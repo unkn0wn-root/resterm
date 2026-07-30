@@ -14,9 +14,7 @@ const (
 	GroupsEnvKey  = "$groups"
 	DefaultEnvKey = "$default"
 
-	// EnvJSONSuffix is the naming convention environment files share. Only the
-	// two candidate names below are ever opened by discovery; the suffix alone
-	// marks files that read as environments without being discoverable.
+	// EnvJSONSuffix is the naming convention environment files share.
 	EnvJSONSuffix = ".env.json"
 )
 
@@ -79,9 +77,8 @@ func LoadEnvironmentFile(path string) (Catalog, error) {
 }
 
 // Discover loads the first environment file found directly under roots, tried
-// in order. Empty roots are skipped and nothing is added implicitly, so the
-// caller decides whether ambient directories such as the working directory take
-// part.
+// in order. Nothing is added implicitly, so the caller decides whether ambient
+// directories such as the working directory take part.
 func Discover(roots ...string) (Catalog, string, error) {
 	path := DiscoverPath(roots...)
 	if path == "" {

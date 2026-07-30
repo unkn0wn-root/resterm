@@ -2155,8 +2155,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		}
 	}
 
-	// The replayed entry names its own file, which wins over the session's
-	// current one when resolving relative bodies and scripts.
+	// The replayed entry's own file wins when resolving relative paths.
 	options := m.runOptions()
 	if basePath != "" {
 		options.BaseDir = filepath.Dir(basePath)

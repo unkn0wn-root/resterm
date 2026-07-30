@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// Persisted globals and tokens are keyed by environment scope, and a scope is
-// named after the environment. Two workspaces that both call an environment
-// "dev" would read each other's state out of one shared directory.
 func TestResolveStatePathsSeparatesWorkspacesByDefault(t *testing.T) {
 	alpha, err := resolveStatePaths(Options{PersistAuth: true}, "/projects/alpha")
 	if err != nil {
@@ -42,9 +39,8 @@ func TestResolveStatePathsHonoursExplicitStateDir(t *testing.T) {
 	}
 }
 
-// A caller that omits WorkspaceRoot has it derived from the request file. The
-// state directory has to follow that derivation, or those callers fall back to
-// one directory shared by every workspace.
+// The state directory has to follow the workspace root Build derives from the
+// request file.
 func TestBuildDerivesStateDirFromFile(t *testing.T) {
 	base := t.TempDir()
 	auth := make([]string, 0, 2)

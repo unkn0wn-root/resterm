@@ -14,32 +14,24 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-// Shared wording. Every aborted move starts with moveRefused so the guarantee
-// it stands for, nothing was committed, reads the same everywhere; noEnvSelected
-// opens both messages the unselected state produces.
+// Shared wording so the messages and the tests asserting on them cannot drift.
 const (
 	moveRefused   = "Workspace not changed"
 	noEnvSelected = "No environment selected"
 )
 
-// workspace is the live workspace state: the root being browsed and the
-// environment its requests run against. A move goes through plan, which touches
-// nothing, and commitMove, which applies everything at once, so a failed move
-// leaves the session exactly as it was.
+// workspace is the live workspace state. A move goes through plan, which
+// touches nothing, and commitMove, which applies everything at once, so a
+// failed move leaves the session exactly as it was.
 type workspace struct {
-	root      string
-	recursive bool
-	cat       vars.Catalog
-	sel       vars.Selection
-	envFile   string
-	// envPinned marks an --env-file environment, which names the environment
-	// for the session rather than for one workspace and so outlives moves.
-	envPinned bool
-	intent    vars.Intent
-	active    vars.Environment
-	// unselected means the workspace has environments but none is active,
-	// because the session's intent does not resolve here. Runs are refused
-	// until someone picks.
+	root       string
+	recursive  bool
+	cat        vars.Catalog
+	sel        vars.Selection
+	envFile    string
+	envPinned  bool
+	intent     vars.Intent
+	active     vars.Environment
 	unselected bool
 }
 
@@ -66,9 +58,6 @@ func (w *workspace) use(env vars.Environment) {
 	w.unselected = false
 }
 
-// wsMove is a planned workspace change. A half applied move is what would leave
-// one workspace's credentials pointed at another's requests, so nothing here
-// reaches the model until commitMove.
 type wsMove struct {
 	root       string
 	cat        vars.Catalog
@@ -79,13 +68,10 @@ type wsMove struct {
 	status     statusMsg
 }
 
-// plan works out the environment a move to root would activate, without
-// touching the current state. Discovery searches only the new root: reaching
-// further, into the directory the session was launched from, is how a workspace
-// without an environment file ends up running another one's credentials. A root
-// whose environment file does not load returns an error and no move: entering it
-// anyway would run its requests with no environment at all, which launching with
-// -w would have refused.
+// plan works out what a move to root would activate, without touching the
+// current state. Discovery searches only the new root, and a root whose
+// environment file does not load refuses the move the same way launching
+// there would.
 func (w workspace) plan(root string) (wsMove, error) {
 	text := fmt.Sprintf("Workspace set to %s", filepath.Base(root))
 
@@ -125,9 +111,8 @@ func (w workspace) plan(root string) (wsMove, error) {
 
 	sel, ok := w.intent.Resolve(cat)
 	if !ok {
-		// This workspace does not have what the session asked for. Falling back
-		// to its default could promote a dev session to prod, so nothing is
-		// active until someone picks.
+		// Falling back to the new default could promote a dev session to
+		// prod, so nothing is active until someone picks.
 		mv.unselected = true
 		mv.status = statusMsg{
 			text: fmt.Sprintf(
@@ -151,15 +136,14 @@ func (w workspace) plan(root string) (wsMove, error) {
 	return mv, nil
 }
 
-// sameEnvFile reports whether two workspaces read their environment from one
-// file on disk. Two workspaces without a file share nothing nameable, so a move
-// between them still crosses a boundary and resets.
+// Two workspaces without an environment file share nothing nameable, so a
+// move between them still crosses a boundary and resets.
 func sameEnvFile(a, b string) bool {
 	return a != "" && b != "" && util.SameFile(a, b)
 }
 
-// moveBlocked refuses a workspace change while a request is in flight, because
-// that request can still write runtime values back and undo the reset.
+// moveBlocked refuses a move while a request is in flight, because that
+// request can still write runtime values back and undo the reset.
 func (m *Model) moveBlocked() tea.Cmd {
 	if !m.hasActiveRun() {
 		return nil
@@ -171,9 +155,8 @@ func moveRefusedCmd(err error) tea.Cmd {
 	return statusCmd(statusError, fmt.Sprintf("%s. %v", moveRefused, err))
 }
 
-// prepareMove runs every check a workspace change must pass before anything is
-// committed: no run in flight, a loadable environment, a listable root. A non
-// nil cmd is the refusal to show, with the session untouched.
+// prepareMove runs every check a move must pass before anything is committed.
+// A non nil cmd is the refusal to show, with the session untouched.
 func (m *Model) prepareMove(dir, current string) (wsMove, []filesvc.FileEntry, tea.Cmd) {
 	if cmd := m.moveBlocked(); cmd != nil {
 		return wsMove{}, nil, cmd
@@ -186,19 +169,25 @@ func (m *Model) prepareMove(dir, current string) (wsMove, []filesvc.FileEntry, t
 	if err != nil {
 		return wsMove{}, nil, moveRefusedCmd(err)
 	}
+
+	// Surface the same environment file warnings launching with -w would,
+	// unless the move already has something more specific to say.
+	if mv.status.level == statusInfo {
+		next := workspace{root: dir, recursive: m.ws.recursive, cat: mv.cat, envFile: mv.envFile}
+		if warn := envFileWarning(entries, next); warn.text != "" {
+			mv.status = statusMsg{text: mv.status.text + ". " + warn.text, level: statusWarn}
+		}
+	}
 	return mv, entries, nil
 }
 
-// commitMove applies a planned move in one step: forget what the previous
-// workspace produced, then install the new root and environment together. The
-// returned command finishes teardown that has to happen off the update loop,
-// currently closing a mock server still rooted in the old workspace.
+// commitMove applies a planned move in one step. The returned command finishes
+// teardown that has to happen off the update loop.
 func (m *Model) commitMove(mv wsMove) (statusMsg, tea.Cmd) {
 	var stop tea.Cmd
 	if server := m.mock.server; server != nil {
 		// The reloader walks the old root and would keep serving its mocks
-		// against the new editor. Detaching first bumps the reload generation,
-		// so results and ticks already in flight are dropped.
+		// against the new editor.
 		addr := m.mockAddress()
 		m.detachMockServer(server)
 		stop = closeMockServerCmd(server, addr, false)
@@ -223,15 +212,15 @@ func (m *Model) commitMove(mv wsMove) (statusMsg, tea.Cmd) {
 		m.ws.active, _ = mv.cat.Resolve(mv.sel)
 	}
 
-	// The launch file's directory stops meaning anything under another root.
-	// Each run derives its base from the file it executes.
+	// Runs re-derive their base directory from the file they execute.
 	m.cfg.HTTPOptions.BaseDir = ""
 
 	m.envDraft = vars.Selection{}
 	m.envList.ResetFilter()
 	m.envList.SetItems(makeEnvItems(mv.cat, mv.sel))
 	m.envList.SetDelegate(envDelegateForTheme(m.theme, mv.cat))
-	m.refreshCompletionScope()
+	// Document-derived state is the caller's to rebuild. Only it knows whether
+	// the move clears the document or installs a new one.
 	return mv.status, stop
 }
 
@@ -251,9 +240,8 @@ func (m *Model) stopLiveStreams() {
 }
 
 // clearResponseState drops everything the previous workspace's requests
-// produced: the engine seeds scripts with the last response, and pane snapshots
-// keep bodies renderable and exportable, so leaving either in place lets one
-// workspace read another's traffic.
+// produced. The engine seeds scripts with the last response, so leaving any of
+// it in place lets one workspace read another's traffic.
 func (m *Model) clearResponseState() {
 	if m.responseRenderCancel != nil {
 		m.responseRenderCancel()
@@ -279,9 +267,8 @@ func (m *Model) clearResponseState() {
 	m.resetResponsePanes()
 }
 
-// resetResponsePanes rebuilds both panes empty while keeping the layout the
-// user arranged: sizes, split and orientation are view preferences, snapshots
-// and caches are content.
+// resetResponsePanes rebuilds both panes empty. Layout is a view preference
+// and stays, content goes.
 func (m *Model) resetResponsePanes() {
 	for i := range m.responsePanes {
 		vp := m.responsePanes[i].viewport

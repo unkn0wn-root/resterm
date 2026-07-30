@@ -16,21 +16,19 @@ import (
 // auth, OAuth tokens), so bumping this discards every stored value.
 const scopeVersion = "g1:"
 
-// scopeSourceVersion prefixes grouped scopes that fold in the environment file. A
-// catalog built in process has no file to name and keeps the scopeVersion scopes
-// it had before.
+// scopeSourceVersion prefixes grouped scopes that fold in the environment
+// file. A catalog built in process has no file and keeps its old scopes.
 const scopeSourceVersion = "g2:"
 
 const (
 	scopeSourceSep = "@"
-	// scopeDigestLen is fixed so a flat scope stays unambiguous: the last
-	// scopeDigestLen characters are always the digest and the rest is the name.
+	// scopeDigestLen is fixed so the last scopeDigestLen characters of a flat
+	// scope are always the digest and the rest is the name.
 	scopeDigestLen = 16
 )
 
-// withSource records the file a catalog was read from, which scopes fold in. The
-// path is made absolute so the same file reached by different spellings keeps one
-// identity.
+// withSource records the file a catalog was read from. The path is made
+// absolute so different spellings of one file keep one identity.
 func (c Catalog) withSource(path string) Catalog {
 	path = str.Trim(path)
 	if path == "" {

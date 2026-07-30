@@ -54,11 +54,9 @@ func resolveStatePaths(opts Options, work string) (statePaths, error) {
 	}, nil
 }
 
-// defaultStateDir keeps persisted state per workspace. Runtime values are keyed
-// by environment scope rather than by workspace, so one shared directory lets two
-// workspaces that both call an environment "dev" read each other's globals and
-// OAuth tokens. An explicit --state-dir names the boundary itself and is honoured
-// as given.
+// defaultStateDir keeps persisted state per workspace. One shared directory
+// would let two workspaces that both call an environment "dev" read each
+// other's globals and tokens. An explicit --state-dir is honoured as given.
 func defaultStateDir(workspace string) string {
 	base := filepath.Join(config.Dir(), "runner")
 	ws := str.Trim(workspace)

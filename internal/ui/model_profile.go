@@ -105,7 +105,7 @@ func (m *Model) startProfileRun(
 		if !started {
 			return run
 		}
-		// Keep the "not supported" warning visible: spinner only, no pulse text.
+		// Spinner only, so the not supported warning stays visible.
 		return batchCommands(run, m.sendProgress("", ""))
 	}
 	title := strings.TrimSpace(m.statusRequestTitle(doc, req))

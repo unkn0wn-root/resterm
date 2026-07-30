@@ -181,10 +181,9 @@ func (r *Runtime) LoadAuthState(st engine.AuthState) {
 	}
 }
 
-// ResetSecrets forgets every credential and runtime value held in memory. It is
-// what makes a workspace change safe: scopes are named after the environment, so
-// two workspaces that both call one "dev" would otherwise read each other's
-// globals, cookies and tokens.
+// ResetSecrets forgets every credential and runtime value held in memory.
+// Scopes are named after the environment, so two workspaces that both call
+// one "dev" would otherwise read each other's globals, cookies and tokens.
 func (r *Runtime) ResetSecrets() {
 	if r == nil {
 		return

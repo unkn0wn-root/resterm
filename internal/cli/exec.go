@@ -226,8 +226,8 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 }
 
 // loadEnvironment loads the file named with --env-file, or discovers one near
-// the launch context. The working directory takes part here and only here: the
-// command line is the one place an ambient directory is meaningful.
+// the launch context. The command line is the one place the ambient working
+// directory takes part in discovery.
 func (f ExecFlags) loadEnvironment(filePath, work string) (vars.Catalog, string, error) {
 	if explicit := str.Trim(f.EnvFile); explicit != "" {
 		cat, err := vars.LoadEnvironmentFile(explicit)

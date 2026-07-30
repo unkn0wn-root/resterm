@@ -41,9 +41,8 @@ func (m *Model) runCfg(opts httpclient.Options) engine.Config {
 	}
 }
 
-// runOptions clones the session HTTP options with BaseDir pointed at the file
-// being run. The command line seeds BaseDir from the launch file, which stops
-// meaning anything once another file or workspace is active.
+// runOptions points BaseDir at the file being run. The launch file's directory
+// stops meaning anything once another file or workspace is active.
 func (m Model) runOptions() httpclient.Options {
 	opts := m.cfg.HTTPOptions
 	if m.currentFile != "" {
@@ -139,11 +138,8 @@ func (m *Model) runMsg(fn func(context.Context) tea.Msg) tea.Cmd {
 	}
 }
 
-// runBlocked reports why nothing can execute right now. The workspace has
-// environments but none is active: resolving the catalog default here is
-// exactly the fallback an unmade choice must not take. startRun checks it, and
-// profile, workflow and compare starters check it before building their plans,
-// so every path onto the wire passes this one rule.
+// runBlocked refuses to execute while no environment is selected. Every path
+// onto the wire passes this one rule.
 func (m *Model) runBlocked() tea.Cmd {
 	if !m.ws.unselected {
 		return nil
@@ -151,8 +147,7 @@ func (m *Model) runBlocked() tea.Cmd {
 	return statusCmd(statusWarn, noEnvSelected+". Choose one with Ctrl+E")
 }
 
-// runSpec describes one request execution. record selects the recorded send
-// pipeline, whose result also lands in history; preview mode bypasses the UI
+// runSpec describes one request execution. Preview mode bypasses the UI
 // wrapper because it must not attach live streams to the model.
 type runSpec struct {
 	doc    *restfile.Document
@@ -163,10 +158,9 @@ type runSpec struct {
 	record bool
 }
 
-// startRun is the single path from a prepared request to a running command. The
-// second result reports whether a run actually started: refusals and resolution
-// failures return false so callers never begin progress indicators, spinner and
-// pulse, for a request that will produce no response to stop them.
+// startRun is the single path from a prepared request to a running command.
+// The second result reports whether a run actually started, so callers never
+// begin progress indicators for a request that will produce no response.
 func (m *Model) startRun(sp runSpec) (tea.Cmd, bool) {
 	if cmd := m.runBlocked(); cmd != nil {
 		return cmd, false

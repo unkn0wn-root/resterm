@@ -18,9 +18,9 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
-// A and B both name their environments dev and prod, which is what makes their
-// runtime scopes collide. C and F have no environment file, D's cannot be
-// parsed, and E has only staging, so neither dev nor prod can be replayed there.
+// A and B both name their environments dev and prod, so their runtime scopes
+// collide. C and F have no environment file, D's cannot be parsed, E has only
+// staging and G holds only a lookalike name discovery never opens.
 func workspaceFixture(t *testing.T) string {
 	t.Helper()
 	base := t.TempDir()
@@ -50,12 +50,13 @@ func workspaceFixture(t *testing.T) string {
 	write("E/resterm.env.json", `{"staging":{"who":"E","auth.token":"E-STAGING"}}`)
 	write("E/req.http", request)
 	write("F/req.http", request)
+	write("G/dev.env.json", `{"e":{"who":"X"}}`)
+	write("G/req.http", request)
 	return base
 }
 
-// workspaceModel starts a session in workspace A through the real command line
-// wiring. Building ui.Config by hand here is what once hid a --env value that
-// never reached the model.
+// workspaceModel starts a session in workspace A through the real command
+// line wiring, which once hid a --env value that never reached the model.
 func workspaceModel(t *testing.T, base, envName, explicitEnvFile string) Model {
 	t.Helper()
 	root := filepath.Join(base, "A")
@@ -70,9 +71,8 @@ func workspaceModel(t *testing.T, base, envName, explicitEnvFile string) Model {
 	return New(Config{Env: cfg.Env, WorkspaceRoot: cfg.Workspace, Recursive: cfg.Recursive})
 }
 
-// firstStatus finds the status a command carries. Status reaches Update either
-// bare or wrapped in an editorEvent, depending on which helper produced it, and a
-// test that only knows one shape silently reports "no status message".
+// firstStatus finds the status a command carries, bare or wrapped, since a
+// test that only knows one shape silently reports no status at all.
 func firstStatus(cmd tea.Cmd) (statusMsg, bool) {
 	if cmd == nil {
 		return statusMsg{}, false
@@ -94,9 +94,6 @@ func firstStatus(cmd tea.Cmd) (statusMsg, bool) {
 	return statusMsg{}, false
 }
 
-// The environment moves with the workspace, and what carries across is the
-// environment that was asked for rather than the one that was resolved. Falling
-// back to the new workspace's default could promote a dev session to prod.
 func TestOpenWorkspaceReplaysSelectionIntent(t *testing.T) {
 	for _, tc := range []struct{ envName, label, token string }{
 		{envName: "", label: "dev", token: "B-DEV"},
@@ -126,7 +123,6 @@ func TestOpenWorkspaceReplaysSelectionIntent(t *testing.T) {
 	}
 }
 
-// The picker choice becomes the intent, so it is what a later move replays.
 func TestOpenWorkspaceReplaysPickerChoice(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -148,10 +144,6 @@ func TestOpenWorkspaceReplaysPickerChoice(t *testing.T) {
 	}
 }
 
-// Scopes name their environment file, so A and B no longer collide. The reset is
-// the second layer: nothing the previous workspace stored stays resident,
-// whatever it was keyed under. The last response goes too, because the engine
-// seeds scripts with it.
 func TestOpenWorkspaceForgetsPreviousState(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -179,8 +171,6 @@ func TestOpenWorkspaceForgetsPreviousState(t *testing.T) {
 	}
 }
 
-// Reopening the same workspace resolves the same environment file, so there is
-// nothing scoped to forget.
 func TestReopeningSameWorkspaceKeepsRuntimeState(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -211,8 +201,6 @@ func TestOpenWorkspaceWithoutEnvironmentClearsIt(t *testing.T) {
 	}
 }
 
-// A broken environment file refuses the move outright, the same way launching
-// with -w there would. Entering anyway would run requests with no environment.
 func TestOpenWorkspaceWithBrokenEnvironmentRefusesMove(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -255,8 +243,6 @@ func TestOpenWorkspaceKeepsExplicitEnvFile(t *testing.T) {
 	}
 }
 
-// Opening a file outside the current root moves the workspace, so it has to move
-// the environment too.
 func TestOpenExternalFileMovesEnvironment(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -274,8 +260,6 @@ func TestOpenExternalFileMovesEnvironment(t *testing.T) {
 	}
 }
 
-// When the intent cannot be honoured nothing is active until someone picks, so
-// the catalog still loads but requests are refused.
 func TestOpenWorkspaceLeavesNothingSelectedWhenIntentIsMissing(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "prod", "")
@@ -325,8 +309,6 @@ func TestOpenWorkspaceLeavesNothingSelectedWhenIntentIsMissing(t *testing.T) {
 	}
 }
 
-// History replay selects an environment without going through the picker, so it
-// has to leave the session in the same state a picked one would.
 func TestHistoryReplaySelectionBecomesTheIntent(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "prod", "")
@@ -348,8 +330,6 @@ func TestHistoryReplaySelectionBecomesTheIntent(t *testing.T) {
 	}
 }
 
-// An in-flight request holds the engine config and can write runtime values back,
-// so the move waits for it.
 func TestOpenWorkspaceRefusedWhileRunning(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -371,9 +351,6 @@ func TestOpenWorkspaceRefusedWhileRunning(t *testing.T) {
 	}
 }
 
-// Discovery for a move searches only the new root. The directory the session
-// was launched from held an environment once, and rediscovering it there is how
-// a workspace without one ended up running another's credentials.
 func TestOpenWorkspaceDoesNotRediscoverFromWorkingDirectory(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -389,8 +366,6 @@ func TestOpenWorkspaceDoesNotRediscoverFromWorkingDirectory(t *testing.T) {
 	}
 }
 
-// Two workspaces without environment files share the unnamed scope, so a move
-// between them still crosses a boundary and resets runtime state.
 func TestMoveBetweenEnvlessWorkspacesResets(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -404,8 +379,6 @@ func TestMoveBetweenEnvlessWorkspacesResets(t *testing.T) {
 	}
 }
 
-// A failed listing aborts the move before anything is committed, so workspace,
-// document and environment stay from one context.
 func TestOpenWorkspaceListingFailureCommitsNothing(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -423,8 +396,6 @@ func TestOpenWorkspaceListingFailureCommitsNothing(t *testing.T) {
 	}
 }
 
-// The move commits everything at once: streams stop, panes and response state
-// drop, and the launch BaseDir stops pointing at the old workspace.
 func TestCommitMoveClearsResponseAndStreamState(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -461,7 +432,6 @@ func TestCommitMoveClearsResponseAndStreamState(t *testing.T) {
 	}
 }
 
-// runOptions points BaseDir at the file being run rather than the launch file.
 func TestRunOptionsDerivesBaseDirFromCurrentFile(t *testing.T) {
 	m := Model{cfg: Config{HTTPOptions: httpclient.Options{BaseDir: "/launch"}}}
 	if got := m.runOptions().BaseDir; got != "/launch" {
@@ -473,8 +443,6 @@ func TestRunOptionsDerivesBaseDirFromCurrentFile(t *testing.T) {
 	}
 }
 
-// A refused run must leave no progress state behind: a stuck spinner reads as
-// an active run and blocks the workspace change that would fix the situation.
 func TestRefusedRunLeavesNoProgressState(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "prod", "")
@@ -502,8 +470,7 @@ func TestRefusedRunLeavesNoProgressState(t *testing.T) {
 		}
 	}
 
-	// Picking an environment unblocks the same entry point, and only then do
-	// the sending indicators start.
+	// Picking an environment unblocks the same entry point.
 	if err := m.selectEnvironment("staging", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -513,9 +480,8 @@ func TestRefusedRunLeavesNoProgressState(t *testing.T) {
 	}
 }
 
-// Messages from a canceled stream must not resurrect its session in the next
-// workspace. Cancellation makes the runner flush pending events and emit state
-// and completion, all of which arrive after the maps were cleared.
+// Cancellation makes the stream runner flush pending events and completion
+// messages, all of which arrive after the move cleared the maps.
 func TestStaleStreamMessagesAreDropped(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -546,8 +512,6 @@ func TestStaleStreamMessagesAreDropped(t *testing.T) {
 	}
 }
 
-// A file that cannot be read aborts the open before anything is committed, so
-// the environment cannot move under an editor still showing the old workspace.
 func TestOpenExternalUnreadableFileCommitsNothing(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -571,8 +535,6 @@ func TestOpenExternalUnreadableFileCommitsNothing(t *testing.T) {
 	}
 }
 
-// A mock server serves the workspace it was started in, so a move stops it and
-// drops reloads already in flight rather than leaving it rooted in the old tree.
 func TestMoveStopsMockServer(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
@@ -605,5 +567,65 @@ func TestMoveStopsMockServer(t *testing.T) {
 	}
 	if closed, ok := stop().(mockServerClosedMsg); !ok || closed.err != nil {
 		t.Fatalf("close result = %+v", closed)
+	}
+}
+
+func TestOpenDirectoryClearsDocumentDerivedState(t *testing.T) {
+	base := workspaceFixture(t)
+	m := workspaceModel(t, base, "", "")
+	flow := "@doctoken = fromdoc\n\n# @workflow demo\n# @if response.ok run=First\n\n" +
+		"### First\n# @name First\nGET http://example.test/{{who}}\n"
+	path := filepath.Join(base, "A", "flow.http")
+	if err := os.WriteFile(path, []byte(flow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m.applyOpenFilePath(path)
+
+	hasVar := func(name string) bool {
+		for _, v := range m.editor.scope.Variables {
+			if v.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	if len(m.workflowItems) == 0 || !hasVar("doctoken") {
+		t.Fatalf(
+			"fixture must project a workflow and a doc variable, got %d workflows, doctoken=%v",
+			len(m.workflowItems),
+			hasVar("doctoken"),
+		)
+	}
+
+	m.applyOpenDirectory(filepath.Join(base, "C"))
+
+	if len(m.workflowItems) != 0 || m.showWorkflow {
+		t.Fatal("workflow rows survived the directory move")
+	}
+	if len(m.requestItems) != 0 {
+		t.Fatal("request rows survived the directory move")
+	}
+	if hasVar("doctoken") {
+		t.Fatal("completion variables from the closed document survived the move")
+	}
+	if hasVar("auth.token") {
+		t.Fatal("completion variables from the previous environment survived the move")
+	}
+}
+
+func TestOpenWorkspaceWarnsAboutUndiscoveredEnvFiles(t *testing.T) {
+	base := workspaceFixture(t)
+	m := workspaceModel(t, base, "", "")
+
+	status, ok := firstStatus(m.applyOpenDirectory(filepath.Join(base, "G")))
+	if !ok {
+		t.Fatal("no status message")
+	}
+	if status.level != statusWarn {
+		t.Fatalf("level = %v, want warn: %q", status.level, status.text)
+	}
+	if !strings.Contains(status.text, "Workspace set to G") ||
+		!strings.Contains(status.text, "Load dev.env.json with --env-file") {
+		t.Fatalf("status = %q, want the move and the undiscovered file named together", status.text)
 	}
 }

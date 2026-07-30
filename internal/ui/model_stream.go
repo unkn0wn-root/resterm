@@ -176,10 +176,9 @@ func (m *Model) attachWebSocketHandle(handle *httpclient.WebSocketHandle, req *r
 	m.ensureWebSocketConsole(sessionID, handle.Session, handle.Sender, req, baseDir)
 }
 
-// liveSession returns the tracked session for id. Entries are created in
-// attachStreamSession and nowhere else, so an unknown id is stale by
-// definition: its stream belonged to a workspace that has been left, and its
-// canceled goroutine is flushing messages that must not take effect here.
+// liveSession returns the tracked session for id. Entries are created only in
+// attachStreamSession, so an unknown id is a stale stream from a workspace
+// that has been left.
 func (m *Model) liveSession(id string) *liveSession {
 	if id == "" {
 		return nil

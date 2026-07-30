@@ -307,8 +307,8 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 		}
 	}
 
-	// A bare WebSocket request stays on the unrecorded pipeline: the stream
-	// attaches to the model and records through its own session instead.
+	// A bare WebSocket request stays on the unrecorded pipeline. The stream
+	// records through its own session instead.
 	rec := st.req.WebSocket == nil || len(st.req.WebSocket.Steps) > 0
 	run, started := m.startRun(runSpec{
 		doc:    st.doc,
@@ -429,9 +429,9 @@ func (m *Model) startSending() tea.Cmd {
 	return m.startTabSpin()
 }
 
-// sendProgress starts the sending indicators for a run that has been accepted.
-// It only ever runs behind startRun's started result, so a refusal can never
-// leave a spinner running with no response on the way to stop it.
+// sendProgress starts the sending indicators for an accepted run. It only runs
+// behind startRun's started result, so a refusal can never leave a spinner
+// running with no response on the way to stop it.
 func (m *Model) sendProgress(base, overlay string) tea.Cmd {
 	spin := m.startSending()
 	m.sendingOverlayBase = overlay

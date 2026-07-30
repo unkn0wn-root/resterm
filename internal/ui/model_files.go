@@ -58,9 +58,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 }
 
 // installFile puts already read content into the editor. Past this point the
-// open cannot be aborted: a workspace listing failure only warns, because the
-// file itself is fine and callers such as a workspace move have already
-// committed state that assumed the open would land.
+// open cannot be aborted, so a workspace listing failure only warns.
 func (m *Model) installFile(path string, data []byte) tea.Cmd {
 	doc := parseEditableDocument(path, data)
 	_ = m.replaceEditorWithDocument(editorDocumentReplacement{

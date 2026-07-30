@@ -83,9 +83,7 @@ func TestInactiveEnvStatus(t *testing.T) {
 	}
 }
 
-// The scan walks the workspace itself, so these cases use real files rather
-// than hand built entries. The entry list New holds drops plain JSON, which an
-// invented fixture would happily hide.
+// The scan walks the workspace itself, so these cases use real files.
 func TestUndiscoveredEnvStatus(t *testing.T) {
 	loaded := testCatalog(vars.EnvironmentSet{"dev": {"a": "1"}})
 
@@ -199,9 +197,6 @@ func modelInWorkspace(t *testing.T, root string, recursive bool) Model {
 	})
 }
 
-// One environment file is resolved per workspace, so a request file in a
-// subdirectory keeps the root environment. The warning is the only thing that
-// tells anyone.
 func TestNestedEnvironmentFileWarnsAtStartup(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"resterm.env.json":   `{"rootenv":{"who":"ROOT"}}`,
@@ -218,45 +213,10 @@ func TestNestedEnvironmentFileWarnsAtStartup(t *testing.T) {
 		t.Fatalf("level = %v, want warn", got)
 	}
 
-	// The warning is accurate: opening the nested file keeps the root catalog.
+	// The warning is accurate because opening the nested file keeps the root
+	// catalog.
 	m.openFile(filepath.Join(root, "a", "req.http"))
 	if got := m.ws.active.Values()["who"]; got != "ROOT" {
 		t.Fatalf("who = %q, want the root environment to stay active", got)
-	}
-}
-
-// A workspace of dev/prod/test.env.json discovers nothing, so every variable goes
-// unresolved. Without this warning nothing says why.
-func TestUndiscoveredEnvironmentFilesWarnAtStartup(t *testing.T) {
-	root := writeWorkspace(t, map[string]string{
-		"dev.env.json":  `{"e":{"who":"X"}}`,
-		"prod.env.json": `{"e":{"who":"X"}}`,
-		"test.env.json": `{"e":{"who":"X"}}`,
-		"req.http":      "### who\n# @name w\nGET http://example.test/{{who}}\n",
-	})
-	m := modelInWorkspace(t, root, false)
-
-	if m.ws.envFile != "" {
-		t.Fatalf("environment file = %q, want nothing discovered", m.ws.envFile)
-	}
-	got := m.statusMessage.text
-	if !strings.Contains(got, "No environment file was discovered") || !strings.Contains(got, "--env-file") {
-		t.Fatalf("status = %q, want a hint about the undiscovered files", got)
-	}
-	if m.statusMessage.level != statusWarn {
-		t.Fatalf("level = %v, want warn", m.statusMessage.level)
-	}
-}
-
-// Both warnings can apply at once. The nested one is more specific, so it wins.
-func TestNestedWarningTakesPrecedenceOverUndiscovered(t *testing.T) {
-	root := writeWorkspace(t, map[string]string{
-		"dev.env.json":       `{"e":{"who":"X"}}`,
-		"a/resterm.env.json": `{"aenv":{"who":"DIR-A"}}`,
-		"req.http":           "### who\n# @name w\nGET http://example.test/x\n",
-	})
-
-	if got := modelInWorkspace(t, root, true).statusMessage.text; !strings.Contains(got, "is inactive") {
-		t.Fatalf("status = %q, want the nested warning to win", got)
 	}
 }

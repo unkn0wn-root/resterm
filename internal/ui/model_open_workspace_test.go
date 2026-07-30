@@ -10,9 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 )
 
-// An --env-file environment is pinned for the session, so a move keeps it. The
-// warning fires only when the new root has a discoverable file of its own that
-// the pin is overriding, the same rule discovery itself uses.
+// An --env-file environment is pinned for the session, so a move keeps it.
 func TestPlanKeepsPinnedEnvFile(t *testing.T) {
 	base := t.TempDir()
 	write := func(rel string) string {
@@ -39,8 +37,7 @@ func TestPlanKeepsPinnedEnvFile(t *testing.T) {
 		warn bool
 	}{
 		{name: "root with its own env file", root: "own", warn: true},
-		// Discovery only looks at the root, so a nested file would not be
-		// loaded by a fresh start either and changes nothing.
+		// Discovery only looks at the root, so a nested file changes nothing.
 		{name: "nested file only", root: "nested"},
 		{name: "no env file at all", root: "bare"},
 	} {
@@ -64,8 +61,7 @@ func TestPlanKeepsPinnedEnvFile(t *testing.T) {
 	}
 }
 
-// The ACTIVE badge and the inactive-environment warning answer the same question,
-// so they have to agree even when one file reaches them under two names.
+// The badge and the warning must agree even when one file has two names.
 func TestActiveEnvBadgeUsesFileIdentity(t *testing.T) {
 	dir := t.TempDir()
 	real := filepath.Join(dir, "resterm.env.json")

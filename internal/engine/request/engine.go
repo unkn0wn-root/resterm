@@ -93,11 +93,10 @@ func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 	}
 }
 
-// ForRun returns an engine view for a single execution. A run reads cfg and the
-// seeded last response from another goroutine, so rewriting them on the shared
-// engine would race an execution in flight. Fields are listed rather than the
-// struct copied, so shared and per-run state stay an explicit choice when a
-// field is added.
+// ForRun returns an engine view for a single execution, so preparing the next
+// run cannot rewrite what a request in flight is reading. Fields are listed
+// rather than the struct copied to keep shared and per-run state an explicit
+// choice.
 func (e *Engine) ForRun(
 	cfg engine.Config,
 	resp *httpclient.Response,

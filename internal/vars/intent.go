@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// Intent is the environment the session asked for, before any catalog resolved
-// it. A resolved Selection already carries the defaults its own catalog filled
-// in, so it cannot be replayed against another one.
+// Intent is the environment the session asked for, before any catalog
+// resolved it. A resolved Selection carries the defaults its own catalog
+// filled in, so only an Intent can be replayed against another catalog.
 type Intent struct {
 	Name   string
 	Groups map[string]string
@@ -29,8 +29,6 @@ func (i Intent) Describe() string {
 	return strings.Join(parts, ", ")
 }
 
-// Resolve replays the intent against cat and reports false when cat does not
-// have what the intent names.
 func (i Intent) Resolve(cat Catalog) (Selection, bool) {
 	sel, err := cat.Select(i.Name, i.Groups)
 	if err != nil {
@@ -39,8 +37,8 @@ func (i Intent) Resolve(cat Catalog) (Selection, bool) {
 	return sel, true
 }
 
-// IntentFor turns an applied selection back into an intent, so a later workspace
-// change replays the picker choice rather than the command line one.
+// IntentFor turns an applied selection back into an intent, so a later
+// workspace change replays the picker choice rather than the command line one.
 func (c Catalog) IntentFor(env Environment) Intent {
 	if c.Grouped() {
 		return Intent{Groups: maps.Clone(env.Selection().Groups())}

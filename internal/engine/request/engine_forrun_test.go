@@ -8,8 +8,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 )
 
-// A run holds its own config and last response, so preparing the next run cannot
-// rewrite what a request in flight is reading.
 func TestForRunIsolatesInFlightRunFromLaterRuns(t *testing.T) {
 	shared := New(engine.Config{EnvironmentFile: "/a/resterm.env.json"}, nil)
 	inflight := shared.ForRun(
@@ -34,9 +32,8 @@ func TestForRunIsolatesInFlightRunFromLaterRuns(t *testing.T) {
 	}
 }
 
-// Every Engine field must be carried into the run view deliberately. A field
-// added to Engine but forgotten in ForRun would be silently zero on every run,
-// so normalising the per-run fields and comparing the rest catches it here.
+// A field added to Engine but forgotten in ForRun would be silently zero on
+// every run.
 func TestForRunCarriesEveryEngineField(t *testing.T) {
 	shared := New(engine.Config{EnvironmentFile: "/a/resterm.env.json"}, nil)
 	run := shared.ForRun(engine.Config{EnvironmentFile: "/b/resterm.env.json"}, nil, nil)

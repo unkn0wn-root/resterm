@@ -102,9 +102,9 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.editor.SetCursor(0)
 	m.markClean()
 	focusCmd := m.setFocus(focusFile)
-	m.requestList.SetItems(nil)
-	m.requestItems = nil
-	m.requestList.Select(-1)
+	// One sync drops everything the old document projected into the UI.
+	m.syncRequestList(nil)
+	m.syncHistory()
 
 	m.fileList.SetItems(makeFileItems(entries))
 	m.rebuildNavigator(entries)
@@ -125,18 +125,16 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 	m.closeOpenModal()
 
-	// Everything that can fail runs before anything is committed: the file
-	// read here, then planning and listing for a move. A read failure after
-	// the environment swap would leave B's credentials under A's editor.
+	// Read before committing anything. A read failure after the environment
+	// swap would leave the new credentials under the old editor.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return statusCmd(statusError, fmt.Sprintf("open failed: %v", err))
 	}
 
 	var status, stopMock tea.Cmd
-	// A file outside the current root moves the workspace, so it has to take the
-	// environment with it. Reaching B/request.http from workspace A would
-	// otherwise run it against A's credentials.
+	// A file outside the current root moves the workspace, so it has to take
+	// the environment with it.
 	if inside := m.ws.root != "" && m.ensureWorkspaceFile(path); !inside {
 		mv, _, refuse := m.prepareMove(filepath.Dir(path), path)
 		if refuse != nil {
