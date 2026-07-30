@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -2011,14 +2012,19 @@ func renderCommandButton(
 	return button.Render(content)
 }
 
+// headerCell is a header segment before rendering. values carries the same
+// information from longest to shortest.
+type headerCell struct {
+	label    string
+	values   []string
+	icon     string
+	priority int
+}
+
 func (m Model) renderHeader() string {
 	workspace := filepath.Base(m.workspaceRoot)
 	if workspace == "" {
 		workspace = "."
-	}
-	env := m.env.Label()
-	if env == "" {
-		env = "default"
 	}
 	request := requestBaseTitle(m.currentRequest)
 	if strings.TrimSpace(request) == "" {
@@ -2028,47 +2034,53 @@ func (m Model) renderHeader() string {
 		}
 	}
 
-	type segment struct {
-		label string
-		value string
-		icon  string
-	}
-
-	segmentsData := []segment{
-		{label: "Workspace", value: workspace},
-		{label: "Env", value: env},
-		{label: "Requests", value: fmt.Sprintf("%d", len(m.requestItems))},
-		{label: "Active", value: request},
+	cells := []headerCell{
+		{label: "Workspace", values: []string{workspace}, priority: headerPriorityWorkspace},
+		{label: "Env", values: m.headerEnvVariants(), priority: headerPriorityEnv},
+		{
+			label:    "Requests",
+			values:   []string{strconv.Itoa(len(m.requestItems))},
+			priority: headerPriorityRequests,
+		},
+		{label: "Active", values: []string{request}, priority: headerPriorityActive},
 	}
 
 	if summary, status, ok := m.headerTestStatus(); ok {
-		segmentsData = append(segmentsData, segment{
-			label: "Tests",
-			value: summary,
-			icon:  headerTestIcon(status),
+		cells = append(cells, headerCell{
+			label:    "Tests",
+			values:   []string{summary},
+			icon:     headerTestIcon(status),
+			priority: headerPriorityTests,
 		})
 	}
 
-	segments := make([]string, 0, len(segmentsData)+1)
-	brandLabel := headerLabelText("RESTERM")
-	brandSegment := m.theme.HeaderBrand.Render(brandLabel)
-	segments = append(segments, brandSegment)
-	for i, seg := range segmentsData {
-		segments = append(segments, m.renderHeaderButton(i, seg.label, seg.value, seg.icon))
-	}
-
-	separator := m.theme.HeaderSeparator.Render(" ")
-
-	rightText := m.renderLatency()
-	rightStyle := lipgloss.NewStyle()
-
 	totalWidth := max(m.width, 1)
 	contentWidth := headerContentWidth(totalWidth, m.theme.Header)
+	limit := headerValueCap(contentWidth)
+
+	segments := make([]headerSegment, 0, len(cells)+1)
+	segments = append(segments, headerSegment{
+		text:     []string{m.theme.HeaderBrand.Render(headerLabelText("RESTERM"))},
+		priority: headerPriorityBrand,
+	})
+	for i, cell := range cells {
+		values, lossy := headerCellVariants(cell.values, limit)
+		text := make([]string, 0, len(values))
+		for _, value := range values {
+			text = append(text, m.renderHeaderButton(i, cell.label, value, cell.icon))
+		}
+		segments = append(segments, headerSegment{
+			text:     text,
+			lossy:    lossy,
+			priority: cell.priority,
+		})
+	}
+
 	headerLine := buildHeaderLine(
 		segments,
-		separator,
-		rightText,
-		rightStyle,
+		m.theme.HeaderSeparator.Render(" "),
+		m.renderLatency(),
+		lipgloss.NewStyle(),
 		contentWidth,
 	)
 	return m.theme.Header.Width(totalWidth).Render(headerLine)

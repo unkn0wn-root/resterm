@@ -233,14 +233,59 @@ func (m Model) environmentSelectionSummary() string {
 		return m.env.Label()
 	}
 
-	groups := m.cfg.Catalog.Groups()
-	sel := m.envSelection()
-	parts := make([]string, 0, len(groups))
-	for _, group := range groups {
-		profile, _ := sel.Profile(group.Name)
-		parts = append(parts, group.Name+": "+profile)
+	choices := m.envChoices(m.envSelection())
+	parts := make([]string, 0, len(choices))
+	for _, choice := range choices {
+		parts = append(parts, choice.group+": "+choice.profile)
 	}
 	return strings.Join(parts, envSummaryJoin)
+}
+
+type envChoice struct {
+	group   string
+	profile string
+}
+
+// envChoices pairs every group with its selected profile in declaration order,
+// which is the order the picker lists them in and the order the header trusts
+// when it names only the first one.
+func (m Model) envChoices(sel vars.Selection) []envChoice {
+	groups := m.cfg.Catalog.Groups()
+	out := make([]envChoice, 0, len(groups))
+	for _, group := range groups {
+		profile, _ := sel.Profile(group.Name)
+		out = append(out, envChoice{group: group.Name, profile: profile})
+	}
+	return out
+}
+
+// headerEnvVariants renders the active environment for the header, longest
+// first. A grouped selection is summarised rather than spelled out: the header
+// exists for orientation, while Ctrl+E, the status bar and history entries carry
+// the complete selection. The group name stays in the longest form because bare
+// profile names like "personal" or "admin" are ambiguous on their own, and every
+// form keeps the profile, because a header that reads the same on dev and on
+// prod has given up the one thing worth glancing at before sending a request.
+func (m Model) headerEnvVariants() []string {
+	label := m.env.Label()
+	if label == "" {
+		return []string{"default"}
+	}
+	if !m.cfg.Catalog.Grouped() {
+		return []string{label}
+	}
+
+	choices := m.envChoices(m.env.Selection())
+	first := choices[0]
+	rest := ""
+	if n := len(choices) - 1; n > 0 {
+		rest = fmt.Sprintf(" +%d", n)
+	}
+
+	return []string{
+		first.group + "=" + first.profile + rest,
+		first.profile + rest,
+	}
 }
 
 // selectEnvironment updates m.cfg.Selection and m.env together so the cached
