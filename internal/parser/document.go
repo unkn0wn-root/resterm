@@ -3,6 +3,7 @@ package parser
 import (
 	"errors"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -103,12 +104,7 @@ func fatalErr(err error) bool {
 		return false
 	}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		for _, item := range joined.Unwrap() {
-			if fatalErr(item) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(joined.Unwrap(), fatalErr)
 	}
 	var unknown *directive.UnknownOptionsError
 	return !errors.As(err, &unknown)

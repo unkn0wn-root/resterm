@@ -211,10 +211,7 @@ func completionPopupColumns(prefLabelW, prefSummaryW, maxTextW int) (int, int) {
 	if maxTextW < 1 {
 		return 0, 0
 	}
-	labelW := max(prefLabelW, 1)
-	if labelW > maxTextW {
-		labelW = maxTextW
-	}
+	labelW := min(max(prefLabelW, 1), maxTextW)
 	if prefSummaryW < 1 || labelW >= maxTextW {
 		return labelW, 0
 	}

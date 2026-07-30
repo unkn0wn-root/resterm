@@ -141,11 +141,8 @@ func TestExecuteWithReportsInsecureSSHWarning(t *testing.T) {
 
 			explainWarning := false
 			if res.Explain != nil {
-				for _, warning := range res.Explain.Warnings {
-					if warning == string(WarningSSHHostKeyVerificationDisabled) {
-						explainWarning = true
-						break
-					}
+				if slices.Contains(res.Explain.Warnings, string(WarningSSHHostKeyVerificationDisabled)) {
+					explainWarning = true
 				}
 			}
 			if explainWarning != tt.expectedExplain {

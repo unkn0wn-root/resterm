@@ -190,7 +190,7 @@ func TestEnsureCommandAuthIsolatesGroupedCredentialProfiles(t *testing.T) {
 	eng := newTestEngine()
 	eng.rt.AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		n := atomic.AddInt32(&calls, 1)
-		return []byte(fmt.Sprintf("token-%d", n)), nil
+		return fmt.Appendf(nil, "token-%d", n), nil
 	})
 	cat, err := vars.NewGroupedCatalog(nil, []vars.Group{{
 		Name:    "credentials",

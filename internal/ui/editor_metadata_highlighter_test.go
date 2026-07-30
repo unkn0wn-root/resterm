@@ -282,11 +282,11 @@ func TestMetadataRuneStylerRequestLines(t *testing.T) {
 // The returned range is in runes, matching how StylesForLine indexes the line.
 func metadataTokenRange(t *testing.T, styles []lipgloss.Style, line, token string) (int, int) {
 	t.Helper()
-	byteStart := strings.Index(line, token)
-	if byteStart < 0 {
+	before, _, ok := strings.Cut(line, token)
+	if !ok {
 		t.Fatalf("token %q is not in %q", token, line)
 	}
-	start := len([]rune(line[:byteStart]))
+	start := len([]rune(before))
 	end := start + len([]rune(token))
 	if len(styles) < end {
 		t.Fatalf("StylesForLine(%q) returned %d styles, need %d", line, len(styles), end)

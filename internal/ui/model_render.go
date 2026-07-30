@@ -1635,10 +1635,7 @@ func (m Model) renderTabRowFromStates(
 ) (string, int) {
 	segments := make([]string, 0, len(states))
 	for _, state := range states {
-		length := max(state.length, 0)
-		if length > state.maxLength {
-			length = state.maxLength
-		}
+		length := min(max(state.length, 0), state.maxLength)
 		label := string(state.runes[:length])
 		style := plan.inactiveStyle
 		if state.isActive {
@@ -2509,10 +2506,7 @@ func (m Model) helpOverlayBox() (string, mouseRect) {
 		Width(contentWidth).
 		Render(top)
 
-	bodyHeight := min(maxBodyHeight-lipgloss.Height(topView), 28)
-	if bodyHeight < 6 {
-		bodyHeight = 6
-	}
+	bodyHeight := max(min(maxBodyHeight-lipgloss.Height(topView), 28), 6)
 
 	sections := m.filteredHelpSections()
 	rows := make([]string, 0, len(sections)*8)
