@@ -118,6 +118,6 @@ func (m *Model) applyThemeToLists() {
 		list.DefaultStyles().ArabicPagination,
 		m.theme.ListItemDescription,
 	)
-	m.envList.SetDelegate(envDelegateForTheme(m.theme, m.cfg.Catalog))
+	m.envList.SetDelegate(envDelegateForTheme(m.theme, m.ws.cat))
 	applyListTheme(m.theme, &m.themeList, true, 3)
 }

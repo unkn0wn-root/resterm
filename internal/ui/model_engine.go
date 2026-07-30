@@ -2,7 +2,7 @@ package ui
 
 import (
 	"context"
-	"maps"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,7 +11,6 @@ import (
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -23,23 +22,34 @@ func (m *Model) runCfg(opts httpclient.Options) engine.Config {
 	return engine.Config{
 		FilePath:              path,
 		Client:                m.client,
-		Catalog:               m.cfg.Catalog,
-		Selection:             m.cfg.Selection,
-		EnvironmentFile:       m.cfg.EnvironmentFile,
+		Catalog:               m.ws.cat,
+		Selection:             m.ws.sel,
+		EnvironmentFile:       m.ws.envFile,
 		AllowInteractiveOAuth: true,
 		HTTPOptions:           opts,
 		GRPCOptions:           m.grpcOptions,
 		History:               m.historyStore(),
 		SSHManager:            m.sshManager(),
 		K8sManager:            m.k8sManager(),
-		WorkspaceRoot:         m.workspaceRoot,
-		Recursive:             m.workspaceRecursive,
+		WorkspaceRoot:         m.ws.root,
+		Recursive:             m.ws.recursive,
 		Compare:               m.cfg.Compare.Clone(),
 		Registry:              m.registryIndex(),
 		Bindings:              m.bindingsMap,
 		SourceDiagnostics:     true,
 		MockInspector:         m.mockInspector(),
 	}
+}
+
+// runOptions clones the session HTTP options with BaseDir pointed at the file
+// being run. The command line seeds BaseDir from the launch file, which stops
+// meaning anything once another file or workspace is active.
+func (m Model) runOptions() httpclient.Options {
+	opts := m.cfg.HTTPOptions
+	if m.currentFile != "" {
+		opts.BaseDir = filepath.Dir(m.currentFile)
+	}
+	return opts
 }
 
 func (m *Model) requestSvc(opts httpclient.Options) *rqeng.Engine {
@@ -50,11 +60,10 @@ func (m *Model) requestSvc(opts httpclient.Options) *rqeng.Engine {
 	cfg := m.runCfg(opts)
 	if m.rq == nil {
 		m.rq = rqeng.New(cfg, rt)
-	} else {
-		m.rq.SetConfig(cfg)
 	}
-	m.rq.SeedLast(m.lastResponse, m.lastGRPC)
-	return m.rq
+	// m.rq only holds the shared collaborators. Each run takes a view, so a
+	// workspace change cannot rewrite the config a request in flight is reading.
+	return m.rq.ForRun(cfg, m.lastResponse, m.lastGRPC)
 }
 
 type requestRunner interface {
@@ -130,58 +139,84 @@ func (m *Model) runMsg(fn func(context.Context) tea.Msg) tea.Cmd {
 	}
 }
 
-func (m *Model) execRunReq(
-	doc *restfile.Document,
-	req *restfile.Request,
-	opts httpclient.Options,
-	sel vars.Selection,
-	vals map[string]rts.Value,
-	xs ...map[string]string,
-) tea.Cmd {
-	env, envErr := m.environment(sel)
-	if envErr != nil {
-		return responseErrCmd(envErr, req, "")
-	}
-	if err := docErr(doc); err != nil {
-		return responseErrCmd(err, req, env.Label())
-	}
-	rq := m.runRequestSvc(opts)
-	if rq == nil {
+// runBlocked reports why nothing can execute right now. The workspace has
+// environments but none is active: resolving the catalog default here is
+// exactly the fallback an unmade choice must not take. startRun checks it, and
+// profile, workflow and compare starters check it before building their plans,
+// so every path onto the wire passes this one rule.
+func (m *Model) runBlocked() tea.Cmd {
+	if !m.ws.unselected {
 		return nil
 	}
-	x := mergeRunExtras(xs...)
+	return statusCmd(statusWarn, noEnvSelected+". Choose one with Ctrl+E")
+}
+
+// runSpec describes one request execution. record selects the recorded send
+// pipeline, whose result also lands in history; preview mode bypasses the UI
+// wrapper because it must not attach live streams to the model.
+type runSpec struct {
+	doc    *restfile.Document
+	req    *restfile.Request
+	opts   httpclient.Options
+	sel    vars.Selection
+	mode   rqeng.ExecMode
+	record bool
+}
+
+// startRun is the single path from a prepared request to a running command. The
+// second result reports whether a run actually started: refusals and resolution
+// failures return false so callers never begin progress indicators, spinner and
+// pulse, for a request that will produce no response to stop them.
+func (m *Model) startRun(sp runSpec) (tea.Cmd, bool) {
+	if cmd := m.runBlocked(); cmd != nil {
+		return cmd, false
+	}
+
+	env, err := m.environment(sp.sel)
+	if err != nil {
+		return responseErrCmd(err, sp.req, ""), false
+	}
+	if err := docErr(sp.doc); err != nil {
+		return responseErrCmd(err, sp.req, env.Label()), false
+	}
+
+	svc := m.requestSvc(sp.opts)
+	if svc == nil {
+		return nil, false
+	}
+	var rq requestRunner = svc
+	if sp.mode == rqeng.ExecModeSend {
+		rq = &uiRequestEngine{Engine: svc, model: m}
+	}
 	gen := m.latencySeries.generation()
 	return m.runMsg(func(ctx context.Context) tea.Msg {
-		res, err := rq.ExecuteWith(doc, req, env, rqeng.ExecOptions{
-			Extra:  x,
-			Values: copyRunValues(vals),
-			Record: true,
+		res, err := rq.ExecuteWith(sp.doc, sp.req, env, rqeng.ExecOptions{
+			Record: sp.record,
 			Ctx:    ctx,
+			Mode:   sp.mode,
 		})
-		return runReqMsg{res: res, err: err, latGen: gen}
-	})
+		if sp.record {
+			return runReqMsg{res: res, err: err, latGen: gen}
+		}
+		if err != nil {
+			return responseMsg{
+				err:         err,
+				executed:    sp.req.Clone(),
+				environment: env.Label(),
+			}
+		}
+		msg := m.responseMsgFromRunState(res, false)
+		msg.latGen = gen
+		return msg
+	}), true
 }
 
-func mergeRunExtras(xs ...map[string]string) map[string]string {
-	n := 0
-	for _, x := range xs {
-		n += len(x)
+func responseErrCmd(err error, req *restfile.Request, env string) tea.Cmd {
+	return func() tea.Msg {
+		return responseMsg{
+			err:         err,
+			executed:    req.Clone(),
+			environment: env,
+		}
 	}
-	if n == 0 {
-		return nil
-	}
-	out := make(map[string]string, n)
-	for _, x := range xs {
-		maps.Copy(out, x)
-	}
-	return out
-}
-
-func copyRunValues(src map[string]rts.Value) map[string]rts.Value {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make(map[string]rts.Value, len(src))
-	maps.Copy(out, src)
-	return out
 }

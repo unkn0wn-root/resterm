@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -32,6 +34,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"nhooyr.io/websocket"
 )
+
+// runCmd flattens startRun's pair for tests that only need the command.
+func runCmd(cmd tea.Cmd, _ bool) tea.Cmd { return cmd }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
@@ -607,7 +612,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 	}
 	doc.Requests = []*restfile.Request{req}
 
-	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, testSelection(""), nil)
+	cmd, _ := model.startRun(runSpec{doc: doc, req: req, opts: model.cfg.HTTPOptions, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -661,7 +666,7 @@ func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 		return &http.Client{Transport: transport}, nil
 	})
 
-	model := New(Config{Selection: testSelection("dev"), Client: fakeClient})
+	model := New(Config{Env: vars.Config{Selection: testSelection("dev")}, Client: fakeClient})
 	model.globalsStore().Set("dev", "token", "global-token", false)
 
 	req := &restfile.Request{
@@ -685,7 +690,7 @@ func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 		},
 	}
 
-	msg, ok := model.executeRequest(nil, req, httpclient.Options{}, testSelection(""), nil)().(responseMsg)
+	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("")}))().(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg")
 	}
@@ -698,7 +703,7 @@ func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 }
 
 func TestExecuteExplainRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *testing.T) {
-	model := New(Config{Selection: testSelection("dev")})
+	model := New(Config{Env: vars.Config{Selection: testSelection("dev")}})
 	model.globalsStore().Set("dev", "token", "global-token", false)
 
 	req := &restfile.Request{
@@ -722,7 +727,7 @@ func TestExecuteExplainRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 		},
 	}
 
-	msg, ok := model.executeExplain(nil, req, httpclient.Options{}, testSelection(""), nil)().(responseMsg)
+	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection(""), mode: rqeng.ExecModePreview}))().(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg")
 	}
@@ -754,7 +759,7 @@ func TestExecuteExplainRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 
 func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 	doc := &restfile.Document{
 		Path: "/tmp/inherited-auth.http",
@@ -792,7 +797,7 @@ func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 
 func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 	model.registryIndex().Sync(&restfile.Document{
 		Path: "/tmp/other.http",
@@ -822,7 +827,7 @@ func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 
 func TestRunPreRequestScriptsApplyCanClearInheritedAuth(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 	doc := &restfile.Document{
 		Path: "/tmp/inherited-auth-apply.http",
@@ -876,7 +881,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	var lastForm url.Values
 
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 
 	model.runtimeSvc().OAuth().SetRequestFunc(
@@ -947,7 +952,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 	called := int32(0)
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 	model.runtimeSvc().OAuth().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
@@ -1037,7 +1042,7 @@ func testPrepareExplainAuthPreview(
 func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	var requests int32
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 	model.runtimeSvc().OAuth().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
@@ -1102,7 +1107,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 
 func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 
 	model.runtimeSvc().OAuth().SetRequestFunc(
@@ -1151,7 +1156,7 @@ func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
 	var seen authcmd.Config
 
 	model := Model{
-		cfg:         Config{Selection: testSelection("dev")},
+		ws:          workspace{sel: testSelection("dev")},
 		currentFile: "/tmp/example.http",
 	}
 	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
@@ -1208,7 +1213,7 @@ func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
 	called := int32(0)
 
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&called, 1)
@@ -1245,7 +1250,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	var calls int32
 
 	model := Model{
-		cfg:         Config{Selection: testSelection("dev")},
+		ws:          workspace{sel: testSelection("dev")},
 		currentFile: "/tmp/example.http",
 	}
 	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
@@ -1298,7 +1303,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 
 func TestBuildCommandAuthConfigExpandsArgvAfterJSONDecode(t *testing.T) {
 	model := Model{
-		cfg:         Config{Selection: testSelection("dev")},
+		ws:          workspace{sel: testSelection("dev")},
 		currentFile: "/tmp/example.http",
 	}
 
@@ -1326,7 +1331,7 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 	var calls int32
 
 	model := Model{
-		cfg:         Config{Selection: testSelection("dev")},
+		ws:          workspace{sel: testSelection("dev")},
 		currentFile: "/tmp/example.http",
 	}
 	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
@@ -1381,7 +1386,7 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 
 func TestPrepareExplainAuthPreviewCommandCacheOnlyRequiresSeed(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 
 	req := &restfile.Request{
@@ -1405,7 +1410,7 @@ func TestPrepareExplainAuthPreviewCommandSkipsWithoutCache(t *testing.T) {
 	called := int32(0)
 
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&called, 1)
@@ -1440,7 +1445,7 @@ func TestPrepareExplainAuthPreviewCommandSkipsWithoutCache(t *testing.T) {
 
 func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 
 	req := &restfile.Request{
@@ -1448,7 +1453,7 @@ func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 		URL:    "https://example.com",
 	}
 
-	cmd := model.executeRequest(nil, req, httpclient.Options{}, testSelection(""), nil)
+	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1481,7 +1486,7 @@ func TestExecuteRequestInteractiveWebSocketStaysAlive(t *testing.T) {
 		},
 	}
 
-	cmd := model.executeRequest(nil, req, httpclient.Options{}, testSelection(""), nil)
+	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1578,10 +1583,10 @@ func TestRunRequestServiceAttachesInteractiveWebSocket(t *testing.T) {
 
 func TestExecuteRequestRejectsNilRequest(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 
-	cmd := model.executeRequest(nil, nil, httpclient.Options{}, testSelection(""), nil)
+	cmd, _ := model.startRun(runSpec{doc: nil, req: nil, opts: httpclient.Options{}, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1598,7 +1603,7 @@ func TestExecuteRequestRejectsNilRequest(t *testing.T) {
 
 func TestExecuteRequestRejectsSSHAndK8sBeforeResolve(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 
 	req := &restfile.Request{
@@ -1608,7 +1613,7 @@ func TestExecuteRequestRejectsSSHAndK8sBeforeResolve(t *testing.T) {
 		K8s:    &restfile.K8sSpec{},
 	}
 
-	cmd := model.executeRequest(nil, req, httpclient.Options{}, testSelection(""), nil)
+	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1707,8 +1712,7 @@ func TestScheduleStatusPulseWhenRunActive(t *testing.T) {
 
 func TestShowGlobalSummary(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
-		env: testEnv("dev"),
+		ws: workspace{sel: testSelection("dev"), active: testEnv("dev")},
 		doc: &restfile.Document{
 			Globals: []restfile.Variable{
 				{Name: "docVar", Value: "foo"},
@@ -1732,8 +1736,7 @@ func TestShowGlobalSummary(t *testing.T) {
 
 func TestClearGlobalValues(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
-		env: testEnv("dev"),
+		ws: workspace{sel: testSelection("dev"), active: testEnv("dev")},
 	}
 	model.globalsStore().Set("dev", "token", "value", false)
 	model.cookieStore().Jar("dev")
@@ -1754,8 +1757,7 @@ func TestClearGlobalValues(t *testing.T) {
 
 func TestClearGlobalValuesClearsCookiesForEnvironment(t *testing.T) {
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
-		env: testEnv("dev"),
+		ws: workspace{sel: testSelection("dev"), active: testEnv("dev")},
 	}
 	u, err := url.Parse("https://example.com")
 	if err != nil {
@@ -1793,17 +1795,17 @@ func TestExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	model := New(Config{Selection: testSelection("dev")})
+	model := New(Config{Env: vars.Config{Selection: testSelection("dev")}})
 
 	setReq := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/set"}
 	echoReq := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/echo"}
 
-	msg, ok := model.executeRequest(nil, setReq, httpclient.Options{}, testSelection("dev"), nil)().(responseMsg)
+	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: setReq, opts: httpclient.Options{}, sel: testSelection("dev")}))().(responseMsg)
 	if !ok || msg.err != nil {
 		t.Fatalf("unexpected set response: %#v", msg)
 	}
 
-	msg, ok = model.executeRequest(nil, echoReq, httpclient.Options{}, testSelection("dev"), nil)().(responseMsg)
+	msg, ok = runCmd(model.startRun(runSpec{doc: nil, req: echoReq, opts: httpclient.Options{}, sel: testSelection("dev")}))().(responseMsg)
 	if !ok || msg.err != nil {
 		t.Fatalf("unexpected dev echo response: %#v", msg)
 	}
@@ -1811,7 +1813,7 @@ func TestExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 		t.Fatalf("expected dev cookie, got %q", got)
 	}
 
-	msg, ok = model.executeRequest(nil, echoReq, httpclient.Options{}, testSelection("prod"), nil)().(responseMsg)
+	msg, ok = runCmd(model.startRun(runSpec{doc: nil, req: echoReq, opts: httpclient.Options{}, sel: testSelection("prod")}))().(responseMsg)
 	if !ok || msg.err != nil {
 		t.Fatalf("unexpected prod echo response: %#v", msg)
 	}
@@ -1831,7 +1833,7 @@ func TestExecuteRequestNoCookiesSettingDisablesJar(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	model := New(Config{Selection: testSelection("dev")})
+	model := New(Config{Env: vars.Config{Selection: testSelection("dev")}})
 	u, err := url.Parse(srv.URL)
 	if err != nil {
 		t.Fatalf("parse url: %v", err)
@@ -1843,7 +1845,7 @@ func TestExecuteRequestNoCookiesSettingDisablesJar(t *testing.T) {
 		URL:      srv.URL + "/echo",
 		Settings: map[string]string{"no-cookies": "true"},
 	}
-	msg, ok := model.executeRequest(nil, req, httpclient.Options{}, testSelection("dev"), nil)().(responseMsg)
+	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("dev")}))().(responseMsg)
 	if !ok || msg.err != nil {
 		t.Fatalf("unexpected response: %#v", msg)
 	}
@@ -1910,7 +1912,7 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 		t.Fatalf("expected single request")
 	}
 	req := doc.Requests[0]
-	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, testSelection(""), nil)
+	cmd, _ := model.startRun(runSpec{doc: doc, req: req, opts: model.cfg.HTTPOptions, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest command")
 	}
@@ -1937,7 +1939,7 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 	defer srv.Close()
 
 	model := Model{
-		cfg: Config{Selection: testSelection("dev")},
+		ws: workspace{sel: testSelection("dev")},
 	}
 
 	// Prepare the cookie jar
@@ -1952,7 +1954,9 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 		URL:    srv.URL,
 	}
 
-	cmd := model.executeRequest(nil, req, httpclient.Options{NoFallback: true}, testSelection("dev"), nil)
+	cmd, _ := model.startRun(
+		runSpec{doc: nil, req: req, opts: httpclient.Options{NoFallback: true}, sel: testSelection("dev")},
+	)
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1977,14 +1981,11 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 		Settings: map[string]string{"no-cookies": "true"},
 	}
 
-	cmd = model.executeRequest(
-		nil,
-		reqWithSetting,
-		httpclient.Options{NoFallback: true}, testSelection(
-
-			"dev"),
-
-		nil)
+	cmd, _ = model.startRun(runSpec{
+		req:  reqWithSetting,
+		opts: httpclient.Options{NoFallback: true},
+		sel:  testSelection("dev"),
+	})
 
 	msg, ok = cmd().(responseMsg)
 	if !ok {

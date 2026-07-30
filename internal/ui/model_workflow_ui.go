@@ -81,7 +81,7 @@ func (m *Model) runSelectedWorkflow() tea.Cmd {
 	if key := workflowKey(item.workflow); key != "" {
 		m.workflowSelectionKey = key
 	}
-	return m.startWorkflowRun(m.doc, wf, m.cfg.HTTPOptions)
+	return m.startWorkflowRun(m.doc, wf, m.runOptions())
 }
 
 func (m *Model) setHistoryWorkflow(name string) {

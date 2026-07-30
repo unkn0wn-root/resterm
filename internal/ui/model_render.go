@@ -2022,7 +2022,7 @@ type headerCell struct {
 }
 
 func (m Model) renderHeader() string {
-	workspace := filepath.Base(m.workspaceRoot)
+	workspace := filepath.Base(m.ws.root)
 	if workspace == "" {
 		workspace = "."
 	}

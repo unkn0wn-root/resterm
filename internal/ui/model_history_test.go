@@ -145,7 +145,7 @@ func TestLoadHistorySelectionComparePrefersFailure(t *testing.T) {
 	cmd := model.loadHistorySelection(false)
 	collectMsgs(cmd)
 
-	env, err := model.environment(model.cfg.Selection)
+	env, err := model.environment(model.ws.sel)
 	if err != nil {
 		t.Fatalf("resolve environment: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestLoadHistorySelectionUsesStructuredSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("catalog: %v", err)
 	}
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	entry := history.Entry{
 		ID:                   "grouped",
 		Environment:          "credentials=ci",
@@ -238,7 +238,7 @@ func TestLoadHistorySelectionUsesStructuredSelection(t *testing.T) {
 	model.historyList.Select(0)
 
 	collectMsgs(model.loadHistorySelection(false))
-	env, err := cat.Resolve(model.cfg.Selection)
+	env, err := cat.Resolve(model.ws.sel)
 	if err != nil {
 		t.Fatalf("resolve selection: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestReplayHistoryRefusesMissingStructuredSelection(t *testing.T) {
 		t.Fatalf("catalog: %v", err)
 	}
 	current := cat.DefaultSelection()
-	model := New(Config{Catalog: cat, Selection: current})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: current}})
 	entry := history.Entry{
 		ID:                   "missing",
 		Environment:          "credentials=removed",
@@ -272,7 +272,7 @@ func TestReplayHistoryRefusesMissingStructuredSelection(t *testing.T) {
 	if cmd := model.loadHistorySelection(true); cmd != nil {
 		t.Fatal("invalid history selection should not resend")
 	}
-	env, err := cat.Resolve(model.cfg.Selection)
+	env, err := cat.Resolve(model.ws.sel)
 	if err != nil {
 		t.Fatalf("resolve current selection: %v", err)
 	}

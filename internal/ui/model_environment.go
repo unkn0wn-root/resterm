@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -22,9 +23,9 @@ func (m *Model) openEnvironmentSelector() {
 	m.showEnvSelector = true
 	m.showHelp = false
 	m.showThemeSelector = false
-	m.envDraft = m.cfg.Selection
+	m.envDraft = m.ws.sel
 	m.envList.ResetFilter()
-	m.envList.SetItems(makeEnvItems(m.cfg.Catalog, m.envDraft))
+	m.envList.SetItems(makeEnvItems(m.ws.cat, m.envDraft))
 	m.resizeEnvList()
 	m.selectActiveEnvironment()
 }
@@ -33,14 +34,14 @@ func (m *Model) closeEnvironmentSelector() {
 	m.showEnvSelector = false
 	m.envDraft = vars.Selection{}
 	m.envList.ResetFilter()
-	m.envList.SetItems(makeEnvItems(m.cfg.Catalog, m.cfg.Selection))
+	m.envList.SetItems(makeEnvItems(m.ws.cat, m.ws.sel))
 }
 
 // envSelection is the staged draft while the picker is open, and the applied
 // selection otherwise: closing the picker clears the draft.
 func (m Model) envSelection() vars.Selection {
 	if m.envDraft.Empty() {
-		return m.cfg.Selection
+		return m.ws.sel
 	}
 	return m.envDraft
 }
@@ -64,7 +65,7 @@ func (m *Model) stageEnvironmentSelection() tea.Cmd {
 	}
 
 	m.envDraft = m.envSelection().WithGroup(item.group, item.profile)
-	cmd := m.envList.SetItems(makeEnvItems(m.cfg.Catalog, m.envDraft))
+	cmd := m.envList.SetItems(makeEnvItems(m.ws.cat, m.envDraft))
 	m.resizeEnvList()
 	return cmd
 }
@@ -87,7 +88,7 @@ func (m *Model) handleEnvSelectorKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, false
 	case key == "enter":
 		m.applyEnvironmentSelection()
-	case isSpaceKey(msg) && m.cfg.Catalog.Grouped():
+	case isSpaceKey(msg) && m.ws.cat.Grouped():
 		return m.stageEnvironmentSelection(), true
 	case key == "?" || key == "shift+/":
 		m.toggleHelp()
@@ -117,29 +118,28 @@ func (m *Model) applyEnvironmentSelection() {
 	defer m.closeEnvironmentSelector()
 
 	sel := m.envSelection()
-	if !m.cfg.Catalog.Grouped() {
+	if !m.ws.cat.Grouped() {
 		item, ok := m.envList.SelectedItem().(envItem)
 		if !ok {
 			return
 		}
 		var err error
-		if sel, err = m.cfg.Catalog.Select(item.name, nil); err != nil {
+		if sel, err = m.ws.cat.Select(item.name, nil); err != nil {
 			m.setStatusMessage(statusMsg{level: statusError, text: err.Error()})
 			return
 		}
 	}
 
-	env, err := m.cfg.Catalog.Resolve(sel)
+	env, err := m.ws.cat.Resolve(sel)
 	if err != nil {
 		m.setStatusMessage(statusMsg{level: statusError, text: err.Error()})
 		return
 	}
-	if m.env.Scope() == env.Scope() {
+	if m.ws.active.Scope() == env.Scope() {
 		return
 	}
 
-	m.cfg.Selection = env.Selection()
-	m.env = env
+	m.ws.use(env)
 	m.latencySeries.reset()
 	if gs := m.globalsStore(); gs != nil {
 		gs.Clear(env.Scope())
@@ -198,7 +198,7 @@ func (m Model) renderEnvironmentModal() string {
 
 func (m Model) renderEnvironmentHints(width int) string {
 	hint := m.theme.CommandBarHint.Render
-	if !m.cfg.Catalog.Grouped() {
+	if !m.ws.cat.Grouped() {
 		return fmt.Sprintf("%s Select  %s Search  %s Cancel", hint("Enter"), hint("/"), hint("Esc"))
 	}
 
@@ -213,7 +213,7 @@ func (m Model) renderEnvironmentHints(width int) string {
 
 func (m Model) renderEnvironmentSummary(width int) string {
 	label := "Active"
-	if m.cfg.Catalog.Grouped() {
+	if m.ws.cat.Grouped() {
 		label = "Selection"
 	}
 
@@ -229,8 +229,11 @@ func (m Model) renderEnvironmentSummary(width int) string {
 }
 
 func (m Model) environmentSelectionSummary() string {
-	if !m.cfg.Catalog.Grouped() {
-		return m.env.Label()
+	if m.ws.unselected {
+		return "none selected, " + m.ws.intent.Describe() + " is not available here"
+	}
+	if !m.ws.cat.Grouped() {
+		return m.ws.active.Label()
 	}
 
 	choices := m.envChoices(m.envSelection())
@@ -250,7 +253,7 @@ type envChoice struct {
 // which is the order the picker lists them in and the order the header trusts
 // when it names only the first one.
 func (m Model) envChoices(sel vars.Selection) []envChoice {
-	groups := m.cfg.Catalog.Groups()
+	groups := m.ws.cat.Groups()
 	out := make([]envChoice, 0, len(groups))
 	for _, group := range groups {
 		profile, _ := sel.Profile(group.Name)
@@ -267,15 +270,18 @@ func (m Model) envChoices(sel vars.Selection) []envChoice {
 // form keeps the profile, because a header that reads the same on dev and on
 // prod has given up the one thing worth glancing at before sending a request.
 func (m Model) headerEnvVariants() []string {
-	label := m.env.Label()
+	if m.ws.unselected {
+		return []string{"none selected", "none"}
+	}
+	label := m.ws.active.Label()
 	if label == "" {
 		return []string{"default"}
 	}
-	if !m.cfg.Catalog.Grouped() {
+	if !m.ws.cat.Grouped() {
 		return []string{label}
 	}
 
-	choices := m.envChoices(m.env.Selection())
+	choices := m.envChoices(m.ws.active.Selection())
 	first := choices[0]
 	rest := ""
 	if n := len(choices) - 1; n > 0 {
@@ -288,25 +294,24 @@ func (m Model) headerEnvVariants() []string {
 	}
 }
 
-// selectEnvironment updates m.cfg.Selection and m.env together so the cached
-// environment always matches the active selection.
+// selectEnvironment applies a selection made outside the picker, such as a
+// history replay naming its environment.
 func (m *Model) selectEnvironment(name string, profiles map[string]string) error {
-	sel, err := m.cfg.Catalog.Select(name, profiles)
+	sel, err := m.ws.cat.Select(name, profiles)
 	if err != nil {
 		return err
 	}
-	env, err := m.cfg.Catalog.Resolve(sel)
+	env, err := m.ws.cat.Resolve(sel)
 	if err != nil {
 		return err
 	}
-	m.cfg.Selection = sel
-	m.env = env
+	m.ws.use(env)
 	return nil
 }
 
 func (m *Model) environment(sel vars.Selection) (vars.Environment, error) {
 	if sel.Empty() {
-		sel = m.cfg.Selection
+		sel = m.ws.sel
 	}
-	return m.cfg.Catalog.Resolve(sel)
+	return m.ws.cat.Resolve(sel)
 }

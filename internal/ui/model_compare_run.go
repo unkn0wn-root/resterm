@@ -71,6 +71,9 @@ func (m *Model) startCompareRun(
 	spec *restfile.CompareSpec,
 	options httpclient.Options,
 ) tea.Cmd {
+	if cmd := m.runBlocked(); cmd != nil {
+		return cmd
+	}
 	if err := docErr(doc); err != nil {
 		return batchCommands(m.restorePane(paneRegionResponse), m.failErr(err))
 	}
@@ -93,8 +96,8 @@ func (m *Model) startCompareRun(
 	}
 	label := fmt.Sprintf("Compare %s", title)
 	spec = core.NormalizeCompareSpec(spec)
-	env := m.env
-	targets, err := m.cfg.Catalog.CompareTargets(
+	env := m.ws.active
+	targets, err := m.ws.cat.CompareTargets(
 		env.Selection(),
 		spec.Group,
 		spec.Baseline,
@@ -486,8 +489,8 @@ func (m *Model) recordCompareHistory(state *compareState) {
 		RequestText: rqeng.RenderRequestText(baseReq),
 		Compare:     &history.CompareEntry{},
 	}
-	entry.Environment = m.env.Label()
-	entry.EnvironmentSelection = history.EnvironmentSelection(m.env.Selection().Groups())
+	entry.Environment = m.ws.active.Label()
+	entry.EnvironmentSelection = history.EnvironmentSelection(m.ws.active.Selection().Groups())
 	if state.canceled {
 		status := fmt.Sprintf("canceled after %d/%d", len(state.results), len(state.targets))
 		if strings.TrimSpace(state.label) != "" {

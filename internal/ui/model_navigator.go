@@ -82,7 +82,7 @@ func (m *Model) buildNavTree(entries []filesvc.FileEntry) []*navigator.Node[any]
 			rel = filepath.Join(rel, parts[i])
 			d, ok := dirs[rel]
 			if !ok {
-				d = m.buildDirNode(parts[i], filepath.Join(m.workspaceRoot, rel))
+				d = m.buildDirNode(parts[i], filepath.Join(m.ws.root, rel))
 				dirs[rel] = d
 				add(p, d)
 			}
@@ -109,7 +109,7 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 		ID:      id,
 		Title:   filepath.Base(entry.Name),
 		Kind:    navigator.KindFile,
-		Badges:  fileEntryBadges(entry, m.cfg.EnvironmentFile),
+		Badges:  fileEntryBadges(entry, m.ws.envFile),
 		Payload: navigator.Payload[any]{FilePath: entry.Path, Data: entry},
 	}
 	if status, ok := m.gitStatus.File(entry.Path); ok {
@@ -136,7 +136,7 @@ func fileEntryBadges(entry filesvc.FileEntry, activeEnvFile string) []string {
 		badges = append(badges, label)
 	}
 
-	if entry.Kind == filesvc.FileKindEnv && util.SamePath(entry.Path, activeEnvFile) {
+	if entry.Kind == filesvc.FileKindEnv && util.SameFile(entry.Path, activeEnvFile) {
 		badges = append(badges, "ACTIVE")
 	}
 	return badges

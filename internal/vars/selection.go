@@ -1,22 +1,13 @@
 package vars
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"io"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
-
-// scopeVersion prefixes every grouped scope key. Scope keys own all persisted
-// per-selection runtime state (globals, file variables, cookie jars, command
-// auth, OAuth tokens), so bumping this discards every stored value.
-const scopeVersion = "g1:"
 
 // defaultEnvNames is the preference order for picking an environment when the
 // caller did not name one.
@@ -176,7 +167,7 @@ func (c Catalog) Resolve(sel Selection) (Environment, error) {
 		return Environment{
 			values: values,
 			label:  next.name,
-			scope:  next.name,
+			scope:  flatScope(next.name, c.source),
 			sel:    next,
 		}, nil
 	}
@@ -192,7 +183,7 @@ func (c Catalog) Resolve(sel Selection) (Environment, error) {
 	return Environment{
 		values: mergeValues(layers...),
 		label:  strings.Join(parts, ", "),
-		scope:  scope(c.groups, next),
+		scope:  groupScope(c.groups, next, c.source),
 		sel:    next,
 	}, nil
 }
@@ -211,19 +202,4 @@ func (e Environment) Scope() string {
 
 func (e Environment) Selection() Selection {
 	return e.sel
-}
-
-func scope(groups []Group, sel Selection) string {
-	h := sha256.New()
-	for _, g := range groups {
-		writePart(h, strings.ToLower(g.Name))
-		writePart(h, strings.ToLower(sel.profiles[g.Name]))
-	}
-	return scopeVersion + hex.EncodeToString(h.Sum(nil))
-}
-
-func writePart(w io.Writer, s string) {
-	_, _ = io.WriteString(w, strconv.Itoa(len(s)))
-	_, _ = io.WriteString(w, ":")
-	_, _ = io.WriteString(w, s)
 }

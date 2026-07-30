@@ -94,11 +94,19 @@ func (m *Model) startProfileRun(
 	if req == nil {
 		return nil
 	}
+	if cmd := m.runBlocked(); cmd != nil {
+		return cmd
+	}
 	if req.GRPC != nil {
 		m.setStatusMessage(
 			statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn},
 		)
-		return m.executeRequest(doc, req, options, m.cfg.Selection, nil)
+		run, started := m.startRun(runSpec{doc: doc, req: req, opts: options, sel: m.ws.sel})
+		if !started {
+			return run
+		}
+		// Keep the "not supported" warning visible: spinner only, no pulse text.
+		return batchCommands(run, m.sendProgress("", ""))
 	}
 	title := strings.TrimSpace(m.statusRequestTitle(doc, req))
 	if title == "" {
@@ -107,7 +115,7 @@ func (m *Model) startProfileRun(
 	msgBase := fmt.Sprintf("Profiling %s", title)
 	pl, err := core.PrepareProfile(doc, req, core.RunMeta{
 		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
-		Env: m.env,
+		Env: m.ws.active,
 	})
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})

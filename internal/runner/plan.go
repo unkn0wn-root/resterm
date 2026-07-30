@@ -75,7 +75,7 @@ func Build(opts Options) (*Plan, error) {
 		return nil, UsageError{err: err}
 	}
 
-	st, err := resolveStatePaths(opts)
+	st, err := resolveStatePaths(opts, work)
 	if err != nil {
 		return nil, fmt.Errorf("resolve runner state: %w", err)
 	}

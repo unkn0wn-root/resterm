@@ -175,7 +175,7 @@ func (m *Model) startMockServer(addr string) tea.Cmd {
 		addr = m.mockAddress()
 	}
 
-	reloader := mock.NewReloader(m.mockRoot(), m.workspaceRecursive)
+	reloader := mock.NewReloader(m.mockRoot(), m.ws.recursive)
 	handler, err := reloader.Reload(m.currentFile, []byte(m.editor.Value()))
 	if err != nil {
 		return mockStartError(err)
@@ -312,7 +312,7 @@ func (m *Model) mockAddress() string {
 }
 
 func (m *Model) mockRoot() string {
-	if root := strings.TrimSpace(m.workspaceRoot); root != "" {
+	if root := strings.TrimSpace(m.ws.root); root != "" {
 		return root
 	}
 	return "."

@@ -11,6 +11,7 @@ import (
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 // A run in flight owns the status message. Parse warnings live in their own
@@ -115,7 +116,7 @@ func TestStatusBarWarningSectionShowsAtStartup(t *testing.T) {
 	src := "### r\n# @websocket compresion=true\nWS wss://x\n"
 	for _, cfg := range []Config{
 		{FilePath: "warn.http", InitialContent: src},
-		{FilePath: "warn.http", InitialContent: src, EnvironmentFallback: "dev"},
+		{FilePath: "warn.http", InitialContent: src, Env: vars.Config{Fallback: "dev"}},
 	} {
 		model := New(cfg)
 		model.width = 200

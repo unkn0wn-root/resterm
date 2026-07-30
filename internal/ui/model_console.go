@@ -642,7 +642,7 @@ func (m *Model) sendConsoleClose() tea.Cmd {
 func (m *Model) clearStreamBufferCmd() tea.Cmd {
 	sessionID := m.sessionIDForRequest(m.currentRequest)
 	if sessionID != "" {
-		if ls := m.ensureLiveSession(sessionID); ls != nil {
+		if ls := m.liveSession(sessionID); ls != nil {
 			ls.events = nil
 			ls.filter = ""
 			ls.paused = false
@@ -700,14 +700,11 @@ func (m *Model) sessionBaseDir(req *restfile.Request) string {
 			return strings.TrimSpace(base)
 		}
 	}
-	if m.cfg.HTTPOptions.BaseDir != "" {
-		return m.cfg.HTTPOptions.BaseDir
-	}
 	if strings.TrimSpace(req.URL) != "" && strings.HasPrefix(strings.ToLower(req.URL), "file://") {
 		return ""
 	}
 	if m.currentFile != "" {
 		return filepath.Dir(m.currentFile)
 	}
-	return ""
+	return m.cfg.HTTPOptions.BaseDir
 }

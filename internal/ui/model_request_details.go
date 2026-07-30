@@ -140,7 +140,7 @@ func (m *Model) buildRequestDetailFields(
 		{label: "Desc", value: desc, dim: true},
 		{label: "Tags", value: detailTags(req.Metadata.Tags)},
 		{label: "Type", value: detailType(req)},
-		{label: "File", value: detailFile(path, m.workspaceRoot, req.LineRange.Start)},
+		{label: "File", value: detailFile(path, m.ws.root, req.LineRange.Start)},
 	}
 	if meta := detailMeta(req); meta != "" {
 		fields = append(fields, requestDetailField{label: "Meta", value: meta})

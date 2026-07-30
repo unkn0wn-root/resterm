@@ -220,7 +220,7 @@ func TestExecFlagsResolveGroupedDefaultsAndCompare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve flags: %v", err)
 	}
-	env, err := cfg.Catalog.Resolve(cfg.Selection)
+	env, err := cfg.Env.Catalog.Resolve(cfg.Env.Selection)
 	if err != nil {
 		t.Fatalf("resolve environment: %v", err)
 	}

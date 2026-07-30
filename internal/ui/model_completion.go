@@ -9,7 +9,7 @@ import (
 )
 
 func (m *Model) refreshCompletionScope() {
-	scope := buildCompletionScope(m.doc, m.cfg.Catalog, m.cfg.Selection)
+	scope := buildCompletionScope(m.doc, m.ws.cat, m.ws.sel)
 	m.editor.SetCompletionScope(scope)
 }
 

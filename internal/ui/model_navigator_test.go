@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -330,9 +331,9 @@ func TestNavigatorIncludesActiveEnvFile(t *testing.T) {
 	writeSampleFile(t, envFile, "{\n  \"dev\": {\"baseUrl\": \"https://example.com\"}\n}\n")
 
 	model := New(Config{
-		WorkspaceRoot:   tmp,
-		FilePath:        reqFile,
-		EnvironmentFile: envFile,
+		WorkspaceRoot: tmp,
+		FilePath:      reqFile,
+		Env:           vars.Config{File: envFile},
 	})
 	m := &model
 
@@ -360,9 +361,9 @@ func TestNavigatorIncludesExplicitEnvFileInsideWorkspace(t *testing.T) {
 	writeSampleFile(t, envFile, "workspace=dev\nAPI_URL=https://example.com\n")
 
 	model := New(Config{
-		WorkspaceRoot:   tmp,
-		FilePath:        reqFile,
-		EnvironmentFile: envFile,
+		WorkspaceRoot: tmp,
+		FilePath:      reqFile,
+		Env:           vars.Config{File: envFile},
 	})
 	m := &model
 

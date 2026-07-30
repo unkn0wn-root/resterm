@@ -12,8 +12,8 @@ func (m *Model) registryIndex() *registry.Index {
 	if m.rg == nil {
 		m.rg = registry.New()
 	}
-	if !m.rg.Match(m.workspaceRoot, m.workspaceRecursive) {
-		m.rg.Load(m.workspaceRoot, m.workspaceRecursive)
+	if !m.rg.Match(m.ws.root, m.ws.recursive) {
+		m.rg.Load(m.ws.root, m.ws.recursive)
 	}
 	return m.rg
 }

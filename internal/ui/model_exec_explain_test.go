@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -20,7 +20,7 @@ func TestExecuteRequestConflictReturnsExplainReport(t *testing.T) {
 		K8s:    &restfile.K8sSpec{},
 	}
 
-	msg := model.executeRequest(nil, req, httpclient.Options{}, testSelection(""), nil)()
+	msg := runCmd(model.startRun(runSpec{req: req, sel: testSelection("")}))()
 	res, ok := msg.(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg, got %T", msg)
@@ -53,7 +53,7 @@ func TestExecuteExplainReturnsPreviewWithoutSending(t *testing.T) {
 		},
 	}
 
-	msg := model.executeExplain(nil, req, httpclient.Options{}, testSelection(""), nil)()
+	msg := runCmd(model.startRun(runSpec{req: req, sel: testSelection(""), mode: rqeng.ExecModePreview}))()
 	res, ok := msg.(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg, got %T", msg)

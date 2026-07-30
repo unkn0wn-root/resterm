@@ -1,6 +1,7 @@
 package util
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -49,6 +50,37 @@ func TestSamePath(t *testing.T) {
 				t.Fatalf("SamePath(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSameFile(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real.json")
+	other := filepath.Join(dir, "other.json")
+	for _, path := range []string{real, other} {
+		if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alias := filepath.Join(dir, "alias.json")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if !SameFile(real, alias) {
+		t.Fatal("a symlink and its target name one file")
+	}
+	if !SameFile(real, filepath.Join(dir, ".", "real.json")) {
+		t.Fatal("lexically equivalent paths name one file")
+	}
+	if SameFile(real, other) {
+		t.Fatal("two distinct files must not match")
+	}
+	if SameFile(real, filepath.Join(dir, "missing.json")) {
+		t.Fatal("a missing path must not match")
+	}
+	if SameFile("", "") || SameFile(real, "") {
+		t.Fatal("an empty path must not match")
 	}
 }
 

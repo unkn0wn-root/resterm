@@ -22,7 +22,7 @@ func TestResponseSaveModalPrefillAndSaveWire(t *testing.T) {
 		ready:        true,
 	}
 	model := newModelWithResponseTab(responseTabPretty, snap)
-	model.workspaceRoot = dir
+	model.ws.root = dir
 	model.lastResponseSaveDir = dir
 
 	if cmd := model.saveResponseBody(); cmd != nil {

@@ -109,6 +109,7 @@ Selector rules:
 Environment selection rules:
 
 - Named-environment files use `--env dev`. Grouped files use the repeatable `--env-group group=profile`. The two flags cannot be combined.
+- In the TUI these flags outlive a workspace change. Opening another workspace looks for the same environment there rather than taking its default, and leaves nothing selected when it does not exist. `--env-file` is kept across workspaces, and Resterm warns when the new one has an environment file of its own. See [Environment files](resterm.md#environment-files).
 - Groups you do not pass keep their declared defaults. Profiles may contain spaces: `--env-group 'app=dev app 1'`.
 - Grouped compare requires `--compare-group`. Separate compare targets with commas when profile names contain spaces, for example `--compare 'dev app 1,dev app 2' --compare-group app`.
 - An unknown group, profile, or baseline is rejected before any request is sent.
@@ -168,7 +169,9 @@ Behavior:
 
 - stream transcripts are written under `<artifact-dir>/streams/`
 - trace summaries are written under `<artifact-dir>/traces/`
-- when persistence is enabled and `--state-dir` is omitted, Resterm uses `<config-dir>/runner`
+- when persistence is enabled and `--state-dir` is omitted, Resterm uses `<config-dir>/runner/<workspace>-<digest>`, one directory per workspace. State written before this became per-workspace stays at `<config-dir>/runner` and is not migrated, so the first run after upgrading re-authenticates
+- `--state-dir` is used exactly as given, so pass the same value only for workspaces that are meant to share state
+- persisted globals and auth are keyed by environment scope, and a scope names the environment file it came from, so two projects that both define a `dev` environment never read each other's globals or OAuth tokens even under one `--state-dir`
 - `--persist-globals` writes `runtime.json`
 - `--persist-auth` writes `auth.json`
 - `--history` writes `history.db`

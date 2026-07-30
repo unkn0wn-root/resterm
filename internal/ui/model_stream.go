@@ -176,34 +176,28 @@ func (m *Model) attachWebSocketHandle(handle *httpclient.WebSocketHandle, req *r
 	m.ensureWebSocketConsole(sessionID, handle.Session, handle.Sender, req, baseDir)
 }
 
-func (m *Model) ensureLiveSession(id string) *liveSession {
+// liveSession returns the tracked session for id. Entries are created in
+// attachStreamSession and nowhere else, so an unknown id is stale by
+// definition: its stream belonged to a workspace that has been left, and its
+// canceled goroutine is flushing messages that must not take effect here.
+func (m *Model) liveSession(id string) *liveSession {
 	if id == "" {
 		return nil
 	}
-	if m.liveSessions == nil {
-		m.liveSessions = make(map[string]*liveSession)
-	}
-	if m.streamMaxEvents <= 0 {
-		m.streamMaxEvents = defaultStreamMaxEvents
-	}
-	ls, ok := m.liveSessions[id]
-	if !ok {
-		ls = newLiveSession(id, m.streamMaxEvents)
-		m.liveSessions[id] = ls
-	}
-	return ls
+	return m.liveSessions[id]
 }
 
 func (m *Model) handleStreamEvents(msg streamEventMsg) {
 	if len(msg.events) == 0 {
 		return
 	}
-	ls := m.ensureLiveSession(msg.sessionID)
-	if ls != nil {
-		ls.append(msg.events)
-		if ls.state == stream.StateConnecting {
-			ls.state = stream.StateOpen
-		}
+	ls := m.liveSession(msg.sessionID)
+	if ls == nil {
+		return
+	}
+	ls.append(msg.events)
+	if ls.state == stream.StateConnecting {
+		ls.state = stream.StateOpen
 	}
 	if m.sending {
 		m.setStatusMessage(
@@ -214,10 +208,11 @@ func (m *Model) handleStreamEvents(msg streamEventMsg) {
 }
 
 func (m *Model) handleStreamState(msg streamStateMsg) {
-	ls := m.ensureLiveSession(msg.sessionID)
-	if ls != nil {
-		ls.setState(msg.state, msg.err)
+	ls := m.liveSession(msg.sessionID)
+	if ls == nil {
+		return
 	}
+	ls.setState(msg.state, msg.err)
 	level := statusInfo
 	if msg.err != nil || msg.state == stream.StateFailed {
 		level = statusWarn
@@ -236,11 +231,14 @@ func (m *Model) handleStreamState(msg streamStateMsg) {
 }
 
 func (m *Model) handleStreamComplete(msg streamCompleteMsg) {
-	ls := m.ensureLiveSession(msg.sessionID)
-	if ls != nil && ls.state != stream.StateFailed {
+	ls := m.liveSession(msg.sessionID)
+	if ls == nil {
+		return
+	}
+	if ls.state != stream.StateFailed {
 		ls.state = stream.StateClosed
 	}
-	if ls != nil && ls.kind == stream.KindWebSocket {
+	if ls.kind == stream.KindWebSocket {
 		if m.wsConsole != nil && m.wsConsole.sessionID == msg.sessionID {
 			m.wsConsole = nil
 		}
@@ -275,7 +273,7 @@ func (m *Model) handleStreamComplete(msg streamCompleteMsg) {
 
 func (m *Model) handleStreamReady(msg streamReadyMsg) {
 	sessionID := msg.sessionID
-	if sessionID == "" {
+	if m.liveSession(sessionID) == nil {
 		return
 	}
 	currentID := m.sessionIDForRequest(m.currentRequest)
@@ -314,7 +312,7 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	sessionID := m.sessionIDForRequest(m.currentRequest)
-	ls := m.ensureLiveSession(sessionID)
+	ls := m.liveSession(sessionID)
 	if sessionID == "" && !m.streamFilterActive {
 		return nil, false
 	}
@@ -525,7 +523,7 @@ func (m *Model) streamContentForPane(id responsePaneID) string {
 	if sessionID == "" {
 		return "Waiting for stream session\n"
 	}
-	ls := m.ensureLiveSession(sessionID)
+	ls := m.liveSession(sessionID)
 	if ls == nil {
 		return "Waiting for stream session\n"
 	}

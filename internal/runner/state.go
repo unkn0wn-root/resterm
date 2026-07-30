@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -32,13 +34,13 @@ type authStateFile struct {
 	State   engine.AuthState `json:"state"`
 }
 
-func resolveStatePaths(opts Options) (statePaths, error) {
+func resolveStatePaths(opts Options, work string) (statePaths, error) {
 	if !usesStateDir(opts) {
 		return statePaths{}, nil
 	}
 	root := str.Trim(opts.StateDir)
 	if root == "" {
-		root = filepath.Join(config.Dir(), "runner")
+		root = defaultStateDir(work)
 	}
 	root, err := absCleanPath(root)
 	if err != nil {
@@ -50,6 +52,30 @@ func resolveStatePaths(opts Options) (statePaths, error) {
 		Auth:    filepath.Join(root, "auth.json"),
 		History: filepath.Join(root, "history.db"),
 	}, nil
+}
+
+// defaultStateDir keeps persisted state per workspace. Runtime values are keyed
+// by environment scope rather than by workspace, so one shared directory lets two
+// workspaces that both call an environment "dev" read each other's globals and
+// OAuth tokens. An explicit --state-dir names the boundary itself and is honoured
+// as given.
+func defaultStateDir(workspace string) string {
+	base := filepath.Join(config.Dir(), "runner")
+	ws := str.Trim(workspace)
+	if ws == "" {
+		return base
+	}
+	if abs, err := filepath.Abs(ws); err == nil {
+		ws = abs
+	}
+
+	sum := sha256.Sum256([]byte(ws))
+	name := hex.EncodeToString(sum[:])[:16]
+	// The prefix is only there to be readable. Identity comes from the digest.
+	if label := filepath.Base(ws); label != "." && label != ".." && label != string(filepath.Separator) {
+		name = label + "-" + name
+	}
+	return filepath.Join(base, name)
 }
 
 func usesStateDir(opts Options) bool {

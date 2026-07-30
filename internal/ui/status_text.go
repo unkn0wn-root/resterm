@@ -30,7 +30,7 @@ func (m *Model) statusResolver(
 	extras ...map[string]string,
 ) *vars.Resolver {
 	rq := m.requestSvc(httpclient.Options{})
-	return rq.DisplayResolver(context.Background(), doc, req, m.env, "", nil, extras...)
+	return rq.DisplayResolver(context.Background(), doc, req, m.ws.active, "", nil, extras...)
 }
 
 func (m *Model) statusRequestLabel(

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/theme"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestSubmitOpenPathOpensFile(t *testing.T) {
@@ -28,7 +29,7 @@ func TestSubmitOpenPathOpensFile(t *testing.T) {
 	if m.currentFile != file {
 		t.Fatalf("expected current file %q, got %q", file, m.currentFile)
 	}
-	if filepath.Clean(m.workspaceRoot) != filepath.Clean(filepath.Dir(file)) {
+	if filepath.Clean(m.ws.root) != filepath.Clean(filepath.Dir(file)) {
 		t.Fatalf("expected workspace to switch to file directory")
 	}
 	selected := selectedFilePath(m.fileList.SelectedItem())
@@ -60,7 +61,7 @@ func TestSubmitOpenPathSwitchesWorkspace(t *testing.T) {
 		cmd()
 	}
 
-	if filepath.Clean(m.workspaceRoot) != filepath.Clean(dir) {
+	if filepath.Clean(m.ws.root) != filepath.Clean(dir) {
 		t.Fatalf("expected workspace root to switch to directory")
 	}
 	if len(m.fileList.Items()) == 0 {
@@ -103,7 +104,7 @@ func TestSubmitOpenPathOpensEnvFile(t *testing.T) {
 	}
 
 	th := theme.DefaultTheme()
-	model := New(Config{WorkspaceRoot: tmp, Theme: &th, EnvironmentFile: file})
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th, Env: vars.Config{File: file}})
 	m := &model
 	m.openOpenModal()
 	m.openPathInput.SetValue(file)
@@ -200,7 +201,7 @@ func TestApplyOpenFilePathResetsLatencyOnWorkspaceChange(t *testing.T) {
 	if _, ok := model.latencySeries.summary(); !ok {
 		t.Fatal("expected latency to survive a nested file open")
 	}
-	if filepath.Clean(model.workspaceRoot) != filepath.Clean(tmp) {
-		t.Fatalf("expected workspace root to stay %q, got %q", tmp, model.workspaceRoot)
+	if filepath.Clean(model.ws.root) != filepath.Clean(tmp) {
+		t.Fatalf("expected workspace root to stay %q, got %q", tmp, model.ws.root)
 	}
 }

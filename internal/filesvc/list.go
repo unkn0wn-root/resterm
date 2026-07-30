@@ -6,20 +6,20 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 const (
-	extHTTP              = ".http"
-	extREST              = ".rest"
-	extRTS               = ".rts"
-	extGraphQL           = ".graphql"
-	extGQL               = ".gql"
-	extJSON              = ".json"
-	extJS                = ".js"
-	extMJS               = ".mjs"
-	extCJS               = ".cjs"
-	defaultEnvSourceFile = "resterm.env.json"
-	altEnvSourceFile     = "rest-client.env.json"
+	extHTTP    = ".http"
+	extREST    = ".rest"
+	extRTS     = ".rts"
+	extGraphQL = ".graphql"
+	extGQL     = ".gql"
+	extJSON    = ".json"
+	extJS      = ".js"
+	extMJS     = ".mjs"
+	extCJS     = ".cjs"
 )
 
 type FileKind int
@@ -94,11 +94,6 @@ func IsJavaScriptFile(path string) bool {
 	return ext == extJS || ext == extMJS || ext == extCJS
 }
 
-func IsEnvJSONFile(path string) bool {
-	base := strings.ToLower(filepath.Base(strings.TrimSpace(path)))
-	return base == defaultEnvSourceFile || base == altEnvSourceFile
-}
-
 func IsWorkspaceFile(path string) bool {
 	_, ok := ClassifyWorkspacePath(path)
 	return ok
@@ -121,7 +116,7 @@ func ClassifyWorkspacePath(path string) (FileKind, bool) {
 		return FileKindRequest, true
 	case IsRTSFile(path):
 		return FileKindScript, true
-	case IsEnvJSONFile(path):
+	case vars.IsEnvFileName(path):
 		return FileKindEnv, true
 	case IsGraphQLFile(path):
 		return FileKindGraphQL, true

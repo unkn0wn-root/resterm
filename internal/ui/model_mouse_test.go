@@ -11,6 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/history"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func newMouseTestModel(t *testing.T) *Model {
@@ -252,7 +253,7 @@ func TestMouseDoubleClickRequestFileOpensAndExpands(t *testing.T) {
 		Recursive:      false,
 		EnableUpdate:   false,
 		Compare:        engine.CompareConfig{},
-		Selection:      testSelection(""),
+		Env:            vars.Config{Selection: testSelection("")},
 	})
 	model.frameWidth = 120
 	model.frameHeight = 40

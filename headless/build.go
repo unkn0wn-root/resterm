@@ -265,7 +265,7 @@ func environmentOptions(
 	case envFile != "":
 		cat, err = vars.LoadEnvironmentFile(envFile)
 	default:
-		cat, envFile, err = vars.ResolveEnvironment(envPaths(path, work))
+		cat, envFile, err = vars.Discover(envPaths(path, work)...)
 	}
 	if err != nil {
 		return vars.Catalog{}, "", vars.Selection{}, UsageError{

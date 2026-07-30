@@ -18,7 +18,7 @@ func TestEnvironmentSelectorRendersItems(t *testing.T) {
 		"dev":  {"baseUrl": "https://dev"},
 		"prod": {"baseUrl": "https://prod"},
 	})
-	cfg := Config{Catalog: cat, Selection: cat.DefaultSelection()}
+	cfg := Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}}
 
 	model := New(cfg)
 	model.ready = true
@@ -47,7 +47,7 @@ func TestApplyEnvironmentSelectionResetsLatency(t *testing.T) {
 		"dev":  {"baseUrl": "https://dev"},
 		"prod": {"baseUrl": "https://prod"},
 	})
-	cfg := Config{Catalog: cat, Selection: cat.DefaultSelection()}
+	cfg := Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}}
 
 	model := New(cfg)
 	model.latencySeries.add(120 * time.Millisecond)
@@ -66,7 +66,7 @@ func TestApplyEnvironmentSelectionResetsLatency(t *testing.T) {
 
 func TestGroupedEnvironmentSelectorChangesOneGroup(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.openEnvironmentSelector()
 
 	summary := ansi.Strip(model.renderEnvironmentSummary(52))
@@ -94,7 +94,7 @@ func TestGroupedEnvironmentSelectorChangesOneGroup(t *testing.T) {
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeySpace})
 	model = updated.(Model)
 	model.applyEnvironmentSelection()
-	env, err := cat.Resolve(model.cfg.Selection)
+	env, err := cat.Resolve(model.ws.sel)
 	if err != nil {
 		t.Fatalf("resolve selection: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestGroupedEnvironmentSelectorChangesOneGroup(t *testing.T) {
 
 func TestGroupedEnvironmentSelectorStagesMultipleGroups(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	m := &model
 	m.openEnvironmentSelector()
 
@@ -120,7 +120,7 @@ func TestGroupedEnvironmentSelectorStagesMultipleGroups(t *testing.T) {
 	if got := m.environmentSelectionSummary(); !strings.Contains(got, "api: prod") {
 		t.Fatalf("Space should stage api=prod, got %q", got)
 	}
-	if got, _ := m.cfg.Selection.Profile("api"); got != "dev" {
+	if got, _ := m.ws.sel.Profile("api"); got != "dev" {
 		t.Fatalf("staging mutated active api profile to %q", got)
 	}
 	if !m.showEnvSelector {
@@ -150,14 +150,14 @@ func TestGroupedEnvironmentSelectorStagesMultipleGroups(t *testing.T) {
 	if m.showEnvSelector {
 		t.Fatal("picker remained open after applying staged selection")
 	}
-	if got, want := m.env.Label(), "api=prod, app=dev app 2"; got != want {
+	if got, want := m.ws.active.Label(), "api=prod, app=dev app 2"; got != want {
 		t.Fatalf("applied selection = %q, want %q", got, want)
 	}
 }
 
 func TestGroupedEnvironmentSelectorCancelsStagedSelection(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	m := &model
 	m.openEnvironmentSelector()
 
@@ -167,7 +167,7 @@ func TestGroupedEnvironmentSelectorCancelsStagedSelection(t *testing.T) {
 	if m.showEnvSelector {
 		t.Fatal("picker remained open after cancel")
 	}
-	if got, want := m.env.Label(), "api=dev, app=dev app 1"; got != want {
+	if got, want := m.ws.active.Label(), "api=dev, app=dev app 1"; got != want {
 		t.Fatalf("cancel changed active selection to %q, want %q", got, want)
 	}
 
@@ -179,7 +179,7 @@ func TestGroupedEnvironmentSelectorCancelsStagedSelection(t *testing.T) {
 
 func TestGroupedEnvironmentSelectorStagesFilteredChoice(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.openEnvironmentSelector()
 	model.envList.SetFilterText("prod")
 
@@ -202,7 +202,7 @@ func TestGroupedEnvironmentSelectorStagesFilteredChoice(t *testing.T) {
 
 func TestGroupedEnvironmentSelectorFilterOwnsTypedKeys(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	m := &model
 	m.openEnvironmentSelector()
 	selectGroupedEnvironmentItem(t, m, "api", "prod")
@@ -234,7 +234,7 @@ func TestGroupedEnvironmentSelectorFilterOwnsTypedKeys(t *testing.T) {
 
 func TestGroupedEnvironmentSelectorRendersHierarchy(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.ready = true
 	model.width = 100
 	model.height = 30
@@ -256,7 +256,7 @@ func TestGroupedEnvironmentSelectorRendersHierarchy(t *testing.T) {
 
 func TestGroupedEnvironmentSelectorFilterShowsFullChoice(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.envList.SetSize(60, 10)
 	model.envList.SetFilterText("prod")
 
@@ -268,7 +268,7 @@ func TestGroupedEnvironmentSelectorFilterShowsFullChoice(t *testing.T) {
 
 func TestGroupedEnvironmentSelectorRepeatsGroupAtPageBoundary(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.envList.SetSize(40, 4)
 	model.envList.Paginator.PerPage = 1
 	model.envList.Select(1)
@@ -299,7 +299,7 @@ func TestEnvironmentSummaryWrapsLongSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("catalog: %v", err)
 	}
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 
 	view := ansi.Strip(model.renderEnvironmentSummary(28))
 	if lipgloss.Height(view) < 2 {
@@ -318,7 +318,7 @@ func TestEnvironmentSummaryWrapsLongSelection(t *testing.T) {
 
 func TestEnvironmentSelectorFitsNarrowTerminal(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.ready = true
 	model.width = 42
 	model.height = 24
@@ -344,7 +344,7 @@ func TestEnvironmentSelectorFitsNarrowTerminal(t *testing.T) {
 // in place makes the highlight drift on every repaint.
 func TestEnvironmentSelectorFilterHighlightIsStable(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.envList.SetSize(60, 10)
 	model.envList.SetFilterText("prod")
 
@@ -368,7 +368,7 @@ func TestEnvironmentSelectorEscapeClearsSearchBeforeClosing(t *testing.T) {
 		{name: "after accepting", accept: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+			model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 			m := &model
 			m.openEnvironmentSelector()
 

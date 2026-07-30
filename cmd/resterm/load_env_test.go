@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/cli"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestLoadEnvironmentExplicitDotEnv(t *testing.T) {
@@ -17,12 +17,9 @@ func TestLoadEnvironmentExplicitDotEnv(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	cat, resolved, err := cli.LoadEnvironment(envPath, "", dir)
+	cat, err := vars.LoadEnvironmentFile(envPath)
 	if err != nil {
 		t.Fatalf("load environment: %v", err)
-	}
-	if resolved != envPath {
-		t.Fatalf("resolved path = %q, want %q", resolved, envPath)
 	}
 	env, err := cat.Resolve(cat.DefaultSelection())
 	if err != nil {
@@ -47,7 +44,7 @@ func TestLoadEnvironmentIgnoresDotEnvDiscovery(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	cat, resolved, err := cli.LoadEnvironment("", "", dir)
+	cat, resolved, err := vars.Discover(dir)
 	if err != nil {
 		t.Fatalf("load environment: %v", err)
 	}
@@ -70,7 +67,7 @@ func TestLoadEnvironmentDiscoveryReturnsInvalidFileError(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	_, resolved, err := cli.LoadEnvironment("", filepath.Join(dir, "api.http"), dir)
+	_, resolved, err := vars.Discover(filepath.Dir(filepath.Join(dir, "api.http")), dir)
 	if err == nil {
 		t.Fatal("expected invalid discovered environment file to fail")
 	}

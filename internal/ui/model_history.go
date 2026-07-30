@@ -1071,7 +1071,7 @@ func (m *Model) recordGRPCHistory(
 }
 
 func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...string) []string {
-	return m.secretValuesForEnv(m.env, req, extraSecrets...)
+	return m.secretValuesForEnv(m.ws.active, req, extraSecrets...)
 }
 
 func (m *Model) secretValuesForEnv(
@@ -2141,7 +2141,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	switch {
 	case len(targetSelection) > 0:
 		selectErr = m.selectEnvironment("", map[string]string(targetSelection))
-	case targetEnv != "" && !m.cfg.Catalog.Grouped():
+	case targetEnv != "" && !m.ws.cat.Grouped():
 		selectErr = m.selectEnvironment(targetEnv, nil)
 	}
 	if selectErr != nil {
@@ -2155,8 +2155,10 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		}
 	}
 
-	options := m.cfg.HTTPOptions
-	if options.BaseDir == "" && basePath != "" {
+	// The replayed entry names its own file, which wins over the session's
+	// current one when resolving relative bodies and scripts.
+	options := m.runOptions()
+	if basePath != "" {
 		options.BaseDir = filepath.Dir(basePath)
 	}
 
@@ -2214,16 +2216,15 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		return m.presentHistoryEntry(entry, req)
 	}
 
-	spin := m.startSending()
+	run, started := m.startRun(runSpec{doc: doc, req: req, opts: options, sel: m.ws.sel, record: true})
+	if !started {
+		return run
+	}
 	replayText := "Replaying"
 	if label := m.statusRequestLabel(doc, req); label != "" {
 		replayText = fmt.Sprintf("Replaying %s", label)
 	}
-	m.statusPulseBase = replayText
-	m.statusPulseFrame = -1
-	m.setStatusMessage(statusMsg{text: replayText, level: statusInfo})
-	cmd := m.execRunReq(doc, req, options, m.cfg.Selection, nil)
-	return batchCmds([]tea.Cmd{cmd, m.startStatusPulse(), spin})
+	return batchCmds([]tea.Cmd{run, m.sendProgress(replayText, "")})
 }
 
 func (m *Model) loadHistoryDocument(doc *restfile.Document, requestText string) {
