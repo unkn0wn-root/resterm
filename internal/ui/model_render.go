@@ -2402,26 +2402,6 @@ func (m Model) renderLayoutSaveModal() string {
 	return m.renderCenteredModal(box)
 }
 
-func (m Model) renderEnvironmentModal() string {
-	width := max(min(m.width-10, 48), 24)
-
-	commands := fmt.Sprintf(
-		"%s Select    %s Cancel",
-		m.theme.CommandBarHint.Render("Enter"),
-		m.theme.CommandBarHint.Render("Esc"),
-	)
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.envList.View(),
-		"",
-		commands,
-	)
-
-	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return m.renderCenteredModal(box)
-}
-
 func (m Model) renderFileChangeModal() string {
 	width := min(m.width-10, 72)
 	if width < 32 {

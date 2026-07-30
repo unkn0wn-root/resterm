@@ -231,6 +231,7 @@ type Model struct {
 	historyFilterActive      bool
 	historyBlockKey          bool
 	envList                  list.Model
+	envDraft                 vars.Selection
 	themeList                list.Model
 
 	responseLatest           *responseSnapshot
@@ -556,11 +557,12 @@ func New(cfg Config) Model {
 	historyList.Paginator.ArabicFormat = "%d/%d"
 
 	envItems := makeEnvItems(cfg.Catalog, cfg.Selection)
-	envList := list.New(envItems, listDelegateForTheme(th, false, 0), 0, 0)
+	envList := list.New(envItems, envDelegateForTheme(th, cfg.Catalog), 0, 0)
 	envList.Title = "Environments"
 	envList.SetShowStatusBar(false)
 	envList.SetShowHelp(false)
 	envList.SetFilteringEnabled(true)
+	envList.SetShowTitle(false)
 	envList.DisableQuitKeybindings()
 
 	themeItems := makeThemeItems(cfg.ThemeCatalog, activeTheme)

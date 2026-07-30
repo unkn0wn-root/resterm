@@ -14,24 +14,6 @@ type envItem struct {
 	active  bool
 }
 
-func (e envItem) Title() string {
-	if e.group != "" {
-		mark := "  "
-		if e.active {
-			mark = "✓ "
-		}
-		return mark + e.group + " = " + e.profile
-	}
-	if e.active {
-		return "✓ " + e.name
-	}
-	return e.name
-}
-
-func (e envItem) Description() string {
-	return ""
-}
-
 func (e envItem) FilterValue() string {
 	if e.group != "" {
 		return e.group + " = " + e.profile

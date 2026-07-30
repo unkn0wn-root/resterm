@@ -42,7 +42,7 @@ func (d historyDelegate) Render(w io.Writer, m list.Model, index int, item list.
 		return
 	}
 
-	titleStyle, descStyle := historyItemStyles(d.Styles, m, index)
+	titleStyle, descStyle := listRowStyles(d.Styles, m, index)
 	titleSeg := historySegmentStyle(titleStyle)
 	descSeg := historySegmentStyle(descStyle)
 
@@ -74,23 +74,6 @@ func (d historyDelegate) Render(w io.Writer, m list.Model, index int, item list.
 		content = historyTrimLine(content, descFrame.width)
 		row := descFrame.render(descSeg, content)
 		_, _ = io.WriteString(w, "\n"+row)
-	}
-}
-
-func historyItemStyles(
-	s list.DefaultItemStyles,
-	m list.Model,
-	index int,
-) (lipgloss.Style, lipgloss.Style) {
-	emptyFilter := m.FilterState() == list.Filtering && m.FilterValue() == ""
-	selected := index == m.Index() && m.FilterState() != list.Filtering
-	switch {
-	case emptyFilter:
-		return s.DimmedTitle, s.DimmedDesc
-	case selected:
-		return s.SelectedTitle, s.SelectedDesc
-	default:
-		return s.NormalTitle, s.NormalDesc
 	}
 }
 

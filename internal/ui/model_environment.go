@@ -2,27 +2,99 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+)
+
+const (
+	envModalMaxWidth = 84
+	envModalMaxBody  = 20
+	envModalMinList  = 4
+	envLabelGap      = "  "
+	envSummaryJoin   = "  •  "
 )
 
 func (m *Model) openEnvironmentSelector() {
 	m.showEnvSelector = true
 	m.showHelp = false
 	m.showThemeSelector = false
-	m.envList.Title = "Environments · " + m.env.Label()
+	m.envDraft = m.cfg.Selection
+	m.envList.ResetFilter()
+	m.envList.SetItems(makeEnvItems(m.cfg.Catalog, m.envDraft))
+	m.resizeEnvList()
+	m.selectActiveEnvironment()
+}
 
+func (m *Model) closeEnvironmentSelector() {
+	m.showEnvSelector = false
+	m.envDraft = vars.Selection{}
+	m.envList.ResetFilter()
+	m.envList.SetItems(makeEnvItems(m.cfg.Catalog, m.cfg.Selection))
+}
+
+// envSelection is the staged draft while the picker is open, and the applied
+// selection otherwise: closing the picker clears the draft.
+func (m Model) envSelection() vars.Selection {
+	if m.envDraft.Empty() {
+		return m.cfg.Selection
+	}
+	return m.envDraft
+}
+
+func (m *Model) selectActiveEnvironment() {
 	for i, item := range m.envList.Items() {
 		if env, ok := item.(envItem); ok && env.active {
 			m.envList.Select(i)
 			return
 		}
 	}
+	m.envList.Select(0)
+}
 
-	if len(m.envList.Items()) > 0 {
-		m.envList.Select(0)
+// stageEnvironmentSelection records the highlighted profile in the draft without
+// applying it, so a grouped picker can change several groups before Enter.
+func (m *Model) stageEnvironmentSelection() tea.Cmd {
+	item, ok := m.envList.SelectedItem().(envItem)
+	if !ok || item.group == "" {
+		return nil
 	}
+
+	m.envDraft = m.envSelection().WithGroup(item.group, item.profile)
+	cmd := m.envList.SetItems(makeEnvItems(m.cfg.Catalog, m.envDraft))
+	m.resizeEnvList()
+	return cmd
+}
+
+// handleEnvSelectorKey consumes the picker's own bindings and reports whether it
+// took the key; everything else falls through to the list.
+func (m *Model) handleEnvSelectorKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch key := msg.String(); {
+	case key == "ctrl+q" || key == "ctrl+d":
+		return tea.Quit, true
+	case key == "esc":
+		// Esc backs out one layer at a time: the list clears the search, and
+		// only an Esc with no search left closes the picker.
+		if m.envList.FilterState() != list.Unfiltered {
+			return nil, false
+		}
+		m.closeEnvironmentSelector()
+	case m.envList.SettingFilter():
+		// The filter input owns every remaining key, Enter and Space included.
+		return nil, false
+	case key == "enter":
+		m.applyEnvironmentSelection()
+	case isSpaceKey(msg) && m.cfg.Catalog.Grouped():
+		return m.stageEnvironmentSelection(), true
+	case key == "?" || key == "shift+/":
+		m.toggleHelp()
+	default:
+		return nil, false
+	}
+	return nil, true
 }
 
 func (m *Model) toggleHelp() {
@@ -32,44 +104,42 @@ func (m *Model) toggleHelp() {
 		m.clearHelpFilter()
 		return
 	}
+	if m.showEnvSelector {
+		m.closeEnvironmentSelector()
+	}
 	m.showHelp = true
 	m.helpJustOpened = true
-	m.showEnvSelector = false
 	m.showThemeSelector = false
 	m.clearHelpFilter()
 }
 
-func (m *Model) applyEnvironmentSelection() tea.Cmd {
-	item, ok := m.envList.SelectedItem().(envItem)
-	if !ok {
-		m.showEnvSelector = false
-		return nil
-	}
+func (m *Model) applyEnvironmentSelection() {
+	defer m.closeEnvironmentSelector()
 
-	m.showEnvSelector = false
-	sel := m.cfg.Selection
-	if item.group != "" {
-		sel = sel.WithGroup(item.group, item.profile)
-	} else {
+	sel := m.envSelection()
+	if !m.cfg.Catalog.Grouped() {
+		item, ok := m.envList.SelectedItem().(envItem)
+		if !ok {
+			return
+		}
 		var err error
 		if sel, err = m.cfg.Catalog.Select(item.name, nil); err != nil {
 			m.setStatusMessage(statusMsg{level: statusError, text: err.Error()})
-			return nil
+			return
 		}
 	}
+
 	env, err := m.cfg.Catalog.Resolve(sel)
 	if err != nil {
 		m.setStatusMessage(statusMsg{level: statusError, text: err.Error()})
-		return nil
+		return
 	}
 	if m.env.Scope() == env.Scope() {
-		return nil
+		return
 	}
 
 	m.cfg.Selection = env.Selection()
 	m.env = env
-	m.envList.SetItems(makeEnvItems(m.cfg.Catalog, m.cfg.Selection))
-	m.envList.Title = "Environments · " + env.Label()
 	m.latencySeries.reset()
 	if gs := m.globalsStore(); gs != nil {
 		gs.Clear(env.Scope())
@@ -81,7 +151,96 @@ func (m *Model) applyEnvironmentSelection() tea.Cmd {
 	m.setStatusMessage(statusMsg{level: statusInfo, text: msg})
 	m.syncRequestList(m.doc)
 	m.syncHistory()
-	return nil
+}
+
+// envModalLayout is the modal frame plus the list height left over once the
+// summary and the blank line under it are placed.
+type envModalLayout struct {
+	modalSize
+	summary string
+	list    int
+}
+
+func (m Model) environmentModalLayout() envModalLayout {
+	size := m.modalSize(envModalMaxWidth, envModalMaxBody)
+	summary := m.renderEnvironmentSummary(size.view)
+	return envModalLayout{
+		modalSize: size,
+		summary:   summary,
+		list:      max(size.body-lipgloss.Height(summary)-1, envModalMinList),
+	}
+}
+
+// resizeEnvList keeps the list in step with the summary, which gains a line
+// whenever a staged selection wraps.
+func (m *Model) resizeEnvList() {
+	if len(m.envList.Items()) == 0 {
+		return
+	}
+	layout := m.environmentModalLayout()
+	m.envList.SetSize(layout.view, layout.list)
+}
+
+func (m Model) renderEnvironmentModal() string {
+	layout := m.environmentModalLayout()
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		layout.summary,
+		"",
+		m.envList.View(),
+	)
+	body = lipgloss.NewStyle().
+		Padding(0, 2).
+		Width(layout.content).
+		Render(body)
+	return m.renderModalBox("Environments", body, m.renderEnvironmentHints(layout.view), layout.width)
+}
+
+func (m Model) renderEnvironmentHints(width int) string {
+	hint := m.theme.CommandBarHint.Render
+	if !m.cfg.Catalog.Grouped() {
+		return fmt.Sprintf("%s Select  %s Search  %s Cancel", hint("Enter"), hint("/"), hint("Esc"))
+	}
+
+	stage := fmt.Sprintf("%s Choose  %s Apply", hint("Space"), hint("Enter"))
+	leave := fmt.Sprintf("%s Search  %s Cancel", hint("/"), hint("Esc"))
+	sep := "  "
+	if visibleWidth(stage)+visibleWidth(sep)+visibleWidth(leave) > width {
+		sep = "\n"
+	}
+	return stage + sep + leave
+}
+
+func (m Model) renderEnvironmentSummary(width int) string {
+	label := "Active"
+	if m.cfg.Catalog.Grouped() {
+		label = "Selection"
+	}
+
+	value := wrapToWidth(
+		m.environmentSelectionSummary(),
+		max(width-visibleWidth(label)-visibleWidth(envLabelGap), 8),
+	)
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		m.themeRuntime.inputLabelStyle(m.theme).Bold(true).Render(label)+envLabelGap,
+		m.theme.HeaderValue.Render(value),
+	)
+}
+
+func (m Model) environmentSelectionSummary() string {
+	if !m.cfg.Catalog.Grouped() {
+		return m.env.Label()
+	}
+
+	groups := m.cfg.Catalog.Groups()
+	sel := m.envSelection()
+	parts := make([]string, 0, len(groups))
+	for _, group := range groups {
+		profile, _ := sel.Profile(group.Name)
+		parts = append(parts, group.Name+": "+profile)
+	}
+	return strings.Join(parts, envSummaryJoin)
 }
 
 // selectEnvironment updates m.cfg.Selection and m.env together so the cached
