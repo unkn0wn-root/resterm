@@ -1,0 +1,78 @@
+# Mock backend for grouped-environments.http. It has no idea which environment
+# is selected, so every route simply reflects what the request carried. That is
+# what makes a group switch visible in the response body.
+#
+# Start it from this directory with `g Shift+M` in the TUI, or from the
+# repository root:
+#
+#   resterm mock _examples/grouped/mock.http
+
+### Context for the active selection
+# @mock method=GET path=/api/{tier}/context
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Mock-Route: context
+
+{
+  "api": {{json.path.tier}},
+  "apiVersion": {{json.headers.X-Api-Version}},
+  "credentials": {{json.headers.X-Credential-Profile}},
+  "clientId": {{json.headers.X-Client-Id}},
+  "region": {{json.headers.X-Region}},
+  "regionName": {{json.headers.X-Region-Name}}
+}
+
+### Backend health, api group only
+# @mock method=GET path=/api/{tier}/health
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Mock-Route: health
+
+{
+  "status": "ok",
+  "api": {{json.path.tier}}
+}
+
+### Caller identity, credentials group only
+# @mock method=GET path=/whoami
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Mock-Route: whoami
+
+{
+  "credentials": {{json.headers.X-Credential-Profile}},
+  "clientId": {{json.headers.X-Client-Id}},
+  "authorization": {{json.headers.Authorization}}
+}
+
+### Regional routing, region group only
+# @mock method=GET path=/regions/{code}/status
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Mock-Route: region
+
+{
+  "region": {{json.path.code}},
+  "regionName": {{json.headers.X-Region-Name}}
+}
+
+### Workloads, every group at once
+# @mock method=GET path=/api/{tier}/{code}/workloads
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Mock-Route: workloads
+
+{
+  "api": {{json.path.tier}},
+  "region": {{json.path.code}},
+  "apiVersion": {{json.headers.X-Api-Version}},
+  "clientId": {{json.headers.X-Client-Id}},
+  "workloads": []
+}
+
+### Anything else
+# @mock method=GET path=/{rest...} default=true
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{"error":"no mock for this path","path":{{json.path.rest}}}

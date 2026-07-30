@@ -399,6 +399,8 @@ In this example `dev` inherits `auth.clientId=demo-client` from `$shared`, while
 
 Use groups when you want to combine independent choices, like API endpoint, app, and credentials, without writing out every combination as its own environment. A file either defines named environments or groups. The two forms cannot be mixed.
 
+Runnable sample: `_examples/grouped/`. Its `resterm.env.json` declares three groups of 3 profiles, so 9 declarations cover 27 combinations, and `grouped-environments.http` has one request per group plus one that reads from all three.
+
 ```json
 {
   "$shared": {
