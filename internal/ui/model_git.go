@@ -18,17 +18,17 @@ type gitStatusMsg struct {
 }
 
 func (m Model) initialGitStatusCmd() tea.Cmd {
-	return newGitStatusCmd(m.gitStatusSeq, m.workspaceRoot, m.gitStatusPaths())
+	return newGitStatusCmd(m.gitStatusSeq, m.ws.root, m.gitStatusPaths())
 }
 
 func (m *Model) refreshGitStatusCmd() tea.Cmd {
 	m.gitStatusSeq++
 	paths := m.gitStatusPaths()
-	if m.workspaceRoot == "" || len(paths) == 0 {
+	if m.ws.root == "" || len(paths) == 0 {
 		m.gitStatus = gitstatus.Snapshot{}
 		return nil
 	}
-	return newGitStatusCmd(m.gitStatusSeq, m.workspaceRoot, paths)
+	return newGitStatusCmd(m.gitStatusSeq, m.ws.root, paths)
 }
 
 func newGitStatusCmd(seq int, root string, paths []string) tea.Cmd {

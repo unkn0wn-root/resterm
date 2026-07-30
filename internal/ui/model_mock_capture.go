@@ -107,7 +107,7 @@ func (m *Model) capturedMock() (*restfile.Mock, error) {
 	}
 
 	overlay.Mocks = append(overlay.Mocks, spec)
-	if _, err := mock.Load(m.mockRoot(), m.workspaceRecursive, overlay); err != nil {
+	if _, err := mock.Load(m.mockRoot(), m.ws.recursive, overlay); err != nil {
 		return nil, fmt.Errorf("response cannot be captured as a mock: %s", oneLine(err.Error()))
 	}
 	return spec, nil
@@ -130,7 +130,7 @@ func (m *Model) captureSource() (*httpclient.Response, string, error) {
 
 func (m *Model) captureRoute(method, path string) (*restfile.Document, []*restfile.Mock, error) {
 	overlay := parser.Parse(m.currentFile, []byte(m.editor.Value()))
-	docs, err := mock.LoadDocuments(m.mockRoot(), m.workspaceRecursive, overlay)
+	docs, err := mock.LoadDocuments(m.mockRoot(), m.ws.recursive, overlay)
 	if err != nil {
 		return nil, nil, fmt.Errorf("response cannot be captured as a mock: %s", oneLine(err.Error()))
 	}

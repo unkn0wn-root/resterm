@@ -61,6 +61,13 @@ func (s *Globals) Clear(env string) {
 	s.store.clear(envKey(env))
 }
 
+func (s *Globals) Reset() {
+	if s == nil {
+		return
+	}
+	s.store.reset()
+}
+
 func (s *Globals) Entries() []engine.RuntimeGlobal {
 	if s == nil {
 		return nil

@@ -93,10 +93,26 @@ func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 	}
 }
 
-func (e *Engine) SetConfig(cfg engine.Config) {
+// ForRun returns an engine view for a single execution, so preparing the next
+// run cannot rewrite what a request in flight is reading. Fields are listed
+// rather than the struct copied to keep shared and per-run state an explicit
+// choice.
+func (e *Engine) ForRun(
+	cfg engine.Config,
+	resp *httpclient.Response,
+	grpc *grpcclient.Response,
+) *Engine {
 	if e == nil {
-		return
+		return nil
 	}
+
+	out := &Engine{cfg: e.cfg, rt: e.rt, hc: e.hc, gc: e.gc, sc: e.sc, re: e.re, rg: e.rg}
+	out.setConfig(cfg)
+	out.seedLast(resp, grpc)
+	return out
+}
+
+func (e *Engine) setConfig(cfg engine.Config) {
 	prev := e.cfg
 	e.cfg = cfg
 	if cfg.Client != nil {
@@ -196,9 +212,9 @@ func (e *Engine) store(res xrunResult) {
 	}
 }
 
-// The UI can replace or finish a response outside ExecuteWith. SeedLast keeps
+// The UI can replace or finish a response outside ExecuteWith. seedLast keeps
 // RTS values such as resp and trace aligned with that UI state.
-func (e *Engine) SeedLast(resp *httpclient.Response, grpc *grpcclient.Response) {
+func (e *Engine) seedLast(resp *httpclient.Response, grpc *grpcclient.Response) {
 	switch {
 	case grpc != nil:
 		e.last.grpc = grpc

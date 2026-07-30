@@ -45,8 +45,10 @@ func TestLoadGroupedEnvironment(t *testing.T) {
 	if got := env.Values()["region"]; got != "eu" {
 		t.Fatalf("shared region = %q, want eu", got)
 	}
-	if !strings.HasPrefix(env.Scope(), "g1:") {
-		t.Fatalf("scope = %q, want g1 prefix", env.Scope())
+	// A catalog read from a file folds that file into its scope, which the g2
+	// prefix marks. Catalogs built in process keep the file-blind g1 scopes.
+	if !strings.HasPrefix(env.Scope(), "g2:") {
+		t.Fatalf("scope = %q, want g2 prefix", env.Scope())
 	}
 
 	sel := env.Selection().WithGroup("app", "dev app 2")

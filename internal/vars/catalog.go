@@ -22,6 +22,7 @@ type Catalog struct {
 	envs   []entry
 	groups []Group
 	shared map[string]string
+	source string
 }
 
 type Group struct {

@@ -45,6 +45,17 @@ func (s *Cookies) Jar(env string) http.CookieJar {
 	return jar
 }
 
+func (s *Cookies) Reset() {
+	if s == nil {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.jars = make(map[string]http.CookieJar)
+}
+
 func (s *Cookies) Clear(env string) {
 	if s == nil {
 		return

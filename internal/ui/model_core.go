@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,32 +142,29 @@ const (
 )
 
 type Config struct {
-	FilePath            string
-	InitialContent      string
-	Client              *httpclient.Client
-	Theme               *theme.Theme
-	ThemeCatalog        theme.Catalog
-	ActiveThemeKey      string
-	Settings            config.Settings
-	SettingsHandle      config.SettingsHandle
-	Catalog             vars.Catalog
-	Selection           vars.Selection
-	EnvironmentFile     string
-	EnvironmentFallback string
-	HTTPOptions         httpclient.Options
-	GRPCOptions         grpcclient.Options
-	SSHManager          *ssh.Manager
-	K8sManager          *k8s.Manager
-	History             history.Store
-	WorkspaceRoot       string
-	Recursive           bool
-	Version             string
-	UpdateClient        update.Client
-	EnableUpdate        bool
-	UpdateCmd           string
-	Compare             engine.CompareConfig
-	Bindings            *bindings.Map
-	Runtime             *rtrun.Runtime
+	FilePath       string
+	InitialContent string
+	Client         *httpclient.Client
+	Theme          *theme.Theme
+	ThemeCatalog   theme.Catalog
+	ActiveThemeKey string
+	Settings       config.Settings
+	SettingsHandle config.SettingsHandle
+	Env            vars.Config
+	HTTPOptions    httpclient.Options
+	GRPCOptions    grpcclient.Options
+	SSHManager     *ssh.Manager
+	K8sManager     *k8s.Manager
+	History        history.Store
+	WorkspaceRoot  string
+	Recursive      bool
+	Version        string
+	UpdateClient   update.Client
+	EnableUpdate   bool
+	UpdateCmd      string
+	Compare        engine.CompareConfig
+	Bindings       *bindings.Map
+	Runtime        *rtrun.Runtime
 }
 
 type operatorState struct {
@@ -179,21 +175,19 @@ type operatorState struct {
 }
 
 type Model struct {
-	cfg                Config
-	env                vars.Environment
-	run                *rtrun.Runtime
-	rq                 *rqeng.Engine
-	bindingsMap        *bindings.Map
-	theme              theme.Theme
-	activeThemeDef     theme.Definition
-	themeRuntime       themeRuntime
-	themeCatalog       theme.Catalog
-	client             *httpclient.Client
-	grpcClient         *grpcclient.Client
-	grpcOptions        grpcclient.Options
-	rg                 *registry.Index
-	workspaceRoot      string
-	workspaceRecursive bool
+	cfg            Config
+	ws             workspace
+	run            *rtrun.Runtime
+	rq             *rqeng.Engine
+	bindingsMap    *bindings.Map
+	theme          theme.Theme
+	activeThemeDef theme.Definition
+	themeRuntime   themeRuntime
+	themeCatalog   theme.Catalog
+	client         *httpclient.Client
+	grpcClient     *grpcclient.Client
+	grpcOptions    grpcclient.Options
+	rg             *registry.Index
 
 	fileWatcher   *watcher.Watcher
 	fileWatchChan chan tea.Msg
@@ -452,36 +446,24 @@ func New(cfg Config) Model {
 	fileWatchChan := make(chan tea.Msg, 16)
 	runMsgChan := make(chan tea.Msg, 256)
 
-	workspace := cfg.WorkspaceRoot
-	if workspace == "" {
+	root := cfg.WorkspaceRoot
+	if root == "" {
 		if cfg.FilePath != "" {
-			workspace = filepath.Dir(cfg.FilePath)
+			root = filepath.Dir(cfg.FilePath)
 		} else if wd, err := os.Getwd(); err == nil {
-			workspace = wd
+			root = wd
 		} else {
-			workspace = "."
+			root = "."
 		}
 	}
+	ws := newWorkspace(root, cfg.Recursive, cfg.Env)
 
 	initialDoc := parseEditableDocument(cfg.FilePath, []byte(cfg.InitialContent))
-	entries, err := listWorkspaceEntries(
-		workspace,
-		cfg.Recursive,
-		cfg.EnvironmentFile,
-		cfg.FilePath,
-		initialDoc,
-	)
-	var initialStatus statusMsg
+	entries, err := listWorkspaceEntries(ws.root, ws.recursive, ws.envFile, cfg.FilePath, initialDoc)
 	if err != nil {
-		initialStatus = statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusWarn}
 		entries = nil
 	}
-	if initialStatus.text == "" && cfg.EnvironmentFallback != "" {
-		initialStatus = statusMsg{
-			text:  fmt.Sprintf("Using environment: %s", cfg.EnvironmentFallback),
-			level: statusInfo,
-		}
-	}
+	initialStatus := startupEnvStatus(entries, ws, cfg.Env.Fallback, err)
 
 	items := makeFileItems(entries)
 	fileList := list.New(items, listDelegateForTheme(th, false, 0), 0, 0)
@@ -556,8 +538,8 @@ func New(cfg Config) Model {
 	historyList.Paginator.Type = paginator.Arabic
 	historyList.Paginator.ArabicFormat = "%d/%d"
 
-	envItems := makeEnvItems(cfg.Catalog, cfg.Selection)
-	envList := list.New(envItems, envDelegateForTheme(th, cfg.Catalog), 0, 0)
+	envItems := makeEnvItems(ws.cat, ws.sel)
+	envList := list.New(envItems, envDelegateForTheme(th, ws.cat), 0, 0)
 	envList.Title = "Environments"
 	envList.SetShowStatusBar(false)
 	envList.SetShowHelp(false)
@@ -608,7 +590,7 @@ func New(cfg Config) Model {
 		k8sMgr = k8s.NewManager()
 	}
 	rg := registry.New()
-	rg.Load(workspace, cfg.Recursive)
+	rg.Load(ws.root, ws.recursive)
 
 	run := cfg.Runtime
 	if run == nil {
@@ -628,10 +610,9 @@ func New(cfg Config) Model {
 	updateEnabled := cfg.EnableUpdate && !update.DevBuild(updateVersion) && cfg.UpdateClient.Ready()
 	statusUser, statusHost := currentStatusIdentity()
 
-	env, _ := cfg.Catalog.Resolve(cfg.Selection)
 	model := Model{
 		cfg:                    cfg,
-		env:                    env,
+		ws:                     ws,
 		run:                    run,
 		bindingsMap:            bindingMap,
 		theme:                  th,
@@ -640,8 +621,6 @@ func New(cfg Config) Model {
 		grpcClient:             grpcExec,
 		grpcOptions:            cfg.GRPCOptions,
 		rg:                     rg,
-		workspaceRoot:          workspace,
-		workspaceRecursive:     cfg.Recursive,
 		fileList:               fileList,
 		requestList:            requestList,
 		workflowList:           workflowList,
@@ -742,9 +721,9 @@ func New(cfg Config) Model {
 	model.startFileWatcher()
 	model.setLivePane(responsePanePrimary)
 	model.applyThemeDefinition(theme.ResolveDefinition(cfg.ThemeCatalog, activeTheme, th))
-	if strings.TrimSpace(model.workspaceRoot) != "" &&
+	if strings.TrimSpace(model.ws.root) != "" &&
 		strings.TrimSpace(model.lastResponseSaveDir) == "" {
-		model.lastResponseSaveDir = model.workspaceRoot
+		model.lastResponseSaveDir = model.ws.root
 	}
 	model.startLatAnim()
 	return model

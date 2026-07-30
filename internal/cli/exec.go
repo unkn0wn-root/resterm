@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -35,16 +36,13 @@ type ExecFlags struct {
 }
 
 type ExecConfig struct {
-	FilePath    string
-	Workspace   string
-	Recursive   bool
-	Catalog     vars.Catalog
-	Selection   vars.Selection
-	EnvFile     string
-	EnvFallback string
-	HTTPOpts    httpclient.Options
-	GRPCOpts    grpcclient.Options
-	Compare     engine.CompareConfig
+	FilePath  string
+	Workspace string
+	Recursive bool
+	Env       vars.Config
+	HTTPOpts  httpclient.Options
+	GRPCOpts  grpcclient.Options
+	Compare   engine.CompareConfig
 }
 
 func NewExecFlags() ExecFlags {
@@ -159,7 +157,7 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 	filePath = CleanExecPath(filePath)
 	work := resolveWorkspace(filePath, f.Workspace)
 
-	cat, envFile, err := LoadEnvironment(f.EnvFile, filePath, work)
+	cat, envFile, err := f.loadEnvironment(filePath, work)
 	if err != nil {
 		return ExecConfig{}, err
 	}
@@ -207,20 +205,44 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 	}
 
 	return ExecConfig{
-		FilePath:    filePath,
-		Workspace:   work,
-		Recursive:   f.Recursive,
-		Catalog:     cat,
-		Selection:   sel,
-		EnvFile:     envFile,
-		EnvFallback: envFallback,
-		HTTPOpts:    httpOpts,
+		FilePath:  filePath,
+		Workspace: work,
+		Recursive: f.Recursive,
+		Env: vars.Config{
+			Catalog:      cat,
+			Selection:    sel,
+			File:         envFile,
+			FileExplicit: str.Trim(f.EnvFile) != "",
+			Intent:       vars.Intent{Name: f.EnvName, Groups: maps.Clone(f.EnvGroups)},
+			Fallback:     envFallback,
+		},
+		HTTPOpts: httpOpts,
 		GRPCOpts: grpcclient.Options{
 			DefaultPlaintext:    true,
 			DefaultPlaintextSet: true,
 		},
 		Compare: engine.CompareConfig{Targets: targets, Base: base, Group: group},
 	}, nil
+}
+
+// loadEnvironment loads the file named with --env-file, or discovers one near
+// the launch context. The command line is the one place the ambient working
+// directory takes part in discovery.
+func (f ExecFlags) loadEnvironment(filePath, work string) (vars.Catalog, string, error) {
+	if explicit := str.Trim(f.EnvFile); explicit != "" {
+		cat, err := vars.LoadEnvironmentFile(explicit)
+		if err != nil {
+			return vars.Catalog{}, "", err
+		}
+		return cat, explicit, nil
+	}
+
+	var fileDir string
+	if filePath != "" {
+		fileDir = filepath.Dir(filePath)
+	}
+	cwd, _ := os.Getwd()
+	return vars.Discover(fileDir, work, cwd)
 }
 
 func CleanExecPath(path string) string {

@@ -34,7 +34,7 @@ func TestOpenRequestDetailsCapturesFields(t *testing.T) {
 	model.doc = &restfile.Document{Requests: []*restfile.Request{req}}
 	model.currentRequest = req
 	model.currentFile = "/tmp/demo.http"
-	model.workspaceRoot = "/tmp"
+	model.ws.root = "/tmp"
 	_ = model.setFocus(focusRequests)
 
 	model.openRequestDetails()

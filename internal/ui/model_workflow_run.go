@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -131,6 +130,9 @@ func (m *Model) startWorkflowRun(
 	workflow restfile.Workflow,
 	options httpclient.Options,
 ) tea.Cmd {
+	if cmd := m.runBlocked(); cmd != nil {
+		return cmd
+	}
 	if doc == nil {
 		m.setStatusMessage(statusMsg{text: "No document loaded", level: statusWarn})
 		return nil
@@ -156,12 +158,9 @@ func (m *Model) startWorkflowRun(
 	if key := workflowKey(&workflow); key != "" {
 		m.workflowSelectionKey = key
 	}
-	if options.BaseDir == "" && m.currentFile != "" {
-		options.BaseDir = filepath.Dir(m.currentFile)
-	}
 	pl, err := core.PrepareWorkflow(doc, workflow, core.RunMeta{
 		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
-		Env: m.env,
+		Env: m.ws.active,
 	})
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
@@ -175,6 +174,9 @@ func (m *Model) startForEachRun(
 	req *restfile.Request,
 	options httpclient.Options,
 ) tea.Cmd {
+	if cmd := m.runBlocked(); cmd != nil {
+		return cmd
+	}
 	if doc == nil || req == nil {
 		m.setStatusMessage(statusMsg{text: "No request loaded", level: statusWarn})
 		return nil
@@ -186,12 +188,9 @@ func (m *Model) startForEachRun(
 		m.setStatusMessage(statusMsg{text: "Another run is already active", level: statusWarn})
 		return nil
 	}
-	if options.BaseDir == "" && m.currentFile != "" {
-		options.BaseDir = filepath.Dir(m.currentFile)
-	}
 	pl, err := core.PrepareForEach(doc, req, core.RunMeta{
 		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
-		Env: m.env,
+		Env: m.ws.active,
 	})
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})

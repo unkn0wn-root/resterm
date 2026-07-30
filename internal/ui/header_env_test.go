@@ -15,7 +15,7 @@ import (
 // and on prod has dropped the only part worth glancing at.
 func TestHeaderEnvVariantsSummarisesGroups(t *testing.T) {
 	cat := groupedEnvironmentCatalog(t)
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 
 	got := model.headerEnvVariants()
 	want := []string{"api=dev +1", "dev +1"}
@@ -38,7 +38,7 @@ func TestHeaderEnvVariantsSingleGroupOmitsCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("catalog: %v", err)
 	}
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 
 	got := model.headerEnvVariants()
 	want := []string{"api=prod", "prod"}
@@ -49,7 +49,7 @@ func TestHeaderEnvVariantsSingleGroupOmitsCount(t *testing.T) {
 
 func TestHeaderEnvVariantsFlatCatalogUsesLabel(t *testing.T) {
 	cat := testCatalog(vars.EnvironmentSet{"dev": {"url": "https://dev"}})
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 
 	if got := model.headerEnvVariants(); len(got) != 1 || got[0] != "dev" {
 		t.Fatalf("variants = %q, want [dev]", got)
@@ -68,7 +68,7 @@ func TestHeaderShowsCompactGroupedEnvironment(t *testing.T) {
 		t.Fatalf("catalog: %v", err)
 	}
 
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.ready = true
 	model.width = 200
 	model.height = 30
@@ -108,7 +108,7 @@ func TestHeaderKeepsActiveAndTestsWithGroupedEnvironment(t *testing.T) {
 		t.Fatalf("catalog: %v", err)
 	}
 
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.ready = true
 	model.width = 120
 	model.height = 30
@@ -128,7 +128,7 @@ func TestHeaderKeepsActiveAndTestsWithGroupedEnvironment(t *testing.T) {
 
 func TestHeaderCapsSingleValue(t *testing.T) {
 	cat := testCatalog(vars.EnvironmentSet{"dev": {"url": "https://dev"}})
-	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	model := New(Config{Env: vars.Config{Catalog: cat, Selection: cat.DefaultSelection()}})
 	model.ready = true
 	model.width = 100
 	model.height = 30

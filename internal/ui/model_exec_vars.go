@@ -85,7 +85,7 @@ func (m *Model) globalsSnapshot() map[string]globalValue {
 	if gs == nil {
 		return nil
 	}
-	return gs.Snapshot(m.env.Scope())
+	return gs.Snapshot(m.ws.active.Scope())
 }
 
 func (m *Model) clearGlobalValues() tea.Cmd {
@@ -95,7 +95,7 @@ func (m *Model) clearGlobalValues() tea.Cmd {
 		return nil
 	}
 
-	env := m.env
+	env := m.ws.active
 	gs.Clear(env.Scope())
 	if cs := m.cookieStore(); cs != nil {
 		cs.Clear(env.Scope())

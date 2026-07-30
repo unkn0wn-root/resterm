@@ -54,16 +54,19 @@ func (m *Model) openFile(path string) tea.Cmd {
 			return statusMsg{text: fmt.Sprintf("open failed: %v", err), level: statusError}
 		}
 	}
+	return m.installFile(path, data)
+}
+
+// installFile puts already read content into the editor. Past this point the
+// open cannot be aborted, so a workspace listing failure only warns.
+func (m *Model) installFile(path string, data []byte) tea.Cmd {
 	doc := parseEditableDocument(path, data)
-	if err := m.replaceEditorWithDocument(editorDocumentReplacement{
-		path:  path,
-		value: string(data),
-		doc:   doc,
-	}); err != nil {
-		return func() tea.Msg {
-			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
-		}
-	}
+	_ = m.replaceEditorWithDocument(editorDocumentReplacement{
+		path:                  path,
+		value:                 string(data),
+		doc:                   doc,
+		reportWorkspaceErrors: true,
+	})
 	m.watchFile(path, data)
 	m.setHistoryScopeForFile(path)
 	m.syncHistory()
@@ -149,7 +152,7 @@ func (m *Model) selectFileByPath(path string) bool {
 
 func (m *Model) ensureWorkspaceFile(path string) bool {
 	clean := filepath.Clean(path)
-	root := filepath.Clean(m.workspaceRoot)
+	root := filepath.Clean(m.ws.root)
 	rel, err := filepath.Rel(root, clean)
 	if err != nil {
 		return false

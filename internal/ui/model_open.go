@@ -65,7 +65,7 @@ func (m *Model) submitOpenPath() tea.Cmd {
 func (m *Model) resolveOpenPath(input string) (string, error) {
 	path := expandHome(input)
 	if !filepath.IsAbs(path) {
-		base := m.workspaceRoot
+		base := m.ws.root
 		if base == "" {
 			if wd, err := os.Getwd(); err == nil {
 				base = wd
@@ -84,31 +84,28 @@ func (m *Model) resolveOpenPath(input string) (string, error) {
 
 func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.closeOpenModal()
+
+	mv, entries, refuse := m.prepareMove(dir, "")
+	if refuse != nil {
+		return refuse
+	}
+
+	status, stopMock := m.commitMove(mv)
 	m.forgetFileWatch(m.currentFile)
-	m.workspaceRoot = dir
-	m.cfg.WorkspaceRoot = dir
-	m.cfg.Recursive = m.workspaceRecursive
 	m.cfg.FilePath = ""
 	m.currentFile = ""
 	m.currentRequest = nil
 	m.activeRequestKey = ""
 	m.activeRequestTitle = ""
 	m.setDocument(nil)
-	m.latencySeries.reset()
 	m.editor.SetValue("")
 	m.editor.SetCursor(0)
 	m.markClean()
 	focusCmd := m.setFocus(focusFile)
-	m.requestList.SetItems(nil)
-	m.requestItems = nil
-	m.requestList.Select(-1)
+	// One sync drops everything the old document projected into the UI.
+	m.syncRequestList(nil)
+	m.syncHistory()
 
-	entries, err := listWorkspaceEntries(dir, m.workspaceRecursive, m.cfg.EnvironmentFile, "", nil)
-	if err != nil {
-		return func() tea.Msg {
-			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
-		}
-	}
 	m.fileList.SetItems(makeFileItems(entries))
 	m.rebuildNavigator(entries)
 	if len(entries) > 0 {
@@ -116,31 +113,41 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	} else {
 		m.fileList.Select(-1)
 	}
+
 	return batchCommands(
 		focusCmd,
 		m.refreshGitStatusCmd(),
-		func() tea.Msg {
-			return statusMsg{
-				text:  fmt.Sprintf("Workspace set to %s", filepath.Base(dir)),
-				level: statusInfo,
-			}
-		},
+		stopMock,
+		func() tea.Msg { return status },
 	)
 }
 
 func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 	m.closeOpenModal()
-	if inside := m.workspaceRoot != "" && m.ensureWorkspaceFile(path); !inside {
-		m.latencySeries.reset()
-		dir := filepath.Dir(path)
-		m.workspaceRoot = dir
-		m.cfg.WorkspaceRoot = dir
+
+	// Read before committing anything. A read failure after the environment
+	// swap would leave the new credentials under the old editor.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return statusCmd(statusError, fmt.Sprintf("open failed: %v", err))
+	}
+
+	var status, stopMock tea.Cmd
+	// A file outside the current root moves the workspace, so it has to take
+	// the environment with it.
+	if inside := m.ws.root != "" && m.ensureWorkspaceFile(path); !inside {
+		mv, _, refuse := m.prepareMove(filepath.Dir(path), path)
+		if refuse != nil {
+			return refuse
+		}
+		moved, stop := m.commitMove(mv)
+		stopMock = stop
+		status = func() tea.Msg { return moved }
 	}
 	m.cfg.FilePath = path
-	m.cfg.Recursive = m.workspaceRecursive
 
 	focusCmd := m.setFocus(focusEditor)
-	return batchCommands(focusCmd, m.openFile(path))
+	return batchCommands(focusCmd, m.installFile(path, data), stopMock, status)
 }
 
 func (m *Model) isSupportedOpenPath(path string) bool {
@@ -149,7 +156,7 @@ func (m *Model) isSupportedOpenPath(path string) bool {
 		return true
 	case vars.IsDotEnvPath(path):
 		return true
-	case util.SamePath(path, m.cfg.EnvironmentFile):
+	case util.SameFile(path, m.ws.envFile):
 		return true
 	default:
 		return false

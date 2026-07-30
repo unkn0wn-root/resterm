@@ -1,6 +1,9 @@
 package util
 
-import "path/filepath"
+import (
+	"os"
+	"path/filepath"
+)
 
 // SamePath reports whether two non-empty paths resolve to the same lexical path.
 //
@@ -21,6 +24,25 @@ func SamePath(a, b string) bool {
 		return false
 	}
 	return absA == absB
+}
+
+// SameFile reports whether two paths name one file on disk. Use it instead of
+// SamePath when the same file can reach the caller under more than one name, as
+// happens through a symlink or on a case insensitive filesystem.
+func SameFile(a, b string) bool {
+	if SamePath(a, b) {
+		return true
+	}
+	if a == "" || b == "" {
+		return false
+	}
+
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	fb, err := os.Stat(b)
+	return err == nil && os.SameFile(fa, fb)
 }
 
 // SamePathOrBothEmpty reports whether a and b are both empty or name the same path.

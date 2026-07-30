@@ -181,6 +181,20 @@ func (r *Runtime) LoadAuthState(st engine.AuthState) {
 	}
 }
 
+// ResetSecrets forgets every credential and runtime value held in memory.
+// Scopes are named after the environment, so two workspaces that both call
+// one "dev" would otherwise read each other's globals, cookies and tokens.
+func (r *Runtime) ResetSecrets() {
+	if r == nil {
+		return
+	}
+	r.Globals().Reset()
+	r.Files().Reset()
+	r.Cookies().Reset()
+	r.OAuth().Reset()
+	r.AuthCmd().Reset()
+}
+
 func (r *Runtime) Close() error {
 	if r == nil {
 		return nil

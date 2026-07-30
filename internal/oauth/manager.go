@@ -153,6 +153,17 @@ func (m *Manager) Token(
 	return token, nil
 }
 
+func (m *Manager) Reset() {
+	if m == nil {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.cache = make(map[string]*cacheEntry)
+}
+
 // CachedToken returns a valid cached token for the config when one is already
 // available. It never refreshes or performs network I/O.
 func (m *Manager) CachedToken(env string, cfg Config) (Token, bool) {

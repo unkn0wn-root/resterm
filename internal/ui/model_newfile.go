@@ -83,7 +83,7 @@ func (m *Model) submitNewFile() tea.Cmd {
 
 	finalPath := cleanInput
 	if !filepath.IsAbs(finalPath) {
-		finalPath = filepath.Join(m.workspaceRoot, finalPath)
+		finalPath = filepath.Join(m.ws.root, finalPath)
 	}
 	finalPath = filepath.Clean(finalPath)
 	if !m.ensureWorkspaceFile(finalPath) {

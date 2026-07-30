@@ -56,6 +56,13 @@ func (s *Files) ClearEnv(env string) {
 	s.store.clearIf(func(scope string) bool { return strings.HasPrefix(scope, pfx) })
 }
 
+func (s *Files) Reset() {
+	if s == nil {
+		return
+	}
+	s.store.reset()
+}
+
 func (s *Files) Entries() []engine.RuntimeFile {
 	if s == nil {
 		return nil

@@ -352,6 +352,16 @@ Resterm automatically searches, in order:
 
 It loads the first `resterm.env.json` or `rest-client.env.json` it finds. Each named environment must be an object. Values inside it can contain nested objects and arrays, which are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
 
+One environment file is resolved per workspace. Opening a request *file* from another directory does not reload it, because the active selection also keys globals, file variables, cookie jars and history scopes. So `resterm requests/api.http` picks up `requests/resterm.env.json`, while opening that same file from a workspace root with its own environment file keeps the root one. In a recursive workspace Resterm warns at startup about environment files it will not load. To use one of them, start Resterm in that directory or pass `--env-file`.
+
+Opening a *workspace*, or a request file that lives outside the current one, moves the workspace and re-resolves the environment for the new root:
+
+- The environment that carries across is the one you asked for, not the one you ended up with. A session started with `--env prod` looks for `prod` in the new workspace, and a later `Ctrl+E` choice becomes what gets replayed instead.
+- When the new workspace does not have it, the catalog loads but nothing is selected, since falling back to that workspace's default could put a `dev` session on `prod`. The header reads `ENV: none selected`, `Ctrl+E` offers what the workspace does have, and requests are refused until you choose.
+- Globals, file variables, cookie jars, OAuth tokens, command auth and the last response are forgotten. Runtime values are keyed by a scope that names both the selection and the environment file it was read from, so two projects that each define a `dev` environment never share them, while two workspaces pointed at one `--env-file` do. Environments built through the Go API have no file to name and keep the older, file-blind scopes.
+- An `--env-file` passed on the command line is a choice for the whole session, so it survives the move and Resterm warns when the new workspace has an environment file of its own. A workspace with no environment file leaves the session with none, and one whose environment file fails to load fails closed with an error and no environment.
+- A move is refused while a request is running, because that request can still write runtime values back and undo the reset. Finish or cancel it first.
+
 Example environment (`_examples/resterm.env.json`):
 
 ```json

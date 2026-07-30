@@ -5,7 +5,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/workspace"
+	wsvc "github.com/unkn0wn-root/resterm/internal/workspace"
 )
 
 func listWorkspaceEntries(
@@ -15,7 +15,7 @@ func listWorkspaceEntries(
 	currentFile string,
 	doc *restfile.Document,
 ) ([]filesvc.FileEntry, error) {
-	return workspace.List(root, workspace.ListOptions{
+	return wsvc.List(root, wsvc.ListOptions{
 		Recursive:       recursive,
 		ExplicitEnvFile: envFile,
 		CurrentFile:     currentFile,
@@ -25,9 +25,9 @@ func listWorkspaceEntries(
 
 func (m *Model) listWorkspaceEntries() ([]filesvc.FileEntry, error) {
 	return listWorkspaceEntries(
-		m.workspaceRoot,
-		m.workspaceRecursive,
-		m.cfg.EnvironmentFile,
+		m.ws.root,
+		m.ws.recursive,
+		m.ws.envFile,
 		m.currentFile,
 		m.doc,
 	)

@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -243,12 +243,7 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 	m.testResults = nil
 	m.scriptError = nil
 
-	opts := m.cfg.HTTPOptions
-	if opts.BaseDir == "" && m.currentFile != "" {
-		opts.BaseDir = filepath.Dir(m.currentFile)
-	}
-
-	return &activeReqExec{doc: doc, req: cloned, opts: opts, wrap: wrap}, nil
+	return &activeReqExec{doc: doc, req: cloned, opts: m.runOptions(), wrap: wrap}, nil
 }
 
 func (m *Model) sendActiveRequest() tea.Cmd {
@@ -312,33 +307,24 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 		}
 	}
 
-	if st.req.WebSocket != nil && len(st.req.WebSocket.Steps) == 0 {
-		spin := m.startSending()
-		base := "Sending"
-		if label := m.statusRequestLabel(st.doc, st.req); label != "" {
-			base = fmt.Sprintf("Sending %s", label)
-		}
-		m.statusPulseBase = base
-		m.statusPulseFrame = -1
-		m.setStatusMessage(statusMsg{text: base, level: statusInfo})
-
-		execCmd := m.executeRequest(st.doc, st.req, st.opts, m.cfg.Selection, nil)
-		pulse := m.startStatusPulse()
-		return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
+	// A bare WebSocket request stays on the unrecorded pipeline. The stream
+	// records through its own session instead.
+	rec := st.req.WebSocket == nil || len(st.req.WebSocket.Steps) > 0
+	run, started := m.startRun(runSpec{
+		doc:    st.doc,
+		req:    st.req,
+		opts:   st.opts,
+		sel:    m.ws.sel,
+		record: rec,
+	})
+	if !started {
+		return st.wrap(run)
 	}
-
-	spin := m.startSending()
 	base := "Sending"
 	if label := m.statusRequestLabel(st.doc, st.req); label != "" {
 		base = fmt.Sprintf("Sending %s", label)
 	}
-	m.statusPulseBase = base
-	m.statusPulseFrame = -1
-	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
-
-	execCmd := m.execRunReq(st.doc, st.req, st.opts, m.cfg.Selection, nil)
-	pulse := m.startStatusPulse()
-	return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
+	return st.wrap(batchCmds([]tea.Cmd{run, m.sendProgress(base, "")}))
 }
 
 func (m *Model) explainActiveRequest() tea.Cmd {
@@ -354,19 +340,21 @@ func (m *Model) explainActiveRequest() tea.Cmd {
 		return nil
 	}
 
-	spin := m.startSending()
-	m.sendingOverlayBase = responseExplainPreviewBase
+	run, started := m.startRun(runSpec{
+		doc:  st.doc,
+		req:  st.req,
+		opts: st.opts,
+		sel:  m.ws.sel,
+		mode: rqeng.ExecModePreview,
+	})
+	if !started {
+		return st.wrap(run)
+	}
 	base := "Preparing explain preview"
 	if label := m.statusRequestLabel(st.doc, st.req); label != "" {
 		base = fmt.Sprintf("Preparing explain for %s", label)
 	}
-	m.statusPulseBase = base
-	m.statusPulseFrame = -1
-	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
-
-	execCmd := m.executeExplain(st.doc, st.req, st.opts, m.cfg.Selection, nil)
-	pulse := m.startStatusPulse()
-	return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
+	return st.wrap(batchCmds([]tea.Cmd{run, m.sendProgress(base, responseExplainPreviewBase)}))
 }
 
 // Allow CLI-level compare flags to kick off a sweep even when the request lacks
@@ -419,10 +407,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	m.testResults = nil
 	m.scriptError = nil
 
-	options := m.cfg.HTTPOptions
-	if options.BaseDir == "" && m.currentFile != "" {
-		options.BaseDir = filepath.Dir(m.currentFile)
-	}
+	options := m.runOptions()
 	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
 		options.Trace = true
 		if budget, ok := tracebudget.FromSpec(cloned.Metadata.Trace); ok {
@@ -442,6 +427,21 @@ func (m *Model) startSending() tea.Cmd {
 	m.sending = true
 	m.sendingOverlayBase = ""
 	return m.startTabSpin()
+}
+
+// sendProgress starts the sending indicators for an accepted run. It only runs
+// behind startRun's started result, so a refusal can never leave a spinner
+// running with no response on the way to stop it.
+func (m *Model) sendProgress(base, overlay string) tea.Cmd {
+	spin := m.startSending()
+	m.sendingOverlayBase = overlay
+	if base == "" {
+		return spin
+	}
+	m.statusPulseBase = base
+	m.statusPulseFrame = -1
+	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
+	return batchCmds([]tea.Cmd{spin, m.startStatusPulse()})
 }
 
 func (m *Model) stopSending() {

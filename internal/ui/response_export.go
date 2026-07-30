@@ -54,7 +54,7 @@ func (m *Model) closeResponseSaveModal() {
 func (m *Model) defaultResponseSavePath(snapshot *responseSnapshot) string {
 	base := strings.TrimSpace(m.lastResponseSaveDir)
 	if base == "" {
-		base = strings.TrimSpace(m.workspaceRoot)
+		base = strings.TrimSpace(m.ws.root)
 	}
 	if base == "" {
 		if cwd, err := os.Getwd(); err == nil {
@@ -171,7 +171,7 @@ func (m *Model) resolveResponseSavePath(input string) (string, error) {
 	if !filepath.IsAbs(path) {
 		base := strings.TrimSpace(m.lastResponseSaveDir)
 		if base == "" {
-			base = strings.TrimSpace(m.workspaceRoot)
+			base = strings.TrimSpace(m.ws.root)
 		}
 		if base == "" {
 			if cwd, err := os.Getwd(); err == nil {

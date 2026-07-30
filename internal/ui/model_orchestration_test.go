@@ -15,6 +15,7 @@ import (
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
@@ -1345,7 +1346,7 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 	store := histdb.New(filepath.Join(t.TempDir(), "history.db"))
 	t.Cleanup(func() { _ = store.Close() })
 
-	m := newOrchTestModel(t, Config{History: store, Selection: testSelection("dev")})
+	m := newOrchTestModel(t, Config{History: store, Env: vars.Config{Selection: testSelection("dev")}})
 	doc := &restfile.Document{
 		Variables: []restfile.Variable{{
 			Name:  "items",

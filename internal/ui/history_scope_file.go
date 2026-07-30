@@ -18,7 +18,7 @@ func (m *Model) historyEntriesForFileScope() ([]history.Entry, error) {
 		return nil, nil
 	}
 
-	vars := historyPathVariants(path, m.workspaceRoot)
+	vars := historyPathVariants(path, m.ws.root)
 	if len(vars) == 0 {
 		return nil, nil
 	}
