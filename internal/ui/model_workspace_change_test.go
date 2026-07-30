@@ -185,6 +185,27 @@ func TestReopeningSameWorkspaceKeepsRuntimeState(t *testing.T) {
 	}
 }
 
+// A workspace with no environment file has nothing to compare a move against,
+// so reopening it once looked like a move between two env-less workspaces.
+func TestReopeningEnvlessWorkspaceKeepsRuntimeState(t *testing.T) {
+	base := workspaceFixture(t)
+	m := workspaceModel(t, base, "", "")
+	m.applyOpenDirectory(filepath.Join(base, "C"))
+
+	scope := m.ws.active.Scope()
+	m.globalsStore().Set(scope, "captured.token", "KEEP", false)
+	m.fileStore().Set(scope, filepath.Join(base, "C", "req.http"), "file.token", "KEEP", false)
+
+	m.applyOpenDirectory(filepath.Join(base, "C"))
+
+	if snap := m.globalsStore().Snapshot(scope); len(snap) == 0 {
+		t.Fatal("reopening the same env-less workspace discarded globals")
+	}
+	if got := m.fileStore().Entries(); len(got) == 0 {
+		t.Fatal("reopening the same env-less workspace discarded file values")
+	}
+}
+
 func TestOpenWorkspaceWithoutEnvironmentClearsIt(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
