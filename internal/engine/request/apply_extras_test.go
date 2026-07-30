@@ -3,6 +3,7 @@ package request
 import (
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -125,10 +126,8 @@ func TestExplainReportCarriesParseWarnings(t *testing.T) {
 	}
 
 	want := `warn.http:3: unknown @sse option "max-event"`
-	for _, got := range res.Explain.Warnings {
-		if got == want {
-			return
-		}
+	if slices.Contains(res.Explain.Warnings, want) {
+		return
 	}
 	t.Fatalf("explain warnings = %v, want one to be %q", res.Explain.Warnings, want)
 }
@@ -161,10 +160,8 @@ func TestExplainReportCarriesParseWarningsOnEarlyFailure(t *testing.T) {
 	}
 
 	want := `warn.http:3: unknown @sse option "max-event"`
-	for _, got := range res.Explain.Warnings {
-		if got == want {
-			return
-		}
+	if slices.Contains(res.Explain.Warnings, want) {
+		return
 	}
 	t.Fatalf("explain warnings = %v, want one to be %q", res.Explain.Warnings, want)
 }

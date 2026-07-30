@@ -274,10 +274,10 @@ func TestManagerExplicitCacheKeyIsScoped(t *testing.T) {
 			return &httpclient.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
-				Body: []byte(fmt.Sprintf(
+				Body: fmt.Appendf(nil,
 					`{"access_token":"token-%d","token_type":"Bearer","expires_in":3600}`,
 					calls,
-				)),
+				),
 				Headers: http.Header{},
 			}, nil
 		},

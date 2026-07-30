@@ -1925,10 +1925,7 @@ func rangesOverlap(aStart, aEnd, bStart, bEnd int) bool {
 // formatLineNumber formats the line number for display dynamically based on
 // the maximum number of lines.
 func (m Model) formatLineNumber(x any) string {
-	maxLine := max(len(m.value), 1)
-	if m.height > maxLine {
-		maxLine = m.height
-	}
+	maxLine := max(m.height, max(len(m.value), 1))
 	if v, ok := x.(int); ok && v > maxLine {
 		maxLine = v
 	} else if s, ok := x.(string); ok {

@@ -328,7 +328,7 @@ func TestEnvironmentSelectorFitsNarrowTerminal(t *testing.T) {
 	model.openEnvironmentSelector()
 
 	view := ansi.Strip(model.renderEnvironmentModal())
-	for _, line := range strings.Split(view, "\n") {
+	for line := range strings.SplitSeq(view, "\n") {
 		if got := lipgloss.Width(line); got > model.width {
 			t.Fatalf("modal line width = %d, want <= %d: %q", got, model.width, line)
 		}

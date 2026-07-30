@@ -176,10 +176,7 @@ func (v *workflowStatsView) scrollDetail(width, height, delta int) bool {
 		return false
 	}
 	maxOffset := max(len(body)-bodyHeight, 0)
-	next := max(v.detailOffset+delta, 0)
-	if next > maxOffset {
-		next = maxOffset
-	}
+	next := min(max(v.detailOffset+delta, 0), maxOffset)
 	if next == v.detailOffset {
 		return false
 	}
@@ -269,10 +266,7 @@ func (v *workflowStatsView) layout(width, height int) workflowStatsLayout {
 
 	if width >= workflowStatsSplitMinWidth && height >= workflowStatsSplitMinH {
 		gapWidth := visibleWidth(workflowStatsGap)
-		listWidth := max(width*38/100, 32)
-		if listWidth > 48 {
-			listWidth = 48
-		}
+		listWidth := min(max(width*38/100, 32), 48)
 		detailWidth := width - listWidth - gapWidth
 		if detailWidth < 32 {
 			detailWidth = 32

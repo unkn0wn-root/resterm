@@ -38,7 +38,7 @@ func (o sessionOpener) open(
 	}
 
 	var lastErr error
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

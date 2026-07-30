@@ -468,10 +468,7 @@ func renderTimelineBar(
 	if total > 0 {
 		ratio = float64(duration) / float64(total)
 	}
-	filled := max(int(math.Round(ratio*float64(width))), 0)
-	if filled > width {
-		filled = width
-	}
+	filled := min(max(int(math.Round(ratio*float64(width))), 0), width)
 	empty := width - filled
 	filledGlyph := strings.Repeat(barGlyphFilled, filled)
 	if warn {

@@ -164,10 +164,7 @@ func (m *Model) applyLayout() tea.Cmd {
 			}
 
 			if remaining < editorMin+responseMin {
-				scaledEditor := max(int(math.Round(float64(remaining)*ratio)), 1)
-				if scaledEditor > remaining-1 {
-					scaledEditor = remaining - 1
-				}
+				scaledEditor := min(max(int(math.Round(float64(remaining)*ratio)), 1), remaining-1)
 				editorMin = scaledEditor
 				responseMin = remaining - editorMin
 				if responseMin < 1 {

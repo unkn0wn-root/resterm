@@ -199,10 +199,7 @@ func (m *runRequestPickerModel) setSize(wid, hgt int) {
 		m.wid = wid
 	}
 	if hgt > 0 {
-		rows := max(hgt-runRequestPickerChromeRows, runRequestPickerMinRows)
-		if rows > runRequestPickerMaxRows {
-			rows = runRequestPickerMaxRows
-		}
+		rows := min(max(hgt-runRequestPickerChromeRows, runRequestPickerMinRows), runRequestPickerMaxRows)
 		m.rows = rows
 	}
 	m.keepVisible()
