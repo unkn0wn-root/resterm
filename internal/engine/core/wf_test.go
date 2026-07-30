@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestRunPlanWorkflowEmitsBranchAndLoopEventsInOrder(t *testing.T) {
@@ -64,7 +65,7 @@ func TestRunPlanWorkflowEmitsBranchAndLoopEventsInOrder(t *testing.T) {
 				},
 			},
 		},
-	}, RunMeta{ID: "wf-1", Env: "dev"})
+	}, RunMeta{ID: "wf-1", Env: testEnvironment("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestRunPlanForEachMarksRequestRunsRecorded(t *testing.T) {
 		},
 	}
 
-	pl, err := PrepareForEach(doc, req, RunMeta{ID: "each-1", Env: "dev"})
+	pl, err := PrepareForEach(doc, req, RunMeta{ID: "each-1", Env: testEnvironment("dev")})
 	if err != nil {
 		t.Fatalf("PrepareForEach: %v", err)
 	}
@@ -203,7 +204,7 @@ func TestRunPlanExecutionErrorMarksRunDoneUnsuccessful(t *testing.T) {
 			Kind:  restfile.WorkflowStepKindRequest,
 			Using: "fail",
 		}},
-	}, RunMeta{ID: "wf-err", Env: "dev"})
+	}, RunMeta{ID: "wf-err", Env: testEnvironment("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -241,7 +242,7 @@ type fakeDep struct {
 func (d *fakeDep) CollectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	extra ...map[string]string,
 ) map[string]string {
 	out := make(map[string]string)
@@ -259,7 +260,7 @@ func (d *fakeDep) CollectVariables(
 func (d *fakeDep) ExecuteWith(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	opt request.ExecOptions,
 ) (engine.RequestResult, error) {
 	d.rec = append(d.rec, opt.Record)
@@ -283,7 +284,8 @@ func (d *fakeDep) ExecuteWith(
 		},
 		Executed:    req,
 		RequestText: request.RenderRequestText(req),
-		Environment: env,
+		Environment: env.Label(),
+		Selection:   env.Selection(),
 	}, nil
 }
 
@@ -291,7 +293,7 @@ func (d *fakeDep) EvalCondition(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	base string,
 	spec *restfile.ConditionSpec,
 	vv map[string]string,
@@ -314,7 +316,7 @@ func (d *fakeDep) EvalForEachItems(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	base string,
 	spec request.ForEachSpec,
 	vv map[string]string,
@@ -326,19 +328,8 @@ func (d *fakeDep) EvalForEachItems(
 	return nil, errors.New("missing list")
 }
 
-func (d *fakeDep) EvalValue(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env string,
-	base string,
-	expr string,
-	site string,
-	pos rts.Pos,
-	vv map[string]string,
-	extra map[string]rts.Value,
-) (rts.Value, error) {
-	switch strings.TrimSpace(expr) {
+func (d *fakeDep) EvalValue(ctx context.Context, in request.EvalInput) (rts.Value, error) {
+	switch strings.TrimSpace(in.Expr) {
 	case "true":
 		return rts.Bool(true), nil
 	case "false":
@@ -346,7 +337,7 @@ func (d *fakeDep) EvalValue(
 	case "boom":
 		return rts.Value{}, errors.New("unsupported expression")
 	default:
-		return rts.Str(expr), nil
+		return rts.Str(in.Expr), nil
 	}
 }
 
@@ -373,4 +364,11 @@ func stepName(meta StepMeta) string {
 		name += " (" + strconv.Itoa(meta.Iter) + "/" + strconv.Itoa(meta.Total) + ")"
 	}
 	return name
+}
+
+func testEnvironment(name string) vars.Environment {
+	cat, _ := vars.NewCatalog(vars.EnvironmentSet{name: {}})
+	sel, _ := cat.Select(name, nil)
+	env, _ := cat.Resolve(sel)
+	return env
 }

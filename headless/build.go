@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
@@ -94,13 +95,13 @@ func (b *builder) buildSelection() {
 }
 
 func (b *builder) buildEnvironment() error {
-	envs, file, name, err := environmentOptions(b.opt, b.out.FilePath, b.out.WorkspaceRoot)
+	cat, file, sel, err := environmentOptions(b.opt, b.out.FilePath, b.out.WorkspaceRoot)
 	if err != nil {
 		return err
 	}
-	b.out.EnvSet = envs
+	b.out.Catalog = cat
 	b.out.EnvironmentFile = file
-	b.out.EnvName = name
+	b.out.Selection = sel
 	return nil
 }
 
@@ -133,8 +134,16 @@ func (b *builder) buildCompare() error {
 	); err != nil {
 		return UsageError{err: err}
 	}
-	b.out.CompareTargets = targets
-	b.out.CompareBase = base
+	group := str.Trim(b.opt.Compare.Group)
+	if group != "" && len(targets) == 0 {
+		return UsageError{err: fmt.Errorf("compare.group requires compare.targets")}
+	}
+	if len(targets) > 0 {
+		if _, err := b.out.Catalog.CompareTargets(b.out.Selection, group, base, targets); err != nil {
+			return UsageError{err: err}
+		}
+	}
+	b.out.Compare = engine.CompareConfig{Targets: targets, Base: base, Group: group}
 	return nil
 }
 
@@ -231,39 +240,63 @@ func workspacePath(path, work string) (string, error) {
 func environmentOptions(
 	opt Options,
 	path, work string,
-) (vars.EnvironmentSet, string, string, error) {
-	envs := environmentSet(opt.Environment.Set)
+) (vars.Catalog, string, vars.Selection, error) {
+	if opt.Environment.Set != nil && opt.Environment.Grouped != nil {
+		return vars.Catalog{}, "", vars.Selection{}, UsageError{
+			err: fmt.Errorf("environment.set cannot be combined with environment.grouped"),
+		}
+	}
+	if str.Trim(opt.Environment.Name) != "" && opt.Environment.Selection != nil {
+		return vars.Catalog{}, "", vars.Selection{}, UsageError{
+			err: fmt.Errorf("environment.name cannot be combined with environment.selection"),
+		}
+	}
+
+	var cat vars.Catalog
 	envFile := str.Trim(opt.Environment.FilePath)
-
+	var err error
 	switch {
-	case len(envs) > 0:
+	case opt.Environment.Set != nil:
+		cat, err = vars.NewCatalog(environmentSet(opt.Environment.Set))
+		envFile = ""
+	case opt.Environment.Grouped != nil:
+		cat, err = groupedCatalog(opt.Environment.Grouped)
+		envFile = ""
 	case envFile != "":
-		set, err := vars.LoadEnvironmentFile(envFile)
-		if err != nil {
-			return nil, "", "", UsageError{
-				err: fmt.Errorf("load environment.filePath: %w", err),
-			}
-		}
-		envs = set
+		cat, err = vars.LoadEnvironmentFile(envFile)
 	default:
-		set, file, err := vars.ResolveEnvironment(envPaths(path, work))
-		if err != nil {
-			return nil, "", "", UsageError{
-				err: fmt.Errorf("resolve environment file: %w", err),
-			}
+		cat, envFile, err = vars.ResolveEnvironment(envPaths(path, work))
+	}
+	if err != nil {
+		return vars.Catalog{}, "", vars.Selection{}, UsageError{
+			err: fmt.Errorf("load environments: %w", err),
 		}
-		envs = set
-		envFile = file
 	}
 
-	envName := str.Trim(opt.Environment.Name)
-	if err := runcheck.ValidateConcreteEnvironment(envName, "environment.name"); err != nil {
-		return nil, "", "", UsageError{err: err}
+	name := str.Trim(opt.Environment.Name)
+	if err := runcheck.ValidateConcreteEnvironment(name, "environment.name"); err != nil {
+		return vars.Catalog{}, "", vars.Selection{}, UsageError{err: err}
 	}
-	if envName == "" && len(envs) > 0 {
-		envName = vars.DefaultEnvironment(envs)
+	sel, err := cat.Select(name, map[string]string(opt.Environment.Selection))
+	if err != nil {
+		return vars.Catalog{}, "", vars.Selection{}, UsageError{err: err}
 	}
-	return envs, envFile, envName, nil
+	return cat, envFile, sel, nil
+}
+
+func groupedCatalog(src *GroupedEnvironmentSet) (vars.Catalog, error) {
+	if src == nil {
+		return vars.Catalog{}, nil
+	}
+	groups := make([]vars.Group, 0, len(src.Groups))
+	for name, group := range src.Groups {
+		groups = append(groups, vars.Group{
+			Name:     name,
+			Default:  group.Default,
+			Profiles: environmentSet(group.Profiles),
+		})
+	}
+	return vars.NewGroupedCatalog(src.Shared, groups)
 }
 
 func envPaths(path, work string) []string {

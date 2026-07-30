@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
@@ -16,16 +17,22 @@ func TestLoadEnvironmentExplicitDotEnv(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	envs, resolved := cli.LoadEnvironment(envPath, "", dir)
+	cat, resolved, err := cli.LoadEnvironment(envPath, "", dir)
+	if err != nil {
+		t.Fatalf("load environment: %v", err)
+	}
 	if resolved != envPath {
 		t.Fatalf("resolved path = %q, want %q", resolved, envPath)
 	}
-	env := envs["local"]
-	if env == nil {
-		t.Fatalf("expected local environment, got %v", envs)
+	env, err := cat.Resolve(cat.DefaultSelection())
+	if err != nil {
+		t.Fatalf("resolve environment: %v", err)
 	}
-	if env["API_URL"] != "http://localhost" {
-		t.Fatalf("API_URL = %q, want %q", env["API_URL"], "http://localhost")
+	if env.Label() != "local" {
+		t.Fatalf("expected local environment, got %v", cat.Names())
+	}
+	if env.Values()["API_URL"] != "http://localhost" {
+		t.Fatalf("API_URL = %q, want %q", env.Values()["API_URL"], "http://localhost")
 	}
 }
 
@@ -40,12 +47,38 @@ func TestLoadEnvironmentIgnoresDotEnvDiscovery(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	envs, resolved := cli.LoadEnvironment("", "", dir)
-	if envs != nil {
-		t.Fatalf("expected no auto-discovered envs, got %v", envs)
+	cat, resolved, err := cli.LoadEnvironment("", "", dir)
+	if err != nil {
+		t.Fatalf("load environment: %v", err)
+	}
+	if !cat.Empty() {
+		t.Fatalf("expected no auto-discovered envs, got %v", cat.Names())
 	}
 	if resolved != "" {
 		t.Fatalf("resolved path = %q, want empty", resolved)
+	}
+}
+
+func TestLoadEnvironmentDiscoveryReturnsInvalidFileError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "resterm.env.json")
+	if err := os.WriteFile(
+		path,
+		[]byte(`{"$groups":{"api":{"dev":{"token":"a"}},"auth":{"dev":{"TOKEN":"b"}}}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	_, resolved, err := cli.LoadEnvironment("", filepath.Join(dir, "api.http"), dir)
+	if err == nil {
+		t.Fatal("expected invalid discovered environment file to fail")
+	}
+	if resolved != path {
+		t.Fatalf("resolved path = %q, want %q", resolved, path)
+	}
+	if !strings.Contains(err.Error(), "collides") {
+		t.Fatalf("error = %v, want collision detail", err)
 	}
 }
 

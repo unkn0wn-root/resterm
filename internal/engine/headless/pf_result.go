@@ -10,11 +10,12 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type profileState struct {
 	req       *restfile.Request
-	env       string
+	env       vars.Environment
 	spec      restfile.ProfileSpec
 	total     int
 	idx       int

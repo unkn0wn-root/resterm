@@ -5,6 +5,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (r *cmpRun) emitRunStart() error {
@@ -23,13 +24,13 @@ func (r *cmpRun) emitRunDone(err error) error {
 
 func (r *cmpRun) emitRowStart(
 	i int,
-	env string,
+	target vars.Target,
 	total int,
 	req *restfile.Request,
 ) error {
 	return Emit(r.ectx, r.sink, CmpRowStart{
 		Meta:    NewMeta(r.pl.Run, time.Now()),
-		Row:     r.row(i, env, total),
+		Row:     r.row(i, target, total),
 		Doc:     r.pl.Doc,
 		Request: req,
 	})
@@ -37,13 +38,13 @@ func (r *cmpRun) emitRowStart(
 
 func (r *cmpRun) emitRowDone(
 	i int,
-	env string,
+	target vars.Target,
 	total int,
 	res engine.RequestResult,
 ) error {
 	return Emit(r.ectx, r.sink, CmpRowDone{
 		Meta:   NewMeta(r.pl.Run, time.Now()),
-		Row:    r.row(i, env, total),
+		Row:    r.row(i, target, total),
 		Result: res,
 	})
 }

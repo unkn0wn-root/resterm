@@ -3,12 +3,9 @@ package settings
 import (
 	"maps"
 	"strings"
-
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func FromEnv(set vars.EnvironmentSet, envName string) map[string]string {
-	values := vars.EnvValues(set, envName)
+func FromValues(values map[string]string) map[string]string {
 	if len(values) == 0 {
 		return nil
 	}

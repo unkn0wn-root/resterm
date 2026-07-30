@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
@@ -110,19 +111,18 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 		t.Fatalf("public Run: %v", err)
 	}
 
-	envs, err := vars.LoadEnvironmentFile(envFile)
+	cat, err := vars.LoadEnvironmentFile(envFile)
 	if err != nil {
 		t.Fatalf("load env file: %v", err)
 	}
-	envName := vars.DefaultEnvironment(envs)
+	sel := cat.DefaultSelection()
 	want, err := runner.RunContext(context.Background(), runner.Options{
 		FilePath:        path,
 		WorkspaceRoot:   dir,
-		EnvSet:          envs,
-		EnvName:         envName,
+		Catalog:         cat,
+		Selection:       sel,
 		EnvironmentFile: envFile,
-		CompareTargets:  []string{"dev", "stage"},
-		CompareBase:     "stage",
+		Compare:         engine.CompareConfig{Targets: []string{"dev", "stage"}, Base: "stage"},
 		HTTPOptions: httpclient.Options{
 			Timeout:         DefaultHTTPTimeout,
 			FollowRedirects: true,

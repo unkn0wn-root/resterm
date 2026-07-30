@@ -149,7 +149,7 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 
 	nodes := make([]*navigator.Node[any], 0, len(doc.Requests)+len(doc.Workflows))
 	for idx, req := range doc.Requests {
-		resolver := m.statusResolver(doc, req, m.cfg.EnvironmentName)
+		resolver := m.statusResolver(doc, req)
 		title := requestNavLabel(req, resolver, fmt.Sprintf("Request %d", idx+1))
 		method := strings.ToUpper(strings.TrimSpace(req.Method))
 		desc := condense(expandStatusText(resolver, req.Metadata.Description), 80)

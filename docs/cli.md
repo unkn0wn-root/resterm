@@ -34,6 +34,7 @@ These flags are shared by `resterm` and `resterm run` when request execution is 
 | `--workspace <dir>` | `-w <dir>` | Workspace root used for file discovery and relative resolution. |
 | `--recursive` | `-R` | Recursively scan the workspace for request files. |
 | `--env <name>` | `-e <name>` | Select an environment explicitly. |
+| `--env-group <group=profile>` |  | Select one group profile. Repeat for multiple groups. |
 | `--env-file <path>` | `-E <path>` | Use an explicit environment JSON file. |
 | `--timeout <duration>` | `-t <duration>` | Default HTTP timeout. |
 | `--insecure` | `-k` | Skip TLS certificate verification. |
@@ -41,6 +42,7 @@ These flags are shared by `resterm` and `resterm run` when request execution is 
 | `--proxy <url>` | `-x <url>` | HTTP proxy URL. |
 | `--compare <envs>` | `-C <envs>` | Default comma/space-delimited compare targets. |
 | `--compare-base <env>` | `-B <env>` | Baseline environment for compare runs. |
+| `--compare-group <group>` |  | In grouped mode, vary this group while holding all other groups fixed. |
 | `--trace-otel-endpoint <url>` | `-toe <url>` | OTLP collector endpoint used by `@trace`. |
 | `--trace-otel-insecure` | `-toi` | Disable TLS for OTLP trace export. |
 | `--trace-otel-service <name>` | `-tos <name>` | Override the exported `service.name`. |
@@ -103,6 +105,13 @@ Selector rules:
 - `--line` cannot be combined with other selectors
 - `--workflow` cannot be combined with request selectors
 - `--workflow` cannot be combined with `--compare` or `--profile`
+
+Environment selection rules:
+
+- Named-environment files use `--env dev`. Grouped files use the repeatable `--env-group group=profile`. The two flags cannot be combined.
+- Groups you do not pass keep their declared defaults. Profiles may contain spaces: `--env-group 'app=dev app 1'`.
+- Grouped compare requires `--compare-group`. Separate compare targets with commas when profile names contain spaces, for example `--compare 'dev app 1,dev app 2' --compare-group app`.
+- An unknown group, profile, or baseline is rejected before any request is sent.
 
 ### Output Formats
 
@@ -211,6 +220,18 @@ Run every request tagged `smoke` and write JSON:
 
 ```bash
 resterm run --tag smoke --format json ./requests.http > run.json
+```
+
+Select two grouped profiles and compare only the API group:
+
+```bash
+resterm run \
+  --env-group 'credentials=ci' \
+  --env-group 'app=dev app 1' \
+  --compare 'dev,uat,prod' \
+  --compare-group api \
+  --compare-base dev \
+  ./requests.http
 ```
 
 Print only the raw response body from one request:

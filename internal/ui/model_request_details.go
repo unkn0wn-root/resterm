@@ -98,7 +98,7 @@ func (m *Model) requestDetailTitleFor(req *restfile.Request, doc *restfile.Docum
 	if req == nil {
 		return "Request Details"
 	}
-	r := m.statusResolver(doc, req, m.cfg.EnvironmentName)
+	r := m.statusResolver(doc, req)
 
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	if method == "" {
@@ -124,8 +124,7 @@ func (m *Model) buildRequestDetailFields(
 	doc *restfile.Document,
 	path string,
 ) []requestDetailField {
-	env := m.cfg.EnvironmentName
-	res := m.statusResolver(doc, req, env)
+	res := m.statusResolver(doc, req)
 	name := expandStatusText(res, req.Metadata.Name)
 	if name == "" {
 		name = requestNavLabel(req, res, "Request")

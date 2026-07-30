@@ -48,7 +48,11 @@ GET %s/ping
 		t.Fatalf("expected 1 workflow, got %d", len(doc.Workflows))
 	}
 
-	out, err := New(engine.Config{}).ExecuteWorkflow(doc, &doc.Workflows[0], "")
+	out, err := New(engine.Config{}).ExecuteWorkflow(
+		doc,
+		&doc.Workflows[0],
+		testSelection(""),
+	)
 	if err != nil {
 		t.Fatalf("ExecuteWorkflow: %v", err)
 	}

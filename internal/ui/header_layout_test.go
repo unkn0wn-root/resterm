@@ -8,12 +8,22 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// headerTextSegments builds equal-priority single-rendering segments, the shape
+// the fitter sees before any segment offers a shorter variant.
+func headerTextSegments(texts ...string) []headerSegment {
+	segs := make([]headerSegment, len(texts))
+	for i, text := range texts {
+		segs[i] = headerSegment{text: []string{text}}
+	}
+	return segs
+}
+
 func TestBuildHeaderLineFitsWidth(t *testing.T) {
 	left := []string{"RESTERM", "ENV", "WORKSPACE"}
 	sep := " "
 	right := "▁▁▁▁ ms"
 	width := 20
-	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
+	line := buildHeaderLine(headerTextSegments(left...), sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "\n") {
 		t.Fatalf("expected single-line header, got %q", line)
 	}
@@ -73,7 +83,7 @@ func TestBuildHeaderLineDropsTrailingSegments(t *testing.T) {
 	sep := " "
 	right := "▁▁▁▁ ms"
 	width := 16
-	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
+	line := buildHeaderLine(headerTextSegments(left...), sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "THREE") {
 		t.Fatalf("expected trailing segments to be dropped, got %q", line)
 	}
@@ -87,7 +97,7 @@ func TestBuildHeaderLineNarrowWidthDropsRight(t *testing.T) {
 	sep := " "
 	right := "▁▁▁▁ ms"
 	width := 4
-	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
+	line := buildHeaderLine(headerTextSegments(left...), sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "▁") {
 		t.Fatalf("expected right text to be dropped, got %q", line)
 	}
@@ -100,7 +110,7 @@ func TestBuildHeaderLineLeftOnly(t *testing.T) {
 	left := []string{"BRAND", "ONE"}
 	sep := " "
 	width := 10
-	line := buildHeaderLine(left, sep, "", lipgloss.NewStyle(), width)
+	line := buildHeaderLine(headerTextSegments(left...), sep, "", lipgloss.NewStyle(), width)
 	if strings.Contains(line, "▁") {
 		t.Fatalf("expected no right text, got %q", line)
 	}
@@ -115,7 +125,7 @@ func TestBuildHeaderLineRightStylePadding(t *testing.T) {
 	right := "LATENCY"
 	width := 18
 	style := lipgloss.NewStyle().Padding(0, 1)
-	line := buildHeaderLine(left, sep, right, style, width)
+	line := buildHeaderLine(headerTextSegments(left...), sep, right, style, width)
 	if got := lipgloss.Width(line); got > width {
 		t.Fatalf("expected width <= %d, got %d", width, got)
 	}

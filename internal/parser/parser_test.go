@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -1888,6 +1889,28 @@ GET https://example.com/health
 	}
 	if spec.Baseline != "stage" {
 		t.Fatalf("expected baseline stage, got %q", spec.Baseline)
+	}
+}
+
+func TestParseGroupedCompareDirective(t *testing.T) {
+	src := `# @name Compare
+# @compare group=api "dev app 1" "dev app 2" base="dev app 2"
+GET https://example.com/health
+`
+	doc := Parse("compare.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors: %v", doc.Errors)
+	}
+	spec := doc.Requests[0].Metadata.Compare
+	if spec == nil {
+		t.Fatal("expected compare metadata")
+	}
+	if spec.Group != "api" || spec.Baseline != "dev app 2" {
+		t.Fatalf("compare spec = %+v", spec)
+	}
+	want := []string{"dev app 1", "dev app 2"}
+	if !reflect.DeepEqual(spec.Environments, want) {
+		t.Fatalf("profiles = %#v, want %#v", spec.Environments, want)
 	}
 }
 

@@ -16,7 +16,7 @@ func (e *Engine) redactExplainReport(
 	rep *xplain.Report,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	globs map[string]vars.GlobalMutation,
 	extra ...string,
 ) *xplain.Report {
@@ -95,7 +95,7 @@ func (e *Engine) redactExplainReport(
 func (e *Engine) explainSecrets(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	globs map[string]vars.GlobalMutation,
 	extra []string,
 ) []string {

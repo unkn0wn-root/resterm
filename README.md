@@ -280,7 +280,7 @@ The first command reports whether a newer release is available. The second downl
 
 ## Configuration
 
-- Environments are JSON files (`resterm.env.json`) discovered in the request directory, workspace root or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace. Prefer JSON when one file should hold several environments.
+- Environments are JSON files (`resterm.env.json`) discovered in the request directory, workspace root or CWD. A file can define named environments or independent groups, for example api, app, and credentials, that combine into one environment. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace. See [grouped environments](./docs/resterm.md#grouped-environments) and the runnable sample in `_examples/grouped/`.
 - Config is stored per OS and can be overridden with `RESTERM_CONFIG_DIR`:
   - macOS: `~/Library/Application Support/resterm`
   - Windows: `%APPDATA%\resterm`

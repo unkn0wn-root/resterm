@@ -38,7 +38,7 @@ type explainFinalizeInput struct {
 	report       *xplain.Report
 	doc          *restfile.Document
 	req          *restfile.Request
-	env          string
+	env          vars.Environment
 	preview      bool
 	status       xplain.Status
 	decision     string
@@ -55,7 +55,7 @@ type explainBuilder struct {
 	eng          *Engine
 	doc          *restfile.Document
 	req          *restfile.Request
-	env          string
+	env          vars.Environment
 	preview      bool
 	report       *xplain.Report
 	trace        *vars.Trace
@@ -70,7 +70,7 @@ func newExplainBuilder(
 	e *Engine,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	preview bool,
 ) *explainBuilder {
 	b := &explainBuilder{
@@ -79,7 +79,7 @@ func newExplainBuilder(
 		req:     req,
 		env:     env,
 		preview: preview,
-		report:  newExplainReport(req, env),
+		report:  newExplainReport(req, env.Label()),
 	}
 	if e != nil {
 		b.globals = effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
@@ -1087,7 +1087,7 @@ func (e *Engine) prepareExplainAuthPreview(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env string,
+	env vars.Environment,
 ) (explainAuthPreviewResult, error) {
 	if req == nil || req.Metadata.Auth == nil {
 		return explainAuthPreviewResult{}, nil
@@ -1157,8 +1157,7 @@ func (e *Engine) prepareExplainAuthPreview(
 		if err != nil {
 			return explainAuthPreviewResult{}, err
 		}
-		env = e.envName(env)
-		cfg = oa.MergeCachedConfig(env, cfg)
+		cfg = oa.MergeCachedConfig(env.Scope(), cfg)
 		if cfg.TokenURL == "" {
 			return explainAuthPreviewResult{}, diag.New(
 				diag.ClassAuth,
@@ -1173,7 +1172,7 @@ func (e *Engine) prepareExplainAuthPreview(
 				notes:   []string{"auth header already set on request"},
 			}, nil
 		}
-		tok, ok := oa.CachedToken(env, cfg)
+		tok, ok := oa.CachedToken(env.Scope(), cfg)
 		if !ok {
 			return explainAuthPreviewResult{
 				status:  xplain.StageSkipped,
@@ -1218,7 +1217,7 @@ func (e *Engine) PrepareExplainAuthPreview(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env string,
+	env vars.Environment,
 ) (ExplainAuthPreviewResult, error) {
 	out, err := e.prepareExplainAuthPreview(doc, req, res, env)
 	if err != nil {

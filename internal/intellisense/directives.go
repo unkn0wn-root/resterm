@@ -2,6 +2,7 @@ package intellisense
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 )
@@ -605,6 +606,12 @@ var directiveArgs = map[directive.Name][]Item{
 			Insert:     "baseline=prod",
 			CursorBack: len("prod"),
 		},
+		{
+			Label:      "group=",
+			Summary:    "Select the environment group to vary",
+			Insert:     "group=api",
+			CursorBack: len("api"),
+		},
 	},
 	directive.SSH: {
 		{
@@ -796,10 +803,10 @@ func (directiveSource) Provide(ctx Context, sc Scope) []Item {
 		if ctx.ArgKey == "use" {
 			return filter(profileItems(name, sc.Profiles), ctx.Query)
 		}
-		opts := directiveArgs[name]
 		if name == directive.Compare {
-			opts = slices.Concat(opts, environmentItems(sc.Environments))
+			return compareItems(ctx, sc)
 		}
+		opts := directiveArgs[name]
 		if len(opts) == 0 {
 			return nil
 		}
@@ -807,6 +814,28 @@ func (directiveSource) Provide(ctx Context, sc Scope) []Item {
 	default:
 		return nil
 	}
+}
+
+func compareItems(ctx Context, sc Scope) []Item {
+	if ctx.ArgKey == "group" {
+		return filter(environmentItems(groupNames(sc.EnvironmentGroups), "environment group"), ctx.Query)
+	}
+
+	profiles := groupProfiles(sc.EnvironmentGroups)
+	if ctx.ArgKey == "base" || ctx.ArgKey == "baseline" {
+		return filter(environmentItems(profiles, "environment profile"), ctx.Query)
+	}
+
+	opts := directiveArgs[directive.Compare]
+	opts = slices.Concat(opts, environmentItems(sc.Environments, "environment"))
+	opts = slices.Concat(opts, environmentItems(profiles, "environment profile"))
+	for _, group := range groupNames(sc.EnvironmentGroups) {
+		opts = append(opts, Item{
+			Label:   "group=" + group,
+			Summary: "environment group",
+		})
+	}
+	return filter(opts, ctx.Query)
 }
 
 func profileItems(name directive.Name, profiles ProfileSet) []Item {
@@ -826,10 +855,40 @@ func profileItems(name directive.Name, profiles ProfileSet) []Item {
 	return out
 }
 
-func environmentItems(names []string) []Item {
+func environmentItems(names []string, summary string) []Item {
 	out := make([]Item, len(names))
 	for i, n := range names {
-		out[i] = Item{Label: n, Summary: "environment"}
+		out[i] = Item{Label: n, Summary: summary}
 	}
 	return out
+}
+
+func groupNames(groups map[string][]string) []string {
+	names := make([]string, 0, len(groups))
+	for name := range groups {
+		names = append(names, name)
+	}
+	slices.SortFunc(names, compareFold)
+	return names
+}
+
+func groupProfiles(groups map[string][]string) []string {
+	seen := make(map[string]struct{})
+	var profiles []string
+	for _, group := range groupNames(groups) {
+		for _, profile := range groups[group] {
+			key := strings.ToLower(profile)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			profiles = append(profiles, profile)
+		}
+	}
+	slices.SortFunc(profiles, compareFold)
+	return profiles
+}
+
+func compareFold(a, b string) int {
+	return strings.Compare(strings.ToLower(a), strings.ToLower(b))
 }

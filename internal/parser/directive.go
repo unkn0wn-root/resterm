@@ -460,6 +460,7 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 	envs := make([]string, 0, len(fields))
 	seen := make(map[string]struct{})
 	var baseline string
+	var group string
 
 	for _, field := range fields {
 		value := strings.TrimSpace(field)
@@ -481,6 +482,17 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 					)
 				}
 				baseline = val
+			case "group":
+				if val == "" {
+					return nil, fmt.Errorf("@compare group cannot be empty")
+				}
+				if group != "" {
+					return nil, fmt.Errorf("@compare group specified more than once")
+				}
+				if vars.IsReservedEnvironment(val) {
+					return nil, fmt.Errorf("@compare group %q is reserved", val)
+				}
+				group = val
 			default:
 				return nil, fmt.Errorf("@compare unsupported option %q", key)
 			}
@@ -523,6 +535,7 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 	return &restfile.CompareSpec{
 		Environments: envs,
 		Baseline:     baseline,
+		Group:        group,
 	}, nil
 }
 

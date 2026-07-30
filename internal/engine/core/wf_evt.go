@@ -71,7 +71,7 @@ func (r *wfRun) emitReqStart(
 		Req: ReqMeta{
 			Index: r.seq,
 			Label: StepLabel(step, branch, iter, total),
-			Env:   r.pl.Run.Env,
+			Env:   r.pl.Run.Env.Label(),
 		},
 		Doc:     r.pl.Doc,
 		Request: req,
@@ -93,7 +93,7 @@ func (r *wfRun) emitReqDone(
 		Req: ReqMeta{
 			Index: r.seq,
 			Label: StepLabel(step, branch, iter, total),
-			Env:   r.pl.Run.Env,
+			Env:   r.pl.Run.Env.Label(),
 		},
 		Result: res,
 	})

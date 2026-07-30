@@ -25,7 +25,6 @@ type HTTPInput struct {
 	Req              *restfile.Request
 	Resolver         *vars.Resolver
 	Options          httpclient.Options
-	EnvName          string
 	EffectiveTimeout time.Duration
 	ScriptVars       map[string]string
 	ExtraVals        map[string]rts.Value
@@ -37,7 +36,6 @@ type CaptureInput struct {
 	Resolver  *vars.Resolver
 	Response  *scripts.Response
 	Stream    *scripts.StreamInfo
-	EnvName   string
 	Vars      map[string]string
 	ExtraVals map[string]rts.Value
 }
@@ -46,7 +44,6 @@ type AssertInput struct {
 	Context   context.Context
 	Doc       *restfile.Document
 	Req       *restfile.Request
-	EnvName   string
 	BaseDir   string
 	Vars      map[string]string
 	ExtraVals map[string]rts.Value
@@ -58,8 +55,8 @@ type HTTPHooks struct {
 	AttachSSEHandle       func(*httpclient.StreamHandle, *restfile.Request)
 	AttachWebSocketHandle func(*httpclient.WebSocketHandle, *restfile.Request)
 	ApplyCaptures         func(CaptureInput) error
-	CollectVariables      func(*restfile.Document, *restfile.Request, string) map[string]string
-	CollectGlobalValues   func(*restfile.Document, string) map[string]vars.GlobalMutation
+	CollectVariables      func(*restfile.Document, *restfile.Request) map[string]string
+	CollectGlobalValues   func(*restfile.Document) map[string]vars.GlobalMutation
 	RunAsserts            func(AssertInput) ([]scripts.TestResult, error)
 	ApplyRuntimeGlobals   func(map[string]vars.GlobalMutation)
 }
@@ -181,8 +178,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			Resolver:  in.Resolver,
 			Response:  respForScripts,
 			Stream:    streamInfo,
-			EnvName:   in.EnvName,
-			Vars:      r.captureVars(in.Doc, in.Req, in.EnvName, in.ScriptVars),
+			Vars:      r.captureVars(in.Doc, in.Req, in.ScriptVars),
 			ExtraVals: in.ExtraVals,
 		})
 		if err != nil {
@@ -193,9 +189,9 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 		}
 	}
 
-	updatedVars := r.collectVars(in.Doc, in.Req, in.EnvName)
+	updatedVars := r.collectVars(in.Doc, in.Req)
 	testVars := mergeStringMaps(updatedVars, in.ScriptVars)
-	testGlobals := r.collectGlobals(in.Doc, in.EnvName)
+	testGlobals := r.collectGlobals(in.Doc)
 
 	var assertErr error
 	if r.Hooks.RunAsserts != nil {
@@ -203,7 +199,6 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			Context:   ctx,
 			Doc:       in.Doc,
 			Req:       in.Req,
-			EnvName:   in.EnvName,
 			BaseDir:   in.Options.BaseDir,
 			Vars:      testVars,
 			ExtraVals: in.ExtraVals,
@@ -240,31 +235,23 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 func (r Runner) captureVars(
 	doc *restfile.Document,
 	req *restfile.Request,
-	envName string,
 	scriptVars map[string]string,
 ) map[string]string {
-	return mergeStringMaps(r.collectVars(doc, req, envName), scriptVars)
+	return mergeStringMaps(r.collectVars(doc, req), scriptVars)
 }
 
-func (r Runner) collectVars(
-	doc *restfile.Document,
-	req *restfile.Request,
-	envName string,
-) map[string]string {
+func (r Runner) collectVars(doc *restfile.Document, req *restfile.Request) map[string]string {
 	if r.Hooks.CollectVariables == nil {
 		return nil
 	}
-	return r.Hooks.CollectVariables(doc, req, envName)
+	return r.Hooks.CollectVariables(doc, req)
 }
 
-func (r Runner) collectGlobals(
-	doc *restfile.Document,
-	envName string,
-) map[string]vars.GlobalMutation {
+func (r Runner) collectGlobals(doc *restfile.Document) map[string]vars.GlobalMutation {
 	if r.Hooks.CollectGlobalValues == nil {
 		return nil
 	}
-	return r.Hooks.CollectGlobalValues(doc, envName)
+	return r.Hooks.CollectGlobalValues(doc)
 }
 
 func httpFailureDecision(req *restfile.Request) string {

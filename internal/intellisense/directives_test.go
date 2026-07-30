@@ -132,14 +132,56 @@ func TestCompareArgsIncludeEnvironments(t *testing.T) {
 	sc := Scope{Environments: []string{"dev", "prod"}}
 	ctx := Context{Kind: KindDirectiveArg, Directive: "compare", Query: ""}
 	items := directiveSource{}.Provide(ctx, sc)
-	for _, label := range []string{"base=", "baseline=", "dev", "prod"} {
+	for _, label := range []string{"base=", "baseline=", "group=", "dev", "prod"} {
 		if !contains(items, label) {
 			t.Fatalf("compare suggestions missing %q: %v", label, items)
 		}
 	}
 	// Static options must not be mutated by appended environments.
-	if got := len(directiveArgs[directive.Compare]); got != 2 {
+	if got := len(directiveArgs[directive.Compare]); got != 3 {
 		t.Fatalf("compare static args mutated, len = %d", got)
+	}
+}
+
+func TestCompareArgsIncludeGroupsAndProfiles(t *testing.T) {
+	sc := Scope{EnvironmentGroups: map[string][]string{
+		"api": {"dev", "prod"},
+		"app": {"dev app 1", "dev app 2"},
+	}}
+	ctx := Context{Kind: KindDirectiveArg, Directive: "compare"}
+	items := directiveSource{}.Provide(ctx, sc)
+	for _, label := range []string{
+		"group=",
+		"group=api",
+		"group=app",
+		"dev",
+		"prod",
+		"dev app 1",
+		"dev app 2",
+	} {
+		if !contains(items, label) {
+			t.Fatalf("compare suggestions missing %q: %v", label, items)
+		}
+	}
+
+	groups := directiveSource{}.Provide(Context{
+		Kind:      KindDirectiveArg,
+		Directive: "compare",
+		ArgKey:    "group",
+	}, sc)
+	for _, label := range []string{"api", "app"} {
+		if !contains(groups, label) {
+			t.Fatalf("group value suggestions missing %q: %v", label, groups)
+		}
+	}
+
+	bases := directiveSource{}.Provide(Context{
+		Kind:      KindDirectiveArg,
+		Directive: "compare",
+		ArgKey:    "base",
+	}, sc)
+	if !contains(bases, "dev app 2") {
+		t.Fatalf("baseline suggestions missing grouped profile: %v", bases)
 	}
 }
 

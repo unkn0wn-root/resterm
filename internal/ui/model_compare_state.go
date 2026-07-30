@@ -12,11 +12,14 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
 )
 
 type compareResult struct {
 	Environment string
+	Profile     string
+	Selection   vars.Selection
 	Response    *httpclient.Response
 	GRPC        *grpcclient.Response
 	Stream      *scripts.StreamInfo
@@ -112,7 +115,11 @@ func findBaselineIndex(results []compareResult, baseline string) int {
 		return -1
 	}
 	for i := range results {
-		if strings.EqualFold(results[i].Environment, baseline) {
+		name := results[i].Profile
+		if name == "" {
+			name = results[i].Environment
+		}
+		if strings.EqualFold(name, baseline) {
 			return i
 		}
 	}

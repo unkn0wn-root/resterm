@@ -3,6 +3,9 @@ package collection
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func buildEnvTemplate(rootAbs, rootReal string) ([]byte, error) {
@@ -36,12 +39,70 @@ func redactEnv(raw []byte, src string) ([]byte, error) {
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return nil, fmt.Errorf("parse env file %s: %w", src, err)
 	}
-	mask := redactAny(v)
+	mask := redactEnvironment(v)
 	data, err := json.MarshalIndent(mask, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode env template from %s: %w", src, err)
 	}
 	return ensureTrailingNewline(data), nil
+}
+
+func redactEnvironment(v any) any {
+	root, ok := v.(map[string]any)
+	if !ok || !hasEnvKey(root, vars.GroupsEnvKey) {
+		return redactAny(v)
+	}
+	out := make(map[string]any, len(root))
+	for key, value := range root {
+		if envKey(key) == vars.GroupsEnvKey {
+			out[key] = redactGroups(value)
+			continue
+		}
+		out[key] = redactAny(value)
+	}
+	return out
+}
+
+func redactGroups(v any) any {
+	groups, ok := v.(map[string]any)
+	if !ok {
+		return redactAny(v)
+	}
+	out := make(map[string]any, len(groups))
+	for name, value := range groups {
+		group, ok := value.(map[string]any)
+		if !ok {
+			out[name] = redactAny(value)
+			continue
+		}
+		profiles := make(map[string]any, len(group))
+		for key, profile := range group {
+			if envKey(key) == vars.DefaultEnvKey {
+				if _, ok := profile.(string); ok {
+					profiles[key] = profile
+				} else {
+					profiles[key] = redactAny(profile)
+				}
+			} else {
+				profiles[key] = redactAny(profile)
+			}
+		}
+		out[name] = profiles
+	}
+	return out
+}
+
+func hasEnvKey(m map[string]any, want string) bool {
+	for key := range m {
+		if envKey(key) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func envKey(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 func redactAny(v any) any {

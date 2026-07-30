@@ -1,21 +1,19 @@
 package cli
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func LoadEnvironment(explicit, filePath, workspace string) (vars.EnvironmentSet, string) {
+func LoadEnvironment(explicit, filePath, workspace string) (vars.Catalog, string, error) {
 	if explicit != "" {
-		envs, err := vars.LoadEnvironmentFile(explicit)
+		cat, err := vars.LoadEnvironmentFile(explicit)
 		if err != nil {
-			log.Printf("failed to load environment file %s: %v", explicit, err)
-			return nil, ""
+			return vars.Catalog{}, "", err
 		}
-		return envs, explicit
+		return cat, explicit, nil
 	}
 
 	var paths []string
@@ -29,9 +27,5 @@ func LoadEnvironment(explicit, filePath, workspace string) (vars.EnvironmentSet,
 		paths = append(paths, cwd)
 	}
 
-	envs, path, err := vars.ResolveEnvironment(paths)
-	if err != nil {
-		return nil, ""
-	}
-	return envs, path
+	return vars.ResolveEnvironment(paths)
 }

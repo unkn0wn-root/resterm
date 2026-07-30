@@ -48,13 +48,13 @@ REGION = ${CLI_REGION}
 		t.Fatalf("write env file: %v", err)
 	}
 
-	envs, err := LoadEnvironmentFile(path)
+	cat, err := LoadEnvironmentFile(path)
 	if err != nil {
 		t.Fatalf("load env: %v", err)
 	}
-	env := envs["stage"]
+	env := resolveValues(t, cat, "stage")
 	if env == nil {
-		t.Fatalf("expected stage environment to exist: %#v", envs)
+		t.Fatalf("expected stage environment to exist: %#v", cat.Names())
 	}
 	if env["BASE_URL"] != "https://api.example.com" {
 		t.Fatalf("BASE_URL = %q, want %q", env["BASE_URL"], "https://api.example.com")
@@ -86,24 +86,24 @@ func TestLoadEnvironmentFileDotEnvNameFallbacks(t *testing.T) {
 	if err := os.WriteFile(prodPath, []byte("API=https://api\n"), 0o644); err != nil {
 		t.Fatalf("write prod.env: %v", err)
 	}
-	envs, err := LoadEnvironmentFile(prodPath)
+	cat, err := LoadEnvironmentFile(prodPath)
 	if err != nil {
 		t.Fatalf("load prod env: %v", err)
 	}
-	if _, ok := envs["prod"]; !ok {
-		t.Fatalf("expected environment derived from filename 'prod', got keys %v", mapsKeys(envs))
+	if got := cat.Names(); len(got) != 1 || got[0] != "prod" {
+		t.Fatalf("expected environment derived from filename 'prod', got keys %v", got)
 	}
 
 	defaultPath := filepath.Join(dir, ".env")
 	if err := os.WriteFile(defaultPath, []byte("FOO=bar\n"), 0o644); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
-	envs, err = LoadEnvironmentFile(defaultPath)
+	cat, err = LoadEnvironmentFile(defaultPath)
 	if err != nil {
 		t.Fatalf("load default env: %v", err)
 	}
-	if _, ok := envs["default"]; !ok {
-		t.Fatalf("expected default environment, got keys %v", mapsKeys(envs))
+	if got := cat.Names(); len(got) != 1 || got[0] != "default" {
+		t.Fatalf("expected default environment, got keys %v", got)
 	}
 }
 
@@ -138,12 +138,4 @@ func TestLoadEnvironmentFileDotEnvDuplicateWorkspace(t *testing.T) {
 	if diag.ClassOf(err) != diag.ClassParse {
 		t.Fatalf("expected parse error, got %v", err)
 	}
-}
-
-func mapsKeys(set EnvironmentSet) []string {
-	keys := make([]string, 0, len(set))
-	for key := range set {
-		keys = append(keys, key)
-	}
-	return keys
 }

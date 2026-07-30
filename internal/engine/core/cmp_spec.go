@@ -3,48 +3,47 @@ package core
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func BuildCompareSpec(targets []string, baseline string) *restfile.CompareSpec {
-	envs := normalizeCompareTargets(targets)
+// BuildCompareSpec turns a run-wide compare override into a spec, or returns
+// nil when the override does not name at least two targets.
+func BuildCompareSpec(cfg engine.CompareConfig) *restfile.CompareSpec {
+	envs := normalizeCompareTargets(cfg.Targets)
 	if len(envs) < 2 {
 		return nil
 	}
 
-	base, found := normalizeCompareBaseline(envs, baseline)
-	switch {
-	case base == "":
+	base := normalizeCompareBaseline(envs, cfg.Base)
+	if base == "" {
 		base = envs[0]
-	case !found:
-		envs = append(envs, base)
 	}
 
 	return &restfile.CompareSpec{
 		Environments: envs,
 		Baseline:     base,
+		Group:        strings.TrimSpace(cfg.Group),
 	}
 }
 
-func prepareCompareSpec(spec *restfile.CompareSpec) *restfile.CompareSpec {
+// NormalizeCompareSpec keeps an explicitly set but unknown baseline as typed
+// so the run can reject it before any request is sent.
+func NormalizeCompareSpec(spec *restfile.CompareSpec) *restfile.CompareSpec {
 	if spec == nil {
 		return nil
 	}
 
 	envs := normalizeCompareTargets(spec.Environments)
-	base, _ := normalizeCompareBaseline(envs, spec.Baseline)
-	switch {
-	case len(envs) == 0:
-	case base == "":
+	base := normalizeCompareBaseline(envs, spec.Baseline)
+	if len(envs) > 0 && base == "" {
 		base = envs[0]
-	default:
-		// Preserve an explicit missing baseline so callers can keep the requested
-		// label while still falling back to the first row for effective diffing.
 	}
 
 	return &restfile.CompareSpec{
 		Environments: envs,
 		Baseline:     base,
+		Group:        strings.TrimSpace(spec.Group),
 	}
 }
 
@@ -73,15 +72,15 @@ func normalizeCompareTargets(targets []string) []string {
 	return out
 }
 
-func normalizeCompareBaseline(envs []string, baseline string) (string, bool) {
+func normalizeCompareBaseline(envs []string, baseline string) string {
 	base := strings.TrimSpace(baseline)
 	if base == "" {
-		return "", false
+		return ""
 	}
 	for _, env := range envs {
 		if strings.EqualFold(env, base) {
-			return env, true
+			return env
 		}
 	}
-	return base, false
+	return base
 }

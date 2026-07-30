@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
-	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,90 +41,71 @@ func NewResolver(providers ...Provider) *Resolver {
 // If that fails and the name has a dot, tries to match a provider prefix -
 // so "production.api_key" looks for a provider labeled "production" then asks for "api_key".
 func (r *Resolver) Resolve(name string) (string, bool) {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return "", false
-	}
-	if r.trace == nil {
-		for _, provider := range r.providers {
-			if value, ok := provider.Resolve(trimmed); ok {
-				return r.applyRefs(value)
-			}
-		}
-	} else {
-		var hits []string
-		var raw string
-		for _, provider := range r.providers {
-			if value, ok := provider.Resolve(trimmed); ok {
-				label := providerLabel(provider)
-				hits = append(hits, label)
-				if len(hits) == 1 {
-					raw = value
-				}
-			}
-		}
-		if len(hits) > 0 {
-			resolved, found := r.applyRefs(raw)
-			r.traceVar(ResolveTrace{
-				Name:     trimmed,
-				Source:   hits[0],
-				Value:    resolved,
-				Shadowed: hits[1:],
-				Uses:     1,
-				Missing:  !found,
-			})
-			return resolved, found
-		}
-	}
-	if !strings.Contains(trimmed, ".") {
+	name = strings.TrimSpace(name)
+	if name == "" {
 		return "", false
 	}
 
-	lowered := strings.ToLower(trimmed)
-	var hits []string
-	var raw string
-	for _, provider := range r.providers {
-		label := strings.TrimSpace(provider.Label())
-		if label == "" {
-			continue
-		}
-		labelLower := strings.ToLower(label)
-		if idx := strings.Index(labelLower, ":"); idx >= 0 {
-			labelLower = strings.TrimSpace(labelLower[:idx])
-		}
-		if labelLower == "" {
-			continue
-		}
-		if strings.HasPrefix(lowered, labelLower+".") {
-			subject := strings.TrimSpace(trimmed[len(labelLower)+1:])
-			if subject == "" {
-				continue
-			}
-			if value, ok := provider.Resolve(subject); ok {
-				if r.trace == nil {
-					return r.applyRefs(value)
-				}
-				label = providerLabel(provider)
-				hits = append(hits, label)
-				if len(hits) == 1 {
-					raw = value
-				}
-			}
-		}
+	raw, sources, ok := r.lookup(func(p Provider) (string, bool) { return p.Resolve(name) })
+	if !ok && strings.Contains(name, ".") {
+		raw, sources, ok = r.lookup(func(p Provider) (string, bool) { return lookupPrefixed(p, name) })
 	}
-	if len(hits) > 0 {
-		resolved, found := r.applyRefs(raw)
+	if !ok {
+		return "", false
+	}
+
+	resolved, found := r.applyRefs(raw)
+	if len(sources) > 0 {
 		r.traceVar(ResolveTrace{
-			Name:     trimmed,
-			Source:   hits[0],
+			Name:     name,
+			Source:   sources[0],
 			Value:    resolved,
-			Shadowed: hits[1:],
+			Shadowed: sources[1:],
 			Uses:     1,
 			Missing:  !found,
 		})
-		return resolved, found
 	}
-	return "", false
+	return resolved, found
+}
+
+// lookup returns the first value find yields across providers. Without tracing
+// it stops at the first hit. With tracing it keeps scanning and collects every
+// matching provider label so shadowed sources can be reported.
+func (r *Resolver) lookup(find func(Provider) (string, bool)) (string, []string, bool) {
+	var raw string
+	var sources []string
+	hit := false
+	for _, p := range r.providers {
+		value, ok := find(p)
+		if !ok {
+			continue
+		}
+		if !hit {
+			raw, hit = value, true
+			if r.trace == nil {
+				return raw, nil, true
+			}
+		}
+		sources = append(sources, providerLabel(p))
+	}
+	return raw, sources, hit
+}
+
+// lookupPrefixed matches "label.name" against the provider label, with any
+// ":detail" suffix stripped, and resolves the remainder against that provider.
+func lookupPrefixed(p Provider, name string) (string, bool) {
+	label := strings.TrimSpace(strings.ToLower(p.Label()))
+	if before, _, ok := strings.Cut(label, ":"); ok {
+		label = strings.TrimSpace(before)
+	}
+	if label == "" || !strings.HasPrefix(strings.ToLower(name), label+".") {
+		return "", false
+	}
+	subject := strings.TrimSpace(name[len(label)+1:])
+	if subject == "" {
+		return "", false
+	}
+	return p.Resolve(subject)
 }
 
 // applyRefs runs the value through registered ref resolvers. The first
@@ -233,25 +214,20 @@ func IsDynamic(name string) bool {
 }
 
 func (r *Resolver) traceVar(it ResolveTrace) {
-	if r == nil || r.trace == nil {
+	if r.trace == nil {
 		return
 	}
 	r.trace.Add(it)
 }
 
 func resolveDynamicBase(name string, offset time.Duration) (string, bool) {
-	lower := strings.ToLower(strings.TrimSpace(name))
-	switch lower {
-	case "$timestamp", "$timestampiso8601", "$timestampms":
-		t := time.Now().Add(offset)
-		switch lower {
-		case "$timestamp":
-			return fmt.Sprintf("%d", t.Unix()), true
-		case "$timestampms":
-			return fmt.Sprintf("%d", t.UnixNano()/int64(time.Millisecond)), true
-		default:
-			return t.UTC().Format(time.RFC3339), true
-		}
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "$timestamp":
+		return strconv.FormatInt(time.Now().Add(offset).Unix(), 10), true
+	case "$timestampms":
+		return strconv.FormatInt(time.Now().Add(offset).UnixMilli(), 10), true
+	case "$timestampiso8601":
+		return time.Now().Add(offset).UTC().Format(time.RFC3339), true
 	case "$randomint":
 		if offset != 0 {
 			return "", false
@@ -333,10 +309,7 @@ func (p *MapProvider) Label() string {
 type EnvProvider struct{}
 
 func (EnvProvider) Resolve(name string) (string, bool) {
-	if value, ok := os.LookupEnv(name); ok {
-		return value, true
-	}
-	return os.LookupEnv(strings.ToUpper(name))
+	return lookupEnv(name)
 }
 
 func (EnvProvider) Label() string {

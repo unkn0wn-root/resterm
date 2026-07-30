@@ -437,24 +437,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showEnvSelector {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch keyMsg.String() {
-			case "esc":
-				m.showEnvSelector = false
-				return m, batchCommands(cmds...)
-			case "ctrl+q", "ctrl+d":
-				return m, tea.Quit
-			case "enter":
-				cmd := m.applyEnvironmentSelection()
+			if cmd, handled := m.handleEnvSelectorKey(keyMsg); handled {
 				return m, batchCommands(append(cmds, cmd)...)
-			case "?", "shift+/":
-				m.toggleHelp()
-				return m, batchCommands(cmds...)
 			}
-			var envCmd tea.Cmd
-			m.envList, envCmd = m.envList.Update(msg)
-			return m, batchCommands(append(cmds, envCmd)...)
 		}
-		return m, batchCommands(cmds...)
+		var envCmd tea.Cmd
+		m.envList, envCmd = m.envList.Update(msg)
+		return m, batchCommands(append(cmds, envCmd)...)
 	}
 
 	if _, ok := msg.(tea.WindowSizeMsg); ok {
@@ -999,7 +988,7 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		}
 		return cmd, true
 	case bindings.ActionOpenEnvSelector:
-		if len(m.cfg.EnvironmentSet) == 0 {
+		if m.cfg.Catalog.Empty() {
 			return func() tea.Msg {
 				return statusMsg{text: "No environments configured", level: statusWarn}
 			}, true

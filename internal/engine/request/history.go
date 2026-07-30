@@ -12,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 var sensHdr = map[string]struct{}{
@@ -68,7 +69,7 @@ func (e *Engine) recordHTTP(
 		return
 	}
 
-	secs := e.secretValues(doc, req, res.Environment, res.RuntimeSecrets...)
+	secs := e.secretValues(doc, req, res.Env, res.RuntimeSecrets...)
 	mask := !req.Metadata.AllowSensitiveHeaders
 	snip := "<body suppressed>"
 	if !req.Metadata.NoLog {
@@ -92,7 +93,10 @@ func (e *Engine) recordHTTP(
 	ent := history.Entry{
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
-		Environment: res.Environment,
+		Environment: res.Env.Label(),
+		EnvironmentSelection: history.EnvironmentSelection(
+			res.Env.Selection().Groups(),
+		),
 		RequestName: engine.ReqID(req),
 		FilePath:    e.filePath(doc),
 		Method:      req.Method,
@@ -122,7 +126,7 @@ func (e *Engine) recordSkipped(
 	if strings.TrimSpace(txt) == "" {
 		txt = renderRequestText(req)
 	}
-	secs := e.secretValues(doc, req, res.Environment, res.RuntimeSecrets...)
+	secs := e.secretValues(doc, req, res.Env, res.RuntimeSecrets...)
 	mask := !req.Metadata.AllowSensitiveHeaders
 	txt = redactText(txt, secs, mask)
 	snip := strings.TrimSpace(res.SkipReason)
@@ -136,7 +140,10 @@ func (e *Engine) recordSkipped(
 	ent := history.Entry{
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
-		Environment: res.Environment,
+		Environment: res.Env.Label(),
+		EnvironmentSelection: history.EnvironmentSelection(
+			res.Env.Selection().Groups(),
+		),
 		RequestName: engine.ReqID(req),
 		FilePath:    e.filePath(doc),
 		Method:      req.Method,
@@ -160,7 +167,7 @@ func (e *Engine) recordGRPC(
 	if hs == nil || req == nil || resp == nil {
 		return
 	}
-	secs := e.secretValues(doc, req, res.Environment, res.RuntimeSecrets...)
+	secs := e.secretValues(doc, req, res.Env, res.RuntimeSecrets...)
 	mask := !req.Metadata.AllowSensitiveHeaders
 	snip := resp.Message
 	if req.Metadata.NoLog {
@@ -175,7 +182,10 @@ func (e *Engine) recordGRPC(
 	ent := history.Entry{
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
-		Environment: res.Environment,
+		Environment: res.Env.Label(),
+		EnvironmentSelection: history.EnvironmentSelection(
+			res.Env.Selection().Groups(),
+		),
 		RequestName: engine.ReqID(req),
 		FilePath:    e.filePath(doc),
 		Method:      req.Method,
@@ -194,7 +204,7 @@ func (e *Engine) recordGRPC(
 func (e *Engine) secretValues(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	extra ...string,
 ) []string {
 	vals := make(map[string]struct{})
@@ -225,7 +235,7 @@ func (e *Engine) secretValues(
 		}
 	}
 	if fs := e.rt.Files(); fs != nil {
-		if snap := fs.Snapshot(e.envName(env), e.filePath(doc)); len(snap) > 0 {
+		if snap := fs.Snapshot(env.Scope(), e.filePath(doc)); len(snap) > 0 {
 			for _, v := range snap {
 				if v.Secret {
 					add(v.Value)
@@ -234,7 +244,7 @@ func (e *Engine) secretValues(
 		}
 	}
 	if gs := e.rt.Globals(); gs != nil {
-		if snap := gs.Snapshot(e.envName(env)); len(snap) > 0 {
+		if snap := gs.Snapshot(env.Scope()); len(snap) > 0 {
 			for _, v := range snap {
 				if v.Secret {
 					add(v.Value)
@@ -329,7 +339,7 @@ type runResult struct {
 	GRPC           *grpcclient.Response
 	RuntimeSecrets []string
 	RequestText    string
-	Environment    string
+	Env            vars.Environment
 	Skipped        bool
 	SkipReason     string
 	Executed       *restfile.Request

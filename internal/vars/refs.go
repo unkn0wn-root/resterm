@@ -7,9 +7,8 @@ import (
 
 type RefResolver func(raw string) (resolved string, handled bool, found bool)
 
-// EnvRefResolver resolves values prefixed with "env:" by looking up the
-// remainder as an OS environment variable. The prefix match is case-insensitive;
-// the env-var key is tried as-is first, then uppercased as a fallback.
+// EnvRefResolver resolves values with a case-insensitive "env:" prefix by
+// looking up the remainder as an OS environment variable.
 func EnvRefResolver(raw string) (string, bool, bool) {
 	trimmed := strings.TrimSpace(raw)
 	if len(trimmed) < 4 || !strings.EqualFold(trimmed[:4], "env:") {
@@ -19,11 +18,15 @@ func EnvRefResolver(raw string) (string, bool, bool) {
 	if key == "" {
 		return "", true, false
 	}
+	value, ok := lookupEnv(key)
+	return value, true, ok
+}
+
+// lookupEnv tries the key as-is first, then uppercased, so lowercase variable
+// names can match conventional uppercase OS environment variables.
+func lookupEnv(key string) (string, bool) {
 	if value, ok := os.LookupEnv(key); ok {
-		return value, true, true
+		return value, true
 	}
-	if value, ok := os.LookupEnv(strings.ToUpper(key)); ok {
-		return value, true, true
-	}
-	return "", true, false
+	return os.LookupEnv(strings.ToUpper(key))
 }

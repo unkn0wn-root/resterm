@@ -13,15 +13,16 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (e *Engine) executeProfile(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 ) (*engine.ProfileResult, error) {
-	pl, err := core.PrepareProfile(doc, req, core.RunMeta{Env: e.env(env)})
+	pl, err := core.PrepareProfile(doc, req, core.RunMeta{Env: env})
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +47,7 @@ func newProCollector(pl *core.ProfilePlan) *proCollector {
 	return &proCollector{
 		st: &profileState{
 			req:   request.CloneRequest(pl.Request),
-			env:   strings.TrimSpace(pl.Run.Env),
+			env:   pl.Run.Env,
 			spec:  pl.Spec,
 			total: pl.Total,
 			ok:    make([]time.Duration, 0, pl.Spec.Count),
@@ -131,7 +132,8 @@ func buildProfileResult(st *profileState) *engine.ProfileResult {
 	if st == nil {
 		return out
 	}
-	out.Environment = st.env
+	out.Environment = st.env.Label()
+	out.Selection = st.env.Selection()
 	out.Summary = profileSummary(st)
 	out.Report = profileReport(st, stats)
 	out.StartedAt = st.start
@@ -244,7 +246,10 @@ func (e *Engine) recordProfile(
 	ent := history.Entry{
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
-		Environment: st.env,
+		Environment: st.env.Label(),
+		EnvironmentSelection: history.EnvironmentSelection(
+			st.env.Selection().Groups(),
+		),
 		RequestName: engine.ReqID(st.req),
 		FilePath:    e.filePath(doc),
 		Method:      st.req.Method,

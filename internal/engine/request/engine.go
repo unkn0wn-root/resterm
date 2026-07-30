@@ -114,7 +114,7 @@ func (e *Engine) SetConfig(cfg engine.Config) {
 func (e *Engine) Execute(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 ) (engine.RequestResult, error) {
 	return e.ExecuteWith(doc, req, env, ExecOptions{Record: true})
 }
@@ -122,7 +122,7 @@ func (e *Engine) Execute(
 func (e *Engine) ExecuteWith(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	opt ExecOptions,
 ) (engine.RequestResult, error) {
 	if req == nil {
@@ -130,12 +130,11 @@ func (e *Engine) ExecuteWith(
 	}
 
 	e.syncRegistry(doc)
-	env = e.envName(env)
 	req = CloneRequest(req)
 	opts := e.resolveHTTPOptions(doc, e.cfg.HTTPOptions)
 	if opts.CookieJar == nil {
 		if cs := e.rt.Cookies(); cs != nil {
-			opts.CookieJar = cs.Jar(env)
+			opts.CookieJar = cs.Jar(env.Scope())
 		}
 	}
 	if tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
@@ -152,7 +151,8 @@ func (e *Engine) ExecuteWith(
 		out := engine.RequestResult{
 			Err:         err,
 			Executed:    req,
-			Environment: env,
+			Environment: env.Label(),
+			Selection:   env.Selection(),
 			Explain:     exp.finish(xplain.StatusError, "Route resolution failed", err),
 		}
 		return out, nil
@@ -175,7 +175,7 @@ func (e *Engine) ExecuteWith(
 			GRPC:           res.GRPC,
 			RuntimeSecrets: res.RuntimeSecrets,
 			RequestText:    res.RequestText,
-			Environment:    res.Environment,
+			Env:            env,
 			Skipped:        res.Skipped,
 			SkipReason:     res.SkipReason,
 			Executed:       res.Executed,
@@ -224,6 +224,7 @@ func toResult(res xrunResult) engine.RequestResult {
 		RequestText:    res.RequestText,
 		RuntimeSecrets: append([]string(nil), res.RuntimeSecrets...),
 		Environment:    res.Environment,
+		Selection:      res.Selection,
 		Skipped:        res.Skipped,
 		SkipReason:     res.SkipReason,
 		Preview:        res.Preview,
@@ -236,7 +237,7 @@ type execCtx struct {
 	eng *Engine
 	doc *restfile.Document
 	req *restfile.Request
-	env string
+	env vars.Environment
 	mod ExecMode
 
 	opts httpclient.Options
@@ -274,7 +275,7 @@ func newExec(
 	e *Engine,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	opts httpclient.Options,
 	opt ExecOptions,
 ) *execCtx {
@@ -335,7 +336,8 @@ func detectPreRequestScripts(req *restfile.Request) (bool, bool) {
 func (x *execCtx) base() xrunResult {
 	return xrunResult{
 		Executed:       x.req,
-		Environment:    x.env,
+		Environment:    x.env.Label(),
+		Selection:      x.env.Selection(),
 		RuntimeSecrets: append([]string(nil), x.runtimeSecrets...),
 	}
 }
@@ -1067,7 +1069,6 @@ func (f flow) ExecuteHTTP() xexec.RequestResult {
 		Req:              x.req,
 		Resolver:         x.res,
 		Options:          x.opts,
-		EnvName:          x.env,
 		EffectiveTimeout: x.timeout,
 		ScriptVars:       x.scriptV,
 		ExtraVals:        x.extraX,
@@ -1089,27 +1090,23 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					resp:   in.Response,
 					stream: in.Stream,
 					out:    &caps,
-					env:    in.EnvName,
+					env:    x.env,
 					v:      in.Vars,
 					x:      in.ExtraVals,
 				})
 			},
-			CollectVariables: func(
-				doc *restfile.Document,
-				req *restfile.Request,
-				env string,
-			) map[string]string {
-				return x.eng.collectVariables(doc, req, env, x.extraV)
+			CollectVariables: func(doc *restfile.Document, req *restfile.Request) map[string]string {
+				return x.eng.collectVariables(doc, req, x.env, x.extraV)
 			},
-			CollectGlobalValues: func(doc *restfile.Document, env string) map[string]vars.GlobalMutation {
-				return x.eng.collectGlobalValues(doc, env)
+			CollectGlobalValues: func(doc *restfile.Document) map[string]vars.GlobalMutation {
+				return x.eng.collectGlobalValues(doc, x.env)
 			},
 			RunAsserts: func(in xexec.AssertInput) ([]scripts.TestResult, error) {
 				return x.eng.runAsserts(
 					in.Context,
 					in.Doc,
 					in.Req,
-					in.EnvName,
+					x.env,
 					in.BaseDir,
 					in.Vars,
 					in.ExtraVals,

@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestRunCompareEmitsRowsInOrderAndStopsOnCanceledResult(t *testing.T) {
@@ -21,10 +22,17 @@ func TestRunCompareEmitsRowsInOrderAndStopsOnCanceledResult(t *testing.T) {
 			Name: "items",
 		},
 	}
-	pl, err := PrepareCompare(&restfile.Document{Path: "cmp.http"}, req, &restfile.CompareSpec{
-		Environments: []string{"dev", "stage", "prod"},
-		Baseline:     "dev",
-	}, RunMeta{ID: "cmp-1", Env: "dev"})
+	pl, err := PrepareCompare(CompareInput{
+		Doc:     &restfile.Document{Path: "cmp.http"},
+		Request: req,
+		Targets: []vars.Target{
+			{Env: testEnvironment("dev")},
+			{Env: testEnvironment("stage")},
+			{Env: testEnvironment("prod")},
+		},
+		Baseline: "dev",
+		Run:      RunMeta{ID: "cmp-1", Env: testEnvironment("dev")},
+	})
 	if err != nil {
 		t.Fatalf("PrepareCompare: %v", err)
 	}
@@ -131,7 +139,7 @@ func TestCompareBaselineHelpers(t *testing.T) {
 }
 
 func TestBuildCompareSpecNormalizesTargetsAndBaseline(t *testing.T) {
-	spec := BuildCompareSpec([]string{" dev ", "DEV", "", "stage"}, "STAGE")
+	spec := BuildCompareSpec(engine.CompareConfig{Targets: []string{" dev ", "DEV", "", "stage"}, Base: "STAGE"})
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}
@@ -144,21 +152,17 @@ func TestBuildCompareSpecNormalizesTargetsAndBaseline(t *testing.T) {
 	}
 }
 
-func TestPrepareCompareNormalizesPlanAndPreservesMissingBaseline(t *testing.T) {
-	req := &restfile.Request{Method: "GET", URL: "https://example.com"}
-	pl, err := PrepareCompare(nil, req, &restfile.CompareSpec{
+func TestNormalizeCompareSpecPreservesMissingBaseline(t *testing.T) {
+	spec := NormalizeCompareSpec(&restfile.CompareSpec{
 		Environments: []string{" dev ", "", "DEV", "stage"},
 		Baseline:     "missing",
-	}, RunMeta{})
-	if err != nil {
-		t.Fatalf("PrepareCompare: %v", err)
-	}
+	})
 	expect := []string{"dev", "stage"}
-	if !reflect.DeepEqual(expect, pl.Spec.Environments) {
-		t.Fatalf("unexpected environments: %#v", pl.Spec.Environments)
+	if !reflect.DeepEqual(expect, spec.Environments) {
+		t.Fatalf("unexpected environments: %#v", spec.Environments)
 	}
-	if pl.Spec.Baseline != "missing" {
-		t.Fatalf("expected missing baseline to be preserved, got %q", pl.Spec.Baseline)
+	if spec.Baseline != "missing" {
+		t.Fatalf("expected missing baseline to be preserved, got %q", spec.Baseline)
 	}
 }
 
@@ -171,17 +175,18 @@ type cmpDep struct {
 func (d *cmpDep) ExecuteWith(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	opt request.ExecOptions,
 ) (engine.RequestResult, error) {
-	d.call = append(d.call, env+":"+boolString(opt.Record))
-	out, ok := d.res[env]
+	d.call = append(d.call, env.Label()+":"+boolString(opt.Record))
+	out, ok := d.res[env.Label()]
 	if !ok {
 		return engine.RequestResult{}, nil
 	}
 	out.Executed = request.CloneRequest(req)
 	out.RequestText = request.RenderRequestText(req)
-	out.Environment = env
+	out.Environment = env.Label()
+	out.Selection = env.Selection()
 	return out, nil
 }
 

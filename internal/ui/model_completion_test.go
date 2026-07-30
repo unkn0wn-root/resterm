@@ -27,7 +27,15 @@ func TestBuildCompletionScope(t *testing.T) {
 		"prod":            {"host": "prod.local"},
 	}
 
-	scope := buildCompletionScope(doc, set, "dev")
+	cat, err := vars.NewCatalog(set)
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	sel, err := cat.Select("dev", nil)
+	if err != nil {
+		t.Fatalf("selection: %v", err)
+	}
+	scope := buildCompletionScope(doc, cat, sel)
 
 	byName := make(map[string]intellisense.VarRef, len(scope.Variables))
 	for _, v := range scope.Variables {
@@ -70,8 +78,41 @@ func TestBuildCompletionScope(t *testing.T) {
 }
 
 func TestBuildCompletionScopeNilDocument(t *testing.T) {
-	scope := buildCompletionScope(nil, nil, "")
+	scope := buildCompletionScope(nil, vars.Catalog{}, vars.Selection{})
 	if len(scope.Variables) != 0 || len(scope.Environments) != 0 {
 		t.Fatalf("expected empty scope for nil document, got %+v", scope)
+	}
+}
+
+func TestBuildCompletionScopeGroupedEnvironments(t *testing.T) {
+	cat, err := vars.NewGroupedCatalog(nil, []vars.Group{
+		{
+			Name:    "api",
+			Default: "dev",
+			Profiles: vars.EnvironmentSet{
+				"dev":  {"api.url": "dev"},
+				"prod": {"api.url": "prod"},
+			},
+		},
+		{
+			Name: "app",
+			Profiles: vars.EnvironmentSet{
+				"dev app 1": {"app.url": "one"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	scope := buildCompletionScope(nil, cat, cat.DefaultSelection())
+	if len(scope.Environments) != 0 {
+		t.Fatalf("flat environments = %#v, want none", scope.Environments)
+	}
+	want := map[string][]string{
+		"api": {"dev", "prod"},
+		"app": {"dev app 1"},
+	}
+	if !reflect.DeepEqual(scope.EnvironmentGroups, want) {
+		t.Fatalf("environment groups = %#v, want %#v", scope.EnvironmentGroups, want)
 	}
 }

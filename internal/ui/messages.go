@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/update"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type statusPulseMsg struct {
@@ -45,6 +46,7 @@ type responseMsg struct {
 	requestText    string
 	runtimeSecrets []string
 	environment    string
+	selection      vars.Selection
 	skipped        bool
 	skipReason     string
 	preview        bool

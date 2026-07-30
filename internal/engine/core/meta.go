@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type Mode uint8
@@ -35,7 +36,7 @@ type RunMeta struct {
 	ID   string
 	Mode Mode
 	Name string
-	Env  string
+	Env  vars.Environment
 }
 
 type EvtMeta struct {
@@ -67,10 +68,11 @@ type StepMeta struct {
 }
 
 type RowMeta struct {
-	Index int
-	Env   string
-	Base  bool
-	Total int
+	Index   int
+	Env     string
+	Profile string
+	Base    bool
+	Total   int
 }
 
 type IterMeta struct {

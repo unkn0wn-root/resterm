@@ -350,7 +350,7 @@ Resterm automatically searches, in order:
 2. The workspace root.
 3. The current working directory.
 
-It loads the first `resterm.env.json` or `rest-client.env.json` it finds. The JSON can contain nested objects and arrays - they are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
+It loads the first `resterm.env.json` or `rest-client.env.json` it finds. Each named environment must be an object. Values inside it can contain nested objects and arrays, which are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
 
 Example environment (`_examples/resterm.env.json`):
 
@@ -394,6 +394,94 @@ Use the reserved `$shared` key to define variables that apply to **all** environ
 ```
 
 In this example `dev` inherits `auth.clientId=demo-client` from `$shared`, while `prod` overrides it with `prod-client`. Both environments receive `api.version=v2`. The `$shared` key itself never appears in the environment selector.
+
+#### Grouped environments
+
+Use groups when you want to combine independent choices, like API endpoint, app, and credentials, without writing out every combination as its own environment. A file either defines named environments or groups. The two forms cannot be mixed.
+
+Runnable sample: `_examples/grouped/`. Its `resterm.env.json` declares three groups of 3 profiles, so 9 declarations cover 27 combinations, and `grouped-environments.http` has one request per group plus one that reads from all three.
+
+```json
+{
+  "$shared": {
+    "region": "eu"
+  },
+  "$groups": {
+    "api": {
+      "$default": "dev",
+      "dev": {
+        "services.api.base": "https://dev.example.com"
+      },
+      "prod": {
+        "services.api.base": "https://api.example.com"
+      }
+    },
+    "app": {
+      "$default": "dev app 1",
+      "dev app 1": {
+        "app.id": "one"
+      },
+      "dev app 2": {
+        "app.id": "two"
+      }
+    },
+    "credentials": {
+      "$default": "personal",
+      "personal": {
+        "auth.token": "local-token"
+      },
+      "ci": {
+        "auth.token": "ci-token"
+      }
+    }
+  }
+}
+```
+
+`$shared`, `$groups`, and `$default` are matched case-insensitively and surrounding whitespace is ignored. Group and profile names cannot be empty or reuse a reserved name, and group names cannot contain `=`. Duplicate names are rejected, even when they only differ in case.
+
+A group with more than one profile needs a `$default`. A group with a single profile uses that profile automatically. The default is matched case-insensitively and keeps the spelling declared on the profile. The example above defaults to `api=dev, app=dev app 1, credentials=personal`.
+
+When the file loads, Resterm checks that no variable name appears in two different groups, since profiles from different groups can be active at the same time. The check is case-insensitive. Reusing a variable across profiles of the same group is fine because only one of them is ever active. Profile values override `$shared`, also when the key only differs in case. A collision error names the variable and both `group=profile` sources but never prints the values.
+
+In the TUI, `Ctrl+E` opens a searchable list with one `group = profile` row per choice. Active profiles are marked. Picking a row switches only that group, and the header and status line always show the full selection.
+
+From the CLI, select profiles with a repeatable flag:
+
+```bash
+resterm \
+  --env-group api=prod \
+  --env-group 'app=dev app 2' \
+  --env-group credentials=ci
+```
+
+`--env` still selects named environments and cannot be combined with `--env-group`. Groups you do not pass keep their defaults. A broken environment file stops TUI and headless startup with a parse error, whether it was discovered or passed explicitly.
+
+The public Go API accepts the same model:
+
+```go
+opt.Environment = headless.EnvironmentOptions{
+    Grouped: &headless.GroupedEnvironmentSet{
+        Shared: map[string]string{"region": "eu"},
+        Groups: headless.EnvironmentGroups{
+            "api": {
+                Default: "dev",
+                Profiles: headless.EnvironmentSet{
+                    "dev":  {"services.api.base": "https://dev.example.com"},
+                    "prod": {"services.api.base": "https://api.example.com"},
+                },
+            },
+        },
+    },
+    Selection: headless.EnvironmentSelection{"api": "prod"},
+}
+```
+
+`EnvironmentOptions.Set` and `Grouped` are mutually exclusive, as are `Name` and `Selection`. Injected definitions take precedence over `FilePath`, and a partial grouped selection is filled in from the group defaults.
+
+Runtime state is keyed by the full selection, not by the resolved values. Cookies, runtime globals, file captures, command-auth entries, OAuth tokens, and persisted runtime state stay separate even when only the credentials profile changes. Values and secrets are never part of that key.
+
+A workspace uses one environment file. There is no group-local `$shared`, and the active selection is not remembered across restarts.
 
 #### Dotenv files via `--env-file`
 
@@ -925,6 +1013,21 @@ Run the same request across multiple environments either inline or from the CLI:
 - Each compare sweep writes a bundled history entry (`COMPARE` method) so you can replay the failing environment later; selecting a compare history row loads the run back into the editor, restores the Compare tab, and lets you resend or inspect deltas off-line.
 - Navigate the Compare tab with ↑/↓ (or PgUp/PgDn/Home/End) to highlight any environment, then press `Enter` to load that environment’s snapshot into the primary pane while the configured baseline stays pinned in the secondary pane. The Diff tab (and Pretty/Raw/Headers) now reflect “selected ↔ baseline,” so choosing the baseline row yields an “identical” diff, while choosing another environment shows how it diverges from the baseline. To compare against a different reference, rerun with a new `base=` value or load the desired pair from History.
 
+Grouped compare varies exactly one group and holds every other active choice fixed:
+
+```http
+# @compare group=api dev uat prod base=dev
+GET {{services.api.base}}/health
+```
+
+The CLI equivalent is:
+
+```bash
+resterm --compare dev,uat,prod --compare-group api --compare-base dev
+```
+
+Profiles with spaces can be quoted inline or comma-separated on the CLI: `--compare 'dev app 1,dev app 2' --compare-group app`. Compare on a grouped file requires a group. Unknown profiles or a baseline that is not one of the targets fail before the first network request.
+
 Use `@compare` alongside the usual metadata, e.g. to couple request-scoped variables per environment:
 
 ```http
@@ -1177,6 +1280,8 @@ Resterm caches tokens per environment and `cache_key`. When a request needs a to
 1. If a valid cached token exists (not expired, with 30-second safety margin), it's reused immediately.
 2. If the cached token has a `refresh_token` and is expired, Resterm attempts a refresh.
 3. If refresh fails or no token exists, a fresh token is fetched from the token endpoint.
+
+For grouped environments, "per environment" means the complete group selection. Changing only the credentials profile uses a separate OAuth and command-auth cache, and explicit `cache_key` values are scoped to that selection too. Tokens persisted under an explicit key before this scoping existed cannot be attributed to a selection, so Resterm ignores them and fetches a fresh token under the new scoped key.
 
 This means you can define full OAuth parameters once, then reference just `cache_key` in subsequent requests:
 
@@ -1684,7 +1789,7 @@ A bundle export contains your request files plus the files those requests depend
 Resterm treats environment sharing as an explicit safe template flow:
 
 1. If `resterm.env.example.json` exists in the workspace, Resterm exports it exactly as written.
-2. If only `resterm.env.json` or `rest-client.env.json` exists, Resterm generates `resterm.env.example.json` and replaces every value with `REPLACE_ME`.
+2. If only `resterm.env.json` or `rest-client.env.json` exists, Resterm generates `resterm.env.example.json` and replaces every value with `REPLACE_ME`. In grouped files the group and profile keys and the `$default` strings are kept as they are, only the values under `$shared` and the profiles are redacted.
 3. If no environment file exists, Resterm still writes an empty `resterm.env.example.json` so the bundle shape remains predictable.
 
 ### Export a collection bundle
@@ -1766,10 +1871,12 @@ Export, import, pack, and unpack all enforce path safety and integrity checks. R
 ## Response History & Diffing
 
 - Every successful request produces a history entry with request text, method, status, duration, and a body snippet (unless `@no-log` is set). Values injected from `-secret` captures and allowlisted sensitive headers (Authorization, Proxy-Authorization, `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, `X-Amz-Security-Token`, etc.) are masked automatically unless you opt-in with `@log-sensitive-headers`.
-- History entries are environment-aware; selecting another environment filters the list automatically.
+- History entries are environment-aware; selecting another environment filters the list automatically. Grouped entries store the display label together with the structured selection, and replaying one restores that selection when it still resolves. If a group or profile no longer exists, Resterm keeps the current selection, shows a warning, and refuses an immediate resend rather than silently running with different credentials.
 - When focused on the history list, press `Enter` to load a request into the editor without executing it. Use `r`/`Ctrl+R` (or your normal send shortcut such as `Ctrl+Enter` / `Cmd+Enter`) to replay the loaded entry.
 - The Diff tab compares focused versus pinned panes, making regression analysis straightforward.
-- Compare runs are stored as grouped rows (`COMPARE` method). The preview (`p`) shows the entire bundle, `Enter` loads the failing (or baseline) environment back into the editor, and the Compare tab is automatically repopulated so you can audit deltas offline.
+- Compare runs are stored as grouped rows (`COMPARE` method), including the varied group, target profile, and full selection for each row. The preview (`p`) shows the entire bundle, `Enter` loads the failing (or baseline) environment back into the editor, and the Compare tab is automatically repopulated so you can audit deltas offline.
+
+JSON reports stay at schema version `1`. Grouped runs add `environmentSelection` and `compare.group`, while the existing `envName` and `environment` strings keep the full display label. Text and JUnit output only use those labels.
 
 ---
 
@@ -1803,7 +1910,7 @@ resterm collection export --workspace ./api --out ./shared/api-bundle
 - History file: `<config-dir>/history.db` (no fixed entry limit).
 - Settings file: `<config-dir>/settings.toml` (created when you first change preferences such as the default theme).
 - Theme directory: `<config-dir>/themes/` (override with `RESTERM_THEMES_DIR`). Drop `.toml` or `.json` files here to make them available in the selector.
-- Runtime globals and file captures are scoped per environment and document; they are released when you clear globals or switch environments.
+- Runtime globals and file captures are scoped per complete environment selection and document; they are released when you clear globals or switch environments.
 
 ---
 

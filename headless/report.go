@@ -2,6 +2,7 @@ package headless
 
 import (
 	"encoding/json"
+	"maps"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
@@ -69,19 +70,20 @@ const (
 
 // Report contains the results of a headless run.
 type Report struct {
-	SchemaVersion string
-	Version       string
-	FilePath      string
-	EnvName       string
-	StartedAt     time.Time
-	EndedAt       time.Time
-	Duration      time.Duration
-	Results       []Result
-	Total         int
-	Passed        int
-	Failed        int
-	Skipped       int
-	StopReason    StopReason
+	SchemaVersion        string
+	Version              string
+	FilePath             string
+	EnvName              string
+	EnvironmentSelection EnvironmentSelection
+	StartedAt            time.Time
+	EndedAt              time.Time
+	Duration             time.Duration
+	Results              []Result
+	Total                int
+	Passed               int
+	Failed               int
+	Skipped              int
+	StopReason           StopReason
 	// Warnings holds parse warnings with their source location. They never
 	// affect HasFailures or the exit code.
 	Warnings []string
@@ -110,27 +112,28 @@ func (r Report) MarshalJSON() ([]byte, error) {
 
 // Result contains one executed request, workflow, compare run, or profile run.
 type Result struct {
-	Kind        Kind
-	Name        string
-	Method      string
-	Target      string
-	Environment string
-	Status      Status
-	Summary     string
-	Duration    time.Duration
-	Canceled    bool
-	SkipReason  string
-	Error       string
-	ScriptError string
-	Failure     *Failure
-	HTTP        *HTTP
-	GRPC        *GRPC
-	Stream      *Stream
-	Trace       *Trace
-	Tests       []Test
-	Compare     *Compare
-	Profile     *Profile
-	Steps       []Step
+	Kind                 Kind
+	Name                 string
+	Method               string
+	Target               string
+	Environment          string
+	EnvironmentSelection EnvironmentSelection
+	Status               Status
+	Summary              string
+	Duration             time.Duration
+	Canceled             bool
+	SkipReason           string
+	Error                string
+	ScriptError          string
+	Failure              *Failure
+	HTTP                 *HTTP
+	GRPC                 *GRPC
+	Stream               *Stream
+	Trace                *Trace
+	Tests                []Test
+	Compare              *Compare
+	Profile              *Profile
+	Steps                []Step
 }
 
 // MarshalJSON writes the canonical result JSON format.
@@ -154,26 +157,27 @@ func (r Result) hasFailureEvidence() bool {
 
 // Step contains one workflow or compare step result.
 type Step struct {
-	Name        string
-	Method      string
-	Target      string
-	Environment string
-	Branch      string
-	Iteration   int
-	Total       int
-	Status      Status
-	Summary     string
-	Duration    time.Duration
-	Canceled    bool
-	SkipReason  string
-	Error       string
-	ScriptError string
-	Failure     *Failure
-	HTTP        *HTTP
-	GRPC        *GRPC
-	Stream      *Stream
-	Trace       *Trace
-	Tests       []Test
+	Name                 string
+	Method               string
+	Target               string
+	Environment          string
+	EnvironmentSelection EnvironmentSelection
+	Branch               string
+	Iteration            int
+	Total                int
+	Status               Status
+	Summary              string
+	Duration             time.Duration
+	Canceled             bool
+	SkipReason           string
+	Error                string
+	ScriptError          string
+	Failure              *Failure
+	HTTP                 *HTTP
+	GRPC                 *GRPC
+	Stream               *Stream
+	Trace                *Trace
+	Tests                []Test
 }
 
 // MarshalJSON writes the canonical step JSON format.
@@ -255,6 +259,7 @@ type Test struct {
 // Compare contains compare-run summary fields.
 type Compare struct {
 	Baseline string `json:"baseline,omitempty"`
+	Group    string `json:"group,omitempty"`
 }
 
 // Profile contains profile-run summary fields.
@@ -343,20 +348,21 @@ func toFormatReport(rep *Report) runfmt.Report {
 		return runfmt.Report{}
 	}
 	out := runfmt.Report{
-		SchemaVersion: rep.SchemaVersion,
-		Version:       rep.Version,
-		FilePath:      rep.FilePath,
-		EnvName:       rep.EnvName,
-		StartedAt:     rep.StartedAt,
-		EndedAt:       rep.EndedAt,
-		Duration:      rep.Duration,
-		Results:       make([]runfmt.Result, 0, len(rep.Results)),
-		Total:         rep.Total,
-		Passed:        rep.Passed,
-		Failed:        rep.Failed,
-		Skipped:       rep.Skipped,
-		StopReason:    string(rep.StopReason),
-		Warnings:      rep.Warnings,
+		SchemaVersion:        rep.SchemaVersion,
+		Version:              rep.Version,
+		FilePath:             rep.FilePath,
+		EnvName:              rep.EnvName,
+		EnvironmentSelection: maps.Clone(rep.EnvironmentSelection),
+		StartedAt:            rep.StartedAt,
+		EndedAt:              rep.EndedAt,
+		Duration:             rep.Duration,
+		Results:              make([]runfmt.Result, 0, len(rep.Results)),
+		Total:                rep.Total,
+		Passed:               rep.Passed,
+		Failed:               rep.Failed,
+		Skipped:              rep.Skipped,
+		StopReason:           string(rep.StopReason),
+		Warnings:             rep.Warnings,
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, toFormatResult(res))
@@ -366,17 +372,18 @@ func toFormatReport(rep *Report) runfmt.Report {
 
 func toFormatResult(res Result) runfmt.Result {
 	out := runfmt.Result{
-		Kind:        string(res.Kind),
-		Name:        res.Name,
-		Method:      res.Method,
-		Target:      res.Target,
-		Environment: res.Environment,
-		Status:      runfmt.Status(res.effectiveStatus()),
-		Summary:     res.Summary,
-		Duration:    res.Duration,
-		Canceled:    res.Canceled,
-		SkipReason:  res.SkipReason,
-		Error:       res.Error,
+		Kind:                 string(res.Kind),
+		Name:                 res.Name,
+		Method:               res.Method,
+		Target:               res.Target,
+		Environment:          res.Environment,
+		EnvironmentSelection: maps.Clone(res.EnvironmentSelection),
+		Status:               runfmt.Status(res.effectiveStatus()),
+		Summary:              res.Summary,
+		Duration:             res.Duration,
+		Canceled:             res.Canceled,
+		SkipReason:           res.SkipReason,
+		Error:                res.Error,
 		ErrorDetail: runfmt.ErrorDetailFromError(
 			errorsFromText(res.Error),
 		),
@@ -414,19 +421,20 @@ func toFormatResult(res Result) runfmt.Result {
 
 func toFormatStep(step Step) runfmt.Step {
 	out := runfmt.Step{
-		Name:        step.Name,
-		Method:      step.Method,
-		Target:      step.Target,
-		Environment: step.Environment,
-		Branch:      step.Branch,
-		Iteration:   step.Iteration,
-		Total:       step.Total,
-		Status:      runfmt.Status(step.effectiveStatus()),
-		Summary:     step.Summary,
-		Duration:    step.Duration,
-		Canceled:    step.Canceled,
-		SkipReason:  step.SkipReason,
-		Error:       step.Error,
+		Name:                 step.Name,
+		Method:               step.Method,
+		Target:               step.Target,
+		Environment:          step.Environment,
+		EnvironmentSelection: maps.Clone(step.EnvironmentSelection),
+		Branch:               step.Branch,
+		Iteration:            step.Iteration,
+		Total:                step.Total,
+		Status:               runfmt.Status(step.effectiveStatus()),
+		Summary:              step.Summary,
+		Duration:             step.Duration,
+		Canceled:             step.Canceled,
+		SkipReason:           step.SkipReason,
+		Error:                step.Error,
 		ErrorDetail: runfmt.ErrorDetailFromError(
 			errorsFromText(step.Error),
 		),
@@ -480,7 +488,7 @@ func toFormatCompare(cmp *Compare) *runfmt.Compare {
 	if cmp == nil {
 		return nil
 	}
-	return &runfmt.Compare{Baseline: cmp.Baseline}
+	return &runfmt.Compare{Baseline: cmp.Baseline, Group: cmp.Group}
 }
 
 func toFormatProfile(prof *Profile) *runfmt.Profile {

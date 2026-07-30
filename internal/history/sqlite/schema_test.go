@@ -79,6 +79,48 @@ func TestMigrateSchemaFromV1(t *testing.T) {
 	}
 }
 
+func TestMigrateSchemaFromV2AddsEnvironmentSelection(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "history.db")
+	db, err := sql.Open(drv, p)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := applyPragmas(db); err != nil {
+		t.Fatalf("pragmas: %v", err)
+	}
+	for _, m := range migs[:2] {
+		if err := applyMigration(db, m); err != nil {
+			t.Fatalf("apply v%d: %v", m.ver, err)
+		}
+	}
+	if _, err := db.Exec(`
+		INSERT INTO hist (id, exec_ns, status_code, dur_ns)
+		VALUES ('old', 1, 0, 0)
+	`); err != nil {
+		t.Fatalf("insert v2 row: %v", err)
+	}
+
+	if err := migrateSchema(db); err != nil {
+		t.Fatalf("migrate schema: %v", err)
+	}
+	ok, err := columnExists(db, "env_sel_json")
+	if err != nil {
+		t.Fatalf("column check: %v", err)
+	}
+	if !ok {
+		t.Fatal("env_sel_json column was not added")
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM hist WHERE id = 'old'`).Scan(&n); err != nil {
+		t.Fatalf("query preserved row: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("v2 row count = %d, want 1", n)
+	}
+}
+
 func TestMigrateSchemaIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "history.db")
@@ -113,4 +155,29 @@ func indexExists(db *sql.DB, name string) (bool, error) {
 		return false, err
 	}
 	return n > 0, nil
+}
+
+func columnExists(db *sql.DB, name string) (bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(hist)`)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var (
+			cid     int
+			col     string
+			kind    string
+			notNull int
+			def     any
+			pk      int
+		)
+		if err := rows.Scan(&cid, &col, &kind, &notNull, &def, &pk); err != nil {
+			return false, err
+		}
+		if col == name {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }

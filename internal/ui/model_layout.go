@@ -365,11 +365,7 @@ func (m *Model) applyLayout() tea.Cmd {
 	historyHeight := max(historyPane.viewport.Height, 1)
 	listHeight := max(historyHeight-m.historyHeaderHeight(), 1)
 	m.historyList.SetSize(historyWidth, listHeight)
-	if len(m.envList.Items()) > 0 {
-		envWidth := max(min(40, m.width-6), 20)
-		envHeight := max(min(paneHeight-4, 12), 5)
-		m.envList.SetSize(envWidth, envHeight)
-	}
+	m.resizeEnvList()
 	if len(m.themeList.Items()) > 0 {
 		themeWidth := max(min(48, m.width-6), 24)
 		themeHeight := max(min(paneHeight-4, 14), 5)

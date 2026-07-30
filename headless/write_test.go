@@ -359,6 +359,59 @@ func TestReportWriteJSONIncludesFailureMetadata(t *testing.T) {
 	}
 }
 
+func TestReportWriteJSONIncludesGroupedEnvironmentMetadata(t *testing.T) {
+	rep := &Report{
+		SchemaVersion:        "1",
+		FilePath:             "api.http",
+		EnvName:              "api=dev, auth=ci",
+		EnvironmentSelection: EnvironmentSelection{"api": "dev", "auth": "ci"},
+		Results: []Result{{
+			Kind:                 KindCompare,
+			Environment:          "api=dev, auth=ci",
+			EnvironmentSelection: EnvironmentSelection{"api": "dev", "auth": "ci"},
+			Status:               StatusPass,
+			Compare:              &Compare{Baseline: "dev", Group: "api"},
+			Steps: []Step{{
+				Environment:          "api=prod, auth=ci",
+				EnvironmentSelection: EnvironmentSelection{"api": "prod", "auth": "ci"},
+				Status:               StatusPass,
+			}},
+		}},
+	}
+
+	var out strings.Builder
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+	var got struct {
+		SchemaVersion        string               `json:"schemaVersion"`
+		EnvironmentSelection EnvironmentSelection `json:"environmentSelection"`
+		Results              []struct {
+			EnvironmentSelection EnvironmentSelection `json:"environmentSelection"`
+			Compare              struct {
+				Group string `json:"group"`
+			} `json:"compare"`
+			Steps []struct {
+				EnvironmentSelection EnvironmentSelection `json:"environmentSelection"`
+			} `json:"steps"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("unmarshal JSON: %v", err)
+	}
+	if got.SchemaVersion != "1" {
+		t.Fatalf("schema version = %q, want 1", got.SchemaVersion)
+	}
+	if got.EnvironmentSelection["auth"] != "ci" ||
+		got.Results[0].EnvironmentSelection["api"] != "dev" ||
+		got.Results[0].Steps[0].EnvironmentSelection["api"] != "prod" {
+		t.Fatalf("environment selections = %+v", got)
+	}
+	if got.Results[0].Compare.Group != "api" {
+		t.Fatalf("compare group = %q, want api", got.Results[0].Compare.Group)
+	}
+}
+
 func TestReportWriteJSONPreservesSkipStatus(t *testing.T) {
 	rep := &Report{
 		FilePath: "api.http",

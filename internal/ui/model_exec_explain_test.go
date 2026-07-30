@@ -20,7 +20,7 @@ func TestExecuteRequestConflictReturnsExplainReport(t *testing.T) {
 		K8s:    &restfile.K8sSpec{},
 	}
 
-	msg := model.executeRequest(nil, req, httpclient.Options{}, "", nil)()
+	msg := model.executeRequest(nil, req, httpclient.Options{}, testSelection(""), nil)()
 	res, ok := msg.(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg, got %T", msg)
@@ -53,7 +53,7 @@ func TestExecuteExplainReturnsPreviewWithoutSending(t *testing.T) {
 		},
 	}
 
-	msg := model.executeExplain(nil, req, httpclient.Options{}, "", nil)()
+	msg := model.executeExplain(nil, req, httpclient.Options{}, testSelection(""), nil)()
 	res, ok := msg.(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg, got %T", msg)

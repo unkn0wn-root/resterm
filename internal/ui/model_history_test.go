@@ -17,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestRedactHistoryTextMasksSecrets(t *testing.T) {
@@ -86,6 +87,7 @@ func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 		req,
 		"GET https://example.com/registry\nX-Registry-Token: Token token-123\n\n",
 		"dev",
+		vars.Selection{},
 		"token-123",
 		"Token token-123",
 	)
@@ -143,8 +145,12 @@ func TestLoadHistorySelectionComparePrefersFailure(t *testing.T) {
 	cmd := model.loadHistorySelection(false)
 	collectMsgs(cmd)
 
-	if env := model.cfg.EnvironmentName; env != "stage" {
-		t.Fatalf("expected environment to switch to failing env stage, got %s", env)
+	env, err := model.environment(model.cfg.Selection)
+	if err != nil {
+		t.Fatalf("resolve environment: %v", err)
+	}
+	if env.Label() != "stage" {
+		t.Fatalf("expected environment to switch to failing env stage, got %s", env.Label())
 	}
 	if !strings.Contains(model.editor.Value(), "X-Debug") {
 		t.Fatalf("expected stage request text to load, got %q", model.editor.Value())
@@ -205,6 +211,110 @@ func TestLoadHistorySelectionCompareHydratesSnapshots(t *testing.T) {
 	}
 	if !strings.Contains(snap.pretty, "Error:") {
 		t.Fatalf("expected snapshot summary to include error text, got %q", snap.pretty)
+	}
+}
+
+func TestLoadHistorySelectionUsesStructuredSelection(t *testing.T) {
+	cat, err := vars.NewGroupedCatalog(nil, []vars.Group{{
+		Name:    "credentials",
+		Default: "personal",
+		Profiles: vars.EnvironmentSet{
+			"personal": {},
+			"ci":       {},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	model := New(Config{Catalog: cat, Selection: cat.DefaultSelection()})
+	entry := history.Entry{
+		ID:                   "grouped",
+		Environment:          "credentials=ci",
+		EnvironmentSelection: history.EnvironmentSelection{"credentials": "ci"},
+		RequestText:          "GET https://example.com\n",
+	}
+	model.historyEntries = []history.Entry{entry}
+	model.historyList.SetItems(makeHistoryItems(model.historyEntries, model.historyScope))
+	model.historyList.Select(0)
+
+	collectMsgs(model.loadHistorySelection(false))
+	env, err := cat.Resolve(model.cfg.Selection)
+	if err != nil {
+		t.Fatalf("resolve selection: %v", err)
+	}
+	if got := env.Selection().Groups()["credentials"]; got != "ci" {
+		t.Fatalf("credentials profile = %q, want ci", got)
+	}
+}
+
+func TestReplayHistoryRefusesMissingStructuredSelection(t *testing.T) {
+	cat, err := vars.NewGroupedCatalog(nil, []vars.Group{{
+		Name: "credentials",
+		Profiles: vars.EnvironmentSet{
+			"personal": {},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	current := cat.DefaultSelection()
+	model := New(Config{Catalog: cat, Selection: current})
+	entry := history.Entry{
+		ID:                   "missing",
+		Environment:          "credentials=removed",
+		EnvironmentSelection: history.EnvironmentSelection{"credentials": "removed"},
+		RequestText:          "GET https://example.com\n",
+	}
+	model.historyEntries = []history.Entry{entry}
+	model.historyList.SetItems(makeHistoryItems(model.historyEntries, model.historyScope))
+	model.historyList.Select(0)
+
+	if cmd := model.loadHistorySelection(true); cmd != nil {
+		t.Fatal("invalid history selection should not resend")
+	}
+	env, err := cat.Resolve(model.cfg.Selection)
+	if err != nil {
+		t.Fatalf("resolve current selection: %v", err)
+	}
+	if got := env.Selection().Groups()["credentials"]; got != "personal" {
+		t.Fatalf("current profile changed to %q", got)
+	}
+	if model.statusMessage.level != statusWarn ||
+		!strings.Contains(model.statusMessage.text, "no longer resolves") {
+		t.Fatalf("status = %+v, want resolution warning", model.statusMessage)
+	}
+}
+
+func TestSelectCompareHistoryResultMatchesGroupedBaseline(t *testing.T) {
+	entry := history.Entry{Compare: &history.CompareEntry{
+		Baseline: "prod",
+		Group:    "api",
+		Results: []history.CompareResult{
+			{Environment: "api=dev, auth=ci", Profile: "dev"},
+			{Environment: "api=prod, auth=ci", Profile: "prod"},
+		},
+	}}
+	got := selectCompareHistoryResult(entry)
+	if got == nil || got.Profile != "prod" {
+		t.Fatalf("selected result = %+v, want prod profile", got)
+	}
+}
+
+func TestBundleFromHistoryResolvesBaselineEnvironment(t *testing.T) {
+	bundle := bundleFromHistory(history.Entry{
+		Compare: &history.CompareEntry{
+			Baseline: "prod",
+			Results: []history.CompareResult{
+				{Environment: "api=dev, auth=ci", Profile: "dev"},
+				{Environment: "api=prod, auth=ci", Profile: "prod"},
+			},
+		},
+	})
+	if bundle == nil {
+		t.Fatal("expected compare bundle")
+	}
+	if got, want := bundle.Baseline, "api=prod, auth=ci"; got != want {
+		t.Fatalf("baseline = %q, want %q", got, want)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
@@ -245,13 +246,13 @@ func TestMouseDoubleClickRequestFileOpensAndExpands(t *testing.T) {
 	writeSampleFile(t, fileB, "### beta\nGET https://example.com/b\n")
 
 	model := New(Config{
-		WorkspaceRoot:   tmp,
-		FilePath:        fileB,
-		InitialContent:  "### beta\nGET https://example.com/b\n",
-		Recursive:       false,
-		EnableUpdate:    false,
-		CompareTargets:  nil,
-		EnvironmentName: "",
+		WorkspaceRoot:  tmp,
+		FilePath:       fileB,
+		InitialContent: "### beta\nGET https://example.com/b\n",
+		Recursive:      false,
+		EnableUpdate:   false,
+		Compare:        engine.CompareConfig{},
+		Selection:      testSelection(""),
 	})
 	model.frameWidth = 120
 	model.frameHeight = 40

@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/theme"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 const historyListDelegateHeight = 2
@@ -30,6 +31,23 @@ func mergeListStyle(base, override lipgloss.Style) lipgloss.Style {
 	return merged
 }
 
+func listRowStyles(
+	s list.DefaultItemStyles,
+	m list.Model,
+	index int,
+) (title, desc lipgloss.Style) {
+	emptyFilter := m.FilterState() == list.Filtering && m.FilterValue() == ""
+	selected := index == m.Index() && m.FilterState() != list.Filtering
+	switch {
+	case emptyFilter:
+		return s.DimmedTitle, s.DimmedDesc
+	case selected:
+		return s.SelectedTitle, s.SelectedDesc
+	default:
+		return s.NormalTitle, s.NormalDesc
+	}
+}
+
 func listDelegateForTheme(th theme.Theme, showDescription bool, height int) list.DefaultDelegate {
 	delegate := list.NewDefaultDelegate()
 	delegate.ShowDescription = showDescription
@@ -38,6 +56,19 @@ func listDelegateForTheme(th theme.Theme, showDescription bool, height int) list
 	}
 	delegate.Styles = listItemStylesForTheme(th)
 	return delegate
+}
+
+func envDelegateForTheme(th theme.Theme, cat vars.Catalog) envDelegate {
+	delegate := list.NewDefaultDelegate()
+	delegate.ShowDescription = false
+	delegate.SetSpacing(0)
+	delegate.Styles = listItemStylesForTheme(th)
+
+	widest := 0
+	for _, group := range cat.Groups() {
+		widest = max(widest, visibleWidth(group.Name))
+	}
+	return envDelegate{DefaultDelegate: delegate, groupName: widest}
 }
 
 func historyDelegateForTheme(
@@ -87,6 +118,6 @@ func (m *Model) applyThemeToLists() {
 		list.DefaultStyles().ArabicPagination,
 		m.theme.ListItemDescription,
 	)
-	applyListTheme(m.theme, &m.envList, false, 0)
+	m.envList.SetDelegate(envDelegateForTheme(m.theme, m.cfg.Catalog))
 	applyListTheme(m.theme, &m.themeList, true, 3)
 }

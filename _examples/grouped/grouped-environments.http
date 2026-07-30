@@ -1,0 +1,67 @@
+# Grouped environments: three independent choices instead of one flat list.
+#
+#   api          dev | stage | prod            which backend
+#   credentials  personal | ci | operator      who you are
+#   region       eu-west | us-east | ap-tokyo  where it runs
+#
+# 9 declarations in resterm.env.json cover all 27 combinations.
+#
+# Press Ctrl+E to switch. Space stages a profile, Enter applies, so you can
+# change several groups in one go. The header shows the first group and a count,
+# for example "ENV: api=prod +2".
+#
+# These requests talk to the local mock in mock.http, which echoes back whatever
+# the request carried. Start it with `g Shift+M`, then switch a group and rerun:
+# the response body changes with the selection. From the CLI, pass one flag per
+# group:
+#
+#   resterm mock _examples/grouped/mock.http &
+#   resterm run --all --env-group api=prod --env-group credentials=operator \
+#     _examples/grouped/grouped-environments.http
+
+### Show the whole selection
+# @name showSelection
+# @description Every group at once. Switch a profile and rerun to see exactly what moved.
+# @assert response.statusCode == 200
+# @assert env.groups.has("api") and env.groups.has("credentials") and env.groups.has("region")
+# @assert response.json().api == env.groups.get("api")
+# @assert response.json().credentials == env.groups.get("credentials")
+# @assert response.json().region == env.get("deployment.code")
+GET {{base.url}}/api/{{api.tier}}/context
+Accept: application/json
+X-Api-Version: {{api.version}}
+X-Credential-Profile: {{identity.profile}}
+X-Client-Id: {{identity.clientId}}
+X-Region: {{deployment.code}}
+X-Region-Name: {{deployment.name}}
+
+### Backend only
+# @name apiHealth
+# @description Reads the api group alone. Switching credentials or region leaves this response unchanged.
+GET {{base.url}}/api/{{api.tier}}/health
+Accept: application/json
+
+### Credentials only
+# @name whoAmI
+# @description Reads the credentials group alone. This is why the header keeps the profile name visible.
+# @auth bearer {{identity.token}}
+GET {{base.url}}/whoami
+Accept: application/json
+X-Credential-Profile: {{identity.profile}}
+X-Client-Id: {{identity.clientId}}
+
+### Region only
+# @name regionRouting
+# @description Reads the region group alone.
+GET {{base.url}}/regions/{{deployment.code}}/status
+Accept: application/json
+X-Region-Name: {{deployment.name}}
+
+### Every group at once
+# @name workloads
+# @description One request drawing on all three groups, the case grouped environments exist for.
+# @auth bearer {{identity.token}}
+GET {{base.url}}/api/{{api.tier}}/{{deployment.code}}/workloads
+Accept: application/json
+X-Api-Version: {{api.version}}
+X-Client-Id: {{identity.clientId}}

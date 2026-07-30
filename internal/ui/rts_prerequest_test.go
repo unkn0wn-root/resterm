@@ -47,7 +47,7 @@ vars.global.delete("old")`,
 	}
 
 	out, err := model.requestSvc(httpclient.Options{}).
-		RunPreRequest(context.Background(), nil, req, "", "", variables, globals)
+		RunPreRequest(context.Background(), nil, req, testEnv(""), "", variables, globals)
 	if err != nil {
 		t.Fatalf("runRTSPreRequest: %v", err)
 	}
@@ -94,7 +94,8 @@ request.setQueryParam("mutated", "true")`,
 		},
 	}
 
-	out, err := model.requestSvc(httpclient.Options{}).RunPreRequest(context.Background(), nil, req, "", "", nil, nil)
+	out, err := model.requestSvc(httpclient.Options{}).
+		RunPreRequest(context.Background(), nil, req, testEnv(""), "", nil, nil)
 	if err != nil {
 		t.Fatalf("runRTSPreRequest: %v", err)
 	}
@@ -129,7 +130,7 @@ GET https://example.com
 		context.Background(),
 		doc,
 		doc.Requests[0],
-		"",
+		testEnv(""),
 		"",
 		nil,
 		nil,
@@ -178,7 +179,8 @@ func TestRunRTSPreRequestErrorRendersIncludedSource(t *testing.T) {
 		},
 	}
 
-	_, err := model.requestSvc(httpclient.Options{}).RunPreRequest(context.Background(), nil, req, "", dir, nil, nil)
+	_, err := model.requestSvc(httpclient.Options{}).
+		RunPreRequest(context.Background(), nil, req, testEnv(""), dir, nil, nil)
 	if err == nil {
 		t.Fatalf("expected rts error")
 	}

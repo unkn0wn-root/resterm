@@ -41,7 +41,7 @@ type captureRun struct {
 	resp   *scripts.Response
 	stream *scripts.StreamInfo
 	out    *captureResult
-	env    string
+	env    vars.Environment
 	v      map[string]string
 	x      map[string]rts.Value
 }
@@ -56,7 +56,7 @@ type captureValueIn struct {
 	doc      *restfile.Document
 	req      *restfile.Request
 	resolver *vars.Resolver
-	env      string
+	env      vars.Environment
 	spec     restfile.CaptureSpec
 	v        map[string]string
 	x        map[string]rts.Value
@@ -68,7 +68,7 @@ type captureValueIn struct {
 type captureRTSIn struct {
 	doc  *restfile.Document
 	req  *restfile.Request
-	env  string
+	env  vars.Environment
 	spec restfile.CaptureSpec
 	ex   string
 	v    map[string]string
@@ -120,7 +120,6 @@ func (e *Engine) applyCaptures(in captureRun) error {
 		return nil
 	}
 
-	env := e.envName(in.env)
 	lc := newCaptureContext(in.resp, in.stream, capture.StrictEnabled(in.req.Settings))
 	rr := rtsScriptResp(in.resp)
 	rs := rtsStream(in.stream)
@@ -158,7 +157,7 @@ func (e *Engine) applyCaptures(in captureRun) error {
 			}
 		case directive.ScopeGlobal:
 			if gs := e.rt.Globals(); gs != nil {
-				gs.Set(env, c.Name, val, c.Secret)
+				gs.Set(in.env.Scope(), c.Name, val, c.Secret)
 			}
 		}
 	}
@@ -166,7 +165,7 @@ func (e *Engine) applyCaptures(in captureRun) error {
 	if fs := e.rt.Files(); in.out != nil && len(in.out.fileVars) > 0 && fs != nil {
 		path := e.filePath(in.doc)
 		for _, v := range in.out.fileVars {
-			fs.Set(env, path, v.Name, v.Value, v.Secret)
+			fs.Set(in.env.Scope(), path, v.Name, v.Value, v.Secret)
 		}
 	}
 	return nil

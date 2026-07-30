@@ -22,9 +22,9 @@ import (
 const (
 	drv = "sqlite"
 
-	histCols = `(id, id_num, exec_ns, env, req_name, file_path, file_norm, method, url, status,
+	histCols = `(id, id_num, exec_ns, env, env_sel_json, req_name, file_path, file_norm, method, url, status,
 		status_code, dur_ns, snippet, req_text, descr, tags_json, prof_json, trace_json, cmp_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// Regular writes replace by ID so reruns can refresh the same row,
 	// while legacy migration keeps the first copy and skips duplicates.
@@ -162,7 +162,7 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 	}
 
 	q := `SELECT
-		id, id_num, exec_ns, env, req_name, file_path, method, url, status, status_code, dur_ns,
+		id, id_num, exec_ns, env, env_sel_json, req_name, file_path, method, url, status, status_code, dur_ns,
 		snippet, req_text, descr, tags_json, prof_json, trace_json, cmp_json
 	FROM hist`
 	if strings.TrimSpace(where) != "" {
@@ -196,13 +196,14 @@ func scanRow(rs *sql.Rows) (history.Entry, error) {
 	var (
 		id, env, reqName, filePath, method, url, status, snippet, reqText, descr string
 		idNum, execNs, statusCode, durNs                                         int64
-		tagsJSON, profJSON, traceJSON, cmpJSON                                   []byte
+		envSelJSON, tagsJSON, profJSON, traceJSON, cmpJSON                       []byte
 	)
 	err := rs.Scan(
 		&id,
 		&idNum,
 		&execNs,
 		&env,
+		&envSelJSON,
 		&reqName,
 		&filePath,
 		&method,
@@ -238,6 +239,13 @@ func scanRow(rs *sql.Rows) (history.Entry, error) {
 		Description: descr,
 	}
 
+	if len(envSelJSON) > 0 {
+		sel, err := dec[history.EnvironmentSelection](envSelJSON)
+		if err != nil {
+			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode environment selection")
+		}
+		e.EnvironmentSelection = sel
+	}
 	if len(tagsJSON) > 0 {
 		tags, err := dec[[]string](tagsJSON)
 		if err != nil {
@@ -290,6 +298,12 @@ func mkRow(e history.Entry) (row, error) {
 	}
 
 	var err error
+	if len(e.EnvironmentSelection) > 0 {
+		r.envSelJSON, err = enc(e.EnvironmentSelection)
+		if err != nil {
+			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode environment selection")
+		}
+	}
 	if len(e.Tags) > 0 {
 		r.tagsJSON, err = enc(e.Tags)
 		if err != nil {
@@ -323,6 +337,7 @@ type row struct {
 	idNum      int64
 	execNs     int64
 	env        string
+	envSelJSON []byte
 	reqName    string
 	filePath   string
 	fileNorm   string
@@ -342,7 +357,7 @@ type row struct {
 
 func (r *row) args() []any {
 	return []any{
-		r.id, r.idNum, r.execNs, r.env, r.reqName, r.filePath, r.fileNorm,
+		r.id, r.idNum, r.execNs, r.env, r.envSelJSON, r.reqName, r.filePath, r.fileNorm,
 		r.method, r.url, r.status, r.statusCode, r.durNs, r.snippet,
 		r.reqText, r.descr, r.tagsJSON, r.profJSON, r.traceJSON, r.cmpJSON,
 	}

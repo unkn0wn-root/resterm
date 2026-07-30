@@ -12,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (m *Model) runCfg(opts httpclient.Options) engine.Config {
@@ -22,8 +23,8 @@ func (m *Model) runCfg(opts httpclient.Options) engine.Config {
 	return engine.Config{
 		FilePath:              path,
 		Client:                m.client,
-		EnvironmentSet:        m.cfg.EnvironmentSet,
-		EnvironmentName:       m.cfg.EnvironmentName,
+		Catalog:               m.cfg.Catalog,
+		Selection:             m.cfg.Selection,
 		EnvironmentFile:       m.cfg.EnvironmentFile,
 		AllowInteractiveOAuth: true,
 		HTTPOptions:           opts,
@@ -33,8 +34,7 @@ func (m *Model) runCfg(opts httpclient.Options) engine.Config {
 		K8sManager:            m.k8sManager(),
 		WorkspaceRoot:         m.workspaceRoot,
 		Recursive:             m.workspaceRecursive,
-		CompareTargets:        append([]string(nil), m.cfg.CompareTargets...),
-		CompareBase:           strings.TrimSpace(m.cfg.CompareBase),
+		Compare:               m.cfg.Compare.Clone(),
 		Registry:              m.registryIndex(),
 		Bindings:              m.bindingsMap,
 		SourceDiagnostics:     true,
@@ -61,7 +61,7 @@ type requestRunner interface {
 	ExecuteWith(
 		doc *restfile.Document,
 		req *restfile.Request,
-		env string,
+		env vars.Environment,
 		opt rqeng.ExecOptions,
 	) (engine.RequestResult, error)
 }
@@ -77,7 +77,7 @@ type uiRequestEngine struct {
 func (e *uiRequestEngine) ExecuteWith(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	opt rqeng.ExecOptions,
 ) (engine.RequestResult, error) {
 	nextWarning := opt.OnWarning
@@ -134,12 +134,16 @@ func (m *Model) execRunReq(
 	doc *restfile.Document,
 	req *restfile.Request,
 	opts httpclient.Options,
-	env string,
+	sel vars.Selection,
 	vals map[string]rts.Value,
 	xs ...map[string]string,
 ) tea.Cmd {
+	env, envErr := m.environment(sel)
+	if envErr != nil {
+		return responseErrCmd(envErr, req, "")
+	}
 	if err := docErr(doc); err != nil {
-		return responseErrCmd(err, req, env)
+		return responseErrCmd(err, req, env.Label())
 	}
 	rq := m.runRequestSvc(opts)
 	if rq == nil {

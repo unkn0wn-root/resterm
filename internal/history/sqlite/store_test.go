@@ -3,6 +3,7 @@ package sqlite
 import (
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -80,6 +81,50 @@ func TestDelete(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("expected empty rows after delete")
+	}
+}
+
+func TestEnvironmentSelectionRoundTrip(t *testing.T) {
+	s := New(filepath.Join(t.TempDir(), "history.db"))
+	entry := history.Entry{
+		ID:                   "grouped",
+		ExecutedAt:           time.Unix(10, 0),
+		Environment:          "api=dev, auth=ci",
+		EnvironmentSelection: history.EnvironmentSelection{"api": "dev", "auth": "ci"},
+		Compare: &history.CompareEntry{
+			Baseline: "dev",
+			Group:    "api",
+			Results: []history.CompareResult{{
+				Environment:          "api=prod, auth=ci",
+				Profile:              "prod",
+				EnvironmentSelection: history.EnvironmentSelection{"api": "prod", "auth": "ci"},
+			}},
+		},
+	}
+	if err := s.Append(entry); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	got, err := s.Entries()
+	if err != nil {
+		t.Fatalf("entries: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("entries = %d, want 1", len(got))
+	}
+	if !reflect.DeepEqual(got[0].EnvironmentSelection, entry.EnvironmentSelection) {
+		t.Fatalf(
+			"selection = %#v, want %#v",
+			got[0].EnvironmentSelection,
+			entry.EnvironmentSelection,
+		)
+	}
+	if got[0].Compare == nil || got[0].Compare.Group != "api" ||
+		got[0].Compare.Results[0].Profile != "prod" ||
+		!reflect.DeepEqual(
+			got[0].Compare.Results[0].EnvironmentSelection,
+			entry.Compare.Results[0].EnvironmentSelection,
+		) {
+		t.Fatalf("compare = %#v, want %#v", got[0].Compare, entry.Compare)
 	}
 }
 

@@ -267,6 +267,33 @@ func TestRenderLeafDiagnosticDoesNotDuplicateCause(t *testing.T) {
 	}
 }
 
+func TestRenderWrappedPlainErrorDoesNotDuplicateOperation(t *testing.T) {
+	const operation = "parse env file /tmp/resterm.env.json"
+	err := diag.WrapAs(
+		diag.ClassParse,
+		errors.New("unexpected end of JSON input"),
+		operation,
+	)
+
+	got := diag.Render(err)
+	want := "error[parse]: " + operation + "\n╰─> unexpected end of JSON input"
+	if got != want {
+		t.Fatalf("Render() = %q, want %q", got, want)
+	}
+
+	rep := diag.ReportOf(err)
+	if len(rep.Items) != 1 || len(rep.Items[0].Chain) != 1 {
+		t.Fatalf("unexpected structured report: %#v", rep)
+	}
+	root := rep.Items[0].Chain[0]
+	if root.Kind != diag.ChainOperation ||
+		root.Message != operation ||
+		len(root.Children) != 1 ||
+		root.Children[0].Message != "unexpected end of JSON input" {
+		t.Fatalf("structured chain = %#v, want operation with parse cause", root)
+	}
+}
+
 func TestRenderJoinedErrorsAsBranches(t *testing.T) {
 	err := diag.Join(
 		diag.ClassConfig,
@@ -276,20 +303,13 @@ func TestRenderJoinedErrorsAsBranches(t *testing.T) {
 	)
 
 	got := diag.Render(err)
-	for _, want := range []string{
-		"error[config]: load config",
-		"├─> token rejected",
-		"╰─> command timed out",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("Render() missing %q in %q", want, got)
-		}
-	}
-	if strings.Contains(got, "\nerror[timeout]") {
-		t.Fatalf("Render() should keep joined errors under one diagnostic: %q", got)
+	want := "error[config]: load config\n" +
+		"├─> token rejected\n" +
+		"╰─> command timed out"
+	if got != want {
+		t.Fatalf("Render() = %q, want %q", got, want)
 	}
 	assertChainLines(t, err, []string{
-		"load config",
 		"├─> token rejected",
 		"╰─> command timed out",
 	})

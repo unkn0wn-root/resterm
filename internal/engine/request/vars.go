@@ -93,10 +93,6 @@ const (
 	omitSecrets secrecy = true
 )
 
-func (e *Engine) envName(name string) string {
-	return vars.SelectEnv(e.cfg.EnvironmentSet, name, e.cfg.EnvironmentName)
-}
-
 func (e *Engine) rtsPos(doc *restfile.Document, req *restfile.Request) vars.ExprPos {
 	path := e.filePath(doc)
 	line := 1
@@ -152,13 +148,11 @@ func (e *Engine) rtsBase(doc *restfile.Document, base string) string {
 	return e.fileDir(doc)
 }
 
-func (e *Engine) rtsEnv(name string) map[string]string {
-	out := make(map[string]string)
-	if env := vars.EnvValues(e.cfg.EnvironmentSet, name); len(env) > 0 {
-		maps.Copy(out, env)
-	}
-	if strings.TrimSpace(name) != "" {
-		out["name"] = name
+func (e *Engine) rtsEnv(env vars.Environment) map[string]string {
+	out := make(map[string]string, len(env.Values())+1)
+	maps.Copy(out, env.Values())
+	if env.Label() != "" {
+		out["name"] = env.Label()
 	}
 	return out
 }
@@ -167,12 +161,12 @@ func (e *Engine) buildResolver(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	globs map[string]vars.GlobalMutation,
 	extra map[string]rts.Value,
 	extras ...map[string]string,
 ) *vars.Resolver {
-	env = e.envName(env)
 	res := vars.NewResolver(e.providers(doc, req, env, globs, keepSecrets, extras...)...)
 	res.AddRefResolver(vars.EnvRefResolver)
 	res.SetExprEval(e.rtsEval(ctx, doc, req, env, base, extra, extras...))
@@ -186,11 +180,11 @@ func (e *Engine) DisplayResolver(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	extra map[string]rts.Value,
 	extras ...map[string]string,
 ) *vars.Resolver {
-	env = e.envName(env)
 	base = e.rtsBase(doc, base)
 	globs := e.collectStoredGlobalValues(env)
 	maps.DeleteFunc(globs, func(_ string, v vars.GlobalMutation) bool { return v.Secret })
@@ -199,7 +193,8 @@ func (e *Engine) DisplayResolver(
 	res.AddRefResolver(vars.EnvRefResolver)
 	vv := e.collectVariablesWithGlobals(doc, req, env, globs, omitSecrets, extras...)
 	res.SetExprEval(e.ExprEvalWithOptions(
-		ctx, doc, req, env, base, vv, extra,
+		ctx,
+		ExprInput{Doc: doc, Req: req, Env: env, Base: base, Vars: vv, Extra: extra},
 		ExprEvalOptions{OmitSecretGlobals: true},
 	))
 	res.SetExprPos(e.rtsPos(doc, req))
@@ -209,7 +204,7 @@ func (e *Engine) DisplayResolver(
 func (e *Engine) providers(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	globs map[string]vars.GlobalMutation,
 	sec secrecy,
 	extras ...map[string]string,
@@ -267,8 +262,8 @@ func (e *Engine) providers(
 	if len(fv) > 0 {
 		ps = append(ps, vars.NewMapProvider("file", fv))
 	}
-	if envVals := vars.EnvValues(e.cfg.EnvironmentSet, env); len(envVals) > 0 {
-		ps = append(ps, vars.NewMapProvider("environment", envVals))
+	if values := env.Values(); len(values) > 0 {
+		ps = append(ps, vars.NewMapProvider("environment", values))
 	}
 	return append(ps, vars.EnvProvider{})
 }
@@ -276,15 +271,14 @@ func (e *Engine) providers(
 func (e *Engine) mergeFileRuntimeVars(
 	dst map[string]string,
 	doc *restfile.Document,
-	env string,
+	env vars.Environment,
 	sec secrecy,
 ) {
 	fs := e.rt.Files()
 	if dst == nil || fs == nil {
 		return
 	}
-	env = e.envName(env)
-	if snap := fs.Snapshot(env, e.filePath(doc)); len(snap) > 0 {
+	if snap := fs.Snapshot(env.Scope(), e.filePath(doc)); len(snap) > 0 {
 		for k, v := range snap {
 			if sec == omitSecrets && v.Secret {
 				continue
@@ -301,7 +295,7 @@ func (e *Engine) mergeFileRuntimeVars(
 func (e *Engine) collectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	extras ...map[string]string,
 ) map[string]string {
 	return e.collectVariablesWithGlobals(
@@ -317,15 +311,14 @@ func (e *Engine) collectVariables(
 func (e *Engine) collectVariablesWithGlobals(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	globs map[string]vars.GlobalMutation,
 	sec secrecy,
 	extras ...map[string]string,
 ) map[string]string {
-	env = e.envName(env)
 	out := make(map[string]string)
-	if vals := vars.EnvValues(e.cfg.EnvironmentSet, env); len(vals) > 0 {
-		maps.Copy(out, vals)
+	if values := env.Values(); len(values) > 0 {
+		maps.Copy(out, values)
 	}
 	if doc != nil {
 		for _, v := range doc.Variables {
@@ -359,19 +352,18 @@ func (e *Engine) collectVariablesWithGlobals(
 
 func (e *Engine) collectGlobalValues(
 	doc *restfile.Document,
-	env string,
+	env vars.Environment,
 ) map[string]vars.GlobalMutation {
 	return effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
 }
 
-func (e *Engine) collectStoredGlobalValues(env string) map[string]vars.GlobalMutation {
-	env = e.envName(env)
+func (e *Engine) collectStoredGlobalValues(env vars.Environment) map[string]vars.GlobalMutation {
 	gs := e.rt.Globals()
 	if gs == nil {
 		return nil
 	}
 	out := make(map[string]vars.GlobalMutation)
-	if snap := gs.Snapshot(env); len(snap) > 0 {
+	if snap := gs.Snapshot(env.Scope()); len(snap) > 0 {
 		for k, v := range snap {
 			name := strings.TrimSpace(v.Name)
 			if name == "" {
@@ -477,22 +469,24 @@ func globalValueMap(globs map[string]vars.GlobalMutation) map[string]string {
 	return out
 }
 
-func (e *Engine) applyGlobalMutations(changes map[string]vars.GlobalMutation, env string) {
+func (e *Engine) applyGlobalMutations(
+	changes map[string]vars.GlobalMutation,
+	env vars.Environment,
+) {
 	gs := e.rt.Globals()
 	if len(changes) == 0 || gs == nil {
 		return
 	}
-	env = e.envName(env)
 	for _, ch := range changes {
 		name := strings.TrimSpace(ch.Name)
 		if name == "" {
 			continue
 		}
 		if ch.Delete {
-			gs.Delete(env, name)
+			gs.Delete(env.Scope(), name)
 			continue
 		}
-		gs.Set(env, name, ch.Value, ch.Secret)
+		gs.Set(env.Scope(), name, ch.Value, ch.Secret)
 	}
 }
 
@@ -500,14 +494,14 @@ func (e *Engine) resolveSSH(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env string,
+	env vars.Environment,
 ) (*ssh.Plan, error) {
 	if req == nil || req.SSH == nil {
 		return nil, nil
 	}
 	ix := e.registryIndex()
 	fileProfiles, globalProfiles := ix.SSH(doc)
-	cfg, err := ssh.Resolve(req.SSH, fileProfiles, globalProfiles, res, env)
+	cfg, err := ssh.Resolve(req.SSH, fileProfiles, globalProfiles, res, env.Label())
 	if err != nil {
 		return nil, err
 	}
@@ -518,14 +512,14 @@ func (e *Engine) resolveK8s(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env string,
+	env vars.Environment,
 ) (*k8s.Plan, error) {
 	if req == nil || req.K8s == nil {
 		return nil, nil
 	}
 	ix := e.registryIndex()
 	fileProfiles, globalProfiles := ix.K8s(doc)
-	cfg, err := k8s.Resolve(req.K8s, fileProfiles, globalProfiles, res, env)
+	cfg, err := k8s.Resolve(req.K8s, fileProfiles, globalProfiles, res, env.Label())
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +543,7 @@ func (x *execCtx) configureGRPC() {
 func (x *execCtx) applySettings() *xrunResult {
 	x.configureGRPC()
 
-	gset := settings.FromEnv(x.eng.cfg.EnvironmentSet, x.env)
+	gset := settings.FromValues(x.env.Values())
 	fset := map[string]string{}
 	if x.doc != nil && x.doc.Settings != nil {
 		fset = x.doc.Settings

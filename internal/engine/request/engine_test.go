@@ -106,7 +106,7 @@ func TestExecuteWithReportsInsecureSSHWarning(t *testing.T) {
 			}
 
 			warnings := []Warning{}
-			res, err := e.ExecuteWith(nil, req, "", ExecOptions{
+			res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{
 				Mode: tt.mode,
 				OnWarning: func(warning Warning) {
 					events = append(events, "warning")

@@ -408,8 +408,8 @@ func run(a []string) error {
 		ActiveThemeKey:      ts.active,
 		Settings:            ts.settings,
 		SettingsHandle:      ts.handle,
-		EnvironmentSet:      cfg.EnvSet,
-		EnvironmentName:     cfg.EnvName,
+		Catalog:             cfg.Catalog,
+		Selection:           cfg.Selection,
 		EnvironmentFile:     cfg.EnvFile,
 		EnvironmentFallback: cfg.EnvFallback,
 		HTTPOptions:         cfg.HTTPOpts,
@@ -421,8 +421,7 @@ func run(a []string) error {
 		UpdateClient:        uc,
 		EnableUpdate:        updateEnabled,
 		UpdateCmd:           ucmd,
-		CompareTargets:      cfg.CompareTargets,
-		CompareBase:         cfg.CompareBase,
+		Compare:             cfg.Compare,
 		Bindings:            bindingMap,
 	})
 	program := tea.NewProgram(

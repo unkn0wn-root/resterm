@@ -78,7 +78,7 @@ func TestSettingsFromEnvAndMerge(t *testing.T) {
 			"other":                  "ignore",
 		},
 	}
-	global := settings.FromEnv(envs, "prod")
+	global := settings.FromValues(envs["prod"])
 	file := map[string]string{"http-root-cas": "file.pem"}
 	req := map[string]string{"http-insecure": "true"}
 

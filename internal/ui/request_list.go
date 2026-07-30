@@ -273,7 +273,6 @@ func (m *Model) buildRequestItems(doc *restfile.Document) ([]requestListItem, []
 		return nil, nil
 	}
 
-	env := m.cfg.EnvironmentName
 	items := make([]requestListItem, len(doc.Requests))
 	listItems := make([]list.Item, len(doc.Requests))
 	for idx, req := range doc.Requests {
@@ -281,7 +280,7 @@ func (m *Model) buildRequestItems(doc *restfile.Document) ([]requestListItem, []
 		if line <= 0 {
 			line = 1
 		}
-		resolver := m.statusResolver(doc, req, env)
+		resolver := m.statusResolver(doc, req)
 		item := requestListItem{
 			request:  req,
 			index:    idx,

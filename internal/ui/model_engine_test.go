@@ -65,11 +65,12 @@ func TestUIRequestEngineQueuesInsecureSSHWarningOnce(t *testing.T) {
 
 	callbackCount := 0
 	for range 2 {
-		res, err := svc.ExecuteWith(nil, req, "", rqeng.ExecOptions{
+		res, err := svc.ExecuteWith(nil, req, testEnv(""), rqeng.ExecOptions{
 			OnWarning: func(rqeng.Warning) {
 				callbackCount++
 			},
 		})
+
 		if err != nil {
 			t.Fatalf("ExecuteWith() error = %v", err)
 		}

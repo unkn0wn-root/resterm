@@ -212,7 +212,7 @@ func (e *Engine) EnsureCommandAuth(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env string,
+	env vars.Environment,
 	timeout time.Duration,
 ) (authcmd.Result, error) {
 	auth := requestAuthOfType(req, authTypeCommand)
@@ -246,7 +246,7 @@ func (e *Engine) PrepareCommandAuth(
 	doc *restfile.Document,
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
-	env string,
+	env vars.Environment,
 	timeout time.Duration,
 ) (authcmd.Prepared, error) {
 	ac, err := e.authCmdManager()
@@ -265,7 +265,7 @@ func (e *Engine) EnsureOAuth(
 	req *restfile.Request,
 	res *vars.Resolver,
 	opts httpclient.Options,
-	env string,
+	env vars.Environment,
 	timeout time.Duration,
 ) error {
 	auth := requestAuthOfType(req, authTypeOAuth2)
@@ -280,8 +280,7 @@ func (e *Engine) EnsureOAuth(
 	if err != nil {
 		return err
 	}
-	env = e.envName(env)
-	cfg = oa.MergeCachedConfig(env, cfg)
+	cfg = oa.MergeCachedConfig(env.Scope(), cfg)
 	if cfg.TokenURL == "" {
 		return diag.New(diag.ClassAuth, errOAuthTokenURLRequired)
 	}
@@ -289,7 +288,7 @@ func (e *Engine) EnsureOAuth(
 	if requestHeaderPresent(req, hdr) {
 		return nil
 	}
-	if e.oauthNeedsHeadlessSeed(oa, env, cfg) {
+	if e.oauthNeedsHeadlessSeed(oa, env.Scope(), cfg) {
 		return diag.New(diag.ClassAuth, errOAuthHeadlessSeedRequired)
 	}
 
@@ -297,7 +296,7 @@ func (e *Engine) EnsureOAuth(
 	ctx, cancel := context.WithTimeout(ctx, tmo)
 	defer cancel()
 
-	tok, err := oa.Token(ctx, env, cfg, opts)
+	tok, err := oa.Token(ctx, env.Scope(), cfg, opts)
 	if err != nil {
 		return diag.WrapAs(diag.ClassAuth, err, "fetch oauth token")
 	}
@@ -345,7 +344,11 @@ func (e *Engine) BuildCommandAuthConfig(
 	return out.WithBaseTimeout(timeout), nil
 }
 
-func (e *Engine) cmdScope(doc *restfile.Document, auth *restfile.AuthSpec, env string) string {
+func (e *Engine) cmdScope(
+	doc *restfile.Document,
+	auth *restfile.AuthSpec,
+	env vars.Environment,
+) string {
 	ws := e.cfg.WorkspaceRoot
 	if ws == "" {
 		ws = e.cmdDir(doc, auth)
@@ -355,7 +358,7 @@ func (e *Engine) cmdScope(doc *restfile.Document, auth *restfile.AuthSpec, env s
 			ws = abs
 		}
 	}
-	return authcmd.Scope(e.envName(env), ws)
+	return authcmd.Scope(env.Scope(), ws)
 }
 
 func (e *Engine) cmdDir(doc *restfile.Document, auth *restfile.AuthSpec) string {
@@ -398,7 +401,7 @@ func (e *Engine) BuildOAuthConfig(
 func (e *Engine) ResolveOAuthConfig(
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
-	env string,
+	env vars.Environment,
 ) (oauth.Config, error) {
 	oa, err := e.oauthManager()
 	if err != nil {
@@ -408,7 +411,7 @@ func (e *Engine) ResolveOAuthConfig(
 	if err != nil {
 		return oauth.Config{}, err
 	}
-	return oa.MergeCachedConfig(e.envName(env), cfg), nil
+	return oa.MergeCachedConfig(env.Scope(), cfg), nil
 }
 
 func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]string, error) {

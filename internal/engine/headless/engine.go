@@ -5,65 +5,15 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 var _ engine.Executor = (*Engine)(nil)
-
-type reqExec interface {
-	Execute(*restfile.Document, *restfile.Request, string) (engine.RequestResult, error)
-	CollectVariables(
-		*restfile.Document,
-		*restfile.Request,
-		string,
-		...map[string]string,
-	) map[string]string
-	ExecuteWith(
-		*restfile.Document,
-		*restfile.Request,
-		string,
-		request.ExecOptions,
-	) (engine.RequestResult, error)
-	EvalCondition(
-		context.Context,
-		*restfile.Document,
-		*restfile.Request,
-		string,
-		string,
-		*restfile.ConditionSpec,
-		map[string]string,
-		map[string]rts.Value,
-	) (bool, string, error)
-	EvalForEachItems(
-		context.Context,
-		*restfile.Document,
-		*restfile.Request,
-		string,
-		string,
-		request.ForEachSpec,
-		map[string]string,
-		map[string]rts.Value,
-	) ([]rts.Value, error)
-	EvalValue(
-		context.Context,
-		*restfile.Document,
-		*restfile.Request,
-		string,
-		string,
-		string,
-		string,
-		rts.Pos,
-		map[string]string,
-		map[string]rts.Value,
-	) (rts.Value, error)
-	PosForLine(*restfile.Document, *restfile.Request, int) rts.Pos
-	ValueString(context.Context, rts.Pos, rts.Value) (string, error)
-}
 
 type repo[T any] struct {
 	snap func() T
@@ -86,7 +36,7 @@ func (r repo[T]) Restore(v T) {
 }
 
 type Engine struct {
-	rq  reqExec
+	rq  core.Dep
 	cfg engine.Config
 	rt  *rtrun.Runtime
 	rs  repo[engine.RuntimeState]
@@ -105,7 +55,7 @@ func New(cfg engine.Config) *Engine {
 	return newWithDeps(rq, rt, cfg)
 }
 
-func newWithDeps(rq reqExec, rt *rtrun.Runtime, cfg engine.Config) *Engine {
+func newWithDeps(rq core.Dep, rt *rtrun.Runtime, cfg engine.Config) *Engine {
 	if rq == nil || rt == nil {
 		return &Engine{}
 	}
@@ -128,16 +78,16 @@ func newWithDeps(rq reqExec, rt *rtrun.Runtime, cfg engine.Config) *Engine {
 func (e *Engine) ExecuteRequest(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	sel vars.Selection,
 ) (engine.RequestResult, error) {
-	return e.ExecuteRequestContext(context.Background(), doc, req, env)
+	return e.ExecuteRequestContext(context.Background(), doc, req, sel)
 }
 
 func (e *Engine) ExecuteRequestContext(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	sel vars.Selection,
 ) (engine.RequestResult, error) {
 	if e == nil || e.rq == nil {
 		return engine.RequestResult{}, nil
@@ -147,6 +97,10 @@ func (e *Engine) ExecuteRequestContext(
 	}
 	if req.WebSocket != nil && len(req.WebSocket.Steps) == 0 {
 		return engine.RequestResult{}, errInteractiveWebSocket
+	}
+	env, err := e.environment(sel)
+	if err != nil {
+		return engine.RequestResult{}, err
 	}
 
 	spec := e.compareSpec(req)
@@ -165,6 +119,7 @@ func (e *Engine) ExecuteRequestContext(
 		return engine.RequestResult{
 			Executed:    request.CloneRequest(req),
 			Environment: out.Environment,
+			Selection:   out.Selection,
 			Skipped:     out.Skipped,
 			Workflow:    out,
 		}, nil
@@ -172,24 +127,26 @@ func (e *Engine) ExecuteRequestContext(
 		if req.Metadata.Profile != nil {
 			return engine.RequestResult{}, errProfileDuringCompare
 		}
-		out, err := e.ExecuteCompareContext(runCtx(ctx), doc, req, spec, env)
+		out, err := e.executeCompare(runCtx(ctx), doc, req, spec, env)
 		if err != nil {
 			return engine.RequestResult{}, err
 		}
 		return engine.RequestResult{
 			Executed:    req,
 			Environment: out.Environment,
+			Selection:   out.Selection,
 			Skipped:     out.Skipped,
 			Compare:     out,
 		}, nil
 	case req.Metadata.Profile != nil && req.GRPC == nil:
-		out, err := e.ExecuteProfileContext(runCtx(ctx), doc, req, env)
+		out, err := e.executeProfile(runCtx(ctx), doc, req, env)
 		if err != nil {
 			return engine.RequestResult{}, err
 		}
 		return engine.RequestResult{
 			Executed:    req,
 			Environment: out.Environment,
+			Selection:   out.Selection,
 			Skipped:     out.Skipped,
 			SkipReason:  out.SkipReason,
 			Profile:     out,
@@ -205,19 +162,23 @@ func (e *Engine) ExecuteRequestContext(
 func (e *Engine) ExecuteWorkflow(
 	doc *restfile.Document,
 	wf *restfile.Workflow,
-	env string,
+	sel vars.Selection,
 ) (*engine.WorkflowResult, error) {
-	return e.ExecuteWorkflowContext(context.Background(), doc, wf, env)
+	return e.ExecuteWorkflowContext(context.Background(), doc, wf, sel)
 }
 
 func (e *Engine) ExecuteWorkflowContext(
 	ctx context.Context,
 	doc *restfile.Document,
 	wf *restfile.Workflow,
-	env string,
+	sel vars.Selection,
 ) (*engine.WorkflowResult, error) {
 	if e == nil || e.rq == nil {
 		return nil, nil
+	}
+	env, err := e.environment(sel)
+	if err != nil {
+		return nil, err
 	}
 	return e.executeWorkflow(runCtx(ctx), doc, wf, env)
 }
@@ -226,9 +187,9 @@ func (e *Engine) ExecuteCompare(
 	doc *restfile.Document,
 	req *restfile.Request,
 	spec *restfile.CompareSpec,
-	env string,
+	sel vars.Selection,
 ) (*engine.CompareResult, error) {
-	return e.ExecuteCompareContext(context.Background(), doc, req, spec, env)
+	return e.ExecuteCompareContext(context.Background(), doc, req, spec, sel)
 }
 
 func (e *Engine) ExecuteCompareContext(
@@ -236,10 +197,14 @@ func (e *Engine) ExecuteCompareContext(
 	doc *restfile.Document,
 	req *restfile.Request,
 	spec *restfile.CompareSpec,
-	env string,
+	sel vars.Selection,
 ) (*engine.CompareResult, error) {
 	if e == nil || e.rq == nil {
 		return nil, nil
+	}
+	env, err := e.environment(sel)
+	if err != nil {
+		return nil, err
 	}
 	return e.executeCompare(runCtx(ctx), doc, req, spec, env)
 }
@@ -247,19 +212,23 @@ func (e *Engine) ExecuteCompareContext(
 func (e *Engine) ExecuteProfile(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	sel vars.Selection,
 ) (*engine.ProfileResult, error) {
-	return e.ExecuteProfileContext(context.Background(), doc, req, env)
+	return e.ExecuteProfileContext(context.Background(), doc, req, sel)
 }
 
 func (e *Engine) ExecuteProfileContext(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	sel vars.Selection,
 ) (*engine.ProfileResult, error) {
 	if e == nil || e.rq == nil {
 		return nil, nil
+	}
+	env, err := e.environment(sel)
+	if err != nil {
+		return nil, err
 	}
 	return e.executeProfile(runCtx(ctx), doc, req, env)
 }
@@ -299,8 +268,11 @@ func (e *Engine) Close() error {
 	return e.cl.Close()
 }
 
-func (e *Engine) env(name string) string {
-	return vars.SelectEnv(e.cfg.EnvironmentSet, name, e.cfg.EnvironmentName)
+func (e *Engine) environment(sel vars.Selection) (vars.Environment, error) {
+	if sel.Empty() {
+		sel = e.cfg.Selection
+	}
+	return e.cfg.Catalog.Resolve(sel)
 }
 
 func runCtx(ctx context.Context) context.Context {

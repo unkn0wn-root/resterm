@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
@@ -27,22 +28,23 @@ type ExecFlags struct {
 	Recursive         bool
 	CompareTargetsRaw string
 	CompareBaseline   string
+	CompareGroup      string
+	EnvGroups         GroupFlags
 
 	telemetry telemetry.Config
 }
 
 type ExecConfig struct {
-	FilePath       string
-	Workspace      string
-	Recursive      bool
-	EnvSet         vars.EnvironmentSet
-	EnvName        string
-	EnvFile        string
-	EnvFallback    string
-	HTTPOpts       httpclient.Options
-	GRPCOpts       grpcclient.Options
-	CompareTargets []string
-	CompareBase    string
+	FilePath    string
+	Workspace   string
+	Recursive   bool
+	Catalog     vars.Catalog
+	Selection   vars.Selection
+	EnvFile     string
+	EnvFallback string
+	HTTPOpts    httpclient.Options
+	GRPCOpts    grpcclient.Options
+	Compare     engine.CompareConfig
 }
 
 func NewExecFlags() ExecFlags {
@@ -59,6 +61,7 @@ func (f *ExecFlags) Bind(fs *flag.FlagSet) {
 		return
 	}
 	StringVarAliases(fs, &f.EnvName, "", "Environment name to use", "env", "e")
+	fs.Var(&f.EnvGroups, "env-group", "Select a grouped environment as group=profile (repeatable)")
 	StringVarAliases(fs, &f.EnvFile, "", "Path to environment file", "env-file", "E")
 	StringVarAliases(
 		fs,
@@ -85,7 +88,7 @@ func (f *ExecFlags) Bind(fs *flag.FlagSet) {
 		fs,
 		&f.CompareTargetsRaw,
 		"",
-		"Default environments for manual compare runs (comma/space separated)",
+		"Default environments or profiles for manual compare runs (comma separated)",
 		"compare",
 		"C",
 	)
@@ -96,6 +99,13 @@ func (f *ExecFlags) Bind(fs *flag.FlagSet) {
 		"Baseline environment when --compare is used (defaults to first target)",
 		"compare-base",
 		"B",
+	)
+	StringVarAliases(
+		fs,
+		&f.CompareGroup,
+		"",
+		"Environment group varied by --compare",
+		"compare-group",
 	)
 }
 
@@ -130,6 +140,9 @@ func (f *ExecFlags) BindTelemetryFlags(fs *flag.FlagSet) {
 }
 
 func (f ExecFlags) ValidateEnvFlag() error {
+	if f.EnvName != "" && len(f.EnvGroups) > 0 {
+		return fmt.Errorf("--env cannot be combined with --env-group")
+	}
 	return runcheck.ValidateConcreteEnvironment(f.EnvName, "--env")
 }
 
@@ -146,16 +159,22 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 	filePath = CleanExecPath(filePath)
 	work := resolveWorkspace(filePath, f.Workspace)
 
-	envSet, envFile := LoadEnvironment(f.EnvFile, filePath, work)
-	envName := f.EnvName
+	cat, envFile, err := LoadEnvironment(f.EnvFile, filePath, work)
+	if err != nil {
+		return ExecConfig{}, err
+	}
+	sel, err := cat.Select(f.EnvName, f.EnvGroups)
+	if err != nil {
+		return ExecConfig{}, err
+	}
 	envFallback := ""
-	if envName == "" && len(envSet) > 0 {
-		name := vars.DefaultEnvironment(envSet)
-		if name != "" {
-			envName = name
-			if len(envSet) > 1 {
-				envFallback = name
-			}
+	if f.EnvName == "" && len(f.EnvGroups) == 0 && !cat.Empty() {
+		env, resolveErr := cat.Resolve(sel)
+		if resolveErr != nil {
+			return ExecConfig{}, resolveErr
+		}
+		if cat.Len() > 1 {
+			envFallback = env.Label()
 		}
 	}
 
@@ -166,6 +185,15 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 	base := f.CompareBaseline
 	if err := runcheck.ValidateConcreteEnvironment(base, "--compare-base"); err != nil {
 		return ExecConfig{}, fmt.Errorf("invalid --compare-base value: %w", err)
+	}
+	group := str.Trim(f.CompareGroup)
+	if group != "" && len(targets) == 0 {
+		return ExecConfig{}, fmt.Errorf("--compare-group requires --compare")
+	}
+	if len(targets) > 0 {
+		if _, err := cat.CompareTargets(sel, group, base, targets); err != nil {
+			return ExecConfig{}, fmt.Errorf("invalid compare selection: %w", err)
+		}
 	}
 
 	httpOpts := httpclient.Options{
@@ -182,8 +210,8 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 		FilePath:    filePath,
 		Workspace:   work,
 		Recursive:   f.Recursive,
-		EnvSet:      envSet,
-		EnvName:     envName,
+		Catalog:     cat,
+		Selection:   sel,
 		EnvFile:     envFile,
 		EnvFallback: envFallback,
 		HTTPOpts:    httpOpts,
@@ -191,8 +219,7 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 			DefaultPlaintext:    true,
 			DefaultPlaintextSet: true,
 		},
-		CompareTargets: targets,
-		CompareBase:    base,
+		Compare: engine.CompareConfig{Targets: targets, Base: base, Group: group},
 	}, nil
 }
 

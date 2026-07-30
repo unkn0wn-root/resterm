@@ -205,7 +205,7 @@ func rtsStream(info *scripts.StreamInfo) *rts.Stream {
 type rtIn struct {
 	doc     *restfile.Document
 	req     *restfile.Request
-	env     string
+	env     vars.Environment
 	base    string
 	vars    map[string]string
 	site    string
@@ -233,6 +233,7 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 	}
 	return rts.RT{
 		Env:         e.rtsEnv(in.env),
+		EnvGroups:   in.env.Selection().Groups(),
 		Vars:        in.vars,
 		Globals:     rtshost.RuntimeGlobals(e.collectGlobalValues(in.doc, in.env), in.secrets),
 		Resp:        resp,
@@ -264,11 +265,38 @@ func (e *Engine) rtsExtra(src map[string]rts.Value) map[string]rts.Value {
 	return out
 }
 
+// ExprInput binds a {{= expr }} evaluator to one request: the environment it
+// resolves against, the base directory for file access, and the variables it
+// sees. Callers own Vars (full for execution, secret-stripped for preview).
+type ExprInput struct {
+	Doc   *restfile.Document
+	Req   *restfile.Request
+	Env   vars.Environment
+	Base  string
+	Vars  map[string]string
+	Extra map[string]rts.Value
+}
+
+// EvalInput is one expression evaluation. Expr is the source to evaluate, Site
+// is the directive text it came from, used in diagnostics.
+type EvalInput struct {
+	Doc   *restfile.Document
+	Req   *restfile.Request
+	Env   vars.Environment
+	Base  string
+	Expr  string
+	Site  string
+	Pos   rts.Pos
+	Vars  map[string]string
+	Extra map[string]rts.Value
+}
+
 func (e *Engine) rtsEval(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	extra map[string]rts.Value,
 	extras ...map[string]string,
 ) vars.ExprEval {
@@ -276,7 +304,14 @@ func (e *Engine) rtsEval(
 	for _, overlay := range extras {
 		maps.Copy(vv, overlay)
 	}
-	return e.ExprEval(ctx, doc, req, env, base, vv, extra)
+	return e.ExprEval(ctx, ExprInput{
+		Doc:   doc,
+		Req:   req,
+		Env:   env,
+		Base:  base,
+		Vars:  vv,
+		Extra: extra,
+	})
 }
 
 // ExprEvalOptions tunes how a {{= expr }} evaluator treats the RTS runtime.
@@ -286,27 +321,15 @@ type ExprEvalOptions struct {
 	OmitSecretGlobals bool
 }
 
-// ExprEval returns a {{= expr }} evaluator bound to vv with default policy.
-// Callers own the variable set (full for execution, secret-stripped for preview).
-func (e *Engine) ExprEval(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env, base string,
-	vv map[string]string,
-	extra map[string]rts.Value,
-) vars.ExprEval {
-	return e.ExprEvalWithOptions(ctx, doc, req, env, base, vv, extra, ExprEvalOptions{})
+// ExprEval returns a {{= expr }} evaluator with default policy.
+func (e *Engine) ExprEval(ctx context.Context, in ExprInput) vars.ExprEval {
+	return e.ExprEvalWithOptions(ctx, in, ExprEvalOptions{})
 }
 
 // ExprEvalWithOptions is ExprEval with an explicit evaluation policy.
 func (e *Engine) ExprEvalWithOptions(
 	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env, base string,
-	vv map[string]string,
-	extra map[string]rts.Value,
+	in ExprInput,
 	opt ExprEvalOptions,
 ) vars.ExprEval {
 	secrets := rtshost.IncludeSecrets
@@ -315,16 +338,22 @@ func (e *Engine) ExprEvalWithOptions(
 	}
 	return func(expr string, pos vars.ExprPos) (string, error) {
 		rt := e.buildRT(rtIn{
-			doc:     doc,
-			req:     req,
-			env:     env,
-			base:    base,
-			vars:    vv,
+			doc:     in.Doc,
+			req:     in.Req,
+			env:     in.Env,
+			base:    in.Base,
+			vars:    in.Vars,
 			site:    "{{= " + expr + " }}",
-			x:       extra,
+			x:       in.Extra,
 			secrets: secrets,
 		})
-		return e.evalRTSString(ctx, doc, rt, expr, rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col})
+		return e.evalRTSString(
+			ctx,
+			in.Doc,
+			rt,
+			expr,
+			rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col},
+		)
 	}
 }
 
@@ -350,29 +379,22 @@ func (e *Engine) evalRTSString(
 	return s, e.rtsErr(err, doc)
 }
 
-func (e *Engine) rtsEvalValue(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env, base, expr, site string,
-	pos rts.Pos,
-	vv map[string]string,
-	extra map[string]rts.Value,
-) (rts.Value, error) {
+func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
+	vv := in.Vars
 	if vv == nil {
-		vv = e.collectVariables(doc, req, env)
+		vv = e.collectVariables(in.Doc, in.Req, in.Env)
 	}
 	rt := e.buildRT(rtIn{
-		doc:     doc,
-		req:     req,
-		env:     env,
-		base:    base,
+		doc:     in.Doc,
+		req:     in.Req,
+		env:     in.Env,
+		base:    in.Base,
 		vars:    vv,
-		site:    site,
-		x:       extra,
+		site:    in.Site,
+		x:       in.Extra,
 		secrets: rtshost.IncludeSecrets,
 	})
-	return e.evalRTSValue(ctx, doc, rt, expr, pos)
+	return e.evalRTSValue(ctx, in.Doc, rt, in.Expr, in.Pos)
 }
 
 func (e *Engine) PosForLine(doc *restfile.Document, req *restfile.Request, line int) rts.Pos {
@@ -382,22 +404,14 @@ func (e *Engine) PosForLine(doc *restfile.Document, req *restfile.Request, line 
 func (e *Engine) CollectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	extras ...map[string]string,
 ) map[string]string {
 	return e.collectVariables(doc, req, env, extras...)
 }
 
-func (e *Engine) EvalValue(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env, base, expr, site string,
-	pos rts.Pos,
-	vv map[string]string,
-	extra map[string]rts.Value,
-) (rts.Value, error) {
-	return e.rtsEvalValue(ctx, doc, req, env, base, expr, site, pos, vv, extra)
+func (e *Engine) EvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
+	return e.rtsEvalValue(ctx, in)
 }
 
 type ForEachSpec struct {
@@ -410,7 +424,8 @@ func (e *Engine) EvalCondition(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	spec *restfile.ConditionSpec,
 	vv map[string]string,
 	extra map[string]rts.Value,
@@ -426,18 +441,17 @@ func (e *Engine) EvalCondition(
 	if spec.Negate {
 		tag = directive.SkipIf.Tag()
 	}
-	val, err := e.rtsEvalValue(
-		ctx,
-		doc,
-		req,
-		env,
-		base,
-		expr,
-		tag+" "+expr,
-		e.rtsPosForLineCol(doc, req, spec.Line, spec.Col),
-		vv,
-		extra,
-	)
+	val, err := e.rtsEvalValue(ctx, EvalInput{
+		Doc:   doc,
+		Req:   req,
+		Env:   env,
+		Base:  base,
+		Expr:  expr,
+		Site:  tag + " " + expr,
+		Pos:   e.rtsPosForLineCol(doc, req, spec.Line, spec.Col),
+		Vars:  vv,
+		Extra: extra,
+	})
 	if err != nil {
 		return false, "", err
 	}
@@ -453,7 +467,8 @@ func (e *Engine) EvalForEachItems(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	spec ForEachSpec,
 	vv map[string]string,
 	extra map[string]rts.Value,
@@ -462,18 +477,17 @@ func (e *Engine) EvalForEachItems(
 	if expr == "" {
 		return nil, fmt.Errorf("@for-each expression missing")
 	}
-	val, err := e.rtsEvalValue(
-		ctx,
-		doc,
-		req,
-		env,
-		base,
-		expr,
-		"@for-each "+expr,
-		e.rtsPosForLine(doc, req, spec.Line),
-		vv,
-		extra,
-	)
+	val, err := e.rtsEvalValue(ctx, EvalInput{
+		Doc:   doc,
+		Req:   req,
+		Env:   env,
+		Base:  base,
+		Expr:  expr,
+		Site:  "@for-each " + expr,
+		Pos:   e.rtsPosForLine(doc, req, spec.Line),
+		Vars:  vv,
+		Extra: extra,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -492,7 +506,8 @@ func (e *Engine) runAsserts(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	extra map[string]rts.Value,
 	resp *rts.Resp,
@@ -556,7 +571,8 @@ func (e *Engine) RunPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	globals map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
@@ -567,7 +583,8 @@ func (e *Engine) runRTSPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	globs map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
@@ -577,6 +594,7 @@ func (e *Engine) runRTSPreRequest(
 	}
 	uses := e.rtsUses(doc, req)
 	envs := e.rtsEnv(env)
+	groups := env.Selection().Groups()
 	base = e.rtsBase(doc, base)
 	gv := rtshost.RuntimeGlobals(globs, rtshost.IncludeSecrets)
 	mut := rtshost.NewMutator(&out, e.rtsReq(req), vv, gv)
@@ -589,6 +607,7 @@ func (e *Engine) runRTSPreRequest(
 		Runtime: func() rts.RT {
 			return rts.RT{
 				Env:         envs,
+				EnvGroups:   groups,
 				Vars:        vv,
 				Globals:     gv,
 				Resp:        e.rtsLast(),
@@ -1125,7 +1144,8 @@ func (e *Engine) runRTSApply(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	extra map[string]rts.Value,
 ) error {
@@ -1144,7 +1164,17 @@ func (e *Engine) runRTSApply(
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			val, err := e.rtsEvalValue(ctx, doc, req, env, base, ex.ex, ex.st, ex.ps, vv, extra)
+			val, err := e.rtsEvalValue(ctx, EvalInput{
+				Doc:   doc,
+				Req:   req,
+				Env:   env,
+				Base:  base,
+				Expr:  ex.ex,
+				Site:  ex.st,
+				Pos:   ex.ps,
+				Vars:  vv,
+				Extra: extra,
+			})
 			if err != nil {
 				return err
 			}
@@ -1165,7 +1195,8 @@ func (e *Engine) ApplyPatches(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	extra map[string]rts.Value,
 ) error {

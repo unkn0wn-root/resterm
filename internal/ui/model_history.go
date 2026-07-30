@@ -22,6 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
 )
 
@@ -58,6 +59,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 				msg.requestText,
 				msg.environment,
 				msg.skipReason,
+				msg.selection,
 				msg.runtimeSecrets...,
 			)
 		}
@@ -86,6 +88,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 				msg.executed,
 				msg.requestText,
 				msg.environment,
+				msg.selection,
 				msg.runtimeSecrets...,
 			)
 		}
@@ -122,6 +125,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 			msg.executed,
 			msg.requestText,
 			msg.environment,
+			msg.selection,
 			msg.runtimeSecrets...,
 		)
 	}
@@ -879,6 +883,7 @@ func (m *Model) recordHTTPHistory(
 	req *restfile.Request,
 	requestText string,
 	environment string,
+	sel vars.Selection,
 	extraSecrets ...string,
 ) {
 	hs := m.historyStore()
@@ -914,6 +919,9 @@ func (m *Model) recordHTTPHistory(
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 		ExecutedAt:  time.Now(),
 		Environment: environment,
+		EnvironmentSelection: history.EnvironmentSelection(
+			sel.Groups(),
+		),
 		RequestName: requestIdentifier(req),
 		FilePath:    m.historyFilePath(),
 		Method:      req.Method,
@@ -939,6 +947,7 @@ func (m *Model) recordHTTPHistory(
 func (m *Model) recordSkippedHistory(
 	req *restfile.Request,
 	requestText, environment, reason string,
+	sel vars.Selection,
 	extraSecrets ...string,
 ) {
 	hs := m.historyStore()
@@ -969,6 +978,9 @@ func (m *Model) recordSkippedHistory(
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 		ExecutedAt:  time.Now(),
 		Environment: environment,
+		EnvironmentSelection: history.EnvironmentSelection(
+			sel.Groups(),
+		),
 		RequestName: requestIdentifier(req),
 		FilePath:    m.historyFilePath(),
 		Method:      req.Method,
@@ -1004,6 +1016,7 @@ func (m *Model) recordGRPCHistory(
 	req *restfile.Request,
 	requestText string,
 	environment string,
+	sel vars.Selection,
 	extraSecrets ...string,
 ) {
 	hs := m.historyStore()
@@ -1032,6 +1045,9 @@ func (m *Model) recordGRPCHistory(
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 		ExecutedAt:  time.Now(),
 		Environment: environment,
+		EnvironmentSelection: history.EnvironmentSelection(
+			sel.Groups(),
+		),
 		RequestName: requestIdentifier(req),
 		FilePath:    m.historyFilePath(),
 		Method:      req.Method,
@@ -1055,6 +1071,14 @@ func (m *Model) recordGRPCHistory(
 }
 
 func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...string) []string {
+	return m.secretValuesForEnv(m.env, req, extraSecrets...)
+}
+
+func (m *Model) secretValuesForEnv(
+	env vars.Environment,
+	req *restfile.Request,
+	extraSecrets ...string,
+) []string {
 	values := make(map[string]struct{})
 	add := func(value string) {
 		if strings.TrimSpace(value) == "" {
@@ -1086,7 +1110,7 @@ func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...
 
 	if fs := m.fileStore(); fs != nil {
 		path := m.documentRuntimePath(m.doc)
-		if snapshot := fs.Snapshot(m.cfg.EnvironmentName, path); len(snapshot) > 0 {
+		if snapshot := fs.Snapshot(env.Scope(), path); len(snapshot) > 0 {
 			for _, entry := range snapshot {
 				if entry.Secret {
 					add(entry.Value)
@@ -1096,7 +1120,7 @@ func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...
 	}
 
 	if gs := m.globalsStore(); gs != nil {
-		if snapshot := gs.Snapshot(m.cfg.EnvironmentName); len(snapshot) > 0 {
+		if snapshot := gs.Snapshot(env.Scope()); len(snapshot) > 0 {
 			for _, entry := range snapshot {
 				if entry.Secret {
 					add(entry.Value)
@@ -1120,17 +1144,12 @@ func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...
 	return secrets
 }
 
-func (m *Model) secretValuesForEnvironment(env string, req *restfile.Request) []string {
-	if strings.TrimSpace(env) == "" {
+func (m *Model) secretValuesForSelection(sel vars.Selection, req *restfile.Request) []string {
+	env, err := m.environment(sel)
+	if err != nil {
 		return m.secretValuesForRedaction(req)
 	}
-
-	prev := m.cfg.EnvironmentName
-	m.cfg.EnvironmentName = env
-	defer func() {
-		m.cfg.EnvironmentName = prev
-	}()
-	return m.secretValuesForRedaction(req)
+	return m.secretValuesForEnv(env, req)
 }
 
 func redactHistoryText(text string, secrets []string, maskHeaders bool) string {
@@ -1198,25 +1217,11 @@ func selectCompareHistoryResult(entry history.Entry) *history.CompareResult {
 
 	for idx := range entry.Compare.Results {
 		res := &entry.Compare.Results[idx]
-		if res == nil {
-			continue
-		}
 		if res.Error != "" || res.StatusCode >= 400 {
 			return res
 		}
 	}
-	if baseline := strings.TrimSpace(entry.Compare.Baseline); baseline != "" {
-		for idx := range entry.Compare.Results {
-			res := &entry.Compare.Results[idx]
-			if res == nil {
-				continue
-			}
-			if strings.EqualFold(res.Environment, baseline) {
-				return res
-			}
-		}
-	}
-	return &entry.Compare.Results[0]
+	return entry.Compare.BaselineResult()
 }
 
 func bundleFromHistory(entry history.Entry) *compareBundle {
@@ -1224,7 +1229,7 @@ func bundleFromHistory(entry history.Entry) *compareBundle {
 		return nil
 	}
 
-	bundle := &compareBundle{Baseline: entry.Compare.Baseline}
+	bundle := &compareBundle{Baseline: entry.Compare.BaselineResult().Environment}
 	rows := make([]compareRow, 0, len(entry.Compare.Results))
 	for idx := range entry.Compare.Results {
 		res := entry.Compare.Results[idx]
@@ -1243,7 +1248,11 @@ func bundleFromHistory(entry history.Entry) *compareBundle {
 			summary = "n/a"
 		}
 		row := compareRow{
-			Result:   &compareResult{Environment: res.Environment},
+			Result: &compareResult{
+				Environment: res.Environment,
+				Profile:     res.Profile,
+				Selection:   historySelection(res.EnvironmentSelection),
+			},
 			Status:   res.Status,
 			Code:     code,
 			Duration: res.Duration,
@@ -1253,6 +1262,13 @@ func bundleFromHistory(entry history.Entry) *compareBundle {
 	}
 	bundle.Rows = rows
 	return bundle
+}
+
+func historySelection(sel history.EnvironmentSelection) vars.Selection {
+	if len(sel) == 0 {
+		return vars.Selection{}
+	}
+	return vars.GroupSelection(sel)
 }
 
 // Hydrate compare snapshots straight from history so the compare tab can render
@@ -1781,7 +1797,7 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 		return nil
 	}
 	preview := rqeng.RenderRequestText(req)
-	title := strings.TrimSpace(m.statusRequestTitle(m.doc, req, ""))
+	title := strings.TrimSpace(m.statusRequestTitle(m.doc, req))
 	if title == "" {
 		title = requestDisplayName(req)
 	}
@@ -2079,6 +2095,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	entry := item.entry
 	requestText := entry.RequestText
 	targetEnv := entry.Environment
+	targetSelection := entry.EnvironmentSelection
 	var compareBundle *compareBundle
 	if entry.Compare != nil {
 		if selected := selectCompareHistoryResult(entry); selected != nil {
@@ -2087,6 +2104,9 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 			}
 			if strings.TrimSpace(selected.Environment) != "" {
 				targetEnv = selected.Environment
+			}
+			if len(selected.EnvironmentSelection) > 0 {
+				targetSelection = selected.EnvironmentSelection
 			}
 		}
 		if strings.TrimSpace(requestText) == "" {
@@ -2117,8 +2137,22 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	}
 
 	docReq := doc.Requests[0]
-	if targetEnv != "" {
-		m.cfg.EnvironmentName = targetEnv
+	var selectErr error
+	switch {
+	case len(targetSelection) > 0:
+		selectErr = m.selectEnvironment("", map[string]string(targetSelection))
+	case targetEnv != "" && !m.cfg.Catalog.Grouped():
+		selectErr = m.selectEnvironment(targetEnv, nil)
+	}
+	if selectErr != nil {
+		text := fmt.Sprintf("History environment failed: %v", selectErr)
+		if errors.Is(selectErr, vars.ErrUnknownSelection) {
+			text = fmt.Sprintf("History environment no longer resolves: %v", selectErr)
+		}
+		m.setStatusMessage(statusMsg{text: text, level: statusWarn})
+		if send {
+			return nil
+		}
 	}
 
 	options := m.cfg.HTTPOptions
@@ -2135,7 +2169,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 
 	if !send {
 		m.stopSending()
-		label := strings.TrimSpace(m.statusRequestTitle(doc, req, targetEnv))
+		label := strings.TrimSpace(m.statusRequestTitle(doc, req))
 		if label == "" {
 			label = "history request"
 		}
@@ -2182,13 +2216,13 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 
 	spin := m.startSending()
 	replayText := "Replaying"
-	if label := m.statusRequestLabel(doc, req, targetEnv); label != "" {
+	if label := m.statusRequestLabel(doc, req); label != "" {
 		replayText = fmt.Sprintf("Replaying %s", label)
 	}
 	m.statusPulseBase = replayText
 	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: replayText, level: statusInfo})
-	cmd := m.execRunReq(doc, req, options, "", nil)
+	cmd := m.execRunReq(doc, req, options, m.cfg.Selection, nil)
 	return batchCmds([]tea.Cmd{cmd, m.startStatusPulse(), spin})
 }
 

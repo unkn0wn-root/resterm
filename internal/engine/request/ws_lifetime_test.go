@@ -65,7 +65,7 @@ func TestInteractiveWebSocketCancelDuringHandoverDoesNotAttach(t *testing.T) {
 	}
 
 	attached := 0
-	res, err := eng.ExecuteWith(nil, req, "dev", ExecOptions{
+	res, err := eng.ExecuteWith(nil, req, testEnv("dev"), ExecOptions{
 		Ctx: parent,
 		AttachWS: func(*httpclient.WebSocketHandle, *restfile.Request) {
 			attached++
@@ -101,7 +101,7 @@ func TestInteractiveWebSocketOutlivesTheRequest(t *testing.T) {
 	}
 
 	var handle *httpclient.WebSocketHandle
-	res, err := eng.ExecuteWith(nil, req, "dev", ExecOptions{
+	res, err := eng.ExecuteWith(nil, req, testEnv("dev"), ExecOptions{
 		Ctx: parent,
 		AttachWS: func(h *httpclient.WebSocketHandle, _ *restfile.Request) {
 			handle = h

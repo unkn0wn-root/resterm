@@ -31,6 +31,7 @@ type workflowState struct {
 	loop           *workflowLoopState
 	currentBranch  string
 	origin         workflowOrigin
+	env            vars.Environment
 	start          time.Time
 	end            time.Time
 	stepStart      time.Time
@@ -118,6 +119,7 @@ func workflowStateFromPlan(
 		workflow: pl.Workflow,
 		steps:    steps,
 		origin:   workflowOriginForMode(pl.Run.Mode),
+		env:      pl.Run.Env,
 		start:    time.Now(),
 		warnings: parser.WarningTexts(pl.Doc),
 	}
@@ -157,10 +159,9 @@ func (m *Model) startWorkflowRun(
 	if options.BaseDir == "" && m.currentFile != "" {
 		options.BaseDir = filepath.Dir(m.currentFile)
 	}
-	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	pl, err := core.PrepareWorkflow(doc, workflow, core.RunMeta{
 		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
-		Env: env,
+		Env: m.env,
 	})
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
@@ -188,10 +189,9 @@ func (m *Model) startForEachRun(
 	if options.BaseDir == "" && m.currentFile != "" {
 		options.BaseDir = filepath.Dir(m.currentFile)
 	}
-	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	pl, err := core.PrepareForEach(doc, req, core.RunMeta{
 		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
-		Env: env,
+		Env: m.env,
 	})
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
@@ -567,6 +567,7 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 				msg.requestText,
 				msg.environment,
 				msg.skipReason,
+				msg.selection,
 				msg.runtimeSecrets...,
 			)
 		case msg.response != nil:
@@ -575,6 +576,7 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 				msg.executed,
 				msg.requestText,
 				msg.environment,
+				msg.selection,
 				msg.runtimeSecrets...,
 			)
 		case msg.grpc != nil:
@@ -583,6 +585,7 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 				msg.executed,
 				msg.requestText,
 				msg.environment,
+				msg.selection,
 				msg.runtimeSecrets...,
 			)
 		}
@@ -771,7 +774,10 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 	entry := history.Entry{
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 		ExecutedAt:  time.Now(),
-		Environment: m.cfg.EnvironmentName,
+		Environment: state.env.Label(),
+		EnvironmentSelection: history.EnvironmentSelection(
+			state.env.Selection().Groups(),
+		),
 		RequestName: workflowName,
 		FilePath:    m.historyFilePath(),
 		Method:      restfile.HistoryMethodWorkflow,

@@ -16,7 +16,7 @@ func (m *Model) executeRequest(
 	doc *restfile.Document,
 	req *restfile.Request,
 	opts httpclient.Options,
-	env string,
+	sel vars.Selection,
 	vals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
@@ -26,7 +26,7 @@ func (m *Model) executeRequest(
 		doc,
 		req,
 		opts,
-		env,
+		sel,
 		vals,
 		extras...,
 	)
@@ -36,7 +36,7 @@ func (m *Model) executeExplain(
 	doc *restfile.Document,
 	req *restfile.Request,
 	opts httpclient.Options,
-	env string,
+	sel vars.Selection,
 	vals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
@@ -46,7 +46,7 @@ func (m *Model) executeExplain(
 		doc,
 		req,
 		opts,
-		env,
+		sel,
 		vals,
 		extras...,
 	)
@@ -59,15 +59,18 @@ func (m *Model) executeWith(
 	doc *restfile.Document,
 	req *restfile.Request,
 	opts httpclient.Options,
-	env string,
+	sel vars.Selection,
 	vals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
+	env, envErr := m.environment(sel)
+	if envErr != nil {
+		return responseErrCmd(envErr, req, "")
+	}
 	if err := docErr(doc); err != nil {
-		return responseErrCmd(err, req, env)
+		return responseErrCmd(err, req, env.Label())
 	}
 
-	env = vars.SelectEnv(m.cfg.EnvironmentSet, env, m.cfg.EnvironmentName)
 	svc := m.requestSvc(opts)
 	if svc == nil {
 		return nil
@@ -88,7 +91,7 @@ func (m *Model) executeWith(
 			return responseMsg{
 				err:         err,
 				executed:    req.Clone(),
-				environment: env,
+				environment: env.Label(),
 			}
 		}
 		msg := m.responseMsgFromRunState(res, false)

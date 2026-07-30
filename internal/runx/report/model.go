@@ -15,73 +15,76 @@ const (
 )
 
 type Report struct {
-	SchemaVersion string
-	Version       string
-	FilePath      string
-	EnvName       string
-	StartedAt     time.Time
-	EndedAt       time.Time
-	Duration      time.Duration
-	Results       []Result
-	Total         int
-	Passed        int
-	Failed        int
-	Skipped       int
-	StopReason    string
-	Warnings      []string
+	SchemaVersion        string
+	Version              string
+	FilePath             string
+	EnvName              string
+	EnvironmentSelection map[string]string
+	StartedAt            time.Time
+	EndedAt              time.Time
+	Duration             time.Duration
+	Results              []Result
+	Total                int
+	Passed               int
+	Failed               int
+	Skipped              int
+	StopReason           string
+	Warnings             []string
 }
 
 type Result struct {
-	Kind              string
-	Name              string
-	Method            string
-	Target            string
-	EffectiveTarget   string
-	Environment       string
-	Status            Status
-	Summary           string
-	Duration          time.Duration
-	Canceled          bool
-	SkipReason        string
-	Error             string
-	ErrorDetail       *ErrorDetail
-	ScriptError       string
-	ScriptErrorDetail *ErrorDetail
-	Failure           *Failure
-	HTTP              *HTTP
-	GRPC              *GRPC
-	Stream            *Stream
-	Trace             *Trace
-	Tests             []Test
-	Compare           *Compare
-	Profile           *Profile
-	Steps             []Step
+	Kind                 string
+	Name                 string
+	Method               string
+	Target               string
+	EffectiveTarget      string
+	Environment          string
+	EnvironmentSelection map[string]string
+	Status               Status
+	Summary              string
+	Duration             time.Duration
+	Canceled             bool
+	SkipReason           string
+	Error                string
+	ErrorDetail          *ErrorDetail
+	ScriptError          string
+	ScriptErrorDetail    *ErrorDetail
+	Failure              *Failure
+	HTTP                 *HTTP
+	GRPC                 *GRPC
+	Stream               *Stream
+	Trace                *Trace
+	Tests                []Test
+	Compare              *Compare
+	Profile              *Profile
+	Steps                []Step
 }
 
 type Step struct {
-	Name              string
-	Method            string
-	Target            string
-	EffectiveTarget   string
-	Environment       string
-	Branch            string
-	Iteration         int
-	Total             int
-	Status            Status
-	Summary           string
-	Duration          time.Duration
-	Canceled          bool
-	SkipReason        string
-	Error             string
-	ErrorDetail       *ErrorDetail
-	ScriptError       string
-	ScriptErrorDetail *ErrorDetail
-	Failure           *Failure
-	HTTP              *HTTP
-	GRPC              *GRPC
-	Stream            *Stream
-	Trace             *Trace
-	Tests             []Test
+	Name                 string
+	Method               string
+	Target               string
+	EffectiveTarget      string
+	Environment          string
+	EnvironmentSelection map[string]string
+	Branch               string
+	Iteration            int
+	Total                int
+	Status               Status
+	Summary              string
+	Duration             time.Duration
+	Canceled             bool
+	SkipReason           string
+	Error                string
+	ErrorDetail          *ErrorDetail
+	ScriptError          string
+	ScriptErrorDetail    *ErrorDetail
+	Failure              *Failure
+	HTTP                 *HTTP
+	GRPC                 *GRPC
+	Stream               *Stream
+	Trace                *Trace
+	Tests                []Test
 }
 
 type HTTP struct {
@@ -105,6 +108,7 @@ type Test struct {
 
 type Compare struct {
 	Baseline string
+	Group    string
 }
 
 type Profile struct {
