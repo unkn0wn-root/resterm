@@ -102,7 +102,7 @@ func (w workspace) plan(root string) (wsMove, error) {
 		root:    root,
 		cat:     cat,
 		envFile: envFile,
-		reset:   !sameEnvFile(envFile, w.envFile),
+		reset:   !w.sameEnv(root, envFile),
 		status:  statusMsg{text: text, level: statusInfo},
 	}
 	if cat.Empty() {
@@ -136,8 +136,17 @@ func (w workspace) plan(root string) (wsMove, error) {
 	return mv, nil
 }
 
-// Two workspaces without an environment file share nothing nameable, so a
-// move between them still crosses a boundary and resets.
+// sameEnv reports whether a move to root keeps the environment the runtime
+// values were captured under. Two workspaces without an environment file share
+// nothing nameable, so a move between them still crosses a boundary and resets,
+// but reopening the same root is not a crossing at all.
+func (w workspace) sameEnv(root, envFile string) bool {
+	if sameEnvFile(envFile, w.envFile) {
+		return true
+	}
+	return envFile == "" && w.envFile == "" && util.SameFile(root, w.root)
+}
+
 func sameEnvFile(a, b string) bool {
 	return a != "" && b != "" && util.SameFile(a, b)
 }
