@@ -3,6 +3,7 @@ package vars
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strconv"
@@ -11,21 +12,22 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
-// scopeVersion prefixes every grouped scope key. Scope keys own all persisted
-// per-selection runtime state (globals, file variables, cookie jars, command
-// auth, OAuth tokens), so bumping this discards every stored value.
-const scopeVersion = "g1:"
-
-// scopeSourceVersion prefixes grouped scopes that fold in the environment
-// file. A catalog built in process has no file and keeps its old scopes.
-const scopeSourceVersion = "g2:"
-
+// Every scope key starts with one of these prefixes, so provenance is written
+// by the code and can never be posed by an environment name. The letter says
+// grouped or flat, the digit says whether the environment file is folded in.
+// Scope keys own all persisted per-selection runtime state (globals, file
+// variables, cookie jars, command auth, OAuth tokens), so changing a prefix
+// discards every stored value.
 const (
-	scopeSourceSep = "@"
-	// scopeDigestLen is fixed so the last scopeDigestLen characters of a flat
-	// scope are always the digest and the rest is the name.
-	scopeDigestLen = 16
+	scopeVersion           = "g1:"
+	scopeSourceVersion     = "g2:"
+	scopeFlatVersion       = "f1:"
+	scopeFlatSourceVersion = "f2:"
 )
+
+// scopeDigestLen is fixed so the last scopeDigestLen characters of a sourced
+// flat scope, behind the "@", are always the digest and the rest is the name.
+const scopeDigestLen = 16
 
 // withSource records the file a catalog was read from. The path is made
 // absolute so different spellings of one file keep one identity.
@@ -45,9 +47,9 @@ func (c Catalog) withSource(path string) Catalog {
 // of the file it came from, so no two (name, source) pairs render alike.
 func flatScope(name, source string) string {
 	if source == "" {
-		return name
+		return scopeFlatVersion + name
 	}
-	return name + scopeSourceSep + sourceDigest(source)
+	return fmt.Sprintf("%s%s@%s", scopeFlatSourceVersion, name, sourceDigest(source))
 }
 
 func groupScope(groups []Group, sel Selection, source string) string {
@@ -67,6 +69,15 @@ func groupScope(groups []Group, sel Selection, source string) string {
 func sourceDigest(source string) string {
 	sum := sha256.Sum256([]byte(source))
 	return hex.EncodeToString(sum[:])[:scopeDigestLen]
+}
+
+// SourcedScope reports whether scope names the environment file it came from.
+// No other workspace can resolve such a scope, so runtime state held under it
+// is safe to keep across a workspace change. Only the version prefix decides,
+// so no environment name can pose as a sourced scope.
+func SourcedScope(scope string) bool {
+	return strings.HasPrefix(scope, scopeSourceVersion) ||
+		strings.HasPrefix(scope, scopeFlatSourceVersion)
 }
 
 func writePart(w io.Writer, s string) {

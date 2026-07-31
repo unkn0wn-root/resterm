@@ -67,13 +67,6 @@ func (s *scopedValueStore) clear(scope string) {
 	delete(s.values, scope)
 }
 
-func (s *scopedValueStore) reset() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.values = make(map[string]map[string]storedValue)
-}
-
 func (s *scopedValueStore) clearIf(match func(string) bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

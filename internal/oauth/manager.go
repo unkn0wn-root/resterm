@@ -50,6 +50,7 @@ type Token struct {
 
 type SnapshotEntry struct {
 	Key    string `json:"key"`
+	Env    string `json:"env,omitempty"`
 	Config Config `json:"config"`
 	Token  Token  `json:"token"`
 }
@@ -66,6 +67,7 @@ type Manager struct {
 type cacheEntry struct {
 	token Token
 	cfg   Config
+	env   string
 }
 
 type call struct {
@@ -138,7 +140,7 @@ func (m *Manager) Token(
 	m.inflight[key] = pending
 	m.mu.Unlock()
 
-	token, err := m.obtainToken(ctx, key, fallback, cfg, opts)
+	token, err := m.obtainToken(ctx, env, key, fallback, cfg, opts)
 	pending.token = token
 	pending.err = err
 	close(pending.done)
@@ -153,7 +155,7 @@ func (m *Manager) Token(
 	return token, nil
 }
 
-func (m *Manager) Reset() {
+func (m *Manager) ClearIf(match func(env string) bool) {
 	if m == nil {
 		return
 	}
@@ -161,7 +163,11 @@ func (m *Manager) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.cache = make(map[string]*cacheEntry)
+	for key, entry := range m.cache {
+		if entry == nil || match(entry.env) {
+			delete(m.cache, key)
+		}
+	}
 }
 
 // CachedToken returns a valid cached token for the config when one is already
@@ -203,6 +209,7 @@ func (m *Manager) Snapshot() []SnapshotEntry {
 		}
 		out = append(out, SnapshotEntry{
 			Key:    key,
+			Env:    entry.env,
 			Config: cloneConfig(entry.cfg),
 			Token:  cloneToken(entry.token),
 		})
@@ -240,12 +247,13 @@ func (m *Manager) Restore(entries []SnapshotEntry) {
 		if strings.TrimSpace(token.AccessToken) == "" {
 			continue
 		}
-		m.cache[key] = &cacheEntry{cfg: cfg, token: token}
+		m.cache[key] = &cacheEntry{cfg: cfg, token: token, env: entry.Env}
 	}
 }
 
 func (m *Manager) obtainToken(
 	ctx context.Context,
+	env string,
 	key string,
 	fallback string,
 	cfg Config,
@@ -264,7 +272,7 @@ func (m *Manager) obtainToken(
 			entry.token.RefreshToken,
 			opts,
 		); err == nil {
-			m.storeToken(key, cfg, refreshed)
+			m.storeToken(key, env, cfg, refreshed)
 			m.dropCacheKey(fallback)
 			if usedKey != "" && usedKey != key {
 				m.dropCacheKey(usedKey)
@@ -274,7 +282,7 @@ func (m *Manager) obtainToken(
 	}
 
 	if cfg.GrantType == GrantAuthorizationCode {
-		return m.requestAuthCodeToken(ctx, key, cfg, opts)
+		return m.requestAuthCodeToken(ctx, env, key, cfg, opts)
 	}
 
 	fetched, err := m.requestToken(ctx, cfg, opts)
@@ -282,7 +290,7 @@ func (m *Manager) obtainToken(
 		return Token{}, err
 	}
 
-	m.storeToken(key, cfg, fetched)
+	m.storeToken(key, env, cfg, fetched)
 	m.dropCacheKey(fallback)
 	return fetched, nil
 }
@@ -316,14 +324,14 @@ func (m *Manager) cacheEntry(keys ...string) (*cacheEntry, string) {
 	return nil, ""
 }
 
-func (m *Manager) storeToken(key string, cfg Config, token Token) {
+func (m *Manager) storeToken(key, env string, cfg Config, token Token) {
 	cfg = cfg.Resolved()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.cache == nil {
 		m.cache = make(map[string]*cacheEntry)
 	}
-	m.cache[key] = &cacheEntry{token: token, cfg: cfg}
+	m.cache[key] = &cacheEntry{token: token, cfg: cfg, env: env}
 }
 
 // MergeCachedConfig fills empty fields in cfg from any cached config that shares the cache key.
@@ -440,10 +448,16 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			parts = append(parts, k+"="+cfg.Extra[k])
+			parts = append(parts, k, cfg.Extra[k])
 		}
 	}
-	return strings.Join(parts, "|")
+
+	// Length prefixed so no two part lists can render the same key.
+	var b strings.Builder
+	for _, part := range parts {
+		b.WriteString(cachePart(part))
+	}
+	return b.String()
 }
 
 func cachePart(s string) string {

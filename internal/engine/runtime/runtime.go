@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type Config struct {
@@ -181,18 +182,20 @@ func (r *Runtime) LoadAuthState(st engine.AuthState) {
 	}
 }
 
-// ResetSecrets forgets every credential and runtime value held in memory.
-// Scopes are named after the environment, so two workspaces that both call
-// one "dev" would otherwise read each other's globals, cookies and tokens.
-func (r *Runtime) ResetSecrets() {
+// ResetSharedSecrets forgets credentials and runtime values whose scope more
+// than one workspace can resolve. A scope that names its environment file is
+// unreachable anywhere else, so its state stays dormant in memory and becomes
+// active again when that workspace returns. Command auth keys carry the
+// workspace root and never collide, so they are kept whole.
+func (r *Runtime) ResetSharedSecrets() {
 	if r == nil {
 		return
 	}
-	r.Globals().Reset()
-	r.Files().Reset()
-	r.Cookies().Reset()
-	r.OAuth().Reset()
-	r.AuthCmd().Reset()
+	shared := func(env string) bool { return !vars.SourcedScope(env) }
+	r.Globals().clearIf(shared)
+	r.Files().clearIf(shared)
+	r.Cookies().clearIf(shared)
+	r.OAuth().ClearIf(shared)
 }
 
 func (r *Runtime) Close() error {

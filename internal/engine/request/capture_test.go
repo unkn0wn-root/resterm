@@ -78,7 +78,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		t.Fatalf("expected file capture to be recorded: %+v", captures.fileVars)
 	}
 
-	snapshot := eng.rt.Globals().Snapshot("dev")
+	snapshot := eng.rt.Globals().Snapshot(testEnv("dev").Scope())
 	if len(snapshot) != 1 {
 		t.Fatalf("expected one global, got %d", len(snapshot))
 	}
@@ -121,7 +121,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		)
 	}
 
-	store := eng.rt.Files().Snapshot("dev", "./sample.http")
+	store := eng.rt.Files().Snapshot(testEnv("dev").Scope(), "./sample.http")
 	if len(store) != 1 {
 		t.Fatalf("expected one stored file variable, got %d", len(store))
 	}
@@ -191,7 +191,7 @@ func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 		t.Fatalf("applyCaptures rst: %v", err)
 	}
 
-	gl := eng.rt.Globals().Snapshot("dev")
+	gl := eng.rt.Globals().Snapshot(testEnv("dev").Scope())
 	if len(gl) != 1 {
 		t.Fatalf("expected one global capture, got %d", len(gl))
 	}
@@ -632,20 +632,20 @@ func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 		t.Fatalf("applyCaptures stage: %v", err)
 	}
 
-	if len(eng.rt.Globals().Snapshot("dev")) != 0 {
+	if len(eng.rt.Globals().Snapshot(testEnv("dev").Scope())) != 0 {
 		t.Fatalf("expected no globals in dev env after stage capture")
 	}
-	stageGlobals := eng.rt.Globals().Snapshot("stage")
+	stageGlobals := eng.rt.Globals().Snapshot(testEnv("stage").Scope())
 	if len(stageGlobals) != 1 {
 		t.Fatalf("expected one global in stage, got %d", len(stageGlobals))
 	}
 
-	devStore := eng.rt.Files().Snapshot("dev", "./capture-env.http")
+	devStore := eng.rt.Files().Snapshot(testEnv("dev").Scope(), "./capture-env.http")
 	if len(devStore) != 0 {
 		t.Fatalf("expected no file captures in dev store")
 	}
 
-	stageStore := eng.rt.Files().Snapshot("stage", "./capture-env.http")
+	stageStore := eng.rt.Files().Snapshot(testEnv("stage").Scope(), "./capture-env.http")
 	if len(stageStore) != 1 {
 		t.Fatalf("expected one file capture in stage store, got %d", len(stageStore))
 	}
@@ -824,7 +824,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	if len(doc.Variables) == 0 || doc.Variables[0].Value != "2" {
 		t.Fatalf("expected file capture for received count, got %+v", doc.Variables)
 	}
-	snapshot := eng.rt.Globals().Snapshot("dev")
+	snapshot := eng.rt.Globals().Snapshot(testEnv("dev").Scope())
 	if len(snapshot) != 1 {
 		t.Fatalf("expected one global capture, got %d", len(snapshot))
 	}

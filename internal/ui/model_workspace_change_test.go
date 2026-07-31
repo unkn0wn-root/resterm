@@ -144,12 +144,15 @@ func TestOpenWorkspaceReplaysPickerChoice(t *testing.T) {
 	}
 }
 
-func TestOpenWorkspaceForgetsPreviousState(t *testing.T) {
+// A and B key their runtime state by scopes naming their own environment
+// files, so a move keeps A's session dormant instead of forgetting it: B can
+// read none of it, and coming back to A restores it without a fresh login.
+func TestOpenWorkspaceKeepsDormantState(t *testing.T) {
 	base := workspaceFixture(t)
 	m := workspaceModel(t, base, "", "")
 
 	scope := m.ws.active.Scope()
-	m.globalsStore().Set(scope, "leaked.token", "A-DEV", true)
+	m.globalsStore().Set(scope, "captured.token", "A-DEV", true)
 	m.lastResponse = &httpclient.Response{Status: "200 OK"}
 	if m.cookieStore().Jar(scope) == nil {
 		t.Fatal("expected a cookie jar for the active scope")
@@ -157,17 +160,25 @@ func TestOpenWorkspaceForgetsPreviousState(t *testing.T) {
 
 	m.applyOpenDirectory(filepath.Join(base, "B"))
 
-	if got := m.ws.active.Scope(); got == scope {
-		t.Fatalf("scope = %q, want the two workspaces to differ", got)
+	next := m.ws.active.Scope()
+	if next == scope {
+		t.Fatalf("scope = %q, want the two workspaces to differ", next)
 	}
-	if snap := m.globalsStore().Snapshot(scope); len(snap) != 0 {
-		t.Fatalf("globals survived the workspace change: %v", snap)
-	}
-	if got := m.globalsStore().Entries(); len(got) != 0 {
-		t.Fatalf("globals survived under some other scope: %v", got)
+	if snap := m.globalsStore().Snapshot(next); len(snap) != 0 {
+		t.Fatalf("the new workspace can read the old globals: %v", snap)
 	}
 	if m.lastResponse != nil {
 		t.Fatalf("last response survived the move: %v", m.lastResponse.Status)
+	}
+
+	m.applyOpenDirectory(filepath.Join(base, "A"))
+
+	if got := m.ws.active.Scope(); got != scope {
+		t.Fatalf("scope = %q, want %q active again", got, scope)
+	}
+	snap := m.globalsStore().Snapshot(scope)
+	if snap["captured.token"].Value != "A-DEV" {
+		t.Fatalf("returning did not wake the dormant session: %v", snap)
 	}
 }
 

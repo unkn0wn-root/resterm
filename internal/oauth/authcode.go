@@ -32,6 +32,7 @@ var launchBrowser = openBrowser
 
 func (m *Manager) requestAuthCodeToken(
 	ctx context.Context,
+	env string,
 	key string,
 	cfg Config,
 	opts httpclient.Options,
@@ -92,7 +93,7 @@ func (m *Manager) requestAuthCodeToken(
 		return Token{}, err
 	}
 
-	m.storeToken(key, cfg, token)
+	m.storeToken(key, env, cfg, token)
 	return token, nil
 }
 
