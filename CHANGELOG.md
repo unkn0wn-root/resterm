@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.49.3](https://github.com/unkn0wn-root/resterm/compare/v0.49.1...v0.49.3) (2026-07-31)
+
 ### [0.49.1](https://github.com/unkn0wn-root/resterm/compare/v0.48.1...v0.49.1) (2026-07-30)
 
 ### [0.48.1](https://github.com/unkn0wn-root/resterm/compare/v0.47.3...v0.48.1) (2026-07-27)
