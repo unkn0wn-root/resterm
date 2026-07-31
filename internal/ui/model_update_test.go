@@ -116,6 +116,46 @@ func TestTabInViewModeCyclesFocus(t *testing.T) {
 	}
 }
 
+func TestTabInInsertModeAcceptsActiveEditorCompletion(t *testing.T) {
+	model := New(Config{})
+	model.editor.SetValue("# ")
+	model.editor.moveCursorTo(0, 2)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(true, false)
+
+	for _, r := range "@n" {
+		updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		model = updated.(Model)
+	}
+	if !model.editor.completion.active {
+		t.Fatal("expected directive completion to be active after typing # @n")
+	}
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = updated.(Model)
+	if got := model.editor.Value(); got != "# @name " {
+		t.Fatalf("expected Tab to accept @name completion, got %q", got)
+	}
+	if model.editor.completion.active {
+		t.Fatal("expected completion popup to close after accepting with Tab")
+	}
+}
+
+func TestTabInInsertModeIndentsWithoutEditorCompletion(t *testing.T) {
+	model := New(Config{})
+	model.editor.SetValue("# ")
+	model.editor.moveCursorTo(0, 2)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(true, false)
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = updated.(Model)
+	want := "# " + strings.Repeat(" ", 4)
+	if got := model.editor.Value(); got != want {
+		t.Fatalf("expected Tab to retain editor indentation, got %q", got)
+	}
+}
+
 func TestHandleKeyIgnoredWhileErrorModalVisible(t *testing.T) {
 	model := newTestModelWithDoc(sampleRequestDoc)
 	_ = model.setFocus(focusEditor)

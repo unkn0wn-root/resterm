@@ -486,8 +486,12 @@ func (e *requestEditor) SetCompletionScope(scope intellisense.Scope) {
 	e.scope = scope
 }
 
+func (e requestEditor) hasActiveCompletion() bool {
+	return e.completion.active && len(e.completion.filtered) > 0
+}
+
 func (e *requestEditor) handleCompletionKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
-	if !e.completion.active || len(e.completion.filtered) == 0 {
+	if !e.hasActiveCompletion() {
 		return false, nil
 	}
 	switch msg.String() {
@@ -564,7 +568,7 @@ func (e *requestEditor) refreshCompletions() {
 }
 
 func (e *requestEditor) applyCompletion() tea.Cmd {
-	if !e.completion.active || len(e.completion.filtered) == 0 {
+	if !e.hasActiveCompletion() {
 		return nil
 	}
 	selected := e.completion.filtered[e.completion.selection]

@@ -25,6 +25,9 @@ func (m *Model) filterEditorMessage(msg tea.Msg) tea.Msg {
 	if km, ok := msg.(tea.KeyMsg); ok {
 		if m.editorInsertMode {
 			if km.Type == tea.KeyTab {
+				if m.editor.hasActiveCompletion() {
+					return msg
+				}
 				km.Type = tea.KeyRunes
 				km.Runes = []rune{'\t'}
 				return km
