@@ -448,7 +448,7 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			parts = append(parts, k+"="+cfg.Extra[k])
+			parts = append(parts, k, cfg.Extra[k])
 		}
 	}
 

@@ -520,6 +520,18 @@ func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
 	}
 }
 
+// An extra key and value are encoded as separate parts, so a "=" inside
+// either cannot make two different configs share one cache entry.
+func TestCacheKeySeparatesExtraKeyFromValue(t *testing.T) {
+	mgr := NewManager(nil)
+	a := Config{TokenURL: "https://auth.local/token", Extra: map[string]string{"a=b": "c"}}
+	b := Config{TokenURL: "https://auth.local/token", Extra: map[string]string{"a": "b=c"}}
+
+	if mgr.cacheKey("dev", a) == mgr.cacheKey("dev", b) {
+		t.Fatal("different extras rendered the same cache key")
+	}
+}
+
 // ClearIf works off the environment recorded when the token was stored, so a
 // selective reset can drop one workspace's tokens without touching another's.
 func TestManagerClearIfDropsMatchingEnvironments(t *testing.T) {
