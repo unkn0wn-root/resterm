@@ -56,7 +56,7 @@ func (m Model) editorCommandHints() []commandHint {
 		return []commandHint{
 			{key: "Esc", label: "Normal"},
 			m.commandActionHint(bindings.ActionSendRequest, "Send"),
-			{key: "⇥", label: "Complete"},
+			{key: "Tab", label: "Complete"},
 		}
 	}
 	// plain Enter sends from normal mode, see shouldSendEditorRequest
@@ -139,10 +139,6 @@ func (m Model) renderCommandHints(style lipgloss.Style) string {
 // the bar. Focus, Cmd, and Help claim remaining space before the middle three.
 func (m Model) pinnedRow(limit int, divider string) string {
 	focus := m.commandActionHint(bindings.ActionCycleFocusNext, "Focus")
-	// the glyph stands in for the default key only, a rebound key shows as itself
-	if focus.key == "Tab" {
-		focus.key = "⇥"
-	}
 	core := []commandHint{
 		focus,
 		{key: ":", label: "Cmd"},

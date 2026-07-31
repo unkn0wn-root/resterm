@@ -150,7 +150,7 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 	out := ansi.Strip(model.renderCommandBar())
 	prev := -1
 	for _, want := range []string{
-		"⇥ Focus", "^N New", "^S Save", "^Q Quit", ": Cmd", "? Help",
+		"Tab Focus", "^N New", "^S Save", "^Q Quit", ": Cmd", "? Help",
 	} {
 		idx := strings.Index(out, want)
 		if idx < 0 {
@@ -164,7 +164,7 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimRight(out, " "), "? Help") {
 		t.Fatalf("expected anchors pinned to the right edge, got %q", out)
 	}
-	if strings.Index(out, "i Insert") > strings.Index(out, "⇥ Focus") {
+	if strings.Index(out, "i Insert") > strings.Index(out, "Tab Focus") {
 		t.Fatalf("expected context hints before the anchors, got %q", out)
 	}
 }
@@ -194,7 +194,7 @@ func TestRenderCommandBarPinnedHintsHaveNoSegmentBackground(t *testing.T) {
 	)[0]
 	assertCommandHintBackground(t, plain, backgrounds, "i Insert", contextBackground)
 	for _, hint := range []string{
-		"⇥ Focus", "^N New", "^S Save", "^Q Quit", ": Cmd", "? Help",
+		"Tab Focus", "^N New", "^S Save", "^Q Quit", ": Cmd", "? Help",
 	} {
 		assertCommandHintBackground(t, plain, backgrounds, hint, nil)
 	}
@@ -256,7 +256,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusEditor
 				m.editorInsertMode = true
 			},
-			want:   []string{"Esc Normal", "Ctrl+Enter Send", "⇥ Complete"},
+			want:   []string{"Esc Normal", "Ctrl+Enter Send", "Tab Complete"},
 			absent: "Shift+K Docs",
 		},
 		{
@@ -304,7 +304,7 @@ func TestRenderCommandBarCompactsStableAnchorsAtNarrowWidth(t *testing.T) {
 	if got := lipgloss.Width(out); got > model.width {
 		t.Fatalf("expected command bar to fit width %d, got %d in %q", model.width, got, out)
 	}
-	for _, want := range []string{"⇥", ":", "?"} {
+	for _, want := range []string{"Tab", ":", "?"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected compact anchor %q, got %q", want, out)
 		}
