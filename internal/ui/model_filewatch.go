@@ -120,7 +120,7 @@ func (m *Model) showFileChangeWarning(path string, kind watcher.EventKind, text 
 	m.fileStale = true
 	m.fileMissing = kind == watcher.EventMissing
 	m.pendingReloadConfirm = false
-	m.showHelp = false
+	m.closeHelp()
 	if text == "" {
 		text = fileChangeMessage(path, kind)
 	}

@@ -21,9 +21,11 @@ import (
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
+	"github.com/unkn0wn-root/resterm/internal/helpdoc"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/launch"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -180,6 +182,8 @@ type Model struct {
 	run            *rtrun.Runtime
 	rq             *rqeng.Engine
 	bindingsMap    *bindings.Map
+	docsOpener     urlOpener
+	docsRef        string
 	theme          theme.Theme
 	activeThemeDef theme.Definition
 	themeRuntime   themeRuntime
@@ -242,6 +246,7 @@ type Model struct {
 	showThemeSelector        bool
 	showHelp                 bool
 	helpJustOpened           bool
+	helpTopic                *helpdoc.Topic
 	helpFilter               textinput.Model
 	showNewFileModal         bool
 	showLayoutSaveModal      bool
@@ -275,6 +280,7 @@ type Model struct {
 	showCommandLine       bool
 	commandLineInput      textinput.Model
 	commandLineJustOpened bool
+	commandSuggestions    exSuggestionState
 
 	statusMessage    statusMsg
 	statusUser       string
@@ -615,6 +621,8 @@ func New(cfg Config) Model {
 		ws:                     ws,
 		run:                    run,
 		bindingsMap:            bindingMap,
+		docsOpener:             launch.New(),
+		docsRef:                helpdoc.DocsRef(cfg.Version),
 		theme:                  th,
 		themeCatalog:           cfg.ThemeCatalog,
 		client:                 client,

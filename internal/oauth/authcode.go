@@ -11,8 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +18,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/launch"
 )
 
 const (
@@ -367,22 +366,7 @@ func (s *codeServer) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func openBrowser(link string) error {
-	cmd := browserCommand(link)
-	if cmd == nil {
-		return diag.New(diag.ClassAuth, "unsupported platform for browser launch")
-	}
-	return cmd.Start()
-}
-
-func browserCommand(link string) *exec.Cmd {
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("open", link)
-	case "windows":
-		return exec.Command("rundll32", "url.dll,FileProtocolHandler", link)
-	default:
-		return exec.Command("xdg-open", link)
-	}
+	return launch.New().Open(link)
 }
 
 func randString(size int) (string, error) {

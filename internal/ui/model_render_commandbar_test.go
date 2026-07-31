@@ -1,12 +1,17 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
+	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -134,6 +139,222 @@ func TestRenderCommandButtonUsesSingleCellHorizontalPadding(t *testing.T) {
 
 	if out != " Tab Focus " {
 		t.Fatalf("expected single-cell shortcut padding, got %q", out)
+	}
+}
+
+func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
+	model := New(Config{})
+	model.width = 220
+	model.focus = focusEditor
+
+	out := ansi.Strip(model.renderCommandBar())
+	prev := -1
+	for _, want := range []string{
+		"⇥ Focus", "^N New", "^S Save", "^Q Quit", ": Cmd", "? Help",
+	} {
+		idx := strings.Index(out, want)
+		if idx < 0 {
+			t.Fatalf("expected stable command-bar anchor %q, got %q", want, out)
+		}
+		if idx < prev {
+			t.Fatalf("expected anchor %q after the previous one, got %q", want, out)
+		}
+		prev = idx
+	}
+	if !strings.HasSuffix(strings.TrimRight(out, " "), "? Help") {
+		t.Fatalf("expected anchors pinned to the right edge, got %q", out)
+	}
+	if strings.Index(out, "i Insert") > strings.Index(out, "⇥ Focus") {
+		t.Fatalf("expected context hints before the anchors, got %q", out)
+	}
+}
+
+func TestRenderCommandBarPinnedHintsHaveNoSegmentBackground(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{})
+	model.width = 220
+	model.focus = focusEditor
+
+	bar := model.renderCommandBar()
+	plain := ansi.Strip(bar)
+	backgrounds := renderedCellBackgrounds(bar)
+	if len(backgrounds) != lipgloss.Width(plain) {
+		t.Fatalf(
+			"expected %d rendered cell backgrounds, got %d",
+			lipgloss.Width(plain),
+			len(backgrounds),
+		)
+	}
+
+	contextBackground := renderedCellBackgrounds(
+		lipgloss.NewStyle().Background(model.theme.CommandSegment(0).Background).Render("x"),
+	)[0]
+	assertCommandHintBackground(t, plain, backgrounds, "i Insert", contextBackground)
+	for _, hint := range []string{
+		"⇥ Focus", "^N New", "^S Save", "^Q Quit", ": Cmd", "? Help",
+	} {
+		assertCommandHintBackground(t, plain, backgrounds, hint, nil)
+	}
+}
+
+func assertCommandHintBackground(
+	t *testing.T,
+	plain string,
+	backgrounds [][]int,
+	hint string,
+	want []int,
+) {
+	t.Helper()
+
+	before, _, ok := strings.Cut(plain, hint)
+	if !ok {
+		t.Fatalf("expected command hint %q in %q", hint, plain)
+	}
+	cellStart := lipgloss.Width(before)
+	for idx := cellStart; idx < cellStart+lipgloss.Width(hint); idx++ {
+		if !slices.Equal(backgrounds[idx], want) {
+			t.Fatalf(
+				"expected %q cell %d to use background %v, got %v",
+				hint,
+				idx,
+				want,
+				backgrounds[idx],
+			)
+		}
+	}
+}
+
+func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
+	tests := []struct {
+		name   string
+		setup  func(*Model)
+		want   []string
+		absent string
+	}{
+		{
+			name: "requests",
+			setup: func(m *Model) {
+				m.focus = focusRequests
+			},
+			want: []string{"Enter Run", "m Method", "t Tags", "l Jump"},
+		},
+		{
+			name: "editor normal",
+			setup: func(m *Model) {
+				m.focus = focusEditor
+				m.editorInsertMode = false
+			},
+			want:   []string{"i Insert", "Enter Send", "Shift+K Docs", "/ Search"},
+			absent: "Ctrl+Enter",
+		},
+		{
+			name: "editor insert",
+			setup: func(m *Model) {
+				m.focus = focusEditor
+				m.editorInsertMode = true
+			},
+			want:   []string{"Esc Normal", "Ctrl+Enter Send", "⇥ Complete"},
+			absent: "Shift+K Docs",
+		},
+		{
+			name: "response raw",
+			setup: func(m *Model) {
+				m.focus = focusResponse
+				m.responsePanes[0].activeTab = responseTabRaw
+			},
+			want: []string{"j/k Scroll", "g b View", "g Shift+D Dump"},
+		},
+		{
+			name: "response history",
+			setup: func(m *Model) {
+				m.focus = focusResponse
+				m.responsePanes[0].activeTab = responseTabHistory
+			},
+			want: []string{"c Scope", "s Sort", "Enter Load"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := New(Config{})
+			model.width = 240
+			tt.setup(&model)
+			out := ansi.Strip(model.renderCommandBar())
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Fatalf("expected context hint %q, got %q", want, out)
+				}
+			}
+			if tt.absent != "" && strings.Contains(out, tt.absent) {
+				t.Fatalf("did not expect context hint %q, got %q", tt.absent, out)
+			}
+		})
+	}
+}
+
+func TestRenderCommandBarCompactsStableAnchorsAtNarrowWidth(t *testing.T) {
+	model := New(Config{})
+	model.width = 24
+	model.focus = focusEditor
+
+	out := ansi.Strip(model.renderCommandBar())
+	if got := lipgloss.Width(out); got > model.width {
+		t.Fatalf("expected command bar to fit width %d, got %d in %q", model.width, got, out)
+	}
+	for _, want := range []string{"⇥", ":", "?"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected compact anchor %q, got %q", want, out)
+		}
+	}
+}
+
+func TestRenderCommandBarUsesCustomContextHelpBinding(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte("[bindings]\nshow_context_help = [\"ctrl+k\"]\n")
+	if err := os.WriteFile(filepath.Join(dir, "bindings.toml"), data, 0o644); err != nil {
+		t.Fatalf("write bindings: %v", err)
+	}
+	bindingMap, _, err := bindings.Load(dir)
+	if err != nil {
+		t.Fatalf("load bindings: %v", err)
+	}
+	model := New(Config{Bindings: bindingMap})
+	model.width = 180
+	model.focus = focusEditor
+
+	out := ansi.Strip(model.renderCommandBar())
+	if !strings.Contains(out, "Ctrl+K Docs") {
+		t.Fatalf("expected configured contextual-help binding, got %q", out)
+	}
+}
+
+func TestRenderCommandBarHidesUnboundSoftContextHelp(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte("[bindings]\nshow_globals = [\"shift+k\"]\n")
+	if err := os.WriteFile(filepath.Join(dir, "bindings.toml"), data, 0o644); err != nil {
+		t.Fatalf("write bindings: %v", err)
+	}
+	bindingMap, _, err := bindings.Load(dir)
+	if err != nil {
+		t.Fatalf("load bindings: %v", err)
+	}
+	model := New(Config{Bindings: bindingMap})
+	model.width = 180
+	model.focus = focusEditor
+
+	out := ansi.Strip(model.renderCommandBar())
+	if strings.Contains(out, "Docs") {
+		t.Fatalf("did not expect an unbound contextual-help hint, got %q", out)
+	}
+	for _, section := range model.helpSections() {
+		for _, entry := range section.entries {
+			if strings.Contains(entry.description, "directive or keyword under the cursor") {
+				t.Fatalf("did not expect unbound contextual help in help overlay: %+v", entry)
+			}
+		}
 	}
 }
 

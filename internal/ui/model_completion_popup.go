@@ -234,6 +234,18 @@ func completionPopupWidth(lines []string) int {
 	return w
 }
 
+// popupWindow centers the selection inside a window of at most limit items.
+func popupWindow(selection, limit, count int) (int, int) {
+	start := 0
+	if selection > 0 {
+		start = max(selection-limit/2, 0)
+	}
+	if maxStart := max(count-limit, 0); start > maxStart {
+		start = maxStart
+	}
+	return start, min(start+limit, count)
+}
+
 func overlayHintPopup(
 	base string,
 	block []string,

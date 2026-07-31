@@ -25,7 +25,7 @@ func (m *Model) prepareNewFileModal(fromSave bool) {
 	m.newFileExtIndex = 0
 	m.newFileInput.SetValue("")
 	m.newFileInput.Focus()
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	m.closeOpenModal()

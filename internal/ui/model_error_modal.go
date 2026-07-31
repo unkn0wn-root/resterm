@@ -5,7 +5,7 @@ import "strings"
 func (m *Model) openErrorModal(message string) {
 	m.showErrorModal = true
 	m.errorModalMessage = strings.TrimSpace(message)
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	m.showOpenModal = false

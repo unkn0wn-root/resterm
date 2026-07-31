@@ -1,9 +1,10 @@
 package ui
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/unkn0wn-root/resterm/internal/intellisense"
 )
 
 type exCommandKind int
@@ -20,6 +21,7 @@ const (
 	exCommandHelp
 	exCommandNoHighlight
 	exCommandMock
+	exCommandDocs
 )
 
 type exCommand struct {
@@ -33,8 +35,9 @@ func isCommandLineTriggerKey(msg tea.KeyMsg) bool {
 	return msg.String() == ":"
 }
 
-// Modals, help, the search prompt and the navigator/history filters are already
-// gated before handleKeyWithChord runs; only states reachable there are checked.
+// Modals, help, the search prompt and the navigator and history filters are
+// already gated before handleKeyWithChord runs. Only states reachable there
+// are checked.
 func (m *Model) canOpenCommandLine(msg tea.KeyMsg) bool {
 	return isCommandLineTriggerKey(msg) &&
 		!m.streamFilterActive &&
@@ -51,6 +54,7 @@ func (m *Model) openCommandLine() tea.Cmd {
 	m.commandLineJustOpened = true
 	m.commandLineInput.SetValue("")
 	m.commandLineInput.CursorEnd()
+	m.refreshCommandSuggestions()
 	return m.commandLineInput.Focus()
 }
 
@@ -59,6 +63,7 @@ func (m *Model) closeCommandLine() {
 	m.commandLineJustOpened = false
 	m.commandLineInput.Blur()
 	m.commandLineInput.SetValue("")
+	m.commandSuggestions.reset(nil)
 }
 
 func (m *Model) handleCommandLineKey(msg tea.KeyMsg) tea.Cmd {
@@ -78,64 +83,43 @@ func (m *Model) handleCommandLineKey(msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit
 	case "enter":
 		value := m.commandLineInput.Value()
+		if item, ok := m.commandSuggestions.selected(); ok {
+			value = item.insert
+		}
 		m.closeCommandLine()
 		return m.executeExCommand(value)
+	case "down", "ctrl+n":
+		m.commandSuggestions.move(1)
+		return nil
+	case "up", "ctrl+p":
+		m.commandSuggestions.move(-1)
+		return nil
+	case "tab":
+		item, ok := m.commandSuggestions.completion()
+		if !ok {
+			return nil
+		}
+		m.commandLineInput.SetValue(item.insert)
+		m.commandLineInput.CursorEnd()
+		m.refreshCommandSuggestions()
+		return nil
 	}
 
+	prev := m.commandLineInput.Value()
 	var cmd tea.Cmd
 	m.commandLineInput, cmd = m.commandLineInput.Update(msg)
+	if m.commandLineInput.Value() != prev {
+		m.refreshCommandSuggestions()
+	}
 	return cmd
 }
 
-func parseExCommand(input string) exCommand {
-	fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(input), ":"))
-	if len(fields) == 0 {
-		return exCommand{kind: exCommandEmpty}
-	}
-
-	name := fields[0]
-	bang := strings.HasSuffix(name, "!")
-	kind := exCommandKindFor(strings.ToLower(strings.TrimSuffix(name, "!")))
-	if kind == exCommandUnknown {
-		return exCommand{kind: exCommandUnknown, name: strings.Join(fields, " ")}
-	}
-	if kind == exCommandMock {
-		if bang {
-			return exCommand{kind: exCommandUnknown, name: strings.Join(fields, " ")}
-		}
-		return exCommand{kind: kind, args: fields[1:]}
-	}
-	if len(fields) > 1 {
-		return exCommand{kind: exCommandTrailing, name: strings.Join(fields[1:], " ")}
-	}
-	return exCommand{kind: kind, bang: bang}
-}
-
-func exCommandKindFor(name string) exCommandKind {
-	switch name {
-	case "w", "write":
-		return exCommandWrite
-	case "q", "quit", "qa", "qall":
-		return exCommandQuit
-	case "wq":
-		return exCommandWriteQuit
-	case "x", "xit", "exit":
-		return exCommandExit
-	case "e", "edit":
-		return exCommandEdit
-	case "h", "help":
-		return exCommandHelp
-	case "noh", "nohlsearch":
-		return exCommandNoHighlight
-	case "mock":
-		return exCommandMock
-	default:
-		return exCommandUnknown
-	}
+func (m *Model) refreshCommandSuggestions() {
+	m.commandSuggestions.reset(exCommands.Suggestions(m.commandLineInput.Value()))
 }
 
 func (m *Model) executeExCommand(input string) tea.Cmd {
-	cmd := parseExCommand(input)
+	cmd := exCommands.Parse(input)
 	switch cmd.kind {
 	case exCommandEmpty:
 		return statusCmd(statusWarn, "Enter a command")
@@ -156,14 +140,13 @@ func (m *Model) executeExCommand(input string) tea.Cmd {
 		m.openOpenModal()
 		return nil
 	case exCommandHelp:
-		if !m.showHelp {
-			m.toggleHelp()
-		}
-		return nil
+		return m.openHelpQuery(cmd.args)
 	case exCommandNoHighlight:
 		return m.clearSearchHighlightsFromEx()
 	case exCommandMock:
 		return m.executeMockCommand(cmd.args)
+	case exCommandDocs:
+		return m.openDocsQuery(cmd.args)
 	default:
 		return statusCmd(statusWarn, "Unknown command: "+cmd.name+" (try :help)")
 	}
@@ -213,4 +196,37 @@ func (m *Model) clearSearchHighlightsFromEx() tea.Cmd {
 		cmds = append(cmds, statusCmd(statusInfo, "No search highlights"))
 	}
 	return batchCommands(cmds...)
+}
+
+const (
+	commandSuggestionMaxRows  = 8
+	commandSuggestionMaxWidth = 64
+)
+
+func (m Model) renderCommandSuggestionPopup(content string, y int) string {
+	w := max(m.width, lipgloss.Width(content))
+	h := lipgloss.Height(content)
+	if w <= 0 || h <= y {
+		return content
+	}
+
+	mx := m.editorHintBoxMetrics()
+	limit := min(commandSuggestionMaxRows, max(h-y-mx.frameH, 0))
+	items, selection, ok := m.commandSuggestions.display(limit)
+	if !ok {
+		return content
+	}
+
+	hints := make([]intellisense.Item, len(items))
+	for i, item := range items {
+		hints[i] = intellisense.Item{Label: item.label, Summary: item.summary}
+	}
+	labelW, summaryW := completionPopupPreference(hints)
+	maxW := min(commandSuggestionMaxWidth, max(w-2, 0))
+	lines := m.buildCompletionPopup(hints, selection, maxW, labelW, summaryW)
+	if len(lines) == 0 {
+		return content
+	}
+
+	return overlayHintPopup(content, lines, 1, y, w, h)
 }

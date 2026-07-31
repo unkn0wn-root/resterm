@@ -201,14 +201,20 @@ func (m Model) renderAppContent(rc renderContext) string {
 			parts...,
 		)
 	}
+	bar := m.renderCommandBar()
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
-		m.renderCommandBar(),
+		bar,
 		panes,
 		m.renderStatusBar(),
 	)
 	header := m.renderHeader()
-	return lipgloss.JoinVertical(lipgloss.Left, header, body)
+	content := lipgloss.JoinVertical(lipgloss.Left, header, body)
+	if m.showCommandLine && !rc.modalUnderlay {
+		y := lipgloss.Height(header) + lipgloss.Height(bar)
+		content = m.renderCommandSuggestionPopup(content, y)
+	}
+	return content
 }
 
 func (m Model) renderWithinAppFrame(content string) string {
@@ -1807,44 +1813,7 @@ func (m Model) renderCommandBar() string {
 		return m.renderSearchPrompt()
 	}
 
-	type hint struct {
-		key   string
-		label string
-	}
-	segments := []hint{
-		{key: "Tab", label: "Focus"},
-		{key: "Enter", label: "Run"},
-		{key: "^C", label: "Cancel"},
-		{key: "^S", label: "Save"},
-		{key: "^N", label: "New"},
-		{key: "^Q", label: "Quit"},
-		{key: "g s/v", label: "Split"},
-		{key: "g h/j/k/l", label: "Resize"},
-		{key: "g1/2/3", label: "Minimize"},
-		{key: "?", label: "Help"},
-	}
-
-	var rendered []string
-	for idx, seg := range segments {
-		style := m.theme.CommandSegment(idx)
-		button := renderCommandButton(seg.key, seg.label, style)
-		rendered = append(rendered, button)
-	}
-
-	if len(rendered) == 0 {
-		return m.theme.CommandBar.Render("")
-	}
-	divider := m.theme.CommandDivider.Render(" ")
-	row := rendered[0]
-	for i := 1; i < len(rendered); i++ {
-		row = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			row,
-			divider,
-			rendered[i],
-		)
-	}
-	return renderCommandBarContainer(m.theme.CommandBar, row)
+	return m.renderCommandHints(m.theme.CommandBar.Width(m.width))
 }
 
 func (m Model) renderSearchPrompt() string {
@@ -1852,7 +1821,14 @@ func (m Model) renderSearchPrompt() string {
 }
 
 func (m Model) renderCommandLinePrompt() string {
-	return m.renderPromptBar(m.theme.CommandBar.Width(m.width), ":", m.commandLineInput, "w q wq q! qa noh e help mock")
+	return m.renderPromptBar(
+		m.theme.CommandBar.Width(m.width),
+		":",
+		m.commandLineInput,
+		"↑/↓ select",
+		"Tab complete",
+		"Enter run",
+	)
 }
 
 func (m Model) renderResponseSearchPrompt(width int) string {
@@ -2004,8 +1980,11 @@ func renderCommandButton(
 		labelStyle = labelStyle.Background(palette.Background)
 	}
 	keyText := keyStyle.Render(key)
-	labelText := labelStyle.Render(" " + label)
-	content := lipgloss.JoinHorizontal(lipgloss.Center, keyText, labelText)
+	content := keyText
+	if label != "" {
+		labelText := labelStyle.Render(" " + label)
+		content = lipgloss.JoinHorizontal(lipgloss.Center, keyText, labelText)
+	}
 	return button.Render(content)
 }
 
@@ -2466,132 +2445,6 @@ func (m Model) renderThemeModal() string {
 
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return m.renderCenteredModal(box)
-}
-
-func (m Model) renderHelpOverlay() string {
-	box, _ := m.helpOverlayBox()
-	return m.renderCenteredModal(box)
-}
-
-func (m Model) helpOverlayBox() (string, mouseRect) {
-	width := max(min(m.width-6, 120), 48)
-
-	contentWidth := width
-	viewWidth := max(contentWidth-4, 22)
-	maxBodyHeight := max(m.height-8, 6)
-
-	header := func(text string, align lipgloss.Position) string {
-		return m.theme.HeaderTitle.
-			Width(viewWidth).
-			Align(align).
-			Render(text)
-	}
-	title := header("Key Bindings", lipgloss.Center)
-	subtitle := m.theme.HeaderValue.
-		Width(viewWidth).
-		Align(lipgloss.Center).
-		Render("/ search • Esc clear/close • ↑/↓ scroll • PgUp/PgDn page")
-	filterView := m.renderHelpFilter(viewWidth)
-
-	top := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		subtitle,
-		"",
-		filterView,
-		"",
-	)
-	topView := lipgloss.NewStyle().
-		Padding(0, 2).
-		Width(contentWidth).
-		Render(top)
-
-	bodyHeight := max(min(maxBodyHeight-lipgloss.Height(topView), 28), 6)
-
-	sections := m.filteredHelpSections()
-	rows := make([]string, 0, len(sections)*8)
-	if len(sections) == 0 {
-		rows = append(rows, m.theme.HeaderValue.Render("No help entries match the current filter."))
-	} else {
-		for idx, section := range sections {
-			rows = append(rows, header(section.title, lipgloss.Left))
-			for _, entry := range section.entries {
-				rows = append(rows, helpRow(m, entry.key, entry.description))
-			}
-			if idx < len(sections)-1 {
-				rows = append(rows, "")
-			}
-		}
-	}
-	body := lipgloss.JoinVertical(lipgloss.Left, rows...)
-
-	var bodyView string
-	if vp := m.helpViewport; vp != nil {
-		vp.Width = viewWidth
-		vp.Height = bodyHeight
-		vp.SetContent(body)
-		bodyView = lipgloss.NewStyle().
-			Padding(0, 2).
-			Width(contentWidth).
-			Height(bodyHeight).
-			Render(vp.View())
-	} else {
-		bodyView = lipgloss.NewStyle().
-			Padding(0, 2).
-			Width(contentWidth).
-			Height(bodyHeight).
-			Render(body)
-	}
-
-	content := lipgloss.JoinVertical(lipgloss.Left, topView, bodyView)
-	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return box, m.helpOverlayBodyRect(box, lipgloss.Height(topView), bodyHeight)
-}
-
-func (m Model) helpOverlayBodyRect(box string, topHeight, bodyHeight int) mouseRect {
-	boxWidth := lipgloss.Width(box)
-	boxHeight := lipgloss.Height(box)
-	width := max(m.width, boxWidth)
-	height := max(m.height, boxHeight)
-	if width <= 0 || height <= 0 {
-		return mouseRect{}
-	}
-
-	x := max((width-boxWidth)/2, 0)
-	y := max((height-boxHeight)/2, 0)
-	style := m.theme.BrowserBorder
-	left := style.GetBorderLeftSize() + style.GetPaddingLeft()
-	right := style.GetBorderRightSize() + style.GetPaddingRight()
-	top := style.GetBorderTopSize() + style.GetPaddingTop()
-	bottom := style.GetBorderBottomSize() + style.GetPaddingBottom()
-	availableHeight := max(boxHeight-top-bottom-topHeight, 0)
-	return mouseRect{
-		x: x + left,
-		y: y + top + topHeight,
-		w: max(boxWidth-left-right, 0),
-		h: min(bodyHeight, availableHeight),
-	}
-}
-
-func (m Model) renderHelpFilter(width int) string {
-	if width < 16 {
-		width = 16
-	}
-	m.helpFilter.Width = width
-	input := lipgloss.NewStyle().
-		Width(width).
-		Render(m.helpFilter.View())
-
-	if !m.helpFilter.Focused() {
-		return input
-	}
-	hintText := "Type to filter the help • Enter done • Esc clear/close"
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		input,
-		m.themeRuntime.helpHintStyle(m.theme).Width(width).Render(hintText),
-	)
 }
 
 func (m Model) renderNewFileModal() string {

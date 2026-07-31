@@ -3,14 +3,13 @@ package ui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
+	"github.com/unkn0wn-root/resterm/internal/launch"
 )
 
 func (m *Model) saveResponseBody() tea.Cmd {
@@ -35,7 +34,7 @@ func (m *Model) openResponseSaveModal() tea.Cmd {
 	m.responseSaveInput.CursorEnd()
 	m.responseSaveInput.Focus()
 	m.responseSaveJustOpened = true
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	m.closeOpenModal()
@@ -104,7 +103,7 @@ func (m *Model) openResponseExternally() tea.Cmd {
 		return nil
 	}
 
-	if err := launchFile(tmpPath); err != nil {
+	if err := launch.New().Open(tmpPath); err != nil {
 		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("Open failed: %v", err)})
 		return nil
 	}
@@ -231,17 +230,4 @@ func ensureUniquePath(path string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("could not create unique path for %s", path)
-}
-
-func launchFile(path string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", path)
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", path)
-	default:
-		cmd = exec.Command("xdg-open", path)
-	}
-	return cmd.Start()
 }

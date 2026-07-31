@@ -19,7 +19,7 @@ func (m *Model) openHistoryPreview(entry history.Entry) {
 	m.historyPreviewContent = string(data)
 	m.historyPreviewTitle = historyPreviewTitle(entry)
 	m.showHistoryPreview = true
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	if vp := m.historyPreviewViewport; vp != nil {

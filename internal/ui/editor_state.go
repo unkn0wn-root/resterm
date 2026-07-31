@@ -199,20 +199,8 @@ func (s completionState) display(limit int) (items []intellisense.Item, selected
 	if !s.active || len(s.filtered) == 0 || limit <= 0 {
 		return nil, 0, false
 	}
-	if s.selection >= len(s.filtered) {
-		return nil, 0, false
-	}
-
-	start := max(s.selection-limit/2, 0)
-	maxStart := max(len(s.filtered)-limit, 0)
-	if start > maxStart {
-		start = maxStart
-	}
-
-	end := min(start+limit, len(s.filtered))
-	window := make([]intellisense.Item, end-start)
-	copy(window, s.filtered[start:end])
-	return window, s.selection - start, true
+	start, end := popupWindow(s.selection, limit, len(s.filtered))
+	return s.filtered[start:end], s.selection - start, true
 }
 
 func completionPopupPreference(items []intellisense.Item) (int, int) {
@@ -577,9 +565,6 @@ func (e *requestEditor) refreshCompletions() {
 
 func (e *requestEditor) applyCompletion() tea.Cmd {
 	if !e.completion.active || len(e.completion.filtered) == 0 {
-		return nil
-	}
-	if e.completion.selection < 0 || e.completion.selection >= len(e.completion.filtered) {
 		return nil
 	}
 	selected := e.completion.filtered[e.completion.selection]

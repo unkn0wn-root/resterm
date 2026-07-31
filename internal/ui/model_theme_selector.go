@@ -11,7 +11,7 @@ import (
 
 func (m *Model) openThemeSelector() {
 	m.showThemeSelector = true
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	if m.showHistoryPreview {
 		m.showHistoryPreview = false

@@ -42,7 +42,7 @@ func (m *Model) openRequestDetails() {
 	m.requestDetailFields = m.buildRequestDetailFields(req, doc, path)
 	m.requestDetailTitle = m.requestDetailTitleFor(req, doc)
 	m.showRequestDetails = true
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	if vp := m.requestDetailViewport; vp != nil {

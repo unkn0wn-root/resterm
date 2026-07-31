@@ -160,6 +160,36 @@ func TestRenderColor(t *testing.T) {
 	}
 }
 
+func TestRenderHTTPFenceHighlights(t *testing.T) {
+	in := "```http\n" +
+		"# @global apiUrl https://api.example.com\n" +
+		"GET {{apiUrl}}/users/{{userId}}\n" +
+		"\n" +
+		"### next request\n" +
+		"```"
+	got := Render(in, Options{Color: ansi})
+
+	for name, want := range map[string]string{
+		"faint gutter":     " \x1b[2m│\x1b[0m",
+		"bold cyan method": "\x1b[36;1mGET\x1b[0m",
+		"accent directive": "\x1b[36m@global\x1b[0m",
+		"code template":    "\x1b[35m{{apiUrl}}\x1b[0m",
+		"faint comment":    "\x1b[2m# \x1b[0m",
+		"faint separator":  "\x1b[2m### next request\x1b[0m",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s missing: want %q in %q", name, want, got)
+		}
+	}
+}
+
+func TestRenderFenceColorLeavesOtherLanguagesPlain(t *testing.T) {
+	got := Render("```go\nfunc main() {}\n```", Options{Color: ansi})
+	if !strings.Contains(got, "\x1b[2m│\x1b[0m func main() {}") {
+		t.Fatalf("expected gutter with unstyled go code, got %q", got)
+	}
+}
+
 func TestRenderWrappedStyleDoesNotBleed(t *testing.T) {
 	got := Render("**aaaa bbbb cccc**", Options{Width: 6, Color: ansi})
 	for ln := range strings.SplitSeq(got, "\n") {
