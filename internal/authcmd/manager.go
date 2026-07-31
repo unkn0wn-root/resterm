@@ -143,17 +143,6 @@ func (m *Manager) ResolvePrepared(ctx context.Context, prep Prepared) (Result, e
 	return m.resolveByFetch(ctx, entryKey, cfg, action.seedCfg, action.start)
 }
 
-func (m *Manager) Reset() {
-	if m == nil {
-		return
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.cache = make(map[string]cacheRecord)
-}
-
 func (m *Manager) Snapshot() []SnapshotEntry {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -45,15 +45,15 @@ func (s *Cookies) Jar(env string) http.CookieJar {
 	return jar
 }
 
-func (s *Cookies) Reset() {
-	if s == nil {
-		return
-	}
-
+func (s *Cookies) clearIf(match func(env string) bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.jars = make(map[string]http.CookieJar)
+	for key := range s.jars {
+		if match(stateEnv(key)) {
+			delete(s.jars, key)
+		}
+	}
 }
 
 func (s *Cookies) Clear(env string) {

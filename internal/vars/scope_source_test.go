@@ -48,7 +48,7 @@ func TestFlatScopeSeparatesEnvironmentFiles(t *testing.T) {
 	if scopeA == scopeB {
 		t.Fatalf("both files resolved to scope %q", scopeA)
 	}
-	if !strings.HasPrefix(scopeA, "dev"+scopeSourceSep) {
+	if !strings.HasPrefix(scopeA, scopeFlatSourceVersion+"dev@") {
 		t.Fatalf("scope = %q, want the environment name to stay readable", scopeA)
 	}
 
@@ -76,9 +76,10 @@ func TestGroupedScopeSeparatesEnvironmentFiles(t *testing.T) {
 	}
 }
 
-// A catalog with no file to name keeps the scopes it had before, so embedders
-// that persist runtime state are not silently invalidated.
-func TestScopeUnchangedWithoutSource(t *testing.T) {
+// A scope decides whether runtime state may cross a workspace boundary, so
+// every scope carries a version prefix even without a file to name. A bare
+// name could pose as any other scope kind.
+func TestUnsourcedScopesAreVersioned(t *testing.T) {
 	cat, err := NewCatalog(EnvironmentSet{"dev": {"who": "x"}})
 	if err != nil {
 		t.Fatal(err)
@@ -87,8 +88,8 @@ func TestScopeUnchangedWithoutSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := env.Scope(); got != "dev" {
-		t.Fatalf("scope = %q, want the bare environment name", got)
+	if got := env.Scope(); got != scopeFlatVersion+"dev" {
+		t.Fatalf("scope = %q, want the prefixed environment name", got)
 	}
 
 	grouped, err := NewGroupedCatalog(nil, []Group{{
@@ -105,6 +106,42 @@ func TestScopeUnchangedWithoutSource(t *testing.T) {
 	}
 	if !strings.HasPrefix(genv.Scope(), scopeVersion) {
 		t.Fatalf("scope = %q, want the %s prefix", genv.Scope(), scopeVersion)
+	}
+}
+
+// Provenance is read from the version prefix alone. An environment name sits
+// behind the prefix, so a name shaped like another scope kind changes nothing,
+// and scopes from before the flat prefixes read as not sourced.
+func TestSourcedScopeClassification(t *testing.T) {
+	base := t.TempDir()
+	flat, _ := scopeOfFile(t, writeEnvFile(t, filepath.Join(base, "flat"), `{"dev":{"who":"x"}}`))
+	grouped, _ := scopeOfFile(t, writeEnvFile(
+		t,
+		filepath.Join(base, "grouped"),
+		`{"$groups":{"api":{"$default":"dev","dev":{"api.url":"x"}}}}`,
+	))
+
+	posing, err := NewCatalog(EnvironmentSet{"g2:anything": {"who": "x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	posingEnv, err := posing.Resolve(posing.DefaultSelection())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for scope, want := range map[string]bool{
+		flat:    true,
+		grouped: true,
+		flatScope("g1:dev", "/a/resterm.env.json"): true,
+		posingEnv.Scope():                          false,
+		"":                                         false,
+		"dev":                                      false,
+		"dev@0123456789abcdef":                     false,
+	} {
+		if got := SourcedScope(scope); got != want {
+			t.Fatalf("SourcedScope(%q) = %v, want %v", scope, got, want)
+		}
 	}
 }
 

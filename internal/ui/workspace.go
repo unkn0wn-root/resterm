@@ -204,7 +204,7 @@ func (m *Model) commitMove(mv wsMove) (statusMsg, tea.Cmd) {
 
 	if mv.reset {
 		if rt := m.runtimeSvc(); rt != nil {
-			rt.ResetSecrets()
+			rt.ResetSharedSecrets()
 		}
 	}
 	m.stopLiveStreams()

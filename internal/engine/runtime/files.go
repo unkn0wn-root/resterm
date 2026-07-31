@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"cmp"
+	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,15 +54,15 @@ func (s *Files) ClearEnv(env string) {
 	if s == nil {
 		return
 	}
-	pfx := envKey(env) + "|"
+	pfx := fileEnvPrefix(env)
 	s.store.clearIf(func(scope string) bool { return strings.HasPrefix(scope, pfx) })
 }
 
-func (s *Files) Reset() {
-	if s == nil {
-		return
-	}
-	s.store.reset()
+func (s *Files) clearIf(match func(env string) bool) {
+	s.store.clearIf(func(key string) bool {
+		env, _ := splitFileKey(key)
+		return match(env)
+	})
 }
 
 func (s *Files) Entries() []engine.RuntimeFile {
@@ -110,18 +112,28 @@ func (s *Files) Restore(xs []engine.RuntimeFile) {
 	})
 }
 
+// Length prefixed so the split stays exact when a name contains the separator.
+func fileEnvPrefix(env string) string {
+	e := envKey(env)
+	return fmt.Sprintf("%d:%s|", len(e), e)
+}
+
 func fileKey(env, path string) string {
 	key := strings.TrimSpace(path)
 	if key == "" {
 		key = "__scratch__"
 	}
-	return envKey(env) + "|" + strings.ToLower(filepath.Clean(key))
+	return fileEnvPrefix(env) + strings.ToLower(filepath.Clean(key))
 }
 
 func splitFileKey(key string) (string, string) {
-	env, path, ok := strings.Cut(key, "|")
+	head, rest, ok := strings.Cut(key, ":")
 	if !ok {
 		return "", key
 	}
-	return stateEnv(env), path
+	n, err := strconv.Atoi(head)
+	if err != nil || n < 0 || n >= len(rest) || rest[n] != '|' {
+		return "", key
+	}
+	return stateEnv(rest[:n]), rest[n+1:]
 }

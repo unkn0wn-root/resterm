@@ -241,7 +241,7 @@ func TestManagerMergeCachedConfig(t *testing.T) {
 		CacheKey:     "github",
 		Extra:        map[string]string{"audience": "https://api.local"},
 	}
-	mgr.storeToken(mgr.cacheKey("dev", base), base, Token{AccessToken: "cached"})
+	mgr.storeToken(mgr.cacheKey("dev", base), "dev", base, Token{AccessToken: "cached"})
 
 	merged := mgr.MergeCachedConfig("dev", Config{
 		CacheKey:     "github",
@@ -328,7 +328,7 @@ func TestManagerMergeCachedConfigCacheOnlyInheritsResolvedValues(t *testing.T) {
 		Header:    " X-Access-Token ",
 		CacheKey:  " github ",
 	}
-	mgr.storeToken(mgr.cacheKey("dev", base), base, Token{AccessToken: "cached"})
+	mgr.storeToken(mgr.cacheKey("dev", base), "dev", base, Token{AccessToken: "cached"})
 
 	merged := mgr.MergeCachedConfig("dev", Config{CacheKey: " github "})
 	if merged.TokenURL != "https://auth.local/token" ||
@@ -496,7 +496,7 @@ func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
 		CacheKey:  "github",
 		Extra:     map[string]string{"audience": "https://api.local"},
 	}
-	mgr.storeToken(mgr.cacheKey("dev", cfg), cfg, Token{
+	mgr.storeToken(mgr.cacheKey("dev", cfg), "dev", cfg, Token{
 		AccessToken:  "expired-token",
 		RefreshToken: "refresh-1",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -517,6 +517,36 @@ func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
 	if merged.TokenURL != cfg.TokenURL || merged.AuthURL != cfg.AuthURL ||
 		merged.ClientID != cfg.ClientID {
 		t.Fatalf("expected restored config to merge, got %#v", merged)
+	}
+}
+
+// ClearIf works off the environment recorded when the token was stored, so a
+// selective reset can drop one workspace's tokens without touching another's.
+func TestManagerClearIfDropsMatchingEnvironments(t *testing.T) {
+	mgr := NewManager(nil)
+	cfg := Config{TokenURL: "https://auth.local/token", CacheKey: "github"}
+	mgr.storeToken(mgr.cacheKey("dev", cfg), "dev", cfg, Token{AccessToken: "drop"})
+	mgr.storeToken(mgr.cacheKey("prod", cfg), "prod", cfg, Token{AccessToken: "keep"})
+
+	mgr.ClearIf(func(env string) bool { return env == "dev" })
+
+	if _, ok := mgr.CachedToken("dev", cfg); ok {
+		t.Fatal("dev token survived the clear")
+	}
+	tok, ok := mgr.CachedToken("prod", cfg)
+	if !ok || tok.AccessToken != "keep" {
+		t.Fatalf("prod token = %+v, want it kept", tok)
+	}
+
+	snap := mgr.Snapshot()
+	if len(snap) != 1 || snap[0].Env != "prod" {
+		t.Fatalf("snapshot after clear = %+v", snap)
+	}
+	restored := NewManager(nil)
+	restored.Restore(snap)
+	restored.ClearIf(func(env string) bool { return env != "prod" })
+	if _, ok := restored.CachedToken("prod", cfg); !ok {
+		t.Fatal("restore lost the recorded environment")
 	}
 }
 

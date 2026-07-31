@@ -112,6 +112,28 @@ func TestFilesClearEnvKeepsOtherEnvironments(t *testing.T) {
 	}
 }
 
+// The length header keeps the environment and the path apart even when the
+// environment name contains the separator.
+func TestFileKeySplitsExactlyWithSeparatorInEnvironment(t *testing.T) {
+	fs := NewFiles()
+	scope := "f2:qa|west@0123456789abcdef"
+	fs.Set(scope, "/ws/a.http", "token", "KEEP", true)
+
+	got := fs.Entries()
+	if len(got) != 1 || got[0].Env != scope || got[0].Path != "/ws/a.http" {
+		t.Fatalf("entries = %+v", got)
+	}
+
+	fs.ClearEnv("f2:qa")
+	if snap := fs.Snapshot(scope, "/ws/a.http"); len(snap) != 1 {
+		t.Fatalf("clearing a shorter environment removed %q values: %v", scope, snap)
+	}
+	fs.ClearEnv(scope)
+	if snap := fs.Snapshot(scope, "/ws/a.http"); len(snap) != 0 {
+		t.Fatalf("clear missed the environment: %v", snap)
+	}
+}
+
 func TestCookiesClearKeepsOtherEnvironments(t *testing.T) {
 	cs := NewCookies()
 	u, err := url.Parse("https://example.com")

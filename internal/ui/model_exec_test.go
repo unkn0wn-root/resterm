@@ -667,7 +667,7 @@ func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 	})
 
 	model := New(Config{Env: vars.Config{Selection: testSelection("dev")}, Client: fakeClient})
-	model.globalsStore().Set("dev", "token", "global-token", false)
+	model.globalsStore().Set(testEnv("dev").Scope(), "token", "global-token", false)
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -704,7 +704,7 @@ func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 
 func TestExecuteExplainRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *testing.T) {
 	model := New(Config{Env: vars.Config{Selection: testSelection("dev")}})
-	model.globalsStore().Set("dev", "token", "global-token", false)
+	model.globalsStore().Set(testEnv("dev").Scope(), "token", "global-token", false)
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -1720,8 +1720,8 @@ func TestShowGlobalSummary(t *testing.T) {
 			},
 		},
 	}
-	model.globalsStore().Set("dev", "token", "secretValue", true)
-	model.globalsStore().Set("dev", "refresh", "xyz", false)
+	model.globalsStore().Set(testEnv("dev").Scope(), "token", "secretValue", true)
+	model.globalsStore().Set(testEnv("dev").Scope(), "refresh", "xyz", false)
 
 	model.showGlobalSummary()
 
@@ -1738,13 +1738,13 @@ func TestClearGlobalValues(t *testing.T) {
 	model := Model{
 		ws: workspace{sel: testSelection("dev"), active: testEnv("dev")},
 	}
-	model.globalsStore().Set("dev", "token", "value", false)
-	model.cookieStore().Jar("dev")
-	if snap := model.globalsStore().Snapshot("dev"); len(snap) == 0 {
+	model.globalsStore().Set(testEnv("dev").Scope(), "token", "value", false)
+	model.cookieStore().Jar(testEnv("dev").Scope())
+	if snap := model.globalsStore().Snapshot(testEnv("dev").Scope()); len(snap) == 0 {
 		t.Fatalf("expected snapshot to contain entries before clearing")
 	}
 	model.clearGlobalValues()
-	if snap := model.globalsStore().Snapshot("dev"); len(snap) != 0 {
+	if snap := model.globalsStore().Snapshot(testEnv("dev").Scope()); len(snap) != 0 {
 		t.Fatalf("expected globals to be cleared, got %v", snap)
 	}
 	if !strings.Contains(model.statusMessage.text, "Cleared globals and cookies") {
@@ -1764,14 +1764,14 @@ func TestClearGlobalValuesClearsCookiesForEnvironment(t *testing.T) {
 		t.Fatalf("parse url: %v", err)
 	}
 
-	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
+	model.cookieStore().Jar(testEnv("dev").Scope()).SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
 	model.cookieStore().
 		Jar("prod").
 		SetCookies(u, []*http.Cookie{{Name: "session", Value: "prod456"}})
 
 	model.clearGlobalValues()
 
-	if got := model.cookieStore().Jar("dev").Cookies(u); len(got) != 0 {
+	if got := model.cookieStore().Jar(testEnv("dev").Scope()).Cookies(u); len(got) != 0 {
 		t.Fatalf("expected dev cookies to be cleared, got %+v", got)
 	}
 	if got := model.cookieStore().
@@ -1838,7 +1838,7 @@ func TestExecuteRequestNoCookiesSettingDisablesJar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse url: %v", err)
 	}
-	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
+	model.cookieStore().Jar(testEnv("dev").Scope()).SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
 
 	req := &restfile.Request{
 		Method:   http.MethodGet,
@@ -1944,7 +1944,7 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 
 	// Prepare the cookie jar
 	u, _ := url.Parse(srv.URL)
-	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{
+	model.cookieStore().Jar(testEnv("dev").Scope()).SetCookies(u, []*http.Cookie{
 		{Name: "foo", Value: "bar"},
 	})
 
