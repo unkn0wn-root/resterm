@@ -101,6 +101,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.nextRunMsgCmd())
 	case statusMsg:
 		m.setStatusMessage(typed)
+	case docsOpenedMsg:
+		m.handleDocsOpened(typed)
 	case statusPulseMsg:
 		if cmd := m.handleStatusPulse(typed); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -1020,6 +1022,11 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionToggleHelp:
 		m.toggleHelp()
 		return nil, true
+	case bindings.ActionShowContextHelp:
+		if m.focus != focusEditor || m.editorInsertMode {
+			return nil, false
+		}
+		return m.showContextHelp(), true
 	case bindings.ActionShowRequestDetails:
 		m.openRequestDetails()
 		return nil, true

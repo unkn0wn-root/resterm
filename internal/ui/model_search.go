@@ -36,7 +36,7 @@ func (m *Model) openSearchPrompt() tea.Cmd {
 	if m.showSearchPrompt {
 		return nil
 	}
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	m.closeNewFileModal()

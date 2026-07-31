@@ -10,7 +10,7 @@ import (
 
 func (m *Model) openLayoutSaveModal() {
 	m.showLayoutSaveModal = true
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	if m.showHistoryPreview {

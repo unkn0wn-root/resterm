@@ -139,6 +139,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | --- | --- |
 | Send active request | `Ctrl+Enter` / `Cmd+Enter` / `Alt+Enter` / `Ctrl+J` / `Ctrl+M` |
 | Toggle help overlay | `?` |
+| Open help for the directive, template, or keyword under the editor cursor | `K` (editor normal mode) |
 | Toggle editor insert mode | `i` / `Esc` |
 | Cycle focus (navigator -> editor -> response) | `Tab` / `Shift+Tab` |
 | Focus navigator / editor / response panes | `g+r` / `g+i` / `g+p` |
@@ -177,7 +178,20 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), insert entries (`i`, `a`, `I`, `A`, `o`, `O`; `I` moves to the first non-blank character), visual selections with `v` / `V`, yank and delete/change operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F` or `/`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
 
-Press `:` from normal mode panes to open a Vim-style command line. Supported actions include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help`, `:noh`, and the `:mock` command family.
+Press `:` from normal mode panes to open a Vim-style command line. Supported actions include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help`, `:man`, `:docs`, `:noh`, and the `:mock` command family.
+
+### Finding help
+
+Resterm keeps concise documentation inside the binary, so the first layer of help works offline and matches the installed version:
+
+- Press `?` for the searchable help index. Type `/` to filter shortcuts and topic contents, then use `Esc` to clear the filter or close help.
+- Run `:help <topic>` to open an embedded topic directly; `:man <topic>` is an alias. Run either command without a topic for the index.
+- In editor normal mode, put the cursor on an `@directive`, an HTTP/protocol keyword, or inside `{{ ... }}`, then press `K` for the relevant topic. If no exact topic is available, Resterm leaves the editor open and shows a short recovery hint.
+- Press `o` from an embedded topic, or run `:docs <topic>`, to open the corresponding full manual section on GitHub. Release builds use their matching Git tag; development builds use `main`. Bare `:docs` opens this manual. If the browser cannot be started, Resterm shows the URL so it can be copied manually.
+
+The command line suggests commands, topics, and `:mock` subcommands as you type. `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) selects a suggestion, `Tab` completes it without running, and `Enter` accepts and runs an explicit selection. If no row has been selected, `Enter` runs the text currently in the prompt.
+
+The bottom command bar always retains Focus, Commands, and Help entry points. The remaining hints adapt to the focused pane, editor mode, and response tab. Configured shortcuts are reflected in both the command bar and help overlay.
 
 ### Editor completions (IntelliSense)
 
@@ -212,6 +226,7 @@ Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first and `${RESTERM_CON
 save_file = ["ctrl+s"]
 set_main_split_horizontal = ["g s", "ctrl+alt+s"]
 send_request = ["ctrl+enter", "cmd+enter"]
+show_context_help = ["shift+k"]
 ```
 
 - Modifiers use `+` (`ctrl+shift+o`), while chord steps are separated by spaces (`"g s"`).
@@ -233,6 +248,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `toggle_response_split_horizontal` | Toggle response inline vs horizontal split. | `ctrl+u` |
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
 | `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
+| `show_context_help` | Open embedded help for the directive, template, or keyword under the editor cursor. | `shift+k` (soft default) |
 | `open_path_modal` | Open the “Open File” modal. | `ctrl+o` |
 | `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
 | `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
@@ -262,7 +278,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `toggle_sidebar_collapse` / `toggle_editor_collapse` / `toggle_response_collapse` | Collapse/expand panes. | `g 1`, `g 2`, `g 3` | ✗ |
 | `toggle_zoom` / `clear_zoom` | Zoom current region / clear zoom. | `g z`, `g shift+z` | ✗ |
 
-`send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. All other actions can be remapped to any combination within the constraints above.
+`send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. The `show_context_help` default is soft for backward compatibility: an explicit binding that already claims `shift+k` wins unless `show_context_help` is also configured. All other actions can be remapped to any combination within the constraints above.
 
 ### Response panes
 

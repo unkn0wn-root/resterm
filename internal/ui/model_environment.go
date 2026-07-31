@@ -21,7 +21,7 @@ const (
 
 func (m *Model) openEnvironmentSelector() {
 	m.showEnvSelector = true
-	m.showHelp = false
+	m.closeHelp()
 	m.showThemeSelector = false
 	m.envDraft = m.ws.sel
 	m.envList.ResetFilter()
@@ -96,22 +96,6 @@ func (m *Model) handleEnvSelectorKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	return nil, true
-}
-
-func (m *Model) toggleHelp() {
-	if m.showHelp {
-		m.showHelp = false
-		m.helpJustOpened = false
-		m.clearHelpFilter()
-		return
-	}
-	if m.showEnvSelector {
-		m.closeEnvironmentSelector()
-	}
-	m.showHelp = true
-	m.helpJustOpened = true
-	m.showThemeSelector = false
-	m.clearHelpFilter()
 }
 
 func (m *Model) applyEnvironmentSelection() {

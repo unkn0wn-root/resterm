@@ -84,7 +84,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **HTTP, GraphQL, gRPC, WebSocket and SSE** out of the box.
 - **Automation lives in the request files:** conditions (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
 - **RestermScript**, a small expression language built for Resterm, with JavaScript hooks when you want them.
-- **Vim-style controls** with familiar motions, `/` search and commands like `:w`, `:q`, `:e` and `:help`.
+- **Vim-style controls** with contextual bottom bar hints, searchable offline help, `K` help under the cursor, `/` search and commands like `:w`, `:q`, `:help` and `:docs`.
 - **Built-in auth and tunneling:** OAuth 2.0 (client credentials, password, auth code with PKCE), auth backed by your existing CLIs, SSH tunnels and Kubernetes port-forwards. No extra tools needed.
 - **CLI runner:** `resterm run` for scripted runs and CI, with JSON and JUnit output.
 - **Mock servers** declared next to the requests they mimic, with matching rules, sequences, call verification and hot reload.
@@ -188,6 +188,11 @@ No files yet? Just run `resterm`, type a URL and press `Ctrl+Enter`. A pasted cu
 - Environments and globals
   - `Ctrl+E`: switch environments.
   - `Ctrl+G`: inspect captured globals.
+- Help and commands
+  - `?`: open the searchable offline help index.
+  - `K` (editor normal mode): open help for the directive, template or keyword under the cursor.
+  - `:help <topic>` / `:man <topic>`: open an embedded topic; `:docs <topic>` opens the version-matched full manual.
+  - `:`: open the command line. Use `Up` / `Down` to select suggestions, `Tab` to complete one, or `Enter` to accept and run a selection.
 - Responses
   - `Ctrl+V` / `Ctrl+U`: split the response pane for side-by-side comparison.
   - `Ctrl+Shift+C` or `g y` (response focused): copy the whole Pretty, Raw or Headers tab.
@@ -393,3 +398,5 @@ Customize colors and keybindings with `themes/*.toml` and `bindings.toml` or `bi
 
 - [`docs/resterm.md`](./docs/resterm.md) covers request syntax, directives, scripting and transports.
 - [`docs/cli.md`](./docs/cli.md) covers `resterm run`, importers, collections and history.
+
+Inside the TUI, press `?` or run `:help`; use `:docs` when you want the full web manual for the installed release.

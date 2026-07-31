@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -220,6 +221,9 @@ func buildMap(overrides map[ActionID][][]string) (*Map, error) {
 	repeatableByAction := make(map[ActionID]bool, len(definitions))
 	for _, def := range definitions {
 		repeatableByAction[def.id] = def.repeatable
+		if def.soft && def.yields(overrides) {
+			continue
+		}
 		defaults := make([][]string, len(def.defaults))
 		for i, seq := range def.defaults {
 			cp := make([]string, len(seq))
@@ -328,6 +332,32 @@ func buildMap(overrides map[ActionID][][]string) (*Map, error) {
 		chordPrefixes: chordPrefixes,
 		actions:       actions,
 	}, nil
+}
+
+// A soft default steps aside when the user claimed one of its keys for another
+// action without also rebinding this one.
+func (d definition) yields(overrides map[ActionID][][]string) bool {
+	if _, ok := overrides[d.id]; ok {
+		return false
+	}
+	for _, seqs := range overrides {
+		for _, seq := range seqs {
+			for _, own := range d.defaults {
+				if sequencesCollide(own, seq) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// Sequences collide when one is a prefix of the other. Those are exactly the
+// combinations buildMap rejects: duplicate keys, duplicate chords, and a chord
+// prefix shadowing a standalone key. Chords that only share a prefix are legal.
+func sequencesCollide(a, b []string) bool {
+	n := min(len(a), len(b))
+	return slices.Equal(a[:n], b[:n])
 }
 
 func parseSequence(spec string) ([]string, error) {

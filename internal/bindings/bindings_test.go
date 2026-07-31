@@ -21,6 +21,10 @@ func TestDefaultMapContainsExpectedBindings(t *testing.T) {
 		t.Fatalf("expected ctrl+c -> ActionCancelRun, got %+v (ok=%v)", binding, ok)
 	}
 
+	if binding, ok := m.MatchSingle("shift+k"); !ok || binding.Action != ActionShowContextHelp {
+		t.Fatalf("expected shift+k -> ActionShowContextHelp, got %+v (ok=%v)", binding, ok)
+	}
+
 	if binding, ok := m.ResolveChord(
 		"g",
 		"s",
@@ -123,5 +127,54 @@ show_globals = ["ctrl+s"]
 
 	if _, _, err := Load(dir); err == nil {
 		t.Fatal("expected conflict error, got nil")
+	}
+}
+
+func TestLoadExplicitBindingWinsOverSoftDefault(t *testing.T) {
+	dir := t.TempDir()
+	payload := `
+[bindings]
+show_globals = ["shift+k"]
+`
+	path := filepath.Join(dir, "bindings.toml")
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write bindings: %v", err)
+	}
+
+	m, _, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if binding, ok := m.MatchSingle("shift+k"); !ok || binding.Action != ActionShowGlobals {
+		t.Fatalf("expected explicit shift+k -> show_globals, got %+v (ok=%v)", binding, ok)
+	}
+	if got := m.Bindings(ActionShowContextHelp); len(got) != 0 {
+		t.Fatalf("expected soft contextual help binding to be omitted, got %+v", got)
+	}
+}
+
+func TestLoadChordPrefixOverrideWinsOverSoftDefault(t *testing.T) {
+	dir := t.TempDir()
+	payload := `
+[bindings]
+show_globals = ["shift+k g"]
+`
+	path := filepath.Join(dir, "bindings.toml")
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write bindings: %v", err)
+	}
+
+	m, _, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if !m.HasChordPrefix("shift+k") {
+		t.Fatal("expected shift+k to remain a chord prefix")
+	}
+	if _, ok := m.MatchSingle("shift+k"); ok {
+		t.Fatal("expected no standalone shift+k binding")
+	}
+	if got := m.Bindings(ActionShowContextHelp); len(got) != 0 {
+		t.Fatalf("expected soft contextual help binding to be omitted, got %+v", got)
 	}
 }

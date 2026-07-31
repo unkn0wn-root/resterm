@@ -237,7 +237,7 @@ func TestModalTitlesAreCenteredWithinBorders(t *testing.T) {
 	}{
 		{
 			name:   "help",
-			title:  "Key Bindings",
+			title:  "Help",
 			render: func(m *Model) string { return m.renderHelpOverlay() },
 		},
 		{

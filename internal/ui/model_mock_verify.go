@@ -80,7 +80,7 @@ func (m *Model) handleMockVerify(msg mockVerifyMsg) tea.Cmd {
 	m.mockVerificationText = content.String()
 	m.showMockVerification = true
 	m.showMockLogs = false
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	if m.mockVerificationViewport == nil {

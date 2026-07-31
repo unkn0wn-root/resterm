@@ -7,8 +7,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/helpdoc"
+	"github.com/unkn0wn-root/resterm/internal/mdterm"
+	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
 
 type helpSection struct {
@@ -21,6 +25,57 @@ type helpEntry struct {
 	description string
 }
 
+const helpTopicsSectionTitle = "Documentation Topics"
+
+func (m *Model) toggleHelp() {
+	if m.showHelp {
+		m.closeHelp()
+		return
+	}
+	m.openHelpIndex("")
+}
+
+func (m *Model) openHelpQuery(args []string) tea.Cmd {
+	query := strings.Join(args, " ")
+	if topic, ok := helpdoc.Lookup(query); ok {
+		m.openHelpTopic(topic)
+		return nil
+	}
+	return m.openHelpIndex(query)
+}
+
+func (m *Model) openHelpIndex(query string) tea.Cmd {
+	m.openHelp()
+	if query == "" {
+		return nil
+	}
+	m.helpFilter.SetValue(query)
+	return m.focusHelpFilter()
+}
+
+func (m *Model) openHelpTopic(topic helpdoc.Topic) {
+	m.openHelp()
+	m.helpTopic = &topic
+}
+
+func (m *Model) openHelp() {
+	if m.showEnvSelector {
+		m.closeEnvironmentSelector()
+	}
+	m.showHelp = true
+	m.helpJustOpened = true
+	m.helpTopic = nil
+	m.showThemeSelector = false
+	m.clearHelpFilter()
+}
+
+func (m *Model) closeHelp() {
+	m.showHelp = false
+	m.helpJustOpened = false
+	m.helpTopic = nil
+	m.clearHelpFilter()
+}
+
 func (m *Model) focusHelpFilter() tea.Cmd {
 	m.helpFilter.CursorEnd()
 	return m.helpFilter.Focus()
@@ -29,7 +84,7 @@ func (m *Model) focusHelpFilter() tea.Cmd {
 func (m *Model) clearHelpFilter() {
 	m.helpFilter.SetValue("")
 	m.helpFilter.Blur()
-	m.resetHelpViewport()
+	m.helpViewport.GotoTop()
 }
 
 func (m *Model) updateHelpFilter(msg tea.Msg) tea.Cmd {
@@ -37,20 +92,26 @@ func (m *Model) updateHelpFilter(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	m.helpFilter, cmd = m.helpFilter.Update(msg)
 	if m.helpFilter.Value() != prev {
-		m.resetHelpViewport()
+		m.helpViewport.GotoTop()
 	}
 	return cmd
 }
 
-func (m *Model) resetHelpViewport() {
-	if vp := m.helpViewport; vp != nil {
-		vp.SetYOffset(0)
-		vp.GotoTop()
-	}
-}
-
 func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 	keyStr := msg.String()
+	if m.helpTopic != nil {
+		switch keyStr {
+		case "ctrl+q", "ctrl+d":
+			return tea.Quit
+		case "esc", "?", "shift+/":
+			m.closeHelp()
+		case "o":
+			return m.openTopicDoc(*m.helpTopic)
+		default:
+			scrollViewportKey(m.helpViewport, keyStr)
+		}
+		return nil
+	}
 	if m.helpFilter.Focused() {
 		switch keyStr {
 		case "ctrl+q", "ctrl+d":
@@ -60,9 +121,7 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 				m.clearHelpFilter()
 				return nil
 			}
-			m.clearHelpFilter()
-			m.showHelp = false
-			m.helpJustOpened = false
+			m.closeHelp()
 			return nil
 		case "enter":
 			m.helpFilter.Blur()
@@ -83,13 +142,9 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 			m.clearHelpFilter()
 			return nil
 		}
-		m.clearHelpFilter()
-		m.showHelp = false
-		m.helpJustOpened = false
+		m.closeHelp()
 	case "?", "shift+/":
-		m.clearHelpFilter()
-		m.showHelp = false
-		m.helpJustOpened = false
+		m.closeHelp()
 	default:
 		scrollViewportKey(m.helpViewport, keyStr)
 	}
@@ -97,7 +152,28 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m Model) helpSections() []helpSection {
-	return []helpSection{
+	editorEntries := []helpEntry{
+		{"h / j / k / l", "Move left / down / up / right"},
+		{"w / b / e", "Word forward / back / end (W / B / E for WORD)"},
+		{"0 / ^ / $", "Line start / first non-blank / line end"},
+		{"gg / G", "Top / bottom of buffer"},
+		{"Ctrl+f / Ctrl+b", "Page down / up (Ctrl+d / Ctrl+u half-page)"},
+		{"v / V / y", "Visual select (char / line) / yank selection"},
+		{"d / c + motion", "Delete / change via Vim motions (dw, db, cw, c$)"},
+		{"dd / D / x / cc", "Delete line / to end / char / change line"},
+		{"a", "Append after cursor (enter insert mode)"},
+		{"p / P", "Paste after / before cursor"},
+		{"f / t / T", "Find character (forward / till / backward)"},
+		{"u / Ctrl+r", "Undo / redo last edit"},
+	}
+	if key := m.helpBindingLabel(bindings.ActionShowContextHelp); key != "" {
+		editorEntries = append([]helpEntry{{
+			key:         key,
+			description: "Open help for the directive or keyword under the cursor",
+		}}, editorEntries...)
+	}
+
+	sections := []helpSection{
 		{
 			title: "Navigation & Focus",
 			entries: sortedHelpEntries([]helpEntry{
@@ -350,21 +426,8 @@ func (m Model) helpSections() []helpSection {
 			}),
 		},
 		{
-			title: "Editor motions",
-			entries: []helpEntry{
-				{"h / j / k / l", "Move left / down / up / right"},
-				{"w / b / e", "Word forward / back / end (W / B / E for WORD)"},
-				{"0 / ^ / $", "Line start / first non-blank / line end"},
-				{"gg / G", "Top / bottom of buffer"},
-				{"Ctrl+f / Ctrl+b", "Page down / up (Ctrl+d / Ctrl+u half-page)"},
-				{"v / V / y", "Visual select (char / line) / yank selection"},
-				{"d / c + motion", "Delete / change via Vim motions (dw, db, cw, c$)"},
-				{"dd / D / x / cc", "Delete line / to end / char / change line"},
-				{"a", "Append after cursor (enter insert mode)"},
-				{"p / P", "Paste after / before cursor"},
-				{"f / t / T", "Find character (forward / till / backward)"},
-				{"u / Ctrl+r", "Undo / redo last edit"},
-			},
+			title:   "Editor motions",
+			entries: editorEntries,
 		},
 		{
 			title: "Command line",
@@ -376,7 +439,9 @@ func (m Model) helpSections() []helpSection {
 				{":wq / :x", "Save and quit"},
 				{":e / :edit", "Open file or folder prompt"},
 				{":noh", "Clear search highlights"},
-				{":help", "Open this help"},
+				{":help [topic] / :man [topic]", "Open embedded help or a documentation topic"},
+				{":docs [topic]", "Open version-matched web documentation"},
+				{"Up / Down / Tab / Enter", "Select, complete, or run command suggestions"},
 			},
 		},
 		{
@@ -399,8 +464,24 @@ func (m Model) helpSections() []helpSection {
 			},
 		},
 	}
+	return sections
 }
 
+func helpTopicSection(topics []helpdoc.Topic) helpSection {
+	entries := make([]helpEntry, 0, len(topics))
+	for _, topic := range topics {
+		entries = append(entries, helpEntry{
+			key:         ":help " + topic.ID,
+			description: topic.Summary,
+		})
+	}
+	return helpSection{title: helpTopicsSectionTitle, entries: entries}
+}
+
+// filteredHelpSections narrows the shortcut sections to the filter tokens and
+// surfaces documentation topics whose metadata or body match the query. The
+// unfiltered index lists only shortcuts because the :help popup already
+// suggests every topic.
 func (m Model) filteredHelpSections() []helpSection {
 	sections := m.helpSections()
 	tokens := filterQueryTokens(m.helpFilter.Value())
@@ -408,7 +489,10 @@ func (m Model) filteredHelpSections() []helpSection {
 		return sections
 	}
 
-	out := make([]helpSection, 0, len(sections))
+	out := make([]helpSection, 0, len(sections)+1)
+	if topics := helpdoc.Search(m.helpFilter.Value()); len(topics) > 0 {
+		out = append(out, helpTopicSection(topics))
+	}
 	for _, section := range sections {
 		if helpTextMatchesAll(section.title, tokens) {
 			out = append(out, section)
@@ -417,7 +501,7 @@ func (m Model) filteredHelpSections() []helpSection {
 
 		filtered := make([]helpEntry, 0, len(section.entries))
 		for _, entry := range section.entries {
-			if helpEntryMatchesAll(entry, tokens) {
+			if helpTextMatchesAll(entry.key+" "+entry.description, tokens) {
 				filtered = append(filtered, entry)
 			}
 		}
@@ -432,25 +516,9 @@ func (m Model) filteredHelpSections() []helpSection {
 	return out
 }
 
-func helpEntryMatchesAll(entry helpEntry, tokens []string) bool {
-	if len(tokens) == 0 {
-		return true
-	}
-	return helpTextMatchesAll(entry.key+" "+entry.description, tokens)
-}
-
 func helpTextMatchesAll(text string, tokens []string) bool {
-	if len(tokens) == 0 {
-		return true
-	}
-	haystack := strings.ToLower(strings.TrimSpace(text))
-	if haystack == "" {
-		return false
-	}
+	haystack := strings.ToLower(text)
 	for _, token := range tokens {
-		if token == "" {
-			continue
-		}
 		if !strings.Contains(haystack, token) {
 			return false
 		}
@@ -459,27 +527,165 @@ func helpTextMatchesAll(text string, tokens []string) bool {
 }
 
 func sortedHelpEntries(entries []helpEntry) []helpEntry {
-	cleaned := make([]helpEntry, 0, len(entries))
-	for _, entry := range entries {
-		key := strings.TrimSpace(entry.key)
-		description := strings.TrimSpace(entry.description)
-		if key == "" || description == "" {
-			continue
-		}
-		cleaned = append(cleaned, helpEntry{
-			key:         key,
-			description: description,
-		})
-	}
-
-	sort.Slice(cleaned, func(i, j int) bool {
-		return strings.ToLower(cleaned[i].key) < strings.ToLower(cleaned[j].key)
+	sort.Slice(entries, func(i, j int) bool {
+		return strings.ToLower(entries[i].key) < strings.ToLower(entries[j].key)
 	})
-
-	return cleaned
+	return entries
 }
 
-func helpRow(m Model, key, description string) string {
+func (m Model) renderHelpOverlay() string {
+	box, _ := m.helpOverlayBox()
+	return m.renderCenteredModal(box)
+}
+
+func (m Model) helpOverlayBox() (string, mouseRect) {
+	// topics are prose and read best narrow, the index needs room for its
+	// key and description columns
+	maxWidth := 120
+	if m.helpTopic != nil {
+		maxWidth = 100
+	}
+	width := max(min(m.width-6, maxWidth), 48)
+	viewWidth := max(width-4, 22)
+
+	header := func(text string) string {
+		return m.theme.HeaderTitle.Width(viewWidth).Align(lipgloss.Center).Render(text)
+	}
+	subtitle := func(text string) string {
+		return m.theme.HeaderValue.Width(viewWidth).Align(lipgloss.Center).Render(text)
+	}
+
+	var top []string
+	var body string
+	if topic := m.helpTopic; topic != nil {
+		top = []string{
+			header(topic.Title),
+			subtitle("o web docs • Esc close • ↑/↓ scroll • PgUp/PgDn page"),
+			"",
+		}
+		body = mdterm.Render(topic.Body, mdterm.Options{Width: viewWidth, Color: helpColor()})
+	} else {
+		top = []string{
+			header("Help"),
+			subtitle("/ search docs and shortcuts • Esc clear/close • ↑/↓ scroll • PgUp/PgDn page"),
+			"",
+			m.renderHelpFilter(viewWidth),
+			"",
+		}
+		body = m.helpIndexBody(viewWidth)
+	}
+
+	topView := lipgloss.NewStyle().
+		Padding(0, 2).
+		Width(width).
+		Render(lipgloss.JoinVertical(lipgloss.Left, top...))
+	bodyHeight := max(max(m.height-8, 6)-lipgloss.Height(topView), 6)
+	if m.helpTopic != nil {
+		// a topic body is static, so the box shrinks to fit short topics. The
+		// index keeps its height stable while the filter is typed.
+		bodyHeight = min(bodyHeight, lipgloss.Height(body))
+	}
+	bodyView := m.renderHelpViewport(body, viewWidth, width, bodyHeight)
+
+	style := m.theme.BrowserBorder
+	if m.helpTopic != nil {
+		// the topic body carries its own mdterm colors, so frame text
+		// attributes would leak only until the first inner reset
+		style = stripTextAttrs(style)
+	}
+	content := lipgloss.JoinVertical(lipgloss.Left, topView, bodyView)
+	box := style.Width(width).Render(content)
+	return box, m.helpOverlayBodyRect(box, lipgloss.Height(topView), bodyHeight)
+}
+
+// helpColor matches mdterm output to the color depth lipgloss negotiated for
+// the rest of the UI. Monochrome terminals keep the plain-text fallbacks.
+func helpColor() termcolor.Config {
+	p := lipgloss.ColorProfile()
+	if p == termenv.Ascii {
+		return termcolor.Config{}
+	}
+	return termcolor.Config{Enabled: true, Profile: p}
+}
+
+func (m Model) helpIndexBody(viewWidth int) string {
+	sections := m.filteredHelpSections()
+	if len(sections) == 0 {
+		return m.theme.HeaderValue.Render("No help entries match the current filter.")
+	}
+
+	rows := make([]string, 0, len(sections)*8)
+	for idx, section := range sections {
+		rows = append(rows, m.theme.HeaderTitle.Width(viewWidth).Render(section.title))
+		for _, entry := range section.entries {
+			rows = append(rows, m.helpRow(entry.key, entry.description))
+		}
+		if idx < len(sections)-1 {
+			rows = append(rows, "")
+		}
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+func (m Model) renderHelpViewport(body string, viewWidth, contentWidth, bodyHeight int) string {
+	vp := m.helpViewport
+	vp.Width = viewWidth
+	vp.Height = bodyHeight
+	vp.SetContent(body)
+	return lipgloss.NewStyle().
+		Padding(0, 2).
+		Width(contentWidth).
+		Height(bodyHeight).
+		Render(vp.View())
+}
+
+func (m Model) helpOverlayBodyRect(box string, topHeight, bodyHeight int) mouseRect {
+	boxWidth := lipgloss.Width(box)
+	boxHeight := lipgloss.Height(box)
+	width := max(m.width, boxWidth)
+	height := max(m.height, boxHeight)
+	if width <= 0 || height <= 0 {
+		return mouseRect{}
+	}
+
+	x := max((width-boxWidth)/2, 0)
+	y := max((height-boxHeight)/2, 0)
+	style := m.theme.BrowserBorder
+	left := style.GetBorderLeftSize() + style.GetPaddingLeft()
+	right := style.GetBorderRightSize() + style.GetPaddingRight()
+	top := style.GetBorderTopSize() + style.GetPaddingTop()
+	bottom := style.GetBorderBottomSize() + style.GetPaddingBottom()
+	availableHeight := max(boxHeight-top-bottom-topHeight, 0)
+	return mouseRect{
+		x: x + left,
+		y: y + top + topHeight,
+		w: max(boxWidth-left-right, 0),
+		h: min(bodyHeight, availableHeight),
+	}
+}
+
+func (m Model) renderHelpFilter(width int) string {
+	if width < 16 {
+		width = 16
+	}
+	m.helpFilter.Width = width
+	input := lipgloss.NewStyle().
+		Width(width).
+		Render(m.helpFilter.View())
+
+	if !m.helpFilter.Focused() {
+		return input
+	}
+	hintText := "Type to filter the help • Enter done • Esc clear/close"
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		input,
+		m.themeRuntime.helpHintStyle(m.theme).Width(width).Render(hintText),
+	)
+}
+
+func (m Model) helpRow(key, description string) string {
 	keyStyled := m.theme.HeaderTitle.
 		Width(helpKeyColumnWidth).
 		Align(lipgloss.Left).

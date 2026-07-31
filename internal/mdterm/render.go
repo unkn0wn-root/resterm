@@ -197,20 +197,27 @@ func (r *renderer) level(ind int) int {
 	return len(r.stack) - 1
 }
 
-// codeBlock emits lines[i:] (4-space indented, never wrapped or inline-parsed)
-// until the closing fence, returning the index of the fence line
-// or len(lines) when the fence is unclosed.
+// codeBlock emits lines[i:] until the closing fence, returning the index of
+// the fence line or len(lines) when the fence is unclosed. Code is never
+// wrapped or inline-parsed. With color on a faint gutter marks the block and
+// known languages get token highlighting. Plain output keeps the conventional
+// 4-space code indent, which no list continuation can be confused with.
 func (r *renderer) codeBlock(lines []string, i int, f fence) int {
 	for ; i < len(lines); i++ {
 		if fenceClose(lines[i], f) {
 			return i
 		}
 		t := strings.TrimRight(lines[i], " \t")
-		if t == "" {
+		switch {
+		case !r.st.on && t == "":
 			r.out = append(r.out, "")
-			continue
+		case !r.st.on:
+			r.out = append(r.out, "    "+t)
+		case t == "":
+			r.out = append(r.out, " "+r.st.span("│", aFaint))
+		default:
+			r.out = append(r.out, " "+r.st.span("│", aFaint)+" "+r.st.codeLine(t, f.lang))
 		}
-		r.out = append(r.out, "    "+t)
 	}
 	return i
 }
@@ -237,12 +244,14 @@ func sanitize(src string) string {
 }
 
 type fence struct {
-	ch byte
-	n  int
+	ch   byte
+	n    int
+	lang string
 }
 
 // fenceOpen matches a code-fence opener: up to three leading spaces, then
-// three or more backticks or tildes; the info string ("go") is dropped.
+// three or more backticks or tildes. The info string's first word becomes
+// the language for code highlighting.
 func fenceOpen(ln string) (fence, bool) {
 	i := 0
 	for i < len(ln) && i < 3 && ln[i] == ' ' {
@@ -262,7 +271,11 @@ func fenceOpen(ln string) (fence, bool) {
 	if t[0] == '`' && strings.IndexByte(t[n:], '`') >= 0 {
 		return fence{}, false
 	}
-	return fence{ch: t[0], n: n}, true
+	lang := strings.ToLower(strings.TrimSpace(t[n:]))
+	if i := strings.IndexByte(lang, ' '); i >= 0 {
+		lang = lang[:i]
+	}
+	return fence{ch: t[0], n: n, lang: lang}, true
 }
 
 // fenceClose matches a closer: a run of the opening char at least as long

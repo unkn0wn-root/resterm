@@ -17,7 +17,7 @@ func (m *Model) openMockLogs() tea.Cmd {
 		return statusCmd(statusInfo, "Mock server is stopped")
 	}
 	m.showMockLogs = true
-	m.showHelp = false
+	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	m.syncMockLogs()

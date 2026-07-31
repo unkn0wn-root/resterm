@@ -15,6 +15,7 @@ var (
 	ActionToggleResponseSplitHorz ActionID = "toggle_response_split_horizontal"
 	ActionTogglePaneFollowLatest  ActionID = "toggle_pane_follow_latest"
 	ActionToggleHelp              ActionID = "toggle_help"
+	ActionShowContextHelp         ActionID = "show_context_help"
 	ActionShowRequestDetails      ActionID = "show_request_details"
 	ActionOpenPathModal           ActionID = "open_path_modal"
 	ActionReloadWorkspace         ActionID = "reload_workspace"
@@ -63,6 +64,7 @@ var (
 type definition struct {
 	id         ActionID
 	repeatable bool
+	soft       bool
 	defaults   [][]string
 }
 
@@ -78,6 +80,7 @@ var definitions = []definition{
 	def(ActionToggleResponseSplitHorz, false, "ctrl+u"),
 	def(ActionTogglePaneFollowLatest, false, "ctrl+shift+v"),
 	def(ActionToggleHelp, false, "?"),
+	softDef(ActionShowContextHelp, "shift+k"),
 	def(ActionShowRequestDetails, false, "g ,"),
 	def(ActionOpenPathModal, false, "ctrl+o"),
 	def(ActionReloadWorkspace, false, "ctrl+shift+o", "g shift+o"),
@@ -136,6 +139,12 @@ func def(id ActionID, repeatable bool, specs ...string) definition {
 		seqs = append(seqs, mustSequence(spec))
 	}
 	return definition{id: id, repeatable: repeatable, defaults: seqs}
+}
+
+func softDef(id ActionID, specs ...string) definition {
+	d := def(id, false, specs...)
+	d.soft = true
+	return d
 }
 
 func mustSequence(spec string) []string {

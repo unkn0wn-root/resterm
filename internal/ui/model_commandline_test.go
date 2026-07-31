@@ -31,10 +31,15 @@ func TestParseExCommand(t *testing.T) {
 		{name: "exit", input: "x", kind: exCommandExit},
 		{name: "edit", input: "edit", kind: exCommandEdit},
 		{name: "help", input: "h", kind: exCommandHelp},
+		{name: "help alias", input: "man requests", kind: exCommandHelp},
+		{name: "help topic", input: "help authentication", kind: exCommandHelp},
 		{name: "no highlight", input: "nohlsearch", kind: exCommandNoHighlight},
 		{name: "mock", input: "mock", kind: exCommandMock},
 		{name: "mock args", input: "mock start 127.0.0.1:9090", kind: exCommandMock},
 		{name: "mock bang", input: "mock!", kind: exCommandUnknown},
+		{name: "docs", input: "docs", kind: exCommandDocs},
+		{name: "docs topic", input: "docs grpc", kind: exCommandDocs},
+		{name: "docs bang", input: "docs!", kind: exCommandUnknown},
 		{name: "trailing args", input: "w other.http", kind: exCommandTrailing},
 		{name: "edit with path", input: "e file.http", kind: exCommandTrailing},
 		{name: "unknown", input: "set number", kind: exCommandUnknown},
@@ -42,7 +47,7 @@ func TestParseExCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseExCommand(tt.input)
+			got := exCommands.Parse(tt.input)
 			if got.kind != tt.kind {
 				t.Fatalf("kind: want %v, got %v", tt.kind, got.kind)
 			}
@@ -127,8 +132,11 @@ func TestRenderCommandLinePrompt(t *testing.T) {
 	if !strings.HasPrefix(out, " :") {
 		t.Fatalf("expected command line to align with command bar gutter, got %q", out)
 	}
-	if !strings.Contains(out, "w q wq q! qa noh e help") {
+	if !strings.Contains(out, "Tab complete") {
 		t.Fatalf("expected command hints, got %q", out)
+	}
+	if !strings.Contains(out, "Enter run") {
+		t.Fatalf("expected execution hint, got %q", out)
 	}
 }
 
