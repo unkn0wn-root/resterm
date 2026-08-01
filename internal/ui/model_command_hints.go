@@ -9,9 +9,8 @@ import (
 )
 
 type commandHint struct {
-	key          string
-	label        string
-	noBackground bool
+	key   string
+	label string
 }
 
 func caretKey(h commandHint) commandHint {
@@ -26,6 +25,9 @@ func (m Model) contextCommandHints() []commandHint {
 			{key: "Enter", label: "Open"},
 			{key: "Space", label: "Expand"},
 			{key: "/", label: "Filter"},
+			caretKey(m.commandActionHint(bindings.ActionOpenNewFileModal, "New")),
+			caretKey(m.commandActionHint(bindings.ActionOpenPathModal, "Open")),
+			caretKey(m.commandActionHint(bindings.ActionOpenTempDocument, "Temp")),
 		}
 	case focusRequests:
 		return []commandHint{
@@ -35,6 +37,7 @@ func (m Model) contextCommandHints() []commandHint {
 			{key: "m", label: "Method"},
 			{key: "t", label: "Tags"},
 			{key: "l", label: "Jump"},
+			m.commandActionHint(bindings.ActionShowRequestDetails, "Details"),
 		}
 	case focusWorkflows:
 		return []commandHint{
@@ -65,6 +68,7 @@ func (m Model) editorCommandHints() []commandHint {
 		{key: "Enter", label: "Send"},
 		m.commandActionHint(bindings.ActionShowContextHelp, "Docs"),
 		{key: "/", label: "Search"},
+		caretKey(m.commandActionHint(bindings.ActionSaveFile, "Save")),
 	}
 }
 
@@ -80,10 +84,13 @@ func (m Model) responseCommandHints() []commandHint {
 	}
 
 	switch pane.activeTab {
+	case responseTabPretty:
+		hints = append(hints, m.commandActionHint(bindings.ActionSaveResponseBody, "Save"))
 	case responseTabRaw:
 		hints = append(hints,
 			m.commandActionHint(bindings.ActionCycleRawView, "View"),
 			m.commandActionHint(bindings.ActionShowRawDump, "Dump"),
+			m.commandActionHint(bindings.ActionSaveResponseBody, "Save"),
 		)
 	case responseTabHeaders:
 		hints = append(hints, commandHint{key: "Enter", label: "Request/Response"})
@@ -177,15 +184,12 @@ func (m Model) pinnedRow(limit int, divider string) string {
 
 // pinnedOrder builds the display order from core Focus, Cmd, Help. Focus leads
 // the row, Cmd and Help trail it, and extras sit in between so they can drop
-// without moving the edges. Pinned hints render without segment backgrounds.
+// without moving the edges.
 func pinnedOrder(core, extras []commandHint) []commandHint {
 	row := make([]commandHint, 0, len(core)+len(extras))
 	row = append(row, core[0])
 	row = append(row, extras...)
 	row = append(row, core[1:]...)
-	for i := range row {
-		row[i].noBackground = true
-	}
 	return row
 }
 
@@ -217,9 +221,5 @@ func (m Model) renderHintRow(hints []commandHint, divider string, limit int) str
 }
 
 func (m Model) renderCommandHint(hint commandHint, idx int) string {
-	segment := m.theme.CommandSegment(idx)
-	if hint.noBackground {
-		segment.Background = ""
-	}
-	return renderCommandButton(hint.key, hint.label, segment)
+	return renderCommandButton(hint.key, hint.label, m.theme.CommandSegment(idx))
 }
