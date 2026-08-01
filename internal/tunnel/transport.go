@@ -17,6 +17,15 @@ type DialManager[T any] interface {
 	DialContext(context.Context, T, string, string) (net.Conn, error)
 }
 
+type Plan[M any, C any] struct {
+	Manager *M
+	Config  *C
+}
+
+func (p *Plan[M, C]) Active() bool {
+	return p != nil && p.Manager != nil && p.Config != nil
+}
+
 func HasConflict(sshOn bool, k8sOn bool) bool {
 	return sshOn && k8sOn
 }

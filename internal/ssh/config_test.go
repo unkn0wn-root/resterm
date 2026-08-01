@@ -59,8 +59,8 @@ func TestNormalizeProfileValues(t *testing.T) {
 		t.Fatalf("normalize err: %v", err)
 	}
 
-	if cfg.Port != 2022 || cfg.PortRaw != "2022" {
-		t.Fatalf("port parse failed: %d %q", cfg.Port, cfg.PortRaw)
+	if cfg.Port != 2022 {
+		t.Fatalf("port parse failed: %d", cfg.Port)
 	}
 	if cfg.User != "ops" || cfg.Pass != "pw" || cfg.KeyPath != "/tmp/key" || cfg.KeyPass != "kp" {
 		t.Fatalf("unexpected auth fields: %+v", cfg)
@@ -77,14 +77,14 @@ func TestNormalizeProfileValues(t *testing.T) {
 	if !cfg.Persist {
 		t.Fatalf("expected persist true")
 	}
-	if cfg.Timeout != 5*time.Second || cfg.TimeoutRaw != "5s" {
-		t.Fatalf("timeout parse failed: %v raw=%q", cfg.Timeout, cfg.TimeoutRaw)
+	if cfg.Timeout != 5*time.Second {
+		t.Fatalf("timeout parse failed: %v", cfg.Timeout)
 	}
-	if cfg.KeepAlive != 2*time.Second || cfg.KeepAliveRaw != "2s" {
-		t.Fatalf("keepalive parse failed: %v raw=%q", cfg.KeepAlive, cfg.KeepAliveRaw)
+	if cfg.KeepAlive != 2*time.Second {
+		t.Fatalf("keepalive parse failed: %v", cfg.KeepAlive)
 	}
-	if cfg.Retries != 3 || cfg.RetriesRaw != "3" {
-		t.Fatalf("retries parse failed: %d raw=%q", cfg.Retries, cfg.RetriesRaw)
+	if cfg.Retries != 3 {
+		t.Fatalf("retries parse failed: %d", cfg.Retries)
 	}
 }
 
@@ -98,11 +98,11 @@ func TestNormalizeProfileAcceptsExtendedDurations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize err: %v", err)
 	}
-	if cfg.Timeout != 24*time.Hour || cfg.TimeoutRaw != "1d" {
-		t.Fatalf("timeout parse failed: %v raw=%q", cfg.Timeout, cfg.TimeoutRaw)
+	if cfg.Timeout != 24*time.Hour {
+		t.Fatalf("timeout parse failed: %v", cfg.Timeout)
 	}
-	if cfg.KeepAlive != 14*24*time.Hour || cfg.KeepAliveRaw != "2w" {
-		t.Fatalf("keepalive parse failed: %v raw=%q", cfg.KeepAlive, cfg.KeepAliveRaw)
+	if cfg.KeepAlive != 14*24*time.Hour {
+		t.Fatalf("keepalive parse failed: %v", cfg.KeepAlive)
 	}
 }
 
@@ -212,8 +212,8 @@ func TestPrepareExecConfigNormalizesDefaults(t *testing.T) {
 	if execCfg.Port != defaultPort || execCfg.Timeout != defaultTimeout {
 		t.Fatalf("unexpected normalized defaults: %+v", execCfg.Config)
 	}
-	if execCfg.ep.host != "jump" || execCfg.ep.port != defaultPort {
-		t.Fatalf("unexpected endpoint: %+v", execCfg.ep)
+	if execCfg.addr() != "jump:22" {
+		t.Fatalf("unexpected endpoint address: %q", execCfg.addr())
 	}
 }
 

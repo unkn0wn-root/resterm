@@ -202,17 +202,13 @@ func parseProfileOptions(cfg *Config, p restfile.K8sProfile) error {
 		return err
 	}
 
-	var raw string
-	if err := connprofile.ParsePort("local", &cfg.LocalPort, &raw, p.LocalPortStr); err != nil {
+	if err := connprofile.ParsePort("local", &cfg.LocalPort, p.LocalPortStr); err != nil {
 		return err
 	}
-	if err := connprofile.ParseDuration("pod wait", &cfg.PodWait, &raw, p.PodWaitStr); err != nil {
+	if err := connprofile.ParseDuration("pod wait", &cfg.PodWait, p.PodWaitStr); err != nil {
 		return err
 	}
-	if err := connprofile.ParseRetries("k8s", &cfg.Retries, &raw, p.RetriesStr); err != nil {
-		return err
-	}
-	return nil
+	return connprofile.ParseRetries("k8s", &cfg.Retries, p.RetriesStr)
 }
 
 func targetFromProfile(p restfile.K8sProfile) (TargetRef, error) {

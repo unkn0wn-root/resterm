@@ -133,8 +133,15 @@ func (b *blockingCloseClient) release() {
 }
 
 func newTestManager(dial func(context.Context, execConfig) (sshClient, error)) *Manager {
+	return newTestManagerAt(dial, time.Now)
+}
+
+func newTestManagerAt(
+	dial func(context.Context, execConfig) (sshClient, error),
+	now func() time.Time,
+) *Manager {
 	return &Manager{
-		cache:  newSessionCache(time.Minute, time.Now),
+		pool:   newSessionPool(time.Minute, now),
 		opener: newSessionOpener(dial, time.Millisecond),
 	}
 }
@@ -319,11 +326,8 @@ func TestDialPersistentReconnectsAfterCachedFailure(t *testing.T) {
 		t.Fatalf("expected new client to handle replacement dial, got %d", got)
 	}
 
-	key := keyForTest(t, cfg)
-	m.cache.mu.Lock()
-	ent := m.cache.entries[key]
-	m.cache.mu.Unlock()
-	if ent == nil || ent.ses.cli != second {
+	ses, ok := m.pool.Peek(keyForTest(t, cfg))
+	if !ok || ses.cli != second {
 		t.Fatalf("expected cache to hold replacement client")
 	}
 }
@@ -372,13 +376,15 @@ func TestPurgeClosesStaleSessionOutsideManagerLock(t *testing.T) {
 	blocking := newBlockingCloseClient(false)
 	defer blocking.release()
 
-	m := newTestManager(func(ctx context.Context, cfg execConfig) (sshClient, error) {
+	var skew atomic.Int64
+	now := func() time.Time { return time.Now().Add(time.Duration(skew.Load())) }
+	m := newTestManagerAt(func(ctx context.Context, cfg execConfig) (sshClient, error) {
 		return &fakeClient{}, nil
-	})
-	m.cache.entries[keyForTest(t, cfg)] = newCacheEntry(
-		newSession(blocking, 0),
-		time.Now().Add(-2*time.Minute),
-	)
+	}, now)
+
+	skew.Store(int64(-2 * time.Minute))
+	m.pool.Put(keyForTest(t, cfg), newSession(blocking, 0))
+	skew.Store(0)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -619,11 +625,7 @@ func TestPersistentTargetDialFailureClosesSession(t *testing.T) {
 		t.Fatalf("expected failed session to close once, got %d", got)
 	}
 
-	key := keyForTest(t, cfg)
-	m.cache.mu.Lock()
-	ent := m.cache.entries[key]
-	m.cache.mu.Unlock()
-	if ent != nil {
+	if _, ok := m.pool.Peek(keyForTest(t, cfg)); ok {
 		t.Fatalf("expected failed session to be removed from cache")
 	}
 }

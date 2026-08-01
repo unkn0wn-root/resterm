@@ -4,7 +4,12 @@ import (
 	"context"
 	"errors"
 	"net"
+	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/tunnel"
 )
+
+const defaultTTL = 10 * time.Minute
 
 var (
 	errManagerUnavailable = errors.New("ssh: manager unavailable")
@@ -12,22 +17,26 @@ var (
 )
 
 type Manager struct {
-	cache  *sessionCache
+	pool   *tunnel.Pool[sessionKey, *session]
 	opener sessionOpener
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		cache:  newSessionCache(defaultTTL, nil),
+		pool:   newSessionPool(defaultTTL, nil),
 		opener: newSessionOpener(dialSSH, dialRetryDelay),
 	}
 }
 
+func newSessionPool(ttl time.Duration, now func() time.Time) *tunnel.Pool[sessionKey, *session] {
+	return tunnel.NewPool[sessionKey, *session](ttl, now, errManagerClosed)
+}
+
 func (m *Manager) Close() error {
-	if m == nil || m.cache == nil {
+	if m == nil || m.pool == nil {
 		return nil
 	}
-	return m.cache.close()
+	return m.pool.Close()
 }
 
 func (m *Manager) DialContext(
@@ -47,14 +56,22 @@ func (m *Manager) DialContext(
 	if !execCfg.Persist {
 		return m.dialOnce(ctx, execCfg, network, addr)
 	}
-	return m.dialCached(ctx, execCfg, network, addr)
+
+	return m.pool.Dial(ctx, execCfg.key,
+		func(ctx context.Context) (*session, error) {
+			return m.opener.open(ctx, execCfg, true)
+		},
+		func(_ context.Context, ses *session) (net.Conn, error) {
+			return ses.dial(network, addr)
+		},
+	)
 }
 
 func (m *Manager) ready() error {
-	if m == nil || m.cache == nil || !m.opener.ready() {
+	if m == nil || m.pool == nil || !m.opener.ready() {
 		return errManagerUnavailable
 	}
-	if m.cache.isClosed() {
+	if m.pool.Closed() {
 		return errManagerClosed
 	}
 	return nil
@@ -70,17 +87,9 @@ func (m *Manager) dialOnce(
 		return nil, err
 	}
 
-	if m.cache.isClosed() {
-		return nil, joinCloseErr(errManagerClosed, ses.close())
+	if m.pool.Closed() {
+		return nil, joinCloseErr(errManagerClosed, ses.Close())
 	}
 
 	return ses.dialOnce(network, addr)
-}
-
-func (m *Manager) dialCached(
-	ctx context.Context,
-	cfg execConfig,
-	network, addr string,
-) (net.Conn, error) {
-	return m.cache.dial(ctx, cfg, m.opener, network, addr)
 }

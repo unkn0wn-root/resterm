@@ -22,13 +22,12 @@ func Fallback(val, def string) string {
 	return val
 }
 
-func ParsePort(label string, target *int, rawOut *string, raw string) error {
+func ParsePort(label string, target *int, raw string) error {
 	val := strings.TrimSpace(raw)
 	if val == "" {
 		return nil
 	}
 
-	*rawOut = val
 	n, err := strconv.Atoi(val)
 	if err != nil || n <= 0 || n > 65535 {
 		return fmt.Errorf("invalid %s port: %q", label, val)
@@ -37,18 +36,12 @@ func ParsePort(label string, target *int, rawOut *string, raw string) error {
 	return nil
 }
 
-func ParseDuration(
-	label string,
-	target *time.Duration,
-	rawOut *string,
-	raw string,
-) error {
+func ParseDuration(label string, target *time.Duration, raw string) error {
 	val := strings.TrimSpace(raw)
 	if val == "" {
 		return nil
 	}
 
-	*rawOut = val
 	dur, ok := duration.Parse(val)
 	if !ok || dur < 0 {
 		return fmt.Errorf("invalid %s duration: %q", label, val)
@@ -57,13 +50,12 @@ func ParseDuration(
 	return nil
 }
 
-func ParseRetries(label string, target *int, rawOut *string, raw string) error {
+func ParseRetries(label string, target *int, raw string) error {
 	val := strings.TrimSpace(raw)
 	if val == "" {
 		return nil
 	}
 
-	*rawOut = val
 	n, err := strconv.Atoi(val)
 	if err != nil || n < 0 {
 		return fmt.Errorf("invalid %s retries: %q", label, val)

@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -159,7 +160,7 @@ func TestResolveInlineOverridesOptionalFields(t *testing.T) {
 	if cfg.Agent || cfg.Strict || !cfg.Persist {
 		t.Fatalf("inline bool overrides failed: %+v", cfg)
 	}
-	if cfg.TimeoutRaw != "5s" || cfg.KeepAliveRaw != "2s" || cfg.Retries != 4 {
+	if cfg.Timeout != 5*time.Second || cfg.KeepAlive != 2*time.Second || cfg.Retries != 4 {
 		t.Fatalf("inline option overrides failed: %+v", cfg)
 	}
 }

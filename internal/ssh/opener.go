@@ -2,7 +2,6 @@ package ssh
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/tunnel"
@@ -30,39 +29,22 @@ func (o sessionOpener) open(
 	cfg execConfig,
 	cached bool,
 ) (*session, error) {
-	attempts := max(cfg.Retries+1, 1)
-
 	delay := o.retryDelay
 	if delay <= 0 {
 		delay = dialRetryDelay
 	}
 
-	var lastErr error
-	for i := range attempts {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		cli, err := o.dial(ctx, cfg)
-		if err == nil {
-			ka := time.Duration(0)
-			if cached {
-				ka = cfg.KeepAlive
-			}
-			return newSession(cli, ka), nil
-		}
-
-		lastErr = err
-		if i+1 < attempts {
-			if err := tunnel.WaitWithContext(ctx, delay); err != nil {
-				return nil, err
-			}
-		}
+	cli, err := tunnel.OpenRetry(ctx, cfg.Retries+1, delay,
+		func(ctx context.Context) (sshClient, error) {
+			return o.dial(ctx, cfg)
+		})
+	if err != nil {
+		return nil, err
 	}
-	if lastErr == nil {
-		lastErr = errors.New("ssh dial failed")
+
+	ka := time.Duration(0)
+	if cached {
+		ka = cfg.KeepAlive
 	}
-	return nil, lastErr
+	return newSession(cli, ka), nil
 }

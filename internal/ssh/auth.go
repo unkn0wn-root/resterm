@@ -12,13 +12,16 @@ import (
 )
 
 var defaultKeyPaths = func() []string {
-	home := userHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
 	return []string{
 		filepath.Join(home, ".ssh", "id_ed25519"),
 		filepath.Join(home, ".ssh", "id_rsa"),
 		filepath.Join(home, ".ssh", "id_ecdsa"),
 	}
-}()
+}
 
 type authSpec struct {
 	keyPath string
@@ -117,7 +120,7 @@ func parseKey(data []byte, pass string) (xssh.Signer, error) {
 }
 
 func loadDefaultKey(pass string) xssh.Signer {
-	for _, p := range defaultKeyPaths {
+	for _, p := range defaultKeyPaths() {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			continue
@@ -129,12 +132,4 @@ func loadDefaultKey(pass string) xssh.Signer {
 		return signer
 	}
 	return nil
-}
-
-func userHomeDir() string {
-	dir, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return dir
 }

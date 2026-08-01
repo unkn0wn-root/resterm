@@ -11,7 +11,7 @@ import (
 )
 
 func dialSSH(ctx context.Context, execCfg execConfig) (sshClient, error) {
-	addr := execCfg.ep.addr()
+	addr := execCfg.addr()
 	base := &net.Dialer{Timeout: execCfg.Timeout}
 
 	netConn, err := base.DialContext(ctx, "tcp", addr)
@@ -46,8 +46,8 @@ func dialSSH(ctx context.Context, execCfg execConfig) (sshClient, error) {
 	return wrapClient(xssh.NewClient(conn, chans, reqs), closeAuth), nil
 }
 
-func (ep endpoint) addr() string {
-	return net.JoinHostPort(ep.host, strconv.Itoa(ep.port))
+func (cfg execConfig) addr() string {
+	return net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 }
 
 func closeAuthConn(conn net.Conn, closeAuth func() error) error {

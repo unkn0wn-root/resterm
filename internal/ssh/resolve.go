@@ -21,27 +21,9 @@ func Resolve(
 		return nil, nil
 	}
 
-	var merged restfile.SSHProfile
-	var useFound bool
-
-	use := strings.TrimSpace(spec.Use)
-	if use != "" {
-		if prof, ok := lookupProfile(fileProfiles, use, directive.ScopeFile); ok {
-			merged = *prof
-			useFound = true
-		} else if prof, ok := lookupProfile(globalProfiles, use, directive.ScopeGlobal); ok {
-			merged = *prof
-			useFound = true
-		}
-		merged.Name = use
-	}
-
-	if use != "" && !useFound {
-		return nil, fmt.Errorf("ssh profile %q not found", use)
-	}
-
-	if spec.Inline != nil {
-		merged = mergeProfile(merged, *spec.Inline)
+	merged, err := resolveProfileSpec(spec, fileProfiles, globalProfiles)
+	if err != nil {
+		return nil, err
 	}
 
 	expanded, err := expandProfile(merged, resolver)
@@ -57,23 +39,59 @@ func Resolve(
 	return &cfg, nil
 }
 
-func lookupProfile(
-	profiles []restfile.SSHProfile,
+func resolveProfileSpec(
+	spec *restfile.SSHSpec,
+	fileProfiles []restfile.SSHProfile,
+	globalProfiles []restfile.SSHProfile,
+) (restfile.SSHProfile, error) {
+	use := strings.TrimSpace(spec.Use)
+	if use == "" {
+		if spec.Inline == nil {
+			return restfile.SSHProfile{}, nil
+		}
+		return *spec.Inline, nil
+	}
+
+	base, ok := resolveNamedProfile(fileProfiles, globalProfiles, use)
+	if !ok {
+		return restfile.SSHProfile{}, fmt.Errorf("ssh profile %q not found", use)
+	}
+	base.Name = use
+
+	if spec.Inline == nil {
+		return base, nil
+	}
+	return mergeProfile(base, *spec.Inline), nil
+}
+
+func resolveNamedProfile(
+	fileProfiles []restfile.SSHProfile,
+	globalProfiles []restfile.SSHProfile,
 	name string,
-	scope directive.Scope,
-) (*restfile.SSHProfile, bool) {
+) (restfile.SSHProfile, bool) {
 	sf := func(p restfile.SSHProfile) directive.Scope { return p.Scope }
 	nf := func(p restfile.SSHProfile) string { return p.Name }
-	return restfile.LookupNamedScoped(profiles, name, scope, sf, nf)
+	p, ok := restfile.ResolveNamedScoped(
+		fileProfiles,
+		globalProfiles,
+		name,
+		directive.ScopeFile,
+		directive.ScopeGlobal,
+		sf,
+		nf,
+	)
+	if !ok {
+		return restfile.SSHProfile{}, false
+	}
+	return *p, true
 }
 
 func mergeProfile(base restfile.SSHProfile, override restfile.SSHProfile) restfile.SSHProfile {
 	out := base
 	connprofile.SetIf(&out.Name, override.Name)
 	connprofile.SetIf(&out.Host, override.Host)
-	connprofile.SetIf(&out.PortStr, override.PortStr)
-
-	if override.PortStr != "" {
+	if port := strings.TrimSpace(override.PortStr); port != "" {
+		out.PortStr = port
 		out.Port = override.Port
 	}
 
