@@ -1,10 +1,13 @@
 package headless
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -596,4 +599,72 @@ func testDocumentRequest(url string) (*restfile.Document, *restfile.Request) {
 		Path:     "smoke.http",
 		Requests: []*restfile.Request{req},
 	}, req
+}
+
+func TestEngineExpandsDeclaredVariableTemplates(t *testing.T) {
+	type observedRequest struct {
+		body  string
+		trace string
+		err   error
+	}
+	observed := make(chan observedRequest, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			observed <- observedRequest{err: fmt.Errorf("read request body: %w", err)}
+			return
+		}
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			observed <- observedRequest{err: fmt.Errorf("write response: %w", err)}
+			return
+		}
+		observed <- observedRequest{body: string(data), trace: r.Header.Get("X-Trace-Id")}
+	}))
+	defer srv.Close()
+
+	src := strings.Join([]string{
+		"# @name nested",
+		"# @request trace.id {{$uuid}}",
+		"POST " + srv.URL,
+		"X-Trace-Id: {{trace.id}}",
+		"Content-Type: application/json",
+		"",
+		`{"request_id": "{{trace.id}}", "inline": "{{$uuid}}"}`,
+		"",
+	}, "\n")
+	doc := parser.Parse("nested.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], testSelection(""))
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if res.Err != nil {
+		t.Fatalf("unexpected request error: %v", res.Err)
+	}
+	got := <-observed
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+
+	uuidRe := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	if !uuidRe.MatchString(got.trace) {
+		t.Fatalf("expected header to carry expanded uuid, got %q", got.trace)
+	}
+
+	var payload struct {
+		RequestID string `json:"request_id"`
+		Inline    string `json:"inline"`
+	}
+	if err := json.Unmarshal([]byte(got.body), &payload); err != nil {
+		t.Fatalf("parse sent body %q: %v", got.body, err)
+	}
+	if payload.RequestID != got.trace {
+		t.Fatalf("expected body and header to share one value, got %q vs %q", payload.RequestID, got.trace)
+	}
+	if !uuidRe.MatchString(payload.Inline) || payload.Inline == got.trace {
+		t.Fatalf("expected inline dynamic to stay fresh, got %q vs %q", payload.Inline, got.trace)
+	}
 }

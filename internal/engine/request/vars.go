@@ -215,7 +215,7 @@ func (e *Engine) providers(
 		for _, c := range doc.Constants {
 			vals[c.Name] = c.Value
 		}
-		ps = append(ps, vars.NewMapProvider("const", vals))
+		ps = append(ps, vars.NewTemplateProvider("const", vals))
 	}
 	for _, extra := range extras {
 		if len(extra) > 0 {
@@ -231,7 +231,7 @@ func (e *Engine) providers(
 			vals[v.Name] = v.Value
 		}
 		if len(vals) > 0 {
-			ps = append(ps, vars.NewMapProvider("request", vals))
+			ps = append(ps, vars.NewTemplateProvider("request", vals))
 		}
 	}
 	if vals := globalValueMap(globs); len(vals) > 0 {
@@ -246,8 +246,13 @@ func (e *Engine) providers(
 			vals[v.Name] = v.Value
 		}
 		if len(vals) > 0 {
-			ps = append(ps, vars.NewMapProvider("document-global", vals))
+			ps = append(ps, vars.NewTemplateProvider("document-global", vals))
 		}
+	}
+	rv := make(map[string]string)
+	e.mergeFileRuntimeVars(rv, doc, env, sec)
+	if len(rv) > 0 {
+		ps = append(ps, vars.NewMapProvider("file", rv))
 	}
 	fv := make(map[string]string)
 	if doc != nil {
@@ -258,9 +263,8 @@ func (e *Engine) providers(
 			fv[v.Name] = v.Value
 		}
 	}
-	e.mergeFileRuntimeVars(fv, doc, env, sec)
 	if len(fv) > 0 {
-		ps = append(ps, vars.NewMapProvider("file", fv))
+		ps = append(ps, vars.NewTemplateProvider("file", fv))
 	}
 	if values := env.Values(); len(values) > 0 {
 		ps = append(ps, vars.NewMapProvider("environment", values))

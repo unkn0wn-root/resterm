@@ -1081,6 +1081,8 @@ Accept: application/json
 
 Values are taken verbatim which means that quotes are not special, so `# @file greeting "hello world"` stores the quotes as part of the value. If you need spaces, just write them directly: `# @file greeting hello world`.
 
+Declared values may reference other variables and dynamic helpers, so `# @request trace.id {{$uuid}}` works as expected. Nested references expand when the request runs, and a declared dynamic such as `{{$uuid}}` is generated once per execution, so every reference to `{{trace.id}}` in the same request sees the same value. Values captured at runtime (captures, script `vars.set`) are data and are never re-expanded. Self- or mutually-referencing variables fail the request with a `variable cycle` error that lists the reference chain.
+
 You can also use shorthand assignments outside comment blocks: `@requestId = {{$uuid}}`. Shorthand defaults to request scope while you're inside a request block and to file scope elsewhere; add a prefix to override (`@global api.token abc`, `@request trace.id {{$uuid}}`, or `@file base.url https://example.com`).
 
 Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stored values in summaries; this works for both comment directives and shorthand lines (`@global-secret token xyz`, `@file-secret base.url ...`, `@request-secret trace.id ...`).
