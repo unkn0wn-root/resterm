@@ -53,16 +53,21 @@ func CompileTemplate(input string) Template {
 // unresolvable or blank placeholder stays literal and only the first error
 // is reported.
 func (t Template) Render(r *Resolver) (string, error) {
-	return t.render(r, r.exprPos, true, true)
+	return t.render(r, r.exprPos, true, true, nil)
 }
 
-func (t Template) render(r *Resolver, pos ExprPos, allowDynamic, allowExpr bool) (string, error) {
+func (t Template) render(
+	r *Resolver,
+	pos ExprPos,
+	allowDynamic, allowExpr bool,
+	st *expandState,
+) (string, error) {
 	var firstErr error
 	out := t.replace(func(match, name string) string {
 		if name == "" {
 			return match
 		}
-		value, err := r.resolveName(name, pos, allowDynamic, allowExpr)
+		value, err := r.resolveName(name, pos, allowDynamic, allowExpr, st)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err

@@ -2,12 +2,14 @@ package request
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestResolveHTTPOptionsFallbackEnvEnable(t *testing.T) {
@@ -141,5 +143,54 @@ func TestRunRTSApplyUsesDocumentGlobalPatchProfiles(t *testing.T) {
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer abc" {
 		t.Fatalf("runRTSApply() authorization = %q, want %q", got, "Bearer abc")
+	}
+}
+
+func TestProvidersExpandDeclaredVariableTemplates(t *testing.T) {
+	t.Parallel()
+
+	e := New(engcfg.Config{}, nil)
+	doc := &restfile.Document{
+		Variables: []restfile.Variable{{Name: "file.greeting", Value: "hello {{name}}"}},
+	}
+	req := &restfile.Request{
+		Variables: []restfile.Variable{{Name: "trace.id", Value: "{{$uuid}}"}},
+	}
+	globs := map[string]vars.GlobalMutation{
+		"captured": {Name: "captured", Value: "{{file.greeting}}"},
+	}
+	res := vars.NewResolver(
+		e.providers(doc, req, testEnv("dev"), globs, keepSecrets, map[string]string{"name": "resterm"})...,
+	)
+
+	greeting, err := res.ExpandTemplates("{{file.greeting}}")
+	if err != nil {
+		t.Fatalf("expand err: %v", err)
+	}
+	if greeting != "hello resterm" {
+		t.Fatalf("expected nested file variable expansion, got %q", greeting)
+	}
+
+	first, err := res.ExpandTemplates("{{trace.id}}")
+	if err != nil {
+		t.Fatalf("expand err: %v", err)
+	}
+	second, err := res.ExpandTemplates("{{trace.id}}")
+	if err != nil {
+		t.Fatalf("expand err: %v", err)
+	}
+	if first == "" || first != second {
+		t.Fatalf("expected stable request variable value, got %q vs %q", first, second)
+	}
+	if strings.Contains(first, "{{") {
+		t.Fatalf("expected dynamic to expand, got %q", first)
+	}
+
+	captured, err := res.ExpandTemplates("{{captured}}")
+	if err != nil {
+		t.Fatalf("expand err: %v", err)
+	}
+	if captured != "{{file.greeting}}" {
+		t.Fatalf("expected runtime global to stay verbatim, got %q", captured)
 	}
 }
