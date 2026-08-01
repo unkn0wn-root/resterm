@@ -148,9 +148,14 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 	model.focus = focusEditor
 
 	out := ansi.Strip(model.renderCommandBar())
+	for _, unexpected := range []string{"^N New", "^S Save"} {
+		if strings.Contains(out, unexpected) {
+			t.Fatalf("did not expect pinned hint %q, got %q", unexpected, out)
+		}
+	}
 	prev := -1
 	for _, want := range []string{
-		"Tab Focus", "^N New", "^S Save", "^Q Quit", ": Cmd", "? Help",
+		"Tab Focus", "^Q Quit", ": Cmd", "? Help",
 	} {
 		idx := strings.Index(out, want)
 		if idx < 0 {
@@ -194,7 +199,7 @@ func TestRenderCommandBarPinnedHintsHaveNoSegmentBackground(t *testing.T) {
 	)[0]
 	assertCommandHintBackground(t, plain, backgrounds, "i Insert", contextBackground)
 	for _, hint := range []string{
-		"Tab Focus", "^N New", "^S Save", "^Q Quit", ": Cmd", "? Help",
+		"Tab Focus", "^Q Quit", ": Cmd", "? Help",
 	} {
 		assertCommandHintBackground(t, plain, backgrounds, hint, nil)
 	}
