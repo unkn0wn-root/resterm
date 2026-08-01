@@ -82,7 +82,7 @@ func startSession(ctx context.Context, cfg execConfig, load loadSettings) (*sess
 	select {
 	case <-readyCh:
 	case <-ctx.Done():
-		return nil, joinCleanupErr(ctx.Err(), ses.close())
+		return nil, joinCleanupErr(ctx.Err(), ses.Close())
 	case <-ses.doneCh:
 		if err := ses.errValue(); err != nil {
 			return nil, err
@@ -93,11 +93,11 @@ func startSession(ctx context.Context, cfg execConfig, load loadSettings) (*sess
 	ports, err := pf.GetPorts()
 	if err != nil {
 		baseErr := fmt.Errorf("k8s: resolve forwarded ports: %w", err)
-		return nil, joinCleanupErr(baseErr, ses.close())
+		return nil, joinCleanupErr(baseErr, ses.Close())
 	}
 	if len(ports) == 0 {
 		baseErr := errors.New("k8s: port-forward did not expose local ports")
-		return nil, joinCleanupErr(baseErr, ses.close())
+		return nil, joinCleanupErr(baseErr, ses.Close())
 	}
 
 	ses.localAddr = net.JoinHostPort(

@@ -27,15 +27,11 @@ type (
 )
 
 type Manager struct {
-	mu sync.Mutex
+	mu  sync.Mutex
+	opt LoadOptions
 
-	cache  *sessionCache
-	closed bool
+	pool *tunnel.Pool[sessionKey, *session]
 
-	ttl time.Duration
-	now func() time.Time
-
-	opt        LoadOptions
 	start      startFn
 	dial       dialFn
 	retryDelay time.Duration
@@ -43,13 +39,15 @@ type Manager struct {
 
 func NewManager() *Manager {
 	return &Manager{
-		cache:      newSessionCache(),
-		ttl:        defaultTTL,
-		now:        time.Now,
+		pool:       newSessionPool(defaultTTL, nil),
 		start:      startSession,
 		dial:       newLocalDialer(),
 		retryDelay: defaultDialRetryDelay,
 	}
+}
+
+func newSessionPool(ttl time.Duration, now func() time.Time) *tunnel.Pool[sessionKey, *session] {
+	return tunnel.NewPool[sessionKey, *session](ttl, now, errManagerClosed)
 }
 
 func newLocalDialer() dialFn {
@@ -68,31 +66,10 @@ func (m *Manager) SetLoadOptions(opt LoadOptions) {
 }
 
 func (m *Manager) Close() error {
-	if m == nil {
+	if m == nil || m.pool == nil {
 		return nil
 	}
-
-	m.mu.Lock()
-	if m.closed {
-		m.mu.Unlock()
-		return nil
-	}
-	m.closed = true
-
-	entries, inflight := m.ensureCacheLocked().reset()
-	m.mu.Unlock()
-
-	for _, ch := range inflight {
-		close(ch)
-	}
-
-	var errs []error
-	for _, ent := range entries {
-		if err := ent.close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+	return m.pool.Close()
 }
 
 func (m *Manager) DialContext(
@@ -117,20 +94,23 @@ func (m *Manager) DialContext(
 	if !execCfg.Persist {
 		return m.dialOnce(ctx, execCfg, load, network)
 	}
-	return m.dialCached(ctx, execCfg, load, network)
+
+	return m.pool.Dial(ctx, sessionKeyFor(execCfg, load),
+		func(ctx context.Context) (*session, error) {
+			return m.connect(ctx, execCfg, load)
+		},
+		func(ctx context.Context, ses *session) (net.Conn, error) {
+			ses.bindRequestDiag(ctx)
+			return m.dialSession(ctx, ses, network)
+		},
+	)
 }
 
 func (m *Manager) ready() error {
-	if m == nil {
+	if m == nil || m.pool == nil || m.start == nil || m.dial == nil {
 		return errManagerUnavailable
 	}
-	if m.start == nil || m.dial == nil {
-		return errManagerUnavailable
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
+	if m.pool.Closed() {
 		return errManagerClosed
 	}
 	return nil
@@ -146,16 +126,16 @@ func (m *Manager) dialOnce(
 	if err != nil {
 		return nil, err
 	}
-	if err = m.ready(); err != nil {
-		return nil, joinCleanupErr(err, ses.close())
+	if m.pool.Closed() {
+		return nil, joinCleanupErr(errManagerClosed, ses.Close())
 	}
 
 	ses.bindRequestDiag(ctx)
 	conn, err := m.dialSession(ctx, ses, network)
 	if err != nil {
-		return nil, joinCleanupErr(err, ses.close())
+		return nil, joinCleanupErr(err, ses.Close())
 	}
-	return tunnel.WrapConn(conn, ses.close), nil
+	return tunnel.WrapConn(conn, ses.Close), nil
 }
 
 func (m *Manager) connect(
@@ -163,42 +143,15 @@ func (m *Manager) connect(
 	cfg execConfig,
 	load loadSettings,
 ) (*session, error) {
-	attempts := max(cfg.Retries+1, 1)
-
-	retryDelay := m.retryDelay
-	if retryDelay <= 0 {
-		retryDelay = defaultDialRetryDelay
+	delay := m.retryDelay
+	if delay <= 0 {
+		delay = defaultDialRetryDelay
 	}
 
-	var lastErr error
-	for i := range attempts {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		ses, err := m.start(ctx, cfg, load)
-		if err == nil {
-			return ses, nil
-		}
-		lastErr = err
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-		if i+1 < attempts {
-			if err := tunnel.WaitWithContext(ctx, retryDelay); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if lastErr == nil {
-		lastErr = errors.New("k8s: port-forward start failed")
-	}
-	return nil, lastErr
+	return tunnel.OpenRetry(ctx, cfg.Retries+1, delay,
+		func(ctx context.Context) (*session, error) {
+			return m.start(ctx, cfg, load)
+		})
 }
 
 func (m *Manager) dialSession(ctx context.Context, ses *session, network string) (net.Conn, error) {
@@ -217,7 +170,5 @@ func (m *Manager) loadSettings() (loadSettings, error) {
 	m.mu.Lock()
 	opt := m.opt
 	m.mu.Unlock()
-
-	opt.ExecAllowlist = append([]string(nil), opt.ExecAllowlist...)
 	return normalizeLoadOptions(opt)
 }

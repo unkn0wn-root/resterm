@@ -1,10 +1,5 @@
 package k8s
 
-type Plan struct {
-	Manager *Manager
-	Config  *Config
-}
+import "github.com/unkn0wn-root/resterm/internal/tunnel"
 
-func (p *Plan) Active() bool {
-	return p != nil && p.Manager != nil && p.Config != nil
-}
+type Plan = tunnel.Plan[Manager, Config]

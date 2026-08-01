@@ -29,22 +29,11 @@ type Config struct {
 	Timeout    time.Duration
 	KeepAlive  time.Duration
 	Retries    int
-
-	PortRaw      string
-	TimeoutRaw   string
-	KeepAliveRaw string
-	RetriesRaw   string
-	Label        string
-}
-
-type endpoint struct {
-	host string
-	port int
+	Label      string
 }
 
 type execConfig struct {
 	Config
-	ep   endpoint
 	auth authSpec
 	hk   hostKeySpec
 	key  sessionKey
@@ -57,8 +46,6 @@ func NormalizeProfile(p restfile.SSHProfile) (Config, error) {
 		return Config{}, errors.New("ssh host is required")
 	}
 
-	applyAuth(&cfg, p)
-
 	if err := resolvePaths(&cfg, p); err != nil {
 		return Config{}, err
 	}
@@ -70,61 +57,32 @@ func NormalizeProfile(p restfile.SSHProfile) (Config, error) {
 }
 
 func baseCfg(p restfile.SSHProfile) Config {
-	cfg := Config{
-		Name:         p.Name,
-		Host:         p.Host,
-		Port:         defaultPort,
-		Agent:        defaultOpt(p.Agent, true),
-		KnownHosts:   p.KnownHosts,
-		Strict:       defaultOpt(p.Strict, true),
-		Persist:      p.Persist.Set && p.Persist.Val,
-		Timeout:      defaultTimeout,
-		KeepAlive:    0,
-		Retries:      0,
-		PortRaw:      p.PortStr,
-		TimeoutRaw:   p.TimeoutStr,
-		KeepAliveRaw: p.KeepAliveStr,
-		RetriesRaw:   p.RetriesStr,
+	return Config{
+		Name:       strings.TrimSpace(p.Name),
+		Host:       strings.TrimSpace(p.Host),
+		Port:       defaultPort,
+		User:       strings.TrimSpace(p.User),
+		Pass:       p.Pass,
+		KeyPass:    p.KeyPass,
+		Agent:      defaultOpt(p.Agent, true),
+		KnownHosts: strings.TrimSpace(p.KnownHosts),
+		Strict:     defaultOpt(p.Strict, true),
+		Persist:    p.Persist.Set && p.Persist.Val,
+		Timeout:    defaultTimeout,
 	}
-	trimConfigStrings(&cfg)
-	return cfg
-}
-
-func applyAuth(cfg *Config, p restfile.SSHProfile) {
-	trimmedAllowEmpty(&cfg.User, p.User)
-	rawIfSet(&cfg.Pass, p.Pass)
-	rawIfSet(&cfg.KeyPass, p.KeyPass)
 }
 
 func parseCfg(cfg *Config, p restfile.SSHProfile) error {
-	if err := connprofile.ParsePort("ssh", &cfg.Port, &cfg.PortRaw, p.PortStr); err != nil {
+	if err := connprofile.ParsePort("ssh", &cfg.Port, p.PortStr); err != nil {
 		return err
 	}
-	if err := connprofile.ParseDuration(
-		"ssh",
-		&cfg.Timeout,
-		&cfg.TimeoutRaw,
-		p.TimeoutStr,
-	); err != nil {
+	if err := connprofile.ParseDuration("ssh", &cfg.Timeout, p.TimeoutStr); err != nil {
 		return err
 	}
-	if err := connprofile.ParseDuration(
-		"ssh",
-		&cfg.KeepAlive,
-		&cfg.KeepAliveRaw,
-		p.KeepAliveStr,
-	); err != nil {
+	if err := connprofile.ParseDuration("ssh", &cfg.KeepAlive, p.KeepAliveStr); err != nil {
 		return err
 	}
-	if err := connprofile.ParseRetries(
-		"ssh",
-		&cfg.Retries,
-		&cfg.RetriesRaw,
-		p.RetriesStr,
-	); err != nil {
-		return err
-	}
-	return nil
+	return connprofile.ParseRetries("ssh", &cfg.Retries, p.RetriesStr)
 }
 
 func defaultOpt(opt restfile.Opt[bool], def bool) bool {
@@ -159,56 +117,31 @@ func prepareExecConfig(cfg Config) (execConfig, error) {
 		return execConfig{}, errors.New("ssh retries out of range")
 	}
 
-	sp := authSpecFor(cfg)
 	return execConfig{
 		Config: cfg,
-		ep: endpoint{
-			host: cfg.Host,
-			port: cfg.Port,
-		},
-		auth: sp,
-		hk:   hostKeySpecFor(cfg),
-		key:  sessionKeyFor(cfg),
+		auth:   authSpecFor(cfg),
+		hk:     hostKeySpecFor(cfg),
+		key:    sessionKeyFor(cfg),
 	}, nil
 }
 
 func (cfg Config) normalize() Config {
-	trimConfigStrings(&cfg)
+	trimStrings(&cfg.Name, &cfg.Host, &cfg.User, &cfg.KeyPath, &cfg.KnownHosts, &cfg.Label)
 	defaultZero(&cfg.Name, connprofile.DefaultName)
 	defaultZero(&cfg.Port, defaultPort)
 	defaultZero(&cfg.Timeout, defaultTimeout)
 	return cfg
 }
 
-func trimConfigStrings(cfg *Config) {
-	if cfg == nil {
-		return
-	}
-	trimStrings(
-		&cfg.Name,
-		&cfg.Host,
-		&cfg.PortRaw,
-		&cfg.User,
-		&cfg.KeyPath,
-		&cfg.KnownHosts,
-		&cfg.TimeoutRaw,
-		&cfg.KeepAliveRaw,
-		&cfg.RetriesRaw,
-		&cfg.Label,
-	)
-}
-
 func trimStrings(fields ...*string) {
 	for _, f := range fields {
-		if f != nil {
-			*f = strings.TrimSpace(*f)
-		}
+		*f = strings.TrimSpace(*f)
 	}
 }
 
 func defaultZero[T comparable](v *T, def T) {
 	var zero T
-	if v != nil && *v == zero {
+	if *v == zero {
 		*v = def
 	}
 }
@@ -237,18 +170,4 @@ func resolvePaths(cfg *Config, p restfile.SSHProfile) error {
 	}
 	cfg.KnownHosts = kh
 	return nil
-}
-
-func trimmedAllowEmpty(target *string, val string) {
-	if val == "" {
-		return
-	}
-	*target = strings.TrimSpace(val)
-}
-
-func rawIfSet(target *string, val string) {
-	if val == "" {
-		return
-	}
-	*target = val
 }

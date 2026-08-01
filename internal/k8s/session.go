@@ -14,12 +14,12 @@ type session struct {
 	stopCh    chan struct{}
 	doneCh    chan struct{}
 
-	mu       sync.RWMutex
-	err      error
-	diag     *diagCollector
-	ended    bool
-	closed   sync.Once
-	finished sync.Once
+	mu        sync.RWMutex
+	err       error
+	diag      *diagCollector
+	ended     bool
+	closeOnce sync.Once
+	finished  sync.Once
 }
 
 func newSession(stopCh chan struct{}) *session {
@@ -29,10 +29,7 @@ func newSession(stopCh chan struct{}) *session {
 	}
 }
 
-func (s *session) alive() bool {
-	if s == nil || s.doneCh == nil {
-		return false
-	}
+func (s *session) Alive() bool {
 	select {
 	case <-s.doneCh:
 		return false
@@ -42,17 +39,13 @@ func (s *session) alive() bool {
 }
 
 func (s *session) localAddress() (string, error) {
-	if s == nil || s.localAddr == "" {
+	if s.localAddr == "" {
 		return "", errors.New("k8s: local forward address unavailable")
 	}
 	return s.localAddr, nil
 }
 
 func (s *session) finish(err error) {
-	if s == nil {
-		return
-	}
-
 	s.mu.Lock()
 	s.err = err
 	s.ended = true
@@ -60,49 +53,34 @@ func (s *session) finish(err error) {
 	s.mu.Unlock()
 
 	s.finished.Do(func() {
-		if s.doneCh != nil {
-			close(s.doneCh)
-		}
+		close(s.doneCh)
 	})
 	if diag != nil {
 		diag.close()
 	}
 }
 
-func (s *session) close() error {
-	if s == nil {
-		return nil
-	}
-
-	s.closed.Do(func() {
-		if s.stopCh != nil {
-			close(s.stopCh)
-		}
+func (s *session) Close() error {
+	s.closeOnce.Do(func() {
+		close(s.stopCh)
 	})
 
-	var errs []error
-	if s.doneCh != nil {
-		select {
-		case <-s.doneCh:
-		case <-time.After(closeWaitWindow):
-			errs = append(errs, errors.New("k8s: timeout closing port-forward"))
-		}
+	select {
+	case <-s.doneCh:
+		return nil
+	case <-time.After(closeWaitWindow):
+		return errors.New("k8s: timeout closing port-forward")
 	}
-	return errors.Join(errs...)
 }
 
 func (s *session) errValue() error {
-	if s == nil {
-		return nil
-	}
-
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.err
 }
 
 func (s *session) setDiag(collector *diagCollector) {
-	if s == nil || collector == nil {
+	if collector == nil {
 		return
 	}
 
@@ -121,10 +99,6 @@ func (s *session) setDiag(collector *diagCollector) {
 }
 
 func (s *session) bindRequestDiag(ctx context.Context) {
-	if s == nil {
-		return
-	}
-
 	s.mu.RLock()
 	diag := s.diag
 	s.mu.RUnlock()

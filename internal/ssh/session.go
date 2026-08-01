@@ -23,9 +23,9 @@ type session struct {
 	stopCh chan struct{}
 	doneCh chan struct{}
 
-	mu     sync.RWMutex
-	err    error
-	closed sync.Once
+	mu        sync.RWMutex
+	err       error
+	closeOnce sync.Once
 }
 
 func newSession(cli sshClient, keepAlive time.Duration) *session {
@@ -41,10 +41,7 @@ func newSession(cli sshClient, keepAlive time.Duration) *session {
 }
 
 func (s *session) dial(network, addr string) (net.Conn, error) {
-	if s == nil || !s.alive() {
-		return nil, errSessionClosed
-	}
-	if s.cli == nil {
+	if !s.Alive() {
 		return nil, errSessionClosed
 	}
 	return s.cli.Dial(network, addr)
@@ -53,15 +50,12 @@ func (s *session) dial(network, addr string) (net.Conn, error) {
 func (s *session) dialOnce(network, addr string) (net.Conn, error) {
 	conn, err := s.dial(network, addr)
 	if err != nil {
-		return nil, joinCloseErr(err, s.close())
+		return nil, joinCloseErr(err, s.Close())
 	}
-	return tunnel.WrapConn(conn, s.close), nil
+	return tunnel.WrapConn(conn, s.Close), nil
 }
 
-func (s *session) alive() bool {
-	if s == nil || s.doneCh == nil {
-		return false
-	}
+func (s *session) Alive() bool {
 	select {
 	case <-s.doneCh:
 		return false
@@ -70,7 +64,7 @@ func (s *session) alive() bool {
 	}
 }
 
-func (s *session) close() error {
+func (s *session) Close() error {
 	s.shutdown(nil)
 	return s.errValue()
 }
@@ -80,25 +74,13 @@ func (s *session) fail(err error) {
 }
 
 func (s *session) shutdown(reason error) {
-	if s == nil {
-		return
-	}
-
-	s.closed.Do(func() {
+	s.closeOnce.Do(func() {
 		close(s.stopCh)
-		var closeErr error
-		if s.cli != nil {
-			closeErr = s.cli.Close()
-		}
-		s.finish(joinCloseErr(reason, closeErr))
+		s.finish(joinCloseErr(reason, s.cli.Close()))
 	})
 }
 
 func (s *session) finish(err error) {
-	if s == nil {
-		return
-	}
-
 	s.mu.Lock()
 	if s.err == nil {
 		s.err = err
@@ -109,9 +91,6 @@ func (s *session) finish(err error) {
 }
 
 func (s *session) errValue() error {
-	if s == nil {
-		return nil
-	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.err

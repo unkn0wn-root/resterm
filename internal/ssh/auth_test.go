@@ -10,7 +10,8 @@ import (
 func withMissingDefaultKeys(t *testing.T) {
 	t.Helper()
 	old := defaultKeyPaths
-	defaultKeyPaths = []string{filepath.Join(t.TempDir(), "missing")}
+	missing := filepath.Join(t.TempDir(), "missing")
+	defaultKeyPaths = func() []string { return []string{missing} }
 	t.Cleanup(func() {
 		defaultKeyPaths = old
 	})
