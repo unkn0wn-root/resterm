@@ -148,10 +148,9 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 	model.focus = focusEditor
 
 	out := ansi.Strip(model.renderCommandBar())
-	for _, unexpected := range []string{"^N New", "^S Save"} {
-		if strings.Contains(out, unexpected) {
-			t.Fatalf("did not expect pinned hint %q, got %q", unexpected, out)
-		}
+	// ^N New belongs to the files context, so it must not leak into the editor bar.
+	if strings.Contains(out, "^N New") {
+		t.Fatalf("did not expect files hint %q, got %q", "^N New", out)
 	}
 	prev := -1
 	for _, want := range []string{
@@ -237,11 +236,18 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 		absent string
 	}{
 		{
+			name: "files",
+			setup: func(m *Model) {
+				m.focus = focusFile
+			},
+			want: []string{"Enter Open", "Space Expand", "/ Filter", "^N New", "^O Open", "^T Temp"},
+		},
+		{
 			name: "requests",
 			setup: func(m *Model) {
 				m.focus = focusRequests
 			},
-			want: []string{"Enter Run", "m Method", "t Tags", "l Jump"},
+			want: []string{"Enter Run", "m Method", "t Tags", "l Jump", "g , Details"},
 		},
 		{
 			name: "editor normal",
@@ -249,7 +255,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusEditor
 				m.editorInsertMode = false
 			},
-			want:   []string{"i Insert", "Enter Send", "Shift+K Docs", "/ Search"},
+			want:   []string{"i Insert", "Enter Send", "Shift+K Docs", "/ Search", "^S Save"},
 			absent: "Ctrl+Enter",
 		},
 		{
@@ -262,12 +268,20 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 			absent: "Shift+K Docs",
 		},
 		{
+			name: "response pretty",
+			setup: func(m *Model) {
+				m.focus = focusResponse
+				m.responsePanes[0].activeTab = responseTabPretty
+			},
+			want: []string{"j/k Scroll", "g Shift+S Save"},
+		},
+		{
 			name: "response raw",
 			setup: func(m *Model) {
 				m.focus = focusResponse
 				m.responsePanes[0].activeTab = responseTabRaw
 			},
-			want: []string{"j/k Scroll", "g b View", "g Shift+D Dump"},
+			want: []string{"j/k Scroll", "g b View", "g Shift+D Dump", "g Shift+S Save"},
 		},
 		{
 			name: "response history",

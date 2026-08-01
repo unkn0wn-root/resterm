@@ -25,6 +25,9 @@ func (m Model) contextCommandHints() []commandHint {
 			{key: "Enter", label: "Open"},
 			{key: "Space", label: "Expand"},
 			{key: "/", label: "Filter"},
+			caretKey(m.commandActionHint(bindings.ActionOpenNewFileModal, "New")),
+			caretKey(m.commandActionHint(bindings.ActionOpenPathModal, "Open")),
+			caretKey(m.commandActionHint(bindings.ActionOpenTempDocument, "Temp")),
 		}
 	case focusRequests:
 		return []commandHint{
@@ -34,6 +37,7 @@ func (m Model) contextCommandHints() []commandHint {
 			{key: "m", label: "Method"},
 			{key: "t", label: "Tags"},
 			{key: "l", label: "Jump"},
+			m.commandActionHint(bindings.ActionShowRequestDetails, "Details"),
 		}
 	case focusWorkflows:
 		return []commandHint{
@@ -64,6 +68,7 @@ func (m Model) editorCommandHints() []commandHint {
 		{key: "Enter", label: "Send"},
 		m.commandActionHint(bindings.ActionShowContextHelp, "Docs"),
 		{key: "/", label: "Search"},
+		caretKey(m.commandActionHint(bindings.ActionSaveFile, "Save")),
 	}
 }
 
@@ -79,10 +84,13 @@ func (m Model) responseCommandHints() []commandHint {
 	}
 
 	switch pane.activeTab {
+	case responseTabPretty:
+		hints = append(hints, m.commandActionHint(bindings.ActionSaveResponseBody, "Save"))
 	case responseTabRaw:
 		hints = append(hints,
 			m.commandActionHint(bindings.ActionCycleRawView, "View"),
 			m.commandActionHint(bindings.ActionShowRawDump, "Dump"),
+			m.commandActionHint(bindings.ActionSaveResponseBody, "Save"),
 		)
 	case responseTabHeaders:
 		hints = append(hints, commandHint{key: "Enter", label: "Request/Response"})
