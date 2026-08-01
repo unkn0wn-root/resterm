@@ -28,6 +28,9 @@ func OpenRetry[S any](
 		}
 		lastErr = err
 
+		if ctx.Err() != nil {
+			return zero, ctx.Err()
+		}
 		if i+1 < attempts {
 			if err := WaitWithContext(ctx, delay); err != nil {
 				return zero, err

@@ -150,8 +150,8 @@ func (p *Pool[K, S]) Peek(key K) (S, bool) {
 	return zero, false
 }
 
-// Put stores an already open session under key, replacing any current entry
-// without closing it. On a closed pool the session is closed instead.
+// Put stores an already open session under key, replacing and closing any
+// current entry. On a closed pool the session is closed instead.
 func (p *Pool[K, S]) Put(key K, ses S) {
 	p.mu.Lock()
 	if p.closed {
@@ -159,8 +159,13 @@ func (p *Pool[K, S]) Put(key K, ses S) {
 		_ = ses.Close()
 		return
 	}
+	cur := p.entries[key]
 	p.entries[key] = &poolEntry[S]{ses: ses, used: p.now()}
 	p.mu.Unlock()
+
+	if cur != nil {
+		_ = cur.ses.Close()
+	}
 }
 
 func (p *Pool[K, S]) tryCached(
