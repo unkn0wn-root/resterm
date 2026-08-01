@@ -1961,20 +1961,11 @@ func renderCommandButton(
 		textColor = lipgloss.Color("#E5E1FF")
 	}
 
-	button := lipgloss.NewStyle().Padding(0, 1)
-	keyStyle := lipgloss.NewStyle().Foreground(keyColor).Bold(true)
-	labelStyle := lipgloss.NewStyle().Foreground(textColor)
-	if palette.Background != "" {
-		button = button.Background(palette.Background)
-		keyStyle = keyStyle.Background(palette.Background)
-		labelStyle = labelStyle.Background(palette.Background)
-	}
-
-	content := keyStyle.Render(key)
+	content := lipgloss.NewStyle().Foreground(keyColor).Bold(true).Render(key)
 	if label != "" {
-		content += labelStyle.Render(" " + label)
+		content += lipgloss.NewStyle().Foreground(textColor).Render(" " + label)
 	}
-	return button.Render(content)
+	return lipgloss.NewStyle().Padding(0, 1).Render(content)
 }
 
 // headerCell is a header segment before rendering. values carries the same

@@ -174,7 +174,7 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 	}
 }
 
-func TestRenderCommandBarPinnedHintsHaveNoSegmentBackground(t *testing.T) {
+func TestRenderCommandBarHintsHaveNoSegmentBackground(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prev)
@@ -194,11 +194,8 @@ func TestRenderCommandBarPinnedHintsHaveNoSegmentBackground(t *testing.T) {
 		)
 	}
 
-	contextBackground := renderedCellBackgrounds(
-		lipgloss.NewStyle().Background(model.theme.CommandSegment(0).Background).Render("x"),
-	)[0]
-	assertCommandHintBackground(t, plain, backgrounds, "i Insert", contextBackground)
 	for _, hint := range []string{
+		"i Insert", "Enter Send", "/ Search",
 		"Tab Focus", "^Q Quit", ": Cmd", "? Help",
 	} {
 		assertCommandHintBackground(t, plain, backgrounds, hint, nil)
