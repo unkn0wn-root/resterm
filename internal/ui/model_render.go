@@ -1961,29 +1961,18 @@ func renderCommandButton(
 		textColor = lipgloss.Color("#E5E1FF")
 	}
 
-	button := lipgloss.NewStyle().
-		Foreground(textColor).
-		Padding(0, 1).
-		Bold(true)
+	button := lipgloss.NewStyle().Padding(0, 1)
+	keyStyle := lipgloss.NewStyle().Foreground(keyColor).Bold(true)
+	labelStyle := lipgloss.NewStyle().Foreground(textColor)
 	if palette.Background != "" {
 		button = button.Background(palette.Background)
-	}
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(keyColor).
-		Bold(true)
-	labelStyle := lipgloss.NewStyle().
-		Foreground(textColor).
-		Bold(false)
-	if palette.Background != "" {
 		keyStyle = keyStyle.Background(palette.Background)
 		labelStyle = labelStyle.Background(palette.Background)
 	}
-	keyText := keyStyle.Render(key)
-	content := keyText
+
+	content := keyStyle.Render(key)
 	if label != "" {
-		labelText := labelStyle.Render(" " + label)
-		content = lipgloss.JoinHorizontal(lipgloss.Center, keyText, labelText)
+		content += labelStyle.Render(" " + label)
 	}
 	return button.Render(content)
 }

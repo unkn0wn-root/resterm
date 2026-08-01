@@ -119,53 +119,38 @@ func (m Model) renderCommandHints(style lipgloss.Style) string {
 	limit := commandBarContentWidth(style)
 	divider := m.theme.CommandDivider.Render(" ")
 
-	anchorRow := m.pinnedRow(limit, divider)
+	anchor := m.pinnedRow(limit, divider)
 	if limit <= 0 {
-		row := lipgloss.JoinHorizontal(lipgloss.Top, m.fitCommandHints(nil, m.contextCommandHints(), divider, 0)...)
-		return renderCommandBarContainer(style, row+anchorRow)
+		return renderCommandBarContainer(style, m.renderHintRow(m.contextCommandHints(), divider, 0)+anchor)
 	}
 
 	const gap = 2
-	contextRow := ""
-	if avail := limit - lipgloss.Width(anchorRow) - gap; avail > 0 {
-		contextRow = lipgloss.JoinHorizontal(lipgloss.Top, m.fitCommandHints(nil, m.contextCommandHints(), divider, avail)...)
+	context := ""
+	if avail := limit - lipgloss.Width(anchor) - gap; avail > 0 {
+		context = m.renderHintRow(m.contextCommandHints(), divider, avail)
 	}
-	pad := max(limit-lipgloss.Width(contextRow)-lipgloss.Width(anchorRow), 0)
-	return renderCommandBarContainer(style, contextRow+strings.Repeat(" ", pad)+anchorRow)
+	pad := max(limit-lipgloss.Width(context)-lipgloss.Width(anchor), 0)
+	return renderCommandBarContainer(style, context+strings.Repeat(" ", pad)+anchor)
 }
 
-// pinnedRow lays out the global shortcuts in display order Focus, New, Save,
-// Quit, Cmd, Help. Labels drop when the full row would claim more than half
-// the bar. Focus, Cmd, and Help claim remaining space before the middle three.
+// pinnedRow lays out the global shortcuts in display order Focus, Quit, Cmd,
+// Help. Labels drop when the full row would claim more than half the bar.
+// Focus, Cmd, and Help claim remaining space before Quit.
 func (m Model) pinnedRow(limit int, divider string) string {
-	focus := m.commandActionHint(bindings.ActionCycleFocusNext, "Focus")
 	core := []commandHint{
-		focus,
+		m.commandActionHint(bindings.ActionCycleFocusNext, "Focus"),
 		{key: ":", label: "Cmd"},
 		m.commandActionHint(bindings.ActionToggleHelp, "Help"),
 	}
 	extras := []commandHint{
-		caretKey(m.commandActionHint(bindings.ActionOpenNewFileModal, "New")),
-		caretKey(m.commandActionHint(bindings.ActionSaveFile, "Save")),
 		caretKey(m.commandActionHint(bindings.ActionQuitApp, "Quit")),
 	}
-	for i := range core {
-		core[i].noBackground = true
-	}
-	for i := range extras {
-		extras[i].noBackground = true
-	}
-	assemble := func() []commandHint {
-		out := []commandHint{core[0]}
-		out = append(out, extras...)
-		return append(out, core[1], core[2])
-	}
 
-	fullRow := lipgloss.JoinHorizontal(lipgloss.Top, m.fitCommandHints(nil, assemble(), divider, 0)...)
+	full := m.renderHintRow(pinnedOrder(core, extras), divider, 0)
 	if limit <= 0 {
-		return fullRow
+		return full
 	}
-	if lipgloss.Width(fullRow) > limit/2 {
+	if lipgloss.Width(full) > limit/2 {
 		for i := range core {
 			core[i].label = ""
 		}
@@ -174,8 +159,8 @@ func (m Model) pinnedRow(limit int, divider string) string {
 		}
 	}
 
-	width := lipgloss.Width(lipgloss.JoinHorizontal(lipgloss.Top, m.fitCommandHints(nil, core, divider, limit)...))
-	kept := extras[:0]
+	width := lipgloss.Width(m.renderHintRow(pinnedOrder(core, nil), divider, limit))
+	kept := make([]commandHint, 0, len(extras))
 	for _, h := range extras {
 		if h.key == "" {
 			continue
@@ -187,37 +172,48 @@ func (m Model) pinnedRow(limit int, divider string) string {
 		width += w
 		kept = append(kept, h)
 	}
-	extras = kept
-	return lipgloss.JoinHorizontal(lipgloss.Top, m.fitCommandHints(nil, assemble(), divider, limit)...)
+	return m.renderHintRow(pinnedOrder(core, kept), divider, limit)
 }
 
-func (m Model) fitCommandHints(
-	buttons []string,
-	hints []commandHint,
-	divider string,
-	limit int,
-) []string {
-	width := lipgloss.Width(lipgloss.JoinHorizontal(lipgloss.Top, buttons...))
+// pinnedOrder builds the display order from core Focus, Cmd, Help. Focus leads
+// the row, Cmd and Help trail it, and extras sit in between so they can drop
+// without moving the edges. Pinned hints render without segment backgrounds.
+func pinnedOrder(core, extras []commandHint) []commandHint {
+	row := make([]commandHint, 0, len(core)+len(extras))
+	row = append(row, core[0])
+	row = append(row, extras...)
+	row = append(row, core[1:]...)
+	for i := range row {
+		row[i].noBackground = true
+	}
+	return row
+}
+
+// renderHintRow joins bound hints with divider. A positive limit drops any
+// hint that would push the row past it.
+func (m Model) renderHintRow(hints []commandHint, divider string, limit int) string {
+	var cells []string
+	width, count := 0, 0
 	for _, hint := range hints {
 		if hint.key == "" {
 			continue
 		}
-		idx := (len(buttons) + 1) / 2
-		button := m.renderCommandHint(hint, idx)
-		extra := lipgloss.Width(button)
-		if len(buttons) > 0 {
-			extra += lipgloss.Width(divider)
+		cell := m.renderCommandHint(hint, count)
+		w := lipgloss.Width(cell)
+		if count > 0 {
+			w += lipgloss.Width(divider)
 		}
-		if limit > 0 && width+extra > limit {
+		if limit > 0 && width+w > limit {
 			continue
 		}
-		if len(buttons) > 0 {
-			buttons = append(buttons, divider)
+		if count > 0 {
+			cells = append(cells, divider)
 		}
-		buttons = append(buttons, button)
-		width += extra
+		cells = append(cells, cell)
+		width += w
+		count++
 	}
-	return buttons
+	return lipgloss.JoinHorizontal(lipgloss.Top, cells...)
 }
 
 func (m Model) renderCommandHint(hint commandHint, idx int) string {
