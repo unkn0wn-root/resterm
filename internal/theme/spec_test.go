@@ -17,6 +17,31 @@ func TestDefaultThemeEditorHintBoxUsesEditorFocusColor(t *testing.T) {
 	}
 }
 
+func TestApplySpecCommandSegmentBackgroundNone(t *testing.T) {
+	base := DefaultTheme()
+	spec := ThemeSpec{
+		CommandSegments: []CommandSegmentSpec{{Background: strPtr("none")}},
+	}
+
+	updated, err := ApplySpec(base, spec)
+	if err != nil {
+		t.Fatalf("ApplySpec returned error: %v", err)
+	}
+	if got := updated.CommandSegments[0].Background; got != "" {
+		t.Errorf("expected none to clear the command segment background, got %q", got)
+	}
+}
+
+func TestApplySpecCommandSegmentBackgroundEmptyErrors(t *testing.T) {
+	spec := ThemeSpec{
+		CommandSegments: []CommandSegmentSpec{{Background: strPtr("")}},
+	}
+
+	if _, err := ApplySpec(DefaultTheme(), spec); err == nil {
+		t.Fatal("expected empty command segment background to error")
+	}
+}
+
 func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	base := DefaultTheme()
 	spec := ThemeSpec{

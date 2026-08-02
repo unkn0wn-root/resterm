@@ -141,7 +141,7 @@ func keycap(key, label string) string {
 }
 
 func TestRenderCommandButtonRendersFlush(t *testing.T) {
-	out := ansi.Strip(renderCommandButton("Tab", "Focus", theme.CommandSegmentStyle{}))
+	out := ansi.Strip(renderCommandButton("Tab", "Focus", theme.CommandSegmentStyle{}, lipgloss.NoColor{}))
 
 	if out != "Tab Focus" {
 		t.Fatalf("expected flush shortcut cell, got %q", out)
@@ -151,7 +151,7 @@ func TestRenderCommandButtonRendersFlush(t *testing.T) {
 func TestRenderCommandKeycapWrapsKeyInChip(t *testing.T) {
 	out := ansi.Strip(renderCommandKeycap("Tab", "Focus", theme.CommandSegmentStyle{
 		Background: lipgloss.Color("#112233"),
-	}))
+	}, lipgloss.NoColor{}))
 
 	if out != "▐Tab▌ Focus" {
 		t.Fatalf("expected capped keycap chip, got %q", out)
@@ -162,7 +162,7 @@ func TestRenderCommandHintFallsBackToFlatWithoutBackground(t *testing.T) {
 	model := New(Config{})
 	model.theme.CommandSegments = []theme.CommandSegmentStyle{{Key: lipgloss.Color("#FFFFFF")}}
 
-	out := ansi.Strip(model.renderCommandHint(commandHint{key: "Tab", label: "Focus"}, 0, true))
+	out := ansi.Strip(model.renderCommandHint(commandHint{key: "Tab", label: "Focus"}, 0, true, lipgloss.NoColor{}))
 
 	if out != "Tab Focus" {
 		t.Fatalf("expected flat hint without segment background, got %q", out)
@@ -229,6 +229,35 @@ func TestRenderCommandBarKeycapBackgrounds(t *testing.T) {
 		"Tab Focus", "^Q Quit", ": Cmd", "? Help",
 	} {
 		assertCommandHintBackground(t, plain, backgrounds, flat, nil)
+	}
+}
+
+// Themes like daybreak set a command_bar background. Every cell inside the
+// gutters must then carry either that background or a chip background, or the
+// bar shows seams.
+func TestRenderCommandBarKeepsThemedBackground(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{})
+	model.width = 120
+	model.focus = focusEditor
+	barBg := lipgloss.Color("#e2e8f0")
+	model.theme.CommandBar = model.theme.CommandBar.Background(barBg)
+
+	bar := model.renderCommandBar()
+	plain := []rune(ansi.Strip(bar))
+	backgrounds := renderedCellBackgrounds(bar)
+
+	allowed := [][]int{sgrTrueColorBackground(t, barBg)}
+	for _, seg := range model.theme.CommandSegments {
+		allowed = append(allowed, sgrTrueColorBackground(t, seg.Background))
+	}
+	for idx := 1; idx < len(backgrounds)-1; idx++ {
+		if !slices.ContainsFunc(allowed, func(bg []int) bool { return slices.Equal(backgrounds[idx], bg) }) {
+			t.Fatalf("cell %d %q lost the bar background: got %v", idx, string(plain[idx]), backgrounds[idx])
+		}
 	}
 }
 
