@@ -15,7 +15,7 @@ X-GitHub-Api-Version: 2022-11-28
 ### GitHub CLI Token Via @apply
 # @name GitHubCLITokenPatched
 # @tag auth command
-# @description Reuses command-backed bearer auth through a global apply profile.
+# @description Reuses command-backed bearer auth through a file-scoped apply profile.
 # @apply use=githubCliAuth
 GET https://api.github.com/user
 Accept: application/vnd.github+json
@@ -33,8 +33,8 @@ X-GitHub-Api-Version: 2022-11-28
 ### GitHub CLI Token Reuse
 # @name GitHubCLITokenReuse
 # @tag auth command
-# @description Reuses the seeded github-cli command auth slot without repeating argv.
-# @auth command cache_key=github-cli
+# @description Reuses the github-cli command auth slot and can also seed it on a cold start.
+# @auth command argv=["gh","auth","token"] cache_key=github-cli
 GET https://api.github.com/user/repos
 Accept: application/vnd.github+json
 X-GitHub-Api-Version: 2022-11-28

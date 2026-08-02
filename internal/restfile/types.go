@@ -30,9 +30,11 @@ type Constant struct {
 type AuthSpec struct {
 	Type   string
 	Params map[string]string
-	// SourcePath tracks the file that defined this auth so relative command auth
-	// execution stays anchored to the auth definition, not the consuming request.
+	// SourcePath and Line track where this auth was defined so errors can point
+	// at the definition, and relative command auth execution stays anchored to
+	// the auth definition, not the consuming request.
 	SourcePath string
+	Line       int
 }
 
 type AuthProfile struct {
@@ -353,12 +355,20 @@ type Request struct {
 	Variables    []Variable
 	Settings     map[string]string
 	LineRange    LineRange
+	SourcePath   string
 	OriginalText string
 	GRPC         *GRPCRequest
 	SSE          *SSERequest
 	WebSocket    *WebSocketRequest
 	SSH          *SSHSpec
 	K8s          *K8sSpec
+}
+
+func (req *Request) Origin() string {
+	if req == nil {
+		return ""
+	}
+	return origin(req.SourcePath, req.LineRange.Start)
 }
 
 type SSERequest struct {

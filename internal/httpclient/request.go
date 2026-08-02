@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -71,63 +72,98 @@ func (c *Client) prepareHTTPRequestWithOpts(
 	return prepared.request, prepared.options, nil
 }
 
+// applyAuthentication fails closed: an unresolved variable in any auth param that
+// would reach the wire aborts the build instead of sending the literal placeholder.
 func (c *Client) applyAuthentication(
 	req *http.Request,
 	resolver *vars.Resolver,
 	auth *restfile.AuthSpec,
-) {
+) error {
 	if auth == nil || len(auth.Params) == 0 {
-		return
+		return nil
 	}
 
-	expand := func(value string) string {
-		if value == "" {
-			return ""
+	kind := strings.ToLower(auth.Type)
+	expand := func(param string) (string, error) {
+		value := auth.Params[param]
+		if value == "" || resolver == nil {
+			return value, nil
 		}
-		if resolver == nil {
-			return value
+		expanded, err := resolver.ExpandTemplates(value)
+		if err != nil {
+			op := fmt.Sprintf("expand %s auth %s", kind, param)
+			if at := auth.Origin(); at != "" {
+				op += " (" + at + ")"
+			}
+			return "", diag.WrapAs(diag.ClassAuth, err, op)
 		}
-		if expanded, err := resolver.ExpandTemplates(value); err == nil {
-			return expanded
-		}
-		return value
+		return expanded, nil
 	}
 
-	switch strings.ToLower(auth.Type) {
+	switch kind {
 	case string(authTypeBasic):
-		user := expand(auth.Params[authParamUsername])
-		pass := expand(auth.Params[authParamPassword])
-		if req.Header.Get(authorizationHeader) == "" {
-			req.SetBasicAuth(user, pass)
+		if req.Header.Get(authorizationHeader) != "" {
+			return nil
 		}
+		user, err := expand(authParamUsername)
+		if err != nil {
+			return err
+		}
+		pass, err := expand(authParamPassword)
+		if err != nil {
+			return err
+		}
+		req.SetBasicAuth(user, pass)
 	case string(authTypeBearer):
-		token := expand(auth.Params[authParamToken])
-		if req.Header.Get(authorizationHeader) == "" {
-			req.Header.Set(authorizationHeader, bearerTokenPrefix+token)
+		if req.Header.Get(authorizationHeader) != "" {
+			return nil
 		}
+		token, err := expand(authParamToken)
+		if err != nil {
+			return err
+		}
+		req.Header.Set(authorizationHeader, bearerTokenPrefix+token)
 	case string(authTypeAPIKey), legacyAPIKeyAuthType:
-		placement := strings.ToLower(auth.Params[authParamPlacement])
-		name := expand(auth.Params[authParamName])
-		value := expand(auth.Params[authParamValue])
-		if placement == authPlacementQuery {
+		name, err := expand(authParamName)
+		if err != nil {
+			return err
+		}
+		if strings.ToLower(auth.Params[authParamPlacement]) == authPlacementQuery {
+			value, err := expand(authParamValue)
+			if err != nil {
+				return err
+			}
 			q := req.URL.Query()
 			q.Set(name, value)
 			req.URL.RawQuery = q.Encode()
-		} else {
-			if name == "" {
-				name = defaultAPIKeyHeader
-			}
-			if req.Header.Get(name) == "" {
-				req.Header.Set(name, value)
-			}
+			return nil
 		}
+		if name == "" {
+			name = defaultAPIKeyHeader
+		}
+		if req.Header.Get(name) != "" {
+			return nil
+		}
+		value, err := expand(authParamValue)
+		if err != nil {
+			return err
+		}
+		req.Header.Set(name, value)
 	case string(authTypeHeader):
-		name := expand(auth.Params[authParamHeader])
-		value := expand(auth.Params[authParamValue])
-		if name != "" && req.Header.Get(name) == "" {
-			req.Header.Set(name, value)
+		name, err := expand(authParamHeader)
+		if err != nil {
+			return err
 		}
+		if name == "" || req.Header.Get(name) != "" {
+			return nil
+		}
+		value, err := expand(authParamValue)
+		if err != nil {
+			return err
+		}
+		req.Header.Set(name, value)
 	}
+	return nil
 }
 
 type reqMeta struct {

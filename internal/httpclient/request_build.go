@@ -172,9 +172,15 @@ func (c *Client) buildHTTPRequest(
 			for _, value := range values {
 				finalValue := value
 				if resolver != nil {
-					if expanded, expandErr := resolver.ExpandTemplates(value); expandErr == nil {
-						finalValue = expanded
+					expanded, expandErr := resolver.ExpandTemplates(value)
+					if expandErr != nil {
+						op := "expand header " + name
+						if at := req.Origin(); at != "" {
+							op += " (" + at + ")"
+						}
+						return nil, opts, diag.WrapAs(diag.ClassProtocol, expandErr, op)
 					}
+					finalValue = expanded
 				}
 				httpReq.Header.Add(name, finalValue)
 			}
@@ -187,6 +193,8 @@ func (c *Client) buildHTTPRequest(
 		}
 	}
 
-	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
+	if err := c.applyAuthentication(httpReq, resolver, req.Metadata.Auth); err != nil {
+		return nil, opts, err
+	}
 	return httpReq, opts, nil
 }

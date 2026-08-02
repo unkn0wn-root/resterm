@@ -2,6 +2,7 @@ package request
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -338,7 +339,7 @@ func (e *Engine) BuildCommandAuthConfig(
 	if err != nil {
 		return out, err
 	}
-	if err := expandCommandAuthArgv(out.Argv, res); err != nil {
+	if err := expandCommandAuthArgv(out.Argv, auth, res); err != nil {
 		return out, err
 	}
 	return out.WithBaseTimeout(timeout), nil
@@ -384,7 +385,7 @@ func (e *Engine) BuildOAuthConfig(
 		return cfg, diag.New(diag.ClassAuth, errMissingOAuthSpec)
 	}
 	for _, field := range oauthConfigFields {
-		value, err := expandAuthParam(res, authTypeOAuth2, field.key, auth.Params[field.key])
+		value, err := expandAuthParam(res, auth, authTypeOAuth2, field.key, auth.Params[field.key])
 		if err != nil {
 			return cfg, err
 		}
@@ -431,7 +432,7 @@ func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]
 		}
 		if key != authParamArgv {
 			var err error
-			value, err = expandAuthParam(res, authTypeCommand, key, value)
+			value, err = expandAuthParam(res, auth, authTypeCommand, key, value)
 			if err != nil {
 				return nil, err
 			}
@@ -441,21 +442,25 @@ func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]
 	return out, nil
 }
 
-func expandCommandAuthArgv(argv []string, res *vars.Resolver) error {
+func expandCommandAuthArgv(argv []string, auth *restfile.AuthSpec, res *vars.Resolver) error {
 	if res == nil {
 		return nil
 	}
 	for i, arg := range argv {
 		value, err := res.ExpandTemplates(arg)
 		if err != nil {
-			return diag.WrapAsf(diag.ClassAuth, err, "expand command auth argv[%d]", i)
+			op := fmt.Sprintf("expand command auth argv[%d]", i)
+			if at := auth.Origin(); at != "" {
+				op += " (" + at + ")"
+			}
+			return diag.WrapAs(diag.ClassAuth, err, op)
 		}
 		argv[i] = value
 	}
 	return nil
 }
 
-func expandAuthParam(res *vars.Resolver, scope, key, raw string) (string, error) {
+func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, scope, key, raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return "", nil
 	}
@@ -464,7 +469,11 @@ func expandAuthParam(res *vars.Resolver, scope, key, raw string) (string, error)
 	}
 	value, err := res.ExpandTemplates(raw)
 	if err != nil {
-		return "", diag.WrapAsf(diag.ClassAuth, err, "expand %s param %s", scope, key)
+		op := fmt.Sprintf("expand %s param %s", scope, key)
+		if at := auth.Origin(); at != "" {
+			op += " (" + at + ")"
+		}
+		return "", diag.WrapAs(diag.ClassAuth, err, op)
 	}
 	return strings.TrimSpace(value), nil
 }
@@ -478,7 +487,7 @@ func oauthExtraParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]s
 		if isKnownOAuthParam(strings.ToLower(rawKey)) || strings.TrimSpace(rawValue) == "" {
 			continue
 		}
-		value, err := expandAuthParam(res, authTypeOAuth2, rawKey, rawValue)
+		value, err := expandAuthParam(res, auth, authTypeOAuth2, rawKey, rawValue)
 		if err != nil {
 			return nil, err
 		}

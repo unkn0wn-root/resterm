@@ -234,6 +234,7 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.request.flushPendingScript()
 
 	req := b.request.build()
+	req.SourcePath = b.doc.Path
 	b.lintRequestCaptures(req)
 	if req.Method != "" && req.URL != "" {
 		b.doc.Requests = append(b.doc.Requests, req)
