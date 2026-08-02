@@ -248,7 +248,7 @@ func assertKeycapBackground(
 	if !ok {
 		t.Fatalf("expected keycap %q in %q", chip, plain)
 	}
-	want := sgrTrueColorBackground(bg)
+	want := sgrTrueColorBackground(t, bg)
 	start := lipgloss.Width(before)
 	end := start + lipgloss.Width(chip)
 	for idx := start; idx < end; idx++ {
@@ -265,9 +265,13 @@ func assertKeycapBackground(
 	}
 }
 
-func sgrTrueColorBackground(c lipgloss.Color) []int {
+func sgrTrueColorBackground(t *testing.T, c lipgloss.Color) []int {
+	t.Helper()
+
 	var r, g, b int
-	fmt.Sscanf(strings.TrimPrefix(string(c), "#"), "%02x%02x%02x", &r, &g, &b)
+	if _, err := fmt.Sscanf(strings.TrimPrefix(string(c), "#"), "%02x%02x%02x", &r, &g, &b); err != nil {
+		t.Fatalf("parse segment color %q: %v", c, err)
+	}
 	return []int{sgrExtBackground, sgrExtRGB, r, g, b}
 }
 
