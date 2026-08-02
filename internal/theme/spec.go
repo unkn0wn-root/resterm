@@ -1077,7 +1077,7 @@ func applyCommandSegments(
 	for i, spec := range overrides {
 		template := base[i%len(base)]
 		if spec.Background != nil {
-			color, err := toColor("command_segments.background", *spec.Background)
+			color, err := toClearableColor("command_segments.background", *spec.Background)
 			if err != nil {
 				return nil, err
 			}
@@ -1321,6 +1321,15 @@ func toColor(field string, value string) (lipgloss.Color, error) {
 		return "", fmt.Errorf("%s: colour value may not be empty", field)
 	}
 	return lipgloss.Color(trimmed), nil
+}
+
+// toClearableColor accepts "none" to clear an inherited colour, matching the
+// border_style sentinel.
+func toClearableColor(field string, value string) (lipgloss.Color, error) {
+	if strings.EqualFold(strings.TrimSpace(value), "none") {
+		return "", nil
+	}
+	return toColor(field, value)
 }
 
 func parseAlign(value string) (lipgloss.Position, error) {

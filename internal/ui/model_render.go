@@ -1951,6 +1951,7 @@ func renderCommandButton(
 	key string,
 	label string,
 	palette theme.CommandSegmentStyle,
+	barBg lipgloss.TerminalColor,
 ) string {
 	keyColor := palette.Key
 	if keyColor == "" {
@@ -1961,11 +1962,41 @@ func renderCommandButton(
 		textColor = lipgloss.Color("#E5E1FF")
 	}
 
-	content := lipgloss.NewStyle().Foreground(keyColor).Bold(true).Render(key)
+	content := lipgloss.NewStyle().Foreground(keyColor).Background(barBg).Bold(true).Render(key)
 	if label != "" {
-		content += lipgloss.NewStyle().Foreground(textColor).Render(" " + label)
+		content += lipgloss.NewStyle().Foreground(textColor).Background(barBg).Render(" " + label)
 	}
-	return lipgloss.NewStyle().Padding(0, 1).Render(content)
+	return content
+}
+
+// renderCommandKeycap draws the key as a chip on the segment background. The
+// half-block caps use the chip colour as foreground over the bar background,
+// so the chip edge blends into the bar instead of ending on a hard cell
+// boundary. Only the key gets the chip background. The label renders on the
+// bar like a flat hint.
+func renderCommandKeycap(
+	key string,
+	label string,
+	palette theme.CommandSegmentStyle,
+	barBg lipgloss.TerminalColor,
+) string {
+	keyColor := palette.Key
+	if keyColor == "" {
+		keyColor = lipgloss.Color("#FFFFFF")
+	}
+	textColor := palette.Text
+	if textColor == "" {
+		textColor = lipgloss.Color("#E5E1FF")
+	}
+
+	edge := lipgloss.NewStyle().Foreground(palette.Background).Background(barBg)
+	content := edge.Render("▐") +
+		lipgloss.NewStyle().Foreground(keyColor).Background(palette.Background).Bold(true).Render(key) +
+		edge.Render("▌")
+	if label != "" {
+		content += lipgloss.NewStyle().Foreground(textColor).Background(barBg).Render(" " + label)
+	}
+	return content
 }
 
 // headerCell is a header segment before rendering. values carries the same

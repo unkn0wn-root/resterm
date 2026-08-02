@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 type commandHint struct {
@@ -121,29 +122,41 @@ func (m Model) commandActionHint(action bindings.ActionID, label string) command
 }
 
 // Context hints lead because they change with the focused pane. The pinned
-// group keeps a fixed position at the right edge.
+// group keeps a fixed position at the right edge. Every run sets the bar
+// background itself because the resets inside rendered hints stop the
+// container style from carrying it across the row.
 func (m Model) renderCommandHints(style lipgloss.Style) string {
 	limit := commandBarContentWidth(style)
-	divider := m.theme.CommandDivider.Render(" ")
+	barBg := style.GetBackground()
+	// Hint cells render flush, so the divider carries all spacing between them.
+	dividerStyle := m.theme.CommandDivider
+	if !theme.ColorDefined(dividerStyle.GetBackground()) {
+		dividerStyle = dividerStyle.Background(barBg)
+	}
+	divider := dividerStyle.Render("  ")
 
-	anchor := m.pinnedRow(limit, divider)
+	anchor := m.pinnedRow(limit, divider, barBg)
 	if limit <= 0 {
-		return renderCommandBarContainer(style, m.renderHintRow(m.contextCommandHints(), divider, 0)+anchor)
+		return renderCommandBarContainer(
+			style,
+			m.renderHintRow(m.contextCommandHints(), divider, 0, true, barBg)+divider+anchor,
+		)
 	}
 
 	const gap = 2
 	context := ""
 	if avail := limit - lipgloss.Width(anchor) - gap; avail > 0 {
-		context = m.renderHintRow(m.contextCommandHints(), divider, avail)
+		context = m.renderHintRow(m.contextCommandHints(), divider, avail, true, barBg)
 	}
 	pad := max(limit-lipgloss.Width(context)-lipgloss.Width(anchor), 0)
-	return renderCommandBarContainer(style, context+strings.Repeat(" ", pad)+anchor)
+	fill := lipgloss.NewStyle().Background(barBg).Render(strings.Repeat(" ", pad))
+	return renderCommandBarContainer(style, context+fill+anchor)
 }
 
 // pinnedRow lays out the global shortcuts in display order Focus, Quit, Cmd,
 // Help. Labels drop when the full row would claim more than half the bar.
 // Focus, Cmd, and Help claim remaining space before Quit.
-func (m Model) pinnedRow(limit int, divider string) string {
+func (m Model) pinnedRow(limit int, divider string, barBg lipgloss.TerminalColor) string {
 	core := []commandHint{
 		m.commandActionHint(bindings.ActionCycleFocusNext, "Focus"),
 		{key: ":", label: "Cmd"},
@@ -153,7 +166,7 @@ func (m Model) pinnedRow(limit int, divider string) string {
 		caretKey(m.commandActionHint(bindings.ActionQuitApp, "Quit")),
 	}
 
-	full := m.renderHintRow(pinnedOrder(core, extras), divider, 0)
+	full := m.renderHintRow(pinnedOrder(core, extras), divider, 0, false, barBg)
 	if limit <= 0 {
 		return full
 	}
@@ -166,20 +179,20 @@ func (m Model) pinnedRow(limit int, divider string) string {
 		}
 	}
 
-	width := lipgloss.Width(m.renderHintRow(pinnedOrder(core, nil), divider, limit))
+	width := lipgloss.Width(m.renderHintRow(pinnedOrder(core, nil), divider, limit, false, barBg))
 	kept := make([]commandHint, 0, len(extras))
 	for _, h := range extras {
 		if h.key == "" {
 			continue
 		}
-		w := lipgloss.Width(m.renderCommandHint(h, 0)) + lipgloss.Width(divider)
+		w := lipgloss.Width(m.renderCommandHint(h, 0, false, barBg)) + lipgloss.Width(divider)
 		if width+w > limit {
 			continue
 		}
 		width += w
 		kept = append(kept, h)
 	}
-	return m.renderHintRow(pinnedOrder(core, kept), divider, limit)
+	return m.renderHintRow(pinnedOrder(core, kept), divider, limit, false, barBg)
 }
 
 // pinnedOrder builds the display order from core Focus, Cmd, Help. Focus leads
@@ -195,14 +208,20 @@ func pinnedOrder(core, extras []commandHint) []commandHint {
 
 // renderHintRow joins bound hints with divider. A positive limit drops any
 // hint that would push the row past it.
-func (m Model) renderHintRow(hints []commandHint, divider string, limit int) string {
+func (m Model) renderHintRow(
+	hints []commandHint,
+	divider string,
+	limit int,
+	keycap bool,
+	barBg lipgloss.TerminalColor,
+) string {
 	var cells []string
 	width, count := 0, 0
 	for _, hint := range hints {
 		if hint.key == "" {
 			continue
 		}
-		cell := m.renderCommandHint(hint, count)
+		cell := m.renderCommandHint(hint, count, keycap, barBg)
 		w := lipgloss.Width(cell)
 		if count > 0 {
 			w += lipgloss.Width(divider)
@@ -220,6 +239,10 @@ func (m Model) renderHintRow(hints []commandHint, divider string, limit int) str
 	return lipgloss.JoinHorizontal(lipgloss.Top, cells...)
 }
 
-func (m Model) renderCommandHint(hint commandHint, idx int) string {
-	return renderCommandButton(hint.key, hint.label, m.theme.CommandSegment(idx))
+func (m Model) renderCommandHint(hint commandHint, idx int, keycap bool, barBg lipgloss.TerminalColor) string {
+	seg := m.theme.CommandSegment(idx)
+	if keycap && seg.Background != "" {
+		return renderCommandKeycap(hint.key, hint.label, seg, barBg)
+	}
+	return renderCommandButton(hint.key, hint.label, seg, barBg)
 }
