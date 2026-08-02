@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -134,11 +135,37 @@ func TestRenderCommandBarDoesNotEchoResponseSearch(t *testing.T) {
 	}
 }
 
-func TestRenderCommandButtonUsesSingleCellHorizontalPadding(t *testing.T) {
+// keycap is the stripped text of a context hint chip.
+func keycap(key, label string) string {
+	return "▐" + key + "▌ " + label
+}
+
+func TestRenderCommandButtonRendersFlush(t *testing.T) {
 	out := ansi.Strip(renderCommandButton("Tab", "Focus", theme.CommandSegmentStyle{}))
 
-	if out != " Tab Focus " {
-		t.Fatalf("expected single-cell shortcut padding, got %q", out)
+	if out != "Tab Focus" {
+		t.Fatalf("expected flush shortcut cell, got %q", out)
+	}
+}
+
+func TestRenderCommandKeycapWrapsKeyInChip(t *testing.T) {
+	out := ansi.Strip(renderCommandKeycap("Tab", "Focus", theme.CommandSegmentStyle{
+		Background: lipgloss.Color("#112233"),
+	}))
+
+	if out != "▐Tab▌ Focus" {
+		t.Fatalf("expected capped keycap chip, got %q", out)
+	}
+}
+
+func TestRenderCommandHintFallsBackToFlatWithoutBackground(t *testing.T) {
+	model := New(Config{})
+	model.theme.CommandSegments = []theme.CommandSegmentStyle{{Key: lipgloss.Color("#FFFFFF")}}
+
+	out := ansi.Strip(model.renderCommandHint(commandHint{key: "Tab", label: "Focus"}, 0, true))
+
+	if out != "Tab Focus" {
+		t.Fatalf("expected flat hint without segment background, got %q", out)
 	}
 }
 
@@ -149,8 +176,8 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 
 	out := ansi.Strip(model.renderCommandBar())
 	// ^N New belongs to the files context, so it must not leak into the editor bar.
-	if strings.Contains(out, "^N New") {
-		t.Fatalf("did not expect files hint %q, got %q", "^N New", out)
+	if strings.Contains(out, keycap("^N", "New")) {
+		t.Fatalf("did not expect files hint %q, got %q", keycap("^N", "New"), out)
 	}
 	prev := -1
 	for _, want := range []string{
@@ -168,12 +195,13 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimRight(out, " "), "? Help") {
 		t.Fatalf("expected anchors pinned to the right edge, got %q", out)
 	}
-	if strings.Index(out, "i Insert") > strings.Index(out, "Tab Focus") {
+	insert := strings.Index(out, keycap("i", "Insert"))
+	if insert < 0 || insert > strings.Index(out, "Tab Focus") {
 		t.Fatalf("expected context hints before the anchors, got %q", out)
 	}
 }
 
-func TestRenderCommandBarHintsHaveNoSegmentBackground(t *testing.T) {
+func TestRenderCommandBarKeycapBackgrounds(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prev)
@@ -193,12 +221,54 @@ func TestRenderCommandBarHintsHaveNoSegmentBackground(t *testing.T) {
 		)
 	}
 
-	for _, hint := range []string{
-		"i Insert", "Enter Send", "/ Search",
+	for idx, key := range []string{"i", "Enter", "Shift+K", "/", "^S"} {
+		assertKeycapBackground(t, plain, backgrounds, key, model.theme.CommandSegment(idx).Background)
+	}
+	for _, flat := range []string{
+		" Insert", " Send", " Docs", " Search", " Save",
 		"Tab Focus", "^Q Quit", ": Cmd", "? Help",
 	} {
-		assertCommandHintBackground(t, plain, backgrounds, hint, nil)
+		assertCommandHintBackground(t, plain, backgrounds, flat, nil)
 	}
+}
+
+// assertKeycapBackground checks that the key cells inside the chip carry the
+// segment background while the half-block caps stay on the bar background.
+func assertKeycapBackground(
+	t *testing.T,
+	plain string,
+	backgrounds [][]int,
+	key string,
+	bg lipgloss.Color,
+) {
+	t.Helper()
+
+	chip := "▐" + key + "▌"
+	before, _, ok := strings.Cut(plain, chip)
+	if !ok {
+		t.Fatalf("expected keycap %q in %q", chip, plain)
+	}
+	want := sgrTrueColorBackground(bg)
+	start := lipgloss.Width(before)
+	end := start + lipgloss.Width(chip)
+	for idx := start; idx < end; idx++ {
+		cell := backgrounds[idx]
+		if idx == start || idx == end-1 {
+			if len(cell) > 0 {
+				t.Fatalf("expected %q cap cell %d on the bar background, got %v", chip, idx, cell)
+			}
+			continue
+		}
+		if !slices.Equal(cell, want) {
+			t.Fatalf("expected %q key cell %d to use background %v, got %v", chip, idx, want, cell)
+		}
+	}
+}
+
+func sgrTrueColorBackground(c lipgloss.Color) []int {
+	var r, g, b int
+	fmt.Sscanf(strings.TrimPrefix(string(c), "#"), "%02x%02x%02x", &r, &g, &b)
+	return []int{sgrExtBackground, sgrExtRGB, r, g, b}
 }
 
 func assertCommandHintBackground(
@@ -240,14 +310,20 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 			setup: func(m *Model) {
 				m.focus = focusFile
 			},
-			want: []string{"Enter Open", "Space Expand", "/ Filter", "^N New", "^O Open", "^T Temp"},
+			want: []string{
+				keycap("Enter", "Open"), keycap("Space", "Expand"), keycap("/", "Filter"),
+				keycap("^N", "New"), keycap("^O", "Open"), keycap("^T", "Temp"),
+			},
 		},
 		{
 			name: "requests",
 			setup: func(m *Model) {
 				m.focus = focusRequests
 			},
-			want: []string{"Enter Run", "m Method", "t Tags", "l Jump", "g , Details"},
+			want: []string{
+				keycap("Enter", "Run"), keycap("m", "Method"), keycap("t", "Tags"),
+				keycap("l", "Jump"), keycap("g ,", "Details"),
+			},
 		},
 		{
 			name: "editor normal",
@@ -255,7 +331,10 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusEditor
 				m.editorInsertMode = false
 			},
-			want:   []string{"i Insert", "Enter Send", "Shift+K Docs", "/ Search", "^S Save"},
+			want: []string{
+				keycap("i", "Insert"), keycap("Enter", "Send"), keycap("Shift+K", "Docs"),
+				keycap("/", "Search"), keycap("^S", "Save"),
+			},
 			absent: "Ctrl+Enter",
 		},
 		{
@@ -264,8 +343,12 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusEditor
 				m.editorInsertMode = true
 			},
-			want:   []string{"Esc Normal", "Ctrl+Enter Send", "Tab Complete"},
-			absent: "Shift+K Docs",
+			want: []string{
+				keycap("Esc", "Normal"),
+				keycap("Ctrl+Enter", "Send"),
+				keycap("Tab", "Complete"),
+			},
+			absent: keycap("Shift+K", "Docs"),
 		},
 		{
 			name: "response pretty",
@@ -273,7 +356,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusResponse
 				m.responsePanes[0].activeTab = responseTabPretty
 			},
-			want: []string{"j/k Scroll", "g Shift+S Save"},
+			want: []string{keycap("j/k", "Scroll"), keycap("g Shift+S", "Save")},
 		},
 		{
 			name: "response raw",
@@ -281,7 +364,10 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusResponse
 				m.responsePanes[0].activeTab = responseTabRaw
 			},
-			want: []string{"j/k Scroll", "g b View", "g Shift+D Dump", "g Shift+S Save"},
+			want: []string{
+				keycap("j/k", "Scroll"), keycap("g b", "View"),
+				keycap("g Shift+D", "Dump"), keycap("g Shift+S", "Save"),
+			},
 		},
 		{
 			name: "response history",
@@ -289,7 +375,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusResponse
 				m.responsePanes[0].activeTab = responseTabHistory
 			},
-			want: []string{"c Scope", "s Sort", "Enter Load"},
+			want: []string{keycap("c", "Scope"), keycap("s", "Sort"), keycap("Enter", "Load")},
 		},
 	}
 
@@ -342,7 +428,7 @@ func TestRenderCommandBarUsesCustomContextHelpBinding(t *testing.T) {
 	model.focus = focusEditor
 
 	out := ansi.Strip(model.renderCommandBar())
-	if !strings.Contains(out, "Ctrl+K Docs") {
+	if !strings.Contains(out, keycap("Ctrl+K", "Docs")) {
 		t.Fatalf("expected configured contextual-help binding, got %q", out)
 	}
 }
