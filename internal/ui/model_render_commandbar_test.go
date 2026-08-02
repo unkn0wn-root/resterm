@@ -261,6 +261,37 @@ func TestRenderCommandBarKeepsThemedBackground(t *testing.T) {
 	}
 }
 
+// A command_divider background configured by a theme must survive even though
+// hint runs set the bar background on themselves.
+func TestRenderCommandBarKeepsDividerBackground(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{})
+	model.width = 120
+	model.focus = focusEditor
+	divBg := lipgloss.Color("#445566")
+	model.theme.CommandDivider = model.theme.CommandDivider.Background(divBg)
+
+	bar := model.renderCommandBar()
+	plain := ansi.Strip(bar)
+	backgrounds := renderedCellBackgrounds(bar)
+
+	first := keycap("i", "Insert")
+	before, _, ok := strings.Cut(plain, first)
+	if !ok {
+		t.Fatalf("expected hint %q in %q", first, plain)
+	}
+	want := sgrTrueColorBackground(t, divBg)
+	start := lipgloss.Width(before) + lipgloss.Width(first)
+	for idx := start; idx < start+2; idx++ {
+		if !slices.Equal(backgrounds[idx], want) {
+			t.Fatalf("expected divider cell %d to keep background %v, got %v", idx, want, backgrounds[idx])
+		}
+	}
+}
+
 // assertKeycapBackground checks that the key cells inside the chip carry the
 // segment background while the half-block caps stay on the bar background.
 func assertKeycapBackground(

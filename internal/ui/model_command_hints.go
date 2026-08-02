@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 type commandHint struct {
@@ -128,7 +129,11 @@ func (m Model) renderCommandHints(style lipgloss.Style) string {
 	limit := commandBarContentWidth(style)
 	barBg := style.GetBackground()
 	// Hint cells render flush, so the divider carries all spacing between them.
-	divider := m.theme.CommandDivider.Background(barBg).Render("  ")
+	dividerStyle := m.theme.CommandDivider
+	if !theme.ColorDefined(dividerStyle.GetBackground()) {
+		dividerStyle = dividerStyle.Background(barBg)
+	}
+	divider := dividerStyle.Render("  ")
 
 	anchor := m.pinnedRow(limit, divider, barBg)
 	if limit <= 0 {
