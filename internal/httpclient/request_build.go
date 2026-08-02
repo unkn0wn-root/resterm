@@ -178,7 +178,12 @@ func (c *Client) buildHTTPRequest(
 						if at := req.Origin(); at != "" {
 							op += " (" + at + ")"
 						}
-						return nil, opts, diag.WrapAs(diag.ClassProtocol, expandErr, op)
+						return nil, opts, diag.WrapAs(
+							diag.ClassProtocol,
+							expandErr,
+							op,
+							diag.WithComponent(diag.ComponentHTTP),
+						)
 					}
 					finalValue = expanded
 				}

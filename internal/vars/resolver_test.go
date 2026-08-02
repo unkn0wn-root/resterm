@@ -430,6 +430,72 @@ func TestLenientResolverPreservesPlaceholders(t *testing.T) {
 	}
 }
 
+func TestExpandTemplatesResultReportsUndefinedVariables(t *testing.T) {
+	tests := []struct {
+		name          string
+		resolver      *Resolver
+		input         string
+		want          string
+		wantUndefined bool
+	}{
+		{
+			name: "resolved variable",
+			resolver: NewResolver(NewMapProvider("env", map[string]string{
+				"host": "example.com",
+			})).Lenient(),
+			input: "{{host}}",
+			want:  "example.com",
+		},
+		{
+			name:          "undefined variable",
+			resolver:      NewResolver().Lenient(),
+			input:         "{{missing}}",
+			want:          "{{missing}}",
+			wantUndefined: true,
+		},
+		{
+			name: "nested undefined variable",
+			resolver: NewResolver(NewTemplateProvider("file", map[string]string{
+				"outer": "{{missing}}",
+			})).Lenient(),
+			input:         "{{outer}}",
+			want:          "{{outer}}",
+			wantUndefined: true,
+		},
+		{
+			name:     "malformed opening marker",
+			resolver: NewResolver().Lenient(),
+			input:    "foo{{",
+			want:     "foo{{",
+		},
+		{
+			name:     "blank placeholder",
+			resolver: NewResolver().Lenient(),
+			input:    "{{ }}",
+			want:     "{{ }}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tt.resolver.ExpandTemplatesResult(tt.input)
+			if err != nil {
+				t.Fatalf("ExpandTemplatesResult() error = %v", err)
+			}
+			if result.Value != tt.want {
+				t.Fatalf("ExpandTemplatesResult() value = %q, want %q", result.Value, tt.want)
+			}
+			if result.HasUndefinedVariables != tt.wantUndefined {
+				t.Fatalf(
+					"ExpandTemplatesResult() HasUndefinedVariables = %v, want %v",
+					result.HasUndefinedVariables,
+					tt.wantUndefined,
+				)
+			}
+		})
+	}
+}
+
 func TestLenientResolverKeepsOuterPlaceholderForNestedFailure(t *testing.T) {
 	r := NewResolver(NewTemplateProvider("file", map[string]string{"a": "{{missing}} x"}))
 	lr := r.Lenient()

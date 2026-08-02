@@ -2,8 +2,8 @@ package request
 
 import (
 	"context"
+	"errors"
 	"maps"
-	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -349,12 +349,16 @@ func detectPreRequestScripts(req *restfile.Request) (bool, bool) {
 	return hasRTS, hasJS
 }
 
+// base marks every result produced in preview mode as a preview so RunRequest
+// short-circuits. Execution safety must not depend on a failed preview
+// failing again on the send path.
 func (x *execCtx) base() xrunResult {
 	return xrunResult{
 		Executed:       x.req,
 		Environment:    x.env.Label(),
 		Selection:      x.env.Selection(),
 		RuntimeSecrets: append([]string(nil), x.runtimeSecrets...),
+		Preview:        x.preview(),
 	}
 }
 
@@ -724,6 +728,21 @@ func (x *execCtx) prepareAuth() *xrunResult {
 	if x.preview() {
 		out, err := x.eng.prepareExplainAuthPreview(x.doc, x.req, x.res, x.env)
 		if err != nil {
+			// Auth values expand strictly so typed params never parse
+			// placeholder text. Undefined variables degrade to a skipped
+			// stage because the trace already lists the missing names.
+			// Structural errors stay fatal.
+			if errors.Is(err, vars.ErrUndefinedVariable) {
+				x.exp.stage(
+					xplain.StageAuth,
+					xplain.StageSkipped,
+					xplain.SummaryAuthPreviewSkipped,
+					before,
+					x.req,
+					err.Error(),
+				)
+				return nil
+			}
 			x.exp.stage(
 				xplain.StageAuth,
 				xplain.StageError,
@@ -747,8 +766,8 @@ func (x *execCtx) prepareAuth() *xrunResult {
 	}
 
 	var secs []string
-	switch strings.ToLower(strings.TrimSpace(x.req.Metadata.Auth.Type)) {
-	case "command":
+	switch authKind(x.req.Metadata.Auth) {
+	case authTypeCommand:
 		out, err := x.eng.EnsureCommandAuth(x.sendCtx, x.doc, x.req, x.res, x.env, x.timeout)
 		if err != nil {
 			x.exp.stage(
@@ -846,9 +865,6 @@ func (f flow) PrepareRequest() *xexec.RequestResult {
 	return x.prepareProto()
 }
 
-// PreviewResult always returns Preview set so RunRequest short-circuits.
-// Execution safety must not depend on a failed preview failing again on the
-// send path.
 func (f flow) PreviewResult() xexec.RequestResult {
 	if f.ctx == nil || !f.ctx.preview() {
 		return xexec.RequestResult{}
@@ -856,7 +872,6 @@ func (f flow) PreviewResult() xexec.RequestResult {
 	x := f.ctx
 	x.exp.setPrepared(x.req)
 	out := x.base()
-	out.Preview = true
 	out.RequestText = x.reqText()
 	if x.req.GRPC == nil {
 		if err := x.eng.prepareExplainHTTPPreview(

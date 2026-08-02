@@ -38,6 +38,7 @@ const (
 	SummaryOAuthTokenFetchSkipped      = "oauth token fetch skipped"
 	SummaryCommandAuthExecutionSkipped = "command auth execution skipped"
 	SummaryAuthTypeNotApplied          = "auth type not applied"
+	SummaryAuthPreviewSkipped          = "auth preview skipped"
 	SummaryRTSPreRequestComplete       = "RTS pre-request complete"
 	SummaryRTSPreRequestFailed         = "RTS pre-request failed"
 	SummaryRTSPreRequestOutputBad      = "RTS pre-request output invalid"

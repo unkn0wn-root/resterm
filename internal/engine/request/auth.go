@@ -385,7 +385,7 @@ func (e *Engine) BuildOAuthConfig(
 		return cfg, diag.New(diag.ClassAuth, errMissingOAuthSpec)
 	}
 	for _, field := range oauthConfigFields {
-		value, err := expandAuthParam(res, auth, authTypeOAuth2, field.key, auth.Params[field.key])
+		value, err := expandAuthParam(res, auth, field.key, auth.Params[field.key])
 		if err != nil {
 			return cfg, err
 		}
@@ -432,7 +432,7 @@ func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]
 		}
 		if key != authParamArgv {
 			var err error
-			value, err = expandAuthParam(res, auth, authTypeCommand, key, value)
+			value, err = expandAuthParam(res, auth, key, value)
 			if err != nil {
 				return nil, err
 			}
@@ -460,7 +460,7 @@ func expandCommandAuthArgv(argv []string, auth *restfile.AuthSpec, res *vars.Res
 	return nil
 }
 
-func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, scope, key, raw string) (string, error) {
+func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, key, raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return "", nil
 	}
@@ -469,7 +469,7 @@ func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, scope, key, ra
 	}
 	value, err := res.ExpandTemplates(raw)
 	if err != nil {
-		op := fmt.Sprintf("expand %s param %s", scope, key)
+		op := fmt.Sprintf("expand %s auth %s", authKind(auth), key)
 		if at := auth.Origin(); at != "" {
 			op += " (" + at + ")"
 		}
@@ -487,7 +487,7 @@ func oauthExtraParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]s
 		if isKnownOAuthParam(strings.ToLower(rawKey)) || strings.TrimSpace(rawValue) == "" {
 			continue
 		}
-		value, err := expandAuthParam(res, auth, authTypeOAuth2, rawKey, rawValue)
+		value, err := expandAuthParam(res, auth, rawKey, rawValue)
 		if err != nil {
 			return nil, err
 		}

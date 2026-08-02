@@ -64,6 +64,16 @@ func (t Template) render(
 	allowDynamic, allowExpr bool,
 	st *expandState,
 ) (string, error) {
+	result, err := t.renderResult(r, pos, allowDynamic, allowExpr, st)
+	return result.Value, err
+}
+
+func (t Template) renderResult(
+	r *Resolver,
+	pos ExprPos,
+	allowDynamic, allowExpr bool,
+	st *expandState,
+) (Expansion, error) {
 	// A lenient root render (st == nil) suppresses only undefined variables,
 	// which the trace records as missing. Cycles, nesting depth, and
 	// expression failures still error, and nested value expansion stays
@@ -72,6 +82,7 @@ func (t Template) render(
 	// declared value can never mask a cycle or broken expression next to it.
 	lenientRoot := st == nil && r.lenient
 	var firstErr error
+	var undef bool
 	out := t.replace(func(match, name string) string {
 		if name == "" {
 			return match
@@ -79,6 +90,9 @@ func (t Template) render(
 		value, err := r.resolveName(name, pos, allowDynamic, allowExpr, st)
 		if err != nil {
 			undefined := errors.Is(err, ErrUndefinedVariable)
+			if undefined {
+				undef = true
+			}
 			if lenientRoot && undefined {
 				return match
 			}
@@ -89,7 +103,7 @@ func (t Template) render(
 		}
 		return value
 	})
-	return out, firstErr
+	return Expansion{Value: out, HasUndefinedVariables: undef}, firstErr
 }
 
 // replace rebuilds the input and passes every placeholder through fn, even a

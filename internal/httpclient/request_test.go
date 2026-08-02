@@ -225,3 +225,166 @@ func TestBuildHTTPRequestLenientResolverKeepsPlaceholders(t *testing.T) {
 		t.Fatalf("unexpected authorization header: %q", got)
 	}
 }
+
+func TestBuildHTTPRequestExpandsAPIKeyPlacement(t *testing.T) {
+	c := NewClient(nil)
+	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{
+		"apiKeyPlacement": " Query ",
+		"apiKey":          "k-123",
+	}))
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/path",
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "apikey",
+				Params: map[string]string{
+					"placement": "{{apiKeyPlacement}}",
+					"name":      "key",
+					"value":     "{{apiKey}}",
+				},
+			},
+		},
+	}
+
+	httpReq, _, _, err := c.BuildHTTPRequest(context.Background(), req, resolver, Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := httpReq.URL.Query().Get("key"); got != "k-123" {
+		t.Fatalf("expected api key in query, got %q", got)
+	}
+	if got := httpReq.Header.Get("key"); got != "" {
+		t.Fatalf("api key must not land in a header, got %q", got)
+	}
+}
+
+func TestBuildHTTPRequestFailsOnUnresolvedAPIKeyPlacement(t *testing.T) {
+	c := NewClient(nil)
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "apikey",
+				Params: map[string]string{
+					"placement": "{{apiKeyPlacement}}",
+					"name":      "key",
+					"value":     "k-123",
+				},
+			},
+		},
+	}
+
+	_, _, _, err := c.BuildHTTPRequest(context.Background(), req, vars.NewResolver(), Options{})
+	if err == nil {
+		t.Fatalf("expected error for unresolved placement")
+	}
+	if !strings.Contains(err.Error(), "expand apikey auth placement") ||
+		!strings.Contains(err.Error(), "undefined variable: apiKeyPlacement") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyAuthenticationInvalidPlacementErrors(t *testing.T) {
+	c := NewClient(nil)
+	httpReq, err := http.NewRequest("GET", "https://example.com", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	auth := &restfile.AuthSpec{
+		Type: "apikey",
+		Params: map[string]string{
+			"placement": "qurey",
+			"name":      "X-Key",
+			"value":     "k-123",
+		},
+	}
+
+	err = c.applyAuthentication(httpReq, vars.NewResolver(), auth)
+	if err == nil || !strings.Contains(err.Error(), `invalid apikey auth placement "qurey"`) {
+		t.Fatalf("expected invalid placement error, got %v", err)
+	}
+	if got := httpReq.Header.Get("X-Key"); got != "" {
+		t.Fatalf("api key must not be applied on invalid placement, got %q", got)
+	}
+}
+
+func TestApplyAuthenticationEmptyPlacementDefaultsToHeader(t *testing.T) {
+	c := NewClient(nil)
+	httpReq, err := http.NewRequest("GET", "https://example.com", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	auth := &restfile.AuthSpec{
+		Type:   "apikey",
+		Params: map[string]string{"name": "X-Key", "value": "k-123"},
+	}
+
+	if err := c.applyAuthentication(httpReq, vars.NewResolver(), auth); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := httpReq.Header.Get("X-Key"); got != "k-123" {
+		t.Fatalf("expected header placement by default, got %q", got)
+	}
+}
+
+func TestApplyAuthenticationLenientAPIKeyPlacement(t *testing.T) {
+	tests := []struct {
+		name      string
+		placement string
+		wantError string
+	}{
+		{
+			name:      "undefined variable skips key",
+			placement: "{{apiKeyPlacement}}",
+		},
+		{
+			name:      "malformed opening marker errors",
+			placement: "foo{{",
+			wantError: `invalid apikey auth placement "foo{{"`,
+		},
+		{
+			name:      "blank placeholder errors",
+			placement: "{{ }}",
+			wantError: `invalid apikey auth placement "{{ }}"`,
+		},
+		{
+			name:      "misspelled placement errors",
+			placement: "qurey",
+			wantError: `invalid apikey auth placement "qurey"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewClient(nil)
+			httpReq, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
+			if err != nil {
+				t.Fatalf("new request: %v", err)
+			}
+			auth := &restfile.AuthSpec{
+				Type: "apikey",
+				Params: map[string]string{
+					"placement": tt.placement,
+					"name":      "X-Key",
+					"value":     "k-123",
+				},
+			}
+
+			err = c.applyAuthentication(httpReq, vars.NewResolver().Lenient(), auth)
+			if tt.wantError == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantError != "" && (err == nil || !strings.Contains(err.Error(), tt.wantError)) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantError, err)
+			}
+			if got := httpReq.Header.Get("X-Key"); got != "" {
+				t.Fatalf("api key with unknown placement must not be applied, got %q", got)
+			}
+			if got := httpReq.URL.RawQuery; got != "" {
+				t.Fatalf("api key with unknown placement must not touch the query, got %q", got)
+			}
+		})
+	}
+}

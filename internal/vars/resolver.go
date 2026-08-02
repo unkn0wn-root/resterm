@@ -27,6 +27,13 @@ type ExprPos struct {
 
 type ExprEval func(expr string, pos ExprPos) (string, error)
 
+// Expansion is the result of rendering one template input. Lenient rendering
+// preserves undefined placeholders in Value and reports their presence here.
+type Expansion struct {
+	Value                 string
+	HasUndefinedVariables bool
+}
+
 type Resolver struct {
 	providers []Provider
 	refs      []RefResolver
@@ -79,10 +86,11 @@ func NewResolver(providers ...Provider) *Resolver {
 	return &Resolver{providers: providers, memo: &memoStore{}}
 }
 
-// Lenient returns a resolver whose top level expansion never fails.
-// Unresolved placeholders stay literal and the trace still records the
-// missing names. Preview rendering uses it so display does not depend on
-// every variable resolving.
+// Lenient returns a resolver that suppresses undefined variable errors at
+// the top level. Placeholders stay literal and the trace still records the
+// missing names, while cycles, nesting depth, and expression failures keep
+// erroring. Derive it only after the resolver is fully configured, since the
+// copy does not see later setter calls.
 func (r *Resolver) Lenient() *Resolver {
 	if r == nil || r.lenient {
 		return r
@@ -319,6 +327,12 @@ func providerLabel(p Provider) string {
 
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
 	return CompileTemplate(input).render(r, r.exprPos, true, true, nil)
+}
+
+// ExpandTemplatesResult expands input and reports whether resolution encountered
+// any undefined variables, including when a lenient resolver suppresses the error.
+func (r *Resolver) ExpandTemplatesResult(input string) (Expansion, error) {
+	return CompileTemplate(input).renderResult(r, r.exprPos, true, true, nil)
 }
 
 func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) {

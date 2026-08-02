@@ -2074,7 +2074,7 @@ Open one in Resterm, switch to the appropriate environment (`resterm.env.json`),
 ## Troubleshooting & Tips
 
 - Use `Ctrl+P` to force a reparse if the navigator seems out of sync with editor changes.
-- If a template fails to expand (undefined variable), Resterm blocks the send and reports the missing variable. This covers URLs, query parameters, headers, auth values, and expanded bodies. Previews and the request list keep the placeholder intact and list the unresolved names.
+- If a template fails to expand (undefined variable), Resterm blocks the send and reports the missing variable. This covers URLs, query parameters, headers, auth values, and expanded bodies. Explain previews keep the placeholder intact and list the unresolved names.
 - Combine `@capture request ...` with test scripts to assert on response headers without cluttering file/global scopes.
 - Inline curl import works best with single commands; complex shell pipelines may need manual cleanup.
 - `Ctrl+Shift+V` pins the focused response pane-ideal for diffing the last good response against the current attempt.
