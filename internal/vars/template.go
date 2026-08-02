@@ -1,6 +1,7 @@
 package vars
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 )
@@ -50,8 +51,9 @@ func CompileTemplate(input string) Template {
 }
 
 // Render expands the template the same way ExpandTemplates does. An
-// unresolvable or blank placeholder stays literal and only the first error
-// is reported.
+// unresolvable or blank placeholder stays literal. One error is reported:
+// the first structural error (cycle, depth, expression) if any occurred,
+// otherwise the first undefined variable.
 func (t Template) Render(r *Resolver) (string, error) {
 	return t.render(r, r.exprPos, true, true, nil)
 }
@@ -62,6 +64,13 @@ func (t Template) render(
 	allowDynamic, allowExpr bool,
 	st *expandState,
 ) (string, error) {
+	// A lenient root render (st == nil) suppresses only undefined variables,
+	// which the trace records as missing. Cycles, nesting depth, and
+	// expression failures still error, and nested value expansion stays
+	// strict so failed values are never memoized. Structural errors outrank
+	// an earlier undefined variable at every level, so a missing name in a
+	// declared value can never mask a cycle or broken expression next to it.
+	lenientRoot := st == nil && r.lenient
 	var firstErr error
 	out := t.replace(func(match, name string) string {
 		if name == "" {
@@ -69,7 +78,11 @@ func (t Template) render(
 		}
 		value, err := r.resolveName(name, pos, allowDynamic, allowExpr, st)
 		if err != nil {
-			if firstErr == nil {
+			undefined := errors.Is(err, ErrUndefinedVariable)
+			if lenientRoot && undefined {
+				return match
+			}
+			if firstErr == nil || (!undefined && errors.Is(firstErr, ErrUndefinedVariable)) {
 				firstErr = err
 			}
 			return match

@@ -2,6 +2,7 @@ package vars
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -32,9 +33,15 @@ type Resolver struct {
 	expr      ExprEval
 	exprPos   ExprPos
 	trace     *Trace
+	lenient   bool
+	memo      *memoStore
+}
 
-	mu   sync.Mutex
-	memo map[memoKey]memoEntry
+// memoStore lives behind a pointer so derived resolvers share pinned values
+// without copying the lock.
+type memoStore struct {
+	mu      sync.Mutex
+	entries map[memoKey]memoEntry
 }
 
 // memoEntry pins the first expansion of a template-valued variable so every
@@ -69,7 +76,20 @@ type expandState struct {
 }
 
 func NewResolver(providers ...Provider) *Resolver {
-	return &Resolver{providers: providers}
+	return &Resolver{providers: providers, memo: &memoStore{}}
+}
+
+// Lenient returns a resolver whose top level expansion never fails.
+// Unresolved placeholders stay literal and the trace still records the
+// missing names. Preview rendering uses it so display does not depend on
+// every variable resolving.
+func (r *Resolver) Lenient() *Resolver {
+	if r == nil || r.lenient {
+		return r
+	}
+	cp := *r
+	cp.lenient = true
+	return &cp
 }
 
 func (r *Resolver) Resolve(name string) (string, bool) {
@@ -178,9 +198,9 @@ func checkExpandState(name string, key variableKey, st *expandState) error {
 }
 
 func (r *Resolver) memoized(key memoKey) (memoEntry, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entry, ok := r.memo[key]
+	r.memo.mu.Lock()
+	defer r.memo.mu.Unlock()
+	entry, ok := r.memo.entries[key]
 	return entry, ok
 }
 
@@ -189,15 +209,15 @@ func (r *Resolver) memoized(key memoKey) (memoEntry, bool) {
 // Avoiding a wait on another variable's expansion also keeps concurrent roots
 // of a cyclic graph from deadlocking each other.
 func (r *Resolver) memoize(key memoKey, candidate memoEntry) memoEntry {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.memo == nil {
-		r.memo = make(map[memoKey]memoEntry)
+	r.memo.mu.Lock()
+	defer r.memo.mu.Unlock()
+	if r.memo.entries == nil {
+		r.memo.entries = make(map[memoKey]memoEntry)
 	}
-	if entry, ok := r.memo[key]; ok {
+	if entry, ok := r.memo.entries[key]; ok {
 		return entry
 	}
-	r.memo[key] = candidate
+	r.memo.entries[key] = candidate
 	return candidate
 }
 
@@ -325,6 +345,11 @@ func (r *Resolver) SetExprPos(pos ExprPos) {
 	r.exprPos = pos
 }
 
+// ErrUndefinedVariable marks names no provider could resolve. Lenient
+// rendering suppresses exactly this class since the trace records the name
+// as missing. Every other error still fails.
+var ErrUndefinedVariable = errors.New("undefined variable")
+
 // resolveName resolves one placeholder name. A non-nil error means the
 // placeholder cannot be resolved and callers keep it as literal text.
 func (r *Resolver) resolveName(
@@ -373,7 +398,7 @@ func (r *Resolver) resolveName(
 		return value, nil
 	}
 	r.traceVar(ResolveTrace{Name: name, Missing: true, Uses: 1})
-	return "", fmt.Errorf("undefined variable: %s", name)
+	return "", fmt.Errorf("%w: %s", ErrUndefinedVariable, name)
 }
 
 func resolveDynamic(name string) (string, bool) {

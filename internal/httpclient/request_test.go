@@ -194,3 +194,34 @@ func TestBuildHTTPRequestExpandsHeaderAndAuth(t *testing.T) {
 		t.Fatalf("unexpected authorization header: %q", got)
 	}
 }
+
+func TestBuildHTTPRequestLenientResolverKeepsPlaceholders(t *testing.T) {
+	c := NewClient(nil)
+	req := &restfile.Request{
+		Method:  "GET",
+		URL:     "https://example.com",
+		Headers: http.Header{"X-Trace": []string{"{{traceID}}"}},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": "{{tok}}"},
+			},
+		},
+	}
+
+	httpReq, _, _, err := c.BuildHTTPRequest(
+		context.Background(),
+		req,
+		vars.NewResolver().Lenient(),
+		Options{},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := httpReq.Header.Get("X-Trace"); got != "{{traceID}}" {
+		t.Fatalf("unexpected trace header: %q", got)
+	}
+	if got := httpReq.Header.Get("Authorization"); got != "Bearer {{tok}}" {
+		t.Fatalf("unexpected authorization header: %q", got)
+	}
+}

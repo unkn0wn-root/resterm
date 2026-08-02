@@ -155,3 +155,105 @@ func TestExecuteWithReportsInsecureSSHWarning(t *testing.T) {
 		})
 	}
 }
+
+func TestPreviewWithUnresolvedVariablesDoesNotExecute(t *testing.T) {
+	transportCalled := false
+	client := httpclient.NewClientWithOptions(
+		httpclient.WithHTTPFactory(func(opts httpclient.Options) (*http.Client, error) {
+			transportCalled = true
+			return &http.Client{}, nil
+		}),
+	)
+	e := New(engcfg.Config{Client: client}, nil)
+	req := &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     "http://example.test",
+		Headers: http.Header{"X-Trace": []string{"{{traceID}}"}},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": "{{auth.globalToken}}"},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview {
+		t.Fatalf("expected preview result")
+	}
+	if res.Err != nil {
+		t.Fatalf("expected lenient preview to succeed, got %v", res.Err)
+	}
+	if res.Explain == nil {
+		t.Fatalf("expected explain report")
+	}
+	if transportCalled {
+		t.Fatalf("preview must not construct a transport")
+	}
+}
+
+func TestPreviewBuildFailureStillShortCircuits(t *testing.T) {
+	transportCalled := false
+	client := httpclient.NewClientWithOptions(
+		httpclient.WithHTTPFactory(func(opts httpclient.Options) (*http.Client, error) {
+			transportCalled = true
+			return &http.Client{}, nil
+		}),
+	)
+	e := New(engcfg.Config{Client: client}, nil)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://{{host}}/status",
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview error result must keep Preview set")
+	}
+	if res.Err == nil {
+		t.Fatalf("expected request build error")
+	}
+	if transportCalled {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestPreviewCyclicVariablesReportsError(t *testing.T) {
+	transportCalled := false
+	client := httpclient.NewClientWithOptions(
+		httpclient.WithHTTPFactory(func(opts httpclient.Options) (*http.Client, error) {
+			transportCalled = true
+			return &http.Client{}, nil
+		}),
+	)
+	e := New(engcfg.Config{Client: client}, nil)
+	req := &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     "http://example.test",
+		Headers: http.Header{"X-Test": []string{"{{a}}"}},
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview error result must keep Preview set")
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected cycle error, got %v", res.Err)
+	}
+	if transportCalled {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}

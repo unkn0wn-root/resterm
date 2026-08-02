@@ -846,12 +846,18 @@ func (f flow) PrepareRequest() *xexec.RequestResult {
 	return x.prepareProto()
 }
 
+// PreviewResult always returns Preview set so RunRequest short-circuits.
+// Execution safety must not depend on a failed preview failing again on the
+// send path.
 func (f flow) PreviewResult() xexec.RequestResult {
 	if f.ctx == nil || !f.ctx.preview() {
 		return xexec.RequestResult{}
 	}
 	x := f.ctx
 	x.exp.setPrepared(x.req)
+	out := x.base()
+	out.Preview = true
+	out.RequestText = x.reqText()
 	if x.req.GRPC == nil {
 		if err := x.eng.prepareExplainHTTPPreview(
 			x.sendCtx,
@@ -868,16 +874,11 @@ func (f flow) PreviewResult() xexec.RequestResult {
 				nil,
 				err.Error(),
 			)
-			out := x.base()
 			out.Err = err
-			out.RequestText = x.reqText()
 			out.Explain = x.exp.finish(xplain.StatusError, "HTTP preparation failed", err)
 			return out
 		}
 	}
-	out := x.base()
-	out.RequestText = x.reqText()
-	out.Preview = true
 	out.Explain = x.exp.finish(
 		xplain.StatusReady,
 		"Explain preview ready. No request was sent.",
