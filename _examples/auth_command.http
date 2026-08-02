@@ -1,13 +1,13 @@
-### Global Command Auth Default
-# @auth global command argv=["gh","auth","token"] cache_key=github-cli-global
+### File Command Auth Default
+# @auth file command argv=["gh","auth","token"] cache_key=github-cli-file
 
 ### Reusable Command Auth Profile
-# @patch global githubCliAuth {auth: {type: "command", argv: '["gh","auth","token"]', cache_key: "github-cli"}}
+# @patch file githubCliAuth {auth: {type: "command", argv: '["gh","auth","token"]', cache_key: "github-cli"}}
 
-### GitHub CLI Token Via Global Auth
-# @name GitHubCLITokenGlobal
-# @tag auth command global
-# @description Inherits command-backed bearer auth from the global @auth directive above.
+### GitHub CLI Token Via File Auth
+# @name GitHubCLITokenFile
+# @tag auth command file
+# @description Inherits command-backed bearer auth from the file-scoped @auth directive above.
 GET https://api.github.com/user
 Accept: application/vnd.github+json
 X-GitHub-Api-Version: 2022-11-28
@@ -44,21 +44,21 @@ X-GitHub-Api-Version: 2022-11-28
 # @tag auth command
 # @description Parses token, token type, and expiry fields from JSON stdout.
 # @auth command argv=["mycli","auth","print","--json"] format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
-GET https://example.com/projects
+GET https://api.github.com/user
 Accept: application/json
 
 ### Custom Header Injection
 # @name CommandCustomHeader
 # @tag auth command
 # @description Sends a raw token to a custom header instead of Authorization.
-# @auth command argv=["aws","--profile","{{aws.profile}}","ecr","get-login-password"] header=X-Registry-Token cache_key=ecr ttl=10m
-GET https://example.com/registry
+# @auth command argv=["gh","auth","token"] header=X-GitHub-Token cache_key=github-cli-custom-header ttl=10m
+GET https://api.github.com/rate_limit
 Accept: application/json
 
 ### Fixed Scheme Override
 # @name CommandFixedScheme
 # @tag auth command
 # @description Overrides token_type with a fixed scheme string.
-# @auth command argv=["mycli","auth","print","--json"] format=json token_path=data.token type_path=data.token_type header=Authorization scheme=Token cache_key=custom-scheme
-GET https://example.com/audit
+# @auth command argv=["gh","auth","token"] header=Authorization scheme=Token cache_key=github-cli-custom-scheme
+GET https://api.github.com/user
 Accept: application/json
