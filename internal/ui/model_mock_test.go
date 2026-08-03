@@ -249,9 +249,8 @@ func TestTUIMockStartWithSourceSubset(t *testing.T) {
 	}
 }
 
-// Recursion is part of the scope a bare start inherits, so a workspace that
-// launched without it does not quietly drop nested routes on the next restart
-// or toggle. Naming a scope again is what changes it.
+// Recursion is part of the scope a bare start inherits. A workspace that
+// launched without it used to drop nested routes on the next restart or toggle.
 func TestMockRecursiveScopeOutlivesRestartAndStop(t *testing.T) {
 	dir := t.TempDir()
 	usersDoc := "### Users\n# @mock method=GET path=/users\nHTTP/1.1 200 OK\n\nusers\n"
@@ -303,7 +302,7 @@ func TestMockRecursiveScopeOutlivesRestartAndStop(t *testing.T) {
 			t.Fatalf("stop result = %+v", closed)
 		}
 		// Rebinding the exact port the last server held races with its
-		// teardown; the scope, not the address, is under test.
+		// teardown, and this test is about the scope, not the address.
 		model.mock.addr = "127.0.0.1:0"
 	}
 
@@ -336,8 +335,7 @@ func TestMockRecursiveScopeOutlivesRestartAndStop(t *testing.T) {
 		t.Fatalf("/orders after toggle = %d, want the remembered recursive scope", got)
 	}
 
-	// Naming whole workspace scope again drops recursion back to the
-	// workspace default, which is how a session widens or narrows on purpose.
+	// Naming workspace scope again drops recursion back to the launch default.
 	restart("--all")
 	if got := get("/users"); got != http.StatusOK {
 		t.Fatalf("/users after restart --all = %d", got)

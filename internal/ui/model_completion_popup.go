@@ -14,6 +14,8 @@ const completionPopupMaxRows = 15
 const completionPreviewMaxWidth = 52
 const completionPreviewMaxHeight = 12
 
+const popupEllipsis = "…"
+
 type completionPopupLayout struct {
 	x     int
 	y     int
@@ -193,11 +195,11 @@ func (m Model) completionPopupLines(
 			labelStyle = m.theme.EditorHintSelected
 		}
 
-		labelText := ansi.Truncate(item.Label, labelW, "")
+		labelText := ansi.Truncate(item.Label, labelW, popupEllipsis)
 		labelText = padVisibleRight(labelText, labelW)
 		label := labelStyle.Render(labelText)
 		if summaryW > 0 && item.Summary != "" {
-			summaryText := ansi.Truncate(item.Summary, summaryW, "")
+			summaryText := ansi.Truncate(item.Summary, summaryW, popupEllipsis)
 			summary := m.theme.EditorHintAnnotation.Render(summaryText)
 			lines[i] = lipgloss.JoinHorizontal(lipgloss.Top, label, " ", summary)
 			continue
@@ -207,21 +209,31 @@ func (m Model) completionPopupLines(
 	return lines
 }
 
+// Both columns keep the width they want while they both fit. After that the
+// label gives way until the summary can hold a readable phrase. When the label
+// cannot shrink any further, rows show labels alone.
+const (
+	popupLabelFloor   = 12
+	popupSummaryFloor = 16
+)
+
 func completionPopupColumns(prefLabelW, prefSummaryW, maxTextW int) (int, int) {
 	if maxTextW < 1 {
 		return 0, 0
 	}
 	labelW := min(max(prefLabelW, 1), maxTextW)
-	if prefSummaryW < 1 || labelW >= maxTextW {
+	if prefSummaryW < 1 {
 		return labelW, 0
 	}
 
-	avail := maxTextW - labelW - 1
-	if avail < 1 {
-		return labelW, 0
+	owed := min(prefSummaryW, popupSummaryFloor)
+	if labelW+1+owed <= maxTextW {
+		return labelW, min(prefSummaryW, maxTextW-labelW-1)
 	}
-	summaryW := min(prefSummaryW, avail)
-	return labelW, summaryW
+	if shared := maxTextW - 1 - owed; shared >= popupLabelFloor {
+		return shared, owed
+	}
+	return labelW, 0
 }
 
 func completionPopupWidth(lines []string) int {

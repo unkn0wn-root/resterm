@@ -143,7 +143,7 @@ func (m *Model) executeMockCommand(args []string) tea.Cmd {
 }
 
 func (m *Model) mockCommandUsage(def mockCommandDef) tea.Cmd {
-	return statusCmd(statusWarn, "Usage: :mock "+def.display())
+	return statusCmd(statusWarn, "Usage: :mock "+def.usage())
 }
 
 func (m *Model) mockArgsError(def mockCommandDef, err error) tea.Cmd {
@@ -359,16 +359,16 @@ func (m *Model) mockRoot() string {
 	return "."
 }
 
-// forgetMockScope drops a remembered scope, whose root and paths only mean
-// anything under the workspace that produced them.
+// forgetMockScope drops a remembered scope. Its root and paths only mean
+// something under the workspace that produced them.
 func (m *Model) forgetMockScope() {
 	m.mock.src = mock.Sources{}
 }
 
 // mockSources reports the scope a mock server would serve now. A scope outlives
 // the server that introduced it, the way the address does, so a stop and start
-// does not silently widen or narrow what is served. Only naming a scope again
-// or leaving the workspace replaces it. Until one is set the workspace answers.
+// serves the same files as before. Naming a scope again or leaving the
+// workspace replaces it. Before any of that the workspace is the scope.
 func (m *Model) mockSources() mock.Sources {
 	if m.mock.src.Path != "" {
 		return m.mock.src
