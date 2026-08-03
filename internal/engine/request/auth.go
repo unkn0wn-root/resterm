@@ -2,8 +2,12 @@ package request
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"maps"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -328,18 +332,27 @@ func (e *Engine) BuildCommandAuthConfig(
 	if auth == nil {
 		return cfg, diag.New(diag.ClassAuth, errMissingCommandAuthSpec)
 	}
-	pm, err := commandAuthParams(auth, res)
-	if err != nil {
-		return cfg, err
+	// Keep going on undefined params so a cycle in argv still fails the
+	// build. If parsing then fails it is probably because the failed params
+	// are missing from the map, so report the undefined variable instead.
+	pm, perr := commandAuthParams(auth, res)
+	if perr != nil && !errors.Is(perr, vars.ErrUndefinedVariable) {
+		return cfg, perr
 	}
 
 	dir := e.cmdDir(doc, auth)
 	out, err := authcmd.Parse(pm, dir)
 	if err != nil {
+		if perr != nil {
+			return cfg, perr
+		}
 		return out, err
 	}
-	if err := expandCommandAuthArgv(out.Argv, res); err != nil {
-		return out, err
+	if err := expandCommandAuthArgv(out.Argv, auth, res); err != nil {
+		return out, vars.PreferStructural(perr, err)
+	}
+	if perr != nil {
+		return cfg, perr
 	}
 	return out.WithBaseTimeout(timeout), nil
 }
@@ -383,16 +396,21 @@ func (e *Engine) BuildOAuthConfig(
 	if auth == nil {
 		return cfg, diag.New(diag.ClassAuth, errMissingOAuthSpec)
 	}
+	var firstErr error
 	for _, field := range oauthConfigFields {
-		value, err := expandAuthParam(res, authTypeOAuth2, field.key, auth.Params[field.key])
+		value, err := expandAuthParam(res, auth, field.key, auth.Params[field.key])
 		if err != nil {
-			return cfg, err
+			firstErr = vars.PreferStructural(firstErr, err)
+			continue
 		}
 		field.set(&cfg, value)
 	}
 	extra, err := oauthExtraParams(auth, res)
 	if err != nil {
-		return cfg, err
+		firstErr = vars.PreferStructural(firstErr, err)
+	}
+	if firstErr != nil {
+		return cfg, firstErr
 	}
 	cfg.Extra = extra
 	return cfg.Normalized(), nil
@@ -419,43 +437,51 @@ func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]
 		return nil, nil
 	}
 	out := make(map[string]string, len(auth.Params))
-	for rawKey, rawValue := range auth.Params {
+	var firstErr error
+	for _, rawKey := range slices.Sorted(maps.Keys(auth.Params)) {
 		key := strings.ToLower(strings.TrimSpace(rawKey))
 		if key == "" {
 			continue
 		}
 
-		value := strings.TrimSpace(rawValue)
+		value := strings.TrimSpace(auth.Params[rawKey])
 		if value == "" {
 			continue
 		}
 		if key != authParamArgv {
 			var err error
-			value, err = expandAuthParam(res, authTypeCommand, key, value)
+			value, err = expandAuthParam(res, auth, key, value)
 			if err != nil {
-				return nil, err
+				firstErr = vars.PreferStructural(firstErr, err)
+				continue
 			}
 		}
 		out[key] = value
 	}
-	return out, nil
+	return out, firstErr
 }
 
-func expandCommandAuthArgv(argv []string, res *vars.Resolver) error {
+func expandCommandAuthArgv(argv []string, auth *restfile.AuthSpec, res *vars.Resolver) error {
 	if res == nil {
 		return nil
 	}
+	var firstErr error
 	for i, arg := range argv {
 		value, err := res.ExpandTemplates(arg)
 		if err != nil {
-			return diag.WrapAsf(diag.ClassAuth, err, "expand command auth argv[%d]", i)
+			op := fmt.Sprintf("expand command auth argv[%d]", i)
+			if at := auth.Origin(); at != "" {
+				op += " (" + at + ")"
+			}
+			firstErr = vars.PreferStructural(firstErr, diag.WrapAs(diag.ClassAuth, err, op))
+			continue
 		}
 		argv[i] = value
 	}
-	return nil
+	return firstErr
 }
 
-func expandAuthParam(res *vars.Resolver, scope, key, raw string) (string, error) {
+func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, key, raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return "", nil
 	}
@@ -464,7 +490,11 @@ func expandAuthParam(res *vars.Resolver, scope, key, raw string) (string, error)
 	}
 	value, err := res.ExpandTemplates(raw)
 	if err != nil {
-		return "", diag.WrapAsf(diag.ClassAuth, err, "expand %s param %s", scope, key)
+		op := fmt.Sprintf("expand %s auth %s", authKind(auth), key)
+		if at := auth.Origin(); at != "" {
+			op += " (" + at + ")"
+		}
+		return "", diag.WrapAs(diag.ClassAuth, err, op)
 	}
 	return strings.TrimSpace(value), nil
 }
@@ -474,18 +504,24 @@ func oauthExtraParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]s
 		return nil, nil
 	}
 	out := make(map[string]string)
-	for rawKey, rawValue := range auth.Params {
+	var firstErr error
+	for _, rawKey := range slices.Sorted(maps.Keys(auth.Params)) {
+		rawValue := auth.Params[rawKey]
 		if isKnownOAuthParam(strings.ToLower(rawKey)) || strings.TrimSpace(rawValue) == "" {
 			continue
 		}
-		value, err := expandAuthParam(res, authTypeOAuth2, rawKey, rawValue)
+		value, err := expandAuthParam(res, auth, rawKey, rawValue)
 		if err != nil {
-			return nil, err
+			firstErr = vars.PreferStructural(firstErr, err)
+			continue
 		}
 		if value == "" {
 			continue
 		}
 		out[strings.ToLower(strings.ReplaceAll(rawKey, "-", "_"))] = value
+	}
+	if firstErr != nil {
+		return nil, firstErr
 	}
 	if len(out) == 0 {
 		return nil, nil

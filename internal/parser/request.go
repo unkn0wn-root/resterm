@@ -15,6 +15,7 @@ import (
 
 type requestBuilder struct {
 	startLine         int
+	sourcePath        string
 	metadata          restfile.RequestMetadata
 	variables         []restfile.Variable
 	originalLines     []string
@@ -93,6 +94,7 @@ func (r *requestBuilder) build() *restfile.Request {
 			Start: r.startLine,
 			End:   r.startLine + len(r.originalLines) - 1,
 		},
+		SourcePath:   r.sourcePath,
 		OriginalText: strings.Join(r.originalLines, "\n"),
 	}
 

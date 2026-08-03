@@ -1,6 +1,7 @@
 package vars
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -397,5 +398,196 @@ func TestExpandTemplatesStaticExpr(t *testing.T) {
 	}
 	if called {
 		t.Fatalf("expected static expansion to skip expression eval")
+	}
+}
+
+func TestLenientResolverPreservesPlaceholders(t *testing.T) {
+	r := NewResolver(NewMapProvider("env", map[string]string{"host": "example.com"}))
+	tr := NewTrace()
+	r.SetTrace(tr)
+	lr := r.Lenient()
+
+	out, err := lr.ExpandTemplates("https://{{host}}/{{missing}}")
+	if err != nil {
+		t.Fatalf("lenient expansion returned error: %v", err)
+	}
+	if out != "https://example.com/{{missing}}" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+
+	if _, err := r.ExpandTemplates("{{missing}}"); err == nil {
+		t.Fatalf("strict resolver should still fail")
+	}
+
+	found := false
+	for _, it := range tr.Items() {
+		if it.Name == "missing" && it.Missing {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("trace did not record missing variable")
+	}
+}
+
+func TestExpandTemplatesResultReportsUndefinedVariables(t *testing.T) {
+	tests := []struct {
+		name          string
+		resolver      *Resolver
+		input         string
+		want          string
+		wantUndefined bool
+	}{
+		{
+			name: "resolved variable",
+			resolver: NewResolver(NewMapProvider("env", map[string]string{
+				"host": "example.com",
+			})).Lenient(),
+			input: "{{host}}",
+			want:  "example.com",
+		},
+		{
+			name:          "undefined variable",
+			resolver:      NewResolver().Lenient(),
+			input:         "{{missing}}",
+			want:          "{{missing}}",
+			wantUndefined: true,
+		},
+		{
+			name: "nested undefined variable",
+			resolver: NewResolver(NewTemplateProvider("file", map[string]string{
+				"outer": "{{missing}}",
+			})).Lenient(),
+			input:         "{{outer}}",
+			want:          "{{outer}}",
+			wantUndefined: true,
+		},
+		{
+			name:     "malformed opening marker",
+			resolver: NewResolver().Lenient(),
+			input:    "foo{{",
+			want:     "foo{{",
+		},
+		{
+			name:     "blank placeholder",
+			resolver: NewResolver().Lenient(),
+			input:    "{{ }}",
+			want:     "{{ }}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tt.resolver.ExpandTemplatesResult(tt.input)
+			if err != nil {
+				t.Fatalf("ExpandTemplatesResult() error = %v", err)
+			}
+			if result.Value != tt.want {
+				t.Fatalf("ExpandTemplatesResult() value = %q, want %q", result.Value, tt.want)
+			}
+			if result.HasUndefinedVariables != tt.wantUndefined {
+				t.Fatalf(
+					"ExpandTemplatesResult() HasUndefinedVariables = %v, want %v",
+					result.HasUndefinedVariables,
+					tt.wantUndefined,
+				)
+			}
+		})
+	}
+}
+
+func TestLenientResolverKeepsOuterPlaceholderForNestedFailure(t *testing.T) {
+	r := NewResolver(NewTemplateProvider("file", map[string]string{"a": "{{missing}} x"}))
+	lr := r.Lenient()
+
+	out, err := lr.ExpandTemplates("{{a}}")
+	if err != nil {
+		t.Fatalf("lenient expansion returned error: %v", err)
+	}
+	if out != "{{a}}" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+
+	if _, err := r.ExpandTemplates("{{a}}"); err == nil {
+		t.Fatalf("strict resolver should still fail after lenient render")
+	}
+}
+
+func TestLenientResolverReportsCycles(t *testing.T) {
+	r := NewResolver(NewTemplateProvider("file", map[string]string{
+		"a": "{{b}}",
+		"b": "{{a}}",
+	}))
+
+	out, err := r.Lenient().ExpandTemplates("{{a}}")
+	if err == nil || !strings.Contains(err.Error(), "variable cycle") {
+		t.Fatalf("expected cycle error, got %v", err)
+	}
+	if out != "{{a}}" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+}
+
+func TestLenientResolverReportsExpressionErrors(t *testing.T) {
+	out, err := NewResolver().Lenient().ExpandTemplates("{{= 1 + 1 }}")
+	if err == nil || !strings.Contains(err.Error(), "expressions not enabled") {
+		t.Fatalf("expected expression error, got %v", err)
+	}
+	if out != "{{= 1 + 1 }}" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+}
+
+func TestLenientResolverCycleNotMaskedByUndefined(t *testing.T) {
+	r := NewResolver(NewTemplateProvider("file", map[string]string{
+		"a": "{{b}}",
+		"b": "{{a}}",
+	}))
+
+	out, err := r.Lenient().ExpandTemplates("{{missing}} {{a}}")
+	if err == nil || !strings.Contains(err.Error(), "variable cycle") {
+		t.Fatalf("expected cycle error, got %v", err)
+	}
+	if out != "{{missing}} {{a}}" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+}
+
+func TestUndefinedVariableSentinel(t *testing.T) {
+	r := NewResolver(NewTemplateProvider("file", map[string]string{"a": "{{missing}}"}))
+
+	_, err := r.ExpandTemplates("{{missing}}")
+	if !errors.Is(err, ErrUndefinedVariable) {
+		t.Fatalf("expected sentinel on plain undefined, got %v", err)
+	}
+
+	_, err = r.ExpandTemplates("{{a}}")
+	if !errors.Is(err, ErrUndefinedVariable) {
+		t.Fatalf("expected sentinel through nested wrap, got %v", err)
+	}
+
+	_, err = r.Lenient().ExpandTemplates("{{= 1 }}")
+	if errors.Is(err, ErrUndefinedVariable) {
+		t.Fatalf("expression error must not match the sentinel")
+	}
+}
+
+func TestNestedCycleOutranksUndefined(t *testing.T) {
+	r := NewResolver(NewTemplateProvider("file", map[string]string{
+		"a": "{{missing}} {{b}}",
+		"b": "{{b}}",
+	}))
+
+	out, err := r.Lenient().ExpandTemplates("{{a}}")
+	if err == nil || !strings.Contains(err.Error(), "variable cycle") {
+		t.Fatalf("lenient render must report the nested cycle, got %v", err)
+	}
+	if out != "{{a}}" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+
+	if _, err := r.ExpandTemplates("{{a}}"); err == nil ||
+		!strings.Contains(err.Error(), "variable cycle") {
+		t.Fatalf("strict render must report the cycle over the missing name, got %v", err)
 	}
 }

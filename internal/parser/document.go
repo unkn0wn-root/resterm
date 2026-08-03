@@ -204,6 +204,7 @@ func (b *documentBuilder) ensureRequest(line int) {
 	b.inRequest = true
 	b.request = &requestBuilder{
 		startLine:         line,
+		sourcePath:        b.doc.Path,
 		metadata:          restfile.RequestMetadata{Tags: []string{}},
 		currentScriptKind: defaultScriptKind,
 		currentScriptLang: defaultScriptLang,

@@ -3768,3 +3768,40 @@ GET https://example.com
 		t.Fatalf("expected empty alias, got %q", sp.Alias)
 	}
 }
+
+func TestParseRecordsAuthAndRequestOrigin(t *testing.T) {
+	src := `# @auth file bearer {{fileToken}}
+
+# @auth request bearer {{reqToken}}
+GET https://example.com
+`
+
+	doc := Parse("origin.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Auth) != 1 {
+		t.Fatalf("expected 1 auth profile, got %d", len(doc.Auth))
+	}
+	spec := doc.Auth[0].Spec
+	if spec.SourcePath != "origin.http" || spec.Line != 1 {
+		t.Fatalf("unexpected file auth origin: %s:%d", spec.SourcePath, spec.Line)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.SourcePath != "origin.http" {
+		t.Fatalf("unexpected request source path: %q", req.SourcePath)
+	}
+	if req.Metadata.Auth == nil {
+		t.Fatalf("expected request auth metadata")
+	}
+	if req.Metadata.Auth.SourcePath != "origin.http" || req.Metadata.Auth.Line != 3 {
+		t.Fatalf(
+			"unexpected request auth origin: %s:%d",
+			req.Metadata.Auth.SourcePath,
+			req.Metadata.Auth.Line,
+		)
+	}
+}

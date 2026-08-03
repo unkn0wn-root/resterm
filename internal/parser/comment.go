@@ -183,6 +183,7 @@ func (b *documentBuilder) handleAuthDirective(
 		}
 		spec := *dir.Spec.Clone()
 		spec.SourcePath = b.doc.Path
+		spec.Line = line
 		b.file.auth = append(b.file.auth, restfile.AuthProfile{
 			Scope:      dir.Scope,
 			Name:       dir.Name,
@@ -200,6 +201,7 @@ func (b *documentBuilder) handleAuthDirective(
 		if dir.Spec != nil {
 			spec := dir.Spec.Clone()
 			spec.SourcePath = b.doc.Path
+			spec.Line = line
 			b.request.metadata.Auth = spec
 			b.request.metadata.AuthDisabled = false
 		}

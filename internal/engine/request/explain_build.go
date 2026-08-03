@@ -1241,7 +1241,7 @@ func (e *Engine) prepareExplainHTTPPreview(
 	if rep == nil || req == nil || e.hc == nil {
 		return nil
 	}
-	httpReq, _, body, err := e.hc.BuildHTTPRequest(ctx, req, res, opts)
+	httpReq, _, body, err := e.hc.BuildHTTPRequest(ctx, req, res.Lenient(), opts)
 	if err != nil {
 		return err
 	}

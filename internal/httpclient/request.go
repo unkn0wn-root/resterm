@@ -2,12 +2,14 @@ package httpclient
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -30,6 +32,7 @@ const (
 	authParamHeader    = "header"
 
 	authPlacementQuery   = "query"
+	authPlacementHeader  = "header"
 	authorizationHeader  = "Authorization"
 	defaultAPIKeyHeader  = "X-API-Key"
 	bearerTokenPrefix    = "Bearer "
@@ -71,63 +74,124 @@ func (c *Client) prepareHTTPRequestWithOpts(
 	return prepared.request, prepared.options, nil
 }
 
+// applyAuthentication expands every auth param that would reach the wire and
+// propagates expansion errors, so a strict resolver fails the build closed
+// while a lenient one previews with placeholders intact.
 func (c *Client) applyAuthentication(
 	req *http.Request,
 	resolver *vars.Resolver,
 	auth *restfile.AuthSpec,
-) {
+) error {
 	if auth == nil || len(auth.Params) == 0 {
-		return
+		return nil
 	}
 
-	expand := func(value string) string {
-		if value == "" {
-			return ""
+	kind := strings.ToLower(auth.Type)
+	expandResult := func(param string) (vars.Expansion, error) {
+		value := auth.Params[param]
+		if value == "" || resolver == nil {
+			return vars.Expansion{Value: value}, nil
 		}
-		if resolver == nil {
-			return value
+		out, err := resolver.ExpandTemplatesResult(value)
+		if err != nil {
+			op := fmt.Sprintf("expand %s auth %s", kind, param)
+			if at := auth.Origin(); at != "" {
+				op += " (" + at + ")"
+			}
+			return vars.Expansion{}, diag.WrapAs(
+				diag.ClassAuth,
+				err,
+				op,
+				diag.WithComponent(diag.ComponentHTTP),
+			)
 		}
-		if expanded, err := resolver.ExpandTemplates(value); err == nil {
-			return expanded
-		}
-		return value
+		return out, nil
+	}
+	expand := func(param string) (string, error) {
+		out, err := expandResult(param)
+		return out.Value, err
 	}
 
-	switch strings.ToLower(auth.Type) {
+	switch kind {
 	case string(authTypeBasic):
-		user := expand(auth.Params[authParamUsername])
-		pass := expand(auth.Params[authParamPassword])
-		if req.Header.Get(authorizationHeader) == "" {
-			req.SetBasicAuth(user, pass)
+		if req.Header.Get(authorizationHeader) != "" {
+			return nil
 		}
+		user, err := expand(authParamUsername)
+		if err != nil {
+			return err
+		}
+		pass, err := expand(authParamPassword)
+		if err != nil {
+			return err
+		}
+		req.SetBasicAuth(user, pass)
 	case string(authTypeBearer):
-		token := expand(auth.Params[authParamToken])
-		if req.Header.Get(authorizationHeader) == "" {
-			req.Header.Set(authorizationHeader, bearerTokenPrefix+token)
+		if req.Header.Get(authorizationHeader) != "" {
+			return nil
 		}
+		token, err := expand(authParamToken)
+		if err != nil {
+			return err
+		}
+		req.Header.Set(authorizationHeader, bearerTokenPrefix+token)
 	case string(authTypeAPIKey), legacyAPIKeyAuthType:
-		placement := strings.ToLower(auth.Params[authParamPlacement])
-		name := expand(auth.Params[authParamName])
-		value := expand(auth.Params[authParamValue])
-		if placement == authPlacementQuery {
+		placement, err := expandResult(authParamPlacement)
+		if err != nil {
+			return err
+		}
+		name, err := expand(authParamName)
+		if err != nil {
+			return err
+		}
+		switch util.LowerTrim(placement.Value) {
+		case authPlacementQuery:
+			value, err := expand(authParamValue)
+			if err != nil {
+				return err
+			}
 			q := req.URL.Query()
 			q.Set(name, value)
 			req.URL.RawQuery = q.Encode()
-		} else {
+		case "", authPlacementHeader:
 			if name == "" {
 				name = defaultAPIKeyHeader
 			}
-			if req.Header.Get(name) == "" {
-				req.Header.Set(name, value)
+			if req.Header.Get(name) != "" {
+				return nil
 			}
+			value, err := expand(authParamValue)
+			if err != nil {
+				return err
+			}
+			req.Header.Set(name, value)
+		default:
+			// Only a lenient resolver leaves an undefined placement literal.
+			// The preview must not guess where the key lands, so skip it.
+			if placement.HasUndefinedVariables {
+				return nil
+			}
+			msg := fmt.Sprintf("invalid apikey auth placement %q, expected header or query", placement.Value)
+			if at := auth.Origin(); at != "" {
+				msg += " (" + at + ")"
+			}
+			return diag.New(diag.ClassAuth, msg, diag.WithComponent(diag.ComponentHTTP))
 		}
 	case string(authTypeHeader):
-		name := expand(auth.Params[authParamHeader])
-		value := expand(auth.Params[authParamValue])
-		if name != "" && req.Header.Get(name) == "" {
-			req.Header.Set(name, value)
+		name, err := expand(authParamHeader)
+		if err != nil {
+			return err
 		}
+		if name == "" || req.Header.Get(name) != "" {
+			return nil
+		}
+		value, err := expand(authParamValue)
+		if err != nil {
+			return err
+		}
+		req.Header.Set(name, value)
 	}
+	return nil
 }
 
 type reqMeta struct {

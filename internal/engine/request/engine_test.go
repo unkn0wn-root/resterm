@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -153,5 +154,445 @@ func TestExecuteWithReportsInsecureSSHWarning(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func newPreviewTestEngine(t *testing.T) (*Engine, func() bool) {
+	t.Helper()
+	transportCalled := false
+	client := httpclient.NewClientWithOptions(
+		httpclient.WithHTTPFactory(func(opts httpclient.Options) (*http.Client, error) {
+			transportCalled = true
+			return &http.Client{}, nil
+		}),
+	)
+	return New(engcfg.Config{Client: client}, nil), func() bool { return transportCalled }
+}
+
+func TestPreviewWithUnresolvedVariablesDoesNotExecute(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     "http://example.test",
+		Headers: http.Header{"X-Trace": []string{"{{traceID}}"}},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": "{{auth.globalToken}}"},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	if res.Explain == nil {
+		t.Fatalf("expected explain report")
+	}
+	if transportCalled() {
+		t.Fatalf("preview must not construct a transport")
+	}
+}
+
+func TestPreviewBuildFailureStillShortCircuits(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://{{host}}/status",
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview error result must keep Preview set")
+	}
+	if res.Err == nil {
+		t.Fatalf("expected request build error")
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestPreviewCyclicVariablesReportsError(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     "http://example.test",
+		Headers: http.Header{"X-Test": []string{"{{a}}"}},
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview error result must keep Preview set")
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected cycle error, got %v", res.Err)
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestPreviewUnresolvedAuthParamSkipsAuthStage(t *testing.T) {
+	cases := []struct {
+		name string
+		auth *restfile.AuthSpec
+	}{
+		{
+			name: "command argv",
+			auth: &restfile.AuthSpec{
+				Type:   "command",
+				Params: map[string]string{"argv": `["demo-auth","{{missing}}"]`},
+			},
+		},
+		{
+			name: "command typed param",
+			auth: &restfile.AuthSpec{
+				Type:   "command",
+				Params: map[string]string{"argv": `["demo-auth"]`, "timeout": "{{missing}}"},
+			},
+		},
+		{
+			name: "oauth token url",
+			auth: &restfile.AuthSpec{
+				Type:   "oauth2",
+				Params: map[string]string{"token_url": "{{missing}}"},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, transportCalled := newPreviewTestEngine(t)
+			req := &restfile.Request{
+				Method:   http.MethodGet,
+				URL:      "http://example.test",
+				Metadata: restfile.RequestMetadata{Auth: tc.auth},
+			}
+
+			res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+			if err != nil {
+				t.Fatalf("ExecuteWith() error = %v", err)
+			}
+			if !res.Preview || res.Err != nil {
+				t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+			}
+			skipped := false
+			for _, st := range res.Explain.Stages {
+				if st.Name == xplain.StageAuth && st.Status == xplain.StageSkipped {
+					skipped = true
+				}
+			}
+			if !skipped {
+				t.Fatalf("expected skipped auth stage, stages: %+v", res.Explain.Stages)
+			}
+			if transportCalled() {
+				t.Fatalf("preview must not construct a transport")
+			}
+		})
+	}
+}
+
+func TestPreviewCommandAuthStructuralErrorStaysFatal(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "command",
+				Params: map[string]string{
+					"argv":      `["demo-auth"]`,
+					"cache_key": "{{a}}",
+				},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected fatal cycle error, got %v", res.Err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview-mode failure result must keep Preview set")
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestPreviewGRPCUnresolvedVariablesStillPreviews(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: "GRPC",
+		URL:    "{{host}}:50051",
+		GRPC: &restfile.GRPCRequest{
+			Target:     "{{host}}:50051",
+			FullMethod: "/pkg.Service/GetUser",
+			Message:    `{"id":"{{missing}}"}`,
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	if got := res.Executed.GRPC.Target; got != "{{host}}:50051" {
+		t.Fatalf("expected literal target placeholder, got %q", got)
+	}
+	if got := res.Executed.GRPC.Message; got != `{"id":"{{missing}}"}` {
+		t.Fatalf("expected literal message placeholder, got %q", got)
+	}
+	if transportCalled() {
+		t.Fatalf("preview must not construct a transport")
+	}
+}
+
+func TestPreviewWebSocketUnresolvedStepStillPreviews(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws://example.test/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepSendJSON, Value: `{"msg":"{{missing}}"}`},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	if got := res.Executed.WebSocket.Steps[0].Value; got != `{"msg":"{{missing}}"}` {
+		t.Fatalf("expected literal step placeholder, got %q", got)
+	}
+	if transportCalled() {
+		t.Fatalf("preview must not construct a transport")
+	}
+}
+
+func TestPreviewGRPCCyclicVariablesStaysFatal(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: "GRPC",
+		URL:    "localhost:50051",
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+		GRPC: &restfile.GRPCRequest{
+			Target:     "localhost:50051",
+			FullMethod: "/pkg.Service/GetUser",
+			Message:    `{"id":"{{a}}"}`,
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected fatal cycle error, got %v", res.Err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview-mode failure result must keep Preview set")
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestSendGRPCUnresolvedVariablesFailsClosed(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: "GRPC",
+		URL:    "{{host}}:50051",
+		GRPC: &restfile.GRPCRequest{
+			Target:     "{{host}}:50051",
+			FullMethod: "/pkg.Service/GetUser",
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "undefined variable: host") {
+		t.Fatalf("expected undefined variable error, got %v", res.Err)
+	}
+	if transportCalled() {
+		t.Fatalf("failed build must not construct a transport")
+	}
+}
+
+func TestPreviewOAuthStructuralErrorOutranksUndefined(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "oauth2",
+				Params: map[string]string{
+					"token_url": "{{missing}}",
+					"cache_key": "{{a}}",
+				},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected fatal cycle error, got %v", res.Err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview-mode failure result must keep Preview set")
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestPreviewCommandAuthStructuralErrorOutranksUndefined(t *testing.T) {
+	// Command auth params come out of a map, so an early-return regression
+	// would only mask the cycle on some runs. Repeat to make it reliable.
+	for range 10 {
+		e, transportCalled := newPreviewTestEngine(t)
+		req := &restfile.Request{
+			Method: http.MethodGet,
+			URL:    "http://example.test",
+			Variables: []restfile.Variable{
+				{Name: "a", Value: "{{b}}"},
+				{Name: "b", Value: "{{a}}"},
+			},
+			Metadata: restfile.RequestMetadata{
+				Auth: &restfile.AuthSpec{
+					Type: "command",
+					Params: map[string]string{
+						"argv":      `["demo-auth"]`,
+						"cache_key": "{{a}}",
+						"timeout":   "{{missing}}",
+					},
+				},
+			},
+		}
+
+		res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+		if err != nil {
+			t.Fatalf("ExecuteWith() error = %v", err)
+		}
+		if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+			t.Fatalf("expected fatal cycle error, got %v", res.Err)
+		}
+		if transportCalled() {
+			t.Fatalf("failed preview must not fall through to execution")
+		}
+	}
+}
+
+func TestPreviewCommandAuthArgvCycleOutranksUndefinedParam(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "command",
+				Params: map[string]string{
+					"argv":    `["demo-auth","{{a}}"]`,
+					"timeout": "{{missing}}",
+				},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected fatal cycle error, got %v", res.Err)
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestPreviewCommandAuthUndefinedParamOutranksDerivedParseError(t *testing.T) {
+	// cache_key fails to expand and is left out of the parsed params, so
+	// Parse claims ttl requires cache_key. The undefined variable is the
+	// real problem and must be the one reported.
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "command",
+				Params: map[string]string{
+					"argv":      `["demo-auth"]`,
+					"ttl":       "30s",
+					"cache_key": "{{missing}}",
+				},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	skipped := false
+	for _, st := range res.Explain.Stages {
+		if st.Name == xplain.StageAuth && st.Status == xplain.StageSkipped {
+			skipped = true
+		}
+	}
+	if !skipped {
+		t.Fatalf("expected skipped auth stage, stages: %+v", res.Explain.Stages)
+	}
+	if transportCalled() {
+		t.Fatalf("preview must not construct a transport")
 	}
 }

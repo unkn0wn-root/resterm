@@ -23,7 +23,9 @@ func TestReplaceTemplateVarsCallbackContract(t *testing.T) {
 }
 
 // Render must stay byte-for-byte equivalent to ExpandTemplates, including how
-// unresolved placeholders stay literal while only the first error is reported.
+// unresolved placeholders stay literal and which single error is reported:
+// the first structural error if any occurred, otherwise the first undefined
+// variable.
 func TestCompileTemplateRenderMatchesExpandTemplates(t *testing.T) {
 	r := NewResolver(NewMapProvider("test", map[string]string{"name": "resterm", "empty": ""}))
 	inputs := []string{

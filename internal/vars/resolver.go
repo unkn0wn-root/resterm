@@ -2,6 +2,7 @@ package vars
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -26,15 +27,28 @@ type ExprPos struct {
 
 type ExprEval func(expr string, pos ExprPos) (string, error)
 
+// Expansion is the result of rendering one template input. Lenient rendering
+// preserves undefined placeholders in Value and reports their presence here.
+type Expansion struct {
+	Value                 string
+	HasUndefinedVariables bool
+}
+
 type Resolver struct {
 	providers []Provider
 	refs      []RefResolver
 	expr      ExprEval
 	exprPos   ExprPos
 	trace     *Trace
+	lenient   bool
+	memo      *memoStore
+}
 
-	mu   sync.Mutex
-	memo map[memoKey]memoEntry
+// memoStore lives behind a pointer so derived resolvers share pinned values
+// without copying the lock.
+type memoStore struct {
+	mu      sync.Mutex
+	entries map[memoKey]memoEntry
 }
 
 // memoEntry pins the first expansion of a template-valued variable so every
@@ -69,7 +83,21 @@ type expandState struct {
 }
 
 func NewResolver(providers ...Provider) *Resolver {
-	return &Resolver{providers: providers}
+	return &Resolver{providers: providers, memo: &memoStore{}}
+}
+
+// Lenient returns a resolver that suppresses undefined variable errors at
+// the top level. Placeholders stay literal and the trace still records the
+// missing names, while cycles, nesting depth, and expression failures keep
+// erroring. Derive it only after the resolver is fully configured, since the
+// copy does not see later setter calls.
+func (r *Resolver) Lenient() *Resolver {
+	if r == nil || r.lenient {
+		return r
+	}
+	cp := *r
+	cp.lenient = true
+	return &cp
 }
 
 func (r *Resolver) Resolve(name string) (string, bool) {
@@ -178,9 +206,9 @@ func checkExpandState(name string, key variableKey, st *expandState) error {
 }
 
 func (r *Resolver) memoized(key memoKey) (memoEntry, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entry, ok := r.memo[key]
+	r.memo.mu.Lock()
+	defer r.memo.mu.Unlock()
+	entry, ok := r.memo.entries[key]
 	return entry, ok
 }
 
@@ -189,15 +217,15 @@ func (r *Resolver) memoized(key memoKey) (memoEntry, bool) {
 // Avoiding a wait on another variable's expansion also keeps concurrent roots
 // of a cyclic graph from deadlocking each other.
 func (r *Resolver) memoize(key memoKey, candidate memoEntry) memoEntry {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.memo == nil {
-		r.memo = make(map[memoKey]memoEntry)
+	r.memo.mu.Lock()
+	defer r.memo.mu.Unlock()
+	if r.memo.entries == nil {
+		r.memo.entries = make(map[memoKey]memoEntry)
 	}
-	if entry, ok := r.memo[key]; ok {
+	if entry, ok := r.memo.entries[key]; ok {
 		return entry
 	}
-	r.memo[key] = candidate
+	r.memo.entries[key] = candidate
 	return candidate
 }
 
@@ -301,6 +329,12 @@ func (r *Resolver) ExpandTemplates(input string) (string, error) {
 	return CompileTemplate(input).render(r, r.exprPos, true, true, nil)
 }
 
+// ExpandTemplatesResult expands input and reports whether resolution encountered
+// any undefined variables, including when a lenient resolver suppresses the error.
+func (r *Resolver) ExpandTemplatesResult(input string) (Expansion, error) {
+	return CompileTemplate(input).renderResult(r, r.exprPos, true, true, nil)
+}
+
 func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) {
 	return CompileTemplate(input).render(r, pos, true, true, nil)
 }
@@ -323,6 +357,22 @@ func (r *Resolver) SetExprEval(fn ExprEval) {
 
 func (r *Resolver) SetExprPos(pos ExprPos) {
 	r.exprPos = pos
+}
+
+// ErrUndefinedVariable marks names no provider could resolve. Lenient
+// rendering suppresses exactly this class since the trace records the name
+// as missing. Every other error still fails.
+var ErrUndefinedVariable = errors.New("undefined variable")
+
+// PreferStructural picks which expansion error to report when several occur.
+// The first structural error wins, so an undefined variable seen earlier can
+// never mask a cycle or broken expression seen later. Callers that classify
+// on ErrUndefinedVariable depend on this order.
+func PreferStructural(firstErr, err error) error {
+	if firstErr == nil || (!errors.Is(err, ErrUndefinedVariable) && errors.Is(firstErr, ErrUndefinedVariable)) {
+		return err
+	}
+	return firstErr
 }
 
 // resolveName resolves one placeholder name. A non-nil error means the
@@ -373,7 +423,7 @@ func (r *Resolver) resolveName(
 		return value, nil
 	}
 	r.traceVar(ResolveTrace{Name: name, Missing: true, Uses: 1})
-	return "", fmt.Errorf("undefined variable: %s", name)
+	return "", fmt.Errorf("%w: %s", ErrUndefinedVariable, name)
 }
 
 func resolveDynamic(name string) (string, bool) {
