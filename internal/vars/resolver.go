@@ -364,6 +364,17 @@ func (r *Resolver) SetExprPos(pos ExprPos) {
 // as missing. Every other error still fails.
 var ErrUndefinedVariable = errors.New("undefined variable")
 
+// PreferStructural picks which expansion error to report when several occur.
+// The first structural error wins, so an undefined variable seen earlier can
+// never mask a cycle or broken expression seen later. Callers that classify
+// on ErrUndefinedVariable depend on this order.
+func PreferStructural(firstErr, err error) error {
+	if firstErr == nil || (!errors.Is(err, ErrUndefinedVariable) && errors.Is(firstErr, ErrUndefinedVariable)) {
+		return err
+	}
+	return firstErr
+}
+
 // resolveName resolves one placeholder name. A non-nil error means the
 // placeholder cannot be resolved and callers keep it as literal text.
 func (r *Resolver) resolveName(

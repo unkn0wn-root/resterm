@@ -96,9 +96,7 @@ func (t Template) renderResult(
 			if lenientRoot && undefined {
 				return match
 			}
-			if firstErr == nil || (!undefined && errors.Is(firstErr, ErrUndefinedVariable)) {
-				firstErr = err
-			}
+			firstErr = PreferStructural(firstErr, err)
 			return match
 		}
 		return value

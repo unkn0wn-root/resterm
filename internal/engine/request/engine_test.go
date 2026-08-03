@@ -451,3 +451,148 @@ func TestSendGRPCUnresolvedVariablesFailsClosed(t *testing.T) {
 		t.Fatalf("failed build must not construct a transport")
 	}
 }
+
+func TestPreviewOAuthStructuralErrorOutranksUndefined(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "oauth2",
+				Params: map[string]string{
+					"token_url": "{{missing}}",
+					"cache_key": "{{a}}",
+				},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected fatal cycle error, got %v", res.Err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview-mode failure result must keep Preview set")
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestPreviewCommandAuthStructuralErrorOutranksUndefined(t *testing.T) {
+	// Command auth params come out of a map, so an early-return regression
+	// would only mask the cycle on some runs. Repeat to make it reliable.
+	for range 10 {
+		e, transportCalled := newPreviewTestEngine(t)
+		req := &restfile.Request{
+			Method: http.MethodGet,
+			URL:    "http://example.test",
+			Variables: []restfile.Variable{
+				{Name: "a", Value: "{{b}}"},
+				{Name: "b", Value: "{{a}}"},
+			},
+			Metadata: restfile.RequestMetadata{
+				Auth: &restfile.AuthSpec{
+					Type: "command",
+					Params: map[string]string{
+						"argv":      `["demo-auth"]`,
+						"cache_key": "{{a}}",
+						"timeout":   "{{missing}}",
+					},
+				},
+			},
+		}
+
+		res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+		if err != nil {
+			t.Fatalf("ExecuteWith() error = %v", err)
+		}
+		if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+			t.Fatalf("expected fatal cycle error, got %v", res.Err)
+		}
+		if transportCalled() {
+			t.Fatalf("failed preview must not fall through to execution")
+		}
+	}
+}
+
+func TestPreviewCommandAuthArgvCycleOutranksUndefinedParam(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "command",
+				Params: map[string]string{
+					"argv":    `["demo-auth","{{a}}"]`,
+					"timeout": "{{missing}}",
+				},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected fatal cycle error, got %v", res.Err)
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestPreviewCommandAuthUndefinedParamOutranksDerivedParseError(t *testing.T) {
+	// cache_key fails to expand and is left out of the parsed params, so
+	// Parse claims ttl requires cache_key. The undefined variable is the
+	// real problem and must be the one reported.
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type: "command",
+				Params: map[string]string{
+					"argv":      `["demo-auth"]`,
+					"ttl":       "30s",
+					"cache_key": "{{missing}}",
+				},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	skipped := false
+	for _, st := range res.Explain.Stages {
+		if st.Name == xplain.StageAuth && st.Status == xplain.StageSkipped {
+			skipped = true
+		}
+	}
+	if !skipped {
+		t.Fatalf("expected skipped auth stage, stages: %+v", res.Explain.Stages)
+	}
+	if transportCalled() {
+		t.Fatalf("preview must not construct a transport")
+	}
+}
