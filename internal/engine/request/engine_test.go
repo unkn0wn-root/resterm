@@ -340,3 +340,114 @@ func TestPreviewCommandAuthStructuralErrorStaysFatal(t *testing.T) {
 		t.Fatalf("failed preview must not fall through to execution")
 	}
 }
+
+func TestPreviewGRPCUnresolvedVariablesStillPreviews(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: "GRPC",
+		URL:    "{{host}}:50051",
+		GRPC: &restfile.GRPCRequest{
+			Target:     "{{host}}:50051",
+			FullMethod: "/pkg.Service/GetUser",
+			Message:    `{"id":"{{missing}}"}`,
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	if got := res.Executed.GRPC.Target; got != "{{host}}:50051" {
+		t.Fatalf("expected literal target placeholder, got %q", got)
+	}
+	if got := res.Executed.GRPC.Message; got != `{"id":"{{missing}}"}` {
+		t.Fatalf("expected literal message placeholder, got %q", got)
+	}
+	if transportCalled() {
+		t.Fatalf("preview must not construct a transport")
+	}
+}
+
+func TestPreviewWebSocketUnresolvedStepStillPreviews(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws://example.test/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepSendJSON, Value: `{"msg":"{{missing}}"}`},
+			},
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	if got := res.Executed.WebSocket.Steps[0].Value; got != `{"msg":"{{missing}}"}` {
+		t.Fatalf("expected literal step placeholder, got %q", got)
+	}
+	if transportCalled() {
+		t.Fatalf("preview must not construct a transport")
+	}
+}
+
+func TestPreviewGRPCCyclicVariablesStaysFatal(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: "GRPC",
+		URL:    "localhost:50051",
+		Variables: []restfile.Variable{
+			{Name: "a", Value: "{{b}}"},
+			{Name: "b", Value: "{{a}}"},
+		},
+		GRPC: &restfile.GRPCRequest{
+			Target:     "localhost:50051",
+			FullMethod: "/pkg.Service/GetUser",
+			Message:    `{"id":"{{a}}"}`,
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "variable cycle") {
+		t.Fatalf("expected fatal cycle error, got %v", res.Err)
+	}
+	if !res.Preview {
+		t.Fatalf("preview-mode failure result must keep Preview set")
+	}
+	if transportCalled() {
+		t.Fatalf("failed preview must not fall through to execution")
+	}
+}
+
+func TestSendGRPCUnresolvedVariablesFailsClosed(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method: "GRPC",
+		URL:    "{{host}}:50051",
+		GRPC: &restfile.GRPCRequest{
+			Target:     "{{host}}:50051",
+			FullMethod: "/pkg.Service/GetUser",
+		},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "undefined variable: host") {
+		t.Fatalf("expected undefined variable error, got %v", res.Err)
+	}
+	if transportCalled() {
+		t.Fatalf("failed build must not construct a transport")
+	}
+}

@@ -802,9 +802,16 @@ func (x *execCtx) prepareAuth() *xrunResult {
 }
 
 func (x *execCtx) prepareProto() *xrunResult {
+	res := x.res
+	if x.preview() {
+		// Preview keeps undefined placeholders literal, matching the lenient
+		// HTTP build. The trace lists the missing names and structural errors
+		// still fail.
+		res = res.Lenient()
+	}
 	if x.req.GRPC != nil {
 		before := CloneRequest(x.req)
-		if err := prepareGRPCRequest(x.req, x.res, x.grpcOpts.BaseDir); err != nil {
+		if err := prepareGRPCRequest(x.req, res, x.grpcOpts.BaseDir); err != nil {
 			x.exp.stage(
 				xplain.StageGRPCPrepare,
 				xplain.StageError,
@@ -825,7 +832,7 @@ func (x *execCtx) prepareProto() *xrunResult {
 	}
 	if x.req.WebSocket != nil {
 		before := CloneRequest(x.req)
-		if err := expandWebSocketSteps(x.req, x.res); err != nil {
+		if err := expandWebSocketSteps(x.req, res); err != nil {
 			x.exp.stage(
 				xplain.StageWebSocketPrepare,
 				xplain.StageError,
