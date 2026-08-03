@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -37,7 +38,7 @@ func (c *Client) prepareBody(
 
 	switch {
 	case req.Body.FilePath != "":
-		data, _, err := lookup.read(c, req.Body.FilePath, "body file")
+		data, _, err := c.readFile(lookup, req.Body.FilePath, "body file")
 		if err != nil {
 			return bodyPlan{}, err
 		}
@@ -71,7 +72,7 @@ func (c *Client) prepareBody(
 
 func (c *Client) textBodyPlan(
 	body string,
-	lookup fileLookup,
+	lookup filelookup.Lookup,
 	req *restfile.Request,
 ) (bodyPlan, error) {
 	processed, err := c.injectBodyIncludes(body, lookup, isMultipartRequest(req))
@@ -138,7 +139,7 @@ func (c *Client) prepareGraphQLBody(
 func (c *Client) gqlQuery(
 	gql *restfile.GraphQLBody,
 	resolver *vars.Resolver,
-	lookup fileLookup,
+	lookup filelookup.Lookup,
 ) (string, error) {
 	query, err := c.graphQLSectionContent(
 		gql.Query,
@@ -181,7 +182,7 @@ func gqlOpName(gql *restfile.GraphQLBody, resolver *vars.Resolver) (string, erro
 func (c *Client) gqlVars(
 	gql *restfile.GraphQLBody,
 	resolver *vars.Resolver,
-	lookup fileLookup,
+	lookup filelookup.Lookup,
 ) (map[string]any, string, error) {
 	raw, err := c.graphQLSectionContent(
 		gql.Variables,
@@ -283,7 +284,7 @@ func buildGraphQLPayload(
 
 func (c *Client) graphQLSectionContent(
 	inline, filePath string,
-	lookup fileLookup,
+	lookup filelookup.Lookup,
 	label string,
 ) (string, error) {
 	inline = strings.TrimSpace(inline)
@@ -295,7 +296,7 @@ func (c *Client) graphQLSectionContent(
 		return "", nil
 	}
 
-	data, _, err := lookup.read(c, filePath, strings.ToLower(label))
+	data, _, err := c.readFile(lookup, filePath, strings.ToLower(label))
 	if err != nil {
 		return "", err
 	}

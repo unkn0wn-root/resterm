@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"slices"
+
 	"io"
 	"sort"
 
@@ -180,6 +182,7 @@ func formatGRPC(resp *grpcclient.Response) *runfmt.GRPC {
 		Code:          resp.StatusCode.String(),
 		StatusCode:    int(resp.StatusCode),
 		StatusMessage: str.Trim(resp.StatusMessage),
+		StatusDetails: slices.Clone(resp.StatusDetails),
 	}
 }
 

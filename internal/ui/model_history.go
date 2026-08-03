@@ -836,7 +836,7 @@ func (m *Model) consumeGRPCResponse(
 		rawHex:          views.rawHex,
 		rawBase64:       views.rawBase64,
 		rawMode:         views.rawMode,
-		responseHeaders: grpcResponseHeaderMap(resp),
+		responseHeaders: resp.HeaderMap(),
 		requestHeaders:  renderer.renderGRPCReqHdrs(req, defaultResponseViewportWidth),
 		source:          newGRPCResponseRenderSource(resp, fullMethod, req),
 	}

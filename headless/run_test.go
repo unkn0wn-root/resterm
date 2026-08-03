@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -54,8 +56,7 @@ func TestRunRequestParity(t *testing.T) {
 			FollowRedirects: true,
 		},
 		GRPCOptions: grpcclient.Options{
-			DefaultPlaintext:    true,
-			DefaultPlaintextSet: true,
+			DefaultPlaintext: restfile.OptOf(true),
 		},
 	})
 	if err != nil {
@@ -128,8 +129,7 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 			FollowRedirects: true,
 		},
 		GRPCOptions: grpcclient.Options{
-			DefaultPlaintext:    true,
-			DefaultPlaintextSet: true,
+			DefaultPlaintext: restfile.OptOf(true),
 		},
 	})
 	if err != nil {
@@ -196,8 +196,7 @@ func TestRunUsesContext(t *testing.T) {
 			FollowRedirects: true,
 		},
 		GRPCOptions: grpcclient.Options{
-			DefaultPlaintext:    true,
-			DefaultPlaintextSet: true,
+			DefaultPlaintext: restfile.OptOf(true),
 		},
 	})
 	if err != nil {
@@ -224,7 +223,7 @@ func TestBuildOptionsUseDefaults(t *testing.T) {
 	if got.HTTPOptions.Timeout != DefaultHTTPTimeout || !got.HTTPOptions.FollowRedirects {
 		t.Fatalf("unexpected http defaults: %+v", got.HTTPOptions)
 	}
-	if !got.GRPCOptions.DefaultPlaintext || !got.GRPCOptions.DefaultPlaintextSet {
+	if v, ok := got.GRPCOptions.DefaultPlaintext.Get(); !ok || !v {
 		t.Fatalf("unexpected grpc defaults: %+v", got.GRPCOptions)
 	}
 }
@@ -264,7 +263,7 @@ func TestBuildOptionsRespectExplicitBoolOptions(t *testing.T) {
 	if got.HTTPOptions.FollowRedirects {
 		t.Fatalf("expected follow=false, got %+v", got.HTTPOptions)
 	}
-	if got.GRPCOptions.DefaultPlaintext {
+	if got.GRPCOptions.DefaultPlaintext.Or(true) {
 		t.Fatalf("expected plaintext=false, got %+v", got.GRPCOptions)
 	}
 }

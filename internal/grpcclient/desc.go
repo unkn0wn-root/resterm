@@ -2,16 +2,12 @@ package grpcclient
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"fmt"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	reflectv1 "google.golang.org/grpc/reflection/grpc_reflection_v1"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -25,40 +21,102 @@ type methodID struct {
 	method protoreflect.Name
 }
 
-func (c *Client) resolveMethod(
-	ctx context.Context,
-	conn *grpc.ClientConn,
-	gr *restfile.GRPCRequest,
-	opt Options,
-) (*protoregistry.Files, protoreflect.MethodDescriptor, error) {
-	id, err := parseFullMethod(gr.FullMethod)
-	if err != nil {
-		return nil, nil, err
-	}
+func (m methodID) symbol() string {
+	return string(m.svc) + "." + string(m.method)
+}
 
-	src, err := descriptorSourceFor(conn, gr, opt)
+// descriptorSource loads method descriptors from a file or server reflection.
+type descriptorSource interface {
+	files(ctx context.Context, id methodID) (*protoregistry.Files, error)
+}
+
+type fileDescriptorSource struct {
+	path string
+	rd   reader
+}
+
+func (s fileDescriptorSource) files(_ context.Context, _ methodID) (*protoregistry.Files, error) {
+	set, err := readDescriptorSet(s.path, s.rd)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
+	}
+	return filesFromDescriptorFile(set)
+}
+
+type reflectionSource struct {
+	conn grpc.ClientConnInterface
+}
+
+func (s reflectionSource) files(ctx context.Context, id methodID) (*protoregistry.Files, error) {
+	set, err := fetchDescriptorsViaReflection(ctx, s.conn, id)
+	if err != nil {
+		return nil, err
+	}
+	return filesFromSet(set, "build descriptors from reflection")
+}
+
+func descriptorSourceFor(
+	conn grpc.ClientConnInterface,
+	gr *restfile.GRPCRequest,
+	rd reader,
+) (descriptorSource, error) {
+	if gr.DescriptorSet != "" {
+		return fileDescriptorSource{path: gr.DescriptorSet, rd: rd}, nil
+	}
+	if !gr.UseReflection {
+		return nil, diag.New(
+			diag.ClassProtocol,
+			"grpc reflection disabled and no descriptor provided",
+			grpcComponent,
+		)
+	}
+	return reflectionSource{conn: conn}, nil
+}
+
+// methodTarget keeps the method and codec on the same descriptor registry so
+// Any payloads can resolve service-local types.
+type methodTarget struct {
+	desc  protoreflect.MethodDescriptor
+	codec codec
+}
+
+func resolveMethod(
+	ctx context.Context,
+	conn grpc.ClientConnInterface,
+	gr *restfile.GRPCRequest,
+	id methodID,
+	rd reader,
+) (methodTarget, error) {
+	src, err := descriptorSourceFor(conn, gr, rd)
+	if err != nil {
+		return methodTarget{}, err
 	}
 
 	files, err := src.files(ctx, id)
 	if err != nil {
-		return nil, nil, err
+		return methodTarget{}, err
 	}
 
-	md, err := findMethod(files, id)
-	return files, md, err
+	desc, err := findMethod(files, id)
+	if err != nil {
+		return methodTarget{}, err
+	}
+	return methodTarget{desc: desc, codec: newCodec(files)}, nil
 }
 
 func parseFullMethod(full string) (methodID, error) {
 	if full == "" {
-		return methodID{}, diag.New(diag.ClassProtocol, "grpc method not specified")
+		return methodID{}, diag.New(diag.ClassProtocol, "grpc method not specified", grpcComponent)
 	}
 
 	trimmed := strings.TrimPrefix(full, "/")
 	svc, method, ok := strings.Cut(trimmed, "/")
 	if !ok || svc == "" || method == "" || strings.Contains(method, "/") {
-		return methodID{}, diag.Newf(diag.ClassProtocol, "invalid grpc method %q", full)
+		return methodID{}, diag.New(
+			diag.ClassProtocol,
+			fmt.Sprintf("invalid grpc method %q", full),
+			grpcComponent,
+		)
 	}
 
 	return methodID{
@@ -68,24 +126,15 @@ func parseFullMethod(full string) (methodID, error) {
 	}, nil
 }
 
-func (m methodID) symbol() string {
-	return string(m.svc) + "." + string(m.method)
-}
-
-func readDescriptorSet(path, baseDir string) (*descriptorpb.FileDescriptorSet, error) {
-	orig := path
-	if !filepath.IsAbs(path) && baseDir != "" {
-		path = filepath.Join(baseDir, path)
-	}
-
-	data, err := os.ReadFile(path)
+func readDescriptorSet(path string, rd reader) (*descriptorpb.FileDescriptorSet, error) {
+	data, err := rd.read(path, "grpc descriptor")
 	if err != nil {
-		return nil, diag.WrapAsf(diag.ClassFilesystem, err, "read grpc descriptor %s", orig)
+		return nil, err
 	}
 
 	set := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(data, set); err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "parse descriptor set")
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "parse descriptor set", grpcComponent)
 	}
 	return set, nil
 }
@@ -93,9 +142,26 @@ func readDescriptorSet(path, baseDir string) (*descriptorpb.FileDescriptorSet, e
 func filesFromSet(set *descriptorpb.FileDescriptorSet, msg string) (*protoregistry.Files, error) {
 	files, err := protodesc.NewFiles(set)
 	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, msg)
+		return nil, diag.WrapAs(diag.ClassProtocol, err, msg, grpcComponent)
 	}
 	return files, nil
+}
+
+// Add the protoc hint that protobuf's unresolved-import error leaves out.
+func filesFromDescriptorFile(set *descriptorpb.FileDescriptorSet) (*protoregistry.Files, error) {
+	files, err := filesFromSet(set, "build descriptors from file")
+	if err == nil {
+		return files, nil
+	}
+	if !strings.Contains(err.Error(), "could not resolve import") {
+		return nil, err
+	}
+	return nil, diag.WrapAs(
+		diag.ClassProtocol,
+		err,
+		"descriptor set is incomplete (rebuild it with protoc --include_imports)",
+		grpcComponent,
+	)
 }
 
 func findMethod(
@@ -104,127 +170,30 @@ func findMethod(
 ) (protoreflect.MethodDescriptor, error) {
 	desc, err := files.FindDescriptorByName(id.svc)
 	if err != nil {
-		return nil, diag.WrapAsf(diag.ClassProtocol, err, "service %s not found", id.svc)
+		return nil, diag.WrapAs(
+			diag.ClassProtocol,
+			err,
+			fmt.Sprintf("service %s not found", id.svc),
+			grpcComponent,
+		)
 	}
 
 	svc, ok := desc.(protoreflect.ServiceDescriptor)
 	if !ok {
-		return nil, diag.Newf(diag.ClassProtocol, "descriptor for %s is not a service", id.svc)
+		return nil, diag.New(
+			diag.ClassProtocol,
+			fmt.Sprintf("descriptor for %s is not a service", id.svc),
+			grpcComponent,
+		)
 	}
 
 	md := svc.Methods().ByName(id.method)
 	if md == nil {
-		return nil, diag.Newf(diag.ClassProtocol, "method %s not found on %s", id.method, id.svc)
+		return nil, diag.New(
+			diag.ClassProtocol,
+			fmt.Sprintf("method %s not found on %s", id.method, id.svc),
+			grpcComponent,
+		)
 	}
 	return md, nil
-}
-
-func fetchDescriptorsViaReflection(
-	ctx context.Context,
-	conn *grpc.ClientConn,
-	id methodID,
-) (*descriptorpb.FileDescriptorSet, error) {
-	sym := id.symbol()
-
-	set, err := fetchReflectV1(ctx, conn, sym)
-	if err == nil {
-		return set, nil
-	}
-
-	alpha, alphaErr := fetchReflectAlpha(ctx, conn, sym)
-	if alphaErr == nil {
-		return alpha, nil
-	}
-
-	// Both failed: if v1 is merely unimplemented, the v1alpha error is the
-	// meaningful one; otherwise the v1 error describes the real failure.
-	if status.Code(err) == codes.Unimplemented {
-		return nil, alphaErr
-	}
-	return nil, err
-}
-
-func fetchReflectV1(
-	ctx context.Context,
-	conn *grpc.ClientConn,
-	sym string,
-) (*descriptorpb.FileDescriptorSet, error) {
-	client := reflectv1.NewServerReflectionClient(conn)
-	stream, err := client.ServerReflectionInfo(ctx)
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "open reflection stream")
-	}
-	req := &reflectv1.ServerReflectionRequest{
-		MessageRequest: &reflectv1.ServerReflectionRequest_FileContainingSymbol{
-			FileContainingSymbol: sym,
-		},
-	}
-
-	return reflectRoundTrip(stream, req, v1ReflectErr, v1ReflectFiles)
-}
-
-func reflectRoundTrip[Req any, Res any](
-	stream grpc.BidiStreamingClient[Req, Res],
-	req *Req,
-	errResp func(*Res) (int32, string, bool),
-	filesResp func(*Res) ([][]byte, bool),
-) (set *descriptorpb.FileDescriptorSet, err error) {
-	defer func() {
-		if closeErr := stream.CloseSend(); closeErr != nil && err == nil {
-			err = diag.WrapAs(diag.ClassProtocol, closeErr, "close reflection stream")
-		}
-	}()
-
-	if err := stream.Send(req); err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "send reflection request")
-	}
-
-	res, err := stream.Recv()
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "receive reflection response")
-	}
-	if code, msg, ok := errResp(res); ok {
-		return nil, reflectionErr(code, msg)
-	}
-	raw, ok := filesResp(res)
-	if !ok {
-		return nil, diag.New(diag.ClassProtocol, "reflection response missing descriptors")
-	}
-	return decodeFileDescriptors(raw)
-}
-
-func v1ReflectErr(res *reflectv1.ServerReflectionResponse) (int32, string, bool) {
-	errRes := res.GetErrorResponse()
-	if errRes == nil {
-		return 0, "", false
-	}
-	return errRes.GetErrorCode(), errRes.GetErrorMessage(), true
-}
-
-func v1ReflectFiles(res *reflectv1.ServerReflectionResponse) ([][]byte, bool) {
-	fileRes := res.GetFileDescriptorResponse()
-	if fileRes == nil {
-		return nil, false
-	}
-	return fileRes.GetFileDescriptorProto(), true
-}
-
-func reflectionErr(code int32, msg string) error {
-	name := codes.Code(code).String()
-	if msg == "" {
-		return diag.Newf(diag.ClassProtocol, "grpc reflection error %s", name)
-	}
-	return diag.Newf(diag.ClassProtocol, "grpc reflection error %s: %s", name, msg)
-}
-
-func decodeFileDescriptors(raw [][]byte) (*descriptorpb.FileDescriptorSet, error) {
-	set := &descriptorpb.FileDescriptorSet{}
-	for _, data := range raw {
-		fd := &descriptorpb.FileDescriptorProto{}
-		if err := proto.Unmarshal(data, fd); err != nil {
-			return nil, diag.WrapAs(diag.ClassProtocol, err, "decode reflected descriptor")
-		}
-		set.File = append(set.File, fd)
-	}
-	return set, nil
 }

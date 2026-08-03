@@ -3,11 +3,13 @@ package grpcclient
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -17,8 +19,8 @@ import (
 )
 
 func TestShouldUsePlaintextHonoursRequestOverride(t *testing.T) {
-	opts := Options{DefaultPlaintext: false, DefaultPlaintextSet: true}
-	req := &restfile.GRPCRequest{Plaintext: true, PlaintextSet: true}
+	opts := Options{DefaultPlaintext: restfile.OptOf(false)}
+	req := &restfile.GRPCRequest{Plaintext: restfile.OptOf(true)}
 
 	if !shouldUsePlaintext(req, opts) {
 		t.Fatalf("expected request override to force plaintext")
@@ -26,7 +28,7 @@ func TestShouldUsePlaintextHonoursRequestOverride(t *testing.T) {
 }
 
 func TestShouldUsePlaintextFallsBackToOptions(t *testing.T) {
-	opts := Options{DefaultPlaintext: true, DefaultPlaintextSet: true}
+	opts := Options{DefaultPlaintext: restfile.OptOf(true)}
 	req := &restfile.GRPCRequest{}
 
 	if !shouldUsePlaintext(req, opts) {
@@ -35,8 +37,8 @@ func TestShouldUsePlaintextFallsBackToOptions(t *testing.T) {
 }
 
 func TestShouldUsePlaintextHandlesExplicitFalse(t *testing.T) {
-	opts := Options{DefaultPlaintext: true, DefaultPlaintextSet: true}
-	req := &restfile.GRPCRequest{Plaintext: false, PlaintextSet: true}
+	opts := Options{DefaultPlaintext: restfile.OptOf(true)}
+	req := &restfile.GRPCRequest{Plaintext: restfile.OptOf(false)}
 
 	if shouldUsePlaintext(req, opts) {
 		t.Fatalf("expected explicit false to disable plaintext")
@@ -55,10 +57,9 @@ func TestShouldUsePlaintextDisabledWhenTLSConfigured(t *testing.T) {
 func TestExecuteRejectsSSHAndK8s(t *testing.T) {
 	client := NewClient()
 	grpcReq := &restfile.GRPCRequest{
-		Target:       "127.0.0.1:1",
-		FullMethod:   "/pkg.Svc/Call",
-		Plaintext:    true,
-		PlaintextSet: true,
+		Target:     "127.0.0.1:1",
+		FullMethod: "/pkg.Svc/Call",
+		Plaintext:  restfile.OptOf(true),
 	}
 	opts := Options{
 		SSH: &ssh.Plan{
@@ -75,7 +76,7 @@ func TestExecuteRejectsSSHAndK8s(t *testing.T) {
 		},
 	}
 
-	_, err := client.Execute(context.Background(), &restfile.Request{}, grpcReq, opts, nil)
+	_, err := client.Execute(context.Background(), &restfile.Request{GRPC: grpcReq}, opts, nil)
 	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
 		t.Fatalf("expected transport conflict error, got %v", err)
 	}
@@ -85,8 +86,7 @@ func TestExecuteRejectsSSHAndK8s(t *testing.T) {
 }
 
 func TestFetchDescriptorsReflectionError(t *testing.T) {
-	addr, stop := startTestServer(t)
-	defer stop()
+	addr := startTestServer(t)
 
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -111,8 +111,7 @@ func TestFetchDescriptorsReflectionError(t *testing.T) {
 }
 
 func TestFetchDescriptorsFallsBackToReflectionAlpha(t *testing.T) {
-	addr, stop := startAlphaReflectionServer(t)
-	defer stop()
+	addr := startAlphaReflectionServer(t)
 
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -136,16 +135,16 @@ func TestFetchDescriptorsFallsBackToReflectionAlpha(t *testing.T) {
 	}
 }
 
-func TestExecuteUnaryNonOKKeepsResponse(t *testing.T) {
-	addr, stop := startTestServer(t)
-	defer stop()
+func TestExecuteUnaryNonOKAgainstServer(t *testing.T) {
+	addr := startTestServer(t)
 
 	req := &restfile.Request{Settings: map[string]string{}}
 	grpcReq := baseStreamReq(addr, "UnimplementedCall")
+	req.GRPC = grpcReq
 	client := NewClient()
-	opts := Options{DefaultPlaintext: true, DefaultPlaintextSet: true, DialTimeout: time.Second}
+	opts := Options{DefaultPlaintext: restfile.OptOf(true), DialTimeout: time.Second}
 
-	resp, err := client.Execute(context.Background(), req, grpcReq, opts, nil)
+	resp, err := client.Execute(context.Background(), req, opts, nil)
 	if err == nil {
 		t.Fatalf("expected non-OK status error")
 	}
@@ -202,6 +201,28 @@ func TestCollectMetadataIncludesValidKeys(t *testing.T) {
 	}
 }
 
+func TestCollectMetadataOrdersHeadersByName(t *testing.T) {
+	req := &restfile.Request{
+		Headers: http.Header{
+			"X-Charlie": []string{"c"},
+			"X-Alpha":   []string{"a"},
+			"X-Bravo":   []string{"b"},
+		},
+	}
+	want := []string{"x-alpha", "a", "x-bravo", "b", "x-charlie", "c"}
+
+	// Repeat to exercise Go's randomized map iteration.
+	for i := 0; i < 50; i++ {
+		pairs, err := collectMetadata(&restfile.GRPCRequest{}, req)
+		if err != nil {
+			t.Fatalf("collect metadata: %v", err)
+		}
+		if !slices.Equal(pairs, want) {
+			t.Fatalf("pairs = %v, want %v", pairs, want)
+		}
+	}
+}
+
 func TestCollectMetadataReservedTimeout(t *testing.T) {
 	grpcReq := &restfile.GRPCRequest{
 		Metadata: []restfile.MetadataPair{
@@ -248,13 +269,11 @@ func TestCollectMetadataInvalidKey(t *testing.T) {
 }
 
 func TestResolveMessagePrefersExpanded(t *testing.T) {
-	client := NewClient()
 	grpcReq := &restfile.GRPCRequest{
-		MessageFile:        "msg.json",
-		MessageExpanded:    `{"id":"abc"}`,
-		MessageExpandedSet: true,
+		MessageFile:     "msg.json",
+		MessageExpanded: restfile.OptOf(`{"id":"abc"}`),
 	}
-	got, err := client.resolveMessage(grpcReq, "")
+	got, err := resolveMessage(grpcReq, newReader(filelookup.OSFileSystem{}, Options{}))
 	if err != nil {
 		t.Fatalf("resolve message: %v", err)
 	}

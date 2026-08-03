@@ -78,17 +78,8 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) bool {
 		}
 		return true
 	case directive.GRPCPlaintext:
-		req := b.EnsureRequest()
-		req.PlaintextSet = true
-		if rest == "" {
-			req.Plaintext = true
-		} else if strings.EqualFold(rest, "false") || strings.EqualFold(rest, "0") {
-			req.Plaintext = false
-		} else if strings.EqualFold(rest, "true") || strings.EqualFold(rest, "1") {
-			req.Plaintext = true
-		} else {
-			req.Plaintext = true
-		}
+		off := strings.EqualFold(rest, "false") || strings.EqualFold(rest, "0")
+		b.EnsureRequest().Plaintext = restfile.OptOf(!off)
 		return true
 	case directive.GRPCAuthority:
 		b.EnsureRequest().Authority = rest

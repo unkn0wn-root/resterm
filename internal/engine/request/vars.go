@@ -542,6 +542,9 @@ func (x *execCtx) configureGRPC() {
 			x.grpcOpts.BaseDir = x.eng.fileDir(x.doc)
 		}
 	}
+	// Use the same fallback roots as HTTP body files.
+	x.grpcOpts.FallbackBaseDirs = x.opts.FallbackBaseDirs
+	x.grpcOpts.NoFallback = x.opts.NoFallback
 }
 
 func (x *execCtx) applySettings() *xrunResult {

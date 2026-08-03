@@ -17,21 +17,20 @@ func baseStreamReq(target, method string) *restfile.GRPCRequest {
 		Method:        method,
 		FullMethod:    "/grpc.testing.TestService/" + method,
 		UseReflection: true,
-		Plaintext:     true,
-		PlaintextSet:  true,
+		Plaintext:     restfile.OptOf(true),
 	}
 }
 
 func TestStreamServerOutput(t *testing.T) {
-	addr, stop := startTestServer(t)
-	defer stop()
+	addr := startTestServer(t)
 
 	req := &restfile.Request{Settings: map[string]string{}}
 	grpcReq := baseStreamReq(addr, "StreamingOutputCall")
+	req.GRPC = grpcReq
 	client := NewClient()
-	opts := Options{DefaultPlaintext: true, DefaultPlaintextSet: true, DialTimeout: time.Second}
+	opts := Options{DefaultPlaintext: restfile.OptOf(true), DialTimeout: time.Second}
 
-	resp, err := client.Execute(context.Background(), req, grpcReq, opts, nil)
+	resp, err := client.Execute(context.Background(), req, opts, nil)
 	if err != nil {
 		t.Fatalf("execute streaming output: %v", err)
 	}
@@ -46,16 +45,16 @@ func TestStreamServerOutput(t *testing.T) {
 }
 
 func TestStreamClientInput(t *testing.T) {
-	addr, stop := startTestServer(t)
-	defer stop()
+	addr := startTestServer(t)
 
 	req := &restfile.Request{Settings: map[string]string{}}
 	grpcReq := baseStreamReq(addr, "StreamingInputCall")
+	req.GRPC = grpcReq
 	grpcReq.Message = `[{}, {}, {}]`
 	client := NewClient()
-	opts := Options{DefaultPlaintext: true, DefaultPlaintextSet: true, DialTimeout: time.Second}
+	opts := Options{DefaultPlaintext: restfile.OptOf(true), DialTimeout: time.Second}
 
-	resp, err := client.Execute(context.Background(), req, grpcReq, opts, nil)
+	resp, err := client.Execute(context.Background(), req, opts, nil)
 	if err != nil {
 		t.Fatalf("execute streaming input: %v", err)
 	}
@@ -73,16 +72,16 @@ func TestStreamClientInput(t *testing.T) {
 }
 
 func TestStreamBidi(t *testing.T) {
-	addr, stop := startTestServer(t)
-	defer stop()
+	addr := startTestServer(t)
 
 	req := &restfile.Request{Settings: map[string]string{}}
 	grpcReq := baseStreamReq(addr, "FullDuplexCall")
+	req.GRPC = grpcReq
 	grpcReq.Message = `[{}, {}]`
 	client := NewClient()
-	opts := Options{DefaultPlaintext: true, DefaultPlaintextSet: true, DialTimeout: time.Second}
+	opts := Options{DefaultPlaintext: restfile.OptOf(true), DialTimeout: time.Second}
 
-	resp, err := client.Execute(context.Background(), req, grpcReq, opts, nil)
+	resp, err := client.Execute(context.Background(), req, opts, nil)
 	if err != nil {
 		t.Fatalf("execute bidi stream: %v", err)
 	}

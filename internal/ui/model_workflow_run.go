@@ -408,7 +408,7 @@ func workflowResultFromRun(
 		Branch:     meta.Branch,
 		Req:        res.Executed.Clone(),
 		HTTP:       cloneHTTPResponse(res.Response),
-		GRPC:       cloneGRPCResponse(res.GRPC),
+		GRPC:       res.GRPC.Clone(),
 		Stream:     cloneStreamInfo(res.Stream),
 		Transcript: append([]byte(nil), res.Transcript...),
 		Tests:      append([]scripts.TestResult(nil), res.Tests...),

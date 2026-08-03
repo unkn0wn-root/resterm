@@ -35,7 +35,10 @@ func ApplyGRPCSettings(
 	opts.ClientKey = tlsCfg.ClientKey
 	opts.Insecure = tlsCfg.Insecure
 	opts.RootMode = tlsCfg.RootMode
-	return nil
+	if len(settings) == 0 {
+		return nil
+	}
+	return grpcclient.ApplyOptionSettings(opts, settings)
 }
 
 func ApplyHTTPSettings(

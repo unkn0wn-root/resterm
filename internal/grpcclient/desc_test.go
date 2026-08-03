@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -94,11 +95,21 @@ func TestResolveMethodUsesFullMethodWithDescriptorSet(t *testing.T) {
 		Service:       "Wrong",
 		Method:        "Nope",
 	}
-	_, md, err := NewClient().resolveMethod(context.Background(), nil, gr, Options{BaseDir: dir})
+	id, err := parseFullMethod(gr.FullMethod)
+	if err != nil {
+		t.Fatalf("parse full method: %v", err)
+	}
+	target, err := resolveMethod(
+		context.Background(),
+		nil,
+		gr,
+		id,
+		newReader(filelookup.OSFileSystem{}, Options{BaseDir: dir}),
+	)
 	if err != nil {
 		t.Fatalf("resolve method: %v", err)
 	}
-	if got := string(md.FullName()); got != "pkg.Svc.Call" {
+	if got := string(target.desc.FullName()); got != "pkg.Svc.Call" {
 		t.Fatalf("method = %q, want pkg.Svc.Call", got)
 	}
 }
@@ -121,6 +132,18 @@ func testSvcDescriptorSet() *descriptorpb.FileDescriptorSet {
 								Name:       proto.String("Call"),
 								InputType:  proto.String(".pkg.Msg"),
 								OutputType: proto.String(".pkg.Msg"),
+							},
+							{
+								Name:            proto.String("ServerStream"),
+								InputType:       proto.String(".pkg.Msg"),
+								OutputType:      proto.String(".pkg.Msg"),
+								ServerStreaming: proto.Bool(true),
+							},
+							{
+								Name:            proto.String("ClientStream"),
+								InputType:       proto.String(".pkg.Msg"),
+								OutputType:      proto.String(".pkg.Msg"),
+								ClientStreaming: proto.Bool(true),
 							},
 						},
 					},

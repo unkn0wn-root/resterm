@@ -173,6 +173,37 @@ func ensureReqHeaders(req *restfile.Request) http.Header {
 	return req.Headers
 }
 
+// applyGRPCAuth resolves auth into request headers before the gRPC client runs.
+// Keeping this in the engine lets InjectedAuthSecrets register the values for
+// redaction.
+func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
+	if req == nil || req.GRPC == nil || req.Metadata.Auth == nil {
+		return nil
+	}
+
+	values, err := httpclient.AuthValues(
+		req.Metadata.Auth,
+		res,
+		reqHeaders(req),
+		diag.ComponentGRPC,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, v := range values {
+		if v.Placement == httpclient.AuthInQuery {
+			return diag.New(
+				diag.ClassAuth,
+				"apikey auth placement query is not supported for grpc, use header",
+				diag.WithComponent(diag.ComponentGRPC),
+			)
+		}
+		setRequestHeaderIfMissing(req, v.Name, v.Value)
+	}
+	return nil
+}
+
 func setRequestHeaderIfMissing(req *restfile.Request, name, value string) bool {
 	headers := ensureReqHeaders(req)
 	if headers == nil || headerPresent(headers, name) {

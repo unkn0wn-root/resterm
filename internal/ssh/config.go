@@ -64,10 +64,10 @@ func baseCfg(p restfile.SSHProfile) Config {
 		User:       strings.TrimSpace(p.User),
 		Pass:       p.Pass,
 		KeyPass:    p.KeyPass,
-		Agent:      defaultOpt(p.Agent, true),
+		Agent:      p.Agent.Or(true),
 		KnownHosts: strings.TrimSpace(p.KnownHosts),
-		Strict:     defaultOpt(p.Strict, true),
-		Persist:    p.Persist.Set && p.Persist.Val,
+		Strict:     p.Strict.Or(true),
+		Persist:    p.Persist.Or(false),
 		Timeout:    defaultTimeout,
 	}
 }
@@ -83,13 +83,6 @@ func parseCfg(cfg *Config, p restfile.SSHProfile) error {
 		return err
 	}
 	return connprofile.ParseRetries("ssh", &cfg.Retries, p.RetriesStr)
-}
-
-func defaultOpt(opt restfile.Opt[bool], def bool) bool {
-	if opt.Set {
-		return opt.Val
-	}
-	return def
 }
 
 func defaultKnownHosts() (string, error) {

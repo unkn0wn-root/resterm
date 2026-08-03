@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/curl/importer"
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -77,7 +78,7 @@ func (r *recordedRequest) form(t *testing.T) (map[string]string, map[string][]by
 
 func executeRequest(t *testing.T, req *restfile.Request, resolver *vars.Resolver, baseDir string) {
 	t.Helper()
-	client := httpclient.NewClient(httpclient.OSFileSystem{})
+	client := httpclient.NewClient(filelookup.OSFileSystem{})
 	resp, err := client.Execute(context.Background(), req, resolver, httpclient.Options{BaseDir: baseDir})
 	if err != nil {
 		t.Fatalf("execute: %v", err)

@@ -793,6 +793,17 @@ func (x *execCtx) prepareAuth() *xrunResult {
 			)
 			return x.fail(err, "Auth preparation failed")
 		}
+		if err := applyGRPCAuth(x.req, x.res); err != nil {
+			x.exp.stage(
+				xplain.StageAuth,
+				xplain.StageError,
+				xplain.SummaryAuthInjectionFailed,
+				before,
+				x.req,
+				err.Error(),
+			)
+			return x.fail(err, "Auth preparation failed")
+		}
 		secs = InjectedAuthSecrets(x.req.Metadata.Auth, before, x.req)
 	}
 	x.exp.addSecrets(secs...)
@@ -811,7 +822,7 @@ func (x *execCtx) prepareProto() *xrunResult {
 	}
 	if x.req.GRPC != nil {
 		before := CloneRequest(x.req)
-		if err := prepareGRPCRequest(x.req, res, x.grpcOpts.BaseDir); err != nil {
+		if err := prepareGRPCRequest(x.req, res, x.grpcOpts); err != nil {
 			x.exp.stage(
 				xplain.StageGRPCPrepare,
 				xplain.StageError,
@@ -988,22 +999,26 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		return res
 	}
 
-	ctx, cancel := context.WithTimeout(x.sendCtx, x.timeout)
-	defer cancel()
-
 	if x.grpcOpts.DialTimeout == 0 {
 		x.grpcOpts.DialTimeout = x.timeout
 	}
+	x.grpcOpts.Timeout = x.timeout
 	x.grpcOpts.SSH = x.sshPlan
 	x.grpcOpts.K8s = x.k8sPlan
 
+	// The client applies the unary timeout after it knows whether the method streams.
 	var sess *stream.Session
-	resp, err := x.eng.gc.Execute(ctx, x.req, x.req.GRPC, x.grpcOpts, func(s *stream.Session) {
-		sess = s
-		if x.onGRPC != nil {
-			x.onGRPC(s, x.req)
-		}
-	})
+	resp, err := x.eng.gc.Execute(
+		x.sendCtx,
+		x.req,
+		x.grpcOpts,
+		func(s *stream.Session) {
+			sess = s
+			if x.onGRPC != nil {
+				x.onGRPC(s, x.req)
+			}
+		},
+	)
 	info, raw, sErr := grpcStreamInfoFromSession(sess)
 	if sErr != nil {
 		x.exp.setPrepared(x.req)
@@ -1058,8 +1073,10 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	vv := x.eng.collectVariables(x.doc, x.req, x.env, x.extraV)
 	testV := mergeStringMaps(vv, x.scriptV)
 	testG := x.eng.collectGlobalValues(x.doc, x.env)
+	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
+	defer cancelAsserts()
 	asserts, assertErr := x.eng.runAsserts(
-		ctx,
+		assertCtx,
 		x.doc,
 		x.req,
 		x.env,

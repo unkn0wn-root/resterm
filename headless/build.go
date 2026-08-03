@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -178,10 +179,7 @@ func httpOptions(opt HTTPOptions) httpclient.Options {
 }
 
 func grpcOptions(opt GRPCOptions) grpcclient.Options {
-	return grpcclient.Options{
-		DefaultPlaintext:    boolOr(opt.Plaintext, true),
-		DefaultPlaintextSet: true,
-	}
+	return grpcclient.Options{DefaultPlaintext: restfile.OptOf(boolOr(opt.Plaintext, true))}
 }
 
 func selectionOptions(sel Selection) (runner.Select, error) {

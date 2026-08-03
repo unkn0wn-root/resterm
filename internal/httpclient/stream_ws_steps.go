@@ -78,7 +78,7 @@ func (c *Client) runWSSteps(
 			}
 			waitForWindow(ctx, recvWindow)
 		case restfile.WebSocketStepSendFile:
-			data, _, readErr := lookup.read(c, step.File, "websocket payload file")
+			data, _, readErr := c.readFile(lookup, step.File, "websocket payload file")
 			if readErr != nil {
 				session.Cancel()
 				return false, readErr

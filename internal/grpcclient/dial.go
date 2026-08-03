@@ -20,7 +20,11 @@ func buildDial(gr *restfile.GRPCRequest, opt Options) (string, []grpc.DialOption
 	sshOn := opt.SSH != nil && opt.SSH.Active()
 	k8sOn := opt.K8s != nil && opt.K8s.Active()
 	if tunnel.HasConflict(sshOn, k8sOn) {
-		return "", nil, diag.New(diag.ClassRoute, "ssh and k8s transports cannot be combined")
+		return "", nil, diag.New(
+			diag.ClassRoute,
+			"ssh and k8s transports cannot be combined",
+			grpcComponent,
+		)
 	}
 
 	var dialOpts []grpc.DialOption
@@ -51,10 +55,10 @@ func buildDial(gr *restfile.GRPCRequest, opt Options) (string, []grpc.DialOption
 	return dialTarget(gr.Target, sshOn || k8sOn), dialOpts, nil
 }
 
-func dialGRPC(target string, opts []grpc.DialOption) (*grpc.ClientConn, error) {
+func dialGRPC(target string, opts []grpc.DialOption) (Conn, error) {
 	conn, err := grpc.NewClient(target, opts...)
 	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "dial grpc target")
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "dial grpc target", grpcComponent)
 	}
 	return conn, nil
 }
@@ -106,16 +110,10 @@ func buildTransportCredentials(opt Options) (credentials.TransportCredentials, e
 }
 
 func shouldUsePlaintext(gr *restfile.GRPCRequest, opt Options) bool {
-	if gr.PlaintextSet {
-		return gr.Plaintext
+	if v, ok := gr.Plaintext.Get(); ok {
+		return v
 	}
-	if opt.DefaultPlaintextSet {
-		return opt.DefaultPlaintext
-	}
-	if hasTLS(opt) {
-		return false
-	}
-	return true
+	return opt.DefaultPlaintext.Or(!hasTLS(opt))
 }
 
 func hasTLS(opt Options) bool {

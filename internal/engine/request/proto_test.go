@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -29,7 +30,7 @@ func TestPrepareGRPCRequestExpandsTemplKeepMsg(t *testing.T) {
 		},
 	}
 
-	if err := prepareGRPCRequest(req, resolver, ""); err != nil {
+	if err := prepareGRPCRequest(req, resolver, grpcclient.Options{}); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 
@@ -67,7 +68,7 @@ func TestPrepareGRPCRequestUsesBodyOverride(t *testing.T) {
 		},
 	}
 
-	if err := prepareGRPCRequest(req, resolver, ""); err != nil {
+	if err := prepareGRPCRequest(req, resolver, grpcclient.Options{}); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.FullMethod != "/UserService/Create" {
@@ -88,7 +89,7 @@ func TestPrepareGRPCRequestNormalizesSchemedTarget(t *testing.T) {
 		},
 	}
 
-	if err := prepareGRPCRequest(req, resolver, ""); err != nil {
+	if err := prepareGRPCRequest(req, resolver, grpcclient.Options{}); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.Target != "localhost:8082" {
@@ -109,18 +110,14 @@ func TestPrepareGRPCRequestNormalizesSecureSchemes(t *testing.T) {
 		},
 	}
 
-	if err := prepareGRPCRequest(req, resolver, ""); err != nil {
+	if err := prepareGRPCRequest(req, resolver, grpcclient.Options{}); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.Target != "api.example.com:8443" {
 		t.Fatalf("expected target to drop grpcs scheme, got %q", req.GRPC.Target)
 	}
-	if !req.GRPC.PlaintextSet || req.GRPC.Plaintext {
-		t.Fatalf(
-			"expected secure scheme to enforce TLS, got plaintext=%v set=%v",
-			req.GRPC.Plaintext,
-			req.GRPC.PlaintextSet,
-		)
+	if v, ok := req.GRPC.Plaintext.Get(); !ok || v {
+		t.Fatalf("expected secure scheme to enforce TLS, got %+v", req.GRPC.Plaintext)
 	}
 }
 
@@ -133,7 +130,7 @@ func TestNormalizeGRPCTargetPreservesQuery(t *testing.T) {
 		},
 	}
 
-	if err := prepareGRPCRequest(req, vars.NewResolver(), ""); err != nil {
+	if err := prepareGRPCRequest(req, vars.NewResolver(), grpcclient.Options{}); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.Target != "localhost:9000/service?alt=blue" {
@@ -157,7 +154,7 @@ func TestPrepareGRPCRequestExpandsDescriptorSet(t *testing.T) {
 		},
 	}
 
-	if err := prepareGRPCRequest(req, resolver, ""); err != nil {
+	if err := prepareGRPCRequest(req, resolver, grpcclient.Options{}); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.DescriptorSet != "./testdata/example.protoset" {
@@ -187,7 +184,7 @@ func TestPrepareGRPCRequestExpandsMessageFile(t *testing.T) {
 		},
 	}
 
-	if err := prepareGRPCRequest(req, resolver, dir); err != nil {
+	if err := prepareGRPCRequest(req, resolver, grpcclient.Options{BaseDir: dir}); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.MessageFile != "msg.json" {
@@ -196,10 +193,7 @@ func TestPrepareGRPCRequestExpandsMessageFile(t *testing.T) {
 	if req.GRPC.Message != "" {
 		t.Fatalf("expected inline message to stay empty, got %q", req.GRPC.Message)
 	}
-	if !req.GRPC.MessageExpandedSet {
-		t.Fatalf("expected expanded message to be set")
-	}
-	if req.GRPC.MessageExpanded != `{"id":"abc"}` {
-		t.Fatalf("expected expanded message, got %q", req.GRPC.MessageExpanded)
+	if v, ok := req.GRPC.MessageExpanded.Get(); !ok || v != `{"id":"abc"}` {
+		t.Fatalf("expected expanded message, got %+v", req.GRPC.MessageExpanded)
 	}
 }

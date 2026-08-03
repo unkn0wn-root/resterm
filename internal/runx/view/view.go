@@ -269,7 +269,7 @@ func requestHeadersText(res runner.Result, show bool, st styler) string {
 		}
 	}
 	if grpc := res.GRPC; grpc != nil {
-		if hdrs := buildGRPCHeaderMap(grpc); len(hdrs) > 0 {
+		if hdrs := grpc.HeaderMap(); len(hdrs) > 0 {
 			respText = st.section("Response Headers:") + "\n" + formatHeaders(hdrs, st)
 		}
 	}
@@ -338,22 +338,8 @@ func httpBodyInput(res runner.Result, resp *httpclient.Response) bodyfmt.BuildIn
 }
 
 func grpcBodyInput(res runner.Result, grpc *grpcclient.Response) bodyfmt.BuildInput {
-	viewBody := cloneBytes(grpc.Body)
-	if len(viewBody) == 0 && str.Trim(grpc.Message) != "" {
-		viewBody = []byte(grpc.Message)
-	}
-	viewType := str.Trim(grpc.ContentType)
-	if viewType == "" && len(viewBody) > 0 {
-		viewType = "application/json"
-	}
-	rawBody := cloneBytes(grpc.Wire)
-	rawType := str.Trim(grpc.WireContentType)
-	if len(rawBody) == 0 {
-		rawBody = cloneBytes(viewBody)
-	}
-	if rawType == "" {
-		rawType = viewType
-	}
+	viewBody, viewType := grpc.ViewBody()
+	rawBody, rawType := grpc.RawBody()
 	if len(viewBody) == 0 {
 		if fallback, fallbackType := streamFallback(res); len(fallback) > 0 {
 			viewBody = fallback
@@ -434,12 +420,7 @@ func statusText(res runner.Result) string {
 	case res.Response != nil:
 		return str.Trim(res.Response.Status)
 	case res.GRPC != nil:
-		code := str.Trim(res.GRPC.StatusCode.String())
-		msg := str.Trim(res.GRPC.StatusMessage)
-		if code != "" && msg != "" && !strings.EqualFold(code, msg) {
-			return code + " (" + msg + ")"
-		}
-		return code
+		return res.GRPC.StatusText()
 	default:
 		return ""
 	}
@@ -519,20 +500,6 @@ func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
 	}
 	if hdrs.Get("Content-Length") == "" && resp.ReqLen > 0 {
 		hdrs.Set("Content-Length", fmt.Sprintf("%d", resp.ReqLen))
-	}
-	return hdrs
-}
-
-func buildGRPCHeaderMap(resp *grpcclient.Response) http.Header {
-	if resp == nil || (len(resp.Headers) == 0 && len(resp.Trailers) == 0) {
-		return nil
-	}
-	hdrs := make(http.Header, len(resp.Headers)+len(resp.Trailers))
-	for key, values := range resp.Headers {
-		hdrs[key] = append([]string(nil), values...)
-	}
-	for key, values := range resp.Trailers {
-		hdrs["Grpc-Trailer-"+key] = append([]string(nil), values...)
 	}
 	return hdrs
 }

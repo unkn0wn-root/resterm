@@ -129,32 +129,6 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 	}
 }
 
-func cloneGRPCResponse(resp *grpcclient.Response) *grpcclient.Response {
-	if resp == nil {
-		return nil
-	}
-	headers := make(map[string][]string, len(resp.Headers))
-	for key, values := range resp.Headers {
-		headers[key] = append([]string(nil), values...)
-	}
-	trailers := make(map[string][]string, len(resp.Trailers))
-	for key, values := range resp.Trailers {
-		trailers[key] = append([]string(nil), values...)
-	}
-	return &grpcclient.Response{
-		Message:         resp.Message,
-		Body:            append([]byte(nil), resp.Body...),
-		Wire:            append([]byte(nil), resp.Wire...),
-		ContentType:     resp.ContentType,
-		WireContentType: resp.WireContentType,
-		Headers:         headers,
-		Trailers:        trailers,
-		StatusCode:      resp.StatusCode,
-		StatusMessage:   resp.StatusMessage,
-		Duration:        resp.Duration,
-	}
-}
-
 type responseViews struct {
 	pretty      string
 	raw         string
@@ -551,25 +525,13 @@ func (r responseRenderer) buildGRPCResponseViews(
 
 	statusLine := grpcStatusLine(resp, fullMethod)
 
-	viewBody := append([]byte(nil), resp.Body...)
-	if len(viewBody) == 0 && strings.TrimSpace(resp.Message) != "" {
-		viewBody = []byte(resp.Message)
-	}
-	viewContentType := strings.TrimSpace(resp.ContentType)
-	if viewContentType == "" && len(viewBody) > 0 {
-		viewContentType = "application/json"
-	}
-
-	rawBody := append([]byte(nil), resp.Wire...)
-	if len(rawBody) == 0 {
-		rawBody = append([]byte(nil), viewBody...)
-	}
-	rawContentType := strings.TrimSpace(resp.WireContentType)
-	if rawContentType == "" {
+	viewBody, viewContentType := resp.ViewBody()
+	rawBody, rawContentType := resp.RawBody()
+	// A restored snapshot may carry its content type only in Headers.
+	if strings.TrimSpace(resp.WireContentType) == "" &&
+		strings.TrimSpace(resp.ContentType) == "" &&
+		contentType != "" {
 		rawContentType = contentType
-	}
-	if rawContentType == "" {
-		rawContentType = viewContentType
 	}
 
 	meta := binaryview.Analyze(viewBody, viewContentType)
@@ -606,10 +568,12 @@ func grpcStatusLine(resp *grpcclient.Response, fullMethod string) string {
 	line := fmt.Sprintf(
 		"gRPC %s - %s",
 		strings.TrimPrefix(strings.TrimSpace(fullMethod), "/"),
-		resp.StatusCode.String(),
+		resp.StatusText(),
 	)
-	if resp.StatusMessage != "" {
-		line += " (" + resp.StatusMessage + ")"
+	for _, detail := range resp.StatusDetails {
+		if d := strings.TrimSpace(detail); d != "" {
+			line += "\n" + d
+		}
 	}
 	return line
 }

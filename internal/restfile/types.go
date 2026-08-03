@@ -174,9 +174,25 @@ type GraphQLBody struct {
 	OperationName string
 }
 
+// Opt keeps a value together with whether it was explicitly set.
 type Opt[T any] struct {
 	Val T
 	Set bool
+}
+
+func OptOf[T any](val T) Opt[T] {
+	return Opt[T]{Val: val, Set: true}
+}
+
+func (o Opt[T]) Get() (T, bool) {
+	return o.Val, o.Set
+}
+
+func (o Opt[T]) Or(def T) T {
+	if o.Set {
+		return o.Val
+	}
+	return def
 }
 
 type SSHOpt[T any] = Opt[T]
@@ -245,21 +261,20 @@ type MetadataPair struct {
 }
 
 type GRPCRequest struct {
-	Target             string
-	Package            string
-	Service            string
-	Method             string
-	FullMethod         string
-	DescriptorSet      string
-	UseReflection      bool
-	Plaintext          bool
-	PlaintextSet       bool
-	Authority          string
-	Message            string
-	MessageFile        string
-	MessageExpanded    string
-	MessageExpandedSet bool
-	Metadata           []MetadataPair
+	Target        string
+	Package       string
+	Service       string
+	Method        string
+	FullMethod    string
+	DescriptorSet string
+	UseReflection bool
+	Plaintext     Opt[bool]
+	Authority     string
+	Message       string
+	MessageFile   string
+	// MessageExpanded caches the expanded message file until the body changes.
+	MessageExpanded Opt[string]
+	Metadata        []MetadataPair
 }
 
 type RequestMetadata struct {
@@ -392,8 +407,7 @@ type WebSocketOptions struct {
 	IdleTimeout      time.Duration
 	MaxMessageBytes  int64
 	Subprotocols     []string
-	Compression      bool
-	CompressionSet   bool
+	Compression      Opt[bool]
 }
 
 type WebSocketStepType string

@@ -1,11 +1,16 @@
 package grpcclient
 
 import (
+	"context"
+	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"google.golang.org/grpc/metadata"
 )
 
 type metaSrc string
@@ -15,43 +20,36 @@ const (
 	metaSrcHeader metaSrc = "headers"
 )
 
-func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) ([]string, error) {
-	var pairs []string
-	if grpcReq != nil && len(grpcReq.Metadata) > 0 {
-		var err error
-		pairs, err = appendMetaPairs(pairs, grpcReq.Metadata, metaSrcMeta)
-		if err != nil {
-			return nil, err
-		}
-	}
+type mdPairs []string
 
-	if req != nil && len(req.Headers) > 0 {
-		var err error
-		pairs, err = appendHeaderPairs(pairs, req.Headers, metaSrcHeader)
-		if err != nil {
-			return nil, err
-		}
+func (p mdPairs) attach(ctx context.Context) context.Context {
+	if len(p) == 0 {
+		return ctx
 	}
-	return pairs, nil
+	return metadata.AppendToOutgoingContext(ctx, p...)
+}
+
+func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) (mdPairs, error) {
+	pairs, err := appendMetaPairs(nil, grpcReq.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	return appendHeaderPairs(pairs, req.Headers)
 }
 
 func ValidateMetaPairs(meta []restfile.MetadataPair) error {
-	_, err := appendMetaPairs(nil, meta, metaSrcMeta)
+	_, err := appendMetaPairs(nil, meta)
 	return err
 }
 
 func ValidateHeaderPairs(h http.Header) error {
-	_, err := appendHeaderPairs(nil, h, metaSrcHeader)
+	_, err := appendHeaderPairs(nil, h)
 	return err
 }
 
-func appendMetaPairs(
-	pairs []string,
-	meta []restfile.MetadataPair,
-	src metaSrc,
-) ([]string, error) {
+func appendMetaPairs(pairs mdPairs, meta []restfile.MetadataPair) (mdPairs, error) {
 	for _, pair := range meta {
-		key, err := normalizeMetaKey(pair.Key, src)
+		key, err := normalizeMetaKey(pair.Key, metaSrcMeta)
 		if err != nil {
 			return nil, err
 		}
@@ -60,13 +58,14 @@ func appendMetaPairs(
 	return pairs, nil
 }
 
-func appendHeaderPairs(pairs []string, hdr http.Header, src metaSrc) ([]string, error) {
-	for key, values := range hdr {
-		norm, err := normalizeMetaKey(key, src)
+// Sort map-backed headers so repeated runs produce metadata in the same order.
+func appendHeaderPairs(pairs mdPairs, hdr http.Header) (mdPairs, error) {
+	for _, key := range slices.Sorted(maps.Keys(hdr)) {
+		norm, err := normalizeMetaKey(key, metaSrcHeader)
 		if err != nil {
 			return nil, err
 		}
-		for _, value := range values {
+		for _, value := range hdr[key] {
 			pairs = append(pairs, norm, value)
 		}
 	}
@@ -100,9 +99,17 @@ func normalizeMetaKey(key string, src metaSrc) (string, error) {
 
 func metaKeyErr(src metaSrc, key string, msg string) error {
 	if src == metaSrcHeader {
-		return diag.Newf(diag.ClassProtocol, "grpc metadata key %q from headers %s", key, msg)
+		return diag.New(
+			diag.ClassProtocol,
+			fmt.Sprintf("grpc metadata key %q from headers %s", key, msg),
+			grpcComponent,
+		)
 	}
-	return diag.Newf(diag.ClassProtocol, "grpc metadata key %q %s", key, msg)
+	return diag.New(
+		diag.ClassProtocol,
+		fmt.Sprintf("grpc metadata key %q %s", key, msg),
+		grpcComponent,
+	)
 }
 
 func validMetaKey(key string) bool {

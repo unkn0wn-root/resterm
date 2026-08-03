@@ -5,40 +5,12 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
-	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
-	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
-
-type Options struct {
-	BaseDir             string
-	DefaultPlaintext    bool
-	DefaultPlaintextSet bool
-	DialTimeout         time.Duration
-	RootCAs             []string
-	ClientCert          string
-	ClientKey           string
-	Insecure            bool
-	RootMode            tlsconfig.RootMode
-	SSH                 *ssh.Plan
-	K8s                 *k8s.Plan
-}
-
-type Response struct {
-	Message         string
-	Body            []byte
-	ContentType     string
-	Wire            []byte
-	WireContentType string
-	Headers         map[string][]string
-	Trailers        map[string][]string
-	StatusCode      codes.Code
-	StatusMessage   string
-	Duration        time.Duration
-}
 
 type StreamHook func(*stream.Session)
 
@@ -50,87 +22,188 @@ const (
 	MetaReason   = "grpc.reason"
 )
 
-const settingTimeout = "timeout"
+var grpcComponent = diag.WithComponent(diag.ComponentGRPC)
 
-type Client struct{}
+// Conn is the connection interface used by Client.
+type Conn interface {
+	grpc.ClientConnInterface
+	Close() error
+}
 
-func NewClient() *Client {
-	return &Client{}
+// DialFunc creates a lazy gRPC connection. A context is not needed until the
+// first RPC starts.
+type DialFunc func(target string, opts []grpc.DialOption) (Conn, error)
+
+type ClientOption func(*Client)
+
+type Client struct {
+	dial DialFunc
+	fs   filelookup.FileSystem
+}
+
+func NewClient(opts ...ClientOption) *Client {
+	c := &Client{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(c)
+		}
+	}
+	if c.dial == nil {
+		c.dial = dialGRPC
+	}
+	if c.fs == nil {
+		c.fs = filelookup.OSFileSystem{}
+	}
+	return c
+}
+
+func WithDialer(dial DialFunc) ClientOption {
+	return func(c *Client) {
+		if dial != nil {
+			c.dial = dial
+		}
+	}
+}
+
+func WithFileSystem(fs filelookup.FileSystem) ClientOption {
+	return func(c *Client) {
+		if fs != nil {
+			c.fs = fs
+		}
+	}
+}
+
+// Clone returns a snapshot of the client configuration.
+func (c *Client) Clone() *Client {
+	if c == nil {
+		return nil
+	}
+	return &Client{dial: c.dial, fs: c.fs}
 }
 
 func (c *Client) Execute(
 	parent context.Context,
 	req *restfile.Request,
-	gr *restfile.GRPCRequest,
 	opt Options,
 	hook StreamHook,
 ) (resp *Response, err error) {
+	gr := req.GRPC
 	if gr == nil {
-		return nil, diag.New(diag.ClassProtocol, "missing grpc metadata")
+		return nil, diag.New(diag.ClassProtocol, "missing grpc metadata", grpcComponent)
 	}
-
 	if gr.Target == "" {
-		return nil, diag.New(diag.ClassProtocol, "grpc target not specified")
-	}
-	if gr.FullMethod == "" {
-		return nil, diag.New(diag.ClassProtocol, "grpc method not specified")
+		return nil, diag.New(diag.ClassProtocol, "grpc target not specified", grpcComponent)
 	}
 
-	ctx, cancel := contextWithTimeout(parent, req, opt)
-	defer cancel()
+	id, err := parseFullMethod(gr.FullMethod)
+	if err != nil {
+		return nil, err
+	}
+
+	if parent == nil {
+		parent = context.Background()
+	}
 
 	target, dialOpts, err := buildDial(gr, opt)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := dialGRPC(target, dialOpts)
+	conn, err := c.dial(target, dialOpts)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil && err == nil {
-			err = diag.WrapAs(diag.ClassProtocol, closeErr, "close grpc connection")
+			err = diag.WrapAs(diag.ClassProtocol, closeErr, "close grpc connection", grpcComponent)
 		}
 	}()
 
-	files, md, err := c.resolveMethod(ctx, conn, gr, opt)
+	// Setup and unary calls use separate timeouts. Streams keep the parent
+	// context so they can run until the session is cancelled.
+	setupCtx, cancelSetup := withTimeout(parent, opt.DialTimeout)
+	in, err := c.prepare(setupCtx, conn, req, id, opt)
+	cancelSetup()
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := c.resolveMessage(gr, opt.BaseDir)
-	if err != nil {
-		return nil, err
+	if in.kind != callUnary {
+		return in.stream(parent, hook)
 	}
 
-	cd := newCodec(files)
-	if isStreaming(md) {
-		return c.executeStream(ctx, conn, req, gr, md, body, cd, hook)
-	}
-	return c.executeUnary(ctx, conn, req, gr, md, body, cd)
+	callCtx, cancel := withTimeout(parent, opt.Timeout)
+	defer cancel()
+	return in.unary(callCtx)
 }
 
-func contextWithTimeout(
+func withTimeout(
 	parent context.Context,
-	req *restfile.Request,
-	opt Options,
+	timeout time.Duration,
 ) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
+	if timeout <= 0 {
+		return parent, func() {}
+	}
+	return context.WithTimeout(parent, timeout)
+}
+
+type invocation struct {
+	conn   Conn
+	method protoreflect.MethodDescriptor
+	kind   streamKind
+	name   string
+	codec  codec
+	body   string
+	md     mdPairs
+	calls  []grpc.CallOption
+}
+
+func (c *Client) prepare(
+	ctx context.Context,
+	conn Conn,
+	req *restfile.Request,
+	id methodID,
+	opt Options,
+) (invocation, error) {
+	gr := req.GRPC
+	rd := newReader(c.fs, opt)
+	target, err := resolveMethod(ctx, conn, gr, id, rd)
+	if err != nil {
+		return invocation{}, err
 	}
 
-	var timeout string
-	if req != nil {
-		timeout = req.Settings[settingTimeout]
+	body, err := resolveMessage(gr, rd)
+	if err != nil {
+		return invocation{}, err
 	}
-	if timeout != "" {
-		if dur, err := time.ParseDuration(timeout); err == nil && dur > 0 {
-			return context.WithTimeout(parent, dur)
-		}
+
+	md, err := collectMetadata(gr, req)
+	if err != nil {
+		return invocation{}, err
 	}
-	if opt.DialTimeout > 0 {
-		return context.WithTimeout(parent, opt.DialTimeout)
+
+	return invocation{
+		conn:   conn,
+		method: target.desc,
+		kind:   streamKindOf(target.desc),
+		name:   id.full,
+		codec:  target.codec,
+		body:   body,
+		md:     md,
+		calls:  callOptions(opt),
+	}, nil
+}
+
+func callOptions(opt Options) []grpc.CallOption {
+	var out []grpc.CallOption
+	if opt.MaxRecvSize > 0 {
+		out = append(out, grpc.MaxCallRecvMsgSize(opt.MaxRecvSize))
 	}
-	return parent, func() {}
+	if opt.MaxSendSize > 0 {
+		out = append(out, grpc.MaxCallSendMsgSize(opt.MaxSendSize))
+	}
+	if opt.Compression != "" {
+		out = append(out, grpc.UseCompressor(opt.Compression))
+	}
+	return out
 }

@@ -8,103 +8,115 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-func isStreaming(md protoreflect.MethodDescriptor) bool {
-	return md.IsStreamingClient() || md.IsStreamingServer()
+type streamKind uint8
+
+const (
+	callUnary streamKind = iota
+	callClientStream
+	callServerStream
+	callBidiStream
+)
+
+func streamKindOf(md protoreflect.MethodDescriptor) streamKind {
+	switch {
+	case md.IsStreamingClient() && md.IsStreamingServer():
+		return callBidiStream
+	case md.IsStreamingClient():
+		return callClientStream
+	case md.IsStreamingServer():
+		return callServerStream
+	default:
+		return callUnary
+	}
 }
 
-func streamDesc(md protoreflect.MethodDescriptor) *grpc.StreamDesc {
+func (k streamKind) sendsStream() bool {
+	return k == callClientStream || k == callBidiStream
+}
+
+func (k streamKind) recvsStream() bool {
+	return k == callServerStream || k == callBidiStream
+}
+
+func (in invocation) streamDesc() *grpc.StreamDesc {
 	return &grpc.StreamDesc{
-		StreamName:    string(md.Name()),
-		ClientStreams: md.IsStreamingClient(),
-		ServerStreams: md.IsStreamingServer(),
+		StreamName:    string(in.method.Name()),
+		ClientStreams: in.kind.sendsStream(),
+		ServerStreams: in.kind.recvsStream(),
 	}
 }
 
-func (c *Client) executeStream(
-	ctx context.Context,
-	conn *grpc.ClientConn,
-	req *restfile.Request,
-	gr *restfile.GRPCRequest,
-	md protoreflect.MethodDescriptor,
-	body string,
-	cd codec,
-	hook StreamHook,
-) (*Response, error) {
-	callCtx, err := outgoingContext(ctx, gr, req)
-	if err != nil {
-		return nil, err
-	}
-	callCtx, cancel := context.WithCancel(callCtx)
-	defer cancel()
-
-	session := stream.NewSession(callCtx, stream.KindGRPC, stream.Config{})
+func (in invocation) stream(ctx context.Context, hook StreamHook) (*Response, error) {
+	session := stream.NewSession(in.md.attach(ctx), stream.KindGRPC, stream.Config{})
+	defer session.Cancel()
 	if hook != nil {
 		hook(session)
 	}
+	// Use the session context so session.Cancel stops the RPC.
+	callCtx := session.Context()
 
-	msgs, err := parseInput(body, md.Input(), md.IsStreamingClient(), cd)
+	msgs, err := parseInput(in.body, in.method.Input(), in.kind.sendsStream(), in.codec)
 	if err != nil {
-		finalizeStream(session, gr.FullMethod, err)
+		finalizeStream(session, in.name, err)
 		return nil, err
 	}
 
-	headerMD := metadata.MD{}
-	trailerMD := metadata.MD{}
+	var md mdCapture
 	start := time.Now()
-	cs, err := conn.NewStream(
-		callCtx,
-		streamDesc(md),
-		gr.FullMethod,
-		grpc.Header(&headerMD),
-		grpc.Trailer(&trailerMD),
-	)
+	cs, err := in.conn.NewStream(callCtx, in.streamDesc(), in.name, in.callOpts(md.opts()...)...)
 	if err != nil {
-		finalizeStream(session, gr.FullMethod, err)
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "open grpc stream")
+		finalizeStream(session, in.name, err)
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "open grpc stream", grpcComponent)
 	}
 	session.MarkOpen()
 
 	sc := streamCall{
 		cs:      cs,
-		md:      md,
-		method:  gr.FullMethod,
+		kind:    in.kind,
+		desc:    in.method,
+		method:  in.name,
 		session: session,
-		cd:      cd,
+		cd:      in.codec,
 	}
-	out, streamErr := runStream(sc, msgs, cancel)
-	resp := newResponse(headerMD, trailerMD, time.Since(start))
+	out, streamErr := runStream(sc, msgs, session.Cancel)
+	resp := md.response(start)
+	// Streams have no single wire payload, so the raw pane uses the JSON transcript.
+	resp.WireContentType = ""
 	bodyData, bodyErr := buildStreamBody(out)
 	if bodyErr != nil {
-		finalizeStream(session, gr.FullMethod, bodyErr)
-		return nil, diag.WrapAs(diag.ClassProtocol, bodyErr, "encode grpc stream response")
+		finalizeStream(session, in.name, bodyErr)
+		return resp, diag.WrapAs(
+			diag.ClassProtocol,
+			bodyErr,
+			"encode grpc stream response",
+			grpcComponent,
+		)
 	}
 	resp.Message = string(bodyData)
 	resp.Body = bodyData
-	ensureContentType(resp)
 
 	if streamErr != nil {
-		setResponseStatus(resp, streamErr)
-		finalizeStream(session, gr.FullMethod, streamErr)
-		return resp, diag.WrapAs(diag.ClassProtocol, streamErr, "invoke grpc stream")
+		setResponseStatus(resp, streamErr, in.codec)
+		finalizeStream(session, in.name, streamErr)
+		return resp, diag.WrapAs(diag.ClassProtocol, streamErr, "invoke grpc stream", grpcComponent)
 	}
-	finalizeStream(session, gr.FullMethod, nil)
+	finalizeStream(session, in.name, nil)
 	return resp, nil
 }
 
 type streamCall struct {
 	cs      grpc.ClientStream
-	md      protoreflect.MethodDescriptor
+	kind    streamKind
+	desc    protoreflect.MethodDescriptor
 	method  string
 	session *stream.Session
 	cd      codec
@@ -115,19 +127,9 @@ func runStream(
 	msgs []proto.Message,
 	cancel context.CancelFunc,
 ) ([][]byte, error) {
-	switch {
-	case sc.md.IsStreamingClient() && sc.md.IsStreamingServer():
+	if sc.kind == callBidiStream {
 		return runBidiStream(sc, msgs, cancel)
-	case sc.md.IsStreamingClient():
-		return runClientStream(sc, msgs)
-	case sc.md.IsStreamingServer():
-		return runServerStream(sc, msgs)
-	default:
-		return nil, diag.New(diag.ClassProtocol, "grpc method is not streaming")
 	}
-}
-
-func runServerStream(sc streamCall, msgs []proto.Message) ([][]byte, error) {
 	if err := sc.send(msgs); err != nil {
 		return nil, err
 	}
@@ -135,16 +137,6 @@ func runServerStream(sc streamCall, msgs []proto.Message) ([][]byte, error) {
 		return nil, err
 	}
 	return sc.recvAll()
-}
-
-func runClientStream(sc streamCall, msgs []proto.Message) ([][]byte, error) {
-	if err := sc.send(msgs); err != nil {
-		return nil, err
-	}
-	if err := sc.cs.CloseSend(); err != nil {
-		return nil, err
-	}
-	return sc.recvOne()
 }
 
 func runBidiStream(
@@ -178,7 +170,7 @@ func runBidiStream(
 }
 
 func (sc streamCall) send(msgs []proto.Message) error {
-	msgType := string(sc.md.Input().FullName())
+	msgType := string(sc.desc.Input().FullName())
 	for i, msg := range msgs {
 		if err := sc.cs.SendMsg(msg); err != nil {
 			return err
@@ -187,14 +179,14 @@ func (sc streamCall) send(msgs []proto.Message) error {
 		if err != nil {
 			return err
 		}
-		publishMsg(sc.session, stream.DirSend, sc.method, msgType, i, payload)
+		sc.publishMsg(stream.DirSend, msgType, i, payload)
 	}
 	return nil
 }
 
 func (sc streamCall) recvAll() ([][]byte, error) {
 	var out [][]byte
-	outDesc := sc.md.Output()
+	outDesc := sc.desc.Output()
 	msgType := string(outDesc.FullName())
 	for i := 0; ; i++ {
 		msg := dynamicpb.NewMessage(outDesc)
@@ -210,84 +202,37 @@ func (sc streamCall) recvAll() ([][]byte, error) {
 			return out, err
 		}
 		out = append(out, payload)
-		publishMsg(sc.session, stream.DirReceive, sc.method, msgType, i, payload)
+		sc.publishMsg(stream.DirReceive, msgType, i, payload)
 	}
 }
 
-func (sc streamCall) recvOne() ([][]byte, error) {
-	outDesc := sc.md.Output()
-	msg := dynamicpb.NewMessage(outDesc)
-	if err := sc.cs.RecvMsg(msg); err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	payload, err := sc.cd.marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	publishMsg(sc.session, stream.DirReceive, sc.method, string(outDesc.FullName()), 0, payload)
-	return [][]byte{payload}, nil
-}
-
-func publishMsg(
-	session *stream.Session,
-	dir stream.Direction,
-	method string,
-	msgType string,
-	idx int,
-	payload []byte,
-) {
-	if session == nil {
-		return
-	}
-	meta := map[string]string{MetaMethod: method}
-	if msgType != "" {
-		meta[MetaMsgType] = msgType
-	}
-	if idx >= 0 {
-		meta[MetaMsgIndex] = strconv.Itoa(idx)
-	}
-	session.Publish(&stream.Event{
+func (sc streamCall) publishMsg(dir stream.Direction, msgType string, idx int, payload []byte) {
+	sc.session.Publish(&stream.Event{
 		Kind:      stream.KindGRPC,
 		Direction: dir,
-		Metadata:  meta,
-		Payload:   payload,
+		Metadata: map[string]string{
+			MetaMethod:   sc.method,
+			MetaMsgType:  msgType,
+			MetaMsgIndex: strconv.Itoa(idx),
+		},
+		Payload: payload,
 	})
 }
 
 func finalizeStream(session *stream.Session, method string, err error) {
-	if session == nil {
-		return
+	st := status.New(codes.OK, statusTextOK)
+	if err != nil {
+		st = status.Convert(err)
 	}
-	publishSummary(session, method, summaryStatus(err))
-	session.Close(err)
-}
 
-func summaryStatus(err error) *status.Status {
-	if err == nil {
-		return status.New(codes.OK, statusTextOK)
-	}
-	return status.Convert(err)
-}
-
-func publishSummary(session *stream.Session, method string, st *status.Status) {
-	if session == nil {
-		return
-	}
-	meta := map[string]string{MetaMethod: method}
-	if st != nil {
-		if code := st.Code().String(); code != "" {
-			meta[MetaStatus] = code
-		}
-		if st.Message() != "" {
-			meta[MetaReason] = st.Message()
-		}
+	meta := map[string]string{MetaMethod: method, MetaStatus: st.Code().String()}
+	if st.Message() != "" {
+		meta[MetaReason] = st.Message()
 	}
 	session.Publish(&stream.Event{
 		Kind:      stream.KindGRPC,
 		Direction: stream.DirNA,
 		Metadata:  meta,
 	})
+	session.Close(err)
 }

@@ -82,7 +82,7 @@ func compareRow(meta core.RowMeta, out engine.RequestResult) engine.CompareRow {
 		Profile:     meta.Profile,
 		Selection:   out.Selection,
 		Response:    cloneHTTP(out.Response),
-		GRPC:        cloneGRPC(out.GRPC),
+		GRPC:        out.GRPC.Clone(),
 		Stream:      cloneStream(out.Stream),
 		Transcript:  copyBytes(out.Transcript),
 		Err:         out.Err,

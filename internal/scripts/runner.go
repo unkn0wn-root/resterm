@@ -17,7 +17,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -25,12 +25,12 @@ import (
 )
 
 type Runner struct {
-	fs httpclient.FileSystem
+	fs filelookup.FileSystem
 }
 
-func NewRunner(fs httpclient.FileSystem) *Runner {
+func NewRunner(fs filelookup.FileSystem) *Runner {
 	if fs == nil {
-		fs = httpclient.OSFileSystem{}
+		fs = filelookup.OSFileSystem{}
 	}
 	return &Runner{fs: fs}
 }

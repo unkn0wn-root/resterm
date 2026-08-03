@@ -12,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -217,11 +218,8 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 			Fallback:     envFallback,
 		},
 		HTTPOpts: httpOpts,
-		GRPCOpts: grpcclient.Options{
-			DefaultPlaintext:    true,
-			DefaultPlaintextSet: true,
-		},
-		Compare: engine.CompareConfig{Targets: targets, Base: base, Group: group},
+		GRPCOpts: grpcclient.Options{DefaultPlaintext: restfile.OptOf(true)},
+		Compare:  engine.CompareConfig{Targets: targets, Base: base, Group: group},
 	}, nil
 }
 

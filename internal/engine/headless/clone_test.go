@@ -124,7 +124,7 @@ func TestCloneGRPC(t *testing.T) {
 		Wire:     []byte("wire"),
 	}
 
-	got := cloneGRPC(src)
+	got := src.Clone()
 	if got == nil {
 		t.Fatal("cloneGRPC() returned nil")
 	}

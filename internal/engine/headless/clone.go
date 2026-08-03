@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
@@ -22,19 +21,6 @@ func cloneHTTP(resp *httpclient.Response) *httpclient.Response {
 	out.Request = request.CloneRequest(resp.Request)
 	out.Timeline = resp.Timeline.Clone()
 	out.TraceReport = resp.TraceReport.Clone()
-	return &out
-}
-
-func cloneGRPC(resp *grpcclient.Response) *grpcclient.Response {
-	if resp == nil {
-		return nil
-	}
-
-	out := *resp
-	out.Headers = cloneStringSliceMap(resp.Headers)
-	out.Trailers = cloneStringSliceMap(resp.Trailers)
-	out.Body = copyBytes(resp.Body)
-	out.Wire = copyBytes(resp.Wire)
 	return &out
 }
 

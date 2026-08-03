@@ -189,7 +189,6 @@ type Model struct {
 	themeRuntime   themeRuntime
 	themeCatalog   theme.Catalog
 	client         *httpclient.Client
-	grpcClient     *grpcclient.Client
 	grpcOptions    grpcclient.Options
 	rg             *registry.Index
 
@@ -443,7 +442,6 @@ func New(cfg Config) Model {
 		client = httpclient.NewClientWithOptions()
 		cfg.Client = client
 	}
-	grpcExec := grpcclient.NewClient()
 	bindingMap := cfg.Bindings
 	if bindingMap == nil {
 		bindingMap = bindings.DefaultMap()
@@ -626,7 +624,6 @@ func New(cfg Config) Model {
 		theme:                  th,
 		themeCatalog:           cfg.ThemeCatalog,
 		client:                 client,
-		grpcClient:             grpcExec,
 		grpcOptions:            cfg.GRPCOptions,
 		rg:                     rg,
 		fileList:               fileList,

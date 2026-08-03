@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -49,7 +50,7 @@ type WebSocketDialer func(
 type ClientOption func(*Client)
 
 type Client struct {
-	fs          FileSystem
+	fs          filelookup.FileSystem
 	httpFactory HTTPClientFactory
 	wsDial      WebSocketDialer
 	telemetry   telemetry.Instrumenter
@@ -86,7 +87,7 @@ func (c *Client) streamClient(opts Options) (*http.Client, error) {
 	return client, nil
 }
 
-func NewClient(fs FileSystem) *Client {
+func NewClient(fs filelookup.FileSystem) *Client {
 	return NewClientWithOptions(WithFileSystem(fs))
 }
 
@@ -98,7 +99,7 @@ func NewClientWithOptions(opts ...ClientOption) *Client {
 		}
 	}
 	if c.fs == nil {
-		c.fs = OSFileSystem{}
+		c.fs = filelookup.OSFileSystem{}
 	}
 	if c.wsDial == nil {
 		c.wsDial = websocket.Dial
@@ -109,7 +110,7 @@ func NewClientWithOptions(opts ...ClientOption) *Client {
 	return c
 }
 
-func WithFileSystem(fs FileSystem) ClientOption {
+func WithFileSystem(fs filelookup.FileSystem) ClientOption {
 	return func(c *Client) {
 		if fs != nil {
 			c.fs = fs

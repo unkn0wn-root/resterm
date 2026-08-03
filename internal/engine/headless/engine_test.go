@@ -520,8 +520,7 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 			Method:        "StreamingOutputCall",
 			FullMethod:    "/grpc.testing.TestService/StreamingOutputCall",
 			UseReflection: true,
-			Plaintext:     true,
-			PlaintextSet:  true,
+			Plaintext:     restfile.OptOf(true),
 		},
 		Metadata: restfile.RequestMetadata{
 			Asserts: []restfile.AssertSpec{{
@@ -538,9 +537,8 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 
 	eng := New(engine.Config{
 		GRPCOptions: grpcclient.Options{
-			DefaultPlaintext:    true,
-			DefaultPlaintextSet: true,
-			DialTimeout:         time.Second,
+			DefaultPlaintext: restfile.OptOf(true),
+			DialTimeout:      time.Second,
 		},
 	})
 	res, err := eng.ExecuteRequest(doc, req, testSelection(""))

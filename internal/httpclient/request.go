@@ -2,14 +2,12 @@ package httpclient
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -36,6 +34,7 @@ const (
 	authorizationHeader  = "Authorization"
 	defaultAPIKeyHeader  = "X-API-Key"
 	bearerTokenPrefix    = "Bearer "
+	basicPrefix          = "Basic "
 	legacyAPIKeyAuthType = "api-key"
 )
 
@@ -82,114 +81,20 @@ func (c *Client) applyAuthentication(
 	resolver *vars.Resolver,
 	auth *restfile.AuthSpec,
 ) error {
-	if auth == nil || len(auth.Params) == 0 {
-		return nil
+	values, err := AuthValues(auth, resolver, req.Header, diag.ComponentHTTP)
+	if err != nil {
+		return err
 	}
 
-	kind := strings.ToLower(auth.Type)
-	expandResult := func(param string) (vars.Expansion, error) {
-		value := auth.Params[param]
-		if value == "" || resolver == nil {
-			return vars.Expansion{Value: value}, nil
-		}
-		out, err := resolver.ExpandTemplatesResult(value)
-		if err != nil {
-			op := fmt.Sprintf("expand %s auth %s", kind, param)
-			if at := auth.Origin(); at != "" {
-				op += " (" + at + ")"
-			}
-			return vars.Expansion{}, diag.WrapAs(
-				diag.ClassAuth,
-				err,
-				op,
-				diag.WithComponent(diag.ComponentHTTP),
-			)
-		}
-		return out, nil
-	}
-	expand := func(param string) (string, error) {
-		out, err := expandResult(param)
-		return out.Value, err
-	}
-
-	switch kind {
-	case string(authTypeBasic):
-		if req.Header.Get(authorizationHeader) != "" {
-			return nil
-		}
-		user, err := expand(authParamUsername)
-		if err != nil {
-			return err
-		}
-		pass, err := expand(authParamPassword)
-		if err != nil {
-			return err
-		}
-		req.SetBasicAuth(user, pass)
-	case string(authTypeBearer):
-		if req.Header.Get(authorizationHeader) != "" {
-			return nil
-		}
-		token, err := expand(authParamToken)
-		if err != nil {
-			return err
-		}
-		req.Header.Set(authorizationHeader, bearerTokenPrefix+token)
-	case string(authTypeAPIKey), legacyAPIKeyAuthType:
-		placement, err := expandResult(authParamPlacement)
-		if err != nil {
-			return err
-		}
-		name, err := expand(authParamName)
-		if err != nil {
-			return err
-		}
-		switch util.LowerTrim(placement.Value) {
-		case authPlacementQuery:
-			value, err := expand(authParamValue)
-			if err != nil {
-				return err
-			}
+	for _, v := range values {
+		switch v.Placement {
+		case AuthInQuery:
 			q := req.URL.Query()
-			q.Set(name, value)
+			q.Set(v.Name, v.Value)
 			req.URL.RawQuery = q.Encode()
-		case "", authPlacementHeader:
-			if name == "" {
-				name = defaultAPIKeyHeader
-			}
-			if req.Header.Get(name) != "" {
-				return nil
-			}
-			value, err := expand(authParamValue)
-			if err != nil {
-				return err
-			}
-			req.Header.Set(name, value)
 		default:
-			// Only a lenient resolver leaves an undefined placement literal.
-			// The preview must not guess where the key lands, so skip it.
-			if placement.HasUndefinedVariables {
-				return nil
-			}
-			msg := fmt.Sprintf("invalid apikey auth placement %q, expected header or query", placement.Value)
-			if at := auth.Origin(); at != "" {
-				msg += " (" + at + ")"
-			}
-			return diag.New(diag.ClassAuth, msg, diag.WithComponent(diag.ComponentHTTP))
+			req.Header.Set(v.Name, v.Value)
 		}
-	case string(authTypeHeader):
-		name, err := expand(authParamHeader)
-		if err != nil {
-			return err
-		}
-		if name == "" || req.Header.Get(name) != "" {
-			return nil
-		}
-		value, err := expand(authParamValue)
-		if err != nil {
-			return err
-		}
-		req.Header.Set(name, value)
 	}
 	return nil
 }

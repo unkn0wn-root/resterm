@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -76,7 +77,7 @@ func TestApplyRequestSettings(t *testing.T) {
 }
 
 func TestInjectBodyIncludes(t *testing.T) {
-	client := &Client{fs: OSFileSystem{}}
+	client := &Client{fs: filelookup.OSFileSystem{}}
 	baseDir := t.TempDir()
 	path := filepath.Join(baseDir, "payload.json")
 	if err := os.WriteFile(path, []byte(`{"status":"ok"}`), 0o644); err != nil {
@@ -113,15 +114,15 @@ func TestInjectBodyIncludesFallback(t *testing.T) {
 	}
 }
 
-func TestReadFileWithFallbackDisabledRaw(t *testing.T) {
+func TestReadFileDisabledRaw(t *testing.T) {
 	client := &Client{fs: mapFS{"payload.json": []byte("hi")}}
-	_, _, err := client.readFileWithFallback("payload.json", "", nil, false, "payload")
+	_, _, err := client.readFile(filelookup.Lookup{}, "payload.json", "payload")
 	if err == nil {
 		t.Fatalf("expected error when raw path is disallowed")
 	}
 }
 
-func TestReadFileWithFallbackStopsOnNonNotExist(t *testing.T) {
+func TestReadFileStopsOnNonNotExist(t *testing.T) {
 	base := "/base"
 	fb := "fb"
 	fs := errFS{
@@ -134,7 +135,8 @@ func TestReadFileWithFallbackStopsOnNonNotExist(t *testing.T) {
 	}
 	client := &Client{fs: fs}
 
-	_, _, err := client.readFileWithFallback("payload.json", base, []string{fb}, true, "payload")
+	lookup := filelookup.Lookup{BaseDir: base, Fallbacks: []string{fb}, AllowRaw: true}
+	_, _, err := client.readFile(lookup, "payload.json", "payload")
 	if err == nil {
 		t.Fatalf("expected permission error to surface")
 	}
@@ -154,45 +156,6 @@ func TestPrepareBodyNoFallbackDisallowsRawPath(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "/base/dir/payload.json") {
 		t.Fatalf("expected error to mention base dir path, got %v", err)
-	}
-}
-
-func TestResolveFileLookup(t *testing.T) {
-	base := "/base"
-	fallbacks, allowRaw := resolveFileLookup(
-		base,
-		Options{NoFallback: true, FallbackBaseDirs: []string{"/fb"}},
-	)
-	if len(fallbacks) != 0 || allowRaw {
-		t.Fatalf(
-			"expected no fallbacks and raw disallowed when NoFallback with base dir, got %v allowRaw=%v",
-			fallbacks,
-			allowRaw,
-		)
-	}
-
-	fallbacks, allowRaw = resolveFileLookup(
-		"",
-		Options{NoFallback: true, FallbackBaseDirs: []string{"/fb"}},
-	)
-	if len(fallbacks) != 0 || !allowRaw {
-		t.Fatalf(
-			"expected raw allowed when base dir empty even if NoFallback, got %v allowRaw=%v",
-			fallbacks,
-			allowRaw,
-		)
-	}
-
-	fallbacks, allowRaw = resolveFileLookup(
-		base,
-		Options{NoFallback: false, FallbackBaseDirs: []string{"/fb"}},
-	)
-	if len(fallbacks) != 1 || fallbacks[0] != "/fb" || !allowRaw {
-		t.Fatalf(
-			"expected fallbacks preserved and raw allowed when fallback enabled, got %v allowRaw=%v",
-			fallbacks,
-			allowRaw,
-		)
 	}
 }
 

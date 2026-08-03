@@ -617,15 +617,12 @@ func explainReqBody(req *restfile.Request) (string, string) {
 	}
 	switch {
 	case req.GRPC != nil:
-		if s := strings.TrimSpace(
-			req.GRPC.MessageExpanded,
-		); req.GRPC.MessageExpandedSet &&
-			s != "" {
+		if s, ok := req.GRPC.MessageExpanded.Get(); ok && strings.TrimSpace(s) != "" {
 			note := "gRPC message"
 			if path := strings.TrimSpace(req.GRPC.MessageFile); path != "" {
 				note = "expanded gRPC message from " + path
 			}
-			return clipExplain(s), note
+			return clipExplain(strings.TrimSpace(s)), note
 		}
 		if s := strings.TrimSpace(req.GRPC.Message); s != "" {
 			return clipExplain(s), "gRPC message"
@@ -780,9 +777,9 @@ func explainGRPCDetails(gr *restfile.GRPCRequest) []xplain.Pair {
 	if auth := strings.TrimSpace(gr.Authority); auth != "" {
 		out = append(out, xplain.Pair{Key: "Authority", Value: auth})
 	}
-	if gr.PlaintextSet {
+	if v, ok := gr.Plaintext.Get(); ok {
 		mode := "tls"
-		if gr.Plaintext {
+		if v {
 			mode = "plaintext"
 		}
 		out = append(out, xplain.Pair{Key: "Transport", Value: mode})
@@ -831,8 +828,8 @@ func explainWebSocketDetails(ws *restfile.WebSocketRequest) []xplain.Pair {
 			xplain.Pair{Key: "Subprotocols", Value: strings.Join(opts.Subprotocols, ", ")},
 		)
 	}
-	if opts.CompressionSet {
-		out = append(out, xplain.Pair{Key: "Compression", Value: explainToggle(opts.Compression)})
+	if v, ok := opts.Compression.Get(); ok {
+		out = append(out, xplain.Pair{Key: "Compression", Value: explainToggle(v)})
 	}
 	return out
 }

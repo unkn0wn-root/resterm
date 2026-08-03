@@ -54,15 +54,13 @@ func TestSetExplainPreparedCapturesGRPCDetails(t *testing.T) {
 	req := &restfile.Request{
 		Method: "POST",
 		GRPC: &restfile.GRPCRequest{
-			Target:             "dns:///grpc.example:8443",
-			FullMethod:         "/pkg.Service/Call",
-			DescriptorSet:      "api.pb",
-			Plaintext:          true,
-			PlaintextSet:       true,
-			Authority:          "grpc.example",
-			MessageFile:        "req.json",
-			MessageExpanded:    `{"ok":true}`,
-			MessageExpandedSet: true,
+			Target:          "dns:///grpc.example:8443",
+			FullMethod:      "/pkg.Service/Call",
+			DescriptorSet:   "api.pb",
+			Plaintext:       restfile.OptOf(true),
+			Authority:       "grpc.example",
+			MessageFile:     "req.json",
+			MessageExpanded: restfile.OptOf(`{"ok":true}`),
 			Metadata: []restfile.MetadataPair{
 				{Key: "x-trace-id", Value: "abc123"},
 			},
@@ -108,8 +106,7 @@ func TestSetExplainPreparedCapturesWebSocketSteps(t *testing.T) {
 				HandshakeTimeout: 3 * time.Second,
 				IdleTimeout:      30 * time.Second,
 				Subprotocols:     []string{"chat", "events"},
-				Compression:      true,
-				CompressionSet:   true,
+				Compression:      restfile.OptOf(true),
 			},
 			Steps: []restfile.WebSocketStep{
 				{Type: restfile.WebSocketStepSendJSON, Value: `{"ping":true}`},

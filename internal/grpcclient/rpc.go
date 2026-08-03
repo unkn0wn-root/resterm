@@ -5,79 +5,47 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-func (c *Client) executeUnary(
-	ctx context.Context,
-	conn *grpc.ClientConn,
-	req *restfile.Request,
-	gr *restfile.GRPCRequest,
-	md protoreflect.MethodDescriptor,
-	body string,
-	cd codec,
-) (*Response, error) {
-	input := dynamicpb.NewMessage(md.Input())
-	if body != "" {
-		if err := cd.unmarshalInto([]byte(body), input); err != nil {
-			return nil, diag.WrapAs(diag.ClassProtocol, err, "decode grpc request body")
-		}
-	}
-
-	callCtx, err := outgoingContext(ctx, gr, req)
+func (in invocation) unary(ctx context.Context) (*Response, error) {
+	msgs, err := parseInput(in.body, in.method.Input(), false, in.codec)
 	if err != nil {
 		return nil, err
 	}
+	input := msgs[0]
 
-	headerMD := metadata.MD{}
-	trailerMD := metadata.MD{}
-	output := dynamicpb.NewMessage(md.Output())
+	var md mdCapture
+	output := dynamicpb.NewMessage(in.method.Output())
 	start := time.Now()
-	callErr := conn.Invoke(
-		callCtx,
-		gr.FullMethod,
+	callErr := in.conn.Invoke(
+		in.md.attach(ctx),
+		in.name,
 		input,
 		output,
-		grpc.Header(&headerMD),
-		grpc.Trailer(&trailerMD),
+		in.callOpts(md.opts()...)...,
 	)
-	resp := newResponse(headerMD, trailerMD, time.Since(start))
+	resp := md.response(start)
 
 	if callErr != nil {
-		setResponseStatus(resp, callErr)
-		ensureContentType(resp)
-		return resp, diag.WrapAs(diag.ClassProtocol, callErr, "invoke grpc method")
+		setResponseStatus(resp, callErr, in.codec)
+		return resp, diag.WrapAs(diag.ClassProtocol, callErr, "invoke grpc method", grpcComponent)
 	}
 
-	data, err := cd.marshal(output)
+	data, err := in.codec.marshal(output)
 	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "encode grpc response")
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "encode grpc response", grpcComponent)
 	}
 	resp.Message = string(data)
 	resp.Body = data
 	if wire, err := proto.Marshal(output); err == nil {
 		resp.Wire = wire
 	}
-	ensureContentType(resp)
 	return resp, nil
 }
 
-func outgoingContext(
-	ctx context.Context,
-	gr *restfile.GRPCRequest,
-	req *restfile.Request,
-) (context.Context, error) {
-	pairs, err := collectMetadata(gr, req)
-	if err != nil {
-		return nil, err
-	}
-	if len(pairs) == 0 {
-		return ctx, nil
-	}
-	return metadata.AppendToOutgoingContext(ctx, pairs...), nil
+func (in invocation) callOpts(extra ...grpc.CallOption) []grpc.CallOption {
+	return append(extra, in.calls...)
 }

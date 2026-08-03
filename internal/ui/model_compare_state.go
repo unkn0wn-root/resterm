@@ -192,7 +192,7 @@ func summarizeCompareDelta(base, target *compareResult) string {
 	case target.Response != nil && base != nil && base.Response != nil:
 		return summarizeHTTPDelta(base.Response, target.Response)
 	case target.GRPC != nil && base != nil && base.GRPC != nil:
-		return summarizeGRPCDelta(base.GRPC, target.GRPC)
+		return base.GRPC.DiffSummary(target.GRPC)
 	default:
 		return "unavailable"
 	}
@@ -221,26 +221,6 @@ func summarizeHTTPDelta(base, target *httpclient.Response) string {
 	}
 	if !headersEqual(target.Headers, base.Headers) {
 		ds = append(ds, "headers")
-	}
-	if len(ds) == 0 {
-		return "match"
-	}
-	return strings.Join(ds, ", ") + " differ"
-}
-
-func summarizeGRPCDelta(base, target *grpcclient.Response) string {
-	if base == nil || target == nil {
-		return "unavailable"
-	}
-	var ds []string
-	if target.StatusCode != base.StatusCode {
-		ds = append(ds, "status")
-	}
-	if strings.TrimSpace(target.StatusMessage) != strings.TrimSpace(base.StatusMessage) {
-		ds = append(ds, "message")
-	}
-	if strings.TrimSpace(target.Message) != strings.TrimSpace(base.Message) {
-		ds = append(ds, "body")
 	}
 	if len(ds) == 0 {
 		return "match"

@@ -3197,11 +3197,8 @@ GRPC localhost:50051
 	if grpc.DescriptorSet != "descriptors/user.pb" {
 		t.Fatalf("unexpected descriptor: %s", grpc.DescriptorSet)
 	}
-	if grpc.Plaintext {
-		t.Fatalf("expected plaintext to be false")
-	}
-	if !grpc.PlaintextSet {
-		t.Fatalf("expected plaintext directive to be marked as set")
+	if v, ok := grpc.Plaintext.Get(); !ok || v {
+		t.Fatalf("expected plaintext directive to be set to false, got %+v", grpc.Plaintext)
 	}
 	found := false
 	for _, pair := range grpc.Metadata {
@@ -3310,7 +3307,7 @@ GRPC localhost:50051
 	if grpc == nil {
 		t.Fatalf("expected grpc metadata")
 	}
-	if grpc.PlaintextSet {
+	if grpc.Plaintext.Set {
 		t.Fatalf("expected plaintext to be unset when directive is missing")
 	}
 }
@@ -3471,7 +3468,7 @@ GET ws://example.com/socket
 	if ws.Options.Subprotocols[0] != "chat" || ws.Options.Subprotocols[1] != "json" {
 		t.Fatalf("unexpected subprotocol list: %v", ws.Options.Subprotocols)
 	}
-	if !ws.Options.CompressionSet || ws.Options.Compression {
+	if v, ok := ws.Options.Compression.Get(); !ok || v {
 		t.Fatalf("expected compression flag to be false and explicitly set")
 	}
 	if len(ws.Steps) != 7 {
@@ -3544,7 +3541,7 @@ func TestParseWebSocketDirectiveReportsInvalidOptions(t *testing.T) {
 				opts.IdleTimeout != 0 ||
 				opts.MaxMessageBytes != 0 ||
 				len(opts.Subprotocols) != 0 ||
-				opts.CompressionSet {
+				opts.Compression.Set {
 				t.Fatalf("invalid option was applied: %+v", opts)
 			}
 		})
@@ -3570,7 +3567,7 @@ GET wss://example.com/socket
 	if opts.MaxMessageBytes != 1024 {
 		t.Fatalf("valid max-message-bytes option was not applied: %d", opts.MaxMessageBytes)
 	}
-	if !opts.CompressionSet || !opts.Compression {
+	if v, ok := opts.Compression.Get(); !ok || !v {
 		t.Fatalf("valid compression option was not applied: %+v", opts)
 	}
 }

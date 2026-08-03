@@ -752,15 +752,12 @@ func explainReqBody(req *restfile.Request) (string, string) {
 	}
 	switch {
 	case req.GRPC != nil:
-		if s := strings.TrimSpace(
-			req.GRPC.MessageExpanded,
-		); req.GRPC.MessageExpandedSet &&
-			s != "" {
+		if s, ok := req.GRPC.MessageExpanded.Get(); ok && strings.TrimSpace(s) != "" {
 			note := "gRPC message"
 			if path := strings.TrimSpace(req.GRPC.MessageFile); path != "" {
 				note = "expanded gRPC message from " + path
 			}
-			return clipExplain(s), note
+			return clipExplain(strings.TrimSpace(s)), note
 		}
 		if s := strings.TrimSpace(req.GRPC.Message); s != "" {
 			return clipExplain(s), "gRPC message"

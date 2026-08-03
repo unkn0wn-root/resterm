@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"net/http"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -40,7 +39,7 @@ func newGRPCResponseRenderSource(
 	req *restfile.Request,
 ) responseRenderSource {
 	return responseRenderSource{
-		grpc:       cloneGRPCResponse(resp),
+		grpc:       resp.Clone(),
 		grpcReq:    req.Clone(),
 		grpcMethod: strings.TrimSpace(fullMethod),
 	}
@@ -156,22 +155,8 @@ func (m *Model) rerenderGRPCResponseSnapshot(
 	} else {
 		snapshot.rawMode = rawViewText
 	}
-	snapshot.responseHeaders = grpcResponseHeaderMap(resp)
+	snapshot.responseHeaders = resp.HeaderMap()
 	applyRawViewMode(snapshot, snapshot.rawMode)
-}
-
-func grpcResponseHeaderMap(resp *grpcclient.Response) http.Header {
-	if resp == nil || (len(resp.Headers) == 0 && len(resp.Trailers) == 0) {
-		return nil
-	}
-	h := make(http.Header, len(resp.Headers)+len(resp.Trailers))
-	for key, values := range resp.Headers {
-		h[key] = append([]string(nil), values...)
-	}
-	for key, values := range resp.Trailers {
-		h["Grpc-Trailer-"+key] = append([]string(nil), values...)
-	}
-	return h
 }
 
 func (m *Model) restartPendingResponseRender() tea.Cmd {

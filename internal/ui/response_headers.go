@@ -177,7 +177,7 @@ func headerMap(s *responseSnapshot, view headersViewMode) http.Header {
 	case s.source.hasHTTP():
 		return s.source.http.Headers
 	case s.source.hasGRPC():
-		return grpcResponseHeaderMap(s.source.grpc)
+		return s.source.grpc.HeaderMap()
 	case len(s.responseHeaders) > 0:
 		return s.responseHeaders
 	default:

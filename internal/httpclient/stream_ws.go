@@ -217,8 +217,8 @@ func wsDialOptions(
 		Subprotocols: util.CloneSlice(wsOpts.Subprotocols),
 		HTTPClient:   client,
 	}
-	if wsOpts.CompressionSet {
-		if wsOpts.Compression {
+	if on, ok := wsOpts.Compression.Get(); ok {
+		if on {
 			opts.CompressionMode = websocket.CompressionNoContextTakeover
 		} else {
 			opts.CompressionMode = websocket.CompressionDisabled
