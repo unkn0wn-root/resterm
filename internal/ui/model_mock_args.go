@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 )
 
 // errMockArgsUsage marks -h and --help, so callers render the usage line
@@ -63,7 +63,7 @@ func parseMockStartArgs(args []string) (mockStartArgs, error) {
 }
 
 func (a *mockStartArgs) setAddr(addr string) error {
-	if filesvc.IsRequestFile(addr) {
+	if files.IsRequest(addr) {
 		return fmt.Errorf("unexpected argument %s (use --source)", addr)
 	}
 	if a.addr != "" {

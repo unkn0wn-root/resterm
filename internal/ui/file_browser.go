@@ -5,11 +5,11 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 )
 
 type fileItem struct {
-	entry filesvc.FileEntry
+	entry files.Entry
 }
 
 func (f fileItem) Title() string {
@@ -24,7 +24,7 @@ func (f fileItem) FilterValue() string {
 	return f.entry.Name
 }
 
-func makeFileItems(entries []filesvc.FileEntry) []list.Item {
+func makeFileItems(entries []files.Entry) []list.Item {
 	items := make([]list.Item, len(entries))
 	for i, e := range entries {
 		items[i] = fileItem{entry: e}

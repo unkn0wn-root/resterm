@@ -10,14 +10,14 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
-func (m *Model) rebuildNavigator(entries []filesvc.FileEntry) {
+func (m *Model) rebuildNavigator(entries []files.Entry) {
 	m.cacheDoc(m.currentFile, m.doc)
 	if len(entries) == 0 {
 		entries = m.entriesFromList()
@@ -56,7 +56,7 @@ func navigatorWorkflowID(path string, idx int) string {
 	return fmt.Sprintf("wf:%s:%d", path, idx)
 }
 
-func (m *Model) buildNavTree(entries []filesvc.FileEntry) []*navigator.Node[any] {
+func (m *Model) buildNavTree(entries []files.Entry) []*navigator.Node[any] {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -103,7 +103,7 @@ func (m *Model) buildDirNode(name, path string) *navigator.Node[any] {
 	}
 }
 
-func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
+func (m *Model) buildFileNode(entry files.Entry) *navigator.Node[any] {
 	id := "file:" + entry.Path
 	node := &navigator.Node[any]{
 		ID:      id,
@@ -116,7 +116,7 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 		node.GitStatus = status.Status
 	}
 
-	if !filesvc.IsRequestFile(entry.Path) {
+	if !files.IsRequest(entry.Path) {
 		return node
 	}
 
@@ -130,13 +130,13 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 	return node
 }
 
-func fileEntryBadges(entry filesvc.FileEntry, activeEnvFile string) []string {
+func fileEntryBadges(entry files.Entry, activeEnvFile string) []string {
 	var badges []string
 	if label := entry.Kind.BadgeLabel(); label != "" {
 		badges = append(badges, label)
 	}
 
-	if entry.Kind == filesvc.FileKindEnv && util.SameFile(entry.Path, activeEnvFile) {
+	if entry.Kind == files.KindEnv && util.SameFile(entry.Path, activeEnvFile) {
 		badges = append(badges, "ACTIVE")
 	}
 	return badges
@@ -275,7 +275,7 @@ func (m *Model) expandNavigatorFile(path string) {
 	if m.navigator == nil {
 		return
 	}
-	if !filesvc.IsRequestFile(path) {
+	if !files.IsRequest(path) {
 		return
 	}
 
@@ -292,7 +292,7 @@ func (m *Model) ensureNavigatorRequestsForFile(path string) {
 	if m.navigator == nil || path == "" {
 		return
 	}
-	if !filesvc.IsRequestFile(path) {
+	if !files.IsRequest(path) {
 		return
 	}
 
@@ -345,9 +345,9 @@ func (m *Model) ensureNavigatorDataForFilter() {
 	}
 }
 
-func (m *Model) entriesFromList() []filesvc.FileEntry {
+func (m *Model) entriesFromList() []files.Entry {
 	items := m.fileList.Items()
-	out := make([]filesvc.FileEntry, 0, len(items))
+	out := make([]files.Entry, 0, len(items))
 	for _, it := range items {
 		if fi, ok := it.(fileItem); ok {
 			out = append(out, fi.entry)

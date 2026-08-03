@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -41,14 +41,14 @@ export fn enabled() {
 	}
 
 	got := entryKinds(entries)
-	want := map[string]filesvc.FileKind{
-		"api.http":               filesvc.FileKindRequest,
-		"helpers.rts":            filesvc.FileKindScript,
-		"pre.js":                 filesvc.FileKindJavaScript,
-		"flags.json":             filesvc.FileKindJSON,
-		"module-data.json":       filesvc.FileKindJSON,
-		"addNote.graphql":        filesvc.FileKindGraphQL,
-		"addNote.variables.json": filesvc.FileKindJSON,
+	want := map[string]files.Kind{
+		"api.http":               files.KindRequest,
+		"helpers.rts":            files.KindScript,
+		"pre.js":                 files.KindJavaScript,
+		"flags.json":             files.KindJSON,
+		"module-data.json":       files.KindJSON,
+		"addNote.graphql":        files.KindGraphQL,
+		"addNote.variables.json": files.KindJSON,
 	}
 	for name, kind := range want {
 		if got[name] != kind {
@@ -82,7 +82,7 @@ export fn enabled() {
 	}
 
 	got := entryKinds(entries)
-	if got["flags.json"] != filesvc.FileKindJSON {
+	if got["flags.json"] != files.KindJSON {
 		t.Fatalf("expected root flags.json from document base, got %+v", entries)
 	}
 	if _, ok := got[filepath.Join("rts", "flags.json")]; ok {
@@ -114,10 +114,10 @@ export fn enabled() {
 	}
 
 	got := entryKinds(entries)
-	if got["flags.json"] != filesvc.FileKindJSON {
+	if got["flags.json"] != files.KindJSON {
 		t.Fatalf("expected root flags.json from root document base, got %+v", entries)
 	}
-	if got[filepath.Join("nested", "flags.json")] != filesvc.FileKindJSON {
+	if got[filepath.Join("nested", "flags.json")] != files.KindJSON {
 		t.Fatalf("expected nested flags.json from nested document base, got %+v", entries)
 	}
 }
@@ -140,7 +140,7 @@ Content-Type: application/json
 	}
 
 	got := entryKinds(entries)
-	if len(got) != 1 || got["api.http"] != filesvc.FileKindRequest {
+	if len(got) != 1 || got["api.http"] != files.KindRequest {
 		t.Fatalf("expected only request file, got %+v", entries)
 	}
 }
@@ -156,7 +156,7 @@ func TestListIncludesCurrentAuxiliaryFile(t *testing.T) {
 	}
 
 	got := entryKinds(entries)
-	if got["scratch.json"] != filesvc.FileKindJSON {
+	if got["scratch.json"] != files.KindJSON {
 		t.Fatalf("expected current auxiliary file, got %+v", entries)
 	}
 }
@@ -181,13 +181,13 @@ Content-Type: application/json
 	}
 
 	got := entryKinds(entries)
-	if got["payload.json"] != filesvc.FileKindJSON {
+	if got["payload.json"] != files.KindJSON {
 		t.Fatalf("expected current document refs, got %+v", entries)
 	}
 }
 
-func entryKinds(entries []filesvc.FileEntry) map[string]filesvc.FileKind {
-	out := make(map[string]filesvc.FileKind, len(entries))
+func entryKinds(entries []files.Entry) map[string]files.Kind {
+	out := make(map[string]files.Kind, len(entries))
 	for _, e := range entries {
 		out[e.Name] = e.Kind
 	}

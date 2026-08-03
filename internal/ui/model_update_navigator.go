@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -196,7 +196,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 					}
 					cmd = m.openFile(path)
 				}
-				if path != "" && !filesvc.IsRequestFile(path) {
+				if path != "" && !files.IsRequest(path) {
 					return applyJump(cmd, true)
 				}
 				m.navExpandFile(n, false)
@@ -227,7 +227,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 					}
 					cmd = m.openFile(path)
 				}
-				if path != "" && !filesvc.IsRequestFile(path) {
+				if path != "" && !files.IsRequest(path) {
 					return applyJump(cmd, true)
 				}
 				m.navExpandFile(n, false)

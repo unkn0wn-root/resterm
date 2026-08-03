@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
@@ -2045,7 +2045,7 @@ func (m *Model) runSidebarResize(delta float64) tea.Cmd {
 		if n := m.navigator.Selected(); n != nil {
 			switch n.Kind {
 			case navigator.KindFile:
-				if filesvc.IsRequestFile(n.Payload.FilePath) {
+				if files.IsRequest(n.Payload.FilePath) {
 					m.navExpandFile(n, false)
 				}
 			case navigator.KindDir:

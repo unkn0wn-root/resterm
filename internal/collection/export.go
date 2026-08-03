@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 )
 
@@ -88,7 +88,7 @@ func ExportBundle(o ExportOptions) (ExportResult, error) {
 }
 
 func collectRequests(byPath map[string]expFile, rootAbs, rootReal string, rec bool) error {
-	ents, err := filesvc.ListRequestFiles(rootAbs, rec)
+	ents, err := files.ListRequests(rootAbs, files.ListOptions{Recursive: rec})
 	if err != nil {
 		return fmt.Errorf("list request files: %w", err)
 	}
@@ -96,7 +96,7 @@ func collectRequests(byPath map[string]expFile, rootAbs, rootReal string, rec bo
 	found := false
 	for _, ent := range ents {
 		entPath := strings.TrimSpace(ent.Path)
-		if entPath == "" || !filesvc.IsRequestFile(entPath) {
+		if entPath == "" || !files.IsRequest(entPath) {
 			continue
 		}
 

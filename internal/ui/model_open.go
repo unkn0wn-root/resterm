@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -152,7 +152,7 @@ func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 
 func (m *Model) isSupportedOpenPath(path string) bool {
 	switch {
-	case filesvc.IsWorkspaceFile(path):
+	case files.IsWorkspace(path):
 		return true
 	case vars.IsDotEnvPath(path):
 		return true

@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
@@ -356,10 +356,10 @@ func TestRenderRowShowsEnvIcon(t *testing.T) {
 			Badges: []string{"ENV", "ACTIVE"},
 			Payload: Payload[any]{
 				FilePath: "/tmp/resterm.env.json",
-				Data: filesvc.FileEntry{
+				Data: files.Entry{
 					Name: "resterm.env.json",
 					Path: "/tmp/resterm.env.json",
-					Kind: filesvc.FileKindEnv,
+					Kind: files.KindEnv,
 				},
 			},
 		},
@@ -385,10 +385,10 @@ func TestRenderRowShowsGraphQLIcon(t *testing.T) {
 			Title: "query.graphql",
 			Payload: Payload[any]{
 				FilePath: "/tmp/query.graphql",
-				Data: filesvc.FileEntry{
+				Data: files.Entry{
 					Name: "query.graphql",
 					Path: "/tmp/query.graphql",
-					Kind: filesvc.FileKindGraphQL,
+					Kind: files.KindGraphQL,
 				},
 			},
 		},
@@ -414,10 +414,10 @@ func TestRenderRowShowsJSONIcon(t *testing.T) {
 			Title: "variables.json",
 			Payload: Payload[any]{
 				FilePath: "/tmp/variables.json",
-				Data: filesvc.FileEntry{
+				Data: files.Entry{
 					Name: "variables.json",
 					Path: "/tmp/variables.json",
-					Kind: filesvc.FileKindJSON,
+					Kind: files.KindJSON,
 				},
 			},
 		},
@@ -443,10 +443,10 @@ func TestRenderRowShowsJavaScriptIcon(t *testing.T) {
 			Title: "pre.js",
 			Payload: Payload[any]{
 				FilePath: "/tmp/pre.js",
-				Data: filesvc.FileEntry{
+				Data: files.Entry{
 					Name: "pre.js",
 					Path: "/tmp/pre.js",
-					Kind: filesvc.FileKindJavaScript,
+					Kind: files.KindJavaScript,
 				},
 			},
 		},

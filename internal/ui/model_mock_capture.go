@@ -12,7 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/parser"
@@ -132,7 +132,7 @@ func (m *Model) captureSources() mock.Sources {
 }
 
 func (m *Model) captureSource() (*httpclient.Response, string, error) {
-	if m.currentFile != "" && !filesvc.IsRequestFile(m.currentFile) {
+	if m.currentFile != "" && !files.IsRequest(m.currentFile) {
 		return nil, "", errors.New("select a .http or .rest file before capturing a mock")
 	}
 	snap := m.mockCaptureSnapshot()

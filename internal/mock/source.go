@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -73,7 +73,7 @@ func rootedSource(root, name string) (string, error) {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(root, path)
 	}
-	if !filesvc.IsRequestFile(path) {
+	if !files.IsRequest(path) {
 		return "", fmt.Errorf("mock source must be a .http or .rest file: %s", name)
 	}
 	if !underRoot(root, path) {
@@ -120,29 +120,29 @@ func (s Sources) resolve() (resolved, error) {
 	switch {
 	case len(s.Files) > 0:
 		for _, f := range s.Files {
-			if !filesvc.IsRequestFile(f) {
+			if !files.IsRequest(f) {
 				return resolved{}, fmt.Errorf("mock source must be a .http or .rest file: %s", f)
 			}
 		}
 		return resolved{files: s.Files, root: root}, nil
 	case !info.IsDir():
-		if !filesvc.IsRequestFile(path) {
+		if !files.IsRequest(path) {
 			return resolved{}, fmt.Errorf("mock source must be a .http or .rest file: %s", path)
 		}
 		return resolved{files: []string{path}, root: root}, nil
 	}
 
-	entries, err := filesvc.ListRequestFiles(path, s.Recursive)
+	entries, err := files.ListRequests(path, files.ListOptions{Recursive: s.Recursive})
 	if err != nil {
 		return resolved{}, fmt.Errorf("list mock workspace %s: %w", path, err)
 	}
-	files := make([]string, 0, len(entries))
+	paths := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if e.Kind == filesvc.FileKindRequest {
-			files = append(files, e.Path)
+		if e.Kind == files.KindRequest {
+			paths = append(paths, e.Path)
 		}
 	}
-	return resolved{files: files, root: root, workspace: true}, nil
+	return resolved{files: paths, root: root, workspace: true}, nil
 }
 
 // documents parses the resolved set, substituting overlay for its own file. An
@@ -242,7 +242,7 @@ func includeOverlay(root string, overlay *restfile.Document) bool {
 	if strings.TrimSpace(overlay.Path) == "" {
 		return len(overlay.Mocks) > 0
 	}
-	if !filesvc.IsRequestFile(overlay.Path) {
+	if !files.IsRequest(overlay.Path) {
 		return false
 	}
 	return underRoot(root, overlay.Path)
