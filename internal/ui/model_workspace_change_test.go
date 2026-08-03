@@ -575,7 +575,7 @@ func TestMoveStopsMockServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.applyOpenFilePath(path)
-	_ = m.startMockServer("127.0.0.1:0")
+	_ = m.startMockServer(mockStartSpec{addr: "127.0.0.1:0"})
 	srv := m.activeMockServer()
 	if srv == nil {
 		t.Fatal("mock server was not started")

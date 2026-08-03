@@ -3,6 +3,7 @@ package cli
 import (
 	"flag"
 	"io"
+	"strings"
 	"time"
 
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -23,6 +24,22 @@ func (v stringValue) String() string {
 
 func (v stringValue) Set(s string) error {
 	*v.dst = str.Trim(s)
+	return nil
+}
+
+type stringListValue struct {
+	dst *[]string
+}
+
+func (v stringListValue) String() string {
+	if v.dst == nil {
+		return ""
+	}
+	return strings.Join(*v.dst, ",")
+}
+
+func (v stringListValue) Set(s string) error {
+	*v.dst = append(*v.dst, str.Trim(s))
 	return nil
 }
 
@@ -48,6 +65,12 @@ func StringVar(fs *flag.FlagSet, dst *string, name, value, usage string) {
 func StringVarAliases(fs *flag.FlagSet, dst *string, value, usage string, names ...string) {
 	registerAliases(names, usage, func(name, usage string) {
 		StringVar(fs, dst, name, value, usage)
+	})
+}
+
+func StringListVarAliases(fs *flag.FlagSet, dst *[]string, usage string, names ...string) {
+	registerAliases(names, usage, func(name, usage string) {
+		fs.Var(stringListValue{dst: dst}, name, usage)
 	})
 }
 

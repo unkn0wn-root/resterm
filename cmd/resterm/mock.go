@@ -35,6 +35,7 @@ func handleMockSubcommand(args []string) (bool, error) {
 
 type mockConfig struct {
 	path             string
+	sources          []string
 	addr             string
 	cors             string
 	tlsCert          string
@@ -108,6 +109,13 @@ func runMockServe(args []string) error {
 	fs := cli.NewFlagSet("mock")
 	cfg := defaultMockConfig()
 	cli.StringVarAliases(fs, &cfg.addr, cfg.addr, "Listen address", "addr", "a")
+	cli.StringListVarAliases(
+		fs,
+		&cfg.sources,
+		"Serve only these request files (repeatable, comma lists allowed)",
+		"source",
+		"s",
+	)
 	cli.StringVarAliases(fs, &cfg.cors, cfg.cors, "CORS policy: auto, off, *, or comma-separated origins", "cors")
 	cli.StringVarAliases(
 		fs,
@@ -197,7 +205,11 @@ func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) erro
 		return err
 	}
 
-	reloader := mock.NewReloader(cfg.path, cfg.recursive)
+	src, err := mock.NewSources(cfg.path, cfg.recursive, cfg.sources)
+	if err != nil {
+		return mockUsageError(fmt.Errorf("mock: %w", err))
+	}
+	reloader := mock.NewReloader(src)
 	handler, err := reloader.Reload("", nil)
 	if err != nil {
 		return fmt.Errorf("mock: %w", err)

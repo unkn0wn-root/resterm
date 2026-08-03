@@ -19,12 +19,19 @@ type exCommandDef struct {
 	noBang  bool
 }
 
+// anyArgs is the maxArgs of a subcommand that parses its own flags.
+const anyArgs = -1
+
 type mockCommandDef struct {
 	name    string
 	usage   string
 	summary string
 	maxArgs int
 }
+
+func (d mockCommandDef) acceptsArgs() bool { return d.maxArgs != 0 }
+
+func (d mockCommandDef) tooManyArgs(n int) bool { return d.maxArgs != anyArgs && n > d.maxArgs }
 
 type exCatalog struct {
 	defs []exCommandDef
@@ -71,9 +78,15 @@ var exCommands = exCatalog{
 	},
 	mock: []mockCommandDef{
 		{name: "status", summary: "Show server address and counters"},
-		{name: "start", usage: "start [host:port]", summary: "Start the mock server", maxArgs: 1},
+		{
+			name: "start", usage: "start [host:port] [--source files] [--recursive] [--all]",
+			summary: "Start the mock server", maxArgs: anyArgs,
+		},
 		{name: "stop", summary: "Stop the mock server"},
-		{name: "restart", usage: "restart [host:port]", summary: "Restart, optionally on another address", maxArgs: 1},
+		{
+			name: "restart", usage: "restart [host:port] [--source files] [--recursive] [--all]",
+			summary: "Restart, optionally with another address or scope", maxArgs: anyArgs,
+		},
 		{name: "logs", summary: "Open the request log"},
 		{name: "clear", summary: "Clear request logs and verification journal"},
 		{name: "reset", usage: "reset [sequence]", summary: "Reset all or one response sequence", maxArgs: 1},
@@ -212,7 +225,7 @@ func (c exCatalog) mockSuggestions(rest string) []exSuggestion {
 			continue
 		}
 		insert := "mock " + def.name
-		if def.maxArgs > 0 {
+		if def.acceptsArgs() {
 			insert += " "
 		}
 		out = append(out, exSuggestion{label: def.display(), summary: def.summary, insert: insert})

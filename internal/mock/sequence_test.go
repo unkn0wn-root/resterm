@@ -420,7 +420,7 @@ func TestResponseSequenceReloadState(t *testing.T) {
 	path := filepath.Join(root, "mocks.http")
 	initial := pollingSequence
 	writeFile(t, path, initial)
-	reloader := NewReloader(path, false)
+	reloader := NewReloader(Sources{Path: path})
 
 	handler, err := reloader.Reload(path, []byte(initial))
 	if err != nil || handler == nil {
@@ -474,7 +474,7 @@ HTTP/1.1 200 OK
 
 < ./final.txt`)
 
-	reloader := NewReloader(root, false)
+	reloader := NewReloader(Sources{Path: root})
 	handler, err := reloader.Reload("", nil)
 	if err != nil || handler == nil {
 		t.Fatalf("initial reload = %v, %v", handler, err)

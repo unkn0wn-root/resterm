@@ -20,7 +20,10 @@ func TestExCatalogSuggestions(t *testing.T) {
 		{name: "help topic", input: "help web", label: "streaming", insert: "help streaming"},
 		{name: "man topic", input: "man grpc", label: "grpc", insert: "help grpc"},
 		{name: "docs topic", input: "docs auth", label: "authentication", insert: "docs authentication"},
-		{name: "mock command", input: "mock rest", label: "restart [host:port]", insert: "mock restart "},
+		{
+			name: "mock command", input: "mock rest",
+			label: "restart [host:port] [--source files] [--recursive] [--all]", insert: "mock restart ",
+		},
 	}
 
 	for _, tt := range tests {

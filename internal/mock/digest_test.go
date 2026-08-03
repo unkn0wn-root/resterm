@@ -14,7 +14,7 @@ func TestReloadDetectsSourceFileRename(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a.http"), "# @mock method=GET path=/x\nHTTP/1.1 200 OK\n\nok")
 
-	reloader := NewReloader(root, false)
+	reloader := NewReloader(Sources{Path: root})
 	if _, err := reloader.Reload("", nil); err != nil {
 		t.Fatalf("initial reload: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestReloadDetectsFixtureRefSwapWithIdenticalContent(t *testing.T) {
 	writeFile(t, filepath.Join(root, "b.txt"), "same")
 	writeFile(t, path, "# @mock method=GET path=/x\nHTTP/1.1 200 OK\n\n< ./a.txt")
 
-	reloader := NewReloader(root, false)
+	reloader := NewReloader(Sources{Path: root})
 	if _, err := reloader.Reload("", nil); err != nil {
 		t.Fatalf("initial reload: %v", err)
 	}

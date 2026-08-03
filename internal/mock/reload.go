@@ -6,16 +6,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 type Reloader struct {
-	root      string
-	recursive bool
+	src Sources
 
 	digest   string
 	fp       string
@@ -23,8 +20,8 @@ type Reloader struct {
 	failing  bool
 }
 
-func NewReloader(root string, recursive bool) *Reloader {
-	return &Reloader{root: root, recursive: recursive}
+func NewReloader(src Sources) *Reloader {
+	return &Reloader{src: src}
 }
 
 func (r *Reloader) Reload(overlayPath string, overlay []byte) (*Handler, error) {
@@ -37,7 +34,7 @@ func (r *Reloader) Reload(overlayPath string, overlay []byte) (*Handler, error) 
 	if overlay != nil {
 		doc = parser.Parse(overlayPath, overlay)
 	}
-	h, err := Load(r.root, r.recursive, doc)
+	h, err := Load(r.src, doc)
 	if err != nil {
 		r.failing = true
 		return nil, err
@@ -54,28 +51,14 @@ func (r *Reloader) Reload(overlayPath string, overlay []byte) (*Handler, error) 
 }
 
 func (r *Reloader) fingerprint(overlayPath string, overlay []byte) string {
-	root := strings.TrimSpace(r.root)
-	if root == "" {
-		root = "."
-	}
-	info, err := os.Stat(root)
+	res, err := r.src.resolve()
 	if err != nil {
 		return ""
 	}
 
 	h := sha256.New()
-	if info.IsDir() {
-		entries, err := filesvc.ListRequestFiles(root, r.recursive)
-		if err != nil {
-			return ""
-		}
-		for _, e := range entries {
-			if e.Kind == filesvc.FileKindRequest {
-				writeStat(h, e.Path)
-			}
-		}
-	} else {
-		writeStat(h, root)
+	for _, f := range res.files {
+		writeStat(h, f)
 	}
 	for _, f := range r.fixtures {
 		writeStat(h, f)
