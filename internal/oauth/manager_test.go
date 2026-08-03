@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -22,7 +22,7 @@ func TestManagerClientCredentialsBasic(t *testing.T) {
 	var callCount int
 
 	mgr.SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			callCount++
 			values, err := url.ParseQuery(req.Body.Text)
 			if err != nil {
@@ -33,7 +33,7 @@ func TestManagerClientCredentialsBasic(t *testing.T) {
 			if accept := req.Headers.Get("Accept"); accept != "application/json" {
 				t.Fatalf("expected Accept header to request json, got %q", accept)
 			}
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body: []byte(
@@ -54,7 +54,7 @@ func TestManagerClientCredentialsBasic(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token, err := mgr.Token(ctx, "dev", cfg, httpclient.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestManagerClientCredentialsBasic(t *testing.T) {
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second)
 	defer cancel2()
-	if _, err := mgr.Token(ctx2, "dev", cfg, httpclient.Options{}); err != nil {
+	if _, err := mgr.Token(ctx2, "dev", cfg, httpx.Options{}); err != nil {
 		t.Fatalf("second token request: %v", err)
 	}
 	if callCount != 1 {
@@ -91,7 +91,7 @@ func TestManagerClientCredentialsBodyAuth(t *testing.T) {
 	var capturedAuth string
 	mgr := NewManager(nil)
 	mgr.SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			values, err := url.ParseQuery(req.Body.Text)
 			if err != nil {
 				t.Fatalf("parse form: %v", err)
@@ -101,7 +101,7 @@ func TestManagerClientCredentialsBodyAuth(t *testing.T) {
 			if accept := req.Headers.Get("Accept"); accept != "application/json" {
 				t.Fatalf("expected Accept header to request json, got %q", accept)
 			}
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body:       []byte(`{"access_token":"token-body","token_type":"Bearer"}`),
@@ -120,7 +120,7 @@ func TestManagerClientCredentialsBodyAuth(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token, err := mgr.Token(ctx, "prod", cfg, httpclient.Options{})
+	token, err := mgr.Token(ctx, "prod", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -140,14 +140,14 @@ func TestManagerClientCredentialsExplicitBasicWithEmptySecret(t *testing.T) {
 	var capturedAuth string
 	mgr := NewManager(nil)
 	mgr.SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			values, err := url.ParseQuery(req.Body.Text)
 			if err != nil {
 				t.Fatalf("parse form: %v", err)
 			}
 			capturedForm = values
 			capturedAuth = req.Headers.Get("Authorization")
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body:       []byte(`{"access_token":"token-basic","token_type":"Bearer"}`),
@@ -165,7 +165,7 @@ func TestManagerClientCredentialsExplicitBasicWithEmptySecret(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token, err := mgr.Token(ctx, "dev", cfg, httpclient.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -189,9 +189,9 @@ func TestManagerTokenFormEncodedResponse(t *testing.T) {
 	mgr := NewManager(nil)
 	var accept string
 	mgr.SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			accept = req.Headers.Get("Accept")
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body: []byte(
@@ -211,7 +211,7 @@ func TestManagerTokenFormEncodedResponse(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token, err := mgr.Token(ctx, "dev", cfg, httpclient.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -269,9 +269,9 @@ func TestManagerExplicitCacheKeyIsScoped(t *testing.T) {
 	mgr := NewManager(nil)
 	var calls int
 	mgr.SetRequestFunc(
-		func(context.Context, *restfile.Request, httpclient.Options) (*httpclient.Response, error) {
+		func(context.Context, *restfile.Request, httpx.Options) (*httpx.Response, error) {
 			calls++
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body: fmt.Appendf(nil,
@@ -288,15 +288,15 @@ func TestManagerExplicitCacheKeyIsScoped(t *testing.T) {
 		CacheKey:  "shared",
 	}
 
-	personal, err := mgr.Token(context.Background(), "scope-personal", cfg, httpclient.Options{})
+	personal, err := mgr.Token(context.Background(), "scope-personal", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("personal token: %v", err)
 	}
-	ci, err := mgr.Token(context.Background(), "scope-ci", cfg, httpclient.Options{})
+	ci, err := mgr.Token(context.Background(), "scope-ci", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("ci token: %v", err)
 	}
-	again, err := mgr.Token(context.Background(), "scope-personal", cfg, httpclient.Options{})
+	again, err := mgr.Token(context.Background(), "scope-personal", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("cached personal token: %v", err)
 	}
@@ -348,9 +348,9 @@ func TestManagerNormalizesDefaultGrantForCacheReuse(t *testing.T) {
 	var calls int
 
 	mgr.SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			calls++
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body: []byte(
@@ -397,7 +397,7 @@ func TestManagerNormalizesDefaultGrantForCacheReuse(t *testing.T) {
 		ClientID:     "client",
 		ClientSecret: "secret",
 		GrantType:    GrantClientCredentials,
-	}, httpclient.Options{})
+	}, httpx.Options{})
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestManagerRefreshToken(t *testing.T) {
 	var grants []string
 
 	mgr.SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			values, err := url.ParseQuery(req.Body.Text)
 			if err != nil {
 				t.Fatalf("parse form: %v", err)
@@ -423,7 +423,7 @@ func TestManagerRefreshToken(t *testing.T) {
 			grants = append(grants, grant)
 			switch grant {
 			case "client_credentials":
-				return &httpclient.Response{
+				return &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: 200,
 					Body: []byte(
@@ -435,7 +435,7 @@ func TestManagerRefreshToken(t *testing.T) {
 				if values.Get("refresh_token") != "refresh-1" {
 					t.Fatalf("unexpected refresh token %q", values.Get("refresh_token"))
 				}
-				return &httpclient.Response{
+				return &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: 200,
 					Body: []byte(
@@ -444,7 +444,7 @@ func TestManagerRefreshToken(t *testing.T) {
 					Headers: http.Header{},
 				}, nil
 			default:
-				return &httpclient.Response{
+				return &httpx.Response{
 					Status:     "400",
 					StatusCode: 400,
 					Body:       []byte("{}"),
@@ -463,7 +463,7 @@ func TestManagerRefreshToken(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token1, err := mgr.Token(ctx, "stage", cfg, httpclient.Options{})
+	token1, err := mgr.Token(ctx, "stage", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("token1: %v", err)
 	}
@@ -473,7 +473,7 @@ func TestManagerRefreshToken(t *testing.T) {
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second)
 	defer cancel2()
-	token2, err := mgr.Token(ctx2, "stage", cfg, httpclient.Options{})
+	token2, err := mgr.Token(ctx2, "stage", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("token2: %v", err)
 	}
@@ -594,13 +594,13 @@ func TestManagerAuthorizationCodePKCE(t *testing.T) {
 	mgr := NewManager(nil)
 	var tokenForm url.Values
 	mgr.SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			values, err := url.ParseQuery(req.Body.Text)
 			if err != nil {
 				t.Fatalf("parse form: %v", err)
 			}
 			tokenForm = values
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body: []byte(
@@ -655,7 +655,7 @@ func TestManagerAuthorizationCodePKCE(t *testing.T) {
 		launchBrowser = openBrowser
 	})
 
-	token, err := mgr.Token(ctx, "dev", cfg, httpclient.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -685,7 +685,7 @@ func TestManagerAuthorizationCodePKCE(t *testing.T) {
 func TestManagerAuthorizationCodeStateMismatch(t *testing.T) {
 	mgr := NewManager(nil)
 	mgr.SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			t.Fatalf("token exchange should not be called on state mismatch")
 			return nil, nil
 		},
@@ -716,7 +716,7 @@ func TestManagerAuthorizationCodeStateMismatch(t *testing.T) {
 		launchBrowser = openBrowser
 	})
 
-	if _, err := mgr.Token(ctx, "dev", cfg, httpclient.Options{}); err == nil {
+	if _, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}); err == nil {
 		t.Fatalf("expected state mismatch error")
 	}
 }

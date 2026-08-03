@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -242,7 +242,7 @@ func (m *Model) stopLiveStreams() {
 	}
 	m.sessionHandles = make(map[string]*stream.Session)
 	m.liveSessions = make(map[string]*liveSession)
-	m.wsSenders = make(map[string]*httpclient.WebSocketSender)
+	m.wsSenders = make(map[string]*httpx.WebSocketSender)
 	m.wsConsole = nil
 	m.requestSessions = make(map[*restfile.Request]string)
 	m.sessionRequests = make(map[string]*restfile.Request)

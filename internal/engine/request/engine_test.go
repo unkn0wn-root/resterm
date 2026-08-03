@@ -9,7 +9,7 @@ import (
 
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -68,8 +68,8 @@ func TestExecuteWithReportsInsecureSSHWarning(t *testing.T) {
 
 			events := []string{}
 			transportCalled := false
-			client := httpclient.NewClientWithOptions(
-				httpclient.WithHTTPFactory(func(opts httpclient.Options) (*http.Client, error) {
+			client := httpx.NewClientWithOptions(
+				httpx.WithHTTPFactory(func(opts httpx.Options) (*http.Client, error) {
 					transportCalled = true
 					events = append(events, "transport")
 					activeSSH := opts.SSH != nil && opts.SSH.Active()
@@ -160,8 +160,8 @@ func TestExecuteWithReportsInsecureSSHWarning(t *testing.T) {
 func newPreviewTestEngine(t *testing.T) (*Engine, func() bool) {
 	t.Helper()
 	transportCalled := false
-	client := httpclient.NewClientWithOptions(
-		httpclient.WithHTTPFactory(func(opts httpclient.Options) (*http.Client, error) {
+	client := httpx.NewClientWithOptions(
+		httpx.WithHTTPFactory(func(opts httpx.Options) (*http.Client, error) {
 			transportCalled = true
 			return &http.Client{}, nil
 		}),

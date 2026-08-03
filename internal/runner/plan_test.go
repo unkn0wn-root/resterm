@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
@@ -136,7 +136,7 @@ func TestRunPlanUsesBuiltClient(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -308,7 +308,7 @@ func parityRunnerStep(src StepResult) StepResult {
 	return out
 }
 
-func parityHTTPResponse(src *httpclient.Response) *httpclient.Response {
+func parityHTTPResponse(src *httpx.Response) *httpx.Response {
 	if src == nil {
 		return nil
 	}
@@ -317,7 +317,7 @@ func parityHTTPResponse(src *httpclient.Response) *httpclient.Response {
 	return &out
 }
 
-func parityGRPCResponse(src *grpcclient.Response) *grpcclient.Response {
+func parityGRPCResponse(src *grpcx.Response) *grpcx.Response {
 	if src == nil {
 		return nil
 	}

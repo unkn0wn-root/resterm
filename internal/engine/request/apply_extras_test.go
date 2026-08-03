@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
@@ -37,8 +37,8 @@ func TestApplySeesTypedForEachValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sent *http.Request
-			client := httpclient.NewClientWithOptions(
-				httpclient.WithHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+			client := httpx.NewClientWithOptions(
+				httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
 					return &http.Client{
 						Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 							sent = r
@@ -88,8 +88,8 @@ func TestApplySeesTypedForEachValues(t *testing.T) {
 // The status bar only holds a warning while the run is in flight, so the report
 // has to carry parse warnings for anything that looks at a finished run.
 func TestExplainReportCarriesParseWarnings(t *testing.T) {
-	client := httpclient.NewClientWithOptions(
-		httpclient.WithHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := httpx.NewClientWithOptions(
+		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
 			return &http.Client{
 				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					return &http.Response{

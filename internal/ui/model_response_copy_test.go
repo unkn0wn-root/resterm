@@ -7,7 +7,7 @@ import (
 
 	"github.com/atotto/clipboard"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
 func newModelWithResponseTab(tab responseTab, snap *responseSnapshot) *Model {
@@ -101,7 +101,7 @@ func TestResponseCopyPayloadRequestHeaders(t *testing.T) {
 
 func TestResponseCopyPayloadHeadersCopiesPlainHeaders(t *testing.T) {
 	val := strings.Repeat("b", 80)
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "200 OK",
 		StatusCode: 200,
 		Headers: http.Header{
@@ -139,7 +139,7 @@ func TestResponseCopyPayloadHeadersCopiesPlainHeaders(t *testing.T) {
 
 func TestResponseCopyPayloadRequestHeadersCopiesPlainHeaders(t *testing.T) {
 	val := strings.Repeat("b", 80)
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "200 OK",
 		StatusCode: 200,
 		RequestHeaders: http.Header{

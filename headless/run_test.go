@@ -17,8 +17,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -51,11 +51,11 @@ func TestRunRequestParity(t *testing.T) {
 	want, err := runner.RunContext(context.Background(), runner.Options{
 		FilePath:      path,
 		WorkspaceRoot: dir,
-		HTTPOptions: httpclient.Options{
+		HTTPOptions: httpx.Options{
 			Timeout:         DefaultHTTPTimeout,
 			FollowRedirects: true,
 		},
-		GRPCOptions: grpcclient.Options{
+		GRPCOptions: grpcx.Options{
 			DefaultPlaintext: restfile.OptOf(true),
 		},
 	})
@@ -124,11 +124,11 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 		Selection:       sel,
 		EnvironmentFile: envFile,
 		Compare:         engine.CompareConfig{Targets: []string{"dev", "stage"}, Base: "stage"},
-		HTTPOptions: httpclient.Options{
+		HTTPOptions: httpx.Options{
 			Timeout:         DefaultHTTPTimeout,
 			FollowRedirects: true,
 		},
-		GRPCOptions: grpcclient.Options{
+		GRPCOptions: grpcx.Options{
 			DefaultPlaintext: restfile.OptOf(true),
 		},
 	})
@@ -191,11 +191,11 @@ func TestRunUsesContext(t *testing.T) {
 	want, err := runner.RunContext(ctx, runner.Options{
 		FilePath:      path,
 		WorkspaceRoot: dir,
-		HTTPOptions: httpclient.Options{
+		HTTPOptions: httpx.Options{
 			Timeout:         2 * time.Second,
 			FollowRedirects: true,
 		},
-		GRPCOptions: grpcclient.Options{
+		GRPCOptions: grpcx.Options{
 			DefaultPlaintext: restfile.OptOf(true),
 		},
 	})

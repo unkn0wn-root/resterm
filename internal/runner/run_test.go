@@ -15,7 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -26,8 +26,8 @@ func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-func newHTTPClientWithFactory(factory httpclient.HTTPClientFactory) *httpclient.Client {
-	return httpclient.NewClientWithOptions(httpclient.WithHTTPFactory(factory))
+func newHTTPClientWithFactory(factory httpx.HTTPClientFactory) *httpx.Client {
+	return httpx.NewClientWithOptions(httpx.WithHTTPFactory(factory))
 }
 
 func TestRunSingleRequestDefaultSelection(t *testing.T) {
@@ -37,7 +37,7 @@ func TestRunSingleRequestDefaultSelection(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -83,7 +83,7 @@ func TestRequestRunResultUsesExplainMissingVarsAndEffectiveURL(t *testing.T) {
 	}
 
 	item := requestRunResult(req, engine.RequestResult{
-		Response: &httpclient.Response{
+		Response: &httpx.Response{
 			Status:       "200 OK",
 			StatusCode:   200,
 			EffectiveURL: "https://httpbin.org/anything/api/reports",
@@ -120,7 +120,7 @@ func TestCompareStepResultPreservesSourceTarget(t *testing.T) {
 
 	step := compareStepResult(req, engine.CompareRow{
 		Environment: "dev",
-		Response: &httpclient.Response{
+		Response: &httpx.Response{
 			Status:       "200 OK",
 			StatusCode:   http.StatusOK,
 			EffectiveURL: "https://httpbin.org/anything/api/reports",
@@ -141,7 +141,7 @@ func TestWorkflowStepResultPreservesSourceTarget(t *testing.T) {
 		Name:   "reports",
 		Method: "GET",
 		Target: "{{services.api.base}}/reports",
-		Response: &httpclient.Response{
+		Response: &httpx.Response{
 			Status:       "200 OK",
 			StatusCode:   http.StatusOK,
 			EffectiveURL: "https://httpbin.org/anything/api/reports",
@@ -175,7 +175,7 @@ func TestRunSelectRequestByName(t *testing.T) {
 	}
 
 	var seen string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				seen = req.URL.String()
@@ -227,7 +227,7 @@ func TestRunFailFastSkipsRemainingRequests(t *testing.T) {
 	}
 
 	var calls int
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				calls++
@@ -295,7 +295,7 @@ func TestRunSelectRequestByLine(t *testing.T) {
 	}
 
 	var seen string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				seen = req.URL.String()
@@ -580,7 +580,7 @@ func TestRunCountsFailedAsserts(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -635,7 +635,7 @@ func TestRunWorkflowByName(t *testing.T) {
 	}
 
 	var auth string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				hdr := make(http.Header)
@@ -719,7 +719,7 @@ func TestRunWorkflowByLine(t *testing.T) {
 	}
 
 	var auth string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				hdr := make(http.Header)
@@ -780,7 +780,7 @@ func TestRunRequestForEach(t *testing.T) {
 	}
 
 	var seen []string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				seen = append(seen, req.URL.Path)
@@ -850,7 +850,7 @@ func TestRunAllCarriesJSPreRequestGlobals(t *testing.T) {
 	}
 
 	var auth string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				if req.URL.Path == "/use" {
@@ -905,7 +905,7 @@ func TestRunAllCarriesCapturesAcrossRequests(t *testing.T) {
 	}
 
 	var auth string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				body := "{}"
@@ -967,7 +967,7 @@ func TestRunAllCarriesRTSPreRequestGlobals(t *testing.T) {
 	}
 
 	var mode string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				if req.URL.Path == "/use" {
@@ -1017,7 +1017,7 @@ func TestRunExecutesRTSPreRequestDirective(t *testing.T) {
 	}
 
 	var mode string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				mode = req.Header.Get("X-Mode")
@@ -1067,7 +1067,7 @@ func TestReportWriteJSON(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -1152,7 +1152,7 @@ func TestReportWriteJSONIncludesEffectiveTargetWhenDifferent(t *testing.T) {
 			Target:          "{{services.api.base}}/reports",
 			EffectiveTarget: "https://httpbin.org/anything/api/reports",
 			Passed:          true,
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Status:       "200 OK",
 				StatusCode:   http.StatusOK,
 				Proto:        "HTTP/1.1",
@@ -1209,7 +1209,7 @@ func TestWorkflowWriteJSONIncludesSteps(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				hdr := make(http.Header)
@@ -1295,7 +1295,7 @@ func TestRunAllCarriesStreamCapturesAndArtifacts(t *testing.T) {
 	}
 
 	var gotHdr string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				hdr := make(http.Header)
@@ -1402,7 +1402,7 @@ func TestRunCompareFromCLIFlags(t *testing.T) {
 	}
 
 	var seen []string
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				seen = append(seen, req.URL.Host)
@@ -1520,7 +1520,7 @@ func TestRunProfileMetadata(t *testing.T) {
 	}
 
 	count := 0
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				count++

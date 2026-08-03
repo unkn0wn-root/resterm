@@ -10,8 +10,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/settings"
@@ -40,8 +40,8 @@ func resolveRequestTimeout(req *restfile.Request, base time.Duration) time.Durat
 
 func (e *Engine) resolveHTTPOptions(
 	doc *restfile.Document,
-	opts httpclient.Options,
-) httpclient.Options {
+	opts httpx.Options,
+) httpx.Options {
 	if opts.BaseDir == "" && e.filePath(doc) != "" {
 		opts.BaseDir = filepath.Dir(e.filePath(doc))
 	}

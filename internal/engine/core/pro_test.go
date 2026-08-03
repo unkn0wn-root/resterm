@@ -9,7 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -37,21 +37,21 @@ func TestRunProfileEmitsWarmupAndMeasuredIterations(t *testing.T) {
 	dep := &proDep{
 		res: []engine.RequestResult{
 			{
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: http.StatusOK,
 					Duration:   3 * time.Millisecond,
 				},
 			},
 			{
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: http.StatusOK,
 					Duration:   4 * time.Millisecond,
 				},
 			},
 			{
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: http.StatusOK,
 					Duration:   5 * time.Millisecond,
@@ -131,7 +131,7 @@ func TestRunProfileStopsOnSkippedIteration(t *testing.T) {
 	dep := &proDep{
 		res: []engine.RequestResult{
 			{Skipped: true, SkipReason: "condition false"},
-			{Response: &httpclient.Response{Status: "200 OK", StatusCode: http.StatusOK}},
+			{Response: &httpx.Response{Status: "200 OK", StatusCode: http.StatusOK}},
 		},
 	}
 
@@ -189,14 +189,14 @@ func TestRunProfileCancelDuringDelayEmitsRunDone(t *testing.T) {
 	dep := &proDep{
 		res: []engine.RequestResult{
 			{
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: http.StatusOK,
 					Duration:   time.Millisecond,
 				},
 			},
 			{
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: http.StatusOK,
 					Duration:   time.Millisecond,

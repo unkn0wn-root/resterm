@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -31,7 +31,7 @@ func TestWorkflowStatsSearchUsesRenderedContent(t *testing.T) {
 				result: workflowStepResult{
 					Step:    restfile.WorkflowStep{Name: "Call"},
 					Success: true,
-					HTTP: &httpclient.Response{
+					HTTP: &httpx.Response{
 						Status:     "200 OK",
 						StatusCode: 200,
 						Headers:    http.Header{"Content-Type": []string{"application/json"}},
@@ -86,7 +86,7 @@ func TestWorkflowStatsSearchKeepsIndexWhenSelectionChanges(t *testing.T) {
 				result: workflowStepResult{
 					Step:    restfile.WorkflowStep{Name: "Call"},
 					Success: true,
-					HTTP: &httpclient.Response{
+					HTTP: &httpx.Response{
 						Status:     "200 OK",
 						StatusCode: 200,
 						Headers:    http.Header{"Content-Type": []string{"application/json"}},
@@ -99,7 +99,7 @@ func TestWorkflowStatsSearchKeepsIndexWhenSelectionChanges(t *testing.T) {
 				result: workflowStepResult{
 					Step:    restfile.WorkflowStep{Name: "Call 2"},
 					Success: true,
-					HTTP: &httpclient.Response{
+					HTTP: &httpx.Response{
 						Status:     "200 OK",
 						StatusCode: 200,
 						Headers:    http.Header{"Content-Type": []string{"application/json"}},

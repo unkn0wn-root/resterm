@@ -13,14 +13,14 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 type profileState struct {
 	id            string
 	base          *restfile.Request
-	options       httpclient.Options
+	options       httpx.Options
 	spec          restfile.ProfileSpec
 	total         int
 	warmup        int
@@ -65,7 +65,7 @@ func (s *profileState) failureCount() int {
 
 func profileStateFromPlan(
 	pl *core.ProfilePlan,
-	opts httpclient.Options,
+	opts httpx.Options,
 	msgBase string,
 ) *profileState {
 	if pl == nil {
@@ -89,7 +89,7 @@ func profileStateFromPlan(
 func (m *Model) startProfileRun(
 	doc *restfile.Document,
 	req *restfile.Request,
-	options httpclient.Options,
+	options httpx.Options,
 ) tea.Cmd {
 	if req == nil {
 		return nil

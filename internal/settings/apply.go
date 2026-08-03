@@ -6,14 +6,14 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func ApplyGRPCSettings(
-	opts *grpcclient.Options,
+	opts *grpcx.Options,
 	settings map[string]string,
 	resolver *vars.Resolver,
 ) error {
@@ -38,11 +38,11 @@ func ApplyGRPCSettings(
 	if len(settings) == 0 {
 		return nil
 	}
-	return grpcclient.ApplyOptionSettings(opts, settings)
+	return grpcx.ApplyOptionSettings(opts, settings)
 }
 
 func ApplyHTTPSettings(
-	opts *httpclient.Options,
+	opts *httpx.Options,
 	settings map[string]string,
 	resolver *vars.Resolver,
 ) error {
@@ -67,7 +67,7 @@ func ApplyHTTPSettings(
 	if len(settings) == 0 {
 		return nil
 	}
-	return httpclient.ApplyOptionSettings(opts, settings)
+	return httpx.ApplyOptionSettings(opts, settings)
 }
 
 func applyTLSSettings(
@@ -176,7 +176,7 @@ func settingsComponent(prefix string) diag.Component {
 }
 
 // Settings come from a file the user edits, so name the key and what it takes.
-// The wording matches the generic HTTP settings in the httpclient package.
+// The wording matches the generic HTTP settings in protocol/httpx.
 func invalidSetting(c diag.Component, key, val, want string) error {
 	msg := fmt.Sprintf("invalid %s %q (use %s)", key, val, want)
 	if strings.TrimSpace(val) == "" {

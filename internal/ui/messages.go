@@ -4,8 +4,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -35,8 +35,8 @@ const (
 )
 
 type responseMsg struct {
-	response       *httpclient.Response
-	grpc           *grpcclient.Response
+	response       *httpx.Response
+	grpc           *grpcx.Response
 	stream         *scripts.StreamInfo
 	transcript     []byte
 	err            error

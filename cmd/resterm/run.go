@@ -14,7 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
@@ -60,7 +60,7 @@ func runRun(args []string) error {
 }
 
 type runExecFn func(context.Context, runner.Options) (*runner.Report, error)
-type runClientFn func(string, cli.ExecFlags) (*httpclient.Client, func() error, error)
+type runClientFn func(string, cli.ExecFlags) (*httpx.Client, func() error, error)
 type runThemeFn func() (theme.Definition, error)
 
 type runFormat string
@@ -446,7 +446,7 @@ func (c *runCmd) themeDefinition() *theme.Definition {
 	return &def
 }
 
-func (c *runCmd) client() (*httpclient.Client, func() error, error) {
+func (c *runCmd) client() (*httpx.Client, func() error, error) {
 	if c != nil && c.newClient != nil {
 		return c.newClient(version, c.exec)
 	}
@@ -457,7 +457,7 @@ func (c *runCmd) execRun(
 	ctx context.Context,
 	src cli.RunSource,
 	cfg cli.ExecConfig,
-	client *httpclient.Client,
+	client *httpx.Client,
 ) (*runner.Report, error) {
 	runFn := runner.RunContext
 	if c != nil && c.runFn != nil {
@@ -469,7 +469,7 @@ func (c *runCmd) execRun(
 func (c *runCmd) runOptions(
 	src cli.RunSource,
 	cfg cli.ExecConfig,
-	client *httpclient.Client,
+	client *httpx.Client,
 ) runner.Options {
 	return runner.Options{
 		Version:         version,

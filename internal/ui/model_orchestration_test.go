@@ -13,7 +13,7 @@ import (
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -33,7 +33,7 @@ func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
 		Baseline:     "dev",
 	}
 
-	cmd := m.startCompareRun(doc, req, spec, httpclient.Options{})
+	cmd := m.startCompareRun(doc, req, spec, httpx.Options{})
 	if cmd == nil {
 		t.Fatal("expected compare run to return command")
 	}
@@ -188,7 +188,7 @@ func TestCompareRunCancelAfterFirstRowPreservesCanceledState(t *testing.T) {
 		Baseline:     "dev",
 	}
 
-	cmd := m.startCompareRun(doc, req, spec, httpclient.Options{})
+	cmd := m.startCompareRun(doc, req, spec, httpx.Options{})
 	if cmd == nil {
 		t.Fatal("expected compare run to return command")
 	}
@@ -264,7 +264,7 @@ func TestProfileRunWarmupProgressAdvancesToMeasuredStage(t *testing.T) {
 		},
 	}
 
-	cmd := m.startProfileRun(doc, req, httpclient.Options{})
+	cmd := m.startProfileRun(doc, req, httpx.Options{})
 	if cmd == nil {
 		t.Fatal("expected profile run to return command")
 	}
@@ -347,7 +347,7 @@ func TestProfileRunCancelWhileActiveFinalizesSummary(t *testing.T) {
 		},
 	}
 
-	cmd := m.startProfileRun(doc, req, httpclient.Options{})
+	cmd := m.startProfileRun(doc, req, httpx.Options{})
 	if cmd == nil {
 		t.Fatal("expected profile run to return command")
 	}
@@ -423,7 +423,7 @@ func TestProfileRunCancelWhileIdleBetweenRunsFinalizesImmediately(t *testing.T) 
 		},
 	}
 
-	cmd := m.startProfileRun(doc, req, httpclient.Options{})
+	cmd := m.startProfileRun(doc, req, httpx.Options{})
 	if cmd == nil {
 		t.Fatal("expected profile run command")
 	}
@@ -497,7 +497,7 @@ func TestProfileRunInteractiveWebSocketUsesCorePath(t *testing.T) {
 		},
 	}
 
-	cmd := m.startProfileRun(doc, req, httpclient.Options{})
+	cmd := m.startProfileRun(doc, req, httpx.Options{})
 	if cmd == nil {
 		t.Fatal("expected profile run command")
 	}
@@ -1302,7 +1302,7 @@ func TestWorkflowRunInteractiveWebSocketUsesCorePath(t *testing.T) {
 		}},
 	}
 
-	cmd := m.startWorkflowRun(doc, wf, httpclient.Options{})
+	cmd := m.startWorkflowRun(doc, wf, httpx.Options{})
 	if cmd == nil {
 		t.Fatal("expected workflow run command")
 	}
@@ -1327,7 +1327,7 @@ func TestCompareRunInteractiveWebSocketUsesCorePath(t *testing.T) {
 		Baseline:     "dev",
 	}
 
-	cmd := m.startCompareRun(doc, req, spec, httpclient.Options{})
+	cmd := m.startCompareRun(doc, req, spec, httpx.Options{})
 	if cmd == nil {
 		t.Fatal("expected compare run command")
 	}
@@ -1525,8 +1525,8 @@ func newOrchTestModel(t *testing.T, cfg Config) Model {
 	return m
 }
 
-func testHTTPResp(url string, code int, body string, dur time.Duration) *httpclient.Response {
-	return &httpclient.Response{
+func testHTTPResp(url string, code int, body string, dur time.Duration) *httpx.Response {
+	return &httpx.Response{
 		Status:       httpStatus(code),
 		StatusCode:   code,
 		Body:         []byte(body),
@@ -1594,7 +1594,7 @@ func TestCompareCoreRunRecordsLatency(t *testing.T) {
 		Baseline:     "dev",
 	}
 
-	if cmd := m.startCompareRun(doc, req, spec, httpclient.Options{}); cmd == nil {
+	if cmd := m.startCompareRun(doc, req, spec, httpx.Options{}); cmd == nil {
 		t.Fatal("expected compare run to return command")
 	}
 	run := core.RunMeta{ID: m.compareRun.id, Mode: core.ModeCompare}

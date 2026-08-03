@@ -16,7 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"nhooyr.io/websocket"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -69,7 +69,7 @@ type consoleHistoryEntry struct {
 
 type websocketConsole struct {
 	sessionID  string
-	sender     *httpclient.WebSocketSender
+	sender     *httpx.WebSocketSender
 	session    *stream.Session
 	baseDir    string
 	mode       websocketConsoleMode
@@ -83,7 +83,7 @@ type websocketConsole struct {
 func newWebsocketConsole(
 	sessionID string,
 	session *stream.Session,
-	sender *httpclient.WebSocketSender,
+	sender *httpx.WebSocketSender,
 	baseDir string,
 ) *websocketConsole {
 	input := bubbletextarea.New()
@@ -368,7 +368,7 @@ func (wc *websocketConsole) payload() (func() error, string, string, error) {
 func (m *Model) ensureWebSocketConsole(
 	sessionID string,
 	session *stream.Session,
-	sender *httpclient.WebSocketSender,
+	sender *httpx.WebSocketSender,
 	req *restfile.Request,
 	baseDir string,
 ) {

@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"google.golang.org/grpc/codes"
@@ -207,7 +207,7 @@ func TestApplyThemeDefinitionRerendersHTTPSnapshotsAndClearsPaneCaches(t *testin
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	model := New(Config{})
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "200 OK",
 		StatusCode: 200,
 		ReqMethod:  "GET",
@@ -281,7 +281,7 @@ func TestApplyThemeDefinitionRerendersHTTPSnapshotsAndClearsPaneCaches(t *testin
 
 func TestSyncThemedResponseStateRestartsPendingRenderWithFreshToken(t *testing.T) {
 	model := New(Config{})
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": {"application/json"}},
@@ -357,7 +357,7 @@ func TestSyncThemedResponseStateRestartsPendingRenderWithFreshToken(t *testing.T
 
 func TestApplyThemeDefinitionKeepsGRPCRawContentType(t *testing.T) {
 	model := New(Config{})
-	resp := &grpcclient.Response{
+	resp := &grpcx.Response{
 		Message:         `{"id":1}`,
 		Body:            []byte(`{"id":1}`),
 		ContentType:     "application/json",

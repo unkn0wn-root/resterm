@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -20,8 +20,8 @@ type compareResult struct {
 	Environment string
 	Profile     string
 	Selection   vars.Selection
-	Response    *httpclient.Response
-	GRPC        *grpcclient.Response
+	Response    *httpx.Response
+	GRPC        *grpcx.Response
 	Stream      *scripts.StreamInfo
 	Transcript  []byte
 	Err         error
@@ -208,7 +208,7 @@ func countTestFailures(tests []scripts.TestResult) int {
 	return n
 }
 
-func summarizeHTTPDelta(base, target *httpclient.Response) string {
+func summarizeHTTPDelta(base, target *httpx.Response) string {
 	if base == nil || target == nil {
 		return "unavailable"
 	}

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
@@ -41,8 +41,8 @@ type ExecConfig struct {
 	Workspace string
 	Recursive bool
 	Env       vars.Config
-	HTTPOpts  httpclient.Options
-	GRPCOpts  grpcclient.Options
+	HTTPOpts  httpx.Options
+	GRPCOpts  grpcx.Options
 	Compare   engine.CompareConfig
 }
 
@@ -195,7 +195,7 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 		}
 	}
 
-	httpOpts := httpclient.Options{
+	httpOpts := httpx.Options{
 		Timeout:            f.Timeout,
 		FollowRedirects:    f.Follow,
 		InsecureSkipVerify: f.Insecure,
@@ -218,7 +218,7 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 			Fallback:     envFallback,
 		},
 		HTTPOpts: httpOpts,
-		GRPCOpts: grpcclient.Options{DefaultPlaintext: restfile.OptOf(true)},
+		GRPCOpts: grpcx.Options{DefaultPlaintext: restfile.OptOf(true)},
 		Compare:  engine.CompareConfig{Targets: targets, Base: base, Group: group},
 	}, nil
 }
@@ -268,12 +268,12 @@ func resolveWorkspace(filePath, workspace string) string {
 	return workspace
 }
 
-func NewExecClient(version string, f ExecFlags) (*httpclient.Client, func() error, error) {
+func NewExecClient(version string, f ExecFlags) (*httpx.Client, func() error, error) {
 	provider, err := telemetry.New(f.TelemetryConfig(version))
 	if err != nil {
-		return httpclient.NewClientWithOptions(), nil, err
+		return httpx.NewClientWithOptions(), nil, err
 	}
-	client := httpclient.NewClientWithOptions(httpclient.WithTelemetry(provider))
+	client := httpx.NewClientWithOptions(httpx.WithTelemetry(provider))
 	return client, func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

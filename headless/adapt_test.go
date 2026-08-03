@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"google.golang.org/grpc/codes"
@@ -34,7 +34,7 @@ func TestReportFromRunnerCounts(t *testing.T) {
 				Target:      "https://example.com",
 				Environment: "dev",
 				Passed:      true,
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: 200,
 					Proto:      "HTTP/1.1",
@@ -68,7 +68,7 @@ func TestReportFromRunnerCounts(t *testing.T) {
 					Summary:  "stop",
 					Passed:   false,
 					Duration: 10 * time.Millisecond,
-					Response: &httpclient.Response{
+					Response: &httpx.Response{
 						Status:     "200 OK",
 						StatusCode: 200,
 						Proto:      "HTTP/1.1",
@@ -161,7 +161,7 @@ func TestReportFromRunnerDetails(t *testing.T) {
 					Total:     3,
 					Passed:    true,
 					Duration:  15 * time.Millisecond,
-					GRPC: &grpcclient.Response{
+					GRPC: &grpcx.Response{
 						StatusCode:    codes.OK,
 						StatusMessage: "ok",
 						Duration:      15 * time.Millisecond,
@@ -380,7 +380,7 @@ func TestReportFromRunnerStrings(t *testing.T) {
 			SkipReason:  "  skipped  ",
 			Err:         errors.New("  boom  "),
 			ScriptErr:   errors.New("  script boom  "),
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Status: " 200 OK ",
 				Proto:  " HTTP/1.1 ",
 			},
@@ -418,7 +418,7 @@ func TestReportFromRunnerStrings(t *testing.T) {
 				SkipReason:  "  guard  ",
 				Err:         errors.New("  step boom  "),
 				ScriptErr:   errors.New("  step script  "),
-				GRPC: &grpcclient.Response{
+				GRPC: &grpcx.Response{
 					StatusCode:    codes.Internal,
 					StatusMessage: "  internal  ",
 				},

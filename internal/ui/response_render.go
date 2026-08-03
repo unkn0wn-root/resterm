@@ -14,9 +14,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
@@ -77,7 +77,7 @@ func nextResponseRenderToken() string {
 	return fmt.Sprintf("render-%d", id)
 }
 
-func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
+func cloneHTTPResponse(resp *httpx.Response) *httpx.Response {
 	if resp == nil {
 		return nil
 	}
@@ -110,7 +110,7 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 		traceReport = resp.TraceReport.Clone()
 	}
 
-	return &httpclient.Response{
+	return &httpx.Response{
 		Status:         resp.Status,
 		StatusCode:     resp.StatusCode,
 		Proto:          resp.Proto,
@@ -165,7 +165,7 @@ func defaultResponseRenderer() responseRenderer {
 }
 
 func buildHTTPResponseViews(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
@@ -173,7 +173,7 @@ func buildHTTPResponseViews(
 }
 
 func (r responseRenderer) buildHTTPResponseViews(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
@@ -182,7 +182,7 @@ func (r responseRenderer) buildHTTPResponseViews(
 
 func (r responseRenderer) buildHTTPResponseViewsCtx(
 	ctx context.Context,
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
@@ -239,7 +239,7 @@ func (r responseRenderer) buildHTTPResponseViewsCtx(
 }
 
 func (r responseRenderer) renderHTTPRespHdrs(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 	width int,
@@ -257,7 +257,7 @@ func (r responseRenderer) renderHTTPRespHdrs(
 	)
 }
 
-func (r responseRenderer) renderHTTPReqHdrs(resp *httpclient.Response, width int) string {
+func (r responseRenderer) renderHTTPReqHdrs(resp *httpx.Response, width int) string {
 	if resp == nil {
 		return noResponseMessage
 	}
@@ -331,7 +331,7 @@ func (r responseRenderer) renderGRPCReqHdrs(req *restfile.Request, width int) st
 }
 
 func (r responseRenderer) renderGRPCRespHdrs(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	fullMethod string,
 	width int,
 ) string {
@@ -500,7 +500,7 @@ func hdrIndent(width int) string {
 }
 
 func (r responseRenderer) buildGRPCResponseViews(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	fullMethod string,
 ) responseViews {
 	if resp == nil {
@@ -561,7 +561,7 @@ func (r responseRenderer) buildGRPCResponseViews(
 	}
 }
 
-func grpcStatusLine(resp *grpcclient.Response, fullMethod string) string {
+func grpcStatusLine(resp *grpcx.Response, fullMethod string) string {
 	if resp == nil {
 		return ""
 	}
@@ -578,7 +578,7 @@ func grpcStatusLine(resp *grpcclient.Response, fullMethod string) string {
 	return line
 }
 
-func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
+func buildRequestHeaderMap(resp *httpx.Response) http.Header {
 	var h http.Header
 	if resp != nil && resp.RequestHeaders != nil {
 		h = resp.RequestHeaders.Clone()

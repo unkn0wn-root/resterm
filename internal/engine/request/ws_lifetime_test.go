@@ -12,7 +12,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -55,7 +55,7 @@ func TestInteractiveWebSocketCancelDuringHandoverDoesNotAttach(t *testing.T) {
 
 	eng := New(engine.Config{
 		FilePath: "/tmp/example.http",
-		Client:   httpclient.NewClientWithOptions(httpclient.WithWebSocketDialer(dial)),
+		Client:   httpx.NewClientWithOptions(httpx.WithWebSocketDialer(dial)),
 	}, rtrun.New(rtrun.Config{}))
 
 	req := &restfile.Request{
@@ -67,7 +67,7 @@ func TestInteractiveWebSocketCancelDuringHandoverDoesNotAttach(t *testing.T) {
 	attached := 0
 	res, err := eng.ExecuteWith(nil, req, testEnv("dev"), ExecOptions{
 		Ctx: parent,
-		AttachWS: func(*httpclient.WebSocketHandle, *restfile.Request) {
+		AttachWS: func(*httpx.WebSocketHandle, *restfile.Request) {
 			attached++
 		},
 	})
@@ -91,7 +91,7 @@ func TestInteractiveWebSocketOutlivesTheRequest(t *testing.T) {
 
 	eng := New(engine.Config{
 		FilePath: "/tmp/example.http",
-		Client:   httpclient.NewClientWithOptions(),
+		Client:   httpx.NewClientWithOptions(),
 	}, rtrun.New(rtrun.Config{}))
 
 	req := &restfile.Request{
@@ -100,10 +100,10 @@ func TestInteractiveWebSocketOutlivesTheRequest(t *testing.T) {
 		WebSocket: &restfile.WebSocketRequest{},
 	}
 
-	var handle *httpclient.WebSocketHandle
+	var handle *httpx.WebSocketHandle
 	res, err := eng.ExecuteWith(nil, req, testEnv("dev"), ExecOptions{
 		Ctx: parent,
-		AttachWS: func(h *httpclient.WebSocketHandle, _ *restfile.Request) {
+		AttachWS: func(h *httpx.WebSocketHandle, _ *restfile.Request) {
 			handle = h
 		},
 	})

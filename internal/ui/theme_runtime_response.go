@@ -6,15 +6,15 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 type responseRenderSource struct {
-	http       *httpclient.Response
-	grpc       *grpcclient.Response
+	http       *httpx.Response
+	grpc       *grpcx.Response
 	grpcReq    *restfile.Request
 	grpcMethod string
 	tests      []scripts.TestResult
@@ -22,7 +22,7 @@ type responseRenderSource struct {
 }
 
 func newHTTPResponseRenderSource(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseRenderSource {
@@ -34,7 +34,7 @@ func newHTTPResponseRenderSource(
 }
 
 func newGRPCResponseRenderSource(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	fullMethod string,
 	req *restfile.Request,
 ) responseRenderSource {

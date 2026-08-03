@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -51,7 +51,7 @@ func expandWebSocketSteps(req *restfile.Request, res *vars.Resolver) error {
 	return nil
 }
 
-func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scripts.Response {
+func grpcScriptResponse(req *restfile.Request, resp *grpcx.Response) *scripts.Response {
 	if resp == nil {
 		return nil
 	}
@@ -96,7 +96,7 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 func prepareGRPCRequest(
 	req *restfile.Request,
 	res *vars.Resolver,
-	opt grpcclient.Options,
+	opt grpcx.Options,
 ) error {
 	grpcReq := req.GRPC
 	if grpcReq == nil {
@@ -128,10 +128,10 @@ func prepareGRPCRequest(
 	}
 	grpcReq.MessageExpanded = restfile.Opt[string]{}
 
-	if err := grpcclient.ValidateMetaPairs(grpcReq.Metadata); err != nil {
+	if err := grpcx.ValidateMetaPairs(grpcReq.Metadata); err != nil {
 		return err
 	}
-	if err := grpcclient.ValidateHeaderPairs(req.Headers); err != nil {
+	if err := grpcx.ValidateHeaderPairs(req.Headers); err != nil {
 		return err
 	}
 
@@ -201,13 +201,13 @@ func prepareGRPCRequest(
 
 func expandGRPCMessageFile(
 	path string,
-	opt grpcclient.Options,
+	opt grpcx.Options,
 	res *vars.Resolver,
 ) (string, error) {
 	if res == nil {
 		return "", nil
 	}
-	data, err := grpcclient.ReadMessageFile(path, opt)
+	data, err := grpcx.ReadMessageFile(path, opt)
 	if err != nil {
 		return "", err
 	}
@@ -272,7 +272,7 @@ func grpcStreamInfoFromSession(sess *stream.Session) (*scripts.StreamInfo, []byt
 		item := map[string]any{
 			"timestamp": ev.Timestamp.Format(time.RFC3339Nano),
 		}
-		if mtd := grpcMetaTrim(ev.Metadata, grpcclient.MetaMethod); mtd != "" {
+		if mtd := grpcMetaTrim(ev.Metadata, grpcx.MetaMethod); mtd != "" {
 			item["method"] = mtd
 		}
 		switch ev.Direction {
@@ -285,21 +285,21 @@ func grpcStreamInfoFromSession(sess *stream.Session) (*scripts.StreamInfo, []byt
 		default:
 			item["direction"] = "summary"
 		}
-		if typ := grpcMetaTrim(ev.Metadata, grpcclient.MetaMsgType); typ != "" {
+		if typ := grpcMetaTrim(ev.Metadata, grpcx.MetaMsgType); typ != "" {
 			item["messageType"] = typ
 		}
-		if idxText := grpcMetaTrim(ev.Metadata, grpcclient.MetaMsgIndex); idxText != "" {
+		if idxText := grpcMetaTrim(ev.Metadata, grpcx.MetaMsgIndex); idxText != "" {
 			item["index"] = idxText
 			if idx, convErr := strconv.Atoi(idxText); convErr == nil {
 				item["indexNum"] = idx
 			}
 		}
 		if ev.Direction == stream.DirNA {
-			if code := grpcMetaTrim(ev.Metadata, grpcclient.MetaStatus); code != "" {
+			if code := grpcMetaTrim(ev.Metadata, grpcx.MetaStatus); code != "" {
 				item["status"] = code
 				status = code
 			}
-			if msg := grpcMetaTrim(ev.Metadata, grpcclient.MetaReason); msg != "" {
+			if msg := grpcMetaTrim(ev.Metadata, grpcx.MetaReason); msg != "" {
 				item["reason"] = msg
 				reason = msg
 			}

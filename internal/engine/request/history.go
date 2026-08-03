@@ -8,9 +8,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -335,8 +335,8 @@ func fmtByteSize(n int64) string {
 }
 
 type runResult struct {
-	Response       *httpclient.Response
-	GRPC           *grpcclient.Response
+	Response       *httpx.Response
+	GRPC           *grpcx.Response
 	RuntimeSecrets []string
 	RequestText    string
 	Env            vars.Environment

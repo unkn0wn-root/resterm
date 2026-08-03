@@ -7,7 +7,7 @@ import (
 	"time"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -24,7 +24,7 @@ func TestSetExplainHTTPExtendsPreparedReport(t *testing.T) {
 	}
 
 	setExplainPrepared(rep, req, req.Settings, nil, nil)
-	setExplainHTTP(rep, &httpclient.Response{
+	setExplainHTTP(rep, &httpx.Response{
 		ReqMethod:      "POST",
 		EffectiveURL:   "https://example.com/final",
 		RequestHeaders: http.Header{"X-Sent": {"2"}},

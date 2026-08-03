@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -18,12 +18,12 @@ func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-func newHTTPClientWithFactory(factory httpclient.HTTPClientFactory) *httpclient.Client {
-	return httpclient.NewClientWithOptions(httpclient.WithHTTPFactory(factory))
+func newHTTPClientWithFactory(factory httpx.HTTPClientFactory) *httpx.Client {
+	return httpx.NewClientWithOptions(httpx.WithHTTPFactory(factory))
 }
 
 func TestRunnerRunHTTPSSE(t *testing.T) {
-	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		transport := transportFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
@@ -111,7 +111,7 @@ func TestRunnerRunHTTPSSE(t *testing.T) {
 func TestRunnerRunHTTPRejectsInteractiveWebSocket(t *testing.T) {
 	run := Runner{}
 	res := run.RunHTTP(HTTPInput{
-		Client:  httpclient.NewClient(nil),
+		Client:  httpx.NewClient(nil),
 		Context: context.Background(),
 		Req: &restfile.Request{
 			URL:       "wss://example.com",

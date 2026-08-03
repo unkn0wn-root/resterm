@@ -1,9 +1,9 @@
 package runner
 
 import (
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -117,7 +117,7 @@ func traceBreachMessage(info *TraceInfo) string {
 	)
 }
 
-func protocolStatusText(http *httpclient.Response, grpc *grpcclient.Response) string {
+func protocolStatusText(http *httpx.Response, grpc *grpcx.Response) string {
 	switch {
 	case http != nil:
 		return str.Trim(http.Status)

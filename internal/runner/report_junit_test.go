@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
 func TestReportWriteJUnitIncludesCompareAndProfile(t *testing.T) {
@@ -26,7 +26,7 @@ func TestReportWriteJUnitIncludesCompareAndProfile(t *testing.T) {
 						Name:        "dev",
 						Environment: "dev",
 						Passed:      true,
-						Response:    &httpclient.Response{Status: "200 OK", StatusCode: 200},
+						Response:    &httpx.Response{Status: "200 OK", StatusCode: 200},
 					},
 					{
 						Name:        "stage",

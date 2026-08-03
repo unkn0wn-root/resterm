@@ -11,8 +11,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 )
@@ -209,7 +209,7 @@ func (m *Model) showReflowCanceled(pane *responsePaneState) {
 type activeReqExec struct {
 	doc  *restfile.Document
 	req  *restfile.Request
-	opts httpclient.Options
+	opts httpx.Options
 	wrap func(tea.Cmd) tea.Cmd
 }
 

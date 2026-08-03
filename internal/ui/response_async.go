@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -89,7 +89,7 @@ func (m *Model) respSpinStop() {
 func (m *Model) respFmtCmd(
 	ctx context.Context,
 	token string,
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 	width int,

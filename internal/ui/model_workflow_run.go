@@ -12,8 +12,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -128,7 +128,7 @@ func workflowStateFromPlan(
 func (m *Model) startWorkflowRun(
 	doc *restfile.Document,
 	workflow restfile.Workflow,
-	options httpclient.Options,
+	options httpx.Options,
 ) tea.Cmd {
 	if cmd := m.runBlocked(); cmd != nil {
 		return cmd
@@ -172,7 +172,7 @@ func (m *Model) startWorkflowRun(
 func (m *Model) startForEachRun(
 	doc *restfile.Document,
 	req *restfile.Request,
-	options httpclient.Options,
+	options httpx.Options,
 ) tea.Cmd {
 	if cmd := m.runBlocked(); cmd != nil {
 		return cmd
@@ -199,7 +199,7 @@ func (m *Model) startForEachRun(
 	return m.startWorkflowCoreRun(pl, options)
 }
 
-func (m *Model) startWorkflowCoreRun(pl *core.WorkflowPlan, opts httpclient.Options) tea.Cmd {
+func (m *Model) startWorkflowCoreRun(pl *core.WorkflowPlan, opts httpx.Options) tea.Cmd {
 	st := workflowStateFromPlan(pl)
 	if st == nil {
 		return nil

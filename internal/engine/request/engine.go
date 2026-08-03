@@ -12,10 +12,10 @@ import (
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -31,15 +31,15 @@ import (
 type xrunResult = xexec.RequestResult
 
 type lastState struct {
-	http *httpclient.Response
-	grpc *grpcclient.Response
+	http *httpx.Response
+	grpc *grpcx.Response
 }
 
 type Engine struct {
 	cfg  engine.Config
 	rt   *rtrun.Runtime
-	hc   *httpclient.Client
-	gc   *grpcclient.Client
+	hc   *httpx.Client
+	gc   *grpcx.Client
 	sc   *scripts.Runner
 	re   *rts.Eng
 	rg   *registry.Index
@@ -64,15 +64,15 @@ type ExecOptions struct {
 	Ctx        context.Context
 	Mode       ExecMode
 	OnWarning  func(Warning)
-	AttachSSE  func(*httpclient.StreamHandle, *restfile.Request)
-	AttachWS   func(*httpclient.WebSocketHandle, *restfile.Request)
+	AttachSSE  func(*httpx.StreamHandle, *restfile.Request)
+	AttachWS   func(*httpx.WebSocketHandle, *restfile.Request)
 	AttachGRPC func(*stream.Session, *restfile.Request)
 }
 
 func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 	hc := cfg.Client
 	if hc == nil {
-		hc = httpclient.NewClientWithOptions()
+		hc = httpx.NewClientWithOptions()
 	}
 	if rt == nil {
 		rt = rtrun.New(rtrun.Config{
@@ -86,7 +86,7 @@ func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 		cfg: cfg,
 		rt:  rt,
 		hc:  hc,
-		gc:  grpcclient.NewClient(),
+		gc:  grpcx.NewClient(),
 		sc:  scripts.NewRunner(nil),
 		re:  rts.NewEng(stdlib.New),
 		rg:  cfg.Registry,
@@ -99,8 +99,8 @@ func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 // choice.
 func (e *Engine) ForRun(
 	cfg engine.Config,
-	resp *httpclient.Response,
-	grpc *grpcclient.Response,
+	resp *httpx.Response,
+	grpc *grpcx.Response,
 ) *Engine {
 	if e == nil {
 		return nil
@@ -118,7 +118,7 @@ func (e *Engine) setConfig(cfg engine.Config) {
 	if cfg.Client != nil {
 		e.hc = cfg.Client
 	} else if e.hc == nil {
-		e.hc = httpclient.NewClientWithOptions()
+		e.hc = httpx.NewClientWithOptions()
 	}
 	if cfg.Registry != nil {
 		e.rg = cfg.Registry
@@ -214,7 +214,7 @@ func (e *Engine) store(res xrunResult) {
 
 // The UI can replace or finish a response outside ExecuteWith. seedLast keeps
 // RTS values such as resp and trace aligned with that UI state.
-func (e *Engine) seedLast(resp *httpclient.Response, grpc *grpcclient.Response) {
+func (e *Engine) seedLast(resp *httpx.Response, grpc *grpcx.Response) {
 	switch {
 	case grpc != nil:
 		e.last.grpc = grpc
@@ -256,7 +256,7 @@ type execCtx struct {
 	env vars.Environment
 	mod ExecMode
 
-	opts httpclient.Options
+	opts httpx.Options
 
 	sendCtx context.Context
 	cancel  context.CancelFunc
@@ -275,15 +275,15 @@ type execCtx struct {
 	k8sPlan *k8s.Plan
 
 	useGRPC  bool
-	grpcOpts grpcclient.Options
+	grpcOpts grpcx.Options
 	timeout  time.Duration
 
 	runtimeSecrets []string
 	trace          *vars.Trace
 	exp            *explainBuilder
 	onWarning      func(Warning)
-	onSSE          func(*httpclient.StreamHandle, *restfile.Request)
-	onWS           func(*httpclient.WebSocketHandle, *restfile.Request)
+	onSSE          func(*httpx.StreamHandle, *restfile.Request)
+	onWS           func(*httpx.WebSocketHandle, *restfile.Request)
 	onGRPC         func(*stream.Session, *restfile.Request)
 }
 
@@ -292,7 +292,7 @@ func newExec(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	opts httpclient.Options,
+	opts httpx.Options,
 	opt ExecOptions,
 ) *execCtx {
 	baseCtx := opt.Ctx
@@ -969,10 +969,10 @@ func (x *execCtx) executeInteractiveWebSocket() xexec.RequestResult {
 		<-handle.Session.Done()
 		lt.cancel()
 	}()
-	return x.interactiveHTTPResult(httpclient.StreamingWebSocketResponse(handle.Meta))
+	return x.interactiveHTTPResult(httpx.StreamingWebSocketResponse(handle.Meta))
 }
 
-func (x *execCtx) interactiveHTTPResult(resp *httpclient.Response) xexec.RequestResult {
+func (x *execCtx) interactiveHTTPResult(resp *httpx.Response) xexec.RequestResult {
 	x.exp.sentHTTP(x.req, resp)
 	x.exp.setHTTP(resp)
 	x.exp.setPrepared(x.req)

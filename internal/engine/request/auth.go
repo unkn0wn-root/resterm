@@ -13,8 +13,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -181,7 +181,7 @@ func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
 		return nil
 	}
 
-	values, err := httpclient.AuthValues(
+	values, err := httpx.AuthValues(
 		req.Metadata.Auth,
 		res,
 		reqHeaders(req),
@@ -192,7 +192,7 @@ func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
 	}
 
 	for _, v := range values {
-		if v.Placement == httpclient.AuthInQuery {
+		if v.Placement == httpx.AuthInQuery {
 			return diag.New(
 				diag.ClassAuth,
 				"apikey auth placement query is not supported for grpc, use header",
@@ -299,7 +299,7 @@ func (e *Engine) EnsureOAuth(
 	ctx context.Context,
 	req *restfile.Request,
 	res *vars.Resolver,
-	opts httpclient.Options,
+	opts httpx.Options,
 	env vars.Environment,
 	timeout time.Duration,
 ) error {

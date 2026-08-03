@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
@@ -124,7 +124,7 @@ func (e *Engine) rtsLastTrace() *rts.Trace {
 	return nil
 }
 
-func rtsHTTP(resp *httpclient.Response) *rts.Resp {
+func rtsHTTP(resp *httpx.Response) *rts.Resp {
 	if resp == nil {
 		return nil
 	}
@@ -141,7 +141,7 @@ func rtsHTTP(resp *httpclient.Response) *rts.Resp {
 	}
 }
 
-func rtsGRPC(resp *grpcclient.Response) *rts.Resp {
+func rtsGRPC(resp *grpcx.Response) *rts.Resp {
 	if resp == nil {
 		return nil
 	}
@@ -160,7 +160,7 @@ func rtsGRPC(resp *grpcclient.Response) *rts.Resp {
 	}
 }
 
-func rtsTrace(resp *httpclient.Response) *rts.Trace {
+func rtsTrace(resp *httpx.Response) *rts.Trace {
 	if resp == nil || resp.TraceReport == nil {
 		return nil
 	}

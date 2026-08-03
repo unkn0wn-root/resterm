@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"google.golang.org/grpc/codes"
 )
 
@@ -89,7 +89,7 @@ func compareSummary(base, row engine.CompareRow) string {
 	}
 }
 
-func summarizeHTTP(base, row *httpclient.Response) string {
+func summarizeHTTP(base, row *httpx.Response) string {
 	if base == nil || row == nil {
 		return "unavailable"
 	}

@@ -13,8 +13,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
@@ -322,7 +322,7 @@ func resolveBodyInput(res runner.Result) bodyfmt.BuildInput {
 	return bodyfmt.BuildInput{Body: body, ContentType: ct}
 }
 
-func httpBodyInput(res runner.Result, resp *httpclient.Response) bodyfmt.BuildInput {
+func httpBodyInput(res runner.Result, resp *httpx.Response) bodyfmt.BuildInput {
 	ct := ""
 	if resp.Headers != nil {
 		ct = resp.Headers.Get("Content-Type")
@@ -337,7 +337,7 @@ func httpBodyInput(res runner.Result, resp *httpclient.Response) bodyfmt.BuildIn
 	return bodyfmt.BuildInput{Body: body, ContentType: ct}
 }
 
-func grpcBodyInput(res runner.Result, grpc *grpcclient.Response) bodyfmt.BuildInput {
+func grpcBodyInput(res runner.Result, grpc *grpcx.Response) bodyfmt.BuildInput {
 	viewBody, viewType := grpc.ViewBody()
 	rawBody, rawType := grpc.RawBody()
 	if len(viewBody) == 0 {
@@ -481,7 +481,7 @@ func contentLengthText(res runner.Result) string {
 	return ""
 }
 
-func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
+func buildRequestHeaderMap(resp *httpx.Response) http.Header {
 	var hdrs http.Header
 	if resp != nil && resp.RequestHeaders != nil {
 		hdrs = resp.RequestHeaders.Clone()

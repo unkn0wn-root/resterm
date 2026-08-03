@@ -4,11 +4,11 @@ import (
 	"slices"
 
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
-func cloneHTTP(resp *httpclient.Response) *httpclient.Response {
+func cloneHTTP(resp *httpx.Response) *httpx.Response {
 	if resp == nil {
 		return nil
 	}

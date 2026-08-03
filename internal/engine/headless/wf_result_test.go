@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -16,7 +16,7 @@ func TestEvaluateStepStatusCode(t *testing.T) {
 		step: restfile.WorkflowStep{
 			Expect: restfile.WorkflowExpect{StatusCode: &code},
 		},
-		http: &httpclient.Response{
+		http: &httpx.Response{
 			Status:     http.StatusText(http.StatusNotFound),
 			StatusCode: http.StatusNotFound,
 			Duration:   1500 * time.Millisecond,
@@ -40,7 +40,7 @@ func TestEvaluateStepStatusCode(t *testing.T) {
 
 func TestEvaluateStepScriptErr(t *testing.T) {
 	res := wfStepRes{
-		http: &httpclient.Response{
+		http: &httpx.Response{
 			Status:     http.StatusText(http.StatusOK),
 			StatusCode: http.StatusOK,
 			Duration:   250 * time.Millisecond,

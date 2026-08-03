@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
@@ -60,7 +60,7 @@ func TestRenderHTTPPrettyUsesTrackedUnresolvedVarsAndEffectiveTarget(t *testing.
 			Target:          "{{services.api.base}}/reports",
 			EffectiveTarget: "https://httpbin.org/anything/api/reports",
 			Environment:     "dev",
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Status:       "200 OK",
 				StatusCode:   200,
 				Headers:      http.Header{"Content-Type": {"application/json"}},
@@ -125,7 +125,7 @@ func TestRenderGRPCRawFallsBackToStreamSummary(t *testing.T) {
 			Kind:   runner.ResultKindRequest,
 			Method: "GRPC",
 			Target: "/demo.Service/Watch",
-			GRPC: &grpcclient.Response{
+			GRPC: &grpcx.Response{
 				StatusCode:    codes.OK,
 				StatusMessage: "ok",
 				Duration:      25 * time.Millisecond,
@@ -192,7 +192,7 @@ func TestRenderBodyRawReturnsBodyOnly(t *testing.T) {
 			Name:   "items",
 			Method: "GET",
 			Target: "https://example.com/items",
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Status:       "200 OK",
 				StatusCode:   200,
 				Headers:      http.Header{"Content-Type": {"application/json"}},
@@ -218,7 +218,7 @@ func TestRenderBodyPrettyCanColorOutput(t *testing.T) {
 	rep := &runner.Report{
 		Results: []runner.Result{{
 			Kind: runner.ResultKindRequest,
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Headers: http.Header{"Content-Type": {"application/json"}},
 				Body:    []byte(`{"id":1}`),
 			},
@@ -245,7 +245,7 @@ func TestRenderBodyPrettyUsesThemeSyntaxStyle(t *testing.T) {
 	rep := &runner.Report{
 		Results: []runner.Result{{
 			Kind: runner.ResultKindRequest,
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Headers: http.Header{"Content-Type": {"application/json"}},
 				Body:    []byte(`{"id":1,"name":"demo"}`),
 			},
@@ -287,7 +287,7 @@ func testHTTPPrettyReport() *runner.Report {
 			Method:      "GET",
 			Target:      "https://example.com/items",
 			Environment: "dev",
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Headers:    http.Header{"Content-Type": {"application/json"}, "X-Resp": {"ok"}},

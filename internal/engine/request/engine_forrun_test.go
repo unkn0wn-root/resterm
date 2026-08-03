@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
 func TestForRunIsolatesInFlightRunFromLaterRuns(t *testing.T) {
 	shared := New(engine.Config{EnvironmentFile: "/a/resterm.env.json"}, nil)
 	inflight := shared.ForRun(
 		engine.Config{EnvironmentFile: "/a/resterm.env.json"},
-		&httpclient.Response{Status: "200 OK"},
+		&httpx.Response{Status: "200 OK"},
 		nil,
 	)
 

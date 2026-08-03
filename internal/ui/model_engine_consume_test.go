@@ -7,7 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -108,8 +108,8 @@ func TestHandleResponseMessageSkippedRunKeepsCurrentTabAndExposesExplain(t *test
 	}
 }
 
-func compareHTTPResponse(url string, body []byte) *httpclient.Response {
-	return &httpclient.Response{
+func compareHTTPResponse(url string, body []byte) *httpx.Response {
+	return &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": []string{"application/json"}},

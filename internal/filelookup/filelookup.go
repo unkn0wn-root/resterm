@@ -1,4 +1,3 @@
-// Package filelookup keeps request file resolution consistent across protocol clients.
 package filelookup
 
 import (

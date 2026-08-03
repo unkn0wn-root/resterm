@@ -11,9 +11,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -22,7 +22,7 @@ import (
 type compareState struct {
 	id           string
 	base         *restfile.Request
-	options      httpclient.Options
+	options      httpx.Options
 	targets      []vars.Target
 	group        string
 	baseline     string
@@ -39,7 +39,7 @@ type compareState struct {
 
 func compareStateFromPlan(
 	pl *core.ComparePlan,
-	opts httpclient.Options,
+	opts httpx.Options,
 	label string,
 ) *compareState {
 	if pl == nil {
@@ -69,7 +69,7 @@ func (m *Model) startCompareRun(
 	doc *restfile.Document,
 	req *restfile.Request,
 	spec *restfile.CompareSpec,
-	options httpclient.Options,
+	options httpx.Options,
 ) tea.Cmd {
 	if cmd := m.runBlocked(); cmd != nil {
 		return cmd
@@ -583,7 +583,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 }
 
 func (m *Model) compareHTTPSnippet(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	req *restfile.Request,
 	sel vars.Selection,
 ) string {
@@ -597,7 +597,7 @@ func (m *Model) compareHTTPSnippet(
 }
 
 func (m *Model) compareGRPCSnippet(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	req *restfile.Request,
 	sel vars.Selection,
 ) string {

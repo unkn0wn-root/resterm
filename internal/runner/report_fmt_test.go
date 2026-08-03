@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"google.golang.org/grpc/codes"
@@ -31,7 +31,7 @@ func TestReportModelTrimsStrings(t *testing.T) {
 			Summary:         "  ok  ",
 			Passed:          true,
 			SkipReason:      "  skipped  ",
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Status: "  200 OK  ",
 				Proto:  "  HTTP/1.1  ",
 			},
@@ -71,7 +71,7 @@ func TestReportModelTrimsStrings(t *testing.T) {
 				Summary:         "  ok  ",
 				Passed:          true,
 				SkipReason:      "  skipped  ",
-				GRPC: &grpcclient.Response{
+				GRPC: &grpcx.Response{
 					StatusCode:    codes.OK,
 					StatusMessage: "  ok  ",
 				},
@@ -253,7 +253,7 @@ func TestReportModelUsesResponseDuration(t *testing.T) {
 	rep := &Report{
 		Results: []Result{{
 			Passed: true,
-			Response: &httpclient.Response{
+			Response: &httpx.Response{
 				Duration: 25 * time.Millisecond,
 			},
 		}},

@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -744,7 +744,7 @@ func TestRunCmdAutoColorsWorkflowOutputForTTY(t *testing.T) {
 					Name:     "Login",
 					Passed:   true,
 					Duration: 250 * time.Millisecond,
-					Response: &httpclient.Response{
+					Response: &httpx.Response{
 						Status:     "200 OK",
 						StatusCode: 200,
 					},
@@ -1165,8 +1165,8 @@ func TestPromptRunRequestChoiceEOF(t *testing.T) {
 	}
 }
 
-func stubRunClient(string, cli.ExecFlags) (*httpclient.Client, func() error, error) {
-	return httpclient.NewClient(nil), nil, nil
+func stubRunClient(string, cli.ExecFlags) (*httpx.Client, func() error, error) {
+	return httpx.NewClient(nil), nil, nil
 }
 
 func envLookup(vals map[string]string) termcolor.Lookup {
@@ -1182,7 +1182,7 @@ func stubRunReport(pass bool) *runner.Report {
 		Name:   "one",
 		Method: "GET",
 		Target: "https://example.com/one",
-		Response: &httpclient.Response{
+		Response: &httpx.Response{
 			Status:       "200 OK",
 			StatusCode:   200,
 			Headers:      http.Header{"Content-Type": {"application/json"}},

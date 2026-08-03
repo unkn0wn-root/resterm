@@ -15,8 +15,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
 	testgrpc "google.golang.org/grpc/interop/grpc_testing"
@@ -536,7 +536,7 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 	doc := &restfile.Document{Path: "grpc.http", Requests: []*restfile.Request{req}}
 
 	eng := New(engine.Config{
-		GRPCOptions: grpcclient.Options{
+		GRPCOptions: grpcx.Options{
 			DefaultPlaintext: restfile.OptOf(true),
 			DialTimeout:      time.Second,
 		},

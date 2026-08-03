@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -388,7 +388,7 @@ func TestWrapStructuredLineMaintainsValueColor(t *testing.T) {
 
 func TestRenderContentLengthLine(t *testing.T) {
 	t.Run("uses numeric header value", func(t *testing.T) {
-		resp := &httpclient.Response{
+		resp := &httpx.Response{
 			Headers: http.Header{"Content-Length": {"64"}},
 			Body:    []byte("payload"),
 		}
@@ -400,7 +400,7 @@ func TestRenderContentLengthLine(t *testing.T) {
 	})
 
 	t.Run("falls back to body length", func(t *testing.T) {
-		resp := &httpclient.Response{Body: []byte("xyz")}
+		resp := &httpx.Response{Body: []byte("xyz")}
 		line := defaultResponseRenderer().renderContentLengthLine(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 3 bytes" {
@@ -409,7 +409,7 @@ func TestRenderContentLengthLine(t *testing.T) {
 	})
 
 	t.Run("returns raw header when non-numeric", func(t *testing.T) {
-		resp := &httpclient.Response{
+		resp := &httpx.Response{
 			Headers: http.Header{"Content-Length": {"approx 100"}},
 		}
 		line := defaultResponseRenderer().renderContentLengthLine(resp)
@@ -420,7 +420,7 @@ func TestRenderContentLengthLine(t *testing.T) {
 	})
 
 	t.Run("pluralizes singular byte", func(t *testing.T) {
-		resp := &httpclient.Response{Body: []byte{0x01}}
+		resp := &httpx.Response{Body: []byte{0x01}}
 		line := defaultResponseRenderer().renderContentLengthLine(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 1 byte" {
@@ -431,7 +431,7 @@ func TestRenderContentLengthLine(t *testing.T) {
 
 func TestRenderContentLengthLinePretty(t *testing.T) {
 	t.Run("formats numeric header", func(t *testing.T) {
-		resp := &httpclient.Response{
+		resp := &httpx.Response{
 			Headers: http.Header{"Content-Length": {"2048"}},
 		}
 		line := defaultResponseRenderer().renderContentLengthLinePretty(resp)
@@ -442,7 +442,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 	})
 
 	t.Run("falls back to body length", func(t *testing.T) {
-		resp := &httpclient.Response{Body: bytes.Repeat([]byte{'x'}, 1536)}
+		resp := &httpx.Response{Body: bytes.Repeat([]byte{'x'}, 1536)}
 		line := defaultResponseRenderer().renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 1.5 KiB" {
@@ -451,7 +451,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 	})
 
 	t.Run("handles zero length", func(t *testing.T) {
-		resp := &httpclient.Response{}
+		resp := &httpx.Response{}
 		line := defaultResponseRenderer().renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 0 B" {
@@ -460,7 +460,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 	})
 
 	t.Run("returns raw value when non-numeric", func(t *testing.T) {
-		resp := &httpclient.Response{Headers: http.Header{"Content-Length": {"approx 100"}}}
+		resp := &httpx.Response{Headers: http.Header{"Content-Length": {"approx 100"}}}
 		line := defaultResponseRenderer().renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: approx 100" {

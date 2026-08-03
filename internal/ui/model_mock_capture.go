@@ -13,9 +13,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/files"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -131,7 +131,7 @@ func (m *Model) captureSources() mock.Sources {
 	return src
 }
 
-func (m *Model) captureSource() (*httpclient.Response, string, error) {
+func (m *Model) captureSource() (*httpx.Response, string, error) {
 	if m.currentFile != "" && !files.IsRequest(m.currentFile) {
 		return nil, "", errors.New("select a .http or .rest file before capturing a mock")
 	}
@@ -158,7 +158,7 @@ func (m *Model) captureRoute(method, path string) (*restfile.Document, []*restfi
 	return overlay, routeMocks(docs, method, path), nil
 }
 
-func capturedMockTitle(resp *httpclient.Response, label string) string {
+func capturedMockTitle(resp *httpx.Response, label string) string {
 	title := fmt.Sprintf("Mock %s - %d", label, resp.StatusCode)
 	if text := http.StatusText(resp.StatusCode); text != "" {
 		title += " " + text
@@ -166,7 +166,7 @@ func capturedMockTitle(resp *httpclient.Response, label string) string {
 	return title
 }
 
-func capturedMockMethod(resp *httpclient.Response) string {
+func capturedMockMethod(resp *httpx.Response) string {
 	method := strings.TrimSpace(resp.ReqMethod)
 	if method == "" && resp.Request != nil {
 		method = strings.TrimSpace(resp.Request.Method)
@@ -174,7 +174,7 @@ func capturedMockMethod(resp *httpclient.Response) string {
 	return strings.ToUpper(method)
 }
 
-func capturedMockPath(resp *httpclient.Response, fallback string) (string, map[string][]string, error) {
+func capturedMockPath(resp *httpx.Response, fallback string) (string, map[string][]string, error) {
 	raw := strings.TrimSpace(resp.EffectiveURL)
 	if raw == "" {
 		raw = strings.TrimSpace(fallback)
@@ -202,7 +202,7 @@ func capturedMockPath(resp *httpclient.Response, fallback string) (string, map[s
 	return path, query, nil
 }
 
-func capturedMockBody(resp *httpclient.Response) (string, error) {
+func capturedMockBody(resp *httpx.Response) (string, error) {
 	if !restfile.ResponseAllowsBody(resp.StatusCode) {
 		return "", nil
 	}
@@ -293,7 +293,7 @@ func (m *Model) mockCaptureSnapshot() *responseSnapshot {
 	return m.responseLatest
 }
 
-func capturedMockLabel(resp *httpclient.Response, fallback string) string {
+func capturedMockLabel(resp *httpx.Response, fallback string) string {
 	label := ""
 	if resp != nil && resp.Request != nil {
 		label = strings.TrimSpace(resp.Request.Metadata.Name)

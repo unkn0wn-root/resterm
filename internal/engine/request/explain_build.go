@@ -10,9 +10,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -121,7 +121,7 @@ func (b *explainBuilder) stage(
 
 func (b *explainBuilder) sentHTTP(
 	req *restfile.Request,
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	notes ...string,
 ) {
 	addExplainSentHTTPStage(b.report, req, resp, notes...)
@@ -153,7 +153,7 @@ func (b *explainBuilder) setGRPC(req *restfile.Request) {
 	setExplainGRPC(b.report, req)
 }
 
-func (b *explainBuilder) setHTTP(resp *httpclient.Response) {
+func (b *explainBuilder) setHTTP(resp *httpx.Response) {
 	setExplainHTTP(b.report, resp)
 }
 
@@ -309,7 +309,7 @@ func addExplainPreparedHTTPStage(
 func addExplainSentHTTPStage(
 	rep *xplain.Report,
 	req *restfile.Request,
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	notes ...string,
 ) {
 	if rep == nil || resp == nil {
@@ -390,7 +390,7 @@ func setExplainGRPC(rep *xplain.Report, req *restfile.Request) {
 	final.Mode = "sent"
 }
 
-func setExplainHTTP(rep *xplain.Report, resp *httpclient.Response) {
+func setExplainHTTP(rep *xplain.Report, resp *httpx.Response) {
 	if rep == nil || resp == nil {
 		return
 	}
@@ -498,7 +498,7 @@ func explainBuiltHTTPChanges(
 	return out
 }
 
-func explainSentHTTPChanges(req *restfile.Request, resp *httpclient.Response) []xplain.Change {
+func explainSentHTTPChanges(req *restfile.Request, resp *httpx.Response) []xplain.Change {
 	if resp == nil {
 		return nil
 	}
@@ -1233,7 +1233,7 @@ func (e *Engine) prepareExplainHTTPPreview(
 	rep *xplain.Report,
 	req *restfile.Request,
 	res *vars.Resolver,
-	opts httpclient.Options,
+	opts httpx.Options,
 ) error {
 	if rep == nil || req == nil || e.hc == nil {
 		return nil
