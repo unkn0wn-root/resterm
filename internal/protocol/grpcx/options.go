@@ -17,16 +17,18 @@ type Options struct {
 	// DialTimeout bounds connection setup and descriptor resolution. The socket
 	// connection itself is lazy.
 	DialTimeout time.Duration
-	// Timeout applies to unary calls. Streams run until completion or cancellation.
-	Timeout     time.Duration
-	MaxRecvSize int
-	MaxSendSize int
-	Compression string
-	RootCAs     []string
-	ClientCert  string
-	ClientKey   string
-	Insecure    bool
-	RootMode    tlsconfig.RootMode
-	SSH         *ssh.Plan
-	K8s         *k8s.Plan
+	// Timeout applies to unary calls.
+	Timeout time.Duration
+	// StreamTimeout bounds an entire streaming call. Zero means no limit.
+	StreamTimeout time.Duration
+	MaxRecvSize   int
+	MaxSendSize   int
+	Compression   string
+	RootCAs       []string
+	ClientCert    string
+	ClientKey     string
+	Insecure      bool
+	RootMode      tlsconfig.RootMode
+	SSH           *ssh.Plan
+	K8s           *k8s.Plan
 }

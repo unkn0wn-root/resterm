@@ -9,13 +9,14 @@ import (
 )
 
 //nolint:staticcheck // v1alpha is deprecated, but this verifies compatibility with v1alpha-only servers.
+func registerAlphaReflection(srv *grpc.Server) {
+	reflectalpha.RegisterServerReflectionServer(
+		srv,
+		reflection.NewServer(reflection.ServerOptions{Services: srv}),
+	)
+}
+
 func startAlphaReflectionServer(t *testing.T) string {
 	t.Helper()
-
-	return startTestServerWith(t, func(srv *grpc.Server) {
-		reflectalpha.RegisterServerReflectionServer(
-			srv,
-			reflection.NewServer(reflection.ServerOptions{Services: srv}),
-		)
-	})
+	return startTestServerWith(t, registerAlphaReflection)
 }

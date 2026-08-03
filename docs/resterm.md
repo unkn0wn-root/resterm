@@ -1514,7 +1514,7 @@ The request body contains protobuf JSON. Use `< payload.json` to load from disk,
 
 Streaming (server/client/bidi) is supported. Unary/server streaming requests use a single JSON object, while client/bidi streaming requests send a JSON array of message objects. Streaming responses return a JSON array, and the Stream tab shows a per-message transcript with a summary.
 
-`@timeout` / `@setting timeout` bounds connecting, resolving descriptors, and unary calls. Streams are not bounded by it: a server stream runs until the server ends it or you cancel it from the Stream tab.
+`@timeout` / `@setting timeout` bounds connecting, resolving descriptors, and unary calls. A timeout set on the request itself also bounds the whole stream, so `# @timeout 2m` ends a server stream after two minutes with `DeadlineExceeded`. Streams without one run until the server ends them or you cancel from the Stream tab. A timeout inherited from file settings, an environment, or the app default does not apply to streams.
 
 Example:
 

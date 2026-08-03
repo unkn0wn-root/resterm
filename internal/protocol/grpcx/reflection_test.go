@@ -2,11 +2,15 @@ package grpcx
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"testing"
+	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/reflection"
 	reflectv1 "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -118,6 +122,41 @@ func TestReflectionFetchesMissingDependencies(t *testing.T) {
 
 	if _, err := filesFromSet(set, "build descriptors from reflection"); err != nil {
 		t.Fatalf("build descriptors: %v", err)
+	}
+}
+
+func TestExecuteSendsMetadataToReflection(t *testing.T) {
+	tests := []struct {
+		name     string
+		register func(*grpc.Server)
+	}{
+		{"v1", func(srv *grpc.Server) { reflection.RegisterV1(srv) }},
+		{"v1alpha", registerAlphaReflection},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			addr := startAuthedTestServer(t, tt.register)
+
+			req := &restfile.Request{
+				Headers: map[string][]string{"Authorization": {testAuthValue}},
+				GRPC:    baseStreamReq(addr, "StreamingOutputCall"),
+			}
+			opts := Options{DefaultPlaintext: restfile.OptOf(true), DialTimeout: time.Second}
+
+			resp, err := NewClient().Execute(context.Background(), req, opts, nil)
+			if err != nil {
+				t.Fatalf("execute via authenticated reflection: %v", err)
+			}
+
+			var out []map[string]any
+			if err := json.Unmarshal(resp.Body, &out); err != nil {
+				t.Fatalf("decode response body: %v", err)
+			}
+			if len(out) != 2 {
+				t.Fatalf("expected 2 responses, got %d", len(out))
+			}
+		})
 	}
 }
 

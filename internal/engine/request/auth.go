@@ -160,7 +160,20 @@ func headerPresent(h http.Header, name string) bool {
 }
 
 func requestHeaderPresent(req *restfile.Request, name string) bool {
-	return headerPresent(reqHeaders(req), name)
+	return headerPresent(reqHeaders(req), name) || grpcMetadataPresent(req, name)
+}
+
+// A key set via @grpc-metadata overrides auth the same way a header does.
+func grpcMetadataPresent(req *restfile.Request, name string) bool {
+	if req == nil || req.GRPC == nil {
+		return false
+	}
+	for _, pair := range req.GRPC.Metadata {
+		if strings.EqualFold(pair.Key, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func ensureReqHeaders(req *restfile.Request) http.Header {
@@ -184,7 +197,7 @@ func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
 	values, err := httpx.AuthValues(
 		req.Metadata.Auth,
 		res,
-		reqHeaders(req),
+		grpcAuthHeaders(req),
 		diag.ComponentGRPC,
 	)
 	if err != nil {
@@ -206,11 +219,26 @@ func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
 
 func setRequestHeaderIfMissing(req *restfile.Request, name, value string) bool {
 	headers := ensureReqHeaders(req)
-	if headers == nil || headerPresent(headers, name) {
+	if headers == nil || requestHeaderPresent(req, name) {
 		return false
 	}
 	headers.Set(name, value)
 	return true
+}
+
+// AuthValues only looks at headers, so hand it the grpc metadata as headers too.
+func grpcAuthHeaders(req *restfile.Request) http.Header {
+	hdr := reqHeaders(req)
+	meta := req.GRPC.Metadata
+	if len(meta) == 0 {
+		return hdr
+	}
+	out := make(http.Header, len(hdr)+len(meta))
+	maps.Copy(out, hdr)
+	for _, pair := range meta {
+		out.Add(pair.Key, pair.Value)
+	}
+	return out
 }
 
 func headerValue(h http.Header, name string) string {

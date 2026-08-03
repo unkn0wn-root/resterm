@@ -1104,11 +1104,11 @@ func (e *Engine) prepareExplainAuthPreview(
 			return explainAuthPreviewResult{}, err
 		}
 		hdr := prep.HeaderName()
-		if req.Headers != nil && req.Headers.Get(hdr) != "" {
+		if requestHeaderPresent(req, hdr) {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
 				summary: xplain.SummaryAuthPrepared,
-				notes:   []string{"auth header already set on request"},
+				notes:   []string{authPresentNote(req, hdr)},
 			}, nil
 		}
 		ac := e.rt.AuthCmd()
@@ -1132,10 +1132,7 @@ func (e *Engine) prepareExplainAuthPreview(
 				},
 			}, nil
 		}
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
-		}
-		req.Headers.Set(out.Header, out.Value)
+		ensureReqHeaders(req).Set(out.Header, out.Value)
 		return explainAuthPreviewResult{
 			status:       xplain.StageOK,
 			summary:      xplain.SummaryAuthPrepared,
@@ -1162,11 +1159,11 @@ func (e *Engine) prepareExplainAuthPreview(
 			)
 		}
 		hdr := cfg.Header
-		if req.Headers != nil && req.Headers.Get(hdr) != "" {
+		if requestHeaderPresent(req, hdr) {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
 				summary: xplain.SummaryAuthPrepared,
-				notes:   []string{"auth header already set on request"},
+				notes:   []string{authPresentNote(req, hdr)},
 			}, nil
 		}
 		tok, ok := oa.CachedToken(env.Scope(), cfg)
@@ -1180,18 +1177,8 @@ func (e *Engine) prepareExplainAuthPreview(
 				},
 			}, nil
 		}
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
-		}
-		val := tok.AccessToken
-		if strings.EqualFold(hdr, "authorization") {
-			typ := strings.TrimSpace(tok.TokenType)
-			if typ == "" {
-				typ = "Bearer"
-			}
-			val = strings.TrimSpace(typ) + " " + tok.AccessToken
-		}
-		req.Headers.Set(hdr, val)
+		val := oauthHeaderValue(hdr, tok)
+		ensureReqHeaders(req).Set(hdr, val)
 		return explainAuthPreviewResult{
 			status:  xplain.StageOK,
 			summary: xplain.SummaryAuthPrepared,
@@ -1208,6 +1195,13 @@ func (e *Engine) prepareExplainAuthPreview(
 			notes:   []string{fmt.Sprintf("unsupported auth type %q is not applied", auth.Type)},
 		}, nil
 	}
+}
+
+func authPresentNote(req *restfile.Request, hdr string) string {
+	if grpcMetadataPresent(req, hdr) && !headerPresent(reqHeaders(req), hdr) {
+		return hdr + " already set via @grpc-metadata"
+	}
+	return "auth header already set on request"
 }
 
 func (e *Engine) PrepareExplainAuthPreview(

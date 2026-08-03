@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -99,6 +100,78 @@ func TestApplyGRPCAuthKeepsExplicitHeader(t *testing.T) {
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer from-user" {
 		t.Fatalf("Authorization = %q, want the user value kept", got)
+	}
+}
+
+func TestApplyGRPCAuthKeepsExplicitMetadata(t *testing.T) {
+	// The broken token proves overridden auth params are never expanded.
+	req := grpcAuthRequest(&restfile.AuthSpec{
+		Type:   "bearer",
+		Params: map[string]string{"token": "{{missing}}"},
+	})
+	req.GRPC.Metadata = []restfile.MetadataPair{{Key: "authorization", Value: "Bearer from-user"}}
+
+	if err := applyGRPCAuth(req, vars.NewResolver()); err != nil {
+		t.Fatalf("apply grpc auth: %v", err)
+	}
+	if got := req.Headers.Get("Authorization"); got != "" {
+		t.Fatalf("Authorization = %q, want no injected duplicate", got)
+	}
+}
+
+func TestSetRequestHeaderIfMissingHonoursGRPCMetadata(t *testing.T) {
+	req := grpcAuthRequest(nil)
+	req.GRPC.Metadata = []restfile.MetadataPair{{Key: "x-api-key", Value: "explicit"}}
+
+	if setRequestHeaderIfMissing(req, "X-API-Key", "injected") {
+		t.Fatal("expected explicit metadata to block the injection")
+	}
+	if got := req.Headers.Get("X-API-Key"); got != "" {
+		t.Fatalf("X-API-Key = %q, want empty", got)
+	}
+}
+
+func TestExplainAuthPreviewHonoursExplicitGRPCMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		auth *restfile.AuthSpec
+	}{
+		{
+			name: "command",
+			auth: &restfile.AuthSpec{
+				Type:   "command",
+				Params: map[string]string{"argv": `["demo-auth"]`},
+			},
+		},
+		{
+			name: "oauth2",
+			auth: &restfile.AuthSpec{
+				Type:   "oauth2",
+				Params: map[string]string{"token_url": "http://token.test"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, _ := newPreviewTestEngine(t)
+			req := grpcAuthRequest(tt.auth)
+			req.GRPC.Metadata = []restfile.MetadataPair{{Key: "authorization", Value: "Bearer from-user"}}
+
+			out, err := e.prepareExplainAuthPreview(nil, req, vars.NewResolver(), testEnv(""))
+			if err != nil {
+				t.Fatalf("prepare auth preview: %v", err)
+			}
+			if out.status != xplain.StageOK {
+				t.Fatalf("status = %v, want StageOK", out.status)
+			}
+			if len(out.notes) != 1 || !strings.Contains(out.notes[0], "@grpc-metadata") {
+				t.Fatalf("notes = %v, want the @grpc-metadata note", out.notes)
+			}
+			if got := req.Headers.Get("Authorization"); got != "" {
+				t.Fatalf("Authorization = %q, want no preview injection", got)
+			}
+		})
 	}
 }
 

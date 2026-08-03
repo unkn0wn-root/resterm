@@ -29,13 +29,23 @@ func defaultTimeout(d time.Duration) time.Duration {
 
 func resolveRequestTimeout(req *restfile.Request, base time.Duration) time.Duration {
 	if req != nil {
-		if raw, ok := req.Settings["timeout"]; ok {
-			if d, err := time.ParseDuration(raw); err == nil && d > 0 {
-				return d
-			}
+		if d, ok := settingTimeout(req.Settings); ok {
+			return d
 		}
 	}
 	return base
+}
+
+func settingTimeout(set map[string]string) (time.Duration, bool) {
+	raw, ok := set["timeout"]
+	if !ok {
+		return 0, false
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return 0, false
+	}
+	return d, true
 }
 
 func (e *Engine) resolveHTTPOptions(
@@ -545,6 +555,12 @@ func (x *execCtx) configureGRPC() {
 	// Use the same fallback roots as HTTP body files.
 	x.grpcOpts.FallbackBaseDirs = x.opts.FallbackBaseDirs
 	x.grpcOpts.NoFallback = x.opts.NoFallback
+
+	// Only a timeout set on the request itself may bound a stream, so read
+	// it before the settings merge adds file and env defaults.
+	if d, ok := settingTimeout(x.req.Settings); ok {
+		x.grpcOpts.StreamTimeout = d
+	}
 }
 
 func (x *execCtx) applySettings() *xrunResult {

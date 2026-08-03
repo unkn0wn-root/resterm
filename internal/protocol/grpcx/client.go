@@ -119,8 +119,8 @@ func (c *Client) Execute(
 		}
 	}()
 
-	// Setup and unary calls use separate timeouts. Streams keep the parent
-	// context so they can run until the session is cancelled.
+	// Setup and unary calls use separate timeouts. Streams run until
+	// cancelled unless the request sets an explicit timeout.
 	setupCtx, cancelSetup := withTimeout(parent, opt.DialTimeout)
 	in, err := c.prepare(setupCtx, conn, req, id, opt)
 	cancelSetup()
@@ -129,7 +129,9 @@ func (c *Client) Execute(
 	}
 
 	if in.kind != callUnary {
-		return in.stream(parent, hook)
+		streamCtx, cancel := withTimeout(parent, opt.StreamTimeout)
+		defer cancel()
+		return in.stream(streamCtx, hook)
 	}
 
 	callCtx, cancel := withTimeout(parent, opt.Timeout)
@@ -166,18 +168,20 @@ func (c *Client) prepare(
 	opt Options,
 ) (invocation, error) {
 	gr := req.GRPC
+	md, err := collectMetadata(gr, req)
+	if err != nil {
+		return invocation{}, err
+	}
+
+	// Some servers require auth on reflection, so resolve descriptors with
+	// the call metadata attached.
 	rd := newReader(c.fs, opt)
-	target, err := resolveMethod(ctx, conn, gr, id, rd)
+	target, err := resolveMethod(md.attach(ctx), conn, gr, id, rd)
 	if err != nil {
 		return invocation{}, err
 	}
 
 	body, err := resolveMessage(gr, rd)
-	if err != nil {
-		return invocation{}, err
-	}
-
-	md, err := collectMetadata(gr, req)
 	if err != nil {
 		return invocation{}, err
 	}

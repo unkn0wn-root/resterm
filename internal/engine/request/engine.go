@@ -1006,7 +1006,8 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	x.grpcOpts.SSH = x.sshPlan
 	x.grpcOpts.K8s = x.k8sPlan
 
-	// The client applies the unary timeout after it knows whether the method streams.
+	// The client picks the unary or stream timeout after it knows whether the
+	// method streams.
 	var sess *stream.Session
 	resp, err := x.eng.gc.Execute(
 		x.sendCtx,
