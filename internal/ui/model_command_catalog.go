@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"unicode"
@@ -19,12 +20,23 @@ type exCommandDef struct {
 	noBang  bool
 }
 
+// anyArgs is the maxArgs of a subcommand that parses its own flags.
+const anyArgs = -1
+
+// args spells every flag out for the usage line. hint is the shorter form the
+// picker shows. Only commands whose full grammar would crowd the summary out of
+// the row need both.
 type mockCommandDef struct {
 	name    string
-	usage   string
+	args    string
+	hint    string
 	summary string
 	maxArgs int
 }
+
+func (d mockCommandDef) acceptsArgs() bool { return d.maxArgs != 0 }
+
+func (d mockCommandDef) tooManyArgs(n int) bool { return d.maxArgs != anyArgs && n > d.maxArgs }
 
 type exCatalog struct {
 	defs []exCommandDef
@@ -71,29 +83,41 @@ var exCommands = exCatalog{
 	},
 	mock: []mockCommandDef{
 		{name: "status", summary: "Show server address and counters"},
-		{name: "start", usage: "start [host:port]", summary: "Start the mock server", maxArgs: 1},
+		{
+			name: "start", args: "[host:port] [--source files] [--recursive] [--all]",
+			hint: "[host:port] [flags]", summary: "Start the mock server", maxArgs: anyArgs,
+		},
 		{name: "stop", summary: "Stop the mock server"},
-		{name: "restart", usage: "restart [host:port]", summary: "Restart, optionally on another address", maxArgs: 1},
+		{
+			name: "restart", args: "[host:port] [--source files] [--recursive] [--all]",
+			hint: "[host:port] [flags]", summary: "Restart with another address or scope", maxArgs: anyArgs,
+		},
 		{name: "logs", summary: "Open the request log"},
 		{name: "clear", summary: "Clear request logs and verification journal"},
-		{name: "reset", usage: "reset [sequence]", summary: "Reset all or one response sequence", maxArgs: 1},
+		{name: "reset", args: "[sequence]", summary: "Reset all or one response sequence", maxArgs: 1},
 		{name: "verify", summary: "Check active @expect declarations"},
 		{name: "capture", summary: "Capture the focused response as a mock"},
 	},
 }
 
-func (d exCommandDef) display() string {
+func (d exCommandDef) label() string {
 	if d.usage != "" {
 		return d.usage
 	}
 	return d.name
 }
 
-func (d mockCommandDef) display() string {
-	if d.usage != "" {
-		return d.usage
+// label goes in the picker, where it shares the row with the summary. usage is
+// the full grammar, for the usage line and the argument hint.
+func (d mockCommandDef) label() string { return joinArgs(d.name, cmp.Or(d.hint, d.args)) }
+
+func (d mockCommandDef) usage() string { return joinArgs(d.name, d.args) }
+
+func joinArgs(name, args string) string {
+	if args == "" {
+		return name
 	}
-	return d.name
+	return name + " " + args
 }
 
 func (c exCatalog) Parse(input string) exCommand {
@@ -127,16 +151,15 @@ func (c exCatalog) Lookup(name string) (exCommandDef, bool) {
 
 func (c exCatalog) Suggestions(input string) []exSuggestion {
 	body := strings.TrimPrefix(strings.TrimLeftFunc(input, unicode.IsSpace), ":")
-	idx := strings.IndexFunc(body, unicode.IsSpace)
-	if idx < 0 {
+	head, rest, typed := cutSpace(body)
+	if !typed {
 		return c.commandSuggestions(body)
 	}
 
-	def, ok := c.Lookup(strings.ToLower(strings.TrimSuffix(body[:idx], "!")))
+	def, ok := c.Lookup(strings.ToLower(strings.TrimSuffix(head, "!")))
 	if !ok {
 		return nil
 	}
-	rest := body[idx+1:]
 	switch def.kind {
 	case exCommandHelp, exCommandDocs:
 		return topicSuggestions(def.name, rest)
@@ -176,7 +199,7 @@ func (c exCatalog) commandSuggestions(filter string) []exSuggestion {
 		if def.hasArgs {
 			insert += " "
 		}
-		out = append(out, exSuggestion{label: def.display(), summary: def.summary, insert: insert})
+		out = append(out, exSuggestion{label: def.label(), summary: def.summary, insert: insert})
 	}
 	return out
 }
@@ -194,16 +217,19 @@ func topicSuggestions(command, filter string) []exSuggestion {
 	return out
 }
 
+// mockSuggestions lists the subcommands until one is named. After that the list
+// has nothing left to offer, so it gives way to the grammar of the named
+// subcommand. That hint inserts the line unchanged, so completing it leaves
+// what was typed alone.
 func (c exCatalog) mockSuggestions(rest string) []exSuggestion {
-	name := strings.ToLower(strings.TrimSpace(rest))
-	if strings.ContainsFunc(name, unicode.IsSpace) {
-		return nil
-	}
-	// a complete name followed by a space means the user moved on to its argument
-	if len(rest) > len(name) {
-		if _, ok := c.Mock(name); ok {
+	head, _, typing := cutSpace(rest)
+	name := strings.ToLower(head)
+	if typing {
+		def, ok := c.Mock(name)
+		if !ok || !def.acceptsArgs() {
 			return nil
 		}
+		return []exSuggestion{{label: def.usage(), insert: "mock " + rest}}
 	}
 
 	out := make([]exSuggestion, 0, len(c.mock))
@@ -212,12 +238,22 @@ func (c exCatalog) mockSuggestions(rest string) []exSuggestion {
 			continue
 		}
 		insert := "mock " + def.name
-		if def.maxArgs > 0 {
+		if def.acceptsArgs() {
 			insert += " "
 		}
-		out = append(out, exSuggestion{label: def.display(), summary: def.summary, insert: insert})
+		out = append(out, exSuggestion{label: def.label(), summary: def.summary, insert: insert})
 	}
 	return out
+}
+
+// cutSpace splits the first word off s. Anything after that word counts,
+// including a lone trailing space.
+func cutSpace(s string) (head, rest string, found bool) {
+	idx := strings.IndexFunc(s, unicode.IsSpace)
+	if idx < 0 {
+		return s, "", false
+	}
+	return s[:idx], s[idx+1:], true
 }
 
 func (d exCommandDef) matches(filter string) bool {

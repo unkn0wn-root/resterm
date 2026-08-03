@@ -199,8 +199,9 @@ func (m *Model) commitMove(mv wsMove) (statusMsg, tea.Cmd) {
 		// against the new editor.
 		addr := m.mockAddress()
 		m.detachMockServer(server)
-		stop = closeMockServerCmd(server, addr, false)
+		stop = closeMockServerCmd(server, mockStartSpec{addr: addr}, false)
 	}
+	m.forgetMockScope()
 
 	if mv.reset {
 		if rt := m.runtimeSvc(); rt != nil {

@@ -18,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // Keep capture bounded because rendering and validating an inline response
@@ -107,10 +108,27 @@ func (m *Model) capturedMock() (*restfile.Mock, error) {
 	}
 
 	overlay.Mocks = append(overlay.Mocks, spec)
-	if _, err := mock.Load(m.mockRoot(), m.ws.recursive, overlay); err != nil {
+	if _, err := mock.Load(m.captureSources(), overlay); err != nil {
 		return nil, fmt.Errorf("response cannot be captured as a mock: %s", oneLine(err.Error()))
 	}
 	return spec, nil
+}
+
+// captureSources validates a capture against what the server serves plus the
+// edited file. A scoped server need not list that file, and an unlisted overlay
+// never joins a scoped set, so the new mock would be checked against everything
+// except itself.
+func (m *Model) captureSources() mock.Sources {
+	src := m.mockSources()
+	if len(src.Files) == 0 || m.currentFile == "" {
+		return src
+	}
+	listed := func(f string) bool { return util.SamePath(f, m.currentFile) }
+	if slices.ContainsFunc(src.Files, listed) {
+		return src
+	}
+	src.Files = append(slices.Clone(src.Files), m.currentFile)
+	return src
 }
 
 func (m *Model) captureSource() (*httpclient.Response, string, error) {
@@ -130,7 +148,7 @@ func (m *Model) captureSource() (*httpclient.Response, string, error) {
 
 func (m *Model) captureRoute(method, path string) (*restfile.Document, []*restfile.Mock, error) {
 	overlay := parser.Parse(m.currentFile, []byte(m.editor.Value()))
-	docs, err := mock.LoadDocuments(m.mockRoot(), m.ws.recursive, overlay)
+	docs, err := mock.LoadDocuments(m.captureSources(), overlay)
 	if err != nil {
 		return nil, nil, fmt.Errorf("response cannot be captured as a mock: %s", oneLine(err.Error()))
 	}

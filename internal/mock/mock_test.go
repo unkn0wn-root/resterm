@@ -188,7 +188,7 @@ HTTP/1.1 200 OK
 
 < ./body.txt`)
 
-	reloader := NewReloader(root, false)
+	reloader := NewReloader(Sources{Path: root})
 	handler, err := reloader.Reload("", nil)
 	if err != nil || handler == nil {
 		t.Fatalf("initial reload = %v, %v", handler, err)
@@ -205,6 +205,160 @@ HTTP/1.1 200 OK
 	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/value", nil), http.StatusOK, "two")
 }
 
+func TestLoadFileListSelectsOnlyListedSources(t *testing.T) {
+	root := t.TempDir()
+	users := filepath.Join(root, "users.http")
+	payments := filepath.Join(root, "payments.http")
+	writeFile(t, users, "# @mock method=GET path=/users\nHTTP/1.1 200 OK\n\nusers")
+	writeFile(t, payments, "# @mock method=GET path=/payments\nHTTP/1.1 200 OK\n\npayments")
+	writeFile(t, filepath.Join(root, "errors.rest"), "# @mock method=GET path=/errors\nHTTP/1.1 200 OK\n\nboom")
+
+	handler, err := Load(Sources{Path: root, Files: []string{users, payments}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if handler.Routes() != 2 {
+		t.Fatalf("routes = %d, want only the two listed files", handler.Routes())
+	}
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/users", nil), http.StatusOK, "users")
+	assertResponse(
+		t,
+		handler,
+		httptest.NewRequest(http.MethodGet, "/errors", nil),
+		http.StatusNotFound,
+		"not found",
+	)
+
+	overlay := parser.Parse(users, []byte("# @mock method=GET path=/users\nHTTP/1.1 200 OK\n\nedited"))
+	handler, err = Load(Sources{Path: root, Files: []string{users}}, overlay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/users", nil), http.StatusOK, "edited")
+
+	_, err = Load(Sources{Path: root, Files: []string{filepath.Join(root, "notes.txt")}}, nil)
+	if err == nil || !strings.Contains(err.Error(), ".http or .rest") {
+		t.Fatalf("Load() error = %v, want request file rejection", err)
+	}
+}
+
+func TestNewSourcesResolvesEntries(t *testing.T) {
+	root := t.TempDir()
+	users := filepath.Join(root, "users.http")
+	payments := filepath.Join(root, "payments.http")
+	writeFile(t, users, "# @mock method=GET path=/users\nHTTP/1.1 200 OK\n\nusers")
+
+	src, err := NewSources(root, false, []string{"users.http, payments.http", "./users.http", payments})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if src.Path != root || len(src.Files) != 2 || src.Files[0] != users || src.Files[1] != payments {
+		t.Fatalf("NewSources() = %+v, want deduped %s and %s", src, users, payments)
+	}
+
+	src, err = NewSources(root, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if src.Path != root || !src.Recursive || src.Files != nil {
+		t.Fatalf("NewSources() without entries = %+v, want recursive workspace scope", src)
+	}
+}
+
+func TestNewSourcesRejectsBadEntries(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "workspace")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	users := filepath.Join(root, "users.http")
+	writeFile(t, users, "# @mock method=GET path=/users\nHTTP/1.1 200 OK\n\nusers")
+	outside := filepath.Join(parent, "outside.http")
+	writeFile(t, outside, "# @mock method=GET path=/outside\nHTTP/1.1 200 OK\n\nnope")
+
+	tests := []struct {
+		name      string
+		root      string
+		recursive bool
+		entries   []string
+		want      string
+	}{
+		{name: "empty list", root: root, entries: []string{","}, want: "no mock source files"},
+		{name: "wrong extension", root: root, entries: []string{"notes.txt"}, want: ".http or .rest"},
+		{name: "file root", root: users, entries: []string{"users.http"}, want: "directory root"},
+		{
+			name:    "missing root",
+			root:    filepath.Join(root, "gone"),
+			entries: []string{"a.http"},
+			want:    "stat mock source root",
+		},
+		{
+			name:      "recursive with entries",
+			root:      root,
+			recursive: true,
+			entries:   []string{"users.http"},
+			want:      "--recursive cannot be combined with --source",
+		},
+		{
+			name:    "relative escape",
+			root:    root,
+			entries: []string{"../outside.http"},
+			want:    "outside the mock source root",
+		},
+		{
+			name:    "absolute escape",
+			root:    root,
+			entries: []string{outside},
+			want:    "outside the mock source root",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := NewSources(test.root, test.recursive, test.entries)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf(
+					"NewSources(%s, %v, %q) error = %v, want %q",
+					test.root,
+					test.recursive,
+					test.entries,
+					err,
+					test.want,
+				)
+			}
+		})
+	}
+}
+
+// The reload fingerprint reads the same resolved set as the loader, so an
+// unlisted file cannot trigger a reload.
+func TestReloaderWatchesOnlyListedFiles(t *testing.T) {
+	root := t.TempDir()
+	users := filepath.Join(root, "users.http")
+	payments := filepath.Join(root, "payments.http")
+	writeFile(t, users, "# @mock method=GET path=/users\nHTTP/1.1 200 OK\n\nold")
+	writeFile(t, payments, "# @mock method=GET path=/payments\nHTTP/1.1 200 OK\n\npayments")
+
+	reloader := NewReloader(Sources{Path: root, Files: []string{users}})
+	handler, err := reloader.Reload("", nil)
+	if err != nil || handler == nil {
+		t.Fatalf("initial reload = %v, %v", handler, err)
+	}
+	if handler.Routes() != 1 {
+		t.Fatalf("routes = %d, want only the listed file", handler.Routes())
+	}
+
+	writeFile(t, payments, "# @mock method=GET path=/payments\nHTTP/1.1 200 OK\n\nchanged body")
+	if handler, err = reloader.Reload("", nil); err != nil || handler != nil {
+		t.Fatalf("unlisted change reload = %v, %v", handler, err)
+	}
+
+	writeFile(t, users, "# @mock method=GET path=/users\nHTTP/1.1 200 OK\n\nnew")
+	if handler, err = reloader.Reload("", nil); err != nil || handler == nil {
+		t.Fatalf("listed change reload = %v, %v", handler, err)
+	}
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/users", nil), http.StatusOK, "new")
+}
+
 func TestLoadConfinesFixturesToSourceRoot(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "workspace")
@@ -217,7 +371,7 @@ HTTP/1.1 200 OK
 
 < ../secret.txt`)
 
-	_, err := Load(root, false, nil)
+	_, err := Load(Sources{Path: root}, nil)
 	if err == nil || !strings.Contains(err.Error(), "read mock response body") {
 		t.Fatalf("Load() error = %v, want confined fixture rejection", err)
 	}

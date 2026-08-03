@@ -198,9 +198,11 @@ func (m *Model) clearSearchHighlightsFromEx() tea.Cmd {
 	return batchCommands(cmds...)
 }
 
+// The popup takes only the width its rows need. The cap stops a verbose row
+// from spanning the whole screen.
 const (
-	commandSuggestionMaxRows  = 8
-	commandSuggestionMaxWidth = 64
+	commandSuggestionMaxRows  = 10
+	commandSuggestionMaxWidth = 96
 )
 
 func (m Model) renderCommandSuggestionPopup(content string, y int) string {

@@ -76,7 +76,9 @@ func TestCompletionPopupLayoutFlipsAboveWhenBelowIsTight(t *testing.T) {
 	}
 }
 
-func TestBuildCompletionPopupTruncatesSummaryWhenWidthIsTight(t *testing.T) {
+// Two or three characters of summary say less than the room they take, so a
+// narrow row keeps the label whole instead.
+func TestBuildCompletionPopupDropsSummaryWhenWidthIsTight(t *testing.T) {
 	m := New(Config{})
 	items := []intellisense.Item{
 		{Label: "@variables", Summary: "project variables"},
@@ -95,16 +97,32 @@ func TestBuildCompletionPopupTruncatesSummaryWhenWidthIsTight(t *testing.T) {
 	}
 
 	plain := stripANSIEscape(strings.Join(lines, "\n"))
-	if !strings.Contains(plain, "@variables pro") {
-		t.Fatalf("expected summary text to remain visible, got %q", plain)
+	if !strings.Contains(plain, "@variables") || !strings.Contains(plain, "@timeout") {
+		t.Fatalf("expected labels to remain visible, got %q", plain)
 	}
-	if !strings.Contains(plain, "@variables") {
-		t.Fatalf("expected label to remain visible, got %q", plain)
+	if strings.Contains(plain, "pro") {
+		t.Fatalf("expected the summary stub to be dropped, got %q", plain)
 	}
 	for line := range strings.SplitSeq(plain, "\n") {
 		if w := lipgloss.Width(line); w > 18 {
 			t.Fatalf("expected popup width <= 18, got %d in %q", w, line)
 		}
+	}
+}
+
+// A cut summary is marked, so it does not read as the whole text.
+func TestBuildCompletionPopupMarksTruncatedText(t *testing.T) {
+	m := New(Config{})
+	items := []intellisense.Item{{Label: "@variables", Summary: "project variables and their scope"}}
+	labelW, summaryW := completionPopupPreference(items)
+	lines := m.buildCompletionPopup(items, 0, 36, labelW, summaryW)
+	if len(lines) == 0 {
+		t.Fatal("expected popup lines")
+	}
+
+	plain := stripANSIEscape(strings.Join(lines, "\n"))
+	if !strings.Contains(plain, "project variables") || !strings.Contains(plain, popupEllipsis) {
+		t.Fatalf("expected a marked truncation, got %q", plain)
 	}
 }
 

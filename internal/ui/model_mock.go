@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -22,6 +23,7 @@ type mockServerState struct {
 	server      *mock.Server
 	inspector   *mockInspector
 	addr        string
+	src         mock.Sources // scope of the running server
 	reloader    mockReloader
 	reloadErr   string
 	gen         uint64 // newest scheduled reload generation
@@ -65,9 +67,34 @@ type mockServerDoneMsg struct {
 }
 
 type mockServerClosedMsg struct {
-	addr    string
+	spec    mockStartSpec
 	err     error
 	restart bool
+}
+
+// mockStartSpec is a resolved start request. An empty addr falls back to the
+// remembered address and an empty src to workspace scope.
+type mockStartSpec struct {
+	addr string
+	src  mock.Sources
+}
+
+// resolveStartSpec inherits the scope in effect when the arguments name none,
+// so a bare start behaves like the toggle key. The workspace recursion default
+// applies to whole-directory scope only, because listed files already name the
+// exact set to serve.
+func (m *Model) resolveStartSpec(args mockStartArgs) (mockStartSpec, error) {
+	if !args.scoped() {
+		return mockStartSpec{addr: args.addr, src: m.mockSources()}, nil
+	}
+	src, err := mock.NewSources(m.mockRoot(), args.recursive, args.sources)
+	if err != nil {
+		return mockStartSpec{}, err
+	}
+	if len(src.Files) == 0 {
+		src.Recursive = src.Recursive || m.ws.recursive
+	}
+	return mockStartSpec{addr: args.addr, src: src}, nil
 }
 
 func (m *Model) executeMockCommand(args []string) tea.Cmd {
@@ -84,31 +111,18 @@ func (m *Model) executeMockCommand(args []string) tea.Cmd {
 			"Unknown :mock command (use "+strings.Join(exCommands.mockNames(), ", ")+")",
 		)
 	}
-	if len(args) > def.maxArgs {
+	if def.tooManyArgs(len(args)) {
 		return m.mockCommandUsage(def)
 	}
 	switch command {
 	case "status":
 		return statusCmd(statusInfo, m.mockStatus())
 	case "start":
-		addr := ""
-		if len(args) == 1 {
-			addr = args[0]
-		}
-		return m.startMockServer(addr)
+		return m.mockStartFromArgs(def, args)
 	case "stop":
 		return m.stopMockServer()
 	case "restart":
-		addr := m.mockAddress()
-		if len(args) == 1 {
-			addr = args[0]
-		}
-		server := m.mock.server
-		if server == nil {
-			return m.startMockServer(addr)
-		}
-		m.detachMockServer(server)
-		return closeMockServerCmd(server, addr, true)
+		return m.mockRestartFromArgs(def, args)
 	case "logs":
 		return m.openMockLogs()
 	case "clear":
@@ -129,32 +143,78 @@ func (m *Model) executeMockCommand(args []string) tea.Cmd {
 }
 
 func (m *Model) mockCommandUsage(def mockCommandDef) tea.Cmd {
-	return statusCmd(statusWarn, "Usage: :mock "+def.display())
+	return statusCmd(statusWarn, "Usage: :mock "+def.usage())
+}
+
+func (m *Model) mockArgsError(def mockCommandDef, err error) tea.Cmd {
+	if errors.Is(err, errMockArgsUsage) {
+		return m.mockCommandUsage(def)
+	}
+	return statusCmd(statusWarn, ":mock "+def.name+": "+oneLine(err.Error()))
 }
 
 func (m *Model) toggleMockServer() tea.Cmd {
 	if m.mock.server != nil {
 		return m.stopMockServer()
 	}
-	return m.startMockServer("")
+	return m.startMockServer(mockStartSpec{})
 }
 
-func (m *Model) startMockServer(addr string) tea.Cmd {
-	addr = strings.TrimSpace(addr)
+func (m *Model) mockStartFromArgs(def mockCommandDef, args []string) tea.Cmd {
+	parsed, err := parseMockStartArgs(args)
+	if err != nil {
+		return m.mockArgsError(def, err)
+	}
 	if m.mock.server != nil {
-		if addr != "" && addr != m.mock.addr {
+		if (parsed.addr != "" && parsed.addr != m.mock.addr) || parsed.scoped() {
 			return statusCmd(
 				statusWarn,
-				"Mock server is already running on "+m.mock.addr+"; use :mock restart "+addr,
+				"Mock server is already running on "+m.mock.addr+"; use :mock restart "+strings.Join(args, " "),
 			)
 		}
 		return statusCmd(statusInfo, m.mockStatus())
 	}
+	spec, err := m.resolveStartSpec(parsed)
+	if err != nil {
+		return m.mockArgsError(def, err)
+	}
+	return m.startMockServer(spec)
+}
+
+func (m *Model) mockRestartFromArgs(def mockCommandDef, args []string) tea.Cmd {
+	parsed, err := parseMockStartArgs(args)
+	if err != nil {
+		return m.mockArgsError(def, err)
+	}
+	spec, err := m.resolveStartSpec(parsed)
+	if err != nil {
+		return m.mockArgsError(def, err)
+	}
+	if spec.addr == "" {
+		spec.addr = m.mockAddress()
+	}
+	server := m.mock.server
+	if server == nil {
+		return m.startMockServer(spec)
+	}
+	m.detachMockServer(server)
+	return closeMockServerCmd(server, spec, true)
+}
+
+func (m *Model) startMockServer(spec mockStartSpec) tea.Cmd {
+	if m.mock.server != nil {
+		return statusCmd(statusInfo, m.mockStatus())
+	}
+	addr := strings.TrimSpace(spec.addr)
 	if addr == "" {
 		addr = m.mockAddress()
 	}
+	src := spec.src
+	if src.Path == "" {
+		src = m.mockSources()
+	}
 
-	reloader := mock.NewReloader(m.mockRoot(), m.ws.recursive)
+	reloader := mock.NewReloader(src)
 	handler, err := reloader.Reload(m.currentFile, []byte(m.editor.Value()))
 	if err != nil {
 		return mockStartError(err)
@@ -175,6 +235,7 @@ func (m *Model) startMockServer(addr string) tea.Cmd {
 	m.mock.server = server
 	m.mockInspector().srv.Store(server)
 	m.mock.addr = server.Addr()
+	m.mock.src = src
 	m.mock.reloader = reloader
 	m.mock.resetReload()
 	m.syncMockLogs()
@@ -185,6 +246,7 @@ func (m *Model) startMockServer(addr string) tea.Cmd {
 		handler.Routes(),
 		handler.Scenarios(),
 	)
+	text += mockSourceSuffix(src)
 	level := statusSuccess
 	if warning != "" {
 		level = statusWarn
@@ -232,14 +294,14 @@ func (m *Model) stopMockServer() tea.Cmd {
 	}
 	addr := m.mockAddress()
 	m.detachMockServer(server)
-	return closeMockServerCmd(server, addr, false)
+	return closeMockServerCmd(server, mockStartSpec{addr: addr}, false)
 }
 
-func closeMockServerCmd(server *mock.Server, addr string, restart bool) tea.Cmd {
+func closeMockServerCmd(server *mock.Server, spec mockStartSpec, restart bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), mockCloseTimeout)
 		defer cancel()
-		return mockServerClosedMsg{addr: addr, err: server.Close(ctx), restart: restart}
+		return mockServerClosedMsg{spec: spec, err: server.Close(ctx), restart: restart}
 	}
 }
 
@@ -247,14 +309,14 @@ func (m *Model) handleMockServerClosed(msg mockServerClosedMsg) tea.Cmd {
 	if msg.err != nil {
 		cmd := statusCmd(statusWarn, "Mock server stop failed: "+oneLine(msg.err.Error()))
 		if msg.restart {
-			return batchCommands(cmd, m.startMockServer(msg.addr))
+			return batchCommands(cmd, m.startMockServer(msg.spec))
 		}
 		return cmd
 	}
 	if msg.restart {
-		return m.startMockServer(msg.addr)
+		return m.startMockServer(msg.spec)
 	}
-	return statusCmd(statusInfo, "Mock server stopped (last address "+msg.addr+")")
+	return statusCmd(statusInfo, "Mock server stopped (last address "+msg.spec.addr+")")
 }
 
 func (m *Model) detachMockServer(server *mock.Server) {
@@ -297,9 +359,26 @@ func (m *Model) mockRoot() string {
 	return "."
 }
 
+// forgetMockScope drops a remembered scope. Its root and paths only mean
+// something under the workspace that produced them.
+func (m *Model) forgetMockScope() {
+	m.mock.src = mock.Sources{}
+}
+
+// mockSources reports the scope a mock server would serve now. A scope outlives
+// the server that introduced it, the way the address does, so a stop and start
+// serves the same files as before. Naming a scope again or leaving the
+// workspace replaces it. Before any of that the workspace is the scope.
+func (m *Model) mockSources() mock.Sources {
+	if m.mock.src.Path != "" {
+		return m.mock.src
+	}
+	return mock.Sources{Path: m.mockRoot(), Recursive: m.ws.recursive}
+}
+
 func (m *Model) mockStatus() string {
 	if m.mock.server == nil {
-		return "Mock server stopped; next address " + m.mockAddress()
+		return "Mock server stopped; next address " + m.mockAddress() + mockSourceSuffix(m.mock.src)
 	}
 	stats := m.mock.server.Stats()
 	text := fmt.Sprintf(
@@ -309,8 +388,25 @@ func (m *Model) mockStatus() string {
 		stats.Scenarios,
 		stats.Calls,
 	)
+	text += mockSourceSuffix(m.mock.src)
 	if m.mock.reloadErr != "" {
 		text += "; reload error: " + m.mock.reloadErr
 	}
 	return text
+}
+
+// mockSourceSuffix names a listed file scope for status text. Whole workspace
+// scope adds nothing.
+func mockSourceSuffix(src mock.Sources) string {
+	if len(src.Files) == 0 {
+		return ""
+	}
+	names := make([]string, len(src.Files))
+	for i, f := range src.Files {
+		if rel, err := filepath.Rel(src.Path, f); err == nil && filepath.IsLocal(rel) {
+			f = rel
+		}
+		names[i] = f
+	}
+	return "; sources: " + strings.Join(names, ", ")
 }

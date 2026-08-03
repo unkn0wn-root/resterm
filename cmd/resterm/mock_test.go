@@ -62,6 +62,40 @@ ok`)
 	}
 }
 
+func TestServeMocksWithSourceSubset(t *testing.T) {
+	dir := t.TempDir()
+	writeMockFile(t, filepath.Join(dir, "users.http"), `# @mock method=GET path=/users
+HTTP/1.1 200 OK
+
+users`)
+	writeMockFile(t, filepath.Join(dir, "payments.http"), `# @mock method=GET path=/payments
+HTTP/1.1 200 OK
+
+payments`)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cfg := defaultMockConfig()
+	cfg.path = dir
+	cfg.sources = []string{"users.http"}
+	cfg.addr = "127.0.0.1:0"
+	cfg.cors = "off"
+	cfg.watch = false
+	var out, errOut bytes.Buffer
+	if err := serveMocks(ctx, cfg, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "(1 routes, 1 scenarios)") {
+		t.Fatalf("stdout:\n%s", out.String())
+	}
+
+	cfg.recursive = true
+	err := serveMocks(ctx, cfg, &out, &errOut)
+	if err == nil || !strings.Contains(err.Error(), "--recursive cannot be combined") {
+		t.Fatalf("err = %v, want the recursive conflict error", err)
+	}
+}
+
 func TestServeMocksRequiresTLSPair(t *testing.T) {
 	var out, errOut bytes.Buffer
 	err := serveMocks(context.Background(), mockConfig{
@@ -160,7 +194,7 @@ pending
 HTTP/1.1 200 OK
 
 done`)
-	handler, err := mock.Load(file, false, nil)
+	handler, err := mock.Load(mock.Sources{Path: file}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

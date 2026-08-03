@@ -391,7 +391,7 @@ HTTP/1.1 200 OK
 Content-Type: application/json
 
 < ./body.json`)
-	handler, err := Load(root, false, nil)
+	handler, err := Load(Sources{Path: root}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

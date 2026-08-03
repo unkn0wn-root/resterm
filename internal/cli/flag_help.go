@@ -57,7 +57,8 @@ func collectRows(fs *flag.FlagSet) []flagRow {
 	for _, name := range names {
 		f := canonical[name]
 		arg, help := flag.UnquoteUsage(f)
-		if _, ok := f.Value.(stringValue); ok {
+		switch f.Value.(type) {
+		case stringValue, stringListValue:
 			arg = "string"
 		}
 		if !isZeroDefault(f) {

@@ -119,8 +119,16 @@ func runMockClear(args []string, out, errOut io.Writer) error {
 
 func runMockVerify(args []string, out, errOut io.Writer) error {
 	var recursive bool
+	var sources []string
 	client, pos, done, err := controlSetup("mock verify", args, errOut, func(fs *flag.FlagSet) {
 		cli.BoolVarAliases(fs, &recursive, false, "Scan workspace recursively", "recursive", "r")
+		cli.StringListVarAliases(
+			fs,
+			&sources,
+			"Verify only these request files (repeatable, comma lists allowed)",
+			"source",
+			"s",
+		)
 	})
 	if done || err != nil {
 		return err
@@ -132,7 +140,11 @@ func runMockVerify(args []string, out, errOut io.Writer) error {
 	if len(pos) == 1 {
 		path = pos[0]
 	}
-	handler, err := mock.Load(path, recursive, nil)
+	src, err := mock.NewSources(path, recursive, sources)
+	if err != nil {
+		return mockUsageError(fmt.Errorf("mock verify: %w", err))
+	}
+	handler, err := mock.Load(src, nil)
 	if err != nil {
 		return mockUsageError(fmt.Errorf("mock verify: %w", err))
 	}

@@ -778,12 +778,16 @@ X-Provider: sandbox
 {"id":"pay_123","status":"pending"}
 ```
 
-Run one file or a workspace with `resterm mock`:
+Run one file, a workspace, or a named subset with `resterm mock`:
 
 ```bash
 resterm mock payments.http
 resterm mock --recursive --addr 127.0.0.1:9090 .
+resterm mock --source users.http --source payments.http
+resterm mock --source users.http,payments.http ./workspace
 ```
+
+`--source` (short `-s`) serves only the listed request files. The flag repeats and accepts comma-separated lists. Entries must be `.http` or `.rest` files, resolve against the positional directory (default `.`) and must stay inside it, because file-based response bodies are confined to that root. It cannot be combined with `--recursive`.
 
 ### Route and response syntax
 
@@ -953,6 +957,7 @@ For a standalone server, verify the source file or workspace from another termin
 ```bash
 resterm mock verify payments.http
 resterm mock verify --recursive .
+resterm mock verify --source users.http,payments.http
 ```
 
 The command exits `0` when every expectation passes, `1` for a mismatch, incomplete journal, or connection failure, and `2` for invalid source/usage or no expectations. `resterm mock clear` clears both the verification journal and human-readable logs.
@@ -977,7 +982,10 @@ Access logs and the verification journal are separate bounded structures. The lo
 Inside the TUI:
 
 - `g Shift+M` toggles the mock server at the remembered session address (initially `127.0.0.1:8080`).
-- `:mock`, `:mock status`, `:mock start [host:port]`, `:mock stop`, and `:mock restart [host:port]` manage it.
+- `:mock`, `:mock status`, `:mock start [host:port]`, `:mock stop`, and `:mock restart [host:port]` manage it. Both `start` and `restart` also accept the address as `--addr host:port`, and take the same flag names, short aliases, and `--flag=value` form as the `resterm mock` CLI.
+- `:mock start` serves every request file in the workspace. `--source` narrows that to named files, either by repeating the flag or by passing a comma-separated list with no spaces, since arguments are split on whitespace. Paths resolve against the workspace root, must stay inside it, and must be `.http` or `.rest` files. `--recursive` includes subdirectories and `--all` names the full-workspace default. Neither combines with `--source`.
+- With `--source`, only the listed files reload. File-based response bodies still resolve relative to each file and stay confined to the workspace root.
+- The scope is remembered like the address, so `:mock restart`, a later `:mock start`, and `g Shift+M` keep serving the same files with the same recursion. Naming a scope again is what changes it: `--source` narrows, `--all` returns to the whole workspace, and `--recursive` adds subdirectories. `:mock status` names the remembered files while the server is stopped, and changing the workspace forgets the scope.
 - `:mock logs` opens the request log, where `c` clears the log. `:mock clear` clears both the log and the verification journal.
 - `:mock reset [sequence]` resets sequence cursors, and `:mock verify` checks active `@expect` declarations.
 - The status bar shows the active address, route count, call count, and reload-error marker.
