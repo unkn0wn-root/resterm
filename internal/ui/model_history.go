@@ -23,7 +23,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
-	"google.golang.org/grpc/codes"
 )
 
 const responseLoadingTickInterval = 200 * time.Millisecond
@@ -817,7 +816,7 @@ func (m *Model) consumeGRPCResponse(
 		fullMethod = req.GRPC.FullMethod
 	}
 	views := renderer.buildGRPCResponseViews(resp, fullMethod)
-	statusLine := grpcStatusLine(resp, fullMethod)
+	statusLine := renderer.grpcStatusLine(resp, fullMethod)
 
 	snapshot := &responseSnapshot{
 		pretty:     views.pretty,
@@ -854,7 +853,7 @@ func (m *Model) consumeGRPCResponse(
 	}
 
 	status := statusMsg{text: statusLine, level: statusSuccess}
-	if resp.StatusCode != codes.OK {
+	if !resp.OK() {
 		status.level = statusWarn
 	}
 	status.testSummary, status.testLevel = responseTestStatusSummary(tests, scriptErr)

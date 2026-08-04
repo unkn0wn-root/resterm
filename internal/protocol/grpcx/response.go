@@ -1,6 +1,7 @@
 package grpcx
 
 import (
+	"encoding/base64"
 	"net/http"
 	"slices"
 	"strings"
@@ -18,6 +19,7 @@ const (
 	wireContentType    = "application/grpc+proto"
 
 	trailerHeaderPrefix = "Grpc-Trailer-"
+	binaryMetaSuffix    = "-bin"
 )
 
 type Response struct {
@@ -85,7 +87,7 @@ func statusDetails(st *status.Status, cd codec) []string {
 	return out
 }
 
-func cloneMetaMap[M ~map[string][]string](src M) map[string][]string {
+func cloneMetaMap(src map[string][]string) map[string][]string {
 	if len(src) == 0 {
 		return nil
 	}
@@ -95,6 +97,32 @@ func cloneMetaMap[M ~map[string][]string](src M) map[string][]string {
 		out[key] = slices.Clone(vals)
 	}
 	return out
+}
+
+// EncodeMetadataHeader converts decoded gRPC metadata to its printable HTTP/2
+// representation. grpc-go exposes -bin values as raw bytes in strings; the
+// transport represents those bytes as unpadded base64. Encode on the way out
+// only: feeding the result back through doubles the encoding.
+func EncodeMetadataHeader(src map[string][]string) http.Header {
+	if len(src) == 0 {
+		return nil
+	}
+
+	out := make(http.Header, len(src))
+	encodeMetaInto(out, "", src)
+	return out
+}
+
+func encodeMetaInto(dst http.Header, prefix string, src map[string][]string) {
+	for key, vals := range src {
+		encoded := slices.Clone(vals)
+		if strings.HasSuffix(strings.ToLower(key), binaryMetaSuffix) {
+			for i := range encoded {
+				encoded[i] = base64.RawStdEncoding.EncodeToString([]byte(encoded[i]))
+			}
+		}
+		dst[prefix+key] = encoded
+	}
 }
 
 func (r *Response) Clone() *Response {
@@ -112,8 +140,9 @@ func (r *Response) Clone() *Response {
 }
 
 // HeaderMap combines headers and trailers without changing their key casing.
-// Trailer keys are prefixed with "Grpc-Trailer-". Content-Type is added when
-// gRPC omits it from the returned metadata.
+// Binary metadata is base64-encoded as it is on the wire. Trailer keys are
+// prefixed with "Grpc-Trailer-". Content-Type is added when gRPC omits it from
+// the returned metadata.
 func (r *Response) HeaderMap() http.Header {
 	if r == nil {
 		return nil
@@ -125,12 +154,8 @@ func (r *Response) HeaderMap() http.Header {
 	}
 
 	out := make(http.Header, len(r.Headers)+len(r.Trailers)+1)
-	for key, vals := range r.Headers {
-		out[key] = slices.Clone(vals)
-	}
-	for key, vals := range r.Trailers {
-		out[trailerHeaderPrefix+key] = slices.Clone(vals)
-	}
+	encodeMetaInto(out, "", r.Headers)
+	encodeMetaInto(out, trailerHeaderPrefix, r.Trailers)
 	if ct != "" && !hasContentType(out) {
 		out.Set("Content-Type", ct)
 	}
@@ -144,6 +169,11 @@ func hasContentType(h http.Header) bool {
 		}
 	}
 	return false
+}
+
+// OK reports whether the call finished with codes.OK.
+func (r *Response) OK() bool {
+	return r != nil && r.StatusCode == codes.OK
 }
 
 // StatusText formats the gRPC status code and message for display.

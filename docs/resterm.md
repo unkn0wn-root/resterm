@@ -1506,11 +1506,13 @@ Supplying any gRPC TLS setting (roots, client cert/key, insecure) automatically 
 
 Reserved transport metadata keys (`grpc-*`, `content-type`, `user-agent`, `te`, etc.) are rejected in `@grpc-metadata` (and gRPC headers).
 
+Metadata keys ending in `-bin` carry binary values. Write the raw bytes in `@grpc-metadata`; gRPC base64-encodes them on the wire, so the request metadata pane shows the encoded form rather than the literal you typed.
+
 `@auth` works on gRPC requests. `basic`, `bearer`, `apikey` and `header` auth are sent as metadata, as are `command` and `oauth2`. `apikey` with `placement query` is rejected, because gRPC has no query string.
 
 Descriptor sets and message files resolve relative to the request file, then against the fallback roots used for HTTP body files.
 
-The request body contains protobuf JSON. Use `< payload.json` to load from disk, and add `# @body expand` if the file includes templates. Responses display message JSON, headers, and trailers; a failing call also shows any `google.rpc.*` status details the server attached. History stores method, status, and timing alongside HTTP calls.
+The request body contains protobuf JSON. Use `< payload.json` to load from disk, and add `# @body expand` if the file includes templates. Responses display message JSON, headers, and trailers, with `-bin` metadata base64-encoded as it travels on the wire; a failing call also shows any `google.rpc.*` status details the server attached. History stores method, status, and timing alongside HTTP calls.
 
 Streaming (server/client/bidi) is supported. Unary/server streaming requests use a single JSON object, while client/bidi streaming requests send a JSON array of message objects. Streaming responses return a JSON array, and the Stream tab shows a per-message transcript with a summary.
 
@@ -1583,7 +1585,7 @@ Objects:
   - `status`, `statusCode`, `url`, `duration`
   - `body()` (raw string)
   - `json()` (parsed JSON or `null`)
-  - `headers.get(name)`, `headers.has(name)`, `headers.all` (lowercase map)
+  - `headers.get(name)`, `headers.has(name)`, `headers.all` (lowercase map). For gRPC the map merges response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`, and `-bin` values arrive base64-encoded.
 - `stream`
   - `enabled()` - returns `true` when the current response is an SSE or WebSocket transcript.
   - `kind()` - returns `"sse"` or `"websocket"`.

@@ -13,7 +13,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
-	"google.golang.org/grpc/codes"
 )
 
 type compareResult struct {
@@ -265,7 +264,7 @@ func compareResultSuccess(result *compareResult) bool {
 	case result.Response != nil:
 		return result.Response.StatusCode < 400
 	case result.GRPC != nil:
-		return result.GRPC.StatusCode == codes.OK
+		return result.GRPC.OK()
 	default:
 		return false
 	}

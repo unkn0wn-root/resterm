@@ -392,6 +392,8 @@ For named environments, `env.name` is unchanged and `env.groups` is empty.
 
 `last` provides a summary of the most recent response. It exposes `status`, `statusCode`, `statusText`, `url`, `headers`, `header(name)`, `text()`, and `json(path)`. `headers` contains the first value per header, while `header(name)` is case-insensitive. `json(path)` accepts a simple dot and `[index]` path (optional leading `$`) and returns null when a value is missing.
 
+For gRPC responses, `headers` merges the response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`. Values under keys ending in `-bin` are binary and read back base64-encoded without padding, the way they travel on the wire, so a trailer sent as `x-trace-bin` reads as `last.header("grpc-trailer-x-trace-bin")`.
+
 ### response
 
 `response` provides a summary of the current response when evaluating `@assert`. It has the same shape as `last`.

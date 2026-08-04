@@ -595,12 +595,14 @@ func TestStatusBarMessageLevelsRenderStyled(t *testing.T) {
 // A multi-line message must not grow the bar past its single row; the error
 // modal still gets the untouched text.
 func TestStatusBarFoldsMultiLineMessage(t *testing.T) {
+	const fullText = "auth command failed:\n  first  line\r\n  second line"
+
 	model := New(Config{})
 	model.width = 96
 	model.statusUser = ""
 	model.statusHost = ""
 	model.statusMessage = statusMsg{
-		text:  "auth command failed:\n  first line\n  second line",
+		text:  fullText,
 		level: statusError,
 	}
 
@@ -608,14 +610,106 @@ func TestStatusBarFoldsMultiLineMessage(t *testing.T) {
 	if got := lipgloss.Height(bar); got != 1 {
 		t.Fatalf("status bar height = %d, want 1", got)
 	}
-	if plain := ansi.Strip(bar); !strings.Contains(plain, "auth command failed: first line second line") {
+	if plain := ansi.Strip(bar); !strings.Contains(
+		plain,
+		"auth command failed: first  line second line",
+	) {
 		t.Fatalf("expected folded message in bar, got %q", plain)
 	}
-	if got, _ := model.statusBarMessage(); strings.Contains(got, "\n") {
-		t.Fatalf("statusBarMessage kept a newline: %q", got)
+	if got, _ := model.statusBarMessage(); got != fullText {
+		t.Fatalf("statusBarMessage() = %q, want untouched text %q", got, fullText)
 	}
-	if model.statusMessage.text != "auth command failed:\n  first line\n  second line" {
+	if model.statusMessage.text != fullText {
 		t.Fatalf("stored status text was rewritten: %q", model.statusMessage.text)
+	}
+}
+
+func TestStatusBarFoldsLineBreaksInEverySection(t *testing.T) {
+	model := New(Config{})
+	model.width = 96
+	model.statusMessage = statusMsg{text: "Ready", level: statusInfo}
+	model.statusUser = "user"
+	model.statusHost = "host\r\n  name"
+
+	bar := model.renderStatusBar()
+	if got := lipgloss.Height(bar); got != 1 {
+		t.Fatalf("status bar height = %d, want 1", got)
+	}
+	if plain := ansi.Strip(bar); !strings.Contains(plain, "host name") {
+		t.Fatalf("expected folded host section in bar, got %q", plain)
+	}
+}
+
+func TestStatusBarDropsTabsFromRenderedBar(t *testing.T) {
+	model := New(Config{})
+	model.width = 96
+	model.statusUser = ""
+	model.statusHost = ""
+	model.statusMessage = statusMsg{text: "auth command failed:\tretry", level: statusError}
+
+	plain := ansi.Strip(model.renderStatusBar())
+	if strings.Contains(plain, "\t") {
+		t.Fatalf("status bar kept a tab the width math cannot measure: %q", plain)
+	}
+	if !strings.Contains(plain, "auth command failed: retry") {
+		t.Fatalf("expected folded message in bar, got %q", plain)
+	}
+}
+
+func TestStatusBarFoldsLineBreaksInStyledRuns(t *testing.T) {
+	sections := compactStatusBarSections([]statusBarSection{{
+		text: "stale width text",
+		runs: []styledRun{
+			{text: "first\r\n", style: lipgloss.NewStyle()},
+			{text: "  second", style: lipgloss.NewStyle()},
+		},
+		valueStyle: lipgloss.NewStyle(),
+	}})
+	if len(sections) != 1 {
+		t.Fatalf("compactStatusBarSections() returned %d sections, want 1", len(sections))
+	}
+	if got := sections[0].text; got != "first second" {
+		t.Fatalf("folded section text = %q, want %q", got, "first second")
+	}
+	if got := styledRunsText(sections[0].runs); got != sections[0].text {
+		t.Fatalf("rendered run text = %q, want layout text %q", got, sections[0].text)
+	}
+}
+
+func TestStatusBarOneLineFoldsBreaksAndTabs(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{name: "LF", text: "first\n  second", want: "first second"},
+		{name: "CRLF", text: "first\r\n\tsecond", want: "first second"},
+		{name: "CR", text: "first\r  second", want: "first second"},
+		{
+			name: "blank lines",
+			text: "first\n \r\nsecond",
+			want: "first second",
+		},
+		{
+			name: "intra-line spacing kept",
+			text: "first  value\nsecond   value",
+			want: "first  value second   value",
+		},
+		{
+			// A tab measures as zero width but expands in the terminal.
+			name: "tab without a line break",
+			text: "first\tvalue",
+			want: "first value",
+		},
+		{name: "single line untouched", text: " first  value ", want: " first  value "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := statusBarOneLine(tt.text); got != tt.want {
+				t.Fatalf("statusBarOneLine(%q) = %q, want %q", tt.text, got, tt.want)
+			}
+		})
 	}
 }
 

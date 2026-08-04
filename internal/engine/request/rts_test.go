@@ -2,6 +2,7 @@ package request
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -9,7 +10,9 @@ import (
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"google.golang.org/grpc/codes"
 )
 
 type testMockInspector struct{}
@@ -134,5 +137,30 @@ GET https://example.com
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected rendered for-each error to contain %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestRTSGRPCExposesEncodedTrailers(t *testing.T) {
+	raw := string([]byte{0x00, 0x01, 0xff})
+	resp := &grpcx.Response{
+		StatusCode:    codes.InvalidArgument,
+		StatusMessage: "invalid page size",
+		Headers:       map[string][]string{"x-shared": {"header"}},
+		Trailers: map[string][]string{
+			"x-shared":  {"trailer"},
+			"trace-bin": {raw},
+		},
+	}
+
+	h := rtsGRPC(resp).H
+	if got := h["x-shared"]; len(got) != 1 || got[0] != "header" {
+		t.Fatalf("x-shared = %q, want the header value to survive the trailer", got)
+	}
+	if got := h["Grpc-Trailer-x-shared"]; len(got) != 1 || got[0] != "trailer" {
+		t.Fatalf("Grpc-Trailer-x-shared = %q, want the trailer under its prefix", got)
+	}
+	want := base64.RawStdEncoding.EncodeToString([]byte(raw))
+	if got := h["Grpc-Trailer-trace-bin"]; len(got) != 1 || got[0] != want {
+		t.Fatalf("Grpc-Trailer-trace-bin = %q, want %q", got, want)
 	}
 }
