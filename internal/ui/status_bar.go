@@ -175,19 +175,35 @@ func statusBarSegmentStyle(
 	return style
 }
 
-// The bar is one row, and its width math measures widest-line only, so a
-// multi-line message silently grows it and pushes the view past the terminal
-// height. Callers keep their full text for the error modal; only the bar folds.
+// The bar is one row, and its width math measures the widest line only, so a
+// line break silently grows it and pushes the view past the terminal height. A
+// tab measures as zero width here but expands in the terminal, so it overflows
+// the row the same way. Fold both without touching the spacing inside a line.
 func statusBarOneLine(text string) string {
-	if !strings.ContainsAny(text, "\r\n") {
+	if !strings.ContainsAny(text, "\r\n\t") {
 		return text
 	}
-	return strings.Join(strings.Fields(text), " ")
+
+	var folded strings.Builder
+	folded.Grow(len(text))
+	for _, part := range strings.FieldsFunc(text, func(r rune) bool {
+		return r == '\r' || r == '\n'
+	}) {
+		part = strings.TrimSpace(strings.ReplaceAll(part, "\t", " "))
+		if part == "" {
+			continue
+		}
+		if folded.Len() > 0 {
+			folded.WriteByte(' ')
+		}
+		folded.WriteString(part)
+	}
+	return folded.String()
 }
 
 func (m Model) statusBarMessage() (string, statusLevel) {
 	if m.statusMessage.text != "" {
-		return statusBarOneLine(m.statusMessage.text), m.statusMessage.level
+		return m.statusMessage.text, m.statusMessage.level
 	}
 	switch {
 	case m.dirty:
@@ -664,10 +680,20 @@ func compactStatusBarSections(
 ) []statusBarSection {
 	out := make([]statusBarSection, 0, len(segs))
 	for _, seg := range segs {
-		seg.text = strings.TrimSpace(seg.text)
-		if seg.text == "" {
+		if len(seg.runs) > 0 {
+			// Runs are what render; keep the layout mirror derived from them.
+			seg.text = styledRunsText(seg.runs)
+		}
+		text := strings.TrimSpace(statusBarOneLine(seg.text))
+		if text == "" {
 			continue
 		}
+		if text != seg.text && len(seg.runs) > 0 {
+			// Folding can cross styled-run boundaries. Collapse only rewritten
+			// text so rendered text and width accounting stay equal.
+			seg.runs = []styledRun{{text: text, style: seg.valueStyle}}
+		}
+		seg.text = text
 		out = append(out, seg)
 	}
 	return out

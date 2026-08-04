@@ -7,7 +7,9 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 )
 
 const (
@@ -761,31 +763,24 @@ func buildWorkflowGRPCDetail(result workflowStepResult) string {
 		return ""
 	}
 	method := strings.TrimSpace(result.Step.Using)
-	statusLine := fmt.Sprintf(
-		"gRPC %s - %s",
-		strings.TrimPrefix(method, "/"),
-		resp.StatusCode.String(),
-	)
-	if resp.StatusMessage != "" {
-		statusLine += " (" + resp.StatusMessage + ")"
-	}
+	renderer := defaultResponseRenderer()
 
 	builder := strings.Builder{}
-	builder.WriteString(statusLine)
+	builder.WriteString(renderer.renderGRPCStatusLine(resp, method))
 	builder.WriteString("\n")
 
-	if len(resp.Headers) > 0 {
-		builder.WriteString("Headers:\n")
-		for name, values := range resp.Headers {
-			fmt.Fprintf(&builder, "%s: %s\n", name, strings.Join(values, ", "))
+	writeMeta := func(title string, meta map[string][]string) {
+		hdrs := grpcx.EncodeMetadataHeader(meta)
+		if len(hdrs) == 0 {
+			return
 		}
+		builder.WriteString(title)
+		builder.WriteString(":\n")
+		builder.WriteString(bodyfmt.FormatHeaders(hdrs))
+		builder.WriteString("\n")
 	}
-	if len(resp.Trailers) > 0 {
-		builder.WriteString("Trailers:\n")
-		for name, values := range resp.Trailers {
-			fmt.Fprintf(&builder, "%s: %s\n", name, strings.Join(values, ", "))
-		}
-	}
+	writeMeta("Headers", resp.Headers)
+	writeMeta("Trailers", resp.Trailers)
 
 	contentType := "application/json"
 	bodyRaw := prettifyBody([]byte(resp.Message), contentType)

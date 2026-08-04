@@ -145,17 +145,12 @@ func rtsGRPC(resp *grpcx.Response) *rts.Resp {
 	if resp == nil {
 		return nil
 	}
-	h := make(map[string][]string, len(resp.Headers)+len(resp.Trailers))
-	for k, vs := range resp.Headers {
-		h[k] = append([]string(nil), vs...)
-	}
-	for k, vs := range resp.Trailers {
-		h[k] = append([]string(nil), vs...)
-	}
+	// Same map scripts read, so an assertion and a script name a trailer the
+	// same way: prefixed with Grpc-Trailer- and binary metadata base64-encoded.
 	return &rts.Resp{
 		Status: resp.StatusMessage,
 		Code:   int(resp.StatusCode),
-		H:      h,
+		H:      resp.HeaderMap(),
 		Body:   resp.Body,
 	}
 }

@@ -339,15 +339,15 @@ func (r responseRenderer) renderGRPCRespHdrs(
 		return noResponseMessage
 	}
 	return r.renderHdrDoc(
-		grpcStatusLine(resp, fullMethod),
+		r.renderGRPCStatusLine(resp, fullMethod),
 		[]hdrPanel{
 			{
-				fields: bodyfmt.HeaderFields(http.Header(resp.Headers)),
+				fields: bodyfmt.HeaderFields(grpcx.EncodeMetadataHeader(resp.Headers)),
 				empty:  "No response headers captured",
 			},
 			{
 				title:  "Trailers",
-				fields: bodyfmt.HeaderFields(http.Header(resp.Trailers)),
+				fields: bodyfmt.HeaderFields(grpcx.EncodeMetadataHeader(resp.Trailers)),
 				empty:  "No trailers captured",
 			},
 		},
@@ -523,7 +523,8 @@ func (r responseRenderer) buildGRPCResponseViews(
 		}
 	}
 
-	block := grpcStatusBlock(resp, fullMethod)
+	statusBlock := r.grpcStatusBlock(resp, fullMethod)
+	prettyStatusBlock := r.renderGRPCStatusBlock(resp, fullMethod)
 
 	viewBody, viewContentType := resp.ViewBody()
 	rawBody, rawContentType := resp.RawBody()
@@ -545,9 +546,9 @@ func (r responseRenderer) buildGRPCResponseViews(
 	)
 
 	return responseViews{
-		pretty:     joinSections(block, bv.pretty),
-		raw:        joinSections(block, bv.raw),
-		rawSummary: block,
+		pretty:     joinSections(prettyStatusBlock, bv.pretty),
+		raw:        joinSections(statusBlock, bv.raw),
+		rawSummary: statusBlock,
 		headers:    r.renderGRPCRespHdrs(resp, fullMethod, defaultResponseViewportWidth),
 		meta:       meta,
 		// Snapshot contentType must continue to describe the stored raw body.
@@ -561,16 +562,51 @@ func (r responseRenderer) buildGRPCResponseViews(
 	}
 }
 
-func grpcStatusLine(resp *grpcx.Response, fullMethod string) string {
-	return fmt.Sprintf(
-		"gRPC %s - %s",
-		strings.TrimPrefix(strings.TrimSpace(fullMethod), "/"),
-		resp.StatusText(),
+func (r responseRenderer) renderGRPCStatusLine(
+	resp *grpcx.Response,
+	fullMethod string,
+) string {
+	statusStyle := r.stats.Warn
+	if resp.OK() {
+		statusStyle = r.stats.Success
+	}
+	method := strings.TrimPrefix(strings.TrimSpace(fullMethod), "/")
+	return r.stats.Label.Render("gRPC") + " " +
+		r.stats.Value.Render(method) +
+		r.stats.SubLabel.Render(" - ") +
+		statusStyle.Render(resp.StatusText())
+}
+
+// The plain views share the styled line so the two never drift apart. Only the
+// details differ: the raw block keeps them on the wire, one JSON blob per line.
+func (r responseRenderer) grpcStatusLine(resp *grpcx.Response, fullMethod string) string {
+	return stripANSIEscape(r.renderGRPCStatusLine(resp, fullMethod))
+}
+
+func (r responseRenderer) grpcStatusBlock(resp *grpcx.Response, fullMethod string) string {
+	return joinSections(
+		append([]string{r.grpcStatusLine(resp, fullMethod)}, resp.StatusDetails...)...,
 	)
 }
 
-func grpcStatusBlock(resp *grpcx.Response, fullMethod string) string {
-	return joinSections(append([]string{grpcStatusLine(resp, fullMethod)}, resp.StatusDetails...)...)
+func (r responseRenderer) renderGRPCStatusBlock(
+	resp *grpcx.Response,
+	fullMethod string,
+) string {
+	sections := make([]string, 0, len(resp.StatusDetails)+1)
+	sections = append(sections, r.renderGRPCStatusLine(resp, fullMethod))
+	for _, detail := range resp.StatusDetails {
+		sections = append(sections, bodyfmt.Prettify(
+			context.Background(),
+			[]byte(detail),
+			"application/json",
+			bodyfmt.PrettyOptions{
+				Color: termcolor.TrueColor(),
+				Style: r.syntaxStyle,
+			},
+		))
+	}
+	return joinSections(sections...)
 }
 
 func buildRequestHeaderMap(resp *httpx.Response) http.Header {
@@ -621,7 +657,7 @@ func grpcRequestHeaderMap(req *restfile.Request) http.Header {
 	if len(h) == 0 {
 		return nil
 	}
-	return h
+	return grpcx.EncodeMetadataHeader(h)
 }
 
 func formatRawBody(body []byte, contentType string) string {

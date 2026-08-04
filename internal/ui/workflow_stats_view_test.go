@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strings"
 	"testing"
@@ -8,9 +9,11 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
+	"google.golang.org/grpc/codes"
 )
 
 func TestNewWorkflowStatsViewSelectsFirstFailure(t *testing.T) {
@@ -425,5 +428,33 @@ func workflowStatsTestView() *workflowStatsView {
 			},
 		},
 		selected: 0,
+	}
+}
+
+func TestBuildWorkflowGRPCDetailEncodesBinaryMetadata(t *testing.T) {
+	raw := string([]byte{0x00, 0x01, 0xff})
+	resp := &grpcx.Response{
+		StatusCode:    codes.OK,
+		StatusMessage: "OK",
+		Trailers:      map[string][]string{"trace-bin": {raw}},
+		Message:       "{}",
+	}
+
+	detail := stripANSIEscape(buildWorkflowGRPCDetail(workflowStepResult{
+		GRPC: resp,
+		Step: restfile.WorkflowStep{Using: "/pkg.Service/Call"},
+	}))
+	if strings.Contains(detail, raw) {
+		t.Fatalf("workflow detail kept raw binary metadata: %q", detail)
+	}
+	want := base64.RawStdEncoding.EncodeToString([]byte(raw))
+	if !strings.Contains(detail, "trace-bin: "+want) {
+		t.Fatalf("workflow detail = %q, want encoded trailer %q", detail, want)
+	}
+	if !strings.Contains(detail, "gRPC pkg.Service/Call - OK") {
+		t.Fatalf("workflow detail omitted status line: %q", detail)
+	}
+	if strings.Contains(detail, "OK (OK)") {
+		t.Fatalf("workflow detail repeated the status code as its message: %q", detail)
 	}
 }

@@ -1,6 +1,7 @@
 package grpcx
 
 import (
+	"encoding/base64"
 	"net/http"
 	"reflect"
 	"testing"
@@ -91,6 +92,41 @@ func TestResponseHeaderMapFoldsTrailers(t *testing.T) {
 	resp.Headers[hdrKey][0] = "mutated"
 	if got[hdrKey][0] != "a" {
 		t.Fatalf("HeaderMap shares the header slice: %v", got)
+	}
+}
+
+func TestEncodeMetadataHeaderEncodesBinaryValues(t *testing.T) {
+	const binaryKey = "Trace-Bin"
+	raw := string([]byte{0x00, 0x01, 0x7f, 0x80, 0xff})
+	src := map[string][]string{
+		binaryKey: {raw},
+		"X-Text":  {"plain"},
+	}
+
+	got := EncodeMetadataHeader(src)
+	wantBinary := base64.RawStdEncoding.EncodeToString([]byte(raw))
+	if values := got[binaryKey]; !reflect.DeepEqual(values, []string{wantBinary}) {
+		t.Fatalf("binary metadata = %q, want %q", values, wantBinary)
+	}
+	if values := got["X-Text"]; !reflect.DeepEqual(values, []string{"plain"}) {
+		t.Fatalf("text metadata = %q, want plain", values)
+	}
+	if src[binaryKey][0] != raw {
+		t.Fatalf("EncodeMetadataHeader mutated source value: %q", src[binaryKey][0])
+	}
+}
+
+func TestResponseHeaderMapEncodesBinaryTrailers(t *testing.T) {
+	raw := string([]byte{0x08, 0x03, 0x12, 0x00})
+	resp := &Response{
+		Trailers: map[string][]string{"grpc-status-details-bin": {raw}},
+	}
+
+	key := trailerHeaderPrefix + "grpc-status-details-bin"
+	want := base64.RawStdEncoding.EncodeToString([]byte(raw))
+	values := resp.HeaderMap()[key]
+	if len(values) != 1 || values[0] != want {
+		t.Fatalf("HeaderMap()[%q] = %q, want [%q]", key, values, want)
 	}
 }
 

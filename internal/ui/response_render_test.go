@@ -3,18 +3,26 @@ package ui
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -193,6 +201,112 @@ func TestBuildHTTPResponseViewsWithLightPaletteUsesReadableSummaryStyles(t *test
 	}
 }
 
+func TestBuildGRPCResponseViewsColorsPrettyStatusAndDetailsOnly(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	const (
+		method = "/pkg.Service/Fail"
+		detail = `{"@type":"type.googleapis.com/google.rpc.BadRequest","field":"page_size"}`
+	)
+	resp := &grpcx.Response{
+		ContentType:   "application/json",
+		StatusCode:    codes.InvalidArgument,
+		StatusMessage: "invalid page size",
+		StatusDetails: []string{detail},
+	}
+	renderer := defaultResponseRenderer()
+	views := renderer.buildGRPCResponseViews(resp, method)
+
+	if !strings.Contains(
+		views.pretty,
+		renderer.stats.Warn.Render(resp.StatusText()),
+	) {
+		t.Fatalf("expected colored gRPC status in pretty view, got %q", views.pretty)
+	}
+	prettyDetail := bodyfmt.Prettify(
+		context.Background(),
+		[]byte(detail),
+		"application/json",
+		bodyfmt.PrettyOptions{Color: termcolor.TrueColor(), Style: renderer.syntaxStyle},
+	)
+	if !strings.Contains(views.pretty, strings.TrimRight(prettyDetail, "\r\n")) {
+		t.Fatalf("expected syntax-colored gRPC detail in pretty view, got %q", views.pretty)
+	}
+	if strings.Contains(views.raw, "\x1b[") {
+		t.Fatalf("expected raw gRPC view without ANSI codes, got %q", views.raw)
+	}
+	if !strings.Contains(views.raw, detail) {
+		t.Fatalf("expected raw gRPC view to preserve detail JSON, got %q", views.raw)
+	}
+	if !strings.Contains(views.headers, renderer.renderGRPCStatusLine(resp, method)) {
+		t.Fatalf("expected colored gRPC status in headers view, got %q", views.headers)
+	}
+	if views.rawSummary != renderer.grpcStatusBlock(resp, method) {
+		t.Fatalf(
+			"raw summary = %q, want plain status block %q",
+			views.rawSummary,
+			renderer.grpcStatusBlock(resp, method),
+		)
+	}
+	// The plain line is stripped from the styled one, so pin the wording here.
+	wantLine := "gRPC pkg.Service/Fail - " + resp.StatusText()
+	if got := renderer.grpcStatusLine(resp, method); got != wantLine {
+		t.Fatalf("grpcStatusLine() = %q, want %q", got, wantLine)
+	}
+}
+
+func TestRenderGRPCResponseHeadersEncodesBinaryMetadata(t *testing.T) {
+	st, err := status.New(codes.InvalidArgument, "invalid page size").WithDetails(
+		&errdetails.BadRequest{
+			FieldViolations: []*errdetails.BadRequest_FieldViolation{{
+				Field:       "page_size",
+				Description: "must be between 1 and 1000",
+			}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("build gRPC status: %v", err)
+	}
+	wire, err := proto.Marshal(st.Proto())
+	if err != nil {
+		t.Fatalf("marshal gRPC status: %v", err)
+	}
+
+	resp := &grpcx.Response{
+		StatusCode:    codes.InvalidArgument,
+		StatusMessage: "invalid page size",
+		Trailers: map[string][]string{
+			"content-type":            {"application/grpc"},
+			"grpc-status-details-bin": {string(wire)},
+		},
+	}
+	const width = 64
+	view := stripANSIEscape(defaultResponseRenderer().renderGRPCRespHdrs(
+		resp,
+		"/pkg.Service/Fail",
+		width,
+	))
+	if !strings.Contains(view, "grpc-status-details-bin:") {
+		t.Fatalf("expected binary trailer name, got %q", view)
+	}
+	encoded := base64.RawStdEncoding.EncodeToString(wire)
+	if !strings.Contains(view, encoded[:16]) {
+		t.Fatalf("expected base64 binary trailer prefix %q, got %q", encoded[:16], view)
+	}
+	for _, r := range view {
+		if unicode.IsControl(r) && r != '\n' {
+			t.Fatalf("rendered binary metadata contains control character %U in %q", r, view)
+		}
+	}
+	for line := range strings.SplitSeq(view, "\n") {
+		if got := lipgloss.Width(line); got > width {
+			t.Fatalf("rendered header width = %d, want <= %d in %q", got, width, line)
+		}
+	}
+}
+
 func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
 	resp := &httpx.Response{
 		ReqMethod:    "GET",
@@ -217,6 +331,23 @@ func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
 	}
 	if !strings.Contains(plain, "1 HEADER") {
 		t.Fatalf("expected request header count, got %q", plain)
+	}
+}
+
+func TestGRPCRequestHeaderMapEncodesBinaryMetadata(t *testing.T) {
+	raw := string([]byte{0x00, 0x01, 0xff})
+	req := &restfile.Request{
+		GRPC: &restfile.GRPCRequest{
+			Metadata: []restfile.MetadataPair{{Key: "trace-bin", Value: raw}},
+		},
+	}
+
+	want := base64.RawStdEncoding.EncodeToString([]byte(raw))
+	if got := grpcRequestHeaderMap(req).Get("trace-bin"); got != want {
+		t.Fatalf("trace-bin = %q, want %q", got, want)
+	}
+	if req.GRPC.Metadata[0].Value != raw {
+		t.Fatalf("grpcRequestHeaderMap mutated request metadata: %q", req.GRPC.Metadata[0].Value)
 	}
 }
 

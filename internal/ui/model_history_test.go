@@ -495,11 +495,11 @@ func TestConsumeGRPCResponseKeepsStatusDetailsInResponsePane(t *testing.T) {
 		t.Fatal("expected response snapshot")
 	}
 	for _, detail := range details {
-		if !strings.Contains(model.responseLatest.pretty, detail) {
-			t.Fatalf("response pane omitted status detail %q", detail)
+		if !strings.Contains(model.responseLatest.raw, detail) {
+			t.Fatalf("raw response pane omitted status detail %q", detail)
 		}
 	}
-	viewport := model.pane(responsePanePrimary).viewport.View()
+	viewport := ansi.Strip(model.pane(responsePanePrimary).viewport.View())
 	for _, detailType := range []string{"BadRequest", "RetryInfo"} {
 		if !strings.Contains(viewport, detailType) {
 			t.Fatalf("response viewport omitted status detail type %q", detailType)
