@@ -523,7 +523,7 @@ func (r responseRenderer) buildGRPCResponseViews(
 		}
 	}
 
-	statusLine := grpcStatusLine(resp, fullMethod)
+	block := grpcStatusBlock(resp, fullMethod)
 
 	viewBody, viewContentType := resp.ViewBody()
 	rawBody, rawContentType := resp.RawBody()
@@ -545,9 +545,9 @@ func (r responseRenderer) buildGRPCResponseViews(
 	)
 
 	return responseViews{
-		pretty:     joinSections(statusLine, bv.pretty),
-		raw:        joinSections(statusLine, bv.raw),
-		rawSummary: statusLine,
+		pretty:     joinSections(block, bv.pretty),
+		raw:        joinSections(block, bv.raw),
+		rawSummary: block,
 		headers:    r.renderGRPCRespHdrs(resp, fullMethod, defaultResponseViewportWidth),
 		meta:       meta,
 		// Snapshot contentType must continue to describe the stored raw body.
@@ -562,20 +562,15 @@ func (r responseRenderer) buildGRPCResponseViews(
 }
 
 func grpcStatusLine(resp *grpcx.Response, fullMethod string) string {
-	if resp == nil {
-		return ""
-	}
-	line := fmt.Sprintf(
+	return fmt.Sprintf(
 		"gRPC %s - %s",
 		strings.TrimPrefix(strings.TrimSpace(fullMethod), "/"),
 		resp.StatusText(),
 	)
-	for _, detail := range resp.StatusDetails {
-		if d := strings.TrimSpace(detail); d != "" {
-			line += "\n" + d
-		}
-	}
-	return line
+}
+
+func grpcStatusBlock(resp *grpcx.Response, fullMethod string) string {
+	return joinSections(append([]string{grpcStatusLine(resp, fullMethod)}, resp.StatusDetails...)...)
 }
 
 func buildRequestHeaderMap(resp *httpx.Response) http.Header {
