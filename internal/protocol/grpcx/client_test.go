@@ -212,7 +212,7 @@ func TestCollectMetadataOrdersHeadersByName(t *testing.T) {
 	want := []string{"x-alpha", "a", "x-bravo", "b", "x-charlie", "c"}
 
 	// Repeat to exercise Go's randomized map iteration.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		pairs, err := collectMetadata(&restfile.GRPCRequest{}, req)
 		if err != nil {
 			t.Fatalf("collect metadata: %v", err)

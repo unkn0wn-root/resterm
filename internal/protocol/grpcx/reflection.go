@@ -118,7 +118,7 @@ func (a reflectionAPI[Req, Res]) roundTrip(
 	set = &descriptorpb.FileDescriptorSet{}
 	have := make(map[string]bool)
 
-	for round := 0; round < maxReflectRounds; round++ {
+	for range maxReflectRounds {
 		files, err := a.exchange(stream, req)
 		if err != nil {
 			return nil, err
