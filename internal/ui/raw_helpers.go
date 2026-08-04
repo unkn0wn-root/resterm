@@ -15,5 +15,5 @@ func rawHeavy(sz int) bool {
 }
 
 func rawSum(meta binaryview.Meta, sz int) string {
-	return bodyfmt.RawSummaryText(meta, sz)
+	return bodyfmt.Payload{Meta: meta, Size: sz}.RawSummaryText()
 }

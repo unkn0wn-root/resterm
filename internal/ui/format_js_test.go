@@ -23,9 +23,9 @@ func TestRenderJSONAsJSFormatsEmbeddedObjectStrings(t *testing.T) {
 		t.Fatalf("failed to marshal body: %v", err)
 	}
 
-	got, ok := bodyfmt.RenderJSONAsJSContext(context.Background(), body)
+	got, ok := bodyfmt.RenderJSONAsJS(context.Background(), body)
 	if !ok {
-		t.Fatalf("RenderJSONAsJSContext returned !ok")
+		t.Fatalf("RenderJSONAsJS returned !ok")
 	}
 
 	want := `{

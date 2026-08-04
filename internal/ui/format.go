@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
@@ -9,6 +10,7 @@ import (
 
 func prettifyBody(body []byte, contentType string) string {
 	return bodyfmt.Prettify(
+		context.Background(),
 		body,
 		contentType,
 		bodyfmt.PrettyOptions{Color: termcolor.TrueColor()},

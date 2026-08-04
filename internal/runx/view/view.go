@@ -2,6 +2,7 @@ package runview
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -308,7 +309,7 @@ func requestBodyText(
 		input.Color = color
 		input.Style = theme.SyntaxHighlightStyle(theme.OrDefault(def))
 	}
-	return selectBody(bodyfmt.Build(input), mode)
+	return selectBody(bodyfmt.Build(context.Background(), input), mode)
 }
 
 func resolveBodyInput(res runner.Result) bodyfmt.BuildInput {

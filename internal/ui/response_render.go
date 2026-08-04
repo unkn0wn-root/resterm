@@ -652,7 +652,7 @@ func (r responseRenderer) buildBodyViewsCtx(
 	viewBody []byte,
 	viewContentType string,
 ) bodyViews {
-	out := bodyfmt.BuildContext(ctx, bodyfmt.BuildInput{
+	out := bodyfmt.Build(ctx, bodyfmt.BuildInput{
 		Body:            body,
 		ContentType:     contentType,
 		Meta:            meta,
@@ -681,50 +681,27 @@ func (r responseRenderer) buildBodyViewsCtx(
 }
 
 func (r responseRenderer) renderBinarySummary(meta binaryview.Meta) string {
-	lines := []string{
-		r.stats.Heading.Render(fmt.Sprintf("Binary body (%s)", formatByteSize(int64(meta.Size)))),
-	}
-	if strings.TrimSpace(meta.MIME) != "" {
-		lines = append(
-			lines,
-			renderLabelValue(
-				"MIME",
-				strings.TrimSpace(meta.MIME),
-				r.stats.Label,
-				r.stats.Value,
-			),
-		)
-	}
-	if strings.TrimSpace(meta.DecodeErr) != "" {
-		lines = append(
-			lines,
-			r.stats.Warn.Render("Decode warning: "+strings.TrimSpace(meta.DecodeErr)),
-		)
-	}
-	if meta.PreviewHex != "" {
-		lines = append(
-			lines,
-			renderLabelValue("Preview hex", meta.PreviewHex, r.stats.Label, r.stats.Message),
-		)
-	}
-	if meta.PreviewB64 != "" {
-		lines = append(
-			lines,
-			renderLabelValue("Preview base64", meta.PreviewB64, r.stats.Label, r.stats.Message),
-		)
-	}
-	if modes := rawViewModeLabels(meta, meta.Size); len(modes) > 0 {
-		lines = append(
-			lines,
-			renderLabelValue(
-				"Raw tab",
-				strings.Join(modes, " / "),
-				r.stats.Label,
-				r.stats.Value,
-			),
-		)
+	summary := bodyfmt.Payload{Meta: meta}.BinarySummary()
+	lines := make([]string, 0, len(summary))
+	for _, line := range summary {
+		lines = append(lines, r.renderSummaryLine(line))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r responseRenderer) renderSummaryLine(line bodyfmt.SummaryLine) string {
+	switch line.Kind {
+	case bodyfmt.SummaryTitle:
+		return r.stats.Heading.Render(line.Value)
+	case bodyfmt.SummaryWarn:
+		return r.stats.Warn.Render(line.String())
+	case bodyfmt.SummaryPreview:
+		return renderLabelValue(line.Label, line.Value, r.stats.Label, r.stats.Message)
+	case bodyfmt.SummaryModes:
+		return renderLabelValue("Raw tab", line.Value, r.stats.Label, r.stats.Value)
+	default:
+		return renderLabelValue(line.Label, line.Value, r.stats.Label, r.stats.Value)
+	}
 }
 
 func cloneHeaders(h http.Header) http.Header {
