@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
 func TestWrapDiffContentPreservesMarkers(t *testing.T) {
@@ -145,7 +145,7 @@ func TestComputeDiffForPrettyDetectsLeadingWhitespaceChanges(t *testing.T) {
 	model := New(Config{})
 	model.responseSplit = true
 
-	respA := &httpclient.Response{
+	respA := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": {"text/plain"}},
@@ -153,7 +153,7 @@ func TestComputeDiffForPrettyDetectsLeadingWhitespaceChanges(t *testing.T) {
 		Duration:     10 * time.Millisecond,
 		EffectiveURL: "https://example.com/a",
 	}
-	respB := &httpclient.Response{
+	respB := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": {"text/plain"}},

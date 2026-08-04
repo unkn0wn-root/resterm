@@ -3,8 +3,8 @@ package ui
 import (
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -20,7 +20,7 @@ func TestApplyHTTPSettingsParsesTLS(t *testing.T) {
 		},
 	}
 	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"val": "one"}))
-	opts := httpclient.Options{}
+	opts := httpx.Options{}
 
 	if err := settings.ApplyHTTPSettings(&opts, req.Settings, resolver); err != nil {
 		t.Fatalf("applyHTTPSettings returned error: %v", err)
@@ -50,7 +50,7 @@ func TestApplyGRPCSettingsParsesTLS(t *testing.T) {
 		},
 	}
 	resolver := vars.NewResolver(vars.NewMapProvider("x", map[string]string{"x": "two"}))
-	opts := grpcclient.Options{Insecure: true}
+	opts := grpcx.Options{Insecure: true}
 
 	if err := settings.ApplyGRPCSettings(&opts, req.Settings, resolver); err != nil {
 		t.Fatalf("applyGRPCSettings returned error: %v", err)

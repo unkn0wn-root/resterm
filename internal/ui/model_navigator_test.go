@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
@@ -964,11 +964,11 @@ Content-Type: application/json
 
 	tests := []struct {
 		path string
-		kind filesvc.FileKind
+		kind files.Kind
 	}{
-		{path: queryFile, kind: filesvc.FileKindGraphQL},
-		{path: varsFile, kind: filesvc.FileKindJSON},
-		{path: scriptFile, kind: filesvc.FileKindJavaScript},
+		{path: queryFile, kind: files.KindGraphQL},
+		{path: varsFile, kind: files.KindJSON},
+		{path: scriptFile, kind: files.KindJavaScript},
 	}
 
 	for _, tt := range tests {
@@ -976,10 +976,10 @@ Content-Type: application/json
 		if node == nil {
 			t.Fatalf("expected navigator node for %s", tt.path)
 		}
-		entry, ok := node.Payload.Data.(filesvc.FileEntry)
+		entry, ok := node.Payload.Data.(files.Entry)
 		if !ok {
 			t.Fatalf(
-				"expected filesvc.FileEntry payload for %s, got %T",
+				"expected files.Entry payload for %s, got %T",
 				tt.path,
 				node.Payload.Data,
 			)

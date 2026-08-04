@@ -2,6 +2,7 @@ package runview
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,8 +14,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
@@ -269,7 +270,7 @@ func requestHeadersText(res runner.Result, show bool, st styler) string {
 		}
 	}
 	if grpc := res.GRPC; grpc != nil {
-		if hdrs := buildGRPCHeaderMap(grpc); len(hdrs) > 0 {
+		if hdrs := grpc.HeaderMap(); len(hdrs) > 0 {
 			respText = st.section("Response Headers:") + "\n" + formatHeaders(hdrs, st)
 		}
 	}
@@ -308,7 +309,7 @@ func requestBodyText(
 		input.Color = color
 		input.Style = theme.SyntaxHighlightStyle(theme.OrDefault(def))
 	}
-	return selectBody(bodyfmt.Build(input), mode)
+	return selectBody(bodyfmt.Build(context.Background(), input), mode)
 }
 
 func resolveBodyInput(res runner.Result) bodyfmt.BuildInput {
@@ -322,7 +323,7 @@ func resolveBodyInput(res runner.Result) bodyfmt.BuildInput {
 	return bodyfmt.BuildInput{Body: body, ContentType: ct}
 }
 
-func httpBodyInput(res runner.Result, resp *httpclient.Response) bodyfmt.BuildInput {
+func httpBodyInput(res runner.Result, resp *httpx.Response) bodyfmt.BuildInput {
 	ct := ""
 	if resp.Headers != nil {
 		ct = resp.Headers.Get("Content-Type")
@@ -337,23 +338,9 @@ func httpBodyInput(res runner.Result, resp *httpclient.Response) bodyfmt.BuildIn
 	return bodyfmt.BuildInput{Body: body, ContentType: ct}
 }
 
-func grpcBodyInput(res runner.Result, grpc *grpcclient.Response) bodyfmt.BuildInput {
-	viewBody := cloneBytes(grpc.Body)
-	if len(viewBody) == 0 && str.Trim(grpc.Message) != "" {
-		viewBody = []byte(grpc.Message)
-	}
-	viewType := str.Trim(grpc.ContentType)
-	if viewType == "" && len(viewBody) > 0 {
-		viewType = "application/json"
-	}
-	rawBody := cloneBytes(grpc.Wire)
-	rawType := str.Trim(grpc.WireContentType)
-	if len(rawBody) == 0 {
-		rawBody = cloneBytes(viewBody)
-	}
-	if rawType == "" {
-		rawType = viewType
-	}
+func grpcBodyInput(res runner.Result, grpc *grpcx.Response) bodyfmt.BuildInput {
+	viewBody, viewType := grpc.ViewBody()
+	rawBody, rawType := grpc.RawBody()
 	if len(viewBody) == 0 {
 		if fallback, fallbackType := streamFallback(res); len(fallback) > 0 {
 			viewBody = fallback
@@ -434,12 +421,7 @@ func statusText(res runner.Result) string {
 	case res.Response != nil:
 		return str.Trim(res.Response.Status)
 	case res.GRPC != nil:
-		code := str.Trim(res.GRPC.StatusCode.String())
-		msg := str.Trim(res.GRPC.StatusMessage)
-		if code != "" && msg != "" && !strings.EqualFold(code, msg) {
-			return code + " (" + msg + ")"
-		}
-		return code
+		return res.GRPC.StatusText()
 	default:
 		return ""
 	}
@@ -500,7 +482,7 @@ func contentLengthText(res runner.Result) string {
 	return ""
 }
 
-func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
+func buildRequestHeaderMap(resp *httpx.Response) http.Header {
 	var hdrs http.Header
 	if resp != nil && resp.RequestHeaders != nil {
 		hdrs = resp.RequestHeaders.Clone()
@@ -519,20 +501,6 @@ func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
 	}
 	if hdrs.Get("Content-Length") == "" && resp.ReqLen > 0 {
 		hdrs.Set("Content-Length", fmt.Sprintf("%d", resp.ReqLen))
-	}
-	return hdrs
-}
-
-func buildGRPCHeaderMap(resp *grpcclient.Response) http.Header {
-	if resp == nil || (len(resp.Headers) == 0 && len(resp.Trailers) == 0) {
-		return nil
-	}
-	hdrs := make(http.Header, len(resp.Headers)+len(resp.Trailers))
-	for key, values := range resp.Headers {
-		hdrs[key] = append([]string(nil), values...)
-	}
-	for key, values := range resp.Trailers {
-		hdrs["Grpc-Trailer-"+key] = append([]string(nil), values...)
 	}
 	return hdrs
 }

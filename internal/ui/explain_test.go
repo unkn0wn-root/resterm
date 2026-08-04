@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
@@ -309,7 +309,7 @@ func TestConsumeHTTPResponseActiveExplainRendersBeforeResponseFormatting(t *test
 	pane.activeTab = responseTabExplain
 
 	cmd := model.consumeHTTPResponse(
-		&httpclient.Response{
+		&httpx.Response{
 			Status:       "200 OK",
 			StatusCode:   200,
 			ReqMethod:    "GET",

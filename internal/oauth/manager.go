@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -56,12 +56,12 @@ type SnapshotEntry struct {
 }
 
 type Manager struct {
-	client *httpclient.Client
+	client *httpx.Client
 
 	mu       sync.Mutex
 	cache    map[string]*cacheEntry
 	inflight map[string]*call
-	do       func(context.Context, *restfile.Request, httpclient.Options) (*httpclient.Response, error)
+	do       func(context.Context, *restfile.Request, httpx.Options) (*httpx.Response, error)
 }
 
 type cacheEntry struct {
@@ -86,9 +86,9 @@ type tokenResponse struct {
 
 const expirySlack = 30 * time.Second
 
-func NewManager(client *httpclient.Client) *Manager {
+func NewManager(client *httpx.Client) *Manager {
 	if client == nil {
-		client = httpclient.NewClientWithOptions()
+		client = httpx.NewClientWithOptions()
 	}
 
 	mgr := &Manager{
@@ -96,7 +96,7 @@ func NewManager(client *httpclient.Client) *Manager {
 		cache:    make(map[string]*cacheEntry),
 		inflight: make(map[string]*call),
 	}
-	mgr.do = func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+	mgr.do = func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 		return mgr.client.Execute(ctx, req, nil, opts)
 	}
 	return mgr
@@ -109,7 +109,7 @@ func (m *Manager) Token(
 	ctx context.Context,
 	env string,
 	cfg Config,
-	opts httpclient.Options,
+	opts httpx.Options,
 ) (Token, error) {
 	cfg, key, fallback := m.lookupKeys(env, cfg)
 
@@ -257,7 +257,7 @@ func (m *Manager) obtainToken(
 	key string,
 	fallback string,
 	cfg Config,
-	opts httpclient.Options,
+	opts httpx.Options,
 ) (Token, error) {
 	if token, ok, usedKey := m.cachedToken(key, fallback); ok && token.valid() {
 		m.promoteCacheKey(key, usedKey)
@@ -296,12 +296,12 @@ func (m *Manager) obtainToken(
 }
 
 func (m *Manager) SetRequestFunc(
-	fn func(context.Context, *restfile.Request, httpclient.Options) (*httpclient.Response, error),
+	fn func(context.Context, *restfile.Request, httpx.Options) (*httpx.Response, error),
 ) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if fn == nil {
-		m.do = func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		m.do = func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			return m.client.Execute(ctx, req, nil, opts)
 		}
 		return
@@ -468,7 +468,7 @@ func cachePart(s string) string {
 func (m *Manager) requestToken(
 	ctx context.Context,
 	cfg Config,
-	opts httpclient.Options,
+	opts httpx.Options,
 ) (Token, error) {
 	cfg = cfg.Resolved()
 	grant := cfg.GrantType
@@ -590,7 +590,7 @@ func (m *Manager) refreshToken(
 	ctx context.Context,
 	cfg Config,
 	refresh string,
-	opts httpclient.Options,
+	opts httpx.Options,
 ) (Token, error) {
 	cfg = cfg.Resolved()
 	if refresh == "" {

@@ -13,8 +13,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -75,7 +75,7 @@ func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 			AllowSensitiveHeaders: true,
 		},
 	}
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "200 OK",
 		StatusCode: 200,
 		Headers:    http.Header{"Content-Type": []string{"application/json"}},
@@ -327,7 +327,7 @@ func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": []string{"text/html"}},
@@ -391,7 +391,7 @@ func TestConsumeHTTPResponseStatusLevelFollowsHTTPStatusCode(t *testing.T) {
 				collectMsgs(cmd)
 			}
 
-			resp := &httpclient.Response{
+			resp := &httpx.Response{
 				Status:     fmt.Sprintf("%d %s", tt.code, http.StatusText(tt.code)),
 				StatusCode: tt.code,
 				Headers:    http.Header{"Content-Type": []string{"text/plain"}},
@@ -419,7 +419,7 @@ func TestConsumeHTTPResponseUsesSeparateStatusBarTestSummary(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "500 Internal Server Error",
 		StatusCode: http.StatusInternalServerError,
 		Headers:    http.Header{"Content-Type": []string{"text/plain"}},
@@ -521,7 +521,7 @@ func TestToggleResponseSplitConfiguresSecondaryPane(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
@@ -627,7 +627,7 @@ func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	first := &httpclient.Response{
+	first := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
@@ -646,7 +646,7 @@ func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
 		t.Fatalf("expected split enabled")
 	}
 
-	second := &httpclient.Response{
+	second := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
@@ -684,7 +684,7 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 		drainResponseCommands(t, &model, cmd)
 	}
 
-	resp1 := &httpclient.Response{
+	resp1 := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
@@ -706,7 +706,7 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 	model.focusResponsePane(responsePaneSecondary)
 	_ = model.setFocus(focusRequests)
 
-	resp2 := &httpclient.Response{
+	resp2 := &httpx.Response{
 		Status:       "201 Created",
 		StatusCode:   201,
 		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
@@ -737,7 +737,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	resp1 := &httpclient.Response{
+	resp1 := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
@@ -766,7 +766,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		t.Fatalf("expected secondary pane to become live after pinning primary")
 	}
 
-	resp2 := &httpclient.Response{
+	resp2 := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
@@ -784,7 +784,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 
 func TestRecordResponseLatencyDropsPreResetSamples(t *testing.T) {
 	m := &Model{latencySeries: newLatencySeries(latCap)}
-	resp := &httpclient.Response{Duration: 120 * time.Millisecond}
+	resp := &httpx.Response{Duration: 120 * time.Millisecond}
 
 	gen := m.latencySeries.gen
 	m.latencySeries.reset()

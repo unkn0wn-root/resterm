@@ -4,8 +4,8 @@ import (
 	"time"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
@@ -23,8 +23,8 @@ type workflowStepResult struct {
 	Branch     string
 	Src        *restfile.Request
 	Req        *restfile.Request
-	HTTP       *httpclient.Response
-	GRPC       *grpcclient.Response
+	HTTP       *httpx.Response
+	GRPC       *grpcx.Response
 	Stream     *scripts.StreamInfo
 	Transcript []byte
 	Tests      []scripts.TestResult

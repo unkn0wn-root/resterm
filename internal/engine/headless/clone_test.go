@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestCloneHTTP(t *testing.T) {
-	src := &httpclient.Response{
+	src := &httpx.Response{
 		Headers:        http.Header{"X-Test": {"one"}},
 		RequestHeaders: http.Header{"Accept": {"application/json"}},
 		ReqTE:          []string{"trailers"},
@@ -117,14 +117,14 @@ func TestCloneHTTP(t *testing.T) {
 }
 
 func TestCloneGRPC(t *testing.T) {
-	src := &grpcclient.Response{
+	src := &grpcx.Response{
 		Headers:  map[string][]string{"x-id": {"1"}},
 		Trailers: map[string][]string{"x-trailer": {"done"}},
 		Body:     []byte("body"),
 		Wire:     []byte("wire"),
 	}
 
-	got := cloneGRPC(src)
+	got := src.Clone()
 	if got == nil {
 		t.Fatal("cloneGRPC() returned nil")
 	}

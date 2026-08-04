@@ -7,12 +7,12 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	runfail "github.com/unkn0wn-root/resterm/internal/runx/fail"
@@ -24,13 +24,13 @@ import (
 
 type Config struct {
 	FilePath              string
-	Client                *httpclient.Client
+	Client                *httpx.Client
 	Catalog               vars.Catalog
 	Selection             vars.Selection
 	EnvironmentFile       string
 	AllowInteractiveOAuth bool
-	HTTPOptions           httpclient.Options
-	GRPCOptions           grpcclient.Options
+	HTTPOptions           httpx.Options
+	GRPCOptions           grpcx.Options
 	SSHManager            *ssh.Manager
 	K8sManager            *k8s.Manager
 	History               history.Store
@@ -89,8 +89,8 @@ type Executor interface {
 }
 
 type RequestResult struct {
-	Response       *httpclient.Response
-	GRPC           *grpcclient.Response
+	Response       *httpx.Response
+	GRPC           *grpcx.Response
 	Stream         *scripts.StreamInfo
 	Transcript     []byte
 	Err            error
@@ -145,8 +145,8 @@ type CompareRow struct {
 	Profile     string
 	Selection   vars.Selection
 	Summary     string
-	Response    *httpclient.Response
-	GRPC        *grpcclient.Response
+	Response    *httpx.Response
+	GRPC        *grpcx.Response
 	Stream      *scripts.StreamInfo
 	Transcript  []byte
 	Err         error
@@ -215,8 +215,8 @@ type WorkflowStep struct {
 	Iteration  int
 	Total      int
 	Summary    string
-	Response   *httpclient.Response
-	GRPC       *grpcclient.Response
+	Response   *httpx.Response
+	GRPC       *grpcx.Response
 	Stream     *scripts.StreamInfo
 	Transcript []byte
 	Err        error

@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -77,7 +77,7 @@ func (m *Model) installFile(path string, data []byte) tea.Cmd {
 }
 
 func (m *Model) setHistoryScopeForFile(path string) {
-	if !filesvc.IsRequestFile(path) {
+	if !files.IsRequest(path) {
 		return
 	}
 	m.historyScope = historyScopeRequest
@@ -317,7 +317,7 @@ func (m *Model) updateEditorStyler(path string) {
 }
 
 func parseEditableDocument(path string, data []byte) *restfile.Document {
-	if path != "" && !filesvc.IsRequestFile(path) {
+	if path != "" && !files.IsRequest(path) {
 		return &restfile.Document{Path: path, Raw: append([]byte(nil), data...)}
 	}
 	return parser.Parse(path, data)

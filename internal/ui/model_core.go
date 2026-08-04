@@ -20,12 +20,12 @@ import (
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/helpdoc"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/launch"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -146,15 +146,15 @@ const (
 type Config struct {
 	FilePath       string
 	InitialContent string
-	Client         *httpclient.Client
+	Client         *httpx.Client
 	Theme          *theme.Theme
 	ThemeCatalog   theme.Catalog
 	ActiveThemeKey string
 	Settings       config.Settings
 	SettingsHandle config.SettingsHandle
 	Env            vars.Config
-	HTTPOptions    httpclient.Options
-	GRPCOptions    grpcclient.Options
+	HTTPOptions    httpx.Options
+	GRPCOptions    grpcx.Options
 	SSHManager     *ssh.Manager
 	K8sManager     *k8s.Manager
 	History        history.Store
@@ -188,9 +188,8 @@ type Model struct {
 	activeThemeDef theme.Definition
 	themeRuntime   themeRuntime
 	themeCatalog   theme.Catalog
-	client         *httpclient.Client
-	grpcClient     *grpcclient.Client
-	grpcOptions    grpcclient.Options
+	client         *httpx.Client
+	grpcOptions    grpcx.Options
 	rg             *registry.Index
 
 	fileWatcher   *watcher.Watcher
@@ -294,8 +293,8 @@ type Model struct {
 	tabSpinIdx       int
 	tabSpinSeq       int
 	tabSpinOn        bool
-	lastResponse     *httpclient.Response
-	lastGRPC         *grpcclient.Response
+	lastResponse     *httpx.Response
+	lastGRPC         *grpcx.Response
 	lastError        error
 	latencySeries    *latencySeries
 	latAnimOn        bool
@@ -403,7 +402,7 @@ type Model struct {
 	streamBatchWindow  time.Duration
 	streamMaxEvents    int
 	liveSessions       map[string]*liveSession
-	wsSenders          map[string]*httpclient.WebSocketSender
+	wsSenders          map[string]*httpx.WebSocketSender
 	sessionHandles     map[string]*stream.Session
 	wsConsole          *websocketConsole
 	streamFilterActive bool
@@ -440,10 +439,9 @@ func New(cfg Config) Model {
 
 	client := cfg.Client
 	if client == nil {
-		client = httpclient.NewClientWithOptions()
+		client = httpx.NewClientWithOptions()
 		cfg.Client = client
 	}
-	grpcExec := grpcclient.NewClient()
 	bindingMap := cfg.Bindings
 	if bindingMap == nil {
 		bindingMap = bindings.DefaultMap()
@@ -626,7 +624,6 @@ func New(cfg Config) Model {
 		theme:                  th,
 		themeCatalog:           cfg.ThemeCatalog,
 		client:                 client,
-		grpcClient:             grpcExec,
 		grpcOptions:            cfg.GRPCOptions,
 		rg:                     rg,
 		fileList:               fileList,
@@ -695,7 +692,7 @@ func New(cfg Config) Model {
 		streamMaxEvents:          defaultStreamMaxEvents,
 		sessionHandles:           make(map[string]*stream.Session),
 		liveSessions:             make(map[string]*liveSession),
-		wsSenders:                make(map[string]*httpclient.WebSocketSender),
+		wsSenders:                make(map[string]*httpx.WebSocketSender),
 		streamFilterInput: func() textinput.Model {
 			ti := textinput.New()
 			ti.Placeholder = "filter"

@@ -7,7 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -17,7 +17,7 @@ func TestResolveHTTPOptionsFallbackEnvEnable(t *testing.T) {
 		FilePath:      "/tmp/request.http",
 		WorkspaceRoot: "/workspace",
 	}, nil)
-	opts := httpclient.Options{FallbackBaseDirs: []string{"/extra"}}
+	opts := httpx.Options{FallbackBaseDirs: []string{"/extra"}}
 
 	t.Setenv("RESTERM_ENABLE_FALLBACK", "true")
 	resolved := e.resolveHTTPOptions(nil, opts)

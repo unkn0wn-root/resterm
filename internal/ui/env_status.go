@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 // startupEnvStatus picks the first message worth showing when a session opens.
-func startupEnvStatus(entries []filesvc.FileEntry, ws workspace, fallback string, wsErr error) statusMsg {
+func startupEnvStatus(entries []files.Entry, ws workspace, fallback string, wsErr error) statusMsg {
 	if wsErr != nil {
 		return statusMsg{text: fmt.Sprintf("workspace error: %v", wsErr), level: statusWarn}
 	}
@@ -25,7 +25,7 @@ func startupEnvStatus(entries []filesvc.FileEntry, ws workspace, fallback string
 
 // envFileWarning surfaces environment files that will not take effect. Startup
 // and workspace moves share it, so both warn the same way.
-func envFileWarning(entries []filesvc.FileEntry, ws workspace) statusMsg {
+func envFileWarning(entries []files.Entry, ws workspace) statusMsg {
 	if s := inactiveEnvStatus(entries, ws.envFile, ws.recursive); s.text != "" {
 		return s
 	}
@@ -34,14 +34,14 @@ func envFileWarning(entries []filesvc.FileEntry, ws workspace) statusMsg {
 
 // inactiveEnvStatus warns about environment files the navigator lists but
 // never loads, because one file is resolved per workspace.
-func inactiveEnvStatus(entries []filesvc.FileEntry, active string, recursive bool) statusMsg {
+func inactiveEnvStatus(entries []files.Entry, active string, recursive bool) statusMsg {
 	if !recursive {
 		return statusMsg{}
 	}
 
 	var names []string
 	for _, entry := range entries {
-		if entry.Kind == filesvc.FileKindEnv && !util.SameFile(entry.Path, active) {
+		if entry.Kind == files.KindEnv && !util.SameFile(entry.Path, active) {
 			names = append(names, entry.Name)
 		}
 	}
@@ -83,13 +83,13 @@ func undiscoveredEnvStatus(ws workspace) statusMsg {
 // envLookalikes walks again because the session's entry list keeps only
 // request and environment files, and these are neither.
 func envLookalikes(root string, recursive bool) []string {
-	files, err := filesvc.ListWorkspaceFiles(root, recursive, filesvc.ListOptions{})
+	entries, err := files.ListWorkspace(root, files.ListOptions{Recursive: recursive})
 	if err != nil {
 		return nil
 	}
 
 	var names []string
-	for _, f := range files {
+	for _, f := range entries {
 		if vars.LooksLikeEnvFile(f.Name) {
 			names = append(names, f.Name)
 		}

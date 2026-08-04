@@ -152,6 +152,24 @@ var settingArgs = []Item{
 		Insert:     "grpc-client-key=key.pem",
 		CursorBack: len("key.pem"),
 	},
+	{
+		Label:      "grpc-max-recv-size=",
+		Summary:    "Max gRPC response size",
+		Insert:     "grpc-max-recv-size=16MB",
+		CursorBack: len("16MB"),
+	},
+	{
+		Label:      "grpc-max-send-size=",
+		Summary:    "Max gRPC request size",
+		Insert:     "grpc-max-send-size=16MB",
+		CursorBack: len("16MB"),
+	},
+	{
+		Label:      "grpc-compression=",
+		Summary:    "gRPC request compression (gzip|none)",
+		Insert:     "grpc-compression=gzip",
+		CursorBack: len("gzip"),
+	},
 }
 
 // directiveArgs maps a directive base key to its option/sub-token suggestions.

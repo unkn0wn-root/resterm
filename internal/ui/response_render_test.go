@@ -13,14 +13,14 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
 	body := []byte("{\"value\":\"" + strings.Repeat("a", 48) + "\"}")
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": {"application/json"}},
@@ -80,7 +80,7 @@ func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
 
 func TestBuildHTTPResponseViewsPreservesLeadingWhitespace(t *testing.T) {
 	body := []byte("  leading line\n    indented line")
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": {"text/plain"}},
@@ -100,7 +100,7 @@ func TestBuildHTTPResponseViewsPreservesLeadingWhitespace(t *testing.T) {
 }
 
 func TestBuildHTTPResponseViewsColorsSummaryExceptRaw(t *testing.T) {
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "201 Created",
 		StatusCode: 201,
 		Headers: http.Header{
@@ -146,7 +146,7 @@ func TestBuildHTTPResponseViewsWithLightPaletteUsesReadableSummaryStyles(t *test
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	body := []byte(`{"id":1,"name":"demo"}`)
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "200 OK",
 		StatusCode: 200,
 		Headers: http.Header{
@@ -194,7 +194,7 @@ func TestBuildHTTPResponseViewsWithLightPaletteUsesReadableSummaryStyles(t *test
 }
 
 func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		ReqMethod:    "GET",
 		EffectiveURL: "https://final.example.com/items",
 		Request: &restfile.Request{
@@ -312,7 +312,7 @@ func TestHeaderPanelLongNameStacksValue(t *testing.T) {
 }
 
 func TestBuildRequestHeaderMapAddsDefaults(t *testing.T) {
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		ReqMethod: "GET",
 		ReqHost:   "example.com",
 	}
@@ -324,7 +324,7 @@ func TestBuildRequestHeaderMapAddsDefaults(t *testing.T) {
 
 func TestBinaryResponsesUseSummaryAndHexRaw(t *testing.T) {
 	body := []byte{0x00, 0x01, 0x02, 0x03}
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": {"application/octet-stream"}},
@@ -374,7 +374,7 @@ func TestBinaryBodySummaryKeepsOriginalUILabelAndStyling(t *testing.T) {
 
 func TestHeavyBinaryDefaultsToSummary(t *testing.T) {
 	body := bytes.Repeat([]byte{0x00, 0xff}, rawHeavyLimit/2+1)
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": {"application/octet-stream"}},
@@ -397,7 +397,7 @@ func TestHeavyBinaryDefaultsToSummary(t *testing.T) {
 
 func TestPrintableOctetStreamDefaultsToText(t *testing.T) {
 	body := []byte("plain text body")
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
 		Headers:      http.Header{"Content-Type": {"application/octet-stream"}},

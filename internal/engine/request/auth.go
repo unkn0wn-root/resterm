@@ -13,8 +13,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -160,7 +160,20 @@ func headerPresent(h http.Header, name string) bool {
 }
 
 func requestHeaderPresent(req *restfile.Request, name string) bool {
-	return headerPresent(reqHeaders(req), name)
+	return headerPresent(reqHeaders(req), name) || grpcMetadataPresent(req, name)
+}
+
+// A key set via @grpc-metadata overrides auth the same way a header does.
+func grpcMetadataPresent(req *restfile.Request, name string) bool {
+	if req == nil || req.GRPC == nil {
+		return false
+	}
+	for _, pair := range req.GRPC.Metadata {
+		if strings.EqualFold(pair.Key, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func ensureReqHeaders(req *restfile.Request) http.Header {
@@ -173,13 +186,59 @@ func ensureReqHeaders(req *restfile.Request) http.Header {
 	return req.Headers
 }
 
+// applyGRPCAuth resolves auth into request headers before the gRPC client runs.
+// Keeping this in the engine lets InjectedAuthSecrets register the values for
+// redaction.
+func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
+	if req == nil || req.GRPC == nil || req.Metadata.Auth == nil {
+		return nil
+	}
+
+	values, err := httpx.AuthValues(
+		req.Metadata.Auth,
+		res,
+		grpcAuthHeaders(req),
+		diag.ComponentGRPC,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, v := range values {
+		if v.Placement == httpx.AuthInQuery {
+			return diag.New(
+				diag.ClassAuth,
+				"apikey auth placement query is not supported for grpc, use header",
+				diag.WithComponent(diag.ComponentGRPC),
+			)
+		}
+		setRequestHeaderIfMissing(req, v.Name, v.Value)
+	}
+	return nil
+}
+
 func setRequestHeaderIfMissing(req *restfile.Request, name, value string) bool {
 	headers := ensureReqHeaders(req)
-	if headers == nil || headerPresent(headers, name) {
+	if headers == nil || requestHeaderPresent(req, name) {
 		return false
 	}
 	headers.Set(name, value)
 	return true
+}
+
+// AuthValues only looks at headers, so hand it the grpc metadata as headers too.
+func grpcAuthHeaders(req *restfile.Request) http.Header {
+	hdr := reqHeaders(req)
+	meta := req.GRPC.Metadata
+	if len(meta) == 0 {
+		return hdr
+	}
+	out := make(http.Header, len(hdr)+len(meta))
+	maps.Copy(out, hdr)
+	for _, pair := range meta {
+		out.Add(pair.Key, pair.Value)
+	}
+	return out
 }
 
 func headerValue(h http.Header, name string) string {
@@ -223,6 +282,9 @@ func (e *Engine) EnsureCommandAuth(
 	if auth == nil {
 		return authcmd.Result{}, nil
 	}
+	if hdr, ok := e.commandAuthHeader(doc, auth, res); ok && requestHeaderPresent(req, hdr) {
+		return authcmd.Result{}, nil
+	}
 	prep, err := e.PrepareCommandAuth(doc, auth, res, env, timeout)
 	if err != nil {
 		return authcmd.Result{}, err
@@ -244,6 +306,28 @@ func (e *Engine) EnsureCommandAuth(
 		return authcmd.Result{}, nil
 	}
 	return out, nil
+}
+
+// commandAuthHeader names the header the directive pins without expanding argv
+// or running the command. It reports false when the directive omits the header
+// and a cache entry could still supply one, since only Prepare reads that.
+func (e *Engine) commandAuthHeader(
+	doc *restfile.Document,
+	auth *restfile.AuthSpec,
+	res *vars.Resolver,
+) (string, bool) {
+	pm, err := commandAuthParams(auth, res)
+	if err != nil {
+		return "", false
+	}
+	cfg, err := authcmd.Parse(pm, e.cmdDir(doc, auth))
+	if err != nil {
+		return "", false
+	}
+	if cfg.Header == "" && cfg.CacheKey != "" {
+		return "", false
+	}
+	return cfg.HeaderName(), true
 }
 
 func (e *Engine) PrepareCommandAuth(
@@ -268,7 +352,7 @@ func (e *Engine) EnsureOAuth(
 	ctx context.Context,
 	req *restfile.Request,
 	res *vars.Resolver,
-	opts httpclient.Options,
+	opts httpx.Options,
 	env vars.Environment,
 	timeout time.Duration,
 ) error {
@@ -285,12 +369,15 @@ func (e *Engine) EnsureOAuth(
 		return err
 	}
 	cfg = oa.MergeCachedConfig(env.Scope(), cfg)
-	if cfg.TokenURL == "" {
-		return diag.New(diag.ClassAuth, errOAuthTokenURLRequired)
-	}
+
+	// Check the override before validating the rest, so an explicit header or
+	// @grpc-metadata never fails on config we are about to discard.
 	hdr := cfg.Header
 	if requestHeaderPresent(req, hdr) {
 		return nil
+	}
+	if cfg.TokenURL == "" {
+		return diag.New(diag.ClassAuth, errOAuthTokenURLRequired)
 	}
 	if e.oauthNeedsHeadlessSeed(oa, env.Scope(), cfg) {
 		return diag.New(diag.ClassAuth, errOAuthHeadlessSeedRequired)

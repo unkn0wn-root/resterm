@@ -10,9 +10,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -121,7 +121,7 @@ func (b *explainBuilder) stage(
 
 func (b *explainBuilder) sentHTTP(
 	req *restfile.Request,
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	notes ...string,
 ) {
 	addExplainSentHTTPStage(b.report, req, resp, notes...)
@@ -153,7 +153,7 @@ func (b *explainBuilder) setGRPC(req *restfile.Request) {
 	setExplainGRPC(b.report, req)
 }
 
-func (b *explainBuilder) setHTTP(resp *httpclient.Response) {
+func (b *explainBuilder) setHTTP(resp *httpx.Response) {
 	setExplainHTTP(b.report, resp)
 }
 
@@ -309,7 +309,7 @@ func addExplainPreparedHTTPStage(
 func addExplainSentHTTPStage(
 	rep *xplain.Report,
 	req *restfile.Request,
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	notes ...string,
 ) {
 	if rep == nil || resp == nil {
@@ -390,7 +390,7 @@ func setExplainGRPC(rep *xplain.Report, req *restfile.Request) {
 	final.Mode = "sent"
 }
 
-func setExplainHTTP(rep *xplain.Report, resp *httpclient.Response) {
+func setExplainHTTP(rep *xplain.Report, resp *httpx.Response) {
 	if rep == nil || resp == nil {
 		return
 	}
@@ -498,7 +498,7 @@ func explainBuiltHTTPChanges(
 	return out
 }
 
-func explainSentHTTPChanges(req *restfile.Request, resp *httpclient.Response) []xplain.Change {
+func explainSentHTTPChanges(req *restfile.Request, resp *httpx.Response) []xplain.Change {
 	if resp == nil {
 		return nil
 	}
@@ -617,15 +617,12 @@ func explainReqBody(req *restfile.Request) (string, string) {
 	}
 	switch {
 	case req.GRPC != nil:
-		if s := strings.TrimSpace(
-			req.GRPC.MessageExpanded,
-		); req.GRPC.MessageExpandedSet &&
-			s != "" {
+		if s, ok := req.GRPC.MessageExpanded.Get(); ok && strings.TrimSpace(s) != "" {
 			note := "gRPC message"
 			if path := strings.TrimSpace(req.GRPC.MessageFile); path != "" {
 				note = "expanded gRPC message from " + path
 			}
-			return clipExplain(s), note
+			return clipExplain(strings.TrimSpace(s)), note
 		}
 		if s := strings.TrimSpace(req.GRPC.Message); s != "" {
 			return clipExplain(s), "gRPC message"
@@ -780,9 +777,9 @@ func explainGRPCDetails(gr *restfile.GRPCRequest) []xplain.Pair {
 	if auth := strings.TrimSpace(gr.Authority); auth != "" {
 		out = append(out, xplain.Pair{Key: "Authority", Value: auth})
 	}
-	if gr.PlaintextSet {
+	if v, ok := gr.Plaintext.Get(); ok {
 		mode := "tls"
-		if gr.Plaintext {
+		if v {
 			mode = "plaintext"
 		}
 		out = append(out, xplain.Pair{Key: "Transport", Value: mode})
@@ -831,8 +828,8 @@ func explainWebSocketDetails(ws *restfile.WebSocketRequest) []xplain.Pair {
 			xplain.Pair{Key: "Subprotocols", Value: strings.Join(opts.Subprotocols, ", ")},
 		)
 	}
-	if opts.CompressionSet {
-		out = append(out, xplain.Pair{Key: "Compression", Value: explainToggle(opts.Compression)})
+	if v, ok := opts.Compression.Get(); ok {
+		out = append(out, xplain.Pair{Key: "Compression", Value: explainToggle(v)})
 	}
 	return out
 }
@@ -1102,16 +1099,23 @@ func (e *Engine) prepareExplainAuthPreview(
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
 		}, nil
 	case "command":
+		if hdr, ok := e.commandAuthHeader(doc, auth, res); ok && requestHeaderPresent(req, hdr) {
+			return explainAuthPreviewResult{
+				status:  xplain.StageOK,
+				summary: xplain.SummaryAuthPrepared,
+				notes:   []string{authPresentNote(req, hdr)},
+			}, nil
+		}
 		prep, err := e.PrepareCommandAuth(doc, auth, res, env, 0)
 		if err != nil {
 			return explainAuthPreviewResult{}, err
 		}
 		hdr := prep.HeaderName()
-		if req.Headers != nil && req.Headers.Get(hdr) != "" {
+		if requestHeaderPresent(req, hdr) {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
 				summary: xplain.SummaryAuthPrepared,
-				notes:   []string{"auth header already set on request"},
+				notes:   []string{authPresentNote(req, hdr)},
 			}, nil
 		}
 		ac := e.rt.AuthCmd()
@@ -1135,10 +1139,7 @@ func (e *Engine) prepareExplainAuthPreview(
 				},
 			}, nil
 		}
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
-		}
-		req.Headers.Set(out.Header, out.Value)
+		ensureReqHeaders(req).Set(out.Header, out.Value)
 		return explainAuthPreviewResult{
 			status:       xplain.StageOK,
 			summary:      xplain.SummaryAuthPrepared,
@@ -1158,19 +1159,19 @@ func (e *Engine) prepareExplainAuthPreview(
 			return explainAuthPreviewResult{}, err
 		}
 		cfg = oa.MergeCachedConfig(env.Scope(), cfg)
-		if cfg.TokenURL == "" {
-			return explainAuthPreviewResult{}, diag.New(
-				diag.ClassAuth,
-				"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
-			)
-		}
 		hdr := cfg.Header
-		if req.Headers != nil && req.Headers.Get(hdr) != "" {
+		if requestHeaderPresent(req, hdr) {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
 				summary: xplain.SummaryAuthPrepared,
-				notes:   []string{"auth header already set on request"},
+				notes:   []string{authPresentNote(req, hdr)},
 			}, nil
+		}
+		if cfg.TokenURL == "" {
+			return explainAuthPreviewResult{}, diag.New(
+				diag.ClassAuth,
+				errOAuthTokenURLRequired,
+			)
 		}
 		tok, ok := oa.CachedToken(env.Scope(), cfg)
 		if !ok {
@@ -1183,18 +1184,8 @@ func (e *Engine) prepareExplainAuthPreview(
 				},
 			}, nil
 		}
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
-		}
-		val := tok.AccessToken
-		if strings.EqualFold(hdr, "authorization") {
-			typ := strings.TrimSpace(tok.TokenType)
-			if typ == "" {
-				typ = "Bearer"
-			}
-			val = strings.TrimSpace(typ) + " " + tok.AccessToken
-		}
-		req.Headers.Set(hdr, val)
+		val := oauthHeaderValue(hdr, tok)
+		ensureReqHeaders(req).Set(hdr, val)
 		return explainAuthPreviewResult{
 			status:  xplain.StageOK,
 			summary: xplain.SummaryAuthPrepared,
@@ -1211,6 +1202,13 @@ func (e *Engine) prepareExplainAuthPreview(
 			notes:   []string{fmt.Sprintf("unsupported auth type %q is not applied", auth.Type)},
 		}, nil
 	}
+}
+
+func authPresentNote(req *restfile.Request, hdr string) string {
+	if grpcMetadataPresent(req, hdr) && !headerPresent(reqHeaders(req), hdr) {
+		return hdr + " already set via @grpc-metadata"
+	}
+	return "auth header already set on request"
 }
 
 func (e *Engine) PrepareExplainAuthPreview(
@@ -1236,7 +1234,7 @@ func (e *Engine) prepareExplainHTTPPreview(
 	rep *xplain.Report,
 	req *restfile.Request,
 	res *vars.Resolver,
-	opts httpclient.Options,
+	opts httpx.Options,
 ) error {
 	if rep == nil || req == nil || e.hc == nil {
 		return nil

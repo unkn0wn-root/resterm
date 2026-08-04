@@ -6,16 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 )
 
 func TestApplyAllDispatchesHandlers(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
-	httpOpts := httpclient.Options{CookieJar: jar}
-	grpcOpts := grpcclient.Options{}
+	httpOpts := httpx.Options{CookieJar: jar}
+	grpcOpts := grpcx.Options{}
 
 	applier := New(
 		HTTPHandler(&httpOpts, nil),
@@ -64,7 +64,7 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 
 func TestApplyAllHTTPAggregated(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
-	httpOpts := httpclient.Options{CookieJar: jar}
+	httpOpts := httpx.Options{CookieJar: jar}
 	applier := New(HTTPHandler(&httpOpts, nil))
 	settings := map[string]string{
 		"timeout":          "2s",
@@ -116,7 +116,7 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 }
 
 func TestApplyAllHTTPInvalidVersionReturnsError(t *testing.T) {
-	httpOpts := httpclient.Options{}
+	httpOpts := httpx.Options{}
 	applier := New(HTTPHandler(&httpOpts, nil))
 
 	_, err := applier.ApplyAll(map[string]string{"http-version": "bogus"})
@@ -129,7 +129,7 @@ func TestApplyAllHTTPInvalidVersionReturnsError(t *testing.T) {
 }
 
 func TestApplyHTTPSettingsRejectsInvalidInsecure(t *testing.T) {
-	opts := httpclient.Options{InsecureSkipVerify: true}
+	opts := httpx.Options{InsecureSkipVerify: true}
 
 	err := ApplyHTTPSettings(&opts, map[string]string{"http-insecure": "maybe"}, nil)
 	if err == nil {
@@ -144,7 +144,7 @@ func TestApplyHTTPSettingsRejectsInvalidInsecure(t *testing.T) {
 }
 
 func TestApplyGRPCSettingsRejectsInvalidInsecure(t *testing.T) {
-	opts := grpcclient.Options{}
+	opts := grpcx.Options{}
 
 	err := ApplyGRPCSettings(&opts, map[string]string{"grpc-insecure": "maybe"}, nil)
 	if err == nil {
@@ -162,7 +162,7 @@ func TestApplyGRPCSettingsRejectsInvalidInsecure(t *testing.T) {
 // reject. The prefixed spellings have to agree, and the wording has to say the
 // value is missing rather than invalid.
 func TestApplyHTTPSettingsRejectsEmptyInsecure(t *testing.T) {
-	opts := httpclient.Options{}
+	opts := httpx.Options{}
 
 	err := ApplyHTTPSettings(&opts, map[string]string{"http-insecure": ""}, nil)
 	if err == nil {
@@ -184,7 +184,7 @@ func TestApplyHTTPSettingsAcceptsBooleanSpellings(t *testing.T) {
 		{raw: "0", want: false},
 	} {
 		t.Run(tc.raw, func(t *testing.T) {
-			opts := httpclient.Options{InsecureSkipVerify: !tc.want}
+			opts := httpx.Options{InsecureSkipVerify: !tc.want}
 			err := ApplyHTTPSettings(&opts, map[string]string{"http-insecure": tc.raw}, nil)
 			if err != nil {
 				t.Fatalf("ApplyHTTPSettings returned error: %v", err)
@@ -197,7 +197,7 @@ func TestApplyHTTPSettingsAcceptsBooleanSpellings(t *testing.T) {
 }
 
 func TestApplyHTTPSettingsRejectsInvalidRootMode(t *testing.T) {
-	opts := httpclient.Options{}
+	opts := httpx.Options{}
 
 	err := ApplyHTTPSettings(&opts, map[string]string{"http-root-mode": "merge"}, nil)
 	if err == nil {
@@ -211,7 +211,7 @@ func TestApplyHTTPSettingsRejectsInvalidRootMode(t *testing.T) {
 // A written-empty root mode used to be skipped in silence while every other
 // setting reports a missing value.
 func TestApplyHTTPSettingsRejectsEmptyRootMode(t *testing.T) {
-	opts := httpclient.Options{}
+	opts := httpx.Options{}
 
 	err := ApplyHTTPSettings(&opts, map[string]string{"http-root-mode": ""}, nil)
 	if err == nil {

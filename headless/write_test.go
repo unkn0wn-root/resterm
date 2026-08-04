@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"google.golang.org/grpc/codes"
 )
@@ -500,7 +500,7 @@ func sampleRunnerReport() *runner.Report {
 				Target:      "https://example.com/ok",
 				Environment: "dev",
 				Passed:      true,
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: 200,
 					Proto:      "HTTP/1.1",
@@ -549,7 +549,7 @@ func sampleRunnerReport() *runner.Report {
 						Target:   "/login",
 						Passed:   true,
 						Duration: 40 * time.Millisecond,
-						Response: &httpclient.Response{
+						Response: &httpx.Response{
 							Status:     "200 OK",
 							StatusCode: 200,
 							Proto:      "HTTP/1.1",
@@ -566,7 +566,7 @@ func sampleRunnerReport() *runner.Report {
 						Target:   "/demo.Service/Use",
 						Canceled: true,
 						Summary:  "stop",
-						GRPC: &grpcclient.Response{
+						GRPC: &grpcx.Response{
 							StatusCode:    codes.Canceled,
 							StatusMessage: "stop",
 							Duration:      10 * time.Millisecond,
@@ -589,7 +589,7 @@ func sampleRunnerReport() *runner.Report {
 						Environment: "dev",
 						Passed:      true,
 						Duration:    20 * time.Millisecond,
-						Response: &httpclient.Response{
+						Response: &httpx.Response{
 							Status:     "200 OK",
 							StatusCode: 200,
 							Proto:      "HTTP/1.1",

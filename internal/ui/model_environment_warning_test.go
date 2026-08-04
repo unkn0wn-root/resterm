@@ -6,17 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func envEntry(name, path string) filesvc.FileEntry {
-	return filesvc.FileEntry{Name: name, Path: path, Kind: filesvc.FileKindEnv}
+func envEntry(name, path string) files.Entry {
+	return files.Entry{Name: name, Path: path, Kind: files.KindEnv}
 }
 
 func TestInactiveEnvStatus(t *testing.T) {
 	active := filepath.Join("/ws", "resterm.env.json")
-	nested := []filesvc.FileEntry{
+	nested := []files.Entry{
 		envEntry("resterm.env.json", active),
 		envEntry(filepath.Join("a", "resterm.env.json"), filepath.Join("/ws", "a", "resterm.env.json")),
 		envEntry(filepath.Join("b", "resterm.env.json"), filepath.Join("/ws", "b", "resterm.env.json")),
@@ -24,7 +24,7 @@ func TestInactiveEnvStatus(t *testing.T) {
 
 	for _, tc := range []struct {
 		name      string
-		entries   []filesvc.FileEntry
+		entries   []files.Entry
 		active    string
 		recursive bool
 		want      string
@@ -66,7 +66,7 @@ func TestInactiveEnvStatus(t *testing.T) {
 		},
 		{
 			name:      "request files are ignored",
-			entries:   []filesvc.FileEntry{{Name: "a/req.http", Path: "/ws/a/req.http", Kind: filesvc.FileKindRequest}},
+			entries:   []files.Entry{{Name: "a/req.http", Path: "/ws/a/req.http", Kind: files.KindRequest}},
 			active:    active,
 			recursive: true,
 		},

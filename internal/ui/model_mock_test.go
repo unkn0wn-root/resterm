@@ -12,8 +12,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/mock"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -500,7 +500,7 @@ func TestCaptureFocusedHTTPResponseAsMock(t *testing.T) {
 POST https://api.example.test/payments
 `
 	model := newMockTestModel(t, input)
-	response := &httpclient.Response{
+	response := &httpx.Response{
 		Status:       "202 Accepted",
 		StatusCode:   http.StatusAccepted,
 		ReqMethod:    http.MethodPost,

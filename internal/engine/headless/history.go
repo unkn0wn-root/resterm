@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -131,7 +131,7 @@ func redactText(text string, secs []string, maskHdr bool) string {
 	return strings.Join(lines, "\n")
 }
 
-func snippetHTTP(resp *httpclient.Response, req *restfile.Request, secs []string) string {
+func snippetHTTP(resp *httpx.Response, req *restfile.Request, secs []string) string {
 	if resp == nil {
 		return ""
 	}
@@ -141,7 +141,7 @@ func snippetHTTP(resp *httpclient.Response, req *restfile.Request, secs []string
 	return redactText(string(resp.Body), secs, false)
 }
 
-func snippetGRPC(resp *grpcclient.Response, req *restfile.Request, secs []string) string {
+func snippetGRPC(resp *grpcx.Response, req *restfile.Request, secs []string) string {
 	if resp == nil {
 		return ""
 	}

@@ -97,7 +97,7 @@ func baseConfig(p restfile.K8sProfile) Config {
 		Container:  strings.TrimSpace(p.Container),
 		Address:    connprofile.Fallback(strings.TrimSpace(p.Address), defaultAddress),
 		LocalPort:  p.LocalPort,
-		Persist:    p.Persist.Set && p.Persist.Val,
+		Persist:    p.Persist.Or(false),
 		PodWait:    defaultPodWait,
 		Retries:    0,
 		Port: PortRef{

@@ -13,8 +13,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"nhooyr.io/websocket"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
@@ -143,7 +143,7 @@ func (m *Model) nextStreamMsgCmd() tea.Cmd {
 	}
 }
 
-func (m *Model) attachSSEHandle(handle *httpclient.StreamHandle, req *restfile.Request) {
+func (m *Model) attachSSEHandle(handle *httpx.StreamHandle, req *restfile.Request) {
 	if handle == nil {
 		return
 	}
@@ -151,14 +151,14 @@ func (m *Model) attachSSEHandle(handle *httpclient.StreamHandle, req *restfile.R
 	m.attachStreamSession(handle.Session)
 }
 
-func (m *Model) attachWebSocketHandle(handle *httpclient.WebSocketHandle, req *restfile.Request) {
+func (m *Model) attachWebSocketHandle(handle *httpx.WebSocketHandle, req *restfile.Request) {
 	if handle == nil {
 		return
 	}
 	m.recordSessionMapping(req, handle.Session)
 	m.attachStreamSession(handle.Session)
 	if m.wsSenders == nil {
-		m.wsSenders = make(map[string]*httpclient.WebSocketSender)
+		m.wsSenders = make(map[string]*httpx.WebSocketSender)
 	}
 	sessionID := ""
 	if handle.Session != nil {
@@ -804,7 +804,7 @@ func (m *Model) renderGRPCEvent(evt *stream.Event) string {
 		return strings.Join(filterEmpty(parts), " ")
 	}
 
-	if method := grpcMetaVal(evt.Metadata, grpcclient.MetaMethod); method != "" {
+	if method := grpcMetaVal(evt.Metadata, grpcx.MetaMethod); method != "" {
 		parts = append(parts, th.StreamSummary.Render(method))
 	}
 
@@ -838,8 +838,8 @@ func grpcMetaVal(md map[string]string, key string) string {
 }
 
 func grpcLabel(md map[string]string) string {
-	typ := grpcMetaVal(md, grpcclient.MetaMsgType)
-	idx := grpcMetaVal(md, grpcclient.MetaMsgIndex)
+	typ := grpcMetaVal(md, grpcx.MetaMsgType)
+	idx := grpcMetaVal(md, grpcx.MetaMsgIndex)
 	if typ == "" {
 		return idx
 	}
@@ -850,9 +850,9 @@ func grpcLabel(md map[string]string) string {
 }
 
 func grpcSummaryLine(md map[string]string) string {
-	method := grpcMetaVal(md, grpcclient.MetaMethod)
-	status := grpcMetaVal(md, grpcclient.MetaStatus)
-	reason := grpcMetaVal(md, grpcclient.MetaReason)
+	method := grpcMetaVal(md, grpcx.MetaMethod)
+	status := grpcMetaVal(md, grpcx.MetaStatus)
+	reason := grpcMetaVal(md, grpcx.MetaReason)
 	summary := "summary"
 	if method != "" {
 		summary += " " + method

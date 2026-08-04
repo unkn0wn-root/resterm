@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -234,7 +234,7 @@ func (ix *Index) Load(root string, rec bool) {
 		return
 	}
 
-	fs, err := filesvc.ListRequestFiles(root, rec)
+	fs, err := files.ListRequests(root, files.ListOptions{Recursive: rec})
 	if err != nil {
 		ix.reset(root, rec)
 		return

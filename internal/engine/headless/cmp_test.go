@@ -11,13 +11,13 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func newHTTPClientWithFactory(factory httpclient.HTTPClientFactory) *httpclient.Client {
-	return httpclient.NewClientWithOptions(httpclient.WithHTTPFactory(factory))
+func newHTTPClientWithFactory(factory httpx.HTTPClientFactory) *httpx.Client {
+	return httpx.NewClientWithOptions(httpx.WithHTTPFactory(factory))
 }
 
 type cmpFixture struct {
@@ -38,7 +38,7 @@ func newCmpFixture(t *testing.T) cmpFixture {
 	}))
 	t.Cleanup(srv.Close)
 
-	cl := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	cl := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return srv.Client(), nil
 	})
 

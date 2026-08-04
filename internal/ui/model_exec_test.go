@@ -25,9 +25,9 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -44,8 +44,8 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-func newHTTPClientWithFactory(factory httpclient.HTTPClientFactory) *httpclient.Client {
-	return httpclient.NewClientWithOptions(httpclient.WithHTTPFactory(factory))
+func newHTTPClientWithFactory(factory httpx.HTTPClientFactory) *httpx.Client {
+	return httpx.NewClientWithOptions(httpx.WithHTTPFactory(factory))
 }
 
 func startUIWebSocketServer(t *testing.T) (*httptest.Server, func()) {
@@ -205,7 +205,7 @@ func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 			FullMethod: "/pkg.Service/Missing",
 		},
 	}
-	resp := &grpcclient.Response{
+	resp := &grpcx.Response{
 		StatusCode:    codes.NotFound,
 		StatusMessage: "not found",
 		Message:       "{}",
@@ -255,7 +255,7 @@ func TestConsumeGRPCResponseUsesBinaryBody(t *testing.T) {
 			FullMethod: "/pkg.Service/Binary",
 		},
 	}
-	resp := &grpcclient.Response{
+	resp := &grpcx.Response{
 		StatusCode:      codes.OK,
 		StatusMessage:   "OK",
 		Message:         `{"ok":true}`,
@@ -407,7 +407,7 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 
 func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
 	var calls int32
-	fakeClient := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	fakeClient := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		atomic.AddInt32(&calls, 1)
 		return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			t.Fatalf("request should not be sent after parse error")
@@ -565,7 +565,7 @@ func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
-	fakeClient := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	fakeClient := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		transport := transportFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
@@ -651,7 +651,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 
 func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *testing.T) {
 	var seenHeader string
-	fakeClient := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	fakeClient := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			seenHeader = req.Header.Get("X-Seen")
 			return &http.Response{
@@ -690,7 +690,7 @@ func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 		},
 	}
 
-	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("")}))().(responseMsg)
+	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpx.Options{}, sel: testSelection("")}))().(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg")
 	}
@@ -727,7 +727,7 @@ func TestExecuteExplainRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 		},
 	}
 
-	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection(""), mode: rqeng.ExecModePreview}))().(responseMsg)
+	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpx.Options{}, sel: testSelection(""), mode: rqeng.ExecModePreview}))().(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg")
 	}
@@ -779,13 +779,13 @@ func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 	}
 
 	model.syncRegistry(doc)
-	model.requestSvc(httpclient.Options{}).ResolveInheritedAuth(doc, req)
-	client := httpclient.NewClient(nil)
+	model.requestSvc(httpx.Options{}).ResolveInheritedAuth(doc, req)
+	client := httpx.NewClient(nil)
 	httpReq, _, _, err := client.BuildHTTPRequest(
 		context.Background(),
 		req,
 		vars.NewResolver(),
-		httpclient.Options{},
+		httpx.Options{},
 	)
 	if err != nil {
 		t.Fatalf("BuildHTTPRequest: %v", err)
@@ -812,7 +812,7 @@ func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 	})
 
 	req := &restfile.Request{}
-	model.requestSvc(httpclient.Options{}).ResolveInheritedAuth(
+	model.requestSvc(httpx.Options{}).ResolveInheritedAuth(
 		&restfile.Document{Path: "/tmp/current.http"},
 		req,
 	)
@@ -853,7 +853,7 @@ func TestRunPreRequestScriptsApplyCanClearInheritedAuth(t *testing.T) {
 		},
 	}
 
-	res, err := model.requestSvc(httpclient.Options{}).ExecuteWith(
+	res, err := model.requestSvc(httpx.Options{}).ExecuteWith(
 		doc,
 		req, testEnv(
 
@@ -885,7 +885,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}
 
 	model.runtimeSvc().OAuth().SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			atomic.AddInt32(&calls, 1)
 			values, err := url.ParseQuery(req.Body.Text)
 			if err != nil {
@@ -893,7 +893,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 			}
 			lastForm = copyValues(values)
 			lastAuth = req.Headers.Get("Authorization")
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body: []byte(
@@ -912,11 +912,11 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 	resolver := vars.NewResolver()
-	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
+	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		resolver,
-		httpclient.Options{},
+		httpx.Options{},
 		testEnv(""),
 		time.Second,
 	); err != nil {
@@ -934,11 +934,11 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}
 
 	req2 := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
-	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
+	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req2,
 		resolver,
-		httpclient.Options{},
+		httpx.Options{},
 		testEnv(""),
 		time.Second,
 	); err != nil {
@@ -955,9 +955,9 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 		ws: workspace{sel: testSelection("dev")},
 	}
 	model.runtimeSvc().OAuth().SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			atomic.AddInt32(&called, 1)
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200",
 				StatusCode: 200,
 				Body:       []byte(`{"access_token":"x"}`),
@@ -973,11 +973,11 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 			}},
 		},
 	}
-	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
+	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
-		httpclient.Options{},
+		httpx.Options{},
 		testEnv(""),
 		time.Second,
 	); err != nil {
@@ -1009,7 +1009,7 @@ func testEnsureCommandAuth(
 	env string,
 	timeout time.Duration,
 ) (authcmd.Result, error) {
-	return m.requestSvc(httpclient.Options{}).EnsureCommandAuth(
+	return m.requestSvc(httpx.Options{}).EnsureCommandAuth(
 		ctx,
 		nil,
 		req,
@@ -1025,7 +1025,7 @@ func testBuildCommandAuthConfig(
 	res *vars.Resolver,
 	timeout time.Duration,
 ) (authcmd.Config, error) {
-	return m.requestSvc(httpclient.Options{}).
+	return m.requestSvc(httpx.Options{}).
 		BuildCommandAuthConfig(nil, auth, res, timeout)
 }
 
@@ -1035,7 +1035,7 @@ func testPrepareExplainAuthPreview(
 	res *vars.Resolver,
 	env string,
 ) (rqeng.ExplainAuthPreviewResult, error) {
-	return m.requestSvc(httpclient.Options{}).
+	return m.requestSvc(httpx.Options{}).
 		PrepareExplainAuthPreview(nil, req, res, testEnv(env))
 }
 
@@ -1045,9 +1045,9 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 		ws: workspace{sel: testSelection("dev")},
 	}
 	model.runtimeSvc().OAuth().SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			atomic.AddInt32(&requests, 1)
-			return &httpclient.Response{
+			return &httpx.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
 				Body:       []byte(`{"access_token":"token","token_type":"Bearer"}`),
@@ -1064,22 +1064,22 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 
-	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
+	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
-		httpclient.Options{},
+		httpx.Options{},
 		testEnv("stage"),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureOAuth stage: %v", err)
 	}
 	req.Headers = nil
-	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
+	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
-		httpclient.Options{},
+		httpx.Options{},
 		testEnv("stage"),
 		time.Second,
 	); err != nil {
@@ -1090,11 +1090,11 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}
 
 	req.Headers = nil
-	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
+	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
-		httpclient.Options{},
+		httpx.Options{},
 		testEnv("dev"),
 		time.Second,
 	); err != nil {
@@ -1111,7 +1111,7 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	}
 
 	model.runtimeSvc().OAuth().SetRequestFunc(
-		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		func(ctx context.Context, req *restfile.Request, opts httpx.Options) (*httpx.Response, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
 		},
@@ -1127,11 +1127,11 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
+		if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 			ctx,
 			req,
 			resolver,
-			httpclient.Options{},
+			httpx.Options{},
 			testEnv(""),
 			time.Minute,
 		); !errors.Is(
@@ -1453,7 +1453,7 @@ func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 		URL:    "https://example.com",
 	}
 
-	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("")})
+	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpx.Options{}, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1486,7 +1486,7 @@ func TestExecuteRequestInteractiveWebSocketStaysAlive(t *testing.T) {
 		},
 	}
 
-	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("")})
+	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpx.Options{}, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1502,7 +1502,7 @@ func TestExecuteRequestInteractiveWebSocketStaysAlive(t *testing.T) {
 	if resp.response == nil {
 		t.Fatalf("expected placeholder websocket response")
 	}
-	if got := resp.response.Headers.Get(httpclient.StreamHeaderType); got != "websocket" {
+	if got := resp.response.Headers.Get(httpx.StreamHeaderType); got != "websocket" {
 		t.Fatalf("expected websocket placeholder header, got %q", got)
 	}
 
@@ -1540,7 +1540,7 @@ func TestRunRequestServiceAttachesInteractiveWebSocket(t *testing.T) {
 		URL:       wsURL,
 		WebSocket: &restfile.WebSocketRequest{},
 	}
-	svc := model.runRequestSvc(httpclient.Options{})
+	svc := model.runRequestSvc(httpx.Options{})
 	if svc == nil {
 		t.Fatal("expected run request service")
 	}
@@ -1559,7 +1559,7 @@ func TestRunRequestServiceAttachesInteractiveWebSocket(t *testing.T) {
 	if res.Response == nil {
 		t.Fatal("expected placeholder websocket response")
 	}
-	if got := res.Response.Headers.Get(httpclient.StreamHeaderType); got != "websocket" {
+	if got := res.Response.Headers.Get(httpx.StreamHeaderType); got != "websocket" {
 		t.Fatalf("expected websocket placeholder header, got %q", got)
 	}
 
@@ -1586,7 +1586,7 @@ func TestExecuteRequestRejectsNilRequest(t *testing.T) {
 		ws: workspace{sel: testSelection("dev")},
 	}
 
-	cmd, _ := model.startRun(runSpec{doc: nil, req: nil, opts: httpclient.Options{}, sel: testSelection("")})
+	cmd, _ := model.startRun(runSpec{doc: nil, req: nil, opts: httpx.Options{}, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1613,7 +1613,7 @@ func TestExecuteRequestRejectsSSHAndK8sBeforeResolve(t *testing.T) {
 		K8s:    &restfile.K8sSpec{},
 	}
 
-	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("")})
+	cmd, _ := model.startRun(runSpec{doc: nil, req: req, opts: httpx.Options{}, sel: testSelection("")})
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -1800,12 +1800,12 @@ func TestExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 	setReq := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/set"}
 	echoReq := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/echo"}
 
-	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: setReq, opts: httpclient.Options{}, sel: testSelection("dev")}))().(responseMsg)
+	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: setReq, opts: httpx.Options{}, sel: testSelection("dev")}))().(responseMsg)
 	if !ok || msg.err != nil {
 		t.Fatalf("unexpected set response: %#v", msg)
 	}
 
-	msg, ok = runCmd(model.startRun(runSpec{doc: nil, req: echoReq, opts: httpclient.Options{}, sel: testSelection("dev")}))().(responseMsg)
+	msg, ok = runCmd(model.startRun(runSpec{doc: nil, req: echoReq, opts: httpx.Options{}, sel: testSelection("dev")}))().(responseMsg)
 	if !ok || msg.err != nil {
 		t.Fatalf("unexpected dev echo response: %#v", msg)
 	}
@@ -1813,7 +1813,7 @@ func TestExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 		t.Fatalf("expected dev cookie, got %q", got)
 	}
 
-	msg, ok = runCmd(model.startRun(runSpec{doc: nil, req: echoReq, opts: httpclient.Options{}, sel: testSelection("prod")}))().(responseMsg)
+	msg, ok = runCmd(model.startRun(runSpec{doc: nil, req: echoReq, opts: httpx.Options{}, sel: testSelection("prod")}))().(responseMsg)
 	if !ok || msg.err != nil {
 		t.Fatalf("unexpected prod echo response: %#v", msg)
 	}
@@ -1845,7 +1845,7 @@ func TestExecuteRequestNoCookiesSettingDisablesJar(t *testing.T) {
 		URL:      srv.URL + "/echo",
 		Settings: map[string]string{"no-cookies": "true"},
 	}
-	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpclient.Options{}, sel: testSelection("dev")}))().(responseMsg)
+	msg, ok := runCmd(model.startRun(runSpec{doc: nil, req: req, opts: httpx.Options{}, sel: testSelection("dev")}))().(responseMsg)
 	if !ok || msg.err != nil {
 		t.Fatalf("unexpected response: %#v", msg)
 	}
@@ -1855,7 +1855,7 @@ func TestExecuteRequestNoCookiesSettingDisablesJar(t *testing.T) {
 }
 
 func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
-	client := newHTTPClientWithFactory(func(opts httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(opts httpx.Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			clientTrace := httptrace.ContextClientTrace(req.Context())
 			if clientTrace != nil {
@@ -1955,7 +1955,7 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 	}
 
 	cmd, _ := model.startRun(
-		runSpec{doc: nil, req: req, opts: httpclient.Options{NoFallback: true}, sel: testSelection("dev")},
+		runSpec{doc: nil, req: req, opts: httpx.Options{NoFallback: true}, sel: testSelection("dev")},
 	)
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
@@ -1983,7 +1983,7 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 
 	cmd, _ = model.startRun(runSpec{
 		req:  reqWithSetting,
-		opts: httpclient.Options{NoFallback: true},
+		opts: httpx.Options{NoFallback: true},
 		sel:  testSelection("dev"),
 	})
 

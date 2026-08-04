@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 )
 
 // An --env-file environment is pinned for the session, so a move keeps it.
@@ -77,7 +77,7 @@ func TestActiveEnvBadgeUsesFileIdentity(t *testing.T) {
 	if !slices.Contains(badges, "ACTIVE") {
 		t.Fatalf("badges = %v, want ACTIVE for an alias of the active file", badges)
 	}
-	if got := inactiveEnvStatus([]filesvc.FileEntry{envEntry("alias.env.json", alias)}, real, true); got.text != "" {
+	if got := inactiveEnvStatus([]files.Entry{envEntry("alias.env.json", alias)}, real, true); got.text != "" {
 		t.Fatalf("warning = %q, want none, so the two agree", got.text)
 	}
 }

@@ -7,8 +7,8 @@ import (
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
@@ -1594,7 +1594,7 @@ func TestWebSocketCommandChordTogglesConsole(t *testing.T) {
 
 	model.currentRequest = req
 	model.requestSessions = map[*restfile.Request]string{req: "ws-1"}
-	model.wsSenders = map[string]*httpclient.WebSocketSender{
+	model.wsSenders = map[string]*httpx.WebSocketSender{
 		"ws-1": {},
 	}
 	model.responsePanes[0].activeTab = responseTabStream

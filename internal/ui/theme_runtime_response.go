@@ -2,20 +2,19 @@ package ui
 
 import (
 	"context"
-	"net/http"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 type responseRenderSource struct {
-	http       *httpclient.Response
-	grpc       *grpcclient.Response
+	http       *httpx.Response
+	grpc       *grpcx.Response
 	grpcReq    *restfile.Request
 	grpcMethod string
 	tests      []scripts.TestResult
@@ -23,7 +22,7 @@ type responseRenderSource struct {
 }
 
 func newHTTPResponseRenderSource(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseRenderSource {
@@ -35,12 +34,12 @@ func newHTTPResponseRenderSource(
 }
 
 func newGRPCResponseRenderSource(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	fullMethod string,
 	req *restfile.Request,
 ) responseRenderSource {
 	return responseRenderSource{
-		grpc:       cloneGRPCResponse(resp),
+		grpc:       resp.Clone(),
 		grpcReq:    req.Clone(),
 		grpcMethod: strings.TrimSpace(fullMethod),
 	}
@@ -156,22 +155,8 @@ func (m *Model) rerenderGRPCResponseSnapshot(
 	} else {
 		snapshot.rawMode = rawViewText
 	}
-	snapshot.responseHeaders = grpcResponseHeaderMap(resp)
+	snapshot.responseHeaders = resp.HeaderMap()
 	applyRawViewMode(snapshot, snapshot.rawMode)
-}
-
-func grpcResponseHeaderMap(resp *grpcclient.Response) http.Header {
-	if resp == nil || (len(resp.Headers) == 0 && len(resp.Trailers) == 0) {
-		return nil
-	}
-	h := make(http.Header, len(resp.Headers)+len(resp.Trailers))
-	for key, values := range resp.Headers {
-		h[key] = append([]string(nil), values...)
-	}
-	for key, values := range resp.Trailers {
-		h["Grpc-Trailer-"+key] = append([]string(nil), values...)
-	}
-	return h
 }
 
 func (m *Model) restartPendingResponseRender() tea.Cmd {

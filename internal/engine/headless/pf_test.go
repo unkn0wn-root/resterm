@@ -10,7 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
@@ -38,7 +38,7 @@ func TestExecuteProfilePreservesWarmupStatsAndFailures(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cl := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
+	cl := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return srv.Client(), nil
 	})
 

@@ -1,18 +1,23 @@
 package bodyfmt
 
 import (
-	"net/http"
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
 
+func build(in BuildInput) BodyViews {
+	return Build(context.Background(), in)
+}
+
 func TestBuildJSONPlainText(t *testing.T) {
-	views := Build(BuildInput{
+	views := build(BuildInput{
 		Body:        []byte(`{"b":1,"a":"x"}`),
 		ContentType: "application/json",
 	})
@@ -25,7 +30,7 @@ func TestBuildJSONPlainText(t *testing.T) {
 }
 
 func TestBuildBinaryDefaultsToHex(t *testing.T) {
-	views := Build(BuildInput{
+	views := build(BuildInput{
 		Body:        []byte{0x00, 0x01, 0x02, 0x03},
 		ContentType: "application/octet-stream",
 	})
@@ -40,8 +45,67 @@ func TestBuildBinaryDefaultsToHex(t *testing.T) {
 	}
 }
 
+func TestBuildHeavyBinaryDefersRawDump(t *testing.T) {
+	body := make([]byte, RawHeavyLimit+1)
+	for i := range body {
+		body[i] = byte(i % 7)
+	}
+
+	views := build(BuildInput{Body: body, ContentType: "application/octet-stream"})
+	if views.Mode != RawSummary {
+		t.Fatalf("Build(...).Mode=%v, want %v", views.Mode, RawSummary)
+	}
+	if views.RawHex != "" || views.RawBase64 != "" {
+		t.Fatalf("expected heavy body to skip dumps, got hex=%d b64=%d bytes",
+			len(views.RawHex), len(views.RawBase64))
+	}
+	if !strings.Contains(views.Raw, "<raw dump deferred>") {
+		t.Fatalf("expected deferred raw text, got %q", views.Raw)
+	}
+}
+
+func TestBuildEmptyBodyUsesPlaceholder(t *testing.T) {
+	views := build(BuildInput{ContentType: "text/plain"})
+	if views.Pretty != placeholder || views.Raw != placeholder {
+		t.Fatalf("Build(...) pretty=%q raw=%q, want %q for both",
+			views.Pretty, views.Raw, placeholder)
+	}
+}
+
+func TestBuildCancelledContextSkipsFormatting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	body := `{"b":1,"a":"x"}`
+	views := Build(ctx, BuildInput{Body: []byte(body), ContentType: "application/json"})
+	if views.Pretty != body {
+		t.Fatalf("expected cancelled build to return source body, got %q", views.Pretty)
+	}
+}
+
+func TestBuildViewBodyOverridesBinaryVerdict(t *testing.T) {
+	views := build(BuildInput{
+		Body:            []byte{0x00, 0x01, 0x02, 0x03},
+		ContentType:     "application/grpc",
+		ViewBody:        []byte(`{"a":1}`),
+		ViewContentType: "application/json",
+	})
+	if views.Meta.Kind != binaryview.KindText {
+		t.Fatalf("expected text verdict from view body, got %v", views.Meta.Kind)
+	}
+	if views.Mode != RawText {
+		t.Fatalf("Build(...).Mode=%v, want %v", views.Mode, RawText)
+	}
+	if !strings.Contains(views.Pretty, "a: 1") {
+		t.Fatalf("expected view body to be prettified, got %q", views.Pretty)
+	}
+	if views.ContentType != "application/json" {
+		t.Fatalf("Build(...).ContentType=%q, want view content type", views.ContentType)
+	}
+}
+
 func TestBuildJSONColorUsesResolvedFormatter(t *testing.T) {
-	views := Build(BuildInput{
+	views := build(BuildInput{
 		Body:        []byte(`{"b":1,"a":"x"}`),
 		ContentType: "application/json",
 		Color:       termcolor.Enabled(termenv.ANSI256),
@@ -55,13 +119,13 @@ func TestBuildJSONColorUsesResolvedFormatter(t *testing.T) {
 }
 
 func TestBuildJSONColorRespectsConfiguredStyle(t *testing.T) {
-	github := Build(BuildInput{
+	github := build(BuildInput{
 		Body:        []byte(`{"b":1,"a":"x"}`),
 		ContentType: "application/json",
 		Color:       termcolor.Enabled(termenv.ANSI256),
 		Style:       "github",
 	})
-	monokai := Build(BuildInput{
+	monokai := build(BuildInput{
 		Body:        []byte(`{"b":1,"a":"x"}`),
 		ContentType: "application/json",
 		Color:       termcolor.Enabled(termenv.ANSI256),
@@ -77,7 +141,7 @@ func TestBuildJSONColorRespectsConfiguredStyle(t *testing.T) {
 }
 
 func TestBuildXMLPrettyFormats(t *testing.T) {
-	views := Build(BuildInput{
+	views := build(BuildInput{
 		Body:        []byte(`<root><child>one</child></root>`),
 		ContentType: "text/xml",
 	})
@@ -91,7 +155,7 @@ func TestBuildXMLPrettyFormats(t *testing.T) {
 
 func TestBuildMalformedXMLFallsBackToOriginalText(t *testing.T) {
 	body := `<root><child></root>`
-	views := Build(BuildInput{
+	views := build(BuildInput{
 		Body:        []byte(body),
 		ContentType: "application/xml",
 	})
@@ -100,54 +164,5 @@ func TestBuildMalformedXMLFallsBackToOriginalText(t *testing.T) {
 	}
 	if views.RawText != body {
 		t.Fatalf("expected malformed XML raw fallback, got %q", views.RawText)
-	}
-}
-
-func TestFormatHeadersSortsNamesAndValues(t *testing.T) {
-	headers := http.Header{
-		"X-B": {"2", "1"},
-		"X-A": {"z"},
-	}
-	got := FormatHeaders(headers)
-	want := "X-A: z\nX-B: 1, 2"
-	if got != want {
-		t.Fatalf("FormatHeaders()=%q, want %q", got, want)
-	}
-}
-
-func TestStripANSIUsesLegacyUIBehavior(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{
-			name: "csi",
-			in:   "\x1b[31mred\x1b[0m",
-			want: "red",
-		},
-		{
-			name: "osc",
-			in:   "\x1b]8;;https://example.com\x07label\x1b]8;;\x07",
-			want: "label",
-		},
-		{
-			name: "incomplete csi preserved",
-			in:   "\x1b[31",
-			want: "\x1b[31",
-		},
-		{
-			name: "non csi escape preserved",
-			in:   "\x1bc",
-			want: "\x1bc",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := StripANSI(tt.in); got != tt.want {
-				t.Fatalf("StripANSI(%q)=%q, want %q", tt.in, got, tt.want)
-			}
-		})
 	}
 }

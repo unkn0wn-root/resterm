@@ -352,7 +352,11 @@ func ensureSnapshotMeta(snapshot *responseSnapshot) binaryview.Meta {
 }
 
 func clampRawViewMode(meta binaryview.Meta, sz int, mode rawViewMode) rawViewMode {
-	return rawViewMode(bodyfmt.ClampRawMode(meta, sz, bodyfmt.RawMode(mode)))
+	return rawViewMode(rawPayload(meta, sz).ClampMode(bodyfmt.RawMode(mode)))
+}
+
+func rawPayload(meta binaryview.Meta, sz int) bodyfmt.Payload {
+	return bodyfmt.Payload{Meta: meta, Size: sz}
 }
 
 func nextRawViewMode(meta binaryview.Meta, sz int, current rawViewMode) rawViewMode {
@@ -372,7 +376,7 @@ func nextRawViewMode(meta binaryview.Meta, sz int, current rawViewMode) rawViewM
 }
 
 func allowedRawViewModes(meta binaryview.Meta, sz int) []rawViewMode {
-	src := bodyfmt.AllowedRawModes(meta, sz)
+	src := rawPayload(meta, sz).Modes()
 	if len(src) == 0 {
 		return nil
 	}
@@ -381,8 +385,4 @@ func allowedRawViewModes(meta binaryview.Meta, sz int) []rawViewMode {
 		out = append(out, rawViewMode(mode))
 	}
 	return out
-}
-
-func rawViewModeLabels(meta binaryview.Meta, sz int) []string {
-	return bodyfmt.ModeLabels(meta, sz)
 }

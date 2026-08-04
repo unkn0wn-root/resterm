@@ -7,7 +7,7 @@ import (
 	"time"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -24,7 +24,7 @@ func TestSetExplainHTTPExtendsPreparedReport(t *testing.T) {
 	}
 
 	setExplainPrepared(rep, req, req.Settings, nil, nil)
-	setExplainHTTP(rep, &httpclient.Response{
+	setExplainHTTP(rep, &httpx.Response{
 		ReqMethod:      "POST",
 		EffectiveURL:   "https://example.com/final",
 		RequestHeaders: http.Header{"X-Sent": {"2"}},
@@ -54,15 +54,13 @@ func TestSetExplainPreparedCapturesGRPCDetails(t *testing.T) {
 	req := &restfile.Request{
 		Method: "POST",
 		GRPC: &restfile.GRPCRequest{
-			Target:             "dns:///grpc.example:8443",
-			FullMethod:         "/pkg.Service/Call",
-			DescriptorSet:      "api.pb",
-			Plaintext:          true,
-			PlaintextSet:       true,
-			Authority:          "grpc.example",
-			MessageFile:        "req.json",
-			MessageExpanded:    `{"ok":true}`,
-			MessageExpandedSet: true,
+			Target:          "dns:///grpc.example:8443",
+			FullMethod:      "/pkg.Service/Call",
+			DescriptorSet:   "api.pb",
+			Plaintext:       restfile.OptOf(true),
+			Authority:       "grpc.example",
+			MessageFile:     "req.json",
+			MessageExpanded: restfile.OptOf(`{"ok":true}`),
 			Metadata: []restfile.MetadataPair{
 				{Key: "x-trace-id", Value: "abc123"},
 			},
@@ -108,8 +106,7 @@ func TestSetExplainPreparedCapturesWebSocketSteps(t *testing.T) {
 				HandshakeTimeout: 3 * time.Second,
 				IdleTimeout:      30 * time.Second,
 				Subprotocols:     []string{"chat", "events"},
-				Compression:      true,
-				CompressionSet:   true,
+				Compression:      restfile.OptOf(true),
 			},
 			Steps: []restfile.WebSocketStep{
 				{Type: restfile.WebSocketStepSendJSON, Value: `{"ping":true}`},

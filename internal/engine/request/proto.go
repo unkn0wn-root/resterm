@@ -2,16 +2,13 @@ package request
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -54,42 +51,30 @@ func expandWebSocketSteps(req *restfile.Request, res *vars.Resolver) error {
 	return nil
 }
 
-func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scripts.Response {
+func grpcScriptResponse(req *restfile.Request, resp *grpcx.Response) *scripts.Response {
 	if resp == nil {
 		return nil
 	}
 
-	body := append([]byte(nil), resp.Body...)
-	if len(body) == 0 && strings.TrimSpace(resp.Message) != "" {
-		body = []byte(resp.Message)
-	}
-	wire := append([]byte(nil), resp.Wire...)
-	wireCT := strings.TrimSpace(resp.WireContentType)
-	ct := strings.TrimSpace(resp.ContentType)
+	body, ct := resp.ViewBody()
 	if ct == "" {
 		ct = "application/json"
 	}
+	wire := append([]byte(nil), resp.Wire...)
+	wireCT := strings.TrimSpace(resp.WireContentType)
 
+	// Re-add metadata through http.Header so script lookups stay case-insensitive.
 	hdr := make(http.Header)
-	for k, vs := range resp.Headers {
+	for k, vs := range resp.HeaderMap() {
 		for _, v := range vs {
 			hdr.Add(k, v)
-		}
-	}
-	for k, vs := range resp.Trailers {
-		key := "Grpc-Trailer-" + k
-		for _, v := range vs {
-			hdr.Add(key, v)
 		}
 	}
 	if hdr.Get("Content-Type") == "" && ct != "" {
 		hdr.Set("Content-Type", ct)
 	}
 
-	status := resp.StatusCode.String()
-	if msg := strings.TrimSpace(resp.StatusMessage); msg != "" && !strings.EqualFold(msg, status) {
-		status = fmt.Sprintf("%s (%s)", status, msg)
-	}
+	status := resp.StatusText()
 	target := ""
 	if req != nil && req.GRPC != nil {
 		target = strings.TrimSpace(req.GRPC.Target)
@@ -111,7 +96,7 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 func prepareGRPCRequest(
 	req *restfile.Request,
 	res *vars.Resolver,
-	base string,
+	opt grpcx.Options,
 ) error {
 	grpcReq := req.GRPC
 	if grpcReq == nil {
@@ -141,15 +126,12 @@ func prepareGRPCRequest(
 		grpcReq.MessageFile = req.Body.FilePath
 		grpcReq.Message = ""
 	}
-	// MessageExpanded belongs to the current body. Clear it before expanding
-	// the latest file contents.
-	grpcReq.MessageExpanded = ""
-	grpcReq.MessageExpandedSet = false
+	grpcReq.MessageExpanded = restfile.Opt[string]{}
 
-	if err := grpcclient.ValidateMetaPairs(grpcReq.Metadata); err != nil {
+	if err := grpcx.ValidateMetaPairs(grpcReq.Metadata); err != nil {
 		return err
 	}
-	if err := grpcclient.ValidateHeaderPairs(req.Headers); err != nil {
+	if err := grpcx.ValidateHeaderPairs(req.Headers); err != nil {
 		return err
 	}
 
@@ -168,12 +150,11 @@ func prepareGRPCRequest(
 			grpcReq.Message = out
 		}
 		if req.Body.Options.ExpandTemplates && strings.TrimSpace(grpcReq.MessageFile) != "" {
-			out, err := expandGRPCMessageFile(grpcReq.MessageFile, base, res)
+			out, err := expandGRPCMessageFile(grpcReq.MessageFile, opt, res)
 			if err != nil {
 				return err
 			}
-			grpcReq.MessageExpanded = out
-			grpcReq.MessageExpandedSet = true
+			grpcReq.MessageExpanded = restfile.OptOf(out)
 		}
 		for i := range grpcReq.Metadata {
 			out, err := res.ExpandTemplates(grpcReq.Metadata[i].Value)
@@ -218,17 +199,17 @@ func prepareGRPCRequest(
 	return nil
 }
 
-func expandGRPCMessageFile(path, base string, res *vars.Resolver) (string, error) {
+func expandGRPCMessageFile(
+	path string,
+	opt grpcx.Options,
+	res *vars.Resolver,
+) (string, error) {
 	if res == nil {
 		return "", nil
 	}
-	full := path
-	if !filepath.IsAbs(full) && base != "" {
-		full = filepath.Join(base, full)
-	}
-	data, err := os.ReadFile(full)
+	data, err := grpcx.ReadMessageFile(path, opt)
 	if err != nil {
-		return "", diag.WrapAsf(diag.ClassFilesystem, err, "read grpc message file %s", path)
+		return "", err
 	}
 	out, err := res.ExpandTemplates(string(data))
 	if err != nil {
@@ -247,15 +228,13 @@ func normalizeGRPCTarget(target string, req *restfile.GRPCRequest) string {
 	low := strings.ToLower(val)
 	switch {
 	case strings.HasPrefix(low, "grpcs://"):
-		if req != nil && !req.PlaintextSet {
-			req.Plaintext = false
-			req.PlaintextSet = true
+		if req != nil && !req.Plaintext.Set {
+			req.Plaintext = restfile.OptOf(false)
 		}
 		return val[len("grpcs://"):]
 	case strings.HasPrefix(low, "https://"):
-		if req != nil && !req.PlaintextSet {
-			req.Plaintext = false
-			req.PlaintextSet = true
+		if req != nil && !req.Plaintext.Set {
+			req.Plaintext = restfile.OptOf(false)
 		}
 		return val[len("https://"):]
 	case strings.HasPrefix(low, "grpc://"):
@@ -293,7 +272,7 @@ func grpcStreamInfoFromSession(sess *stream.Session) (*scripts.StreamInfo, []byt
 		item := map[string]any{
 			"timestamp": ev.Timestamp.Format(time.RFC3339Nano),
 		}
-		if mtd := grpcMetaTrim(ev.Metadata, grpcclient.MetaMethod); mtd != "" {
+		if mtd := grpcMetaTrim(ev.Metadata, grpcx.MetaMethod); mtd != "" {
 			item["method"] = mtd
 		}
 		switch ev.Direction {
@@ -306,21 +285,21 @@ func grpcStreamInfoFromSession(sess *stream.Session) (*scripts.StreamInfo, []byt
 		default:
 			item["direction"] = "summary"
 		}
-		if typ := grpcMetaTrim(ev.Metadata, grpcclient.MetaMsgType); typ != "" {
+		if typ := grpcMetaTrim(ev.Metadata, grpcx.MetaMsgType); typ != "" {
 			item["messageType"] = typ
 		}
-		if idxText := grpcMetaTrim(ev.Metadata, grpcclient.MetaMsgIndex); idxText != "" {
+		if idxText := grpcMetaTrim(ev.Metadata, grpcx.MetaMsgIndex); idxText != "" {
 			item["index"] = idxText
 			if idx, convErr := strconv.Atoi(idxText); convErr == nil {
 				item["indexNum"] = idx
 			}
 		}
 		if ev.Direction == stream.DirNA {
-			if code := grpcMetaTrim(ev.Metadata, grpcclient.MetaStatus); code != "" {
+			if code := grpcMetaTrim(ev.Metadata, grpcx.MetaStatus); code != "" {
 				item["status"] = code
 				status = code
 			}
-			if msg := grpcMetaTrim(ev.Metadata, grpcclient.MetaReason); msg != "" {
+			if msg := grpcMetaTrim(ev.Metadata, grpcx.MetaReason); msg != "" {
 				item["reason"] = msg
 				reason = msg
 			}

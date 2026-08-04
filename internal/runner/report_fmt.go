@@ -1,12 +1,14 @@
 package runner
 
 import (
+	"slices"
+
 	"io"
 	"sort"
 
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -161,7 +163,7 @@ func errText(err error) string {
 	return err.Error()
 }
 
-func formatHTTP(resp *httpclient.Response) *runfmt.HTTP {
+func formatHTTP(resp *httpx.Response) *runfmt.HTTP {
 	if resp == nil {
 		return nil
 	}
@@ -172,7 +174,7 @@ func formatHTTP(resp *httpclient.Response) *runfmt.HTTP {
 	}
 }
 
-func formatGRPC(resp *grpcclient.Response) *runfmt.GRPC {
+func formatGRPC(resp *grpcx.Response) *runfmt.GRPC {
 	if resp == nil {
 		return nil
 	}
@@ -180,6 +182,7 @@ func formatGRPC(resp *grpcclient.Response) *runfmt.GRPC {
 		Code:          resp.StatusCode.String(),
 		StatusCode:    int(resp.StatusCode),
 		StatusMessage: str.Trim(resp.StatusMessage),
+		StatusDetails: slices.Clone(resp.StatusDetails),
 	}
 }
 

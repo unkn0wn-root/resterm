@@ -127,8 +127,7 @@ func (b *Builder) applyOption(name, value string) error {
 				value,
 			)
 		}
-		b.opts.Compression = val
-		b.opts.CompressionSet = true
+		b.opts.Compression = restfile.OptOf(val)
 	default:
 		return directive.UnknownOption(directive.WebSocket, name)
 	}

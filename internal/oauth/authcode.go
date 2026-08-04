@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/launch"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
 const (
@@ -34,7 +34,7 @@ func (m *Manager) requestAuthCodeToken(
 	env string,
 	key string,
 	cfg Config,
-	opts httpclient.Options,
+	opts httpx.Options,
 ) (Token, error) {
 	authURL := cfg.AuthURL
 	if authURL == "" {

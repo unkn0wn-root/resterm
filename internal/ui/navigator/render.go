@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -205,15 +205,15 @@ func rowIcon(n *Node[any]) string {
 		return dirIcon(n.Expanded)
 	case KindFile:
 		switch fileKind(n) {
-		case filesvc.FileKindScript:
+		case files.KindScript:
 			return iconRTS
-		case filesvc.FileKindEnv:
+		case files.KindEnv:
 			return iconEnv
-		case filesvc.FileKindGraphQL:
+		case files.KindGraphQL:
 			return iconGraphQL
-		case filesvc.FileKindJSON:
+		case files.KindJSON:
 			return iconJSON
-		case filesvc.FileKindJavaScript:
+		case files.KindJavaScript:
 			return iconJavaScript
 		}
 		return caret(n.Expanded)
@@ -273,14 +273,14 @@ func withActiveForeground(style lipgloss.Style, th theme.Theme) lipgloss.Style {
 	return style
 }
 
-func fileKind(n *Node[any]) filesvc.FileKind {
-	if entry, ok := n.Payload.Data.(filesvc.FileEntry); ok {
+func fileKind(n *Node[any]) files.Kind {
+	if entry, ok := n.Payload.Data.(files.Entry); ok {
 		return entry.Kind
 	}
-	if kind, ok := filesvc.ClassifyWorkspacePath(n.Payload.FilePath); ok {
+	if kind, ok := files.ClassifyWorkspace(n.Payload.FilePath); ok {
 		return kind
 	}
-	return filesvc.FileKindRequest
+	return files.KindRequest
 }
 
 func caret(expanded bool) string {

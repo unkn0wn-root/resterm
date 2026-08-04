@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
@@ -399,7 +399,7 @@ func workflowStatsTestView() *workflowStatsView {
 					Success:  true,
 					Status:   "200 OK",
 					Duration: 7 * time.Millisecond,
-					HTTP: &httpclient.Response{
+					HTTP: &httpx.Response{
 						Status:     "200 OK",
 						StatusCode: 200,
 						Headers:    http.Header{"Content-Type": []string{"application/json"}},
@@ -415,7 +415,7 @@ func workflowStatsTestView() *workflowStatsView {
 					Status:   "500 Internal Server Error",
 					Duration: 12 * time.Millisecond,
 					Message:  "expected 200",
-					HTTP: &httpclient.Response{
+					HTTP: &httpx.Response{
 						Status:     "500 Internal Server Error",
 						StatusCode: 500,
 						Headers:    http.Header{"Content-Type": []string{"application/json"}},

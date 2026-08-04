@@ -99,13 +99,8 @@ func (w *requestTextWriter) writeGRPCSection(grpc *restfile.GRPCRequest) {
 	if !grpc.UseReflection {
 		w.writeLine(directive.GRPCReflection.Comment() + " false")
 	}
-	if grpc.PlaintextSet {
-		line := fmt.Sprintf(
-			"%s %t",
-			directive.GRPCPlaintext.Comment(),
-			grpc.Plaintext,
-		)
-		w.writeLine(line)
+	if v, ok := grpc.Plaintext.Get(); ok {
+		w.writeLine(fmt.Sprintf("%s %t", directive.GRPCPlaintext.Comment(), v))
 	}
 	if grpc.Authority != "" {
 		w.writeLine(directive.GRPCAuthority.Comment() + " " + grpc.Authority)
@@ -197,7 +192,7 @@ func renderWebSocketDirectiveLine(opts restfile.WebSocketOptions) string {
 		durationDirectivePart("idle", opts.IdleTimeout),
 		int64DirectivePart("max-message-bytes", opts.MaxMessageBytes),
 		csvDirectivePart("subprotocols", opts.Subprotocols),
-		boolDirectivePart("compression", opts.Compression, opts.CompressionSet),
+		boolDirectivePart("compression", opts.Compression),
 	)
 }
 
@@ -242,11 +237,12 @@ func csvDirectivePart(name string, values []string) string {
 	return fmt.Sprintf("%s=%s", name, strings.Join(values, ","))
 }
 
-func boolDirectivePart(name string, value, set bool) string {
-	if !set {
+func boolDirectivePart(name string, opt restfile.Opt[bool]) string {
+	v, ok := opt.Get()
+	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("%s=%t", name, value)
+	return fmt.Sprintf("%s=%t", name, v)
 }
 
 func renderWebSocketStepLine(st restfile.WebSocketStep) string {

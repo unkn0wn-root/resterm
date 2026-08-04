@@ -14,9 +14,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
@@ -77,7 +77,7 @@ func nextResponseRenderToken() string {
 	return fmt.Sprintf("render-%d", id)
 }
 
-func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
+func cloneHTTPResponse(resp *httpx.Response) *httpx.Response {
 	if resp == nil {
 		return nil
 	}
@@ -110,7 +110,7 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 		traceReport = resp.TraceReport.Clone()
 	}
 
-	return &httpclient.Response{
+	return &httpx.Response{
 		Status:         resp.Status,
 		StatusCode:     resp.StatusCode,
 		Proto:          resp.Proto,
@@ -126,32 +126,6 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 		Request:        resp.Request,
 		Timeline:       timeline,
 		TraceReport:    traceReport,
-	}
-}
-
-func cloneGRPCResponse(resp *grpcclient.Response) *grpcclient.Response {
-	if resp == nil {
-		return nil
-	}
-	headers := make(map[string][]string, len(resp.Headers))
-	for key, values := range resp.Headers {
-		headers[key] = append([]string(nil), values...)
-	}
-	trailers := make(map[string][]string, len(resp.Trailers))
-	for key, values := range resp.Trailers {
-		trailers[key] = append([]string(nil), values...)
-	}
-	return &grpcclient.Response{
-		Message:         resp.Message,
-		Body:            append([]byte(nil), resp.Body...),
-		Wire:            append([]byte(nil), resp.Wire...),
-		ContentType:     resp.ContentType,
-		WireContentType: resp.WireContentType,
-		Headers:         headers,
-		Trailers:        trailers,
-		StatusCode:      resp.StatusCode,
-		StatusMessage:   resp.StatusMessage,
-		Duration:        resp.Duration,
 	}
 }
 
@@ -191,7 +165,7 @@ func defaultResponseRenderer() responseRenderer {
 }
 
 func buildHTTPResponseViews(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
@@ -199,7 +173,7 @@ func buildHTTPResponseViews(
 }
 
 func (r responseRenderer) buildHTTPResponseViews(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
@@ -208,7 +182,7 @@ func (r responseRenderer) buildHTTPResponseViews(
 
 func (r responseRenderer) buildHTTPResponseViewsCtx(
 	ctx context.Context,
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
@@ -265,7 +239,7 @@ func (r responseRenderer) buildHTTPResponseViewsCtx(
 }
 
 func (r responseRenderer) renderHTTPRespHdrs(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 	width int,
@@ -283,7 +257,7 @@ func (r responseRenderer) renderHTTPRespHdrs(
 	)
 }
 
-func (r responseRenderer) renderHTTPReqHdrs(resp *httpclient.Response, width int) string {
+func (r responseRenderer) renderHTTPReqHdrs(resp *httpx.Response, width int) string {
 	if resp == nil {
 		return noResponseMessage
 	}
@@ -357,7 +331,7 @@ func (r responseRenderer) renderGRPCReqHdrs(req *restfile.Request, width int) st
 }
 
 func (r responseRenderer) renderGRPCRespHdrs(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	fullMethod string,
 	width int,
 ) string {
@@ -526,7 +500,7 @@ func hdrIndent(width int) string {
 }
 
 func (r responseRenderer) buildGRPCResponseViews(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	fullMethod string,
 ) responseViews {
 	if resp == nil {
@@ -551,25 +525,13 @@ func (r responseRenderer) buildGRPCResponseViews(
 
 	statusLine := grpcStatusLine(resp, fullMethod)
 
-	viewBody := append([]byte(nil), resp.Body...)
-	if len(viewBody) == 0 && strings.TrimSpace(resp.Message) != "" {
-		viewBody = []byte(resp.Message)
-	}
-	viewContentType := strings.TrimSpace(resp.ContentType)
-	if viewContentType == "" && len(viewBody) > 0 {
-		viewContentType = "application/json"
-	}
-
-	rawBody := append([]byte(nil), resp.Wire...)
-	if len(rawBody) == 0 {
-		rawBody = append([]byte(nil), viewBody...)
-	}
-	rawContentType := strings.TrimSpace(resp.WireContentType)
-	if rawContentType == "" {
+	viewBody, viewContentType := resp.ViewBody()
+	rawBody, rawContentType := resp.RawBody()
+	// A restored snapshot may carry its content type only in Headers.
+	if strings.TrimSpace(resp.WireContentType) == "" &&
+		strings.TrimSpace(resp.ContentType) == "" &&
+		contentType != "" {
 		rawContentType = contentType
-	}
-	if rawContentType == "" {
-		rawContentType = viewContentType
 	}
 
 	meta := binaryview.Analyze(viewBody, viewContentType)
@@ -599,22 +561,24 @@ func (r responseRenderer) buildGRPCResponseViews(
 	}
 }
 
-func grpcStatusLine(resp *grpcclient.Response, fullMethod string) string {
+func grpcStatusLine(resp *grpcx.Response, fullMethod string) string {
 	if resp == nil {
 		return ""
 	}
 	line := fmt.Sprintf(
 		"gRPC %s - %s",
 		strings.TrimPrefix(strings.TrimSpace(fullMethod), "/"),
-		resp.StatusCode.String(),
+		resp.StatusText(),
 	)
-	if resp.StatusMessage != "" {
-		line += " (" + resp.StatusMessage + ")"
+	for _, detail := range resp.StatusDetails {
+		if d := strings.TrimSpace(detail); d != "" {
+			line += "\n" + d
+		}
 	}
 	return line
 }
 
-func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
+func buildRequestHeaderMap(resp *httpx.Response) http.Header {
 	var h http.Header
 	if resp != nil && resp.RequestHeaders != nil {
 		h = resp.RequestHeaders.Clone()
@@ -688,7 +652,7 @@ func (r responseRenderer) buildBodyViewsCtx(
 	viewBody []byte,
 	viewContentType string,
 ) bodyViews {
-	out := bodyfmt.BuildContext(ctx, bodyfmt.BuildInput{
+	out := bodyfmt.Build(ctx, bodyfmt.BuildInput{
 		Body:            body,
 		ContentType:     contentType,
 		Meta:            meta,
@@ -717,50 +681,27 @@ func (r responseRenderer) buildBodyViewsCtx(
 }
 
 func (r responseRenderer) renderBinarySummary(meta binaryview.Meta) string {
-	lines := []string{
-		r.stats.Heading.Render(fmt.Sprintf("Binary body (%s)", formatByteSize(int64(meta.Size)))),
-	}
-	if strings.TrimSpace(meta.MIME) != "" {
-		lines = append(
-			lines,
-			renderLabelValue(
-				"MIME",
-				strings.TrimSpace(meta.MIME),
-				r.stats.Label,
-				r.stats.Value,
-			),
-		)
-	}
-	if strings.TrimSpace(meta.DecodeErr) != "" {
-		lines = append(
-			lines,
-			r.stats.Warn.Render("Decode warning: "+strings.TrimSpace(meta.DecodeErr)),
-		)
-	}
-	if meta.PreviewHex != "" {
-		lines = append(
-			lines,
-			renderLabelValue("Preview hex", meta.PreviewHex, r.stats.Label, r.stats.Message),
-		)
-	}
-	if meta.PreviewB64 != "" {
-		lines = append(
-			lines,
-			renderLabelValue("Preview base64", meta.PreviewB64, r.stats.Label, r.stats.Message),
-		)
-	}
-	if modes := rawViewModeLabels(meta, meta.Size); len(modes) > 0 {
-		lines = append(
-			lines,
-			renderLabelValue(
-				"Raw tab",
-				strings.Join(modes, " / "),
-				r.stats.Label,
-				r.stats.Value,
-			),
-		)
+	summary := bodyfmt.Payload{Meta: meta}.BinarySummary()
+	lines := make([]string, 0, len(summary))
+	for _, line := range summary {
+		lines = append(lines, r.renderSummaryLine(line))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r responseRenderer) renderSummaryLine(line bodyfmt.SummaryLine) string {
+	switch line.Kind {
+	case bodyfmt.SummaryTitle:
+		return r.stats.Heading.Render(line.Value)
+	case bodyfmt.SummaryWarn:
+		return r.stats.Warn.Render(line.String())
+	case bodyfmt.SummaryPreview:
+		return renderLabelValue(line.Label, line.Value, r.stats.Label, r.stats.Message)
+	case bodyfmt.SummaryModes:
+		return renderLabelValue("Raw tab", line.Value, r.stats.Label, r.stats.Value)
+	default:
+		return renderLabelValue(line.Label, line.Value, r.stats.Label, r.stats.Value)
+	}
 }
 
 func cloneHeaders(h http.Header) http.Header {

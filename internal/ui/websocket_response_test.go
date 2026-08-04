@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
 type wsTestTranscript struct {
@@ -48,7 +48,7 @@ func TestBuildHTTPResponseViewsForWebSocket(t *testing.T) {
 		t.Fatalf("marshal transcript: %v", err)
 	}
 
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:       "101 Switching Protocols",
 		StatusCode:   http.StatusSwitchingProtocols,
 		Proto:        "HTTP/1.1",

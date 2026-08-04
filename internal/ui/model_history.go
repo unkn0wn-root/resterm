@@ -16,10 +16,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -413,7 +413,7 @@ func requestErrorNote(class diag.Class) string {
 }
 
 func (m *Model) consumeHTTPResponse(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 	environment string,
@@ -776,7 +776,7 @@ func (m *Model) handleResponseLoadingTick() tea.Cmd {
 }
 
 func (m *Model) consumeGRPCResponse(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 	req *restfile.Request,
@@ -836,7 +836,7 @@ func (m *Model) consumeGRPCResponse(
 		rawHex:          views.rawHex,
 		rawBase64:       views.rawBase64,
 		rawMode:         views.rawMode,
-		responseHeaders: grpcResponseHeaderMap(resp),
+		responseHeaders: resp.HeaderMap(),
 		requestHeaders:  renderer.renderGRPCReqHdrs(req, defaultResponseViewportWidth),
 		source:          newGRPCResponseRenderSource(resp, fullMethod, req),
 	}
@@ -879,7 +879,7 @@ func (m *Model) consumeGRPCResponse(
 }
 
 func (m *Model) recordHTTPHistory(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	req *restfile.Request,
 	requestText string,
 	environment string,
@@ -1012,7 +1012,7 @@ func formatBinaryHistorySnippet(meta binaryview.Meta, size int) string {
 }
 
 func (m *Model) recordGRPCHistory(
-	resp *grpcclient.Response,
+	resp *grpcx.Response,
 	req *restfile.Request,
 	requestText string,
 	environment string,

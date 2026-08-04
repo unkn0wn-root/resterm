@@ -15,6 +15,7 @@ import (
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -182,6 +183,66 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	}
 	if atomic.LoadInt32(&calls) != 1 {
 		t.Fatalf("expected cache-only reuse to skip execution, got %d calls", calls)
+	}
+}
+
+// A cache-only directive inherits its header from the seeded entry, so an
+// unrelated Authorization header must not be mistaken for the auth output.
+func TestEnsureCommandAuthCacheOnlyReuseIgnoresUnrelatedAuthorization(t *testing.T) {
+	var calls int32
+
+	eng := newTestEngine()
+	eng.rt.AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		return []byte("token-basic"), nil
+	})
+
+	doc := &restfile.Document{Path: "/tmp/example.http"}
+	seedReq := &restfile.Request{Metadata: restfile.RequestMetadata{
+		Auth: &restfile.AuthSpec{Type: "command", Params: map[string]string{
+			"argv":      `["gh","auth","token"]`,
+			"cache_key": "github",
+			"header":    "X-Registry-Token",
+			"scheme":    "Token",
+		}},
+	}}
+	if _, err := eng.EnsureCommandAuth(
+		context.Background(),
+		doc,
+		seedReq,
+		vars.NewResolver(),
+		testEnv(""),
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth seed: %v", err)
+	}
+
+	req := &restfile.Request{
+		Headers: http.Header{"Authorization": {"Bearer gateway-token"}},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{Type: "command", Params: map[string]string{
+				"cache_key": "github",
+			}},
+		},
+	}
+	if _, err := eng.EnsureCommandAuth(
+		context.Background(),
+		doc,
+		req,
+		vars.NewResolver(),
+		testEnv(""),
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth cache-only: %v", err)
+	}
+	if got := req.Headers.Get("X-Registry-Token"); got != "Token token-basic" {
+		t.Fatalf("expected inherited seeded header, got %q", got)
+	}
+	if got := req.Headers.Get("Authorization"); got != "Bearer gateway-token" {
+		t.Fatalf("expected unrelated header to survive, got %q", got)
+	}
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("expected cache reuse to skip execution, got %d calls", calls)
 	}
 }
 
@@ -480,6 +541,194 @@ func TestEnsureCommandAuthWithoutRuntimeReturnsInitError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), errCommandAuthNotInitialized) {
 		t.Fatalf("expected init error, got %v", err)
+	}
+}
+
+func oauthSpec(params map[string]string) *restfile.AuthSpec {
+	return &restfile.AuthSpec{Type: "oauth2", Params: params}
+}
+
+// An explicit credential means the oauth config is never used, so an
+// incomplete one must not fail the request.
+func TestEnsureOAuthSkipsIncompleteConfigWhenMetadataPresent(t *testing.T) {
+	eng := newTestEngine()
+	req := grpcAuthRequest(
+		oauthSpec(map[string]string{"client_id": "example"}),
+		restfile.MetadataPair{Key: "authorization", Value: "Bearer manually-supplied"},
+	)
+
+	if err := eng.EnsureOAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		httpx.Options{},
+		testEnv(""),
+		time.Second,
+	); err != nil {
+		t.Fatalf("EnsureOAuth with overriding metadata: %v", err)
+	}
+	if got := req.Headers.Get("Authorization"); got != "" {
+		t.Fatalf("expected no injected header, got %q", got)
+	}
+}
+
+func TestEnsureOAuthSkipsIncompleteConfigWhenHeaderPresent(t *testing.T) {
+	eng := newTestEngine()
+	req := &restfile.Request{
+		Headers:  http.Header{"Authorization": {"Bearer manually-supplied"}},
+		Metadata: restfile.RequestMetadata{Auth: oauthSpec(map[string]string{"client_id": "example"})},
+	}
+
+	if err := eng.EnsureOAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		httpx.Options{},
+		testEnv(""),
+		time.Second,
+	); err != nil {
+		t.Fatalf("EnsureOAuth with overriding header: %v", err)
+	}
+	if got := req.Headers.Get("Authorization"); got != "Bearer manually-supplied" {
+		t.Fatalf("expected header to survive untouched, got %q", got)
+	}
+}
+
+// A custom header only counts as an override when it is the one oauth targets.
+func TestEnsureOAuthUnrelatedHeaderStillRequiresTokenURL(t *testing.T) {
+	eng := newTestEngine()
+	req := grpcAuthRequest(
+		oauthSpec(map[string]string{"client_id": "example", "header": "X-Auth"}),
+		restfile.MetadataPair{Key: "authorization", Value: "Bearer manually-supplied"},
+	)
+
+	err := eng.EnsureOAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		httpx.Options{},
+		testEnv(""),
+		time.Second,
+	)
+	if err == nil {
+		t.Fatal("expected missing token_url to fail when the override targets another header")
+	}
+	if !strings.Contains(err.Error(), "token_url") {
+		t.Fatalf("expected token_url error, got %v", err)
+	}
+}
+
+func TestEnsureOAuthWithoutOverrideStillRequiresTokenURL(t *testing.T) {
+	eng := newTestEngine()
+	req := grpcAuthRequest(oauthSpec(map[string]string{"client_id": "example"}))
+
+	err := eng.EnsureOAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		httpx.Options{},
+		testEnv(""),
+		time.Second,
+	)
+	if err == nil {
+		t.Fatal("expected missing token_url to fail without an override")
+	}
+	if !strings.Contains(err.Error(), "token_url") {
+		t.Fatalf("expected token_url error, got %v", err)
+	}
+}
+
+// argv is only needed to run the command, so an override skips its templates
+// the same way it skips the execution.
+func TestEnsureCommandAuthSkipsBrokenArgvWhenMetadataPresent(t *testing.T) {
+	called := int32(0)
+
+	eng := newTestEngine()
+	eng.rt.AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&called, 1)
+		return []byte("token-basic"), nil
+	})
+
+	req := grpcAuthRequest(
+		&restfile.AuthSpec{Type: "command", Params: map[string]string{
+			"argv": `["gh","auth","token","--tenant","{{missing_var}}"]`,
+		}},
+		restfile.MetadataPair{Key: "authorization", Value: "Bearer manually-supplied"},
+	)
+
+	if _, err := eng.EnsureCommandAuth(
+		context.Background(),
+		&restfile.Document{Path: "/tmp/example.http"},
+		req,
+		vars.NewResolver(),
+		testEnv(""),
+		time.Second,
+	); err != nil {
+		t.Fatalf("EnsureCommandAuth with overriding metadata: %v", err)
+	}
+	if atomic.LoadInt32(&called) != 0 {
+		t.Fatalf("expected no command auth execution, got %d", called)
+	}
+	if got := req.Headers.Get("Authorization"); got != "" {
+		t.Fatalf("expected no injected header, got %q", got)
+	}
+}
+
+func TestEnsureCommandAuthWithoutOverrideReportsBrokenArgv(t *testing.T) {
+	eng := newTestEngine()
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{Type: "command", Params: map[string]string{
+				"argv": `["gh","auth","token","--tenant","{{missing_var}}"]`,
+			}},
+		},
+	}
+
+	_, err := eng.EnsureCommandAuth(
+		context.Background(),
+		&restfile.Document{Path: "/tmp/example.http"},
+		req,
+		vars.NewResolver(),
+		testEnv(""),
+		time.Second,
+	)
+	if err == nil {
+		t.Fatal("expected a broken argv template to fail without an override")
+	}
+	if !strings.Contains(err.Error(), "missing_var") {
+		t.Fatalf("expected undefined variable error, got %v", err)
+	}
+}
+
+func TestEnsureCommandAuthSkipsBrokenArgvForCustomHeader(t *testing.T) {
+	called := int32(0)
+
+	eng := newTestEngine()
+	eng.rt.AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&called, 1)
+		return []byte("token-basic"), nil
+	})
+
+	req := grpcAuthRequest(
+		&restfile.AuthSpec{Type: "command", Params: map[string]string{
+			"argv":   `["gh","auth","token","{{missing_var}}"]`,
+			"header": "X-Auth",
+		}},
+		restfile.MetadataPair{Key: "x-auth", Value: "manually-supplied"},
+	)
+
+	if _, err := eng.EnsureCommandAuth(
+		context.Background(),
+		&restfile.Document{Path: "/tmp/example.http"},
+		req,
+		vars.NewResolver(),
+		testEnv(""),
+		time.Second,
+	); err != nil {
+		t.Fatalf("EnsureCommandAuth with overriding metadata: %v", err)
+	}
+	if atomic.LoadInt32(&called) != 0 {
+		t.Fatalf("expected no command auth execution, got %d", called)
 	}
 }
 

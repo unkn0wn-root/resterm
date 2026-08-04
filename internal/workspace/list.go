@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -33,7 +33,7 @@ type ListOptions struct {
 	CurrentDoc      *restfile.Document
 }
 
-func List(root string, opt ListOptions) ([]filesvc.FileEntry, error) {
+func List(root string, opt ListOptions) ([]files.Entry, error) {
 	l := newLister(root, opt)
 	return l.list()
 }
@@ -42,8 +42,8 @@ type lister struct {
 	root              string
 	rootAbs           string
 	opt               ListOptions
-	entries           map[string]filesvc.FileEntry
-	docs              []filesvc.FileEntry
+	entries           map[string]files.Entry
+	docs              []files.Entry
 	seenRTSModuleRefs map[string]struct{}
 }
 
@@ -58,12 +58,12 @@ func newLister(root string, opt ListOptions) *lister {
 		root:              root,
 		rootAbs:           rootAbs,
 		opt:               opt,
-		entries:           make(map[string]filesvc.FileEntry),
+		entries:           make(map[string]files.Entry),
 		seenRTSModuleRefs: make(map[string]struct{}),
 	}
 }
 
-func (l *lister) list() ([]filesvc.FileEntry, error) {
+func (l *lister) list() ([]files.Entry, error) {
 	base, err := l.loadBase()
 	if err != nil {
 		return nil, err
@@ -74,21 +74,20 @@ func (l *lister) list() ([]filesvc.FileEntry, error) {
 	return l.sorted(), nil
 }
 
-func (l *lister) loadBase() ([]filesvc.FileEntry, error) {
-	return filesvc.ListWorkspaceFiles(
-		l.root,
-		l.opt.Recursive,
-		filesvc.ListOptions{ExplicitEnvFile: l.opt.ExplicitEnvFile},
-	)
+func (l *lister) loadBase() ([]files.Entry, error) {
+	return files.ListWorkspace(l.root, files.ListOptions{
+		Recursive:       l.opt.Recursive,
+		ExplicitEnvFile: l.opt.ExplicitEnvFile,
+	})
 }
 
-func (l *lister) addBaseEntries(base []filesvc.FileEntry) {
+func (l *lister) addBaseEntries(base []files.Entry) {
 	for _, e := range base {
 		switch e.Kind {
-		case filesvc.FileKindRequest:
+		case files.KindRequest:
 			l.addEntry(e)
 			l.addDoc(e)
-		case filesvc.FileKindEnv:
+		case files.KindEnv:
 			l.addEntry(e)
 		}
 	}
@@ -100,7 +99,7 @@ func (l *lister) addCurrentFile() {
 		return
 	}
 	l.addEntry(e)
-	if e.Kind == filesvc.FileKindRequest {
+	if e.Kind == files.KindRequest {
 		l.addDoc(e)
 	}
 }
@@ -130,8 +129,8 @@ func (l *lister) addRef(referrerPath string, ref Ref) {
 	l.addRTSModuleRefs(referrerPath, e)
 }
 
-func (l *lister) addRTSModuleRefs(referrerPath string, e filesvc.FileEntry) {
-	if e.Kind != filesvc.FileKindScript {
+func (l *lister) addRTSModuleRefs(referrerPath string, e files.Entry) {
+	if e.Kind != files.KindScript {
 		return
 	}
 
@@ -163,11 +162,11 @@ func (l *lister) loadDoc(path string) *restfile.Document {
 	return parser.Parse(path, data)
 }
 
-func (l *lister) addEntry(e filesvc.FileEntry) {
+func (l *lister) addEntry(e files.Entry) {
 	l.entries[pathKey(e.Path)] = e
 }
 
-func (l *lister) addDoc(e filesvc.FileEntry) {
+func (l *lister) addDoc(e files.Entry) {
 	for _, doc := range l.docs {
 		if util.SamePath(util.Trim(doc.Path), util.Trim(e.Path)) {
 			return
@@ -176,25 +175,25 @@ func (l *lister) addDoc(e filesvc.FileEntry) {
 	l.docs = append(l.docs, e)
 }
 
-func (l *lister) currentEntry() (filesvc.FileEntry, bool) {
+func (l *lister) currentEntry() (files.Entry, bool) {
 	path := util.Trim(l.opt.CurrentFile)
 	if path == "" {
-		return filesvc.FileEntry{}, false
+		return files.Entry{}, false
 	}
-	kind, ok := filesvc.ClassifyWorkspacePath(path)
+	kind, ok := files.ClassifyWorkspace(path)
 	if !ok {
-		return filesvc.FileEntry{}, false
+		return files.Entry{}, false
 	}
 	return l.entryFor(path, kind)
 }
 
-func (l *lister) refEntry(src, ref string) (filesvc.FileEntry, bool) {
+func (l *lister) refEntry(src, ref string) (files.Entry, bool) {
 	ref = util.Trim(ref)
 	if ref == "" {
-		return filesvc.FileEntry{}, false
+		return files.Entry{}, false
 	}
 	if isDynamicRef(ref) {
-		return filesvc.FileEntry{}, false
+		return files.Entry{}, false
 	}
 
 	path := ref
@@ -202,14 +201,14 @@ func (l *lister) refEntry(src, ref string) (filesvc.FileEntry, bool) {
 		path = filepath.Join(filepath.Dir(src), path)
 	}
 
-	kind, ok := filesvc.ClassifyWorkspacePath(path)
+	kind, ok := files.ClassifyWorkspace(path)
 	if !ok {
-		return filesvc.FileEntry{}, false
+		return files.Entry{}, false
 	}
 	return l.entryFor(path, kind)
 }
 
-func (l *lister) entryFor(path string, kind filesvc.FileKind) (filesvc.FileEntry, bool) {
+func (l *lister) entryFor(path string, kind files.Kind) (files.Entry, bool) {
 	pathAbs, err := filepath.Abs(filepath.Clean(path))
 	if err != nil {
 		pathAbs = filepath.Clean(path)
@@ -217,25 +216,25 @@ func (l *lister) entryFor(path string, kind filesvc.FileKind) (filesvc.FileEntry
 
 	rel, err := filepath.Rel(l.rootAbs, pathAbs)
 	if err != nil {
-		return filesvc.FileEntry{}, false
+		return files.Entry{}, false
 	}
 	if relEscapesRoot(rel) {
-		return filesvc.FileEntry{}, false
+		return files.Entry{}, false
 	}
 
 	info, err := os.Stat(pathAbs)
 	if err != nil || info.IsDir() {
-		return filesvc.FileEntry{}, false
+		return files.Entry{}, false
 	}
-	return filesvc.FileEntry{
+	return files.Entry{
 		Name: rel,
 		Path: filepath.Join(l.root, rel),
 		Kind: kind,
 	}, true
 }
 
-func (l *lister) sorted() []filesvc.FileEntry {
-	out := make([]filesvc.FileEntry, 0, len(l.entries))
+func (l *lister) sorted() []files.Entry {
+	out := make([]files.Entry, 0, len(l.entries))
 	for _, e := range l.entries {
 		out = append(out, e)
 	}

@@ -9,12 +9,12 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func (m *Model) runCfg(opts httpclient.Options) engine.Config {
+func (m *Model) runCfg(opts httpx.Options) engine.Config {
 	path := strings.TrimSpace(m.currentFile)
 	if path == "" {
 		path = strings.TrimSpace(m.cfg.FilePath)
@@ -43,7 +43,7 @@ func (m *Model) runCfg(opts httpclient.Options) engine.Config {
 
 // runOptions points BaseDir at the file being run. The launch file's directory
 // stops meaning anything once another file or workspace is active.
-func (m Model) runOptions() httpclient.Options {
+func (m Model) runOptions() httpx.Options {
 	opts := m.cfg.HTTPOptions
 	if m.currentFile != "" {
 		opts.BaseDir = filepath.Dir(m.currentFile)
@@ -51,7 +51,7 @@ func (m Model) runOptions() httpclient.Options {
 	return opts
 }
 
-func (m *Model) requestSvc(opts httpclient.Options) *rqeng.Engine {
+func (m *Model) requestSvc(opts httpx.Options) *rqeng.Engine {
 	rt := m.runtimeSvc()
 	if rt == nil {
 		return nil
@@ -118,7 +118,7 @@ func (e *uiRequestEngine) queueWarning(text string) {
 	emitQueuedMsg(e.model.runMsgChan, runWarningMsg{text: text})
 }
 
-func (m *Model) runRequestSvc(opts httpclient.Options) *uiRequestEngine {
+func (m *Model) runRequestSvc(opts httpx.Options) *uiRequestEngine {
 	rq := m.requestSvc(opts)
 	if rq == nil {
 		return nil
@@ -152,7 +152,7 @@ func (m *Model) runBlocked() tea.Cmd {
 type runSpec struct {
 	doc    *restfile.Document
 	req    *restfile.Request
-	opts   httpclient.Options
+	opts   httpx.Options
 	sel    vars.Selection
 	mode   rqeng.ExecMode
 	record bool

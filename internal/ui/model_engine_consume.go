@@ -8,8 +8,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -62,8 +62,8 @@ func (m *Model) responseMsgFromRunState(res engine.RequestResult, done bool) res
 
 func (m *Model) applyRunSnapshot(
 	sn *responseSnapshot,
-	hr *httpclient.Response,
-	gr *grpcclient.Response,
+	hr *httpx.Response,
+	gr *grpcx.Response,
 ) {
 	if sn == nil {
 		return

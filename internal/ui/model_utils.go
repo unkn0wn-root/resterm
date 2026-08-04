@@ -14,7 +14,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
@@ -99,7 +99,7 @@ func (r responseRenderer) formatTestSummary(
 }
 
 func (r responseRenderer) buildRespSum(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) string {
@@ -107,7 +107,7 @@ func (r responseRenderer) buildRespSum(
 }
 
 func (r responseRenderer) buildRespSumPretty(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) string {
@@ -115,7 +115,7 @@ func (r responseRenderer) buildRespSumPretty(
 }
 
 func (r responseRenderer) buildRespSummary(
-	resp *httpclient.Response,
+	resp *httpx.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 	prettyLength bool,
@@ -144,7 +144,7 @@ func (r responseRenderer) buildRespSummary(
 
 	if resp.Headers != nil {
 		if streamType := strings.TrimSpace(
-			resp.Headers.Get(httpclient.StreamHeaderType),
+			resp.Headers.Get(httpx.StreamHeaderType),
 		); streamType != "" {
 			lines = append(
 				lines,
@@ -153,7 +153,7 @@ func (r responseRenderer) buildRespSummary(
 		}
 
 		if summary := strings.TrimSpace(
-			resp.Headers.Get(httpclient.StreamHeaderSummary),
+			resp.Headers.Get(httpx.StreamHeaderSummary),
 		); summary != "" {
 			lines = append(
 				lines,
@@ -196,7 +196,7 @@ type contentLen struct {
 	numeric bool
 }
 
-func contentLength(resp *httpclient.Response) contentLen {
+func contentLength(resp *httpx.Response) contentLen {
 	if resp == nil {
 		return contentLen{}
 	}
@@ -212,7 +212,7 @@ func contentLength(resp *httpclient.Response) contentLen {
 	return contentLen{n: n, has: true, numeric: true}
 }
 
-func (r responseRenderer) renderContentLengthLine(resp *httpclient.Response) string {
+func (r responseRenderer) renderContentLengthLine(resp *httpx.Response) string {
 	cl := contentLength(resp)
 	if !cl.has {
 		return ""
@@ -226,7 +226,7 @@ func (r responseRenderer) renderContentLengthLine(resp *httpclient.Response) str
 	return renderLabelValue("Content-Length", value, r.stats.Label, r.stats.Value)
 }
 
-func (r responseRenderer) renderContentLengthLinePretty(resp *httpclient.Response) string {
+func (r responseRenderer) renderContentLengthLinePretty(resp *httpx.Response) string {
 	cl := contentLength(resp)
 	if !cl.has {
 		return ""

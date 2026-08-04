@@ -12,9 +12,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
@@ -48,9 +48,9 @@ type Options struct {
 	EnvironmentFile string
 	Compare         engine.CompareConfig
 	Profile         bool
-	HTTPOptions     httpclient.Options
-	GRPCOptions     grpcclient.Options
-	Client          *httpclient.Client
+	HTTPOptions     httpx.Options
+	GRPCOptions     grpcx.Options
+	Client          *httpx.Client
 	Select          Select
 }
 
@@ -97,8 +97,8 @@ type Result struct {
 	Duration                  time.Duration
 	Passed                    bool
 	Canceled                  bool
-	Response                  *httpclient.Response
-	GRPC                      *grpcclient.Response
+	Response                  *httpx.Response
+	GRPC                      *grpcx.Response
 	Err                       error
 	Tests                     []scripts.TestResult
 	ScriptErr                 error
@@ -164,8 +164,8 @@ type StepResult struct {
 	Total                int
 	Summary              string
 	Duration             time.Duration
-	Response             *httpclient.Response
-	GRPC                 *grpcclient.Response
+	Response             *httpx.Response
+	GRPC                 *grpcx.Response
 	Err                  error
 	Tests                []scripts.TestResult
 	ScriptErr            error
@@ -273,11 +273,11 @@ func requestSourceTarget(req *restfile.Request) string {
 	return str.Trim(req.URL)
 }
 
-func requestTarget(req *restfile.Request, resp *httpclient.Response) string {
+func requestTarget(req *restfile.Request, resp *httpx.Response) string {
 	return effectiveURL(resp, requestSourceTarget(req))
 }
 
-func effectiveURL(resp *httpclient.Response, fallback string) string {
+func effectiveURL(resp *httpx.Response, fallback string) string {
 	if resp != nil {
 		if target := str.Trim(resp.EffectiveURL); target != "" {
 			return target
@@ -581,7 +581,7 @@ func explainMissingTemplateVars(rep *xplain.Report) []string {
 	return out
 }
 
-func traceResult(resp *httpclient.Response) *TraceInfo {
+func traceResult(resp *httpx.Response) *TraceInfo {
 	if resp == nil {
 		return nil
 	}

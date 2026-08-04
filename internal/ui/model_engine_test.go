@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -20,15 +20,15 @@ func (f warningRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, erro
 func TestRunCfgAllowsInteractiveOAuth(t *testing.T) {
 	model := New(Config{})
 
-	cfg := model.runCfg(httpclient.Options{})
+	cfg := model.runCfg(httpx.Options{})
 	if !cfg.AllowInteractiveOAuth {
 		t.Fatalf("expected UI request engine config to allow interactive OAuth")
 	}
 }
 
 func TestUIRequestEngineQueuesInsecureSSHWarningOnce(t *testing.T) {
-	client := httpclient.NewClientWithOptions(
-		httpclient.WithHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := httpx.NewClientWithOptions(
+		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
 			return &http.Client{
 				Transport: warningRoundTripFunc(
 					func(req *http.Request) (*http.Response, error) {
@@ -45,7 +45,7 @@ func TestUIRequestEngineQueuesInsecureSSHWarningOnce(t *testing.T) {
 		}),
 	)
 	model := New(Config{Client: client})
-	svc := model.runRequestSvc(httpclient.Options{})
+	svc := model.runRequestSvc(httpx.Options{})
 	if svc == nil {
 		t.Fatal("expected UI request engine")
 	}

@@ -11,7 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -153,7 +153,7 @@ func TestOpenWorkspaceKeepsDormantState(t *testing.T) {
 
 	scope := m.ws.active.Scope()
 	m.globalsStore().Set(scope, "captured.token", "A-DEV", true)
-	m.lastResponse = &httpclient.Response{Status: "200 OK"}
+	m.lastResponse = &httpx.Response{Status: "200 OK"}
 	if m.cookieStore().Jar(scope) == nil {
 		t.Fatal("expected a cookie jar for the active scope")
 	}
@@ -319,10 +319,10 @@ func TestOpenWorkspaceLeavesNothingSelectedWhenIntentIsMissing(t *testing.T) {
 	// Every path onto the wire is refused, not only the ordinary send.
 	for name, cmd := range map[string]tea.Cmd{
 		"send":     runCmd(m.startRun(runSpec{sel: m.ws.sel})),
-		"profile":  m.startProfileRun(nil, &restfile.Request{}, httpclient.Options{}),
-		"compare":  m.startCompareRun(nil, nil, nil, httpclient.Options{}),
-		"workflow": m.startWorkflowRun(nil, restfile.Workflow{}, httpclient.Options{}),
-		"foreach":  m.startForEachRun(nil, nil, httpclient.Options{}),
+		"profile":  m.startProfileRun(nil, &restfile.Request{}, httpx.Options{}),
+		"compare":  m.startCompareRun(nil, nil, nil, httpx.Options{}),
+		"workflow": m.startWorkflowRun(nil, restfile.Workflow{}, httpx.Options{}),
+		"foreach":  m.startForEachRun(nil, nil, httpx.Options{}),
 	} {
 		refused, ok := firstStatus(cmd)
 		if !ok || !strings.Contains(refused.text, "No environment selected") {
@@ -465,7 +465,7 @@ func TestCommitMoveClearsResponseAndStreamState(t *testing.T) {
 }
 
 func TestRunOptionsDerivesBaseDirFromCurrentFile(t *testing.T) {
-	m := Model{cfg: Config{HTTPOptions: httpclient.Options{BaseDir: "/launch"}}}
+	m := Model{cfg: Config{HTTPOptions: httpx.Options{BaseDir: "/launch"}}}
 	if got := m.runOptions().BaseDir; got != "/launch" {
 		t.Fatalf("BaseDir = %q, want the launch dir with no file open", got)
 	}

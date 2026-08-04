@@ -98,10 +98,11 @@ func TestWebSocketCompressionAcceptsEveryBooleanSpelling(t *testing.T) {
 		if req.WebSocket == nil {
 			t.Fatalf("compression=%s: no websocket request", value)
 		}
-		if !req.WebSocket.Options.CompressionSet {
+		got, ok := req.WebSocket.Options.Compression.Get()
+		if !ok {
 			t.Fatalf("compression=%s: option not recorded", value)
 		}
-		if got := req.WebSocket.Options.Compression; got != want {
+		if got != want {
 			t.Fatalf("compression=%s = %t, want %t", value, got, want)
 		}
 	}

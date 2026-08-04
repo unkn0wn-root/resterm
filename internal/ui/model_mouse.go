@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -332,7 +332,7 @@ func (m *Model) activateNavigatorMouseFile(n *navigator.Node[any]) tea.Cmd {
 		}
 	}
 
-	if filesvc.IsRequestFile(path) {
+	if files.IsRequest(path) {
 		if refreshed := m.navigator.Find(n.ID); refreshed != nil {
 			n = refreshed
 		}

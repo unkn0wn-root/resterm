@@ -15,8 +15,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
 	testgrpc "google.golang.org/grpc/interop/grpc_testing"
@@ -520,8 +520,7 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 			Method:        "StreamingOutputCall",
 			FullMethod:    "/grpc.testing.TestService/StreamingOutputCall",
 			UseReflection: true,
-			Plaintext:     true,
-			PlaintextSet:  true,
+			Plaintext:     restfile.OptOf(true),
 		},
 		Metadata: restfile.RequestMetadata{
 			Asserts: []restfile.AssertSpec{{
@@ -537,10 +536,9 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 	doc := &restfile.Document{Path: "grpc.http", Requests: []*restfile.Request{req}}
 
 	eng := New(engine.Config{
-		GRPCOptions: grpcclient.Options{
-			DefaultPlaintext:    true,
-			DefaultPlaintextSet: true,
-			DialTimeout:         time.Second,
+		GRPCOptions: grpcx.Options{
+			DefaultPlaintext: restfile.OptOf(true),
+			DialTimeout:      time.Second,
 		},
 	})
 	res, err := eng.ExecuteRequest(doc, req, testSelection(""))

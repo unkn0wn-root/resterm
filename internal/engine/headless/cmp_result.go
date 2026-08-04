@@ -8,8 +8,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"google.golang.org/grpc/codes"
 )
 
@@ -84,13 +83,13 @@ func compareSummary(base, row engine.CompareRow) string {
 	case row.Response != nil && base.Response != nil:
 		return summarizeHTTP(base.Response, row.Response)
 	case row.GRPC != nil && base.GRPC != nil:
-		return summarizeGRPC(base.GRPC, row.GRPC)
+		return base.GRPC.DiffSummary(row.GRPC)
 	default:
 		return "unavailable"
 	}
 }
 
-func summarizeHTTP(base, row *httpclient.Response) string {
+func summarizeHTTP(base, row *httpx.Response) string {
 	if base == nil || row == nil {
 		return "unavailable"
 	}
@@ -103,27 +102,6 @@ func summarizeHTTP(base, row *httpclient.Response) string {
 		diff = append(diff, "headers")
 	}
 	if !bytes.Equal(row.Body, base.Body) {
-		diff = append(diff, "body")
-	}
-	if len(diff) == 0 {
-		return "match"
-	}
-	return strings.Join(diff, ", ") + " differ"
-}
-
-func summarizeGRPC(base, row *grpcclient.Response) string {
-	if base == nil || row == nil {
-		return "unavailable"
-	}
-
-	var diff []string
-	if row.StatusCode != base.StatusCode {
-		diff = append(diff, "status")
-	}
-	if strings.TrimSpace(row.StatusMessage) != strings.TrimSpace(base.StatusMessage) {
-		diff = append(diff, "message")
-	}
-	if strings.TrimSpace(row.Message) != strings.TrimSpace(base.Message) {
 		diff = append(diff, "body")
 	}
 	if len(diff) == 0 {

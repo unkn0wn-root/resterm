@@ -12,9 +12,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	engheadless "github.com/unkn0wn-root/resterm/internal/engine/headless"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
@@ -243,7 +243,7 @@ func clonePlanOptions(opts Options, path, work, art string) Options {
 	return out
 }
 
-func cloneHTTPOptions(src httpclient.Options) httpclient.Options {
+func cloneHTTPOptions(src httpx.Options) httpx.Options {
 	out := src
 	out.RootCAs = slices.Clone(src.RootCAs)
 	out.FallbackBaseDirs = slices.Clone(src.FallbackBaseDirs)
@@ -254,7 +254,7 @@ func cloneHTTPOptions(src httpclient.Options) httpclient.Options {
 	return out
 }
 
-func cloneGRPCOptions(src grpcclient.Options) grpcclient.Options {
+func cloneGRPCOptions(src grpcx.Options) grpcx.Options {
 	out := src
 	out.RootCAs = slices.Clone(src.RootCAs)
 	return out

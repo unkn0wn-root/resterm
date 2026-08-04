@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -166,7 +166,7 @@ func moveRefusedCmd(err error) tea.Cmd {
 
 // prepareMove runs every check a move must pass before anything is committed.
 // A non nil cmd is the refusal to show, with the session untouched.
-func (m *Model) prepareMove(dir, current string) (wsMove, []filesvc.FileEntry, tea.Cmd) {
+func (m *Model) prepareMove(dir, current string) (wsMove, []files.Entry, tea.Cmd) {
 	if cmd := m.moveBlocked(); cmd != nil {
 		return wsMove{}, nil, cmd
 	}
@@ -242,7 +242,7 @@ func (m *Model) stopLiveStreams() {
 	}
 	m.sessionHandles = make(map[string]*stream.Session)
 	m.liveSessions = make(map[string]*liveSession)
-	m.wsSenders = make(map[string]*httpclient.WebSocketSender)
+	m.wsSenders = make(map[string]*httpx.WebSocketSender)
 	m.wsConsole = nil
 	m.requestSessions = make(map[*restfile.Request]string)
 	m.sessionRequests = make(map[string]*restfile.Request)

@@ -11,8 +11,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -63,8 +63,8 @@ type wfStepRes struct {
 	skip    bool
 	cancel  bool
 	dur     time.Duration
-	http    *httpclient.Response
-	grpc    *grpcclient.Response
+	http    *httpx.Response
+	grpc    *grpcx.Response
 	stream  *scripts.StreamInfo
 	raw     []byte
 	tests   []scripts.TestResult
@@ -113,7 +113,7 @@ func makeStepRes(
 		iter:    iter,
 		total:   total,
 		http:    cloneHTTP(out.Response),
-		grpc:    cloneGRPC(out.GRPC),
+		grpc:    out.GRPC.Clone(),
 		stream:  cloneStream(out.Stream),
 		raw:     copyBytes(out.Transcript),
 		tests:   slices.Clone(out.Tests),
@@ -269,7 +269,7 @@ func toWorkflowStep(res wfStepRes) engine.WorkflowStep {
 		Total:      res.total,
 		Summary:    summary,
 		Response:   cloneHTTP(res.http),
-		GRPC:       cloneGRPC(res.grpc),
+		GRPC:       res.grpc.Clone(),
 		Stream:     cloneStream(res.stream),
 		Transcript: copyBytes(res.raw),
 		Err:        res.err,

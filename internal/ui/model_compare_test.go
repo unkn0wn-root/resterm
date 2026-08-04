@@ -6,7 +6,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -118,7 +118,7 @@ func TestCompareProgressSummaryMarksGroupedBaseline(t *testing.T) {
 		t.Fatalf("prepare compare: %v", err)
 	}
 
-	state := compareStateFromPlan(pl, httpclient.Options{}, "Compare items")
+	state := compareStateFromPlan(pl, httpx.Options{}, "Compare items")
 	want := "api=dev, app=one? api=stage, app=one*? api=prod, app=one?"
 	if got := state.progressSummary(); got != want {
 		t.Fatalf("progress summary =\n%q\nwant\n%q", got, want)

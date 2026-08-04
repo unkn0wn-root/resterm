@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
 func TestHeadersDisplayShowsSwitcher(t *testing.T) {
@@ -168,7 +168,7 @@ func TestHeadersDisplayShowsWidthAwareDividerBelowSwitcher(t *testing.T) {
 }
 
 func TestHeadersDisplayRendersCountRuleToPaneWidth(t *testing.T) {
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "200 OK",
 		StatusCode: 200,
 		Headers: http.Header{
@@ -203,7 +203,7 @@ func TestHeadersDisplayRendersCountRuleToPaneWidth(t *testing.T) {
 }
 
 func TestHeadersDisplayIndentsWrappedValues(t *testing.T) {
-	resp := &httpclient.Response{
+	resp := &httpx.Response{
 		Status:     "200 OK",
 		StatusCode: 200,
 		Headers: http.Header{

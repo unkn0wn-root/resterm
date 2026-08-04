@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -18,13 +18,13 @@ import (
 const StageCaptures = "captures"
 
 type HTTPInput struct {
-	Client           *httpclient.Client
+	Client           *httpx.Client
 	Scripts          *scripts.Runner
 	Context          context.Context
 	Doc              *restfile.Document
 	Req              *restfile.Request
 	Resolver         *vars.Resolver
-	Options          httpclient.Options
+	Options          httpx.Options
 	EffectiveTimeout time.Duration
 	ScriptVars       map[string]string
 	ExtraVals        map[string]rts.Value
@@ -47,13 +47,13 @@ type AssertInput struct {
 	BaseDir   string
 	Vars      map[string]string
 	ExtraVals map[string]rts.Value
-	HTTP      *httpclient.Response
+	HTTP      *httpx.Response
 	Stream    *scripts.StreamInfo
 }
 
 type HTTPHooks struct {
-	AttachSSEHandle       func(*httpclient.StreamHandle, *restfile.Request)
-	AttachWebSocketHandle func(*httpclient.WebSocketHandle, *restfile.Request)
+	AttachSSEHandle       func(*httpx.StreamHandle, *restfile.Request)
+	AttachWebSocketHandle func(*httpx.WebSocketHandle, *restfile.Request)
 	ApplyCaptures         func(CaptureInput) error
 	CollectVariables      func(*restfile.Document, *restfile.Request) map[string]string
 	CollectGlobalValues   func(*restfile.Document) map[string]vars.GlobalMutation
@@ -62,7 +62,7 @@ type HTTPHooks struct {
 }
 
 type HTTPResult struct {
-	Response  *httpclient.Response
+	Response  *httpx.Response
 	Stream    *scripts.StreamInfo
 	Tests     []scripts.TestResult
 	ScriptErr error
@@ -111,7 +111,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	res := HTTPResult{Decision: "HTTP request sent"}
 
 	var (
-		resp *httpclient.Response
+		resp *httpx.Response
 		err  error
 	)
 
@@ -149,7 +149,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			if r.Hooks.AttachSSEHandle != nil {
 				r.Hooks.AttachSSEHandle(handle, in.Req)
 			}
-			resp, err = httpclient.CompleteSSE(handle)
+			resp, err = httpx.CompleteSSE(handle)
 		}
 	default:
 		resp, err = in.Client.Execute(ctx, in.Req, in.Resolver, in.Options)
@@ -267,7 +267,7 @@ func httpFailureDecision(req *restfile.Request) string {
 	}
 }
 
-func httpScriptResponse(resp *httpclient.Response) *scripts.Response {
+func httpScriptResponse(resp *httpx.Response) *scripts.Response {
 	if resp == nil {
 		return nil
 	}
@@ -284,21 +284,21 @@ func httpScriptResponse(resp *httpclient.Response) *scripts.Response {
 
 func streamInfoFromResponse(
 	req *restfile.Request,
-	resp *httpclient.Response,
+	resp *httpx.Response,
 ) (*scripts.StreamInfo, error) {
 	if req == nil || resp == nil {
 		return nil, nil
 	}
-	streamType := strings.ToLower(resp.Headers.Get(httpclient.StreamHeaderType))
+	streamType := strings.ToLower(resp.Headers.Get(httpx.StreamHeaderType))
 	if req.SSE != nil && streamType == "sse" {
-		transcript, err := httpclient.DecodeSSETranscript(resp.Body)
+		transcript, err := httpx.DecodeSSETranscript(resp.Body)
 		if err != nil {
 			return nil, err
 		}
 		return convertSSETranscript(transcript), nil
 	}
 	if req.WebSocket != nil && streamType == "websocket" {
-		transcript, err := httpclient.DecodeWebSocketTranscript(resp.Body)
+		transcript, err := httpx.DecodeWebSocketTranscript(resp.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +307,7 @@ func streamInfoFromResponse(
 	return nil, nil
 }
 
-func convertSSETranscript(t *httpclient.SSETranscript) *scripts.StreamInfo {
+func convertSSETranscript(t *httpx.SSETranscript) *scripts.StreamInfo {
 	if t == nil {
 		return nil
 	}
@@ -336,7 +336,7 @@ func convertSSETranscript(t *httpclient.SSETranscript) *scripts.StreamInfo {
 	return info
 }
 
-func convertWebSocketTranscript(t *httpclient.WebSocketTranscript) *scripts.StreamInfo {
+func convertWebSocketTranscript(t *httpx.WebSocketTranscript) *scripts.StreamInfo {
 	if t == nil {
 		return nil
 	}

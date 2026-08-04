@@ -9,7 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -40,7 +40,7 @@ func TestRunCompareEmitsRowsInOrderAndStopsOnCanceledResult(t *testing.T) {
 	dep := &cmpDep{
 		res: map[string]engine.RequestResult{
 			"dev": {
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: http.StatusOK,
 					Duration:   5 * time.Millisecond,
@@ -50,7 +50,7 @@ func TestRunCompareEmitsRowsInOrderAndStopsOnCanceledResult(t *testing.T) {
 				Err: context.Canceled,
 			},
 			"prod": {
-				Response: &httpclient.Response{
+				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: http.StatusOK,
 					Duration:   5 * time.Millisecond,

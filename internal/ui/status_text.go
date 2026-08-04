@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -29,7 +29,7 @@ func (m *Model) statusResolver(
 	req *restfile.Request,
 	extras ...map[string]string,
 ) *vars.Resolver {
-	rq := m.requestSvc(httpclient.Options{})
+	rq := m.requestSvc(httpx.Options{})
 	return rq.DisplayResolver(context.Background(), doc, req, m.ws.active, "", nil, extras...)
 }
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
 func TestHeadersEqualOrder(t *testing.T) {
@@ -20,7 +20,7 @@ func TestHeadersEqualOrder(t *testing.T) {
 func TestCompareSummaryHTTPDiffs(t *testing.T) {
 	base := engine.CompareRow{
 		Environment: "base",
-		Response: &httpclient.Response{
+		Response: &httpx.Response{
 			StatusCode: http.StatusOK,
 			Headers:    http.Header{"X-Test": {"one"}},
 			Body:       []byte("alpha"),
@@ -28,7 +28,7 @@ func TestCompareSummaryHTTPDiffs(t *testing.T) {
 	}
 	row := engine.CompareRow{
 		Environment: "other",
-		Response: &httpclient.Response{
+		Response: &httpx.Response{
 			StatusCode: http.StatusCreated,
 			Headers:    http.Header{"X-Test": {"two"}},
 			Body:       []byte("beta"),
