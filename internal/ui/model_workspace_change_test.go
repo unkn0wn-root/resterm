@@ -436,7 +436,7 @@ func TestCommitMoveClearsResponseAndStreamState(t *testing.T) {
 	m.sessionHandles[sess.ID()] = sess
 	m.liveSessions[sess.ID()] = newLiveSession(sess.ID(), 10)
 	m.responsePanes[0].snapshot = &responseSnapshot{}
-	m.responseTokens["t"] = &responseSnapshot{}
+	m.render = pendingRender{token: "t", snapshot: &responseSnapshot{}, cancel: func() {}}
 	m.testResults = []scripts.TestResult{{Name: "x", Passed: true}}
 	m.scriptError = errors.New("old")
 	m.lastError = errors.New("old")
@@ -453,8 +453,8 @@ func TestCommitMoveClearsResponseAndStreamState(t *testing.T) {
 	if m.responsePanes[0].snapshot != nil {
 		t.Fatal("pane snapshot survived the move")
 	}
-	if m.responseTokens == nil || len(m.responseTokens) != 0 {
-		t.Fatal("response tokens must be cleared but stay usable")
+	if m.render.token != "" || m.render.snapshot != nil || m.render.cancel != nil {
+		t.Fatal("the in-flight render survived the move")
 	}
 	if m.testResults != nil || m.scriptError != nil || m.lastError != nil {
 		t.Fatal("test and error state survived the move")
@@ -534,7 +534,7 @@ func TestStaleStreamMessagesAreDropped(t *testing.T) {
 	m.handleStreamEvents(streamEventMsg{sessionID: id, events: []*stream.Event{{}}})
 	m.handleStreamState(streamStateMsg{sessionID: id, state: stream.StateClosed})
 	m.handleStreamComplete(streamCompleteMsg{sessionID: id})
-	m.handleStreamReady(streamReadyMsg{sessionID: id})
+	m.showStreamTab(id)
 
 	if len(m.liveSessions) != 0 {
 		t.Fatal("a stale stream message resurrected its session")

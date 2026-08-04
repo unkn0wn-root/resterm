@@ -506,7 +506,7 @@ func (m *Model) responseTabAt(id responsePaneID, x int) (responseTab, bool) {
 	row := m.renderPaneTabs(id, true, width)
 	line := firstLine(ansi.Strip(row))
 	off := 0
-	for _, tab := range m.availableResponseTabs() {
+	for _, tab := range m.availableResponseTabsFor(id) {
 		label := responseTabLabelForSnapshot(tab, pane.snapshot)
 		r := findVisibleTabRange(line, label, off)
 		if !r.ok {

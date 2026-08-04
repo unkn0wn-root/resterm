@@ -233,8 +233,6 @@ type Model struct {
 
 	responseLatest           *responseSnapshot
 	responsePrevious         *responseSnapshot
-	responsePending          *responseSnapshot
-	responseTokens           map[string]*responseSnapshot
 	responseLastFocused      responsePaneID
 	focus                    paneFocus
 	compareSnapshots         map[string]*responseSnapshot
@@ -312,10 +310,9 @@ type Model struct {
 	updateLastErr   string
 	updateLastCheck time.Time
 
-	responseRenderToken  string
+	render               pendingRender
 	responseLoading      bool
 	responseLoadingFrame int
-	responseRenderCancel context.CancelFunc
 	respTasks            *respTasks
 
 	activeThemeKey      string
@@ -401,6 +398,7 @@ type Model struct {
 	streamMsgChan      chan tea.Msg
 	streamBatchWindow  time.Duration
 	streamMaxEvents    int
+	streamGen          uint64
 	liveSessions       map[string]*liveSession
 	wsSenders          map[string]*httpx.WebSocketSender
 	sessionHandles     map[string]*stream.Session
@@ -657,7 +655,6 @@ func New(cfg Config) Model {
 		reqCompact:               &reqCompact,
 		wfCompact:                &wfCompact,
 		respTasks:                newRespTasks(),
-		responseTokens:           make(map[string]*responseSnapshot),
 		responseLastFocused:      responsePanePrimary,
 		focus:                    focusFile,
 		sidebarWidth:             sidebarWidthDefault,

@@ -1323,7 +1323,7 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 		return ""
 	}
 
-	tabs := m.availableResponseTabs()
+	tabs := m.availableResponseTabsFor(id)
 	lineWidth := max(width, 1)
 	rowStyle := m.theme.Tabs.Width(lineWidth).Align(lipgloss.Center)
 	contentLimit := max(lineWidth, 1)
@@ -1352,6 +1352,25 @@ func (m Model) renderResponseDivider(left, right string) string {
 	return m.theme.PaneDivider.Render(line)
 }
 
+// paneModeLabel names what the pane is following. The Stream tab reports the
+// tail, every other tab reports whether new responses land here, because those
+// are two independent things the same pane can be doing.
+func paneModeLabel(pane *responsePaneState) string {
+	switch {
+	case pane == nil:
+		return "Pinned"
+	case pane.activeTab == responseTabStream:
+		if pane.tail {
+			return "Tail"
+		}
+		return "Scroll"
+	case pane.followLatest:
+		return "Live"
+	default:
+		return "Pinned"
+	}
+}
+
 func (m Model) buildTabRowContent(
 	tabs []responseTab,
 	pane *responsePaneState,
@@ -1362,21 +1381,16 @@ func (m Model) buildTabRowContent(
 		limit = 1
 	}
 	active := responseTabPretty
-	followLatest := false
 	var snapshot *responseSnapshot
 	if pane != nil {
 		active = pane.activeTab
-		followLatest = pane.followLatest
 		snapshot = pane.snapshot
 	}
 	labels := make([]string, len(tabs))
 	for i, tab := range tabs {
 		labels[i] = responseTabLabelForSnapshot(tab, snapshot)
 	}
-	mode := "Pinned"
-	if followLatest {
-		mode = "Live"
-	}
+	mode := paneModeLabel(pane)
 	badge := m.tabBadgeText(mode)
 	shortBadge := m.tabBadgeShort(mode)
 	actTab := m.theme.TabActive

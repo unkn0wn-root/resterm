@@ -69,3 +69,29 @@ func TestSessionDropNewestPolicy(t *testing.T) {
 	s.Close(nil)
 	listener.Cancel()
 }
+
+func TestSessionSubscribeAfterClose(t *testing.T) {
+	s := NewSession(context.Background(), KindGRPC, Config{})
+	s.Publish(&Event{Kind: KindGRPC, Direction: DirReceive, Payload: []byte("last")})
+	s.Close(context.DeadlineExceeded)
+
+	listener := s.Subscribe()
+	if got := len(listener.Snapshot.Events); got != 1 {
+		t.Fatalf("expected one snapshot event, got %d", got)
+	}
+	if listener.Snapshot.State != StateFailed {
+		t.Fatalf("expected failed snapshot, got %v", listener.Snapshot.State)
+	}
+	if listener.Snapshot.Err != context.DeadlineExceeded {
+		t.Fatalf("expected deadline error, got %v", listener.Snapshot.Err)
+	}
+	select {
+	case _, ok := <-listener.C:
+		if ok {
+			t.Fatal("expected closed listener channel")
+		}
+	default:
+		t.Fatal("expected listener channel to be closed immediately")
+	}
+	listener.Cancel()
+}

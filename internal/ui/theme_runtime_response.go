@@ -69,10 +69,7 @@ func (m *Model) collectResponseSnapshots() []*responseSnapshot {
 
 	add(m.responseLatest)
 	add(m.responsePrevious)
-	add(m.responsePending)
-	for _, snapshot := range m.responseTokens {
-		add(snapshot)
-	}
+	add(m.render.snapshot)
 	for _, snapshot := range m.compareSnapshots {
 		add(snapshot)
 	}
@@ -160,23 +157,17 @@ func (m *Model) rerenderGRPCResponseSnapshot(
 }
 
 func (m *Model) restartPendingResponseRender() tea.Cmd {
-	pending := m.responsePending
+	pending := m.render.snapshot
 	if pending == nil || pending.ready || !pending.source.hasHTTP() {
 		return nil
 	}
 
-	m.abortResponseFormatting()
+	m.resetPendingResponse()
 
 	// Always issue a fresh render token when restarting canceled work.
 	// The snapshot identity can stay stable; the async task identity must not.
 	token := nextResponseRenderToken()
-	m.responsePending = pending
 	m.responseLatest = pending
-	if m.responseTokens == nil {
-		m.responseTokens = make(map[string]*responseSnapshot)
-	}
-	m.responseTokens[token] = pending
-	m.responseRenderToken = token
 	m.responseLoading = true
 	m.responseLoadingFrame = 0
 
@@ -186,7 +177,7 @@ func (m *Model) restartPendingResponseRender() tea.Cmd {
 	}
 
 	formatCtx, cancel := context.WithCancel(context.Background())
-	m.responseRenderCancel = cancel
+	m.render = pendingRender{token: token, snapshot: pending, cancel: cancel}
 	return m.respFmtCmd(
 		formatCtx,
 		token,

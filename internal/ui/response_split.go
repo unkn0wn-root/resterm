@@ -41,6 +41,8 @@ type explainState struct {
 
 type responseSnapshot struct {
 	id              string
+	streamID        string
+	stream          *liveSession
 	pretty          string
 	raw             string
 	rawSummary      string
@@ -86,6 +88,8 @@ type responsePaneState struct {
 	activeTab        responseTab
 	lastContentTab   responseTab
 	followLatest     bool
+	streamID         string
+	tail             bool
 	snapshot         *responseSnapshot
 	wrapCache        map[responseTab]cachedWrap
 	rawWrapCache     map[rawViewMode]cachedWrap
@@ -117,6 +121,7 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 		activeTab:        responseTabPretty,
 		lastContentTab:   responseTabPretty,
 		followLatest:     followLatest,
+		tail:             true,
 		wrapCache:        make(map[responseTab]cachedWrap),
 		rawWrapCache:     make(map[rawViewMode]cachedWrap),
 		headersWrapCache: make(map[headersViewMode]cachedWrap),
@@ -346,6 +351,30 @@ func (pane *responsePaneState) setCurrPosition() {
 	pane.tabScroll[pane.activeTab] = offset
 }
 
+// resetScroll puts a pane back at the top after its content was replaced.
+func (pane *responsePaneState) resetScroll() {
+	pane.viewport.GotoTop()
+	pane.setCurrPosition()
+}
+
+// stopStreamTail pins the stream view to the top. A stream that failed prints
+// the reason in its header, and following the tail would scroll it off screen.
+func (pane *responsePaneState) stopStreamTail() {
+	pane.tail = false
+	if pane.tabScroll == nil {
+		pane.tabScroll = make(map[responseTab]int)
+	}
+	pane.tabScroll[responseTabStream] = 0
+}
+
+// syncStreamTail resumes or stops tailing after the user scrolled the stream.
+func (pane *responsePaneState) syncStreamTail(tail bool) {
+	if pane.activeTab != responseTabStream {
+		return
+	}
+	pane.tail = tail
+}
+
 func (pane *responsePaneState) restoreScrollForActiveTab() {
 	if pane == nil {
 		return
@@ -418,6 +447,19 @@ func (m *Model) setLivePane(id responsePaneID) {
 	}
 }
 
+// invalidatePaneDiffs drops the cached Diff rendering everywhere but the pane
+// that just changed. A diff is rendered from both panes, so the neighbour's
+// copy still describes the response that was replaced. Only the cache goes: the
+// next sync recomputes the diff against whatever each pane now holds.
+func (m *Model) invalidatePaneDiffs(except responsePaneID) {
+	for _, id := range m.visiblePaneIDs() {
+		if id == except {
+			continue
+		}
+		m.pane(id).wrapCache[responseTabDiff] = cachedWrap{}
+	}
+}
+
 func (m *Model) syncResponsePanes() tea.Cmd {
 	var cmds []tea.Cmd
 	for _, id := range m.visiblePaneIDs() {
@@ -460,13 +502,17 @@ func paneDims(p *responsePaneState, tab responseTab) (int, int, int) {
 	if p == nil {
 		return 0, 0, 0
 	}
-	w := p.viewport.Width
-	if w <= 0 {
-		w = defaultResponseViewportWidth
+	w := paneWidth(p)
+	return w, responseWrapWidth(tab, w), p.viewport.Height
+}
+
+// paneWidth is the pane's render width, falling back to the default before the
+// first layout pass has sized the viewport.
+func paneWidth(p *responsePaneState) int {
+	if p == nil || p.viewport.Width <= 0 {
+		return defaultResponseViewportWidth
 	}
-	ww := responseWrapWidth(tab, w)
-	h := p.viewport.Height
-	return w, ww, h
+	return p.viewport.Width
 }
 
 func paneSnap(p *responsePaneState) (bool, string) {
@@ -613,10 +659,14 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		return nil
 	}
 
-	m.ensurePaneActiveTabValid(pane)
+	m.ensurePaneActiveTabValid(id, pane)
 
 	tab := pane.activeTab
 	if tab == responseTabHistory {
+		return nil
+	}
+	if tab == responseTabStream {
+		m.refreshStreamPane(id)
 		return nil
 	}
 
@@ -1237,8 +1287,8 @@ func splitDiffMarker(line string) (marker string, markerWidth int, remainder str
 	}
 }
 
-func (m *Model) ensurePaneActiveTabValid(pane *responsePaneState) {
-	tabs := m.availableResponseTabs()
+func (m *Model) ensurePaneActiveTabValid(id responsePaneID, pane *responsePaneState) {
+	tabs := m.availableResponseTabsFor(id)
 	if len(tabs) == 0 {
 		pane.setActiveTab(responseTabPretty)
 		return
@@ -1260,13 +1310,9 @@ func (m *Model) disableResponseSplit() tea.Cmd {
 	m.responseSplitOrientation = responseSplitVertical
 	m.responsePaneFocus = responsePanePrimary
 	m.setLivePane(responsePanePrimary)
-	if secondary := m.pane(responsePaneSecondary); secondary != nil {
-		secondary.snapshot = nil
-		secondary.invalidateCaches()
-	}
-	if primary := m.pane(responsePanePrimary); primary != nil {
-		primary.wrapCache[responseTabDiff] = cachedWrap{}
-	}
+	// The split is already closed, so this drops the secondary pane's content
+	// and, through it, the primary's now meaningless Diff.
+	m.setPaneSnapshot(responsePaneSecondary, nil)
 	cmd := m.applyLayout()
 	status := func() tea.Msg {
 		return statusMsg{text: "Response split disabled", level: statusInfo}
@@ -1284,11 +1330,8 @@ func (m *Model) enableResponseSplit(orientation responseSplitOrientation) tea.Cm
 	m.responseSplitOrientation = orientation
 	m.ensurePaneFocusValid()
 	if !wasSplit {
-		if secondary := m.pane(responsePaneSecondary); secondary != nil {
-			secondary.snapshot = m.responseLatest
-			secondary.invalidateCaches()
-			secondary.setActiveTab(responseTabPretty)
-		}
+		m.setPaneSnapshot(responsePaneSecondary, m.responseLatest)
+		m.pane(responsePaneSecondary).setActiveTab(responseTabPretty)
 	}
 	if wasSplit {
 		m.setLivePane(m.responseTargetPane())
@@ -1343,7 +1386,7 @@ func (m *Model) togglePaneFollowLatest(id responsePaneID) tea.Cmd {
 	pane.followLatest = !pane.followLatest
 	var note string
 	if pane.followLatest {
-		pane.snapshot = m.responseLatest
+		m.setPaneSnapshot(id, m.responseLatest)
 		note = "Pane now following latest responses"
 		m.setLivePane(id)
 	} else {
@@ -1361,23 +1404,16 @@ func (m *Model) togglePaneFollowLatest(id responsePaneID) tea.Cmd {
 		}
 	}
 	pane.invalidateCaches()
-	for _, otherID := range m.visiblePaneIDs() {
-		if other := m.pane(otherID); other != nil {
-			other.wrapCache[responseTabDiff] = cachedWrap{}
-		}
-	}
+	// Pinning changes no snapshot, so the neighbour's Diff has to be dropped
+	// here rather than on the way through setPaneSnapshot.
+	m.invalidatePaneDiffs(id)
 
 	if pane.snapshot == nil {
-		width := pane.viewport.Width
-		if width <= 0 {
-			width = defaultResponseViewportWidth
-		}
-		pane.viewport.SetContent(logoPlaceholder(width, pane.viewport.Height))
+		pane.viewport.SetContent(logoPlaceholder(paneWidth(pane), pane.viewport.Height))
 	} else if !pane.snapshot.ready {
 		pane.viewport.SetContent(m.responseLoadingMessage())
 	}
-	pane.viewport.GotoTop()
-	pane.setCurrPosition()
+	pane.resetScroll()
 
 	syncCmd := m.syncResponsePane(id)
 	status := func() tea.Msg {

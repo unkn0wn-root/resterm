@@ -41,6 +41,7 @@ func (m *Model) scrollResponseToEdge(top bool) tea.Cmd {
 	} else {
 		pane.viewport.GotoBottom()
 	}
+	pane.syncStreamTail(!top)
 	pane.setCurrPosition()
 	if m.syncRespCursorToEdge(pane, top) {
 		return m.syncResponsePane(m.responsePaneFocus)
@@ -86,7 +87,8 @@ func isScrollableResponsePane(pane *responsePaneState) bool {
 		return false
 	}
 	switch pane.activeTab {
-	case responseTabPretty, responseTabRaw, responseTabHeaders, responseTabExplain:
+	case responseTabPretty, responseTabRaw, responseTabHeaders, responseTabExplain,
+		responseTabStream:
 		return true
 	default:
 		return false
@@ -99,6 +101,7 @@ func (m *Model) scrollResponseViewport(pane *responsePaneState, scrollFn func())
 	}
 	prevOffset := pane.viewport.YOffset
 	scrollFn()
+	pane.syncStreamTail(pane.viewport.AtBottom())
 	pane.setCurrPosition()
 	if m.followRespCursorOnScroll(pane, prevOffset, pane.viewport.YOffset) {
 		return m.syncResponsePane(m.responsePaneFocus)

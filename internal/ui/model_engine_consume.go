@@ -24,6 +24,7 @@ func (m *Model) handleRunReqMsg(msg runReqMsg) tea.Cmd {
 	}
 	rm := m.responseMsgFromRun(msg.res)
 	rm.latGen = msg.latGen
+	rm.target = msg.target
 	return m.handleResponseMessage(rm)
 }
 
@@ -43,6 +44,7 @@ func (m *Model) responseMsgFromRunState(res engine.RequestResult, done bool) res
 		response:       res.Response,
 		grpc:           res.GRPC,
 		stream:         res.Stream,
+		streamID:       res.StreamID,
 		transcript:     append([]byte(nil), res.Transcript...),
 		err:            res.Err,
 		tests:          append([]scripts.TestResult(nil), res.Tests...),
@@ -74,6 +76,17 @@ func (m *Model) applyRunSnapshot(
 	m.setResponseSnapshotContent(sn)
 	m.lastResponse = hr
 	m.lastGRPC = gr
+}
+
+// consumeStreamTranscript shows a finished stream run: the transcript the run
+// captured, still pointing at the session so the Stream tab keeps its events.
+// Like every other consumer it returns the pane sync, because the pane that did
+// not receive the transcript still has to redraw anything derived from it.
+func (m *Model) consumeStreamTranscript(msg responseMsg) tea.Cmd {
+	snap := newStreamSnapshot(msg.stream, msg.transcript, msg.environment)
+	m.bindSnapshotStream(snap, msg.streamID)
+	m.applyRunSnapshot(snap, nil, nil)
+	return m.syncResponsePanes()
 }
 
 func (m *Model) syncRecordedHistory() {

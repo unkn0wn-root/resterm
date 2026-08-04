@@ -49,7 +49,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.lastError = nil
 		m.testResults = nil
 		m.scriptError = nil
-		cmd := m.consumeSkippedRequest(msg.skipReason, msg.explain)
+		cmd := m.consumeSkippedRequest(msg)
 		if msg.historyDone {
 			m.syncRecordedHistory()
 		} else {
@@ -71,14 +71,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		} else {
 			m.lastError = nil
 		}
-		cmd := m.consumeGRPCResponse(
-			msg.grpc,
-			msg.tests,
-			msg.scriptErr,
-			msg.executed,
-			msg.environment,
-			msg.explain,
-		)
+		cmd := m.consumeGRPCResponse(msg)
 		if msg.historyDone {
 			m.syncRecordedHistory()
 		} else {
@@ -104,18 +97,12 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.lastResponse = nil
 		m.lastGRPC = nil
 
-		cmd := m.consumeRequestError(msg.err, msg.explain)
+		cmd := m.consumeRequestError(msg)
 		m.setStatusMessage(requestErrorStatus(canceled))
 		return cmd
 	}
 
-	cmd := m.consumeHTTPResponse(
-		msg.response,
-		msg.tests,
-		msg.scriptErr,
-		msg.environment,
-		msg.explain,
-	)
+	cmd := m.consumeHTTPResponse(msg)
 	if msg.historyDone {
 		m.syncRecordedHistory()
 	} else {
@@ -173,7 +160,8 @@ func (m *Model) recordResponseLatency(msg responseMsg) {
 	}
 }
 
-func (m *Model) consumeRequestError(err error, rep *xplain.Report) tea.Cmd {
+func (m *Model) consumeRequestError(msg responseMsg) tea.Cmd {
+	err := msg.err
 	if err == nil {
 		return nil
 	}
@@ -184,15 +172,7 @@ func (m *Model) consumeRequestError(err error, rep *xplain.Report) tea.Cmd {
 		m.responsePrevious = m.responseLatest
 	}
 
-	m.responseLoading = false
-	m.responseLoadingFrame = 0
-	m.responsePending = nil
-	m.responseRenderToken = ""
-	if m.responseTokens != nil {
-		for key := range m.responseTokens {
-			delete(m.responseTokens, key)
-		}
-	}
+	m.resetPendingResponse()
 
 	class := diag.ClassOf(err)
 	view := m.errView(err)
@@ -220,47 +200,29 @@ func (m *Model) consumeRequestError(err error, rep *xplain.Report) tea.Cmd {
 		headers:        view.head,
 		requestHeaders: view.head,
 		explain: explainState{
-			report: rep,
+			report: msg.explain,
 		},
 		ready: true,
 	}
 	m.responseLatest = snapshot
-	m.responsePending = nil
+	m.bindSnapshotStream(snapshot, msg.streamID)
 
-	target := m.responseTargetPane()
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		pane.snapshot = snapshot
-		pane.invalidateCaches()
-		pane.viewport.SetContent(view.pretty)
-		pane.viewport.GotoTop()
-		pane.setCurrPosition()
-	}
-	m.setLivePane(target)
+	pane := m.showSnapshot(m.responseTargetForMsg(msg), snapshot)
+	pane.viewport.SetContent(view.pretty)
+	pane.resetScroll()
 
 	return m.syncResponsePanes()
 }
 
-func (m *Model) consumeSkippedRequest(reason string, rep *xplain.Report) tea.Cmd {
+func (m *Model) consumeSkippedRequest(msg responseMsg) tea.Cmd {
 	if m.responseLatest != nil && m.responseLatest.ready {
 		m.responsePrevious = m.responseLatest
 	}
 
-	m.responseLoading = false
-	m.responseLoadingFrame = 0
-	m.responsePending = nil
-	m.responseRenderToken = ""
-	if m.responseTokens != nil {
-		for key := range m.responseTokens {
-			delete(m.responseTokens, key)
-		}
-	}
+	m.resetPendingResponse()
 
 	title := "Request Skipped"
-	detail := strings.TrimSpace(reason)
+	detail := strings.TrimSpace(msg.skipReason)
 	if detail == "" {
 		detail = "Condition evaluated to false."
 	}
@@ -274,26 +236,15 @@ func (m *Model) consumeSkippedRequest(reason string, rep *xplain.Report) tea.Cmd
 		raw:     raw,
 		headers: headers,
 		explain: explainState{
-			report: rep,
+			report: msg.explain,
 		},
 		ready: true,
 	}
 	m.responseLatest = snapshot
-	m.responsePending = nil
 
-	target := m.responseTargetPane()
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		pane.snapshot = snapshot
-		pane.invalidateCaches()
-		pane.viewport.SetContent(pretty)
-		pane.viewport.GotoTop()
-		pane.setCurrPosition()
-	}
-	m.setLivePane(target)
+	pane := m.showSnapshot(m.responseTargetForMsg(msg), snapshot)
+	pane.viewport.SetContent(pretty)
+	pane.resetScroll()
 
 	m.setStatusMessage(statusMsg{text: detail, level: statusWarn})
 	return m.syncResponsePanes()
@@ -307,15 +258,7 @@ func (m *Model) consumeExplainPreview(env string, rep *xplain.Report) tea.Cmd {
 		m.responsePrevious = m.responseLatest
 	}
 
-	m.responseLoading = false
-	m.responseLoadingFrame = 0
-	m.responsePending = nil
-	m.responseRenderToken = ""
-	if m.responseTokens != nil {
-		for key := range m.responseTokens {
-			delete(m.responseTokens, key)
-		}
-	}
+	m.resetPendingResponse()
 
 	detail := "Explain preview ready. No request was sent."
 	if txt := strings.TrimSpace(rep.Decision); txt != "" {
@@ -342,23 +285,11 @@ func (m *Model) consumeExplainPreview(env string, rep *xplain.Report) tea.Cmd {
 		environment: env,
 	}
 	m.responseLatest = snapshot
-	m.responsePending = nil
 
-	target := m.responseTargetPane()
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		if id == target {
-			pane.snapshot = snapshot
-			pane.invalidateCaches()
-			pane.setActiveTab(responseTabExplain)
-			pane.viewport.GotoTop()
-			pane.setCurrPosition()
-		}
-	}
-	m.setLivePane(target)
+	pane := m.showSnapshot(m.responseTargetPane(), snapshot)
+	pane.setActiveTab(responseTabExplain)
+	pane.resetScroll()
+
 	m.setStatusMessage(statusMsg{text: detail, level: statusInfo})
 	return m.syncResponsePanes()
 }
@@ -411,13 +342,10 @@ func requestErrorNote(class diag.Class) string {
 	}
 }
 
-func (m *Model) consumeHTTPResponse(
-	resp *httpx.Response,
-	tests []scripts.TestResult,
-	scriptErr error,
-	environment string,
-	rep *xplain.Report,
-) tea.Cmd {
+func (m *Model) consumeHTTPResponse(msg responseMsg) tea.Cmd {
+	resp := msg.response
+	tests := msg.tests
+	scriptErr := msg.scriptErr
 	m.lastGRPC = nil
 	m.lastResponse = resp
 
@@ -425,33 +353,15 @@ func (m *Model) consumeHTTPResponse(
 		m.responsePrevious = m.responseLatest
 	}
 
+	m.resetPendingResponse()
+
 	if resp == nil {
-		m.abortResponseFormatting()
 		m.responseLatest = nil
-		m.responsePending = nil
-		target := m.responseTargetPane()
-		for _, id := range m.visiblePaneIDs() {
-			pane := m.pane(id)
-			if pane == nil {
-				continue
-			}
-			if id == target {
-				pane.snapshot = nil
-				pane.invalidateCaches()
-				width := pane.viewport.Width
-				if width <= 0 {
-					width = defaultResponseViewportWidth
-				}
-				pane.viewport.SetContent(logoPlaceholder(width, pane.viewport.Height))
-				pane.viewport.GotoTop()
-				pane.setCurrPosition()
-			}
-		}
-		m.setLivePane(target)
+		pane := m.showSnapshot(m.responseTargetForMsg(msg), nil)
+		pane.viewport.SetContent(logoPlaceholder(paneWidth(pane), pane.viewport.Height))
+		pane.resetScroll()
 		return nil
 	}
-
-	m.abortResponseFormatting()
 
 	var traceSpec *restfile.TraceSpec
 	if cloned := traceSpecFromRequest(resp.Request).Clone(); cloned != nil &&
@@ -499,15 +409,14 @@ func (m *Model) consumeHTTPResponse(
 	token := nextResponseRenderToken()
 	snapshot := &responseSnapshot{
 		id:          token,
-		environment: environment,
+		environment: msg.environment,
 		explain: explainState{
-			report: rep,
+			report: msg.explain,
 		},
 		source: newHTTPResponseRenderSource(resp, tests, scriptErr),
 	}
-	m.responseRenderToken = token
-	m.responsePending = snapshot
 	m.responseLatest = snapshot
+	m.bindSnapshotStream(snapshot, msg.streamID)
 	if traceSpec != nil {
 		snapshot.traceSpec = traceSpec
 	}
@@ -516,36 +425,18 @@ func (m *Model) consumeHTTPResponse(
 		snapshot.traceReport = timeline
 		snapshot.traceData = resp.TraceReport.Clone()
 	}
-	if m.responseTokens == nil {
-		m.responseTokens = make(map[string]*responseSnapshot)
-	}
-	m.responseTokens[token] = snapshot
 	m.responseLoading = true
 	m.responseLoadingFrame = 0
 
-	target := m.responseTargetPane()
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		if id == target {
-			pane.snapshot = snapshot
-			pane.invalidateCaches()
-			pane.viewport.SetContent(m.responseLoadingMessage())
-			pane.viewport.GotoTop()
-			pane.setCurrPosition()
-		}
-	}
-	m.setLivePane(target)
+	target := m.responseTargetForMsg(msg)
+	pane := m.showSnapshot(target, snapshot)
+	pane.viewport.SetContent(m.responseLoadingMessage())
+	pane.resetScroll()
 
-	primaryWidth := m.pane(responsePanePrimary).viewport.Width
-	if primaryWidth <= 0 {
-		primaryWidth = defaultResponseViewportWidth
-	}
+	primaryWidth := paneWidth(m.pane(responsePanePrimary))
 
 	formatCtx, cancel := context.WithCancel(context.Background())
-	m.responseRenderCancel = cancel
+	m.render = pendingRender{token: token, snapshot: snapshot, cancel: cancel}
 
 	renderCmd := m.respCmd(m.respFmtCmd(formatCtx, token, resp, tests, scriptErr, primaryWidth))
 	if pane := m.pane(target); pane != nil &&
@@ -574,25 +465,25 @@ func (m *Model) responseReflowMessage() string {
 	return responseReflowingMessage + " " + spin
 }
 
-func (m *Model) abortResponseFormatting() {
-	if m.responseRenderCancel != nil {
-		m.responseRenderCancel()
-		m.responseRenderCancel = nil
+// resetPendingResponse retires the render that was in flight. Any path that
+// replaces the response synchronously has to call this: a render left running
+// would otherwise finish and overwrite the view that replaced it. Retiring it
+// as one value is what makes that safe, since there is no half-cleared state a
+// late result could still match.
+func (m *Model) resetPendingResponse() {
+	if m.render.cancel != nil {
+		m.render.cancel()
 	}
-	if m.responseRenderToken != "" && m.responseTokens != nil {
-		delete(m.responseTokens, m.responseRenderToken)
-	}
-	m.responseRenderToken = ""
+	m.render = pendingRender{}
 	m.responseLoading = false
 	m.responseLoadingFrame = 0
 	m.respSpinStop()
 }
 
 func (m *Model) cancelResponseFormatting(reason string) tea.Cmd {
-	pending := m.responsePending
+	pending := m.render.snapshot
 	previous := m.responsePrevious
-	m.abortResponseFormatting()
-	m.responsePending = nil
+	m.resetPendingResponse()
 
 	if pending != nil && !pending.ready {
 		switch {
@@ -633,18 +524,15 @@ func (m *Model) scheduleResponseLoadingTick() tea.Cmd {
 	})
 }
 
+// handleResponseRendered fills in the snapshot its render was started for, and
+// only that one. A result whose render has been retired is dropped: the
+// snapshot it was building is no longer on screen, so writing it anywhere else
+// would replace a response the user is actually looking at.
 func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
-	if msg.token == "" || msg.token != m.responseRenderToken {
+	if !m.render.owns(msg.token) {
 		return nil
 	}
-
-	snapshot, ok := m.responseTokens[msg.token]
-	if !ok {
-		snapshot = m.responseLatest
-	}
-	if snapshot == nil {
-		return nil
-	}
+	snapshot := m.render.snapshot
 
 	snapshot.pretty = msg.pretty
 	snapshot.raw = msg.raw
@@ -667,14 +555,9 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 	applyRawViewMode(snapshot, snapshot.rawMode)
 	snapshot.ready = true
 
-	delete(m.responseTokens, msg.token)
-	if m.responsePending == snapshot {
-		m.responsePending = nil
-	}
-	m.responseRenderToken = ""
+	m.render = pendingRender{}
 	m.responseLoading = false
 	m.responseLoadingFrame = 0
-	m.responseRenderCancel = nil
 	m.responseLatest = snapshot
 	m.respSpinStop()
 
@@ -774,39 +657,22 @@ func (m *Model) handleResponseLoadingTick() tea.Cmd {
 	return m.scheduleResponseLoadingTick()
 }
 
-func (m *Model) consumeGRPCResponse(
-	resp *grpcx.Response,
-	tests []scripts.TestResult,
-	scriptErr error,
-	req *restfile.Request,
-	environment string,
-	rep *xplain.Report,
-) tea.Cmd {
+func (m *Model) consumeGRPCResponse(msg responseMsg) tea.Cmd {
+	resp := msg.grpc
+	tests := msg.tests
+	scriptErr := msg.scriptErr
+	req := msg.executed
 	m.lastResponse = nil
 	m.lastGRPC = resp
-	m.responseLoading = false
-	m.responseRenderToken = ""
-	m.responsePending = nil
 	if m.responseLatest != nil && m.responseLatest.ready {
 		m.responsePrevious = m.responseLatest
 	}
+	m.resetPendingResponse()
 
 	if resp == nil {
-		target := m.responseTargetPane()
-		for _, id := range m.visiblePaneIDs() {
-			pane := m.pane(id)
-			if pane == nil {
-				continue
-			}
-			if id == target {
-				pane.snapshot = nil
-				pane.invalidateCaches()
-				pane.viewport.SetContent("No gRPC response")
-				pane.viewport.GotoTop()
-				pane.setCurrPosition()
-			}
-		}
-		m.setLivePane(target)
+		pane := m.showSnapshot(m.responseTargetForMsg(msg), nil)
+		pane.viewport.SetContent("No gRPC response")
+		pane.resetScroll()
 		return nil
 	}
 
@@ -819,15 +685,16 @@ func (m *Model) consumeGRPCResponse(
 	statusLine := renderer.grpcStatusLine(resp, fullMethod)
 
 	snapshot := &responseSnapshot{
+		id:         nextResponseRenderToken(),
 		pretty:     views.pretty,
 		raw:        views.raw,
 		rawSummary: views.rawSummary,
 		headers:    views.headers,
 		explain: explainState{
-			report: rep,
+			report: msg.explain,
 		},
 		ready:           true,
-		environment:     environment,
+		environment:     msg.environment,
 		body:            append([]byte(nil), resp.Wire...),
 		bodyMeta:        views.meta,
 		contentType:     views.contentType,
@@ -844,13 +711,7 @@ func (m *Model) consumeGRPCResponse(
 	}
 	applyRawViewMode(snapshot, snapshot.rawMode)
 	m.responseLatest = snapshot
-	m.responsePending = nil
-
-	if m.responseTokens != nil {
-		for key := range m.responseTokens {
-			delete(m.responseTokens, key)
-		}
-	}
+	m.bindSnapshotStream(snapshot, msg.streamID)
 
 	status := statusMsg{text: statusLine, level: statusSuccess}
 	if !resp.OK() {
@@ -859,20 +720,7 @@ func (m *Model) consumeGRPCResponse(
 	status.testSummary, status.testLevel = responseTestStatusSummary(tests, scriptErr)
 	m.setStatusMessage(status)
 
-	target := m.responseTargetPane()
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		if id == target {
-			pane.snapshot = snapshot
-		}
-		pane.invalidateCaches()
-		pane.viewport.GotoTop()
-		pane.setCurrPosition()
-	}
-	m.setLivePane(target)
+	m.showSnapshot(m.responseTargetForMsg(msg), snapshot).resetScroll()
 
 	return m.syncResponsePanes()
 }
@@ -1806,68 +1654,47 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 
 func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 	snapshot := &responseSnapshot{
+		id:             nextResponseRenderToken(),
 		pretty:         preview,
 		raw:            preview,
 		headers:        preview,
 		requestHeaders: preview,
 		ready:          true,
 	}
-	m.responseRenderToken = ""
-	m.responsePending = nil
-	m.responseLoading = false
+	m.resetPendingResponse()
 	m.responseLatest = snapshot
 
-	targetPaneID := m.responseTargetPane()
+	pane := m.showSnapshot(m.responseTargetPane(), snapshot)
+	pane.setActiveTab(responseTabPretty)
+	pane.resetScroll()
 
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		if id == targetPaneID {
-			pane.snapshot = snapshot
-		}
-		pane.invalidateCaches()
-		if id == targetPaneID {
-			pane.setActiveTab(responseTabPretty)
-		}
-		pane.viewport.GotoTop()
-		pane.setCurrPosition()
-	}
-	m.setLivePane(targetPaneID)
-
-	if pane := m.pane(targetPaneID); pane != nil {
-		displayWidth := pane.viewport.Width
-		if displayWidth <= 0 {
-			displayWidth = defaultResponseViewportWidth
-		}
-		content := displayContent(preview)
-		prettyCache := wrapCache(
-			responseTabPretty,
-			content,
-			responseWrapWidth(responseTabPretty, displayWidth),
-		)
-		pane.setCacheForTab(responseTabPretty, rawViewText, pane.headersView, prettyCache)
-		pane.setCacheForTab(
-			responseTabRaw,
-			snapshot.rawMode,
-			pane.headersView,
-			wrapCache(responseTabRaw, content, responseWrapWidth(responseTabRaw, displayWidth)),
-		)
-		pane.setCacheForTab(
+	displayWidth := paneWidth(pane)
+	content := displayContent(preview)
+	prettyCache := wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, displayWidth),
+	)
+	pane.setCacheForTab(responseTabPretty, rawViewText, pane.headersView, prettyCache)
+	pane.setCacheForTab(
+		responseTabRaw,
+		snapshot.rawMode,
+		pane.headersView,
+		wrapCache(responseTabRaw, content, responseWrapWidth(responseTabRaw, displayWidth)),
+	)
+	pane.setCacheForTab(
+		responseTabHeaders,
+		rawViewText,
+		pane.headersView,
+		wrapCache(
 			responseTabHeaders,
-			rawViewText,
-			pane.headersView,
-			wrapCache(
-				responseTabHeaders,
-				content,
-				responseWrapWidth(responseTabHeaders, displayWidth),
-			),
-		)
-		pane.wrapCache[responseTabDiff] = cachedWrap{}
-		pane.wrapCache[responseTabStats] = cachedWrap{}
-		pane.viewport.SetContent(prettyCache.content)
-	}
+			content,
+			responseWrapWidth(responseTabHeaders, displayWidth),
+		),
+	)
+	pane.wrapCache[responseTabDiff] = cachedWrap{}
+	pane.wrapCache[responseTabStats] = cachedWrap{}
+	pane.viewport.SetContent(prettyCache.content)
 
 	m.testResults = nil
 	m.scriptError = nil
@@ -2279,27 +2106,21 @@ func (m *Model) applyHistorySnapshot(snap *responseSnapshot) {
 		return
 	}
 
-	m.responsePending = nil
+	// A history entry replaces the response, so a render still formatting the
+	// previous one has to be retired before it can finish into this snapshot.
+	m.resetPendingResponse()
 	m.responseLatest = snap
-	if m.responseTokens != nil {
-		for key := range m.responseTokens {
-			delete(m.responseTokens, key)
-		}
-	}
 
+	// Browsing history replaces both panes: the entry is the whole view now,
+	// not one side of a comparison.
 	for _, id := range m.visiblePaneIDs() {
+		m.setPaneSnapshot(id, snap)
 		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		pane.snapshot = snap
-		pane.invalidateCaches()
 		if pane.activeTab == responseTabHistory {
 			continue
 		}
 		pane.viewport.SetContent(displayContent(snap.pretty))
-		pane.viewport.GotoTop()
-		pane.setCurrPosition()
+		pane.resetScroll()
 	}
 }
 

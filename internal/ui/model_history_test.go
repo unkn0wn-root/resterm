@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"google.golang.org/grpc/codes"
 
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -321,6 +323,130 @@ func TestBundleFromHistoryResolvesBaselineEnvironment(t *testing.T) {
 	}
 }
 
+// Replacing a response while its formatter is still running has to retire that
+// render. Its token stops matching, so handleResponseRendered drops the result
+// without ever collecting the snapshot it was building.
+func TestSynchronousResponsesRetireTheInFlightRender(t *testing.T) {
+	cases := []struct {
+		name  string
+		apply func(m *Model)
+	}{
+		{
+			name: "error",
+			apply: func(m *Model) {
+				m.consumeRequestError(responseMsg{err: errors.New("boom")})
+			},
+		},
+		{
+			name:  "preview",
+			apply: func(m *Model) { m.applyPreview("GET https://example.com", "Previewing") },
+		},
+		{
+			name: "stream transcript",
+			apply: func(m *Model) {
+				m.consumeStreamTranscript(responseMsg{transcript: []byte("data: hi\n")})
+			},
+		},
+		{
+			name: "history",
+			apply: func(m *Model) {
+				m.applyHistorySnapshot(newTextSnapshot("history entry body", "dev"))
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			model := New(Config{})
+			model.ready = true
+			model.width = 120
+			model.height = 40
+			if cmd := model.applyLayout(); cmd != nil {
+				collectMsgs(cmd)
+			}
+
+			render := model.consumeHTTPResponse(responseMsg{response: &httpx.Response{
+				Status:       "200 OK",
+				StatusCode:   200,
+				Body:         []byte("<html><body><p>Hello</p></body></html>"),
+				EffectiveURL: "https://example.com",
+			}})
+			if render == nil {
+				t.Fatal("expected an async render to be scheduled")
+			}
+			if model.render.snapshot == nil || model.render.cancel == nil ||
+				model.render.token == "" {
+				t.Fatalf("expected a render in flight, got %+v", model.render)
+			}
+
+			tc.apply(&model)
+
+			if model.render.token != "" || model.render.snapshot != nil ||
+				model.render.cancel != nil {
+				t.Fatalf("render outlived the response it was building: %+v", model.render)
+			}
+			if model.responseLoading {
+				t.Fatal("expected the loading indicator to stop")
+			}
+			// A canceled formatter yields nothing, so running it now is a no-op
+			// rather than a render that lands on top of the new response.
+			for _, msg := range collectMsgs(render) {
+				if rendered, ok := msg.(responseRenderedMsg); ok {
+					t.Fatalf("canceled formatter still produced a render: %+v", rendered.token)
+				}
+			}
+		})
+	}
+}
+
+// Canceling the formatter does not unqueue a result it already produced, so the
+// late message still has to be refused. Otherwise it lands on the history entry
+// that replaced it and silently rewrites the entry with another response's body.
+func TestLateRenderCannotOverwriteHistorySnapshot(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if cmd := model.consumeHTTPResponse(responseMsg{response: &httpx.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Body:         []byte("live response body"),
+		EffectiveURL: "https://example.com",
+	}}); cmd == nil {
+		t.Fatal("expected an async render to be scheduled")
+	}
+	// The formatter finished before the user moved: its result is already in
+	// the queue and will be delivered no matter what happens next.
+	inFlight := responseRenderedMsg{
+		token:  model.render.token,
+		pretty: "live response body",
+		raw:    "live response body",
+	}
+
+	entry := newTextSnapshot("history entry body", "dev")
+	model.applyHistorySnapshot(entry)
+
+	if cmd := model.handleResponseRendered(inFlight); cmd != nil {
+		t.Fatal("expected the retired render to be refused")
+	}
+	if entry.pretty != "history entry body" {
+		t.Fatalf("history entry was rewritten by the retired render: %q", entry.pretty)
+	}
+	if model.responseLatest != entry {
+		t.Fatal("the retired render stole the latest response")
+	}
+	if got := ansi.Strip(model.pane(responsePanePrimary).viewport.View()); !strings.Contains(
+		got,
+		"history entry body",
+	) {
+		t.Fatalf("pane stopped showing the history entry: %q", got)
+	}
+}
+
 func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 	model := New(Config{})
 	model.ready = true
@@ -339,15 +465,15 @@ func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 		EffectiveURL: "https://example.com",
 	}
 
-	cmd := model.consumeHTTPResponse(resp, nil, nil, "", nil)
+	cmd := model.consumeHTTPResponse(responseMsg{response: resp})
 	if cmd == nil {
 		t.Fatalf("expected consumeHTTPResponse to return render command")
 	}
 	if !model.responseLoading {
 		t.Fatalf("expected responseLoading to be true after scheduling render")
 	}
-	if model.responseRenderToken == "" {
-		t.Fatalf("expected responseRenderToken to be assigned")
+	if model.render.token == "" {
+		t.Fatalf("expected a render token to be assigned")
 	}
 	if content := model.pane(
 		responsePanePrimary,
@@ -401,7 +527,7 @@ func TestConsumeHTTPResponseStatusLevelFollowsHTTPStatusCode(t *testing.T) {
 				Body:       []byte("body"),
 			}
 
-			if cmd := model.consumeHTTPResponse(resp, nil, nil, "", nil); cmd == nil {
+			if cmd := model.consumeHTTPResponse(responseMsg{response: resp}); cmd == nil {
 				t.Fatalf("expected consumeHTTPResponse to return render command")
 			}
 			if model.statusMessage.level != tt.want {
@@ -430,7 +556,7 @@ func TestConsumeHTTPResponseUsesSeparateStatusBarTestSummary(t *testing.T) {
 	}
 	tests := []scripts.TestResult{{Name: "status", Passed: false}}
 
-	if cmd := model.consumeHTTPResponse(resp, tests, nil, "", nil); cmd == nil {
+	if cmd := model.consumeHTTPResponse(responseMsg{response: resp, tests: tests}); cmd == nil {
 		t.Fatalf("expected consumeHTTPResponse to return render command")
 	}
 	if strings.Contains(model.statusMessage.text, " - ") {
@@ -480,7 +606,7 @@ func TestConsumeGRPCResponseKeepsStatusDetailsInResponsePane(t *testing.T) {
 		},
 	}
 
-	if cmd := model.consumeGRPCResponse(resp, nil, nil, req, "", nil); cmd != nil {
+	if cmd := model.consumeGRPCResponse(responseMsg{grpc: resp, executed: req}); cmd != nil {
 		collectMsgs(cmd)
 	}
 
@@ -507,6 +633,150 @@ func TestConsumeGRPCResponseKeepsStatusDetailsInResponsePane(t *testing.T) {
 	}
 }
 
+// A response lands in one pane only. The pinned neighbour used to be scrolled
+// back to the top by every gRPC response, losing the reader's place.
+func TestConsumeGRPCResponseLeavesPinnedPaneScrollAlone(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 160
+	model.height = 40
+	model.responseSplit = true
+	model.responseLastFocused = responsePanePrimary
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	pinned := model.pane(responsePaneSecondary)
+	pinned.followLatest = false
+	pinned.snapshot = &responseSnapshot{ready: true, pretty: strings.Repeat("line\n", 50)}
+	pinned.viewport.Height = 5
+	pinned.viewport.SetContent(pinned.snapshot.pretty)
+	pinned.viewport.SetYOffset(12)
+	pinned.setCurrPosition()
+	pinned.wrapCache[responseTabDiff] = cachedWrap{content: "stale diff", valid: true}
+
+	cmd := model.consumeGRPCResponse(responseMsg{
+		grpc:     &grpcx.Response{StatusCode: codes.OK},
+		executed: &restfile.Request{Method: "GRPC", GRPC: &restfile.GRPCRequest{FullMethod: "/s/M"}},
+	})
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if pinned.snapshot == model.responseLatest {
+		t.Fatal("response leaked into the pinned pane")
+	}
+	if pinned.viewport.YOffset != 12 {
+		t.Fatalf("pinned pane was scrolled, offset=%d want 12", pinned.viewport.YOffset)
+	}
+	if pinned.wrapCache[responseTabDiff].valid {
+		t.Fatal("expected the pinned pane's diff cache to be dropped")
+	}
+}
+
+// A Diff is rendered from both panes, so replacing one side makes the cached
+// rendering on the other side describe a response that is no longer on screen.
+// Dropping that cache is what makes the neighbour recompute against the new
+// response: the Diff tab keeps working, it just stops showing the old answer.
+func TestResponsesRecomputeNeighbourDiff(t *testing.T) {
+	const stale = "STALE DIFF CONTENT"
+
+	cases := []struct {
+		name string
+		// marker is text unique to the incoming response. The neighbour's
+		// recomputed Diff has to contain it, because that response is now one
+		// side of the comparison.
+		marker string
+		apply  func(m *Model)
+	}{
+		{
+			name:   "error",
+			marker: "boom",
+			apply: func(m *Model) {
+				m.consumeRequestError(responseMsg{err: errors.New("boom")})
+			},
+		},
+		{
+			name:   "skipped",
+			marker: "Request Skipped",
+			apply: func(m *Model) {
+				m.consumeSkippedRequest(responseMsg{skipped: true, skipReason: "condition false"})
+			},
+		},
+		{
+			name:   "explain preview",
+			marker: "Explain Preview",
+			apply: func(m *Model) {
+				m.consumeExplainPreview("dev", &xplain.Report{Decision: "would send"})
+			},
+		},
+		{
+			name:   "stream transcript",
+			marker: "transcript-marker",
+			apply: func(m *Model) {
+				m.consumeStreamTranscript(responseMsg{
+					transcript: []byte("event: one\ndata: transcript-marker\n"),
+					streamID:   "sse-1",
+				})
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			model := New(Config{})
+			model.ready = true
+			model.width = 160
+			model.height = 40
+			model.responseSplit = true
+			model.responseLastFocused = responsePanePrimary
+			if cmd := model.applyLayout(); cmd != nil {
+				collectMsgs(cmd)
+			}
+
+			model.pane(responsePanePrimary).snapshot = &responseSnapshot{
+				ready:  true,
+				pretty: "replaced body",
+			}
+			neighbour := model.pane(responsePaneSecondary)
+			neighbour.snapshot = &responseSnapshot{ready: true, pretty: "kept body"}
+			neighbour.followLatest = false
+			neighbour.setActiveTab(responseTabDiff)
+			neighbour.wrapCache[responseTabDiff] = cachedWrap{
+				width:   neighbour.viewport.Width,
+				content: stale,
+				valid:   true,
+			}
+
+			tc.apply(&model)
+
+			if got := neighbour.wrapCache[responseTabDiff]; got.valid &&
+				strings.Contains(got.content, stale) {
+				t.Fatal("neighbour kept a diff cached against the replaced response")
+			}
+
+			view := ansi.Strip(neighbour.viewport.View())
+			if strings.Contains(view, stale) {
+				t.Fatal("neighbour still shows the stale diff")
+			}
+			// The Diff tab is still a Diff tab: the neighbour keeps its own
+			// response and now compares it against the one that just landed.
+			if neighbour.activeTab != responseTabDiff {
+				t.Fatalf("neighbour left the Diff tab, now on %v", neighbour.activeTab)
+			}
+			if neighbour.snapshot.pretty != "kept body" {
+				t.Fatalf("neighbour lost its own response: %q", neighbour.snapshot.pretty)
+			}
+			if !strings.Contains(view, "kept body") {
+				t.Fatalf("recomputed diff dropped the neighbour's side: %q", view)
+			}
+			if !strings.Contains(view, tc.marker) {
+				t.Fatalf("recomputed diff missing the new response %q: %q", tc.marker, view)
+			}
+		})
+	}
+}
+
 // Multi-line status details in the status bar grew the view past the terminal,
 // which scrolled the whole TUI up instead of staying inside the frame.
 func TestConsumeGRPCResponseKeepsViewWithinTerminalHeight(t *testing.T) {
@@ -526,7 +796,7 @@ func TestConsumeGRPCResponseKeepsViewWithinTerminalHeight(t *testing.T) {
 		Method: "GRPC",
 		GRPC:   &restfile.GRPCRequest{FullMethod: "/pkg.Service/FailWithDetails"},
 	}
-	if cmd := model.consumeGRPCResponse(resp, nil, nil, req, "", nil); cmd != nil {
+	if cmd := model.consumeGRPCResponse(responseMsg{grpc: resp, executed: req}); cmd != nil {
 		collectMsgs(cmd)
 	}
 
@@ -576,8 +846,8 @@ func drainResponseCommands(t *testing.T, model *Model, initial tea.Cmd) {
 		queue = queue[1:]
 		switch typed := msg.(type) {
 		case responseRenderedMsg:
-			if typed.token != model.responseRenderToken {
-				t.Fatalf("render token mismatch: %s vs %s", typed.token, model.responseRenderToken)
+			if typed.token != model.render.token {
+				t.Fatalf("render token mismatch: %s vs %s", typed.token, model.render.token)
 			}
 			if follow := model.handleResponseRendered(typed); follow != nil {
 				queue = append(queue, collectMsgs(follow)...)
@@ -617,7 +887,7 @@ func TestToggleResponseSplitConfiguresSecondaryPane(t *testing.T) {
 		EffectiveURL: "https://example.com",
 	}
 
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp, nil, nil, "", nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(responseMsg{response: resp}))
 	if model.responseLatest == nil || !model.responseLatest.ready {
 		t.Fatalf("expected latest snapshot to be ready")
 	}
@@ -722,7 +992,7 @@ func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/one",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(first, nil, nil, "", nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(responseMsg{response: first}))
 	if model.diffAvailable() {
 		t.Fatalf("diff should be unavailable before split")
 	}
@@ -741,7 +1011,7 @@ func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/two",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(second, nil, nil, "", nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(responseMsg{response: second}))
 	if !model.diffAvailable() {
 		t.Fatalf("expected diff to be available after second response")
 	}
@@ -779,7 +1049,7 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/one",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, "", nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(responseMsg{response: resp1}))
 
 	primary := model.pane(responsePanePrimary)
 	if primary == nil || primary.snapshot == nil ||
@@ -801,7 +1071,7 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/two",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, "", nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(responseMsg{response: resp2}))
 
 	secondary := model.pane(responsePaneSecondary)
 	if secondary == nil || secondary.snapshot == nil ||
@@ -832,7 +1102,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/a",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, "", nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(responseMsg{response: resp1}))
 	primary := model.pane(responsePanePrimary)
 	firstSnapshot := primary.snapshot
 	if firstSnapshot == nil {
@@ -861,7 +1131,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/b",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, "", nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(responseMsg{response: resp2}))
 	if primary.snapshot != firstSnapshot {
 		t.Fatalf("expected pinned pane to retain original snapshot")
 	}

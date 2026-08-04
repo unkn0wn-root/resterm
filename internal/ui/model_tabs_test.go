@@ -80,3 +80,37 @@ func TestResponseTabLabelFallsBackToStats(t *testing.T) {
 		t.Fatalf("expected generic stats label, got %q", label)
 	}
 }
+
+func TestStreamTabBelongsToOwningPaneAndResponse(t *testing.T) {
+	model := New(Config{})
+	model.responseSplit = true
+	streamSnap := &responseSnapshot{ready: true, streamID: "grpc-1"}
+	plainSnap := &responseSnapshot{ready: true}
+	model.responsePanes[responsePanePrimary].snapshot = streamSnap
+	model.responsePanes[responsePanePrimary].activeTab = responseTabStream
+	model.responsePanes[responsePaneSecondary].snapshot = plainSnap
+
+	if !containsResponseTab(
+		model.availableResponseTabsFor(responsePanePrimary),
+		responseTabStream,
+	) {
+		t.Fatal("expected Stream on its owning pane")
+	}
+	if containsResponseTab(
+		model.availableResponseTabsFor(responsePaneSecondary),
+		responseTabStream,
+	) {
+		t.Fatal("Stream leaked into the other response pane")
+	}
+
+	model.setPaneSnapshot(responsePanePrimary, plainSnap)
+	if containsResponseTab(
+		model.availableResponseTabsFor(responsePanePrimary),
+		responseTabStream,
+	) {
+		t.Fatal("Stream remained after a non-stream response")
+	}
+	if got := model.responsePanes[responsePanePrimary].activeTab; got != responseTabPretty {
+		t.Fatalf("expected invalid Stream tab to fall back to Pretty, got %v", got)
+	}
+}

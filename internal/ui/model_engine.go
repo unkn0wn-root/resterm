@@ -11,6 +11,7 @@ import (
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -78,8 +79,11 @@ type requestRunner interface {
 // workflow run shares one wrapper so repeated warnings are only shown once.
 type uiRequestEngine struct {
 	*rqeng.Engine
-	model *Model
-	seen  map[string]struct{}
+	model   *Model
+	seen    map[string]struct{}
+	pane    responsePaneID
+	gen     uint64
+	baseDir string
 }
 
 func (e *uiRequestEngine) ExecuteWith(
@@ -95,10 +99,65 @@ func (e *uiRequestEngine) ExecuteWith(
 		}
 		e.queueWarning(string(warning))
 	}
-	opt.AttachSSE = e.model.attachSSEHandle
-	opt.AttachWS = e.model.attachWebSocketHandle
-	opt.AttachGRPC = e.model.attachGRPCSession
-	return e.Engine.ExecuteWith(doc, req, env, opt)
+	// Every protocol reports its session the same way, so each hook only has to
+	// unwrap its own handle. The hooks run on this goroutine, which is what
+	// makes the captured id safe to read once the run returns.
+	var streamID string
+	nextSSE := opt.AttachSSE
+	opt.AttachSSE = func(handle *httpx.StreamHandle, req *restfile.Request) {
+		if nextSSE != nil {
+			nextSSE(handle, req)
+		}
+		if handle == nil {
+			return
+		}
+		streamID = e.attach(handle.Session, req, nil, handle.Meta.BaseDir)
+	}
+	nextWS := opt.AttachWS
+	opt.AttachWS = func(handle *httpx.WebSocketHandle, req *restfile.Request) {
+		if nextWS != nil {
+			nextWS(handle, req)
+		}
+		if handle == nil {
+			return
+		}
+		streamID = e.attach(handle.Session, req, handle.Sender, handle.Meta.BaseDir)
+	}
+	nextGRPC := opt.AttachGRPC
+	opt.AttachGRPC = func(session *stream.Session, req *restfile.Request) {
+		if nextGRPC != nil {
+			nextGRPC(session, req)
+		}
+		streamID = e.attach(session, req, nil, "")
+	}
+	res, err := e.Engine.ExecuteWith(doc, req, env, opt)
+	res.StreamID = streamID
+	return res, err
+}
+
+// attach hands a session to the update loop and reports its id. The engine
+// goroutine must not touch the model, so ownership is transferred by message.
+func (e *uiRequestEngine) attach(
+	session *stream.Session,
+	req *restfile.Request,
+	sender *httpx.WebSocketSender,
+	baseDir string,
+) string {
+	if session == nil {
+		return ""
+	}
+	if baseDir == "" {
+		baseDir = e.baseDir
+	}
+	e.model.emitStreamMsg(streamAttachMsg{
+		session: session,
+		req:     req,
+		sender:  sender,
+		baseDir: baseDir,
+		pane:    e.pane,
+		gen:     e.gen,
+	})
+	return session.ID()
 }
 
 // Engine warnings only. Parse warnings have their own status bar segment, and
@@ -118,12 +177,24 @@ func (e *uiRequestEngine) queueWarning(text string) {
 	emitQueuedMsg(e.model.runMsgChan, runWarningMsg{text: text})
 }
 
+// newUIRequestEngine pins the run to the pane and stream generation it started
+// under. Both are read here, on the update loop, and never again afterwards.
+func (m *Model) newUIRequestEngine(rq *rqeng.Engine, baseDir string) *uiRequestEngine {
+	return &uiRequestEngine{
+		Engine:  rq,
+		model:   m,
+		pane:    m.responseTargetPane(),
+		gen:     m.streamGen,
+		baseDir: baseDir,
+	}
+}
+
 func (m *Model) runRequestSvc(opts httpx.Options) *uiRequestEngine {
 	rq := m.requestSvc(opts)
 	if rq == nil {
 		return nil
 	}
-	return &uiRequestEngine{Engine: rq, model: m}
+	return m.newUIRequestEngine(rq, opts.BaseDir)
 }
 
 func (m *Model) runMsg(fn func(context.Context) tea.Msg) tea.Cmd {
@@ -180,8 +251,9 @@ func (m *Model) startRun(sp runSpec) (tea.Cmd, bool) {
 	}
 	var rq requestRunner = svc
 	if sp.mode == rqeng.ExecModeSend {
-		rq = &uiRequestEngine{Engine: svc, model: m}
+		rq = m.newUIRequestEngine(svc, sp.opts.BaseDir)
 	}
+	target := paneRunTarget(m.responseTargetPane())
 	gen := m.latencySeries.generation()
 	return m.runMsg(func(ctx context.Context) tea.Msg {
 		res, err := rq.ExecuteWith(sp.doc, sp.req, env, rqeng.ExecOptions{
@@ -190,17 +262,19 @@ func (m *Model) startRun(sp runSpec) (tea.Cmd, bool) {
 			Mode:   sp.mode,
 		})
 		if sp.record {
-			return runReqMsg{res: res, err: err, latGen: gen}
+			return runReqMsg{res: res, err: err, latGen: gen, target: target}
 		}
 		if err != nil {
 			return responseMsg{
 				err:         err,
 				executed:    sp.req.Clone(),
 				environment: env.Label(),
+				target:      target,
 			}
 		}
 		msg := m.responseMsgFromRunState(res, false)
 		msg.latGen = gen
+		msg.target = target
 		return msg
 	}), true
 }

@@ -307,43 +307,32 @@ func (m *Model) consumeCompareRow(
 	var cmds []tea.Cmd
 	if !canceled && msg.skipped {
 		m.lastError = nil
-		if cmd := m.consumeSkippedRequest(msg.skipReason, msg.explain); cmd != nil {
+		if cmd := m.consumeSkippedRequest(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if !canceled && msg.err != nil {
 		result.Err = msg.err
 		m.lastError = msg.err
-		if cmd := m.consumeRequestError(msg.err, msg.explain); cmd != nil {
+		if cmd := m.consumeRequestError(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if !canceled && msg.grpc != nil {
 		result.GRPC = msg.grpc
 		m.lastError = nil
-		if cmd := m.consumeGRPCResponse(
-			msg.grpc,
-			msg.tests,
-			msg.scriptErr,
-			msg.executed,
-			msg.environment,
-			msg.explain,
-		); cmd != nil {
+		if cmd := m.consumeGRPCResponse(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if !canceled && msg.response != nil {
 		result.Response = msg.response
 		m.lastError = nil
-		if cmd := m.consumeHTTPResponse(
-			msg.response,
-			msg.tests,
-			msg.scriptErr,
-			msg.environment,
-			msg.explain,
-		); cmd != nil {
+		if cmd := m.consumeHTTPResponse(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if !canceled && (msg.stream != nil || len(msg.transcript) > 0) {
 		m.lastError = nil
-		m.applyRunSnapshot(newStreamSnapshot(msg.stream, msg.transcript, msg.environment), nil, nil)
+		if cmd := m.consumeStreamTranscript(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	} else {
 		m.lastError = nil
 	}
@@ -373,8 +362,7 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 
 	if secondary := m.pane(responsePaneSecondary); secondary != nil {
 		secondary.followLatest = true
-		secondary.snapshot = m.responseLatest
-		secondary.invalidateCaches()
+		m.setPaneSnapshot(responsePaneSecondary, m.responseLatest)
 	}
 
 	if bundle := buildCompareBundle(state.results, state.baseline); bundle != nil {
@@ -444,9 +432,8 @@ func (m *Model) pinCompareReferencePane(state *compareState) {
 	if snapshot == nil {
 		return
 	}
-	secondary.snapshot = snapshot
+	m.setPaneSnapshot(responsePaneSecondary, snapshot)
 	secondary.followLatest = false
-	secondary.invalidateCaches()
 }
 
 func (m *Model) storeCompareSnapshot(env string) {

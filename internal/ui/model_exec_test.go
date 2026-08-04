@@ -265,7 +265,7 @@ func TestConsumeGRPCResponseUsesBinaryBody(t *testing.T) {
 		WireContentType: "application/grpc+proto",
 	}
 
-	cmd := model.consumeGRPCResponse(resp, nil, nil, req, "", nil)
+	cmd := model.consumeGRPCResponse(responseMsg{grpc: resp, executed: req})
 	if cmd != nil {
 		collectMsgs(cmd)
 	}
@@ -1505,6 +1505,7 @@ func TestExecuteRequestInteractiveWebSocketStaysAlive(t *testing.T) {
 	if got := resp.response.Headers.Get(httpx.StreamHeaderType); got != "websocket" {
 		t.Fatalf("expected websocket placeholder header, got %q", got)
 	}
+	applyQueuedStreamAttach(t, &model)
 
 	sessionID := model.sessionIDForRequest(req)
 	if sessionID == "" {
@@ -1562,6 +1563,10 @@ func TestRunRequestServiceAttachesInteractiveWebSocket(t *testing.T) {
 	if got := res.Response.Headers.Get(httpx.StreamHeaderType); got != "websocket" {
 		t.Fatalf("expected websocket placeholder header, got %q", got)
 	}
+	if res.StreamID == "" {
+		t.Fatal("expected websocket result to carry its stream ID")
+	}
+	applyQueuedStreamAttach(t, &model)
 
 	sessionID := model.sessionIDForRequest(req)
 	session := model.sessionHandles[sessionID]
@@ -1578,6 +1583,20 @@ func TestRunRequestServiceAttachesInteractiveWebSocket(t *testing.T) {
 	case <-session.Done():
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for websocket session shutdown")
+	}
+}
+
+func applyQueuedStreamAttach(t *testing.T, model *Model) {
+	t.Helper()
+	select {
+	case msg := <-model.streamMsgChan:
+		attach, ok := msg.(streamAttachMsg)
+		if !ok {
+			t.Fatalf("expected queued stream attachment, got %T", msg)
+		}
+		model.handleStreamAttach(attach)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stream attachment")
 	}
 }
 
