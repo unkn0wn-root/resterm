@@ -88,6 +88,7 @@ func TestJSONTags(t *testing.T) {
 		{typ: reflect.TypeFor[Step](), name: "Failure", tag: ""},
 		{typ: reflect.TypeFor[HTTP](), name: "StatusCode", tag: "statusCode,omitempty"},
 		{typ: reflect.TypeFor[GRPC](), name: "StatusMessage", tag: "statusMessage,omitempty"},
+		{typ: reflect.TypeFor[GRPC](), name: "StatusDetails", tag: "statusDetails,omitempty"},
 		{typ: reflect.TypeFor[Test](), name: "Elapsed", tag: "elapsed,omitempty"},
 		{typ: reflect.TypeFor[Profile](), name: "TotalRuns", tag: "totalRuns,omitempty"},
 		{typ: reflect.TypeFor[ProfileFailure](), name: "StatusCode", tag: "statusCode,omitempty"},

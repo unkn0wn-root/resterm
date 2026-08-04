@@ -97,7 +97,7 @@ type GRPC struct {
 	Code          string
 	StatusCode    int
 	StatusMessage string
-	StatusDetails []string `json:",omitempty"`
+	StatusDetails []string
 }
 
 type Test struct {

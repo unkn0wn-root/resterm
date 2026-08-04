@@ -6,6 +6,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
+
+	// Registers the google.rpc.* detail types in the global registry so status
+	// details resolve when the request carries no descriptor for them.
+	_ "google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 
 // codec resolves Any payloads from request descriptors first, then falls back

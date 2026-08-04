@@ -64,9 +64,10 @@ type jsonHTTP struct {
 }
 
 type jsonGRPC struct {
-	Code          string `json:"code,omitempty"`
-	StatusCode    int    `json:"statusCode,omitempty"`
-	StatusMessage string `json:"statusMessage,omitempty"`
+	Code          string   `json:"code,omitempty"`
+	StatusCode    int      `json:"statusCode,omitempty"`
+	StatusMessage string   `json:"statusMessage,omitempty"`
+	StatusDetails []string `json:"statusDetails,omitempty"`
 }
 
 type jsonFailure struct {
@@ -355,6 +356,7 @@ func (grpc *GRPC) json() *jsonGRPC {
 		Code:          grpc.Code,
 		StatusCode:    grpc.StatusCode,
 		StatusMessage: grpc.StatusMessage,
+		StatusDetails: grpc.StatusDetails,
 	}
 }
 
