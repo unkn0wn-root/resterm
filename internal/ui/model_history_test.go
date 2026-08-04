@@ -9,11 +9,14 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"google.golang.org/grpc/codes"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -447,6 +450,91 @@ func TestConsumeHTTPResponseUsesSeparateStatusBarTestSummary(t *testing.T) {
 	}
 	if strings.Contains(plain, " - ✗") {
 		t.Fatalf("expected test summary to use a status bar block instead of hyphen separator, got %q", plain)
+	}
+}
+
+func TestConsumeGRPCResponseKeepsStatusDetailsInResponsePane(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	model.statusUser = ""
+	model.statusHost = ""
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	details := []string{
+		`{"@type":"type.googleapis.com/google.rpc.BadRequest"}`,
+		`{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"5s"}`,
+	}
+	resp := &grpcx.Response{
+		StatusCode:    codes.InvalidArgument,
+		StatusMessage: "invalid page size",
+		StatusDetails: details,
+	}
+	req := &restfile.Request{
+		Method: "GRPC",
+		GRPC: &restfile.GRPCRequest{
+			FullMethod: "/pkg.Service/FailWithDetail",
+		},
+	}
+
+	if cmd := model.consumeGRPCResponse(resp, nil, nil, req, "", nil); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	const summary = "gRPC pkg.Service/FailWithDetail - InvalidArgument (invalid page size)"
+	if model.statusMessage.text != summary {
+		t.Fatalf("status message = %q, want %q", model.statusMessage.text, summary)
+	}
+	if plain := ansi.Strip(model.renderStatusBar()); strings.Contains(plain, "\n") {
+		t.Fatalf("expected one-line status bar, got %q", plain)
+	}
+	if model.responseLatest == nil {
+		t.Fatal("expected response snapshot")
+	}
+	for _, detail := range details {
+		if !strings.Contains(model.responseLatest.pretty, detail) {
+			t.Fatalf("response pane omitted status detail %q", detail)
+		}
+	}
+	viewport := model.pane(responsePanePrimary).viewport.View()
+	for _, detailType := range []string{"BadRequest", "RetryInfo"} {
+		if !strings.Contains(viewport, detailType) {
+			t.Fatalf("response viewport omitted status detail type %q", detailType)
+		}
+	}
+}
+
+// Multi-line status details in the status bar grew the view past the terminal,
+// which scrolled the whole TUI up instead of staying inside the frame.
+func TestConsumeGRPCResponseKeepsViewWithinTerminalHeight(t *testing.T) {
+	const height = 40
+	base := New(Config{})
+	model := applyModelUpdate(t, &base, tea.WindowSizeMsg{Width: 120, Height: height})
+
+	resp := &grpcx.Response{
+		StatusCode:    codes.InvalidArgument,
+		StatusMessage: "invalid page size",
+		StatusDetails: []string{
+			"{\n  \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n  \"fieldViolations\": [\n    {\n      \"field\": \"page_size\"\n    }\n  ]\n}",
+			"{\n  \"@type\": \"type.googleapis.com/google.rpc.RetryInfo\",\n  \"retryDelay\": \"5s\"\n}",
+		},
+	}
+	req := &restfile.Request{
+		Method: "GRPC",
+		GRPC:   &restfile.GRPCRequest{FullMethod: "/pkg.Service/FailWithDetails"},
+	}
+	if cmd := model.consumeGRPCResponse(resp, nil, nil, req, "", nil); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if got := lipgloss.Height(model.renderStatusBar()); got != 1 {
+		t.Fatalf("status bar height = %d, want 1", got)
+	}
+	if got := lipgloss.Height(model.View()); got != height {
+		t.Fatalf("view height = %d, want %d", got, height)
 	}
 }
 

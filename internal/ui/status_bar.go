@@ -175,9 +175,19 @@ func statusBarSegmentStyle(
 	return style
 }
 
+// The bar is one row, and its width math measures widest-line only, so a
+// multi-line message silently grows it and pushes the view past the terminal
+// height. Callers keep their full text for the error modal; only the bar folds.
+func statusBarOneLine(text string) string {
+	if !strings.ContainsAny(text, "\r\n") {
+		return text
+	}
+	return strings.Join(strings.Fields(text), " ")
+}
+
 func (m Model) statusBarMessage() (string, statusLevel) {
 	if m.statusMessage.text != "" {
-		return m.statusMessage.text, m.statusMessage.level
+		return statusBarOneLine(m.statusMessage.text), m.statusMessage.level
 	}
 	switch {
 	case m.dirty:

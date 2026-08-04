@@ -592,6 +592,33 @@ func TestStatusBarMessageLevelsRenderStyled(t *testing.T) {
 	}
 }
 
+// A multi-line message must not grow the bar past its single row; the error
+// modal still gets the untouched text.
+func TestStatusBarFoldsMultiLineMessage(t *testing.T) {
+	model := New(Config{})
+	model.width = 96
+	model.statusUser = ""
+	model.statusHost = ""
+	model.statusMessage = statusMsg{
+		text:  "auth command failed:\n  first line\n  second line",
+		level: statusError,
+	}
+
+	bar := model.renderStatusBar()
+	if got := lipgloss.Height(bar); got != 1 {
+		t.Fatalf("status bar height = %d, want 1", got)
+	}
+	if plain := ansi.Strip(bar); !strings.Contains(plain, "auth command failed: first line second line") {
+		t.Fatalf("expected folded message in bar, got %q", plain)
+	}
+	if got, _ := model.statusBarMessage(); strings.Contains(got, "\n") {
+		t.Fatalf("statusBarMessage kept a newline: %q", got)
+	}
+	if model.statusMessage.text != "auth command failed:\n  first line\n  second line" {
+		t.Fatalf("stored status text was rewritten: %q", model.statusMessage.text)
+	}
+}
+
 func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)

@@ -817,7 +817,7 @@ func (m *Model) consumeGRPCResponse(
 		fullMethod = req.GRPC.FullMethod
 	}
 	views := renderer.buildGRPCResponseViews(resp, fullMethod)
-	statusLine := views.rawSummary
+	statusLine := grpcStatusLine(resp, fullMethod)
 
 	snapshot := &responseSnapshot{
 		pretty:     views.pretty,
