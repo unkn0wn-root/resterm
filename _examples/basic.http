@@ -6,6 +6,8 @@ Accept: application/json
 
 ### Download binary file
 # @name downloadBinary
+// github returns 404 for an invalid Authorization header and _examples defines a global auth profile
+# @auth none
 GET https://raw.githubusercontent.com/unkn0wn-root/resterm/main/_media/resterm_base.png
 
 ### Create Post
