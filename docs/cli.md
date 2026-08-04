@@ -151,7 +151,7 @@ Output rules worth knowing:
 | `--fail-fast` | `-ff` | Stop after the first failed top-level result and mark the remaining selected requests as skipped. |
 | `--exit-code-mode <mode>` | `-m <mode>` | `detailed` returns classified CI exit codes; `summary` preserves the legacy `0`/`1`/`2` contract. |
 
-JSON output includes a top-level `schemaVersion`, `summary.exitCode`, `summary.failureCodes`, and per-result `failure` metadata when a result fails. Workflow, compare, and profile failures include the same structured failure object at the step or profile-iteration level.
+JSON output includes a top-level `schemaVersion`, `summary.exitCode`, `summary.failureCodes`, and per-result `failure` metadata when a result fails. Workflow, compare, and profile failures include the same structured failure object at the step or profile-iteration level. gRPC results include `grpc.statusDetails` with each status detail message encoded as JSON when the server returns any.
 
 ### Artifacts And Persisted State
 

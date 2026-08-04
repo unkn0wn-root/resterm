@@ -123,6 +123,7 @@ func grpcFromFmt(grpc *runfmt.GRPC) *GRPC {
 		Code:          grpc.Code,
 		StatusCode:    grpc.StatusCode,
 		StatusMessage: grpc.StatusMessage,
+		StatusDetails: grpc.StatusDetails,
 	}
 }
 

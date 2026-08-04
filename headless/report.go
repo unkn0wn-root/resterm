@@ -243,9 +243,10 @@ type HTTP struct {
 
 // GRPC contains gRPC response summary fields.
 type GRPC struct {
-	Code          string `json:"code,omitempty"`
-	StatusCode    int    `json:"statusCode,omitempty"`
-	StatusMessage string `json:"statusMessage,omitempty"`
+	Code          string   `json:"code,omitempty"`
+	StatusCode    int      `json:"statusCode,omitempty"`
+	StatusMessage string   `json:"statusMessage,omitempty"`
+	StatusDetails []string `json:"statusDetails,omitempty"`
 }
 
 // Test contains one assertion result.
@@ -481,6 +482,7 @@ func toFormatGRPC(grpc *GRPC) *runfmt.GRPC {
 		Code:          grpc.Code,
 		StatusCode:    grpc.StatusCode,
 		StatusMessage: grpc.StatusMessage,
+		StatusDetails: grpc.StatusDetails,
 	}
 }
 

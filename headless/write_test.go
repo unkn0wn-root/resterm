@@ -480,6 +480,56 @@ func TestReportMarshalJSONMatchesWriteJSON(t *testing.T) {
 	}
 }
 
+func TestReportRoundTripKeepsGRPCStatusDetails(t *testing.T) {
+	detail := `{"@type":"type.googleapis.com/google.rpc.RetryInfo"}`
+	rep := reportFromRunner(&runner.Report{
+		FilePath: "api.http",
+		Total:    1,
+		Failed:   1,
+		Results: []runner.Result{{
+			Kind:   runner.ResultKindRequest,
+			Name:   "invalid request",
+			Method: "GRPC",
+			Target: "/demo.Service/List",
+			GRPC: &grpcx.Response{
+				StatusCode:    codes.InvalidArgument,
+				StatusMessage: "invalid page size",
+				StatusDetails: []string{detail},
+			},
+		}},
+	})
+	if rep == nil {
+		t.Fatal("expected report")
+	}
+
+	grpc := rep.Results[0].GRPC
+	if grpc == nil || len(grpc.StatusDetails) != 1 || grpc.StatusDetails[0] != detail {
+		t.Fatalf("expected status details on the public report, got %+v", grpc)
+	}
+
+	var out strings.Builder
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	var got struct {
+		Results []struct {
+			GRPC struct {
+				StatusDetails []string `json:"statusDetails"`
+			} `json:"grpc"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if len(got.Results) != 1 {
+		t.Fatalf("expected one result, got %+v", got.Results)
+	}
+	if details := got.Results[0].GRPC.StatusDetails; len(details) != 1 || details[0] != detail {
+		t.Fatalf("statusDetails = %v, want [%s]", details, detail)
+	}
+}
+
 func sampleRunnerReport() *runner.Report {
 	return &runner.Report{
 		Version:   "v1",
