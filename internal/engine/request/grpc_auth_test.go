@@ -9,9 +9,13 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func grpcAuthRequest(auth *restfile.AuthSpec) *restfile.Request {
+func grpcAuthRequest(auth *restfile.AuthSpec, meta ...restfile.MetadataPair) *restfile.Request {
 	return &restfile.Request{
-		GRPC:     &restfile.GRPCRequest{Target: "localhost:50051", FullMethod: "/pkg.Svc/Call"},
+		GRPC: &restfile.GRPCRequest{
+			Target:     "localhost:50051",
+			FullMethod: "/pkg.Svc/Call",
+			Metadata:   meta,
+		},
 		Metadata: restfile.RequestMetadata{Auth: auth},
 	}
 }

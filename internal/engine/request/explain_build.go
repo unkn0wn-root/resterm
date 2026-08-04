@@ -1099,6 +1099,13 @@ func (e *Engine) prepareExplainAuthPreview(
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
 		}, nil
 	case "command":
+		if hdr, ok := e.commandAuthHeader(doc, auth, res); ok && requestHeaderPresent(req, hdr) {
+			return explainAuthPreviewResult{
+				status:  xplain.StageOK,
+				summary: xplain.SummaryAuthPrepared,
+				notes:   []string{authPresentNote(req, hdr)},
+			}, nil
+		}
 		prep, err := e.PrepareCommandAuth(doc, auth, res, env, 0)
 		if err != nil {
 			return explainAuthPreviewResult{}, err
@@ -1152,12 +1159,6 @@ func (e *Engine) prepareExplainAuthPreview(
 			return explainAuthPreviewResult{}, err
 		}
 		cfg = oa.MergeCachedConfig(env.Scope(), cfg)
-		if cfg.TokenURL == "" {
-			return explainAuthPreviewResult{}, diag.New(
-				diag.ClassAuth,
-				"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
-			)
-		}
 		hdr := cfg.Header
 		if requestHeaderPresent(req, hdr) {
 			return explainAuthPreviewResult{
@@ -1165,6 +1166,12 @@ func (e *Engine) prepareExplainAuthPreview(
 				summary: xplain.SummaryAuthPrepared,
 				notes:   []string{authPresentNote(req, hdr)},
 			}, nil
+		}
+		if cfg.TokenURL == "" {
+			return explainAuthPreviewResult{}, diag.New(
+				diag.ClassAuth,
+				errOAuthTokenURLRequired,
+			)
 		}
 		tok, ok := oa.CachedToken(env.Scope(), cfg)
 		if !ok {

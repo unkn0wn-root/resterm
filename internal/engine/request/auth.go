@@ -282,6 +282,9 @@ func (e *Engine) EnsureCommandAuth(
 	if auth == nil {
 		return authcmd.Result{}, nil
 	}
+	if hdr, ok := e.commandAuthHeader(doc, auth, res); ok && requestHeaderPresent(req, hdr) {
+		return authcmd.Result{}, nil
+	}
 	prep, err := e.PrepareCommandAuth(doc, auth, res, env, timeout)
 	if err != nil {
 		return authcmd.Result{}, err
@@ -303,6 +306,28 @@ func (e *Engine) EnsureCommandAuth(
 		return authcmd.Result{}, nil
 	}
 	return out, nil
+}
+
+// commandAuthHeader names the header the directive pins without expanding argv
+// or running the command. It reports false when the directive omits the header
+// and a cache entry could still supply one, since only Prepare reads that.
+func (e *Engine) commandAuthHeader(
+	doc *restfile.Document,
+	auth *restfile.AuthSpec,
+	res *vars.Resolver,
+) (string, bool) {
+	pm, err := commandAuthParams(auth, res)
+	if err != nil {
+		return "", false
+	}
+	cfg, err := authcmd.Parse(pm, e.cmdDir(doc, auth))
+	if err != nil {
+		return "", false
+	}
+	if cfg.Header == "" && cfg.CacheKey != "" {
+		return "", false
+	}
+	return cfg.HeaderName(), true
 }
 
 func (e *Engine) PrepareCommandAuth(
@@ -344,12 +369,15 @@ func (e *Engine) EnsureOAuth(
 		return err
 	}
 	cfg = oa.MergeCachedConfig(env.Scope(), cfg)
-	if cfg.TokenURL == "" {
-		return diag.New(diag.ClassAuth, errOAuthTokenURLRequired)
-	}
+
+	// Check the override before validating the rest, so an explicit header or
+	// @grpc-metadata never fails on config we are about to discard.
 	hdr := cfg.Header
 	if requestHeaderPresent(req, hdr) {
 		return nil
+	}
+	if cfg.TokenURL == "" {
+		return diag.New(diag.ClassAuth, errOAuthTokenURLRequired)
 	}
 	if e.oauthNeedsHeadlessSeed(oa, env.Scope(), cfg) {
 		return diag.New(diag.ClassAuth, errOAuthHeadlessSeedRequired)
