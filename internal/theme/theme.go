@@ -269,31 +269,31 @@ func DefaultTheme() Theme {
 		},
 		CommandSegments: []CommandSegmentStyle{
 			{
-				Background: lipgloss.Color("#2C1E3A"),
+				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#7D56F4"),
 				Key:        lipgloss.Color("#F6E3FF"),
 				Text:       lipgloss.Color("#E5E1FF"),
 			},
 			{
-				Background: lipgloss.Color("#102B33"),
+				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#15AABF"),
 				Key:        lipgloss.Color("#A7F2FF"),
 				Text:       lipgloss.Color("#D6F7FF"),
 			},
 			{
-				Background: lipgloss.Color("#32160E"),
+				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#FF7A45"),
 				Key:        lipgloss.Color("#FFE0D3"),
 				Text:       lipgloss.Color("#FFD4C2"),
 			},
 			{
-				Background: lipgloss.Color("#0F2F20"),
+				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#33C481"),
 				Key:        lipgloss.Color("#C0F5DF"),
 				Text:       lipgloss.Color("#D6F9E8"),
 			},
 			{
-				Background: lipgloss.Color("#332408"),
+				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#FFB61E"),
 				Key:        lipgloss.Color("#FFECC0"),
 				Text:       lipgloss.Color("#FFF3D8"),
@@ -503,7 +503,7 @@ func (t Theme) HeaderSegment(idx int) HeaderSegmentStyle {
 func (t Theme) CommandSegment(idx int) CommandSegmentStyle {
 	if len(t.CommandSegments) == 0 {
 		return CommandSegmentStyle{
-			Background: lipgloss.Color("#2C1E3A"),
+			Background: lipgloss.Color(""),
 			Border:     lipgloss.Color("#7D56F4"),
 			Key:        lipgloss.Color("#F6E3FF"),
 			Text:       lipgloss.Color("#E5E1FF"),

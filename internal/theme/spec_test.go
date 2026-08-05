@@ -60,8 +60,9 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			Foreground: strPtr("#eeeeee"),
 		}},
 		CommandSegments: []CommandSegmentSpec{{
-			Key:  strPtr("#abcdef"),
-			Text: strPtr("#fedcba"),
+			Background: strPtr("#222222"),
+			Key:        strPtr("#abcdef"),
+			Text:       strPtr("#fedcba"),
 		}},
 		StatusBar: &StatusBarSpec{
 			Base: strPtr("#010101"),
@@ -161,6 +162,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if updated.CommandSegments[0].Key != "#abcdef" {
 		t.Errorf("expected command key color override, got %q", updated.CommandSegments[0].Key)
+	}
+	if updated.CommandSegments[0].Background != "#222222" {
+		t.Errorf(
+			"expected command background color override, got %q",
+			updated.CommandSegments[0].Background,
+		)
 	}
 	if got := updated.StatusBarPalette.Base; got != "#010101" {
 		t.Errorf("expected status bar base override, got %q", got)
