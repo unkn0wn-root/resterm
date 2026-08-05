@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.51.3](https://github.com/unkn0wn-root/resterm/compare/v0.51.2...v0.51.3) (2026-08-05)
+
+
+### Bug Fixes
+
+* **ui:** prevent completion on whitespace and idle deletion ([#352](https://github.com/unkn0wn-root/resterm/issues/352)) ([201b7f4](https://github.com/unkn0wn-root/resterm/commit/201b7f457161b5e48da70a2b7d46fce79ba3c79b))
+
 ### [0.51.2](https://github.com/unkn0wn-root/resterm/compare/v0.50.0...v0.51.2) (2026-08-05)
 
 
