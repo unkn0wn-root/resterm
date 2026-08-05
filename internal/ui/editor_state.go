@@ -539,6 +539,19 @@ func (e *requestEditor) dismissCompletion() bool {
 	return true
 }
 
+func (e *requestEditor) updateCompletions(msg tea.KeyMsg) {
+	switch msg.String() {
+	case " ", "enter", "ctrl+m":
+		e.completion.deactivate()
+	case "backspace", "ctrl+h", "delete":
+		if e.completion.active {
+			e.refreshCompletions()
+		}
+	default:
+		e.refreshCompletions()
+	}
+}
+
 func (e *requestEditor) refreshCompletions() {
 	if !e.completionEnabled {
 		e.completion.deactivate()
@@ -867,7 +880,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	}
 
 	after := e.caretPosition()
-	e.refreshCompletions()
+	e.updateCompletions(keyMsg)
 	if transformed.String() != keyMsg.String() && !e.hasSelection() {
 		e.clearSelection()
 	}

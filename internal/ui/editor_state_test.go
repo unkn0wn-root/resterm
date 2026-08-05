@@ -1419,6 +1419,79 @@ func TestRequestEditorCompletionsSuggestAndAccept(t *testing.T) {
 	}
 }
 
+func TestRequestEditorCompletionsStayClosedAfterSpaces(t *testing.T) {
+	editor := newTestEditor("")
+	editor.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "  ")
+	if got := editor.Value(); got != "  " {
+		t.Fatalf("expected spaces to be inserted, got %q", got)
+	}
+	if editor.completion.active {
+		t.Fatal("expected completion to stay closed after spaces")
+	}
+}
+
+func TestRequestEditorCompletionsStayClosedAfterEnters(t *testing.T) {
+	editor := newTestEditor("")
+	editor.SetMotionsEnabled(false)
+	editor.SetCompletionEnabled(true)
+
+	for range 2 {
+		editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	}
+	if got := editor.Value(); got != "\n\n" {
+		t.Fatalf("expected enters to insert newlines, got %q", got)
+	}
+	if editor.completion.active {
+		t.Fatal("expected completion to stay closed after enters")
+	}
+}
+
+func TestRequestEditorCompletionsStayClosedAfterDeletion(t *testing.T) {
+	tests := []struct {
+		name string
+		key  tea.KeyMsg
+	}{
+		{name: "backspace", key: tea.KeyMsg{Type: tea.KeyBackspace}},
+		{name: "ctrl h", key: tea.KeyMsg{Type: tea.KeyCtrlH}},
+		{name: "delete", key: tea.KeyMsg{Type: tea.KeyDelete}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			editor := newTestEditor("")
+			editor.SetMotionsEnabled(false)
+			editor.SetCompletionEnabled(true)
+
+			editor, _ = editor.Update(tt.key)
+			if editor.completion.active {
+				t.Fatal("expected completion to stay closed after deletion")
+			}
+		})
+	}
+}
+
+func TestRequestEditorCompletionsRefilterAfterBackspace(t *testing.T) {
+	editor := newTestEditor("")
+	editor.SetCompletionEnabled(true)
+	editor = typeRunes(editor, "GE")
+	if !editor.completion.active {
+		t.Fatal("expected method completion to be active")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if got := editor.Value(); got != "G" {
+		t.Fatalf("expected backspace to remove one character, got %q", got)
+	}
+	if !editor.completion.active {
+		t.Fatal("expected backspace to refilter the active completion")
+	}
+	if got := editor.completion.ctx.Query; got != "g" {
+		t.Fatalf("expected completion query %q, got %q", "g", got)
+	}
+}
+
 func TestRequestEditorCompletionsSecondLineAnchor(t *testing.T) {
 	editor := newTestEditor("GET https://example.com\n# ")
 	editorPtr := &editor
@@ -1475,21 +1548,25 @@ func TestRequestEditorCompletionsSuggestWsSubcommands(t *testing.T) {
 		}
 	}
 
+	if editor.completion.active {
+		t.Fatal("expected metadata hints to stay closed after the directive separator")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	if !editor.completion.active {
-		t.Fatal("expected metadata hints to activate for @ws directive")
+		t.Fatal("expected metadata hints to activate for an @ws argument prefix")
 	}
 	if editor.completion.ctx.Kind != intellisense.KindDirectiveArg {
 		t.Fatalf("expected subcommand hint mode, got %v", editor.completion.ctx.Kind)
 	}
 
 	labels := collectHintLabels(editor.completion.filtered)
-	for _, label := range []string{"send", "send-json", "send-base64", "send-file", "ping", "pong", "wait", "close"} {
+	for _, label := range []string{"send", "send-json", "send-base64", "send-file"} {
 		if !labels[label] {
 			t.Fatalf("expected ws subcommand %q in suggestions", label)
 		}
 	}
 
-	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	if len(editor.completion.filtered) == 0 {
 		t.Fatal("expected filtered subcommand suggestions after typing prefix")
 	}
@@ -1532,21 +1609,23 @@ func TestRequestEditorCompletionsSuggestAuthSubcommands(t *testing.T) {
 		}
 	}
 
+	if editor.completion.active {
+		t.Fatal("expected metadata hints to stay closed after the directive separator")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	if !editor.completion.active {
-		t.Fatal("expected metadata hints to activate for @auth directive")
+		t.Fatal("expected metadata hints to activate for an @auth argument prefix")
 	}
 	if editor.completion.ctx.Kind != intellisense.KindDirectiveArg {
 		t.Fatalf("expected subcommand hint mode, got %v", editor.completion.ctx.Kind)
 	}
 
 	labels := collectHintLabels(editor.completion.filtered)
-	for _, label := range []string{"basic", "bearer", "apikey", "oauth2", "command", "token_url=", "argv="} {
-		if !labels[label] {
-			t.Fatalf("expected auth subcommand %q in suggestions", label)
-		}
+	if !labels["command"] {
+		t.Fatalf("expected command suggestion, got %v", editor.completion.filtered)
 	}
 
-	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	if len(editor.completion.filtered) == 0 {
 		t.Fatal("expected filtered auth subcommand suggestions after typing prefix")
 	}
@@ -1651,8 +1730,13 @@ func TestRequestEditorCompletionsProfileMultipleParams(t *testing.T) {
 		}
 	}
 
+	if editor.completion.active {
+		t.Fatal("expected metadata hints to stay closed after the directive separator")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	if !editor.completion.active {
-		t.Fatal("expected metadata hints to activate for profile subcommands")
+		t.Fatal("expected metadata hints to activate for a profile argument prefix")
 	}
 	if editor.completion.ctx.Kind != intellisense.KindDirectiveArg {
 		t.Fatalf("expected subcommand mode, got %v", editor.completion.ctx.Kind)
