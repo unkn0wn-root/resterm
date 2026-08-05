@@ -308,24 +308,21 @@ func TestConsumeHTTPResponseActiveExplainRendersBeforeResponseFormatting(t *test
 	}
 	pane.activeTab = responseTabExplain
 
-	cmd := model.consumeHTTPResponse(
-		&httpx.Response{
+	cmd := model.consumeHTTPResponse(responseMsg{
+		response: &httpx.Response{
 			Status:       "200 OK",
 			StatusCode:   200,
 			ReqMethod:    "GET",
 			EffectiveURL: "https://example.com",
 			Body:         []byte("ok"),
 		},
-		nil,
-		nil,
-		"",
-		&xplain.Report{
+		explain: &xplain.Report{
 			Status:   xplain.StatusReady,
 			Method:   "GET",
 			URL:      "https://example.com",
 			Decision: "HTTP request sent",
 		},
-	)
+	})
 	if cmd == nil {
 		t.Fatal("expected async response render command")
 	}

@@ -188,8 +188,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamCompleteMsg:
 		m.handleStreamComplete(typed)
 		cmds = append(cmds, m.nextStreamMsgCmd())
-	case streamReadyMsg:
-		m.handleStreamReady(typed)
+	case streamAttachMsg:
+		m.handleStreamAttach(typed)
 		cmds = append(cmds, m.nextStreamMsgCmd())
 	case fileChangedMsg:
 		if cmd := m.handleFileChangeEvent(typed); cmd != nil {

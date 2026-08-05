@@ -28,9 +28,17 @@ const (
 	streamJSONIndent         = "  "
 )
 
-func (m *Model) attachStreamSession(session *stream.Session) {
+// attachStreamSession starts tracking a session, returning the existing entry
+// if it is already tracked. Subscribing seeds the buffer with whatever the
+// stream published before the attachment reached the update loop, so nothing
+// that arrived in that window is lost.
+func (m *Model) attachStreamSession(session *stream.Session) *liveSession {
 	if session == nil {
-		return
+		return nil
+	}
+	id := session.ID()
+	if ls := m.liveSession(id); ls != nil {
+		return ls
 	}
 	if m.streamMgr != nil {
 		m.streamMgr.Register(session)
@@ -41,33 +49,58 @@ func (m *Model) attachStreamSession(session *stream.Session) {
 	if m.sessionHandles == nil {
 		m.sessionHandles = make(map[string]*stream.Session)
 	}
-	id := session.ID()
 	ls := newLiveSession(id, m.streamMaxEvents)
 	ls.kind = session.Kind()
+	listener := session.Subscribe()
+	ls.append(listener.Snapshot.Events)
+	ls.setState(listener.Snapshot.State, listener.Snapshot.Err)
 	m.liveSessions[id] = ls
 	m.sessionHandles[id] = session
-	go m.runStreamSession(session)
-	m.emitStreamMsg(streamReadyMsg{sessionID: id})
+	go m.runStreamSession(session, listener)
+	return ls
 }
 
-func (m *Model) attachGRPCSession(session *stream.Session, req *restfile.Request) {
-	if session == nil {
+// handleStreamAttach takes ownership of a session the engine just opened. Every
+// map and pane it touches belongs to the update loop, which is why the engine
+// hands the session over as a message instead of registering it itself.
+func (m *Model) handleStreamAttach(msg streamAttachMsg) {
+	if msg.session == nil {
 		return
 	}
-	m.recordSessionMapping(req, session)
-	m.attachStreamSession(session)
+	if msg.gen != m.streamGen {
+		msg.session.Cancel()
+		return
+	}
+	m.recordSessionMapping(msg.req, msg.session)
+	ls := m.attachStreamSession(msg.session)
+	if ls == nil {
+		return
+	}
+
+	// The pane owns the session until the response carrying it arrives, which
+	// is what puts a stream on screen before its request has finished.
+	id := msg.session.ID()
+	target, _ := paneRunTarget(msg.pane).resolve(m.responseSplit)
+	m.pane(target).streamID = id
+	m.linkStreamSnapshots(ls)
+
+	if ls.kind == stream.KindWebSocket {
+		if m.wsSenders == nil {
+			m.wsSenders = make(map[string]*httpx.WebSocketSender)
+		}
+		if msg.sender != nil {
+			m.wsSenders[id] = msg.sender
+		}
+		m.ensureWebSocketConsole(id, msg.session, msg.sender, msg.req, msg.baseDir)
+	}
+	m.showStreamTab(id)
 }
 
-func (m *Model) runStreamSession(session *stream.Session) {
-	if session == nil {
+func (m *Model) runStreamSession(session *stream.Session, listener stream.Listener) {
+	if session == nil || listener.C == nil {
 		return
 	}
-	listener := session.Subscribe()
 	defer listener.Cancel()
-
-	if snapshot := listener.Snapshot.Events; len(snapshot) > 0 {
-		m.emitStreamMsg(streamEventMsg{sessionID: session.ID(), events: cloneEventSlice(snapshot)})
-	}
 
 	batchWindow := m.streamBatchWindow
 	if batchWindow <= 0 {
@@ -143,39 +176,6 @@ func (m *Model) nextStreamMsgCmd() tea.Cmd {
 	}
 }
 
-func (m *Model) attachSSEHandle(handle *httpx.StreamHandle, req *restfile.Request) {
-	if handle == nil {
-		return
-	}
-	m.recordSessionMapping(req, handle.Session)
-	m.attachStreamSession(handle.Session)
-}
-
-func (m *Model) attachWebSocketHandle(handle *httpx.WebSocketHandle, req *restfile.Request) {
-	if handle == nil {
-		return
-	}
-	m.recordSessionMapping(req, handle.Session)
-	m.attachStreamSession(handle.Session)
-	if m.wsSenders == nil {
-		m.wsSenders = make(map[string]*httpx.WebSocketSender)
-	}
-	sessionID := ""
-	if handle.Session != nil {
-		sessionID = handle.Session.ID()
-	}
-	if sessionID != "" && handle.Sender != nil {
-		m.wsSenders[sessionID] = handle.Sender
-	}
-	baseDir := ""
-	if handle.Meta.BaseDir != "" {
-		baseDir = handle.Meta.BaseDir
-	} else {
-		baseDir = m.sessionBaseDir(req)
-	}
-	m.ensureWebSocketConsole(sessionID, handle.Session, handle.Sender, req, baseDir)
-}
-
 // liveSession returns the tracked session for id. Entries are created only in
 // attachStreamSession, so an unknown id is a stale stream from a workspace
 // that has been left.
@@ -184,6 +184,131 @@ func (m *Model) liveSession(id string) *liveSession {
 		return nil
 	}
 	return m.liveSessions[id]
+}
+
+// paneStream resolves the session a pane is showing. A pane owns its session
+// directly from the moment it attaches until the response carrying it arrives;
+// from then on the snapshot is the owner, which is what lets a pinned pane keep
+// a finished transcript while a new run streams into the other pane.
+func (m *Model) paneStream(id responsePaneID) (string, *liveSession) {
+	pane := m.pane(id)
+	if pane == nil {
+		return "", nil
+	}
+	if pane.streamID != "" {
+		return pane.streamID, m.liveSession(pane.streamID)
+	}
+	if pane.snapshot == nil {
+		return "", nil
+	}
+	sid := pane.snapshot.streamID
+	if ls := pane.snapshot.stream; ls != nil {
+		return sid, ls
+	}
+	return sid, m.liveSession(sid)
+}
+
+func (m *Model) streamIDForPane(id responsePaneID) string {
+	sid, _ := m.paneStream(id)
+	return sid
+}
+
+func (m *Model) streamForPane(id responsePaneID) *liveSession {
+	_, ls := m.paneStream(id)
+	return ls
+}
+
+// activeStreamID is the session the console shortcuts act on. Focus in the
+// response pane picks the pane's stream, otherwise it is the one the request
+// under the cursor opened.
+func (m *Model) activeStreamID() string {
+	if m.focus == focusResponse {
+		if id := m.streamIDForPane(m.responsePaneFocus); id != "" {
+			return id
+		}
+	}
+	return m.sessionIDForRequest(m.currentRequest)
+}
+
+// bindSnapshotStream gives a snapshot the session its run opened. The session
+// may not have attached yet, so the id is recorded either way and
+// linkStreamSnapshots fills in the rest once the attachment lands.
+func (m *Model) bindSnapshotStream(snap *responseSnapshot, id string) {
+	if snap == nil {
+		return
+	}
+	snap.streamID = id
+	if ls := m.liveSession(id); ls != nil {
+		m.linkSnapshot(snap, ls)
+		m.releaseLiveStream(ls)
+	}
+}
+
+// linkStreamSnapshots runs the same binding the other way: a session that has
+// just attached reaches every snapshot already waiting for it.
+func (m *Model) linkStreamSnapshots(ls *liveSession) {
+	if ls == nil {
+		return
+	}
+	m.linkSnapshot(m.responseLatest, ls)
+	m.linkSnapshot(m.responsePrevious, ls)
+	m.linkSnapshot(m.render.snapshot, ls)
+	for i := range m.responsePanes {
+		m.linkSnapshot(m.responsePanes[i].snapshot, ls)
+	}
+	m.releaseLiveStream(ls)
+}
+
+func (m *Model) linkSnapshot(snap *responseSnapshot, ls *liveSession) {
+	if snap == nil || snap.streamID != ls.id {
+		return
+	}
+	snap.stream = ls
+	ls.bound = true
+}
+
+// releaseLiveStream drops a finished session from the registry once a snapshot
+// holds it. Both conditions are needed, in either order: see liveSession.
+func (m *Model) releaseLiveStream(ls *liveSession) {
+	if ls == nil || !ls.bound || !ls.done {
+		return
+	}
+	delete(m.liveSessions, ls.id)
+}
+
+func (m *Model) panesForStream(id string) []responsePaneID {
+	if id == "" {
+		return nil
+	}
+	var ids []responsePaneID
+	for _, paneID := range m.visiblePaneIDs() {
+		if m.streamIDForPane(paneID) == id {
+			ids = append(ids, paneID)
+		}
+	}
+	return ids
+}
+
+// responseTargetForStream keeps a stream's later responses in the pane that
+// already owns it, so a transcript and its response never split up.
+func (m *Model) responseTargetForStream(id string) responsePaneID {
+	if ids := m.panesForStream(id); len(ids) > 0 {
+		return ids[0]
+	}
+	return m.responseTargetPane()
+}
+
+// responseTargetForMsg picks where a response lands: the pane holding its
+// stream, else the pane the run was launched from, else the live pane. Focus
+// moving mid-run must not drag the response along with it.
+func (m *Model) responseTargetForMsg(msg responseMsg) responsePaneID {
+	if ids := m.panesForStream(msg.streamID); len(ids) > 0 {
+		return ids[0]
+	}
+	if id, ok := msg.target.resolve(m.responseSplit); ok {
+		return id
+	}
+	return m.responseTargetPane()
 }
 
 func (m *Model) handleStreamEvents(msg streamEventMsg) {
@@ -213,8 +338,11 @@ func (m *Model) handleStreamState(msg streamStateMsg) {
 	}
 	ls.setState(msg.state, msg.err)
 	level := statusInfo
-	if msg.err != nil || msg.state == stream.StateFailed {
+	if ls.failed() {
 		level = statusWarn
+		for _, id := range m.panesForStream(msg.sessionID) {
+			m.pane(id).stopStreamTail()
+		}
 	}
 	m.setStatusMessage(
 		statusMsg{
@@ -237,6 +365,8 @@ func (m *Model) handleStreamComplete(msg streamCompleteMsg) {
 	if ls.state != stream.StateFailed {
 		ls.state = stream.StateClosed
 	}
+	ls.done = true
+	filterID := m.streamIDForPane(m.responsePaneFocus)
 	if ls.kind == stream.KindWebSocket {
 		if m.wsConsole != nil && m.wsConsole.sessionID == msg.sessionID {
 			m.wsConsole = nil
@@ -259,29 +389,36 @@ func (m *Model) handleStreamComplete(msg streamCompleteMsg) {
 		}
 		delete(m.sessionRequests, msg.sessionID)
 	}
-	if sessionID := m.sessionIDForRequest(m.currentRequest); sessionID == msg.sessionID {
+	if filterID == msg.sessionID {
 		m.streamFilterActive = false
 		m.streamFilterInput.SetValue("")
 		m.streamFilterInput.Blur()
 	}
-	m.setStatusMessage(
-		statusMsg{text: fmt.Sprintf("Stream %s completed", msg.sessionID), level: statusSuccess},
-	)
+	status := statusMsg{text: fmt.Sprintf("Stream %s completed", msg.sessionID), level: statusSuccess}
+	if ls.failed() {
+		detail := streamStateString(ls.state, ls.err)
+		if ls.err != nil {
+			detail = ls.err.Error()
+		}
+		status.text = fmt.Sprintf("Stream %s failed: %s", msg.sessionID, detail)
+		status.level = statusWarn
+	}
+	m.setStatusMessage(status)
+	m.releaseLiveStream(ls)
 	m.refreshStreamPanes()
 }
 
-func (m *Model) handleStreamReady(msg streamReadyMsg) {
-	sessionID := msg.sessionID
+// showStreamTab brings every pane that owns the session onto its transcript.
+func (m *Model) showStreamTab(sessionID string) {
 	if m.liveSession(sessionID) == nil {
 		return
 	}
-	currentID := m.sessionIDForRequest(m.currentRequest)
-	if currentID == sessionID {
-		if pane := m.pane(responsePanePrimary); pane != nil {
-			pane.setActiveTab(responseTabStream)
-		}
-		if m.focus == focusResponse {
-			m.setLivePane(m.responsePaneFocus)
+	for _, id := range m.panesForStream(sessionID) {
+		pane := m.pane(id)
+		pane.setActiveTab(responseTabStream)
+		pane.tail = true
+		if m.focus == focusResponse && id == m.responsePaneFocus {
+			m.setLivePane(id)
 		}
 	}
 	m.refreshStreamPanes()
@@ -310,8 +447,8 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		return nil, false
 	}
-	sessionID := m.sessionIDForRequest(m.currentRequest)
-	ls := m.liveSession(sessionID)
+	sessionID := m.streamIDForPane(m.responsePaneFocus)
+	ls := m.streamForPane(m.responsePaneFocus)
 	if sessionID == "" && !m.streamFilterActive {
 		return nil, false
 	}
@@ -349,22 +486,20 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 
 	switch msg.String() {
-	case "ctrl+space":
+	// Terminals that send NUL for ctrl+space surface it as ctrl+@.
+	case "ctrl+space", "ctrl+@":
 		if ls == nil {
 			return nil, false
 		}
 		ls.setPaused(!ls.paused)
+		// Pausing holds the transcript still. It says nothing about which pane
+		// the next response belongs in, so followLatest stays untouched.
+		pane.tail = !ls.paused
+		text := "Stream resumed"
 		if ls.paused {
-			m.setStatusMessage(statusMsg{text: "Stream paused", level: statusInfo})
-			if pane != nil {
-				pane.followLatest = false
-			}
-		} else {
-			m.setStatusMessage(statusMsg{text: "Stream resumed", level: statusInfo})
-			if pane != nil {
-				pane.followLatest = true
-			}
+			text = "Stream paused"
 		}
+		m.setStatusMessage(statusMsg{text: text, level: statusInfo})
 		m.refreshStreamPanes()
 		return nil, true
 	case "ctrl+f":
@@ -392,46 +527,36 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.refreshStreamPanes()
 		return nil, true
 	case "ctrl+up":
-		if ls == nil || len(ls.bookmarks) == 0 {
-			m.setStatusMessage(statusMsg{text: "No bookmarks", level: statusInfo})
-			return nil, true
-		}
-		if bm := ls.nextBookmark(false); bm != nil {
-			ls.setPaused(true)
-			if bm.Index >= 0 && bm.Index <= len(ls.events) {
-				ls.pausedIndex = bm.Index
-			}
-			m.setStatusMessage(
-				statusMsg{text: fmt.Sprintf("Bookmark: %s", bookmarkLabel(*bm)), level: statusInfo},
-			)
-			if pane != nil {
-				pane.followLatest = false
-			}
-			m.refreshStreamPanes()
-		}
+		m.jumpToStreamBookmark(pane, ls, false)
 		return nil, true
 	case "ctrl+down":
-		if ls == nil || len(ls.bookmarks) == 0 {
-			m.setStatusMessage(statusMsg{text: "No bookmarks", level: statusInfo})
-			return nil, true
-		}
-		if bm := ls.nextBookmark(true); bm != nil {
-			ls.setPaused(true)
-			if bm.Index >= 0 && bm.Index <= len(ls.events) {
-				ls.pausedIndex = bm.Index
-			}
-			m.setStatusMessage(
-				statusMsg{text: fmt.Sprintf("Bookmark: %s", bookmarkLabel(*bm)), level: statusInfo},
-			)
-			if pane != nil {
-				pane.followLatest = false
-			}
-			m.refreshStreamPanes()
-		}
+		m.jumpToStreamBookmark(pane, ls, true)
 		return nil, true
 	}
 
 	return nil, false
+}
+
+// jumpToStreamBookmark pauses on the next bookmark in either direction. The
+// pause is what freezes the transcript at that point, so tailing has to stop.
+func (m *Model) jumpToStreamBookmark(pane *responsePaneState, ls *liveSession, forward bool) {
+	if ls == nil || len(ls.bookmarks) == 0 {
+		m.setStatusMessage(statusMsg{text: "No bookmarks", level: statusInfo})
+		return
+	}
+	bm := ls.nextBookmark(forward)
+	if bm == nil {
+		return
+	}
+	ls.setPaused(true)
+	if bm.Index >= 0 && bm.Index <= len(ls.events) {
+		ls.pausedIndex = bm.Index
+	}
+	m.setStatusMessage(
+		statusMsg{text: fmt.Sprintf("Bookmark: %s", bookmarkLabel(*bm)), level: statusInfo},
+	)
+	pane.tail = false
+	m.refreshStreamPanes()
 }
 
 func streamStateString(state stream.State, err error) string {
@@ -492,64 +617,21 @@ func (m *Model) sessionIDForRequest(req *restfile.Request) string {
 	return ""
 }
 
-func (m *Model) hasActiveStream() bool {
-	if m.wsConsole != nil {
-		return true
-	}
-	if len(m.liveSessions) == 0 {
-		return false
-	}
-	for _, ls := range m.liveSessions {
-		if ls == nil {
-			continue
-		}
-		if ls.state != stream.StateClosed || len(ls.events) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func (m *Model) streamContentForPane(id responsePaneID) string {
-	req := m.requestForPane(id)
-	if req == nil {
-		if id == responsePanePrimary {
-			return "No active request\n"
-		}
+	if m.streamIDForPane(id) == "" {
 		return "No stream available\n"
 	}
-	sessionID := m.sessionIDForRequest(req)
-	if sessionID == "" {
-		return "Waiting for stream session\n"
-	}
-	ls := m.liveSession(sessionID)
+	ls := m.streamForPane(id)
 	if ls == nil {
 		return "Waiting for stream session\n"
 	}
 	return m.formatStreamContent(ls)
 }
 
-func (m *Model) requestForPane(id responsePaneID) *restfile.Request {
-	switch id {
-	case responsePanePrimary:
-		return m.currentRequest
-	default:
-		return nil
-	}
-}
-
 func (m *Model) consoleForPane(id responsePaneID) *websocketConsole {
-	req := m.requestForPane(id)
-	if req == nil {
-		return nil
-	}
-	sessionID := m.sessionIDForRequest(req)
+	sessionID := m.streamIDForPane(id)
 	if sessionID == "" {
-		if m.wsConsole == nil || m.wsConsole.sessionID == "" {
-			return nil
-		}
-		// Allow console display while mapping is pending as long as we're on the active request.
-		sessionID = m.wsConsole.sessionID
+		return nil
 	}
 	if m.wsConsole == nil {
 		return nil
@@ -799,7 +881,12 @@ func (m *Model) renderGRPCEvent(evt *stream.Event) string {
 	if evt.Direction == stream.DirNA {
 		summary := grpcSummaryLine(evt.Metadata)
 		if summary != "" {
-			parts = append(parts, th.StreamSummary.Render(summary))
+			style := th.StreamSummary
+			status := grpcMetaVal(evt.Metadata, grpcx.MetaStatus)
+			if status != "" && !strings.EqualFold(status, "OK") {
+				style = th.StreamError
+			}
+			parts = append(parts, style.Render(summary))
 		}
 		return strings.Join(filterEmpty(parts), " ")
 	}
@@ -1007,58 +1094,57 @@ func opcodeToType(op int) string {
 
 func (m *Model) refreshStreamPanes() {
 	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		if pane.wrapCache == nil {
-			pane.wrapCache = make(map[responseTab]cachedWrap)
-		}
-		if pane.activeTab != responseTabStream {
-			pane.wrapCache[responseTabStream] = cachedWrap{}
-			continue
-		}
-		req := m.requestForPane(id)
-		sessionID := m.sessionIDForRequest(req)
-		streamContent := m.streamContentForPane(id)
-		if streamContent == "" {
-			streamContent = "<stream idle>\n"
-		}
-		width := pane.viewport.Width
-		if m.streamFilterActive && sessionID != "" &&
-			sessionID == m.sessionIDForRequest(m.currentRequest) {
-			if !strings.HasSuffix(streamContent, "\n") {
-				streamContent += "\n"
-			}
-			filterInput := m.streamFilterInput
-			streamContent += filterInput.View()
-			streamContent += "\n"
-			m.streamFilterInput = filterInput
-		}
-		wrappedStream := wrapStructuredContent(streamContent, width)
-		pane.wrapCache[responseTabStream] = cachedWrap{
-			width:   width,
-			content: wrappedStream,
-			valid:   true,
-		}
-		decorated := m.applyResponseContentStyles(responseTabStream, wrappedStream)
-		console := m.consoleForPane(id)
-		if console != nil {
-			if !strings.HasSuffix(decorated, "\n") {
-				decorated += "\n"
-			}
-			if !strings.HasSuffix(decorated, "\n\n") {
-				decorated += "\n"
-			}
-			consoleView := console.view(width, m.theme)
-			decorated += consoleView
-		}
-		pane.viewport.SetContent(decorated)
-		if pane.followLatest {
-			pane.viewport.GotoBottom()
-		} else {
-			pane.restoreScrollForActiveTab()
-		}
-		pane.setCurrPosition()
+		m.refreshStreamPane(id)
 	}
+}
+
+func (m *Model) refreshStreamPane(id responsePaneID) {
+	pane := m.pane(id)
+	if pane == nil {
+		return
+	}
+	if pane.wrapCache == nil {
+		pane.wrapCache = make(map[responseTab]cachedWrap)
+	}
+	if pane.activeTab != responseTabStream {
+		pane.wrapCache[responseTabStream] = cachedWrap{}
+		return
+	}
+	sessionID := m.streamIDForPane(id)
+	content := m.streamContentForPane(id)
+	if content == "" {
+		content = "<stream idle>\n"
+	}
+	width := pane.viewport.Width
+	// The filter prompt belongs to the pane being typed in, not to every pane
+	// showing the same session.
+	if m.streamFilterActive && sessionID != "" && id == m.responsePaneFocus {
+		if !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		content += m.streamFilterInput.View() + "\n"
+	}
+	wrapped := wrapStructuredContent(content, width)
+	pane.wrapCache[responseTabStream] = cachedWrap{
+		width:   width,
+		content: wrapped,
+		valid:   true,
+	}
+	decorated := m.applyResponseContentStyles(responseTabStream, wrapped)
+	if console := m.consoleForPane(id); console != nil {
+		if !strings.HasSuffix(decorated, "\n") {
+			decorated += "\n"
+		}
+		if !strings.HasSuffix(decorated, "\n\n") {
+			decorated += "\n"
+		}
+		decorated += console.view(width, m.theme)
+	}
+	pane.viewport.SetContent(decorated)
+	if pane.tail {
+		pane.viewport.GotoBottom()
+	} else {
+		pane.restoreScrollForActiveTab()
+	}
+	pane.setCurrPosition()
 }

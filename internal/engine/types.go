@@ -92,6 +92,7 @@ type RequestResult struct {
 	Response       *httpx.Response
 	GRPC           *grpcx.Response
 	Stream         *scripts.StreamInfo
+	StreamID       string
 	Transcript     []byte
 	Err            error
 	Tests          []scripts.TestResult

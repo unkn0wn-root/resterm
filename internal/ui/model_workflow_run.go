@@ -519,36 +519,25 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 	switch {
 	case msg.skipped:
 		m.lastError = nil
-		if cmd := m.consumeSkippedRequest(msg.skipReason, msg.explain); cmd != nil {
+		if cmd := m.consumeSkippedRequest(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case msg.err != nil:
-		if cmd := m.consumeRequestError(msg.err, msg.explain); cmd != nil {
+		if cmd := m.consumeRequestError(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case msg.response != nil:
-		if cmd := m.consumeHTTPResponse(
-			msg.response,
-			msg.tests,
-			msg.scriptErr,
-			msg.environment,
-			msg.explain,
-		); cmd != nil {
+		if cmd := m.consumeHTTPResponse(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case msg.grpc != nil:
-		if cmd := m.consumeGRPCResponse(
-			msg.grpc,
-			msg.tests,
-			msg.scriptErr,
-			msg.executed,
-			msg.environment,
-			msg.explain,
-		); cmd != nil {
+		if cmd := m.consumeGRPCResponse(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case msg.stream != nil || len(msg.transcript) > 0:
-		m.applyRunSnapshot(newStreamSnapshot(msg.stream, msg.transcript, msg.environment), nil, nil)
+		if cmd := m.consumeStreamTranscript(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	if st != nil && st.origin == workflowOriginForEach {
@@ -640,7 +629,6 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 			workflowStats:  statsView,
 			ready:          true,
 		}
-		m.responsePending = nil
 	}
 
 	var cmd tea.Cmd

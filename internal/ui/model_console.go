@@ -396,14 +396,14 @@ func (m *Model) ensureWebSocketConsole(
 
 func (m *Model) handleWebSocketConsoleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	key := msg.String()
-	sessionID := m.sessionIDForRequest(m.currentRequest)
+	sessionID := m.activeStreamID()
 
 	console := m.wsConsole
 	if console == nil || console.sessionID != sessionID {
 		return nil, false
 	}
 
-	pane := m.pane(responsePanePrimary)
+	pane := m.pane(m.responsePaneFocus)
 	if pane == nil || pane.activeTab != responseTabStream {
 		return nil, false
 	}
@@ -465,11 +465,11 @@ func (m *Model) websocketConsoleCapturesInput() bool {
 	if console == nil || !console.active {
 		return false
 	}
-	pane := m.pane(responsePanePrimary)
+	pane := m.pane(m.responsePaneFocus)
 	if pane == nil || pane.activeTab != responseTabStream {
 		return false
 	}
-	sessionID := m.sessionIDForRequest(m.currentRequest)
+	sessionID := m.activeStreamID()
 	if sessionID == "" {
 		return false
 	}
@@ -477,7 +477,7 @@ func (m *Model) websocketConsoleCapturesInput() bool {
 }
 
 func (m *Model) armWebSocketCommandMode() tea.Cmd {
-	sessionID := m.sessionIDForRequest(m.currentRequest)
+	sessionID := m.activeStreamID()
 	if sessionID == "" {
 		m.wsCommandChord = false
 		m.setStatusMessage(statusMsg{text: "No active websocket stream", level: statusWarn})
@@ -526,7 +526,7 @@ func (m *Model) handleWebSocketCommandChord(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 func (m *Model) toggleWebSocketConsole() tea.Cmd {
 	var cmds []tea.Cmd
-	sessionID := m.sessionIDForRequest(m.currentRequest)
+	sessionID := m.activeStreamID()
 	if sessionID == "" {
 		m.setStatusMessage(statusMsg{text: "No active websocket stream", level: statusWarn})
 		return nil
@@ -568,10 +568,14 @@ func (m *Model) toggleWebSocketConsole() tea.Cmd {
 }
 
 func (m *Model) focusStreamPane() tea.Cmd {
-	if pane := m.pane(responsePanePrimary); pane != nil {
-		pane.setActiveTab(responseTabStream)
+	id := responsePanePrimary
+	if m.wsConsole != nil {
+		if ids := m.panesForStream(m.wsConsole.sessionID); len(ids) > 0 {
+			id = ids[0]
+		}
 	}
-	m.responsePaneFocus = responsePanePrimary
+	m.pane(id).setActiveTab(responseTabStream)
+	m.responsePaneFocus = id
 	if m.focus != focusResponse {
 		return m.setFocus(focusResponse)
 	}
@@ -640,16 +644,13 @@ func (m *Model) sendConsoleClose() tea.Cmd {
 }
 
 func (m *Model) clearStreamBufferCmd() tea.Cmd {
-	sessionID := m.sessionIDForRequest(m.currentRequest)
+	sessionID := m.activeStreamID()
 	if sessionID != "" {
-		if ls := m.liveSession(sessionID); ls != nil {
-			ls.events = nil
-			ls.filter = ""
-			ls.paused = false
-			ls.pausedIndex = -1
-			ls.bookmarks = nil
-			ls.bookmarkIdx = -1
+		ls := m.streamForPane(m.responsePaneFocus)
+		if ls == nil {
+			ls = m.liveSession(sessionID)
 		}
+		ls.reset()
 		if m.wsConsole != nil && m.wsConsole.sessionID == sessionID {
 			m.wsConsole.history = nil
 			m.wsConsole.historyIdx = -1

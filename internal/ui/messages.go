@@ -38,6 +38,7 @@ type responseMsg struct {
 	response       *httpx.Response
 	grpc           *grpcx.Response
 	stream         *scripts.StreamInfo
+	streamID       string
 	transcript     []byte
 	err            error
 	tests          []scripts.TestResult
@@ -53,6 +54,32 @@ type responseMsg struct {
 	explain        *xplain.Report
 	historyDone    bool
 	latGen         int
+	target         runTarget
+}
+
+// runTarget remembers which response pane a run was launched from so a late
+// response lands there instead of wherever focus has drifted to. The zero
+// value means the run never captured one.
+type runTarget struct {
+	pane responsePaneID
+	set  bool
+}
+
+func paneRunTarget(id responsePaneID) runTarget {
+	return runTarget{pane: id, set: true}
+}
+
+// resolve reports the pane the run was launched from and whether it is still a
+// destination worth honouring. The pane is always usable: an unset target, or a
+// secondary pane after the split closed, resolves to the primary pane.
+func (t runTarget) resolve(split bool) (responsePaneID, bool) {
+	if !t.set {
+		return responsePanePrimary, false
+	}
+	if t.pane == responsePaneSecondary && !split {
+		return responsePanePrimary, false
+	}
+	return t.pane, true
 }
 
 type statusMsg struct {
@@ -83,8 +110,17 @@ type streamCompleteMsg struct {
 	sessionID string
 }
 
-type streamReadyMsg struct {
-	sessionID string
+// streamAttachMsg hands a session opened on the engine goroutine to the update
+// loop, which owns every map and pane it has to be recorded in. gen is the
+// stream generation the run started under, so an attachment that arrives after
+// a workspace change can be dropped instead of writing into the new workspace.
+type streamAttachMsg struct {
+	session *stream.Session
+	req     *restfile.Request
+	sender  *httpx.WebSocketSender
+	baseDir string
+	pane    responsePaneID
+	gen     uint64
 }
 
 type wsConsoleResultMsg struct {
@@ -109,6 +145,7 @@ type runReqMsg struct {
 	res    engine.RequestResult
 	err    error
 	latGen int
+	target runTarget
 }
 
 type runEvtMsg struct {

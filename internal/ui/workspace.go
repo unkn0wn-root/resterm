@@ -237,6 +237,7 @@ func (m *Model) commitMove(mv wsMove) (statusMsg, tea.Cmd) {
 // stopLiveStreams cancels every live session and drops their consoles, so a
 // stream opened in one workspace cannot keep writing into the next.
 func (m *Model) stopLiveStreams() {
+	m.streamGen++
 	for _, s := range m.sessionHandles {
 		s.Cancel()
 	}
@@ -253,13 +254,8 @@ func (m *Model) stopLiveStreams() {
 // produced. The engine seeds scripts with the last response, so leaving any of
 // it in place lets one workspace read another's traffic.
 func (m *Model) clearResponseState() {
-	if m.responseRenderCancel != nil {
-		m.responseRenderCancel()
-		m.responseRenderCancel = nil
-	}
+	m.resetPendingResponse()
 	m.cancelResponseReflow()
-	m.responseLoading = false
-	m.responseRenderToken = ""
 	m.respTasks = newRespTasks()
 
 	m.lastResponse = nil
@@ -269,8 +265,6 @@ func (m *Model) clearResponseState() {
 	m.scriptError = nil
 	m.responseLatest = nil
 	m.responsePrevious = nil
-	m.responsePending = nil
-	m.responseTokens = make(map[string]*responseSnapshot)
 	m.compareBundle = nil
 	m.resetCompareState()
 	m.latencySeries.reset()

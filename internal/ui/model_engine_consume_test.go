@@ -27,6 +27,7 @@ func TestResponseMsgFromRunStateUsesEngineExplainAndCarriesRuntimeSecrets(t *tes
 		},
 		Environment: "dev",
 		Explain:     exp,
+		StreamID:    "grpc-1",
 	}
 
 	msg := model.responseMsgFromRunState(res, false)
@@ -35,6 +36,9 @@ func TestResponseMsgFromRunStateUsesEngineExplainAndCarriesRuntimeSecrets(t *tes
 	}
 	if len(msg.runtimeSecrets) != 2 {
 		t.Fatalf("expected runtime secrets to be preserved, got %d", len(msg.runtimeSecrets))
+	}
+	if msg.streamID != "grpc-1" {
+		t.Fatalf("expected stream ID to be preserved, got %q", msg.streamID)
 	}
 }
 

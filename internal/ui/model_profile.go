@@ -390,17 +390,11 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 	var cmds []tea.Cmd
 	canceled := state != nil && state.canceled
 	if msg.err != nil && (!canceled || !isCanceled(msg.err)) {
-		if cmd := m.consumeRequestError(msg.err, msg.explain); cmd != nil {
+		if cmd := m.consumeRequestError(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if msg.response != nil {
-		if cmd := m.consumeHTTPResponse(
-			msg.response,
-			msg.tests,
-			msg.scriptErr,
-			msg.environment,
-			msg.explain,
-		); cmd != nil {
+		if cmd := m.consumeHTTPResponse(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else {

@@ -15,6 +15,23 @@ const (
 	respRflMax = 2
 )
 
+// pendingRender is the response format currently in flight: the token that
+// identifies it, the snapshot it will fill in, and the cancel that stops it.
+// Those are one fact, so they are stored as one value. Held apart they drift:
+// a path that forgets the snapshot but leaves the token behind lets a finished
+// render land on whatever response replaced it.
+type pendingRender struct {
+	token    string
+	snapshot *responseSnapshot
+	cancel   context.CancelFunc
+}
+
+// owns reports whether a finished render still belongs here. Anything else was
+// retired while it ran, and its result has nowhere left to go.
+func (p pendingRender) owns(token string) bool {
+	return token != "" && token == p.token && p.snapshot != nil
+}
+
 type respTasks struct {
 	fmtLim chan struct{}
 	rflLim chan struct{}

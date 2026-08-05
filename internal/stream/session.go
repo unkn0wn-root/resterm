@@ -90,6 +90,13 @@ type Snapshot struct {
 
 var sessionCounter uint64
 
+// closedEvents is handed to subscribers that arrive after a session ended.
+var closedEvents = func() chan *Event {
+	ch := make(chan *Event)
+	close(ch)
+	return ch
+}()
+
 func NewSession(parent context.Context, kind Kind, cfg Config) *Session {
 	cfg = defaultConfig(cfg)
 	ctx, cancel := context.WithCancel(parent)
@@ -157,9 +164,21 @@ func (s *Session) EventsSnapshot() []*Event {
 	return s.events.snapshot()
 }
 
+// Subscribe returns the events still to come plus a snapshot of the ones
+// already published. A session that has ended hands back a closed channel, so
+// a late subscriber reads the transcript and stops instead of waiting on a
+// listener that nothing will ever write to.
 func (s *Session) Subscribe() Listener {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	snapshot := Snapshot{
+		Events: s.events.snapshot(),
+		State:  s.state,
+		Err:    s.err,
+	}
+	if s.ended() {
+		return Listener{C: closedEvents, Cancel: func() {}, Snapshot: snapshot}
+	}
 
 	id := s.nextLID
 	s.nextLID++
@@ -169,12 +188,6 @@ func (s *Session) Subscribe() Listener {
 	}
 	s.listeners[id] = l
 
-	snapshot := Snapshot{
-		Events: s.events.snapshot(),
-		State:  s.state,
-		Err:    s.err,
-	}
-
 	return Listener{
 		C: l.ch,
 		Cancel: func() {
@@ -182,6 +195,12 @@ func (s *Session) Subscribe() Listener {
 		},
 		Snapshot: snapshot,
 	}
+}
+
+// ended reports whether Close already ran. Callers must hold s.mu: EndedAt is
+// stamped under the lock, while s.done closes just after it is released.
+func (s *Session) ended() bool {
+	return !s.stats.EndedAt.IsZero()
 }
 
 func (s *Session) removeListener(id int) {
@@ -296,7 +315,7 @@ func (s *Session) MarkClosing() {
 func (s *Session) Close(err error) {
 	s.cancel()
 	s.mu.Lock()
-	if s.stats.EndedAt.IsZero() {
+	if !s.ended() {
 		if err != nil {
 			s.state = StateFailed
 			s.err = err

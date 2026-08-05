@@ -30,6 +30,34 @@ func TestScrollResponseToTopAndBottom(t *testing.T) {
 	}
 }
 
+func TestScrollStreamControlsTailFollow(t *testing.T) {
+	model := newModelWithResponseTab(
+		responseTabStream,
+		&responseSnapshot{ready: true, streamID: "grpc-1"},
+	)
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Height = 5
+	pane.viewport.SetContent(strings.Repeat("event\n", 30))
+	pane.tail = true
+
+	model.scrollResponseToEdge(true)
+	if pane.viewport.YOffset != 0 || pane.tail {
+		t.Fatalf("expected gg to stop stream tail at top, offset=%d tail=%v", pane.viewport.YOffset, pane.tail)
+	}
+
+	model.scrollResponseToEdge(false)
+	if pane.viewport.YOffset == 0 || !pane.tail {
+		t.Fatalf("expected G to resume stream tail, offset=%d tail=%v", pane.viewport.YOffset, pane.tail)
+	}
+
+	model.scrollResponseViewport(pane, func() {
+		pane.viewport.ScrollUp(1)
+	})
+	if pane.tail {
+		t.Fatal("manual stream scrolling should stop tail follow")
+	}
+}
+
 func TestScrollResponseIgnoredInEditorFocus(t *testing.T) {
 	model := newModelWithResponseTab(responseTabPretty, &responseSnapshot{ready: true})
 	pane := model.pane(responsePanePrimary)

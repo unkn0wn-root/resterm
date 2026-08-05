@@ -7,6 +7,14 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
+// liveSession is the UI's copy of one stream: the events it has seen plus the
+// view state (filter, pause, bookmarks) the user applied to them.
+//
+// bound and done drive its lifetime in Model.liveSessions. The registry is what
+// a stream that has no response yet is looked up through, so an entry can only
+// be dropped once a snapshot holds the session (bound) and no more events are
+// coming (done). Either order works: a stream that ends before its response
+// arrives stays in the registry until that response adopts it.
 type liveSession struct {
 	id          string
 	events      []*stream.Event
@@ -19,6 +27,12 @@ type liveSession struct {
 	pausedIndex int
 	bookmarks   []streamBookmark
 	bookmarkIdx int
+	bound       bool
+	done        bool
+}
+
+func (ls *liveSession) failed() bool {
+	return ls != nil && (ls.err != nil || ls.state == stream.StateFailed)
 }
 
 func newLiveSession(id string, max int) *liveSession {
@@ -69,6 +83,20 @@ func (ls *liveSession) append(events []*stream.Event) {
 	if ls.paused && ls.pausedIndex == -1 {
 		ls.pausedIndex = len(ls.events)
 	}
+}
+
+// reset empties the buffer and every view applied to it. The session itself
+// keeps running, so new events land in a clean transcript.
+func (ls *liveSession) reset() {
+	if ls == nil {
+		return
+	}
+	ls.events = nil
+	ls.filter = ""
+	ls.paused = false
+	ls.pausedIndex = -1
+	ls.bookmarks = nil
+	ls.bookmarkIdx = -1
 }
 
 func (ls *liveSession) setState(state stream.State, err error) {

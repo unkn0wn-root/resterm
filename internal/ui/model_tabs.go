@@ -11,7 +11,7 @@ func (m *Model) activatePrevTabFor(id responsePaneID) tea.Cmd {
 	if pane == nil {
 		return nil
 	}
-	tabs := m.availableResponseTabs()
+	tabs := m.availableResponseTabsFor(id)
 	idx := indexOfResponseTab(tabs, pane.activeTab)
 	if idx == -1 {
 		pane.setActiveTab(tabs[0])
@@ -31,7 +31,7 @@ func (m *Model) activateNextTabFor(id responsePaneID) tea.Cmd {
 	if pane == nil {
 		return nil
 	}
-	tabs := m.availableResponseTabs()
+	tabs := m.availableResponseTabsFor(id)
 	idx := indexOfResponseTab(tabs, pane.activeTab)
 	if idx == -1 {
 		pane.setActiveTab(tabs[0])
@@ -65,17 +65,28 @@ func indexOfResponseTab(tabs []responseTab, target responseTab) int {
 }
 
 func (m *Model) availableResponseTabs() []responseTab {
+	return m.availableResponseTabsFor(m.responsePaneFocus)
+}
+
+// availableResponseTabsFor answers per pane, not per model: Explain, Stream and
+// the report tabs belong to whatever that pane is showing, so a split never
+// offers a tab that would render the other pane's response.
+func (m *Model) availableResponseTabsFor(id responsePaneID) []responseTab {
+	var snap *responseSnapshot
+	if pane := m.pane(id); pane != nil {
+		snap = pane.snapshot
+	}
 	tabs := []responseTab{responseTabPretty, responseTabRaw, responseTabHeaders}
-	if m.snapshotHasExplain() {
+	if snap != nil && snap.explain.report != nil {
 		tabs = append(tabs, responseTabExplain)
 	}
-	if m.hasActiveStream() {
+	if m.streamIDForPane(id) != "" {
 		tabs = append(tabs, responseTabStream)
 	}
-	if m.snapshotHasStats() {
+	if snap != nil && strings.TrimSpace(snap.stats) != "" {
 		tabs = append(tabs, responseTabStats)
 	}
-	if m.snapshotHasTimeline() {
+	if snapshotHasTrace(snap) {
 		tabs = append(tabs, responseTabTimeline)
 	}
 	if m.compareTabAvailable() {
@@ -86,6 +97,13 @@ func (m *Model) availableResponseTabs() []responseTab {
 	}
 	tabs = append(tabs, responseTabHistory)
 	return tabs
+}
+
+func snapshotHasTrace(snap *responseSnapshot) bool {
+	if snap == nil {
+		return false
+	}
+	return snap.timeline != nil || snap.traceSpec != nil && snap.traceSpec.Enabled
 }
 
 func responseTabLabelForSnapshot(tab responseTab, snapshot *responseSnapshot) string {
@@ -147,59 +165,17 @@ func (m *Model) diffAvailable() bool {
 	return true
 }
 
-func (m *Model) snapshotHasStats() bool {
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil || pane.snapshot == nil {
-			continue
-		}
-		if strings.TrimSpace(pane.snapshot.stats) != "" {
-			return true
-		}
-	}
-	if m.responseLatest != nil && strings.TrimSpace(m.responseLatest.stats) != "" {
-		return true
-	}
-	return false
-}
-
-func (m *Model) snapshotHasExplain() bool {
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil || pane.snapshot == nil {
-			continue
-		}
-		if pane.snapshot.explain.report != nil {
-			return true
-		}
-	}
-	return m.responseLatest != nil && m.responseLatest.explain.report != nil
-}
-
 func (m *Model) snapshotHasTimeline() bool {
-	hasTrace := func(snapshot *responseSnapshot) bool {
-		if snapshot == nil {
-			return false
-		}
-		if snapshot.timeline != nil {
-			return true
-		}
-		if snapshot.traceSpec != nil && snapshot.traceSpec.Enabled {
-			return true
-		}
-		return false
-	}
-
 	for _, id := range m.visiblePaneIDs() {
 		pane := m.pane(id)
 		if pane == nil {
 			continue
 		}
-		if hasTrace(pane.snapshot) {
+		if snapshotHasTrace(pane.snapshot) {
 			return true
 		}
 	}
-	return hasTrace(m.responseLatest)
+	return snapshotHasTrace(m.responseLatest)
 }
 
 func (m *Model) compareTabAvailable() bool {

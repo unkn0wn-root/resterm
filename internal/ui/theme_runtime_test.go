@@ -289,16 +289,16 @@ func TestSyncThemedResponseStateRestartsPendingRenderWithFreshToken(t *testing.T
 		EffectiveURL: "https://api.example.com/items",
 	}
 
-	initialCmd := model.consumeHTTPResponse(resp, nil, nil, "", nil)
+	initialCmd := model.consumeHTTPResponse(responseMsg{response: resp})
 	if initialCmd == nil {
 		t.Fatalf("expected pending response render command")
 	}
-	if model.responsePending == nil {
+	if model.render.snapshot == nil {
 		t.Fatalf("expected pending snapshot")
 	}
 
-	oldRenderToken := model.responseRenderToken
-	oldSnapshotID := model.responsePending.id
+	oldRenderToken := model.render.token
+	oldSnapshotID := model.render.snapshot.id
 	if oldRenderToken == "" || oldSnapshotID == "" {
 		t.Fatalf("expected initial render token and snapshot id")
 	}
@@ -327,13 +327,13 @@ func TestSyncThemedResponseStateRestartsPendingRenderWithFreshToken(t *testing.T
 	if restartCmd == nil {
 		t.Fatalf("expected themed response sync command")
 	}
-	if model.responseRenderToken == "" {
+	if model.render.token == "" {
 		t.Fatalf("expected restarted render token")
 	}
-	if model.responseRenderToken == oldRenderToken {
+	if model.render.token == oldRenderToken {
 		t.Fatalf("expected pending restart to use a fresh render token")
 	}
-	if model.responsePending == nil || model.responsePending.id != oldSnapshotID {
+	if model.render.snapshot == nil || model.render.snapshot.id != oldSnapshotID {
 		t.Fatalf("expected pending snapshot identity to stay stable")
 	}
 
@@ -341,7 +341,7 @@ func TestSyncThemedResponseStateRestartsPendingRenderWithFreshToken(t *testing.T
 	if cmd := model.handleResponseRendered(stale); cmd != nil {
 		t.Fatalf("expected stale render to be ignored")
 	}
-	if model.responseRenderToken == "" || model.responseRenderToken == oldRenderToken {
+	if model.render.token == "" || model.render.token == oldRenderToken {
 		t.Fatalf("expected stale render to leave restarted token active")
 	}
 
@@ -372,7 +372,7 @@ func TestApplyThemeDefinitionKeepsGRPCRawContentType(t *testing.T) {
 		GRPC: &restfile.GRPCRequest{FullMethod: "/demo.Service/Call"},
 	}
 
-	if cmd := model.consumeGRPCResponse(resp, nil, nil, req, "", nil); cmd != nil {
+	if cmd := model.consumeGRPCResponse(responseMsg{grpc: resp, executed: req}); cmd != nil {
 		_ = collectMsgs(cmd)
 	}
 	if model.responseLatest == nil {

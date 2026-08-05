@@ -104,19 +104,13 @@ func (m *Model) selectCompareFocus() tea.Cmd {
 	if cmd := m.ensureCompareSplit(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	m.setPaneSnapshot(responsePanePrimary, targetSnap)
 	primary := m.pane(responsePanePrimary)
-	secondary := m.pane(responsePaneSecondary)
-	if primary != nil {
-		primary.snapshot = targetSnap
-		primary.followLatest = false
-		primary.invalidateCaches()
-		primary.setActiveTab(responseTabDiff)
-	}
-	if secondary != nil {
-		secondary.snapshot = baselineSnap
-		secondary.followLatest = false
-		secondary.invalidateCaches()
-	}
+	primary.followLatest = false
+	primary.setActiveTab(responseTabDiff)
+
+	m.setPaneSnapshot(responsePaneSecondary, baselineSnap)
+	m.pane(responsePaneSecondary).followLatest = false
 	m.compareSelectedEnv = targetEnv
 	m.compareFocusedEnv = targetEnv
 	m.compareRowIndex = compareRowIndexForEnv(bundle, targetEnv)
