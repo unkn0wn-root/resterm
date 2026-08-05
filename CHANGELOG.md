@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.51.2](https://github.com/unkn0wn-root/resterm/compare/v0.50.0...v0.51.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* **grpc:** carry status details into json and headless reports ([#347](https://github.com/unkn0wn-root/resterm/issues/347)) ([9924517](https://github.com/unkn0wn-root/resterm/commit/9924517cbc1129b028a8b94b6c934063365bee7d))
+* **ui:** preserve stream and response ownership across split panes ([#350](https://github.com/unkn0wn-root/resterm/issues/350)) ([df561ad](https://github.com/unkn0wn-root/resterm/commit/df561ade966623937c9e12a3554c1c55a05843ac))
+
 ### [0.51.1](https://github.com/unkn0wn-root/resterm/compare/v0.50.0...v0.51.1) (2026-08-04)
 
 ## [0.50.0](https://github.com/unkn0wn-root/resterm/compare/v0.49.4...v0.50.0) (2026-08-03)
