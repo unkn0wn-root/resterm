@@ -135,11 +135,6 @@ func TestRenderCommandBarDoesNotEchoResponseSearch(t *testing.T) {
 	}
 }
 
-// keycap is the stripped text of a context hint chip.
-func keycap(key, label string) string {
-	return "▐" + key + "▌ " + label
-}
-
 func TestRenderCommandButtonRendersFlush(t *testing.T) {
 	out := ansi.Strip(renderCommandButton("Tab", "Focus", theme.CommandSegmentStyle{}, lipgloss.NoColor{}))
 
@@ -175,9 +170,12 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 	model.focus = focusEditor
 
 	out := ansi.Strip(model.renderCommandBar())
+	if strings.ContainsAny(out, "▐▌") {
+		t.Fatalf("expected default command hints to render flat, got %q", out)
+	}
 	// ^N New belongs to the files context, so it must not leak into the editor bar.
-	if strings.Contains(out, keycap("^N", "New")) {
-		t.Fatalf("did not expect files hint %q, got %q", keycap("^N", "New"), out)
+	if strings.Contains(out, "^N New") {
+		t.Fatalf("did not expect files hint %q, got %q", "^N New", out)
 	}
 	prev := -1
 	for _, want := range []string{
@@ -195,13 +193,13 @@ func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimRight(out, " "), "? Help") {
 		t.Fatalf("expected anchors pinned to the right edge, got %q", out)
 	}
-	insert := strings.Index(out, keycap("i", "Insert"))
+	insert := strings.Index(out, "i Insert")
 	if insert < 0 || insert > strings.Index(out, "Tab Focus") {
 		t.Fatalf("expected context hints before the anchors, got %q", out)
 	}
 }
 
-func TestRenderCommandBarKeycapBackgrounds(t *testing.T) {
+func TestRenderCommandBarCustomBackgroundsEnableKeycaps(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prev)
@@ -209,18 +207,17 @@ func TestRenderCommandBarKeycapBackgrounds(t *testing.T) {
 	model := New(Config{})
 	model.width = 220
 	model.focus = focusEditor
+	model.theme.CommandSegments = []theme.CommandSegmentStyle{
+		{Background: lipgloss.Color("#112233")},
+		{Background: lipgloss.Color("#223344")},
+		{Background: lipgloss.Color("#334455")},
+		{Background: lipgloss.Color("#445566")},
+		{Background: lipgloss.Color("#556677")},
+	}
 
 	bar := model.renderCommandBar()
 	plain := ansi.Strip(bar)
 	backgrounds := renderedCellBackgrounds(bar)
-	if len(backgrounds) != lipgloss.Width(plain) {
-		t.Fatalf(
-			"expected %d rendered cell backgrounds, got %d",
-			lipgloss.Width(plain),
-			len(backgrounds),
-		)
-	}
-
 	for idx, key := range []string{"i", "Enter", "Shift+K", "/", "^S"} {
 		assertKeycapBackground(t, plain, backgrounds, key, model.theme.CommandSegment(idx).Background)
 	}
@@ -232,9 +229,8 @@ func TestRenderCommandBarKeycapBackgrounds(t *testing.T) {
 	}
 }
 
-// Themes like daybreak set a command_bar background. Every cell inside the
-// gutters must then carry either that background or a chip background, or the
-// bar shows seams.
+// A themed command_bar background must cover every cell inside the gutters or
+// the bar shows seams.
 func TestRenderCommandBarKeepsThemedBackground(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -250,12 +246,9 @@ func TestRenderCommandBarKeepsThemedBackground(t *testing.T) {
 	plain := []rune(ansi.Strip(bar))
 	backgrounds := renderedCellBackgrounds(bar)
 
-	allowed := [][]int{sgrTrueColorBackground(t, barBg)}
-	for _, seg := range model.theme.CommandSegments {
-		allowed = append(allowed, sgrTrueColorBackground(t, seg.Background))
-	}
+	want := sgrTrueColorBackground(t, barBg)
 	for idx := 1; idx < len(backgrounds)-1; idx++ {
-		if !slices.ContainsFunc(allowed, func(bg []int) bool { return slices.Equal(backgrounds[idx], bg) }) {
+		if !slices.Equal(backgrounds[idx], want) {
 			t.Fatalf("cell %d %q lost the bar background: got %v", idx, string(plain[idx]), backgrounds[idx])
 		}
 	}
@@ -278,7 +271,7 @@ func TestRenderCommandBarKeepsDividerBackground(t *testing.T) {
 	plain := ansi.Strip(bar)
 	backgrounds := renderedCellBackgrounds(bar)
 
-	first := keycap("i", "Insert")
+	first := "i Insert"
 	before, _, ok := strings.Cut(plain, first)
 	if !ok {
 		t.Fatalf("expected hint %q in %q", first, plain)
@@ -374,20 +367,14 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 			setup: func(m *Model) {
 				m.focus = focusFile
 			},
-			want: []string{
-				keycap("Enter", "Open"), keycap("Space", "Expand"), keycap("/", "Filter"),
-				keycap("^N", "New"), keycap("^O", "Open"), keycap("^T", "Temp"),
-			},
+			want: []string{"Enter Open", "Space Expand", "/ Filter", "^N New", "^O Open", "^T Temp"},
 		},
 		{
 			name: "requests",
 			setup: func(m *Model) {
 				m.focus = focusRequests
 			},
-			want: []string{
-				keycap("Enter", "Run"), keycap("m", "Method"), keycap("t", "Tags"),
-				keycap("l", "Jump"), keycap("g ,", "Details"),
-			},
+			want: []string{"Enter Run", "m Method", "t Tags", "l Jump", "g , Details"},
 		},
 		{
 			name: "editor normal",
@@ -395,10 +382,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusEditor
 				m.editorInsertMode = false
 			},
-			want: []string{
-				keycap("i", "Insert"), keycap("Enter", "Send"), keycap("Shift+K", "Docs"),
-				keycap("/", "Search"), keycap("^S", "Save"),
-			},
+			want:   []string{"i Insert", "Enter Send", "Shift+K Docs", "/ Search", "^S Save"},
 			absent: "Ctrl+Enter",
 		},
 		{
@@ -407,12 +391,8 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusEditor
 				m.editorInsertMode = true
 			},
-			want: []string{
-				keycap("Esc", "Normal"),
-				keycap("Ctrl+Enter", "Send"),
-				keycap("Tab", "Complete"),
-			},
-			absent: keycap("Shift+K", "Docs"),
+			want:   []string{"Esc Normal", "Ctrl+Enter Send", "Tab Complete"},
+			absent: "Shift+K Docs",
 		},
 		{
 			name: "response pretty",
@@ -420,7 +400,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusResponse
 				m.responsePanes[0].activeTab = responseTabPretty
 			},
-			want: []string{keycap("j/k", "Scroll"), keycap("g Shift+S", "Save")},
+			want: []string{"j/k Scroll", "g Shift+S Save"},
 		},
 		{
 			name: "response raw",
@@ -428,10 +408,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusResponse
 				m.responsePanes[0].activeTab = responseTabRaw
 			},
-			want: []string{
-				keycap("j/k", "Scroll"), keycap("g b", "View"),
-				keycap("g Shift+D", "Dump"), keycap("g Shift+S", "Save"),
-			},
+			want: []string{"j/k Scroll", "g b View", "g Shift+D Dump", "g Shift+S Save"},
 		},
 		{
 			name: "response history",
@@ -439,7 +416,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 				m.focus = focusResponse
 				m.responsePanes[0].activeTab = responseTabHistory
 			},
-			want: []string{keycap("c", "Scope"), keycap("s", "Sort"), keycap("Enter", "Load")},
+			want: []string{"c Scope", "s Sort", "Enter Load"},
 		},
 	}
 
@@ -492,7 +469,7 @@ func TestRenderCommandBarUsesCustomContextHelpBinding(t *testing.T) {
 	model.focus = focusEditor
 
 	out := ansi.Strip(model.renderCommandBar())
-	if !strings.Contains(out, keycap("Ctrl+K", "Docs")) {
+	if !strings.Contains(out, "Ctrl+K Docs") {
 		t.Fatalf("expected configured contextual-help binding, got %q", out)
 	}
 }

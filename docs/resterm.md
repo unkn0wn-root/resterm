@@ -191,7 +191,7 @@ Resterm keeps concise documentation inside the binary, so the first layer of hel
 
 The command line suggests commands, topics, and `:mock` subcommands as you type. `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) selects a suggestion, `Tab` completes it without running, and `Enter` accepts and runs an explicit selection. If no row has been selected, `Enter` runs the text currently in the prompt.
 
-The bottom command bar always retains Focus, Commands, and Help entry points. The remaining hints adapt to the focused pane, editor mode, and response tab, with each contextual key rendered as a keycap chip on its segment background. Configured shortcuts are reflected in both the command bar and help overlay.
+The bottom command bar always retains Focus, Commands, and Help entry points. The remaining hints adapt to the focused pane, editor mode, and response tab. Contextual keys use the same flat presentation as the pinned shortcuts by default; themes can add keycap backgrounds through `command_segments`. Configured shortcuts are reflected in both the command bar and help overlay.
 
 ### Editor completions (IntelliSense)
 
@@ -2038,7 +2038,7 @@ background = "#404040"
 | `[status_bar]` | `base`, plus `[status_bar.info]`, `[status_bar.warn]`, `[status_bar.error]`, `[status_bar.success]`, `[status_bar.tests_pass]`, `[status_bar.tests_fail]`, `[status_bar.tests_error]`, `[status_bar.file]`, `[status_bar.focus]`, `[status_bar.mode]`, `[status_bar.editor]`, `[status_bar.mock]`, `[status_bar.zoom]`, `[status_bar.minimized]`, `[status_bar.version]`, `[status_bar.user]`, `[status_bar.host]` with `foreground` and `background` | Controls the segmented bottom status bar. Segment entries inherit the built in palette. The `tests_*` entries colour test result blocks separately from matching request status blocks. `[status_bar.editor]` colours the editor cursor position (`Ln/Col`), shown faint by default. Set it to override. `[status_bar.mock]` colours the mock server segment, which switches to the warn colours while a reload error is active. `base` fills otherwise empty status bar cells when set. Omit it to leave them uncoloured. |
 | `[editor_metadata]` | `comment_marker`, `directive_default`, `value`, `setting_key`, `setting_value`, `request_line`, `request_separator`, `[editor_metadata.directive_colors]` | Controls metadata highlighting inside the editor. |
 | `[[header_segments]]` | `background`, `foreground`, `border`, `accent` | Rotating header chips; add multiple tables for rotation. |
-| `[[command_segments]]` | `background`, `border`, `key`, `text` | Colour sets for command bar hints. Contextual keys render as keycap chips on `background`; set `background = "none"` to render that segment flat. Pinned hints use only `key` and `text`. `border` is accepted for compatibility. |
+| `[[command_segments]]` | `background`, `border`, `key`, `text` | Colour sets for command bar hints. Contextual keys render flat by default; set `background` to a colour to enable keycap chips, or to `none` to disable them explicitly. Pinned hints use only `key` and `text`. `border` is accepted for compatibility. |
 
 The segmented bottom bar uses `[status_bar]` for section backgrounds and text colours. Legacy `[styles.status_bar*]` entries remain accepted for older themes, but they do not control the segmented section palette.
 
