@@ -25,7 +25,7 @@
 # @assert len(uuid()) == 36
 # @assert (try missing_name).ok == false
 # @assert (null ?? "fallback") == "fallback"
-# @assert default(vars.get("missing"), "fallback") == "fallback"
+# @assert (vars.get("missing") ?? "fallback") == "fallback"
 # @assert (true and not false) == true
 # @assert [1,2,3][1] == 2
 # @assert ({a: 1, "b": 2}.a + {a: 1, "b": 2}["b"]) == 3
@@ -101,9 +101,10 @@ GET {{base_url}}/status/204
 # @assert loops.rangeDict() == "ab"
 # @assert loops.rangeString() == "0g1o"
 # @assert loops.countdown(3) == "321"
-# @assert loops.statusLabel(201) == "success"
-# @assert loops.statusLabel(403) == "denied"
-# @assert loops.statusLabel(500) == "unexpected"
+# @assert loops.statusLabel(201, null) == "success"
+# @assert loops.statusLabel(403, null) == "denied"
+# @assert loops.statusLabel(500, null) == "unexpected"
+# @assert loops.statusLabel(500, "forced") == "forced"
 # @assert loops.grade(95) == "A"
 # @assert loops.grade(85) == "B"
 # @assert loops.grade(10) == "C"

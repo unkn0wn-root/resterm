@@ -106,6 +106,64 @@ func TestEvalLogic(t *testing.T) {
 	}
 }
 
+// ?? must not evaluate its right side unless the left side is null, which is
+// what separates it from a default(a, b) call
+func TestCoalesceIsLazy(t *testing.T) {
+	src := `
+let calls = 0
+fn side(v) {
+  calls = calls + 1
+  return v
+}
+let kept = "ok" ?? side("fallback")
+let taken = null ?? side("fallback")
+let unresolved = "ok" ?? missingName
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "kept", "ok")
+	wantStr(t, comp, "taken", "fallback")
+	wantStr(t, comp, "unresolved", "ok")
+	wantNum(t, comp, "calls", 1)
+}
+
+func TestCoalesceRejectsUndefinedLeftSide(t *testing.T) {
+	err := execModuleErr(t, "let v = missingName ?? \"fallback\"\n", Limits{})
+	if !strings.Contains(err.Error(), `undefined name "missingName"`) {
+		t.Fatalf("expected undefined name error, got %v", err)
+	}
+}
+
+// ?? answers "is it null", not "is it falsey". Ternary is the truthiness form
+func TestCoalesceFallsBackOnNullOnly(t *testing.T) {
+	src := `
+let zero = 0 ?? 5
+let empty = "" ?? "x"
+let no = false ?? true
+let list = [] ?? [1]
+let dict = {} ?? {a: 1}
+let nul = null ?? 5
+let truthy = 0 ? 0 : 5
+`
+	comp := execModule(t, src)
+	wantNum(t, comp, "zero", 0)
+	wantStr(t, comp, "empty", "")
+	wantNum(t, comp, "nul", 5)
+	wantNum(t, comp, "truthy", 5)
+
+	no, _ := comp.Env.Get("no")
+	if no.K != VBool || no.B {
+		t.Fatalf("expected no=false, got %+v", no)
+	}
+	list, _ := comp.Env.Get("list")
+	if list.K != VList || len(list.L) != 0 {
+		t.Fatalf("expected empty list, got %+v", list)
+	}
+	dict, _ := comp.Env.Get("dict")
+	if dict.K != VDict || len(dict.M) != 0 {
+		t.Fatalf("expected empty dict, got %+v", dict)
+	}
+}
+
 func TestEvalFnCall(t *testing.T) {
 	src := "fn add(a, b){ return a + b }"
 	m, err := ParseModule("test", []byte(src))

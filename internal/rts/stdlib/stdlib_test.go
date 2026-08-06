@@ -51,6 +51,26 @@ func TestStdlibCore(t *testing.T) {
 	}
 }
 
+// default(a, b) is deprecated in favour of ?? because a call evaluates both
+// arguments. This pins the difference that motivates the deprecation
+func TestStdlibDefaultIsEagerUnlikeCoalesce(t *testing.T) {
+	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+
+	mod, err := rts.ParseModule("test", []byte(`export let __v = default("ok", fail("boom"))`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, err := rts.Exec(ctx, mod, New()); err == nil {
+		t.Fatalf("expected default to evaluate its unused fallback")
+	} else if !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("expected boom from the fallback, got %v", err)
+	}
+
+	if v := evalExprCtx(t, ctx, `"ok" ?? fail("boom")`); v.K != rts.VStr || v.S != "ok" {
+		t.Fatalf("expected ?? to skip the fallback, got %+v", v)
+	}
+}
+
 // default is a contextual switch label, so the stdlib helper of the same name
 // has to stay callable in both spellings, including inside a switch body
 func TestStdlibDefaultSurvivesSwitch(t *testing.T) {

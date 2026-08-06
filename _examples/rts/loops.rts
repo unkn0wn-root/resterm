@@ -47,7 +47,7 @@ export fn countdown(n) {
   return out
 }
 
-export fn statusLabel(code) {
+export fn statusLabel(code, override) {
   let label = ""
   switch code {
   case 200, 201:
@@ -55,9 +55,9 @@ export fn statusLabel(code) {
   case 401, 403:
     label = "denied"
   default:
-    label = default(null, "unexpected")
+    label = "unexpected"
   }
-  return label
+  return override ?? label
 }
 
 export fn grade(score) {

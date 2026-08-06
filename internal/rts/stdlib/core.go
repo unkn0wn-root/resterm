@@ -137,6 +137,9 @@ func coreStr(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	return rts.Str(s), nil
 }
 
+// Deprecated: the ?? operator covers this and is lazy. Both arguments here are
+// already evaluated by the time the call runs, so a failing fallback fails even
+// when it is not needed. Kept callable because existing request files use it
 func coreDefault(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	na := rts.NewArgs(ctx, pos, args, sigDefault)
 	if err := na.Count(2); err != nil {
