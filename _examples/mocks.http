@@ -90,8 +90,8 @@ Content-Type: application/json
 
 ### Large order held for review
 # A query value is always text, so an object there can only be a matcher and the
-# operators are written bare. gte reads the value as a number, which means
-# ?amount=none just fails to match instead of erroring.
+# operators are written bare. gte reads the value as a number, so a request with
+# amount=none fails to match instead of erroring.
 # @mock method=POST path=/orders name=review
 # @match query={"amount":{"gte":1000},"channel":{"oneOf":["web","ios"]},"dry-run":{"absent":true}}
 HTTP/1.1 202 Accepted
