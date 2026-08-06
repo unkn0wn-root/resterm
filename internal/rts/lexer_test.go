@@ -27,9 +27,19 @@ func TestLexerAutoSemi(t *testing.T) {
 
 func TestLexerSwitchKeywords(t *testing.T) {
 	got := lexKinds("switch case default")
-	want := []Kind{KW_SWITCH, KW_CASE, IDENT, AUTO_SEMI, EOF}
+	want := []Kind{KW_SWITCH, KW_CASE, KW_DEFAULT, EOF}
 	if !slices.Equal(got, want) {
 		t.Fatalf("kinds: got %v, want %v", got, want)
+	}
+}
+
+// default carries a colon like case does, so it must not close a statement
+func TestLexerNoSemiAfterDefault(t *testing.T) {
+	k := lexKinds("switch x {\ndefault:\n  y = 1\n}\n")
+	for i := 0; i < len(k)-1; i++ {
+		if k[i] == KW_DEFAULT && k[i+1] == AUTO_SEMI {
+			t.Fatalf("unexpected auto semi after default")
+		}
 	}
 }
 
@@ -40,7 +50,7 @@ func TestKeywordClassSwitchCase(t *testing.T) {
 	}{
 		{"switch", KeywordControl},
 		{"case", KeywordControl},
-		{"default", KeywordNone},
+		{"default", KeywordControl},
 	}
 	for _, tc := range cases {
 		if got := KeywordClassOf(tc.name); got != tc.want {

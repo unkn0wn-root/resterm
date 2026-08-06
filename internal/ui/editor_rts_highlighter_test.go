@@ -68,9 +68,9 @@ func TestRTSRuneStylerHighlightsFnCall(t *testing.T) {
 	}
 }
 
-// default is not a keyword and the line styler cannot tell a switch clause
-// label from a multiline dict key, so it stays unstyled as control everywhere
-func TestRTSRuneStylerLeavesDefaultUnstyledAsControl(t *testing.T) {
+// reserving default removed the ambiguity that used to keep it unstyled: every
+// spelling on any line is now the keyword, so one line is enough to classify it
+func TestRTSRuneStylerHighlightsDefault(t *testing.T) {
 	p := theme.DefaultTheme().EditorMetadata
 	p.RTSKeywordControl = lipgloss.Color("#112233")
 	st := newRTSRuneStyler(p)
@@ -86,20 +86,23 @@ func TestRTSRuneStylerLeavesDefaultUnstyledAsControl(t *testing.T) {
 
 	lines := []string{
 		"  default:",
+		"default:",
 		"  default: 1",
-		"x = default(a, b)",
-		"x = rts.default(a, b)",
 	}
 	for i, src := range lines {
 		styles := rs.StylesForLine([]rune(src), i)
 		idx := strings.Index(src, "default")
-		var fg lipgloss.TerminalColor = lipgloss.NoColor{}
-		if idx < len(styles) {
-			fg = styles[idx].GetForeground()
+		got := styles[idx].GetForeground()
+		if want := control.GetForeground(); got != want {
+			t.Fatalf("%q color: got %v, want %v", src, got, want)
 		}
-		if fg == control.GetForeground() {
-			t.Fatalf("%q: default should not use the control keyword color", src)
-		}
+	}
+
+	// a quoted key is data, so it keeps the string colour
+	styles := rs.StylesForLine([]rune(`{"default": 1}`), 0)
+	idx := strings.Index(`{"default": 1}`, "default")
+	if got := styles[idx].GetForeground(); got == control.GetForeground() {
+		t.Fatalf(`"default" in a quoted key should not use the control keyword color`)
 	}
 }
 

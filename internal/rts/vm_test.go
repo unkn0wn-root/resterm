@@ -106,8 +106,8 @@ func TestEvalLogic(t *testing.T) {
 	}
 }
 
-// ?? must not evaluate its right side unless the left side is null, which is
-// what separates it from a default(a, b) call
+// ?? must not evaluate its right side unless the left side is null, so a
+// fallback with side effects or its own failure stays untouched when it is unused
 func TestCoalesceIsLazy(t *testing.T) {
 	src := `
 let calls = 0
@@ -124,6 +124,39 @@ let unresolved = "ok" ?? missingName
 	wantStr(t, comp, "taken", "fallback")
 	wantStr(t, comp, "unresolved", "ok")
 	wantNum(t, comp, "calls", 1)
+}
+
+// the migration guide tells people to keep the parentheses when replacing a
+// default(a, b) call, which only matters because ?? binds looser than arithmetic,
+// equality, and the logical operators. Each case returns a number under the loose
+// grouping and a bool under the tight one, so the kind alone proves the grouping
+func TestCoalesceBindsLooserThanOtherOperators(t *testing.T) {
+	src := `
+let add = 1 ?? 2 + 3
+let eq = 1 ?? 2 == 2
+let alt = 2 ?? 1 or 0
+let both = 1 ?? 2 and 3
+`
+	comp := execModule(t, src)
+	wantNum(t, comp, "add", 1)
+	wantNum(t, comp, "eq", 1)
+	wantNum(t, comp, "alt", 2)
+	wantNum(t, comp, "both", 1)
+}
+
+// the reserved-word parse errors name a replacement syntax, so the replacements
+// have to survive a round trip. A quoted key going in, an index coming back out
+func TestReservedWordKeyRoundTrips(t *testing.T) {
+	src := `
+let cfg = {"default": 1, "range": 2, "plain": 3}
+let a = cfg["default"]
+let b = cfg["range"]
+let c = cfg.plain
+`
+	comp := execModule(t, src)
+	wantNum(t, comp, "a", 1)
+	wantNum(t, comp, "b", 2)
+	wantNum(t, comp, "c", 3)
 }
 
 func TestCoalesceRejectsUndefinedLeftSide(t *testing.T) {

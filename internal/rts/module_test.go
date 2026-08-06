@@ -114,3 +114,44 @@ func TestUseAliasCollisionBeforeParse(t *testing.T) {
 		t.Fatalf("expected alias collision error, got %v", err)
 	}
 }
+
+// hosts other than the directive parser can build an RT directly, so the engine
+// refuses a reserved binding rather than creating one nothing can reference
+func TestEngineRejectsReservedBindings(t *testing.T) {
+	dir := t.TempDir()
+	fs := &memFS{files: map[string]*memFile{}}
+	p := filepath.Join(dir, "a.rts")
+	fs.files[p] = &memFile{data: []byte("module mod\nexport let x = 1\n"), mod: time.Unix(10, 0)}
+
+	cases := []struct {
+		name string
+		rt   RT
+		msg  string
+	}{
+		{
+			"use alias",
+			RT{BaseDir: dir, Uses: []Use{{Path: "a.rts", Alias: "default"}}},
+			"alias is a reserved word: default",
+		},
+		{
+			"extra binding",
+			RT{BaseDir: dir, Extra: map[string]Value{"default": Num(1)}},
+			"name is a reserved word: default",
+		},
+		{
+			"extra binding other keyword",
+			RT{BaseDir: dir, Extra: map[string]Value{"range": Num(1)}},
+			"name is a reserved word: range",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := NewEng(testStdlib)
+			e.C = NewCache(fs, e.modulePre)
+			_, err := e.Eval(context.Background(), tc.rt, "1", Pos{Path: "test", Line: 1, Col: 1})
+			if err == nil || !strings.Contains(err.Error(), tc.msg) {
+				t.Fatalf("expected %q, got %v", tc.msg, err)
+			}
+		})
+	}
+}

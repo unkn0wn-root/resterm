@@ -107,6 +107,10 @@ func (p *Parser) parseMod() *Mod {
 
 func (p *Parser) parseModDecl() (string, Pos) {
 	pos := p.expect(KW_MODULE).P
+	// the module name becomes the binding when @use omits an alias
+	if p.cur.K.isKeyword() {
+		p.fail(p.cur.P, fmt.Sprintf("module name cannot be the reserved word %s", p.cur.K))
+	}
 	if p.cur.K != IDENT {
 		p.fail(p.cur.P, "module requires a name")
 	}
@@ -142,6 +146,8 @@ func (p *Parser) parseStmt() Stmt {
 		return p.parseSwitch(stmtLabel{})
 	case KW_CASE:
 		p.fail(p.cur.P, "case outside switch body")
+	case KW_DEFAULT:
+		p.fail(p.cur.P, "default outside switch body")
 	case KW_FOR:
 		return p.parseFor(stmtLabel{})
 	case KW_BREAK:
@@ -282,11 +288,7 @@ func (p *Parser) parseIf() Stmt {
 // statement and no goto
 func (p *Parser) parseLabeled() Stmt {
 	tok := p.cur
-	switch tok.Lit {
-	case defaultClause:
-		// a switch body consumes its own default: before reaching a statement
-		p.fail(tok.P, "default outside switch body")
-	case "_":
+	if tok.Lit == "_" {
 		p.fail(tok.P, fmt.Sprintf("invalid label %q", tok.Lit))
 	}
 	if t := p.findControl(tok.Lit); t != nil {
@@ -370,14 +372,14 @@ func (p *Parser) parseCaseClauses() []CaseClause {
 	seenDefault := false
 	for {
 		p.skipSemi()
-		switch {
-		case p.cur.K == RBRACE:
+		switch p.cur.K {
+		case RBRACE:
 			return out
-		case p.cur.K == EOF:
+		case EOF:
 			p.fail(p.cur.P, "unterminated switch")
-		case p.cur.K == KW_CASE:
+		case KW_CASE:
 			out = append(out, p.parseCase())
-		case p.isDefaultClause():
+		case KW_DEFAULT:
 			if seenDefault {
 				p.fail(p.cur.P, "duplicate default in switch")
 			}
@@ -411,8 +413,7 @@ func (p *Parser) parseCaseExprs() []Expr {
 }
 
 func (p *Parser) parseDefault() CaseClause {
-	pos := p.cur.P
-	p.next()
+	pos := p.expect(KW_DEFAULT).P
 	colon := p.expect(COLON).P
 	return CaseClause{P: pos, Body: p.parseClauseBody(colon)}
 }
@@ -421,7 +422,7 @@ func (p *Parser) parseClauseBody(pos Pos) *Block {
 	var out []Stmt
 	for {
 		p.skipSemi()
-		if p.cur.K == RBRACE || p.cur.K == KW_CASE || p.isDefaultClause() {
+		if p.cur.K == RBRACE || p.cur.K == KW_CASE || p.cur.K == KW_DEFAULT {
 			return &Block{P: pos, Stmts: out}
 		}
 		if p.cur.K == EOF {
@@ -429,14 +430,6 @@ func (p *Parser) parseClauseBody(pos Pos) *Block {
 		}
 		out = append(out, p.parseStmt())
 	}
-}
-
-// isDefaultClause matches the contextual default label. It shares the
-// "identifier followed by a colon" shape with a statement label, so the switch
-// body checks this first and parseLabeled rejects default outright. Neither
-// reaches default(a, b) or a dict key, which are parsed as expressions
-func (p *Parser) isDefaultClause() bool {
-	return p.cur.K == IDENT && p.cur.Lit == defaultClause && p.peek.K == COLON
 }
 
 func (p *Parser) parseFor(lb stmtLabel) Stmt {
@@ -813,6 +806,12 @@ func (p *Parser) parsePostfix() Expr {
 		case DOT:
 			pos := p.cur.P
 			p.next()
+			// member access has no quoted spelling, so the fix here is an index
+			if p.cur.K.isKeyword() {
+				p.fail(p.cur.P, fmt.Sprintf(
+					"field name cannot be the reserved word %s, use [%q] instead", p.cur.K, p.cur.K,
+				))
+			}
 			name := p.expect(IDENT).Lit
 			left = &Member{P: pos, X: left, Name: name}
 		default:
@@ -937,6 +936,11 @@ func (p *Parser) parseDict() Expr {
 			key = p.cur.Lit
 			p.next()
 		default:
+			if p.cur.K.isKeyword() {
+				p.fail(p.cur.P, fmt.Sprintf(
+					"dict key cannot be the reserved word %s, quote it as %q", p.cur.K, p.cur.K,
+				))
+			}
 			p.fail(p.cur.P, "dict key must be string or ident")
 		}
 		p.expect(COLON)

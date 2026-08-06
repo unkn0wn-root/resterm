@@ -1,6 +1,9 @@
 package rts
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func (e *Eng) resolveUses(cx *Ctx, rt RT, pre map[string]Value, pos Pos) ([]Use, error) {
 	if len(rt.Uses) == 0 {
@@ -31,6 +34,9 @@ func (e *Eng) resolveUses(cx *Ctx, rt RT, pre map[string]Value, pos Pos) ([]Use,
 			}
 			al = nm
 			u.Alias = nm
+		}
+		if IsKeyword(al) {
+			return nil, Errf(cx, pos, "alias is a reserved word: %s", al)
 		}
 		if _, ok := seen[al]; ok {
 			return nil, Errf(cx, pos, "alias already defined: %s", al)
@@ -97,6 +103,12 @@ func modHead(path string, src []byte) (string, Pos, error) {
 			nt := lx.Next()
 			if nt.K == ILLEGAL {
 				return "", nt.P, &ParseError{Pos: nt.P, Msg: nt.Lit}
+			}
+			if nt.K.isKeyword() {
+				return "", nt.P, &ParseError{
+					Pos: nt.P,
+					Msg: fmt.Sprintf("module name cannot be the reserved word %s", nt.K),
+				}
 			}
 			if nt.K != IDENT {
 				return "", nt.P, &ParseError{Pos: nt.P, Msg: "module requires a name"}
