@@ -81,11 +81,16 @@ Identifiers start with a letter or `_` and can contain letters, digits, and `_` 
 Keywords:
 
 ```
-export module fn let const if elif else switch case try return for break continue range
+export module fn let const if elif else switch case default try return for break continue range
 true false null and or not
 ```
 
-`default` is not reserved. It is read as a clause label only at the top level of a `switch` body, so the deprecated `default(a, b)` and `rts.default(a, b)` helpers stay available as ordinary identifiers. Prefer `a ?? b`.
+A reserved word cannot be a bare name anywhere, which includes dict keys and field access. Data that carries a key spelled like a keyword uses the quoted forms instead:
+
+```
+let cfg = {"default": 1}
+let v = cfg["default"]
+```
 
 ### Literals
 
@@ -102,15 +107,20 @@ String escapes include `\n`, `\r`, `\t`, `\\`, `\"`, and `\'`. Dict keys in lite
 
 ### Operators by precedence
 
+Listed from tightest to loosest. Each level binds more tightly than the one below it.
+
 - Postfix operators include function calls, indexing, and member access.
 - Unary operators include `not`, `try`, and unary `-`.
 - Multiplicative operators include `*`, `/`, and `%`.
 - Additive operators include `+` and `-`.
 - Comparison operators include `<`, `<=`, `>`, and `>=`.
 - Equality operators include `==` and `!=`.
-- Logical operators include `and` and `or`.
+- `and`.
+- `or`.
 - The coalesce operator `??` returns the right side when the left side is null.
 - The ternary operator `cond ? a : b` selects between two values.
+
+`??` sits near the bottom, so it binds looser than arithmetic, comparison, and both logical operators. `a ?? b + c` means `a ?? (b + c)`, and `a ?? b or c` means `a ?? (b or c)`. Parenthesise when you want the other grouping.
 
 `+` adds numbers or concatenates strings. Non numeric values are converted to string using `str()`. Comparisons only work for numbers or strings, and equality only works for primitive types.
 
@@ -143,6 +153,36 @@ let value = candidate ? candidate : "something"
 ```
 
 `??` does not rescue an undefined name. `missingName ?? "fallback"` is still an error, which keeps typos visible. Optional lookups return null explicitly instead, so `vars.get("missing") ?? "fallback"` works.
+
+#### Migrating from default()
+
+`default(a, b)`, `rts.default(a, b)`, and `stdlib.default(a, b)` were removed, and `default` became a reserved word. Replace every call with `(a ?? b)`:
+
+```
+default(vars.get("token"), "anon")     # removed
+(vars.get("token") ?? "anon")          # replacement
+```
+
+Keep the parentheses. A call is a single tight unit, but `??` binds looser than every operator except the ternary, so dropping them regroups the expression whenever the call was part of a larger one:
+
+```
+default(a, b) + c   # old, means (a ?? b) + c
+a ?? b + c          # wrong, parses as a ?? (b + c)
+(a ?? b) + c        # right
+```
+
+The parentheses are only redundant when the call was the entire expression, as in the `vars.get` example above.
+
+The replacement is not only shorter. `default(a, b)` was an ordinary call, so `b` was evaluated before the call ran, whether or not `a` was null. `??` evaluates `b` only when `a` is null. If a fallback did real work, that work now happens only when it is actually needed:
+
+```
+default(a, fail("missing"))   # always failed
+a ?? fail("missing")          # fails only when a is null
+```
+
+Check fallbacks that call `uuid()`, mutate `vars`, or fail. Migrating them changes when they run, not just how they are spelled.
+
+Because `default` is reserved, these spellings are now parse errors: `let default = 1`, `fn default() {}`, `{default: 1}`, and `value.default`. Dict data that genuinely has a `default` key uses `{"default": 1}` and `value["default"]`.
 
 ### Error handling with try
 
@@ -294,19 +334,13 @@ case 1:
 
 Case expressions are arbitrary runtime expressions, so duplicate cases are not reported at parse time. The first one written wins.
 
-Because `default` stays an ordinary identifier, the deprecated helper of the same name still parses inside a switch body, so existing files keep working:
+`default` is a reserved word, so it is always the clause label and never a name. Use `??` for a fallback value:
 
 ```
 switch value {
 default:
-  value = rts.default(value, "other")   # deprecated, prefer value ?? "other"
+  value = candidate ?? "fallback"
 }
-```
-
-New code should use `??`:
-
-```
-let value = candidate ?? "fallback"
 ```
 
 Switch initializers, type switches, switch expressions that produce a value, and `fallthrough` are not part of the language. A switch can carry a label so that a `break` deeper inside can leave it by name, described under [Labels](#labels).
@@ -386,7 +420,7 @@ Rules:
 - `continue` must name a loop. Naming a switch is an error.
 - Labels live in their own namespace, so a label never collides with a variable or function of the same name.
 - Two active labels cannot share a name, but a name is free again once its statement ends, so sibling statements can reuse it.
-- `_` and `default` are not valid labels.
+- `_` is not a valid label, and neither is any reserved word.
 - The label of a `break` or `continue` has to stay on the same line as the keyword, because a newline there already ends the statement. A label in front of a `for` or `switch` may sit on its own line.
 
 ## Modules and exports
@@ -427,7 +461,6 @@ RTS provides a small standard library that covers common request needs without e
 - `rts.contains(haystack, needle)` checks whether a value is contained in a string, list, or dict.
 - `rts.match(pattern, text)` applies a regular expression to text and returns true when it matches.
 - `rts.str(x)` converts a value to a string, using JSON for lists and dicts.
-- `rts.default(a, b)` returns `a` unless it is null, otherwise it returns `b`. Deprecated, use `a ?? b`. It still works, but as a function call it evaluates both arguments, so `default("ok", fail("boom"))` fails where `"ok" ?? fail("boom")` returns `"ok"`.
 - `rts.num(x[, def])` converts a value to a number, or returns `def` when conversion fails.
 - `rts.int(x[, def])` converts a value to an integer, or returns `def` when conversion fails.
 - `rts.bool(x[, def])` converts a value to a bool, or returns `def` when conversion fails.

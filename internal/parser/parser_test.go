@@ -3766,6 +3766,44 @@ GET https://example.com
 	}
 }
 
+// a reserved word passes the identifier test but lexes as an RTS keyword, so the
+// binding would exist and be impossible to reference. Reject it at parse time
+func TestParseRejectsReservedRTSBindingNames(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		msg  string
+	}{
+		{"use alias", "# @use ./rts/helpers.rts as default\n", `@use alias "default" is a reserved word`},
+		{"use alias other keyword", "# @use ./rts/helpers.rts as range\n", `@use alias "range" is a reserved word`},
+		{"for-each as", "# @for-each [1] as default\n", `@for-each name "default" is a reserved word`},
+		{"for-each in", "# @for-each default in [1]\n", `@for-each name "default" is a reserved word`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Parse("reserved.http", []byte(tc.src+"GET https://example.com\n"))
+			if !hasParseMessage(d.Errors, tc.msg) && !hasParseMessage(d.Warnings, tc.msg) {
+				t.Fatalf("expected %q, got errors=%v warnings=%v", tc.msg, d.Errors, d.Warnings)
+			}
+		})
+	}
+}
+
+// the reserved-word check must not reject names that merely resemble keywords
+func TestParseAllowsKeywordLikeRTSBindingNames(t *testing.T) {
+	src := `# @use ./rts/helpers.rts as Default
+# @for-each [1] as defaults
+GET https://example.com
+`
+	d := Parse("ok.http", []byte(src))
+	if len(d.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", d.Errors)
+	}
+	if len(d.Uses) != 1 || d.Uses[0].Alias != "Default" {
+		t.Fatalf("expected alias Default, got %+v", d.Uses)
+	}
+}
+
 func TestParseRecordsAuthAndRequestOrigin(t *testing.T) {
 	src := `# @auth file bearer {{fileToken}}
 

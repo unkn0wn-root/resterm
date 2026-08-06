@@ -20,6 +20,7 @@ const (
 	KW_ELSE
 	KW_SWITCH
 	KW_CASE
+	KW_DEFAULT
 	KW_RETURN
 	KW_FOR
 	KW_BREAK
@@ -110,6 +111,8 @@ func (k Kind) String() string {
 		return "switch"
 	case KW_CASE:
 		return "case"
+	case KW_DEFAULT:
+		return "default"
 	case KW_RETURN:
 		return "return"
 	case KW_FOR:
@@ -189,10 +192,20 @@ func (k Kind) String() string {
 	}
 }
 
-// defaultClause labels the fallback clause of a switch. It is matched
-// contextually instead of being reserved so the default(a, b) stdlib helper
-// keeps working as an ordinary identifier
-const defaultClause = "default"
+// isKeyword reports whether k is a reserved word. The keyword kinds are
+// contiguous in the enum, so a new one has to be declared between KW_EXPORT and
+// KW_NOT to be recognised here
+func (k Kind) isKeyword() bool {
+	return k >= KW_EXPORT && k <= KW_NOT
+}
+
+// IsKeyword reports whether name is reserved. Hosts that turn user input into an
+// RTS binding check this first, because a reserved name passes an ordinary
+// identifier test but lexes as a keyword, leaving the binding unreferenceable
+func IsKeyword(name string) bool {
+	_, ok := kw[name]
+	return ok
+}
 
 var kw = map[string]Kind{
 	"export":   KW_EXPORT,
@@ -205,6 +218,7 @@ var kw = map[string]Kind{
 	"else":     KW_ELSE,
 	"switch":   KW_SWITCH,
 	"case":     KW_CASE,
+	"default":  KW_DEFAULT,
 	"return":   KW_RETURN,
 	"for":      KW_FOR,
 	"break":    KW_BREAK,
@@ -237,6 +251,7 @@ func keywordClassForKind(k Kind) KeywordClass {
 		KW_ELSE,
 		KW_SWITCH,
 		KW_CASE,
+		KW_DEFAULT,
 		KW_RETURN,
 		KW_FOR,
 		KW_BREAK,

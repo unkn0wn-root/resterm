@@ -15,7 +15,6 @@ const (
 	sigContains = "contains(a, b)"
 	sigMatch    = "match(pattern, text)"
 	sigStr      = "str(x)"
-	sigDefault  = "default(a, b)"
 	sigUUID     = "uuid()"
 )
 
@@ -25,7 +24,6 @@ var coreSpec = map[string]rts.NativeFunc{
 	"contains": coreContains,
 	"match":    coreMatch,
 	"str":      coreStr,
-	"default":  coreDefault,
 	"num":      coreNum,
 	"int":      coreInt,
 	"bool":     coreBool,
@@ -135,20 +133,6 @@ func coreStr(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 	return rts.Str(s), nil
-}
-
-// Deprecated: the ?? operator covers this and is lazy. Both arguments here are
-// already evaluated by the time the call runs, so a failing fallback fails even
-// when it is not needed. Kept callable because existing request files use it
-func coreDefault(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigDefault)
-	if err := na.Count(2); err != nil {
-		return rts.Null(), err
-	}
-	if na.Arg(0).K != rts.VNull {
-		return na.Arg(0), nil
-	}
-	return na.Arg(1), nil
 }
 
 func coreUUID(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {

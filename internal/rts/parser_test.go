@@ -598,14 +598,52 @@ func TestParseLabelErrors(t *testing.T) {
 	}
 }
 
-func TestParseDefaultStaysIdentifier(t *testing.T) {
-	src := "let a = default(null, \"x\")\nlet b = rts.default(a, \"y\")\nlet c = {default: 1}.default\n"
+func TestParseDefaultIsReserved(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		msg  string
+	}{
+		{"let binding", "let default = 1\n", "expected IDENT, got default"},
+		{"assignment", "default = 1\n", "default outside switch body"},
+		{"fn name", "fn default() {\n}\n", "expected IDENT, got default"},
+		{"fn param", "fn f(default) {\n}\n", "expected parameter name"},
+		{"call", "let a = default(null, \"x\")\n", "unexpected default"},
+		{"namespaced call", "let a = rts.default(null, \"x\")\n",
+			`field name cannot be the reserved word default, use ["default"] instead`},
+		{"dict key", "let a = {default: 1}\n",
+			`dict key cannot be the reserved word default, quote it as "default"`},
+		{"member access", "let a = x.default\n",
+			`field name cannot be the reserved word default, use ["default"] instead`},
+		{"member access of other keyword", "let a = x.range\n",
+			`field name cannot be the reserved word range, use ["range"] instead`},
+		{"range variable", "for default range [1] {\n}\n", "unexpected default"},
+		{"module name", "module default\n", "module name cannot be the reserved word default"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseModule("test", []byte(tc.src))
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+			}
+			if pe.Msg != tc.msg {
+				t.Fatalf("msg: got %q, want %q", pe.Msg, tc.msg)
+			}
+		})
+	}
+}
+
+// reserving default only closes the bare-name spellings, so data keeps its
+// "default" key through the quoted forms
+func TestParseDefaultAsQuotedKey(t *testing.T) {
+	src := "let a = {\"default\": 1}\nlet b = a[\"default\"]\n"
 	m, err := ParseModule("test", []byte(src))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if len(m.Stmts) != 3 {
-		t.Fatalf("expected 3 stmts, got %d", len(m.Stmts))
+	if len(m.Stmts) != 2 {
+		t.Fatalf("expected 2 stmts, got %d", len(m.Stmts))
 	}
 }
 

@@ -51,51 +51,28 @@ func TestStdlibCore(t *testing.T) {
 	}
 }
 
-// default(a, b) is deprecated in favour of ?? because a call evaluates both
-// arguments. This pins the difference that motivates the deprecation
-func TestStdlibDefaultIsEagerUnlikeCoalesce(t *testing.T) {
-	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
-
-	mod, err := rts.ParseModule("test", []byte(`export let __v = default("ok", fail("boom"))`))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
+// the default(a, b) helper was removed in favour of ??. Dropping it from
+// coreSpec has to clear all three spellings at once, because the prelude and
+// both namespace objects are built from that one map
+func TestStdlibDoesNotExposeDefault(t *testing.T) {
+	env := New()
+	if _, ok := env["default"]; ok {
+		t.Fatalf("default is still in the top level prelude")
 	}
-	if _, err := rts.Exec(ctx, mod, New()); err == nil {
-		t.Fatalf("expected default to evaluate its unused fallback")
-	} else if !strings.Contains(err.Error(), "boom") {
-		t.Fatalf("expected boom from the fallback, got %v", err)
-	}
-
-	if v := evalExprCtx(t, ctx, `"ok" ?? fail("boom")`); v.K != rts.VStr || v.S != "ok" {
-		t.Fatalf("expected ?? to skip the fallback, got %+v", v)
-	}
-}
-
-// default is a contextual switch label, so the stdlib helper of the same name
-// has to stay callable in both spellings, including inside a switch body
-func TestStdlibDefaultSurvivesSwitch(t *testing.T) {
-	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
-	mod := `
-fn label(code) {
-  let out = default(null, "fallback")
-  switch code {
-  case 200:
-    out = default("ok", "unused")
-  default:
-    out = rts.default(null, "other")
-  }
-  return out
-}
-`
-	if v := evalExprMod(t, ctx, mod, `label(200)`); v.K != rts.VStr || v.S != "ok" {
-		t.Fatalf("expected ok, got %+v", v)
-	}
-	if v := evalExprMod(t, ctx, mod, `label(500)`); v.K != rts.VStr || v.S != "other" {
-		t.Fatalf("expected other, got %+v", v)
-	}
-	v := evalExprCtx(t, ctx, `default(null, "fallback")`)
-	if v.K != rts.VStr || v.S != "fallback" {
-		t.Fatalf("expected fallback, got %+v", v)
+	for _, ns := range []string{"rts", "stdlib"} {
+		v, ok := env[ns]
+		if !ok {
+			t.Fatalf("missing %s namespace", ns)
+		}
+		if v.K != rts.VObj {
+			t.Fatalf("%s: expected an object, got kind %v", ns, v.K)
+		}
+		if _, ok := v.O.GetMember("default"); ok {
+			t.Fatalf("%s.default is still exposed", ns)
+		}
+		if _, ok := v.O.GetMember("str"); !ok {
+			t.Fatalf("%s.str went missing, the namespace lookup is not proving anything", ns)
+		}
 	}
 }
 

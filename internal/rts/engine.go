@@ -190,6 +190,9 @@ func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
 		if k == "" {
 			continue
 		}
+		if IsKeyword(k) {
+			return nil, Errf(cx, pos, "name is a reserved word: %s", k)
+		}
 		if _, ok := pre[k]; ok {
 			return nil, Errf(cx, pos, "name already defined: %s", k)
 		}
