@@ -18,6 +18,8 @@ const (
 	KW_IF
 	KW_ELIF
 	KW_ELSE
+	KW_SWITCH
+	KW_CASE
 	KW_RETURN
 	KW_FOR
 	KW_BREAK
@@ -104,6 +106,10 @@ func (k Kind) String() string {
 		return "elif"
 	case KW_ELSE:
 		return "else"
+	case KW_SWITCH:
+		return "switch"
+	case KW_CASE:
+		return "case"
 	case KW_RETURN:
 		return "return"
 	case KW_FOR:
@@ -183,6 +189,11 @@ func (k Kind) String() string {
 	}
 }
 
+// defaultClause labels the fallback clause of a switch. It is matched
+// contextually instead of being reserved so the default(a, b) stdlib helper
+// keeps working as an ordinary identifier
+const defaultClause = "default"
+
 var kw = map[string]Kind{
 	"export":   KW_EXPORT,
 	"module":   KW_MODULE,
@@ -192,6 +203,8 @@ var kw = map[string]Kind{
 	"if":       KW_IF,
 	"elif":     KW_ELIF,
 	"else":     KW_ELSE,
+	"switch":   KW_SWITCH,
+	"case":     KW_CASE,
 	"return":   KW_RETURN,
 	"for":      KW_FOR,
 	"break":    KW_BREAK,
@@ -219,7 +232,17 @@ func keywordClassForKind(k Kind) KeywordClass {
 	switch k {
 	case KW_EXPORT, KW_MODULE, KW_FN, KW_LET, KW_CONST:
 		return KeywordDecl
-	case KW_IF, KW_ELIF, KW_ELSE, KW_RETURN, KW_FOR, KW_BREAK, KW_CONTINUE, KW_RANGE, KW_TRY:
+	case KW_IF,
+		KW_ELIF,
+		KW_ELSE,
+		KW_SWITCH,
+		KW_CASE,
+		KW_RETURN,
+		KW_FOR,
+		KW_BREAK,
+		KW_CONTINUE,
+		KW_RANGE,
+		KW_TRY:
 		return KeywordControl
 	case KW_TRUE, KW_FALSE, KW_NULL:
 		return KeywordLiteral

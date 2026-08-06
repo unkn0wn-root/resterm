@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -62,6 +65,64 @@ func TestRTSRuneStylerHighlightsFnCall(t *testing.T) {
 	want := style.Render("s")
 	if got != want {
 		t.Fatalf("fn call style mismatch:\nwant %q\n got %q", want, got)
+	}
+}
+
+// default is not a keyword and the line styler cannot tell a switch clause
+// label from a multiline dict key, so it stays unstyled as control everywhere
+func TestRTSRuneStylerLeavesDefaultUnstyledAsControl(t *testing.T) {
+	p := theme.DefaultTheme().EditorMetadata
+	p.RTSKeywordControl = lipgloss.Color("#112233")
+	st := newRTSRuneStyler(p)
+	rs, ok := st.(*rtsRuneStyler)
+	if !ok {
+		t.Fatalf("expected rts rune styler")
+	}
+
+	control, ok := rs.keywordStyleForClass(rts.KeywordControl)
+	if !ok {
+		t.Fatalf("expected control keyword style")
+	}
+
+	lines := []string{
+		"  default:",
+		"  default: 1",
+		"x = default(a, b)",
+		"x = rts.default(a, b)",
+	}
+	for i, src := range lines {
+		styles := rs.StylesForLine([]rune(src), i)
+		idx := strings.Index(src, "default")
+		var fg lipgloss.TerminalColor = lipgloss.NoColor{}
+		if idx < len(styles) {
+			fg = styles[idx].GetForeground()
+		}
+		if fg == control.GetForeground() {
+			t.Fatalf("%q: default should not use the control keyword color", src)
+		}
+	}
+}
+
+func TestRTSRuneStylerHighlightsSwitchKeywords(t *testing.T) {
+	p := theme.DefaultTheme().EditorMetadata
+	p.RTSKeywordControl = lipgloss.Color("#112233")
+	st := newRTSRuneStyler(p)
+	rs, ok := st.(*rtsRuneStyler)
+	if !ok {
+		t.Fatalf("expected rts rune styler")
+	}
+
+	control, ok := rs.keywordStyleForClass(rts.KeywordControl)
+	if !ok {
+		t.Fatalf("expected control keyword style")
+	}
+
+	for i, src := range []string{"switch code {", "case 200, 201:"} {
+		styles := rs.StylesForLine([]rune(src), i)
+		got := styles[0].GetForeground()
+		if want := control.GetForeground(); got != want {
+			t.Fatalf("%q color: got %v, want %v", src, got, want)
+		}
 	}
 }
 

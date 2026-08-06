@@ -81,9 +81,11 @@ Identifiers start with a letter or `_` and can contain letters, digits, and `_` 
 Keywords:
 
 ```
-export module fn let const if elif else try return for break continue range
+export module fn let const if elif else switch case try return for break continue range
 true false null and or not
 ```
+
+`default` is not reserved. It is read as a clause label only at the top level of a `switch` body, so the `default(a, b)` and `rts.default(a, b)` helpers stay available as ordinary identifiers.
 
 ### Literals
 
@@ -202,6 +204,81 @@ if cond {
 
 Conditionals evaluate each branch in order and execute the first branch whose condition is true. The `else` branch runs only when no earlier condition is true.
 
+### switch
+
+`switch` picks one branch out of many. The tagged form compares a value against cases, and the tagless form replaces a long `if`/`elif` chain.
+
+```
+switch response.statusCode {
+case 200, 201:
+  result = "success"
+case 401:
+  result = "unauthorized"
+default:
+  result = "unexpected"
+}
+```
+
+```
+switch {
+case score >= 90:
+  grade = "A"
+case score >= 80:
+  grade = "B"
+default:
+  grade = "C"
+}
+```
+
+Grammar:
+
+```
+SwitchStmt = "switch" [ Expression ] "{" { CaseClause } "}" .
+CaseClause = "case" Expression { "," Expression } ":" StatementList
+           | "default" ":" StatementList .
+```
+
+Rules:
+
+- The tag is evaluated exactly once, before any case.
+- Clauses run top to bottom and the expressions within a clause run left to right. Evaluation stops at the first match, so later case expressions never run.
+- Only the matching clause runs. There is no fallthrough, implicit or explicit.
+- A tagged switch matches with the same equality as `==`. Kinds must match, and only null, bool, number, and string compare by value. Lists and dicts never compare equal, so `switch [1] { case [1]: ... }` falls through to `default`.
+- A tagless switch takes the first case expression that is truthy, using the same truth test as `if`. It does not require a bool.
+- `case` takes one or more expressions separated by commas. A comma can be followed by a newline, but the colon must stay on the last expression's line.
+- A clause body can be empty, in which case a match does nothing.
+- At most one `default` is allowed. It can sit anywhere among the cases and runs only when no case matched.
+- Every clause is its own scope. `let` and `const` inside a clause do not escape it, while assignment to an outer binding works as usual.
+- `break` leaves the nearest enclosing switch or loop. A `break` inside a switch that sits in a loop ends the switch, and the loop continues. Use a label when you need to leave the loop instead.
+- `continue` always targets the nearest enclosing loop, including from inside a switch.
+- `return`, runtime errors, and hard aborts propagate out of the switch normally.
+
+A `{` right after `switch` always starts the tagless form, so a dict literal tag needs parentheses:
+
+```
+switch ({a: 1}).a {
+case 1:
+  matched = true
+}
+```
+
+Case expressions are arbitrary runtime expressions, so duplicate cases are not reported at parse time. The first one written wins.
+
+Because `default` stays an ordinary identifier, the stdlib helper of the same name still works, including inside a switch body:
+
+```
+let value = default(null, "fallback")
+
+switch value {
+default:
+  value = rts.default(value, "other")
+}
+```
+
+Switch initializers, type switches, switch expressions that produce a value, and `fallthrough` are not part of the language. A switch can carry a label so that a `break` deeper inside can leave it by name, described under [Labels](#labels).
+
+This statement is separate from the `@switch` workflow directive. `@switch` selects a workflow step in an `.http` file and shares the same equality relation, while `switch` is a statement inside RestermScript code.
+
 ### for loops
 
 RTS supports several loop forms.
@@ -214,7 +291,7 @@ for let k, v range expr { ... }
 
 The language also supports a three clause loop with init, condition, and post clauses. The clauses are separated by the semicolon token.
 
-Rules for loops are consistent. `break` and `continue` are valid only inside loops. `const` is not allowed in loop headers. `for let` introduces loop scoped variables that do not escape the loop block. `for range` without `let` assigns to existing variables.
+Rules for loops are consistent. `continue` is valid only inside loops, and `break` is valid inside loops and switches. Both accept a label to target an enclosing statement by name. `const` is not allowed in loop headers. `for let` introduces loop scoped variables that do not escape the loop block. `for range` without `let` assigns to existing variables.
 
 ### range semantics
 
@@ -231,6 +308,52 @@ for let i, ch range "go" {
   // i is the byte index, ch is "g" and then "o"
 }
 ```
+
+### Labels
+
+A label names a `for` or a `switch` so that a `break` or `continue` deeper inside can target it by name. Without labels there is no way to leave a loop from inside a switch, because a plain `break` stops at the switch.
+
+```
+outer: for let i = 0; i < 10; i = i + 1 {
+  switch i {
+  case 5:
+    break outer
+  }
+}
+```
+
+`continue label` resumes the named loop, skipping the rest of every construct in between:
+
+```
+outer: for let i, row range rows {
+  for let j, value range row {
+    switch value {
+    case null:
+      continue outer
+    }
+  }
+}
+```
+
+Grammar:
+
+```
+LabeledStmt  = identifier ":" ( ForStmt | SwitchStmt ) .
+BreakStmt    = "break" [ identifier ] .
+ContinueStmt = "continue" [ identifier ] .
+```
+
+Rules:
+
+- A label can decorate only a `for` or a `switch`. There are no labeled blocks, no labels on `if` or `fn`, and no `goto`.
+- The unlabeled forms are unchanged. `break` still leaves the nearest switch or loop, and `continue` still resumes the nearest loop.
+- `break label` leaves the named statement. `continue label` resumes the named loop and runs that loop's post clause once, skipping the post clause of every loop it passed through.
+- The target must lexically enclose the `break` or `continue`, and labels do not cross a function boundary.
+- `continue` must name a loop. Naming a switch is an error.
+- Labels live in their own namespace, so a label never collides with a variable or function of the same name.
+- Two active labels cannot share a name, but a name is free again once its statement ends, so sibling statements can reuse it.
+- `_` and `default` are not valid labels.
+- The label of a `break` or `continue` has to stay on the same line as the keyword, because a newline there already ends the statement. A label in front of a `for` or `switch` may sit on its own line.
 
 ## Modules and exports
 
@@ -510,6 +633,8 @@ These directives are used in workflows to branch steps.
 # @case 401 run=StepRefresh
 # @default fail="unexpected status"
 ```
+
+These directives route workflow steps and are not the `switch` statement. They share the same equality relation, but each `@case` names a step to run instead of holding a statement list.
 
 ### @for-each
 

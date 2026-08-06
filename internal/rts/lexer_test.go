@@ -25,6 +25,42 @@ func TestLexerAutoSemi(t *testing.T) {
 	}
 }
 
+func TestLexerSwitchKeywords(t *testing.T) {
+	got := lexKinds("switch case default")
+	want := []Kind{KW_SWITCH, KW_CASE, IDENT, AUTO_SEMI, EOF}
+	if !slices.Equal(got, want) {
+		t.Fatalf("kinds: got %v, want %v", got, want)
+	}
+}
+
+func TestKeywordClassSwitchCase(t *testing.T) {
+	cases := []struct {
+		name string
+		want KeywordClass
+	}{
+		{"switch", KeywordControl},
+		{"case", KeywordControl},
+		{"default", KeywordNone},
+	}
+	for _, tc := range cases {
+		if got := KeywordClassOf(tc.name); got != tc.want {
+			t.Fatalf("%s: got class %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestLexerNoSemiInCaseList(t *testing.T) {
+	k := lexKinds("switch x {\ncase 1,\n2:\n}\n")
+	for i := 0; i < len(k)-1; i++ {
+		if k[i] == COMMA && k[i+1] == AUTO_SEMI {
+			t.Fatalf("unexpected auto semi after case comma")
+		}
+		if k[i] == COLON && k[i+1] == AUTO_SEMI {
+			t.Fatalf("unexpected auto semi after case colon")
+		}
+	}
+}
+
 func TestLexerNoSemiInParens(t *testing.T) {
 	src := "let a = (1\n+2)\n"
 	k := lexKinds(src)

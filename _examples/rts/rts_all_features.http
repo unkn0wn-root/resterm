@@ -92,15 +92,25 @@ Authorization: {{= helpers.authHeader(vars.get("api.token")) }}
 # @assert response.statusCode == 204
 GET {{base_url}}/status/204
 
-### RTS Loops + Const + Try
+### RTS Loops + Switch + Labels + Const + Try
 # @name RTS_Loops
-# @description Exercises for/range/break/continue/const/try in modules.
+# @description Exercises for/range/switch/labels/break/continue/const/try in modules.
 # @assert loops.sampleTag == "rts-examples"
 # @assert loops.sumClassic(6) == 8
 # @assert loops.rangeList() == "0a1b2c"
 # @assert loops.rangeDict() == "ab"
 # @assert loops.rangeString() == "0g1o"
 # @assert loops.countdown(3) == "321"
+# @assert loops.statusLabel(201) == "success"
+# @assert loops.statusLabel(403) == "denied"
+# @assert loops.statusLabel(500) == "unexpected"
+# @assert loops.grade(95) == "A"
+# @assert loops.grade(85) == "B"
+# @assert loops.grade(10) == "C"
+# @assert loops.switchBreakScope(["a", "skip", "mark"]) == "a!mark"
+# @assert loops.firstDenied([200, 403, 401]) == 403
+# @assert loops.firstDenied([200, 201]) == -1
+# @assert loops.fullRows([[1, 2], [3, null], [4, 5]]) == "02"
 # @assert loops.constLabel(7) == "user-7"
 # @assert loops.dictAccess() == 3
 # @assert loops.tryFail() == false
