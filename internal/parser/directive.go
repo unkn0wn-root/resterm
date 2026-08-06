@@ -15,10 +15,18 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+// bindingKind names the directive slot a binding came from
+type bindingKind string
+
+const (
+	useAlias    bindingKind = "@use alias"
+	forEachName bindingKind = "@for-each name"
+)
+
 // checkRTSBinding validates a directive token that becomes an RTS binding. A
 // reserved word looks like an identifier but lexes as a keyword, so the binding
 // would be created and then be impossible to reference
-func checkRTSBinding(kind, name string) error {
+func checkRTSBinding(kind bindingKind, name string) error {
 	if !directive.IsIdent(name) {
 		return fmt.Errorf("%s %q is invalid", kind, name)
 	}
@@ -162,7 +170,7 @@ func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
 		if p == "" || a == "" {
 			return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
 		}
-		if err := checkRTSBinding("@use alias", a); err != nil {
+		if err := checkRTSBinding(useAlias, a); err != nil {
 			return restfile.UseSpec{}, err
 		}
 		return restfile.UseSpec{
@@ -199,7 +207,7 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<expr> as <name>'")
 		}
-		if err := checkRTSBinding("@for-each name", name); err != nil {
+		if err := checkRTSBinding(forEachName, name); err != nil {
 			return nil, err
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
@@ -210,7 +218,7 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<name> in <expr>'")
 		}
-		if err := checkRTSBinding("@for-each name", name); err != nil {
+		if err := checkRTSBinding(forEachName, name); err != nil {
 			return nil, err
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
