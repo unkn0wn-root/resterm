@@ -32,16 +32,24 @@ type ret struct {
 func (r ret) Error() string { return "return" }
 
 type breakSig struct {
-	pos Pos
+	pos   Pos
+	label string
 }
 
 func (b breakSig) Error() string { return "break" }
 
 type continueSig struct {
-	pos Pos
+	pos   Pos
+	label string
 }
 
 func (c continueSig) Error() string { return "continue" }
+
+// targets reports whether a break or continue naming label should be consumed
+// by a for or switch named target. An unlabeled signal stops at the first one
+func targets(label, target string) bool {
+	return label == "" || label == target
+}
 
 func Exec(ctx *Ctx, mod *Mod, pre map[string]Value) (*Comp, error) {
 	if mod == nil {
@@ -169,9 +177,9 @@ func (vm *VM) execStmt(env *Env, exp map[string]Value, st Stmt) error {
 	case *ForStmt:
 		return vm.execFor(env, exp, s)
 	case *BreakStmt:
-		return breakSig{pos: s.Pos()}
+		return breakSig{pos: s.Pos(), label: s.Label}
 	case *ContinueStmt:
-		return continueSig{pos: s.Pos()}
+		return continueSig{pos: s.Pos(), label: s.Label}
 	default:
 		return Errf(vm.ctx, st.Pos(), "unknown stmt")
 	}
@@ -218,10 +226,10 @@ func (vm *VM) execSwitch(up *Env, exp map[string]Value, s *SwitchStmt) error {
 			return err
 		}
 		if match {
-			return vm.execClause(up, exp, cl.Body)
+			return vm.execClause(up, exp, s.Label, cl.Body)
 		}
 	}
-	return vm.execClause(up, exp, def)
+	return vm.execClause(up, exp, s.Label, def)
 }
 
 func (vm *VM) matchCase(env *Env, tagged bool, tag Value, exprs []Expr) (bool, error) {
@@ -243,11 +251,12 @@ func (vm *VM) matchCase(env *Env, tagged bool, tag Value, exprs []Expr) (bool, e
 	return false, nil
 }
 
-// execClause runs a clause body and stops break at the switch. Everything else
-// (return, continue, aborts, runtime errors) keeps propagating
-func (vm *VM) execClause(up *Env, exp map[string]Value, body *Block) error {
+// execClause runs a clause body and stops break at the switch. A break naming
+// some outer target keeps going, and so does everything else: continue, return,
+// aborts, and runtime errors
+func (vm *VM) execClause(up *Env, exp map[string]Value, label string, body *Block) error {
 	err := vm.execBlock(up, exp, body)
-	if _, ok := err.(breakSig); ok {
+	if b, ok := err.(breakSig); ok && targets(b.label, label) {
 		return nil
 	}
 	return err
@@ -276,7 +285,7 @@ func (vm *VM) execFor(up *Env, exp map[string]Value, s *ForStmt) error {
 				break
 			}
 		}
-		action, err := vm.execLoopBlock(env, exp, s.Body)
+		action, err := vm.execLoopBlock(env, exp, s.Label, s.Body)
 		if err != nil {
 			return err
 		}
@@ -300,18 +309,31 @@ func (vm *VM) execFor(up *Env, exp map[string]Value, s *ForStmt) error {
 	return nil
 }
 
-func (vm *VM) execLoopBlock(env *Env, exp map[string]Value, body *Block) (loopAction, error) {
+// execLoopBlock runs one iteration. A signal aimed at an outer label is handed
+// back as an error so it keeps travelling up through the enclosing statements
+func (vm *VM) execLoopBlock(
+	env *Env,
+	exp map[string]Value,
+	label string,
+	body *Block,
+) (loopAction, error) {
 	err := vm.execBlock(env, exp, body)
 	if err == nil {
 		return loopNext, nil
 	}
-	switch err.(type) {
+	switch sig := err.(type) {
 	case ret:
 		return loopNext, err
 	case breakSig:
-		return loopBreak, nil
+		if targets(sig.label, label) {
+			return loopBreak, nil
+		}
+		return loopNext, err
 	case continueSig:
-		return loopContinue, nil
+		if targets(sig.label, label) {
+			return loopContinue, nil
+		}
+		return loopNext, err
 	default:
 		return loopNext, err
 	}
@@ -406,7 +428,7 @@ func (vm *VM) execRangeStep(
 	if err := vm.assignRangeVar(env, rng.Val, itemVal, rng.Declare, pos); err != nil {
 		return loopNext, err
 	}
-	return vm.execLoopBlock(env, exp, s.Body)
+	return vm.execLoopBlock(env, exp, s.Label, s.Body)
 }
 
 func (vm *VM) defRangeVar(env *Env, name string) {

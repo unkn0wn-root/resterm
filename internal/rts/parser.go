@@ -5,15 +5,36 @@ import (
 	"strconv"
 )
 
-// loopDepth gates continue, breakDepth gates break. Loops raise both, switches
-// raise only breakDepth so continue inside a switch still targets the loop
+type controlKind uint8
+
+const (
+	controlSwitch controlKind = iota
+	controlLoop
+)
+
+// controlTarget is one lexically enclosing for or switch. label is empty for
+// unlabeled statements and pos points at the label that opened the target
+type controlTarget struct {
+	kind  controlKind
+	label string
+	pos   Pos
+}
+
+// stmtLabel is the optional name in front of a for or switch. The zero value
+// means the statement carries no label
+type stmtLabel struct {
+	name string
+	pos  Pos
+}
+
+// controls holds every for and switch enclosing the statement being parsed, so
+// break and continue can be checked against real targets instead of a depth
 type Parser struct {
-	lx         *Lexer
-	cur        Tok
-	peek       Tok
-	ahead      []Tok
-	loopDepth  int
-	breakDepth int
+	lx       *Lexer
+	cur      Tok
+	peek     Tok
+	ahead    []Tok
+	controls []controlTarget
 }
 
 func NewParserAt(path string, src []byte, pos Pos) *Parser {
@@ -118,11 +139,11 @@ func (p *Parser) parseStmt() Stmt {
 	case KW_IF:
 		return p.parseIf()
 	case KW_SWITCH:
-		return p.parseSwitch()
+		return p.parseSwitch(stmtLabel{})
 	case KW_CASE:
 		p.fail(p.cur.P, "case outside switch body")
 	case KW_FOR:
-		return p.parseFor()
+		return p.parseFor(stmtLabel{})
 	case KW_BREAK:
 		return p.parseBreak()
 	case KW_CONTINUE:
@@ -133,8 +154,8 @@ func (p *Parser) parseStmt() Stmt {
 		if p.peek.K == ASSIGN {
 			return p.parseAssign()
 		}
-		if p.isDefaultClause() {
-			p.fail(p.cur.P, "default outside switch body")
+		if p.peek.K == COLON {
+			return p.parseLabeled()
 		}
 	}
 	return p.parseExprStmt()
@@ -199,10 +220,10 @@ func (p *Parser) parseFn(exp bool) Stmt {
 	p.expect(LPAREN)
 	params := p.parseParams()
 	p.expect(RPAREN)
-	savedLoop, savedBreak := p.loopDepth, p.breakDepth
-	p.loopDepth, p.breakDepth = 0, 0
+	saved := p.controls
+	p.controls = nil
 	body := p.parseBlock()
-	p.loopDepth, p.breakDepth = savedLoop, savedBreak
+	p.controls = saved
 	return &FnDef{P: pos, Exported: exp, Name: name, Params: params, Body: body}
 }
 
@@ -256,20 +277,92 @@ func (p *Parser) parseIf() Stmt {
 	return &IfStmt{P: pos, Cond: cond, Then: then, Elifs: elifs, Else: els}
 }
 
+// parseLabeled reads "name:" in front of a for or switch. Labels live in their
+// own namespace and decorate nothing else, so there is no general labeled
+// statement and no goto
+func (p *Parser) parseLabeled() Stmt {
+	tok := p.cur
+	switch tok.Lit {
+	case defaultClause:
+		// a switch body consumes its own default: before reaching a statement
+		p.fail(tok.P, "default outside switch body")
+	case "_":
+		p.fail(tok.P, fmt.Sprintf("invalid label %q", tok.Lit))
+	}
+	if t := p.findControl(tok.Lit); t != nil {
+		p.fail(
+			tok.P,
+			fmt.Sprintf("duplicate label %q, active since %d:%d", tok.Lit, t.pos.Line, t.pos.Col),
+		)
+	}
+	p.next()
+	p.next()
+
+	lb := stmtLabel{name: tok.Lit, pos: tok.P}
+	switch p.cur.K {
+	case KW_FOR:
+		return p.parseFor(lb)
+	case KW_SWITCH:
+		return p.parseSwitch(lb)
+	default:
+		p.failCur(fmt.Sprintf("label must be followed by for or switch, got %s", p.cur.K))
+		return nil
+	}
+}
+
+func (p *Parser) pushControl(kind controlKind, lb stmtLabel) {
+	p.controls = append(p.controls, controlTarget{kind: kind, label: lb.name, pos: lb.pos})
+}
+
+func (p *Parser) popControl() {
+	p.controls = p.controls[:len(p.controls)-1]
+}
+
+// findControl looks up an active label. It is never called with an empty name,
+// which would match the unlabeled targets
+func (p *Parser) findControl(label string) *controlTarget {
+	for i := len(p.controls) - 1; i >= 0; i-- {
+		if p.controls[i].label == label {
+			return &p.controls[i]
+		}
+	}
+	return nil
+}
+
+func (p *Parser) inLoop() bool {
+	for _, c := range p.controls {
+		if c.kind == controlLoop {
+			return true
+		}
+	}
+	return false
+}
+
+// labelRef reads the optional target of a break or continue. The lexer inserts
+// a semicolon after both keywords, so a label only parses on the same line
+func (p *Parser) labelRef() (Tok, bool) {
+	if p.cur.K != IDENT {
+		return Tok{}, false
+	}
+	tok := p.cur
+	p.next()
+	return tok, true
+}
+
 // parseSwitch reads both switch forms. A brace right after the keyword means
 // the tagless form, mirroring Go: a dict literal tag has to be parenthesized
-func (p *Parser) parseSwitch() Stmt {
+func (p *Parser) parseSwitch(lb stmtLabel) Stmt {
 	pos := p.expect(KW_SWITCH).P
 	var tag Expr
 	if p.cur.K != LBRACE {
 		tag = p.parseExpr()
 	}
 	p.expect(LBRACE)
-	p.breakDepth++
+	p.pushControl(controlSwitch, lb)
 	clauses := p.parseCaseClauses()
-	p.breakDepth--
+	p.popControl()
 	p.expect(RBRACE)
-	return &SwitchStmt{P: pos, Tag: tag, Clauses: clauses}
+	return &SwitchStmt{P: pos, Label: lb.name, LabelPos: lb.pos, Tag: tag, Clauses: clauses}
 }
 
 func (p *Parser) parseCaseClauses() []CaseClause {
@@ -338,20 +431,21 @@ func (p *Parser) parseClauseBody(pos Pos) *Block {
 	}
 }
 
-// isDefaultClause matches the contextual default label. Nothing else in the
-// language starts a statement with an identifier followed by a colon, so
-// default(a, b) and dict keys stay untouched
+// isDefaultClause matches the contextual default label. It shares the
+// "identifier followed by a colon" shape with a statement label, so the switch
+// body checks this first and parseLabeled rejects default outright. Neither
+// reaches default(a, b) or a dict key, which are parsed as expressions
 func (p *Parser) isDefaultClause() bool {
 	return p.cur.K == IDENT && p.cur.Lit == defaultClause && p.peek.K == COLON
 }
 
-func (p *Parser) parseFor() Stmt {
+func (p *Parser) parseFor(lb stmtLabel) Stmt {
 	pos := p.expect(KW_FOR).P
 	if p.cur.K == LBRACE {
-		return p.parseForBody(pos, nil, nil, nil, nil)
+		return p.parseForBody(pos, lb, nil, nil, nil, nil)
 	}
 	if p.isForRangeStart() {
-		return p.parseForRange(pos)
+		return p.parseForRange(pos, lb)
 	}
 
 	if p.isSemi(p.cur.K) {
@@ -359,7 +453,7 @@ func (p *Parser) parseFor() Stmt {
 		cond := p.parseForCond()
 		p.expectSemi()
 		post := p.parseForPost()
-		return p.parseForBody(pos, nil, cond, post, nil)
+		return p.parseForBody(pos, lb, nil, cond, post, nil)
 	}
 
 	init := p.parseForInit()
@@ -368,14 +462,14 @@ func (p *Parser) parseFor() Stmt {
 		cond := p.parseForCond()
 		p.expectSemi()
 		post := p.parseForPost()
-		return p.parseForBody(pos, init, cond, post, nil)
+		return p.parseForBody(pos, lb, init, cond, post, nil)
 	}
 
 	exprStmt, ok := init.(*ExprStmt)
 	if !ok {
 		p.fail(init.Pos(), "for condition must be expression")
 	}
-	return p.parseForBody(pos, nil, exprStmt.Exp, nil, nil)
+	return p.parseForBody(pos, lb, nil, exprStmt.Exp, nil, nil)
 }
 
 func (p *Parser) isForRangeStart() bool {
@@ -401,7 +495,7 @@ func (p *Parser) isForRangeStart() bool {
 	return next.K == KW_RANGE
 }
 
-func (p *Parser) parseForRange(pos Pos) Stmt {
+func (p *Parser) parseForRange(pos Pos, lb stmtLabel) Stmt {
 	decl := false
 	if p.cur.K == KW_LET {
 		decl = true
@@ -424,7 +518,7 @@ func (p *Parser) parseForRange(pos Pos) Stmt {
 	p.expect(KW_RANGE)
 	src := p.parseExpr()
 	rng := &ForRange{Key: key, Val: val, Expr: src, Declare: decl}
-	return p.parseForBody(pos, nil, nil, nil, rng)
+	return p.parseForBody(pos, lb, nil, nil, nil, rng)
 }
 
 func (p *Parser) parseForCond() Expr {
@@ -464,29 +558,62 @@ func (p *Parser) parseForClause(allowLet bool, label string) Stmt {
 	return p.parseExprStmt()
 }
 
-func (p *Parser) parseForBody(pos Pos, init Stmt, cond Expr, post Stmt, rng *ForRange) Stmt {
-	p.loopDepth++
-	p.breakDepth++
+func (p *Parser) parseForBody(
+	pos Pos,
+	lb stmtLabel,
+	init Stmt,
+	cond Expr,
+	post Stmt,
+	rng *ForRange,
+) Stmt {
+	p.pushControl(controlLoop, lb)
 	body := p.parseBlock()
-	p.loopDepth--
-	p.breakDepth--
-	return &ForStmt{P: pos, Init: init, Cond: cond, Post: post, Range: rng, Body: body}
+	p.popControl()
+	return &ForStmt{
+		P:        pos,
+		Label:    lb.name,
+		LabelPos: lb.pos,
+		Init:     init,
+		Cond:     cond,
+		Post:     post,
+		Range:    rng,
+		Body:     body,
+	}
 }
 
 func (p *Parser) parseBreak() Stmt {
 	pos := p.expect(KW_BREAK).P
-	if p.breakDepth == 0 {
-		p.fail(pos, "break outside loop or switch")
+	tok, ok := p.labelRef()
+	if !ok {
+		if len(p.controls) == 0 {
+			p.fail(pos, "break outside loop or switch")
+		}
+		return &BreakStmt{P: pos}
 	}
-	return &BreakStmt{P: pos}
+	if p.findControl(tok.Lit) == nil {
+		p.fail(tok.P, fmt.Sprintf("undefined label %q", tok.Lit))
+	}
+	return &BreakStmt{P: pos, Label: tok.Lit}
 }
 
 func (p *Parser) parseContinue() Stmt {
 	pos := p.expect(KW_CONTINUE).P
-	if p.loopDepth == 0 {
-		p.fail(pos, "continue outside loop")
+	tok, ok := p.labelRef()
+	if !ok {
+		if !p.inLoop() {
+			p.fail(pos, "continue outside loop")
+		}
+		return &ContinueStmt{P: pos}
 	}
-	return &ContinueStmt{P: pos}
+
+	t := p.findControl(tok.Lit)
+	if t == nil {
+		p.fail(tok.P, fmt.Sprintf("undefined label %q", tok.Lit))
+	}
+	if t.kind != controlLoop {
+		p.fail(tok.P, fmt.Sprintf("continue label %q is not a loop", tok.Lit))
+	}
+	return &ContinueStmt{P: pos, Label: tok.Lit}
 }
 
 func (p *Parser) parseBlock() *Block {

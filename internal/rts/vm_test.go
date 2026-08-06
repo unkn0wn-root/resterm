@@ -575,6 +575,152 @@ for let i = 0; i < 4; i = i + 1 {
 	wantStr(t, comp, "out", "0two3")
 }
 
+func TestLabeledBreakEscapesLoopFromSwitch(t *testing.T) {
+	src := `
+let out = ""
+outer: for let i = 0; i < 5; i = i + 1 {
+  switch i {
+  case 3:
+    break outer
+  }
+  out = out + str(i)
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "012")
+}
+
+func TestLabeledBreakPropagatesThroughNesting(t *testing.T) {
+	src := `
+let out = ""
+outer: for let i = 0; i < 3; i = i + 1 {
+  for let j = 0; j < 3; j = j + 1 {
+    switch j {
+    case 1:
+      switch i {
+      case 1:
+        break outer
+      }
+    }
+    out = out + str(i) + str(j)
+  }
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "00010210")
+}
+
+// a labeled continue runs the target loop's post once and skips the post of
+// every loop it travels through
+func TestLabeledContinueRunsTargetPostOnce(t *testing.T) {
+	src := `
+let posts = 0
+let inner = 0
+fn bumpOuter(i) {
+  posts = posts + 1
+  return i + 1
+}
+fn bumpInner(j) {
+  inner = inner + 1
+  return j + 1
+}
+let out = ""
+outer: for let i = 0; i < 3; i = bumpOuter(i) {
+  for let j = 0; j < 3; j = bumpInner(j) {
+    continue outer
+  }
+  out = out + "unreachable"
+}
+`
+	comp := execModule(t, src)
+	wantNum(t, comp, "posts", 3)
+	wantNum(t, comp, "inner", 0)
+	wantStr(t, comp, "out", "")
+}
+
+func TestLabeledRangeBreakAndContinue(t *testing.T) {
+	src := `
+let out = ""
+outer: for let i, row range [[1, 2], [3, 9], [5, 6]] {
+  for let j, v range row {
+    switch v {
+    case 9:
+      continue outer
+    case 5:
+      break outer
+    }
+    out = out + str(v)
+  }
+  out = out + "|"
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "12|3")
+}
+
+func TestLabeledBreakLeavesOuterSwitch(t *testing.T) {
+	src := `
+let out = ""
+outer: switch 1 {
+case 1:
+  out = out + "a"
+  switch 2 {
+  case 2:
+    out = out + "b"
+    break outer
+  }
+  out = out + "c"
+}
+out = out + "d"
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "abd")
+}
+
+// a labeled break travels past the loop it is written in when the label names
+// an enclosing switch
+func TestLabeledBreakSkipsLoopToReachSwitch(t *testing.T) {
+	src := `
+let out = ""
+sw: switch 1 {
+case 1:
+  for let i = 0; i < 3; i = i + 1 {
+    switch i {
+    case 1:
+      break sw
+    }
+    out = out + str(i)
+  }
+  out = out + "tail"
+}
+out = out + "end"
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "0end")
+}
+
+func TestLabeledSignalsInsideFunction(t *testing.T) {
+	src := `
+fn firstMissing(rows) {
+  outer: for let i, row range rows {
+    for let j, v range row {
+      switch v {
+      case null:
+        continue outer
+      }
+    }
+    return i
+  }
+  return -1
+}
+let a = firstMissing([[1, null], [2, 3]])
+let b = firstMissing([[null], [null]])
+`
+	comp := execModule(t, src)
+	wantNum(t, comp, "a", 1)
+	wantNum(t, comp, "b", -1)
+}
+
 func TestSwitchReturnPropagates(t *testing.T) {
 	src := `
 fn grade(score) {

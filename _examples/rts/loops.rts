@@ -71,6 +71,34 @@ export fn grade(score) {
   }
 }
 
+# a plain break would only leave the switch, so the label is what stops the loop
+export fn firstDenied(codes) {
+  let found = -1
+  outer: for let i, code range codes {
+    switch code {
+    case 401, 403:
+      found = code
+      break outer
+    }
+  }
+  return found
+}
+
+# continue outer abandons the current row as soon as a hole shows up
+export fn fullRows(rows) {
+  let out = ""
+  outer: for let i, row range rows {
+    for let j, value range row {
+      switch value {
+      case null:
+        continue outer
+      }
+    }
+    out = out + str(i)
+  }
+  return out
+}
+
 # break leaves the switch and the loop keeps going, while continue skips to the
 # next iteration of the loop
 export fn switchBreakScope(items) {

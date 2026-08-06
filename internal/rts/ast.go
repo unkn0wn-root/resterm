@@ -94,23 +94,28 @@ type CaseClause struct {
 }
 
 // SwitchStmt keeps its clauses in source order because evaluation stops at the
-// first match. Tag is nil for the tagless form, which tests clauses for truth
+// first match. Tag is nil for the tagless form, which tests clauses for truth.
+// Label is the optional name a break can target and is empty when unlabeled
 type SwitchStmt struct {
-	P       Pos
-	Tag     Expr
-	Clauses []CaseClause
+	P        Pos
+	Label    string
+	LabelPos Pos
+	Tag      Expr
+	Clauses  []CaseClause
 }
 
 func (*SwitchStmt) stmtNode()  {}
 func (s *SwitchStmt) Pos() Pos { return s.P }
 
 type ForStmt struct {
-	P     Pos
-	Init  Stmt
-	Cond  Expr
-	Post  Stmt
-	Range *ForRange
-	Body  *Block
+	P        Pos
+	Label    string
+	LabelPos Pos
+	Init     Stmt
+	Cond     Expr
+	Post     Stmt
+	Range    *ForRange
+	Body     *Block
 }
 
 func (*ForStmt) stmtNode()  {}
@@ -123,15 +128,21 @@ type ForRange struct {
 	Declare bool
 }
 
+// Label names the enclosing for or switch to leave. It is empty for the plain
+// form, which targets the nearest one
 type BreakStmt struct {
-	P Pos
+	P     Pos
+	Label string
 }
 
 func (*BreakStmt) stmtNode()  {}
 func (s *BreakStmt) Pos() Pos { return s.P }
 
+// Label names the enclosing loop to resume. It is empty for the plain form,
+// which targets the nearest one
 type ContinueStmt struct {
-	P Pos
+	P     Pos
+	Label string
 }
 
 func (*ContinueStmt) stmtNode()  {}

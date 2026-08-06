@@ -445,6 +445,159 @@ func TestParseSwitchBreakAndContinue(t *testing.T) {
 	}
 }
 
+func parseOneStmt(t *testing.T, src string) Stmt {
+	t.Helper()
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(m.Stmts) != 1 {
+		t.Fatalf("expected 1 stmt, got %d", len(m.Stmts))
+	}
+	return m.Stmts[0]
+}
+
+func TestParseLabeledFor(t *testing.T) {
+	st := parseOneStmt(t, "outer: for let i = 0; i < 3; i = i + 1 {\n  break outer\n}\n")
+	loop, ok := st.(*ForStmt)
+	if !ok {
+		t.Fatalf("expected for stmt, got %T", st)
+	}
+	if loop.Label != "outer" {
+		t.Fatalf("label: got %q, want %q", loop.Label, "outer")
+	}
+	if loop.LabelPos.Line != 1 || loop.LabelPos.Col != 1 {
+		t.Fatalf("label pos: got %d:%d, want 1:1", loop.LabelPos.Line, loop.LabelPos.Col)
+	}
+	if loop.Pos().Col != 8 {
+		t.Fatalf("for pos: got col %d, want 8", loop.Pos().Col)
+	}
+	brk, ok := loop.Body.Stmts[0].(*BreakStmt)
+	if !ok {
+		t.Fatalf("expected break stmt, got %T", loop.Body.Stmts[0])
+	}
+	if brk.Label != "outer" {
+		t.Fatalf("break label: got %q, want %q", brk.Label, "outer")
+	}
+}
+
+func TestParseLabeledSwitchAndRange(t *testing.T) {
+	st := parseOneStmt(t, "sw: switch x {\ncase 1:\n  break sw\ndefault:\n  y = 2\n}\n")
+	sw, ok := st.(*SwitchStmt)
+	if !ok {
+		t.Fatalf("expected switch stmt, got %T", st)
+	}
+	if sw.Label != "sw" {
+		t.Fatalf("label: got %q, want %q", sw.Label, "sw")
+	}
+	if len(sw.Clauses) != 2 || sw.Clauses[1].Exprs != nil {
+		t.Fatalf("expected default to stay a clause, got %+v", sw.Clauses)
+	}
+
+	st = parseOneStmt(t, "rows: for let i, row range items {\n  continue rows\n}\n")
+	loop, ok := st.(*ForStmt)
+	if !ok {
+		t.Fatalf("expected for stmt, got %T", st)
+	}
+	if loop.Label != "rows" || loop.Range == nil {
+		t.Fatalf("expected labeled range loop, got %+v", loop)
+	}
+	cont, ok := loop.Body.Stmts[0].(*ContinueStmt)
+	if !ok {
+		t.Fatalf("expected continue stmt, got %T", loop.Body.Stmts[0])
+	}
+	if cont.Label != "rows" {
+		t.Fatalf("continue label: got %q, want %q", cont.Label, "rows")
+	}
+}
+
+func TestParseLabelOnOwnLine(t *testing.T) {
+	st := parseOneStmt(t, "outer:\nfor {\n  break outer\n}\n")
+	loop, ok := st.(*ForStmt)
+	if !ok {
+		t.Fatalf("expected for stmt, got %T", st)
+	}
+	if loop.Label != "outer" {
+		t.Fatalf("label: got %q, want %q", loop.Label, "outer")
+	}
+}
+
+// the lexer closes the statement after break and continue, so a label on the
+// next line is a separate expression statement rather than a target
+func TestParseBreakLabelMustShareLine(t *testing.T) {
+	st := parseOneStmt(t, "outer: for {\n  break\n  outer\n}\n")
+	loop := st.(*ForStmt)
+	if len(loop.Body.Stmts) != 2 {
+		t.Fatalf("expected 2 stmts, got %d", len(loop.Body.Stmts))
+	}
+	brk, ok := loop.Body.Stmts[0].(*BreakStmt)
+	if !ok || brk.Label != "" {
+		t.Fatalf("expected unlabeled break, got %T %+v", loop.Body.Stmts[0], loop.Body.Stmts[0])
+	}
+	if _, ok := loop.Body.Stmts[1].(*ExprStmt); !ok {
+		t.Fatalf("expected expr stmt, got %T", loop.Body.Stmts[1])
+	}
+}
+
+func TestParseLabelReuseAfterStatementEnds(t *testing.T) {
+	src := "outer: for { break outer }\nouter: switch x {\ncase 1:\n  break outer\n}\n"
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(m.Stmts) != 2 {
+		t.Fatalf("expected 2 stmts, got %d", len(m.Stmts))
+	}
+}
+
+func TestParseLabelErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		msg  string
+	}{
+		{"label on let", "outer: let x = 1\n", "label must be followed by for or switch, got let"},
+		{"label on if", "outer: if x {\n}\n", "label must be followed by for or switch, got if"},
+		{"label on block", "outer: {\n}\n", "label must be followed by for or switch, got {"},
+		{"blank label", "_: for {\n}\n", `invalid label "_"`},
+		{"default label", "default: for {\n}\n", "default outside switch body"},
+		{"undefined break label", "for {\n  break missing\n}\n", `undefined label "missing"`},
+		{"undefined continue label", "for {\n  continue missing\n}\n", `undefined label "missing"`},
+		{
+			"continue targets switch",
+			"sw: switch x {\ncase 1:\n  for {\n    continue sw\n  }\n}\n",
+			`continue label "sw" is not a loop`,
+		},
+		{
+			"duplicate active label",
+			"outer: for {\n  outer: for {\n  }\n}\n",
+			`duplicate label "outer", active since 1:1`,
+		},
+		{
+			"label across function boundary",
+			"outer: for {\n  fn f() {\n    break outer\n  }\n}\n",
+			`undefined label "outer"`,
+		},
+		{
+			"label out of scope",
+			"a: for {\n}\nb: for {\n  break a\n}\n",
+			`undefined label "a"`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseModule("test", []byte(tc.src))
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+			}
+			if pe.Msg != tc.msg {
+				t.Fatalf("msg: got %q, want %q", pe.Msg, tc.msg)
+			}
+		})
+	}
+}
+
 func TestParseDefaultStaysIdentifier(t *testing.T) {
 	src := "let a = default(null, \"x\")\nlet b = rts.default(a, \"y\")\nlet c = {default: 1}.default\n"
 	m, err := ParseModule("test", []byte(src))

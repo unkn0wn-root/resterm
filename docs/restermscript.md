@@ -249,7 +249,7 @@ Rules:
 - A clause body can be empty, in which case a match does nothing.
 - At most one `default` is allowed. It can sit anywhere among the cases and runs only when no case matched.
 - Every clause is its own scope. `let` and `const` inside a clause do not escape it, while assignment to an outer binding works as usual.
-- `break` leaves the nearest enclosing switch or loop. A `break` inside a switch that sits in a loop ends the switch, and the loop continues.
+- `break` leaves the nearest enclosing switch or loop. A `break` inside a switch that sits in a loop ends the switch, and the loop continues. Use a label when you need to leave the loop instead.
 - `continue` always targets the nearest enclosing loop, including from inside a switch.
 - `return`, runtime errors, and hard aborts propagate out of the switch normally.
 
@@ -275,7 +275,7 @@ default:
 }
 ```
 
-Switch initializers, type switches, switch expressions that produce a value, `fallthrough`, and labels are not part of the language.
+Switch initializers, type switches, switch expressions that produce a value, and `fallthrough` are not part of the language. A switch can carry a label so that a `break` deeper inside can leave it by name, described under [Labels](#labels).
 
 This statement is separate from the `@switch` workflow directive. `@switch` selects a workflow step in an `.http` file and shares the same equality relation, while `switch` is a statement inside RestermScript code.
 
@@ -291,7 +291,7 @@ for let k, v range expr { ... }
 
 The language also supports a three clause loop with init, condition, and post clauses. The clauses are separated by the semicolon token.
 
-Rules for loops are consistent. `continue` is valid only inside loops, and `break` is valid inside loops and switches. `const` is not allowed in loop headers. `for let` introduces loop scoped variables that do not escape the loop block. `for range` without `let` assigns to existing variables.
+Rules for loops are consistent. `continue` is valid only inside loops, and `break` is valid inside loops and switches. Both accept a label to target an enclosing statement by name. `const` is not allowed in loop headers. `for let` introduces loop scoped variables that do not escape the loop block. `for range` without `let` assigns to existing variables.
 
 ### range semantics
 
@@ -308,6 +308,52 @@ for let i, ch range "go" {
   // i is the byte index, ch is "g" and then "o"
 }
 ```
+
+### Labels
+
+A label names a `for` or a `switch` so that a `break` or `continue` deeper inside can target it by name. Without labels there is no way to leave a loop from inside a switch, because a plain `break` stops at the switch.
+
+```
+outer: for let i = 0; i < 10; i = i + 1 {
+  switch i {
+  case 5:
+    break outer
+  }
+}
+```
+
+`continue label` resumes the named loop, skipping the rest of every construct in between:
+
+```
+outer: for let i, row range rows {
+  for let j, value range row {
+    switch value {
+    case null:
+      continue outer
+    }
+  }
+}
+```
+
+Grammar:
+
+```
+LabeledStmt  = identifier ":" ( ForStmt | SwitchStmt ) .
+BreakStmt    = "break" [ identifier ] .
+ContinueStmt = "continue" [ identifier ] .
+```
+
+Rules:
+
+- A label can decorate only a `for` or a `switch`. There are no labeled blocks, no labels on `if` or `fn`, and no `goto`.
+- The unlabeled forms are unchanged. `break` still leaves the nearest switch or loop, and `continue` still resumes the nearest loop.
+- `break label` leaves the named statement. `continue label` resumes the named loop and runs that loop's post clause once, skipping the post clause of every loop it passed through.
+- The target must lexically enclose the `break` or `continue`, and labels do not cross a function boundary.
+- `continue` must name a loop. Naming a switch is an error.
+- Labels live in their own namespace, so a label never collides with a variable or function of the same name.
+- Two active labels cannot share a name, but a name is free again once its statement ends, so sibling statements can reuse it.
+- `_` and `default` are not valid labels.
+- The label of a `break` or `continue` has to stay on the same line as the keyword, because a newline there already ends the statement. A label in front of a `for` or `switch` may sit on its own line.
 
 ## Modules and exports
 
