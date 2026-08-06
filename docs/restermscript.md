@@ -85,7 +85,7 @@ export module fn let const if elif else switch case try return for break continu
 true false null and or not
 ```
 
-`default` is not reserved. It is read as a clause label only at the top level of a `switch` body, so the `default(a, b)` and `rts.default(a, b)` helpers stay available as ordinary identifiers.
+`default` is not reserved. It is read as a clause label only at the top level of a `switch` body, so the deprecated `default(a, b)` and `rts.default(a, b)` helpers stay available as ordinary identifiers. Prefer `a ?? b`.
 
 ### Literals
 
@@ -113,6 +113,36 @@ String escapes include `\n`, `\r`, `\t`, `\\`, `\"`, and `\'`. Dict keys in lite
 - The ternary operator `cond ? a : b` selects between two values.
 
 `+` adds numbers or concatenates strings. Non numeric values are converted to string using `str()`. Comparisons only work for numbers or strings, and equality only works for primitive types.
+
+### Fallback values with ??
+
+`??` is the way to supply a fallback. It returns the left side unless it is null, and it is lazy: the right side is only evaluated when the left side is null.
+
+```
+let token = vars.get("auth.token") ?? env.get("auth.token")
+let label = candidate ?? "unknown"
+```
+
+Laziness means the fallback can be expensive or failing without cost when it is not needed:
+
+```
+"ok" ?? fail("boom")   # "ok", fail is never called
+```
+
+`??` reacts to null only. `false`, `0`, `""`, the empty list, and the empty dict are real values and pass straight through:
+
+```
+0 ?? 5      # 0
+"" ?? "x"   # ""
+```
+
+When you do want any falsey value replaced, that is a different question and the ternary answers it:
+
+```
+let value = candidate ? candidate : "something"
+```
+
+`??` does not rescue an undefined name. `missingName ?? "fallback"` is still an error, which keeps typos visible. Optional lookups return null explicitly instead, so `vars.get("missing") ?? "fallback"` works.
 
 ### Error handling with try
 
@@ -264,15 +294,19 @@ case 1:
 
 Case expressions are arbitrary runtime expressions, so duplicate cases are not reported at parse time. The first one written wins.
 
-Because `default` stays an ordinary identifier, the stdlib helper of the same name still works, including inside a switch body:
+Because `default` stays an ordinary identifier, the deprecated helper of the same name still parses inside a switch body, so existing files keep working:
 
 ```
-let value = default(null, "fallback")
-
 switch value {
 default:
-  value = rts.default(value, "other")
+  value = rts.default(value, "other")   # deprecated, prefer value ?? "other"
 }
+```
+
+New code should use `??`:
+
+```
+let value = candidate ?? "fallback"
 ```
 
 Switch initializers, type switches, switch expressions that produce a value, and `fallthrough` are not part of the language. A switch can carry a label so that a `break` deeper inside can leave it by name, described under [Labels](#labels).
@@ -393,7 +427,7 @@ RTS provides a small standard library that covers common request needs without e
 - `rts.contains(haystack, needle)` checks whether a value is contained in a string, list, or dict.
 - `rts.match(pattern, text)` applies a regular expression to text and returns true when it matches.
 - `rts.str(x)` converts a value to a string, using JSON for lists and dicts.
-- `rts.default(a, b)` returns `a` unless it is null, otherwise it returns `b`.
+- `rts.default(a, b)` returns `a` unless it is null, otherwise it returns `b`. Deprecated, use `a ?? b`. It still works, but as a function call it evaluates both arguments, so `default("ok", fail("boom"))` fails where `"ok" ?? fail("boom")` returns `"ok"`.
 - `rts.num(x[, def])` converts a value to a number, or returns `def` when conversion fails.
 - `rts.int(x[, def])` converts a value to an integer, or returns `def` when conversion fails.
 - `rts.bool(x[, def])` converts a value to a bool, or returns `def` when conversion fails.
