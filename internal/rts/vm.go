@@ -62,7 +62,7 @@ func Exec(ctx *Ctx, mod *Mod, pre map[string]Value) (*Comp, error) {
 				return nil, Errf(ctx, st.Pos(), "return outside fn")
 			}
 			if b, ok := err.(breakSig); ok {
-				return nil, Errf(ctx, b.pos, "break outside loop")
+				return nil, Errf(ctx, b.pos, "break outside loop or switch")
 			}
 			if c, ok := err.(continueSig); ok {
 				return nil, Errf(ctx, c.pos, "continue outside loop")
@@ -164,6 +164,8 @@ func (vm *VM) execStmt(env *Env, exp map[string]Value, st Stmt) error {
 			return vm.execBlock(env, exp, s.Else)
 		}
 		return nil
+	case *SwitchStmt:
+		return vm.execSwitch(env, exp, s)
 	case *ForStmt:
 		return vm.execFor(env, exp, s)
 	case *BreakStmt:
@@ -189,6 +191,66 @@ func (vm *VM) execBlock(up *Env, exp map[string]Value, b *Block) error {
 		}
 	}
 	return nil
+}
+
+// execSwitch evaluates the tag once, then walks clauses in source order and
+// runs the first match. The default clause is remembered rather than run in
+// place so it can sit anywhere between the cases
+func (vm *VM) execSwitch(up *Env, exp map[string]Value, s *SwitchStmt) error {
+	var tag Value
+	if s.Tag != nil {
+		v, err := vm.eval(up, s.Tag)
+		if err != nil {
+			return err
+		}
+		tag = v
+	}
+
+	var def *Block
+	for i := range s.Clauses {
+		cl := &s.Clauses[i]
+		if cl.Exprs == nil {
+			def = cl.Body
+			continue
+		}
+		match, err := vm.matchCase(up, s.Tag != nil, tag, cl.Exprs)
+		if err != nil {
+			return err
+		}
+		if match {
+			return vm.execClause(up, exp, cl.Body)
+		}
+	}
+	return vm.execClause(up, exp, def)
+}
+
+func (vm *VM) matchCase(env *Env, tagged bool, tag Value, exprs []Expr) (bool, error) {
+	for _, ex := range exprs {
+		v, err := vm.eval(env, ex)
+		if err != nil {
+			return false, err
+		}
+		if tagged {
+			if ValueEqual(tag, v) {
+				return true, nil
+			}
+			continue
+		}
+		if v.IsTruthy() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// execClause runs a clause body and stops break at the switch. Everything else
+// (return, continue, aborts, runtime errors) keeps propagating
+func (vm *VM) execClause(up *Env, exp map[string]Value, body *Block) error {
+	err := vm.execBlock(up, exp, body)
+	if _, ok := err.(breakSig); ok {
+		return nil
+	}
+	return err
 }
 
 func (vm *VM) execFor(up *Env, exp map[string]Value, s *ForStmt) error {
@@ -597,7 +659,7 @@ func (vm *VM) callVal(pos Pos, cal Value, args []Value) (Value, error) {
 				return r.v, nil
 			}
 			if b, ok := err.(breakSig); ok {
-				return Null(), Errf(vm.ctx, b.pos, "break outside loop")
+				return Null(), Errf(vm.ctx, b.pos, "break outside loop or switch")
 			}
 			if c, ok := err.(continueSig); ok {
 				return Null(), Errf(vm.ctx, c.pos, "continue outside loop")
@@ -713,9 +775,9 @@ func (vm *VM) evalBin(env *Env, e *Binary) (Value, error) {
 			return Num(math.Mod(ln, rn)), nil
 		}
 	case OpEq:
-		return Bool(eq(l, r)), nil
+		return Bool(ValueEqual(l, r)), nil
 	case OpNe:
-		return Bool(!eq(l, r)), nil
+		return Bool(!ValueEqual(l, r)), nil
 	case OpLt, OpLe, OpGt, OpGe:
 		return cmp(vm.ctx, e.Pos(), e.Op, l, r)
 	}
@@ -758,24 +820,6 @@ func (vm *VM) checkStr(pos Pos, s string) error {
 		return Errf(vm.ctx, pos, "string too long")
 	}
 	return nil
-}
-
-func eq(a, b Value) bool {
-	if a.K != b.K {
-		return false
-	}
-	switch a.K {
-	case VNull:
-		return true
-	case VBool:
-		return a.B == b.B
-	case VNum:
-		return a.N == b.N
-	case VStr:
-		return a.S == b.S
-	default:
-		return false
-	}
 }
 
 func cmp(ctx *Ctx, pos Pos, op BinOp, a, b Value) (Value, error) {

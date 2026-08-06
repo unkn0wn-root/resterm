@@ -69,6 +69,14 @@ func walkStmt(st rts.Stmt, add func(string)) {
 			walkBlock(el.Body, add)
 		}
 		walkBlock(s.Else, add)
+	case *rts.SwitchStmt:
+		walkExpr(s.Tag, add)
+		for _, cl := range s.Clauses {
+			for _, ex := range cl.Exprs {
+				walkExpr(ex, add)
+			}
+			walkBlock(cl.Body, add)
+		}
 	case *rts.ForStmt:
 		walkStmt(s.Init, add)
 		walkExpr(s.Cond, add)

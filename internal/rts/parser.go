@@ -5,12 +5,15 @@ import (
 	"strconv"
 )
 
+// loopDepth gates continue, breakDepth gates break. Loops raise both, switches
+// raise only breakDepth so continue inside a switch still targets the loop
 type Parser struct {
-	lx        *Lexer
-	cur       Tok
-	peek      Tok
-	ahead     []Tok
-	loopDepth int
+	lx         *Lexer
+	cur        Tok
+	peek       Tok
+	ahead      []Tok
+	loopDepth  int
+	breakDepth int
 }
 
 func NewParserAt(path string, src []byte, pos Pos) *Parser {
@@ -114,6 +117,10 @@ func (p *Parser) parseStmt() Stmt {
 		return p.parseFn(false)
 	case KW_IF:
 		return p.parseIf()
+	case KW_SWITCH:
+		return p.parseSwitch()
+	case KW_CASE:
+		p.fail(p.cur.P, "case outside switch body")
 	case KW_FOR:
 		return p.parseFor()
 	case KW_BREAK:
@@ -125,6 +132,9 @@ func (p *Parser) parseStmt() Stmt {
 	case IDENT:
 		if p.peek.K == ASSIGN {
 			return p.parseAssign()
+		}
+		if p.isDefaultClause() {
+			p.fail(p.cur.P, "default outside switch body")
 		}
 	}
 	return p.parseExprStmt()
@@ -189,10 +199,10 @@ func (p *Parser) parseFn(exp bool) Stmt {
 	p.expect(LPAREN)
 	params := p.parseParams()
 	p.expect(RPAREN)
-	savedDepth := p.loopDepth
-	p.loopDepth = 0
+	savedLoop, savedBreak := p.loopDepth, p.breakDepth
+	p.loopDepth, p.breakDepth = 0, 0
 	body := p.parseBlock()
-	p.loopDepth = savedDepth
+	p.loopDepth, p.breakDepth = savedLoop, savedBreak
 	return &FnDef{P: pos, Exported: exp, Name: name, Params: params, Body: body}
 }
 
@@ -244,6 +254,95 @@ func (p *Parser) parseIf() Stmt {
 		els = p.parseBlock()
 	}
 	return &IfStmt{P: pos, Cond: cond, Then: then, Elifs: elifs, Else: els}
+}
+
+// parseSwitch reads both switch forms. A brace right after the keyword means
+// the tagless form, mirroring Go: a dict literal tag has to be parenthesized
+func (p *Parser) parseSwitch() Stmt {
+	pos := p.expect(KW_SWITCH).P
+	var tag Expr
+	if p.cur.K != LBRACE {
+		tag = p.parseExpr()
+	}
+	p.expect(LBRACE)
+	p.breakDepth++
+	clauses := p.parseCaseClauses()
+	p.breakDepth--
+	p.expect(RBRACE)
+	return &SwitchStmt{P: pos, Tag: tag, Clauses: clauses}
+}
+
+func (p *Parser) parseCaseClauses() []CaseClause {
+	var out []CaseClause
+	seenDefault := false
+	for {
+		p.skipSemi()
+		switch {
+		case p.cur.K == RBRACE:
+			return out
+		case p.cur.K == EOF:
+			p.fail(p.cur.P, "unterminated switch")
+		case p.cur.K == KW_CASE:
+			out = append(out, p.parseCase())
+		case p.isDefaultClause():
+			if seenDefault {
+				p.fail(p.cur.P, "duplicate default in switch")
+			}
+			seenDefault = true
+			out = append(out, p.parseDefault())
+		default:
+			p.failCur(fmt.Sprintf("expected case or default, got %s", p.cur.K))
+		}
+	}
+}
+
+func (p *Parser) parseCase() CaseClause {
+	pos := p.expect(KW_CASE).P
+	exprs := p.parseCaseExprs()
+	colon := p.expect(COLON).P
+	return CaseClause{P: pos, Exprs: exprs, Body: p.parseClauseBody(colon)}
+}
+
+func (p *Parser) parseCaseExprs() []Expr {
+	var out []Expr
+	for {
+		if p.cur.K == COLON {
+			p.fail(p.cur.P, "case requires an expression")
+		}
+		out = append(out, p.parseExpr())
+		if p.cur.K != COMMA {
+			return out
+		}
+		p.next()
+	}
+}
+
+func (p *Parser) parseDefault() CaseClause {
+	pos := p.cur.P
+	p.next()
+	colon := p.expect(COLON).P
+	return CaseClause{P: pos, Body: p.parseClauseBody(colon)}
+}
+
+func (p *Parser) parseClauseBody(pos Pos) *Block {
+	var out []Stmt
+	for {
+		p.skipSemi()
+		if p.cur.K == RBRACE || p.cur.K == KW_CASE || p.isDefaultClause() {
+			return &Block{P: pos, Stmts: out}
+		}
+		if p.cur.K == EOF {
+			p.fail(p.cur.P, "unterminated switch")
+		}
+		out = append(out, p.parseStmt())
+	}
+}
+
+// isDefaultClause matches the contextual default label. Nothing else in the
+// language starts a statement with an identifier followed by a colon, so
+// default(a, b) and dict keys stay untouched
+func (p *Parser) isDefaultClause() bool {
+	return p.cur.K == IDENT && p.cur.Lit == defaultClause && p.peek.K == COLON
 }
 
 func (p *Parser) parseFor() Stmt {
@@ -355,7 +454,7 @@ func (p *Parser) parseForClause(allowLet bool, label string) Stmt {
 		return p.parseLet(false, false)
 	case KW_CONST:
 		p.fail(p.cur.P, fmt.Sprintf("for %s clause cannot use const", label))
-	case KW_EXPORT, KW_FN, KW_IF, KW_FOR, KW_RETURN, KW_BREAK, KW_CONTINUE, KW_RANGE:
+	case KW_EXPORT, KW_FN, KW_IF, KW_SWITCH, KW_FOR, KW_RETURN, KW_BREAK, KW_CONTINUE, KW_RANGE:
 		p.fail(p.cur.P, fmt.Sprintf("invalid for %s clause", label))
 	case IDENT:
 		if p.peek.K == ASSIGN {
@@ -367,15 +466,17 @@ func (p *Parser) parseForClause(allowLet bool, label string) Stmt {
 
 func (p *Parser) parseForBody(pos Pos, init Stmt, cond Expr, post Stmt, rng *ForRange) Stmt {
 	p.loopDepth++
+	p.breakDepth++
 	body := p.parseBlock()
 	p.loopDepth--
+	p.breakDepth--
 	return &ForStmt{P: pos, Init: init, Cond: cond, Post: post, Range: rng, Body: body}
 }
 
 func (p *Parser) parseBreak() Stmt {
 	pos := p.expect(KW_BREAK).P
-	if p.loopDepth == 0 {
-		p.fail(pos, "break outside loop")
+	if p.breakDepth == 0 {
+		p.fail(pos, "break outside loop or switch")
 	}
 	return &BreakStmt{P: pos}
 }

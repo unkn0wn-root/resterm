@@ -88,6 +88,9 @@ func (v Value) IsTruthy() bool {
 	}
 }
 
+// ValueEqual is the one equality relation in the language. It backs ==, !=,
+// switch case matching, workflow @switch, and the collection helpers: kinds
+// must match, primitives compare by value, and collections are never equal
 func ValueEqual(a, b Value) bool {
 	if a.K != b.K {
 		return false

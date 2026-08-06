@@ -85,6 +85,25 @@ type IfStmt struct {
 func (*IfStmt) stmtNode()  {}
 func (s *IfStmt) Pos() Pos { return s.P }
 
+// CaseClause is one clause of a switch. Exprs is nil for the default clause
+// and holds at least one expression otherwise
+type CaseClause struct {
+	P     Pos
+	Exprs []Expr
+	Body  *Block
+}
+
+// SwitchStmt keeps its clauses in source order because evaluation stops at the
+// first match. Tag is nil for the tagless form, which tests clauses for truth
+type SwitchStmt struct {
+	P       Pos
+	Tag     Expr
+	Clauses []CaseClause
+}
+
+func (*SwitchStmt) stmtNode()  {}
+func (s *SwitchStmt) Pos() Pos { return s.P }
+
 type ForStmt struct {
 	P     Pos
 	Init  Stmt

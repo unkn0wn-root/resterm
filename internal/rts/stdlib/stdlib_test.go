@@ -51,6 +51,34 @@ func TestStdlibCore(t *testing.T) {
 	}
 }
 
+// default is a contextual switch label, so the stdlib helper of the same name
+// has to stay callable in both spellings, including inside a switch body
+func TestStdlibDefaultSurvivesSwitch(t *testing.T) {
+	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	mod := `
+fn label(code) {
+  let out = default(null, "fallback")
+  switch code {
+  case 200:
+    out = default("ok", "unused")
+  default:
+    out = rts.default(null, "other")
+  }
+  return out
+}
+`
+	if v := evalExprMod(t, ctx, mod, `label(200)`); v.K != rts.VStr || v.S != "ok" {
+		t.Fatalf("expected ok, got %+v", v)
+	}
+	if v := evalExprMod(t, ctx, mod, `label(500)`); v.K != rts.VStr || v.S != "other" {
+		t.Fatalf("expected other, got %+v", v)
+	}
+	v := evalExprCtx(t, ctx, `default(null, "fallback")`)
+	if v.K != rts.VStr || v.S != "fallback" {
+		t.Fatalf("expected fallback, got %+v", v)
+	}
+}
+
 func TestStdlibCrypto(t *testing.T) {
 	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "crypto.sha256(\"abc\")")

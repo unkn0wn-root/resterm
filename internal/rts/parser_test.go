@@ -219,6 +219,243 @@ func TestParseBreakContinueOutsideLoop(t *testing.T) {
 	}
 }
 
+func parseSwitchStmt(t *testing.T, src string) *SwitchStmt {
+	t.Helper()
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(m.Stmts) != 1 {
+		t.Fatalf("expected 1 stmt, got %d", len(m.Stmts))
+	}
+	sw, ok := m.Stmts[0].(*SwitchStmt)
+	if !ok {
+		t.Fatalf("expected switch stmt, got %T", m.Stmts[0])
+	}
+	return sw
+}
+
+func TestParseSwitchTagged(t *testing.T) {
+	src := "switch code {\ncase 200, 201:\n  out = \"ok\"\ncase 401:\n  out = \"no\"\ndefault:\n  out = \"?\"\n}\n"
+	sw := parseSwitchStmt(t, src)
+	if sw.Tag == nil {
+		t.Fatalf("expected tag expression")
+	}
+	if len(sw.Clauses) != 3 {
+		t.Fatalf("expected 3 clauses, got %d", len(sw.Clauses))
+	}
+	if len(sw.Clauses[0].Exprs) != 2 {
+		t.Fatalf("expected 2 case expressions, got %d", len(sw.Clauses[0].Exprs))
+	}
+	if sw.Clauses[2].Exprs != nil {
+		t.Fatalf("expected default clause to carry no expressions")
+	}
+	for i, cl := range sw.Clauses {
+		if cl.Body == nil || len(cl.Body.Stmts) != 1 {
+			t.Fatalf("clause %d: expected one body statement", i)
+		}
+	}
+}
+
+func TestParseSwitchTagless(t *testing.T) {
+	src := "switch {\ncase score >= 90:\n  grade = \"A\"\ndefault:\n  grade = \"C\"\n}\n"
+	sw := parseSwitchStmt(t, src)
+	if sw.Tag != nil {
+		t.Fatalf("expected tagless switch, got tag %T", sw.Tag)
+	}
+	if len(sw.Clauses) != 2 {
+		t.Fatalf("expected 2 clauses, got %d", len(sw.Clauses))
+	}
+	if _, ok := sw.Clauses[0].Exprs[0].(*Binary); !ok {
+		t.Fatalf("expected binary case expression, got %T", sw.Clauses[0].Exprs[0])
+	}
+}
+
+func TestParseSwitchBraceIsAlwaysTagless(t *testing.T) {
+	if _, err := ParseModule("test", []byte("switch {a: 1} {\ncase 1:\n}\n")); err == nil {
+		t.Fatalf("expected a bare dict tag to be read as the tagless form")
+	}
+	sw := parseSwitchStmt(t, "switch ({a: 1}) {\ncase 1:\n}\n")
+	if _, ok := sw.Tag.(*DictLit); !ok {
+		t.Fatalf("expected parenthesized dict tag, got %T", sw.Tag)
+	}
+}
+
+func TestParseSwitchEmptyForms(t *testing.T) {
+	sw := parseSwitchStmt(t, "switch x {\n}\n")
+	if len(sw.Clauses) != 0 {
+		t.Fatalf("expected no clauses, got %d", len(sw.Clauses))
+	}
+
+	sw = parseSwitchStmt(t, "switch x {\ncase 1:\ncase 2:\ndefault:\n}\n")
+	if len(sw.Clauses) != 3 {
+		t.Fatalf("expected 3 clauses, got %d", len(sw.Clauses))
+	}
+	for i, cl := range sw.Clauses {
+		if cl.Body == nil {
+			t.Fatalf("clause %d: expected body block", i)
+		}
+		if len(cl.Body.Stmts) != 0 {
+			t.Fatalf("clause %d: expected empty body, got %d stmts", i, len(cl.Body.Stmts))
+		}
+	}
+}
+
+func TestParseSwitchDefaultFirst(t *testing.T) {
+	sw := parseSwitchStmt(t, "switch x {\ndefault:\n  y = 0\ncase 1:\n  y = 1\n}\n")
+	if sw.Clauses[0].Exprs != nil {
+		t.Fatalf("expected leading default clause")
+	}
+	if len(sw.Clauses[1].Exprs) != 1 {
+		t.Fatalf("expected trailing case clause")
+	}
+}
+
+func TestParseSwitchMultilineCaseList(t *testing.T) {
+	sw := parseSwitchStmt(t, "switch x {\ncase 1,\n  2,\n  3:\n  y = 1\n}\n")
+	if len(sw.Clauses[0].Exprs) != 3 {
+		t.Fatalf("expected 3 case expressions, got %d", len(sw.Clauses[0].Exprs))
+	}
+}
+
+func TestParseSwitchNested(t *testing.T) {
+	src := "switch a {\ncase 1:\n  switch b {\n  case 2:\n    y = 1\n  }\n}\n"
+	sw := parseSwitchStmt(t, src)
+	inner, ok := sw.Clauses[0].Body.Stmts[0].(*SwitchStmt)
+	if !ok {
+		t.Fatalf("expected nested switch, got %T", sw.Clauses[0].Body.Stmts[0])
+	}
+	if len(inner.Clauses) != 1 {
+		t.Fatalf("expected 1 inner clause, got %d", len(inner.Clauses))
+	}
+}
+
+// a clause body that ends in a block leaves the lexer on an auto semi, which
+// must not leak into the next clause
+func TestParseSwitchClauseEndingInBlock(t *testing.T) {
+	src := "switch x {\ncase 1:\n  if y {\n    z = 1\n  }\ncase 2:\n  for {\n    break\n  }\ndefault:\n  z = 3\n}\n"
+	sw := parseSwitchStmt(t, src)
+	if len(sw.Clauses) != 3 {
+		t.Fatalf("expected 3 clauses, got %d", len(sw.Clauses))
+	}
+	for i, cl := range sw.Clauses {
+		if len(cl.Body.Stmts) != 1 {
+			t.Fatalf("clause %d: expected 1 stmt, got %d", i, len(cl.Body.Stmts))
+		}
+	}
+}
+
+func TestParseSwitchPositions(t *testing.T) {
+	src := "let x = 1\nswitch x {\ncase 1:\n  x = 2\ndefault:\n  x = 3\n}\n"
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	sw, ok := m.Stmts[1].(*SwitchStmt)
+	if !ok {
+		t.Fatalf("expected switch stmt, got %T", m.Stmts[1])
+	}
+	if sw.Pos().Line != 2 || sw.Pos().Col != 1 {
+		t.Fatalf("switch pos: got %d:%d, want 2:1", sw.Pos().Line, sw.Pos().Col)
+	}
+	if sw.Tag.Pos().Line != 2 || sw.Tag.Pos().Col != 8 {
+		t.Fatalf("tag pos: got %d:%d, want 2:8", sw.Tag.Pos().Line, sw.Tag.Pos().Col)
+	}
+	if sw.Clauses[0].P.Line != 3 || sw.Clauses[0].P.Col != 1 {
+		t.Fatalf("case pos: got %d:%d, want 3:1", sw.Clauses[0].P.Line, sw.Clauses[0].P.Col)
+	}
+	if sw.Clauses[0].Body.P.Line != 3 || sw.Clauses[0].Body.P.Col != 7 {
+		t.Fatalf(
+			"case body pos: got %d:%d, want 3:7",
+			sw.Clauses[0].Body.P.Line,
+			sw.Clauses[0].Body.P.Col,
+		)
+	}
+	if sw.Clauses[1].P.Line != 5 || sw.Clauses[1].P.Col != 1 {
+		t.Fatalf("default pos: got %d:%d, want 5:1", sw.Clauses[1].P.Line, sw.Clauses[1].P.Col)
+	}
+}
+
+func TestParseSwitchMalformed(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		msg  string
+	}{
+		{"empty case list", "switch x {\ncase:\n}\n", "case requires an expression"},
+		{"trailing comma", "switch x {\ncase 1, :\n}\n", "case requires an expression"},
+		{"colon on next line", "switch x {\ncase 1\n:\n}\n", "expected :, got <auto-semi>"},
+		{"brace on next line", "switch x\n{\n}\n", "expected {, got <auto-semi>"},
+		{
+			"statement before clause",
+			"switch x {\nlet y = 1\ncase 1:\n}\n",
+			"expected case or default, got let",
+		},
+		{"duplicate default", "switch x {\ndefault:\ndefault:\n}\n", "duplicate default in switch"},
+		{"unterminated", "switch x {\ncase 1:\n  y = 1\n", "unterminated switch"},
+		{"case outside switch", "case 1:\n", "case outside switch body"},
+		{"default outside switch", "default:\n", "default outside switch body"},
+		{"default in nested block", "switch x {\ncase 1:\n  if y {\n  default:\n  }\n}\n",
+			"default outside switch body"},
+		{"switch in for init", "for switch x { }; y; z { }\n", "invalid for init clause"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseModule("test", []byte(tc.src))
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+			}
+			if pe.Msg != tc.msg {
+				t.Fatalf("msg: got %q, want %q", pe.Msg, tc.msg)
+			}
+		})
+	}
+}
+
+func TestParseSwitchBreakAndContinue(t *testing.T) {
+	ok := []string{
+		"switch 1 {\ncase 1:\n  break\n}\n",
+		"for {\n  switch 1 {\n  case 1:\n    continue\n  }\n}\n",
+		"for {\n  switch 1 {\n  case 1:\n    break\n  }\n  break\n}\n",
+	}
+	for _, src := range ok {
+		if _, err := ParseModule("test", []byte(src)); err != nil {
+			t.Fatalf("parse %q: %v", src, err)
+		}
+	}
+
+	bad := []struct {
+		src string
+		msg string
+	}{
+		{"switch 1 {\ncase 1:\n  continue\n}\n", "continue outside loop"},
+		{"switch 1 {\ncase 1:\n  fn g() {\n    break\n  }\n}\n", "break outside loop or switch"},
+		{"break\n", "break outside loop or switch"},
+	}
+	for _, tc := range bad {
+		_, err := ParseModule("test", []byte(tc.src))
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Fatalf("expected *ParseError for %q, got %T", tc.src, err)
+		}
+		if pe.Msg != tc.msg {
+			t.Fatalf("msg: got %q, want %q", pe.Msg, tc.msg)
+		}
+	}
+}
+
+func TestParseDefaultStaysIdentifier(t *testing.T) {
+	src := "let a = default(null, \"x\")\nlet b = rts.default(a, \"y\")\nlet c = {default: 1}.default\n"
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(m.Stmts) != 3 {
+		t.Fatalf("expected 3 stmts, got %d", len(m.Stmts))
+	}
+}
+
 func TestParseModuleDecl(t *testing.T) {
 	src := "module mod\nexport let x = 1\n"
 	m, err := ParseModule("test", []byte(src))

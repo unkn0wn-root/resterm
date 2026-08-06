@@ -163,6 +163,10 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 				i++
 			}
 			token := string(line[start:i])
+			// switch and case are reserved so they classify on their own, but a
+			// switch default label is deliberately left alone: it is an ordinary
+			// identifier, and one line cannot tell "default:" in a clause from
+			// "default:" as a key in a multiline dict
 			class := rts.KeywordClassOf(token)
 			if class != rts.KeywordNone {
 				if style, ok := s.keywordStyleForClass(class); ok {

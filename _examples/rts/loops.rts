@@ -47,6 +47,47 @@ export fn countdown(n) {
   return out
 }
 
+export fn statusLabel(code) {
+  let label = ""
+  switch code {
+  case 200, 201:
+    label = "success"
+  case 401, 403:
+    label = "denied"
+  default:
+    label = default(null, "unexpected")
+  }
+  return label
+}
+
+export fn grade(score) {
+  switch {
+  case score >= 90:
+    return "A"
+  case score >= 80:
+    return "B"
+  default:
+    return "C"
+  }
+}
+
+# break leaves the switch and the loop keeps going, while continue skips to the
+# next iteration of the loop
+export fn switchBreakScope(items) {
+  let out = ""
+  for let i, v range items {
+    switch v {
+    case "skip":
+      continue
+    case "mark":
+      out = out + "!"
+      break
+    }
+    out = out + v
+  }
+  return out
+}
+
 export fn constLabel(id) {
   const prefix = "user-"
   return prefix + str(id)

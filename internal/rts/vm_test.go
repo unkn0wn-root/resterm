@@ -40,6 +40,35 @@ func execModule(t *testing.T, src string) *Comp {
 	return comp
 }
 
+func execModuleErr(t *testing.T, src string, lim Limits) error {
+	t.Helper()
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, err := Exec(NewCtx(context.Background(), lim), m, testStdlib()); err != nil {
+		return err
+	}
+	t.Fatalf("expected exec error")
+	return nil
+}
+
+func wantStr(t *testing.T, comp *Comp, name, want string) {
+	t.Helper()
+	v, ok := comp.Env.Get(name)
+	if !ok || v.K != VStr || v.S != want {
+		t.Fatalf("expected %s=%q, got %+v (ok=%v)", name, want, v, ok)
+	}
+}
+
+func wantNum(t *testing.T, comp *Comp, name string, want float64) {
+	t.Helper()
+	v, ok := comp.Env.Get(name)
+	if !ok || v.K != VNum || v.N != want {
+		t.Fatalf("expected %s=%v, got %+v (ok=%v)", name, want, v, ok)
+	}
+}
+
 func TestEvalBasic(t *testing.T) {
 	v := evalExpr(t, "1 + 2 * 3")
 	if v.K != VNum || v.N != 7 {
@@ -293,6 +322,368 @@ for let i, ch range "ab" {
 	out, ok := comp.Env.Get("out")
 	if !ok || out.K != VStr || out.S != "ab" {
 		t.Fatalf("expected out=ab, got %+v (ok=%v)", out, ok)
+	}
+}
+
+func TestSwitchEvaluatesTagOnce(t *testing.T) {
+	src := `
+let calls = 0
+fn tag() {
+  calls = calls + 1
+  return 3
+}
+let out = ""
+switch tag() {
+case 1:
+  out = "one"
+case 2:
+  out = "two"
+case 3:
+  out = "three"
+}
+`
+	comp := execModule(t, src)
+	wantNum(t, comp, "calls", 1)
+	wantStr(t, comp, "out", "three")
+}
+
+func TestSwitchCaseEvaluationOrderStops(t *testing.T) {
+	src := `
+let log = ""
+fn probe(name, v) {
+  log = log + name
+  return v
+}
+let out = ""
+switch 2 {
+case probe("a", 1), probe("b", 2), probe("c", 2):
+  out = "hit"
+case probe("d", 2):
+  out = "miss"
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "log", "ab")
+	wantStr(t, comp, "out", "hit")
+}
+
+func TestSwitchFirstMatchOnlyNoFallthrough(t *testing.T) {
+	src := `
+let out = ""
+switch 1 {
+case 1:
+  out = out + "a"
+case 1:
+  out = out + "b"
+default:
+  out = out + "d"
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "a")
+}
+
+func TestSwitchDefault(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			"runs when nothing matches",
+			"switch 9 {\ncase 1:\n  out = \"a\"\ndefault:\n  out = \"d\"\n}",
+			"d",
+		},
+		{
+			"skipped when a case matches",
+			"switch 1 {\ncase 1:\n  out = \"a\"\ndefault:\n  out = \"d\"\n}",
+			"a",
+		},
+		{
+			"reachable from any position",
+			"switch 9 {\ndefault:\n  out = \"d\"\ncase 1:\n  out = \"a\"\n}",
+			"d",
+		},
+		{
+			"absent leaves state untouched",
+			"switch 9 {\ncase 1:\n  out = \"a\"\n}",
+			"none",
+		},
+		{
+			"empty body runs nothing",
+			"switch 9 {\ncase 1:\n  out = \"a\"\ndefault:\n}",
+			"none",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			comp := execModule(t, "let out = \"none\"\n"+tc.src+"\n")
+			wantStr(t, comp, "out", tc.want)
+		})
+	}
+}
+
+func TestSwitchEqualityIsTypeSensitive(t *testing.T) {
+	cases := []struct {
+		name string
+		tag  string
+		want string
+	}{
+		{"number matches number", "1", "num"},
+		{"string is not number", "\"1\"", "str"},
+		{"bool is not number", "true", "bool"},
+		{"zero is not false", "0", "d"},
+		{"null matches null", "null", "null"},
+		{"lists never match", "[1]", "d"},
+		{"dicts never match", "({a: 1})", "d"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "let out = \"\"\nswitch " + tc.tag + " {\n" +
+				"case 1:\n  out = \"num\"\n" +
+				"case \"1\":\n  out = \"str\"\n" +
+				"case null:\n  out = \"null\"\n" +
+				"case true:\n  out = \"bool\"\n" +
+				"case [1]:\n  out = \"list\"\n" +
+				"case {a: 1}:\n  out = \"dict\"\n" +
+				"default:\n  out = \"d\"\n}\n"
+			comp := execModule(t, src)
+			wantStr(t, comp, "out", tc.want)
+		})
+	}
+}
+
+func TestSwitchTaglessUsesTruthiness(t *testing.T) {
+	src := `
+let out = ""
+switch {
+case "":
+  out = "empty string"
+case 0:
+  out = "zero"
+case []:
+  out = "empty list"
+case "x":
+  out = "truthy"
+default:
+  out = "d"
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "truthy")
+}
+
+func TestSwitchTaglessFallsToDefault(t *testing.T) {
+	src := `
+let out = ""
+switch {
+case null:
+  out = "null"
+case 0:
+  out = "zero"
+default:
+  out = "d"
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "d")
+}
+
+func TestSwitchClauseScope(t *testing.T) {
+	src := `
+let out = "outer"
+let shadow = 1
+switch 1 {
+case 1:
+  let inner = "clause"
+  let shadow = 2
+  out = inner
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "clause")
+	wantNum(t, comp, "shadow", 1)
+	if _, ok := comp.Env.Get("inner"); ok {
+		t.Fatalf("expected clause declaration to stay in the clause")
+	}
+}
+
+func TestSwitchBreakStopsAtSwitch(t *testing.T) {
+	src := `
+let out = ""
+switch 1 {
+case 1:
+  out = out + "a"
+  break
+  out = out + "b"
+default:
+  out = out + "d"
+}
+out = out + "after"
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "aafter")
+}
+
+func TestSwitchNestedBreakLeavesOuterRunning(t *testing.T) {
+	src := `
+let out = ""
+switch 1 {
+case 1:
+  switch 2 {
+  case 2:
+    out = out + "inner"
+    break
+  }
+  out = out + "outer"
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "innerouter")
+}
+
+func TestSwitchBreakInLoopTargetsSwitch(t *testing.T) {
+	src := `
+let out = ""
+for let i = 0; i < 4; i = i + 1 {
+  switch i {
+  case 2:
+    break
+  }
+  out = out + str(i)
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "0123")
+}
+
+func TestSwitchContinueTargetsLoop(t *testing.T) {
+	src := `
+let out = ""
+for let i = 0; i < 4; i = i + 1 {
+  switch i {
+  case 1:
+    continue
+  case 2:
+    out = out + "two"
+    continue
+  }
+  out = out + str(i)
+}
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "out", "0two3")
+}
+
+func TestSwitchReturnPropagates(t *testing.T) {
+	src := `
+fn grade(score) {
+  switch {
+  case score >= 90:
+    return "A"
+  case score >= 80:
+    return "B"
+  default:
+    return "C"
+  }
+  return "unreachable"
+}
+let a = grade(95)
+let b = grade(85)
+let c = grade(10)
+`
+	comp := execModule(t, src)
+	wantStr(t, comp, "a", "A")
+	wantStr(t, comp, "b", "B")
+	wantStr(t, comp, "c", "C")
+}
+
+func TestSwitchErrorsKeepPosition(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		msg  string
+		line int
+		col  int
+	}{
+		{"tag", "switch missing {\ncase 1:\n}\n", "undefined name \"missing\"", 1, 8},
+		{"case expression", "switch 1 {\ncase missing:\n}\n", "undefined name \"missing\"", 2, 6},
+		{"clause body", "switch 1 {\ncase 1:\n  let x = missing\n}\n",
+			"undefined name \"missing\"", 3, 11},
+		{"default body", "switch 9 {\ndefault:\n  let x = missing\n}\n",
+			"undefined name \"missing\"", 3, 11},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := execModuleErr(t, tc.src, Limits{})
+			se, ok := err.(*StackError)
+			if !ok {
+				t.Fatalf("expected *StackError, got %T", err)
+			}
+			re, ok := se.Err.(*RuntimeError)
+			if !ok {
+				t.Fatalf("expected *RuntimeError, got %T", se.Err)
+			}
+			if re.Msg != tc.msg {
+				t.Fatalf("msg: got %q, want %q", re.Msg, tc.msg)
+			}
+			if re.Pos.Line != tc.line || re.Pos.Col != tc.col {
+				t.Fatalf("pos: got %d:%d, want %d:%d", re.Pos.Line, re.Pos.Col, tc.line, tc.col)
+			}
+		})
+	}
+}
+
+func TestSwitchCaseErrorKeepsCallStack(t *testing.T) {
+	src := `
+fn boom() {
+  return missing
+}
+switch 1 {
+case boom():
+  let x = 1
+}
+`
+	err := execModuleErr(t, src, Limits{})
+	se, ok := err.(*StackError)
+	if !ok {
+		t.Fatalf("expected *StackError, got %T", err)
+	}
+	if len(se.Frames) != 1 || se.Frames[0].Name != "boom" {
+		t.Fatalf("expected boom frame, got %+v", se.Frames)
+	}
+}
+
+func TestSwitchStepLimitPropagates(t *testing.T) {
+	src := `
+let out = 0
+switch 1 {
+case 1:
+  out = 1
+}
+`
+	err := execModuleErr(t, src, Limits{MaxSteps: 6})
+	if !isAbort(err) {
+		t.Fatalf("expected abort, got %T (%v)", err, err)
+	}
+	if !strings.Contains(err.Error(), "step limit exceeded") {
+		t.Fatalf("expected step limit error, got %v", err)
+	}
+}
+
+func TestSwitchHardAbortNotSwallowed(t *testing.T) {
+	src := `
+let out = 0
+switch 1 {
+case 1:
+  for {
+    out = out + 1
+  }
+}
+`
+	err := execModuleErr(t, src, Limits{MaxSteps: 200})
+	if !isAbort(err) {
+		t.Fatalf("expected abort, got %T (%v)", err, err)
 	}
 }
 
