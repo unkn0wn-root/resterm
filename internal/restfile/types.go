@@ -153,12 +153,39 @@ type MockHeaderRule struct {
 	Values []string
 }
 
-// StringList decodes a JSON string or string array, the value shape shared by
-// @match query, @match headers, and mock request patterns.
+// MockQueryOp is the operator of one @match query rule. New operators belong at
+// the end because mock_query.go indexes its operand table by this value.
+type MockQueryOp uint8
+
+const (
+	MockQueryOpUnknown MockQueryOp = iota
+	MockQueryOpExact
+	MockQueryOpPrefix
+	MockQueryOpPresent
+	MockQueryOpAbsent
+	MockQueryOpContains
+	MockQueryOpRegex
+	MockQueryOpOneOf
+	MockQueryOpGT
+	MockQueryOpGTE
+	MockQueryOpLT
+	MockQueryOpLTE
+)
+
+// MockQueryRule is one query parameter condition. Values holds the operand the
+// same way MockHeaderRule does, and for gt, gte, lt and lte it holds the JSON
+// number as it was written.
+type MockQueryRule struct {
+	Op     MockQueryOp
+	Values []string
+}
+
+// StringList decodes a JSON string or string array, the operand shape both
+// matcher shorthands share.
 type StringList []string
 
 type MockMatch struct {
-	Query   map[string]StringList
+	Query   map[string]MockQueryRule
 	Headers map[string]MockHeaderRule
 	JSON    []byte
 }

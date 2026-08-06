@@ -20,7 +20,10 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 			Default: true,
 			Latency: 250 * time.Millisecond,
 			Match: restfile.MockMatch{
-				Query: map[string]restfile.StringList{"mode": {"test"}},
+				Query: map[string]restfile.MockQueryRule{
+					"mode": {Op: restfile.MockQueryOpExact, Values: []string{"test"}},
+					"page": {Op: restfile.MockQueryOpGTE, Values: []string{"10"}},
+				},
 				Headers: map[string]restfile.MockHeaderRule{
 					"X-Tenant": {Op: restfile.MockHeaderOpExact, Values: []string{"acme"}},
 				},
@@ -52,6 +55,15 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 	if first.Name != "accepted" || first.Responses[0].Status != http.StatusAccepted ||
 		string(first.Match.JSON) != `{"amount":100}` || first.Responses[0].Body.Text != "{\"id\":\"pay_123\"}\n" {
 		t.Fatalf("round-trip mock = %+v", first)
+	}
+	// gte renders as a bare JSON number, so a quoted operand would come back as
+	// an exact matcher instead of failing
+	if got := first.Match.Query["page"]; got.Op != restfile.MockQueryOpGTE ||
+		got.Values[0] != "10" {
+		t.Fatalf("round-trip query rule = %+v\n%s", got, rendered)
+	}
+	if got := first.Match.Query["mode"]; got.Op != restfile.MockQueryOpExact {
+		t.Fatalf("round-trip shorthand rule = %+v\n%s", got, rendered)
 	}
 	if got := parsed.Mocks[1].Responses[0].Body.FilePath; got != "./fixtures/data.json" {
 		t.Fatalf("fixture path = %q", got)

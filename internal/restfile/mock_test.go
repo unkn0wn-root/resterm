@@ -123,43 +123,59 @@ func TestMockHeaderRuleMarshalRejectsInvalidRules(t *testing.T) {
 	}
 }
 
-func TestMockHeaderOpNames(t *testing.T) {
-	names := map[MockHeaderOp]string{
-		MockHeaderOpExact:    "exact",
-		MockHeaderOpPrefix:   "prefix",
-		MockHeaderOpPresent:  "present",
-		MockHeaderOpAbsent:   "absent",
-		MockHeaderOpContains: "contains",
-		MockHeaderOpRegex:    "regex",
-		MockHeaderOpOneOf:    "oneOf",
+func TestMatcherOpNames(t *testing.T) {
+	tests := []struct {
+		kind    string
+		table   []matcherSpec
+		names   []string
+		unknown string
+	}{
+		{
+			kind:    "header",
+			table:   mockHeaderOps,
+			names:   []string{"exact", "prefix", "present", "absent", "contains", "regex", "oneOf"},
+			unknown: MockHeaderOpUnknown.String(),
+		},
+		{
+			kind:  "query",
+			table: mockQueryOps,
+			names: []string{
+				"exact", "prefix", "present", "absent", "contains", "regex", "oneOf",
+				"gt", "gte", "lt", "lte",
+			},
+			unknown: MockQueryOpUnknown.String(),
+		},
 	}
-	declared := 0
-	for index, spec := range mockHeaderOps {
-		if spec.name == "" {
-			continue
-		}
-		declared++
-		op := MockHeaderOp(index)
-		want, ok := names[op]
-		if !ok {
-			t.Fatalf("operator %d has no expected name; add it here and to the docs", op)
-		}
-		if got := op.String(); got != want {
-			t.Fatalf("op %d String() = %q, want %q", op, got, want)
-		}
-		if back, ok := mockHeaderOpNamed(want); !ok || back != op {
-			t.Fatalf("mockHeaderOpNamed(%q) = %v, %t", want, back, ok)
-		}
+	for _, test := range tests {
+		t.Run(test.kind, func(t *testing.T) {
+			var declared []string
+			for index, spec := range test.table {
+				if spec.name == "" {
+					continue
+				}
+				declared = append(declared, spec.name)
+				if back, ok := specNamed(test.table, spec.name); !ok || back != index {
+					t.Fatalf("specNamed(%q) = %d, %t, want %d", spec.name, back, ok, index)
+				}
+			}
+			if !slices.Equal(declared, test.names) {
+				t.Fatalf("%s operators = %q, want %q; update the docs too", test.kind, declared, test.names)
+			}
+			if test.unknown != "unknown" {
+				t.Fatalf("unknown %s operator String() = %q", test.kind, test.unknown)
+			}
+			// index 0 has no name, so an empty JSON key must not resolve to it
+			if _, ok := specNamed(test.table, ""); ok {
+				t.Fatalf("the empty name resolved to a %s operator", test.kind)
+			}
+		})
 	}
-	if declared != len(names) {
-		t.Fatalf("mockHeaderOps declares %d operators, want %d", declared, len(names))
+
+	if got := MockQueryOpGTE.String(); got != "gte" {
+		t.Fatalf("MockQueryOpGTE.String() = %q", got)
 	}
-	if got := MockHeaderOpUnknown.String(); got != "unknown" {
-		t.Fatalf("unknown String() = %q", got)
-	}
-	// index 0 has no name, so an empty JSON key must not resolve to it
-	if _, ok := mockHeaderOpNamed(""); ok {
-		t.Fatal("the empty name resolved to an operator")
+	if got := MockHeaderOpOneOf.String(); got != "oneOf" {
+		t.Fatalf("MockHeaderOpOneOf.String() = %q", got)
 	}
 }
 

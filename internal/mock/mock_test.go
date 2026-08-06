@@ -87,7 +87,7 @@ func TestJSONMatcherComparesNumbersExactly(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			want, err := decodeJSON([]byte(test.want))
+			match, err := compileJSONMatcher([]byte(test.want))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -95,8 +95,8 @@ func TestJSONMatcherComparesNumbersExactly(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if ok := subset(want, got); ok != test.ok {
-				t.Fatalf("subset(%s, %s) = %t, want %t", test.want, test.got, ok, test.ok)
+			if ok := match(got); ok != test.ok {
+				t.Fatalf("match(%s, %s) = %t, want %t", test.want, test.got, ok, test.ok)
 			}
 		})
 	}

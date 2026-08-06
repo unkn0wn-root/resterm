@@ -101,9 +101,12 @@ func (m *Model) capturedMock() (*restfile.Mock, error) {
 	// A default scenario answers every request, so query conditions are only
 	// attached once another scenario already covers the route.
 	if !spec.Default && len(query) > 0 {
-		spec.Match.Query = make(map[string]restfile.StringList, len(query))
+		spec.Match.Query = make(map[string]restfile.MockQueryRule, len(query))
 		for name, values := range query {
-			spec.Match.Query[name] = values
+			spec.Match.Query[name] = restfile.MockQueryRule{
+				Op:     restfile.MockQueryOpExact,
+				Values: values,
+			}
 		}
 	}
 

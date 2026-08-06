@@ -572,12 +572,13 @@ mock.count({method: "POST", path: "/webhooks/{name}"})
 mock.received({
   method: "POST",
   path: "/webhooks/payment",
+  query: {page: {gte: 2}, channel: {oneOf: ["web", "ios"]}},
   headers: {
     Authorization: {prefix: "Bearer "},
     "X-Version": {regex: "^v[0-9]+$"},
     "X-Env": {oneOf: ["dev", "prod"]}
   },
-  json: {status: "completed"}
+  json: {status: "completed", amount: {"$gt": 100}}
 })
 ```
 
@@ -585,9 +586,9 @@ Both helpers require one pattern dictionary. `count` returns the exact number of
 
 - `method` is case-insensitive and normalized to uppercase.
 - `path` uses mock path syntax, including `{name}` and terminal `{name...}` wildcards.
-- `query` maps keys to exact strings or ordered lists of strings.
+- `query` maps case-sensitive names to exact strings/lists or one rule. It accepts every header rule below plus `{gt: 10}`, `{gte: 10}`, `{lt: 10}`, and `{lte: 10}`, which read each value as a number and treat anything else as a non-match.
 - `headers` maps case-insensitive names to exact strings/lists or one rule: `{exact: ...}`, `{prefix: "..."}`, `{contains: "..."}`, `{regex: "..."}`, `{oneOf: [...]}`, `{present: true}`, or `{absent: true}`. Header values are case-sensitive, `regex` uses unanchored RE2 syntax, and `oneOf` needs a non-empty array.
-- `json` uses recursive object-subset matching and exact ordered arrays.
+- `json` uses recursive object-subset matching and exact ordered arrays. A field can carry `{"$gt": ...}`, `{"$gte": ...}`, `{"$lt": ...}`, `{"$lte": ...}`, or `{"$oneOf": [...]}`. Operator keys need quoting because `$` does not start an RTS identifier. The comparisons need JSON numbers on both sides. An operator is recognized only as the sole member of its object and only for those five names, so `$schema`, `$ref` and any other dollar-prefixed field still match as data.
 
 Journal eviction makes inspection fail instead of returning a potentially false result. Resterm does not connect `resterm run` to an external journal. Use declarative `@expect` entries with `resterm mock verify` for standalone or CI automation.
 

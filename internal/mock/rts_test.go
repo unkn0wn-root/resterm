@@ -33,7 +33,7 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 	value, err := engine.Eval(context.Background(), runtime, `mock.count({
   method: "POST",
   path: "/webhooks/{id}",
-  query: {kind: "payment"},
+  query: {kind: "payment", page: {gte: 10}},
   headers: {
     Authorization: {prefix: "Bearer "},
     "X-Trace": {present: true},
@@ -42,7 +42,7 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
     "X-Version": {regex: "^v[0-9]+$"},
     "X-Env": {oneOf: ["dev", "prod"]}
   },
-  json: {status: "completed"}
+  json: {status: "completed", amount: {"$gt": 100}}
 })`, rts.Pos{Path: "test.http", Line: 1, Col: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -53,8 +53,13 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 	if inspector.pattern.Method != http.MethodPost || inspector.pattern.Path != "/webhooks/{id}" {
 		t.Fatalf("pattern = %+v", inspector.pattern)
 	}
-	if got := inspector.pattern.Query["kind"]; len(got) != 1 || got[0] != "payment" {
+	if got := inspector.pattern.Query["kind"]; got.Op != restfile.MockQueryOpExact ||
+		!slices.Equal(got.Values, []string{"payment"}) {
 		t.Fatalf("query rule = %+v", got)
+	}
+	if got := inspector.pattern.Query["page"]; got.Op != restfile.MockQueryOpGTE ||
+		!slices.Equal(got.Values, []string{"10"}) {
+		t.Fatalf("page rule = %+v", got)
 	}
 	if got := inspector.pattern.Headers["Authorization"]; got.Op != restfile.MockHeaderOpPrefix ||
 		got.Values[0] != "Bearer " {
@@ -77,8 +82,12 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 		!slices.Equal(got.Values, []string{"dev", "prod"}) {
 		t.Fatalf("X-Env rule = %+v", got)
 	}
-	if string(inspector.pattern.JSON) != `{"status":"completed"}` {
+	// $ does not start an RTS identifier, so an operator key has to be quoted
+	if string(inspector.pattern.JSON) != `{"amount":{"$gt":100},"status":"completed"}` {
 		t.Fatalf("JSON pattern = %s", inspector.pattern.JSON)
+	}
+	if _, err := compileRequestPattern(inspector.pattern); err != nil {
+		t.Fatalf("scripted pattern does not compile: %v", err)
 	}
 
 	inspector.count = 0

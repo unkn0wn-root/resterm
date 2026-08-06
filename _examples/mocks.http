@@ -88,6 +88,43 @@ Content-Type: application/json
 
 {"error":"send a Chrome user agent, an X-Api-Version like v2, and a known X-Env"}
 
+### Large order held for review
+# A query value is always text, so an object there can only be a matcher and the
+# operators are written bare. gte reads the value as a number, which means
+# ?amount=none just fails to match instead of erroring.
+# @mock method=POST path=/orders name=review
+# @match query={"amount":{"gte":1000},"channel":{"oneOf":["web","ios"]},"dry-run":{"absent":true}}
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"id":"ord_9","status":"pending_review"}
+
+### Order accepted
+# @mock method=POST path=/orders name=accepted default=true
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{"id":"ord_9","status":"accepted"}
+
+### Account flagged for manual review
+# A JSON value can be an object, so {"lt":40} is ordinary data to compare against
+# and the operators carry a $ to make a collision unlikely. Only the five known
+# names count, and only as the sole member of their object, so a body is still
+# free to send $schema, $ref or any other dollar-prefixed field.
+# @mock method=POST path=/accounts name=flagged
+# @match json={"score":{"$lt":40},"tier":{"$oneOf":["free","trial"]}}
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{"error":"account needs manual review"}
+
+### Account accepted
+# @mock method=POST path=/accounts name=accepted default=true
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{"id":"acct_7","status":"active"}
+
 ### Per-key rate limit
 # @mock method=GET path=/quota sequence=quota sequence-key=header.X-Api-Key
 HTTP/1.1 200 OK
@@ -136,6 +173,20 @@ GET {{mock.base}}/catalog
 User-Agent: Mozilla/5.0 Chrome/120.0 Safari/537.36
 X-Api-Version: v2
 X-Env: stage
+
+### Place an order large enough to need review
+# @name place-order
+POST {{mock.base}}/orders?amount=2500&channel=web
+Content-Type: application/json
+
+{"sku":"widget","qty":5}
+
+### Submit an account that gets flagged
+# @name submit-account
+POST {{mock.base}}/accounts
+Content-Type: application/json
+
+{"score":12,"tier":"trial"}
 
 ### Deliver the payment webhook
 # The mock.* assertion needs the TUI-owned server (`g Shift+M`).

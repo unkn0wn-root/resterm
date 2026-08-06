@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -13,14 +12,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-// headerPredicate reports whether one header's values satisfy a rule. A header
-// the request never sent arrives as nil.
-type headerPredicate func(got []string) bool
-
 type headerRule struct {
 	name  string
 	rule  restfile.MockHeaderRule
-	match headerPredicate
+	match valuePredicate
 }
 
 // headerRules is a compiled @match headers block. Every rule has to hold.
@@ -35,8 +30,7 @@ func (rs headerRules) matches(h http.Header, host string) bool {
 	return true
 }
 
-// declared rebuilds the rule map. RequestPattern is returned to callers and
-// serialized, so the normalized rules live next to the predicates.
+// declared rebuilds the rule map, which RequestPattern returns and serializes.
 func (rs headerRules) declared() map[string]restfile.MockHeaderRule {
 	if len(rs) == 0 {
 		return nil
@@ -49,9 +43,8 @@ func (rs headerRules) declared() map[string]restfile.MockHeaderRule {
 	return out
 }
 
-// compileHeaderRules validates each rule, rekeys it by canonical header name,
-// and compiles it. Names are visited in sorted order so a block with several
-// problems always reports the same one.
+// compileHeaderRules stores each rule under the canonical header name. Sorted
+// order means a block with several problems always reports the same one.
 func compileHeaderRules(src map[string]restfile.MockHeaderRule) (headerRules, error) {
 	if len(src) == 0 {
 		return nil, nil
@@ -80,45 +73,28 @@ func compileHeaderRules(src map[string]restfile.MockHeaderRule) (headerRules, er
 	return out, nil
 }
 
-// compileHeaderRule turns a rule into a predicate. The predicate captures the
-// values and outlives the caller's map, so callers clone them first.
-func compileHeaderRule(rule restfile.MockHeaderRule) (headerPredicate, error) {
+// compileHeaderRule builds a predicate that keeps the values after this returns,
+// so callers clone them first.
+func compileHeaderRule(rule restfile.MockHeaderRule) (valuePredicate, error) {
 	if err := rule.Check(); err != nil {
 		return nil, err
 	}
 	switch rule.Op {
 	case restfile.MockHeaderOpExact:
-		want := rule.Values
-		return func(got []string) bool { return got != nil && slices.Equal(got, want) }, nil
+		return exactValues(rule.Values), nil
 	case restfile.MockHeaderOpPrefix:
-		prefix := rule.Values[0]
-		return anyValue(func(v string) bool { return strings.HasPrefix(v, prefix) }), nil
+		return anyPrefix(rule.Values[0]), nil
 	case restfile.MockHeaderOpContains:
-		sub := rule.Values[0]
-		return anyValue(func(v string) bool { return strings.Contains(v, sub) }), nil
+		return anyContains(rule.Values[0]), nil
 	case restfile.MockHeaderOpRegex:
-		re, err := regexp.Compile(rule.Values[0])
-		if err != nil {
-			return nil, fmt.Errorf("%s matcher is not a valid regular expression: %w", rule.Op, err)
-		}
-		return anyValue(re.MatchString), nil
+		return anyRegex(rule.Values[0])
 	case restfile.MockHeaderOpOneOf:
-		allowed := make(map[string]struct{}, len(rule.Values))
-		for _, v := range rule.Values {
-			allowed[v] = struct{}{}
-		}
-		return anyValue(func(v string) bool { _, ok := allowed[v]; return ok }), nil
+		return anyOneOf(rule.Values), nil
 	case restfile.MockHeaderOpPresent:
-		return func(got []string) bool { return len(got) > 0 }, nil
+		return valuePresent, nil
 	case restfile.MockHeaderOpAbsent:
-		return func(got []string) bool { return len(got) == 0 }, nil
+		return valueAbsent, nil
 	default:
 		return nil, fmt.Errorf("%s matcher is not supported", rule.Op)
 	}
-}
-
-// anyValue turns a single-value test into one that a repeated header passes as
-// soon as any of its values matches.
-func anyValue(test func(string) bool) headerPredicate {
-	return func(got []string) bool { return slices.ContainsFunc(got, test) }
 }

@@ -918,24 +918,41 @@ Content-Type: application/json
 {"error":"amount must be positive"}
 ```
 
-Query objects accept a string or an array of strings per key. Header matchers retain the same exact shorthand and also support generic rules:
+Query and header matchers share the same shorthand and the same rule objects:
 
 ```http
 # @match headers={"X-Tenant":{"exact":"demo"},"Authorization":{"prefix":"Bearer "},"X-Correlation-ID":{"present":true},"X-Debug":{"absent":true}}
 # @match headers={"User-Agent":{"contains":"Chrome"},"X-Version":{"regex":"^v[0-9]+$"},"X-Env":{"oneOf":["dev","stage","prod"]}}
+# @match query={"channel":{"oneOf":["web","ios"]},"page":{"gte":2},"trace":{"absent":true}}
 ```
 
 - A string or array is shorthand for `exact`. Repeated values must match exactly and in order.
-- `prefix` succeeds when any value for that header starts with the non-empty prefix.
-- `contains` succeeds when any value for that header contains the non-empty substring.
-- `regex` succeeds when any value for that header matches the [RE2](https://pkg.go.dev/regexp/syntax) pattern. Matching is unanchored, so use `^` and `$` to match a whole value, and `(?i)` to ignore case.
-- `oneOf` succeeds when any value for that header equals one of the listed values. The list cannot be empty. Unlike `exact`, order and extra values do not matter.
-- `present` requires the header to have a value, including an explicitly empty value.
-- `absent` requires no value for that header.
+- `prefix` succeeds when any value starts with the non-empty prefix.
+- `contains` succeeds when any value contains the non-empty substring.
+- `regex` succeeds when any value matches the [RE2](https://pkg.go.dev/regexp/syntax) pattern. Matching is unanchored, so use `^` and `$` to match a whole value, and `(?i)` to ignore case.
+- `oneOf` succeeds when any value equals one of the listed values. The list cannot be empty. Unlike `exact`, order and extra values do not matter.
+- `present` requires a value, including an explicitly empty one.
+- `absent` requires no value at all.
+- `gt`, `gte`, `lt`, and `lte` are query-only. Each succeeds when any value reads as a number and compares that way against the operand.
 
-Each header declares exactly one rule. Header names are case-insensitive, but header values are case-sensitive. `prefix`, `contains`, `regex`, and `oneOf` test each repeated value on its own and succeed as soon as one of them matches. A comma-separated list inside a single value is never split, and a missing header fails all four. Empty `prefix`, `contains`, and `regex` operands are rejected, as is an empty `oneOf` array. To match an empty value on purpose, write `{"regex":"^$"}`.
+Each key declares exactly one rule. Header names are case-insensitive and query parameter names are case-sensitive. Values are case-sensitive in both. Every rule except `exact`, `present`, and `absent` tests each repeated value on its own and succeeds as soon as one of them matches. A comma-separated list inside a single value is never split, and a missing key fails all of them. Empty `prefix`, `contains`, and `regex` operands are rejected, as is an empty `oneOf` array. To match an empty value on purpose, write `{"regex":"^$"}`.
+
+The numeric operand must be written as a JSON number, so `{"gte":2}` rather than `{"gte":"2"}`. A value that does not read as a number is an ordinary non-match, not an error, so `?page=none` simply fails `{"gte":2}`.
 
 Only declared query and header keys are constrained. JSON objects match as recursive subsets, while arrays are exact and ordered. JSON numbers compare numerically (`1`, `1.0`, and `1e0` are equal). JSON matching accepts `application/json` and `+json`, rejects malformed bodies with `400`, and caps matcher input at 4 MiB (`413`).
+
+A JSON field can also carry an operator, written with a `$` prefix so it is unlikely to collide with a real field name:
+
+```http
+# @match json={"amount":{"$gt":100},"user":{"age":{"$gte":18}},"status":{"$oneOf":["new","hold"]}}
+```
+
+- `$gt`, `$gte`, `$lt`, and `$lte` require the operand and the request value to both be JSON numbers. The string `"101"` does not satisfy `{"$gt":100}`.
+- `$oneOf` succeeds when the request value equals one of the listed values. Alternatives may be any JSON value, and an object or array alternative must match whole rather than as a subset.
+
+An operator is recognized only when it is the **sole member** of its object, and only for the five names above. The `$` is a naming convention, not a reserved namespace: JSON assigns it no special meaning, so `{"$schema":"..."}`, `{"$ref":"#/$defs/user"}` and any other dollar-prefixed field match as ordinary data. An unrecognized name such as `{"$between":[1,9]}` is a field name too, which means a misspelled operator matches nothing rather than failing to load, exactly as a misspelled field name would. An operator can appear anywhere a value can, including inside an array.
+
+The one shape you cannot write directly is a body field that is itself a lone operator name, such as `{"age":{"$gt":21}}` as literal data. Use `$oneOf` with a single alternative for that, since its alternatives are compared as values: `{"age":{"$oneOf":[{"$gt":21}]}}`. That comparison is exact rather than a subset, so it matches a body whose `age` is exactly `{"$gt":21}` and not one that also carries a sibling such as `{"$gt":21,"source":"legacy"}`.
 
 Scenario selection is deterministic:
 

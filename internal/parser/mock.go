@@ -87,7 +87,7 @@ func (b *documentBuilder) startMock(line int, raw string) {
 		sequence:  strings.TrimSpace(vals["sequence"]),
 		headers:   make(http.Header),
 		match: restfile.MockMatch{
-			Query:   make(map[string]restfile.StringList),
+			Query:   make(map[string]restfile.MockQueryRule),
 			Headers: make(map[string]restfile.MockHeaderRule),
 		},
 	}
@@ -248,7 +248,7 @@ func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
 		}
 	}
 	if raw, ok := vals["query"]; ok {
-		m.addStringMatchers(b, line, "query", raw, m.match.Query)
+		m.addQueryMatchers(b, line, raw)
 	}
 	if raw, ok := vals["headers"]; ok {
 		m.addHeaderMatchers(b, line, raw)
@@ -288,33 +288,28 @@ func (m *mockBuilder) addExpectation(b *documentBuilder, line int, raw string) {
 	m.expectation = &restfile.MockExpectation{Calls: n, Line: line}
 }
 
-func (m *mockBuilder) addStringMatchers(
-	b *documentBuilder,
-	line int,
-	kind, raw string,
-	dst map[string]restfile.StringList,
-) {
-	vals, err := parseStringListMap(raw)
+func (m *mockBuilder) addQueryMatchers(b *documentBuilder, line int, raw string) {
+	vals, err := parseMockRules[restfile.MockQueryRule](raw)
 	if err != nil {
-		b.addMockError(line, fmt.Sprintf("invalid @match %s: %s", kind, err))
+		b.addMockError(line, "invalid @match query: "+err.Error())
 		return
 	}
-	for _, k := range util.SortedKeys(vals) {
-		name := strings.TrimSpace(k)
+	for _, key := range util.SortedKeys(vals) {
+		name := strings.TrimSpace(key)
 		if name == "" {
-			b.addMockError(line, fmt.Sprintf("@match %s name cannot be empty", kind))
+			b.addMockError(line, "@match query name cannot be empty")
 			continue
 		}
-		if _, ok := dst[name]; ok {
-			b.addMockError(line, fmt.Sprintf("@match %s %q is repeated", kind, name))
+		if _, exists := m.match.Query[name]; exists {
+			b.addMockError(line, fmt.Sprintf("@match query %q is repeated", name))
 			continue
 		}
-		dst[name] = vals[k]
+		m.match.Query[name] = vals[key]
 	}
 }
 
 func (m *mockBuilder) addHeaderMatchers(b *documentBuilder, line int, raw string) {
-	vals, err := parseMockHeaderRules(raw)
+	vals, err := parseMockRules[restfile.MockHeaderRule](raw)
 	if err != nil {
 		b.addMockError(line, "invalid @match headers: "+err.Error())
 		return
@@ -338,7 +333,7 @@ func (m *mockBuilder) addHeaderMatchers(b *documentBuilder, line int, raw string
 }
 
 // canonMatchHeader only validates the name. The rule and its values are checked
-// when they decode in parseMockHeaderRules.
+// when they decode in parseMockRules.
 func (b *documentBuilder) canonMatchHeader(line int, key string) (string, bool) {
 	if !httpguts.ValidHeaderFieldName(key) {
 		b.addMockError(line, fmt.Sprintf("invalid @match header name %q", key))
@@ -434,31 +429,19 @@ func parseMockStatusLine(line string) (int, bool, error) {
 	return status, true, nil
 }
 
-func parseStringListMap(raw string) (map[string]restfile.StringList, error) {
+// parseMockRules visits keys in sorted order. Map order would report a different
+// broken rule on each parse, and the editor reparses on every keystroke.
+func parseMockRules[T restfile.MockQueryRule | restfile.MockHeaderRule](
+	raw string,
+) (map[string]T, error) {
 	fields, err := parseJSONObject(raw)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]restfile.StringList, len(fields))
-	for key, value := range fields {
-		var values restfile.StringList
-		if err := json.Unmarshal(value, &values); err != nil {
-			return nil, fmt.Errorf("value for %q must be a string or string array", key)
-		}
-		out[key] = values
-	}
-	return out, nil
-}
-
-func parseMockHeaderRules(raw string) (map[string]restfile.MockHeaderRule, error) {
-	fields, err := parseJSONObject(raw)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]restfile.MockHeaderRule, len(fields))
-	for name, value := range fields {
-		var rule restfile.MockHeaderRule
-		if err := json.Unmarshal(value, &rule); err != nil {
+	out := make(map[string]T, len(fields))
+	for _, name := range util.SortedKeys(fields) {
+		var rule T
+		if err := json.Unmarshal(fields[name], &rule); err != nil {
 			return nil, fmt.Errorf("matcher for %q: %w", name, err)
 		}
 		out[name] = rule

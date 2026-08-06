@@ -6,11 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"mime"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -25,7 +23,8 @@ type matcher func(*probe) (bool, *problem)
 // load-bearing: JSON body errors surface only after query and header conditions
 // pass.
 func newMatchers(m restfile.MockMatch) ([]matcher, error) {
-	if err := checkQueryRules(m.Query); err != nil {
+	query, err := compileQueryRules(m.Query)
+	if err != nil {
 		return nil, err
 	}
 	headers, err := compileMatchHeaders(m.Headers)
@@ -34,20 +33,34 @@ func newMatchers(m restfile.MockMatch) ([]matcher, error) {
 	}
 
 	var ms []matcher
-	if len(m.Query) > 0 {
-		ms = append(ms, queryMatcher(m.Query))
+	if len(query) > 0 {
+		ms = append(ms, queryMatcher(query))
 	}
 	if len(headers) > 0 {
 		ms = append(ms, headerMatcher(headers))
 	}
 	if len(m.JSON) > 0 {
-		want, err := decodeJSON(m.JSON)
+		body, err := compileJSONMatcher(m.JSON)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON matcher: %w", err)
+			return nil, err
 		}
-		ms = append(ms, jsonMatcher(want))
+		ms = append(ms, jsonMatcher(body))
 	}
 	return ms, nil
+}
+
+// compileJSONMatcher decodes a pattern and compiles it, so nothing about the
+// configuration is interpreted again once a request arrives.
+func compileJSONMatcher(raw []byte) (jsonPredicate, error) {
+	pattern, err := decodeJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JSON matcher: %w", err)
+	}
+	match, err := compileJSONPredicate(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JSON matcher: %w", err)
+	}
+	return match, nil
 }
 
 // compileMatchHeaders rejects the scenario selector headers. They steer routing
@@ -61,19 +74,10 @@ func compileMatchHeaders(src map[string]restfile.MockHeaderRule) (headerRules, e
 	return compileHeaderRules(src)
 }
 
-func queryMatcher(want map[string]restfile.StringList) matcher {
+func queryMatcher(rules queryRules) matcher {
 	return func(p *probe) (bool, *problem) {
-		return matchQuery(p.query(), want), nil
+		return rules.matches(p.query()), nil
 	}
-}
-
-func matchQuery(got url.Values, want map[string]restfile.StringList) bool {
-	for k, vals := range want {
-		if g, ok := got[k]; !ok || !slices.Equal(g, []string(vals)) {
-			return false
-		}
-	}
-	return true
 }
 
 func headerMatcher(rules headerRules) matcher {
@@ -98,13 +102,13 @@ func headerOrHost(h http.Header, host, name string) []string {
 	return h.Values(name)
 }
 
-func jsonMatcher(want any) matcher {
+func jsonMatcher(want jsonPredicate) matcher {
 	return func(p *probe) (bool, *problem) {
 		body, ok, err := p.json()
 		if err != nil {
 			return false, err
 		}
-		return ok && subset(want, body), nil
+		return ok && want(body), nil
 	}
 }
 
@@ -201,50 +205,4 @@ func decodeJSON(data []byte) (any, error) {
 		return nil, err
 	}
 	return v, nil
-}
-
-func subset(want, got any) bool {
-	switch want := want.(type) {
-	case map[string]any:
-		got, ok := got.(map[string]any)
-		if !ok {
-			return false
-		}
-		for k, v := range want {
-			if g, ok := got[k]; !ok || !subset(v, g) {
-				return false
-			}
-		}
-		return true
-	case []any:
-		got, ok := got.([]any)
-		if !ok || len(want) != len(got) {
-			return false
-		}
-		for i := range want {
-			if !subset(want[i], got[i]) {
-				return false
-			}
-		}
-		return true
-	case json.Number:
-		got, ok := got.(json.Number)
-		return ok && equalJSONNumbers(want, got)
-	default:
-		return want == got
-	}
-}
-
-// equalJSONNumbers compares two JSON numbers by value so 100, 1e2 and 100.0
-// all match. 256 bits keep mixed int/decimal forms exact far past float64's
-// 2^53. Unlike big.Rat, a hostile request cannot make this allocate 10^exp
-// bytes, because a runaway exponent just saturates to Inf and Inf never
-// matches anything.
-func equalJSONNumbers(want, got json.Number) bool {
-	if want == got {
-		return true
-	}
-	a, _, aerr := big.ParseFloat(string(want), 10, 256, big.ToNearestEven)
-	b, _, berr := big.ParseFloat(string(got), 10, 256, big.ToNearestEven)
-	return aerr == nil && berr == nil && !a.IsInf() && !b.IsInf() && a.Cmp(b) == 0
 }

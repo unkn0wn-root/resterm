@@ -50,7 +50,8 @@ GET https://example.com
 	if got := resp.Headers.Values("Set-Cookie"); !reflect.DeepEqual(got, []string{"one=1", "two=2"}) {
 		t.Fatalf("set-cookie = %#v", got)
 	}
-	if got := m.Match.Query["mode"]; !reflect.DeepEqual(got, restfile.StringList{"test"}) {
+	if got := m.Match.Query["mode"]; got.Op != restfile.MockQueryOpExact ||
+		!reflect.DeepEqual(got.Values, []string{"test"}) {
 		t.Fatalf("query matcher = %#v", got)
 	}
 	if got := m.Match.Headers["X-Tenant"]; got.Op != restfile.MockHeaderOpExact ||
@@ -104,6 +105,78 @@ done`
 	}
 	if got := mock.Match.Headers["X-Env"].Values; !reflect.DeepEqual(got, []string{"dev", "prod"}) {
 		t.Fatalf("oneOf values = %#v", got)
+	}
+}
+
+// TestParseMockRulesReportsTheSameRuleEveryTime pins the diagnostic for a block
+// with several broken rules. Map order would otherwise pick a different one on
+// each parse, and the editor reparses on every keystroke.
+func TestParseMockRulesReportsTheSameRuleEveryTime(t *testing.T) {
+	sources := map[string]string{
+		"query": "# @mock method=GET path=/x\n" +
+			`# @match query={"ccc":{"oneOf":[]},"aaa":{"gt":"1"},"bbb":{"prefix":""}}` + "\nHTTP/1.1 200 OK",
+		"headers": "# @mock method=GET path=/x\n" +
+			`# @match headers={"X-C":{"oneOf":[]},"X-A":{"regex":"^v[0-9"},"X-B":{"prefix":""}}` +
+			"\nHTTP/1.1 200 OK",
+	}
+	for kind, source := range sources {
+		t.Run(kind, func(t *testing.T) {
+			first := Parse("bad.http", []byte(source)).Errors
+			if len(first) == 0 {
+				t.Fatal("expected a diagnostic")
+			}
+			for range 50 {
+				got := Parse("bad.http", []byte(source)).Errors
+				if len(got) != len(first) || got[0].Message != first[0].Message {
+					t.Fatalf("diagnostic varies between parses:\n  %s\n  %s", first[0].Message, got[0].Message)
+				}
+			}
+			// sorted order means the alphabetically first broken key wins
+			if !strings.Contains(first[0].Message, "aaa") && !strings.Contains(first[0].Message, "X-A") {
+				t.Fatalf("diagnostic = %q, want the first key in sorted order", first[0].Message)
+			}
+		})
+	}
+}
+
+func TestParseMockQueryRules(t *testing.T) {
+	src := `# @mock method=GET path=/orders
+# @match query={"mode":"live","tags":["a","b"],"job":{"prefix":"pay_"},"trace":{"present":true},"debug":{"absent":true},"note":{"contains":"abc"},"v":{"regex":"^v[0-9]+$"},"env":{"oneOf":["dev","prod"]},"page":{"gt":10},"size":{"gte":1},"skip":{"lt":100},"limit":{"lte":50}}
+HTTP/1.1 200 OK
+
+ok`
+	doc := Parse("mocks.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Mocks) != 1 {
+		t.Fatalf("errors=%+v mocks=%d", doc.Errors, len(doc.Mocks))
+	}
+	wantOps := map[string]restfile.MockQueryOp{
+		"mode":  restfile.MockQueryOpExact,
+		"tags":  restfile.MockQueryOpExact,
+		"job":   restfile.MockQueryOpPrefix,
+		"trace": restfile.MockQueryOpPresent,
+		"debug": restfile.MockQueryOpAbsent,
+		"note":  restfile.MockQueryOpContains,
+		"v":     restfile.MockQueryOpRegex,
+		"env":   restfile.MockQueryOpOneOf,
+		"page":  restfile.MockQueryOpGT,
+		"size":  restfile.MockQueryOpGTE,
+		"skip":  restfile.MockQueryOpLT,
+		"limit": restfile.MockQueryOpLTE,
+	}
+	query := doc.Mocks[0].Match.Query
+	if len(query) != len(wantOps) {
+		t.Fatalf("query = %+v", query)
+	}
+	for name, want := range wantOps {
+		if got := query[name].Op; got != want {
+			t.Fatalf("query %s op = %v, want %v", name, got, want)
+		}
+	}
+	if got := query["page"].Values; !reflect.DeepEqual(got, []string{"10"}) {
+		t.Fatalf("gt operand = %#v", got)
+	}
+	if got := query["tags"].Values; !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("exact array operand = %#v", got)
 	}
 }
 
@@ -310,6 +383,16 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 			name:   "header oneOf rejects a scalar",
 			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"oneOf\":\"dev\"}}\nHTTP/1.1 200 OK",
 			want:   "oneOf matcher must be a non-empty string array",
+		},
+		{
+			name:   "null query matcher",
+			source: "# @mock method=GET path=/x\n# @match query={\"page\":null}\nHTTP/1.1 200 OK",
+			want:   "cannot be null",
+		},
+		{
+			name:   "quoted query number",
+			source: "# @mock method=GET path=/x\n# @match query={\"page\":{\"gte\":\"10\"}}\nHTTP/1.1 200 OK",
+			want:   "gte matcher must be a number, not a quoted string",
 		},
 	}
 	for _, tt := range tests {
