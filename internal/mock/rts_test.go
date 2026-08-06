@@ -3,6 +3,7 @@ package mock
 import (
 	"context"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -36,7 +37,10 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
   headers: {
     Authorization: {prefix: "Bearer "},
     "X-Trace": {present: true},
-    "X-Debug": {absent: true}
+    "X-Debug": {absent: true},
+    "User-Agent": {contains: "Chrome"},
+    "X-Version": {regex: "^v[0-9]+$"},
+    "X-Env": {oneOf: ["dev", "prod"]}
   },
   json: {status: "completed"}
 })`, rts.Pos{Path: "test.http", Line: 1, Col: 1})
@@ -58,6 +62,20 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 	}
 	if got := inspector.pattern.Headers["X-Debug"]; got.Op != restfile.MockHeaderOpAbsent {
 		t.Fatalf("X-Debug rule = %+v", got)
+	}
+	// scripts, the control API, and .http files share one JSON schema, so every
+	// operator has to decode the same way from an RTS dict
+	if got := inspector.pattern.Headers["User-Agent"]; got.Op != restfile.MockHeaderOpContains ||
+		got.Values[0] != "Chrome" {
+		t.Fatalf("User-Agent rule = %+v", got)
+	}
+	if got := inspector.pattern.Headers["X-Version"]; got.Op != restfile.MockHeaderOpRegex ||
+		got.Values[0] != "^v[0-9]+$" {
+		t.Fatalf("X-Version rule = %+v", got)
+	}
+	if got := inspector.pattern.Headers["X-Env"]; got.Op != restfile.MockHeaderOpOneOf ||
+		!slices.Equal(got.Values, []string{"dev", "prod"}) {
+		t.Fatalf("X-Env rule = %+v", got)
 	}
 	if string(inspector.pattern.JSON) != `{"status":"completed"}` {
 		t.Fatalf("JSON pattern = %s", inspector.pattern.JSON)

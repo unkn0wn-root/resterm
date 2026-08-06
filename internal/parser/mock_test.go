@@ -65,7 +65,7 @@ GET https://example.com
 func TestParseMockSequenceKeyExpectationAndHeaderRules(t *testing.T) {
 	src := `# @mock method=POST path=/payments/{id} sequence=polling sequence-key=path.id
 # @expect calls=2
-# @match headers={"X-Tenant":{"exact":"acme"},"Authorization":{"prefix":"Bearer "},"X-Request-ID":{"present":true},"X-Debug":{"absent":true}}
+# @match headers={"X-Tenant":{"exact":"acme"},"Authorization":{"prefix":"Bearer "},"X-Request-ID":{"present":true},"X-Debug":{"absent":true},"User-Agent":{"contains":"Chrome"},"X-Version":{"regex":"^v[0-9]+$"},"X-Env":{"oneOf":["dev","prod"]}}
 HTTP/1.1 503 Service Unavailable
 
 pending
@@ -90,11 +90,20 @@ done`
 		"Authorization": restfile.MockHeaderOpPrefix,
 		"X-Request-Id":  restfile.MockHeaderOpPresent,
 		"X-Debug":       restfile.MockHeaderOpAbsent,
+		"User-Agent":    restfile.MockHeaderOpContains,
+		"X-Version":     restfile.MockHeaderOpRegex,
+		"X-Env":         restfile.MockHeaderOpOneOf,
+	}
+	if len(mock.Match.Headers) != len(wantOps) {
+		t.Fatalf("headers = %+v", mock.Match.Headers)
 	}
 	for name, want := range wantOps {
 		if got := mock.Match.Headers[name].Op; got != want {
 			t.Fatalf("header %s op = %v, want %v", name, got, want)
 		}
+	}
+	if got := mock.Match.Headers["X-Env"].Values; !reflect.DeepEqual(got, []string{"dev", "prod"}) {
+		t.Fatalf("oneOf values = %#v", got)
 	}
 }
 
@@ -260,7 +269,7 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 		{
 			name:   "empty header prefix",
 			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"prefix\":\"\"}}\nHTTP/1.1 200 OK",
-			want:   "must be a non-empty string",
+			want:   "prefix matcher requires one non-empty value",
 		},
 		{
 			name:   "false header presence",
@@ -271,6 +280,36 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 			name:   "null header matcher",
 			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":null}\nHTTP/1.1 200 OK",
 			want:   "cannot be null",
+		},
+		{
+			name:   "unknown header operator",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"matches\":\"v1\"}}\nHTTP/1.1 200 OK",
+			want:   "unknown matcher operator \"matches\"",
+		},
+		{
+			name:   "empty header contains",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"contains\":\"\"}}\nHTTP/1.1 200 OK",
+			want:   "contains matcher requires one non-empty value",
+		},
+		{
+			name:   "header contains wrong type",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"contains\":[\"a\"]}}\nHTTP/1.1 200 OK",
+			want:   "contains matcher must be a non-empty string",
+		},
+		{
+			name:   "malformed header regex",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"regex\":\"^v[0-9\"}}\nHTTP/1.1 200 OK",
+			want:   "regex matcher is not a valid regular expression",
+		},
+		{
+			name:   "empty header oneOf",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"oneOf\":[]}}\nHTTP/1.1 200 OK",
+			want:   "oneOf matcher requires at least one value",
+		},
+		{
+			name:   "header oneOf rejects a scalar",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"oneOf\":\"dev\"}}\nHTTP/1.1 200 OK",
+			want:   "oneOf matcher must be a non-empty string array",
 		},
 	}
 	for _, tt := range tests {

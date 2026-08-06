@@ -116,7 +116,8 @@ func (c *compiler) newVariant(
 	case spec.Default && spec.Match.HasConditions():
 		return nil, errors.New("default mock scenario cannot have @match conditions")
 	}
-	if err := checkMatch(spec.Match); err != nil {
+	ms, err := newMatchers(spec.Match)
+	if err != nil {
 		return nil, err
 	}
 	sequenceKey, err := spec.SequenceKey.Check(pathParams)
@@ -136,11 +137,6 @@ func (c *compiler) newVariant(
 			}
 		}
 		responses = append(responses, resp)
-	}
-
-	ms, err := newMatchers(spec.Match)
-	if err != nil {
-		return nil, err
 	}
 
 	return &variant{
@@ -272,19 +268,6 @@ func inMocks(mocks []*restfile.Mock, line int) bool {
 		}
 	}
 	return false
-}
-
-func checkMatch(m restfile.MockMatch) error {
-	if err := checkQueryRules(m.Query); err != nil {
-		return err
-	}
-	for name := range m.Headers {
-		if isSelectorHeader(name) {
-			return fmt.Errorf("mock selector header %q cannot be used as a matcher", name)
-		}
-	}
-	_, err := canonHeaderRules(m.Headers)
-	return err
 }
 
 func respHeaders(src http.Header) (http.Header, error) {

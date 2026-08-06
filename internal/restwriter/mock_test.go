@@ -119,6 +119,39 @@ func TestRenderMockSequenceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRenderMockHeaderRuleRoundTrip(t *testing.T) {
+	doc := &restfile.Document{Mocks: []*restfile.Mock{{
+		Title:  "Browser",
+		Method: http.MethodGet,
+		Path:   "/browser",
+		Match: restfile.MockMatch{Headers: map[string]restfile.MockHeaderRule{
+			"User-Agent": {Op: restfile.MockHeaderOpContains, Values: []string{"Chrome"}},
+			"X-Version":  {Op: restfile.MockHeaderOpRegex, Values: []string{"^v[0-9]+$"}},
+			"X-Env":      {Op: restfile.MockHeaderOpOneOf, Values: []string{"dev", "prod"}},
+		}},
+		Responses: []restfile.MockResponse{{Status: http.StatusOK}},
+	}}}
+
+	rendered := mustRender(t, doc)
+	want := `headers={"User-Agent":{"contains":"Chrome"},` +
+		`"X-Env":{"oneOf":["dev","prod"]},"X-Version":{"regex":"^v[0-9]+$"}}`
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered:\n%s\nwant %s", rendered, want)
+	}
+
+	parsed := parser.Parse("generated.http", []byte(rendered))
+	if len(parsed.Errors) != 0 || len(parsed.Mocks) != 1 {
+		t.Fatalf("round-trip errors=%+v mocks=%d\n%s", parsed.Errors, len(parsed.Mocks), rendered)
+	}
+	headers := parsed.Mocks[0].Match.Headers
+	if headers["User-Agent"].Op != restfile.MockHeaderOpContains ||
+		headers["X-Version"].Values[0] != "^v[0-9]+$" ||
+		headers["X-Env"].Op != restfile.MockHeaderOpOneOf ||
+		len(headers["X-Env"].Values) != 2 {
+		t.Fatalf("round-trip headers = %+v", headers)
+	}
+}
+
 func TestRenderRejectsMockSequenceDelimiterInBody(t *testing.T) {
 	mock := &restfile.Mock{
 		Sequence: "polling",

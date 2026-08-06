@@ -24,6 +24,7 @@ type RequestPattern struct {
 type compiledPattern struct {
 	pattern RequestPattern
 	path    *pathMatcher
+	headers headerRules
 	json    any
 	hasJSON bool
 }
@@ -33,11 +34,11 @@ type pathMatcher struct {
 }
 
 func compileRequestPattern(p RequestPattern) (*compiledPattern, error) {
-	p, err := normalizeRequestPattern(p)
+	p, headers, err := normalizeRequestPattern(p)
 	if err != nil {
 		return nil, err
 	}
-	cp := &compiledPattern{pattern: p}
+	cp := &compiledPattern{pattern: p, headers: headers}
 	if p.Path != "" {
 		cp.path, err = newPathMatcher(p.Path)
 		if err != nil {
@@ -54,7 +55,7 @@ func compileRequestPattern(p RequestPattern) (*compiledPattern, error) {
 	return cp, nil
 }
 
-func normalizeRequestPattern(p RequestPattern) (RequestPattern, error) {
+func normalizeRequestPattern(p RequestPattern) (RequestPattern, headerRules, error) {
 	q := make(map[string]restfile.StringList, len(p.Query))
 	for k, vs := range p.Query {
 		q[k] = slices.Clone(vs)
@@ -66,22 +67,22 @@ func normalizeRequestPattern(p RequestPattern) (RequestPattern, error) {
 		JSON:   slices.Clone(p.JSON),
 	}
 	if out.Method != "" && !httpguts.ValidHeaderFieldName(out.Method) {
-		return RequestPattern{}, fmt.Errorf("invalid request pattern method %q", p.Method)
+		return RequestPattern{}, nil, fmt.Errorf("invalid request pattern method %q", p.Method)
 	}
 	if out.Path != "" {
 		if err := restfile.ValidateMockPath(out.Path); err != nil {
-			return RequestPattern{}, err
+			return RequestPattern{}, nil, err
 		}
 	}
 	if err := checkQueryRules(out.Query); err != nil {
-		return RequestPattern{}, err
+		return RequestPattern{}, nil, err
 	}
-	headers, err := canonHeaderRules(p.Headers)
+	headers, err := compileHeaderRules(p.Headers)
 	if err != nil {
-		return RequestPattern{}, err
+		return RequestPattern{}, nil, err
 	}
-	out.Headers = headers
-	return out, nil
+	out.Headers = headers.declared()
+	return out, headers, nil
 }
 
 func checkQueryRules(query map[string]restfile.StringList) error {
@@ -94,54 +95,6 @@ func checkQueryRules(query map[string]restfile.StringList) error {
 		}
 	}
 	return nil
-}
-
-// canonHeaderRules validates every rule and rekeys the map by canonical header name.
-func canonHeaderRules(src map[string]restfile.MockHeaderRule) (map[string]restfile.MockHeaderRule, error) {
-	out := make(map[string]restfile.MockHeaderRule, len(src))
-	for name, rule := range src {
-		name = strings.TrimSpace(name)
-		if !httpguts.ValidHeaderFieldName(name) {
-			return nil, fmt.Errorf("invalid mock header matcher %q", name)
-		}
-		if err := validateHeaderRule(name, rule); err != nil {
-			return nil, err
-		}
-		rule.Values = slices.Clone(rule.Values)
-		name = http.CanonicalHeaderKey(name)
-		if _, exists := out[name]; exists {
-			return nil, fmt.Errorf("mock header matcher %q is repeated with different casing", name)
-		}
-		out[name] = rule
-	}
-	return out, nil
-}
-
-func validateHeaderRule(name string, rule restfile.MockHeaderRule) error {
-	for _, value := range rule.Values {
-		if !httpguts.ValidHeaderFieldValue(value) {
-			return fmt.Errorf("invalid value for mock header matcher %q", name)
-		}
-	}
-	switch rule.Op {
-	case restfile.MockHeaderOpExact:
-		if len(rule.Values) == 0 {
-			return fmt.Errorf("mock header exact matcher %q requires at least one value", name)
-		}
-		return nil
-	case restfile.MockHeaderOpPrefix:
-		if len(rule.Values) != 1 || rule.Values[0] == "" {
-			return fmt.Errorf("mock header prefix matcher %q requires one non-empty value", name)
-		}
-		return nil
-	case restfile.MockHeaderOpPresent, restfile.MockHeaderOpAbsent:
-		if len(rule.Values) != 0 {
-			return fmt.Errorf("mock header presence matcher %q cannot have values", name)
-		}
-		return nil
-	default:
-		return fmt.Errorf("mock header matcher %q has an invalid operation", name)
-	}
 }
 
 func newPathMatcher(path string) (*pathMatcher, error) {
@@ -180,10 +133,8 @@ func (p *compiledPattern) matches(entry requestRecord) (bool, error) {
 	if !matchQuery(entry.query, p.pattern.Query) {
 		return false, nil
 	}
-	for name, rule := range p.pattern.Headers {
-		if !matchHeaderRule(entry.headerValues(name), rule) {
-			return false, nil
-		}
+	if !p.headers.matches(entry.headers, entry.host) {
+		return false, nil
 	}
 	if !p.hasJSON {
 		return true, nil

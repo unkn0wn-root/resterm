@@ -325,7 +325,7 @@ func (m *mockBuilder) addHeaderMatchers(b *documentBuilder, line int, raw string
 			b.addMockError(line, "@match headers name cannot be empty")
 			continue
 		}
-		canon, ok := b.canonMatchHeader(line, name, vals[key])
+		canon, ok := b.canonMatchHeader(line, name)
 		if !ok {
 			continue
 		}
@@ -337,23 +337,14 @@ func (m *mockBuilder) addHeaderMatchers(b *documentBuilder, line int, raw string
 	}
 }
 
-func (b *documentBuilder) canonMatchHeader(
-	line int,
-	key string,
-	rule restfile.MockHeaderRule,
-) (string, bool) {
+// canonMatchHeader only validates the name. The rule and its values are checked
+// when they decode in parseMockHeaderRules.
+func (b *documentBuilder) canonMatchHeader(line int, key string) (string, bool) {
 	if !httpguts.ValidHeaderFieldName(key) {
 		b.addMockError(line, fmt.Sprintf("invalid @match header name %q", key))
 		return "", false
 	}
-	key = http.CanonicalHeaderKey(key)
-	for _, v := range rule.Values {
-		if !httpguts.ValidHeaderFieldValue(v) {
-			b.addMockError(line, fmt.Sprintf("invalid @match header value for %q", key))
-			return "", false
-		}
-	}
-	return key, true
+	return http.CanonicalHeaderKey(key), true
 }
 
 func (b *documentBuilder) flushMock() {

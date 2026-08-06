@@ -21,14 +21,24 @@ const maxMockRequestBody = 4 << 20
 // matcher is one compiled @match condition, run per request against a probe.
 type matcher func(*probe) (bool, *problem)
 
-// order is load-bearing: JSON body errors surface only after query and header conditions pass
+// newMatchers validates and compiles the whole @match block. Runtime order is
+// load-bearing: JSON body errors surface only after query and header conditions
+// pass.
 func newMatchers(m restfile.MockMatch) ([]matcher, error) {
+	if err := checkQueryRules(m.Query); err != nil {
+		return nil, err
+	}
+	headers, err := compileMatchHeaders(m.Headers)
+	if err != nil {
+		return nil, err
+	}
+
 	var ms []matcher
 	if len(m.Query) > 0 {
 		ms = append(ms, queryMatcher(m.Query))
 	}
-	if len(m.Headers) > 0 {
-		ms = append(ms, headerMatcher(m.Headers))
+	if len(headers) > 0 {
+		ms = append(ms, headerMatcher(headers))
 	}
 	if len(m.JSON) > 0 {
 		want, err := decodeJSON(m.JSON)
@@ -38,6 +48,17 @@ func newMatchers(m restfile.MockMatch) ([]matcher, error) {
 		ms = append(ms, jsonMatcher(want))
 	}
 	return ms, nil
+}
+
+// compileMatchHeaders rejects the scenario selector headers. They steer routing
+// before any variant is consulted, so matching on them cannot work.
+func compileMatchHeaders(src map[string]restfile.MockHeaderRule) (headerRules, error) {
+	for name := range src {
+		if isSelectorHeader(name) {
+			return nil, fmt.Errorf("mock selector header %q cannot be used as a matcher", name)
+		}
+	}
+	return compileHeaderRules(src)
 }
 
 func queryMatcher(want map[string]restfile.StringList) matcher {
@@ -55,38 +76,9 @@ func matchQuery(got url.Values, want map[string]restfile.StringList) bool {
 	return true
 }
 
-func headerMatcher(want map[string]restfile.MockHeaderRule) matcher {
+func headerMatcher(rules headerRules) matcher {
 	return func(p *probe) (bool, *problem) {
-		for k, rule := range want {
-			got := headerValues(p.r, k)
-			if !matchHeaderRule(got, rule) {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-}
-
-func matchHeaderRule(got []string, rule restfile.MockHeaderRule) bool {
-	switch rule.Op {
-	case restfile.MockHeaderOpExact:
-		return got != nil && slices.Equal(got, rule.Values)
-	case restfile.MockHeaderOpPrefix:
-		if len(rule.Values) != 1 {
-			return false
-		}
-		for _, value := range got {
-			if strings.HasPrefix(value, rule.Values[0]) {
-				return true
-			}
-		}
-		return false
-	case restfile.MockHeaderOpPresent:
-		return len(got) > 0
-	case restfile.MockHeaderOpAbsent:
-		return len(got) == 0
-	default:
-		return false
+		return rules.matches(p.r.Header, p.r.Host), nil
 	}
 }
 

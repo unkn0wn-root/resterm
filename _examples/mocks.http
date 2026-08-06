@@ -70,6 +70,24 @@ Content-Type: application/json
 
 {"error":"missing or invalid webhook credentials"}
 
+### Catalog for a supported client
+# regex is unanchored, so ^ and $ are what limit X-Api-Version to a whole value
+# like "v2". oneOf accepts any one of the listed values, while an exact array
+# such as {"X-Env":["dev","prod"]} would require both of them, in that order.
+# @mock method=GET path=/catalog name=supported
+# @match headers={"User-Agent":{"contains":"Chrome"},"X-Api-Version":{"regex":"^v[0-9]+$"},"X-Env":{"oneOf":["dev","stage","prod"]}}
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"items":[{"id":"widget","price":499}]}
+
+### Catalog for everything else
+# @mock method=GET path=/catalog name=unsupported default=true
+HTTP/1.1 426 Upgrade Required
+Content-Type: application/json
+
+{"error":"send a Chrome user agent, an X-Api-Version like v2, and a known X-Env"}
+
 ### Per-key rate limit
 # @mock method=GET path=/quota sequence=quota sequence-key=header.X-Api-Key
 HTTP/1.1 200 OK
@@ -111,6 +129,13 @@ GET {{mock.base}}/payments/pay_42
 # @name spend-quota
 GET {{mock.base}}/quota
 X-Api-Key: demo-key
+
+### Fetch the catalog as a supported client
+# @name fetch-catalog
+GET {{mock.base}}/catalog
+User-Agent: Mozilla/5.0 Chrome/120.0 Safari/537.36
+X-Api-Version: v2
+X-Env: stage
 
 ### Deliver the payment webhook
 # The mock.* assertion needs the TUI-owned server (`g Shift+M`).

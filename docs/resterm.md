@@ -922,14 +922,20 @@ Query objects accept a string or an array of strings per key. Header matchers re
 
 ```http
 # @match headers={"X-Tenant":{"exact":"demo"},"Authorization":{"prefix":"Bearer "},"X-Correlation-ID":{"present":true},"X-Debug":{"absent":true}}
+# @match headers={"User-Agent":{"contains":"Chrome"},"X-Version":{"regex":"^v[0-9]+$"},"X-Env":{"oneOf":["dev","stage","prod"]}}
 ```
 
 - A string or array is shorthand for `exact`. Repeated values must match exactly and in order.
 - `prefix` succeeds when any value for that header starts with the non-empty prefix.
+- `contains` succeeds when any value for that header contains the non-empty substring.
+- `regex` succeeds when any value for that header matches the [RE2](https://pkg.go.dev/regexp/syntax) pattern. Matching is unanchored, so use `^` and `$` to match a whole value, and `(?i)` to ignore case.
+- `oneOf` succeeds when any value for that header equals one of the listed values. The list cannot be empty. Unlike `exact`, order and extra values do not matter.
 - `present` requires the header to have a value, including an explicitly empty value.
 - `absent` requires no value for that header.
 
-Each header declares exactly one rule. Header names are case-insensitive. Only declared query and header keys are constrained. JSON objects match as recursive subsets, while arrays are exact and ordered. JSON numbers compare numerically (`1`, `1.0`, and `1e0` are equal). JSON matching accepts `application/json` and `+json`, rejects malformed bodies with `400`, and caps matcher input at 4 MiB (`413`).
+Each header declares exactly one rule. Header names are case-insensitive, but header values are case-sensitive. `prefix`, `contains`, `regex`, and `oneOf` test each repeated value on its own and succeed as soon as one of them matches. A comma-separated list inside a single value is never split, and a missing header fails all four. Empty `prefix`, `contains`, and `regex` operands are rejected, as is an empty `oneOf` array. To match an empty value on purpose, write `{"regex":"^$"}`.
+
+Only declared query and header keys are constrained. JSON objects match as recursive subsets, while arrays are exact and ordered. JSON numbers compare numerically (`1`, `1.0`, and `1e0` are equal). JSON matching accepts `application/json` and `+json`, rejects malformed bodies with `400`, and caps matcher input at 4 MiB (`413`).
 
 Scenario selection is deterministic:
 

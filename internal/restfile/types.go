@@ -130,6 +130,8 @@ type MockExpectation struct {
 	Line  int
 }
 
+// MockHeaderOp is the operator of one @match headers rule. New operators belong
+// at the end because mock_header.go indexes its operand table by this value.
 type MockHeaderOp uint8
 
 const (
@@ -138,8 +140,14 @@ const (
 	MockHeaderOpPrefix
 	MockHeaderOpPresent
 	MockHeaderOpAbsent
+	MockHeaderOpContains
+	MockHeaderOpRegex
+	MockHeaderOpOneOf
 )
 
+// MockHeaderRule is one header condition. Values holds the operand, which is the
+// full expected sequence for exact, the allowed values for oneOf, a single
+// string for prefix, contains and regex, and nothing for present and absent.
 type MockHeaderRule struct {
 	Op     MockHeaderOp
 	Values []string
