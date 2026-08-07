@@ -32,10 +32,6 @@ type requestRecord struct {
 	size          int64
 }
 
-func (r requestRecord) headerValues(name string) []string {
-	return headerOrHost(r.headers, r.host, name)
-}
-
 type requestJournal struct {
 	mu sync.RWMutex
 

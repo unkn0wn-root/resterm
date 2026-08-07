@@ -206,6 +206,7 @@ func (b *documentBuilder) ensureRequest(line int) {
 		startLine:         line,
 		sourcePath:        b.doc.Path,
 		metadata:          restfile.RequestMetadata{Tags: []string{}},
+		declared:          make(map[directive.Name]bool),
 		currentScriptKind: defaultScriptKind,
 		currentScriptLang: defaultScriptLang,
 		http:              httpbuilder.New(),
@@ -280,7 +281,8 @@ func (b *documentBuilder) startWorkflow(line int, rest string) {
 	}
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
-	sb.applyOptions(directive.ParseOptions(remainder))
+	opts, err := directive.ParseOptions(directive.Workflow, remainder)
+	b.addErrors(line, errors.Join(err, sb.applyOptions(opts)))
 	sb.touch(line)
 	b.workflow = sb
 }

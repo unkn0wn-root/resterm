@@ -171,6 +171,27 @@ GET https://example.com/first
 	}
 }
 
+func TestParseWorkflowFailureAliasNeverLeaksIntoOptions(t *testing.T) {
+	src := `# @workflow demo on-failure=continue onfailure=stop region=us-east-1
+# @step one using=First
+`
+
+	doc := Parse("workflow.http", []byte(src))
+	want := `@workflow options "on-failure", "onfailure" are the same option`
+	if !hasParseMessage(doc.Errors, want) {
+		t.Fatalf("expected %q, got %v", want, doc.Errors)
+	}
+	opts := doc.Workflows[0].Options
+	for _, key := range []string{"on-failure", "onfailure"} {
+		if _, ok := opts[key]; ok {
+			t.Fatalf("workflow options kept %q: %v", key, opts)
+		}
+	}
+	if opts["region"] != "us-east-1" {
+		t.Fatalf("workflow options = %v, want region preserved", opts)
+	}
+}
+
 // A quoted value and a comparison decode to the same token, so classifying an
 // option after decoding got all of these wrong.
 func TestParseWorkflowBranchClassifiesOptionsFromSource(t *testing.T) {

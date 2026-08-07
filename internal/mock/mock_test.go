@@ -71,37 +71,6 @@ user`)
 	)
 }
 
-func TestJSONMatcherComparesNumbersExactly(t *testing.T) {
-	tests := []struct {
-		name string
-		want string
-		got  string
-		ok   bool
-	}{
-		{name: "decimal equivalent", want: `1`, got: `1.0`, ok: true},
-		{name: "exponent equivalent", want: `100`, got: `1e2`, ok: true},
-		{
-			name: "distinct large integers",
-			want: `9007199254740993`, got: `9007199254740992`, ok: false,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			want, err := decodeJSON([]byte(test.want))
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, err := decodeJSON([]byte(test.got))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if ok := subset(want, got); ok != test.ok {
-				t.Fatalf("subset(%s, %s) = %t, want %t", test.want, test.got, ok, test.ok)
-			}
-		})
-	}
-}
-
 func TestCompileRejectsInvalidMocks(t *testing.T) {
 	tests := []struct {
 		name   string

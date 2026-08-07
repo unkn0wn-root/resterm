@@ -130,29 +130,52 @@ type MockExpectation struct {
 	Line  int
 }
 
-type MockHeaderOp uint8
+// MockMatchOp is the operator of one @match rule. New operators belong at the
+// end because the operand table is indexed by this value. Each matcher field
+// declares the operators it takes.
+type MockMatchOp uint8
 
 const (
-	MockHeaderOpUnknown MockHeaderOp = iota
-	MockHeaderOpExact
-	MockHeaderOpPrefix
-	MockHeaderOpPresent
-	MockHeaderOpAbsent
+	MockOpUnknown MockMatchOp = iota
+	MockOpExact
+	MockOpPrefix
+	MockOpPresent
+	MockOpAbsent
+	MockOpContains
+	MockOpRegex
+	MockOpOneOf
+	MockOpGT
+	MockOpGTE
+	MockOpLT
+	MockOpLTE
 )
 
-type MockHeaderRule struct {
-	Op     MockHeaderOp
+// MockRule is one @match condition. Values holds the operand, which is the full
+// expected sequence for exact, the allowed values for oneOf, a single string for
+// prefix, contains and regex, the JSON number as written for gt, gte, lt and
+// lte, and nothing for present and absent.
+type MockRule struct {
+	Op     MockMatchOp
 	Values []string
 }
 
-// StringList decodes a JSON string or string array, the value shape shared by
-// @match query, @match headers, and mock request patterns.
+// Separate types so a rule only one field accepts cannot be stored in, or
+// written back to, the other.
+type (
+	MockHeaderRule MockRule
+	MockQueryRule  MockRule
+)
+
+// StringList decodes a JSON string or string array, the operand shape both
+// matcher shorthands share.
 type StringList []string
 
+// MockMatch keeps body conditions as JSON because the mock package compiles them.
 type MockMatch struct {
-	Query   map[string]StringList
-	Headers map[string]MockHeaderRule
-	JSON    []byte
+	Query     map[string]MockQueryRule
+	Headers   map[string]MockHeaderRule
+	JSON      []byte
+	JSONRules []byte
 }
 
 type MockResponse struct {

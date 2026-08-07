@@ -52,21 +52,80 @@ func TestUnknownOptionsWarnWithoutDiscardingTheDirective(t *testing.T) {
 	}
 }
 
-// Write both spellings of an aliased option and neither should come back as
-// unknown.
-func TestOptionAliasesAreNotReportedAsUnknown(t *testing.T) {
+func TestOptionAliasesConflictWithoutBeingUnknown(t *testing.T) {
 	tests := []struct {
 		name string
 		src  string
+		want string
 	}{
-		{name: "ssh known hosts", src: "### r\n# @ssh host=h known-hosts=a known_hosts=b\nGET http://x\n"},
-		{name: "ssh strict", src: "### r\n# @ssh host=h strict_hostkey=yes strict-hostkey=no\nGET http://x\n"},
+		{
+			name: "ssh known hosts",
+			src:  "### r\n# @ssh host=h known-hosts=a known_hosts=b\nGET http://x\n",
+			want: `@ssh options "known-hosts", "known_hosts" are the same option`,
+		},
+		{
+			name: "ssh strict",
+			src:  "### r\n# @ssh host=h strict_hostkey=yes strict-hostkey=no\nGET http://x\n",
+			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
+		},
 		{
 			name: "k8s local port",
 			src:  "### r\n# @k8s target=pod/api port=1 local_port=2 local-port=3\nGET http://x\n",
+			want: `@k8s options "local-port", "local_port" are the same option`,
 		},
-		{name: "k8s context", src: "### r\n# @k8s target=pod/api port=1 kube-context=c\nGET http://x\n"},
-		{name: "sse idle", src: "### r\n# @sse idle=1s idle-timeout=2s\nGET http://x\n"},
+		{
+			name: "sse idle",
+			src:  "### r\n# @sse idle=1s idle-timeout=2s\nGET http://x\n",
+			want: `@sse options "idle", "idle-timeout" are the same option`,
+		},
+		{
+			name: "every spelling of the group is named",
+			src:  "### r\n# @k8s target=pod/api port=1 local_port=2 local-port=3 localport=4\nGET http://x\n",
+			want: `@k8s options "local-port", "local_port", "localport" are the same option`,
+		},
+		{
+			name: "workflow step run and using",
+			src:  "# @workflow f\n# @step one using=A run=B\n",
+			want: `@step options "run", "using" are the same option`,
+		},
+		{
+			name: "workflow branch run and using",
+			src:  "# @workflow f\n# @if last.status == 200 run=A using=B\n# @endif\n",
+			want: `@if options "run", "using" are the same option`,
+		},
+		{
+			name: "workflow on-failure",
+			src:  "# @workflow f on-failure=stop onfailure=continue\n# @step one using=A\n",
+			want: `@workflow options "on-failure", "onfailure" are the same option`,
+		},
+		{
+			name: "k8s target kind",
+			src:  "### r\n# @k8s service=api svc=api-canary port=8080\nGET http://x\n",
+			want: `@k8s options "service", "svc" are the same option`,
+		},
+		{
+			name: "script lang and language",
+			src:  "### r\nGET http://x\n# @script test lang=js language=rts\n> tests.assert(true)\n",
+			want: `@script options "lang", "language" are the same option`,
+		},
+		{
+			name: "rts lang and language",
+			src:  "### r\n# @rts pre-request lang=rts language=rts\nGET http://x\n",
+			want: `@rts options "lang", "language" are the same option`,
+		},
+		{
+			name: "compare baseline",
+			src:  "### r\n# @compare dev stage base=dev baseline=stage\nGET http://x\n",
+			want: `@compare options "base", "baseline" are the same option`,
+		},
+		{
+			name: "one spelling is not a conflict",
+			src:  "### r\n# @k8s target=pod/api port=1 kube-context=c\nGET http://x\n",
+		},
+		{
+			name: "a spelling without a value is not a conflict",
+			src:  "### r\n# @ssh host=h known-hosts=a known_hosts=\nGET http://x\n",
+		},
 	}
 
 	for _, tt := range tests {
@@ -75,8 +134,14 @@ func TestOptionAliasesAreNotReportedAsUnknown(t *testing.T) {
 			if hasParseMessage(doc.Warnings, "unknown") {
 				t.Fatalf("alias reported as unknown: %v", doc.Warnings)
 			}
-			if len(doc.Errors) != 0 {
-				t.Fatalf("expected no errors, got %v", doc.Errors)
+			if tt.want == "" {
+				if len(doc.Errors) != 0 {
+					t.Fatalf("expected no errors, got %v", doc.Errors)
+				}
+				return
+			}
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
 			}
 		})
 	}

@@ -37,6 +37,11 @@ type requestBuilder struct {
 	multipart         *multipartSpan
 	ssh               *restfile.SSHSpec
 	k8s               *restfile.K8sSpec
+	declared          map[directive.Name]bool
+}
+
+type featureBuilder interface {
+	HandleDirective(name directive.Name, rest string) (handled, reset bool, err error)
 }
 
 // protoDirective offers a directive to each protocol builder in turn. The
@@ -46,16 +51,23 @@ func (r *requestBuilder) protoDirective(name directive.Name, args string) (bool,
 	if r.grpc.HandleDirective(name, args) {
 		return true, nil
 	}
-	if handled, err := r.websocket.HandleDirective(name, args); handled {
+	for _, feature := range []featureBuilder{r.websocket, r.sse, r.graphql} {
+		handled, reset, err := feature.HandleDirective(name, args)
+		if !handled {
+			continue
+		}
+		if reset {
+			r.clearDeclared(name)
+		}
 		return true, err
-	}
-	if handled, err := r.sse.HandleDirective(name, args); handled {
-		return true, err
-	}
-	if r.graphql.HandleDirective(name, args) {
-		return true, nil
 	}
 	return false, nil
+}
+
+func (r *requestBuilder) clearDeclared(name directive.Name) {
+	for _, cleared := range name.Resets() {
+		delete(r.declared, cleared)
+	}
 }
 
 func (r *requestBuilder) protoBodyLine(raw string) bool {

@@ -20,9 +20,12 @@ type Directive struct {
 
 func ParseDirective(rest string) (Directive, error) {
 	res := Directive{}
-	head, ok := directive.ParseProfileHeader(rest)
+	head, ok, err := directive.ParseProfileHeader(directive.SSH, rest)
 	if !ok {
 		return res, fmt.Errorf("@ssh requires options")
+	}
+	if err != nil {
+		return res, err
 	}
 	scope, opts := head.Scope, head.Options
 	name := head.Name
@@ -37,7 +40,7 @@ func ParseDirective(rest string) (Directive, error) {
 	use := opts.Pop("use")
 	// Everything valid has been popped by now, so the leftovers are typos. They
 	// ride along with a usable result and the caller turns them into warnings.
-	unknown := opts.Unknown(directive.SSH)
+	left := opts.Leftover(directive.SSH)
 
 	if scope == directive.ScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking tunnels.
@@ -51,7 +54,7 @@ func ParseDirective(rest string) (Directive, error) {
 		}
 		res.Scope = scope
 		res.Profile = prof
-		return res, unknown
+		return res, left
 	}
 
 	inline := buildInlineSSH(prof)
@@ -62,7 +65,7 @@ func ParseDirective(rest string) (Directive, error) {
 	res.Scope = scope
 	res.Profile = prof
 	res.Spec = &restfile.SSHSpec{Use: use, Inline: inline}
-	return res, unknown
+	return res, left
 }
 
 func applySSHOptions(prof *restfile.SSHProfile, opts directive.Options) error {

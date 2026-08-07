@@ -70,6 +70,66 @@ Content-Type: application/json
 
 {"error":"missing or invalid webhook credentials"}
 
+### Catalog for a supported client
+# regex is unanchored, so ^ and $ are what limit X-Api-Version to a whole value
+# like "v2". oneOf accepts any one of the listed values, while an exact array
+# such as {"X-Env":["dev","prod"]} would require both of them, in that order.
+# @mock method=GET path=/catalog name=supported
+# @match headers={"User-Agent":{"contains":"Chrome"},"X-Api-Version":{"regex":"^v[0-9]+$"},"X-Env":{"oneOf":["dev","stage","prod"]}}
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"items":[{"id":"widget","price":499}]}
+
+### Catalog for everything else
+# @mock method=GET path=/catalog name=unsupported default=true
+HTTP/1.1 426 Upgrade Required
+Content-Type: application/json
+
+{"error":"send a Chrome user agent, an X-Api-Version like v2, and a known X-Env"}
+
+### Large order held for review
+# A query value is always text, so an object there can only be a matcher and the
+# operators are written bare. gte reads the value as a number, so a request with
+# amount=none fails to match instead of erroring.
+# @mock method=POST path=/orders name=review
+# @match query={"amount":{"gte":1000},"channel":{"oneOf":["web","ios"]},"dry-run":{"absent":true}}
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"id":"ord_9","status":"pending_review"}
+
+### Order accepted
+# @mock method=POST path=/orders name=accepted default=true
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{"id":"ord_9","status":"accepted"}
+
+### Account flagged for manual review
+# json matches literal data while json-rules compares values. Both must match.
+# An open bracket continues the matcher on the next comment line.
+# @mock method=POST path=/accounts name=flagged
+# @match json={"kind":"personal"}
+# @match json-rules={
+#   "score": {"lt": 40},
+#   "tier":  {"oneOf": ["free", "trial"]},
+#   "limits": {
+#     "daily": {"gte": 1, "lt": 100}
+#   }
+# }
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{"error":"account needs manual review"}
+
+### Account accepted
+# @mock method=POST path=/accounts name=accepted default=true
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{"id":"acct_7","status":"active"}
+
 ### Per-key rate limit
 # @mock method=GET path=/quota sequence=quota sequence-key=header.X-Api-Key
 HTTP/1.1 200 OK
@@ -111,6 +171,36 @@ GET {{mock.base}}/payments/pay_42
 # @name spend-quota
 GET {{mock.base}}/quota
 X-Api-Key: demo-key
+
+### Fetch the catalog as a supported client
+# @name fetch-catalog
+GET {{mock.base}}/catalog
+User-Agent: Mozilla/5.0 Chrome/120.0 Safari/537.36
+X-Api-Version: v2
+X-Env: stage
+
+### Place an order large enough to need review
+# @name place-order
+POST {{mock.base}}/orders?amount=2500&channel=web
+Content-Type: application/json
+
+{"sku":"widget","qty":5}
+
+### Submit an account that gets flagged
+# @name submit-account
+POST {{mock.base}}/accounts
+Content-Type: application/json
+
+{"kind":"personal","score":12,"tier":"trial","limits":{"daily":5}}
+
+### Submit an account that is accepted
+# This score misses the rule and uses the default scenario. The gt field remains
+# ordinary request data.
+# @name submit-account-ok
+POST {{mock.base}}/accounts
+Content-Type: application/json
+
+{"kind":"personal","score":80,"tier":"free","limits":{"daily":5},"gt":1}
 
 ### Deliver the payment webhook
 # The mock.* assertion needs the TUI-owned server (`g Shift+M`).

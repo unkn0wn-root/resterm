@@ -150,6 +150,49 @@ mock`)
 	}
 }
 
+func TestControlCountCarriesJSONRules(t *testing.T) {
+	handler := compileSource(t, `# @mock method=POST path=/orders
+HTTP/1.1 200 OK
+
+ok`)
+	server, err := Start("127.0.0.1:0", handler, Options{EnableControl: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = server.Close(context.Background()) })
+
+	client, err := NewClient("http://"+server.Addr(), ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sender := &http.Client{Timeout: 2 * time.Second}
+	for _, body := range []string{`{"type":"order","amount":150}`, `{"type":"order","amount":50}`} {
+		url := "http://" + server.Addr() + "/orders"
+		response, err := sender.Post(url, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+	}
+
+	pattern := RequestPattern{
+		Method:    "POST",
+		Path:      "/orders",
+		JSON:      []byte(`{"type":"order"}`),
+		JSONRules: []byte(`{"amount":{"gt":100}}`),
+	}
+	count, err := client.Count(context.Background(), pattern)
+	if err != nil || count != 1 {
+		t.Fatalf("control Count() = %d, %v, want 1", count, err)
+	}
+
+	pattern.JSONRules = []byte(`{"amount":{"gtt":100}}`)
+	if _, err := client.Count(context.Background(), pattern); err == nil ||
+		!strings.Contains(err.Error(), "amount.gtt") {
+		t.Fatalf("control Count() with a broken rule = %v", err)
+	}
+}
+
 func TestNewClientValidatesURL(t *testing.T) {
 	tests := []struct {
 		name    string

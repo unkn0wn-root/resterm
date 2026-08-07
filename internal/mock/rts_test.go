@@ -3,6 +3,7 @@ package mock
 import (
 	"context"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -32,13 +33,17 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 	value, err := engine.Eval(context.Background(), runtime, `mock.count({
   method: "POST",
   path: "/webhooks/{id}",
-  query: {kind: "payment"},
+  query: {kind: "payment", page: {gte: 10}},
   headers: {
     Authorization: {prefix: "Bearer "},
     "X-Trace": {present: true},
-    "X-Debug": {absent: true}
+    "X-Debug": {absent: true},
+    "User-Agent": {contains: "Chrome"},
+    "X-Version": {regex: "^v[0-9]+$"},
+    "X-Env": {oneOf: ["dev", "prod"]}
   },
-  json: {status: "completed"}
+  json: {status: "completed"},
+  jsonRules: {amount: {gt: 100}, tier: {oneOf: ["gold", "silver"]}}
 })`, rts.Pos{Path: "test.http", Line: 1, Col: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -49,18 +54,43 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 	if inspector.pattern.Method != http.MethodPost || inspector.pattern.Path != "/webhooks/{id}" {
 		t.Fatalf("pattern = %+v", inspector.pattern)
 	}
-	if got := inspector.pattern.Query["kind"]; len(got) != 1 || got[0] != "payment" {
+	if got := inspector.pattern.Query["kind"]; got.Op != restfile.MockOpExact ||
+		!slices.Equal(got.Values, []string{"payment"}) {
 		t.Fatalf("query rule = %+v", got)
 	}
-	if got := inspector.pattern.Headers["Authorization"]; got.Op != restfile.MockHeaderOpPrefix ||
+	if got := inspector.pattern.Query["page"]; got.Op != restfile.MockOpGTE ||
+		!slices.Equal(got.Values, []string{"10"}) {
+		t.Fatalf("page rule = %+v", got)
+	}
+	if got := inspector.pattern.Headers["Authorization"]; got.Op != restfile.MockOpPrefix ||
 		got.Values[0] != "Bearer " {
 		t.Fatalf("Authorization rule = %+v", got)
 	}
-	if got := inspector.pattern.Headers["X-Debug"]; got.Op != restfile.MockHeaderOpAbsent {
+	if got := inspector.pattern.Headers["X-Debug"]; got.Op != restfile.MockOpAbsent {
 		t.Fatalf("X-Debug rule = %+v", got)
+	}
+	// scripts, the control API, and .http files share one JSON schema, so every
+	// operator has to decode the same way from an RTS dict
+	if got := inspector.pattern.Headers["User-Agent"]; got.Op != restfile.MockOpContains ||
+		got.Values[0] != "Chrome" {
+		t.Fatalf("User-Agent rule = %+v", got)
+	}
+	if got := inspector.pattern.Headers["X-Version"]; got.Op != restfile.MockOpRegex ||
+		got.Values[0] != "^v[0-9]+$" {
+		t.Fatalf("X-Version rule = %+v", got)
+	}
+	if got := inspector.pattern.Headers["X-Env"]; got.Op != restfile.MockOpOneOf ||
+		!slices.Equal(got.Values, []string{"dev", "prod"}) {
+		t.Fatalf("X-Env rule = %+v", got)
 	}
 	if string(inspector.pattern.JSON) != `{"status":"completed"}` {
 		t.Fatalf("JSON pattern = %s", inspector.pattern.JSON)
+	}
+	if got := string(inspector.pattern.JSONRules); got != `{"amount":{"gt":100},"tier":{"oneOf":["gold","silver"]}}` {
+		t.Fatalf("JSON rules pattern = %s", got)
+	}
+	if _, err := compileRequestPattern(inspector.pattern); err != nil {
+		t.Fatalf("scripted pattern does not compile: %v", err)
 	}
 
 	inspector.count = 0

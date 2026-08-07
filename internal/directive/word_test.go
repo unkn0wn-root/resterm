@@ -83,7 +83,7 @@ func TestQuoteRoundTripsThroughCutName(t *testing.T) {
 		if got != want {
 			t.Fatalf("CutName(Quote(%q)) = %q, rendered as %q", want, got, line)
 		}
-		if opts := ParseOptions(rest); opts["using"] != "First" {
+		if opts, _ := ParseOptions(Step, rest); opts.Get("using") != "First" {
 			t.Fatalf("options after %q = %v, want using=First", line, opts)
 		}
 	}

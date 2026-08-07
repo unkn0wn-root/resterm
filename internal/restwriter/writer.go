@@ -329,6 +329,9 @@ func renderMockMatch(b *strings.Builder, match restfile.MockMatch) error {
 	if len(match.JSON) > 0 {
 		fields = append(fields, "json="+formatMockJSON(match.JSON))
 	}
+	if len(match.JSONRules) > 0 {
+		fields = append(fields, "json-rules="+formatMockJSON(match.JSONRules))
+	}
 	if len(fields) == 0 {
 		return nil
 	}

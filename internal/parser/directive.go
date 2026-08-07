@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -272,7 +271,10 @@ func parseAuthDirective(rest string) (authDirective, bool, error) {
 		return dir, true, nil
 	}
 
-	spec := parseAuthSpec(strings.Join(fields, " "))
+	spec, err := parseAuthSpec(strings.Join(fields, " "))
+	if err != nil {
+		return dir, true, err
+	}
 	if spec == nil {
 		if explicitScope {
 			return dir, true, fmt.Errorf(
@@ -286,10 +288,10 @@ func parseAuthDirective(rest string) (authDirective, bool, error) {
 	return dir, true, nil
 }
 
-func parseAuthSpec(rest string) *restfile.AuthSpec {
+func parseAuthSpec(rest string) (*restfile.AuthSpec, error) {
 	fields := directive.Fields(rest)
 	if len(fields) == 0 {
-		return nil
+		return nil, nil
 	}
 	authType := strings.ToLower(fields[0])
 	params := make(map[string]string)
@@ -311,11 +313,15 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		}
 	case "oauth2":
 		if len(fields) < 2 {
-			return nil
+			return nil, nil
 		}
-		maps.Copy(params, directive.OptionFields(fields[1:]))
+		opts, err := directive.OptionFields(directive.Auth, fields[1:])
+		if err != nil {
+			return nil, err
+		}
+		opts.CopyTo(params)
 		if params["token_url"] == "" && params["cache_key"] == "" {
-			return nil
+			return nil, nil
 		}
 		if params["grant"] == "" {
 			params["grant"] = "client_credentials"
@@ -325,11 +331,15 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		}
 	case "command":
 		if len(fields) < 2 {
-			return nil
+			return nil, nil
 		}
-		maps.Copy(params, directive.OptionFields(fields[1:]))
+		opts, err := directive.OptionFields(directive.Auth, fields[1:])
+		if err != nil {
+			return nil, err
+		}
+		opts.CopyTo(params)
 		if params["argv"] == "" && params["cache_key"] == "" {
-			return nil
+			return nil, nil
 		}
 	default:
 		if len(fields) >= 2 {
@@ -339,25 +349,28 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		}
 	}
 	if len(params) == 0 {
-		return nil
+		return nil, nil
 	}
-	return &restfile.AuthSpec{Type: authType, Params: params}
+	return &restfile.AuthSpec{Type: authType, Params: params}, nil
 }
 
-func parseProfileSpec(rest string) *restfile.ProfileSpec {
+func parseProfileSpec(rest string) (*restfile.ProfileSpec, error) {
 	rest = strings.TrimSpace(rest)
 	spec := &restfile.ProfileSpec{}
 
 	if rest == "" {
 		spec.Count = 10
-		return spec
+		return spec, nil
 	}
 
 	fields := directive.Fields(rest)
-	params := directive.OptionFields(fields)
+	params, err := directive.OptionFields(directive.Profile, fields)
+	if err != nil {
+		return nil, err
+	}
 
 	if spec.Count == 0 {
-		if raw, ok := params["count"]; ok {
+		if raw, ok := params.Lookup("count"); ok {
 			if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && n > 0 {
 				spec.Count = n
 			}
@@ -370,13 +383,13 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 		}
 	}
 
-	if raw, ok := params["warmup"]; ok {
+	if raw, ok := params.Lookup("warmup"); ok {
 		if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && n >= 0 {
 			spec.Warmup = n
 		}
 	}
 
-	if raw, ok := params["delay"]; ok {
+	if raw, ok := params.Lookup("delay"); ok {
 		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
 			spec.Delay = dur
 		}
@@ -388,82 +401,95 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 	if spec.Warmup < 0 {
 		spec.Warmup = 0
 	}
-	return spec
+	return spec, nil
 }
 
-func parseTraceSpec(rest string) *restfile.TraceSpec {
+// Trace budgets use "<=" syntax, so duplicate checks use normalized target
+// names instead of parsed options.
+func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 	spec := &restfile.TraceSpec{Enabled: true}
 	rest = strings.TrimSpace(rest)
 	if rest == "" {
-		return spec
+		return spec, nil
 	}
 
+	var set []string
 	for _, field := range directive.Fields(rest) {
 		if value := strings.TrimSpace(field); value != "" {
-			applyTraceToken(spec, value)
+			if target := applyTraceToken(spec, value); target != "" {
+				set = append(set, target)
+			}
 		}
+	}
+	if err := directive.RepeatedNames(directive.Trace, set); err != nil {
+		return nil, err
 	}
 
 	if len(spec.Budgets.Phases) == 0 {
 		spec.Budgets.Phases = nil
 	}
-	return spec
+	return spec, nil
 }
 
-// applyTraceToken handles one @trace token, which is an on/off word, a
-// "phase<=dur" budget or a key=value option. The budget form has to be
-// checked before the plain option form because it contains "=" as well.
-func applyTraceToken(spec *restfile.TraceSpec, value string) {
+// applyTraceToken returns the normalized setting name used for duplicate checks.
+func applyTraceToken(spec *restfile.TraceSpec, value string) string {
 	switch strings.ToLower(value) {
 	case "off", "disable", "disabled", "false":
 		spec.Enabled = false
-		return
+		return ""
 	case "on", "enable", "enabled", "true":
 		spec.Enabled = true
-		return
+		return ""
 	}
 
 	if parts := strings.SplitN(value, "<=", 2); len(parts) == 2 {
 		name := tracebudget.NormalizePhase(parts[0])
 		dur := parseDuration(parts[1])
-		if name != "" && dur > 0 {
-			setTracePhaseBudget(spec, name, dur)
+		if name == "" || dur <= 0 {
+			return ""
 		}
-		return
+		setTracePhaseBudget(spec, name, dur)
+		return name
 	}
 
 	if before, after, ok := strings.Cut(value, "="); ok {
 		key := strings.ToLower(strings.TrimSpace(before))
 		val := strings.TrimSpace(after)
-		applyTraceOption(spec, key, val)
+		return applyTraceOption(spec, key, val)
 	}
+	return ""
 }
 
-func applyTraceOption(spec *restfile.TraceSpec, key, val string) {
+func applyTraceOption(spec *restfile.TraceSpec, key, val string) string {
 	switch key {
 	case "enabled":
 		if b, ok := directive.ParseBool(val); ok {
 			spec.Enabled = b
+			return key
 		}
 	case "total":
 		if dur := parseDuration(val); dur > 0 {
 			spec.Budgets.Total = dur
+			return tracebudget.TotalPhase
 		}
 	case "tolerance", "allowance", "grace":
 		if dur := parseDuration(val); dur >= 0 {
 			spec.Budgets.Tolerance = dur
+			return "tolerance"
 		}
 	default:
 		dur := parseDuration(val)
 		if dur <= 0 {
-			return
+			return ""
 		}
 		name := tracebudget.NormalizePhase(key)
 		if name == "" {
-			return
+			return ""
 		}
 		setTracePhaseBudget(spec, name, dur)
+		return name
 	}
+	return ""
 }
 
 func setTracePhaseBudget(spec *restfile.TraceSpec, name string, dur time.Duration) {
@@ -477,88 +503,83 @@ func setTracePhaseBudget(spec *restfile.TraceSpec, name string, dur time.Duratio
 	spec.Budgets.Phases[name] = dur
 }
 
+var compareBaselineKeys = []string{"base", "baseline", "primary", "ref"}
+
 func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 	fields := directive.Fields(rest)
-	envs := make([]string, 0, len(fields))
-	seen := make(map[string]struct{})
-	var baseline string
-	var group string
-
-	for _, field := range fields {
-		value := strings.TrimSpace(field)
-		if value == "" {
-			continue
-		}
-		if before, after, ok := strings.Cut(value, "="); ok {
-			key := strings.ToLower(strings.TrimSpace(before))
-			val := strings.TrimSpace(after)
-			switch key {
-			case "base", "baseline", "primary", "ref":
-				if val == "" {
-					return nil, fmt.Errorf("@compare baseline cannot be empty")
-				}
-				if vars.IsReservedEnvironment(val) {
-					return nil, fmt.Errorf(
-						"@compare baseline %q is reserved for shared defaults",
-						val,
-					)
-				}
-				baseline = val
-			case "group":
-				if val == "" {
-					return nil, fmt.Errorf("@compare group cannot be empty")
-				}
-				if group != "" {
-					return nil, fmt.Errorf("@compare group specified more than once")
-				}
-				if vars.IsReservedEnvironment(val) {
-					return nil, fmt.Errorf("@compare group %q is reserved", val)
-				}
-				group = val
-			default:
-				return nil, fmt.Errorf("@compare unsupported option %q", key)
-			}
-			continue
-		}
-		if vars.IsReservedEnvironment(value) {
-			return nil, fmt.Errorf("@compare environment %q is reserved for shared defaults", value)
-		}
-		lowered := strings.ToLower(value)
-		if _, exists := seen[lowered]; exists {
-			return nil, fmt.Errorf("@compare duplicate environment %q", value)
-		}
-		seen[lowered] = struct{}{}
-		envs = append(envs, value)
+	opts, err := directive.OptionFields(directive.Compare, fields)
+	if err != nil {
+		return nil, err
 	}
 
+	baseline, err := compareOption(opts, compareBaselineKeys...)
+	if err != nil {
+		return nil, err
+	}
+	group, err := compareOption(opts, "group")
+	if err != nil {
+		return nil, err
+	}
+	if err := opts.Leftover(directive.Compare); err != nil {
+		return nil, err
+	}
+	if vars.IsReservedEnvironment(baseline) {
+		return nil, fmt.Errorf("@compare baseline %q is reserved for shared defaults", baseline)
+	}
+	if vars.IsReservedEnvironment(group) {
+		return nil, fmt.Errorf("@compare group %q is reserved", group)
+	}
+
+	envs, err := compareEnvironments(fields)
+	if err != nil {
+		return nil, err
+	}
+	spec := &restfile.CompareSpec{Environments: envs, Baseline: envs[0], Group: group}
+	if baseline == "" {
+		return spec, nil
+	}
+	for _, env := range envs {
+		if strings.EqualFold(env, baseline) {
+			spec.Baseline = env
+			return spec, nil
+		}
+	}
+	return nil, fmt.Errorf("@compare baseline %q must match one of the environments", baseline)
+}
+
+// Compare options reject empty values even when another alias supplies one.
+func compareOption(opts directive.Options, keys ...string) (string, error) {
+	for _, key := range keys {
+		if raw, ok := opts.Lookup(key); ok && strings.TrimSpace(raw) == "" {
+			return "", fmt.Errorf("@compare %s cannot be empty", key)
+		}
+	}
+	value, _ := opts.PopAny(keys...)
+	return value, nil
+}
+
+func compareEnvironments(fields []string) ([]string, error) {
+	envs := make([]string, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		env := strings.TrimSpace(field)
+		if env == "" || strings.Contains(env, "=") {
+			continue
+		}
+		if vars.IsReservedEnvironment(env) {
+			return nil, fmt.Errorf("@compare environment %q is reserved for shared defaults", env)
+		}
+		lowered := strings.ToLower(env)
+		if _, exists := seen[lowered]; exists {
+			return nil, fmt.Errorf("@compare duplicate environment %q", env)
+		}
+		seen[lowered] = struct{}{}
+		envs = append(envs, env)
+	}
 	if len(envs) < 2 {
 		return nil, fmt.Errorf("@compare requires at least two environments")
 	}
-
-	if baseline == "" {
-		baseline = envs[0]
-	} else {
-		match := ""
-		for _, env := range envs {
-			if strings.EqualFold(env, baseline) {
-				match = env
-				break
-			}
-		}
-		if match == "" {
-			return nil, fmt.Errorf(
-				"@compare baseline %q must match one of the environments",
-				baseline,
-			)
-		}
-		baseline = match
-	}
-
-	return &restfile.CompareSpec{
-		Environments: envs,
-		Baseline:     baseline,
-		Group:        group,
-	}, nil
+	return envs, nil
 }
 
 func parseDuration(value string) time.Duration {
