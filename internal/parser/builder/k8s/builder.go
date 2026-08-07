@@ -1,7 +1,6 @@
 package k8s
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -69,7 +68,9 @@ func ParseDirective(rest string) (Directive, error) {
 		return res, profileErr(err)
 	}
 	use := opts.Pop("use")
-	left := errors.Join(opts.Unknown(directive.K8s), opts.Conflicts(directive.K8s))
+	// Everything valid has been popped by now, so the leftovers are typos. They
+	// ride along with a usable result and the caller turns them into warnings.
+	left := opts.Leftover(directive.K8s)
 
 	if scope == directive.ScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking forwarders.

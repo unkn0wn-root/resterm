@@ -54,32 +54,32 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 	if inspector.pattern.Method != http.MethodPost || inspector.pattern.Path != "/webhooks/{id}" {
 		t.Fatalf("pattern = %+v", inspector.pattern)
 	}
-	if got := inspector.pattern.Query["kind"]; got.Op != restfile.MockQueryOpExact ||
+	if got := inspector.pattern.Query["kind"]; got.Op != restfile.MockOpExact ||
 		!slices.Equal(got.Values, []string{"payment"}) {
 		t.Fatalf("query rule = %+v", got)
 	}
-	if got := inspector.pattern.Query["page"]; got.Op != restfile.MockQueryOpGTE ||
+	if got := inspector.pattern.Query["page"]; got.Op != restfile.MockOpGTE ||
 		!slices.Equal(got.Values, []string{"10"}) {
 		t.Fatalf("page rule = %+v", got)
 	}
-	if got := inspector.pattern.Headers["Authorization"]; got.Op != restfile.MockHeaderOpPrefix ||
+	if got := inspector.pattern.Headers["Authorization"]; got.Op != restfile.MockOpPrefix ||
 		got.Values[0] != "Bearer " {
 		t.Fatalf("Authorization rule = %+v", got)
 	}
-	if got := inspector.pattern.Headers["X-Debug"]; got.Op != restfile.MockHeaderOpAbsent {
+	if got := inspector.pattern.Headers["X-Debug"]; got.Op != restfile.MockOpAbsent {
 		t.Fatalf("X-Debug rule = %+v", got)
 	}
 	// scripts, the control API, and .http files share one JSON schema, so every
 	// operator has to decode the same way from an RTS dict
-	if got := inspector.pattern.Headers["User-Agent"]; got.Op != restfile.MockHeaderOpContains ||
+	if got := inspector.pattern.Headers["User-Agent"]; got.Op != restfile.MockOpContains ||
 		got.Values[0] != "Chrome" {
 		t.Fatalf("User-Agent rule = %+v", got)
 	}
-	if got := inspector.pattern.Headers["X-Version"]; got.Op != restfile.MockHeaderOpRegex ||
+	if got := inspector.pattern.Headers["X-Version"]; got.Op != restfile.MockOpRegex ||
 		got.Values[0] != "^v[0-9]+$" {
 		t.Fatalf("X-Version rule = %+v", got)
 	}
-	if got := inspector.pattern.Headers["X-Env"]; got.Op != restfile.MockHeaderOpOneOf ||
+	if got := inspector.pattern.Headers["X-Env"]; got.Op != restfile.MockOpOneOf ||
 		!slices.Equal(got.Values, []string{"dev", "prod"}) {
 		t.Fatalf("X-Env rule = %+v", got)
 	}

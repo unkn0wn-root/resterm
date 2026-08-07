@@ -51,11 +51,11 @@ GET https://example.com
 	if got := resp.Headers.Values("Set-Cookie"); !reflect.DeepEqual(got, []string{"one=1", "two=2"}) {
 		t.Fatalf("set-cookie = %#v", got)
 	}
-	if got := m.Match.Query["mode"]; got.Op != restfile.MockQueryOpExact ||
+	if got := m.Match.Query["mode"]; got.Op != restfile.MockOpExact ||
 		!reflect.DeepEqual(got.Values, []string{"test"}) {
 		t.Fatalf("query matcher = %#v", got)
 	}
-	if got := m.Match.Headers["X-Tenant"]; got.Op != restfile.MockHeaderOpExact ||
+	if got := m.Match.Headers["X-Tenant"]; got.Op != restfile.MockOpExact ||
 		!reflect.DeepEqual(got.Values, []string{"acme", "west"}) {
 		t.Fatalf("header matcher = %#v", got)
 	}
@@ -274,14 +274,14 @@ done`
 	if mock.Expectation == nil || mock.Expectation.Calls != 2 || mock.Expectation.Line != 2 {
 		t.Fatalf("expectation = %+v", mock.Expectation)
 	}
-	wantOps := map[string]restfile.MockHeaderOp{
-		"X-Tenant":      restfile.MockHeaderOpExact,
-		"Authorization": restfile.MockHeaderOpPrefix,
-		"X-Request-Id":  restfile.MockHeaderOpPresent,
-		"X-Debug":       restfile.MockHeaderOpAbsent,
-		"User-Agent":    restfile.MockHeaderOpContains,
-		"X-Version":     restfile.MockHeaderOpRegex,
-		"X-Env":         restfile.MockHeaderOpOneOf,
+	wantOps := map[string]restfile.MockMatchOp{
+		"X-Tenant":      restfile.MockOpExact,
+		"Authorization": restfile.MockOpPrefix,
+		"X-Request-Id":  restfile.MockOpPresent,
+		"X-Debug":       restfile.MockOpAbsent,
+		"User-Agent":    restfile.MockOpContains,
+		"X-Version":     restfile.MockOpRegex,
+		"X-Env":         restfile.MockOpOneOf,
 	}
 	if len(mock.Match.Headers) != len(wantOps) {
 		t.Fatalf("headers = %+v", mock.Match.Headers)
@@ -337,19 +337,19 @@ ok`
 	if len(doc.Errors) != 0 || len(doc.Mocks) != 1 {
 		t.Fatalf("errors=%+v mocks=%d", doc.Errors, len(doc.Mocks))
 	}
-	wantOps := map[string]restfile.MockQueryOp{
-		"mode":  restfile.MockQueryOpExact,
-		"tags":  restfile.MockQueryOpExact,
-		"job":   restfile.MockQueryOpPrefix,
-		"trace": restfile.MockQueryOpPresent,
-		"debug": restfile.MockQueryOpAbsent,
-		"note":  restfile.MockQueryOpContains,
-		"v":     restfile.MockQueryOpRegex,
-		"env":   restfile.MockQueryOpOneOf,
-		"page":  restfile.MockQueryOpGT,
-		"size":  restfile.MockQueryOpGTE,
-		"skip":  restfile.MockQueryOpLT,
-		"limit": restfile.MockQueryOpLTE,
+	wantOps := map[string]restfile.MockMatchOp{
+		"mode":  restfile.MockOpExact,
+		"tags":  restfile.MockOpExact,
+		"job":   restfile.MockOpPrefix,
+		"trace": restfile.MockOpPresent,
+		"debug": restfile.MockOpAbsent,
+		"note":  restfile.MockOpContains,
+		"v":     restfile.MockOpRegex,
+		"env":   restfile.MockOpOneOf,
+		"page":  restfile.MockOpGT,
+		"size":  restfile.MockOpGTE,
+		"skip":  restfile.MockOpLT,
+		"limit": restfile.MockOpLTE,
 	}
 	query := doc.Mocks[0].Match.Query
 	if len(query) != len(wantOps) {

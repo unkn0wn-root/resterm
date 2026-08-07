@@ -571,8 +571,11 @@ func TestOptionsOpen(t *testing.T) {
 	}
 }
 
+// Options only ever fill through put, so tests see what a directive would store.
 func testOptions(vals map[string]string) Options {
 	opts := newOptions(len(vals))
-	maps.Copy(opts.vals, vals)
+	for key, val := range vals {
+		opts.put(key, val)
+	}
 	return opts
 }

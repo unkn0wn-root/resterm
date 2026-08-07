@@ -70,18 +70,7 @@ func (b *Builder) handleWebSocket(rest string) (reset bool, err error) {
 	}
 
 	b.on = true
-	opts, err := directive.ParseOptions(directive.WebSocket, t)
-	errs := []error{err}
-	for _, group := range wsAliases {
-		opts.Aliases(group...)
-	}
-	for _, key := range opts.Keys() {
-		if err := b.applyOption(key, opts.Get(key)); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	errs = append(errs, opts.Conflicts(directive.WebSocket))
-	return false, errors.Join(errs...)
+	return false, directive.ApplyOptions(directive.WebSocket, t, wsAliases, b.applyOption)
 }
 
 var wsAliases = [][]string{

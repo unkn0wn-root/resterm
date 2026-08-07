@@ -21,11 +21,11 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 			Latency: 250 * time.Millisecond,
 			Match: restfile.MockMatch{
 				Query: map[string]restfile.MockQueryRule{
-					"mode": {Op: restfile.MockQueryOpExact, Values: []string{"test"}},
-					"page": {Op: restfile.MockQueryOpGTE, Values: []string{"10"}},
+					"mode": {Op: restfile.MockOpExact, Values: []string{"test"}},
+					"page": {Op: restfile.MockOpGTE, Values: []string{"10"}},
 				},
 				Headers: map[string]restfile.MockHeaderRule{
-					"X-Tenant": {Op: restfile.MockHeaderOpExact, Values: []string{"acme"}},
+					"X-Tenant": {Op: restfile.MockOpExact, Values: []string{"acme"}},
 				},
 				JSON:      []byte(`{"amount":100}`),
 				JSONRules: []byte(`{"amount":{"gte":100},"status":{"oneOf":["new","hold"]}}`),
@@ -59,11 +59,11 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 	}
 	// gte renders as a bare JSON number, so a quoted operand would come back as
 	// an exact matcher instead of failing
-	if got := first.Match.Query["page"]; got.Op != restfile.MockQueryOpGTE ||
+	if got := first.Match.Query["page"]; got.Op != restfile.MockOpGTE ||
 		got.Values[0] != "10" {
 		t.Fatalf("round-trip query rule = %+v\n%s", got, rendered)
 	}
-	if got := first.Match.Query["mode"]; got.Op != restfile.MockQueryOpExact {
+	if got := first.Match.Query["mode"]; got.Op != restfile.MockOpExact {
 		t.Fatalf("round-trip shorthand rule = %+v\n%s", got, rendered)
 	}
 	if got := string(first.Match.JSONRules); got != `{"amount":{"gte":100},"status":{"oneOf":["new","hold"]}}` {
@@ -131,7 +131,7 @@ func TestRenderMockSequenceRoundTrip(t *testing.T) {
 		Expectation:          &restfile.MockExpectation{Calls: 2},
 		Match: restfile.MockMatch{Headers: map[string]restfile.MockHeaderRule{
 			"Authorization": {
-				Op: restfile.MockHeaderOpPrefix, Values: []string{"Bearer "},
+				Op: restfile.MockOpPrefix, Values: []string{"Bearer "},
 			},
 		}},
 		Responses: []restfile.MockResponse{
@@ -161,7 +161,7 @@ func TestRenderMockSequenceRoundTrip(t *testing.T) {
 	m := parsed.Mocks[0]
 	if m.Sequence != "polling" || m.SequenceKey.String() != "path.id" ||
 		m.Expectation == nil || m.Expectation.Calls != 2 ||
-		m.Match.Headers["Authorization"].Op != restfile.MockHeaderOpPrefix ||
+		m.Match.Headers["Authorization"].Op != restfile.MockOpPrefix ||
 		!m.DisableInterpolation || len(m.Responses) != 2 ||
 		m.Responses[1].Body.Text != `{"status":"{{literal}}"}` {
 		t.Fatalf("round-trip mock = %+v", m)
@@ -174,9 +174,9 @@ func TestRenderMockHeaderRuleRoundTrip(t *testing.T) {
 		Method: http.MethodGet,
 		Path:   "/browser",
 		Match: restfile.MockMatch{Headers: map[string]restfile.MockHeaderRule{
-			"User-Agent": {Op: restfile.MockHeaderOpContains, Values: []string{"Chrome"}},
-			"X-Version":  {Op: restfile.MockHeaderOpRegex, Values: []string{"^v[0-9]+$"}},
-			"X-Env":      {Op: restfile.MockHeaderOpOneOf, Values: []string{"dev", "prod"}},
+			"User-Agent": {Op: restfile.MockOpContains, Values: []string{"Chrome"}},
+			"X-Version":  {Op: restfile.MockOpRegex, Values: []string{"^v[0-9]+$"}},
+			"X-Env":      {Op: restfile.MockOpOneOf, Values: []string{"dev", "prod"}},
 		}},
 		Responses: []restfile.MockResponse{{Status: http.StatusOK}},
 	}}}
@@ -193,9 +193,9 @@ func TestRenderMockHeaderRuleRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip errors=%+v mocks=%d\n%s", parsed.Errors, len(parsed.Mocks), rendered)
 	}
 	headers := parsed.Mocks[0].Match.Headers
-	if headers["User-Agent"].Op != restfile.MockHeaderOpContains ||
+	if headers["User-Agent"].Op != restfile.MockOpContains ||
 		headers["X-Version"].Values[0] != "^v[0-9]+$" ||
-		headers["X-Env"].Op != restfile.MockHeaderOpOneOf ||
+		headers["X-Env"].Op != restfile.MockOpOneOf ||
 		len(headers["X-Env"].Values) != 2 {
 		t.Fatalf("round-trip headers = %+v", headers)
 	}

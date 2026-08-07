@@ -130,55 +130,41 @@ type MockExpectation struct {
 	Line  int
 }
 
-// MockHeaderOp is the operator of one @match headers rule. New operators belong
-// at the end because mock_header.go indexes its operand table by this value.
-type MockHeaderOp uint8
+// MockMatchOp is the operator of one @match rule. New operators belong at the
+// end because the operand table is indexed by this value. Each matcher field
+// declares the operators it takes.
+type MockMatchOp uint8
 
 const (
-	MockHeaderOpUnknown MockHeaderOp = iota
-	MockHeaderOpExact
-	MockHeaderOpPrefix
-	MockHeaderOpPresent
-	MockHeaderOpAbsent
-	MockHeaderOpContains
-	MockHeaderOpRegex
-	MockHeaderOpOneOf
+	MockOpUnknown MockMatchOp = iota
+	MockOpExact
+	MockOpPrefix
+	MockOpPresent
+	MockOpAbsent
+	MockOpContains
+	MockOpRegex
+	MockOpOneOf
+	MockOpGT
+	MockOpGTE
+	MockOpLT
+	MockOpLTE
 )
 
-// MockHeaderRule is one header condition. Values holds the operand, which is the
-// full expected sequence for exact, the allowed values for oneOf, a single
-// string for prefix, contains and regex, and nothing for present and absent.
-type MockHeaderRule struct {
-	Op     MockHeaderOp
+// MockRule is one @match condition. Values holds the operand, which is the full
+// expected sequence for exact, the allowed values for oneOf, a single string for
+// prefix, contains and regex, the JSON number as written for gt, gte, lt and
+// lte, and nothing for present and absent.
+type MockRule struct {
+	Op     MockMatchOp
 	Values []string
 }
 
-// MockQueryOp is the operator of one @match query rule. New operators belong at
-// the end because mock_query.go indexes its operand table by this value.
-type MockQueryOp uint8
-
-const (
-	MockQueryOpUnknown MockQueryOp = iota
-	MockQueryOpExact
-	MockQueryOpPrefix
-	MockQueryOpPresent
-	MockQueryOpAbsent
-	MockQueryOpContains
-	MockQueryOpRegex
-	MockQueryOpOneOf
-	MockQueryOpGT
-	MockQueryOpGTE
-	MockQueryOpLT
-	MockQueryOpLTE
+// Separate types so a rule only one field accepts cannot be stored in, or
+// written back to, the other.
+type (
+	MockHeaderRule MockRule
+	MockQueryRule  MockRule
 )
-
-// MockQueryRule is one query parameter condition. Values holds the operand the
-// same way MockHeaderRule does, and for gt, gte, lt and lte it holds the JSON
-// number as it was written.
-type MockQueryRule struct {
-	Op     MockQueryOp
-	Values []string
-}
 
 // StringList decodes a JSON string or string array, the operand shape both
 // matcher shorthands share.

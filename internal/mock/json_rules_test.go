@@ -272,8 +272,8 @@ standard`)
 
 	loose := RequestPattern{
 		Query: map[string]restfile.MockQueryRule{
-			"page":    queryRuleOf(restfile.MockQueryOpGTE, "2"),
-			"channel": queryRuleOf(restfile.MockQueryOpOneOf, "web", "ios"),
+			"page":    queryRuleOf(restfile.MockOpGTE, "2"),
+			"channel": queryRuleOf(restfile.MockOpOneOf, "web", "ios"),
 		},
 		JSONRules: []byte(`{"amount":{"gt":100}}`),
 	}
@@ -284,9 +284,9 @@ standard`)
 
 	tight := loose
 	tight.Query = map[string]restfile.MockQueryRule{
-		"page":    queryRuleOf(restfile.MockQueryOpGTE, "2"),
-		"channel": queryRuleOf(restfile.MockQueryOpOneOf, "web", "ios"),
-		"trace":   queryRuleOf(restfile.MockQueryOpAbsent),
+		"page":    queryRuleOf(restfile.MockOpGTE, "2"),
+		"channel": queryRuleOf(restfile.MockOpOneOf, "web", "ios"),
+		"trace":   queryRuleOf(restfile.MockOpAbsent),
 	}
 	tight.JSON = []byte(`{"type":"order"}`)
 	tight.JSONRules = []byte(`{"amount":{"gt":100},"status":{"oneOf":["new","hold"]}}`)

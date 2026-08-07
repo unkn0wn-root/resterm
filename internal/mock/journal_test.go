@@ -148,7 +148,7 @@ func TestRequestPatternRejectsAmbiguityAndHandlesTruncationAfterMetadata(t *test
 		size:          32,
 	})
 	count, err := journal.count(context.Background(), RequestPattern{
-		Query: map[string]restfile.MockQueryRule{"missing": {Op: restfile.MockQueryOpPresent}},
+		Query: map[string]restfile.MockQueryRule{"missing": {Op: restfile.MockOpPresent}},
 	})
 	if err != nil || count != 0 {
 		t.Fatalf("missing query count = %d, %v, want 0", count, err)
@@ -158,7 +158,7 @@ func TestRequestPatternRejectsAmbiguityAndHandlesTruncationAfterMetadata(t *test
 		t.Fatalf("truncated non-JSON count = %d, %v, want 0", count, err)
 	}
 
-	exact := restfile.MockHeaderRule{Op: restfile.MockHeaderOpExact, Values: []string{"one"}}
+	exact := restfile.MockHeaderRule{Op: restfile.MockOpExact, Values: []string{"one"}}
 	_, err = compileRequestPattern(RequestPattern{Headers: map[string]restfile.MockHeaderRule{
 		"X-Test": exact,
 		"x-test": exact,
@@ -197,7 +197,7 @@ HTTP/1.1 204 No Content`)
 		t.Fatalf("expectations = %+v", expectations)
 	}
 	rule, ok := expectations[0].Pattern.Headers["Authorization"]
-	if !ok || rule.Op != restfile.MockHeaderOpPresent {
+	if !ok || rule.Op != restfile.MockOpPresent {
 		t.Fatalf("Authorization rule = %+v, %t", rule, ok)
 	}
 }

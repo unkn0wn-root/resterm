@@ -1,7 +1,6 @@
 package sse
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -39,18 +38,7 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, re
 	}
 
 	b.enabled = true
-	assignments, err := directive.ParseOptions(directive.SSE, rest)
-	errs := []error{err}
-	for _, group := range sseAliases {
-		assignments.Aliases(group...)
-	}
-	for _, key := range assignments.Keys() {
-		if err := b.applyOption(key, assignments.Get(key)); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	errs = append(errs, assignments.Conflicts(directive.SSE))
-	return true, false, errors.Join(errs...)
+	return true, false, directive.ApplyOptions(directive.SSE, rest, sseAliases, b.applyOption)
 }
 
 var sseAliases = [][]string{

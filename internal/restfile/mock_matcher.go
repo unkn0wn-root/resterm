@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 )
 
 // operand is the JSON shape a matcher operand takes. Decoding, encoding, and the
@@ -27,22 +28,116 @@ type matcherSpec struct {
 	verify  func(name string, values []string) error
 }
 
-// specAt indexes a table by the operator enum. Index 0 is the unknown operator
-// and stays empty, which is how a zero or out of range value is caught.
-func specAt(table []matcherSpec, op int) (matcherSpec, bool) {
-	if op < 0 || op >= len(table) || table[op].name == "" {
-		return matcherSpec{}, false
-	}
-	return table[op], true
+// matcherSpecs is indexed by MockMatchOp. Index 0 is the unknown operator and
+// stays empty, which is how a zero or out of range value is caught.
+var matcherSpecs = []matcherSpec{
+	MockOpExact:    {name: "exact", operand: operandShorthand},
+	MockOpPrefix:   {name: "prefix", operand: operandString},
+	MockOpPresent:  {name: "present", operand: operandFlag},
+	MockOpAbsent:   {name: "absent", operand: operandFlag},
+	MockOpContains: {name: "contains", operand: operandString},
+	MockOpRegex:    {name: "regex", operand: operandString, verify: verifyRegex},
+	MockOpOneOf:    {name: "oneOf", operand: operandList},
+	MockOpGT:       {name: "gt", operand: operandNumber},
+	MockOpGTE:      {name: "gte", operand: operandNumber},
+	MockOpLT:       {name: "lt", operand: operandNumber},
+	MockOpLTE:      {name: "lte", operand: operandNumber},
 }
 
-func specNamed(table []matcherSpec, name string) (int, bool) {
-	for op, spec := range table {
-		if spec.name != "" && spec.name == name {
+func specOf(op MockMatchOp) (matcherSpec, bool) {
+	if int(op) >= len(matcherSpecs) || matcherSpecs[op].name == "" {
+		return matcherSpec{}, false
+	}
+	return matcherSpecs[op], true
+}
+
+func (op MockMatchOp) String() string {
+	if spec, ok := specOf(op); ok {
+		return spec.name
+	}
+	return "unknown"
+}
+
+// matcherOps is the operator set one matcher field accepts. Only one operator in
+// a set can use operandShorthand, because the bare JSON form has no keyword to
+// tell them apart.
+type matcherOps []MockMatchOp
+
+func (ops matcherOps) spec(op MockMatchOp) (matcherSpec, bool) {
+	if !slices.Contains(ops, op) {
+		return matcherSpec{}, false
+	}
+	return specOf(op)
+}
+
+func (ops matcherOps) named(name string) (MockMatchOp, bool) {
+	for _, op := range ops {
+		if spec, ok := specOf(op); ok && spec.name == name {
 			return op, true
 		}
 	}
-	return 0, false
+	return MockOpUnknown, false
+}
+
+func (r MockRule) check(ops matcherOps) error {
+	spec, ok := ops.spec(r.Op)
+	if !ok {
+		return errors.New("matcher operation is invalid")
+	}
+	return spec.check(r.Values)
+}
+
+func (r MockRule) marshal(ops matcherOps) ([]byte, error) {
+	spec, ok := ops.spec(r.Op)
+	if !ok {
+		return nil, errors.New("matcher operation is invalid")
+	}
+	return spec.marshal(r.Values)
+}
+
+// Validation is left to the caller, whose field may hold the operand to a
+// stricter standard than the operator does.
+func (r *MockRule) unmarshal(ops matcherOps, data []byte) error {
+	if string(data) == "null" {
+		return errors.New("matcher cannot be null")
+	}
+	// a bare string or array is the exact shorthand and carries no operator name
+	var exact StringList
+	if exact.UnmarshalJSON(data) == nil {
+		*r = MockRule{Op: MockOpExact, Values: exact}
+		return nil
+	}
+
+	op, values, err := ops.decode(data)
+	if err != nil {
+		return err
+	}
+	*r = MockRule{Op: op, Values: values}
+	return nil
+}
+
+func (ops matcherOps) decode(data []byte) (MockMatchOp, []string, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
+		return MockOpUnknown, nil, errors.New("matcher must be a string, string array, or object")
+	}
+	if len(fields) != 1 {
+		return MockOpUnknown, nil, errors.New("matcher must contain exactly one operator")
+	}
+	var name string
+	var raw json.RawMessage
+	for key, value := range fields {
+		name, raw = key, value
+	}
+	op, ok := ops.named(name)
+	if !ok {
+		return MockOpUnknown, nil, fmt.Errorf("unknown matcher operator %q", name)
+	}
+	values, err := matcherSpecs[op].decode(raw)
+	if err != nil {
+		return MockOpUnknown, nil, err
+	}
+	return op, values, nil
 }
 
 func (s matcherSpec) check(values []string) error {
@@ -127,32 +222,6 @@ func (s matcherSpec) decode(raw json.RawMessage) ([]string, error) {
 	default:
 		return nil, fmt.Errorf("%s matcher has an unsupported operand", s.name)
 	}
-}
-
-// decodeMatcher resolves the single operator key of a matcher object. The bare
-// shorthand has no operator name, so callers try that form first.
-func decodeMatcher(table []matcherSpec, data []byte) (int, []string, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
-		return 0, nil, errors.New("matcher must be a string, string array, or object")
-	}
-	if len(fields) != 1 {
-		return 0, nil, errors.New("matcher must contain exactly one operator")
-	}
-	var name string
-	var raw json.RawMessage
-	for key, value := range fields {
-		name, raw = key, value
-	}
-	op, ok := specNamed(table, name)
-	if !ok {
-		return 0, nil, fmt.Errorf("unknown matcher operator %q", name)
-	}
-	values, err := table[op].decode(raw)
-	if err != nil {
-		return 0, nil, err
-	}
-	return op, values, nil
 }
 
 func verifyRegex(name string, values []string) error {

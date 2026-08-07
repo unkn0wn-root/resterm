@@ -12,17 +12,17 @@ func TestMockQueryRuleJSONRoundTrip(t *testing.T) {
 		rule MockQueryRule
 		json string
 	}{
-		{MockQueryRule{Op: MockQueryOpExact, Values: []string{"one"}}, `"one"`},
-		{MockQueryRule{Op: MockQueryOpExact, Values: []string{"one", "two"}}, `["one","two"]`},
-		{MockQueryRule{Op: MockQueryOpPrefix, Values: []string{"pay_"}}, `{"prefix":"pay_"}`},
-		{MockQueryRule{Op: MockQueryOpPresent}, `{"present":true}`},
-		{MockQueryRule{Op: MockQueryOpAbsent}, `{"absent":true}`},
-		{MockQueryRule{Op: MockQueryOpContains, Values: []string{"abc"}}, `{"contains":"abc"}`},
-		{MockQueryRule{Op: MockQueryOpRegex, Values: []string{"^v[0-9]+$"}}, `{"regex":"^v[0-9]+$"}`},
-		{MockQueryRule{Op: MockQueryOpOneOf, Values: []string{"A", "B"}}, `{"oneOf":["A","B"]}`},
-		{MockQueryRule{Op: MockQueryOpGT, Values: []string{"10"}}, `{"gt":10}`},
-		{MockQueryRule{Op: MockQueryOpGTE, Values: []string{"-1.5"}}, `{"gte":-1.5}`},
-		{MockQueryRule{Op: MockQueryOpLTE, Values: []string{"0"}}, `{"lte":0}`},
+		{MockQueryRule{Op: MockOpExact, Values: []string{"one"}}, `"one"`},
+		{MockQueryRule{Op: MockOpExact, Values: []string{"one", "two"}}, `["one","two"]`},
+		{MockQueryRule{Op: MockOpPrefix, Values: []string{"pay_"}}, `{"prefix":"pay_"}`},
+		{MockQueryRule{Op: MockOpPresent}, `{"present":true}`},
+		{MockQueryRule{Op: MockOpAbsent}, `{"absent":true}`},
+		{MockQueryRule{Op: MockOpContains, Values: []string{"abc"}}, `{"contains":"abc"}`},
+		{MockQueryRule{Op: MockOpRegex, Values: []string{"^v[0-9]+$"}}, `{"regex":"^v[0-9]+$"}`},
+		{MockQueryRule{Op: MockOpOneOf, Values: []string{"A", "B"}}, `{"oneOf":["A","B"]}`},
+		{MockQueryRule{Op: MockOpGT, Values: []string{"10"}}, `{"gt":10}`},
+		{MockQueryRule{Op: MockOpGTE, Values: []string{"-1.5"}}, `{"gte":-1.5}`},
+		{MockQueryRule{Op: MockOpLTE, Values: []string{"0"}}, `{"lte":0}`},
 	}
 	for _, test := range tests {
 		t.Run(test.rule.Op.String()+"_"+test.json, func(t *testing.T) {
@@ -80,13 +80,13 @@ func TestMockQueryRuleMarshalRejectsInvalidRules(t *testing.T) {
 		rule MockQueryRule
 	}{
 		{"unknown op", MockQueryRule{}},
-		{"exact without values", MockQueryRule{Op: MockQueryOpExact}},
-		{"present with values", MockQueryRule{Op: MockQueryOpPresent, Values: []string{"yes"}}},
-		{"gt without values", MockQueryRule{Op: MockQueryOpGT}},
+		{"exact without values", MockQueryRule{Op: MockOpExact}},
+		{"present with values", MockQueryRule{Op: MockOpPresent, Values: []string{"yes"}}},
+		{"gt without values", MockQueryRule{Op: MockOpGT}},
 		// an empty operand would otherwise be written out as the number 0
-		{"gt with an empty value", MockQueryRule{Op: MockQueryOpGT, Values: []string{""}}},
-		{"gt with text", MockQueryRule{Op: MockQueryOpLT, Values: []string{"ten"}}},
-		{"malformed regex", MockQueryRule{Op: MockQueryOpRegex, Values: []string{"^v[0-9"}}},
+		{"gt with an empty value", MockQueryRule{Op: MockOpGT, Values: []string{""}}},
+		{"gt with text", MockQueryRule{Op: MockOpLT, Values: []string{"ten"}}},
+		{"malformed regex", MockQueryRule{Op: MockOpRegex, Values: []string{"^v[0-9"}}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -106,7 +106,7 @@ func TestMatcherShorthandHasAnExplicitSpelling(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"exact":["a","b"]}`), &rule); err != nil {
 		t.Fatal(err)
 	}
-	if rule.Op != MockQueryOpExact || !slices.Equal(rule.Values, []string{"a", "b"}) {
+	if rule.Op != MockOpExact || !slices.Equal(rule.Values, []string{"a", "b"}) {
 		t.Fatalf("explicit rule = %+v", rule)
 	}
 	data, err := json.Marshal(rule)

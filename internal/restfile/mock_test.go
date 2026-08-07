@@ -33,15 +33,15 @@ func TestMockHeaderRuleJSONRoundTrip(t *testing.T) {
 		rule MockHeaderRule
 		json string
 	}{
-		{MockHeaderRule{Op: MockHeaderOpExact, Values: []string{"one"}}, `"one"`},
-		{MockHeaderRule{Op: MockHeaderOpExact, Values: []string{"one", "two"}}, `["one","two"]`},
-		{MockHeaderRule{Op: MockHeaderOpPrefix, Values: []string{"Bearer "}}, `{"prefix":"Bearer "}`},
-		{MockHeaderRule{Op: MockHeaderOpPresent}, `{"present":true}`},
-		{MockHeaderRule{Op: MockHeaderOpAbsent}, `{"absent":true}`},
-		{MockHeaderRule{Op: MockHeaderOpContains, Values: []string{"Chrome"}}, `{"contains":"Chrome"}`},
-		{MockHeaderRule{Op: MockHeaderOpRegex, Values: []string{"^v[0-9]+$"}}, `{"regex":"^v[0-9]+$"}`},
+		{MockHeaderRule{Op: MockOpExact, Values: []string{"one"}}, `"one"`},
+		{MockHeaderRule{Op: MockOpExact, Values: []string{"one", "two"}}, `["one","two"]`},
+		{MockHeaderRule{Op: MockOpPrefix, Values: []string{"Bearer "}}, `{"prefix":"Bearer "}`},
+		{MockHeaderRule{Op: MockOpPresent}, `{"present":true}`},
+		{MockHeaderRule{Op: MockOpAbsent}, `{"absent":true}`},
+		{MockHeaderRule{Op: MockOpContains, Values: []string{"Chrome"}}, `{"contains":"Chrome"}`},
+		{MockHeaderRule{Op: MockOpRegex, Values: []string{"^v[0-9]+$"}}, `{"regex":"^v[0-9]+$"}`},
 		{
-			MockHeaderRule{Op: MockHeaderOpOneOf, Values: []string{"dev", "prod"}},
+			MockHeaderRule{Op: MockOpOneOf, Values: []string{"dev", "prod"}},
 			`{"oneOf":["dev","prod"]}`,
 		},
 	}
@@ -78,6 +78,8 @@ func TestMockHeaderRuleUnmarshalRejects(t *testing.T) {
 		{"two operators", `{"present":true,"absent":true}`, "exactly one operator"},
 		{"unknown operator", `{"matches":"v1"}`, `unknown matcher operator "matches"`},
 		{"unnamed operator", `{"":true}`, `unknown matcher operator ""`},
+		// gt is a query operator, so headers must not inherit it from the shared table
+		{"query only operator", `{"gt":5}`, `unknown matcher operator "gt"`},
 		{"present false", `{"present":false}`, "present matcher must be true"},
 		{"present with a value", `{"present":"yes"}`, "present matcher must be true"},
 		{"empty prefix", `{"prefix":""}`, "prefix matcher requires one non-empty value"},
@@ -107,12 +109,12 @@ func TestMockHeaderRuleMarshalRejectsInvalidRules(t *testing.T) {
 		rule MockHeaderRule
 	}{
 		{"unknown op", MockHeaderRule{}},
-		{"out of range op", MockHeaderRule{Op: MockHeaderOp(99)}},
-		{"exact without values", MockHeaderRule{Op: MockHeaderOpExact}},
-		{"prefix with two values", MockHeaderRule{Op: MockHeaderOpPrefix, Values: []string{"a", "b"}}},
-		{"present with values", MockHeaderRule{Op: MockHeaderOpPresent, Values: []string{"yes"}}},
-		{"oneOf without values", MockHeaderRule{Op: MockHeaderOpOneOf}},
-		{"malformed regex", MockHeaderRule{Op: MockHeaderOpRegex, Values: []string{"^v[0-9"}}},
+		{"out of range op", MockHeaderRule{Op: MockMatchOp(99)}},
+		{"exact without values", MockHeaderRule{Op: MockOpExact}},
+		{"prefix with two values", MockHeaderRule{Op: MockOpPrefix, Values: []string{"a", "b"}}},
+		{"present with values", MockHeaderRule{Op: MockOpPresent, Values: []string{"yes"}}},
+		{"oneOf without values", MockHeaderRule{Op: MockOpOneOf}},
+		{"malformed regex", MockHeaderRule{Op: MockOpRegex, Values: []string{"^v[0-9"}}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -125,57 +127,59 @@ func TestMockHeaderRuleMarshalRejectsInvalidRules(t *testing.T) {
 
 func TestMatcherOpNames(t *testing.T) {
 	tests := []struct {
-		kind    string
-		table   []matcherSpec
-		names   []string
-		unknown string
+		kind  string
+		ops   matcherOps
+		names []string
 	}{
 		{
-			kind:    "header",
-			table:   mockHeaderOps,
-			names:   []string{"exact", "prefix", "present", "absent", "contains", "regex", "oneOf"},
-			unknown: MockHeaderOpUnknown.String(),
+			kind:  "header",
+			ops:   mockHeaderOps,
+			names: []string{"exact", "prefix", "present", "absent", "contains", "regex", "oneOf"},
 		},
 		{
-			kind:  "query",
-			table: mockQueryOps,
+			kind: "query",
+			ops:  mockQueryOps,
 			names: []string{
 				"exact", "prefix", "present", "absent", "contains", "regex", "oneOf",
 				"gt", "gte", "lt", "lte",
 			},
-			unknown: MockQueryOpUnknown.String(),
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.kind, func(t *testing.T) {
 			var declared []string
-			for index, spec := range test.table {
-				if spec.name == "" {
-					continue
+			for _, op := range test.ops {
+				spec, ok := test.ops.spec(op)
+				if !ok || spec.name == "" {
+					t.Fatalf("operator %d has no spec", op)
 				}
 				declared = append(declared, spec.name)
-				if back, ok := specNamed(test.table, spec.name); !ok || back != index {
-					t.Fatalf("specNamed(%q) = %d, %t, want %d", spec.name, back, ok, index)
+				if back, ok := test.ops.named(spec.name); !ok || back != op {
+					t.Fatalf("named(%q) = %d, %t, want %d", spec.name, back, ok, op)
 				}
 			}
 			if !slices.Equal(declared, test.names) {
 				t.Fatalf("%s operators = %q, want %q; update the docs too", test.kind, declared, test.names)
 			}
-			if test.unknown != "unknown" {
-				t.Fatalf("unknown %s operator String() = %q", test.kind, test.unknown)
-			}
-			// index 0 has no name, so an empty JSON key must not resolve to it
-			if _, ok := specNamed(test.table, ""); ok {
+			// the unknown operator has no name, so an empty JSON key must not resolve to it
+			if _, ok := test.ops.named(""); ok {
 				t.Fatalf("the empty name resolved to a %s operator", test.kind)
 			}
 		})
 	}
 
-	if got := MockQueryOpGTE.String(); got != "gte" {
-		t.Fatalf("MockQueryOpGTE.String() = %q", got)
+	// a field rejects the operators it does not list, whatever the shared table holds
+	if _, ok := mockHeaderOps.spec(MockOpGT); ok {
+		t.Fatal("header matchers resolved the gt operator")
 	}
-	if got := MockHeaderOpOneOf.String(); got != "oneOf" {
-		t.Fatalf("MockHeaderOpOneOf.String() = %q", got)
+	if got := MockOpUnknown.String(); got != "unknown" {
+		t.Fatalf("MockOpUnknown.String() = %q", got)
+	}
+	if got := MockOpGTE.String(); got != "gte" {
+		t.Fatalf("MockOpGTE.String() = %q", got)
+	}
+	if got := MockOpOneOf.String(); got != "oneOf" {
+		t.Fatalf("MockOpOneOf.String() = %q", got)
 	}
 }
 

@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -499,7 +498,7 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := errors.Join(opts.Conflicts(directive.Compare), opts.Unknown(directive.Compare)); err != nil {
+	if err := opts.Leftover(directive.Compare); err != nil {
 		return nil, err
 	}
 	if vars.IsReservedEnvironment(baseline) {

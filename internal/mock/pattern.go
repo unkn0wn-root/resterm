@@ -103,10 +103,10 @@ func (p *compiledPattern) matches(entry requestRecord) (bool, error) {
 	if p.path != nil && !p.path.matches(entry.path, entry.rawPath) {
 		return false, nil
 	}
-	if !p.query.matches(entry.query) {
+	if !p.query.matches(queryLookup(entry.query)) {
 		return false, nil
 	}
-	if !p.headers.matches(entry.headers, entry.host) {
+	if !p.headers.matches(headerLookup(entry.headers, entry.host)) {
 		return false, nil
 	}
 	if p.json == nil {

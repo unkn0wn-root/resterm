@@ -63,30 +63,14 @@ func compileMatchHeaders(src map[string]restfile.MockHeaderRule) (headerRules, e
 
 func queryMatcher(rules queryRules) matcher {
 	return func(p *probe) (bool, *problem) {
-		return rules.matches(p.query()), nil
+		return rules.matches(queryLookup(p.query())), nil
 	}
 }
 
 func headerMatcher(rules headerRules) matcher {
 	return func(p *probe) (bool, *problem) {
-		return rules.matches(p.r.Header, p.r.Host), nil
+		return rules.matches(headerLookup(p.r.Header, p.r.Host)), nil
 	}
-}
-
-// headerValues reads a request header for mock config. net/http strips Host
-// out of the header map, so every header lookup needs the same special case.
-func headerValues(r *http.Request, name string) []string {
-	return headerOrHost(r.Header, r.Host, name)
-}
-
-func headerOrHost(h http.Header, host, name string) []string {
-	if strings.EqualFold(name, "Host") {
-		if host == "" {
-			return nil
-		}
-		return []string{host}
-	}
-	return h.Values(name)
 }
 
 func jsonMatcher(want jsonPredicate) matcher {

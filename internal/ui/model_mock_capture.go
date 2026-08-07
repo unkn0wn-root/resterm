@@ -104,7 +104,7 @@ func (m *Model) capturedMock() (*restfile.Mock, error) {
 		spec.Match.Query = make(map[string]restfile.MockQueryRule, len(query))
 		for name, values := range query {
 			spec.Match.Query[name] = restfile.MockQueryRule{
-				Op:     restfile.MockQueryOpExact,
+				Op:     restfile.MockOpExact,
 				Values: values,
 			}
 		}

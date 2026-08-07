@@ -15,7 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func rule(op restfile.MockHeaderOp, values ...string) restfile.MockHeaderRule {
+func headerRuleOf(op restfile.MockMatchOp, values ...string) restfile.MockHeaderRule {
 	return restfile.MockHeaderRule{Op: op, Values: values}
 }
 
@@ -28,210 +28,179 @@ func TestCompileHeaderRulePredicates(t *testing.T) {
 	}{
 		{
 			name: "exact ordered",
-			rule: rule(restfile.MockHeaderOpExact, "one", "two"),
+			rule: headerRuleOf(restfile.MockOpExact, "one", "two"),
 			got:  []string{"one", "two"},
 			want: true,
 		},
 		{
 			name: "exact rejects reordered",
-			rule: rule(restfile.MockHeaderOpExact, "one", "two"),
+			rule: headerRuleOf(restfile.MockOpExact, "one", "two"),
 			got:  []string{"two", "one"},
 		},
 		{
 			name: "exact rejects a subset",
-			rule: rule(restfile.MockHeaderOpExact, "one", "two"),
+			rule: headerRuleOf(restfile.MockOpExact, "one", "two"),
 			got:  []string{"one"},
 		},
 		{
 			name: "exact rejects a missing header",
-			rule: rule(restfile.MockHeaderOpExact, "one"),
+			rule: headerRuleOf(restfile.MockOpExact, "one"),
 		},
 		{
 			name: "exact matches an empty value",
-			rule: rule(restfile.MockHeaderOpExact, ""),
+			rule: headerRuleOf(restfile.MockOpExact, ""),
 			got:  []string{""},
 			want: true,
 		},
 		{
 			name: "prefix any value",
-			rule: rule(restfile.MockHeaderOpPrefix, "Bearer "),
+			rule: headerRuleOf(restfile.MockOpPrefix, "Bearer "),
 			got:  []string{"Basic token", "Bearer token"},
 			want: true,
 		},
 		{
 			name: "prefix rejects a mid-value hit",
-			rule: rule(restfile.MockHeaderOpPrefix, "Bearer "),
+			rule: headerRuleOf(restfile.MockOpPrefix, "Bearer "),
 			got:  []string{"token Bearer "},
 		},
 		{
 			name: "prefix rejects a missing header",
-			rule: rule(restfile.MockHeaderOpPrefix, "Bearer "),
+			rule: headerRuleOf(restfile.MockOpPrefix, "Bearer "),
 		},
 		{
 			name: "present accepts an empty value",
-			rule: rule(restfile.MockHeaderOpPresent),
+			rule: headerRuleOf(restfile.MockOpPresent),
 			got:  []string{""},
 			want: true,
 		},
 		{
 			name: "present rejects a missing header",
-			rule: rule(restfile.MockHeaderOpPresent),
+			rule: headerRuleOf(restfile.MockOpPresent),
 		},
 		{
 			name: "absent",
-			rule: rule(restfile.MockHeaderOpAbsent),
+			rule: headerRuleOf(restfile.MockOpAbsent),
 			want: true,
 		},
 		{
 			name: "absent rejects an empty value",
-			rule: rule(restfile.MockHeaderOpAbsent),
+			rule: headerRuleOf(restfile.MockOpAbsent),
 			got:  []string{""},
 		},
 		{
 			name: "contains anywhere in a value",
-			rule: rule(restfile.MockHeaderOpContains, "Chrome"),
+			rule: headerRuleOf(restfile.MockOpContains, "Chrome"),
 			got:  []string{"Mozilla/5.0 Chrome/120 Safari/537"},
 			want: true,
 		},
 		{
 			name: "contains scans every repeated value",
-			rule: rule(restfile.MockHeaderOpContains, "Chrome"),
+			rule: headerRuleOf(restfile.MockOpContains, "Chrome"),
 			got:  []string{"curl/8", "Chrome/120"},
 			want: true,
 		},
 		{
 			name: "contains is case sensitive",
-			rule: rule(restfile.MockHeaderOpContains, "Chrome"),
+			rule: headerRuleOf(restfile.MockOpContains, "Chrome"),
 			got:  []string{"chrome/120"},
 		},
 		{
 			name: "contains does not split a comma list",
-			rule: rule(restfile.MockHeaderOpContains, "gzip, br"),
+			rule: headerRuleOf(restfile.MockOpContains, "gzip, br"),
 			got:  []string{"gzip, br"},
 			want: true,
 		},
 		{
 			name: "contains rejects a missing header",
-			rule: rule(restfile.MockHeaderOpContains, "Chrome"),
+			rule: headerRuleOf(restfile.MockOpContains, "Chrome"),
 		},
 		{
 			name: "regex unanchored matches a substring",
-			rule: rule(restfile.MockHeaderOpRegex, "v[0-9]+"),
+			rule: headerRuleOf(restfile.MockOpRegex, "v[0-9]+"),
 			got:  []string{"api v12 beta"},
 			want: true,
 		},
 		{
 			name: "regex anchored requires the whole value",
-			rule: rule(restfile.MockHeaderOpRegex, "^v[0-9]+$"),
+			rule: headerRuleOf(restfile.MockOpRegex, "^v[0-9]+$"),
 			got:  []string{"api v12 beta"},
 		},
 		{
 			name: "regex anchored accepts the whole value",
-			rule: rule(restfile.MockHeaderOpRegex, "^v[0-9]+$"),
+			rule: headerRuleOf(restfile.MockOpRegex, "^v[0-9]+$"),
 			got:  []string{"v12"},
 			want: true,
 		},
 		{
 			name: "regex scans every repeated value",
-			rule: rule(restfile.MockHeaderOpRegex, "^v[0-9]+$"),
+			rule: headerRuleOf(restfile.MockOpRegex, "^v[0-9]+$"),
 			got:  []string{"beta", "v3"},
 			want: true,
 		},
 		{
 			name: "regex is case sensitive by default",
-			rule: rule(restfile.MockHeaderOpRegex, "^V[0-9]+$"),
+			rule: headerRuleOf(restfile.MockOpRegex, "^V[0-9]+$"),
 			got:  []string{"v12"},
 		},
 		{
 			name: "regex honors an inline case-insensitive flag",
-			rule: rule(restfile.MockHeaderOpRegex, "(?i)^v[0-9]+$"),
+			rule: headerRuleOf(restfile.MockOpRegex, "(?i)^v[0-9]+$"),
 			got:  []string{"V12"},
 			want: true,
 		},
 		{
 			name: "regex can match an empty value",
-			rule: rule(restfile.MockHeaderOpRegex, "^$"),
+			rule: headerRuleOf(restfile.MockOpRegex, "^$"),
 			got:  []string{""},
 			want: true,
 		},
 		{
 			name: "regex rejects a missing header",
-			rule: rule(restfile.MockHeaderOpRegex, "^$"),
+			rule: headerRuleOf(restfile.MockOpRegex, "^$"),
 		},
 		{
 			name: "oneOf accepts an allowed value",
-			rule: rule(restfile.MockHeaderOpOneOf, "dev", "stage", "prod"),
+			rule: headerRuleOf(restfile.MockOpOneOf, "dev", "stage", "prod"),
 			got:  []string{"stage"},
 			want: true,
 		},
 		{
 			name: "oneOf accepts any repeated value",
-			rule: rule(restfile.MockHeaderOpOneOf, "dev", "prod"),
+			rule: headerRuleOf(restfile.MockOpOneOf, "dev", "prod"),
 			got:  []string{"qa", "prod"},
 			want: true,
 		},
 		{
 			name: "oneOf is exact, not a substring test",
-			rule: rule(restfile.MockHeaderOpOneOf, "dev", "prod"),
+			rule: headerRuleOf(restfile.MockOpOneOf, "dev", "prod"),
 			got:  []string{"production"},
 		},
 		{
 			name: "oneOf is case sensitive",
-			rule: rule(restfile.MockHeaderOpOneOf, "prod"),
+			rule: headerRuleOf(restfile.MockOpOneOf, "prod"),
 			got:  []string{"PROD"},
 		},
 		{
 			name: "oneOf ignores order, unlike exact",
-			rule: rule(restfile.MockHeaderOpOneOf, "a", "b"),
+			rule: headerRuleOf(restfile.MockOpOneOf, "a", "b"),
 			got:  []string{"b", "a"},
 			want: true,
 		},
 		{
 			name: "oneOf rejects a missing header",
-			rule: rule(restfile.MockHeaderOpOneOf, "dev"),
+			rule: headerRuleOf(restfile.MockOpOneOf, "dev"),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			match, err := compileHeaderRule(test.rule)
+			_, match, err := compileHeaderRule(test.rule)
 			if err != nil {
 				t.Fatalf("compileHeaderRule() error = %v", err)
 			}
 			if got := match(test.got); got != test.want {
 				t.Fatalf("predicate(%q) = %t, want %t", test.got, got, test.want)
 			}
-		})
-	}
-}
-
-// an operator with a restfile table row but no predicate here would only fail
-// once somebody wrote it in a file, so a new operator goes in this list by hand.
-func TestCompileHeaderRuleCoversEveryOperator(t *testing.T) {
-	ops := []restfile.MockHeaderOp{
-		restfile.MockHeaderOpExact,
-		restfile.MockHeaderOpPrefix,
-		restfile.MockHeaderOpPresent,
-		restfile.MockHeaderOpAbsent,
-		restfile.MockHeaderOpContains,
-		restfile.MockHeaderOpRegex,
-		restfile.MockHeaderOpOneOf,
-	}
-	// the operand shapes are restfile's business, so try each until one is valid
-	operands := [][]string{nil, {"x"}, {"x", "y"}}
-	for _, op := range ops {
-		t.Run(op.String(), func(t *testing.T) {
-			for _, values := range operands {
-				candidate := restfile.MockHeaderRule{Op: op, Values: values}
-				if candidate.Check() != nil {
-					continue
-				}
-				if _, err := compileHeaderRule(candidate); err != nil {
-					t.Fatalf("compileHeaderRule(%s) = %v; add a case for it", op, err)
-				}
-				return
-			}
-			t.Fatalf("no operand shape satisfied %s.Check()", op)
 		})
 	}
 }
@@ -244,63 +213,63 @@ func TestCompileHeaderRuleRejectsInvalidRules(t *testing.T) {
 		rule restfile.MockHeaderRule
 		want string
 	}{
-		{name: "unknown op", rule: rule(restfile.MockHeaderOpUnknown), want: "operation is invalid"},
-		{name: "out of range op", rule: rule(restfile.MockHeaderOp(99)), want: "operation is invalid"},
+		{name: "unknown op", rule: headerRuleOf(restfile.MockOpUnknown), want: "operation is invalid"},
+		{name: "out of range op", rule: headerRuleOf(restfile.MockMatchOp(99)), want: "operation is invalid"},
 		{
 			name: "exact without values",
-			rule: rule(restfile.MockHeaderOpExact),
+			rule: headerRuleOf(restfile.MockOpExact),
 			want: "exact matcher requires at least one value",
 		},
 		{
 			name: "prefix with two values",
-			rule: rule(restfile.MockHeaderOpPrefix, "a", "b"),
+			rule: headerRuleOf(restfile.MockOpPrefix, "a", "b"),
 			want: "prefix matcher requires one non-empty value",
 		},
 		{
 			name: "prefix with an empty value",
-			rule: rule(restfile.MockHeaderOpPrefix, ""),
+			rule: headerRuleOf(restfile.MockOpPrefix, ""),
 			want: "prefix matcher requires one non-empty value",
 		},
 		{
 			name: "contains with an empty value",
-			rule: rule(restfile.MockHeaderOpContains, ""),
+			rule: headerRuleOf(restfile.MockOpContains, ""),
 			want: "contains matcher requires one non-empty value",
 		},
 		{
 			name: "regex with an empty value",
-			rule: rule(restfile.MockHeaderOpRegex, ""),
+			rule: headerRuleOf(restfile.MockOpRegex, ""),
 			want: "regex matcher requires one non-empty value",
 		},
 		{
 			name: "regex that does not compile",
-			rule: rule(restfile.MockHeaderOpRegex, "^v[0-9"),
+			rule: headerRuleOf(restfile.MockOpRegex, "^v[0-9"),
 			want: "not a valid regular expression",
 		},
 		{
 			name: "oneOf without values",
-			rule: rule(restfile.MockHeaderOpOneOf),
+			rule: headerRuleOf(restfile.MockOpOneOf),
 			want: "oneOf matcher requires at least one value",
 		},
 		{
 			name: "present with values",
-			rule: rule(restfile.MockHeaderOpPresent, "yes"),
+			rule: headerRuleOf(restfile.MockOpPresent, "yes"),
 			want: "present matcher cannot have values",
 		},
 		{
 			name: "absent with values",
-			rule: rule(restfile.MockHeaderOpAbsent, "no"),
+			rule: headerRuleOf(restfile.MockOpAbsent, "no"),
 			want: "absent matcher cannot have values",
 		},
 		{
 			name: "value with a newline",
-			rule: rule(restfile.MockHeaderOpContains, "a\nb"),
+			rule: headerRuleOf(restfile.MockOpContains, "a\nb"),
 			want: "is not a valid header value",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := compileHeaderRule(test.rule)
+			_, _, err := compileHeaderRule(test.rule)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("compileHeaderRule() error = %v, want %q", err, test.want)
 			}
@@ -310,8 +279,8 @@ func TestCompileHeaderRuleRejectsInvalidRules(t *testing.T) {
 
 func TestCompileHeaderRulesCanonicalizesAndValidatesNames(t *testing.T) {
 	rules, err := compileHeaderRules(map[string]restfile.MockHeaderRule{
-		"  x-tenant  ": rule(restfile.MockHeaderOpExact, "acme"),
-		"user-agent":   rule(restfile.MockHeaderOpContains, "Chrome"),
+		"  x-tenant  ": headerRuleOf(restfile.MockOpExact, "acme"),
+		"user-agent":   headerRuleOf(restfile.MockOpContains, "Chrome"),
 	})
 	if err != nil {
 		t.Fatalf("compileHeaderRules() error = %v", err)
@@ -326,7 +295,7 @@ func TestCompileHeaderRulesCanonicalizesAndValidatesNames(t *testing.T) {
 	}
 
 	declared := rules.declared()
-	if got := declared["X-Tenant"]; got.Op != restfile.MockHeaderOpExact ||
+	if got := declared["X-Tenant"]; got.Op != restfile.MockOpExact ||
 		!slices.Equal(got.Values, []string{"acme"}) {
 		t.Fatalf("declared X-Tenant = %+v", got)
 	}
@@ -341,25 +310,25 @@ func TestCompileHeaderRulesRejectsBadNames(t *testing.T) {
 	}{
 		{
 			name: "invalid name",
-			src:  map[string]restfile.MockHeaderRule{"bad header": rule(restfile.MockHeaderOpPresent)},
+			src:  map[string]restfile.MockHeaderRule{"bad header": headerRuleOf(restfile.MockOpPresent)},
 			want: `invalid mock header matcher "bad header"`,
 		},
 		{
 			name: "empty name",
-			src:  map[string]restfile.MockHeaderRule{"": rule(restfile.MockHeaderOpPresent)},
+			src:  map[string]restfile.MockHeaderRule{"": headerRuleOf(restfile.MockOpPresent)},
 			want: `invalid mock header matcher ""`,
 		},
 		{
 			name: "repeated casing",
 			src: map[string]restfile.MockHeaderRule{
-				"x-tenant": rule(restfile.MockHeaderOpPresent),
-				"X-Tenant": rule(restfile.MockHeaderOpAbsent),
+				"x-tenant": headerRuleOf(restfile.MockOpPresent),
+				"X-Tenant": headerRuleOf(restfile.MockOpAbsent),
 			},
 			want: "is repeated with different casing",
 		},
 		{
 			name: "invalid rule names the header",
-			src:  map[string]restfile.MockHeaderRule{"X-Env": rule(restfile.MockHeaderOpOneOf)},
+			src:  map[string]restfile.MockHeaderRule{"X-Env": headerRuleOf(restfile.MockOpOneOf)},
 			want: `mock header matcher "X-Env": oneOf matcher requires at least one value`,
 		},
 	}
@@ -379,7 +348,7 @@ func TestCompileHeaderRulesRejectsBadNames(t *testing.T) {
 func TestCompileHeaderRulesClonesValues(t *testing.T) {
 	values := []string{"dev", "prod"}
 	src := map[string]restfile.MockHeaderRule{
-		"X-Env": {Op: restfile.MockHeaderOpOneOf, Values: values},
+		"X-Env": {Op: restfile.MockOpOneOf, Values: values},
 	}
 	rules, err := compileHeaderRules(src)
 	if err != nil {
@@ -387,7 +356,7 @@ func TestCompileHeaderRulesClonesValues(t *testing.T) {
 	}
 	values[0] = "stage"
 
-	if !rules.matches(http.Header{"X-Env": []string{"dev"}}, "") {
+	if !rules.matches(headerLookup(http.Header{"X-Env": []string{"dev"}}, "")) {
 		t.Fatal("compiled predicate followed a later mutation of the source values")
 	}
 	if got := rules.declared()["X-Env"]; !slices.Equal(got.Values, []string{"dev", "prod"}) {
@@ -397,9 +366,9 @@ func TestCompileHeaderRulesClonesValues(t *testing.T) {
 
 func TestHeaderRulesMatchHostAndCanonicalNames(t *testing.T) {
 	rules, err := compileHeaderRules(map[string]restfile.MockHeaderRule{
-		"host":          rule(restfile.MockHeaderOpContains, "example.com"),
-		"CONTENT-type":  rule(restfile.MockHeaderOpPrefix, "application/"),
-		"X-Correlation": rule(restfile.MockHeaderOpPresent),
+		"host":          headerRuleOf(restfile.MockOpContains, "example.com"),
+		"CONTENT-type":  headerRuleOf(restfile.MockOpPrefix, "application/"),
+		"X-Correlation": headerRuleOf(restfile.MockOpPresent),
 	})
 	if err != nil {
 		t.Fatalf("compileHeaderRules() error = %v", err)
@@ -408,10 +377,10 @@ func TestHeaderRulesMatchHostAndCanonicalNames(t *testing.T) {
 	h := http.Header{}
 	h.Set("Content-Type", "application/json")
 	h.Set("x-correlation", "abc")
-	if !rules.matches(h, "api.example.com:8080") {
+	if !rules.matches(headerLookup(h, "api.example.com:8080")) {
 		t.Fatal("expected the request to match")
 	}
-	if rules.matches(h, "api.other.test") {
+	if rules.matches(headerLookup(h, "api.other.test")) {
 		t.Fatal("Host is read off the request, not the header map")
 	}
 }
@@ -523,9 +492,9 @@ legacy`)
 
 	count, err := server.Count(context.Background(), RequestPattern{
 		Headers: map[string]restfile.MockHeaderRule{
-			"User-Agent": rule(restfile.MockHeaderOpContains, "Chrome"),
-			"X-Version":  rule(restfile.MockHeaderOpRegex, "^v[0-9]+$"),
-			"X-Env":      rule(restfile.MockHeaderOpOneOf, "dev", "prod"),
+			"User-Agent": headerRuleOf(restfile.MockOpContains, "Chrome"),
+			"X-Version":  headerRuleOf(restfile.MockOpRegex, "^v[0-9]+$"),
+			"X-Env":      headerRuleOf(restfile.MockOpOneOf, "dev", "prod"),
 		},
 	})
 	if err != nil || count != 2 {
@@ -555,10 +524,10 @@ func TestJournalPatternReadsHostOutsideTheHeaderMap(t *testing.T) {
 		rule restfile.MockHeaderRule
 		want uint64
 	}{
-		{name: "contains", rule: rule(restfile.MockHeaderOpContains, "example.com"), want: 1},
-		{name: "regex", rule: rule(restfile.MockHeaderOpRegex, `^api\.[a-z.]+:8080$`), want: 1},
-		{name: "oneOf", rule: rule(restfile.MockHeaderOpOneOf, "api.example.com:8080"), want: 1},
-		{name: "oneOf without the port", rule: rule(restfile.MockHeaderOpOneOf, "api.example.com")},
+		{name: "contains", rule: headerRuleOf(restfile.MockOpContains, "example.com"), want: 1},
+		{name: "regex", rule: headerRuleOf(restfile.MockOpRegex, `^api\.[a-z.]+:8080$`), want: 1},
+		{name: "oneOf", rule: headerRuleOf(restfile.MockOpOneOf, "api.example.com:8080"), want: 1},
+		{name: "oneOf without the port", rule: headerRuleOf(restfile.MockOpOneOf, "api.example.com")},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			count, err := journal.count(context.Background(), RequestPattern{
@@ -624,7 +593,7 @@ func TestHeaderRulesMatchEmptyIsAlwaysTrue(t *testing.T) {
 	if len(rules) != 0 || rules.declared() != nil {
 		t.Fatalf("rules = %+v, want empty", rules)
 	}
-	if !rules.matches(http.Header{}, "") {
+	if !rules.matches(headerLookup(http.Header{}, "")) {
 		t.Fatal("an empty rule set must match everything")
 	}
 }

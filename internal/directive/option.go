@@ -66,24 +66,22 @@ func OptionsOpen(input string) bool {
 // OptionFields is for callers that already separated the input. It only keeps
 // key=value pairs, unlike ParseOptions where a bare key means true.
 func OptionFields(name Name, fields []string) (Options, error) {
-	opts := newOptions(len(fields))
-	var rep repeats
-	for _, field := range fields {
-		key, val, ok := strings.Cut(field, "=")
-		if !ok {
-			continue
-		}
-		rep.add(opts.put(key, val))
-	}
-	return opts, rep.err(name)
+	return collectOptions(name, fields, false)
 }
 
 func parseOptions(name Name, toks []string) (Options, error) {
+	return collectOptions(name, toks, true)
+}
+
+func collectOptions(name Name, toks []string, bareIsTrue bool) (Options, error) {
 	opts := newOptions(len(toks))
 	var rep repeats
 	for _, tok := range toks {
 		key, val, ok := strings.Cut(tok, "=")
 		if !ok {
+			if !bareIsTrue {
+				continue
+			}
 			val = "true"
 		}
 		rep.add(opts.put(key, val))
@@ -91,6 +89,22 @@ func parseOptions(name Name, toks []string) (Options, error) {
 	return opts, rep.err(name)
 }
 
+// Every option is visited even after one fails, so a line with two mistakes
+// reports both.
+func ApplyOptions(name Name, raw string, aliases [][]string, apply func(key, val string) error) error {
+	opts, err := ParseOptions(name, raw)
+	errs := []error{err}
+	for _, group := range aliases {
+		opts.Aliases(group...)
+	}
+	for _, key := range opts.Keys() {
+		errs = append(errs, apply(key, opts.Get(key)))
+	}
+	return errors.Join(append(errs, opts.Conflicts(name))...)
+}
+
+// The only writer, so every stored key is lowercase and every value trimmed.
+// Readers below rely on that.
 func (o Options) put(key, val string) (repeated string) {
 	key = strings.ToLower(strings.TrimSpace(key))
 	if key == "" {
@@ -120,7 +134,7 @@ func (r *repeats) err(name Name) error {
 }
 
 func (o Options) Get(key string) string {
-	return strings.TrimSpace(o.vals[key])
+	return o.vals[key]
 }
 
 // First returns the value of the first key that carries one. Keys present with
@@ -140,12 +154,9 @@ func (o Options) Aliases(keys ...string) {
 }
 
 func (o Options) Pop(key string) string {
-	val, ok := o.vals[key]
-	if !ok {
-		return ""
-	}
+	val := o.vals[key]
 	delete(o.vals, key)
-	return strings.TrimSpace(val)
+	return val
 }
 
 // Drops every alias, not just the one it returns. Otherwise the losing spelling
@@ -159,9 +170,8 @@ func (o Options) PopAny(keys ...string) (string, bool) {
 func (o Options) PopKey(keys ...string) (string, string, bool) {
 	var outKey, outVal string
 	for _, key := range o.given(keys) {
-		val := o.vals[key]
-		if outKey == "" && strings.TrimSpace(val) != "" {
-			outKey, outVal = key, strings.TrimSpace(val)
+		if val := o.vals[key]; outKey == "" && val != "" {
+			outKey, outVal = key, val
 		}
 		delete(o.vals, key)
 	}
@@ -180,7 +190,7 @@ func (o Options) given(keys []string) []string {
 			continue
 		}
 		written = append(written, key)
-		if strings.TrimSpace(val) != "" {
+		if val != "" {
 			set = append(set, key)
 		}
 	}
@@ -207,7 +217,7 @@ func (o Options) PopBool(keys ...string) (val, ok bool, bad string) {
 		delete(o.vals, key)
 	}
 	if found {
-		if strings.TrimSpace(raw) == "" {
+		if raw == "" {
 			return true, true, ""
 		}
 		if parsed, valid := ParseBool(raw); valid {
@@ -218,6 +228,14 @@ func (o Options) PopBool(keys ...string) (val, ok bool, bad string) {
 	return false, false, ""
 }
 
+func quoteKeys(keys []string) string {
+	quoted := make([]string, len(keys))
+	for i, key := range keys {
+		quoted[i] = strconv.Quote(key)
+	}
+	return strings.Join(quoted, ", ")
+}
+
 // Parsers report this as a warning. A typo should not throw away the rest of
 // the directive.
 type UnknownOptionsError struct {
@@ -226,14 +244,10 @@ type UnknownOptionsError struct {
 }
 
 func (e *UnknownOptionsError) Error() string {
-	quoted := make([]string, len(e.Keys))
-	for i, key := range e.Keys {
-		quoted[i] = strconv.Quote(key)
+	if len(e.Keys) == 1 {
+		return fmt.Sprintf("unknown %s option %s", e.Directive.Tag(), quoteKeys(e.Keys))
 	}
-	if len(quoted) == 1 {
-		return fmt.Sprintf("unknown %s option %s", e.Directive.Tag(), quoted[0])
-	}
-	return fmt.Sprintf("unknown %s options %s", e.Directive.Tag(), strings.Join(quoted, ", "))
+	return fmt.Sprintf("unknown %s options %s", e.Directive.Tag(), quoteKeys(e.Keys))
 }
 
 func UnknownOption(name Name, keys ...string) error {
@@ -249,14 +263,10 @@ type RepeatedOptionsError struct {
 }
 
 func (e *RepeatedOptionsError) Error() string {
-	quoted := make([]string, len(e.Keys))
-	for i, key := range e.Keys {
-		quoted[i] = strconv.Quote(key)
+	if len(e.Keys) == 1 {
+		return fmt.Sprintf("%s option %s is repeated", e.Directive.Tag(), quoteKeys(e.Keys))
 	}
-	if len(quoted) == 1 {
-		return fmt.Sprintf("%s option %s is repeated", e.Directive.Tag(), quoted[0])
-	}
-	return fmt.Sprintf("%s options %s are repeated", e.Directive.Tag(), strings.Join(quoted, ", "))
+	return fmt.Sprintf("%s options %s are repeated", e.Directive.Tag(), quoteKeys(e.Keys))
 }
 
 // RepeatedNames checks directives that use custom option syntax.
@@ -284,17 +294,19 @@ func (o Options) Unknown(name Name) error {
 	return UnknownOption(name, o.Keys()...)
 }
 
+// What is left for a caller that popped every option it knows: aliases of one
+// option given together, and options nobody claimed.
+func (o Options) Leftover(name Name) error {
+	return errors.Join(o.Conflicts(name), o.Unknown(name))
+}
+
 type AliasConflictError struct {
 	Directive Name
 	Keys      []string
 }
 
 func (e *AliasConflictError) Error() string {
-	quoted := make([]string, len(e.Keys))
-	for i, key := range e.Keys {
-		quoted[i] = strconv.Quote(key)
-	}
-	return fmt.Sprintf("%s options %s are the same option", e.Directive.Tag(), strings.Join(quoted, ", "))
+	return fmt.Sprintf("%s options %s are the same option", e.Directive.Tag(), quoteKeys(e.Keys))
 }
 
 func (o Options) Conflicts(name Name) error {
