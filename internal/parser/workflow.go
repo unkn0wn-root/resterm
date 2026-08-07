@@ -3,7 +3,6 @@ package parser
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"strconv"
 	"strings"
 	"unicode"
@@ -64,19 +63,19 @@ func (b *workflowBuilder) touch(line int) {
 }
 
 func (b *workflowBuilder) applyOptions(opts directive.Options) {
-	if len(opts) == 0 {
+	if opts.Len() == 0 {
 		return
 	}
 	if mode, ok := popFailMode(opts, "on-failure", "onfailure"); ok {
 		b.wf.DefaultOnFailure = mode
 	}
-	if len(opts) == 0 {
+	if opts.Len() == 0 {
 		return
 	}
 	if b.wf.Options == nil {
-		b.wf.Options = make(map[string]string, len(opts))
+		b.wf.Options = make(map[string]string, opts.Len())
 	}
-	maps.Copy(b.wf.Options, opts)
+	opts.CopyTo(b.wf.Options)
 }
 
 func (b *workflowBuilder) handleDirective(
@@ -235,7 +234,7 @@ func (b *workflowBuilder) handleWorkflowIf(
 		if err := b.flushFlow(line); err != nil {
 			return true, err
 		}
-		cond, run, fail, err := parseExprRun(rest, "@if expression missing")
+		cond, run, fail, err := parseExprRun(directive.If, rest, "@if expression missing")
 		if err != nil {
 			return true, err
 		}
@@ -249,7 +248,7 @@ func (b *workflowBuilder) handleWorkflowIf(
 		if b.ifb == nil {
 			return true, errors.New("@elif without @if")
 		}
-		cond, run, fail, err := parseExprRun(rest, "@elif expression missing")
+		cond, run, fail, err := parseExprRun(directive.Elif, rest, "@elif expression missing")
 		if err != nil {
 			return true, err
 		}
@@ -266,8 +265,11 @@ func (b *workflowBuilder) handleWorkflowIf(
 		if b.ifb.els != nil {
 			return true, errors.New("@else already defined")
 		}
-		opts := directive.ParseOptions(rest)
-		run, fail, err := parseWorkflowRunOptions(opts)
+		opts, err := directive.ParseOptions(directive.Else, rest)
+		if err != nil {
+			return true, err
+		}
+		run, fail, err := parseWorkflowRunOptions(name, opts)
 		if err != nil {
 			return true, err
 		}
@@ -330,7 +332,7 @@ func (b *workflowBuilder) flushFlow(line int) error {
 }
 
 func (sw *workflowSwitchBuilder) addCase(rest string, line int) error {
-	expr, run, fail, err := parseExprRun(rest, "@case expression missing")
+	expr, run, fail, err := parseExprRun(directive.Case, rest, "@case expression missing")
 	if err != nil {
 		return err
 	}
@@ -345,8 +347,11 @@ func (sw *workflowSwitchBuilder) addDefault(rest string, line int) error {
 	if sw.def != nil {
 		return errors.New("@default already defined")
 	}
-	opts := directive.ParseOptions(rest)
-	run, fail, err := parseWorkflowRunOptions(opts)
+	opts, err := directive.ParseOptions(directive.Default, rest)
+	if err != nil {
+		return err
+	}
+	run, fail, err := parseWorkflowRunOptions(directive.Default, opts)
 	if err != nil {
 		return err
 	}
@@ -354,21 +359,27 @@ func (sw *workflowSwitchBuilder) addDefault(rest string, line int) error {
 	return nil
 }
 
-func parseExprRun(rest, miss string) (expr, run, fail string, err error) {
-	expr, opts := directive.CutOptions(rest)
+func parseExprRun(name directive.Name, rest, miss string) (expr, run, fail string, err error) {
+	expr, opts, err := directive.CutOptions(name, rest)
 	if expr == "" {
 		return "", "", "", errors.New(miss)
 	}
-	run, fail, err = parseWorkflowRunOptions(opts)
+	if err != nil {
+		return "", "", "", err
+	}
+	run, fail, err = parseWorkflowRunOptions(name, opts)
 	if err != nil {
 		return "", "", "", err
 	}
 	return expr, run, fail, nil
 }
 
-func parseWorkflowRunOptions(opts directive.Options) (run, fail string, err error) {
+func parseWorkflowRunOptions(name directive.Name, opts directive.Options) (run, fail string, err error) {
 	run, _ = opts.First("run", "using")
 	fail = opts.Get("fail")
+	if err := opts.Conflicts(name); err != nil {
+		return "", "", err
+	}
 	if run == "" && fail == "" {
 		return "", "", errors.New("missing a run= or fail= option")
 	}
@@ -404,7 +415,7 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 	}
 	// A step with a bad expect option is still added so the workflow keeps
 	// its shape. The error is reported next to it.
-	expErr := applyStepOpts(&step, opts)
+	expErr := errors.Join(opts.Conflicts(directive.Step), applyStepOpts(&step, opts))
 	b.applyPending(&step)
 	b.wf.Steps = append(b.wf.Steps, step)
 	b.touch(line)
@@ -416,10 +427,13 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 // name= option is a fallback for a step that opens with an option.
 func parseStepSpec(rest string) (string, directive.Options, error) {
 	if str.Trim(rest) == "" {
-		return "", nil, errors.New("@step missing content")
+		return "", directive.Options{}, errors.New("@step missing content")
 	}
 	name, tail := directive.CutName(rest)
-	opts := directive.ParseOptions(tail)
+	opts, err := directive.ParseOptions(directive.Step, tail)
+	if err != nil {
+		return "", directive.Options{}, err
+	}
 	if nm := opts.Pop("name"); name == "" {
 		name = nm
 	}
@@ -427,12 +441,12 @@ func parseStepSpec(rest string) (string, directive.Options, error) {
 }
 
 func applyStepOpts(step *restfile.WorkflowStep, opts directive.Options) error {
-	if len(opts) == 0 {
+	if opts.Len() == 0 {
 		return nil
 	}
 	var errs []string
 	var left map[string]string
-	for key, val := range opts {
+	for key, val := range opts.All() {
 		switch {
 		case strings.HasPrefix(key, "expect."):
 			switch suf := strings.TrimPrefix(key, "expect."); suf {
@@ -504,11 +518,11 @@ func (b *workflowBuilder) applyPending(step *restfile.WorkflowStep) {
 
 func popFailMode(opts directive.Options, keys ...string) (restfile.WorkflowFailureMode, bool) {
 	for _, key := range keys {
-		val, ok := opts[key]
+		val, ok := opts.Lookup(key)
 		if !ok {
 			continue
 		}
-		delete(opts, key)
+		opts.Pop(key)
 		if mode, ok := parseWorkflowFailureMode(val); ok {
 			return mode, true
 		}

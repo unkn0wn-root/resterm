@@ -14,11 +14,12 @@ import (
 )
 
 type RequestPattern struct {
-	Method  string                             `json:"method,omitempty"`
-	Path    string                             `json:"path,omitempty"`
-	Query   map[string]restfile.MockQueryRule  `json:"query,omitempty"`
-	Headers map[string]restfile.MockHeaderRule `json:"headers,omitempty"`
-	JSON    json.RawMessage                    `json:"json,omitempty"`
+	Method    string                             `json:"method,omitempty"`
+	Path      string                             `json:"path,omitempty"`
+	Query     map[string]restfile.MockQueryRule  `json:"query,omitempty"`
+	Headers   map[string]restfile.MockHeaderRule `json:"headers,omitempty"`
+	JSON      json.RawMessage                    `json:"json,omitempty"`
+	JSONRules json.RawMessage                    `json:"jsonRules,omitempty"`
 }
 
 // compiledPattern holds the normalized pattern next to the predicates built from
@@ -39,9 +40,10 @@ type pathMatcher struct {
 func compileRequestPattern(p RequestPattern) (*compiledPattern, error) {
 	cp := &compiledPattern{
 		pattern: RequestPattern{
-			Method: strings.ToUpper(strings.TrimSpace(p.Method)),
-			Path:   strings.TrimSpace(p.Path),
-			JSON:   slices.Clone(p.JSON),
+			Method:    strings.ToUpper(strings.TrimSpace(p.Method)),
+			Path:      strings.TrimSpace(p.Path),
+			JSON:      slices.Clone(p.JSON),
+			JSONRules: slices.Clone(p.JSONRules),
 		},
 	}
 	if cp.pattern.Method != "" && !httpguts.ValidHeaderFieldName(cp.pattern.Method) {
@@ -60,10 +62,8 @@ func compileRequestPattern(p RequestPattern) (*compiledPattern, error) {
 	if cp.headers, err = compileHeaderRules(p.Headers); err != nil {
 		return nil, err
 	}
-	if len(cp.pattern.JSON) > 0 {
-		if cp.json, err = compileJSONMatcher(cp.pattern.JSON); err != nil {
-			return nil, fmt.Errorf("invalid request pattern JSON: %w", err)
-		}
+	if cp.json, err = compileJSONBody(cp.pattern.JSON, cp.pattern.JSONRules); err != nil {
+		return nil, err
 	}
 	cp.pattern.Query = cp.query.declared()
 	cp.pattern.Headers = cp.headers.declared()

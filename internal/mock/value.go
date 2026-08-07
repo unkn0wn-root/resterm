@@ -1,9 +1,7 @@
 package mock
 
 import (
-	"encoding/json"
 	"fmt"
-	"math/big"
 	"regexp"
 	"slices"
 	"strings"
@@ -50,82 +48,10 @@ func valuePresent(got []string) bool { return len(got) > 0 }
 
 func valueAbsent(got []string) bool { return len(got) == 0 }
 
-// numberRelation puts the request value on the left, so relGT holds when the
-// request value is the bigger one.
-type numberRelation uint8
-
-const (
-	relGT numberRelation = iota + 1
-	relGTE
-	relLT
-	relLTE
-)
-
-func (rel numberRelation) holds(cmp int) bool {
-	switch rel {
-	case relGT:
-		return cmp > 0
-	case relGTE:
-		return cmp >= 0
-	case relLT:
-		return cmp < 0
-	case relLTE:
-		return cmp <= 0
-	default:
-		return false
-	}
-}
-
-// anyNumber reads each value as a decimal number. Text that is not a number is a
-// non-match rather than an error.
-func anyNumber(rel numberRelation, operand string) (valuePredicate, error) {
-	want, ok := parseNumber(operand)
-	if !ok {
-		return nil, fmt.Errorf("matcher operand %s is out of range", operand)
-	}
+func anyNumber(rel numberRelation, operand string) valuePredicate {
+	want, _ := parseNumber(operand)
 	return anyValue(func(v string) bool {
 		got, ok := parseNumber(v)
-		return ok && rel.holds(got.Cmp(want))
-	}), nil
-}
-
-const maxNumberText = 1024
-
-// numberPrecision covers any number within the cap. Every value has to use the
-// same width. 0.1 has no exact binary form, so parsing it at two widths gives
-// two values that are not equal.
-const numberPrecision = uint(maxNumberText * 4)
-
-// parseNumber rejects Inf so a runaway exponent never compares against anything.
-// big.Rat would be exact but lets a hostile body allocate 10^exp bytes.
-func parseNumber(s string) (*big.Float, bool) {
-	if len(s) > maxNumberText {
-		return nil, false
-	}
-	f, _, err := big.ParseFloat(s, 10, numberPrecision, big.ToNearestEven)
-	if err != nil || f.IsInf() {
-		return nil, false
-	}
-	return f, true
-}
-
-func compareNumbers(a, b json.Number) (int, bool) {
-	x, ok := parseNumber(string(a))
-	if !ok {
-		return 0, false
-	}
-	y, ok := parseNumber(string(b))
-	if !ok {
-		return 0, false
-	}
-	return x.Cmp(y), true
-}
-
-// equalJSONNumbers compares by value, so 100, 1e2 and 100.0 all match.
-func equalJSONNumbers(want, got json.Number) bool {
-	if want == got {
-		return true
-	}
-	cmp, ok := compareNumbers(want, got)
-	return ok && cmp == 0
+		return ok && rel.holds(got.cmp(want))
+	})
 }

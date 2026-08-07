@@ -135,7 +135,8 @@ func TestDocumentCloneIsIndependent(t *testing.T) {
 				Headers: map[string]MockHeaderRule{
 					"Authorization": {Values: []string{"one"}},
 				},
-				JSON: []byte(`{"id":"one"}`),
+				JSON:      []byte(`{"id":"one"}`),
+				JSONRules: []byte(`{"n":{"gt":1}}`),
 			},
 			Expectation: &MockExpectation{Calls: 1},
 			Responses: []MockResponse{{
@@ -158,6 +159,7 @@ func TestDocumentCloneIsIndependent(t *testing.T) {
 	rule.Values[0] = "two"
 	got.Mocks[0].Match.Headers["Authorization"] = rule
 	got.Mocks[0].Match.JSON[0] = '['
+	got.Mocks[0].Match.JSONRules[0] = '['
 	got.Mocks[0].Expectation.Calls = 2
 	got.Mocks[0].Responses[0].Headers["X-Test"][0] = "two"
 	got.Mocks[0].Responses[0].Body.GraphQL.Query = "query Two"
@@ -169,6 +171,7 @@ func TestDocumentCloneIsIndependent(t *testing.T) {
 		mock.Match.Query["id"].Values[0] != "one" ||
 		mock.Match.Headers["Authorization"].Values[0] != "one" ||
 		string(mock.Match.JSON) != `{"id":"one"}` ||
+		string(mock.Match.JSONRules) != `{"n":{"gt":1}}` ||
 		mock.Expectation.Calls != 1 ||
 		mock.Responses[0].Headers.Get("X-Test") != "one" ||
 		mock.Responses[0].Body.GraphQL.Query != "query One" ||

@@ -88,13 +88,13 @@ func compileQueryRule(rule restfile.MockQueryRule) (valuePredicate, error) {
 	case restfile.MockQueryOpAbsent:
 		return valueAbsent, nil
 	case restfile.MockQueryOpGT:
-		return anyNumber(relGT, rule.Values[0])
+		return anyNumber(relGT, rule.Values[0]), nil
 	case restfile.MockQueryOpGTE:
-		return anyNumber(relGTE, rule.Values[0])
+		return anyNumber(relGTE, rule.Values[0]), nil
 	case restfile.MockQueryOpLT:
-		return anyNumber(relLT, rule.Values[0])
+		return anyNumber(relLT, rule.Values[0]), nil
 	case restfile.MockQueryOpLTE:
-		return anyNumber(relLTE, rule.Values[0])
+		return anyNumber(relLTE, rule.Values[0]), nil
 	default:
 		return nil, fmt.Errorf("%s matcher is not supported", rule.Op)
 	}

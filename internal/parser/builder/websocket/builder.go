@@ -3,8 +3,6 @@ package websocket
 import (
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -71,14 +69,23 @@ func (b *Builder) handleWebSocket(rest string) error {
 	}
 
 	b.on = true
-	opts := directive.ParseOptions(t)
-	var errs []error
-	for _, key := range slices.Sorted(maps.Keys(opts)) {
-		if err := b.applyOption(key, opts[key]); err != nil {
+	opts, err := directive.ParseOptions(directive.WebSocket, t)
+	errs := []error{err}
+	for _, group := range wsAliases {
+		opts.Aliases(group...)
+	}
+	for _, key := range opts.Keys() {
+		if err := b.applyOption(key, opts.Get(key)); err != nil {
 			errs = append(errs, err)
 		}
 	}
+	errs = append(errs, opts.Conflicts(directive.WebSocket))
 	return errors.Join(errs...)
+}
+
+var wsAliases = [][]string{
+	{wsOptIdle, wsOptIdleAlt},
+	{wsOptSub, wsOptSubs},
 }
 
 func (b *Builder) reset() {

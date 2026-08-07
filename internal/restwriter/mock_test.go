@@ -27,7 +27,8 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 				Headers: map[string]restfile.MockHeaderRule{
 					"X-Tenant": {Op: restfile.MockHeaderOpExact, Values: []string{"acme"}},
 				},
-				JSON: []byte(`{"amount":100}`),
+				JSON:      []byte(`{"amount":100}`),
+				JSONRules: []byte(`{"amount":{"gte":100},"status":{"oneOf":["new","hold"]}}`),
 			},
 			Responses: []restfile.MockResponse{{
 				Status:  http.StatusAccepted,
@@ -65,8 +66,44 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 	if got := first.Match.Query["mode"]; got.Op != restfile.MockQueryOpExact {
 		t.Fatalf("round-trip shorthand rule = %+v\n%s", got, rendered)
 	}
+	if got := string(first.Match.JSONRules); got != `{"amount":{"gte":100},"status":{"oneOf":["new","hold"]}}` {
+		t.Fatalf("round-trip json-rules = %s\n%s", got, rendered)
+	}
 	if got := parsed.Mocks[1].Responses[0].Body.FilePath; got != "./fixtures/data.json" {
 		t.Fatalf("fixture path = %q", got)
+	}
+}
+
+func TestRenderMocksNormalizesIndentedMatchers(t *testing.T) {
+	source := `# @mock method=POST path=/accounts
+# @match json-rules={
+#   "amount": {"gte": 100, "lt": 500}
+# }
+# @match json-rules={"status":{"oneOf":["new","hold"]}}
+HTTP/1.1 200 OK
+
+ok
+`
+	const want = `{"amount":{"gte":100,"lt":500},"status":{"oneOf":["new","hold"]}}`
+
+	parsed := parser.Parse("mocks.http", []byte(source))
+	if len(parsed.Errors) != 0 {
+		t.Fatalf("parse errors: %+v", parsed.Errors)
+	}
+	if got := string(parsed.Mocks[0].Match.JSONRules); got != want {
+		t.Fatalf("gathered json-rules = %s, want %s", got, want)
+	}
+
+	rendered := mustRender(t, parsed)
+	if strings.Count(rendered, "@match") != 1 {
+		t.Fatalf("writer did not emit one @match line:\n%s", rendered)
+	}
+	again := parser.Parse("generated.http", []byte(rendered))
+	if len(again.Errors) != 0 {
+		t.Fatalf("round-trip errors: %+v\n%s", again.Errors, rendered)
+	}
+	if got := string(again.Mocks[0].Match.JSONRules); got != want {
+		t.Fatalf("round-trip json-rules = %s, want %s", got, want)
 	}
 }
 

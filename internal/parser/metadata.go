@@ -50,10 +50,14 @@ func (b *documentBuilder) handleRequestMetadataDirective(
 		}
 		return true
 	case directive.Settings:
-		b.request.settings = applySettingsTokens(b.request.settings, rest)
+		settings, err := applySettingsTokens(b.request.settings, rest, directive.Settings)
+		b.request.settings = settings
+		b.addErrors(no, err)
 		return true
 	case directive.Setting:
-		b.request.settings = putSetting(b.request.settings, rest)
+		settings, err := putSetting(b.request.settings, rest)
+		b.request.settings = settings
+		b.addErrors(no, err)
 		return true
 	case directive.Timeout:
 		if b.request.settings == nil {
@@ -66,7 +70,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(
 		return true
 	case directive.Script:
 		if rest != "" {
-			b.setScript(rest, "")
+			b.addErrors(no, b.setScript(rest, ""))
 		} else {
 			b.request.discardScript = false
 		}
@@ -92,12 +96,16 @@ func (b *documentBuilder) handleRequestMetadataDirective(
 		b.setForEach(no, rest)
 		return true
 	case directive.Profile:
-		if spec := parseProfileSpec(rest); spec != nil {
+		spec, err := parseProfileSpec(rest)
+		b.addErrors(no, err)
+		if spec != nil {
 			b.request.metadata.Profile = spec
 		}
 		return true
 	case directive.Trace:
-		if spec := parseTraceSpec(rest); spec != nil {
+		spec, err := parseTraceSpec(rest)
+		b.addErrors(no, err)
+		if spec != nil {
 			b.request.metadata.Trace = spec
 		}
 		return true
@@ -167,10 +175,6 @@ func (b *documentBuilder) setWhen(no, argCol int, invert bool, rest string) {
 		b.addError(no, err.Error())
 		return
 	}
-	if b.request.metadata.When != nil {
-		b.addError(no, "@when directive already defined for this request")
-		return
-	}
 	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
 		spec.Col = c
 	}
@@ -183,18 +187,10 @@ func (b *documentBuilder) setForEach(no int, rest string) {
 		b.addError(no, err.Error())
 		return
 	}
-	if b.request.metadata.ForEach != nil {
-		b.addError(no, "@for-each directive already defined for this request")
-		return
-	}
 	b.request.metadata.ForEach = spec
 }
 
 func (b *documentBuilder) setCompare(no int, rest string) {
-	if b.request.metadata.Compare != nil {
-		b.addError(no, "@compare directive already defined for this request")
-		return
-	}
 	spec, err := parseCompareDirective(rest)
 	if err != nil {
 		b.addError(no, err.Error())
@@ -223,15 +219,15 @@ func appendTagsFold(dst, tags []string) []string {
 	return dst
 }
 
-func putSetting(dst map[string]string, rest string) map[string]string {
+func putSetting(dst map[string]string, rest string) (map[string]string, error) {
 	key, val := directive.CutKey(rest)
 	if key == "" {
-		return dst
+		return dst, nil
 	}
 	// The @settings spelling. Read it that way instead of storing a key with an
 	// equals sign in it, which no consumer would ever look up.
 	if strings.Contains(key, "=") {
-		return applySettingsTokens(dst, rest)
+		return applySettingsTokens(dst, rest, directive.Setting)
 	}
 	// A key written on its own is a flag, the same as it is in @settings. Only
 	// the parser can tell that apart from a value that was written empty.
@@ -242,24 +238,30 @@ func putSetting(dst map[string]string, rest string) map[string]string {
 		dst = make(map[string]string)
 	}
 	dst[key] = val
-	return dst
+	return dst, nil
 }
 
-func applySettingsTokens(dst map[string]string, raw string) map[string]string {
-	opts := directive.ParseOptions(raw)
-	if len(opts) == 0 {
-		return dst
+// Duplicate settings are errors because the map would otherwise keep only the
+// last value.
+func applySettingsTokens(
+	dst map[string]string,
+	raw string,
+	name directive.Name,
+) (map[string]string, error) {
+	opts, err := directive.ParseOptions(name, raw)
+	if opts.Len() == 0 {
+		return dst, err
 	}
 	if dst == nil {
-		dst = make(map[string]string, len(opts))
+		dst = make(map[string]string, opts.Len())
 	}
-	for k, v := range opts {
+	for k, v := range opts.All() {
 		if k == "" {
 			continue
 		}
 		dst[k] = v
 	}
-	return dst
+	return dst, err
 }
 
 func (b *documentBuilder) parseCaptureDirective(

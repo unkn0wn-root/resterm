@@ -3,8 +3,6 @@ package sse
 import (
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
@@ -41,14 +39,24 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (bool, error
 	}
 
 	b.enabled = true
-	assignments := directive.ParseOptions(rest)
-	var errs []error
-	for _, key := range slices.Sorted(maps.Keys(assignments)) {
-		if err := b.applyOption(key, assignments[key]); err != nil {
+	assignments, err := directive.ParseOptions(directive.SSE, rest)
+	errs := []error{err}
+	for _, group := range sseAliases {
+		assignments.Aliases(group...)
+	}
+	for _, key := range assignments.Keys() {
+		if err := b.applyOption(key, assignments.Get(key)); err != nil {
 			errs = append(errs, err)
 		}
 	}
+	errs = append(errs, assignments.Conflicts(directive.SSE))
 	return true, errors.Join(errs...)
+}
+
+var sseAliases = [][]string{
+	{"duration", "timeout"},
+	{"idle", "idle-timeout"},
+	{"max-bytes", "limit-bytes"},
 }
 
 // ParseOptions lowercases keys, so name is already normalized.

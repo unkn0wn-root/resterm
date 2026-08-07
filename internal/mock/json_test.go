@@ -1,13 +1,11 @@
 package mock
 
 import (
-	"maps"
-	"slices"
 	"strings"
 	"testing"
 )
 
-func TestCompileJSONMatcher(t *testing.T) {
+func TestJSONSubsetMatchesLiteralData(t *testing.T) {
 	tests := []struct {
 		name    string
 		pattern string
@@ -18,149 +16,126 @@ func TestCompileJSONMatcher(t *testing.T) {
 		{"missing field", `{"a":1}`, `{"b":2}`, false},
 		{"nested subset", `{"u":{"id":1}}`, `{"u":{"id":1,"name":"x"}}`, true},
 		{"arrays are exact", `{"a":[1,2]}`, `{"a":[1,2,3]}`, false},
+		{"arrays are ordered", `{"a":[1,2]}`, `{"a":[2,1]}`, false},
+		{"array elements match as subsets", `{"a":[{"id":1}]}`, `{"a":[{"id":1,"x":0}]}`, true},
 		{"null matches null", `{"a":null}`, `{"a":null}`, true},
 		{"null does not match missing", `{"a":null}`, `{"b":1}`, false},
+		{"empty object matches any object", `{}`, `{"a":1}`, true},
+		{"empty object does not match a scalar", `{}`, `1`, false},
+		{"a bare scalar pattern", `5`, `5`, true},
+		{"a bare array pattern", `[1]`, `[1]`, true},
+		{"booleans", `{"ok":true}`, `{"ok":true}`, true},
+		{"a boolean is not a number", `{"ok":true}`, `{"ok":1}`, false},
 
-		{"gt", `{"amount":{"$gt":100}}`, `{"amount":101}`, true},
-		{"gt at the boundary", `{"amount":{"$gt":100}}`, `{"amount":100}`, false},
-		{"gte at the boundary", `{"age":{"$gte":18}}`, `{"age":18}`, true},
-		{"lt", `{"price":{"$lt":500}}`, `{"price":499.99}`, true},
-		{"lte at the boundary", `{"price":{"$lte":500}}`, `{"price":500.0}`, true},
-		{"exponent form", `{"n":{"$gte":100}}`, `{"n":1e2}`, true},
-		{"large integers stay exact", `{"n":{"$gt":9007199254740992}}`, `{"n":9007199254740993}`, true},
-		// a JSON string is never a number, so the comparison cannot coerce
-		{"string is not a number", `{"amount":{"$gt":100}}`, `{"amount":"101"}`, false},
-		{"numeric on a missing field", `{"amount":{"$gt":0}}`, `{"other":1}`, false},
+		{"numbers compare by value", `{"n":1}`, `{"n":1.0}`, true},
+		{"exponent form", `{"n":100}`, `{"n":1e2}`, true},
+		{"large integers stay exact", `{"n":9007199254740993}`, `{"n":9007199254740992}`, false},
+		{"a quoted number is a string", `{"n":1}`, `{"n":"1"}`, false},
 
-		{"oneOf strings", `{"status":{"$oneOf":["A","B"]}}`, `{"status":"B"}`, true},
-		{"oneOf miss", `{"status":{"$oneOf":["A","B"]}}`, `{"status":"C"}`, false},
-		{"oneOf compares numbers by value", `{"n":{"$oneOf":[1]}}`, `{"n":1.0}`, true},
-		{"oneOf null", `{"v":{"$oneOf":[null,"x"]}}`, `{"v":null}`, true},
-		{"oneOf arrays", `{"v":{"$oneOf":[[1,2]]}}`, `{"v":[1,2]}`, true},
-		{"oneOf mixed types", `{"v":{"$oneOf":[1,"1",true]}}`, `{"v":"1"}`, true},
-		// an alternative is compared whole, unlike a bare object pattern
-		{"oneOf objects are exact", `{"v":{"$oneOf":[{"a":1}]}}`, `{"v":{"a":1,"b":2}}`, false},
-		{"oneOf object hit", `{"v":{"$oneOf":[{"a":1}]}}`, `{"v":{"a":1}}`, true},
-		{"oneOf object value differs", `{"v":{"$oneOf":[{"a":1}]}}`, `{"v":{"a":2}}`, false},
-		{"oneOf array element differs", `{"v":{"$oneOf":[[1,2]]}}`, `{"v":[1,3]}`, false},
-
-		{"operator nested in an object", `{"u":{"age":{"$gte":18}}}`, `{"u":{"age":21}}`, true},
-		{"operator inside an array", `{"a":[{"$gt":1},{"$lt":9}]}`, `{"a":[2,8]}`, true},
-		{"operator inside an array misses", `{"a":[{"$gt":1}]}`, `{"a":[0]}`, false},
-		{"operator on an array element field", `{"a":[{"n":{"$gt":1}}]}`, `{"a":[{"n":2,"x":0}]}`, true},
-		{"operator at the top level", `{"$gt":10}`, `11`, true},
-		{"oneOf at the top level", `{"$oneOf":["a"]}`, `"a"`, true},
-
-		// a field named gt carries no $ and stays ordinary data
-		{"unprefixed gt is a field", `{"gt":100}`, `{"gt":100}`, true},
-		{"unprefixed gt is not an operator", `{"gt":100}`, `{"gt":101}`, false},
-		{"nested unprefixed gt", `{"range":{"gt":1}}`, `{"range":{"gt":1,"lt":9}}`, true},
-
-		// $ is a naming convention, not a reserved namespace, so dollar-prefixed
-		// data stays matchable
+		{"lone $gt is data", `{"amount":{"$gt":100}}`, `{"amount":{"$gt":100}}`, true},
+		{"lone $gt does not compare", `{"amount":{"$gt":100}}`, `{"amount":101}`, false},
+		{"$gt subset keeps siblings", `{"a":{"$gt":1}}`, `{"a":{"$gt":1,"$lt":9}}`, true},
+		{"$oneOf is data", `{"v":{"$oneOf":["a"]}}`, `{"v":{"$oneOf":["a"]}}`, true},
 		{
 			"JSON Schema document",
 			`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"}`,
 			`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","title":"x"}`,
 			true,
 		},
-		{"lone $ref", `{"$ref":"#/$defs/user"}`, `{"$ref":"#/$defs/user"}`, true},
+		{"$ref", `{"$ref":"#/$defs/user"}`, `{"$ref":"#/$defs/user"}`, true},
 		{"nested $id", `{"schema":{"$id":"urn:x"}}`, `{"schema":{"$id":"urn:x","type":"object"}}`, true},
-		{"unregistered name is a field", `{"$between":[1,9]}`, `{"$between":[1,9]}`, true},
-		{"a trailing space is a different name", `{"$gte ":1}`, `{"$gte ":1}`, true},
-		// an operator name next to a sibling is data, which is what makes a Mongo
-		// shaped body matchable
-		{"operator name with a sibling", `{"$gt":1,"$lt":9}`, `{"$gt":1,"$lt":9,"x":0}`, true},
-		// a sole registered name is always the operator, so $oneOf is how a body
-		// field shaped exactly like one gets matched as data
-		{"sole operator name reads as an operator", `{"age":{"$gt":21}}`, `{"age":22}`, true},
-		{"oneOf reaches the literal form", `{"age":{"$oneOf":[{"$gt":21}]}}`, `{"age":{"$gt":21}}`, true},
+
+		{"gt is data", `{"range":{"gt":125}}`, `{"range":{"gt":125}}`, true},
+		{"gt does not compare", `{"range":{"gt":100}}`, `{"range":{"gt":125}}`, false},
+		{"oneOf is data", `{"v":{"oneOf":["a","b"]}}`, `{"v":{"oneOf":["a","b"]}}`, true},
+
+		{"dotted name", `{"a.b":1}`, `{"a.b":1,"a":{"b":2}}`, true},
+		{"slashed name", `{"a/b":1}`, `{"a/b":1}`, true},
+		{"unicode name", `{"ключ":"значение"}`, `{"ключ":"значение"}`, true},
+		{"empty name", `{"":1}`, `{"":1}`, true},
+		{"trailing space is a different name", `{"gt ":1}`, `{"gt ":1}`, true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			match, err := compileJSONMatcher([]byte(test.pattern))
-			if err != nil {
-				t.Fatal(err)
-			}
-			body, err := decodeJSON([]byte(test.body))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := match(body); got != test.want {
+			match := mustCompileBody(t, test.pattern, "")
+			if got := match(decodeBody(t, test.body)); got != test.want {
 				t.Fatalf("%s against %s = %t, want %t", test.pattern, test.body, got, test.want)
 			}
 		})
 	}
 }
 
-func TestCompileJSONMatcherRejects(t *testing.T) {
+func TestJSONSubsetRejectsMalformedPatterns(t *testing.T) {
+	for _, pattern := range []string{`{"a":`, `{"a":1}{"b":2}`, `nope`} {
+		t.Run(pattern, func(t *testing.T) {
+			_, err := compileJSONBody([]byte(pattern), nil)
+			if err == nil || !strings.Contains(err.Error(), "invalid json matcher") {
+				t.Fatalf("compileJSONBody(%s) error = %v", pattern, err)
+			}
+		})
+	}
+}
+
+func TestJSONBodyCombinesLiteralsAndRules(t *testing.T) {
 	tests := []struct {
-		name    string
-		pattern string
-		want    string
+		name   string
+		subset string
+		rules  string
+		body   string
+		want   bool
 	}{
-		{"malformed JSON", `{"a":`, "invalid JSON matcher"},
-		// the message names the keyword that failed, not just its shape
-		{"string operand", `{"a":{"$gt":"100"}}`, "$gt matcher requires a number"},
-		{"operand out of range", `{"a":{"$gt":1e999999999}}`, "$gt matcher operand 1e999999999 is out of range"},
-		{"oneOf scalar", `{"a":{"$oneOf":"x"}}`, "$oneOf matcher requires a non-empty array"},
-		// the field path points at where the mistake is
-		{"nested error names the field", `{"u":{"age":{"$gt":"x"}}}`, `field "u": field "age"`},
-		{"array index error", `{"a":[{"$oneOf":[]}]}`, `field "a": index 0`},
+		{
+			name: "both match", subset: `{"type":"order"}`, rules: `{"amount":{"gt":100}}`,
+			body: `{"type":"order","amount":101}`, want: true,
+		},
+		{
+			name: "the literal half fails", subset: `{"type":"order"}`, rules: `{"amount":{"gt":100}}`,
+			body: `{"type":"refund","amount":101}`, want: false,
+		},
+		{
+			name: "the rule half fails", subset: `{"type":"order"}`, rules: `{"amount":{"gt":100}}`,
+			body: `{"type":"order","amount":100}`, want: false,
+		},
+		{
+			name: "rules alone", rules: `{"amount":{"gt":100}}`,
+			body: `{"amount":101}`, want: true,
+		},
+		{
+			name: "the same field on both sides", subset: `{"amount":150}`, rules: `{"amount":{"gt":100}}`,
+			body: `{"amount":150}`, want: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := compileJSONMatcher([]byte(test.pattern))
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("compileJSONMatcher(%s) error = %v, want %q", test.pattern, err, test.want)
+			match := mustCompileBody(t, test.subset, test.rules)
+			if got := match(decodeBody(t, test.body)); got != test.want {
+				t.Fatalf("body match = %t, want %t", got, test.want)
 			}
 		})
 	}
 }
 
-// A new operator has to use the $ naming and name itself in errors. Each one
-// brings its own invalid operand so this does not have to guess which shapes a
-// later operator will accept.
-func TestJSONOpsFollowTheTableContract(t *testing.T) {
-	invalid := map[string]string{
-		"$gt":    `"100"`,
-		"$gte":   `null`,
-		"$lt":    `[1]`,
-		"$lte":   `true`,
-		"$oneOf": `[]`,
-	}
-	if !slices.Equal(slices.Sorted(maps.Keys(invalid)), slices.Sorted(maps.Keys(jsonOps))) {
-		t.Fatalf("operators = %q, covered here = %q; add the new one",
-			slices.Sorted(maps.Keys(jsonOps)), slices.Sorted(maps.Keys(invalid)))
-	}
-	for name, operand := range invalid {
-		t.Run(name, func(t *testing.T) {
-			if !strings.HasPrefix(name, "$") {
-				t.Fatalf("operator %q needs the $ convention to stay clear of real field names", name)
-			}
-			_, err := compileJSONMatcher([]byte(`{"x":{"` + name + `":` + operand + `}}`))
-			if err == nil {
-				t.Fatalf("%s accepted %s", name, operand)
-			}
-			if !strings.Contains(err.Error(), name+" matcher") {
-				t.Fatalf("%s error does not name the operator: %v", name, err)
-			}
-		})
+func TestJSONBodyWithoutConditionsIsNil(t *testing.T) {
+	match, err := compileJSONBody(nil, nil)
+	if err != nil || match != nil {
+		t.Fatalf("compileJSONBody(nil, nil) = %v, %v", match, err)
 	}
 }
 
-func TestJSONMatcherComparesValuesNotFormatting(t *testing.T) {
-	match, err := compileJSONMatcher([]byte(`{"a":{"$oneOf":[100]}}`))
+func mustCompileBody(t *testing.T, subset, rules string) jsonPredicate {
+	t.Helper()
+	match, err := compileJSONBody([]byte(subset), []byte(rules))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, body := range []string{`{"a":100}`, `{"a":100.0}`, `{"a":1e2}`} {
-		got, err := decodeJSON([]byte(body))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !match(got) {
-			t.Fatalf("%s did not match $oneOf:[100]", body)
-		}
+	return match
+}
+
+func decodeBody(t *testing.T, body string) any {
+	t.Helper()
+	got, err := decodeJSON([]byte(body))
+	if err != nil {
+		t.Fatal(err)
 	}
+	return got
 }

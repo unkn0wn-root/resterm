@@ -216,11 +216,12 @@ func (c *compiler) handler() (*Handler, error) {
 
 func compileExpectation(path string, spec *restfile.Mock) (Expectation, error) {
 	pattern, err := compileRequestPattern(RequestPattern{
-		Method:  spec.Method,
-		Path:    spec.Path,
-		Query:   spec.Match.Query,
-		Headers: spec.Match.Headers,
-		JSON:    spec.Match.JSON,
+		Method:    spec.Method,
+		Path:      spec.Path,
+		Query:     spec.Match.Query,
+		Headers:   spec.Match.Headers,
+		JSON:      spec.Match.JSON,
+		JSONRules: spec.Match.JSONRules,
 	})
 	if err != nil {
 		return Expectation{}, fmt.Errorf("invalid mock expectation: %w", err)

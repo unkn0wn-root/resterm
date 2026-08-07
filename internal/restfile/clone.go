@@ -231,6 +231,7 @@ func cloneMockMatch(src MockMatch) MockMatch {
 	src.Query = cloneMockQuery(src.Query)
 	src.Headers = cloneMockHeaders(src.Headers)
 	src.JSON = bytes.Clone(src.JSON)
+	src.JSONRules = bytes.Clone(src.JSONRules)
 	return src
 }
 

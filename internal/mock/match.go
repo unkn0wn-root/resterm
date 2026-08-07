@@ -32,6 +32,11 @@ func newMatchers(m restfile.MockMatch) ([]matcher, error) {
 		return nil, err
 	}
 
+	body, err := compileJSONBody(m.JSON, m.JSONRules)
+	if err != nil {
+		return nil, err
+	}
+
 	var ms []matcher
 	if len(query) > 0 {
 		ms = append(ms, queryMatcher(query))
@@ -39,28 +44,10 @@ func newMatchers(m restfile.MockMatch) ([]matcher, error) {
 	if len(headers) > 0 {
 		ms = append(ms, headerMatcher(headers))
 	}
-	if len(m.JSON) > 0 {
-		body, err := compileJSONMatcher(m.JSON)
-		if err != nil {
-			return nil, err
-		}
+	if body != nil {
 		ms = append(ms, jsonMatcher(body))
 	}
 	return ms, nil
-}
-
-// compileJSONMatcher decodes a pattern and compiles it, so nothing about the
-// configuration is interpreted again once a request arrives.
-func compileJSONMatcher(raw []byte) (jsonPredicate, error) {
-	pattern, err := decodeJSON(raw)
-	if err != nil {
-		return nil, fmt.Errorf("invalid JSON matcher: %w", err)
-	}
-	match, err := compileJSONPredicate(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("invalid JSON matcher: %w", err)
-	}
-	return match, nil
 }
 
 // compileMatchHeaders rejects the scenario selector headers. They steer routing

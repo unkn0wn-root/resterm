@@ -11,6 +11,14 @@ const (
 	ArgOptions
 )
 
+type Repeat uint8
+
+const (
+	repeatUnset Repeat = iota
+	Once
+	Many
+)
+
 // Completion, syntax highlighting, and embedded help all use this metadata.
 // Topic names the helpdoc topic that documents the directive.
 type Spec struct {
@@ -18,6 +26,7 @@ type Spec struct {
 	Aliases []Name
 	Summary string
 	Args    ArgKind
+	Repeat  Repeat
 	Topic   string
 }
 
@@ -28,53 +37,107 @@ var specs = []Spec{
 		Name:    Mock,
 		Summary: "Define an interpolated mock response or response sequence",
 		Args:    ArgOptions,
+		Repeat:  Many,
 		Topic:   "mocks",
 	},
 	{
 		Name:    Match,
 		Summary: "Match mock requests by query, header rules, or JSON body",
 		Args:    ArgOptions,
+		Repeat:  Many,
 		Topic:   "mocks",
 	},
-	{Name: Expect, Summary: "Declare the expected number of matching mock calls", Args: ArgOptions, Topic: "mocks"},
-	{Name: RequestName, Summary: "Assign a display name to the request", Args: ArgToken, Topic: "requests"},
+	{
+		Name:    Expect,
+		Summary: "Declare the expected number of matching mock calls",
+		Args:    ArgOptions,
+		Repeat:  Once,
+		Topic:   "mocks",
+	},
+	{
+		Name:    RequestName,
+		Summary: "Assign a display name to the request",
+		Args:    ArgToken,
+		Repeat:  Once,
+		Topic:   "requests",
+	},
 	{
 		Name:    Description,
 		Aliases: []Name{Desc},
 		Summary: "Add a multi-line description",
 		Args:    ArgText,
+		Repeat:  Many,
 		Topic:   "requests",
 	},
-	{Name: Tag, Aliases: []Name{Tags}, Summary: "Categorize the request with tags", Args: ArgText, Topic: "requests"},
-	{Name: NoLog, Aliases: []Name{Nolog}, Summary: "Disable logging of response bodies", Topic: "requests"},
+	{
+		Name:    Tag,
+		Aliases: []Name{Tags},
+		Summary: "Categorize the request with tags",
+		Args:    ArgText,
+		Repeat:  Many,
+		Topic:   "requests",
+	},
+	{
+		Name:    NoLog,
+		Aliases: []Name{Nolog},
+		Summary: "Disable logging of response bodies",
+		Repeat:  Once,
+		Topic:   "requests",
+	},
 	{
 		Name:    LogSensitiveHeaders,
 		Aliases: []Name{LogSecretHeaders},
 		Summary: "Permit logging sensitive headers",
 		Args:    ArgToken,
+		Repeat:  Once,
 		Topic:   "requests",
 	},
-	{Name: Auth, Summary: "Configure authentication (basic, bearer, etc.)", Args: ArgToken, Topic: "authentication"},
-	{Name: Setting, Summary: "Set options (transport/TLS/etc.)", Args: ArgSetting, Topic: "transport"},
-	{Name: Settings, Summary: "Set multiple options on one line", Args: ArgOptions, Topic: "transport"},
-	{Name: Timeout, Summary: "Override the request timeout", Args: ArgToken, Topic: "transport"},
-	{Name: Body, Summary: "Control body parsing and template expansion", Args: ArgText, Topic: "requests"},
-	{Name: Var, Summary: "Declare a request-scoped variable", Args: ArgText, Topic: "variables"},
-	{Name: Request, Summary: "Define a request-scoped variable", Args: ArgText, Topic: "variables"},
-	{Name: RequestSecret, Summary: "Define a secret request variable", Args: ArgText, Topic: "variables"},
-	{Name: File, Summary: "Define a file-scoped variable", Args: ArgText, Topic: "variables"},
-	{Name: FileSecret, Summary: "Define a secret file variable", Args: ArgText, Topic: "variables"},
-	{Name: Global, Summary: "Define or override a global variable", Args: ArgText, Topic: "variables"},
-	{Name: GlobalSecret, Summary: "Define a secret global variable", Args: ArgText, Topic: "variables"},
-	{Name: Const, Summary: "Define a reusable constant", Args: ArgText, Topic: "variables"},
-	{Name: Use, Summary: "Import a RestermScript module", Args: ArgText, Topic: "rts"},
-	{Name: Script, Summary: "Start a pre-request or test script block", Args: ArgToken, Topic: "scripting"},
-	{Name: RTS, Summary: "Start a RestermScript pre-request block", Args: ArgToken, Topic: "rts"},
-	{Name: Patch, Summary: "Define a reusable apply profile at file/global scope", Args: ArgText, Topic: "rts"},
+	{
+		Name:    Auth,
+		Summary: "Configure authentication (basic, bearer, etc.)",
+		Args:    ArgToken,
+		Repeat:  Once,
+		Topic:   "authentication",
+	},
+	{Name: Setting, Summary: "Set options (transport/TLS/etc.)", Args: ArgSetting, Repeat: Many, Topic: "transport"},
+	{Name: Settings, Summary: "Set multiple options on one line", Args: ArgOptions, Repeat: Many, Topic: "transport"},
+	{Name: Timeout, Summary: "Override the request timeout", Args: ArgToken, Repeat: Once, Topic: "transport"},
+	{
+		Name:    Body,
+		Summary: "Control body parsing and template expansion",
+		Args:    ArgText,
+		Repeat:  Many,
+		Topic:   "requests",
+	},
+	{Name: Var, Summary: "Declare a request-scoped variable", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{Name: Request, Summary: "Define a request-scoped variable", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{Name: RequestSecret, Summary: "Define a secret request variable", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{Name: File, Summary: "Define a file-scoped variable", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{Name: FileSecret, Summary: "Define a secret file variable", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{Name: Global, Summary: "Define or override a global variable", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{Name: GlobalSecret, Summary: "Define a secret global variable", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{Name: Const, Summary: "Define a reusable constant", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{Name: Use, Summary: "Import a RestermScript module", Args: ArgText, Repeat: Many, Topic: "rts"},
+	{
+		Name:    Script,
+		Summary: "Start a pre-request or test script block",
+		Args:    ArgToken,
+		Repeat:  Many,
+		Topic:   "scripting",
+	},
+	{Name: RTS, Summary: "Start a RestermScript pre-request block", Args: ArgToken, Repeat: Many, Topic: "rts"},
+	{
+		Name:    Patch,
+		Summary: "Define a reusable apply profile at file/global scope",
+		Args:    ArgText,
+		Repeat:  Many,
+		Topic:   "rts",
+	},
 	{
 		Name:    Apply,
 		Summary: "Apply an inline patch or reuse profiles (use=...) before pre-request scripts",
 		Args:    ArgText,
+		Repeat:  Many,
 		Topic:   "rts",
 	},
 	{
@@ -82,30 +145,53 @@ var specs = []Spec{
 		Aliases: []Name{SkipIf},
 		Summary: "Conditionally run or skip a request/step",
 		Args:    ArgText,
+		Repeat:  Once,
 		Topic:   "rts",
 	},
-	{Name: Capture, Summary: "Capture data from the response", Args: ArgText, Topic: "rts"},
-	{Name: Assert, Summary: "Evaluate a RestermScript assertion", Args: ArgText, Topic: "rts"},
-	{Name: Trace, Summary: "Enable HTTP tracing and latency budgets", Args: ArgOptions, Topic: "tracing"},
-	{Name: Profile, Summary: "Run the request repeatedly with profiling", Args: ArgOptions, Topic: "profiling"},
-	{Name: Compare, Summary: "Run the request across multiple environments", Args: ArgOptions, Topic: "comparison"},
-	{Name: SSH, Summary: "Send request via SSH jump host", Args: ArgOptions, Topic: "ssh"},
-	{Name: K8s, Summary: "Send request via Kubernetes port-forward", Args: ArgOptions, Topic: "kubernetes"},
-	{Name: Workflow, Summary: "Begin a workflow definition", Args: ArgText, Topic: "workflows"},
-	{Name: Step, Summary: "Add a workflow step", Args: ArgText, Topic: "workflows"},
-	{Name: If, Summary: "Conditionally run a workflow step", Args: ArgText, Topic: "workflows"},
-	{Name: Elif, Summary: "Additional workflow condition", Args: ArgText, Topic: "workflows"},
-	{Name: Else, Summary: "Fallback workflow branch", Args: ArgOptions, Topic: "workflows"},
-	{Name: Switch, Summary: "Branch workflow steps based on a value", Args: ArgText, Topic: "workflows"},
-	{Name: Case, Summary: "Match a switch case", Args: ArgText, Topic: "workflows"},
-	{Name: Default, Summary: "Fallback switch case", Args: ArgOptions, Topic: "workflows"},
-	{Name: ForEach, Summary: "Run a request once per list item", Args: ArgText, Topic: "workflows"},
-	{Name: GraphQL, Summary: "Enable GraphQL request handling", Args: ArgToken, Topic: "graphql"},
+	{Name: Capture, Summary: "Capture data from the response", Args: ArgText, Repeat: Many, Topic: "rts"},
+	{Name: Assert, Summary: "Evaluate a RestermScript assertion", Args: ArgText, Repeat: Many, Topic: "rts"},
+	{Name: Trace, Summary: "Enable HTTP tracing and latency budgets", Args: ArgOptions, Repeat: Once, Topic: "tracing"},
+	{
+		Name:    Profile,
+		Summary: "Run the request repeatedly with profiling",
+		Args:    ArgOptions,
+		Repeat:  Once,
+		Topic:   "profiling",
+	},
+	{
+		Name:    Compare,
+		Summary: "Run the request across multiple environments",
+		Args:    ArgOptions,
+		Repeat:  Once,
+		Topic:   "comparison",
+	},
+	// SSH and K8s parse their scope before checking for duplicates.
+	{Name: SSH, Summary: "Send request via SSH jump host", Args: ArgOptions, Repeat: Many, Topic: "ssh"},
+	{
+		Name:    K8s,
+		Summary: "Send request via Kubernetes port-forward",
+		Args:    ArgOptions,
+		Repeat:  Many,
+		Topic:   "kubernetes",
+	},
+	{Name: Workflow, Summary: "Begin a workflow definition", Args: ArgText, Repeat: Many, Topic: "workflows"},
+	{Name: Step, Summary: "Add a workflow step", Args: ArgText, Repeat: Many, Topic: "workflows"},
+	{Name: If, Summary: "Conditionally run a workflow step", Args: ArgText, Repeat: Many, Topic: "workflows"},
+	{Name: Elif, Summary: "Additional workflow condition", Args: ArgText, Repeat: Many, Topic: "workflows"},
+	{Name: Else, Summary: "Fallback workflow branch", Args: ArgOptions, Repeat: Many, Topic: "workflows"},
+	{Name: Switch, Summary: "Branch workflow steps based on a value", Args: ArgText, Repeat: Many, Topic: "workflows"},
+	{Name: Case, Summary: "Match a switch case", Args: ArgText, Repeat: Many, Topic: "workflows"},
+	{Name: Default, Summary: "Fallback switch case", Args: ArgOptions, Repeat: Many, Topic: "workflows"},
+	{Name: ForEach, Summary: "Run a request once per list item", Args: ArgText, Repeat: Once, Topic: "workflows"},
+	// These directives allow "off" between configurations, so their handlers
+	// enforce duplicate rules after applying resets.
+	{Name: GraphQL, Summary: "Enable GraphQL request handling", Args: ArgToken, Repeat: Many, Topic: "graphql"},
 	{
 		Name:    GraphQLOperation,
 		Aliases: []Name{Operation},
 		Summary: "Set the GraphQL operation name",
 		Args:    ArgToken,
+		Repeat:  Once,
 		Topic:   "graphql",
 	},
 	{
@@ -113,6 +199,7 @@ var specs = []Spec{
 		Aliases: []Name{GraphQLVariables},
 		Summary: "Provide GraphQL variables (JSON)",
 		Args:    ArgText,
+		Repeat:  Once,
 		Topic:   "graphql",
 	},
 	{
@@ -120,22 +207,30 @@ var specs = []Spec{
 		Aliases: []Name{GraphQLQuery},
 		Summary: "Inline a GraphQL query",
 		Args:    ArgText,
+		Repeat:  Once,
 		Topic:   "graphql",
 	},
-	{Name: GRPC, Summary: "Configure the gRPC method (supports streaming)", Args: ArgText, Topic: "grpc"},
-	{Name: GRPCDescriptor, Summary: "Load a gRPC descriptor set", Args: ArgText, Topic: "grpc"},
-	{Name: GRPCReflection, Summary: "Toggle gRPC reflection", Args: ArgToken, Topic: "grpc"},
-	{Name: GRPCPlaintext, Summary: "Force plaintext gRPC transport", Args: ArgToken, Topic: "grpc"},
-	{Name: GRPCAuthority, Summary: "Set gRPC authority override", Args: ArgText, Topic: "grpc"},
+	{Name: GRPC, Summary: "Configure the gRPC method (supports streaming)", Args: ArgText, Repeat: Once, Topic: "grpc"},
+	{Name: GRPCDescriptor, Summary: "Load a gRPC descriptor set", Args: ArgText, Repeat: Once, Topic: "grpc"},
+	{Name: GRPCReflection, Summary: "Toggle gRPC reflection", Args: ArgToken, Repeat: Once, Topic: "grpc"},
+	{Name: GRPCPlaintext, Summary: "Force plaintext gRPC transport", Args: ArgToken, Repeat: Once, Topic: "grpc"},
+	{Name: GRPCAuthority, Summary: "Set gRPC authority override", Args: ArgText, Repeat: Once, Topic: "grpc"},
 	{
 		Name:    GRPCMetadata,
 		Summary: "Attach gRPC metadata (Repeatable. Reserved keys rejected - use @timeout)",
 		Args:    ArgText,
+		Repeat:  Many,
 		Topic:   "grpc",
 	},
-	{Name: SSE, Summary: "Enable Server-Sent Events streaming", Args: ArgOptions, Topic: "streaming"},
-	{Name: WebSocket, Summary: "Enable WebSocket streaming", Args: ArgOptions, Topic: "streaming"},
-	{Name: WS, Summary: "Add a WebSocket scripted step (send/ping/wait/close)", Args: ArgText, Topic: "streaming"},
+	{Name: SSE, Summary: "Enable Server-Sent Events streaming", Args: ArgOptions, Repeat: Many, Topic: "streaming"},
+	{Name: WebSocket, Summary: "Enable WebSocket streaming", Args: ArgOptions, Repeat: Many, Topic: "streaming"},
+	{
+		Name:    WS,
+		Summary: "Add a WebSocket scripted step (send/ping/wait/close)",
+		Args:    ArgText,
+		Repeat:  Many,
+		Topic:   "streaming",
+	},
 }
 
 var index = func() map[Name]*Spec {
@@ -149,6 +244,11 @@ var index = func() map[Name]*Spec {
 	}
 	return ix
 }()
+
+func (n Name) DeclaredOnce() bool {
+	spec, ok := index[n]
+	return ok && spec.Repeat == Once
+}
 
 // Lookup resolves canonical names and aliases alike. The lookup expects lowercase input.
 func Lookup(name Name) (Spec, bool) {

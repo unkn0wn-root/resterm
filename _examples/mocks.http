@@ -107,12 +107,17 @@ Content-Type: application/json
 {"id":"ord_9","status":"accepted"}
 
 ### Account flagged for manual review
-# A JSON value can be an object, so {"lt":40} is ordinary data to compare against
-# and the operators carry a $ to make a collision unlikely. Only the five known
-# names count, and only as the sole member of their object, so a body is still
-# free to send $schema, $ref or any other dollar-prefixed field.
+# json matches literal data while json-rules compares values. Both must match.
+# An open bracket continues the matcher on the next comment line.
 # @mock method=POST path=/accounts name=flagged
-# @match json={"score":{"$lt":40},"tier":{"$oneOf":["free","trial"]}}
+# @match json={"kind":"personal"}
+# @match json-rules={
+#   "score": {"lt": 40},
+#   "tier":  {"oneOf": ["free", "trial"]},
+#   "limits": {
+#     "daily": {"gte": 1, "lt": 100}
+#   }
+# }
 HTTP/1.1 403 Forbidden
 Content-Type: application/json
 
@@ -186,7 +191,16 @@ Content-Type: application/json
 POST {{mock.base}}/accounts
 Content-Type: application/json
 
-{"score":12,"tier":"trial"}
+{"kind":"personal","score":12,"tier":"trial","limits":{"daily":5}}
+
+### Submit an account that is accepted
+# This score misses the rule and uses the default scenario. The gt field remains
+# ordinary request data.
+# @name submit-account-ok
+POST {{mock.base}}/accounts
+Content-Type: application/json
+
+{"kind":"personal","score":80,"tier":"free","limits":{"daily":5},"gt":1}
 
 ### Deliver the payment webhook
 # The mock.* assertion needs the TUI-owned server (`g Shift+M`).

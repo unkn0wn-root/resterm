@@ -184,10 +184,12 @@ type MockQueryRule struct {
 // matcher shorthands share.
 type StringList []string
 
+// MockMatch keeps body conditions as JSON because the mock package compiles them.
 type MockMatch struct {
-	Query   map[string]MockQueryRule
-	Headers map[string]MockHeaderRule
-	JSON    []byte
+	Query     map[string]MockQueryRule
+	Headers   map[string]MockHeaderRule
+	JSON      []byte
+	JSONRules []byte
 }
 
 type MockResponse struct {

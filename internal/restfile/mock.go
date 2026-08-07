@@ -172,7 +172,7 @@ func (r MockResponse) HasTemplate() bool {
 }
 
 func (m MockMatch) HasConditions() bool {
-	return len(m.Query) > 0 || len(m.Headers) > 0 || len(m.JSON) > 0
+	return len(m.Query)+len(m.Headers)+len(m.JSON)+len(m.JSONRules) > 0
 }
 
 func ValidateMockPath(path string) error {

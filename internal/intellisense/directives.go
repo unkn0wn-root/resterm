@@ -191,7 +191,12 @@ var directiveArgs = map[directive.Name][]Item{
 	directive.Match: {
 		{Label: "query=", Summary: "Exact query matcher JSON", Insert: `query={"key":"value"}`},
 		{Label: "headers=", Summary: "Header matcher rules as JSON", Insert: `headers={"X-Key":"value"}`},
-		{Label: "json=", Summary: "Recursive JSON subset matcher", Insert: `json={"key":"value"}`},
+		{Label: "json=", Summary: "Literal JSON body subset", Insert: `json={"key":"value"}`},
+		{
+			Label:   "json-rules=",
+			Summary: "JSON body matcher rules",
+			Insert:  `json-rules={"key":{"gt":1}}`,
+		},
 	},
 	directive.Expect: {
 		{Label: "calls=", Summary: "Exact matching request count", Insert: "calls=1"},

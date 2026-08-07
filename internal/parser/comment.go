@@ -12,6 +12,31 @@ func (b *documentBuilder) handleComment(line, baseCol int, text string) {
 	if !ok {
 		return
 	}
+	if b.redeclared(line, call) {
+		return
+	}
+	b.routeDirective(line, baseCol, call)
+	// Routing may create the request that owns this declaration.
+	b.markDeclared(call)
+}
+
+// File directives may define several named profiles, so only request
+// declarations are tracked here.
+func (b *documentBuilder) redeclared(line int, call directive.Call) bool {
+	if !b.inRequest || !b.request.declared[call.Name] {
+		return false
+	}
+	b.addError(line, call.Name.Tag()+" directive already defined for this request")
+	return true
+}
+
+func (b *documentBuilder) markDeclared(call directive.Call) {
+	if b.inRequest && call.Name.DeclaredOnce() {
+		b.request.declared[call.Name] = true
+	}
+}
+
+func (b *documentBuilder) routeDirective(line, baseCol int, call directive.Call) {
 	argCol := 0
 	if baseCol > 0 {
 		argCol = baseCol + call.ArgOffset
@@ -48,7 +73,7 @@ func (b *documentBuilder) handleComment(line, baseCol int, text string) {
 	if b.handlePatchDirective(line, argCol, call.Name, call.Args) {
 		return
 	}
-	if b.handleFileSettingsDirective(call.Name, call.Args) {
+	if b.handleFileSettingsDirective(line, call.Name, call.Args) {
 		return
 	}
 
@@ -236,6 +261,7 @@ func (b *documentBuilder) handlePatchDirective(
 }
 
 func (b *documentBuilder) handleFileSettingsDirective(
+	line int,
 	name directive.Name,
 	args string,
 ) bool {
@@ -244,10 +270,14 @@ func (b *documentBuilder) handleFileSettingsDirective(
 	}
 	switch name {
 	case directive.Setting:
-		b.file.settings = putSetting(b.file.settings, args)
+		settings, err := putSetting(b.file.settings, args)
+		b.file.settings = settings
+		b.addErrors(line, err)
 		return true
 	case directive.Settings:
-		b.file.settings = applySettingsTokens(b.file.settings, args)
+		settings, err := applySettingsTokens(b.file.settings, args, directive.Settings)
+		b.file.settings = settings
+		b.addErrors(line, err)
 		return true
 	default:
 		return false

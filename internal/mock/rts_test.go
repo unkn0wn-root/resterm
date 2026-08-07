@@ -42,7 +42,8 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
     "X-Version": {regex: "^v[0-9]+$"},
     "X-Env": {oneOf: ["dev", "prod"]}
   },
-  json: {status: "completed", amount: {"$gt": 100}}
+  json: {status: "completed"},
+  jsonRules: {amount: {gt: 100}, tier: {oneOf: ["gold", "silver"]}}
 })`, rts.Pos{Path: "test.http", Line: 1, Col: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -82,9 +83,11 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 		!slices.Equal(got.Values, []string{"dev", "prod"}) {
 		t.Fatalf("X-Env rule = %+v", got)
 	}
-	// $ does not start an RTS identifier, so an operator key has to be quoted
-	if string(inspector.pattern.JSON) != `{"amount":{"$gt":100},"status":"completed"}` {
+	if string(inspector.pattern.JSON) != `{"status":"completed"}` {
 		t.Fatalf("JSON pattern = %s", inspector.pattern.JSON)
+	}
+	if got := string(inspector.pattern.JSONRules); got != `{"amount":{"gt":100},"tier":{"oneOf":["gold","silver"]}}` {
+		t.Fatalf("JSON rules pattern = %s", got)
 	}
 	if _, err := compileRequestPattern(inspector.pattern); err != nil {
 		t.Fatalf("scripted pattern does not compile: %v", err)

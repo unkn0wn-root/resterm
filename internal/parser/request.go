@@ -37,6 +37,7 @@ type requestBuilder struct {
 	multipart         *multipartSpan
 	ssh               *restfile.SSHSpec
 	k8s               *restfile.K8sSpec
+	declared          map[directive.Name]bool
 }
 
 // protoDirective offers a directive to each protocol builder in turn. The

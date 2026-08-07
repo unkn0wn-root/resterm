@@ -1749,7 +1749,7 @@ GET https://example.com
 }
 
 func TestParseOAuth2AuthSpec(t *testing.T) {
-	spec := parseAuthSpec(
+	spec, _ := parseAuthSpec(
 		`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`,
 	)
 	if spec == nil {
@@ -1777,7 +1777,7 @@ func TestParseOAuth2AuthSpec(t *testing.T) {
 }
 
 func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
-	spec := parseAuthSpec(`oauth2 cache_key=github`)
+	spec, _ := parseAuthSpec(`oauth2 cache_key=github`)
 	if spec == nil {
 		t.Fatalf("expected oauth2 spec for cache-only directive")
 	}
@@ -1799,7 +1799,7 @@ func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
 }
 
 func TestParseCommandAuthSpec(t *testing.T) {
-	spec := parseAuthSpec(
+	spec, _ := parseAuthSpec(
 		`command argv='["gh","auth","token"]' header=Authorization cache_key=github timeout=5s`,
 	)
 	if spec == nil {
@@ -1822,7 +1822,7 @@ func TestParseCommandAuthSpec(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
-	spec := parseAuthSpec(
+	spec, _ := parseAuthSpec(
 		`command argv=["gh", "auth", "token"] header=Authorization cache_key=github timeout=5s`,
 	)
 	if spec == nil {
@@ -1845,7 +1845,7 @@ func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecCacheOnly(t *testing.T) {
-	spec := parseAuthSpec(`command cache_key=github header=X-Token`)
+	spec, _ := parseAuthSpec(`command cache_key=github header=X-Token`)
 	if spec == nil {
 		t.Fatalf("expected command auth spec")
 	}
@@ -3132,33 +3132,33 @@ query Second {
 
 func TestParseOptionTokensQuotedValues(t *testing.T) {
 	input := `expect.status="201 Created" vars.request.item_name='Workflow Demo Item' note=alpha\ beta message="He said \"hi\"" flag`
-	opts := directive.ParseOptions(input)
+	opts, _ := directive.ParseOptions(directive.Step, input)
 
-	if got := opts["expect.status"]; got != "201 Created" {
+	if got := opts.Get("expect.status"); got != "201 Created" {
 		t.Fatalf("expected expect.status to be '201 Created', got %q", got)
 	}
-	if got := opts["vars.request.item_name"]; got != "Workflow Demo Item" {
+	if got := opts.Get("vars.request.item_name"); got != "Workflow Demo Item" {
 		t.Fatalf("expected vars.request.item_name to keep spaces, got %q", got)
 	}
-	if got := opts["note"]; got != "alpha beta" {
+	if got := opts.Get("note"); got != "alpha beta" {
 		t.Fatalf("expected escaped spaces to collapse, got %q", got)
 	}
-	if got := opts["message"]; got != "He said \"hi\"" {
+	if got := opts.Get("message"); got != "He said \"hi\"" {
 		t.Fatalf("expected escaped quotes preserved, got %q", got)
 	}
-	if got := opts["flag"]; got != "true" {
+	if got := opts.Get("flag"); got != "true" {
 		t.Fatalf("expected bare flag to default to true, got %q", got)
 	}
 }
 
 func TestParseOptionTokensBareJSONValue(t *testing.T) {
 	input := `argv=["gh", "auth", "token"] mode=json`
-	opts := directive.ParseOptions(input)
+	opts, _ := directive.ParseOptions(directive.Step, input)
 
-	if got := opts["argv"]; got != `["gh", "auth", "token"]` {
+	if got := opts.Get("argv"); got != `["gh", "auth", "token"]` {
 		t.Fatalf("expected argv JSON preserved, got %q", got)
 	}
-	if got := opts["mode"]; got != "json" {
+	if got := opts.Get("mode"); got != "json" {
 		t.Fatalf("expected mode=json, got %q", got)
 	}
 }
@@ -3800,5 +3800,224 @@ GET https://example.com
 			req.Metadata.Auth.SourcePath,
 			req.Metadata.Auth.Line,
 		)
+	}
+}
+
+func TestParseRepeatedDirectiveOptions(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "file settings",
+			src:  "# @settings insecure=true insecure=false\n",
+			want: `@settings option "insecure" is repeated`,
+		},
+		{
+			name: "request settings",
+			src:  "GET https://example.com\n# @settings timeout=1s timeout=2s\n",
+			want: `@settings option "timeout" is repeated`,
+		},
+		{
+			name: "mock",
+			src:  "# @mock method=GET path=/a path=/b\nHTTP/1.1 200 OK\n",
+			want: `@mock option "path" is repeated`,
+		},
+		{
+			name: "expect",
+			src:  "# @mock method=GET path=/a\n# @expect calls=1 calls=2\nHTTP/1.1 200 OK\n",
+			want: `@expect option "calls" is repeated`,
+		},
+		{
+			name: "sse",
+			src:  "GET https://example.com\n# @sse timeout=1s timeout=2s\n",
+			want: `@sse option "timeout" is repeated`,
+		},
+		{
+			name: "websocket",
+			src:  "GET wss://example.com\n# @websocket idle=1s idle=2s\n",
+			want: `@websocket option "idle" is repeated`,
+		},
+		{
+			name: "ssh",
+			src:  "GET https://example.com\n# @ssh host=a host=b\n",
+			want: `@ssh option "host" is repeated`,
+		},
+		{
+			name: "k8s",
+			src:  "GET https://example.com\n# @k8s service=a service=b\n",
+			want: `@k8s option "service" is repeated`,
+		},
+		{
+			name: "profile",
+			src:  "GET https://example.com\n# @profile count=2 count=3\n",
+			want: `@profile option "count" is repeated`,
+		},
+		{
+			name: "compare",
+			src:  "GET https://example.com\n# @compare dev stage group=a group=b\n",
+			want: `@compare option "group" is repeated`,
+		},
+		{
+			name: "auth",
+			src:  "GET https://example.com\n# @auth oauth2 token_url=a token_url=b\n",
+			want: `@auth option "token_url" is repeated`,
+		},
+		{
+			name: "script",
+			src:  "GET https://example.com\n# @script pre lang=js lang=js\n",
+			want: `@script option "lang" is repeated`,
+		},
+		{
+			name: "rts",
+			src:  "GET https://example.com\n# @rts pre-request lang=rts lang=rts\n",
+			want: `@rts option "lang" is repeated`,
+		},
+		{
+			name: "workflow",
+			src:  "# @workflow flow parallel=2 parallel=3\n# @step one GET https://example.com\n",
+			want: `@workflow option "parallel" is repeated`,
+		},
+		{
+			name: "step",
+			src:  "# @workflow flow\n# @step one use=A use=B\n",
+			want: `@step option "use" is repeated`,
+		},
+		{
+			name: "if",
+			src:  "# @workflow flow\n# @if last.status == 200 run=A run=B\n# @endif\n",
+			want: `@if option "run" is repeated`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("repeat.http", []byte(tt.src))
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
+			}
+			if hasParseMessage(doc.Warnings, tt.want) {
+				t.Fatalf("a repeated option must be an error, got a warning: %v", doc.Warnings)
+			}
+		})
+	}
+}
+
+func TestParseRedeclaredDirective(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "auth twice in one request",
+			src:  "GET https://example.com\n# @auth bearer aaa\n# @auth bearer bbb\n",
+			want: "@auth directive already defined for this request",
+		},
+		{
+			name: "name twice",
+			src:  "# @name Alpha\n# @name Beta\nGET https://example.com\n",
+			want: "@name directive already defined for this request",
+		},
+		{
+			name: "timeout twice",
+			src:  "GET https://example.com\n# @timeout 1s\n# @timeout 2s\n",
+			want: "@timeout directive already defined for this request",
+		},
+		{
+			name: "skip-if reports as when",
+			src:  "GET https://example.com\n# @skip-if true\n# @skip-if false\n",
+			want: "@when directive already defined for this request",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("repeat.http", []byte(tt.src))
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRedeclaredDirectiveScope(t *testing.T) {
+	sources := map[string]string{
+		"once in each of two requests": "GET https://a.example.com\n# @auth bearer aaa\n\n###\n" +
+			"GET https://b.example.com\n# @auth bearer bbb\n",
+		"file and global scope each add a profile": "# @auth file bearer aaa\n" +
+			"# @auth global bearer bbb\n\n###\nGET https://example.com\n",
+		"a request overrides the inherited file profile": "# @auth file bearer aaa\n\n###\n" +
+			"GET https://example.com\n# @auth bearer bbb\n",
+		"tags accumulate":       "GET https://example.com\n# @tag one\n# @tag two\n",
+		"captures accumulate":   "GET https://example.com\n# @capture a = 1\n# @capture b = 2\n",
+		"body options separate": "GET https://example.com\n# @body expand\n# @body inline\n",
+		"a setting per line":    "GET https://example.com\n# @setting timeout 1s\n# @setting insecure true\n",
+	}
+
+	for name, src := range sources {
+		t.Run(name, func(t *testing.T) {
+			doc := Parse("scope.http", []byte(src))
+			if hasParseMessage(doc.Errors, "already defined for this request") {
+				t.Fatalf("errors = %v, want no redeclaration error", doc.Errors)
+			}
+		})
+	}
+}
+
+func TestParseRedeclaredDirectiveKeepsTheFirst(t *testing.T) {
+	doc := Parse("first.http", []byte("# @name Alpha\n# @name Beta\nGET https://example.com\n"))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if got := doc.Requests[0].Metadata.Name; got != "Alpha" {
+		t.Fatalf("name = %q, want the first declaration %q", got, "Alpha")
+	}
+}
+
+func TestParseTraceRepeatedTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		rest string
+		want string
+	}{
+		{
+			name: "an option twice",
+			rest: "total=100ms total=2s",
+			want: `@trace option "total" is repeated`,
+		},
+		{
+			name: "a budget twice",
+			rest: "dns<=40ms dns<=50ms",
+			want: `@trace option "dns" is repeated`,
+		},
+		{
+			name: "a budget and the option form of it",
+			rest: "total<=100ms total=2s",
+			want: `@trace option "total" is repeated`,
+		},
+		{
+			name: "two spellings of tolerance",
+			rest: "tolerance=1s grace=2s",
+			want: `@trace option "tolerance" is repeated`,
+		},
+		{name: "distinct targets", rest: "dns<=40ms total<=200ms tolerance=25ms"},
+		{name: "a switch word is not a target", rest: "on"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("trace.http", []byte("GET https://example.com\n# @trace "+tt.rest+"\n"))
+			if tt.want == "" {
+				if len(doc.Errors) != 0 {
+					t.Fatalf("parse errors: %v", doc.Errors)
+				}
+				return
+			}
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
+			}
+		})
 	}
 }

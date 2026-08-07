@@ -45,6 +45,8 @@ func TestCompileQueryRulePredicates(t *testing.T) {
 		{"negative operand", queryRuleOf(restfile.MockQueryOpGT, "-5"), []string{"-4"}, true},
 		{"text is not a number", queryRuleOf(restfile.MockQueryOpGT, "10"), []string{"eleven"}, false},
 		{"infinity never compares", queryRuleOf(restfile.MockQueryOpGT, "0"), []string{"Inf"}, false},
+		{"runaway exponent", queryRuleOf(restfile.MockQueryOpGT, "1e999999999"), []string{"1e1000000000"}, true},
+		{"runaway exponent misses", queryRuleOf(restfile.MockQueryOpLTE, "0"), []string{"1e-999999999"}, false},
 		{"numeric any repeated", queryRuleOf(restfile.MockQueryOpGT, "10"), []string{"x", "11"}, true},
 		{"numeric missing", queryRuleOf(restfile.MockQueryOpLT, "10"), nil, false},
 	}
@@ -127,9 +129,9 @@ func TestCompileQueryRulesValidatesNamesAndRules(t *testing.T) {
 			want: "not a valid regular expression",
 		},
 		{
-			name: "operand out of range",
-			src:  map[string]restfile.MockQueryRule{"n": queryRuleOf(restfile.MockQueryOpGT, "1e999999999")},
-			want: "out of range",
+			name: "non-numeric operand",
+			src:  map[string]restfile.MockQueryRule{"n": queryRuleOf(restfile.MockQueryOpGT, "ten")},
+			want: "gt matcher requires one JSON number",
 		},
 	}
 	for _, test := range tests {

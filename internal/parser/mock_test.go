@@ -13,6 +13,7 @@ func TestParseMockBlock(t *testing.T) {
 	src := `### Payment accepted
 # @mock method=POST path=/payments name=accepted default=true latency=250ms
 # @match query={"mode":"test"} headers={"X-Tenant":["acme","west"]} json={"amount":100}
+# @match json-rules={ "score": { "gte": 10 } }
 HTTP/1.1 202 Accepted
 Content-Type: application/json
 Set-Cookie: one=1
@@ -60,6 +61,193 @@ GET https://example.com
 	}
 	if string(m.Match.JSON) != `{"amount":100}` {
 		t.Fatalf("json matcher = %s", m.Match.JSON)
+	}
+	if string(m.Match.JSONRules) != `{"score":{"gte":10}}` {
+		t.Fatalf("json-rules matcher = %s", m.Match.JSONRules)
+	}
+}
+
+func TestParseMockJSONMatchOptions(t *testing.T) {
+	tests := []struct {
+		name  string
+		match string
+		want  string
+	}{
+		{
+			name:  "json takes any JSON value",
+			match: `json=[1,2]`,
+		},
+		{
+			name:  "json-rules has to be an object",
+			match: `json-rules=[1,2]`,
+			want:  "invalid @match json-rules: must be a JSON object",
+		},
+		{
+			name:  "json-rules cannot be a scalar",
+			match: `json-rules=5`,
+			want:  "invalid @match json-rules: must be a JSON object",
+		},
+		{
+			name:  "malformed json-rules",
+			match: `json-rules={bad}`,
+			want:  "invalid @match json-rules:",
+		},
+		{
+			name:  "a field cannot be declared twice",
+			match: "json-rules={\"a\":{\"gt\":1}}\n# @match json-rules={\"a\":{\"lt\":9}}",
+			want:  `@match json-rules field "a" is repeated`,
+		},
+		{
+			name:  "only objects can be repeated",
+			match: "json=[1,2]\n# @match json={\"b\":2}",
+			want:  "@match json can only be repeated when every declaration is a JSON object",
+		},
+		{
+			name:  "a field cannot be repeated inside one declaration",
+			match: `json-rules={"amount":{"gt":100},"amount":{"lt":500}}`,
+			want:  `invalid @match json-rules: field "amount" is repeated`,
+		},
+		{
+			name:  "a nested field cannot be repeated either",
+			match: `json-rules={"user":{"age":{"gt":1},"age":{"lt":9}}}`,
+			want:  `invalid @match json-rules: field "age" is repeated`,
+		},
+		{
+			name:  "inside an array counts too",
+			match: `json=[{"a":1,"a":2}]`,
+			want:  `invalid @match json: field "a" is repeated`,
+		},
+		{
+			name:  "nesting a name under itself is fine",
+			match: `json-rules={"a":{"a":{"gt":1}}}`,
+		},
+		{
+			name:  "query names cannot be repeated",
+			match: `query={"page":"1","page":"2"}`,
+			want:  `invalid @match query: field "page" is repeated`,
+		},
+		{
+			name:  "header names cannot be repeated",
+			match: `headers={"X-Env":"a","X-Env":"b"}`,
+			want:  `invalid @match headers: field "X-Env" is repeated`,
+		},
+		{
+			name:  "every repeated field is named",
+			match: "json-rules={\"a\":{\"gt\":1},\"b\":{\"gt\":1}}\n# @match json-rules={\"b\":{\"lt\":9},\"a\":{\"lt\":9}}",
+			want:  `@match json-rules fields "a", "b" are repeated`,
+		},
+		{
+			name:  "repeating the option on one line is not a merge",
+			match: `json={"a":1} json={"b":2}`,
+			want:  `@match option "json" is repeated`,
+		},
+		{
+			name:  "an unterminated bracket is reported",
+			match: "json-rules={\"a\":{\"gt\":1}",
+			want:  "@match option is missing a closing bracket",
+		},
+		{
+			name:  "unknown option",
+			match: `jsonRules={"a":{"gt":1}}`,
+			want:  `unknown @match option "jsonrules"`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			doc := Parse("mocks.http", []byte("# @mock method=GET path=/x\n# @match "+test.match+"\nHTTP/1.1 200 OK\n"))
+			if test.want == "" {
+				if len(doc.Errors) != 0 {
+					t.Fatalf("parse errors: %+v", doc.Errors)
+				}
+				return
+			}
+			var found bool
+			for _, err := range doc.Errors {
+				found = found || strings.Contains(err.Message, test.want)
+			}
+			if !found {
+				t.Fatalf("errors = %+v, want %q", doc.Errors, test.want)
+			}
+		})
+	}
+}
+
+func TestParseMockJSONMatchSpansLines(t *testing.T) {
+	const wantJSON = `{"kind":"personal"}`
+	const wantRules = `{"amount":{"gte":100,"lt":500},"status":{"oneOf":["new","hold"]},` +
+		`"user":{"age":{"gte":18},"tier":{"oneOf":["gold","silver"]}}}`
+
+	sources := map[string]string{
+		"one line": `# @match json={"kind":"personal"}
+# @match json-rules={"amount":{"gte":100,"lt":500},"status":{"oneOf":["new","hold"]},"user":{"age":{"gte":18},"tier":{"oneOf":["gold","silver"]}}}`,
+
+		"indented": `# @match json={"kind":"personal"}
+# @match json-rules={
+#   "amount": {"gte": 100, "lt": 500},
+#   "status": {"oneOf": ["new", "hold"]},
+#   "user": {
+#     "age":  {"gte": 18},
+#     "tier": {"oneOf": ["gold", "silver"]}
+#   }
+# }`,
+
+		"repeated": `# @match json={"kind":"personal"}
+# @match json-rules={"user":{"age":{"gte":18},"tier":{"oneOf":["gold","silver"]}}}
+# @match json-rules={"status":{"oneOf":["new","hold"]}}
+# @match json-rules={"amount":{"gte":100,"lt":500}}`,
+
+		"indented and repeated": `# @match json={
+#   "kind": "personal"
+# }
+# @match json-rules={
+#   "amount": {"gte": 100, "lt": 500}
+# }
+# @match json-rules={
+#   "status": {"oneOf": ["new", "hold"]},
+#   "user":   {"age": {"gte": 18}, "tier": {"oneOf": ["gold", "silver"]}}
+# }`,
+
+		"beside other options": `# @match json={"kind":"personal"} query={"page":"2"}
+# @match json-rules={
+#   "amount": {"gte": 100, "lt": 500}
+# } headers={"X-Env":"prod"}
+# @match json-rules={"status":{"oneOf":["new","hold"]},"user":{"age":{"gte":18},"tier":{"oneOf":["gold","silver"]}}}`,
+	}
+
+	for name, match := range sources {
+		t.Run(name, func(t *testing.T) {
+			doc := Parse("mocks.http", []byte("# @mock method=POST path=/accounts\n"+match+"\nHTTP/1.1 200 OK\n"))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("parse errors: %+v", doc.Errors)
+			}
+			m := doc.Mocks[0].Match
+			if string(m.JSON) != wantJSON {
+				t.Fatalf("json = %s, want %s", m.JSON, wantJSON)
+			}
+			if string(m.JSONRules) != wantRules {
+				t.Fatalf("json-rules = %s, want %s", m.JSONRules, wantRules)
+			}
+		})
+	}
+}
+
+func TestParseMockJSONMatchKeepsMarkupCharacters(t *testing.T) {
+	const src = `# @mock method=POST path=/accounts
+# @match json={"note":"a<b & c>d"}
+# @match json-rules={"tag":{"eq":"<b>"}}
+# @match json-rules={"other":{"gt":1}}
+HTTP/1.1 200 OK
+`
+	doc := Parse("mocks.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors: %+v", doc.Errors)
+	}
+	m := doc.Mocks[0].Match
+	if want := `{"note":"a<b & c>d"}`; string(m.JSON) != want {
+		t.Fatalf("json = %s, want %s", m.JSON, want)
+	}
+	if want := `{"other":{"gt":1},"tag":{"eq":"<b>"}}`; string(m.JSONRules) != want {
+		t.Fatalf("json-rules = %s, want %s", m.JSONRules, want)
 	}
 }
 

@@ -745,6 +745,10 @@ Troubleshooting:
 - Begin each request with a line that starts with `###`. Everything up to the next separator belongs to the same request.
 - Lines prefixed with `#`, `//`, or `--` are treated as comments. Metadata directives live inside these comment blocks.
 - A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
+- An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](#splitting-a-long-matcher).
+- Alternate spellings count as the same option. For example, `known_hosts` and `known-hosts` cannot both have values on one `@ssh` directive. An empty spelling does not conflict with one that has a value.
+- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first declaration and reports the next one.
+- Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
 - In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. The full text appears in the Explain pane for each run.
 - The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
 - `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
@@ -906,7 +910,7 @@ A no-op hot reload keeps the active handler and its cursors. Any source or fixtu
 
 ### Conditional scenarios
 
-Add `@match` before the raw status line to select a response by query values, request headers, or a JSON body subset:
+Add `@match` before the raw status line to select a response by query values, request headers, or the JSON request body:
 
 ```http
 ### Declined payment
@@ -939,20 +943,78 @@ Each key declares exactly one rule. Header names are case-insensitive and query 
 
 The numeric operand must be written as a JSON number, so `{"gte":2}` rather than `{"gte":"2"}`. A value that does not read as a number is an ordinary non-match, not an error, so `?page=none` simply fails `{"gte":2}`.
 
-Only declared query and header keys are constrained. JSON objects match as recursive subsets, while arrays are exact and ordered. JSON numbers compare numerically (`1`, `1.0`, and `1e0` are equal). JSON matching accepts `application/json` and `+json`, rejects malformed bodies with `400`, and caps matcher input at 4 MiB (`413`).
+Only declared query and header keys are constrained. Numbers are compared exactly by value, so `1`, `1.0`, and `1e0` are equal. Large and small exponents do not overflow or underflow.
 
-A JSON field can also carry an operator, written with a `$` prefix so it is unlikely to collide with a real field name:
+#### Matching the request body
+
+Use `json` to match a literal body subset and `json-rules` to compare body values. They can be combined:
 
 ```http
-# @match json={"amount":{"$gt":100},"user":{"age":{"$gte":18}},"status":{"$oneOf":["new","hold"]}}
+# @match json={"type":"order"}
+# @match json-rules={"amount":{"gt":100},"user":{"age":{"gte":18}},"status":{"oneOf":["new","hold"]}}
 ```
 
-- `$gt`, `$gte`, `$lt`, and `$lte` require the operand and the request value to both be JSON numbers. The string `"101"` does not satisfy `{"$gt":100}`.
-- `$oneOf` succeeds when the request value equals one of the listed values. Alternatives may be any JSON value, and an object or array alternative must match whole rather than as a subset.
+All body, query, and header conditions must match. Body matching accepts `application/json` and `+json` media types. A malformed body returns `400`, and a body larger than 4 MiB returns `413`.
 
-An operator is recognized only when it is the **sole member** of its object, and only for the five names above. The `$` is a naming convention, not a reserved namespace: JSON assigns it no special meaning, so `{"$schema":"..."}`, `{"$ref":"#/$defs/user"}` and any other dollar-prefixed field match as ordinary data. An unrecognized name such as `{"$between":[1,9]}` is a field name too, which means a misspelled operator matches nothing rather than failing to load, exactly as a misspelled field name would. An operator can appear anywhere a value can, including inside an array.
+Everything inside `json` is request data:
 
-The one shape you cannot write directly is a body field that is itself a lone operator name, such as `{"age":{"$gt":21}}` as literal data. Use `$oneOf` with a single alternative for that, since its alternatives are compared as values: `{"age":{"$oneOf":[{"$gt":21}]}}`. That comparison is exact rather than a subset, so it matches a body whose `age` is exactly `{"$gt":21}` and not one that also carries a sibling such as `{"$gt":21,"source":"legacy"}`.
+- Objects match as recursive subsets, so members the pattern does not mention are ignored.
+- Arrays match exactly and in order.
+- Other values match by value.
+- Keys are always field names. Patterns such as `{"$gt":100}`, `{"$schema":"..."}`, `{"$ref":"#/$defs/user"}`, and `{"gt":125}` need no escaping.
+
+The structure of `json-rules` follows the request body:
+
+- `gt`, `gte`, `lt`, and `lte` require JSON numbers on both sides. The string `"101"` does not match `{"gt":100}`.
+- `oneOf` matches any listed JSON value. Object and array entries must match the entire value.
+- Several operators can apply to one value. For example, `{"amount":{"gte":100,"lt":500}}` checks both bounds.
+- Missing fields and values of the wrong type do not match.
+- Field names containing `.`, `/`, `$`, or non-ASCII text need no escaping. `{"a.b":{"gt":1}}` refers to the top-level field named `a.b`.
+
+Operator names can also be body field names. Nest another rule inside the field to match one:
+
+```http
+# Matches {"range": {"gt": 125}}
+# @match json-rules={"range":{"gt":{"gt":100}}}
+```
+
+The outer `gt` is a field because its value is an object. The inner `gt` is the operator.
+
+Empty rule objects, unknown operators, invalid operands, and empty `oneOf` arrays are configuration errors. The error includes the location:
+
+```
+invalid json-rules matcher at amount.gtt: expected a rule object or a known operator
+```
+
+Rules do not inspect array elements. Match an array with `json`, or compare the whole array with `oneOf`:
+
+```http
+# @match json-rules={"roles":{"oneOf":[["admin"],["admin","auditor"]]}}
+```
+
+#### Splitting a long matcher
+
+If a bracket is still open, the matcher continues on the next comment line:
+
+```http
+# @match json-rules={
+#   "amount": {"gte": 100, "lt": 500},
+#   "user": {
+#     "age":  {"gte": 18},
+#     "tier": {"oneOf": ["gold", "silver"]}
+#   },
+#   "status": {"oneOf": ["new", "hold"]}
+# }
+```
+
+You can also split unrelated fields across declarations:
+
+```http
+# @match json-rules={"amount":{"gte":100,"lt":500}}
+# @match json-rules={"status":{"oneOf":["new","hold"]}}
+```
+
+Resterm merges repeated object values. Repeating a field or a non-object value is an error. When Resterm rewrites the file, it writes the matcher as one merged line.
 
 Scenario selection is deterministic:
 
@@ -992,7 +1054,7 @@ While the TUI owns an active mock server, `:mock verify` checks the active compi
 # @assert mock.received({method:"POST", path:"/webhooks/payment", headers:{Authorization:{prefix:"Bearer "}}, json:{status:"completed"}})
 ```
 
-Both functions take one pattern dictionary. `count` returns the exact count, and `received` is shorthand for a count greater than zero. Supported fields are `method`, `path`, `query`, `headers`, and `json`, with the same wildcard, exact, header-rule, and JSON-subset semantics as mocks. These helpers are deliberately in-process: `resterm run` does not connect to an arbitrary mock journal. Use `resterm mock verify` for standalone or headless automation.
+Both functions take one pattern dictionary. `count` returns the number of matching requests, and `received` reports whether any request matched. Supported fields are `method`, `path`, `query`, `headers`, `json`, and `jsonRules`, with the same behavior as the matching `@match` options. These helpers inspect the TUI's active mock server. `resterm run` does not connect to another mock journal. Use `resterm mock verify` for standalone or headless automation.
 
 ### CORS, reload, and request journals
 
