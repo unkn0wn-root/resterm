@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -23,25 +24,19 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (b *Builder) HandleDirective(name directive.Name, rest string) bool {
+func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, reset bool, err error) {
 	switch name {
 	case directive.GraphQL:
-		if rest == "" || strings.EqualFold(rest, "true") {
-			b.enabled = true
-			return true
-		} else if strings.EqualFold(rest, "false") {
-			b.disable()
-			return true
-		}
-		return true
+		reset, err := b.toggle(str.Trim(rest))
+		return true, reset, err
 	case directive.GraphQLOperation:
 		if b.enabled {
 			b.operation = rest
 		}
-		return b.enabled
+		return b.enabled, false, nil
 	case directive.Variables:
 		if !b.enabled {
-			return false
+			return false, false, nil
 		}
 		b.collectVariables = true
 		b.variablesLines = nil
@@ -55,10 +50,10 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) bool {
 				b.variablesLines = append(b.variablesLines, rest)
 			}
 		}
-		return true
+		return true, false, nil
 	case directive.Query:
 		if !b.enabled {
-			return false
+			return false, false, nil
 		}
 		b.collectVariables = false
 		b.queryLines = nil
@@ -68,13 +63,30 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) bool {
 		if rest != "" {
 			if file, ok := bodyref.Parse(rest, bodyref.Options{Location: bodyref.Line}); ok {
 				b.queryFile = file
-				return true
+				return true, false, nil
 			}
 			b.queryLines = append(b.queryLines, rest)
 		}
-		return true
+		return true, false, nil
 	}
-	return false
+	return false, false, nil
+}
+
+func (b *Builder) toggle(rest string) (reset bool, err error) {
+	switch {
+	case rest == "":
+		b.enabled = true
+	case directive.IsOff(rest):
+		b.disable()
+		return true, nil
+	default:
+		on, ok := directive.ParseBool(rest)
+		if !ok {
+			return false, fmt.Errorf("invalid @graphql %q: expected true or false", rest)
+		}
+		b.enabled = on
+	}
+	return false, nil
 }
 
 func (b *Builder) disable() {

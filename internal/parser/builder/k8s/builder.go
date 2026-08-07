@@ -104,6 +104,16 @@ func ParseDirective(rest string) (Directive, error) {
 	return res, left
 }
 
+var k8sTargetKinds = []struct {
+	kind k8starget.Kind
+	keys []string
+}{
+	{kind: k8starget.Pod, keys: []string{"pod"}},
+	{kind: k8starget.Service, keys: []string{"service", "svc"}},
+	{kind: k8starget.Deployment, keys: []string{"deployment", "deploy"}},
+	{kind: k8starget.StatefulSet, keys: []string{"statefulset", "sts"}},
+}
+
 func applyK8sOptions(prof *restfile.K8sProfile, opts directive.Options) error {
 	if ns, ok := opts.PopAny("namespace", "ns"); ok {
 		prof.Namespace = ns
@@ -119,22 +129,9 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts directive.Options) error {
 		}
 	}
 
-	targetAliases := []struct {
-		kind k8starget.Kind
-		keys []string
-	}{
-		{kind: k8starget.Pod, keys: []string{"pod"}},
-		{kind: k8starget.Service, keys: []string{"service", "svc"}},
-		{kind: k8starget.Deployment, keys: []string{"deployment", "deploy"}},
-		{kind: k8starget.StatefulSet, keys: []string{"statefulset", "sts"}},
-	}
-	for _, ta := range targetAliases {
-		for _, key := range ta.keys {
-			v := opts.Pop(key)
-			if v == "" {
-				continue
-			}
-			if err := setK8sTarget(prof, ta.kind, v); err != nil {
+	for _, ta := range k8sTargetKinds {
+		if name, ok := opts.PopAny(ta.keys...); ok {
+			if err := setK8sTarget(prof, ta.kind, name); err != nil {
 				return err
 			}
 		}

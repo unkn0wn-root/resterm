@@ -19,14 +19,16 @@ const (
 	Many
 )
 
-// Completion, syntax highlighting, and embedded help all use this metadata.
-// Topic names the helpdoc topic that documents the directive.
+// Spec describes a directive for completion, syntax highlighting, and help.
+// Topic identifies the corresponding help topic. Resets names directives whose
+// declarations are cleared when the feature is disabled.
 type Spec struct {
 	Name    Name
 	Aliases []Name
 	Summary string
 	Args    ArgKind
 	Repeat  Repeat
+	Resets  []Name
 	Topic   string
 }
 
@@ -183,9 +185,15 @@ var specs = []Spec{
 	{Name: Case, Summary: "Match a switch case", Args: ArgText, Repeat: Many, Topic: "workflows"},
 	{Name: Default, Summary: "Fallback switch case", Args: ArgOptions, Repeat: Many, Topic: "workflows"},
 	{Name: ForEach, Summary: "Run a request once per list item", Args: ArgText, Repeat: Once, Topic: "workflows"},
-	// These directives allow "off" between configurations, so their handlers
-	// enforce duplicate rules after applying resets.
-	{Name: GraphQL, Summary: "Enable GraphQL request handling", Args: ArgToken, Repeat: Many, Topic: "graphql"},
+	// Protocol toggles may repeat because disabling them resets their state.
+	{
+		Name:    GraphQL,
+		Summary: "Enable GraphQL request handling",
+		Args:    ArgToken,
+		Repeat:  Many,
+		Resets:  []Name{GraphQLOperation, Variables, Query},
+		Topic:   "graphql",
+	},
 	{
 		Name:    GraphQLOperation,
 		Aliases: []Name{Operation},
@@ -248,6 +256,16 @@ var index = func() map[Name]*Spec {
 func (n Name) DeclaredOnce() bool {
 	spec, ok := index[n]
 	return ok && spec.Repeat == Once
+}
+
+// Resets returns the directive names cleared when this feature is disabled.
+// The returned slice must not be modified.
+func (n Name) Resets() []Name {
+	spec, ok := index[n]
+	if !ok {
+		return nil
+	}
+	return spec.Resets
 }
 
 // Lookup resolves canonical names and aliases alike. The lookup expects lowercase input.

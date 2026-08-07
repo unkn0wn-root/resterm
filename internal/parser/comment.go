@@ -15,9 +15,10 @@ func (b *documentBuilder) handleComment(line, baseCol int, text string) {
 	if b.redeclared(line, call) {
 		return
 	}
-	b.routeDirective(line, baseCol, call)
-	// Routing may create the request that owns this declaration.
-	b.markDeclared(call)
+	// Only handled directives participate in request-level duplicate checks.
+	if b.routeDirective(line, baseCol, call) {
+		b.markDeclared(call)
+	}
 }
 
 // File directives may define several named profiles, so only request
@@ -36,48 +37,48 @@ func (b *documentBuilder) markDeclared(call directive.Call) {
 	}
 }
 
-func (b *documentBuilder) routeDirective(line, baseCol int, call directive.Call) {
+func (b *documentBuilder) routeDirective(line, baseCol int, call directive.Call) bool {
 	argCol := 0
 	if baseCol > 0 {
 		argCol = baseCol + call.ArgOffset
 	}
 
 	if b.handleMockDirective(line, call.Name, call.Args) {
-		return
+		return true
 	}
 
 	if b.handleWorkflowStart(line, call.Name, call.Args) {
-		return
+		return true
 	}
 	if b.handleUseDirective(line, call.Name, call.Args) {
-		return
+		return true
 	}
 	if b.handleWorkflowDirective(line, call) {
-		return
+		return true
 	}
 	if b.handleScopedVariableDirective(call.Name, call.Args, line) {
-		return
+		return true
 	}
 	if b.handleConstDirective(line, call.Name, call.Args) {
-		return
+		return true
 	}
 	if b.handleAuthDirective(line, call.Name, call.Args) {
-		return
+		return true
 	}
 	if b.handleSSHDirective(line, call.Name, call.Args) {
-		return
+		return true
 	}
 	if b.handleK8sDirective(line, call.Name, call.Args) {
-		return
+		return true
 	}
 	if b.handlePatchDirective(line, argCol, call.Name, call.Args) {
-		return
+		return true
 	}
 	if b.handleFileSettingsDirective(line, call.Name, call.Args) {
-		return
+		return true
 	}
 
-	b.handleRequestDirective(line, argCol, call)
+	return b.handleRequestDirective(line, argCol, call)
 }
 
 // handleRequestDirective routes request scoped directives and creates the

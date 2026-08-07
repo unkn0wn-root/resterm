@@ -282,8 +282,7 @@ func (b *documentBuilder) startWorkflow(line int, rest string) {
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
 	opts, err := directive.ParseOptions(directive.Workflow, remainder)
-	b.addErrors(line, err)
-	sb.applyOptions(opts)
+	b.addErrors(line, errors.Join(err, sb.applyOptions(opts)))
 	sb.touch(line)
 	b.workflow = sb
 }

@@ -21,21 +21,21 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (b *Builder) HandleDirective(name directive.Name, rest string) (bool, error) {
+func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, reset bool, err error) {
 	if name != directive.SSE {
-		return false, nil
+		return false, false, nil
 	}
 
 	rest = str.Trim(rest)
 	if rest == "" {
 		b.enabled = true
-		return true, nil
+		return true, false, nil
 	}
 
 	if directive.IsOff(rest) {
 		b.enabled = false
 		b.options = restfile.SSEOptions{}
-		return true, nil
+		return true, true, nil
 	}
 
 	b.enabled = true
@@ -50,7 +50,7 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (bool, error
 		}
 	}
 	errs = append(errs, assignments.Conflicts(directive.SSE))
-	return true, errors.Join(errs...)
+	return true, false, errors.Join(errs...)
 }
 
 var sseAliases = [][]string{

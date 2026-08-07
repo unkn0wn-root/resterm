@@ -94,6 +94,31 @@ func TestOptionAliasesConflictWithoutBeingUnknown(t *testing.T) {
 			want: `@if options "run", "using" are the same option`,
 		},
 		{
+			name: "workflow on-failure",
+			src:  "# @workflow f on-failure=stop onfailure=continue\n# @step one using=A\n",
+			want: `@workflow options "on-failure", "onfailure" are the same option`,
+		},
+		{
+			name: "k8s target kind",
+			src:  "### r\n# @k8s service=api svc=api-canary port=8080\nGET http://x\n",
+			want: `@k8s options "service", "svc" are the same option`,
+		},
+		{
+			name: "script lang and language",
+			src:  "### r\nGET http://x\n# @script test lang=js language=rts\n> tests.assert(true)\n",
+			want: `@script options "lang", "language" are the same option`,
+		},
+		{
+			name: "rts lang and language",
+			src:  "### r\n# @rts pre-request lang=rts language=rts\nGET http://x\n",
+			want: `@rts options "lang", "language" are the same option`,
+		},
+		{
+			name: "compare baseline",
+			src:  "### r\n# @compare dev stage base=dev baseline=stage\nGET http://x\n",
+			want: `@compare options "base", "baseline" are the same option`,
+		},
+		{
 			name: "one spelling is not a conflict",
 			src:  "### r\n# @k8s target=pod/api port=1 kube-context=c\nGET http://x\n",
 		},

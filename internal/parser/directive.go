@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -481,88 +482,83 @@ func setTracePhaseBudget(spec *restfile.TraceSpec, name string, dur time.Duratio
 	spec.Budgets.Phases[name] = dur
 }
 
+var compareBaselineKeys = []string{"base", "baseline", "primary", "ref"}
+
 func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 	fields := directive.Fields(rest)
-	if _, err := directive.OptionFields(directive.Compare, fields); err != nil {
+	opts, err := directive.OptionFields(directive.Compare, fields)
+	if err != nil {
 		return nil, err
 	}
-	envs := make([]string, 0, len(fields))
-	seen := make(map[string]struct{})
-	var baseline string
-	var group string
 
-	for _, field := range fields {
-		value := strings.TrimSpace(field)
-		if value == "" {
-			continue
-		}
-		if before, after, ok := strings.Cut(value, "="); ok {
-			key := strings.ToLower(strings.TrimSpace(before))
-			val := strings.TrimSpace(after)
-			switch key {
-			case "base", "baseline", "primary", "ref":
-				if val == "" {
-					return nil, fmt.Errorf("@compare baseline cannot be empty")
-				}
-				if vars.IsReservedEnvironment(val) {
-					return nil, fmt.Errorf(
-						"@compare baseline %q is reserved for shared defaults",
-						val,
-					)
-				}
-				baseline = val
-			case "group":
-				if val == "" {
-					return nil, fmt.Errorf("@compare group cannot be empty")
-				}
-				if vars.IsReservedEnvironment(val) {
-					return nil, fmt.Errorf("@compare group %q is reserved", val)
-				}
-				group = val
-			default:
-				return nil, fmt.Errorf("@compare unsupported option %q", key)
-			}
-			continue
-		}
-		if vars.IsReservedEnvironment(value) {
-			return nil, fmt.Errorf("@compare environment %q is reserved for shared defaults", value)
-		}
-		lowered := strings.ToLower(value)
-		if _, exists := seen[lowered]; exists {
-			return nil, fmt.Errorf("@compare duplicate environment %q", value)
-		}
-		seen[lowered] = struct{}{}
-		envs = append(envs, value)
+	baseline, err := compareOption(opts, compareBaselineKeys...)
+	if err != nil {
+		return nil, err
+	}
+	group, err := compareOption(opts, "group")
+	if err != nil {
+		return nil, err
+	}
+	if err := errors.Join(opts.Conflicts(directive.Compare), opts.Unknown(directive.Compare)); err != nil {
+		return nil, err
+	}
+	if vars.IsReservedEnvironment(baseline) {
+		return nil, fmt.Errorf("@compare baseline %q is reserved for shared defaults", baseline)
+	}
+	if vars.IsReservedEnvironment(group) {
+		return nil, fmt.Errorf("@compare group %q is reserved", group)
 	}
 
+	envs, err := compareEnvironments(fields)
+	if err != nil {
+		return nil, err
+	}
+	spec := &restfile.CompareSpec{Environments: envs, Baseline: envs[0], Group: group}
+	if baseline == "" {
+		return spec, nil
+	}
+	for _, env := range envs {
+		if strings.EqualFold(env, baseline) {
+			spec.Baseline = env
+			return spec, nil
+		}
+	}
+	return nil, fmt.Errorf("@compare baseline %q must match one of the environments", baseline)
+}
+
+// Compare options reject empty values even when another alias supplies one.
+func compareOption(opts directive.Options, keys ...string) (string, error) {
+	for _, key := range keys {
+		if raw, ok := opts.Lookup(key); ok && strings.TrimSpace(raw) == "" {
+			return "", fmt.Errorf("@compare %s cannot be empty", key)
+		}
+	}
+	value, _ := opts.PopAny(keys...)
+	return value, nil
+}
+
+func compareEnvironments(fields []string) ([]string, error) {
+	envs := make([]string, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		env := strings.TrimSpace(field)
+		if env == "" || strings.Contains(env, "=") {
+			continue
+		}
+		if vars.IsReservedEnvironment(env) {
+			return nil, fmt.Errorf("@compare environment %q is reserved for shared defaults", env)
+		}
+		lowered := strings.ToLower(env)
+		if _, exists := seen[lowered]; exists {
+			return nil, fmt.Errorf("@compare duplicate environment %q", env)
+		}
+		seen[lowered] = struct{}{}
+		envs = append(envs, env)
+	}
 	if len(envs) < 2 {
 		return nil, fmt.Errorf("@compare requires at least two environments")
 	}
-
-	if baseline == "" {
-		baseline = envs[0]
-	} else {
-		match := ""
-		for _, env := range envs {
-			if strings.EqualFold(env, baseline) {
-				match = env
-				break
-			}
-		}
-		if match == "" {
-			return nil, fmt.Errorf(
-				"@compare baseline %q must match one of the environments",
-				baseline,
-			)
-		}
-		baseline = match
-	}
-
-	return &restfile.CompareSpec{
-		Environments: envs,
-		Baseline:     baseline,
-		Group:        group,
-	}, nil
+	return envs, nil
 }
 
 func parseDuration(value string) time.Duration {

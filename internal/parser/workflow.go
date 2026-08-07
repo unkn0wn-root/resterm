@@ -62,20 +62,25 @@ func (b *workflowBuilder) touch(line int) {
 	}
 }
 
-func (b *workflowBuilder) applyOptions(opts directive.Options) {
+// Keep recognized aliases out of the unconsumed options exposed to tooling.
+func (b *workflowBuilder) applyOptions(opts directive.Options) error {
 	if opts.Len() == 0 {
-		return
+		return nil
 	}
-	if mode, ok := popFailMode(opts, "on-failure", "onfailure"); ok {
-		b.wf.DefaultOnFailure = mode
+	if val, ok := opts.PopAny("on-failure", "onfailure"); ok {
+		if mode, ok := parseWorkflowFailureMode(val); ok {
+			b.wf.DefaultOnFailure = mode
+		}
 	}
+	err := opts.Conflicts(directive.Workflow)
 	if opts.Len() == 0 {
-		return
+		return err
 	}
 	if b.wf.Options == nil {
 		b.wf.Options = make(map[string]string, opts.Len())
 	}
 	opts.CopyTo(b.wf.Options)
+	return err
 }
 
 func (b *workflowBuilder) handleDirective(
@@ -514,20 +519,6 @@ func (b *workflowBuilder) applyPending(step *restfile.WorkflowStep) {
 		}
 		b.pendEach = nil
 	}
-}
-
-func popFailMode(opts directive.Options, keys ...string) (restfile.WorkflowFailureMode, bool) {
-	for _, key := range keys {
-		val, ok := opts.Lookup(key)
-		if !ok {
-			continue
-		}
-		opts.Pop(key)
-		if mode, ok := parseWorkflowFailureMode(val); ok {
-			return mode, true
-		}
-	}
-	return "", false
 }
 
 func parseWorkflowFailureMode(value string) (restfile.WorkflowFailureMode, bool) {

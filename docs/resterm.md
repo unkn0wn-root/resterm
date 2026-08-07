@@ -747,8 +747,9 @@ Troubleshooting:
 - A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](#splitting-a-long-matcher).
 - Alternate spellings count as the same option. For example, `known_hosts` and `known-hosts` cannot both have values on one `@ssh` directive. An empty spelling does not conflict with one that has a value.
-- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first declaration and reports the next one.
-- Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
+- `@compare` requires non-empty values for its baseline and group options. This is stricter than general alias conflict handling: `# @ssh host=h known-hosts=a known_hosts=` is valid, but `# @compare dev stage base=dev baseline=` reports an empty baseline.
+- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first declaration and reports the next one. A GraphQL directive ignored while GraphQL is off does not count as declared, so it does not block a later declaration.
+- Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. For GraphQL, the reset also clears `@operation`, `@variables`, and `@query`, so they may be declared again after `@graphql off`. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
 - In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. The full text appears in the Explain pane for each run.
 - The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
 - `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
@@ -1126,7 +1127,7 @@ GET https://httpbin.org/delay/5
 
 Run the same request across multiple environments either inline or from the CLI:
 
-- Add `# @compare dev stage prod base=stage` to a request block to pin the order/baseline inside the file. Provide at least two environments; `base` is optional and defaults to the first entry.
+- Add `# @compare dev stage prod base=stage` to a request block to pin the order/baseline inside the file. Provide at least two environments; `base` is optional and defaults to the first entry. `baseline`, `primary`, and `ref` are alternate spellings of `base`, so only one of them may carry a value. Writing `base=` or `group=` with nothing after it is reported rather than treated as omitted.
 - Supply global defaults with `resterm --compare dev,stage,prod --compare-base stage`, then press `g+c` anywhere in the editor to reuse those targets even if the request lacks `@compare`.
 - While a compare run is active Resterm automatically enables a split layout, pins the previous response in the secondary pane, and streams progress in the status bar (`Compare dev✓ stage… prod?`). The new Compare tab renders a table with status/code/duration/diff summaries per environment.
 - Each compare sweep writes a bundled history entry (`COMPARE` method) so you can replay the failing environment later; selecting a compare history row loads the run back into the editor, restores the Compare tab, and lets you resend or inspect deltas off-line.
@@ -1539,10 +1540,24 @@ Available directives:
 
 | Directive | Description |
 | --- | --- |
-| `@graphql [true\|false]` | Enable/disable GraphQL processing for the request. |
+| `@graphql [boolean]` | Enable/disable GraphQL processing for the request. |
 | `@operation` / `@graphql-operation` | Sets the `operationName`. |
 | `@variables` | Starts a variables block; inline JSON or `< file.json`. |
 | `@query` | Loads the query from a file instead of the inline body. |
+
+`@graphql` accepts the standard boolean spellings, including `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`, and `t`/`f`. It also accepts `disable` and `disabled` as false values; other values are reported as errors. Switching GraphQL off discards the operation, variables, and query collected so far, allowing the request to declare them again after GraphQL is re-enabled:
+
+```http
+### Reconfigured
+# @graphql
+# @operation First
+# @query query First { a }
+POST {{graphql.endpoint}}
+# @graphql off
+# @graphql
+# @operation Second
+# @query query Second { b }
+```
 
 Example:
 

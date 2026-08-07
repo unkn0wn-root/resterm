@@ -1291,8 +1291,9 @@ func TestParseK8sRejectsConflictingTargetAliases(t *testing.T) {
 GET http://example.com
 `
 	doc := Parse("k8s_target_alias_conflict.http", []byte(src))
-	if !hasParseMessage(doc.Errors, "multiple @k8s targets specified") {
-		t.Fatalf("expected alias conflict error, got %v", doc.Errors)
+	want := `@k8s options "service", "svc" are the same option`
+	if !hasParseMessage(doc.Errors, want) {
+		t.Fatalf("expected %q, got %v", want, doc.Errors)
 	}
 }
 
@@ -1927,6 +1928,62 @@ GET https://example.com
 	req := doc.Requests[0]
 	if req.Metadata.Compare != nil {
 		t.Fatalf("expected compare metadata to be nil on error")
+	}
+}
+
+func TestParseCompareDirectiveOptionErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "unknown option",
+			src:  "# @compare dev stage baze=dev\nGET https://example.com\n",
+			want: `unknown @compare option "baze"`,
+		},
+		{
+			name: "empty baseline",
+			src:  "# @compare dev stage primary=\nGET https://example.com\n",
+			want: "@compare primary cannot be empty",
+		},
+		{
+			name: "empty group",
+			src:  "# @compare dev stage group=\nGET https://example.com\n",
+			want: "@compare group cannot be empty",
+		},
+		{
+			name: "empty alias beside a value",
+			src:  "# @compare dev stage base=dev baseline=\nGET https://example.com\n",
+			want: "@compare baseline cannot be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("compare.http", []byte(tt.src))
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("expected %q, got %v", tt.want, doc.Errors)
+			}
+			if doc.Requests[0].Metadata.Compare != nil {
+				t.Fatal("expected compare metadata to be nil on error")
+			}
+		})
+	}
+}
+
+func TestParseCompareDirectiveBaselineAliases(t *testing.T) {
+	for _, key := range compareBaselineKeys {
+		t.Run(key, func(t *testing.T) {
+			src := "# @compare dev stage prod " + key + "=prod\nGET https://example.com\n"
+			doc := Parse("compare.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("unexpected parse errors: %v", doc.Errors)
+			}
+			if got := doc.Requests[0].Metadata.Compare.Baseline; got != "prod" {
+				t.Fatalf("baseline = %q, want prod", got)
+			}
+		})
 	}
 }
 
@@ -3026,6 +3083,89 @@ POST https://example.com/graphql
 	}
 	if gql.Variables != `{"id":"123"}` {
 		t.Fatalf("unexpected variables %q", gql.Variables)
+	}
+}
+
+func TestParseGraphQLResetAllowsReconfiguration(t *testing.T) {
+	src := `### gql
+# @graphql
+# @operation First
+# @query query First { a }
+# @variables {"id":"1"}
+POST https://example.com/graphql
+# @graphql false
+# @graphql
+# @operation Second
+# @query query Second { b }
+# @variables {"id":"2"}
+`
+
+	doc := Parse("graphql-reset.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatal("expected GraphQL body")
+	}
+	if gql.OperationName != "Second" {
+		t.Fatalf("unexpected operation %q", gql.OperationName)
+	}
+	if gql.Query != "query Second { b }" {
+		t.Fatalf("unexpected query %q", gql.Query)
+	}
+	if gql.Variables != `{"id":"2"}` {
+		t.Fatalf("unexpected variables %q", gql.Variables)
+	}
+}
+
+func TestParseGraphQLOperationBeforeEnableDoesNotBlockLaterOne(t *testing.T) {
+	src := `# @name Gql
+# @operation Ignored
+# @graphql
+# @operation Used
+POST https://example.com/graphql
+
+query Used { a }
+`
+
+	doc := Parse("graphql-operation-order.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatal("expected GraphQL body")
+	}
+	if gql.OperationName != "Used" {
+		t.Fatalf("unexpected operation %q", gql.OperationName)
+	}
+}
+
+func TestParseGraphQLAcceptsEveryOffSpelling(t *testing.T) {
+	for _, off := range []string{"false", "no", "off", "0", "f", "disable", "disabled"} {
+		t.Run(off, func(t *testing.T) {
+			src := "# @graphql\n# @query query First { a }\nPOST https://example.com/graphql\n# @graphql " + off + "\n"
+			doc := Parse("graphql-off.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("expected no parse errors, got %v", doc.Errors)
+			}
+			if gql := doc.Requests[0].Body.GraphQL; gql != nil {
+				t.Fatalf("expected GraphQL to be off, got %+v", gql)
+			}
+		})
+	}
+}
+
+func TestParseGraphQLRejectsNonBooleanValue(t *testing.T) {
+	src := `# @graphql maybe
+POST https://example.com/graphql
+`
+
+	doc := Parse("graphql-bad-value.http", []byte(src))
+	want := `invalid @graphql "maybe": expected true or false`
+	if !hasParseMessage(doc.Errors, want) {
+		t.Fatalf("expected %q, got %v", want, doc.Errors)
 	}
 }
 

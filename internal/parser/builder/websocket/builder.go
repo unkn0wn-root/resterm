@@ -46,26 +46,27 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (b *Builder) HandleDirective(name directive.Name, rest string) (bool, error) {
+func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, reset bool, err error) {
 	switch name {
 	case directive.WebSocket:
-		return true, b.handleWebSocket(rest)
+		reset, err := b.handleWebSocket(rest)
+		return true, reset, err
 	case directive.WS:
-		return true, b.handleStep(rest)
+		return true, false, b.handleStep(rest)
 	default:
-		return false, nil
+		return false, false, nil
 	}
 }
 
-func (b *Builder) handleWebSocket(rest string) error {
+func (b *Builder) handleWebSocket(rest string) (reset bool, err error) {
 	t := str.Trim(rest)
 	if t == "" {
 		b.on = true
-		return nil
+		return false, nil
 	}
 	if directive.IsOff(t) {
 		b.reset()
-		return nil
+		return true, nil
 	}
 
 	b.on = true
@@ -80,7 +81,7 @@ func (b *Builder) handleWebSocket(rest string) error {
 		}
 	}
 	errs = append(errs, opts.Conflicts(directive.WebSocket))
-	return errors.Join(errs...)
+	return false, errors.Join(errs...)
 }
 
 var wsAliases = [][]string{

@@ -172,6 +172,8 @@ func (b *documentBuilder) setRTSScript(rest string) error {
 	return nil
 }
 
+var scriptLangKeys = []string{"lang", "language"}
+
 func parseScriptSpec(rest string) (scriptKind, scriptLang, error) {
 	fields := directive.Fields(rest)
 	kind := scriptKind("")
@@ -191,12 +193,10 @@ func parseScriptSpec(rest string) (scriptKind, scriptLang, error) {
 		}
 	}
 	params, err := directive.OptionFields(directive.Script, fields)
-	if v := params.Get("lang"); v != "" {
+	if v, ok := params.First(scriptLangKeys...); ok {
 		lang = scriptLang(v)
 	}
-	if v := params.Get("language"); v != "" && lang == "" {
-		lang = scriptLang(v)
-	}
+	err = errors.Join(err, params.Conflicts(directive.Script))
 	return normScriptKind(kind.String()), normScriptLang(lang.String()), err
 }
 
@@ -253,12 +253,10 @@ func validateRTSScriptLangOptions(fields []string) error {
 	if err != nil {
 		return err
 	}
-	for _, opt := range []string{"lang", "language"} {
-		if val := params.Get(opt); val != "" && normScriptLang(val) != scriptLangRTS {
-			return errRTSLangUnsupported
-		}
+	if val, ok := params.First(scriptLangKeys...); ok && normScriptLang(val) != scriptLangRTS {
+		return errRTSLangUnsupported
 	}
-	return nil
+	return params.Conflicts(directive.RTS)
 }
 
 var errRTSTestUnsupported = errors.New(
