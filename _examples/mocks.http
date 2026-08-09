@@ -92,12 +92,28 @@ Content-Type: application/json
 # A query value is always text, so an object there can only be a matcher and the
 # operators are written bare. gte reads the value as a number, so a request with
 # amount=none fails to match instead of erroring.
+# Both forms are supported. This matcher is a single line, and the next scenario
+# splits the same syntax over several comment lines.
 # @mock method=POST path=/orders name=review
 # @match query={"amount":{"gte":1000},"channel":{"oneOf":["web","ios"]},"dry-run":{"absent":true}}
 HTTP/1.1 202 Accepted
 Content-Type: application/json
 
 {"id":"ord_9","status":"pending_review"}
+
+### Bulk partner order queued
+# The multiline form. An open bracket carries the matcher onto the next comment
+# line, so this is the same matcher a single line would produce.
+# @mock method=POST path=/orders name=bulk
+# @match query={
+#   "amount":  {"gte": 10000},
+#   "channel": {"oneOf": ["partner"]},
+#   "dry-run": {"absent": true}
+# }
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"id":"ord_10","status":"queued_for_batch"}
 
 ### Order accepted
 # @mock method=POST path=/orders name=accepted default=true
@@ -185,6 +201,15 @@ POST {{mock.base}}/orders?amount=2500&channel=web
 Content-Type: application/json
 
 {"sku":"widget","qty":5}
+
+### Place a bulk order that goes to the batch queue
+# The multiline matcher selects this one. channel=partner is not in the web/ios
+# list, so the review scenario above does not match.
+# @name place-bulk-order
+POST {{mock.base}}/orders?amount=25000&channel=partner
+Content-Type: application/json
+
+{"sku":"widget","qty":50}
 
 ### Submit an account that gets flagged
 # @name submit-account
