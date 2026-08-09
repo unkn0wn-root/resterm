@@ -20,100 +20,94 @@ func (b *documentBuilder) handleDescriptionLine(ln line) bool {
 	return true
 }
 
-func (b *documentBuilder) handleRequestMetadataDirective(
-	no, argCol int,
-	call directive.Call,
-) bool {
-	rest := call.Args
-	switch call.Name {
+func (b *documentBuilder) handleRequestMetadataDirective(d directiveLine) directiveOutcome {
+	rest := d.Args
+	switch d.Name {
 	case directive.RequestName:
-		if rest != "" {
-			b.request.metadata.Name = directive.TrimQuotes(strings.TrimSpace(rest))
-		}
-		return true
+		b.request.metadata.Name = directive.Value(rest)
+		return directiveApplied
 	case directive.Description:
 		b.request.metadata.Description = appendDesc(b.request.metadata.Description, rest)
-		return true
+		return directiveApplied
 	case directive.Tag:
 		b.addRequestTags(rest)
-		return true
+		return directiveApplied
 	case directive.NoLog:
 		b.request.metadata.NoLog = true
-		return true
+		return directiveApplied
 	case directive.LogSensitiveHeaders:
-		if rest == "" {
-			b.request.metadata.AllowSensitiveHeaders = true
-			return true
+		allow, ok := directive.ParseSwitch(rest)
+		if !ok {
+			b.addError(d.no, d.Spelling.Tag()+" must be true or false")
+			return directiveRejected
 		}
-		if value, ok := directive.ParseBool(rest); ok {
-			b.request.metadata.AllowSensitiveHeaders = value
-		}
-		return true
+		b.request.metadata.AllowSensitiveHeaders = allow
+		return directiveApplied
 	case directive.Settings:
 		settings, err := applySettingsTokens(b.request.settings, rest, directive.Settings)
 		b.request.settings = settings
-		b.addErrors(no, err)
-		return true
+		b.report(d.no, err)
+		return directiveApplied
 	case directive.Setting:
 		settings, err := putSetting(b.request.settings, rest)
 		b.request.settings = settings
-		b.addErrors(no, err)
-		return true
+		b.report(d.no, err)
+		return directiveApplied
 	case directive.Timeout:
 		if b.request.settings == nil {
 			b.request.settings = make(map[string]string)
 		}
 		b.request.settings["timeout"] = rest
-		return true
+		return directiveApplied
 	case directive.Var:
-		b.addRequestVar(no, rest)
-		return true
+		b.addRequestVar(d.no, rest)
+		return directiveApplied
 	case directive.Script:
-		if rest != "" {
-			b.addErrors(no, b.setScript(rest, ""))
-		} else {
+		if rest == "" {
 			b.request.discardScript = false
+			return directiveApplied
 		}
-		return true
+		if err := b.setScript(rest, ""); err != nil {
+			b.report(d.no, err)
+			return directiveRejected
+		}
+		return directiveApplied
 	case directive.RTS:
 		if err := b.setRTSScript(rest); err != nil {
-			b.addError(no, err.Error())
+			b.addError(d.no, err.Error())
+			return directiveRejected
 		}
-		return true
+		return directiveApplied
 	case directive.Apply:
-		b.addApply(no, argCol, rest)
-		return true
+		return b.addApply(d)
 	case directive.Capture:
-		b.addCapture(no, argCol, rest)
-		return true
+		return b.addCapture(d)
 	case directive.Assert:
-		b.addAssert(no, argCol, rest)
-		return true
+		return b.addAssert(d)
 	case directive.When:
-		b.setWhen(no, argCol, call.Spelling == directive.SkipIf, rest)
-		return true
+		return b.setWhen(d)
 	case directive.ForEach:
-		b.setForEach(no, rest)
-		return true
+		return b.setForEach(d)
 	case directive.Profile:
 		spec, err := parseProfileSpec(rest)
-		b.addErrors(no, err)
-		if spec != nil {
-			b.request.metadata.Profile = spec
+		b.report(d.no, err)
+		if spec == nil {
+			return directiveRejected
 		}
-		return true
+		b.request.metadata.Profile = spec
+		return directiveApplied
 	case directive.Trace:
 		spec, err := parseTraceSpec(rest)
-		b.addErrors(no, err)
-		if spec != nil {
-			b.request.metadata.Trace = spec
+		b.report(d.no, err)
+		if spec == nil {
+			return directiveRejected
 		}
-		return true
+		b.request.metadata.Trace = spec
+		return directiveApplied
 	case directive.Compare:
-		b.setCompare(no, rest)
-		return true
+		return b.setCompare(d)
 	}
-	return false
+	return directiveIgnored
 }
 
 func (b *documentBuilder) addRequestTags(rest string) {
@@ -137,66 +131,72 @@ func (b *documentBuilder) addRequestVar(no int, rest string) {
 	})
 }
 
-func (b *documentBuilder) addApply(no, argCol int, rest string) {
-	spec, err := parseApplySpec(rest, no)
+func (b *documentBuilder) addApply(d directiveLine) directiveOutcome {
+	spec, err := parseApplySpec(d.Args, d.no)
 	if err != nil {
-		b.addError(no, err.Error())
-		return
+		b.addError(d.no, err.Error())
+		return directiveRejected
 	}
-	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+	if c := d.exprCol(spec.Expression); c > 0 {
 		spec.Col = c
 	}
 	b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
+	return directiveApplied
 }
 
-func (b *documentBuilder) addCapture(no, argCol int, rest string) {
-	spec, ok := b.parseCaptureDirective(rest, no)
+func (b *documentBuilder) addCapture(d directiveLine) directiveOutcome {
+	spec, ok := b.parseCaptureDirective(d.Args, d.no)
 	if !ok {
-		return
+		return directiveRejected
 	}
-	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+	if c := d.exprCol(spec.Expression); c > 0 {
 		spec.Col = c
 	}
 	b.request.metadata.Captures = append(b.request.metadata.Captures, spec)
+	return directiveApplied
 }
 
-func (b *documentBuilder) addAssert(no, argCol int, rest string) {
-	spec, ok := b.parseAssertDirective(rest, no, argCol)
+func (b *documentBuilder) addAssert(d directiveLine) directiveOutcome {
+	spec, ok := b.parseAssertDirective(d.Args, d.no, d.argCol)
 	if !ok {
-		b.addError(no, "@assert expression missing")
-		return
+		b.addError(d.no, "@assert expression missing")
+		return directiveRejected
 	}
 	b.request.metadata.Asserts = append(b.request.metadata.Asserts, spec)
+	return directiveApplied
 }
 
-func (b *documentBuilder) setWhen(no, argCol int, invert bool, rest string) {
-	spec, err := parseConditionSpec(rest, no, invert)
+func (b *documentBuilder) setWhen(d directiveLine) directiveOutcome {
+	spec, err := parseConditionSpec(d.Args, d.no, d.Spelling == directive.SkipIf)
 	if err != nil {
-		b.addError(no, err.Error())
-		return
+		b.addError(d.no, err.Error())
+		return directiveRejected
 	}
-	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+	if c := d.exprCol(spec.Expression); c > 0 {
 		spec.Col = c
 	}
 	b.request.metadata.When = spec
+	return directiveApplied
 }
 
-func (b *documentBuilder) setForEach(no int, rest string) {
-	spec, err := parseForEachSpec(rest, no)
+func (b *documentBuilder) setForEach(d directiveLine) directiveOutcome {
+	spec, err := parseForEachSpec(d.Args, d.no)
 	if err != nil {
-		b.addError(no, err.Error())
-		return
+		b.addError(d.no, err.Error())
+		return directiveRejected
 	}
 	b.request.metadata.ForEach = spec
+	return directiveApplied
 }
 
-func (b *documentBuilder) setCompare(no int, rest string) {
-	spec, err := parseCompareDirective(rest)
+func (b *documentBuilder) setCompare(d directiveLine) directiveOutcome {
+	spec, err := parseCompareDirective(d.Args)
 	if err != nil {
-		b.addError(no, err.Error())
-		return
+		b.addError(d.no, err.Error())
+		return directiveRejected
 	}
 	b.request.metadata.Compare = spec
+	return directiveApplied
 }
 
 func appendDesc(existing, add string) string {

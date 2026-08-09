@@ -34,11 +34,37 @@ func TestMatchJSONNumberHugeExponentDoesNotBlowUp(t *testing.T) {
 # @match json={"n":1}
 HTTP/1.1 200 OK
 
-matched`)
+matched
 
-	req := httptest.NewRequest(http.MethodPost, "/n", strings.NewReader(`{"n":1e999999999}`))
-	req.Header.Set("Content-Type", "application/json")
-	assertResponse(t, handler, req, http.StatusNotFound, "no mock scenario matched")
+### rules
+# @mock method=POST path=/r
+# @match json-rules={"n":{"gt":1}}
+HTTP/1.1 200 OK
+
+matched
+
+### query
+# @mock method=GET path=/q
+# @match query={"n":{"gte":1}}
+HTTP/1.1 200 OK
+
+matched`)
+	huge := "1e" + strings.Repeat("9", 1<<20)
+
+	t.Run("a literal 1 is not that number", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/n", strings.NewReader(`{"n":`+huge+`}`))
+		req.Header.Set("Content-Type", "application/json")
+		assertResponse(t, handler, req, http.StatusNotFound, "no mock scenario matched")
+	})
+	t.Run("json rules read it as huge", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/r", strings.NewReader(`{"n":`+huge+`}`))
+		req.Header.Set("Content-Type", "application/json")
+		assertResponse(t, handler, req, http.StatusOK, "matched")
+	})
+	t.Run("query rules read it as huge", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/q?n="+huge, nil)
+		assertResponse(t, handler, req, http.StatusOK, "matched")
+	})
 }
 
 func TestMatchReadsTheBodyOncePerRequest(t *testing.T) {

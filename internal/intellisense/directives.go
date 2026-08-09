@@ -189,7 +189,7 @@ var directiveArgs = map[directive.Name][]Item{
 		{Label: "interpolate=false", Summary: "Preserve response template syntax literally"},
 	},
 	directive.Match: {
-		{Label: "query=", Summary: "Exact query matcher JSON", Insert: `query={"key":"value"}`},
+		{Label: "query=", Summary: "Query matcher rules as JSON", Insert: `query={"key":"value"}`},
 		{Label: "headers=", Summary: "Header matcher rules as JSON", Insert: `headers={"X-Key":"value"}`},
 		{Label: "json=", Summary: "Literal JSON body subset", Insert: `json={"key":"value"}`},
 		{

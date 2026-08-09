@@ -50,15 +50,22 @@ func newMatchers(m restfile.MockMatch) ([]matcher, error) {
 	return ms, nil
 }
 
-// compileMatchHeaders rejects the scenario selector headers. They steer routing
-// before any variant is consulted, so matching on them cannot work.
 func compileMatchHeaders(src map[string]restfile.MockHeaderRule) (headerRules, error) {
-	for name := range src {
-		if isSelectorHeader(name) {
-			return nil, fmt.Errorf("mock selector header %q cannot be used as a matcher", name)
-		}
+	return compileRules("header", src, canonMatchHeaderName, compileHeaderRule)
+}
+
+// Selector headers choose the mock variant before match rules run. Accepting
+// one here would create a condition that can never select another variant, so
+// check the canonical name and reject it during compilation.
+func canonMatchHeaderName(key string) (string, error) {
+	name, err := canonHeaderName(key)
+	if err != nil {
+		return "", err
 	}
-	return compileHeaderRules(src)
+	if isSelectorHeader(name) {
+		return "", fmt.Errorf("mock selector header %q cannot be used as a matcher", name)
+	}
+	return name, nil
 }
 
 func queryMatcher(rules queryRules) matcher {

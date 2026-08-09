@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
@@ -56,28 +57,24 @@ type mockBuilder struct {
 	delimLine            int
 }
 
-func (b *documentBuilder) handleMockDirective(
-	line int,
-	name directive.Name,
-	raw string,
-) bool {
-	switch name {
+func (b *documentBuilder) handleMockDirective(d directiveLine) directiveOutcome {
+	switch d.Name {
 	case directive.Mock:
 		if b.inRequest {
-			b.addMockError(line, "@mock must start a new block after a ### separator")
-			return true
+			b.addMockError(d.no, "@mock must start a new block after a ### separator")
+			return directiveRejected
 		}
 		if b.workflow != nil {
-			b.addMockError(line, "@mock cannot be declared inside a workflow")
-			return true
+			b.addMockError(d.no, "@mock cannot be declared inside a workflow")
+			return directiveRejected
 		}
-		b.startMock(line, raw)
-		return true
+		b.startMock(d.no, d.Args)
+		return directiveApplied
 	case directive.Match, directive.Expect:
-		b.addMockError(line, name.Tag()+" must follow an @mock directive")
-		return true
+		b.addMockError(d.no, d.Name.Tag()+" must follow an @mock directive")
+		return directiveRejected
 	default:
-		return false
+		return directiveIgnored
 	}
 }
 
@@ -298,7 +295,7 @@ func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
 	}
 	if raw, ok := vals.Lookup("json"); ok {
 		compact, err := compactJSON(raw)
-		b.setMockJSON(line, "json", &m.match.JSON, compact, err)
+		b.setMockJSON(line, "json", &m.match.JSON, compact, jsonValueError(raw, err))
 	}
 	if raw, ok := vals.Lookup("json-rules"); ok {
 		compact, err := compactJSONObject(raw)
@@ -347,8 +344,9 @@ func (m *mockBuilder) addExpectation(b *documentBuilder, line int, raw string) {
 	m.expectation = &restfile.MockExpectation{Calls: n, Line: line}
 }
 
-// A rule the block gets wrong is reported and skipped, so the rest of the block
-// still lands.
+// Rules are decoded independently so one bad matcher does not discard the valid
+// ones. Sort the keys first so reparsing produces diagnostics in the same order
+// instead of exposing map iteration order.
 func addMatchers[T restfile.MockQueryRule | restfile.MockHeaderRule](
 	b *documentBuilder,
 	line int,
@@ -357,12 +355,12 @@ func addMatchers[T restfile.MockQueryRule | restfile.MockHeaderRule](
 	dst map[string]T,
 	canon func(string) (string, error),
 ) {
-	vals, err := parseMockRules[T](raw)
+	fields, err := parseJSONObject(raw)
 	if err != nil {
 		b.addMockError(line, fmt.Sprintf("invalid @match %s: %s", opt, err))
 		return
 	}
-	for _, key := range util.SortedKeys(vals) {
+	for _, key := range util.SortedKeys(fields) {
 		name := strings.TrimSpace(key)
 		if name == "" {
 			b.addMockError(line, fmt.Sprintf("@match %s name cannot be empty", opt))
@@ -377,7 +375,12 @@ func addMatchers[T restfile.MockQueryRule | restfile.MockHeaderRule](
 			b.addMockError(line, fmt.Sprintf("@match %s %q is repeated", opt, name))
 			continue
 		}
-		dst[name] = vals[key]
+		var rule T
+		if err := json.Unmarshal(fields[key], &rule); err != nil {
+			b.addMockError(line, fmt.Sprintf("invalid @match %s: matcher for %q: %s", opt, key, err))
+			continue
+		}
+		dst[name] = rule
 	}
 }
 
@@ -386,8 +389,6 @@ func canonQueryMatcher(name string) (string, error) {
 	return name, nil
 }
 
-// Only the name is validated here. The rule and its values are checked when they
-// decode in parseMockRules.
 func canonHeaderMatcher(name string) (string, error) {
 	if !httpguts.ValidHeaderFieldName(name) {
 		return "", fmt.Errorf("invalid @match header name %q", name)

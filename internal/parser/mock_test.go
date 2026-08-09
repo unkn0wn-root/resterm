@@ -122,6 +122,20 @@ func TestParseMockJSONMatchOptions(t *testing.T) {
 			match: `json-rules={"a":{"a":{"gt":1}}}`,
 		},
 		{
+			name:  "a number too large for a float does not end the scan",
+			match: `json={"n":1e1000,"a":1,"a":2}`,
+			want:  `invalid @match json: field "a" is repeated`,
+		},
+		{
+			name:  "the same holds for rules",
+			match: `json-rules={"n":{"gt":1e1000},"a":{"gt":1},"a":{"lt":2}}`,
+			want:  `invalid @match json-rules: field "a" is repeated`,
+		},
+		{
+			name:  "a large number on its own is still fine",
+			match: `json={"n":1e1000,"a":1}`,
+		},
+		{
 			name:  "query names cannot be repeated",
 			match: `query={"page":"1","page":"2"}`,
 			want:  `invalid @match query: field "page" is repeated`,
@@ -147,9 +161,33 @@ func TestParseMockJSONMatchOptions(t *testing.T) {
 			want:  "@match option is missing a closing bracket",
 		},
 		{
+			name:  "an unterminated headers bracket is reported",
+			match: `headers={"X-Env":"prod"`,
+			want:  "@match option is missing a closing bracket",
+		},
+		{
+			name:  "an unterminated query bracket is reported",
+			match: `query={"page":{"gte":2}`,
+			want:  "@match option is missing a closing bracket",
+		},
+		{
+			name:  "headers repeated across lines are folded onto one name",
+			match: "headers={\"x-env\":\"a\"}\n# @match headers={\"X-Env\":\"b\"}",
+			want:  `@match headers "X-Env" is repeated`,
+		},
+		{
+			name:  "query names keep their case across lines",
+			match: "query={\"page\":\"1\"}\n# @match query={\"Page\":\"2\"}",
+		},
+		{
 			name:  "unknown option",
 			match: `jsonRules={"a":{"gt":1}}`,
 			want:  `unknown @match option "jsonrules"`,
+		},
+		{
+			name:  "an unknown option trailing a continued matcher",
+			match: "headers={\n#   \"X-Env\": \"prod\"\n# } bogus=1",
+			want:  `unknown @match option "bogus"`,
 		},
 	}
 	for _, test := range tests {
@@ -228,6 +266,137 @@ func TestParseMockJSONMatchSpansLines(t *testing.T) {
 				t.Fatalf("json-rules = %s, want %s", m.JSONRules, wantRules)
 			}
 		})
+	}
+}
+
+func TestParseMockJSONMatchNamesTheStringSyntax(t *testing.T) {
+	tests := map[string]string{
+		`json=paid`:            `invalid @match json: paid is not a JSON value. Write json='"paid"'`,
+		`json="paid"`:          `invalid @match json: paid is not a JSON value. Write json='"paid"'`,
+		`json="paid in full"`:  `invalid @match json: paid in full is not a JSON value. Write json='"paid in full"'`,
+		`json=truely`:          `invalid @match json: truely is not a JSON value. Write json='"truely"'`,
+		`json={a:1}`:           "invalid @match json: invalid character 'a'",
+		`json="it's paid"`:     "invalid @match json: invalid character 'i'",
+		`json-rules=paid`:      "invalid @match json-rules: invalid character 'p'",
+		`json='"paid"'`:        "",
+		`json=100`:             "",
+		`json={"kind":"paid"}`: "",
+	}
+	for match, want := range tests {
+		t.Run(match, func(t *testing.T) {
+			doc := Parse("mocks.http", []byte("# @mock method=POST path=/x\n# @match "+match+"\nHTTP/1.1 200 OK\n"))
+			if want == "" {
+				if len(doc.Errors) != 0 {
+					t.Fatalf("parse errors: %+v", doc.Errors)
+				}
+				return
+			}
+			if len(doc.Errors) != 1 || !strings.HasPrefix(doc.Errors[0].Message, want) {
+				t.Fatalf("errors = %+v, want %q", doc.Errors, want)
+			}
+		})
+	}
+}
+
+func TestParseMockMatchSpansLines(t *testing.T) {
+	wantQuery := map[string]restfile.MockQueryRule{
+		"channel": {Op: restfile.MockOpOneOf, Values: []string{"web", "ios"}},
+		"page":    {Op: restfile.MockOpGTE, Values: []string{"2"}},
+	}
+	wantHeaders := map[string]restfile.MockHeaderRule{
+		"Authorization": {Op: restfile.MockOpPrefix, Values: []string{"Bearer "}},
+		"X-Env":         {Op: restfile.MockOpExact, Values: []string{"prod"}},
+	}
+	const wantJSON = `{"kind":"personal"}`
+
+	sources := map[string]string{
+		"one line": `# @match query={"channel":{"oneOf":["web","ios"]},"page":{"gte":2}} ` +
+			`headers={"Authorization":{"prefix":"Bearer "},"X-Env":"prod"} json={"kind":"personal"}`,
+
+		"one option per block": `# @match query={
+#   "channel": {"oneOf": ["web", "ios"]},
+#   "page":    {"gte": 2}
+# }
+# @match headers={
+#   "Authorization": {"prefix": "Bearer "},
+#   "X-Env":         "prod"
+# }
+# @match json={"kind":"personal"}`,
+
+		"one option per name": `# @match query={"channel":{"oneOf":["web","ios"]}}
+# @match query={
+#   "page": {"gte": 2}
+# }
+# @match headers={"Authorization":{"prefix":"Bearer "}}
+# @match headers={
+#   "X-Env": "prod"
+# }
+# @match json={"kind":"personal"}`,
+
+		"a continued option carries the next one": `# @match query={
+#   "channel": {"oneOf": ["web", "ios"]},
+#   "page": {"gte": 2}
+# } headers={
+#   "Authorization": {"prefix": "Bearer "},
+#   "X-Env": "prod"
+# } json={
+#   "kind": "personal"
+# }`,
+
+		"slash comments": `// @match query={
+//   "channel": {"oneOf": ["web", "ios"]},
+//   "page": {"gte": 2}
+// }
+// @match headers={"Authorization":{"prefix":"Bearer "},"X-Env":"prod"}
+// @match json={"kind":"personal"}`,
+
+		"dash comments": `-- @match headers={
+--   "Authorization": {"prefix": "Bearer "},
+--   "X-Env": "prod"
+-- }
+-- @match query={"channel":{"oneOf":["web","ios"]},"page":{"gte":2}}
+-- @match json={"kind":"personal"}`,
+	}
+
+	for name, match := range sources {
+		t.Run(name, func(t *testing.T) {
+			doc := Parse("mocks.http", []byte("# @mock method=POST path=/accounts\n"+match+"\nHTTP/1.1 200 OK\n"))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("parse errors: %+v", doc.Errors)
+			}
+			m := doc.Mocks[0].Match
+			if !reflect.DeepEqual(m.Query, wantQuery) {
+				t.Fatalf("query = %+v, want %+v", m.Query, wantQuery)
+			}
+			if !reflect.DeepEqual(m.Headers, wantHeaders) {
+				t.Fatalf("headers = %+v, want %+v", m.Headers, wantHeaders)
+			}
+			if string(m.JSON) != wantJSON {
+				t.Fatalf("json = %s, want %s", m.JSON, wantJSON)
+			}
+		})
+	}
+}
+
+func TestParseMockMatchStopsAtANonCommentLine(t *testing.T) {
+	src := `# @mock method=GET path=/x
+# @match headers={
+#   "X-Env": "prod"
+HTTP/1.1 200 OK
+
+ok`
+	doc := Parse("mocks.http", []byte(src))
+	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, "missing a closing bracket") {
+		t.Fatalf("errors = %+v", doc.Errors)
+	}
+	if doc.Errors[0].Line != 2 {
+		t.Fatalf("error line = %d, want the line the matcher opened on", doc.Errors[0].Line)
+	}
+	if len(doc.Mocks) != 1 || len(doc.Mocks[0].Match.Headers) != 0 {
+		t.Fatalf("mock = %+v", doc.Mocks)
+	}
+	if resp := doc.Mocks[0].Responses[0]; resp.Status != 200 || resp.Body.Text != "ok" {
+		t.Fatalf("response = %+v", resp)
 	}
 }
 
@@ -324,6 +493,43 @@ func TestParseMockRulesReportsTheSameRuleEveryTime(t *testing.T) {
 				t.Fatalf("diagnostic = %q, want the first key in sorted order", first[0].Message)
 			}
 		})
+	}
+}
+
+func TestParseMockRulesKeepsTheRulesBesideABrokenOne(t *testing.T) {
+	src := "# @mock method=GET path=/x\n" +
+		`# @match query={"aaa":{"gt":"1"},"bbb":{"gte":2}} ` +
+		`headers={"X-A":{"regex":"^v[0-9"},"X-B":{"prefix":"v"}}` +
+		"\nHTTP/1.1 200 OK"
+
+	doc := Parse("bad.http", []byte(src))
+	if len(doc.Errors) != 2 {
+		t.Fatalf("errors = %+v, want one per broken rule", doc.Errors)
+	}
+	for i, want := range []string{`invalid @match query: matcher for "aaa"`, `invalid @match headers: matcher for "X-A"`} {
+		if !strings.Contains(doc.Errors[i].Message, want) {
+			t.Fatalf("error %d = %q, want %q", i, doc.Errors[i].Message, want)
+		}
+	}
+
+	m := doc.Mocks[0].Match
+	wantQuery := map[string]restfile.MockQueryRule{
+		"bbb": {Op: restfile.MockOpGTE, Values: []string{"2"}},
+	}
+	wantHeaders := map[string]restfile.MockHeaderRule{
+		"X-B": {Op: restfile.MockOpPrefix, Values: []string{"v"}},
+	}
+	if !reflect.DeepEqual(m.Query, wantQuery) || !reflect.DeepEqual(m.Headers, wantHeaders) {
+		t.Fatalf("query = %+v, headers = %+v", m.Query, m.Headers)
+	}
+}
+
+func TestParseMockRuleReportsOneErrorPerKey(t *testing.T) {
+	doc := Parse("bad.http", []byte("# @mock method=GET path=/x\n"+
+		`# @match headers={"bad header":{"oneOf":[]}}`+"\nHTTP/1.1 200 OK"))
+	if len(doc.Errors) != 1 ||
+		!strings.Contains(doc.Errors[0].Message, `invalid @match header name "bad header"`) {
+		t.Fatalf("errors = %+v", doc.Errors)
 	}
 }
 

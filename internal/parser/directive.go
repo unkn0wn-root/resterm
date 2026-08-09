@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -210,16 +211,13 @@ type authDirective struct {
 	Disable bool
 }
 
-func parseAuthDirective(rest string) (authDirective, bool, error) {
-	dir := authDirective{Scope: directive.ScopeRequest}
-	rest = strings.TrimSpace(rest)
-	if rest == "" {
-		return dir, false, nil
-	}
+var errAuthSpec = errors.New("@auth requires a valid auth spec")
 
-	fields := directive.Fields(rest)
+func parseAuthDirective(rest string) (authDirective, error) {
+	dir := authDirective{Scope: directive.ScopeRequest}
+	fields := directive.Fields(strings.TrimSpace(rest))
 	if len(fields) == 0 {
-		return dir, false, nil
+		return dir, errAuthSpec
 	}
 
 	explicitScope := false
@@ -228,42 +226,33 @@ func parseAuthDirective(rest string) (authDirective, bool, error) {
 		explicitScope = true
 		fields = fields[1:]
 		if len(fields) == 0 {
-			return dir, true, fmt.Errorf(
-				"@auth %s scope requires an auth spec",
-				scope.String(),
-			)
+			return dir, fmt.Errorf("@auth %s scope requires an auth spec", scope.String())
 		}
 	}
 
 	if strings.EqualFold(fields[0], "none") {
 		if dir.Scope != directive.ScopeRequest {
-			return dir, true, fmt.Errorf(
-				"@auth %s scope does not support none",
-				dir.Scope.String(),
-			)
+			return dir, fmt.Errorf("@auth %s scope does not support none", dir.Scope.String())
 		}
 		if len(fields) != 1 {
-			return dir, true, fmt.Errorf("@auth none does not accept additional tokens")
+			return dir, errors.New("@auth none does not accept additional tokens")
 		}
 		dir.Disable = true
-		return dir, true, nil
+		return dir, nil
 	}
 
 	spec, err := parseAuthSpec(strings.Join(fields, " "))
 	if err != nil {
-		return dir, true, err
+		return dir, err
 	}
 	if spec == nil {
 		if explicitScope {
-			return dir, true, fmt.Errorf(
-				"@auth %s scope requires a valid auth spec",
-				dir.Scope.String(),
-			)
+			return dir, fmt.Errorf("@auth %s scope requires a valid auth spec", dir.Scope.String())
 		}
-		return dir, false, nil
+		return dir, errAuthSpec
 	}
 	dir.Spec = spec
-	return dir, true, nil
+	return dir, nil
 }
 
 func parseAuthSpec(rest string) (*restfile.AuthSpec, error) {

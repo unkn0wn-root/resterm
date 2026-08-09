@@ -178,7 +178,6 @@ func (o Options) PopKey(keys ...string) (string, string, bool) {
 	return outKey, outVal, outKey != ""
 }
 
-// Empty aliases do not conflict because empty values are ignored when choosing one.
 func (o Options) given(keys []string) []string {
 	var (
 		written []string
@@ -194,11 +193,31 @@ func (o Options) given(keys []string) []string {
 			set = append(set, key)
 		}
 	}
-	if len(set) > 1 {
-		slices.Sort(set)
-		o.clash[strings.Join(set, " ")] = set
-	}
+	o.noteClash(set)
 	return written
+}
+
+// Boolean aliases conflict whenever more than one spelling is present. An empty
+// value still enables a switch, so it cannot be ignored in favor of another
+// alias with an explicit value.
+func (o Options) present(keys []string) []string {
+	var written []string
+	for _, key := range keys {
+		if o.Has(key) {
+			written = append(written, key)
+		}
+	}
+	o.noteClash(written)
+	return written
+}
+
+func (o Options) noteClash(keys []string) {
+	if len(keys) < 2 {
+		return
+	}
+	set := slices.Clone(keys)
+	slices.Sort(set)
+	o.clash[strings.Join(set, " ")] = set
 }
 
 // A present boolean option defaults to true. Only a recognized false value
@@ -210,7 +229,7 @@ func (o Options) PopBool(keys ...string) (val, ok bool, bad string) {
 		found bool
 		raw   string
 	)
-	for _, key := range o.given(keys) {
+	for _, key := range o.present(keys) {
 		if !found {
 			found, raw = true, o.vals[key]
 		}

@@ -72,7 +72,8 @@ func TestNumberCmpIsExact(t *testing.T) {
 		{"huge exponents stay ordered", "1e999999999", "2e999999999", -1},
 		{"huge exponent against a bigger one", "1e1000000000", "1e999999999", 1},
 		{"same value at different exponents", "1e100", "10e99", 0},
-		{"exponent beyond int64", "1e99999999999999999999", "1e99999999999999999998", 1},
+		{"exponents just under the limit", "1e999999999999999997", "1e999999999999999996", 1},
+		{"the shift is applied before the limit", "0.001e1000000000000000000", "1e999999999999999997", 0},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -91,6 +92,44 @@ func TestNumberCmpIsExact(t *testing.T) {
 				t.Fatalf("%s.cmp(%s) = %d, want %d", test.b, test.a, got, -test.want)
 			}
 		})
+	}
+}
+
+func TestNumberExponentSaturates(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b string
+		want int
+	}{
+		{"huge exponents collapse together", "1e99999999999999999999", "1e99999999999999999998", 0},
+		{"digits stop counting once huge", "1e10000000000000000000", "9e10000000000000000000", 0},
+		{"tiny exponents collapse together", "1e-99999999999999999999", "1e-99999999999999999998", 0},
+		{"huge stays above the largest finite", "1e10000000000000000000", "1e999999999999999997", 1},
+		{"tiny stays below the smallest finite", "1e-10000000000000000000", "1e-999999999999999997", -1},
+		{"tiny stays above zero", "1e-10000000000000000000", "0", 1},
+		{"huge negatives sort below huge positives", "-1e10000000000000000000", "1e10000000000000000000", -1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			a, aok := parseNumber(test.a)
+			b, bok := parseNumber(test.b)
+			if !aok || !bok {
+				t.Fatalf("parseNumber(%q) = %t, parseNumber(%q) = %t", test.a, aok, test.b, bok)
+			}
+			if got := a.cmp(b); got != test.want {
+				t.Fatalf("%s.cmp(%s) = %d, want %d", test.a, test.b, got, test.want)
+			}
+			if got := b.cmp(a); got != -test.want {
+				t.Fatalf("%s.cmp(%s) = %d, want %d", test.b, test.a, got, -test.want)
+			}
+		})
+	}
+}
+
+func TestParseNumberDoesNotAllocate(t *testing.T) {
+	huge := "1e" + strings.Repeat("9", 1<<20)
+	if allocs := testing.AllocsPerRun(10, func() { parseNumber(huge) }); allocs != 0 {
+		t.Fatalf("parseNumber allocated %v times per run, want 0", allocs)
 	}
 }
 
@@ -152,6 +191,9 @@ func FuzzNumberCmpMatchesBigRat(f *testing.F) {
 	f.Fuzz(func(t *testing.T, a, b string) {
 		x, okx := parseNumber(a)
 		y, oky := parseNumber(b)
+		if okx && oky && x.cmp(y) != -y.cmp(x) {
+			t.Fatalf("%q.cmp(%q) = %d, %q.cmp(%q) = %d", a, b, x.cmp(y), b, a, y.cmp(x))
+		}
 		rx, okrx := boundedRat(a)
 		ry, okry := boundedRat(b)
 		if !okx || !oky || !okrx || !okry {
@@ -168,7 +210,7 @@ func boundedRat(s string) (*big.Rat, bool) {
 	if !ok || len(s) > 40 || strings.ContainsAny(s, "/pP") {
 		return nil, false
 	}
-	if n.digits != "" && n.exp.CmpAbs(big.NewInt(100)) > 0 {
+	if n.digits != "" && (n.exp > 100 || n.exp < -100) {
 		return nil, false
 	}
 	r, ok := new(big.Rat).SetString(s)

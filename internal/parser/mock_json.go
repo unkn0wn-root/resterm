@@ -12,26 +12,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
-// parseMockRules visits keys in sorted order. Map order would report a different
-// broken rule on each parse, and the editor reparses on every keystroke.
-func parseMockRules[T restfile.MockQueryRule | restfile.MockHeaderRule](
-	raw string,
-) (map[string]T, error) {
-	fields, err := parseJSONObject(raw)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]T, len(fields))
-	for _, name := range util.SortedKeys(fields) {
-		var rule T
-		if err := json.Unmarshal(fields[name], &rule); err != nil {
-			return nil, fmt.Errorf("matcher for %q: %w", name, err)
-		}
-		out[name] = rule
-	}
-	return out, nil
-}
-
 func parseJSONObject(raw string) (map[string]json.RawMessage, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
@@ -40,10 +20,24 @@ func parseJSONObject(raw string) (map[string]json.RawMessage, error) {
 	if obj == nil {
 		return nil, fmt.Errorf("expected a JSON object")
 	}
-	if key, dup := duplicateJSONKey([]byte(raw)); dup {
-		return nil, fmt.Errorf("field %q is repeated", key)
+	if err := restfile.CheckMockJSONKeys([]byte(raw)); err != nil {
+		return nil, err
 	}
 	return obj, nil
+}
+
+// The option lexer removes one layer of quotes, so a JSON string reaches this
+// function as a bare word. Other invalid values keep the decoder's original
+// error because the quoting hint would not help them.
+func jsonValueError(raw string, err error) error {
+	if err == nil || raw == "" || strings.ContainsAny(raw, "{}[]\",:'\\") {
+		return err
+	}
+	quoted := strconv.Quote(raw)
+	if quoted != `"`+raw+`"` {
+		return err
+	}
+	return fmt.Errorf("%s is not a JSON value. Write json='%s' to match a body that is a JSON string", raw, quoted)
 }
 
 func compactJSON(raw string) ([]byte, error) {
@@ -51,48 +45,10 @@ func compactJSON(raw string) ([]byte, error) {
 	if err := json.Compact(&compact, []byte(raw)); err != nil {
 		return nil, err
 	}
-	if key, dup := duplicateJSONKey(compact.Bytes()); dup {
-		return nil, fmt.Errorf("field %q is repeated", key)
+	if err := restfile.CheckMockJSONKeys(compact.Bytes()); err != nil {
+		return nil, err
 	}
 	return compact.Bytes(), nil
-}
-
-// encoding/json keeps the last duplicate key, which could silently remove a
-// match condition.
-func duplicateJSONKey(raw []byte) (string, bool) {
-	key, dup, _ := scanJSONKeys(json.NewDecoder(bytes.NewReader(raw)))
-	return key, dup
-}
-
-func scanJSONKeys(dec *json.Decoder) (string, bool, error) {
-	tok, err := dec.Token()
-	if err != nil {
-		return "", false, err
-	}
-	delim, ok := tok.(json.Delim)
-	if !ok {
-		return "", false, nil
-	}
-
-	seen := map[string]bool{}
-	for dec.More() {
-		if delim == '{' {
-			name, err := dec.Token()
-			if err != nil {
-				return "", false, err
-			}
-			key, _ := name.(string)
-			if seen[key] {
-				return key, true, nil
-			}
-			seen[key] = true
-		}
-		if key, dup, err := scanJSONKeys(dec); dup || err != nil {
-			return key, dup, err
-		}
-	}
-	_, err = dec.Token()
-	return "", false, err
 }
 
 func mergeMockJSON(dst, src []byte) ([]byte, error) {

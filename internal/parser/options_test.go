@@ -69,6 +69,11 @@ func TestOptionAliasesConflictWithoutBeingUnknown(t *testing.T) {
 			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
 		},
 		{
+			name: "ssh strict with an empty spelling",
+			src:  "### r\n# @ssh host=h strict_hostkey= strict-hostkey=false\nGET http://x\n",
+			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
+		},
+		{
 			name: "k8s local port",
 			src:  "### r\n# @k8s target=pod/api port=1 local_port=2 local-port=3\nGET http://x\n",
 			want: `@k8s options "local-port", "local_port" are the same option`,

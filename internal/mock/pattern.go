@@ -22,6 +22,14 @@ type RequestPattern struct {
 	JSONRules json.RawMessage                    `json:"jsonRules,omitempty"`
 }
 
+func (p RequestPattern) Clone() RequestPattern {
+	p.Query = restfile.CloneMockQuery(p.Query)
+	p.Headers = restfile.CloneMockHeaders(p.Headers)
+	p.JSON = slices.Clone(p.JSON)
+	p.JSONRules = slices.Clone(p.JSONRules)
+	return p
+}
+
 // compiledPattern holds the normalized pattern next to the predicates built from
 // it. The pattern is what callers read back and what gets serialized, so the two
 // have to travel together.

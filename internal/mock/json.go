@@ -3,6 +3,8 @@ package mock
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 type jsonPredicate func(got any) bool
@@ -17,6 +19,9 @@ const (
 func compileJSONBody(subset, rules []byte) (jsonPredicate, error) {
 	var literal jsonPredicate
 	if len(subset) > 0 {
+		if err := restfile.CheckMockJSONKeys(subset); err != nil {
+			return nil, fmt.Errorf("invalid json matcher: %w", err)
+		}
 		pattern, err := decodeJSON(subset)
 		if err != nil {
 			return nil, fmt.Errorf("invalid json matcher: %w", err)
@@ -27,6 +32,9 @@ func compileJSONBody(subset, rules []byte) (jsonPredicate, error) {
 		return literal, nil
 	}
 
+	if err := restfile.CheckMockJSONKeys(rules); err != nil {
+		return nil, fmt.Errorf("invalid json-rules matcher: %w", err)
+	}
 	match, err := compileJSONRules(rules)
 	if err != nil {
 		return nil, err

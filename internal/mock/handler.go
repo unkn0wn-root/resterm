@@ -26,7 +26,11 @@ func (h *Handler) Scenarios() int { return h.scenarios }
 func (h *Handler) Digest() string { return h.digest }
 
 func (h *Handler) Expectations() []Expectation {
-	return slices.Clone(h.expectations)
+	out := slices.Clone(h.expectations)
+	for i := range out {
+		out[i].Pattern = out[i].Pattern.Clone()
+	}
+	return out
 }
 
 func (h *Handler) ResetSequences(name string) int {

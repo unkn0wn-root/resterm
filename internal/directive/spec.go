@@ -22,14 +22,18 @@ const (
 // Spec describes a directive for completion, syntax highlighting, and help.
 // Topic identifies the corresponding help topic. Resets names directives whose
 // declarations are cleared when the feature is disabled.
+//
+// ValueRequired is set only when an empty argument is invalid. Toggles and
+// directives that collect the lines below them must leave it unset.
 type Spec struct {
-	Name    Name
-	Aliases []Name
-	Summary string
-	Args    ArgKind
-	Repeat  Repeat
-	Resets  []Name
-	Topic   string
+	Name          Name
+	Aliases       []Name
+	Summary       string
+	Args          ArgKind
+	Repeat        Repeat
+	ValueRequired bool
+	Resets        []Name
+	Topic         string
 }
 
 // Keep this list in completion order. Alias lookup and syntax highlighting also
@@ -57,11 +61,12 @@ var specs = []Spec{
 		Topic:   "mocks",
 	},
 	{
-		Name:    RequestName,
-		Summary: "Assign a display name to the request",
-		Args:    ArgToken,
-		Repeat:  Once,
-		Topic:   "requests",
+		Name:          RequestName,
+		Summary:       "Assign a display name to the request",
+		Args:          ArgToken,
+		Repeat:        Once,
+		ValueRequired: true,
+		Topic:         "requests",
 	},
 	{
 		Name:    Description,
@@ -195,12 +200,13 @@ var specs = []Spec{
 		Topic:   "graphql",
 	},
 	{
-		Name:    GraphQLOperation,
-		Aliases: []Name{Operation},
-		Summary: "Set the GraphQL operation name",
-		Args:    ArgToken,
-		Repeat:  Once,
-		Topic:   "graphql",
+		Name:          GraphQLOperation,
+		Aliases:       []Name{Operation},
+		Summary:       "Set the GraphQL operation name",
+		Args:          ArgToken,
+		Repeat:        Once,
+		ValueRequired: true,
+		Topic:         "graphql",
 	},
 	{
 		Name:    Variables,
@@ -219,16 +225,31 @@ var specs = []Spec{
 		Topic:   "graphql",
 	},
 	{Name: GRPC, Summary: "Configure the gRPC method (supports streaming)", Args: ArgText, Repeat: Once, Topic: "grpc"},
-	{Name: GRPCDescriptor, Summary: "Load a gRPC descriptor set", Args: ArgText, Repeat: Once, Topic: "grpc"},
+	{
+		Name:          GRPCDescriptor,
+		Summary:       "Load a gRPC descriptor set",
+		Args:          ArgText,
+		Repeat:        Once,
+		ValueRequired: true,
+		Topic:         "grpc",
+	},
 	{Name: GRPCReflection, Summary: "Toggle gRPC reflection", Args: ArgToken, Repeat: Once, Topic: "grpc"},
 	{Name: GRPCPlaintext, Summary: "Force plaintext gRPC transport", Args: ArgToken, Repeat: Once, Topic: "grpc"},
-	{Name: GRPCAuthority, Summary: "Set gRPC authority override", Args: ArgText, Repeat: Once, Topic: "grpc"},
 	{
-		Name:    GRPCMetadata,
-		Summary: "Attach gRPC metadata (Repeatable. Reserved keys rejected - use @timeout)",
-		Args:    ArgText,
-		Repeat:  Many,
-		Topic:   "grpc",
+		Name:          GRPCAuthority,
+		Summary:       "Set gRPC authority override",
+		Args:          ArgText,
+		Repeat:        Once,
+		ValueRequired: true,
+		Topic:         "grpc",
+	},
+	{
+		Name:          GRPCMetadata,
+		Summary:       "Attach gRPC metadata (Repeatable. Reserved keys rejected - use @timeout)",
+		Args:          ArgText,
+		Repeat:        Many,
+		ValueRequired: true,
+		Topic:         "grpc",
 	},
 	{Name: SSE, Summary: "Enable Server-Sent Events streaming", Args: ArgOptions, Repeat: Many, Topic: "streaming"},
 	{Name: WebSocket, Summary: "Enable WebSocket streaming", Args: ArgOptions, Repeat: Many, Topic: "streaming"},
@@ -256,6 +277,11 @@ var index = func() map[Name]*Spec {
 func (n Name) DeclaredOnce() bool {
 	spec, ok := index[n]
 	return ok && spec.Repeat == Once
+}
+
+func (n Name) ValueRequired() bool {
+	spec, ok := index[n]
+	return ok && spec.ValueRequired
 }
 
 // Resets returns the directive names cleared when this feature is disabled.

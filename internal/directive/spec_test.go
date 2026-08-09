@@ -15,6 +15,36 @@ func TestSpecsDeclareRepeat(t *testing.T) {
 	}
 }
 
+func TestSpecsRequireValuesTheyCanHold(t *testing.T) {
+	t.Parallel()
+
+	for _, spec := range specs {
+		if spec.ValueRequired && spec.Args == ArgNone {
+			t.Errorf("%s requires a value but takes no argument", spec.Name.Tag())
+		}
+	}
+}
+
+func TestValueRequired(t *testing.T) {
+	t.Parallel()
+
+	tests := map[Name]bool{
+		RequestName:      true,
+		GraphQLOperation: true,
+		Operation:        true,
+		GraphQL:          false,
+		Query:            false,
+		Timeout:          false,
+		NoLog:            false,
+		"nonesuch":       false,
+	}
+	for name, want := range tests {
+		if got := name.ValueRequired(); got != want {
+			t.Errorf("%s.ValueRequired() = %t, want %t", name.Tag(), got, want)
+		}
+	}
+}
+
 func TestSpecsResetOnlySingleDeclarationDirectives(t *testing.T) {
 	t.Parallel()
 

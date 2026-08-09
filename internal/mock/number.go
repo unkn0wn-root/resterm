@@ -1,8 +1,8 @@
 package mock
 
 import (
+	"cmp"
 	"encoding/json"
-	"math/big"
 	"strings"
 )
 
@@ -11,7 +11,57 @@ import (
 type number struct {
 	neg    bool
 	digits string
-	exp    *big.Int
+	exp    exponent
+}
+
+// Exponents come from request bodies and may contain millions of digits. The
+// parser caps them so it stays linear without allocating. The cap is far beyond
+// any shift caused by a 4 MiB number, so a capped exponent cannot return to the
+// finite range after the decimal point is accounted for.
+type exponent int64
+
+const expLimit exponent = 1e18
+
+func (e exponent) finite() bool { return -expLimit < e && e < expLimit }
+
+func (e exponent) shift(digits int) exponent {
+	return min(max(e+exponent(digits), -expLimit), expLimit)
+}
+
+func parseExponent(s string) (exponent, bool) {
+	const scanMax = 4 * expLimit
+
+	if s == "" {
+		return 0, true
+	}
+	if s[0] != 'e' && s[0] != 'E' {
+		return 0, false
+	}
+
+	s = s[1:]
+	neg := strings.HasPrefix(s, "-")
+	if neg || strings.HasPrefix(s, "+") {
+		s = s[1:]
+	}
+	digits, rest := cutDigits(s)
+	if digits == "" || rest != "" {
+		return 0, false
+	}
+
+	var e exponent
+	digits = strings.TrimLeft(digits, "0")
+	for i := range digits {
+		if e > scanMax/10 {
+			e = scanMax
+			break
+		}
+		e = e*10 + exponent(digits[i]-'0')
+	}
+	e = min(e, scanMax)
+	if neg {
+		return -e, true
+	}
+	return e, true
 }
 
 type numberRelation uint8
@@ -23,23 +73,21 @@ const (
 	relLTE
 )
 
-func (rel numberRelation) holds(cmp int) bool {
+func (rel numberRelation) holds(c int) bool {
 	switch rel {
 	case relGT:
-		return cmp > 0
+		return c > 0
 	case relGTE:
-		return cmp >= 0
+		return c >= 0
 	case relLT:
-		return cmp < 0
+		return c < 0
 	case relLTE:
-		return cmp <= 0
+		return c <= 0
 	default:
 		return false
 	}
 }
 
-// Query values may include a leading plus or leading zeros, so parseNumber
-// accepts both. A big integer exponent prevents overflow and underflow.
 func parseNumber(s string) (number, bool) {
 	neg := false
 	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
@@ -58,13 +106,8 @@ func parseNumber(s string) (number, bool) {
 		}
 	}
 
-	exp := new(big.Int)
-	switch {
-	case len(s) > 1 && (s[0] == 'e' || s[0] == 'E'):
-		if _, ok := exp.SetString(s[1:], 10); !ok {
-			return number{}, false
-		}
-	case s != "":
+	exp, ok := parseExponent(s)
+	if !ok {
 		return number{}, false
 	}
 
@@ -78,11 +121,7 @@ func parseNumber(s string) (number, bool) {
 		return number{}, true
 	}
 	// Account for the decimal point and any removed leading zeros.
-	return number{
-		neg:    neg,
-		digits: digits,
-		exp:    exp.Add(exp, big.NewInt(int64(len(whole)-lead))),
-	}, true
+	return number{neg: neg, digits: digits, exp: exp.shift(len(whole) - lead)}, true
 }
 
 func cutDigits(s string) (digits, rest string) {
@@ -108,9 +147,8 @@ func (n number) cmp(o number) int {
 		return 1
 	}
 
-	c := n.exp.Cmp(o.exp)
-	if c == 0 {
-		// Equal exponents put both digit strings on the same scale.
+	c := cmp.Compare(n.exp, o.exp)
+	if c == 0 && n.exp.finite() {
 		c = strings.Compare(n.digits, o.digits)
 	}
 	if n.neg {

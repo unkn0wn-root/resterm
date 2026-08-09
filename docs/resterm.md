@@ -746,10 +746,12 @@ Troubleshooting:
 - Lines prefixed with `#`, `//`, or `--` are treated as comments. Metadata directives live inside these comment blocks.
 - A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](#splitting-a-long-matcher).
-- Alternate spellings count as the same option. For example, `known_hosts` and `known-hosts` cannot both have values on one `@ssh` directive. An empty spelling does not conflict with one that has a value.
+- Alternate spellings count as the same option. For example, you cannot use both `known_hosts` and `known-hosts` on one `@ssh` directive. Empty values are ignored for regular options, but not for switches. `strict_hostkey=` enables the switch, so it conflicts with `strict-hostkey=false`.
 - `@compare` requires non-empty values for its baseline and group options. This is stricter than general alias conflict handling: `# @ssh host=h known-hosts=a known_hosts=` is valid, but `# @compare dev stage base=dev baseline=` reports an empty baseline.
-- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first declaration and reports the next one. A GraphQL directive ignored while GraphQL is off does not count as declared, so it does not block a later declaration.
+- Directives that require a value report `value missing` when left empty. This applies to `@name`, `@operation`, `@grpc-descriptor`, `@grpc-authority`, and `@grpc-metadata`. Some directives deliberately accept an empty value. `@graphql` enables GraphQL, `@query` and `@variables` read the lines below them, and `@grpc-reflection` defaults to on.
+- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first valid declaration and reports later duplicates. An invalid declaration does not count, so a valid one may follow it. A GraphQL directive ignored while GraphQL is off does not count either.
 - Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. For GraphQL, the reset also clears `@operation`, `@variables`, and `@query`, so they may be declared again after `@graphql off`. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
+- Files can be saved with parse errors. The status line shows the number of errors, for example `Saved requests.http (1 parse error)`. Requests cannot run until those errors are fixed.
 - In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. The full text appears in the Explain pane for each run.
 - The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
 - `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
@@ -944,7 +946,7 @@ Each key declares exactly one rule. Header names are case-insensitive and query 
 
 The numeric operand must be written as a JSON number, so `{"gte":2}` rather than `{"gte":"2"}`. A value that does not read as a number is an ordinary non-match, not an error, so `?page=none` simply fails `{"gte":2}`.
 
-Only declared query and header keys are constrained. Numbers are compared exactly by value, so `1`, `1.0`, and `1e0` are equal. Large and small exponents do not overflow or underflow.
+Only declared query and header keys are constrained. Numbers are compared by decimal value, so `1`, `1.0`, and `1e0` are equal. Exponents that are too large are capped instead of overflowing. Two values beyond the same limit compare as equal.
 
 #### Matching the request body
 
@@ -963,6 +965,14 @@ Everything inside `json` is request data:
 - Arrays match exactly and in order.
 - Other values match by value.
 - Keys are always field names. Patterns such as `{"$gt":100}`, `{"$schema":"..."}`, `{"$ref":"#/$defs/user"}`, and `{"gt":125}` need no escaping.
+
+To match a body containing a JSON string, quote the JSON value inside the option value:
+
+```http
+# @match json='"paid"'
+```
+
+The single quotes delimit the option value. The double quotes are part of the JSON string. For example, `json=100` matches the number `100`, while `json='"100"'` matches the string `"100"`. Other JSON values need no extra quotes. When Resterm writes this matcher, it uses the equivalent form `json="\"paid\""`.
 
 The structure of `json-rules` follows the request body:
 
@@ -1593,7 +1603,7 @@ gRPC requests start with a line such as `GRPC host:port`. Metadata directives de
 | `@grpc-reflection [true\|false]` | Toggle server reflection (default `true`). |
 | `@grpc-plaintext [true\|false]` | Force plaintext or TLS. |
 | `@grpc-authority value` | Override the HTTP/2 `:authority` header. |
-| `@grpc-metadata key: value` | Add metadata pairs (repeatable). |
+| `@grpc-metadata key: value` | Add a metadata pair (repeatable). Invalid lines are reported. |
 | `@setting grpc-root-cas path1,path2` | Extra root CAs (space/comma/semicolon separated). Paths resolve relative to the request file. |
 | `@setting grpc-root-mode append\|replace` | Control whether extra CAs append to system roots (`append`) or replace them (`replace`, default). |
 | `@setting grpc-client-cert path` / `@setting grpc-client-key path` | Client cert/key for mTLS (relative paths allowed). |

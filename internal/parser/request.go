@@ -48,10 +48,7 @@ type featureBuilder interface {
 // first builder that recognizes the key claims it, so the order decides
 // which protocol wins when a key is ambiguous.
 func (r *requestBuilder) protoDirective(name directive.Name, args string) (bool, error) {
-	if r.grpc.HandleDirective(name, args) {
-		return true, nil
-	}
-	for _, feature := range []featureBuilder{r.websocket, r.sse, r.graphql} {
+	for _, feature := range []featureBuilder{r.grpc, r.websocket, r.sse, r.graphql} {
 		handled, reset, err := feature.HandleDirective(name, args)
 		if !handled {
 			continue

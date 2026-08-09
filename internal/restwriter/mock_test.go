@@ -107,6 +107,49 @@ ok
 	}
 }
 
+func TestRenderMockScalarJSONMatchRoundTrip(t *testing.T) {
+	for name, want := range map[string]string{
+		"string":            `"paid"`,
+		"string with space": `"paid in full"`,
+		"quoted string":     `"say \"hi\""`,
+		"number":            `100`,
+		"boolean":           `true`,
+		"null":              `null`,
+		"array":             `[1,2]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := &restfile.Document{Mocks: []*restfile.Mock{{
+				Method:    http.MethodPost,
+				Path:      "/payments",
+				Match:     restfile.MockMatch{JSON: []byte(want)},
+				Responses: []restfile.MockResponse{{Status: http.StatusOK}},
+			}}}
+
+			rendered := mustRender(t, doc)
+			parsed := parser.Parse("generated.http", []byte(rendered))
+			if len(parsed.Errors) != 0 || len(parsed.Mocks) != 1 {
+				t.Fatalf("round-trip errors=%+v mocks=%d\n%s", parsed.Errors, len(parsed.Mocks), rendered)
+			}
+			if got := string(parsed.Mocks[0].Match.JSON); got != want {
+				t.Fatalf("round-trip json = %s, want %s\n%s", got, want, rendered)
+			}
+		})
+	}
+}
+
+func TestParseMockScalarJSONMatchWrittenByHand(t *testing.T) {
+	doc := parser.Parse("mocks.http", []byte(`# @mock method=POST path=/payments
+# @match json='"paid"'
+HTTP/1.1 200 OK
+`))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors: %+v", doc.Errors)
+	}
+	if got := string(doc.Mocks[0].Match.JSON); got != `"paid"` {
+		t.Fatalf("json = %s", got)
+	}
+}
+
 func TestRenderRejectsUnsafeMockBodies(t *testing.T) {
 	mock := &restfile.Mock{
 		Responses: []restfile.MockResponse{{

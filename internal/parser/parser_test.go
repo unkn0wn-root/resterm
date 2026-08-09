@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -4079,6 +4080,389 @@ func TestParseRedeclaredDirective(t *testing.T) {
 				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseDirectiveValueMissing(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "name",
+			src:  "# @name\nGET https://example.com\n",
+			want: "@name value missing",
+		},
+		{
+			name: "a trailing colon is not a value",
+			src:  "# @name:\nGET https://example.com\n",
+			want: "@name value missing",
+		},
+		{
+			name: "graphql operation",
+			src:  "GET https://example.com\n# @graphql\n# @graphql-operation\n",
+			want: "@graphql-operation value missing",
+		},
+		{
+			name: "an alias is reported the way it was written",
+			src:  "GET https://example.com\n# @graphql\n# @operation\n",
+			want: "@operation value missing",
+		},
+		{
+			name: "grpc descriptor",
+			src:  "GRPC localhost:9000\n# @grpc-descriptor\n",
+			want: "@grpc-descriptor value missing",
+		},
+		{
+			name: "grpc authority",
+			src:  "GRPC localhost:9000\n# @grpc-authority\n",
+			want: "@grpc-authority value missing",
+		},
+		{
+			name: "grpc metadata",
+			src:  "GRPC localhost:9000\n# @grpc-metadata\n",
+			want: "@grpc-metadata value missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("missing.http", []byte(tt.src))
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseQuotedDirectiveValueKeepsItsSpaces(t *testing.T) {
+	doc := Parse("quoted.http", []byte("# @name \"  Spaced  \"\nGET https://example.com\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+	if got := firstRequest(t, doc).Metadata.Name; got != "  Spaced  " {
+		t.Fatalf("name = %q, want the quoted spelling", got)
+	}
+}
+
+func TestParseDirectivesThatAllowAnEmptyValue(t *testing.T) {
+	sources := map[string]string{
+		"graphql enables the feature":       "GET https://example.com\n# @graphql\n",
+		"query collects the lines below it": "GET https://example.com\n# @graphql\n# @query\nquery { id }\n",
+		"variables collect the lines below them": "GET https://example.com\n# @graphql\n" +
+			"# @variables\n{\"id\":1}\n",
+		"grpc marks the request":               "GRPC localhost:9000\n# @grpc\n",
+		"grpc reflection defaults to on":       "GRPC localhost:9000\n# @grpc-reflection\n",
+		"sensitive header logging defaults on": "GET https://example.com\n# @log-sensitive-headers\n",
+		"a bare timeout reaches the transport": "GET https://example.com\n# @timeout\n",
+	}
+
+	for name, src := range sources {
+		t.Run(name, func(t *testing.T) {
+			if doc := Parse("empty.http", []byte(src)); len(doc.Errors) != 0 {
+				t.Fatalf("errors = %v, want none", doc.Errors)
+			}
+		})
+	}
+}
+
+func TestParseBrokenDirectiveLeavesTheSlotFree(t *testing.T) {
+	tests := []struct {
+		name  string
+		first string
+		then  string
+		want  string
+		check func(*restfile.Request) error
+	}{
+		{
+			name: "name value missing", first: "@name", then: "@name Good",
+			want:  "@name value missing",
+			check: wantName("Good"),
+		},
+		{
+			name: "name is empty inside quotes", first: `@name ""`, then: "@name Good",
+			want:  "@name value missing",
+			check: wantName("Good"),
+		},
+		{
+			name: "auth has no spec", first: "@auth", then: "@auth bearer good",
+			want:  "@auth requires a valid auth spec",
+			check: wantAuth("bearer"),
+		},
+		{
+			name: "auth scheme has no operand", first: "@auth bearer", then: "@auth bearer good",
+			want:  "@auth requires a valid auth spec",
+			check: wantAuth("bearer"),
+		},
+		{
+			name: "auth is a single unknown token", first: "@auth nonsense", then: "@auth bearer good",
+			want:  "@auth requires a valid auth spec",
+			check: wantAuth("bearer"),
+		},
+		{
+			name:  "sensitive header logging is not a boolean",
+			first: "@log-sensitive-headers maybe", then: "@log-sensitive-headers true",
+			want: "@log-sensitive-headers must be true or false",
+			check: func(req *restfile.Request) error {
+				if !req.Metadata.AllowSensitiveHeaders {
+					return fmt.Errorf("sensitive header logging is off, want the second declaration")
+				}
+				return nil
+			},
+		},
+		{
+			name: "when expression missing", first: "@when", then: "@when true",
+			want: "@when expression missing",
+			check: func(req *restfile.Request) error {
+				if req.Metadata.When == nil || req.Metadata.When.Expression != "true" {
+					return fmt.Errorf("when = %+v, want the second declaration", req.Metadata.When)
+				}
+				return nil
+			},
+		},
+		{
+			name: "for-each expression missing", first: "@for-each", then: "@for-each item in vars.items",
+			want: "@for-each expression missing",
+			check: func(req *restfile.Request) error {
+				if req.Metadata.ForEach == nil || req.Metadata.ForEach.Var != "item" {
+					return fmt.Errorf("for-each = %+v, want the second declaration", req.Metadata.ForEach)
+				}
+				return nil
+			},
+		},
+		{
+			name: "compare needs two environments", first: "@compare dev", then: "@compare dev stage",
+			want: "@compare requires at least two environments",
+			check: func(req *restfile.Request) error {
+				if req.Metadata.Compare == nil || len(req.Metadata.Compare.Environments) != 2 {
+					return fmt.Errorf("compare = %+v, want the second declaration", req.Metadata.Compare)
+				}
+				return nil
+			},
+		},
+		{
+			name: "profile repeats an option", first: "@profile count=2 count=3", then: "@profile count=5",
+			want: `@profile option "count" is repeated`,
+			check: func(req *restfile.Request) error {
+				if req.Metadata.Profile == nil || req.Metadata.Profile.Count != 5 {
+					return fmt.Errorf("profile = %+v, want the second declaration", req.Metadata.Profile)
+				}
+				return nil
+			},
+		},
+		{
+			name: "trace repeats a budget", first: "@trace total<=1s total<=2s", then: "@trace",
+			want: `@trace option "total" is repeated`,
+			check: func(req *restfile.Request) error {
+				if req.Metadata.Trace == nil || !req.Metadata.Trace.Enabled {
+					return fmt.Errorf("trace = %+v, want the second declaration", req.Metadata.Trace)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "GET https://example.com\n# " + tt.first + "\n# " + tt.then + "\n"
+			doc := Parse("broken.http", []byte(src))
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+			if err := tt.check(firstRequest(t, doc)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestParseBrokenGRPCDirectiveLeavesTheSlotFree(t *testing.T) {
+	tests := []struct {
+		name  string
+		first string
+		then  string
+		want  string
+		check func(*restfile.GRPCRequest) error
+	}{
+		{
+			name: "malformed method", first: "@grpc nonsense", then: "@grpc pkg.Svc/Method",
+			want: `invalid @grpc method "nonsense", use package.Service/Method`,
+			check: func(req *restfile.GRPCRequest) error {
+				if req.FullMethod != "/pkg.Svc/Method" {
+					return fmt.Errorf("method = %q, want the second declaration", req.FullMethod)
+				}
+				return nil
+			},
+		},
+		{
+			name: "descriptor value missing", first: "@grpc-descriptor", then: "@grpc-descriptor ./svc.protoset",
+			want: "@grpc-descriptor value missing",
+			check: func(req *restfile.GRPCRequest) error {
+				if req.DescriptorSet != "./svc.protoset" {
+					return fmt.Errorf("descriptor = %q, want the second declaration", req.DescriptorSet)
+				}
+				return nil
+			},
+		},
+		{
+			name: "authority value missing", first: "@grpc-authority", then: "@grpc-authority api.internal",
+			want: "@grpc-authority value missing",
+			check: func(req *restfile.GRPCRequest) error {
+				if req.Authority != "api.internal" {
+					return fmt.Errorf("authority = %q, want the second declaration", req.Authority)
+				}
+				return nil
+			},
+		},
+		{
+			name: "reflection is not a boolean", first: "@grpc-reflection maybe", then: "@grpc-reflection false",
+			want: `invalid @grpc-reflection "maybe": expected true or false`,
+			check: func(req *restfile.GRPCRequest) error {
+				if req.UseReflection {
+					return fmt.Errorf("reflection is on, want the second declaration")
+				}
+				return nil
+			},
+		},
+		{
+			name: "plaintext is not a boolean", first: "@grpc-plaintext maybe", then: "@grpc-plaintext false",
+			want: `invalid @grpc-plaintext "maybe": expected true or false`,
+			check: func(req *restfile.GRPCRequest) error {
+				if on, set := req.Plaintext.Get(); !set || on {
+					return fmt.Errorf("plaintext = %v (set %t), want the second declaration", on, set)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "GRPC localhost:9000\n# " + tt.first + "\n# " + tt.then + "\n"
+			doc := Parse("broken.http", []byte(src))
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+			req := firstRequest(t, doc)
+			if req.GRPC == nil {
+				t.Fatal("request has no gRPC section")
+			}
+			if err := tt.check(req.GRPC); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestParseGRPCMetadataRequiresAPair(t *testing.T) {
+	src := "GRPC localhost:9000\n" +
+		"# @grpc-metadata x-first: one\n" +
+		"# @grpc-metadata nonsense\n" +
+		"# @grpc-metadata x-last: two\n"
+
+	doc := Parse("meta.http", []byte(src))
+	want := `invalid @grpc-metadata "nonsense", use key: value`
+	if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+		t.Fatalf("errors = %v, want exactly %q", doc.Errors, want)
+	}
+	req := firstRequest(t, doc)
+	if req.GRPC == nil {
+		t.Fatal("request has no gRPC section")
+	}
+	pairs := req.GRPC.Metadata
+	if len(pairs) != 2 || pairs[0].Key != "x-first" || pairs[1].Key != "x-last" {
+		t.Fatalf("metadata = %+v, want the two pairs around the bad line", pairs)
+	}
+}
+
+func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "metadata is not a pair",
+			line: "@grpc-metadata broken",
+			want: `invalid @grpc-metadata "broken", use key: value`,
+		},
+		{
+			name: "metadata written bare",
+			line: "@grpc-metadata",
+			want: "@grpc-metadata value missing",
+		},
+		{
+			name: "method is malformed",
+			line: "@grpc nonsense",
+			want: `invalid @grpc method "nonsense", use package.Service/Method`,
+		},
+		{
+			name: "descriptor written bare",
+			line: "@grpc-descriptor",
+			want: "@grpc-descriptor value missing",
+		},
+		{
+			name: "authority written bare",
+			line: "@grpc-authority",
+			want: "@grpc-authority value missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "POST https://example.com/graphql\n# " + tt.line + "\n" +
+				"# @graphql\n# @operation Used\n# @query\nquery Used { id }\n"
+
+			doc := Parse("mixed.http", []byte(src))
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+			req := firstRequest(t, doc)
+			if req.GRPC != nil {
+				t.Fatalf("gRPC = %+v, want the request left alone", req.GRPC)
+			}
+			if req.Body.GraphQL == nil || req.Body.GraphQL.OperationName != "Used" {
+				t.Fatalf("graphql = %+v, want the operation the author declared", req.Body.GraphQL)
+			}
+		})
+	}
+}
+
+func TestParseGraphQLDirectivesBeforeEnablingAreIgnored(t *testing.T) {
+	src := "POST https://example.com/graphql\n# @operation\n# @graphql\n# @operation Used\n"
+	doc := Parse("graphql.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+	body := firstRequest(t, doc).Body
+	if body.GraphQL == nil || body.GraphQL.OperationName != "Used" {
+		t.Fatalf("graphql = %+v, want the operation declared after @graphql", body.GraphQL)
+	}
+}
+
+func wantName(name string) func(*restfile.Request) error {
+	return func(req *restfile.Request) error {
+		if req.Metadata.Name != name {
+			return fmt.Errorf("name = %q, want %q", req.Metadata.Name, name)
+		}
+		return nil
+	}
+}
+
+func wantAuth(kind string) func(*restfile.Request) error {
+	return func(req *restfile.Request) error {
+		if req.Metadata.Auth == nil || req.Metadata.Auth.Type != kind {
+			return fmt.Errorf("auth = %+v, want a %s spec", req.Metadata.Auth, kind)
+		}
+		return nil
+	}
+}
+
+func TestParseIgnoredOptionKeepsTheDirectiveSlot(t *testing.T) {
+	doc := Parse("keep.http", []byte("GET https://example.com\n# @profile bogus=1\n# @profile count=2\n"))
+	if !hasParseMessage(doc.Errors, "@profile directive already defined for this request") {
+		t.Fatalf("errors = %v", doc.Errors)
 	}
 }
 

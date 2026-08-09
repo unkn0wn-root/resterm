@@ -1,6 +1,7 @@
 package restfile
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -247,6 +248,53 @@ func validateMockPathForm(path string) error {
 		return fmt.Errorf("mock path must escape whitespace and control characters")
 	}
 	return nil
+}
+
+// CheckMockJSONKeys rejects duplicate object fields in a JSON matcher. The
+// standard decoder keeps only the last duplicate, which would silently discard
+// one of the requested match conditions.
+//
+// Numbers remain json.Number during the scan. This lets the decoder pass values
+// too large for float64 and continue checking fields that follow them.
+func CheckMockJSONKeys(raw []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	key, dup, _ := scanJSONKeys(dec)
+	if dup {
+		return fmt.Errorf("field %q is repeated", key)
+	}
+	return nil
+}
+
+func scanJSONKeys(dec *json.Decoder) (string, bool, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return "", false, err
+	}
+	delim, ok := tok.(json.Delim)
+	if !ok {
+		return "", false, nil
+	}
+
+	seen := map[string]bool{}
+	for dec.More() {
+		if delim == '{' {
+			name, err := dec.Token()
+			if err != nil {
+				return "", false, err
+			}
+			key, _ := name.(string)
+			if seen[key] {
+				return key, true, nil
+			}
+			seen[key] = true
+		}
+		if key, dup, err := scanJSONKeys(dec); dup || err != nil {
+			return key, dup, err
+		}
+	}
+	_, err = dec.Token()
+	return "", false, err
 }
 
 func parseWildcard(part string) (string, bool, error) {

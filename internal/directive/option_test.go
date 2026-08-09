@@ -277,6 +277,73 @@ func TestUnknownOptions(t *testing.T) {
 	}
 }
 
+func TestPopBoolConflictsOnEveryWrittenSpelling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		opts map[string]string
+		want string
+	}{
+		{
+			name: "empty spelling beside an explicit value",
+			opts: map[string]string{"strict_hostkey": "", "strict-hostkey": "false"},
+			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
+		},
+		{
+			name: "both spellings empty",
+			opts: map[string]string{"strict_hostkey": "", "strict-hostkey": ""},
+			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
+		},
+		{
+			name: "both spellings valued",
+			opts: map[string]string{"strict_hostkey": "yes", "strict-hostkey": "no"},
+			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
+		},
+		{
+			name: "one spelling on its own",
+			opts: map[string]string{"strict-hostkey": "false"},
+		},
+		{
+			name: "one spelling written empty",
+			opts: map[string]string{"strict_hostkey": ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts := testOptions(tt.opts)
+			opts.PopBool("strict_hostkey", "strict-hostkey", "strict_host_key")
+
+			err := opts.Conflicts(SSH)
+			switch {
+			case tt.want == "":
+				if err != nil {
+					t.Fatalf("Conflicts() = %v, want nil", err)
+				}
+			case err == nil:
+				t.Fatalf("Conflicts() = nil, want %q", tt.want)
+			case err.Error() != tt.want:
+				t.Fatalf("Conflicts() = %q, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestPopAnySkipsEmptySpellingWithoutConflict(t *testing.T) {
+	t.Parallel()
+
+	opts := testOptions(map[string]string{"known_hosts": "", "known-hosts": "/tmp/kh"})
+	got, ok := opts.PopAny("known_hosts", "known-hosts")
+	if !ok || got != "/tmp/kh" {
+		t.Fatalf("PopAny() = (%q, %t), want the spelling that carries a value", got, ok)
+	}
+	if err := opts.Conflicts(SSH); err != nil {
+		t.Fatalf("Conflicts() = %v, want nil", err)
+	}
+}
+
 // Popping every spelling a directive knows leaves only the typos behind.
 func TestUnknownAfterPopping(t *testing.T) {
 	t.Parallel()

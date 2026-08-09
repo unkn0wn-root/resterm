@@ -102,6 +102,67 @@ func TestSaveFilePromptsForPathAndSavesContent(t *testing.T) {
 	}
 }
 
+func TestSaveFileReportsParseErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+		level   statusLevel
+	}{
+		{
+			name:    "clean",
+			content: "GET https://example.com\n",
+			want:    "Saved draft.http",
+			level:   statusSuccess,
+		},
+		{
+			name:    "one error",
+			content: "# @name\nGET https://example.com\n",
+			want:    "Saved draft.http (1 parse error)",
+			level:   statusWarn,
+		},
+		{
+			name:    "several errors",
+			content: "# @name\n# @graphql\n# @operation\nGET https://example.com\n",
+			want:    "Saved draft.http (2 parse errors)",
+			level:   statusWarn,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			path := filepath.Join(tmp, "draft.http")
+			if err := os.WriteFile(path, []byte("GET https://example.com\n"), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+			th := theme.DefaultTheme()
+			model := New(Config{WorkspaceRoot: tmp, Theme: &th})
+			m := &model
+			if cmd := m.openFile(path); cmd != nil {
+				cmd()
+			}
+			m.editor.SetValue(tt.content)
+
+			outcome, cmd := m.saveFileWithOutcome()
+			if outcome != saveFileOutcomeSaved {
+				t.Fatalf("outcome = %v, want saved", outcome)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil || string(data) != tt.content {
+				t.Fatalf("file = %q, %v, want the editor text", data, err)
+			}
+			msg, ok := statusMsgFromCmd(cmd)
+			if !ok {
+				t.Fatal("expected a status message")
+			}
+			if msg.text != tt.want || msg.level != tt.level {
+				t.Fatalf("status = %q (level %v), want %q (level %v)", msg.text, msg.level, tt.want, tt.level)
+			}
+		})
+	}
+}
+
 func TestOpenTemporaryDocumentResetsState(t *testing.T) {
 	tmp := t.TempDir()
 	th := theme.DefaultTheme()

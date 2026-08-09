@@ -550,6 +550,33 @@ func TestMatchRejectsSelectorHeaders(t *testing.T) {
 	}
 }
 
+func TestMatchRejectsSelectorHeaderSpellings(t *testing.T) {
+	for _, name := range []string{"  x-resterm-mock  ", "X-RESTERM-MOCK", "\tx-Resterm-Mock-Status"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := newMatchers(restfile.MockMatch{
+				Headers: map[string]restfile.MockHeaderRule{
+					name: headerRuleOf(restfile.MockOpPresent),
+				},
+			})
+			if err == nil || !strings.Contains(err.Error(), "cannot be used as a matcher") {
+				t.Fatalf("newMatchers() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestMatchKeepsOtherHeaderMatchers(t *testing.T) {
+	rules, err := compileMatchHeaders(map[string]restfile.MockHeaderRule{
+		"  x-resterm-mocked  ": headerRuleOf(restfile.MockOpExact, "yes"),
+	})
+	if err != nil {
+		t.Fatalf("compileMatchHeaders() error = %v", err)
+	}
+	if !rules.matches(headerLookup(http.Header{"X-Resterm-Mocked": []string{"yes"}}, "")) {
+		t.Fatal("X-Resterm-Mocked did not match")
+	}
+}
+
 // a broken matcher has to fail the whole reload, so the caller keeps serving the
 // mock set that last compiled
 func TestInvalidHeaderRuleFailsReloadAndKeepsTheLastHandler(t *testing.T) {
