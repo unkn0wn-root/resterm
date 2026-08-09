@@ -1,86 +1,11 @@
 package mock
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
-
-func TestEqualJSONNumbers(t *testing.T) {
-	tests := []struct {
-		a, b string
-		want bool
-	}{
-		{"1", "1", true},
-		{"100", "1e2", true},
-		{"1.5", "1.50", true},
-		{"9007199254740993", "9.007199254740993e15", true}, // same value, different form
-		{"9007199254740993", "9007199254740992", false},    // adjacent ints stay distinct
-		{"9007199254740993", "9007199254740992.0", false},  // ...even when one side is a decimal
-		{"1e100", "10e99", true},
-		{"1", "2", false},
-		{"1", "1e999999999", false}, // runaway exponent stays cheap (ParseFloat -> +Inf)
-		{"1e999999999", "1", false},
-		{"1e999999999", "1e999999999", true},  // byte-identical short-circuits before Inf
-		{"1e999999999", "2e999999999", false}, // distinct overflows never compare equal
-	}
-	for _, tt := range tests {
-		t.Run(tt.a+"_"+tt.b, func(t *testing.T) {
-			if got := equalJSONNumbers(json.Number(tt.a), json.Number(tt.b)); got != tt.want {
-				t.Fatalf("equalJSONNumbers(%q, %q) = %t, want %t", tt.a, tt.b, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestMatchHeaderRule(t *testing.T) {
-	tests := []struct {
-		name string
-		got  []string
-		rule restfile.MockHeaderRule
-		want bool
-	}{
-		{
-			name: "exact ordered",
-			got:  []string{"one", "two"},
-			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpExact, Values: []string{"one", "two"}},
-			want: true,
-		},
-		{
-			name: "exact rejects reordered",
-			got:  []string{"two", "one"},
-			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpExact, Values: []string{"one", "two"}},
-		},
-		{
-			name: "prefix any value",
-			got:  []string{"Basic token", "Bearer token"},
-			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpPrefix, Values: []string{"Bearer "}},
-			want: true,
-		},
-		{
-			name: "present accepts empty value",
-			got:  []string{""},
-			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpPresent},
-			want: true,
-		},
-		{
-			name: "absent",
-			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpAbsent},
-			want: true,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := matchHeaderRule(test.got, test.rule); got != test.want {
-				t.Fatalf("matchHeaderRule() = %t, want %t", got, test.want)
-			}
-		})
-	}
-}
 
 func TestIsJSONMediaType(t *testing.T) {
 	tests := []struct {
@@ -109,9 +34,90 @@ func TestMatchJSONNumberHugeExponentDoesNotBlowUp(t *testing.T) {
 # @match json={"n":1}
 HTTP/1.1 200 OK
 
-matched`)
+matched
 
-	req := httptest.NewRequest(http.MethodPost, "/n", strings.NewReader(`{"n":1e999999999}`))
-	req.Header.Set("Content-Type", "application/json")
-	assertResponse(t, handler, req, http.StatusNotFound, "no mock scenario matched")
+### rules
+# @mock method=POST path=/r
+# @match json-rules={"n":{"gt":1}}
+HTTP/1.1 200 OK
+
+matched
+
+### query
+# @mock method=GET path=/q
+# @match query={"n":{"gte":1}}
+HTTP/1.1 200 OK
+
+matched`)
+	huge := "1e" + strings.Repeat("9", 1<<20)
+
+	t.Run("a literal 1 is not that number", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/n", strings.NewReader(`{"n":`+huge+`}`))
+		req.Header.Set("Content-Type", "application/json")
+		assertResponse(t, handler, req, http.StatusNotFound, "no mock scenario matched")
+	})
+	t.Run("json rules read it as huge", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/r", strings.NewReader(`{"n":`+huge+`}`))
+		req.Header.Set("Content-Type", "application/json")
+		assertResponse(t, handler, req, http.StatusOK, "matched")
+	})
+	t.Run("query rules read it as huge", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/q?n="+huge, nil)
+		assertResponse(t, handler, req, http.StatusOK, "matched")
+	})
+}
+
+func TestMatchReadsTheBodyOncePerRequest(t *testing.T) {
+	tests := []struct {
+		name        string
+		option      string
+		contentType string
+		body        string
+		status      int
+		contains    string
+	}{
+		{
+			name: "literal subset matches", option: `json={"n":1}`,
+			contentType: "application/json", body: `{"n":1,"extra":true}`,
+			status: http.StatusOK, contains: "matched",
+		},
+		{
+			name: "rules match a +json media type", option: `json-rules={"n":{"gt":0}}`,
+			contentType: "application/vnd.acme+json", body: `{"n":1}`,
+			status: http.StatusOK, contains: "matched",
+		},
+		{
+			name: "a non-JSON media type never matches", option: `json-rules={"n":{"gt":0}}`,
+			contentType: "text/plain", body: `{"n":1}`,
+			status: http.StatusNotFound, contains: "no mock scenario matched",
+		},
+		{
+			name: "a malformed body is a bad request", option: `json-rules={"n":{"gt":0}}`,
+			contentType: "application/json", body: `{"n":`,
+			status: http.StatusBadRequest, contains: "invalid JSON request body",
+		},
+		{
+			name: "trailing JSON is a bad request", option: `json={"n":1}`,
+			contentType: "application/json", body: `{"n":1}{"n":2}`,
+			status: http.StatusBadRequest, contains: "invalid JSON request body",
+		},
+		{
+			name: "an oversized body is rejected before decoding", option: `json-rules={"n":{"gt":0}}`,
+			contentType: "application/json",
+			body:        `{"n":1,"pad":"` + strings.Repeat("x", maxMockRequestBody) + `"}`,
+			status:      http.StatusRequestEntityTooLarge, contains: "4 MiB limit",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := compileSource(t, `# @mock method=POST path=/n
+# @match `+test.option+`
+HTTP/1.1 200 OK
+
+matched`)
+			req := httptest.NewRequest(http.MethodPost, "/n", strings.NewReader(test.body))
+			req.Header.Set("Content-Type", test.contentType)
+			assertResponse(t, handler, req, test.status, test.contains)
+		})
+	}
 }

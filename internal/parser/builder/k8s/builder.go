@@ -40,9 +40,12 @@ func (e *DirectiveError) Unwrap() error {
 
 func ParseDirective(rest string) (Directive, error) {
 	res := Directive{}
-	head, ok := directive.ParseProfileHeader(rest)
+	head, ok, err := directive.ParseProfileHeader(directive.K8s, rest)
 	if !ok {
 		return res, fmt.Errorf("@k8s requires options")
+	}
+	if err != nil {
+		return res, err
 	}
 	scope, opts := head.Scope, head.Options
 	name := head.Name
@@ -67,7 +70,7 @@ func ParseDirective(rest string) (Directive, error) {
 	use := opts.Pop("use")
 	// Everything valid has been popped by now, so the leftovers are typos. They
 	// ride along with a usable result and the caller turns them into warnings.
-	unknown := opts.Unknown(directive.K8s)
+	left := opts.Leftover(directive.K8s)
 
 	if scope == directive.ScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking forwarders.
@@ -83,7 +86,7 @@ func ParseDirective(rest string) (Directive, error) {
 		}
 		res.Scope = scope
 		res.Profile = prof
-		return res, unknown
+		return res, left
 	}
 
 	if use == "" {
@@ -99,7 +102,17 @@ func ParseDirective(rest string) (Directive, error) {
 	res.Scope = scope
 	res.Profile = prof
 	res.Spec = &restfile.K8sSpec{Use: use, Inline: inline}
-	return res, unknown
+	return res, left
+}
+
+var k8sTargetKinds = []struct {
+	kind k8starget.Kind
+	keys []string
+}{
+	{kind: k8starget.Pod, keys: []string{"pod"}},
+	{kind: k8starget.Service, keys: []string{"service", "svc"}},
+	{kind: k8starget.Deployment, keys: []string{"deployment", "deploy"}},
+	{kind: k8starget.StatefulSet, keys: []string{"statefulset", "sts"}},
 }
 
 func applyK8sOptions(prof *restfile.K8sProfile, opts directive.Options) error {
@@ -117,22 +130,9 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts directive.Options) error {
 		}
 	}
 
-	targetAliases := []struct {
-		kind k8starget.Kind
-		keys []string
-	}{
-		{kind: k8starget.Pod, keys: []string{"pod"}},
-		{kind: k8starget.Service, keys: []string{"service", "svc"}},
-		{kind: k8starget.Deployment, keys: []string{"deployment", "deploy"}},
-		{kind: k8starget.StatefulSet, keys: []string{"statefulset", "sts"}},
-	}
-	for _, ta := range targetAliases {
-		for _, key := range ta.keys {
-			v := opts.Pop(key)
-			if v == "" {
-				continue
-			}
-			if err := setK8sTarget(prof, ta.kind, v); err != nil {
+	for _, ta := range k8sTargetKinds {
+		if name, ok := opts.PopAny(ta.keys...); ok {
+			if err := setK8sTarget(prof, ta.kind, name); err != nil {
 				return err
 			}
 		}

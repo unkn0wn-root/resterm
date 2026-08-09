@@ -6,11 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"mime"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -21,98 +19,74 @@ const maxMockRequestBody = 4 << 20
 // matcher is one compiled @match condition, run per request against a probe.
 type matcher func(*probe) (bool, *problem)
 
-// order is load-bearing: JSON body errors surface only after query and header conditions pass
+// newMatchers validates and compiles the whole @match block. Runtime order is
+// load-bearing: JSON body errors surface only after query and header conditions
+// pass.
 func newMatchers(m restfile.MockMatch) ([]matcher, error) {
+	query, err := compileQueryRules(m.Query)
+	if err != nil {
+		return nil, err
+	}
+	headers, err := compileMatchHeaders(m.Headers)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := compileJSONBody(m.JSON, m.JSONRules)
+	if err != nil {
+		return nil, err
+	}
+
 	var ms []matcher
-	if len(m.Query) > 0 {
-		ms = append(ms, queryMatcher(m.Query))
+	if len(query) > 0 {
+		ms = append(ms, queryMatcher(query))
 	}
-	if len(m.Headers) > 0 {
-		ms = append(ms, headerMatcher(m.Headers))
+	if len(headers) > 0 {
+		ms = append(ms, headerMatcher(headers))
 	}
-	if len(m.JSON) > 0 {
-		want, err := decodeJSON(m.JSON)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON matcher: %w", err)
-		}
-		ms = append(ms, jsonMatcher(want))
+	if body != nil {
+		ms = append(ms, jsonMatcher(body))
 	}
 	return ms, nil
 }
 
-func queryMatcher(want map[string]restfile.StringList) matcher {
+func compileMatchHeaders(src map[string]restfile.MockHeaderRule) (headerRules, error) {
+	return compileRules("header", src, canonMatchHeaderName, compileHeaderRule)
+}
+
+// Selector headers choose the mock variant before match rules run. Accepting
+// one here would create a condition that can never select another variant, so
+// check the canonical name and reject it during compilation.
+func canonMatchHeaderName(key string) (string, error) {
+	name, err := canonHeaderName(key)
+	if err != nil {
+		return "", err
+	}
+	if isSelectorHeader(name) {
+		return "", fmt.Errorf("mock selector header %q cannot be used as a matcher", name)
+	}
+	return name, nil
+}
+
+func queryMatcher(rules queryRules) matcher {
 	return func(p *probe) (bool, *problem) {
-		return matchQuery(p.query(), want), nil
+		return rules.matches(queryLookup(p.query())), nil
 	}
 }
 
-func matchQuery(got url.Values, want map[string]restfile.StringList) bool {
-	for k, vals := range want {
-		if g, ok := got[k]; !ok || !slices.Equal(g, []string(vals)) {
-			return false
-		}
-	}
-	return true
-}
-
-func headerMatcher(want map[string]restfile.MockHeaderRule) matcher {
+func headerMatcher(rules headerRules) matcher {
 	return func(p *probe) (bool, *problem) {
-		for k, rule := range want {
-			got := headerValues(p.r, k)
-			if !matchHeaderRule(got, rule) {
-				return false, nil
-			}
-		}
-		return true, nil
+		return rules.matches(headerLookup(p.r.Header, p.r.Host)), nil
 	}
 }
 
-func matchHeaderRule(got []string, rule restfile.MockHeaderRule) bool {
-	switch rule.Op {
-	case restfile.MockHeaderOpExact:
-		return got != nil && slices.Equal(got, rule.Values)
-	case restfile.MockHeaderOpPrefix:
-		if len(rule.Values) != 1 {
-			return false
-		}
-		for _, value := range got {
-			if strings.HasPrefix(value, rule.Values[0]) {
-				return true
-			}
-		}
-		return false
-	case restfile.MockHeaderOpPresent:
-		return len(got) > 0
-	case restfile.MockHeaderOpAbsent:
-		return len(got) == 0
-	default:
-		return false
-	}
-}
-
-// headerValues reads a request header for mock config. net/http strips Host
-// out of the header map, so every header lookup needs the same special case.
-func headerValues(r *http.Request, name string) []string {
-	return headerOrHost(r.Header, r.Host, name)
-}
-
-func headerOrHost(h http.Header, host, name string) []string {
-	if strings.EqualFold(name, "Host") {
-		if host == "" {
-			return nil
-		}
-		return []string{host}
-	}
-	return h.Values(name)
-}
-
-func jsonMatcher(want any) matcher {
+func jsonMatcher(want jsonPredicate) matcher {
 	return func(p *probe) (bool, *problem) {
 		body, ok, err := p.json()
 		if err != nil {
 			return false, err
 		}
-		return ok && subset(want, body), nil
+		return ok && want(body), nil
 	}
 }
 
@@ -209,50 +183,4 @@ func decodeJSON(data []byte) (any, error) {
 		return nil, err
 	}
 	return v, nil
-}
-
-func subset(want, got any) bool {
-	switch want := want.(type) {
-	case map[string]any:
-		got, ok := got.(map[string]any)
-		if !ok {
-			return false
-		}
-		for k, v := range want {
-			if g, ok := got[k]; !ok || !subset(v, g) {
-				return false
-			}
-		}
-		return true
-	case []any:
-		got, ok := got.([]any)
-		if !ok || len(want) != len(got) {
-			return false
-		}
-		for i := range want {
-			if !subset(want[i], got[i]) {
-				return false
-			}
-		}
-		return true
-	case json.Number:
-		got, ok := got.(json.Number)
-		return ok && equalJSONNumbers(want, got)
-	default:
-		return want == got
-	}
-}
-
-// equalJSONNumbers compares two JSON numbers by value so 100, 1e2 and 100.0
-// all match. 256 bits keep mixed int/decimal forms exact far past float64's
-// 2^53. Unlike big.Rat, a hostile request cannot make this allocate 10^exp
-// bytes, because a runaway exponent just saturates to Inf and Inf never
-// matches anything.
-func equalJSONNumbers(want, got json.Number) bool {
-	if want == got {
-		return true
-	}
-	a, _, aerr := big.ParseFloat(string(want), 10, 256, big.ToNearestEven)
-	b, _, berr := big.ParseFloat(string(got), 10, 256, big.ToNearestEven)
-	return aerr == nil && berr == nil && !a.IsInf() && !b.IsInf() && a.Cmp(b) == 0
 }

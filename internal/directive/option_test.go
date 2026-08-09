@@ -10,63 +10,100 @@ func TestParseOptions(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name  string
-		input string
-		want  Options
+		name    string
+		input   string
+		want    map[string]string
+		wantErr string
 	}{
 		{
 			name:  "mixed",
 			input: `enabled path="hello resterm" json={"id":1, "name":"test"}`,
-			want: Options{
+			want: map[string]string{
 				"enabled": "true",
 				"path":    "hello resterm",
 				"json":    `{"id":1, "name":"test"}`,
 			},
 		},
-		{name: "bare key is true", input: "persist", want: Options{"persist": "true"}},
-		{name: "key is lowercased", input: "Persist=NO", want: Options{"persist": "NO"}},
-		{name: "empty value is kept", input: "key=", want: Options{"key": ""}},
-		{name: "value without key is dropped", input: "=orphan", want: Options{}},
-		{name: "last duplicate wins", input: "a=1 a=2", want: Options{"a": "2"}},
-		{name: "empty input", input: "   ", want: Options{}},
+		{name: "bare key is true", input: "persist", want: map[string]string{"persist": "true"}},
+		{name: "key is lowercased", input: "Persist=NO", want: map[string]string{"persist": "NO"}},
+		{name: "empty value is kept", input: "key=", want: map[string]string{"key": ""}},
+		{name: "value without key is dropped", input: "=orphan", want: map[string]string{}},
+		{
+			name:    "a repeat is reported",
+			input:   "a=1 a=2",
+			want:    map[string]string{"a": "2"},
+			wantErr: `@mock option "a" is repeated`,
+		},
+		{
+			name:    "repeats are named once each, in order",
+			input:   "b=1 a=1 b=2 a=2 b=3",
+			want:    map[string]string{"a": "2", "b": "3"},
+			wantErr: `@mock options "a", "b" are repeated`,
+		},
+		{
+			name:    "casing does not hide a repeat",
+			input:   "Path=one path=two",
+			want:    map[string]string{"path": "two"},
+			wantErr: `@mock option "path" is repeated`,
+		},
+		{
+			name:    "flag repeated after a value",
+			input:   "persist=false persist",
+			want:    map[string]string{"persist": "true"},
+			wantErr: `@mock option "persist" is repeated`,
+		},
+		{
+			name:  "a repeat inside an open bracket is not one",
+			input: `json={"a":1 json=2`,
+			want:  map[string]string{"json": `{"a":1 json=2`},
+		},
+		{name: "empty input", input: "   ", want: map[string]string{}},
 		{
 			name:  "quoted value keeps backslashes",
 			input: `kubeconfig="C:\Users\me\.kube\config"`,
-			want:  Options{"kubeconfig": `C:\Users\me\.kube\config`},
+			want:  map[string]string{"kubeconfig": `C:\Users\me\.kube\config`},
 		},
 		{
 			name:  "unquoted backslash escapes the next rune",
 			input: `path=hello\ resterm`,
-			want:  Options{"path": "hello resterm"},
+			want:  map[string]string{"path": "hello resterm"},
 		},
 		{
 			name:  "escaped quote inside a quoted value",
 			input: `desc="say \"hi\""`,
-			want:  Options{"desc": `say "hi"`},
+			want:  map[string]string{"desc": `say "hi"`},
 		},
 		{
 			name:  "unterminated quote runs to the end",
 			input: `desc="abc def`,
-			want:  Options{"desc": "abc def"},
+			want:  map[string]string{"desc": "abc def"},
 		},
 		{
 			name:  "unbalanced bracket swallows the rest",
 			input: `json={"a":1 next=2`,
-			want:  Options{"json": `{"a":1 next=2`},
+			want:  map[string]string{"json": `{"a":1 next=2`},
 		},
 		{
 			name:  "trailing backslash stays",
 			input: `path=trailing\`,
-			want:  Options{"path": `trailing\`},
+			want:  map[string]string{"path": `trailing\`},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := ParseOptions(tt.input)
-			if !maps.Equal(got, tt.want) {
+			got, err := ParseOptions(Mock, tt.input)
+			if !maps.Equal(got.vals, tt.want) {
 				t.Fatalf("ParseOptions(%q) = %#v, want %#v", tt.input, got, tt.want)
+			}
+			switch {
+			case tt.wantErr == "" && err != nil:
+				t.Fatalf("ParseOptions(%q) err = %v, want nil", tt.input, err)
+			case tt.wantErr != "" && err == nil:
+				t.Fatalf("ParseOptions(%q) err = nil, want %q", tt.input, tt.wantErr)
+			case tt.wantErr != "" && err.Error() != tt.wantErr:
+				t.Fatalf("ParseOptions(%q) err = %q, want %q", tt.input, err, tt.wantErr)
 			}
 		})
 	}
@@ -76,17 +113,28 @@ func TestParseOptions(t *testing.T) {
 func TestOptionFields(t *testing.T) {
 	t.Parallel()
 
-	got := OptionFields([]string{"a=1", "bare", "", "=orphan", " B = 2 "})
-	want := Options{"a": "1", "b": "2"}
-	if !maps.Equal(got, want) {
+	got, err := OptionFields(Auth, []string{"a=1", "bare", "", "=orphan", " B = 2 "})
+	want := map[string]string{"a": "1", "b": "2"}
+	if !maps.Equal(got.vals, want) {
 		t.Fatalf("OptionFields() = %#v, want %#v", got, want)
+	}
+	if err != nil {
+		t.Fatalf("OptionFields() err = %v, want nil", err)
+	}
+
+	got, err = OptionFields(Auth, []string{"a=1", "bare", "bare", "a=2"})
+	if want := (map[string]string{"a": "2"}); !maps.Equal(got.vals, want) {
+		t.Fatalf("OptionFields() = %#v, want %#v", got, want)
+	}
+	if err == nil || err.Error() != `@auth option "a" is repeated` {
+		t.Fatalf(`OptionFields() err = %v, want @auth option "a" is repeated`, err)
 	}
 }
 
 func TestOptionsGetAndFirst(t *testing.T) {
 	t.Parallel()
 
-	opts := Options{"host": " jump ", "empty": "", "port": "22"}
+	opts := testOptions(map[string]string{"host": " jump ", "empty": "", "port": "22"})
 
 	if got := opts.Get("host"); got != "jump" {
 		t.Fatalf("Get(host) = %q, want %q", got, "jump")
@@ -106,14 +154,14 @@ func TestOptionsGetAndFirst(t *testing.T) {
 func TestOptionsPopKey(t *testing.T) {
 	t.Parallel()
 
-	opts := Options{"empty": "", "port": " 22 ", "local-port": "9"}
+	opts := testOptions(map[string]string{"empty": "", "port": " 22 ", "local-port": "9"})
 	key, val, ok := opts.PopKey("empty", "port")
 	if !ok || key != "port" || val != "22" {
 		t.Fatalf("PopKey() = (%q, %q, %t), want (port, 22, true)", key, val, ok)
 	}
 	// Both spellings go away so leftover validation does not flag the loser.
-	if len(opts) != 1 {
-		t.Fatalf("PopKey() left %#v, want only local-port", opts)
+	if opts.Len() != 1 {
+		t.Fatalf("PopKey() left %#v, want only local-port", opts.vals)
 	}
 	if _, _, ok := opts.PopKey("missing"); ok {
 		t.Fatal("PopKey(missing) ok = true, want false")
@@ -123,12 +171,12 @@ func TestOptionsPopKey(t *testing.T) {
 func TestOptionsPop(t *testing.T) {
 	t.Parallel()
 
-	opts := Options{"name": " step ", "using": "req", "run": "other"}
+	opts := testOptions(map[string]string{"name": " step ", "using": "req", "run": "other"})
 
 	if got := opts.Pop("name"); got != "step" {
 		t.Fatalf("Pop(name) = %q, want %q", got, "step")
 	}
-	if _, ok := opts["name"]; ok {
+	if opts.Has("name") {
 		t.Fatal("Pop(name) left the key behind")
 	}
 	if got := opts.Pop("missing"); got != "" {
@@ -139,15 +187,18 @@ func TestOptionsPop(t *testing.T) {
 	if got, _ := opts.PopAny("using", "run"); got != "req" {
 		t.Fatalf("PopAny() = %q, want %q", got, "req")
 	}
-	if len(opts) != 0 {
-		t.Fatalf("PopAny() left %#v", opts)
+	if opts.Len() != 0 {
+		t.Fatalf("PopAny() left %#v", opts.vals)
 	}
 }
 
-func TestOptionsPopNilMap(t *testing.T) {
+func TestOptionsZeroValue(t *testing.T) {
 	t.Parallel()
 
 	var opts Options
+	if opts.Len() != 0 || opts.Has("x") || opts.Get("x") != "" {
+		t.Fatal("zero Options is not empty")
+	}
 	if got := opts.Pop("x"); got != "" {
 		t.Fatalf("Pop() on nil = %q, want empty", got)
 	}
@@ -161,20 +212,20 @@ func TestOptionsPopBool(t *testing.T) {
 
 	tests := []struct {
 		name string
-		opts Options
+		opts map[string]string
 		want bool
 		ok   bool
 		bad  string
 	}{
-		{name: "absent", opts: Options{}},
-		{name: "true", opts: Options{"persist": "true"}, want: true, ok: true},
-		{name: "off", opts: Options{"persist": "off"}, ok: true},
-		{name: "bare key", opts: Options{"persist": "true"}, want: true, ok: true},
-		{name: "empty value", opts: Options{"persist": ""}, want: true, ok: true},
-		{name: "blank value", opts: Options{"persist": "  "}, want: true, ok: true},
+		{name: "absent", opts: map[string]string{}},
+		{name: "true", opts: map[string]string{"persist": "true"}, want: true, ok: true},
+		{name: "off", opts: map[string]string{"persist": "off"}, ok: true},
+		{name: "bare key", opts: map[string]string{"persist": "true"}, want: true, ok: true},
+		{name: "empty value", opts: map[string]string{"persist": ""}, want: true, ok: true},
+		{name: "blank value", opts: map[string]string{"persist": "  "}, want: true, ok: true},
 		{
 			name: "typo reads as true but is reported",
-			opts: Options{"persist": "flase"},
+			opts: map[string]string{"persist": "flase"},
 			want: true,
 			ok:   true,
 			bad:  "flase",
@@ -184,7 +235,7 @@ func TestOptionsPopBool(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, ok, bad := tt.opts.PopBool("persist")
+			got, ok, bad := testOptions(tt.opts).PopBool("persist")
 			if got != tt.want || ok != tt.ok || bad != tt.bad {
 				t.Fatalf("PopBool() = (%t, %t, %q), want (%t, %t, %q)",
 					got, ok, bad, tt.want, tt.ok, tt.bad)
@@ -199,11 +250,11 @@ func TestUnknownOptions(t *testing.T) {
 	if err := UnknownOption(SSH); err != nil {
 		t.Fatalf("UnknownOption() with no keys = %v, want nil", err)
 	}
-	if err := (Options{}).Unknown(SSH); err != nil {
+	if err := newOptions(0).Unknown(SSH); err != nil {
 		t.Fatalf("empty Unknown() = %v, want nil", err)
 	}
-	if err := Options(nil).Unknown(SSH); err != nil {
-		t.Fatalf("nil Unknown() = %v, want nil", err)
+	if err := (Options{}).Unknown(SSH); err != nil {
+		t.Fatalf("zero Unknown() = %v, want nil", err)
 	}
 
 	one := UnknownOption(SSH, "userr")
@@ -212,7 +263,7 @@ func TestUnknownOptions(t *testing.T) {
 	}
 
 	// Keys come back sorted so the message does not depend on map order.
-	many := Options{"zeta": "1", "alpha": "2"}.Unknown(K8s)
+	many := testOptions(map[string]string{"zeta": "1", "alpha": "2"}).Unknown(K8s)
 	if got, want := many.Error(), `unknown @k8s options "alpha", "zeta"`; got != want {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
@@ -226,11 +277,78 @@ func TestUnknownOptions(t *testing.T) {
 	}
 }
 
+func TestPopBoolConflictsOnEveryWrittenSpelling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		opts map[string]string
+		want string
+	}{
+		{
+			name: "empty spelling beside an explicit value",
+			opts: map[string]string{"strict_hostkey": "", "strict-hostkey": "false"},
+			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
+		},
+		{
+			name: "both spellings empty",
+			opts: map[string]string{"strict_hostkey": "", "strict-hostkey": ""},
+			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
+		},
+		{
+			name: "both spellings valued",
+			opts: map[string]string{"strict_hostkey": "yes", "strict-hostkey": "no"},
+			want: `@ssh options "strict-hostkey", "strict_hostkey" are the same option`,
+		},
+		{
+			name: "one spelling on its own",
+			opts: map[string]string{"strict-hostkey": "false"},
+		},
+		{
+			name: "one spelling written empty",
+			opts: map[string]string{"strict_hostkey": ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts := testOptions(tt.opts)
+			opts.PopBool("strict_hostkey", "strict-hostkey", "strict_host_key")
+
+			err := opts.Conflicts(SSH)
+			switch {
+			case tt.want == "":
+				if err != nil {
+					t.Fatalf("Conflicts() = %v, want nil", err)
+				}
+			case err == nil:
+				t.Fatalf("Conflicts() = nil, want %q", tt.want)
+			case err.Error() != tt.want:
+				t.Fatalf("Conflicts() = %q, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestPopAnySkipsEmptySpellingWithoutConflict(t *testing.T) {
+	t.Parallel()
+
+	opts := testOptions(map[string]string{"known_hosts": "", "known-hosts": "/tmp/kh"})
+	got, ok := opts.PopAny("known_hosts", "known-hosts")
+	if !ok || got != "/tmp/kh" {
+		t.Fatalf("PopAny() = (%q, %t), want the spelling that carries a value", got, ok)
+	}
+	if err := opts.Conflicts(SSH); err != nil {
+		t.Fatalf("Conflicts() = %v, want nil", err)
+	}
+}
+
 // Popping every spelling a directive knows leaves only the typos behind.
 func TestUnknownAfterPopping(t *testing.T) {
 	t.Parallel()
 
-	opts := ParseOptions("host=jump known-hosts=a known_hosts=b agent=yes userr=bob")
+	opts, _ := ParseOptions(SSH, "host=jump known-hosts=a known_hosts=b agent=yes userr=bob")
 	opts.PopAny("host")
 	opts.PopAny("known_hosts", "known-hosts")
 	opts.PopBool("agent")
@@ -247,31 +365,43 @@ func TestUnknownAfterPopping(t *testing.T) {
 func TestParseProfileHeader(t *testing.T) {
 	t.Parallel()
 
-	head, ok := ParseProfileHeader(`file office timeout=5s host="hello resterm" persist`)
+	head, ok, err := ParseProfileHeader(SSH, `file office timeout=5s host="hello resterm" persist`)
 	if !ok {
 		t.Fatal("ParseProfileHeader() ok = false")
+	}
+	if err != nil {
+		t.Fatalf("ParseProfileHeader() err = %v, want nil", err)
 	}
 	if head.Scope != ScopeFile || head.Name != "office" {
 		t.Fatalf("ParseProfileHeader() = (%v, %q), want (file, %q)", head.Scope, head.Name, "office")
 	}
-	want := Options{
+	want := map[string]string{
 		"timeout": "5s",
 		"host":    "hello resterm",
 		"persist": "true",
 	}
-	if !maps.Equal(head.Options, want) {
+	if !maps.Equal(head.Options.vals, want) {
 		t.Fatalf("options = %#v, want %#v", head.Options, want)
 	}
 
 	// A leading option means the name was omitted.
-	head, ok = ParseProfileHeader(`host=jump`)
+	head, ok, _ = ParseProfileHeader(SSH, `host=jump`)
 	if !ok || head.Scope != ScopeRequest || head.Name != "" {
 		t.Fatalf("ParseProfileHeader() = (%v, %q, %t), want (request, empty, true)",
 			head.Scope, head.Name, ok)
 	}
 
-	if _, ok := ParseProfileHeader("   "); ok {
+	if _, ok, _ := ParseProfileHeader(SSH, "   "); ok {
 		t.Fatal("ParseProfileHeader(blank) ok = true, want false")
+	}
+
+	_, _, err = ParseProfileHeader(SSH, `file host host=jump`)
+	if err != nil {
+		t.Fatalf("ParseProfileHeader() err = %v, want nil", err)
+	}
+	_, _, err = ParseProfileHeader(SSH, `file office host=a host=b`)
+	if err == nil || err.Error() != `@ssh option "host" is repeated` {
+		t.Fatalf(`ParseProfileHeader() err = %v, want @ssh option "host" is repeated`, err)
 	}
 }
 
@@ -380,7 +510,8 @@ func TestParseOptionsKeepsDecodedValues(t *testing.T) {
 		`fail=plain`:    "plain",
 	}
 	for in, want := range tests {
-		if got := ParseOptions(in)["fail"]; got != want {
+		opts, _ := ParseOptions(Step, in)
+		if got := opts.Get("fail"); got != want {
 			t.Fatalf("ParseOptions(%q)[fail] = %q, want %q", in, got, want)
 		}
 	}
@@ -390,46 +521,60 @@ func TestCutOptions(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		rest string
-		head string
-		opts Options
+		name    string
+		rest    string
+		head    string
+		opts    map[string]string
+		wantErr string
 	}{
 		{
 			name: "quoted option value",
 			rest: `true fail="explicit failure"`,
 			head: "true",
-			opts: Options{"fail": "explicit failure"},
+			opts: map[string]string{"fail": "explicit failure"},
+		},
+		{
+			name: "the head is not an option",
+			rest: "run == run run=StepOK",
+			head: "run == run",
+			opts: map[string]string{"run": "StepOK"},
+		},
+		{
+			name:    "repeated option after a head",
+			rest:    "last.statusCode == 200 run=A run=B",
+			head:    "last.statusCode == 200",
+			opts:    map[string]string{"run": "B"},
+			wantErr: `@if option "run" is repeated`,
 		},
 		{
 			name: "quoted expression",
 			rest: `name == "John Doe" run=StepOK`,
 			head: `name == "John Doe"`,
-			opts: Options{"run": "StepOK"},
+			opts: map[string]string{"run": "StepOK"},
 		},
 		{
 			name: "comparison without spaces",
 			rest: "last.statusCode==200 run=StepOK",
 			head: "last.statusCode==200",
-			opts: Options{"run": "StepOK"},
+			opts: map[string]string{"run": "StepOK"},
 		},
 		{
 			name: "head only",
 			rest: "  last.statusCode == 200  ",
 			head: "last.statusCode == 200",
-			opts: Options{},
+			opts: map[string]string{},
 		},
 		{
 			name: "options only",
 			rest: "run=StepOK fail=nope",
 			head: "",
-			opts: Options{"run": "StepOK", "fail": "nope"},
+			opts: map[string]string{"run": "StepOK", "fail": "nope"},
 		},
 		{
 			name: "bare option after the first",
 			rest: "true run=StepOK quiet",
 			head: "true",
-			opts: Options{"run": "StepOK", "quiet": "true"},
+			opts: map[string]string{"run": "StepOK", "quiet": "true"},
 		},
 		// The span lexer has to honor the escape, or the quote closes early and
 		// the tail of the string reads as an option.
@@ -437,21 +582,67 @@ func TestCutOptions(t *testing.T) {
 			name: "escaped quote inside a quoted expression",
 			rest: `response.body.msg == "say \" fail=x" run=StepOK`,
 			head: `response.body.msg == "say \" fail=x"`,
-			opts: Options{"run": "StepOK"},
+			opts: map[string]string{"run": "StepOK"},
 		},
-		{name: "empty", opts: Options{}},
+		{name: "empty", opts: map[string]string{}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			head, opts := CutOptions(tt.rest)
+			head, opts, err := CutOptions(If, tt.rest)
 			if head != tt.head {
 				t.Fatalf("CutOptions(%q) head = %q, want %q", tt.rest, head, tt.head)
 			}
-			if !maps.Equal(opts, tt.opts) {
+			if !maps.Equal(opts.vals, tt.opts) {
 				t.Fatalf("CutOptions(%q) options = %v, want %v", tt.rest, opts, tt.opts)
+			}
+			switch {
+			case tt.wantErr == "" && err != nil:
+				t.Fatalf("CutOptions(%q) err = %v, want nil", tt.rest, err)
+			case tt.wantErr != "" && (err == nil || err.Error() != tt.wantErr):
+				t.Fatalf("CutOptions(%q) err = %v, want %q", tt.rest, err, tt.wantErr)
 			}
 		})
 	}
+}
+
+func TestOptionsOpen(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{name: "empty"},
+		{name: "closed object", input: `json={"a":1}`},
+		{name: "closed array", input: `json=[1,2]`},
+		{name: "open object", input: `json={`, want: true},
+		{name: "open partway", input: `json={"a": {"gt": 1},`, want: true},
+		{name: "open array", input: `json=[1,`, want: true},
+		{name: "closed after an open one", input: `json={ headers={"X":"y"}`, want: true},
+		{name: "open after a closed one", input: `query={"a":"b"} json={`, want: true},
+		{name: "open behind a closed one", input: `json={ } headers={"X":"y"}`},
+		{name: "bracket inside a string", input: `json={"a":"{"}`},
+		{name: "escaped quote inside a string", input: `json={"a":"\""}`},
+		{name: "unclosed quoted value", input: `regex="^v`, want: true},
+		{name: "closed quoted value", input: `regex="^v[0-9]+$"`},
+		{name: "stray closer", input: `json=}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := OptionsOpen(tt.input); got != tt.want {
+				t.Fatalf("OptionsOpen(%q) = %t, want %t", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// Options only ever fill through put, so tests see what a directive would store.
+func testOptions(vals map[string]string) Options {
+	opts := newOptions(len(vals))
+	for key, val := range vals {
+		opts.put(key, val)
+	}
+	return opts
 }

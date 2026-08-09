@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -1291,8 +1292,9 @@ func TestParseK8sRejectsConflictingTargetAliases(t *testing.T) {
 GET http://example.com
 `
 	doc := Parse("k8s_target_alias_conflict.http", []byte(src))
-	if !hasParseMessage(doc.Errors, "multiple @k8s targets specified") {
-		t.Fatalf("expected alias conflict error, got %v", doc.Errors)
+	want := `@k8s options "service", "svc" are the same option`
+	if !hasParseMessage(doc.Errors, want) {
+		t.Fatalf("expected %q, got %v", want, doc.Errors)
 	}
 }
 
@@ -1749,7 +1751,7 @@ GET https://example.com
 }
 
 func TestParseOAuth2AuthSpec(t *testing.T) {
-	spec := parseAuthSpec(
+	spec, _ := parseAuthSpec(
 		`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`,
 	)
 	if spec == nil {
@@ -1777,7 +1779,7 @@ func TestParseOAuth2AuthSpec(t *testing.T) {
 }
 
 func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
-	spec := parseAuthSpec(`oauth2 cache_key=github`)
+	spec, _ := parseAuthSpec(`oauth2 cache_key=github`)
 	if spec == nil {
 		t.Fatalf("expected oauth2 spec for cache-only directive")
 	}
@@ -1799,7 +1801,7 @@ func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
 }
 
 func TestParseCommandAuthSpec(t *testing.T) {
-	spec := parseAuthSpec(
+	spec, _ := parseAuthSpec(
 		`command argv='["gh","auth","token"]' header=Authorization cache_key=github timeout=5s`,
 	)
 	if spec == nil {
@@ -1822,7 +1824,7 @@ func TestParseCommandAuthSpec(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
-	spec := parseAuthSpec(
+	spec, _ := parseAuthSpec(
 		`command argv=["gh", "auth", "token"] header=Authorization cache_key=github timeout=5s`,
 	)
 	if spec == nil {
@@ -1845,7 +1847,7 @@ func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecCacheOnly(t *testing.T) {
-	spec := parseAuthSpec(`command cache_key=github header=X-Token`)
+	spec, _ := parseAuthSpec(`command cache_key=github header=X-Token`)
 	if spec == nil {
 		t.Fatalf("expected command auth spec")
 	}
@@ -1927,6 +1929,62 @@ GET https://example.com
 	req := doc.Requests[0]
 	if req.Metadata.Compare != nil {
 		t.Fatalf("expected compare metadata to be nil on error")
+	}
+}
+
+func TestParseCompareDirectiveOptionErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "unknown option",
+			src:  "# @compare dev stage baze=dev\nGET https://example.com\n",
+			want: `unknown @compare option "baze"`,
+		},
+		{
+			name: "empty baseline",
+			src:  "# @compare dev stage primary=\nGET https://example.com\n",
+			want: "@compare primary cannot be empty",
+		},
+		{
+			name: "empty group",
+			src:  "# @compare dev stage group=\nGET https://example.com\n",
+			want: "@compare group cannot be empty",
+		},
+		{
+			name: "empty alias beside a value",
+			src:  "# @compare dev stage base=dev baseline=\nGET https://example.com\n",
+			want: "@compare baseline cannot be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("compare.http", []byte(tt.src))
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("expected %q, got %v", tt.want, doc.Errors)
+			}
+			if doc.Requests[0].Metadata.Compare != nil {
+				t.Fatal("expected compare metadata to be nil on error")
+			}
+		})
+	}
+}
+
+func TestParseCompareDirectiveBaselineAliases(t *testing.T) {
+	for _, key := range compareBaselineKeys {
+		t.Run(key, func(t *testing.T) {
+			src := "# @compare dev stage prod " + key + "=prod\nGET https://example.com\n"
+			doc := Parse("compare.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("unexpected parse errors: %v", doc.Errors)
+			}
+			if got := doc.Requests[0].Metadata.Compare.Baseline; got != "prod" {
+				t.Fatalf("baseline = %q, want prod", got)
+			}
+		})
 	}
 }
 
@@ -3029,6 +3087,89 @@ POST https://example.com/graphql
 	}
 }
 
+func TestParseGraphQLResetAllowsReconfiguration(t *testing.T) {
+	src := `### gql
+# @graphql
+# @operation First
+# @query query First { a }
+# @variables {"id":"1"}
+POST https://example.com/graphql
+# @graphql false
+# @graphql
+# @operation Second
+# @query query Second { b }
+# @variables {"id":"2"}
+`
+
+	doc := Parse("graphql-reset.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatal("expected GraphQL body")
+	}
+	if gql.OperationName != "Second" {
+		t.Fatalf("unexpected operation %q", gql.OperationName)
+	}
+	if gql.Query != "query Second { b }" {
+		t.Fatalf("unexpected query %q", gql.Query)
+	}
+	if gql.Variables != `{"id":"2"}` {
+		t.Fatalf("unexpected variables %q", gql.Variables)
+	}
+}
+
+func TestParseGraphQLOperationBeforeEnableDoesNotBlockLaterOne(t *testing.T) {
+	src := `# @name Gql
+# @operation Ignored
+# @graphql
+# @operation Used
+POST https://example.com/graphql
+
+query Used { a }
+`
+
+	doc := Parse("graphql-operation-order.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatal("expected GraphQL body")
+	}
+	if gql.OperationName != "Used" {
+		t.Fatalf("unexpected operation %q", gql.OperationName)
+	}
+}
+
+func TestParseGraphQLAcceptsEveryOffSpelling(t *testing.T) {
+	for _, off := range []string{"false", "no", "off", "0", "f", "disable", "disabled"} {
+		t.Run(off, func(t *testing.T) {
+			src := "# @graphql\n# @query query First { a }\nPOST https://example.com/graphql\n# @graphql " + off + "\n"
+			doc := Parse("graphql-off.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("expected no parse errors, got %v", doc.Errors)
+			}
+			if gql := doc.Requests[0].Body.GraphQL; gql != nil {
+				t.Fatalf("expected GraphQL to be off, got %+v", gql)
+			}
+		})
+	}
+}
+
+func TestParseGraphQLRejectsNonBooleanValue(t *testing.T) {
+	src := `# @graphql maybe
+POST https://example.com/graphql
+`
+
+	doc := Parse("graphql-bad-value.http", []byte(src))
+	want := `invalid @graphql "maybe": expected true or false`
+	if !hasParseMessage(doc.Errors, want) {
+		t.Fatalf("expected %q, got %v", want, doc.Errors)
+	}
+}
+
 func TestParseGraphQLDirectiveFileRefsIgnoreBodyInline(t *testing.T) {
 	src := `# @body inline
 # @graphql
@@ -3132,33 +3273,33 @@ query Second {
 
 func TestParseOptionTokensQuotedValues(t *testing.T) {
 	input := `expect.status="201 Created" vars.request.item_name='Workflow Demo Item' note=alpha\ beta message="He said \"hi\"" flag`
-	opts := directive.ParseOptions(input)
+	opts, _ := directive.ParseOptions(directive.Step, input)
 
-	if got := opts["expect.status"]; got != "201 Created" {
+	if got := opts.Get("expect.status"); got != "201 Created" {
 		t.Fatalf("expected expect.status to be '201 Created', got %q", got)
 	}
-	if got := opts["vars.request.item_name"]; got != "Workflow Demo Item" {
+	if got := opts.Get("vars.request.item_name"); got != "Workflow Demo Item" {
 		t.Fatalf("expected vars.request.item_name to keep spaces, got %q", got)
 	}
-	if got := opts["note"]; got != "alpha beta" {
+	if got := opts.Get("note"); got != "alpha beta" {
 		t.Fatalf("expected escaped spaces to collapse, got %q", got)
 	}
-	if got := opts["message"]; got != "He said \"hi\"" {
+	if got := opts.Get("message"); got != "He said \"hi\"" {
 		t.Fatalf("expected escaped quotes preserved, got %q", got)
 	}
-	if got := opts["flag"]; got != "true" {
+	if got := opts.Get("flag"); got != "true" {
 		t.Fatalf("expected bare flag to default to true, got %q", got)
 	}
 }
 
 func TestParseOptionTokensBareJSONValue(t *testing.T) {
 	input := `argv=["gh", "auth", "token"] mode=json`
-	opts := directive.ParseOptions(input)
+	opts, _ := directive.ParseOptions(directive.Step, input)
 
-	if got := opts["argv"]; got != `["gh", "auth", "token"]` {
+	if got := opts.Get("argv"); got != `["gh", "auth", "token"]` {
 		t.Fatalf("expected argv JSON preserved, got %q", got)
 	}
-	if got := opts["mode"]; got != "json" {
+	if got := opts.Get("mode"); got != "json" {
 		t.Fatalf("expected mode=json, got %q", got)
 	}
 }
@@ -3838,5 +3979,607 @@ GET https://example.com
 			req.Metadata.Auth.SourcePath,
 			req.Metadata.Auth.Line,
 		)
+	}
+}
+
+func TestParseRepeatedDirectiveOptions(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "file settings",
+			src:  "# @settings insecure=true insecure=false\n",
+			want: `@settings option "insecure" is repeated`,
+		},
+		{
+			name: "request settings",
+			src:  "GET https://example.com\n# @settings timeout=1s timeout=2s\n",
+			want: `@settings option "timeout" is repeated`,
+		},
+		{
+			name: "mock",
+			src:  "# @mock method=GET path=/a path=/b\nHTTP/1.1 200 OK\n",
+			want: `@mock option "path" is repeated`,
+		},
+		{
+			name: "expect",
+			src:  "# @mock method=GET path=/a\n# @expect calls=1 calls=2\nHTTP/1.1 200 OK\n",
+			want: `@expect option "calls" is repeated`,
+		},
+		{
+			name: "sse",
+			src:  "GET https://example.com\n# @sse timeout=1s timeout=2s\n",
+			want: `@sse option "timeout" is repeated`,
+		},
+		{
+			name: "websocket",
+			src:  "GET wss://example.com\n# @websocket idle=1s idle=2s\n",
+			want: `@websocket option "idle" is repeated`,
+		},
+		{
+			name: "ssh",
+			src:  "GET https://example.com\n# @ssh host=a host=b\n",
+			want: `@ssh option "host" is repeated`,
+		},
+		{
+			name: "k8s",
+			src:  "GET https://example.com\n# @k8s service=a service=b\n",
+			want: `@k8s option "service" is repeated`,
+		},
+		{
+			name: "profile",
+			src:  "GET https://example.com\n# @profile count=2 count=3\n",
+			want: `@profile option "count" is repeated`,
+		},
+		{
+			name: "compare",
+			src:  "GET https://example.com\n# @compare dev stage group=a group=b\n",
+			want: `@compare option "group" is repeated`,
+		},
+		{
+			name: "auth",
+			src:  "GET https://example.com\n# @auth oauth2 token_url=a token_url=b\n",
+			want: `@auth option "token_url" is repeated`,
+		},
+		{
+			name: "script",
+			src:  "GET https://example.com\n# @script pre lang=js lang=js\n",
+			want: `@script option "lang" is repeated`,
+		},
+		{
+			name: "rts",
+			src:  "GET https://example.com\n# @rts pre-request lang=rts lang=rts\n",
+			want: `@rts option "lang" is repeated`,
+		},
+		{
+			name: "workflow",
+			src:  "# @workflow flow parallel=2 parallel=3\n# @step one GET https://example.com\n",
+			want: `@workflow option "parallel" is repeated`,
+		},
+		{
+			name: "step",
+			src:  "# @workflow flow\n# @step one use=A use=B\n",
+			want: `@step option "use" is repeated`,
+		},
+		{
+			name: "if",
+			src:  "# @workflow flow\n# @if last.status == 200 run=A run=B\n# @endif\n",
+			want: `@if option "run" is repeated`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("repeat.http", []byte(tt.src))
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
+			}
+			if hasParseMessage(doc.Warnings, tt.want) {
+				t.Fatalf("a repeated option must be an error, got a warning: %v", doc.Warnings)
+			}
+		})
+	}
+}
+
+func TestParseRedeclaredDirective(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "auth twice in one request",
+			src:  "GET https://example.com\n# @auth bearer aaa\n# @auth bearer bbb\n",
+			want: "@auth directive already defined for this request",
+		},
+		{
+			name: "name twice",
+			src:  "# @name Alpha\n# @name Beta\nGET https://example.com\n",
+			want: "@name directive already defined for this request",
+		},
+		{
+			name: "timeout twice",
+			src:  "GET https://example.com\n# @timeout 1s\n# @timeout 2s\n",
+			want: "@timeout directive already defined for this request",
+		},
+		{
+			name: "skip-if reports as when",
+			src:  "GET https://example.com\n# @skip-if true\n# @skip-if false\n",
+			want: "@when directive already defined for this request",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("repeat.http", []byte(tt.src))
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseDirectiveValueMissing(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "name",
+			src:  "# @name\nGET https://example.com\n",
+			want: "@name value missing",
+		},
+		{
+			name: "a trailing colon is not a value",
+			src:  "# @name:\nGET https://example.com\n",
+			want: "@name value missing",
+		},
+		{
+			name: "graphql operation",
+			src:  "GET https://example.com\n# @graphql\n# @graphql-operation\n",
+			want: "@graphql-operation value missing",
+		},
+		{
+			name: "an alias is reported the way it was written",
+			src:  "GET https://example.com\n# @graphql\n# @operation\n",
+			want: "@operation value missing",
+		},
+		{
+			name: "grpc descriptor",
+			src:  "GRPC localhost:9000\n# @grpc-descriptor\n",
+			want: "@grpc-descriptor value missing",
+		},
+		{
+			name: "grpc authority",
+			src:  "GRPC localhost:9000\n# @grpc-authority\n",
+			want: "@grpc-authority value missing",
+		},
+		{
+			name: "grpc metadata",
+			src:  "GRPC localhost:9000\n# @grpc-metadata\n",
+			want: "@grpc-metadata value missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("missing.http", []byte(tt.src))
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseQuotedDirectiveValueKeepsItsSpaces(t *testing.T) {
+	doc := Parse("quoted.http", []byte("# @name \"  Spaced  \"\nGET https://example.com\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+	if got := firstRequest(t, doc).Metadata.Name; got != "  Spaced  " {
+		t.Fatalf("name = %q, want the quoted spelling", got)
+	}
+}
+
+func TestParseDirectivesThatAllowAnEmptyValue(t *testing.T) {
+	sources := map[string]string{
+		"graphql enables the feature":       "GET https://example.com\n# @graphql\n",
+		"query collects the lines below it": "GET https://example.com\n# @graphql\n# @query\nquery { id }\n",
+		"variables collect the lines below them": "GET https://example.com\n# @graphql\n" +
+			"# @variables\n{\"id\":1}\n",
+		"grpc marks the request":               "GRPC localhost:9000\n# @grpc\n",
+		"grpc reflection defaults to on":       "GRPC localhost:9000\n# @grpc-reflection\n",
+		"sensitive header logging defaults on": "GET https://example.com\n# @log-sensitive-headers\n",
+		"a bare timeout reaches the transport": "GET https://example.com\n# @timeout\n",
+	}
+
+	for name, src := range sources {
+		t.Run(name, func(t *testing.T) {
+			if doc := Parse("empty.http", []byte(src)); len(doc.Errors) != 0 {
+				t.Fatalf("errors = %v, want none", doc.Errors)
+			}
+		})
+	}
+}
+
+func TestParseBrokenDirectiveLeavesTheSlotFree(t *testing.T) {
+	tests := []struct {
+		name  string
+		first string
+		then  string
+		want  string
+		check func(*restfile.Request) error
+	}{
+		{
+			name: "name value missing", first: "@name", then: "@name Good",
+			want:  "@name value missing",
+			check: wantName("Good"),
+		},
+		{
+			name: "name is empty inside quotes", first: `@name ""`, then: "@name Good",
+			want:  "@name value missing",
+			check: wantName("Good"),
+		},
+		{
+			name: "auth has no spec", first: "@auth", then: "@auth bearer good",
+			want:  "@auth requires a valid auth spec",
+			check: wantAuth("bearer"),
+		},
+		{
+			name: "auth scheme has no operand", first: "@auth bearer", then: "@auth bearer good",
+			want:  "@auth requires a valid auth spec",
+			check: wantAuth("bearer"),
+		},
+		{
+			name: "auth is a single unknown token", first: "@auth nonsense", then: "@auth bearer good",
+			want:  "@auth requires a valid auth spec",
+			check: wantAuth("bearer"),
+		},
+		{
+			name:  "sensitive header logging is not a boolean",
+			first: "@log-sensitive-headers maybe", then: "@log-sensitive-headers true",
+			want: "@log-sensitive-headers must be true or false",
+			check: func(req *restfile.Request) error {
+				if !req.Metadata.AllowSensitiveHeaders {
+					return fmt.Errorf("sensitive header logging is off, want the second declaration")
+				}
+				return nil
+			},
+		},
+		{
+			name: "when expression missing", first: "@when", then: "@when true",
+			want: "@when expression missing",
+			check: func(req *restfile.Request) error {
+				if req.Metadata.When == nil || req.Metadata.When.Expression != "true" {
+					return fmt.Errorf("when = %+v, want the second declaration", req.Metadata.When)
+				}
+				return nil
+			},
+		},
+		{
+			name: "for-each expression missing", first: "@for-each", then: "@for-each item in vars.items",
+			want: "@for-each expression missing",
+			check: func(req *restfile.Request) error {
+				if req.Metadata.ForEach == nil || req.Metadata.ForEach.Var != "item" {
+					return fmt.Errorf("for-each = %+v, want the second declaration", req.Metadata.ForEach)
+				}
+				return nil
+			},
+		},
+		{
+			name: "compare needs two environments", first: "@compare dev", then: "@compare dev stage",
+			want: "@compare requires at least two environments",
+			check: func(req *restfile.Request) error {
+				if req.Metadata.Compare == nil || len(req.Metadata.Compare.Environments) != 2 {
+					return fmt.Errorf("compare = %+v, want the second declaration", req.Metadata.Compare)
+				}
+				return nil
+			},
+		},
+		{
+			name: "profile repeats an option", first: "@profile count=2 count=3", then: "@profile count=5",
+			want: `@profile option "count" is repeated`,
+			check: func(req *restfile.Request) error {
+				if req.Metadata.Profile == nil || req.Metadata.Profile.Count != 5 {
+					return fmt.Errorf("profile = %+v, want the second declaration", req.Metadata.Profile)
+				}
+				return nil
+			},
+		},
+		{
+			name: "trace repeats a budget", first: "@trace total<=1s total<=2s", then: "@trace",
+			want: `@trace option "total" is repeated`,
+			check: func(req *restfile.Request) error {
+				if req.Metadata.Trace == nil || !req.Metadata.Trace.Enabled {
+					return fmt.Errorf("trace = %+v, want the second declaration", req.Metadata.Trace)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "GET https://example.com\n# " + tt.first + "\n# " + tt.then + "\n"
+			doc := Parse("broken.http", []byte(src))
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+			if err := tt.check(firstRequest(t, doc)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestParseBrokenGRPCDirectiveLeavesTheSlotFree(t *testing.T) {
+	tests := []struct {
+		name  string
+		first string
+		then  string
+		want  string
+		check func(*restfile.GRPCRequest) error
+	}{
+		{
+			name: "malformed method", first: "@grpc nonsense", then: "@grpc pkg.Svc/Method",
+			want: `invalid @grpc method "nonsense", use package.Service/Method`,
+			check: func(req *restfile.GRPCRequest) error {
+				if req.FullMethod != "/pkg.Svc/Method" {
+					return fmt.Errorf("method = %q, want the second declaration", req.FullMethod)
+				}
+				return nil
+			},
+		},
+		{
+			name: "descriptor value missing", first: "@grpc-descriptor", then: "@grpc-descriptor ./svc.protoset",
+			want: "@grpc-descriptor value missing",
+			check: func(req *restfile.GRPCRequest) error {
+				if req.DescriptorSet != "./svc.protoset" {
+					return fmt.Errorf("descriptor = %q, want the second declaration", req.DescriptorSet)
+				}
+				return nil
+			},
+		},
+		{
+			name: "authority value missing", first: "@grpc-authority", then: "@grpc-authority api.internal",
+			want: "@grpc-authority value missing",
+			check: func(req *restfile.GRPCRequest) error {
+				if req.Authority != "api.internal" {
+					return fmt.Errorf("authority = %q, want the second declaration", req.Authority)
+				}
+				return nil
+			},
+		},
+		{
+			name: "reflection is not a boolean", first: "@grpc-reflection maybe", then: "@grpc-reflection false",
+			want: `invalid @grpc-reflection "maybe": expected true or false`,
+			check: func(req *restfile.GRPCRequest) error {
+				if req.UseReflection {
+					return fmt.Errorf("reflection is on, want the second declaration")
+				}
+				return nil
+			},
+		},
+		{
+			name: "plaintext is not a boolean", first: "@grpc-plaintext maybe", then: "@grpc-plaintext false",
+			want: `invalid @grpc-plaintext "maybe": expected true or false`,
+			check: func(req *restfile.GRPCRequest) error {
+				if on, set := req.Plaintext.Get(); !set || on {
+					return fmt.Errorf("plaintext = %v (set %t), want the second declaration", on, set)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "GRPC localhost:9000\n# " + tt.first + "\n# " + tt.then + "\n"
+			doc := Parse("broken.http", []byte(src))
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+			req := firstRequest(t, doc)
+			if req.GRPC == nil {
+				t.Fatal("request has no gRPC section")
+			}
+			if err := tt.check(req.GRPC); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestParseGRPCMetadataRequiresAPair(t *testing.T) {
+	src := "GRPC localhost:9000\n" +
+		"# @grpc-metadata x-first: one\n" +
+		"# @grpc-metadata nonsense\n" +
+		"# @grpc-metadata x-last: two\n"
+
+	doc := Parse("meta.http", []byte(src))
+	want := `invalid @grpc-metadata "nonsense", use key: value`
+	if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+		t.Fatalf("errors = %v, want exactly %q", doc.Errors, want)
+	}
+	req := firstRequest(t, doc)
+	if req.GRPC == nil {
+		t.Fatal("request has no gRPC section")
+	}
+	pairs := req.GRPC.Metadata
+	if len(pairs) != 2 || pairs[0].Key != "x-first" || pairs[1].Key != "x-last" {
+		t.Fatalf("metadata = %+v, want the two pairs around the bad line", pairs)
+	}
+}
+
+func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "metadata is not a pair",
+			line: "@grpc-metadata broken",
+			want: `invalid @grpc-metadata "broken", use key: value`,
+		},
+		{
+			name: "metadata written bare",
+			line: "@grpc-metadata",
+			want: "@grpc-metadata value missing",
+		},
+		{
+			name: "method is malformed",
+			line: "@grpc nonsense",
+			want: `invalid @grpc method "nonsense", use package.Service/Method`,
+		},
+		{
+			name: "descriptor written bare",
+			line: "@grpc-descriptor",
+			want: "@grpc-descriptor value missing",
+		},
+		{
+			name: "authority written bare",
+			line: "@grpc-authority",
+			want: "@grpc-authority value missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "POST https://example.com/graphql\n# " + tt.line + "\n" +
+				"# @graphql\n# @operation Used\n# @query\nquery Used { id }\n"
+
+			doc := Parse("mixed.http", []byte(src))
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+			req := firstRequest(t, doc)
+			if req.GRPC != nil {
+				t.Fatalf("gRPC = %+v, want the request left alone", req.GRPC)
+			}
+			if req.Body.GraphQL == nil || req.Body.GraphQL.OperationName != "Used" {
+				t.Fatalf("graphql = %+v, want the operation the author declared", req.Body.GraphQL)
+			}
+		})
+	}
+}
+
+func TestParseGraphQLDirectivesBeforeEnablingAreIgnored(t *testing.T) {
+	src := "POST https://example.com/graphql\n# @operation\n# @graphql\n# @operation Used\n"
+	doc := Parse("graphql.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+	body := firstRequest(t, doc).Body
+	if body.GraphQL == nil || body.GraphQL.OperationName != "Used" {
+		t.Fatalf("graphql = %+v, want the operation declared after @graphql", body.GraphQL)
+	}
+}
+
+func wantName(name string) func(*restfile.Request) error {
+	return func(req *restfile.Request) error {
+		if req.Metadata.Name != name {
+			return fmt.Errorf("name = %q, want %q", req.Metadata.Name, name)
+		}
+		return nil
+	}
+}
+
+func wantAuth(kind string) func(*restfile.Request) error {
+	return func(req *restfile.Request) error {
+		if req.Metadata.Auth == nil || req.Metadata.Auth.Type != kind {
+			return fmt.Errorf("auth = %+v, want a %s spec", req.Metadata.Auth, kind)
+		}
+		return nil
+	}
+}
+
+func TestParseIgnoredOptionKeepsTheDirectiveSlot(t *testing.T) {
+	doc := Parse("keep.http", []byte("GET https://example.com\n# @profile bogus=1\n# @profile count=2\n"))
+	if !hasParseMessage(doc.Errors, "@profile directive already defined for this request") {
+		t.Fatalf("errors = %v", doc.Errors)
+	}
+}
+
+func TestParseRedeclaredDirectiveScope(t *testing.T) {
+	sources := map[string]string{
+		"once in each of two requests": "GET https://a.example.com\n# @auth bearer aaa\n\n###\n" +
+			"GET https://b.example.com\n# @auth bearer bbb\n",
+		"file and global scope each add a profile": "# @auth file bearer aaa\n" +
+			"# @auth global bearer bbb\n\n###\nGET https://example.com\n",
+		"a request overrides the inherited file profile": "# @auth file bearer aaa\n\n###\n" +
+			"GET https://example.com\n# @auth bearer bbb\n",
+		"tags accumulate":       "GET https://example.com\n# @tag one\n# @tag two\n",
+		"captures accumulate":   "GET https://example.com\n# @capture a = 1\n# @capture b = 2\n",
+		"body options separate": "GET https://example.com\n# @body expand\n# @body inline\n",
+		"a setting per line":    "GET https://example.com\n# @setting timeout 1s\n# @setting insecure true\n",
+	}
+
+	for name, src := range sources {
+		t.Run(name, func(t *testing.T) {
+			doc := Parse("scope.http", []byte(src))
+			if hasParseMessage(doc.Errors, "already defined for this request") {
+				t.Fatalf("errors = %v, want no redeclaration error", doc.Errors)
+			}
+		})
+	}
+}
+
+func TestParseRedeclaredDirectiveKeepsTheFirst(t *testing.T) {
+	doc := Parse("first.http", []byte("# @name Alpha\n# @name Beta\nGET https://example.com\n"))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if got := doc.Requests[0].Metadata.Name; got != "Alpha" {
+		t.Fatalf("name = %q, want the first declaration %q", got, "Alpha")
+	}
+}
+
+func TestParseTraceRepeatedTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		rest string
+		want string
+	}{
+		{
+			name: "an option twice",
+			rest: "total=100ms total=2s",
+			want: `@trace option "total" is repeated`,
+		},
+		{
+			name: "a budget twice",
+			rest: "dns<=40ms dns<=50ms",
+			want: `@trace option "dns" is repeated`,
+		},
+		{
+			name: "a budget and the option form of it",
+			rest: "total<=100ms total=2s",
+			want: `@trace option "total" is repeated`,
+		},
+		{
+			name: "two spellings of tolerance",
+			rest: "tolerance=1s grace=2s",
+			want: `@trace option "tolerance" is repeated`,
+		},
+		{name: "distinct targets", rest: "dns<=40ms total<=200ms tolerance=25ms"},
+		{name: "a switch word is not a target", rest: "on"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("trace.http", []byte("GET https://example.com\n# @trace "+tt.rest+"\n"))
+			if tt.want == "" {
+				if len(doc.Errors) != 0 {
+					t.Fatalf("parse errors: %v", doc.Errors)
+				}
+				return
+			}
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
+			}
+		})
 	}
 }

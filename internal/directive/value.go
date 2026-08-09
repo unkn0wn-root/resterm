@@ -19,6 +19,13 @@ func ParseBool(raw string) (bool, bool) {
 	}
 }
 
+func ParseSwitch(args string) (on, ok bool) {
+	if strings.TrimSpace(args) == "" {
+		return true, true
+	}
+	return ParseBool(args)
+}
+
 // Feature directives also accept "disable" and "disabled", which are not
 // general boolean values. Every false spelling counts as off.
 func IsOff(raw string) bool {
@@ -65,6 +72,14 @@ func SplitCSV(value string) []string {
 		return nil
 	}
 	return out
+}
+
+func Value(args string) string {
+	return TrimQuotes(strings.TrimSpace(args))
+}
+
+func HasValue(args string) bool {
+	return strings.TrimSpace(Value(args)) != ""
 }
 
 func TrimQuotes(value string) string {

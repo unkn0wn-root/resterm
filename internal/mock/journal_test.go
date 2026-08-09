@@ -148,17 +148,17 @@ func TestRequestPatternRejectsAmbiguityAndHandlesTruncationAfterMetadata(t *test
 		size:          32,
 	})
 	count, err := journal.count(context.Background(), RequestPattern{
-		Query: map[string]restfile.StringList{"missing": {}},
+		Query: map[string]restfile.MockQueryRule{"missing": {Op: restfile.MockOpPresent}},
 	})
 	if err != nil || count != 0 {
-		t.Fatalf("missing empty query count = %d, %v, want 0", count, err)
+		t.Fatalf("missing query count = %d, %v, want 0", count, err)
 	}
 	count, err = journal.count(context.Background(), RequestPattern{JSON: []byte(`{}`)})
 	if err != nil || count != 0 {
 		t.Fatalf("truncated non-JSON count = %d, %v, want 0", count, err)
 	}
 
-	exact := restfile.MockHeaderRule{Op: restfile.MockHeaderOpExact, Values: []string{"one"}}
+	exact := restfile.MockHeaderRule{Op: restfile.MockOpExact, Values: []string{"one"}}
 	_, err = compileRequestPattern(RequestPattern{Headers: map[string]restfile.MockHeaderRule{
 		"X-Test": exact,
 		"x-test": exact,
@@ -166,9 +166,11 @@ func TestRequestPatternRejectsAmbiguityAndHandlesTruncationAfterMetadata(t *test
 	if err == nil || !strings.Contains(err.Error(), "different casing") {
 		t.Fatalf("case-duplicate header error = %v", err)
 	}
-	_, err = compileRequestPattern(RequestPattern{Query: map[string]restfile.StringList{"job": nil}})
-	if err == nil || !strings.Contains(err.Error(), "cannot be null") {
-		t.Fatalf("null query error = %v", err)
+	_, err = compileRequestPattern(RequestPattern{
+		Query: map[string]restfile.MockQueryRule{"job": {}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "matcher operation is invalid") {
+		t.Fatalf("zero query rule error = %v", err)
 	}
 }
 
@@ -195,7 +197,7 @@ HTTP/1.1 204 No Content`)
 		t.Fatalf("expectations = %+v", expectations)
 	}
 	rule, ok := expectations[0].Pattern.Headers["Authorization"]
-	if !ok || rule.Op != restfile.MockHeaderOpPresent {
+	if !ok || rule.Op != restfile.MockOpPresent {
 		t.Fatalf("Authorization rule = %+v, %t", rule, ok)
 	}
 }

@@ -64,27 +64,22 @@ func (b *documentBuilder) addScopedVariable(
 	}
 }
 
-func (b *documentBuilder) handleScopedVariableDirective(
-	name directive.Name,
-	rest string,
-	line int,
-) bool {
-	scopeToken := name.String()
-	args := rest
-	if name == directive.Var {
-		scopeToken, args = directive.CutToken(rest)
-		if scopeToken == "" {
-			return false
+func (b *documentBuilder) handleScopedVariableDirective(d directiveLine) directiveOutcome {
+	token, args := d.Name.String(), d.Args
+	if d.Name == directive.Var {
+		token, args = directive.CutToken(d.Args)
+		if token == "" {
+			return directiveIgnored
 		}
 	}
 
-	scope, secret, ok := directive.ParseSecretScope(scopeToken)
+	scope, secret, ok := directive.ParseSecretScope(token)
 	if !ok {
-		return false
+		return directiveIgnored
 	}
-	varName, value := directive.ParseNameValue(args)
-	b.addScopedVariable(varName, value, line, scope, secret)
-	return true
+	name, value := directive.ParseNameValue(args)
+	b.addScopedVariable(name, value, d.no, scope, secret)
+	return directiveApplied
 }
 
 func (b *documentBuilder) addConstant(name, value string, line int) {
@@ -96,16 +91,12 @@ func (b *documentBuilder) addConstant(name, value string, line int) {
 	b.file.consts = append(b.file.consts, constant)
 }
 
-func (b *documentBuilder) handleConstDirective(
-	line int,
-	name directive.Name,
-	rest string,
-) bool {
-	if name != directive.Const {
-		return false
+func (b *documentBuilder) handleConstDirective(d directiveLine) directiveOutcome {
+	if d.Name != directive.Const {
+		return directiveIgnored
 	}
-	if name, value := directive.ParseNameValue(rest); name != "" {
-		b.addConstant(name, value, line)
+	if name, value := directive.ParseNameValue(d.Args); name != "" {
+		b.addConstant(name, value, d.no)
 	}
-	return true
+	return directiveApplied
 }

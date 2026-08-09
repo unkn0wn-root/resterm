@@ -147,14 +147,16 @@ func (b *documentBuilder) endScriptBlock() {
 	}
 }
 
-func (b *documentBuilder) setScript(rest, lang string) {
-	k, l := parseScriptSpec(rest)
+// Keep the parsed settings after an option error so the script body is not lost.
+func (b *documentBuilder) setScript(rest, lang string) error {
+	k, l, err := parseScriptSpec(rest)
 	if lang != "" {
 		l = normScriptLang(lang)
 	}
 	b.request.currentScriptKind = k
 	b.request.currentScriptLang = l
 	b.request.discardScript = false
+	return err
 }
 
 func (b *documentBuilder) setRTSScript(rest string) error {
@@ -170,7 +172,9 @@ func (b *documentBuilder) setRTSScript(rest string) error {
 	return nil
 }
 
-func parseScriptSpec(rest string) (scriptKind, scriptLang) {
+var scriptLangKeys = []string{"lang", "language"}
+
+func parseScriptSpec(rest string) (scriptKind, scriptLang, error) {
 	fields := directive.Fields(rest)
 	kind := scriptKind("")
 	lang := scriptLang("")
@@ -188,14 +192,12 @@ func parseScriptSpec(rest string) (scriptKind, scriptLang) {
 			}
 		}
 	}
-	params := directive.OptionFields(fields)
-	if v := params["lang"]; v != "" {
+	params, err := directive.OptionFields(directive.Script, fields)
+	if v, ok := params.First(scriptLangKeys...); ok {
 		lang = scriptLang(v)
 	}
-	if v := params["language"]; v != "" && lang == "" {
-		lang = scriptLang(v)
-	}
-	return normScriptKind(kind.String()), normScriptLang(lang.String())
+	err = errors.Join(err, params.Conflicts(directive.Script))
+	return normScriptKind(kind.String()), normScriptLang(lang.String()), err
 }
 
 func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
@@ -247,13 +249,14 @@ func parseRTSScriptKind(field string) (scriptKind, error) {
 }
 
 func validateRTSScriptLangOptions(fields []string) error {
-	params := directive.OptionFields(fields)
-	for _, opt := range []string{"lang", "language"} {
-		if val := params[opt]; val != "" && normScriptLang(val) != scriptLangRTS {
-			return errRTSLangUnsupported
-		}
+	params, err := directive.OptionFields(directive.RTS, fields)
+	if err != nil {
+		return err
 	}
-	return nil
+	if val, ok := params.First(scriptLangKeys...); ok && normScriptLang(val) != scriptLangRTS {
+		return errRTSLangUnsupported
+	}
+	return params.Conflicts(directive.RTS)
 }
 
 var errRTSTestUnsupported = errors.New(

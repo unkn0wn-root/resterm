@@ -77,15 +77,16 @@ func (b *documentBuilder) addError(line int, message string) {
 	})
 }
 
-// Unknown options go to Warnings. One bad key should not cost you the whole
-// directive.
-func (b *documentBuilder) addErrors(line int, err error) {
+// Joined errors are reported separately so the editor can show every problem on
+// the line. Unknown options are warnings because the rest of the directive may
+// still be valid.
+func (b *documentBuilder) report(line int, err error) {
 	if err == nil {
 		return
 	}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		for _, item := range joined.Unwrap() {
-			b.addErrors(line, item)
+			b.report(line, item)
 		}
 		return
 	}
@@ -206,6 +207,7 @@ func (b *documentBuilder) ensureRequest(line int) {
 		startLine:         line,
 		sourcePath:        b.doc.Path,
 		metadata:          restfile.RequestMetadata{Tags: []string{}},
+		declared:          make(map[directive.Name]bool),
 		currentScriptKind: defaultScriptKind,
 		currentScriptLang: defaultScriptLang,
 		http:              httpbuilder.New(),
@@ -280,7 +282,8 @@ func (b *documentBuilder) startWorkflow(line int, rest string) {
 	}
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
-	sb.applyOptions(directive.ParseOptions(remainder))
+	opts, err := directive.ParseOptions(directive.Workflow, remainder)
+	b.report(line, errors.Join(err, sb.applyOptions(opts)))
 	sb.touch(line)
 	b.workflow = sb
 }

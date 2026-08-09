@@ -20,92 +20,94 @@ func (b *documentBuilder) handleDescriptionLine(ln line) bool {
 	return true
 }
 
-func (b *documentBuilder) handleRequestMetadataDirective(
-	no, argCol int,
-	call directive.Call,
-) bool {
-	rest := call.Args
-	switch call.Name {
+func (b *documentBuilder) handleRequestMetadataDirective(d directiveLine) directiveOutcome {
+	rest := d.Args
+	switch d.Name {
 	case directive.RequestName:
-		if rest != "" {
-			b.request.metadata.Name = directive.TrimQuotes(strings.TrimSpace(rest))
-		}
-		return true
+		b.request.metadata.Name = directive.Value(rest)
+		return directiveApplied
 	case directive.Description:
 		b.request.metadata.Description = appendDesc(b.request.metadata.Description, rest)
-		return true
+		return directiveApplied
 	case directive.Tag:
 		b.addRequestTags(rest)
-		return true
+		return directiveApplied
 	case directive.NoLog:
 		b.request.metadata.NoLog = true
-		return true
+		return directiveApplied
 	case directive.LogSensitiveHeaders:
-		if rest == "" {
-			b.request.metadata.AllowSensitiveHeaders = true
-			return true
+		allow, ok := directive.ParseSwitch(rest)
+		if !ok {
+			b.addError(d.no, d.Spelling.Tag()+" must be true or false")
+			return directiveRejected
 		}
-		if value, ok := directive.ParseBool(rest); ok {
-			b.request.metadata.AllowSensitiveHeaders = value
-		}
-		return true
+		b.request.metadata.AllowSensitiveHeaders = allow
+		return directiveApplied
 	case directive.Settings:
-		b.request.settings = applySettingsTokens(b.request.settings, rest)
-		return true
+		settings, err := applySettingsTokens(b.request.settings, rest, directive.Settings)
+		b.request.settings = settings
+		b.report(d.no, err)
+		return directiveApplied
 	case directive.Setting:
-		b.request.settings = putSetting(b.request.settings, rest)
-		return true
+		settings, err := putSetting(b.request.settings, rest)
+		b.request.settings = settings
+		b.report(d.no, err)
+		return directiveApplied
 	case directive.Timeout:
 		if b.request.settings == nil {
 			b.request.settings = make(map[string]string)
 		}
 		b.request.settings["timeout"] = rest
-		return true
+		return directiveApplied
 	case directive.Var:
-		b.addRequestVar(no, rest)
-		return true
+		b.addRequestVar(d.no, rest)
+		return directiveApplied
 	case directive.Script:
-		if rest != "" {
-			b.setScript(rest, "")
-		} else {
+		if rest == "" {
 			b.request.discardScript = false
+			return directiveApplied
 		}
-		return true
+		if err := b.setScript(rest, ""); err != nil {
+			b.report(d.no, err)
+			return directiveRejected
+		}
+		return directiveApplied
 	case directive.RTS:
 		if err := b.setRTSScript(rest); err != nil {
-			b.addError(no, err.Error())
+			b.addError(d.no, err.Error())
+			return directiveRejected
 		}
-		return true
+		return directiveApplied
 	case directive.Apply:
-		b.addApply(no, argCol, rest)
-		return true
+		return b.addApply(d)
 	case directive.Capture:
-		b.addCapture(no, argCol, rest)
-		return true
+		return b.addCapture(d)
 	case directive.Assert:
-		b.addAssert(no, argCol, rest)
-		return true
+		return b.addAssert(d)
 	case directive.When:
-		b.setWhen(no, argCol, call.Spelling == directive.SkipIf, rest)
-		return true
+		return b.setWhen(d)
 	case directive.ForEach:
-		b.setForEach(no, rest)
-		return true
+		return b.setForEach(d)
 	case directive.Profile:
-		if spec := parseProfileSpec(rest); spec != nil {
-			b.request.metadata.Profile = spec
+		spec, err := parseProfileSpec(rest)
+		b.report(d.no, err)
+		if spec == nil {
+			return directiveRejected
 		}
-		return true
+		b.request.metadata.Profile = spec
+		return directiveApplied
 	case directive.Trace:
-		if spec := parseTraceSpec(rest); spec != nil {
-			b.request.metadata.Trace = spec
+		spec, err := parseTraceSpec(rest)
+		b.report(d.no, err)
+		if spec == nil {
+			return directiveRejected
 		}
-		return true
+		b.request.metadata.Trace = spec
+		return directiveApplied
 	case directive.Compare:
-		b.setCompare(no, rest)
-		return true
+		return b.setCompare(d)
 	}
-	return false
+	return directiveIgnored
 }
 
 func (b *documentBuilder) addRequestTags(rest string) {
@@ -129,78 +131,72 @@ func (b *documentBuilder) addRequestVar(no int, rest string) {
 	})
 }
 
-func (b *documentBuilder) addApply(no, argCol int, rest string) {
-	spec, err := parseApplySpec(rest, no)
+func (b *documentBuilder) addApply(d directiveLine) directiveOutcome {
+	spec, err := parseApplySpec(d.Args, d.no)
 	if err != nil {
-		b.addError(no, err.Error())
-		return
+		b.addError(d.no, err.Error())
+		return directiveRejected
 	}
-	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+	if c := d.exprCol(spec.Expression); c > 0 {
 		spec.Col = c
 	}
 	b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
+	return directiveApplied
 }
 
-func (b *documentBuilder) addCapture(no, argCol int, rest string) {
-	spec, ok := b.parseCaptureDirective(rest, no)
+func (b *documentBuilder) addCapture(d directiveLine) directiveOutcome {
+	spec, ok := b.parseCaptureDirective(d.Args, d.no)
 	if !ok {
-		return
+		return directiveRejected
 	}
-	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+	if c := d.exprCol(spec.Expression); c > 0 {
 		spec.Col = c
 	}
 	b.request.metadata.Captures = append(b.request.metadata.Captures, spec)
+	return directiveApplied
 }
 
-func (b *documentBuilder) addAssert(no, argCol int, rest string) {
-	spec, ok := b.parseAssertDirective(rest, no, argCol)
+func (b *documentBuilder) addAssert(d directiveLine) directiveOutcome {
+	spec, ok := b.parseAssertDirective(d.Args, d.no, d.argCol)
 	if !ok {
-		b.addError(no, "@assert expression missing")
-		return
+		b.addError(d.no, "@assert expression missing")
+		return directiveRejected
 	}
 	b.request.metadata.Asserts = append(b.request.metadata.Asserts, spec)
+	return directiveApplied
 }
 
-func (b *documentBuilder) setWhen(no, argCol int, invert bool, rest string) {
-	spec, err := parseConditionSpec(rest, no, invert)
+func (b *documentBuilder) setWhen(d directiveLine) directiveOutcome {
+	spec, err := parseConditionSpec(d.Args, d.no, d.Spelling == directive.SkipIf)
 	if err != nil {
-		b.addError(no, err.Error())
-		return
+		b.addError(d.no, err.Error())
+		return directiveRejected
 	}
-	if b.request.metadata.When != nil {
-		b.addError(no, "@when directive already defined for this request")
-		return
-	}
-	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+	if c := d.exprCol(spec.Expression); c > 0 {
 		spec.Col = c
 	}
 	b.request.metadata.When = spec
+	return directiveApplied
 }
 
-func (b *documentBuilder) setForEach(no int, rest string) {
-	spec, err := parseForEachSpec(rest, no)
+func (b *documentBuilder) setForEach(d directiveLine) directiveOutcome {
+	spec, err := parseForEachSpec(d.Args, d.no)
 	if err != nil {
-		b.addError(no, err.Error())
-		return
-	}
-	if b.request.metadata.ForEach != nil {
-		b.addError(no, "@for-each directive already defined for this request")
-		return
+		b.addError(d.no, err.Error())
+		return directiveRejected
 	}
 	b.request.metadata.ForEach = spec
+	return directiveApplied
 }
 
-func (b *documentBuilder) setCompare(no int, rest string) {
-	if b.request.metadata.Compare != nil {
-		b.addError(no, "@compare directive already defined for this request")
-		return
-	}
-	spec, err := parseCompareDirective(rest)
+func (b *documentBuilder) setCompare(d directiveLine) directiveOutcome {
+	spec, err := parseCompareDirective(d.Args)
 	if err != nil {
-		b.addError(no, err.Error())
-		return
+		b.addError(d.no, err.Error())
+		return directiveRejected
 	}
 	b.request.metadata.Compare = spec
+	return directiveApplied
 }
 
 func appendDesc(existing, add string) string {
@@ -223,15 +219,15 @@ func appendTagsFold(dst, tags []string) []string {
 	return dst
 }
 
-func putSetting(dst map[string]string, rest string) map[string]string {
+func putSetting(dst map[string]string, rest string) (map[string]string, error) {
 	key, val := directive.CutKey(rest)
 	if key == "" {
-		return dst
+		return dst, nil
 	}
 	// The @settings spelling. Read it that way instead of storing a key with an
 	// equals sign in it, which no consumer would ever look up.
 	if strings.Contains(key, "=") {
-		return applySettingsTokens(dst, rest)
+		return applySettingsTokens(dst, rest, directive.Setting)
 	}
 	// A key written on its own is a flag, the same as it is in @settings. Only
 	// the parser can tell that apart from a value that was written empty.
@@ -242,24 +238,30 @@ func putSetting(dst map[string]string, rest string) map[string]string {
 		dst = make(map[string]string)
 	}
 	dst[key] = val
-	return dst
+	return dst, nil
 }
 
-func applySettingsTokens(dst map[string]string, raw string) map[string]string {
-	opts := directive.ParseOptions(raw)
-	if len(opts) == 0 {
-		return dst
+// Duplicate settings are errors because the map would otherwise keep only the
+// last value.
+func applySettingsTokens(
+	dst map[string]string,
+	raw string,
+	name directive.Name,
+) (map[string]string, error) {
+	opts, err := directive.ParseOptions(name, raw)
+	if opts.Len() == 0 {
+		return dst, err
 	}
 	if dst == nil {
-		dst = make(map[string]string, len(opts))
+		dst = make(map[string]string, opts.Len())
 	}
-	for k, v := range opts {
+	for k, v := range opts.All() {
 		if k == "" {
 			continue
 		}
 		dst[k] = v
 	}
-	return dst
+	return dst, err
 }
 
 func (b *documentBuilder) parseCaptureDirective(

@@ -28,6 +28,56 @@ func TestParseBool(t *testing.T) {
 	}
 }
 
+func TestParseSwitch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		args string
+		want bool
+		ok   bool
+	}{
+		{args: "", want: true, ok: true},
+		{args: "   ", want: true, ok: true},
+		{args: "true", want: true, ok: true},
+		{args: "off", want: false, ok: true},
+		{args: "maybe", want: false, ok: false},
+	}
+	for _, tt := range tests {
+		got, ok := ParseSwitch(tt.args)
+		if got != tt.want || ok != tt.ok {
+			t.Fatalf("ParseSwitch(%q) = (%t, %t), want (%t, %t)",
+				tt.args, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+func TestValueAndHasValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		args string
+		want string
+		has  bool
+	}{
+		{args: "", want: "", has: false},
+		{args: "   ", want: "", has: false},
+		{args: `""`, want: "", has: false},
+		{args: `"   "`, want: "   ", has: false},
+		{args: "  plain  ", want: "plain", has: true},
+		{args: `"  spaced  "`, want: "  spaced  ", has: true},
+		{args: `'single'`, want: "single", has: true},
+		{args: `"unbalanced`, want: `"unbalanced`, has: true},
+	}
+	for _, tt := range tests {
+		if got := Value(tt.args); got != tt.want {
+			t.Errorf("Value(%q) = %q, want %q", tt.args, got, tt.want)
+		}
+		if got := HasValue(tt.args); got != tt.has {
+			t.Errorf("HasValue(%q) = %t, want %t", tt.args, got, tt.has)
+		}
+	}
+}
+
 // Every spelling that parses as false has to read as off, otherwise "@sse no"
 // would quietly leave the feature enabled.
 func TestIsOffMatchesParseBool(t *testing.T) {

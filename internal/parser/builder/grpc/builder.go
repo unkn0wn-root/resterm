@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -44,63 +45,87 @@ func (b *Builder) SetTarget(target string) {
 	req.Target = str.Trim(target)
 }
 
-func (b *Builder) HandleDirective(name directive.Name, rest string) bool {
+// HandleDirective applies a gRPC directive. A directive with a missing value is
+// left unclaimed because claiming it could make gRPC hide a body intended for
+// another protocol. gRPC has no reset directive, so reset is always false.
+func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, reset bool, err error) {
 	switch name {
 	case directive.GRPC:
-		req := b.EnsureRequest()
 		if rest == "" {
-			return true
+			b.EnsureRequest()
+			return true, false, nil
 		}
-
 		pkg, service, method := parseMethod(rest)
-		if service != "" && method != "" {
-			req.Package = pkg
-			req.Service = service
-			req.Method = method
-			if pkg != "" {
-				req.FullMethod = "/" + pkg + "." + service + "/" + method
-			} else {
-				req.FullMethod = "/" + service + "/" + method
-			}
+		if service == "" || method == "" {
+			return true, false, fmt.Errorf("invalid @grpc method %q, use package.Service/Method", rest)
 		}
-		return true
+		req := b.EnsureRequest()
+		req.Package, req.Service, req.Method = pkg, service, method
+		req.FullMethod = fullMethod(pkg, service, method)
+		return true, false, nil
 	case directive.GRPCDescriptor:
-		b.EnsureRequest().DescriptorSet = rest
-		return true
-	case directive.GRPCReflection:
-		req := b.EnsureRequest()
 		if rest == "" {
-			req.UseReflection = true
-		} else if strings.EqualFold(rest, "false") || strings.EqualFold(rest, "0") {
-			req.UseReflection = false
-		} else {
-			req.UseReflection = true
+			return true, false, nil
 		}
-		return true
+		b.EnsureRequest().DescriptorSet = rest
+		return true, false, nil
+	case directive.GRPCReflection:
+		on, err := parseSwitch(name, rest)
+		if err != nil {
+			return true, false, err
+		}
+		b.EnsureRequest().UseReflection = on
+		return true, false, nil
 	case directive.GRPCPlaintext:
-		off := strings.EqualFold(rest, "false") || strings.EqualFold(rest, "0")
-		b.EnsureRequest().Plaintext = restfile.OptOf(!off)
-		return true
-	case directive.GRPCAuthority:
-		b.EnsureRequest().Authority = rest
-		return true
-	case directive.GRPCMetadata:
-		req := b.EnsureRequest()
-		if rest != "" {
-			if before, after, ok := strings.Cut(rest, ":"); ok {
-				key := str.Trim(before)
-				value := str.Trim(after)
-				if key != "" {
-					req.Metadata = append(req.Metadata, restfile.MetadataPair{
-						Key:   key,
-						Value: value,
-					})
-				}
-			}
+		on, err := parseSwitch(name, rest)
+		if err != nil {
+			return true, false, err
 		}
-		return true
+		b.EnsureRequest().Plaintext = restfile.OptOf(on)
+		return true, false, nil
+	case directive.GRPCAuthority:
+		if rest == "" {
+			return true, false, nil
+		}
+		b.EnsureRequest().Authority = rest
+		return true, false, nil
+	case directive.GRPCMetadata:
+		if rest == "" {
+			return true, false, nil
+		}
+		pair, err := parseMetadata(name, rest)
+		if err != nil {
+			return true, false, err
+		}
+		req := b.EnsureRequest()
+		req.Metadata = append(req.Metadata, pair)
+		return true, false, nil
 	}
-	return false
+	return false, false, nil
+}
+
+func parseSwitch(name directive.Name, rest string) (bool, error) {
+	on, ok := directive.ParseSwitch(rest)
+	if !ok {
+		return false, fmt.Errorf("invalid %s %q: expected true or false", name.Tag(), rest)
+	}
+	return on, nil
+}
+
+func parseMetadata(name directive.Name, rest string) (restfile.MetadataPair, error) {
+	before, after, ok := strings.Cut(rest, ":")
+	key := str.Trim(before)
+	if !ok || key == "" {
+		return restfile.MetadataPair{}, fmt.Errorf("invalid %s %q, use key: value", name.Tag(), rest)
+	}
+	return restfile.MetadataPair{Key: key, Value: str.Trim(after)}, nil
+}
+
+func fullMethod(pkg, service, method string) string {
+	if pkg != "" {
+		service = pkg + "." + service
+	}
+	return "/" + service + "/" + method
 }
 
 func (b *Builder) HandleBodyLine(line string, forceInline bool) bool {

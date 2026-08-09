@@ -115,8 +115,19 @@ func (m *Model) saveFileWithOutcome() (saveFileOutcome, tea.Cmd) {
 	m.refreshCurrentDocument(content)
 	return saveFileOutcomeSaved, batchCommands(
 		m.refreshGitStatusCmd(),
-		statusCmd(statusSuccess, fmt.Sprintf("Saved %s", filepath.Base(m.currentFile))),
+		statusCmd(savedStatus(m.currentFile, m.doc)),
 	)
+}
+
+func savedStatus(path string, doc *restfile.Document) (statusLevel, string) {
+	saved := "Saved " + filepath.Base(path)
+	if doc == nil || len(doc.Errors) == 0 {
+		return statusSuccess, saved
+	}
+	if len(doc.Errors) == 1 {
+		return statusWarn, saved + " (1 parse error)"
+	}
+	return statusWarn, fmt.Sprintf("%s (%d parse errors)", saved, len(doc.Errors))
 }
 
 func (m *Model) reloadWorkspace() tea.Cmd {

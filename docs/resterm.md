@@ -745,6 +745,13 @@ Troubleshooting:
 - Begin each request with a line that starts with `###`. Everything up to the next separator belongs to the same request.
 - Lines prefixed with `#`, `//`, or `--` are treated as comments. Metadata directives live inside these comment blocks.
 - A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
+- An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](#splitting-a-long-matcher).
+- Alternate spellings count as the same option. For example, you cannot use both `known_hosts` and `known-hosts` on one `@ssh` directive. Empty values are ignored for regular options, but not for switches. `strict_hostkey=` enables the switch, so it conflicts with `strict-hostkey=false`.
+- `@compare` requires non-empty values for its baseline and group options. This is stricter than general alias conflict handling: `# @ssh host=h known-hosts=a known_hosts=` is valid, but `# @compare dev stage base=dev baseline=` reports an empty baseline.
+- Directives that require a value report `value missing` when left empty. This applies to `@name`, `@operation`, `@grpc-descriptor`, `@grpc-authority`, and `@grpc-metadata`. Some directives deliberately accept an empty value. `@graphql` enables GraphQL, `@query` and `@variables` read the lines below them, and `@grpc-reflection` defaults to on.
+- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first valid declaration and reports later duplicates. An invalid declaration does not count, so a valid one may follow it. A GraphQL directive ignored while GraphQL is off does not count either.
+- Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. For GraphQL, the reset also clears `@operation`, `@variables`, and `@query`, so they may be declared again after `@graphql off`. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
+- Files can be saved with parse errors. The status line shows the number of errors, for example `Saved requests.http (1 parse error)`. Requests cannot run until those errors are fixed.
 - In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. The full text appears in the Explain pane for each run.
 - The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
 - `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
@@ -906,7 +913,7 @@ A no-op hot reload keeps the active handler and its cursors. Any source or fixtu
 
 ### Conditional scenarios
 
-Add `@match` before the raw status line to select a response by query values, request headers, or a JSON body subset:
+Add `@match` before the raw status line to select a response by query values, request headers, or the JSON request body:
 
 ```http
 ### Declined payment
@@ -918,18 +925,107 @@ Content-Type: application/json
 {"error":"amount must be positive"}
 ```
 
-Query objects accept a string or an array of strings per key. Header matchers retain the same exact shorthand and also support generic rules:
+Query and header matchers share the same shorthand and the same rule objects:
 
 ```http
 # @match headers={"X-Tenant":{"exact":"demo"},"Authorization":{"prefix":"Bearer "},"X-Correlation-ID":{"present":true},"X-Debug":{"absent":true}}
+# @match headers={"User-Agent":{"contains":"Chrome"},"X-Version":{"regex":"^v[0-9]+$"},"X-Env":{"oneOf":["dev","stage","prod"]}}
+# @match query={"channel":{"oneOf":["web","ios"]},"page":{"gte":2},"trace":{"absent":true}}
 ```
 
 - A string or array is shorthand for `exact`. Repeated values must match exactly and in order.
-- `prefix` succeeds when any value for that header starts with the non-empty prefix.
-- `present` requires the header to have a value, including an explicitly empty value.
-- `absent` requires no value for that header.
+- `prefix` succeeds when any value starts with the non-empty prefix.
+- `contains` succeeds when any value contains the non-empty substring.
+- `regex` succeeds when any value matches the [RE2](https://pkg.go.dev/regexp/syntax) pattern. Matching is unanchored, so use `^` and `$` to match a whole value, and `(?i)` to ignore case.
+- `oneOf` succeeds when any value equals one of the listed values. The list cannot be empty. Unlike `exact`, order and extra values do not matter.
+- `present` requires a value, including an explicitly empty one.
+- `absent` requires no value at all.
+- `gt`, `gte`, `lt`, and `lte` are query-only. Each succeeds when any value reads as a number and compares that way against the operand.
 
-Each header declares exactly one rule. Header names are case-insensitive. Only declared query and header keys are constrained. JSON objects match as recursive subsets, while arrays are exact and ordered. JSON numbers compare numerically (`1`, `1.0`, and `1e0` are equal). JSON matching accepts `application/json` and `+json`, rejects malformed bodies with `400`, and caps matcher input at 4 MiB (`413`).
+Each key declares exactly one rule. Header names are case-insensitive and query parameter names are case-sensitive. Values are case-sensitive in both. Every rule except `exact`, `present`, and `absent` tests each repeated value on its own and succeeds as soon as one of them matches. A comma-separated list inside a single value is never split, and a missing key fails all of them. Empty `prefix`, `contains`, and `regex` operands are rejected, as is an empty `oneOf` array. To match an empty value on purpose, write `{"regex":"^$"}`.
+
+The numeric operand must be written as a JSON number, so `{"gte":2}` rather than `{"gte":"2"}`. A value that does not read as a number is an ordinary non-match, not an error, so `?page=none` simply fails `{"gte":2}`.
+
+Only declared query and header keys are constrained. Numbers are compared by decimal value, so `1`, `1.0`, and `1e0` are equal. Exponents that are too large are capped instead of overflowing. Two values beyond the same limit compare as equal.
+
+#### Matching the request body
+
+Use `json` to match a literal body subset and `json-rules` to compare body values. They can be combined:
+
+```http
+# @match json={"type":"order"}
+# @match json-rules={"amount":{"gt":100},"user":{"age":{"gte":18}},"status":{"oneOf":["new","hold"]}}
+```
+
+All body, query, and header conditions must match. Body matching accepts `application/json` and `+json` media types. A malformed body returns `400`, and a body larger than 4 MiB returns `413`.
+
+Everything inside `json` is request data:
+
+- Objects match as recursive subsets, so members the pattern does not mention are ignored.
+- Arrays match exactly and in order.
+- Other values match by value.
+- Keys are always field names. Patterns such as `{"$gt":100}`, `{"$schema":"..."}`, `{"$ref":"#/$defs/user"}`, and `{"gt":125}` need no escaping.
+
+To match a body containing a JSON string, quote the JSON value inside the option value:
+
+```http
+# @match json='"paid"'
+```
+
+The single quotes delimit the option value. The double quotes are part of the JSON string. For example, `json=100` matches the number `100`, while `json='"100"'` matches the string `"100"`. Other JSON values need no extra quotes. When Resterm writes this matcher, it uses the equivalent form `json="\"paid\""`.
+
+The structure of `json-rules` follows the request body:
+
+- `gt`, `gte`, `lt`, and `lte` require JSON numbers on both sides. The string `"101"` does not match `{"gt":100}`.
+- `oneOf` matches any listed JSON value. Object and array entries must match the entire value.
+- Several operators can apply to one value. For example, `{"amount":{"gte":100,"lt":500}}` checks both bounds.
+- Missing fields and values of the wrong type do not match.
+- Field names containing `.`, `/`, `$`, or non-ASCII text need no escaping. `{"a.b":{"gt":1}}` refers to the top-level field named `a.b`.
+
+Operator names can also be body field names. Nest another rule inside the field to match one:
+
+```http
+# Matches {"range": {"gt": 125}}
+# @match json-rules={"range":{"gt":{"gt":100}}}
+```
+
+The outer `gt` is a field because its value is an object. The inner `gt` is the operator.
+
+Empty rule objects, unknown operators, invalid operands, and empty `oneOf` arrays are configuration errors. The error includes the location:
+
+```
+invalid json-rules matcher at amount.gtt: expected a rule object or a known operator
+```
+
+Rules do not inspect array elements. Match an array with `json`, or compare the whole array with `oneOf`:
+
+```http
+# @match json-rules={"roles":{"oneOf":[["admin"],["admin","auditor"]]}}
+```
+
+#### Splitting a long matcher
+
+If a bracket is still open, the matcher continues on the next comment line:
+
+```http
+# @match json-rules={
+#   "amount": {"gte": 100, "lt": 500},
+#   "user": {
+#     "age":  {"gte": 18},
+#     "tier": {"oneOf": ["gold", "silver"]}
+#   },
+#   "status": {"oneOf": ["new", "hold"]}
+# }
+```
+
+You can also split unrelated fields across declarations:
+
+```http
+# @match json-rules={"amount":{"gte":100,"lt":500}}
+# @match json-rules={"status":{"oneOf":["new","hold"]}}
+```
+
+Resterm merges repeated object values. Repeating a field or a non-object value is an error. When Resterm rewrites the file, it writes the matcher as one merged line.
 
 Scenario selection is deterministic:
 
@@ -969,7 +1065,7 @@ While the TUI owns an active mock server, `:mock verify` checks the active compi
 # @assert mock.received({method:"POST", path:"/webhooks/payment", headers:{Authorization:{prefix:"Bearer "}}, json:{status:"completed"}})
 ```
 
-Both functions take one pattern dictionary. `count` returns the exact count, and `received` is shorthand for a count greater than zero. Supported fields are `method`, `path`, `query`, `headers`, and `json`, with the same wildcard, exact, header-rule, and JSON-subset semantics as mocks. These helpers are deliberately in-process: `resterm run` does not connect to an arbitrary mock journal. Use `resterm mock verify` for standalone or headless automation.
+Both functions take one pattern dictionary. `count` returns the number of matching requests, and `received` reports whether any request matched. Supported fields are `method`, `path`, `query`, `headers`, `json`, and `jsonRules`, with the same behavior as the matching `@match` options. These helpers inspect the TUI's active mock server. `resterm run` does not connect to another mock journal. Use `resterm mock verify` for standalone or headless automation.
 
 ### CORS, reload, and request journals
 
@@ -1041,7 +1137,7 @@ GET https://httpbin.org/delay/5
 
 Run the same request across multiple environments either inline or from the CLI:
 
-- Add `# @compare dev stage prod base=stage` to a request block to pin the order/baseline inside the file. Provide at least two environments; `base` is optional and defaults to the first entry.
+- Add `# @compare dev stage prod base=stage` to a request block to pin the order/baseline inside the file. Provide at least two environments; `base` is optional and defaults to the first entry. `baseline`, `primary`, and `ref` are alternate spellings of `base`, so only one of them may carry a value. Writing `base=` or `group=` with nothing after it is reported rather than treated as omitted.
 - Supply global defaults with `resterm --compare dev,stage,prod --compare-base stage`, then press `g+c` anywhere in the editor to reuse those targets even if the request lacks `@compare`.
 - While a compare run is active Resterm automatically enables a split layout, pins the previous response in the secondary pane, and streams progress in the status bar (`Compare dev✓ stage… prod?`). The new Compare tab renders a table with status/code/duration/diff summaries per environment.
 - Each compare sweep writes a bundled history entry (`COMPARE` method) so you can replay the failing environment later; selecting a compare history row loads the run back into the editor, restores the Compare tab, and lets you resend or inspect deltas off-line.
@@ -1454,10 +1550,24 @@ Available directives:
 
 | Directive | Description |
 | --- | --- |
-| `@graphql [true\|false]` | Enable/disable GraphQL processing for the request. |
+| `@graphql [boolean]` | Enable/disable GraphQL processing for the request. |
 | `@operation` / `@graphql-operation` | Sets the `operationName`. |
 | `@variables` | Starts a variables block; inline JSON or `< file.json`. |
 | `@query` | Loads the query from a file instead of the inline body. |
+
+`@graphql` accepts the standard boolean spellings, including `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`, and `t`/`f`. It also accepts `disable` and `disabled` as false values; other values are reported as errors. Switching GraphQL off discards the operation, variables, and query collected so far, allowing the request to declare them again after GraphQL is re-enabled:
+
+```http
+### Reconfigured
+# @graphql
+# @operation First
+# @query query First { a }
+POST {{graphql.endpoint}}
+# @graphql off
+# @graphql
+# @operation Second
+# @query query Second { b }
+```
 
 Example:
 
@@ -1493,7 +1603,7 @@ gRPC requests start with a line such as `GRPC host:port`. Metadata directives de
 | `@grpc-reflection [true\|false]` | Toggle server reflection (default `true`). |
 | `@grpc-plaintext [true\|false]` | Force plaintext or TLS. |
 | `@grpc-authority value` | Override the HTTP/2 `:authority` header. |
-| `@grpc-metadata key: value` | Add metadata pairs (repeatable). |
+| `@grpc-metadata key: value` | Add a metadata pair (repeatable). Invalid lines are reported. |
 | `@setting grpc-root-cas path1,path2` | Extra root CAs (space/comma/semicolon separated). Paths resolve relative to the request file. |
 | `@setting grpc-root-mode append\|replace` | Control whether extra CAs append to system roots (`append`) or replace them (`replace`, default). |
 | `@setting grpc-client-cert path` / `@setting grpc-client-key path` | Client cert/key for mTLS (relative paths allowed). |

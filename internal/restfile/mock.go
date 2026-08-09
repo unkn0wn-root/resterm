@@ -1,6 +1,7 @@
 package restfile
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,85 +138,6 @@ func (l *StringList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (r MockHeaderRule) MarshalJSON() ([]byte, error) {
-	switch r.Op {
-	case MockHeaderOpExact:
-		if len(r.Values) == 0 {
-			return nil, errors.New("mock header exact matcher requires at least one value")
-		}
-		if len(r.Values) == 1 {
-			return json.Marshal(r.Values[0])
-		}
-		return json.Marshal(r.Values)
-	case MockHeaderOpPrefix:
-		if len(r.Values) != 1 || r.Values[0] == "" {
-			return nil, errors.New("mock header prefix requires one non-empty value")
-		}
-		return json.Marshal(map[string]string{"prefix": r.Values[0]})
-	case MockHeaderOpPresent:
-		return []byte(`{"present":true}`), nil
-	case MockHeaderOpAbsent:
-		return []byte(`{"absent":true}`), nil
-	default:
-		return nil, errors.New("mock header matcher has an invalid operation")
-	}
-}
-
-func (r *MockHeaderRule) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
-		return errors.New("mock header matcher cannot be null")
-	}
-	var exact StringList
-	if exact.UnmarshalJSON(data) == nil {
-		if len(exact) == 0 {
-			return errors.New("mock header exact matcher requires at least one value")
-		}
-		*r = MockHeaderRule{Op: MockHeaderOpExact, Values: exact}
-		return nil
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
-		return errors.New("mock header matcher must be a string, string array, or object")
-	}
-	if len(fields) != 1 {
-		return errors.New("mock header matcher must contain exactly one operator")
-	}
-	var op string
-	var raw json.RawMessage
-	for name, value := range fields {
-		op, raw = name, value
-	}
-	switch op {
-	case "exact":
-		var values StringList
-		if err := values.UnmarshalJSON(raw); err != nil || len(values) == 0 {
-			return errors.New("mock header exact matcher requires a string or non-empty string array")
-		}
-		*r = MockHeaderRule{Op: MockHeaderOpExact, Values: values}
-		return nil
-	case "prefix":
-		var prefix string
-		if err := json.Unmarshal(raw, &prefix); err != nil || prefix == "" {
-			return errors.New("mock header prefix matcher must be a non-empty string")
-		}
-		*r = MockHeaderRule{Op: MockHeaderOpPrefix, Values: []string{prefix}}
-		return nil
-	case "present", "absent":
-		var enabled bool
-		if err := json.Unmarshal(raw, &enabled); err != nil || !enabled {
-			return fmt.Errorf("mock header %s matcher must be true", op)
-		}
-		ruleOp := MockHeaderOpPresent
-		if op == "absent" {
-			ruleOp = MockHeaderOpAbsent
-		}
-		*r = MockHeaderRule{Op: ruleOp}
-		return nil
-	default:
-		return fmt.Errorf("unknown mock header matcher operator %q", op)
-	}
-}
-
 func ResponseAllowsBody(status int) bool {
 	switch status {
 	case http.StatusNoContent, http.StatusResetContent, http.StatusNotModified:
@@ -251,7 +173,7 @@ func (r MockResponse) HasTemplate() bool {
 }
 
 func (m MockMatch) HasConditions() bool {
-	return len(m.Query) > 0 || len(m.Headers) > 0 || len(m.JSON) > 0
+	return len(m.Query)+len(m.Headers)+len(m.JSON)+len(m.JSONRules) > 0
 }
 
 func ValidateMockPath(path string) error {
@@ -326,6 +248,53 @@ func validateMockPathForm(path string) error {
 		return fmt.Errorf("mock path must escape whitespace and control characters")
 	}
 	return nil
+}
+
+// CheckMockJSONKeys rejects duplicate object fields in a JSON matcher. The
+// standard decoder keeps only the last duplicate, which would silently discard
+// one of the requested match conditions.
+//
+// Numbers remain json.Number during the scan. This lets the decoder pass values
+// too large for float64 and continue checking fields that follow them.
+func CheckMockJSONKeys(raw []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	key, dup, _ := scanJSONKeys(dec)
+	if dup {
+		return fmt.Errorf("field %q is repeated", key)
+	}
+	return nil
+}
+
+func scanJSONKeys(dec *json.Decoder) (string, bool, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return "", false, err
+	}
+	delim, ok := tok.(json.Delim)
+	if !ok {
+		return "", false, nil
+	}
+
+	seen := map[string]bool{}
+	for dec.More() {
+		if delim == '{' {
+			name, err := dec.Token()
+			if err != nil {
+				return "", false, err
+			}
+			key, _ := name.(string)
+			if seen[key] {
+				return key, true, nil
+			}
+			seen[key] = true
+		}
+		if key, dup, err := scanJSONKeys(dec); dup || err != nil {
+			return key, dup, err
+		}
+	}
+	_, err = dec.Token()
+	return "", false, err
 }
 
 func parseWildcard(part string) (string, bool, error) {

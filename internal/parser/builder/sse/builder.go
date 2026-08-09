@@ -1,10 +1,7 @@
 package sse
 
 import (
-	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
@@ -23,32 +20,31 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (b *Builder) HandleDirective(name directive.Name, rest string) (bool, error) {
+func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, reset bool, err error) {
 	if name != directive.SSE {
-		return false, nil
+		return false, false, nil
 	}
 
 	rest = str.Trim(rest)
 	if rest == "" {
 		b.enabled = true
-		return true, nil
+		return true, false, nil
 	}
 
 	if directive.IsOff(rest) {
 		b.enabled = false
 		b.options = restfile.SSEOptions{}
-		return true, nil
+		return true, true, nil
 	}
 
 	b.enabled = true
-	assignments := directive.ParseOptions(rest)
-	var errs []error
-	for _, key := range slices.Sorted(maps.Keys(assignments)) {
-		if err := b.applyOption(key, assignments[key]); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return true, errors.Join(errs...)
+	return true, false, directive.ApplyOptions(directive.SSE, rest, sseAliases, b.applyOption)
+}
+
+var sseAliases = [][]string{
+	{"duration", "timeout"},
+	{"idle", "idle-timeout"},
+	{"max-bytes", "limit-bytes"},
 }
 
 // ParseOptions lowercases keys, so name is already normalized.

@@ -228,24 +228,26 @@ func cloneMocks(src []*Mock) []*Mock {
 }
 
 func cloneMockMatch(src MockMatch) MockMatch {
-	src.Query = cloneStringLists(src.Query)
-	src.Headers = cloneMockHeaders(src.Headers)
+	src.Query = CloneMockQuery(src.Query)
+	src.Headers = CloneMockHeaders(src.Headers)
 	src.JSON = bytes.Clone(src.JSON)
+	src.JSONRules = bytes.Clone(src.JSONRules)
 	return src
 }
 
-func cloneStringLists(src map[string]StringList) map[string]StringList {
+func CloneMockQuery(src map[string]MockQueryRule) map[string]MockQueryRule {
 	if src == nil {
 		return nil
 	}
-	dst := make(map[string]StringList, len(src))
-	for key, vals := range src {
-		dst[key] = slices.Clone(vals)
+	dst := make(map[string]MockQueryRule, len(src))
+	for key, rule := range src {
+		rule.Values = slices.Clone(rule.Values)
+		dst[key] = rule
 	}
 	return dst
 }
 
-func cloneMockHeaders(src map[string]MockHeaderRule) map[string]MockHeaderRule {
+func CloneMockHeaders(src map[string]MockHeaderRule) map[string]MockHeaderRule {
 	if src == nil {
 		return nil
 	}
