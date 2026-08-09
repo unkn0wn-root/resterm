@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.52.1](https://github.com/unkn0wn-root/resterm/compare/v0.51.3...v0.52.1) (2026-08-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **rts:** reserve default and remove default() (RST-312) (#356)
+
+### Features
+
+* **rts:** reserve default and remove default() (RST-312) ([#356](https://github.com/unkn0wn-root/resterm/issues/356)) ([bbeca96](https://github.com/unkn0wn-root/resterm/commit/bbeca964cfe7fafa7cb685190a21522f8e0b90d6))
+
 ### [0.51.3](https://github.com/unkn0wn-root/resterm/compare/v0.51.2...v0.51.3) (2026-08-05)
 
 
