@@ -28,7 +28,7 @@ func TestInferSchemaTypeCaseInsensitive(t *testing.T) {
 func TestSchemaTypesFromStringsNormalizes(t *testing.T) {
 	t.Parallel()
 
-	got := SchemaTypesFromStrings([]string{" ARRAY ", "ObjEcT", "number", " null ", "garbage"})
+	got := SchemaTypesFromStrings([]string{" ARRAY ", "ObjEcT", "number", " null ", "unsupported"})
 	want := []SchemaType{TypeArray, TypeObject, TypeNumber, TypeNull}
 	if len(got) != len(want) {
 		t.Fatalf("unexpected type count: got %d want %d (%#v)", len(got), len(want), got)
@@ -60,8 +60,8 @@ func TestInferSchemaTypeNullUnions(t *testing.T) {
 			want: TypeString,
 		},
 		{
-			name: "garbage then integer uses integer",
-			sch:  &Schema{Types: []SchemaType{"garbage", "integer"}},
+			name: "unsupported type then integer uses integer",
+			sch:  &Schema{Types: []SchemaType{"unsupported", "integer"}},
 			want: TypeInteger,
 		},
 		{
@@ -70,14 +70,14 @@ func TestInferSchemaTypeNullUnions(t *testing.T) {
 			want: TypeNull,
 		},
 		{
-			name: "garbage and null returns null",
-			sch:  &Schema{Types: []SchemaType{"garbage", "null"}},
+			name: "unsupported type and null returns null",
+			sch:  &Schema{Types: []SchemaType{"unsupported", "null"}},
 			def:  TypeString,
 			want: TypeNull,
 		},
 		{
-			name: "garbage only falls back to default",
-			sch:  &Schema{Types: []SchemaType{"garbage"}},
+			name: "unsupported type falls back to default",
+			sch:  &Schema{Types: []SchemaType{"unsupported"}},
 			def:  TypeString,
 			want: TypeString,
 		},
@@ -140,8 +140,8 @@ func TestInferSchemaType(t *testing.T) {
 			want: SchemaTypeInfo{PrimaryType: TypeObject},
 		},
 		{
-			name: "garbage and nullable keeps default plus nullable",
-			sch:  &Schema{Types: []SchemaType{"garbage"}, Nullable: &nullable},
+			name: "unsupported nullable type keeps default plus nullable",
+			sch:  &Schema{Types: []SchemaType{"unsupported"}, Nullable: &nullable},
 			def:  TypeNumber,
 			want: SchemaTypeInfo{PrimaryType: TypeNumber, Nullable: true},
 		},

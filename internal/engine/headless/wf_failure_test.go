@@ -11,7 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 )
 
-// An @if that fails on purpose used to end the run whatever on-failure said, so
+// An @if that fails on purpose used to end the run regardless of on-failure, so
 // this goes through the parser to prove the mode reaches the step.
 func TestExecuteWorkflowContinuesPastFailedIfBranch(t *testing.T) {
 	var hits atomic.Int64

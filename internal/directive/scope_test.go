@@ -14,7 +14,7 @@ func TestParseScope(t *testing.T) {
 		{input: " FILE ", want: ScopeFile, ok: true},
 		{input: "global", want: ScopeGlobal, ok: true},
 		{input: "file-secret"},
-		{input: "bogus"},
+		{input: "unsupported"},
 		{input: ""},
 	}
 
@@ -39,8 +39,8 @@ func TestParseSecretScope(t *testing.T) {
 		{input: "file-secret", want: ScopeFile, secret: true, ok: true},
 		{input: " GLOBAL-SECRET ", want: ScopeGlobal, secret: true, ok: true},
 		{input: "request-secret", want: ScopeRequest, secret: true, ok: true},
-		{input: "bogus-secret", secret: true},
-		{input: "bogus"},
+		{input: "unsupported-secret", secret: true},
+		{input: "unsupported"},
 		{input: ""},
 	}
 

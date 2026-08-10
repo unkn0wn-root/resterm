@@ -104,7 +104,7 @@ func TestNameContinuation(t *testing.T) {
 		Match:        ContinueOptions,
 		RequestName:  ContinueNone,
 		Step:         ContinueNone,
-		Name("nope"): ContinueNone,
+		Name("void"): ContinueNone,
 	}
 	for name, want := range tests {
 		t.Run(name.String(), func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestNameKnown(t *testing.T) {
 	tests := map[Name]bool{
 		Assert:          true,
 		SkipIf:          true,
-		Name("nope"):    false,
+		Name("void"):    false,
 		Name("ASSERT"):  false,
 		Name(""):        false,
 		Name("assert:"): false,

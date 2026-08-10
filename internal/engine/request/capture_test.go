@@ -631,14 +631,14 @@ func TestApplyCapturesStrictModeFailsOnUnexpectedJSONPathChar(t *testing.T) {
 		Kind:   scripts.ResponseKindHTTP,
 		Status: "200 OK",
 		Code:   200,
-		Body:   []byte(`{"foo":{"bar":"ok"}}`),
+		Body:   []byte(`{"user":{"name":"Ada"}}`),
 	}
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
 				Scope:      directive.ScopeRequest,
 				Name:       "v",
-				Expression: "{{response.json.foo]bar}}",
+				Expression: "{{response.json.user]name}}",
 				Line:       11,
 			}},
 		},
@@ -655,7 +655,7 @@ func TestApplyCapturesStrictModeFailsOnUnexpectedJSONPathChar(t *testing.T) {
 		t.Fatalf("expected malformed strict json path to fail")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, `json path "json.foo]bar"`) {
+	if !strings.Contains(msg, `json path "json.user]name"`) {
 		t.Fatalf("expected malformed path in error, got %q", msg)
 	}
 	if !strings.Contains(msg, "got ']'") {

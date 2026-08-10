@@ -196,8 +196,8 @@ func TestParseMockJSONMatchOptions(t *testing.T) {
 		},
 		{
 			name:  "an unknown option trailing a continued matcher",
-			match: "headers={\n#   \"X-Env\": \"prod\"\n# } bogus=1",
-			want:  `unknown @match option "bogus"`,
+			match: "headers={\n#   \"X-Env\": \"prod\"\n# } unsupported=1",
+			want:  `unknown @match option "unsupported"`,
 		},
 	}
 	for _, test := range tests {
@@ -715,12 +715,12 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 		},
 		{
 			name:   "unknown key source",
-			source: "# @mock method=GET path=/x sequence=poll sequence-key=body.id\nHTTP/1.1 503 Nope\n---\nHTTP/1.1 200 OK",
+			source: "# @mock method=GET path=/x sequence=poll sequence-key=body.id\nHTTP/1.1 503 Retry\n---\nHTTP/1.1 200 OK",
 			want:   "source \"body\" is not supported",
 		},
 		{
 			name:   "unknown path key",
-			source: "# @mock method=GET path=/x/{id} sequence=poll sequence-key=path.job\nHTTP/1.1 503 Nope\n---\nHTTP/1.1 200 OK",
+			source: "# @mock method=GET path=/x/{id} sequence=poll sequence-key=path.job\nHTTP/1.1 503 Retry\n---\nHTTP/1.1 200 OK",
 			want:   "path wildcard \"job\" is not declared",
 		},
 		{
@@ -822,7 +822,7 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 func TestParseMockDiagnostics(t *testing.T) {
 	src := `# @mock method=POST path=/payments status=202 default=maybe
 # @match query={"mode":1} json={bad}
-	HTTP/2 199 Nope
+	HTTP/2 199 Informational
 `
 	doc := Parse("bad.http", []byte(src))
 	if len(doc.Errors) == 0 || len(doc.Requests) != 0 || len(doc.Mocks) != 1 {

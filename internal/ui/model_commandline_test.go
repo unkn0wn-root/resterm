@@ -268,8 +268,8 @@ func TestExWriteQuitUnnamedBufferQuitsAfterSaveAsSubmit(t *testing.T) {
 
 func TestExNoHighlightClearsEditorSearch(t *testing.T) {
 	model := New(Config{})
-	model.editor.SetValue("foo\nbar\nfoo\n")
-	updated, cmd := model.editor.ApplySearch("foo", false)
+	model.editor.SetValue("GET\nPUT\nGET\n")
+	updated, cmd := model.editor.ApplySearch("GET", false)
 	model.editor = updated
 	collectMsgs(cmd)
 	if !model.editor.SearchActive() {

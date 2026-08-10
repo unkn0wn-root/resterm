@@ -1734,17 +1734,17 @@ func TestShowGlobalSummary(t *testing.T) {
 		ws: workspace{sel: testSelection("dev"), active: testEnv("dev")},
 		doc: &restfile.Document{
 			Globals: []restfile.Variable{
-				{Name: "docVar", Value: "foo"},
-				{Name: "secretDoc", Value: "bar", Secret: true},
+				{Name: "docVar", Value: "visible"},
+				{Name: "secretDoc", Value: "hidden", Secret: true},
 			},
 		},
 	}
 	model.globalsStore().Set(testEnv("dev").Scope(), "token", "secretValue", true)
-	model.globalsStore().Set(testEnv("dev").Scope(), "refresh", "xyz", false)
+	model.globalsStore().Set(testEnv("dev").Scope(), "refresh", "refresh-token", false)
 
 	model.showGlobalSummary()
 
-	expected := "Globals: refresh=xyz, token=••• | Doc: docVar=foo, secretDoc=•••"
+	expected := "Globals: refresh=refresh-token, token=••• | Doc: docVar=visible, secretDoc=•••"
 	if model.statusMessage.text != expected {
 		t.Fatalf("expected summary %q, got %q", expected, model.statusMessage.text)
 	}
@@ -1964,7 +1964,7 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 	// Prepare the cookie jar
 	u, _ := url.Parse(srv.URL)
 	model.cookieStore().Jar(testEnv("dev").Scope()).SetCookies(u, []*http.Cookie{
-		{Name: "foo", Value: "bar"},
+		{Name: "session", Value: "active"},
 	})
 
 	// First request to check the cookie is set by default
@@ -1989,8 +1989,8 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 	}
 
 	respBodyString := strings.TrimSpace(string(msg.response.Body))
-	if respBodyString != "foo=bar" {
-		t.Fatalf("expected cookie foo=bar in dev env, got %q", respBodyString)
+	if respBodyString != "session=active" {
+		t.Fatalf("expected cookie session=active in dev env, got %q", respBodyString)
 	}
 
 	// Second request with setting to skip cookies

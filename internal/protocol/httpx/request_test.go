@@ -45,7 +45,7 @@ func TestPrepareHTTPRequestAllowsHTTP2OverHTTPS(t *testing.T) {
 func TestApplyRequestSettingsIgnoresInvalidHTTPVersion(t *testing.T) {
 	opts := Options{HTTPVersion: httpver.V11}
 
-	effective := applyRequestSettings(opts, map[string]string{"http-version": "bogus"})
+	effective := applyRequestSettings(opts, map[string]string{"http-version": "unsupported"})
 
 	if effective.HTTPVersion != httpver.V11 {
 		t.Fatalf("expected HTTP version to remain unchanged, got %v", effective.HTTPVersion)
@@ -341,8 +341,8 @@ func TestApplyAuthenticationLenientAPIKeyPlacement(t *testing.T) {
 		},
 		{
 			name:      "malformed opening marker errors",
-			placement: "foo{{",
-			wantError: `invalid apikey auth placement "foo{{"`,
+			placement: "header{{",
+			wantError: `invalid apikey auth placement "header{{"`,
 		},
 		{
 			name:      "blank placeholder errors",

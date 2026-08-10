@@ -146,8 +146,8 @@ func TestOptionsGetAndFirst(t *testing.T) {
 	if got, ok := opts.First("empty", "port"); !ok || got != "22" {
 		t.Fatalf("First(empty, port) = (%q, %t), want (%q, true)", got, ok, "22")
 	}
-	if _, ok := opts.First("nope"); ok {
-		t.Fatal("First(nope) ok = true, want false")
+	if _, ok := opts.First("missing"); ok {
+		t.Fatal("First(missing) ok = true, want false")
 	}
 }
 
@@ -421,7 +421,7 @@ func TestParseNameValue(t *testing.T) {
 		{name: "colon without value", input: "token:", key: "token"},
 		{name: "dotted name", input: "a.b:c", key: "a.b", value: "c"},
 		{name: "value keeps later separators", input: "tok = = v", key: "tok", value: "= v"},
-		{name: "invalid rune in name", input: "X-Foo/Bar: v"},
+		{name: "invalid rune in name", input: "X-Invalid/Name: v"},
 		{name: "empty"},
 		{name: "blank", input: "   "},
 	}
@@ -504,7 +504,7 @@ func TestParseOptionsKeepsDecodedValues(t *testing.T) {
 
 	tests := map[string]string{
 		`fail="\"hi\""`: `"hi"`,
-		`fail="=foo"`:   "=foo",
+		`fail="=err"`:   "=err",
 		`fail="a=b"`:    "a=b",
 		"fail=\"a\tb\"": "a\tb",
 		`fail=plain`:    "plain",

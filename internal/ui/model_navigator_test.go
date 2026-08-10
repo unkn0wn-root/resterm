@@ -1031,7 +1031,7 @@ func TestNavigatorEscClearsFilters(t *testing.T) {
 	m.ensureNavigatorFilter()
 	m.navigatorFilter.SetValue("abc")
 	m.navigator.ToggleMethodFilter("GET")
-	m.navigator.ToggleTagFilter("foo")
+	m.navigator.ToggleTagFilter("smoke")
 	m.navigatorFilter.Focus()
 
 	_ = m.updateNavigator(tea.KeyMsg{Type: tea.KeyEsc})

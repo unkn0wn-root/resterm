@@ -36,7 +36,7 @@ func TestSplitCommandsSudoUser(t *testing.T) {
 }
 
 func TestSplitCommandsEnvUnset(t *testing.T) {
-	src := "env -u FOO curl https://a.test"
+	src := "env -u HTTP_PROXY curl https://a.test"
 	cmds := SplitCommands(src)
 	if len(cmds) != 1 {
 		t.Fatalf("expected 1 command, got %d", len(cmds))

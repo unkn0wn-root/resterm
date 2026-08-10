@@ -26,7 +26,7 @@ func TestWrapLineSegmentsPreservesLeadingIndent(t *testing.T) {
 }
 
 func TestWrapLineSegmentsSkipsLeadingWhitespaceOnContinuation(t *testing.T) {
-	segments := wrapLineSegments("foo bar baz", 5)
+	segments := wrapLineSegments("GET API URL", 5)
 	if len(segments) != 3 {
 		t.Fatalf("expected 3 segments, got %d", len(segments))
 	}

@@ -119,7 +119,7 @@ func TestApplyAllHTTPInvalidVersionReturnsError(t *testing.T) {
 	httpOpts := httpx.Options{}
 	applier := New(HTTPHandler(&httpOpts, nil))
 
-	_, err := applier.ApplyAll(map[string]string{"http-version": "bogus"})
+	_, err := applier.ApplyAll(map[string]string{"http-version": "unsupported"})
 	if err == nil {
 		t.Fatal("expected invalid http-version error")
 	}

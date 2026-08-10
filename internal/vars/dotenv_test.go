@@ -95,7 +95,7 @@ func TestLoadEnvironmentFileDotEnvNameFallbacks(t *testing.T) {
 	}
 
 	defaultPath := filepath.Join(dir, ".env")
-	if err := os.WriteFile(defaultPath, []byte("FOO=bar\n"), 0o644); err != nil {
+	if err := os.WriteFile(defaultPath, []byte("API_URL=https://api.example.com\n"), 0o644); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 	cat, err = LoadEnvironmentFile(defaultPath)

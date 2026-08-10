@@ -73,7 +73,7 @@ func TestRunPlanUsesBuiltFileSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if err := os.WriteFile(file, []byte("GET http://127.0.0.1:1/nope\n"), 0o644); err != nil {
+	if err := os.WriteFile(file, []byte("GET http://127.0.0.1:1/unreachable\n"), 0o644); err != nil {
 		t.Fatalf("overwrite file: %v", err)
 	}
 

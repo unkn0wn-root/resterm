@@ -168,7 +168,7 @@ func TestMatcherOpNames(t *testing.T) {
 		})
 	}
 
-	// a field rejects the operators it does not list, whatever the shared table holds
+	// a field rejects the operators it does not list, regardless of the shared table
 	if _, ok := mockHeaderOps.spec(MockOpGT); ok {
 		t.Fatal("header matchers resolved the gt operator")
 	}

@@ -93,7 +93,7 @@ func TestResolveMethodUsesFullMethodWithDescriptorSet(t *testing.T) {
 		DescriptorSet: "svc.protoset",
 		Package:       "wrong",
 		Service:       "Wrong",
-		Method:        "Nope",
+		Method:        "Missing",
 	}
 	id, err := parseFullMethod(gr.FullMethod)
 	if err != nil {

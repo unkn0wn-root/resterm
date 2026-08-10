@@ -11,9 +11,9 @@ import (
 
 const warnSource = `### one
 # @name One
-# @capture bogus token $.token
+# @capture unsupported token $.token
 # @sse max-event=5
-GET http://127.0.0.1:1/nope
+GET http://127.0.0.1:1/unreachable
 `
 
 // Warnings have to reach the public report and both of its writers. They used to
@@ -35,7 +35,7 @@ func TestRunExposesParseWarnings(t *testing.T) {
 	if len(rep.Warnings) != 2 {
 		t.Fatalf("Warnings = %v, want 2", rep.Warnings)
 	}
-	for _, want := range []string{`@capture scope "bogus"`, `unknown @sse option "max-event"`} {
+	for _, want := range []string{`@capture scope "unsupported"`, `unknown @sse option "max-event"`} {
 		if !hasWarning(rep.Warnings, want) {
 			t.Fatalf("Warnings %v do not mention %q", rep.Warnings, want)
 		}
@@ -78,7 +78,7 @@ func TestRunExposesParseWarnings(t *testing.T) {
 func TestRunLeavesWarningsEmptyForACleanFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "clean.http")
-	src := "### one\n# @name One\nGET http://127.0.0.1:1/nope\n"
+	src := "### one\n# @name One\nGET http://127.0.0.1:1/unreachable\n"
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatalf("write file: %v", err)
 	}

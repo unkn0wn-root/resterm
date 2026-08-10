@@ -71,7 +71,7 @@ func TestCommandSuggestionPopupKeepsBothColumnsReadable(t *testing.T) {
 // A subcommand that takes no arguments has no grammar to hint at, and neither
 // does a name that does not exist.
 func TestMockArgumentHintOnlyWhereArgumentsExist(t *testing.T) {
-	for _, input := range []string{"mock status ", "mock logs --all", "mock nope --all", "mock  start"} {
+	for _, input := range []string{"mock status ", "mock logs --all", "mock unsupported --all", "mock  start"} {
 		if items := exCommands.Suggestions(input); len(items) != 0 {
 			t.Fatalf("%q suggested %+v, want nothing", input, items)
 		}

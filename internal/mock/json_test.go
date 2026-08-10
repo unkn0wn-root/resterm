@@ -66,7 +66,7 @@ func TestJSONSubsetMatchesLiteralData(t *testing.T) {
 }
 
 func TestJSONSubsetRejectsMalformedPatterns(t *testing.T) {
-	for _, pattern := range []string{`{"a":`, `{"a":1}{"b":2}`, `nope`} {
+	for _, pattern := range []string{`{"a":`, `{"a":1}{"b":2}`, `not-json`} {
 		t.Run(pattern, func(t *testing.T) {
 			_, err := compileJSONBody([]byte(pattern), nil)
 			if err == nil || !strings.Contains(err.Error(), "invalid json matcher") {

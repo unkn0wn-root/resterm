@@ -21,13 +21,13 @@ func TestRetreatResponseSearchWrap(t *testing.T) {
 	pane.viewport.Width = 80
 	pane.snapshot = &responseSnapshot{
 		id:      "snap-1",
-		pretty:  withTrailingNewline("foo bar\nfoo baz\nfoo"),
-		raw:     withTrailingNewline("foo bar\nfoo baz\nfoo"),
+		pretty:  withTrailingNewline("GET api\nGET url\nGET"),
+		raw:     withTrailingNewline("GET api\nGET url\nGET"),
 		headers: withTrailingNewline("Status: 200 OK"),
 		ready:   true,
 	}
 
-	if status := statusFromCmd(t, model.applyResponseSearch("foo", false)); status == nil {
+	if status := statusFromCmd(t, model.applyResponseSearch("GET", false)); status == nil {
 		t.Fatal("expected initial response search status")
 	}
 
@@ -76,13 +76,13 @@ func TestClearResponseSearchOnEsc(t *testing.T) {
 	pane.viewport.Width = 80
 	pane.snapshot = &responseSnapshot{
 		id:      "snap-1",
-		pretty:  withTrailingNewline("foo bar\nfoo baz\nfoo"),
-		raw:     withTrailingNewline("foo bar\nfoo baz\nfoo"),
+		pretty:  withTrailingNewline("GET api\nGET url\nGET"),
+		raw:     withTrailingNewline("GET api\nGET url\nGET"),
 		headers: withTrailingNewline("Status: 200 OK"),
 		ready:   true,
 	}
 
-	if status := statusFromCmd(t, model.applyResponseSearch("foo", false)); status == nil {
+	if status := statusFromCmd(t, model.applyResponseSearch("GET", false)); status == nil {
 		t.Fatal("expected initial response search status")
 	}
 	if !pane.search.active || len(pane.search.matches) == 0 {
@@ -314,15 +314,15 @@ func TestResponseSearchAppliesWhileTyping(t *testing.T) {
 	pane.viewport.Width = 80
 	pane.snapshot = &responseSnapshot{
 		id:      "snap-1",
-		pretty:  withTrailingNewline("foo bar\nfoo baz\nfoo"),
-		raw:     withTrailingNewline("foo bar\nfoo baz\nfoo"),
+		pretty:  withTrailingNewline("GET api\nGET url\nGET"),
+		raw:     withTrailingNewline("GET api\nGET url\nGET"),
 		headers: withTrailingNewline("Status: 200 OK"),
 		ready:   true,
 	}
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	model = updated.(Model)
-	for _, r := range "foo" {
+	for _, r := range "GET" {
 		updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		model = updated.(Model)
 	}
@@ -337,7 +337,7 @@ func TestResponseSearchAppliesWhileTyping(t *testing.T) {
 	if !pane.search.active {
 		t.Fatal("expected response search to apply before enter")
 	}
-	if pane.search.query != "foo" {
+	if pane.search.query != "GET" {
 		t.Fatalf("expected response search query to be stored, got %q", pane.search.query)
 	}
 	if len(pane.search.matches) != 3 {
@@ -353,7 +353,7 @@ func TestResponseSearchAppliesWhileTyping(t *testing.T) {
 	if model.showSearchPrompt {
 		t.Fatal("expected esc to close prompt")
 	}
-	if pane == nil || !pane.search.active || pane.search.query != "foo" {
+	if pane == nil || !pane.search.active || pane.search.query != "GET" {
 		t.Fatalf("expected esc to keep live response search active, got %+v", pane)
 	}
 }
@@ -544,12 +544,12 @@ func TestLiveSearchEmptyQueryClearsCurrentTarget(t *testing.T) {
 	pane.viewport.Width = 80
 	pane.snapshot = &responseSnapshot{
 		id:      "snap-1",
-		pretty:  withTrailingNewline("foo bar\nfoo baz\nfoo"),
-		raw:     withTrailingNewline("foo bar\nfoo baz\nfoo"),
+		pretty:  withTrailingNewline("GET api\nGET url\nGET"),
+		raw:     withTrailingNewline("GET api\nGET url\nGET"),
 		headers: withTrailingNewline("Status: 200 OK"),
 		ready:   true,
 	}
-	if status := statusFromCmd(t, model.applyResponseSearch("foo", false)); status == nil {
+	if status := statusFromCmd(t, model.applyResponseSearch("GET", false)); status == nil {
 		t.Fatal("expected initial response search status")
 	}
 
@@ -579,18 +579,18 @@ func TestLiveSearchRegexToggleReappliesCurrentInput(t *testing.T) {
 	model.ready = true
 	model.focus = focusEditor
 	model.editorInsertMode = false
-	model.editor.SetValue("foo\nfao\nbar")
+	model.editor.SetValue("GET\nSET\nPUT")
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, 0)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	model = updated.(Model)
-	for _, r := range "f.o" {
+	for _, r := range ".ET" {
 		updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		model = updated.(Model)
 	}
 	if model.editor.SearchActive() {
-		t.Fatal("did not expect literal f.o to match before regex toggle")
+		t.Fatal("did not expect literal .ET to match before regex toggle")
 	}
 
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
@@ -604,7 +604,7 @@ func TestLiveSearchRegexToggleReappliesCurrentInput(t *testing.T) {
 	if len(model.editor.search.matches) != 2 {
 		t.Fatalf("expected 2 regex matches, got %d", len(model.editor.search.matches))
 	}
-	if model.editor.search.query != "f.o" {
-		t.Fatalf("expected search query to stay f.o, got %q", model.editor.search.query)
+	if model.editor.search.query != ".ET" {
+		t.Fatalf("expected search query to stay .ET, got %q", model.editor.search.query)
 	}
 }

@@ -368,8 +368,8 @@ func TestCompileRejectsInvalidResponseTemplates(t *testing.T) {
 		{name: "JSON dynamic helper", body: "{{json.$uuid}}", want: "unsupported"},
 		{name: "unknown encoded path parameter", body: "{{json.path.other}}", want: "no parameter"},
 		{name: "expression", body: "{{= 1 + 1}}", want: "do not support expressions"},
-		{name: "invalid body path", body: "{{body.items[nope]}}", want: "invalid JSON body"},
-		{name: "invalid encoded body path", body: "{{json.body.items[nope]}}", want: "invalid JSON body"},
+		{name: "invalid body path", body: "{{body.items[invalid-index]}}", want: "invalid JSON body"},
+		{name: "invalid encoded body path", body: "{{json.body.items[invalid-index]}}", want: "invalid JSON body"},
 		{name: "unsupported dynamic", body: "{{$uuid + 1s}}", want: "unsupported dynamic"},
 	}
 	for _, test := range tests {

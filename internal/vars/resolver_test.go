@@ -192,7 +192,7 @@ func TestIsDynamic(t *testing.T) {
 		{name: "$guid + 0s", want: true},
 		{name: "$uuid + 1s", want: false},
 		{name: "$unknown", want: false},
-		{name: "$timestamp + nope", want: false},
+		{name: "$timestamp + missing", want: false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -465,8 +465,8 @@ func TestExpandTemplatesResultReportsUndefinedVariables(t *testing.T) {
 		{
 			name:     "malformed opening marker",
 			resolver: NewResolver().Lenient(),
-			input:    "foo{{",
-			want:     "foo{{",
+			input:    "prefix{{",
+			want:     "prefix{{",
 		},
 		{
 			name:     "blank placeholder",

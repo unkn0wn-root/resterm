@@ -37,7 +37,7 @@ func TestParseCommandWithHeadersAndBody(t *testing.T) {
 }
 
 func TestParseCommandImplicitPost(t *testing.T) {
-	req, err := ParseCommand("curl https://example.com --data foo=bar")
+	req, err := ParseCommand("curl https://example.com --data name=resterm")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestParseCommandSudoHead(t *testing.T) {
 }
 
 func TestParseCommandFormEncoded(t *testing.T) {
-	req, err := ParseCommand("curl https://example.com --data foo=bar --data baz=qux")
+	req, err := ParseCommand("curl https://example.com --data name=resterm --data mode=test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestParseCommandFormEncoded(t *testing.T) {
 	if req.Headers.Get("Content-Type") != "application/x-www-form-urlencoded" {
 		t.Fatalf("expected form urlencoded header, got %q", req.Headers.Get("Content-Type"))
 	}
-	if req.Body.Text != "foo=bar&baz=qux" {
+	if req.Body.Text != "name=resterm&mode=test" {
 		t.Fatalf("unexpected form body %q", req.Body.Text)
 	}
 }
@@ -191,7 +191,7 @@ func TestParseCommandMultipartStableBoundary(t *testing.T) {
 }
 
 func TestParseCommandMultilineJSON(t *testing.T) {
-	cmd := "curl https://example.com -d '{\n  \"foo\": \"bar\"\n}'"
+	cmd := "curl https://example.com -d '{\n  \"name\": \"resterm\"\n}'"
 	req, err := ParseCommand(cmd)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -199,7 +199,7 @@ func TestParseCommandMultilineJSON(t *testing.T) {
 	if req.Method != "POST" {
 		t.Fatalf("expected POST, got %s", req.Method)
 	}
-	if !strings.Contains(req.Body.Text, "\n  \"foo\": \"bar\"\n") {
+	if !strings.Contains(req.Body.Text, "\n  \"name\": \"resterm\"\n") {
 		t.Fatalf("expected multiline body, got %q", req.Body.Text)
 	}
 }
@@ -290,27 +290,27 @@ func TestParseCommandSettings(t *testing.T) {
 }
 
 func TestSplitTokensAnsiQuote(t *testing.T) {
-	tok, err := splitTokens("curl $'foo\\nbar'")
+	tok, err := splitTokens("curl $'first\\nsecond'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(tok) != 2 {
 		t.Fatalf("unexpected token count: %d", len(tok))
 	}
-	if tok[1] != "foo\nbar" {
+	if tok[1] != "first\nsecond" {
 		t.Fatalf("unexpected ansi token: %q", tok[1])
 	}
 }
 
 func TestSplitTokensAnsiHex(t *testing.T) {
-	tok, err := splitTokens("curl $'foo\\x41bar'")
+	tok, err := splitTokens("curl $'pre\\x41post'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(tok) != 2 {
 		t.Fatalf("unexpected token count: %d", len(tok))
 	}
-	if tok[1] != "fooAbar" {
+	if tok[1] != "preApost" {
 		t.Fatalf("unexpected ansi hex token: %q", tok[1])
 	}
 }
@@ -327,14 +327,14 @@ func TestParseCommandLineContinuation(t *testing.T) {
 }
 
 func TestParseCommandGetQuery(t *testing.T) {
-	req, err := ParseCommand("curl -G https://example.com -d foo=bar")
+	req, err := ParseCommand("curl -G https://example.com -d filter=active")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if req.Method != "GET" {
 		t.Fatalf("expected GET, got %s", req.Method)
 	}
-	if req.URL != "https://example.com?foo=bar" {
+	if req.URL != "https://example.com?filter=active" {
 		t.Fatalf("unexpected url %q", req.URL)
 	}
 	if req.Body.Text != "" {

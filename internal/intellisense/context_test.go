@@ -117,7 +117,7 @@ func TestAnalyzeClassifiesContexts(t *testing.T) {
 		},
 		{
 			name:     "no completion in body",
-			lines:    []string{"GET https://x", "Accept: foo", "", "bodyline"},
+			lines:    []string{"GET https://x", "Accept: application/json", "", "bodyline"},
 			line:     3,
 			col:      8,
 			wantKind: KindNone,

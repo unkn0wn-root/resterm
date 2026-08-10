@@ -196,7 +196,7 @@ func TestParseWorkflowFailureAliasNeverLeaksIntoOptions(t *testing.T) {
 // option after decoding got all of these wrong.
 func TestParseWorkflowBranchClassifiesOptionsFromSource(t *testing.T) {
 	src := `# @workflow demo
-# @if true fail="=foo"
+# @if true fail="=err"
 # @elif response.text() == "a=b" run=First
 # @else fail=none
 # @switch role
@@ -218,8 +218,8 @@ GET https://example.com/first
 	}
 
 	branch := steps[0].If
-	if branch.Then.Fail != "=foo" {
-		t.Fatalf("@if fail = %q, want %q", branch.Then.Fail, "=foo")
+	if branch.Then.Fail != "=err" {
+		t.Fatalf("@if fail = %q, want %q", branch.Then.Fail, "=err")
 	}
 	if want := `response.text() == "a=b"`; branch.Elifs[0].Cond != want {
 		t.Fatalf("@elif condition = %q, want %q", branch.Elifs[0].Cond, want)
@@ -269,7 +269,7 @@ func TestCutBranch(t *testing.T) {
 	}{
 		{name: "empty"},
 		{name: "head only", rest: "  last.statusCode == 200  ", expr: "last.statusCode == 200"},
-		{name: "options only", rest: "run=StepOK fail=nope", opts: "run=StepOK fail=nope"},
+		{name: "options only", rest: "run=StepOK fail=stop", opts: "run=StepOK fail=stop"},
 		{name: "head and option", rest: "true run=StepOK", expr: "true", opts: "run=StepOK"},
 		{
 			name: "the head is not an option",
