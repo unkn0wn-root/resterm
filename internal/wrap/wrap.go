@@ -85,8 +85,8 @@ func Wrap(ctx context.Context, s string, w int, m Mode, mp bool) (Res, bool) {
 	for {
 		line := rest
 		last := true
-		if i := bytes.IndexByte(rest, '\n'); i >= 0 {
-			line, rest, last = rest[:i], rest[i+1:], false
+		if before, after, ok := bytes.Cut(rest, []byte{'\n'}); ok {
+			line, rest, last = before, after, false
 		}
 
 		start := rows
