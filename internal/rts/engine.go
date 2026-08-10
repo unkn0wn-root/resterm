@@ -223,13 +223,12 @@ func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos, kind evalKind) (map[string]Value
 
 func (e *Eng) basePre(rt RT) pre {
 	p := pre{values: e.modulePre()}
-	p.values["env"] = Obj(newEnvObj(rt.Env, rt.EnvGroups))
-	p.values["vars"] = Obj(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
-	p.values["last"] = Obj(newRespObj("last", rt.Resp))
-
-	p.values["response"] = Obj(responseObj(rt.Res))
-	p.values["trace"] = Obj(newTraceObj(rt.Trace))
-	p.values["stream"] = Obj(newStreamObj(rt.Stream))
+	p.bind(newEnvObj(rt.Env, rt.EnvGroups))
+	p.bind(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
+	p.bind(newRespObj("last", rt.Resp))
+	p.bind(responseObj(rt.Res))
+	p.bind(newTraceObj(rt.Trace))
+	p.bind(newStreamObj(rt.Stream))
 	return p
 }
 
@@ -243,17 +242,19 @@ func (e *Eng) addUses(cx *Ctx, rt RT, p pre, pos Pos) error {
 		if err != nil {
 			return err
 		}
+		// Not p.bind: a module reports itself as module:<name>, while the alias
+		// is the name the file wrote.
 		p.values[u.Alias] = Obj(NewModObj(u.Alias, cp.Exp))
 	}
 	return nil
 }
 
 func (e *Eng) modulePre() map[string]Value {
-	pre := cloneVals(e.Stdlib())
+	p := pre{values: cloneVals(e.Stdlib())}
 	if e.reqObj != nil {
-		pre["request"] = Obj(e.reqObj)
+		p.bind(e.reqObj)
 	}
-	return pre
+	return p.values
 }
 
 func cloneVals(src map[string]Value) map[string]Value {
