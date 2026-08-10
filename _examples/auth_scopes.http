@@ -2,6 +2,7 @@
 # @global auth.fileToken demo-file-token
 
 # @auth global bearer {{auth.globalToken}}
+# @auth file bearer {{auth.fileToken}}
 
 ### Global Default Auth
 # @name AuthGlobalDefault
@@ -9,8 +10,6 @@
 # @description Inherits the global default because no file-scoped auth has been defined yet.
 GET https://httpbin.org/anything/auth/global-default
 Accept: application/json
-
-# @auth file bearer {{auth.fileToken}}
 
 ### File Default Auth
 # @name AuthFileDefault
