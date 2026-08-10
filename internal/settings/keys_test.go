@@ -19,7 +19,7 @@ func TestIsHTTPKey(t *testing.T) {
 		}
 	}
 
-	bad := []string{"grpc-timeout", "", "foo", "httpx-root"}
+	bad := []string{"grpc-timeout", "", "unsupported-setting", "httpx-root"}
 	for _, k := range bad {
 		if IsHTTPKey(k) {
 			t.Fatalf("expected http key %q to be unsupported", k)

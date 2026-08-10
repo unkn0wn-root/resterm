@@ -1,26 +1,14 @@
 package parser
 
-import (
-	"strings"
-
-	"github.com/unkn0wn-root/resterm/internal/directive"
-)
-
 func (b *documentBuilder) handleComment(no, baseCol int, text string) {
-	call, ok := directive.Parse(text)
+	d, ok := b.readDirective(no, baseCol, text)
 	if !ok {
 		return
 	}
-	d := directiveLine{Call: call, no: no}
-	if baseCol > 0 {
-		d.argCol = baseCol + call.ArgOffset
-	}
-	if b.redeclared(d) {
-		return
-	}
-	if b.routeDirective(d) == directiveApplied {
+	if !b.redeclared(d) && b.routeDirective(d) == directiveApplied {
 		b.markDeclared(d)
 	}
+	b.flushOpenLines()
 }
 
 func (b *documentBuilder) handleBlockComment(ln line) bool {
@@ -51,13 +39,11 @@ func (b *documentBuilder) handleBlockComment(ln line) bool {
 }
 
 func (b *documentBuilder) handleCommentLine(ln line) bool {
-	if commentText, col, ok := stripComment(ln.text); ok {
-		// col counts from the start of the trimmed text. Adding the offset of
-		// the trimmed text inside the raw line turns it into a source column.
-		base := strings.Index(ln.raw, ln.text) + col
-		b.handleComment(ln.no, base, commentText)
-		b.appendLine(ln.raw)
-		return true
+	text, col, ok := ln.comment()
+	if !ok {
+		return false
 	}
-	return false
+	b.handleComment(ln.no, col, text)
+	b.appendLine(ln.raw)
+	return true
 }

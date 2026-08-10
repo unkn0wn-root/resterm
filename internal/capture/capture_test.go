@@ -53,11 +53,55 @@ func TestHasJSONPathDoubleDotIgnoresQuoted(t *testing.T) {
 }
 
 func TestHasUnquotedTemplateMarker(t *testing.T) {
-	if !HasUnquotedTemplateMarker(`Bearer {{response.json.token}}`) {
-		t.Fatalf("expected unquoted marker to be detected")
+	tests := []struct {
+		name string
+		ex   string
+		want bool
+	}{
+		{name: "plain text", ex: `Bearer {{response.json.token}}`, want: true},
+		{name: "quoted marker", ex: `contains(response.text(), "{{token}}")`},
+		{name: "no marker", ex: `response.json.token`},
+		{name: "unmatched bracket", ex: `prefix[{{response.status}}`, want: true},
+		{name: "unmatched paren", ex: `prefix({{response.status}}`, want: true},
+		{name: "hash before the marker", ex: `anchor#{{response.status}}`, want: true},
+		{name: "hash after the marker", ex: `{{response.status}}#anchor`, want: true},
+		{name: "open marker", ex: `prefix {{response.status`},
+		{name: "closed then open", ex: `{{a}} and {{b`, want: true},
 	}
-	if HasUnquotedTemplateMarker(`contains(response.text(), "{{token}}")`) {
-		t.Fatalf("expected quoted marker not to be detected")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := HasUnquotedTemplateMarker(tt.ex); got != tt.want {
+				t.Fatalf("HasUnquotedTemplateMarker(%q) = %v, want %v", tt.ex, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOpenMarker(t *testing.T) {
+	tests := []struct {
+		name string
+		ex   string
+		want string
+	}{
+		{name: "empty"},
+		{name: "no marker", ex: `response.json.token`},
+		{name: "closed marker", ex: `Bearer {{token}}`},
+		{name: "open marker", ex: `Bearer {{token`, want: "}}"},
+		{name: "open expression marker", ex: `{{=`, want: "}}"},
+		{name: "open after a closed one", ex: `{{a}} and {{b`, want: "}}"},
+		{name: "open across lines", ex: "{{\n  response.status", want: "}}"},
+		{name: "closed across lines", ex: "{{\n  response.status\n}}"},
+		{name: "marker in a string", ex: `contains(response.text(), "{{token")`},
+		{name: "unmatched bracket", ex: `prefix[{{token}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := OpenMarker(tt.ex); got != tt.want {
+				t.Fatalf("OpenMarker(%q) = %q, want %q", tt.ex, got, tt.want)
+			}
+		})
 	}
 }
 

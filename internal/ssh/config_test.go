@@ -135,7 +135,7 @@ func TestNormalizeProfileRejectsInvalidNumbers(t *testing.T) {
 	})
 	t.Run("timeout", func(t *testing.T) {
 		if _, err := NormalizeProfile(
-			restfile.SSHProfile{Host: "h", TimeoutStr: "nope"},
+			restfile.SSHProfile{Host: "h", TimeoutStr: "not-a-duration"},
 		); err == nil {
 			t.Fatalf("expected timeout error")
 		}

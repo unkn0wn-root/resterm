@@ -10,9 +10,9 @@ import (
 
 const warnSource = `### one
 # @name One
-# @capture bogus token $.token
+# @capture unsupported token $.token
 # @sse max-event=5
-GET http://127.0.0.1:1/nope
+GET http://127.0.0.1:1/unreachable
 `
 
 // Unknown options and other recoverable directive problems are warnings, so the
@@ -36,7 +36,7 @@ func TestRunPlanReportsParseWarnings(t *testing.T) {
 	if len(rep.Warnings) != 2 {
 		t.Fatalf("warnings = %v, want 2", rep.Warnings)
 	}
-	for _, want := range []string{`@capture scope "bogus"`, `unknown @sse option "max-event"`} {
+	for _, want := range []string{`@capture scope "unsupported"`, `unknown @sse option "max-event"`} {
 		if !containsAny(rep.Warnings, want) {
 			t.Fatalf("warnings %v do not mention %q", rep.Warnings, want)
 		}
@@ -75,7 +75,7 @@ func TestRunPlanReportsParseWarnings(t *testing.T) {
 func TestRunPlanLeavesWarningsEmptyForACleanFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "clean.http")
-	src := "### one\n# @name One\nGET http://127.0.0.1:1/nope\n"
+	src := "### one\n# @name One\nGET http://127.0.0.1:1/unreachable\n"
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatalf("write file: %v", err)
 	}

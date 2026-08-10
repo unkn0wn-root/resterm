@@ -21,8 +21,8 @@ func TestRenderPlain(t *testing.T) {
 		},
 		{
 			name: "no space no heading",
-			in:   "#nope",
-			want: "#nope",
+			in:   "#tag",
+			want: "#tag",
 		},
 		{
 			name: "nested list",

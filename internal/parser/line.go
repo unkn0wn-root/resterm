@@ -30,6 +30,19 @@ func (ln line) isBlockCommentStart() bool {
 	return strings.HasPrefix(ln.text, "/*")
 }
 
+func (ln line) isComment() bool {
+	_, _, ok := stripComment(ln.text)
+	return ok
+}
+
+func (ln line) comment() (string, int, bool) {
+	text, col, ok := stripComment(ln.text)
+	if !ok {
+		return "", 0, false
+	}
+	return text, strings.Index(ln.raw, ln.text) + col, true
+}
+
 // stripComment strips a leading //, # or -- marker. It returns the comment
 // text, the 1-based column of that text inside the input and whether the
 // input was a comment at all.

@@ -20,12 +20,12 @@ func RenderWorkflow(wf restfile.Workflow, fallback string) string {
 	}
 
 	var b strings.Builder
-	w := workflowWriter{b: &b, fail: wf.DefaultOnFailure}
-	w.writeHead(directive.Workflow, name)
+	w := workflowWriter{directiveWriter: directiveWriter{b: &b}, fail: wf.DefaultOnFailure}
+	w.head(directive.Workflow, name)
 	w.writeWorkflowOptions(wf)
 	b.WriteString("\n")
-	renderDescription(&b, wf.Description)
-	renderTags(&b, wf.Tags)
+	renderDescription(w.directiveWriter, wf.Description)
+	renderTags(w.directiveWriter, wf.Tags)
 
 	for _, step := range wf.Steps {
 		w.writeStep(step)
@@ -34,7 +34,7 @@ func RenderWorkflow(wf restfile.Workflow, fallback string) string {
 }
 
 type workflowWriter struct {
-	b    *strings.Builder
+	directiveWriter
 	fail restfile.WorkflowFailureMode
 }
 
@@ -50,32 +50,24 @@ func (w workflowWriter) writeStep(step restfile.WorkflowStep) {
 }
 
 func (w workflowWriter) writeRequest(step restfile.WorkflowStep) {
-	if step.When != nil {
-		name := directive.When
-		if step.When.Negate {
-			name = directive.SkipIf
-		}
-		w.writeLine(name, step.When.Expression)
-	}
-	if step.ForEach != nil {
-		w.writeLine(directive.ForEach, step.ForEach.Expr+" as "+step.ForEach.Var)
-	}
+	writeOne(w.directiveWriter, step.When, conditionArg)
+	writeOne(w.directiveWriter, step.ForEach, stepForEachArg)
 
-	w.writeHead(directive.Step, directive.Quote(strings.TrimSpace(step.Name)))
-	w.writeOption("using", step.Using)
+	w.head(directive.Step, directive.Quote(strings.TrimSpace(step.Name)))
+	w.option("using", step.Using)
 	if step.OnFailure != w.fail {
-		w.writeOption("on-failure", string(step.OnFailure))
+		w.option("on-failure", string(step.OnFailure))
 	}
 	if step.Expect.Status != "" {
-		w.writeOption("expect.status", step.Expect.Status)
+		w.option("expect.status", step.Expect.Status)
 	}
 	if step.Expect.StatusCode != nil {
-		w.writeOption("expect.statuscode", strconv.Itoa(*step.Expect.StatusCode))
+		w.option("expect.statuscode", strconv.Itoa(*step.Expect.StatusCode))
 	}
 	w.writeOptions("expect.", step.Expect.Extra)
 	w.writeOptions("", step.Vars)
 	w.writeOptions("", step.Options)
-	w.b.WriteString("\n")
+	w.end()
 }
 
 func (w workflowWriter) writeIf(flow *restfile.WorkflowIf) {
@@ -95,7 +87,7 @@ func (w workflowWriter) writeSwitch(flow *restfile.WorkflowSwitch) {
 	if flow == nil {
 		return
 	}
-	w.writeLine(directive.Switch, flow.Expr)
+	w.line(directive.Switch, flow.Expr)
 	for _, br := range flow.Cases {
 		w.writeBranch(directive.Case, br.Expr, br.Run, br.Fail)
 	}
@@ -105,49 +97,29 @@ func (w workflowWriter) writeSwitch(flow *restfile.WorkflowSwitch) {
 }
 
 func (w workflowWriter) writeBranch(name directive.Name, arg, run, fail string) {
-	w.writeHead(name, arg)
+	w.head(name, arg)
 	switch {
 	case run != "":
-		w.writeOption("run", run)
+		w.option("run", run)
 	case fail != "":
-		w.writeOption("fail", fail)
+		w.option("fail", fail)
 	}
-	w.b.WriteString("\n")
-}
-
-func (w workflowWriter) writeLine(name directive.Name, arg string) {
-	w.writeHead(name, arg)
-	w.b.WriteString("\n")
-}
-
-func (w workflowWriter) writeHead(name directive.Name, arg string) {
-	w.b.WriteString(name.Comment())
-	if arg != "" {
-		w.b.WriteString(" ")
-		w.b.WriteString(arg)
-	}
+	w.end()
 }
 
 func (w workflowWriter) writeWorkflowOptions(wf restfile.Workflow) {
 	if wf.DefaultOnFailure == restfile.WorkflowOnFailureContinue {
-		w.writeOption("on-failure", string(restfile.WorkflowOnFailureContinue))
+		w.option("on-failure", string(restfile.WorkflowOnFailureContinue))
 	}
 	for _, key := range sortedKeys(wf.Options) {
 		if strings.HasPrefix(key, "vars.") {
-			w.writeOption(key, wf.Options[key])
+			w.option(key, wf.Options[key])
 		}
 	}
 }
 
 func (w workflowWriter) writeOptions(prefix string, opts map[string]string) {
 	for _, key := range sortedKeys(opts) {
-		w.writeOption(prefix+key, opts[key])
+		w.option(prefix+key, opts[key])
 	}
-}
-
-func (w workflowWriter) writeOption(key, value string) {
-	w.b.WriteString(" ")
-	w.b.WriteString(key)
-	w.b.WriteString("=")
-	w.b.WriteString(directive.Quote(value))
 }

@@ -167,7 +167,7 @@ func TestRunUsageError(t *testing.T) {
 func TestRunUsesContext(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "ctx.http")
-	src := "GET http://127.0.0.1:1/nope\n"
+	src := "GET http://127.0.0.1:1/unreachable\n"
 	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestRunPlanUsesBuiltFileSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if err := os.WriteFile(file, []byte("GET http://127.0.0.1:1/nope\n"), 0o644); err != nil {
+	if err := os.WriteFile(file, []byte("GET http://127.0.0.1:1/unreachable\n"), 0o644); err != nil {
 		t.Fatalf("overwrite file: %v", err)
 	}
 

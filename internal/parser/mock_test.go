@@ -158,17 +158,27 @@ func TestParseMockJSONMatchOptions(t *testing.T) {
 		{
 			name:  "an unterminated bracket is reported",
 			match: "json-rules={\"a\":{\"gt\":1}",
-			want:  "@match option is missing a closing bracket",
+			want:  `@match is missing a closing "}"`,
 		},
 		{
 			name:  "an unterminated headers bracket is reported",
 			match: `headers={"X-Env":"prod"`,
-			want:  "@match option is missing a closing bracket",
+			want:  `@match is missing a closing "}"`,
 		},
 		{
 			name:  "an unterminated query bracket is reported",
 			match: `query={"page":{"gte":2}`,
-			want:  "@match option is missing a closing bracket",
+			want:  `@match is missing a closing "}"`,
+		},
+		{
+			name:  "an unterminated single quote is reported",
+			match: `regex='unfinished`,
+			want:  `@match is missing a closing "'"`,
+		},
+		{
+			name:  "an unterminated double quote is reported",
+			match: `regex="unfinished`,
+			want:  `@match is missing a closing "\""`,
 		},
 		{
 			name:  "headers repeated across lines are folded onto one name",
@@ -186,8 +196,8 @@ func TestParseMockJSONMatchOptions(t *testing.T) {
 		},
 		{
 			name:  "an unknown option trailing a continued matcher",
-			match: "headers={\n#   \"X-Env\": \"prod\"\n# } bogus=1",
-			want:  `unknown @match option "bogus"`,
+			match: "headers={\n#   \"X-Env\": \"prod\"\n# } unsupported=1",
+			want:  `unknown @match option "unsupported"`,
 		},
 	}
 	for _, test := range tests {
@@ -386,7 +396,7 @@ HTTP/1.1 200 OK
 
 ok`
 	doc := Parse("mocks.http", []byte(src))
-	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, "missing a closing bracket") {
+	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, `missing a closing "}"`) {
 		t.Fatalf("errors = %+v", doc.Errors)
 	}
 	if doc.Errors[0].Line != 2 {
@@ -705,12 +715,12 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 		},
 		{
 			name:   "unknown key source",
-			source: "# @mock method=GET path=/x sequence=poll sequence-key=body.id\nHTTP/1.1 503 Nope\n---\nHTTP/1.1 200 OK",
+			source: "# @mock method=GET path=/x sequence=poll sequence-key=body.id\nHTTP/1.1 503 Retry\n---\nHTTP/1.1 200 OK",
 			want:   "source \"body\" is not supported",
 		},
 		{
 			name:   "unknown path key",
-			source: "# @mock method=GET path=/x/{id} sequence=poll sequence-key=path.job\nHTTP/1.1 503 Nope\n---\nHTTP/1.1 200 OK",
+			source: "# @mock method=GET path=/x/{id} sequence=poll sequence-key=path.job\nHTTP/1.1 503 Retry\n---\nHTTP/1.1 200 OK",
 			want:   "path wildcard \"job\" is not declared",
 		},
 		{
@@ -812,10 +822,37 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 func TestParseMockDiagnostics(t *testing.T) {
 	src := `# @mock method=POST path=/payments status=202 default=maybe
 # @match query={"mode":1} json={bad}
-	HTTP/2 199 Nope
+	HTTP/2 199 Informational
 `
 	doc := Parse("bad.http", []byte(src))
 	if len(doc.Errors) == 0 || len(doc.Requests) != 0 || len(doc.Mocks) != 1 {
 		t.Fatalf("errors=%+v requests=%d mocks=%d", doc.Errors, len(doc.Requests), len(doc.Mocks))
+	}
+}
+
+func TestParseMockMatchStopsAtTheNextDirective(t *testing.T) {
+	doc := Parse("mocks.http", []byte(`# @mock method=GET path=/x
+# @match headers={
+# @expect calls=1
+HTTP/1.1 200 OK
+`))
+	if len(doc.Errors) != 1 {
+		t.Fatalf("errors = %+v, want 1", doc.Errors)
+	}
+	if doc.Errors[0].Line != 2 || !doc.Errors[0].Mock {
+		t.Fatalf("error = %+v, want a mock error on line 2", doc.Errors[0])
+	}
+	if !strings.Contains(doc.Errors[0].Message, `@match is missing a closing "}"`) {
+		t.Fatalf("message = %q", doc.Errors[0].Message)
+	}
+	if len(doc.Mocks) != 1 {
+		t.Fatalf("mocks = %d, want 1", len(doc.Mocks))
+	}
+	m := doc.Mocks[0]
+	if len(m.Match.Headers) != 0 {
+		t.Fatalf("headers = %+v, want none", m.Match.Headers)
+	}
+	if m.Expectation == nil || m.Expectation.Calls != 1 {
+		t.Fatalf("expectation = %+v, want the @expect below it", m.Expectation)
 	}
 }

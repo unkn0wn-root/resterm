@@ -11,15 +11,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-type authType string
-
-const (
-	authTypeBasic  authType = "basic"
-	authTypeBearer authType = "bearer"
-	authTypeAPIKey authType = "apikey"
-	authTypeHeader authType = "header"
-)
-
 const (
 	authParamUsername  = "username"
 	authParamPassword  = "password"
@@ -29,13 +20,12 @@ const (
 	authParamValue     = "value"
 	authParamHeader    = "header"
 
-	authPlacementQuery   = "query"
-	authPlacementHeader  = "header"
-	authorizationHeader  = "Authorization"
-	defaultAPIKeyHeader  = "X-API-Key"
-	bearerTokenPrefix    = "Bearer "
-	basicPrefix          = "Basic "
-	legacyAPIKeyAuthType = "api-key"
+	authPlacementQuery  = "query"
+	authPlacementHeader = "header"
+	authorizationHeader = "Authorization"
+	defaultAPIKeyHeader = "X-API-Key"
+	bearerTokenPrefix   = "Bearer "
+	basicPrefix         = "Basic "
 )
 
 func (c *Client) prepareHTTPRequest(

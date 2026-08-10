@@ -46,7 +46,7 @@ func newExprScanner(s string) *exprScanner {
 }
 
 func (sc *exprScanner) done() bool {
-	return sc == nil || sc.i >= len(sc.s)
+	return sc.i >= len(sc.s)
 }
 
 func (sc *exprScanner) ch() byte {
@@ -58,7 +58,7 @@ func (sc *exprScanner) advance(n int) {
 }
 
 func (sc *exprScanner) inQuoted(ch byte) bool {
-	if sc == nil || sc.q == 0 {
+	if sc.q == 0 {
 		return false
 	}
 	if sc.esc {
@@ -76,64 +76,70 @@ func (sc *exprScanner) inQuoted(ch byte) bool {
 }
 
 func (sc *exprScanner) openQuote(ch byte) bool {
-	if sc == nil || !isQuote(ch) {
+	if !isQuote(ch) {
 		return false
 	}
 	sc.q = ch
 	return true
 }
 
-func (sc *exprScanner) templateEnd() (int, bool) {
-	if sc == nil || !hasTemplateOpenAt(sc.s, sc.i) {
-		return 0, false
-	}
-	return nextTemplateEnd(sc.s, sc.i)
-}
-
 func HasUnquotedTemplateMarker(ex string) bool {
-	_, has := stripUnquotedTemplateSegments(ex)
-	return has
+	return scanTemplates(ex).has
 }
 
+// OpenMarker returns "}}" when ex contains an unclosed template marker.
+func OpenMarker(ex string) string {
+	if !scanTemplates(ex).open {
+		return ""
+	}
+	return templateClose
+}
+
+// MixedTemplateRTSCall reports template markers mixed with RTS call syntax.
+// It only checks call syntax to avoid flagging ordinary template prefixes.
 func MixedTemplateRTSCall(ex string) bool {
-	rem, has := stripUnquotedTemplateSegments(ex)
-	if !has {
+	scan := scanTemplates(ex)
+	if !scan.has {
 		return false
 	}
-	return mixedTemplateCallPattern.MatchString(strings.TrimSpace(rem))
+	return mixedTemplateCallPattern.MatchString(strings.TrimSpace(scan.rem))
 }
 
-func stripUnquotedTemplateSegments(ex string) (string, bool) {
+type templateScan struct {
+	rem  string // the text left once the closed markers are cut out
+	has  bool   // a marker closed
+	open bool   // the last marker never closed
+}
+
+// scanTemplates ignores markers inside quoted RTS strings.
+func scanTemplates(ex string) templateScan {
 	s := strings.TrimSpace(ex)
 	if s == "" {
-		return "", false
+		return templateScan{}
 	}
 	sc := newExprScanner(s)
+	var scan templateScan
 	var b strings.Builder
 	b.Grow(len(s))
-	has := false
 
 	for !sc.done() {
 		ch := sc.ch()
-		if sc.inQuoted(ch) {
+		if sc.inQuoted(ch) || sc.openQuote(ch) || !strings.HasPrefix(s[sc.i:], templateOpen) {
 			b.WriteByte(ch)
 			sc.advance(1)
 			continue
 		}
-		if sc.openQuote(ch) {
-			b.WriteByte(ch)
-			sc.advance(1)
-			continue
+		body := sc.i + templateOpenLen
+		end := strings.Index(s[body:], templateClose)
+		if end < 0 {
+			scan.rem, scan.open = b.String(), true
+			return scan
 		}
-		if end, ok := sc.templateEnd(); ok {
-			has = true
-			sc.i = end
-			continue
-		}
-		b.WriteByte(ch)
-		sc.advance(1)
+		scan.has = true
+		sc.i = body + end + templateCloseLen
 	}
-	return b.String(), has
+	scan.rem = b.String()
+	return scan
 }
 
 func StrictEnabled(ss ...map[string]string) bool {
@@ -278,20 +284,4 @@ func ident(b byte) bool {
 
 func isQuote(ch byte) bool {
 	return ch == '"' || ch == '\''
-}
-
-func hasTemplateOpenAt(s string, i int) bool {
-	return i+templateOpenLen <= len(s) && s[i:i+templateOpenLen] == templateOpen
-}
-
-func nextTemplateEnd(s string, start int) (int, bool) {
-	if !hasTemplateOpenAt(s, start) {
-		return 0, false
-	}
-	bodyStart := start + templateOpenLen
-	closeRel := strings.Index(s[bodyStart:], templateClose)
-	if closeRel < 0 {
-		return 0, false
-	}
-	return bodyStart + closeRel + templateCloseLen, true
 }

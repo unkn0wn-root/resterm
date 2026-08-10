@@ -530,7 +530,7 @@ func TestRequestEditorMotionE(t *testing.T) {
 }
 
 func TestRequestEditorMotionWordEnds(t *testing.T) {
-	content := "foo,bar baz"
+	content := "GET,PUT URL"
 	editor := newTestEditor(content)
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 0)
@@ -538,7 +538,7 @@ func TestRequestEditorMotionWordEnds(t *testing.T) {
 	editor = applyMotion(t, editor, "e")
 	pos := editor.caretPosition()
 	if pos.Line != 0 || pos.Column != 2 {
-		t.Fatalf("expected end of foo at column 2; got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf("expected end of GET at column 2; got (%d,%d)", pos.Line, pos.Column)
 	}
 
 	editor = applyMotion(t, editor, "e")
@@ -550,19 +550,19 @@ func TestRequestEditorMotionWordEnds(t *testing.T) {
 	editor = applyMotion(t, editor, "e")
 	pos = editor.caretPosition()
 	if pos.Line != 0 || pos.Column != 6 {
-		t.Fatalf("expected end of bar at column 6; got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf("expected end of PUT at column 6; got (%d,%d)", pos.Line, pos.Column)
 	}
 
 	editorPtr.moveCursorTo(0, 0)
 	editor = applyMotion(t, editor, "E")
 	pos = editor.caretPosition()
 	if pos.Line != 0 || pos.Column != 6 {
-		t.Fatalf("expected end of foo,bar at column 6; got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf("expected end of GET,PUT at column 6; got (%d,%d)", pos.Line, pos.Column)
 	}
 }
 
 func TestRequestEditorMotionWordStarts(t *testing.T) {
-	content := "foo, bar baz"
+	content := "GET, PUT URL"
 	editor := newTestEditor(content)
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 0)
@@ -576,7 +576,7 @@ func TestRequestEditorMotionWordStarts(t *testing.T) {
 	editor = applyMotion(t, editor, "w")
 	pos = editor.caretPosition()
 	if pos.Line != 0 || pos.Column != 5 {
-		t.Fatalf("expected bar start at column 5; got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf("expected PUT start at column 5; got (%d,%d)", pos.Line, pos.Column)
 	}
 
 	editor = applyMotion(t, editor, "b")
@@ -589,13 +589,13 @@ func TestRequestEditorMotionWordStarts(t *testing.T) {
 	editor = applyMotion(t, editor, "W")
 	pos = editor.caretPosition()
 	if pos.Line != 0 || pos.Column != 5 {
-		t.Fatalf("expected bar start at column 5; got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf("expected PUT start at column 5; got (%d,%d)", pos.Line, pos.Column)
 	}
 
 	editor = applyMotion(t, editor, "B")
 	pos = editor.caretPosition()
 	if pos.Line != 0 || pos.Column != 0 {
-		t.Fatalf("expected foo start at column 0; got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf("expected GET start at column 0; got (%d,%d)", pos.Line, pos.Column)
 	}
 }
 
@@ -1169,12 +1169,12 @@ func TestRequestEditorApplySearchLiteral(t *testing.T) {
 }
 
 func TestRequestEditorApplySearchHighlightsAllMatches(t *testing.T) {
-	content := "foo bar\nfoo baz\nfoo"
+	content := "GET api\nGET url\nGET"
 	editor := newTestEditor(content)
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 0)
 
-	editor, cmd := editor.ApplySearch("foo", false)
+	editor, cmd := editor.ApplySearch("GET", false)
 	if status := statusFromCmd(t, cmd); status == nil {
 		t.Fatal("expected initial search status")
 	}
@@ -1187,8 +1187,8 @@ func TestRequestEditorApplySearchHighlightsAllMatches(t *testing.T) {
 		t.Fatalf("expected first match to be active, got %+v", ranges)
 	}
 	for i, r := range ranges {
-		if got := r.End - r.Start; got != len("foo") {
-			t.Fatalf("expected range %d to cover foo, got length %d", i, got)
+		if got := r.End - r.Start; got != len("GET") {
+			t.Fatalf("expected range %d to cover GET, got length %d", i, got)
 		}
 	}
 
@@ -1227,12 +1227,12 @@ func TestRequestEditorApplySearchRegexInvalid(t *testing.T) {
 }
 
 func TestRequestEditorNextSearchMatchWrap(t *testing.T) {
-	content := "foo bar\nfoo baz\nfoo"
+	content := "GET api\nGET url\nGET"
 	editor := newTestEditor(content)
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 0)
 
-	editor, cmd := editor.ApplySearch("foo", false)
+	editor, cmd := editor.ApplySearch("GET", false)
 	if status := statusFromCmd(t, cmd); status == nil {
 		t.Fatal("expected initial search status")
 	}
@@ -1284,12 +1284,12 @@ func TestRequestEditorNextSearchMatchWrap(t *testing.T) {
 }
 
 func TestRequestEditorRegexSearchMatches(t *testing.T) {
-	content := "foo\nfao\nbar"
+	content := "GET\nSET\nPUT"
 	editor := newTestEditor(content)
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 0)
 
-	editor, cmd := editor.ApplySearch("f.o", true)
+	editor, cmd := editor.ApplySearch(".ET", true)
 	status := statusFromCmd(t, cmd)
 	if status == nil {
 		t.Fatal("expected status from regex search")
@@ -1330,12 +1330,12 @@ func TestRequestEditorRegexSearchMatches(t *testing.T) {
 }
 
 func TestRequestEditorPrevSearchMatchWrap(t *testing.T) {
-	content := "foo bar\nfoo baz\nfoo"
+	content := "GET api\nGET url\nGET"
 	editor := newTestEditor(content)
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 0)
 
-	editor, cmd := editor.ApplySearch("foo", false)
+	editor, cmd := editor.ApplySearch("GET", false)
 	if status := statusFromCmd(t, cmd); status == nil {
 		t.Fatal("expected initial search status")
 	}
@@ -1989,12 +1989,12 @@ func TestRequestEditorCompletionsQuietInBody(t *testing.T) {
 }
 
 func TestRequestEditorExitSearchMode(t *testing.T) {
-	content := "foo\nbar\nfoo"
+	content := "GET\nPUT\nGET"
 	editor := newTestEditor(content)
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 0)
 
-	editor, cmd := editor.ApplySearch("foo", false)
+	editor, cmd := editor.ApplySearch("GET", false)
 	status := statusFromCmd(t, cmd)
 	if status == nil {
 		t.Fatal("expected status after applying search")

@@ -369,9 +369,9 @@ func TestTrailingResetSurvivesWrap(t *testing.T) {
 		in   string
 		w    int
 	}{
-		{"reset after dropped space", rd + "foo " + rs, 3},
-		{"reset after wrapped token", rd + "foobar" + rs, 3},
-		{"reset alone at end", rd + "foo bar " + rs, 4},
+		{"reset after dropped space", rd + "GET " + rs, 3},
+		{"reset after wrapped token", rd + "METHOD" + rs, 3},
+		{"reset alone at end", rd + "GET URL " + rs, 4},
 		{"reset after wide rune", rd + "界界 " + rs, 2},
 	}
 

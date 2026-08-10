@@ -74,7 +74,7 @@ func TestRunWarningQueueStillCarriesEngineWarnings(t *testing.T) {
 	}
 }
 
-// A run's completion status replaces whatever the status bar message was, and
+// A run's completion status replaces the previous status bar message, and
 // the status bar never clears itself, so the warning gets its own segment.
 func TestStatusBarWarningSectionSurvivesTheRunStatus(t *testing.T) {
 	model := New(Config{})

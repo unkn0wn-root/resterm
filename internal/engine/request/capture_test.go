@@ -246,6 +246,74 @@ func TestApplyCapturesRSTKeepsQuotedTemplateMarkersLiteral(t *testing.T) {
 	}
 }
 
+func TestApplyCapturesRSTKeepsQuotedTemplateMarkerInAComment(t *testing.T) {
+	eng := newCaptureEngine("")
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"token":"abc123"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      directive.ScopeRequest,
+				Name:       "code",
+				Expression: `response.statusCode # mention "{{token}}"`,
+				Mode:       restfile.CaptureExprModeRTS,
+			}},
+		},
+	}
+
+	if err := eng.applyCaptures(captureRun{req: req, resp: resp}); err != nil {
+		t.Fatalf("applyCaptures: %v", err)
+	}
+	if len(req.Variables) != 1 {
+		t.Fatalf("captures = %d, want 1", len(req.Variables))
+	}
+	if req.Variables[0].Value != "200" {
+		t.Fatalf("value = %q, want %q", req.Variables[0].Value, "200")
+	}
+}
+
+func TestApplyCapturesTemplateKeepsLiteralDelimiters(t *testing.T) {
+	tests := map[string]string{
+		"prefix[{{response.json.token}}": "prefix[abc123",
+		"anchor#{{response.json.token}}": "anchor#abc123",
+		"{{response.json.token}})":       "abc123)",
+	}
+	for expr, want := range tests {
+		t.Run(expr, func(t *testing.T) {
+			eng := newCaptureEngine("")
+			resp := &scripts.Response{
+				Kind:   scripts.ResponseKindHTTP,
+				Status: "200 OK",
+				Code:   200,
+				Body:   []byte(`{"token":"abc123"}`),
+			}
+			req := &restfile.Request{
+				Metadata: restfile.RequestMetadata{
+					Captures: []restfile.CaptureSpec{{
+						Scope:      directive.ScopeRequest,
+						Name:       "literal",
+						Expression: expr,
+					}},
+				},
+			}
+
+			if err := eng.applyCaptures(captureRun{req: req, resp: resp}); err != nil {
+				t.Fatalf("applyCaptures: %v", err)
+			}
+			if len(req.Variables) != 1 {
+				t.Fatalf("captures = %d, want 1", len(req.Variables))
+			}
+			if req.Variables[0].Value != want {
+				t.Fatalf("value = %q, want %q", req.Variables[0].Value, want)
+			}
+		})
+	}
+}
+
 func TestApplyCapturesFailsOnMixedTemplateRTSCall(t *testing.T) {
 	eng := newCaptureEngine("")
 	resp := &scripts.Response{
@@ -563,14 +631,14 @@ func TestApplyCapturesStrictModeFailsOnUnexpectedJSONPathChar(t *testing.T) {
 		Kind:   scripts.ResponseKindHTTP,
 		Status: "200 OK",
 		Code:   200,
-		Body:   []byte(`{"foo":{"bar":"ok"}}`),
+		Body:   []byte(`{"user":{"name":"Ada"}}`),
 	}
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
 				Scope:      directive.ScopeRequest,
 				Name:       "v",
-				Expression: "{{response.json.foo]bar}}",
+				Expression: "{{response.json.user]name}}",
 				Line:       11,
 			}},
 		},
@@ -587,7 +655,7 @@ func TestApplyCapturesStrictModeFailsOnUnexpectedJSONPathChar(t *testing.T) {
 		t.Fatalf("expected malformed strict json path to fail")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, `json path "json.foo]bar"`) {
+	if !strings.Contains(msg, `json path "json.user]name"`) {
 		t.Fatalf("expected malformed path in error, got %q", msg)
 	}
 	if !strings.Contains(msg, "got ']'") {

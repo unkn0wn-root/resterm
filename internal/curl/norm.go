@@ -204,7 +204,7 @@ func applyUser(req *restfile.Request, usr string) {
 	user, pass, ok := strings.Cut(usr, ":")
 	if ok {
 		req.Metadata.Auth = &restfile.AuthSpec{
-			Type: authTypeBasic,
+			Type: restfile.AuthBasic,
 			Params: map[string]string{
 				"username": user,
 				"password": pass,

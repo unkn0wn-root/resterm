@@ -100,6 +100,17 @@ func (r *Resolver) Lenient() *Resolver {
 	return &cp
 }
 
+// WithExprEval returns a copy that uses fn for expression templates.
+// It shares memoized values with the original but not later configuration changes.
+func (r *Resolver) WithExprEval(fn ExprEval) *Resolver {
+	if r == nil {
+		return r
+	}
+	cp := *r
+	cp.expr = fn
+	return &cp
+}
+
 func (r *Resolver) Resolve(name string) (string, bool) {
 	value, ok, err := r.resolve(name, r.exprPos, true, true, nil)
 	if err != nil {

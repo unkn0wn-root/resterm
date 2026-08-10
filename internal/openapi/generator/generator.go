@@ -569,14 +569,14 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 		case authTypeBasic:
 			rb.builder.registerGlobal(globalAuthUsernameVar, "user", false)
 			rb.builder.registerGlobal(globalAuthPasswordVar, "pass", true)
-			return &restfile.AuthSpec{Type: authTypeBasic, Params: map[string]string{
+			return &restfile.AuthSpec{Type: restfile.AuthBasic, Params: map[string]string{
 				"username": varRef(globalAuthUsernameVar),
 				"password": varRef(globalAuthPasswordVar),
 			}}
 		case authTypeBearer:
 			rb.builder.registerGlobal(globalAuthTokenVar, placeholderToken, true)
 			return &restfile.AuthSpec{
-				Type:   authTypeBearer,
+				Type:   restfile.AuthBearer,
 				Params: map[string]string{"token": varRef(globalAuthTokenVar)},
 			}
 		}
@@ -594,7 +594,7 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 			params["name"] = defaultAPIKeyHeaderName
 		}
 		rb.builder.registerGlobal(globalAuthAPIKeyVar, placeholderAPIKey, true)
-		return &restfile.AuthSpec{Type: authTypeAPIKey, Params: params}
+		return &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: params}
 	case model.SecurityOAuth2:
 		return rb.buildOAuthAuthSpec(scheme, req)
 	}
@@ -636,7 +636,7 @@ func (rb *requestBuilder) buildOAuthAuthSpec(
 			return nil
 		}
 		rb.finalizeOAuthParams(params, scopes)
-		return &restfile.AuthSpec{Type: authTypeOAuth2, Params: params}
+		return &restfile.AuthSpec{Type: restfile.AuthOAuth2, Params: params}
 	case model.OAuthFlowPassword:
 		params, ok := rb.oauthBaseParams(flow.TokenURL, openapi.OAuthGrantPassword, "password")
 		if !ok {
@@ -647,7 +647,7 @@ func (rb *requestBuilder) buildOAuthAuthSpec(
 		rb.builder.registerGlobal(globalOAuthUsernameVar, "user@example.com", false)
 		rb.builder.registerGlobal(globalOAuthPasswordVar, placeholderPassword, true)
 		rb.finalizeOAuthParams(params, scopes)
-		return &restfile.AuthSpec{Type: authTypeOAuth2, Params: params}
+		return &restfile.AuthSpec{Type: restfile.AuthOAuth2, Params: params}
 	case model.OAuthFlowAuthorizationCode:
 		authURL := strings.TrimSpace(flow.AuthorizationURL)
 		if authURL == "" {
@@ -670,7 +670,7 @@ func (rb *requestBuilder) buildOAuthAuthSpec(
 		params[openapi.OAuthParamAuthURL] = authURL
 		params[openapi.OAuthParamCodeMethod] = "s256"
 		rb.finalizeOAuthParams(params, scopes)
-		return &restfile.AuthSpec{Type: authTypeOAuth2, Params: params}
+		return &restfile.AuthSpec{Type: restfile.AuthOAuth2, Params: params}
 	case model.OAuthFlowImplicit:
 		rb.builder.registerGlobal(globalAuthTokenVar, placeholderToken, true)
 		rb.builder.noteWarning(
@@ -681,7 +681,7 @@ func (rb *requestBuilder) buildOAuthAuthSpec(
 			),
 		)
 		return &restfile.AuthSpec{
-			Type:   authTypeBearer,
+			Type:   restfile.AuthBearer,
 			Params: map[string]string{"token": varRef(globalAuthTokenVar)},
 		}
 	default:

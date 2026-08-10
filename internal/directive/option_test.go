@@ -146,8 +146,8 @@ func TestOptionsGetAndFirst(t *testing.T) {
 	if got, ok := opts.First("empty", "port"); !ok || got != "22" {
 		t.Fatalf("First(empty, port) = (%q, %t), want (%q, true)", got, ok, "22")
 	}
-	if _, ok := opts.First("nope"); ok {
-		t.Fatal("First(nope) ok = true, want false")
+	if _, ok := opts.First("missing"); ok {
+		t.Fatal("First(missing) ok = true, want false")
 	}
 }
 
@@ -421,7 +421,7 @@ func TestParseNameValue(t *testing.T) {
 		{name: "colon without value", input: "token:", key: "token"},
 		{name: "dotted name", input: "a.b:c", key: "a.b", value: "c"},
 		{name: "value keeps later separators", input: "tok = = v", key: "tok", value: "= v"},
-		{name: "invalid rune in name", input: "X-Foo/Bar: v"},
+		{name: "invalid rune in name", input: "X-Invalid/Name: v"},
 		{name: "empty"},
 		{name: "blank", input: "   "},
 	}
@@ -504,7 +504,7 @@ func TestParseOptionsKeepsDecodedValues(t *testing.T) {
 
 	tests := map[string]string{
 		`fail="\"hi\""`: `"hi"`,
-		`fail="=foo"`:   "=foo",
+		`fail="=err"`:   "=err",
 		`fail="a=b"`:    "a=b",
 		"fail=\"a\tb\"": "a\tb",
 		`fail=plain`:    "plain",
@@ -517,114 +517,24 @@ func TestParseOptionsKeepsDecodedValues(t *testing.T) {
 	}
 }
 
-func TestCutOptions(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		rest    string
-		head    string
-		opts    map[string]string
-		wantErr string
-	}{
-		{
-			name: "quoted option value",
-			rest: `true fail="explicit failure"`,
-			head: "true",
-			opts: map[string]string{"fail": "explicit failure"},
-		},
-		{
-			name: "the head is not an option",
-			rest: "run == run run=StepOK",
-			head: "run == run",
-			opts: map[string]string{"run": "StepOK"},
-		},
-		{
-			name:    "repeated option after a head",
-			rest:    "last.statusCode == 200 run=A run=B",
-			head:    "last.statusCode == 200",
-			opts:    map[string]string{"run": "B"},
-			wantErr: `@if option "run" is repeated`,
-		},
-		{
-			name: "quoted expression",
-			rest: `name == "John Doe" run=StepOK`,
-			head: `name == "John Doe"`,
-			opts: map[string]string{"run": "StepOK"},
-		},
-		{
-			name: "comparison without spaces",
-			rest: "last.statusCode==200 run=StepOK",
-			head: "last.statusCode==200",
-			opts: map[string]string{"run": "StepOK"},
-		},
-		{
-			name: "head only",
-			rest: "  last.statusCode == 200  ",
-			head: "last.statusCode == 200",
-			opts: map[string]string{},
-		},
-		{
-			name: "options only",
-			rest: "run=StepOK fail=nope",
-			head: "",
-			opts: map[string]string{"run": "StepOK", "fail": "nope"},
-		},
-		{
-			name: "bare option after the first",
-			rest: "true run=StepOK quiet",
-			head: "true",
-			opts: map[string]string{"run": "StepOK", "quiet": "true"},
-		},
-		// The span lexer has to honor the escape, or the quote closes early and
-		// the tail of the string reads as an option.
-		{
-			name: "escaped quote inside a quoted expression",
-			rest: `response.body.msg == "say \" fail=x" run=StepOK`,
-			head: `response.body.msg == "say \" fail=x"`,
-			opts: map[string]string{"run": "StepOK"},
-		},
-		{name: "empty", opts: map[string]string{}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			head, opts, err := CutOptions(If, tt.rest)
-			if head != tt.head {
-				t.Fatalf("CutOptions(%q) head = %q, want %q", tt.rest, head, tt.head)
-			}
-			if !maps.Equal(opts.vals, tt.opts) {
-				t.Fatalf("CutOptions(%q) options = %v, want %v", tt.rest, opts, tt.opts)
-			}
-			switch {
-			case tt.wantErr == "" && err != nil:
-				t.Fatalf("CutOptions(%q) err = %v, want nil", tt.rest, err)
-			case tt.wantErr != "" && (err == nil || err.Error() != tt.wantErr):
-				t.Fatalf("CutOptions(%q) err = %v, want %q", tt.rest, err, tt.wantErr)
-			}
-		})
-	}
-}
-
 func TestOptionsOpen(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		want  bool
+		want  rune
 	}{
 		{name: "empty"},
 		{name: "closed object", input: `json={"a":1}`},
 		{name: "closed array", input: `json=[1,2]`},
-		{name: "open object", input: `json={`, want: true},
-		{name: "open partway", input: `json={"a": {"gt": 1},`, want: true},
-		{name: "open array", input: `json=[1,`, want: true},
-		{name: "closed after an open one", input: `json={ headers={"X":"y"}`, want: true},
-		{name: "open after a closed one", input: `query={"a":"b"} json={`, want: true},
+		{name: "open object", input: `json={`, want: '}'},
+		{name: "open partway", input: `json={"a": {"gt": 1},`, want: '}'},
+		{name: "open array", input: `json=[1,`, want: ']'},
+		{name: "closed after an open one", input: `json={ headers={"X":"y"}`, want: '}'},
+		{name: "open after a closed one", input: `query={"a":"b"} json={`, want: '}'},
 		{name: "open behind a closed one", input: `json={ } headers={"X":"y"}`},
 		{name: "bracket inside a string", input: `json={"a":"{"}`},
 		{name: "escaped quote inside a string", input: `json={"a":"\""}`},
-		{name: "unclosed quoted value", input: `regex="^v`, want: true},
+		{name: "unclosed quoted value", input: `regex="^v`, want: '"'},
 		{name: "closed quoted value", input: `regex="^v[0-9]+$"`},
 		{name: "stray closer", input: `json=}`},
 	}
@@ -632,7 +542,7 @@ func TestOptionsOpen(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := OptionsOpen(tt.input); got != tt.want {
-				t.Fatalf("OptionsOpen(%q) = %t, want %t", tt.input, got, tt.want)
+				t.Fatalf("OptionsOpen(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

@@ -198,7 +198,7 @@ func TestListWorkspaceSkipsUnreadableSubdir(t *testing.T) {
 }
 
 func TestListWorkspaceFailsOnMissingRoot(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "nope")
+	missing := filepath.Join(t.TempDir(), "missing")
 	if _, err := ListWorkspace(missing, ListOptions{Recursive: true}); err == nil {
 		t.Fatal("expected an error for a missing root")
 	}

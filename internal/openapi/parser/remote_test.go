@@ -139,7 +139,7 @@ func TestLoaderParseFromURLResolvesRelativeServers(t *testing.T) {
 func TestLoaderParseFromURLStatusError(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "nope", http.StatusInternalServerError)
+		http.Error(w, "upstream failure", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
@@ -204,7 +204,7 @@ func TestLoaderParseFromURLResolvesRemoteRef(t *testing.T) {
 func TestRemoteHandlerRejectsStatusError(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "nope", http.StatusInternalServerError)
+		http.Error(w, "upstream failure", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 

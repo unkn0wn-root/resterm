@@ -6,6 +6,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func (state *workflowState) explainReport() *xplain.Report {
@@ -294,10 +295,10 @@ func (x wfStepExplain) isAuthChange(c xplain.Change) bool {
 		return false
 	}
 	a := req.Metadata.Auth
-	switch strings.ToLower(strings.TrimSpace(a.Type)) {
-	case "header":
+	switch a.Kind() {
+	case restfile.AuthHeader:
 		return strings.EqualFold(h, strings.TrimSpace(a.Params["header"]))
-	case "apikey", "api-key":
+	case restfile.AuthAPIKey:
 		if !strings.EqualFold(strings.TrimSpace(a.Params["placement"]), "header") {
 			return false
 		}

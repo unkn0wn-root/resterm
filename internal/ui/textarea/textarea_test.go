@@ -477,7 +477,7 @@ func TestValueSoftWrap(t *testing.T) {
 
 func TestSetValue(t *testing.T) {
 	textarea := newTextArea()
-	textarea.SetValue(strings.Join([]string{"Foo", "Bar", "Baz"}, "\n"))
+	textarea.SetValue(strings.Join([]string{"GET", "PUT", "URL"}, "\n"))
 
 	if textarea.row != 2 && textarea.col != 3 {
 		t.Log(textarea.row, textarea.col)
@@ -485,8 +485,8 @@ func TestSetValue(t *testing.T) {
 	}
 
 	value := textarea.Value()
-	if value != "Foo\nBar\nBaz" {
-		t.Fatal("Value should be Foo\nBar\nBaz")
+	if value != "GET\nPUT\nURL" {
+		t.Fatal("Value should be GET\nPUT\nURL")
 	}
 
 	// SetValue should reset text area
@@ -500,9 +500,9 @@ func TestSetValue(t *testing.T) {
 
 func TestSetValueNormalizesCRLF(t *testing.T) {
 	textarea := newTextArea()
-	textarea.SetValue("Foo\r\nBar\r\nBaz")
+	textarea.SetValue("GET\r\nPUT\r\nURL")
 
-	if got := textarea.Value(); got != "Foo\nBar\nBaz" {
+	if got := textarea.Value(); got != "GET\nPUT\nURL" {
 		t.Fatalf("expected CRLF normalized, got %q", got)
 	}
 	if textarea.LineCount() != 3 {
@@ -514,7 +514,7 @@ func TestInsertString(t *testing.T) {
 	textarea := newTextArea()
 
 	// Insert some text
-	input := "foo baz"
+	input := "GET URL"
 
 	for _, k := range input {
 		textarea, _ = textarea.Update(keyPress(k))
@@ -523,12 +523,12 @@ func TestInsertString(t *testing.T) {
 	// Put cursor in the middle of the text
 	textarea.col = 4
 
-	textarea.InsertString("bar ")
+	textarea.InsertString("API ")
 
 	value := textarea.Value()
-	if value != "foo bar baz" {
+	if value != "GET API URL" {
 		t.Log(value)
-		t.Fatal("Expected insert string to insert bar between foo and baz")
+		t.Fatal("Expected insert string to insert API between GET and URL")
 	}
 }
 
@@ -944,14 +944,14 @@ func TestView(t *testing.T) {
 		{
 			name: "type single line",
 			modelFunc: func(m Model) Model {
-				input := "foo"
+				input := "GET"
 				m = sendString(m, input)
 
 				return m
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 foo
+					>   1 GET
 					>
 					>
 					>
@@ -965,16 +965,16 @@ func TestView(t *testing.T) {
 		{
 			name: "type multiple lines",
 			modelFunc: func(m Model) Model {
-				input := "foo\nbar\nbaz"
+				input := "GET\nPUT\nURL"
 				m = sendString(m, input)
 
 				return m
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 foo
-					>   2 bar
-					>   3 baz
+					>   1 GET
+					>   2 PUT
+					>   3 URL
 					>
 					>
 					>
@@ -990,14 +990,14 @@ func TestView(t *testing.T) {
 				m.Prompt = ""
 				m.SetWidth(5)
 
-				input := "foo bar baz"
+				input := "GET API URL"
 				m = sendString(m, input)
 
 				return m
 			},
 			want: want{
 				view: heredoc.Doc(`
-				r baz
+				I URL
 
 
 
@@ -1013,14 +1013,14 @@ func TestView(t *testing.T) {
 			modelFunc: func(m Model) Model {
 				m.CharLimit = 7
 
-				input := "foo bar baz"
+				input := "GET API URL"
 				m = sendString(m, input)
 
 				return m
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 foo bar
+					>   1 GET API
 					>
 					>
 					>
@@ -1036,15 +1036,15 @@ func TestView(t *testing.T) {
 			modelFunc: func(m Model) Model {
 				m.CharLimit = 19
 
-				input := "foo bar baz\nfoo bar baz"
+				input := "GET API URL\nGET API URL"
 				m = sendString(m, input)
 
 				return m
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 foo bar baz
-					>   2 foo bar
+					>   1 GET API URL
+					>   2 GET API
 					>
 					>
 					>

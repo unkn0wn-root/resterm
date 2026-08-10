@@ -8,6 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
 func (b *documentBuilder) handleDescriptionLine(ln line) bool {
@@ -20,7 +21,7 @@ func (b *documentBuilder) handleDescriptionLine(ln line) bool {
 	return true
 }
 
-func (b *documentBuilder) handleRequestMetadataDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) directiveOutcome {
 	rest := d.Args
 	switch d.Name {
 	case directive.RequestName:
@@ -38,20 +39,19 @@ func (b *documentBuilder) handleRequestMetadataDirective(d directiveLine) direct
 	case directive.LogSensitiveHeaders:
 		allow, ok := directive.ParseSwitch(rest)
 		if !ok {
-			b.addError(d.no, d.Spelling.Tag()+" must be true or false")
-			return directiveRejected
+			return b.reject(d, d.Spelling.Tag()+" must be true or false")
 		}
 		b.request.metadata.AllowSensitiveHeaders = allow
 		return directiveApplied
 	case directive.Settings:
 		settings, err := applySettingsTokens(b.request.settings, rest, directive.Settings)
 		b.request.settings = settings
-		b.report(d.no, err)
+		b.report(d.lines.Start, err)
 		return directiveApplied
 	case directive.Setting:
 		settings, err := putSetting(b.request.settings, rest)
 		b.request.settings = settings
-		b.report(d.no, err)
+		b.report(d.lines.Start, err)
 		return directiveApplied
 	case directive.Timeout:
 		if b.request.settings == nil {
@@ -60,7 +60,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d directiveLine) direct
 		b.request.settings["timeout"] = rest
 		return directiveApplied
 	case directive.Var:
-		b.addRequestVar(d.no, rest)
+		b.addRequestVar(d.lines.Start, rest)
 		return directiveApplied
 	case directive.Script:
 		if rest == "" {
@@ -68,14 +68,13 @@ func (b *documentBuilder) handleRequestMetadataDirective(d directiveLine) direct
 			return directiveApplied
 		}
 		if err := b.setScript(rest, ""); err != nil {
-			b.report(d.no, err)
+			b.report(d.lines.Start, err)
 			return directiveRejected
 		}
 		return directiveApplied
 	case directive.RTS:
 		if err := b.setRTSScript(rest); err != nil {
-			b.addError(d.no, err.Error())
-			return directiveRejected
+			return b.reject(d, err.Error())
 		}
 		return directiveApplied
 	case directive.Apply:
@@ -90,7 +89,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d directiveLine) direct
 		return b.setForEach(d)
 	case directive.Profile:
 		spec, err := parseProfileSpec(rest)
-		b.report(d.no, err)
+		b.report(d.lines.Start, err)
 		if spec == nil {
 			return directiveRejected
 		}
@@ -98,7 +97,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d directiveLine) direct
 		return directiveApplied
 	case directive.Trace:
 		spec, err := parseTraceSpec(rest)
-		b.report(d.no, err)
+		b.report(d.lines.Start, err)
 		if spec == nil {
 			return directiveRejected
 		}
@@ -131,69 +130,58 @@ func (b *documentBuilder) addRequestVar(no int, rest string) {
 	})
 }
 
-func (b *documentBuilder) addApply(d directiveLine) directiveOutcome {
-	spec, err := parseApplySpec(d.Args, d.no)
+func (b *documentBuilder) addApply(d parsedDirective) directiveOutcome {
+	spec, err := parseApplySpec(d.Args, d.lines.Start)
 	if err != nil {
-		b.addError(d.no, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
-	if c := d.exprCol(spec.Expression); c > 0 {
-		spec.Col = c
-	}
+	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
 	return directiveApplied
 }
 
-func (b *documentBuilder) addCapture(d directiveLine) directiveOutcome {
-	spec, ok := b.parseCaptureDirective(d.Args, d.no)
+func (b *documentBuilder) addCapture(d parsedDirective) directiveOutcome {
+	spec, ok := b.parseCaptureDirective(d.Args, d.lines.Start)
 	if !ok {
 		return directiveRejected
 	}
-	if c := d.exprCol(spec.Expression); c > 0 {
-		spec.Col = c
-	}
+	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.Captures = append(b.request.metadata.Captures, spec)
 	return directiveApplied
 }
 
-func (b *documentBuilder) addAssert(d directiveLine) directiveOutcome {
-	spec, ok := b.parseAssertDirective(d.Args, d.no, d.argCol)
+func (b *documentBuilder) addAssert(d parsedDirective) directiveOutcome {
+	spec, ok := b.parseAssertDirective(d.Args, d.lines.Start, d.argCol)
 	if !ok {
-		b.addError(d.no, "@assert expression missing")
-		return directiveRejected
+		return b.reject(d, "@assert expression missing")
 	}
 	b.request.metadata.Asserts = append(b.request.metadata.Asserts, spec)
 	return directiveApplied
 }
 
-func (b *documentBuilder) setWhen(d directiveLine) directiveOutcome {
-	spec, err := parseConditionSpec(d.Args, d.no, d.Spelling == directive.SkipIf)
+func (b *documentBuilder) setWhen(d parsedDirective) directiveOutcome {
+	spec, err := parseConditionSpec(d.Args, d.lines.Start, d.Spelling == directive.SkipIf)
 	if err != nil {
-		b.addError(d.no, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
-	if c := d.exprCol(spec.Expression); c > 0 {
-		spec.Col = c
-	}
+	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.When = spec
 	return directiveApplied
 }
 
-func (b *documentBuilder) setForEach(d directiveLine) directiveOutcome {
-	spec, err := parseForEachSpec(d.Args, d.no)
+func (b *documentBuilder) setForEach(d parsedDirective) directiveOutcome {
+	spec, err := parseForEachSpec(d.Args, d.lines.Start)
 	if err != nil {
-		b.addError(d.no, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 	b.request.metadata.ForEach = spec
 	return directiveApplied
 }
 
-func (b *documentBuilder) setCompare(d directiveLine) directiveOutcome {
+func (b *documentBuilder) setCompare(d parsedDirective) directiveOutcome {
 	spec, err := parseCompareDirective(d.Args)
 	if err != nil {
-		b.addError(d.no, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 	b.request.metadata.Compare = spec
 	return directiveApplied
@@ -268,7 +256,7 @@ func (b *documentBuilder) parseCaptureDirective(
 	rest string,
 	line int,
 ) (restfile.CaptureSpec, bool) {
-	scopeToken, remainder := directive.CutKey(rest)
+	scopeToken, name, expression := cutCapture(rest)
 	if scopeToken == "" {
 		b.addWarning(line, "@capture missing scope (use request, file, or global)")
 		return restfile.CaptureSpec{}, false
@@ -284,27 +272,12 @@ func (b *documentBuilder) parseCaptureDirective(
 		)
 		return restfile.CaptureSpec{}, false
 	}
-	s := strings.TrimSpace(remainder)
-	if s == "" {
+	if name == "" {
 		b.addWarning(line, "@capture missing '<name> <expression>'")
 		return restfile.CaptureSpec{}, false
 	}
-	nameEnd := strings.IndexAny(s, " \t")
-	if nameEnd == -1 {
+	if expression == "" {
 		b.addWarning(line, "@capture missing expression after capture name")
-		return restfile.CaptureSpec{}, false
-	}
-	name := strings.TrimSpace(s[:nameEnd])
-	expression := strings.TrimSpace(s[nameEnd:])
-	if expression == "" {
-		b.addWarning(line, "@capture expression missing")
-		return restfile.CaptureSpec{}, false
-	}
-	if strings.HasPrefix(expression, "=") {
-		expression = strings.TrimSpace(expression[1:])
-	}
-	if expression == "" {
-		b.addWarning(line, "@capture expression missing after '='")
 		return restfile.CaptureSpec{}, false
 	}
 	mode := restfile.CaptureExprModeRTS
@@ -321,9 +294,14 @@ func (b *documentBuilder) parseCaptureDirective(
 	}, true
 }
 
+func cutCapture(rest string) (scope, name, expr string) {
+	scope, rem := directive.CutKey(rest)
+	name, rem = directive.CutToken(rem)
+	return scope, name, cutAssign(rem)
+}
+
 func (b *documentBuilder) parseAssertDirective(rest string, line, col int) (restfile.AssertSpec, bool) {
 	expr, msg := splitAssert(rest)
-	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return restfile.AssertSpec{}, false
 	}
@@ -335,43 +313,14 @@ func (b *documentBuilder) parseAssertDirective(rest string, line, col int) (rest
 	}, true
 }
 
-func splitAssert(text string) (string, string) {
+// splitAssert ignores arrows inside strings, comments, and nested groups.
+func splitAssert(text string) (expr, msg string) {
 	s := strings.TrimSpace(text)
-	if s == "" {
-		return "", ""
+	i := strings.Index(rts.Mask(s), "=>")
+	if i < 0 {
+		return s, ""
 	}
-
-	inQuote := false
-	var quote byte
-	escaped := false
-	for i := 0; i < len(s)-1; i++ {
-		ch := s[i]
-		if escaped {
-			escaped = false
-			continue
-		}
-		if ch == '\\' {
-			escaped = true
-			continue
-		}
-		if inQuote {
-			if ch == quote {
-				inQuote = false
-			}
-			continue
-		}
-		if ch == '"' || ch == '\'' {
-			inQuote = true
-			quote = ch
-			continue
-		}
-		if ch == '=' && s[i+1] == '>' {
-			left := strings.TrimSpace(s[:i])
-			right := strings.TrimSpace(s[i+2:])
-			return left, directive.TrimQuotes(right)
-		}
-	}
-	return s, ""
+	return strings.TrimSpace(s[:i]), directive.TrimQuotes(strings.TrimSpace(s[i+2:]))
 }
 
 func (b *documentBuilder) lintRequestCaptures(req *restfile.Request) {

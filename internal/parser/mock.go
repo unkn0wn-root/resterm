@@ -47,7 +47,6 @@ type mockBuilder struct {
 	isDefault            bool
 	disableInterpolation bool
 	match                restfile.MockMatch
-	pending              *pendingMatch
 	expectation          *restfile.MockExpectation
 	responses            []restfile.MockResponse
 	status               int
@@ -57,21 +56,21 @@ type mockBuilder struct {
 	delimLine            int
 }
 
-func (b *documentBuilder) handleMockDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleMockDirective(d parsedDirective) directiveOutcome {
 	switch d.Name {
 	case directive.Mock:
 		if b.inRequest {
-			b.addMockError(d.no, "@mock must start a new block after a ### separator")
+			b.addMockError(d.lines.Start, "@mock must start a new block after a ### separator")
 			return directiveRejected
 		}
 		if b.workflow != nil {
-			b.addMockError(d.no, "@mock cannot be declared inside a workflow")
+			b.addMockError(d.lines.Start, "@mock cannot be declared inside a workflow")
 			return directiveRejected
 		}
-		b.startMock(d.no, d.Args)
+		b.startMock(d.lines.Start, d.Args)
 		return directiveApplied
 	case directive.Match, directive.Expect:
-		b.addMockError(d.no, d.Name.Tag()+" must follow an @mock directive")
+		b.addMockError(d.lines.Start, d.Name.Tag()+" must follow an @mock directive")
 		return directiveRejected
 	default:
 		return directiveIgnored
@@ -192,7 +191,7 @@ func (b *documentBuilder) handleMockBlockLine(ln line) {
 	case m.inBody:
 		m.body = append(m.body, ln.raw)
 	case m.status == 0:
-		m.parsePreamble(b, ln.no, ln.text)
+		m.parsePreamble(b, ln)
 	case ln.text == "":
 		m.inBody = true
 	default:
@@ -200,41 +199,40 @@ func (b *documentBuilder) handleMockBlockLine(ln line) {
 	}
 }
 
-func (m *mockBuilder) parsePreamble(b *documentBuilder, line int, s string) {
-	if m.pending != nil && m.continueMatch(b, s) {
+func (m *mockBuilder) parsePreamble(b *documentBuilder, ln line) {
+	if ln.text == "" {
 		return
 	}
-	if s == "" {
-		return
-	}
-	if text, _, ok := stripComment(s); ok {
-		call, ok := directive.Parse(text)
-		if !ok {
-			return
-		}
-		switch {
-		case call.Name == directive.Match && len(m.responses) == 0:
-			m.addMatch(b, line, call.Args)
-		case call.Name == directive.Expect && len(m.responses) == 0:
-			m.addExpectation(b, line, call.Args)
-		case call.Name == directive.Match || call.Name == directive.Expect:
-			b.addMockError(line, call.Name.Tag()+" must be declared before the first sequence response")
-		default:
-			b.addMockError(
-				line,
-				fmt.Sprintf("directive %s is not valid before a mock response", call.Spelling.Tag()),
-			)
+	if text, col, ok := ln.comment(); ok {
+		if d, ok := b.readDirective(ln.no, col, text); ok {
+			m.declare(b, d)
 		}
 		return
 	}
 
-	status, recognized, err := parseMockStatusLine(s)
+	status, recognized, err := parseMockStatusLine(ln.text)
 	if !recognized {
-		b.addMockError(line, "expected an HTTP response status line in @mock block")
+		b.addMockError(ln.no, "expected an HTTP response status line in @mock block")
 	} else if err != nil {
-		b.addMockError(line, err.Error())
+		b.addMockError(ln.no, err.Error())
 	} else {
 		m.status = status
+	}
+}
+
+func (m *mockBuilder) declare(b *documentBuilder, d parsedDirective) {
+	switch {
+	case d.Name == directive.Match && len(m.responses) == 0:
+		m.addMatch(b, d.lines.Start, d.Args)
+	case d.Name == directive.Expect && len(m.responses) == 0:
+		m.addExpectation(b, d.lines.Start, d.Args)
+	case d.Name == directive.Match || d.Name == directive.Expect:
+		b.addMockError(d.lines.Start, d.Name.Tag()+" must be declared before the first sequence response")
+	default:
+		b.addMockError(
+			d.lines.Start,
+			fmt.Sprintf("directive %s is not valid before a mock response", d.Spelling.Tag()),
+		)
 	}
 }
 
@@ -257,30 +255,7 @@ func (m *mockBuilder) addHeader(b *documentBuilder, ln int, line string) {
 	m.headers.Add(name, value)
 }
 
-type pendingMatch struct {
-	line int
-	args string
-}
-
-func (m *mockBuilder) continueMatch(b *documentBuilder, s string) bool {
-	text, _, ok := stripComment(s)
-	if !ok {
-		b.addMockError(m.pending.line, "@match option is missing a closing bracket")
-		m.pending = nil
-		return false
-	}
-	open := m.pending
-	m.pending = nil
-	m.addMatch(b, open.line, open.args+" "+text)
-	return true
-}
-
 func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
-	if directive.OptionsOpen(raw) {
-		m.pending = &pendingMatch{line: line, args: raw}
-		return
-	}
-
 	vals, err := directive.ParseOptions(directive.Match, raw)
 	if err != nil {
 		b.addMockError(line, err.Error())
@@ -401,9 +376,6 @@ func (b *documentBuilder) flushMock() {
 		return
 	}
 	m := b.mock
-	if m.pending != nil {
-		b.addMockError(m.pending.line, "@match option is missing a closing bracket")
-	}
 	if m.delimLine > 0 && !m.started() {
 		b.addMockError(m.delimLine, "@mock sequence ends with a dangling delimiter")
 	}

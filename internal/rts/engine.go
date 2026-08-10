@@ -172,17 +172,22 @@ func (e *Eng) newCtx(ctx context.Context, rt RT) *Ctx {
 	return cx
 }
 
+const unboundResponse = "response is not available until the request has run; use last for the previous response"
+
+func responseObj(r *Resp) *respObj {
+	if r == nil {
+		return newUnboundRespObj("response", unboundResponse)
+	}
+	return newRespObj("response", r)
+}
+
 func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
 	pre := e.modulePre()
 	pre["env"] = Obj(newEnvObj(rt.Env, rt.EnvGroups))
 	pre["vars"] = Obj(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
 	pre["last"] = Obj(newRespObj("last", rt.Resp))
 
-	res := rt.Res
-	if res == nil {
-		res = rt.Resp
-	}
-	pre["response"] = Obj(newRespObj("response", res))
+	pre["response"] = Obj(responseObj(rt.Res))
 	pre["trace"] = Obj(newTraceObj(rt.Trace))
 	pre["stream"] = Obj(newStreamObj(rt.Stream))
 

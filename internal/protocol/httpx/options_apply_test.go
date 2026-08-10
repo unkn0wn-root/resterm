@@ -20,7 +20,7 @@ func TestApplyOptionSettingsRejectsInvalidValues(t *testing.T) {
 		{name: "followredirects", key: "followredirects", val: "maybe", want: `invalid followredirects "maybe" (use true or false)`},
 		{name: "insecure", key: "insecure", val: "maybe", want: `invalid insecure "maybe" (use true or false)`},
 		{name: "no-cookies", key: "no-cookies", val: "maybe", want: `invalid no-cookies "maybe" (use true or false)`},
-		{name: "http-version", key: "http-version", val: "bogus", want: `invalid http-version "bogus"`},
+		{name: "http-version", key: "http-version", val: "unsupported", want: `invalid http-version "unsupported"`},
 		// A bare "@setting insecure" writes no value at all, so say it is missing.
 		{name: "bare bool", key: "insecure", val: "", want: "missing insecure value (use true or false)"},
 		{
@@ -122,7 +122,7 @@ func TestApplyRequestSettingsSkipsUnreadableValues(t *testing.T) {
 	opts := Options{Timeout: time.Second, HTTPVersion: httpver.V11, CookieJar: jar}
 
 	got := applyRequestSettings(opts, map[string]string{
-		"http-version":    "bogus",
+		"http-version":    "unsupported",
 		"timeout":         "5sec",
 		"followredirects": "maybe",
 		"insecure":        "true",

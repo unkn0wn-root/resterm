@@ -1335,7 +1335,7 @@ GET http://example.com
 
 func TestParseRequestVarDirectiveVariants(t *testing.T) {
 	src := `# @name Vars
-# @var simple foo
+# @var simple enabled
 # @var equals key=value
 # @var colon key: value
 # @var url https://example.com:8443/path
@@ -1357,7 +1357,7 @@ GET https://example.com
 	}
 
 	checks := map[string]string{
-		"simple": "foo",
+		"simple": "enabled",
 		"equals": "key=value",
 		"colon":  "key: value",
 		"url":    "https://example.com:8443/path",
@@ -3163,7 +3163,7 @@ func TestParseGraphQLRejectsNonBooleanValue(t *testing.T) {
 POST https://example.com/graphql
 `
 
-	doc := Parse("graphql-bad-value.http", []byte(src))
+	doc := Parse("graphql-invalid-value.http", []byte(src))
 	want := `invalid @graphql "maybe": expected true or false`
 	if !hasParseMessage(doc.Errors, want) {
 		t.Fatalf("expected %q, got %v", want, doc.Errors)
@@ -4234,7 +4234,7 @@ func TestParseBrokenDirectiveLeavesTheSlotFree(t *testing.T) {
 			check: wantAuth("bearer"),
 		},
 		{
-			name: "auth is a single unknown token", first: "@auth nonsense", then: "@auth bearer good",
+			name: "auth is a single unknown token", first: "@auth unsupported", then: "@auth bearer good",
 			want:  "@auth requires a valid auth spec",
 			check: wantAuth("bearer"),
 		},
@@ -4324,8 +4324,8 @@ func TestParseBrokenGRPCDirectiveLeavesTheSlotFree(t *testing.T) {
 		check func(*restfile.GRPCRequest) error
 	}{
 		{
-			name: "malformed method", first: "@grpc nonsense", then: "@grpc pkg.Svc/Method",
-			want: `invalid @grpc method "nonsense", use package.Service/Method`,
+			name: "malformed method", first: "@grpc missing-slash", then: "@grpc pkg.Svc/Method",
+			want: `invalid @grpc method "missing-slash", use package.Service/Method`,
 			check: func(req *restfile.GRPCRequest) error {
 				if req.FullMethod != "/pkg.Svc/Method" {
 					return fmt.Errorf("method = %q, want the second declaration", req.FullMethod)
@@ -4396,11 +4396,11 @@ func TestParseBrokenGRPCDirectiveLeavesTheSlotFree(t *testing.T) {
 func TestParseGRPCMetadataRequiresAPair(t *testing.T) {
 	src := "GRPC localhost:9000\n" +
 		"# @grpc-metadata x-first: one\n" +
-		"# @grpc-metadata nonsense\n" +
+		"# @grpc-metadata missing-colon\n" +
 		"# @grpc-metadata x-last: two\n"
 
 	doc := Parse("meta.http", []byte(src))
-	want := `invalid @grpc-metadata "nonsense", use key: value`
+	want := `invalid @grpc-metadata "missing-colon", use key: value`
 	if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
 		t.Fatalf("errors = %v, want exactly %q", doc.Errors, want)
 	}
@@ -4432,8 +4432,8 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 		},
 		{
 			name: "method is malformed",
-			line: "@grpc nonsense",
-			want: `invalid @grpc method "nonsense", use package.Service/Method`,
+			line: "@grpc missing-slash",
+			want: `invalid @grpc method "missing-slash", use package.Service/Method`,
 		},
 		{
 			name: "descriptor written bare",
@@ -4488,7 +4488,7 @@ func wantName(name string) func(*restfile.Request) error {
 	}
 }
 
-func wantAuth(kind string) func(*restfile.Request) error {
+func wantAuth(kind restfile.AuthKind) func(*restfile.Request) error {
 	return func(req *restfile.Request) error {
 		if req.Metadata.Auth == nil || req.Metadata.Auth.Type != kind {
 			return fmt.Errorf("auth = %+v, want a %s spec", req.Metadata.Auth, kind)
@@ -4498,7 +4498,7 @@ func wantAuth(kind string) func(*restfile.Request) error {
 }
 
 func TestParseIgnoredOptionKeepsTheDirectiveSlot(t *testing.T) {
-	doc := Parse("keep.http", []byte("GET https://example.com\n# @profile bogus=1\n# @profile count=2\n"))
+	doc := Parse("keep.http", []byte("GET https://example.com\n# @profile unsupported=1\n# @profile count=2\n"))
 	if !hasParseMessage(doc.Errors, "@profile directive already defined for this request") {
 		t.Fatalf("errors = %v", doc.Errors)
 	}

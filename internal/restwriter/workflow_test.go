@@ -201,3 +201,39 @@ func TestRenderWorkflowRoundTrip(t *testing.T) {
 		t.Fatalf("workflow step changed after round trip:\nwant: %#v\ngot:  %#v", wf.Steps[0], step)
 	}
 }
+
+func TestRenderWorkflowSpanningConditionRoundTrip(t *testing.T) {
+	src := `# @workflow deploy
+# @step build using=Build
+# @if contains(
+#   ["dev", "stage"],
+#   env
+# ) run=Deploy
+`
+	doc := parser.Parse("workflow.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("source did not parse: %v", doc.Errors)
+	}
+	want := doc.Workflows[0].Steps[1].If.Then.Cond
+	if !strings.Contains(want, "\n") {
+		t.Fatalf("condition did not span lines: %q", want)
+	}
+
+	out := RenderWorkflow(doc.Workflows[0], "")
+	back := parser.Parse("workflow.http", []byte(out))
+	if len(back.Errors) != 0 {
+		t.Fatalf("rendered workflow did not parse: %v\n%s", back.Errors, out)
+	}
+	got := back.Workflows[0].Steps[1].If.Then
+	if got.Run != "Deploy" {
+		t.Fatalf("run = %q after round trip\n%s", got.Run, out)
+	}
+	if strings.Join(strings.Fields(got.Cond), " ") != strings.Join(strings.Fields(want), " ") {
+		t.Fatalf("condition changed after round trip:\nwant %q\ngot  %q\n%s", want, got.Cond, out)
+	}
+
+	again := RenderWorkflow(back.Workflows[0], "")
+	if again != out {
+		t.Fatalf("render is not idempotent:\nfirst:\n%s\nsecond:\n%s", out, again)
+	}
+}

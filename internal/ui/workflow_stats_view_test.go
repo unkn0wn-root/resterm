@@ -71,7 +71,7 @@ func TestWorkflowStatsRenderSplitListAndSelectedDetail(t *testing.T) {
 		"Selected Step",
 		"2. Verify",
 		"FAIL",
-		"nope",
+		"step failed",
 	} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected rendered workflow view to contain %q, got %q", want, plain)
@@ -281,7 +281,7 @@ func TestWorkflowStatsRenderNarrowLayout(t *testing.T) {
 	if !strings.Contains(plain, "Steps") || !strings.Contains(plain, "Selected Step") {
 		t.Fatalf("expected narrow layout to stack list and detail, got %q", plain)
 	}
-	if !strings.Contains(plain, "nope") {
+	if !strings.Contains(plain, "step failed") {
 		t.Fatalf("expected selected detail in narrow layout, got %q", plain)
 	}
 }
@@ -422,7 +422,7 @@ func workflowStatsTestView() *workflowStatsView {
 						Status:     "500 Internal Server Error",
 						StatusCode: 500,
 						Headers:    http.Header{"Content-Type": []string{"application/json"}},
-						Body:       []byte(`{"error":"nope"}`),
+						Body:       []byte(`{"error":"step failed"}`),
 					},
 				},
 			},

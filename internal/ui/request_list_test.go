@@ -54,10 +54,10 @@ func TestRequestListItemDescriptionFallbacks(t *testing.T) {
 		{
 			name: "rest absolute path without description",
 			item: requestListItem{
-				request: &restfile.Request{Method: "get", URL: "https://example.com/api/v1?q=foo"},
+				request: &restfile.Request{Method: "get", URL: "https://example.com/api/v1?status=active"},
 				line:    3,
 			},
-			expected: "GET /api/v1?q=foo\nhttps://example.com",
+			expected: "GET /api/v1?status=active\nhttps://example.com",
 		},
 		{
 			name: "rest templated path without description",

@@ -1057,14 +1057,14 @@ func AuthSecretValues(auth *restfile.AuthSpec, res *vars.Resolver) []string {
 		vals[val] = struct{}{}
 	}
 
-	switch strings.ToLower(strings.TrimSpace(auth.Type)) {
-	case "basic":
+	switch auth.Kind() {
+	case restfile.AuthBasic:
 		add(expand("password"))
-	case "bearer":
+	case restfile.AuthBearer:
 		add(expand("token"))
-	case "apikey", "api-key", "header":
+	case restfile.AuthAPIKey, restfile.AuthHeader:
 		add(expand("value"))
-	case "oauth2":
+	case restfile.AuthOAuth2:
 		for _, key := range []string{"client_secret", "password", "refresh_token", "access_token"} {
 			add(expand(key))
 		}
@@ -1090,15 +1090,15 @@ func (e *Engine) prepareExplainAuthPreview(
 		return explainAuthPreviewResult{}, nil
 	}
 	auth := req.Metadata.Auth
-	kind := strings.ToLower(strings.TrimSpace(auth.Type))
+	kind := auth.Kind()
 	switch kind {
-	case "", "basic", "bearer", "apikey", "api-key", "header":
+	case "", restfile.AuthBasic, restfile.AuthBearer, restfile.AuthAPIKey, restfile.AuthHeader:
 		return explainAuthPreviewResult{
 			status:  xplain.StageOK,
 			summary: xplain.SummaryAuthPrepared,
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
 		}, nil
-	case "command":
+	case restfile.AuthCommand:
 		if hdr, ok := e.commandAuthHeader(doc, auth, res); ok && requestHeaderPresent(req, hdr) {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,

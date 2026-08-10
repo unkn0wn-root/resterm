@@ -722,7 +722,7 @@ func TestManagerAuthorizationCodeStateMismatch(t *testing.T) {
 }
 
 func TestPrepareRedirectPreservesQuery(t *testing.T) {
-	redirect, ln, err := prepareRedirect("http://127.0.0.1:0/oauth/callback?foo=bar")
+	redirect, ln, err := prepareRedirect("http://127.0.0.1:0/oauth/callback?state=expected")
 	if err != nil {
 		t.Fatalf("prepare redirect: %v", err)
 	}
@@ -735,7 +735,7 @@ func TestPrepareRedirectPreservesQuery(t *testing.T) {
 	if redirect.Path != "/oauth/callback" {
 		t.Fatalf("unexpected path %q", redirect.Path)
 	}
-	if redirect.RawQuery != "foo=bar" {
+	if redirect.RawQuery != "state=expected" {
 		t.Fatalf("expected query to be preserved, got %q", redirect.RawQuery)
 	}
 	if !strings.HasPrefix(redirect.Host, "127.0.0.1:") {

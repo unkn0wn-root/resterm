@@ -29,7 +29,7 @@ POST https://example.com/graphql
 Content-Type: application/json
 
 ### GRPC
-# @grpc foo.Bar/Baz
+# @grpc accounts.UserService/GetUser
 # @grpc-descriptor ./descriptors/service.protoset
 GRPC localhost:8080
 

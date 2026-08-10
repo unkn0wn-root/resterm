@@ -94,3 +94,52 @@ func TestDeclaredOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestNameContinuation(t *testing.T) {
+	tests := map[Name]Continuation{
+		Assert:       ContinueExpr,
+		SkipIf:       ContinueExpr,
+		When:         ContinueExpr,
+		Capture:      ContinueCapture,
+		Match:        ContinueOptions,
+		RequestName:  ContinueNone,
+		Step:         ContinueNone,
+		Name("void"): ContinueNone,
+	}
+	for name, want := range tests {
+		t.Run(name.String(), func(t *testing.T) {
+			if got := name.Continuation(); got != want {
+				t.Fatalf("%s continuation = %d, want %d", name.Tag(), got, want)
+			}
+		})
+	}
+}
+
+func TestSpecsContinueOnlyWithStructuredArguments(t *testing.T) {
+	for _, spec := range Specs() {
+		if spec.Continues == ContinueNone {
+			continue
+		}
+		if spec.Args != ArgText && spec.Args != ArgOptions {
+			t.Fatalf("%s continues with args kind %d", spec.Name.Tag(), spec.Args)
+		}
+	}
+}
+
+func TestNameKnown(t *testing.T) {
+	tests := map[Name]bool{
+		Assert:          true,
+		SkipIf:          true,
+		Name("void"):    false,
+		Name("ASSERT"):  false,
+		Name(""):        false,
+		Name("assert:"): false,
+	}
+	for name, want := range tests {
+		t.Run(name.String(), func(t *testing.T) {
+			if got := name.Known(); got != want {
+				t.Fatalf("%q known = %t, want %t", name, got, want)
+			}
+		})
+	}
+}

@@ -766,8 +766,8 @@ func (x *execCtx) prepareAuth() *xrunResult {
 	}
 
 	var secs []string
-	switch authKind(x.req.Metadata.Auth) {
-	case authTypeCommand:
+	switch x.req.Metadata.Auth.Kind() {
+	case restfile.AuthCommand:
 		out, err := x.eng.EnsureCommandAuth(x.sendCtx, x.doc, x.req, x.res, x.env, x.timeout)
 		if err != nil {
 			x.exp.stage(
@@ -1045,6 +1045,8 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	respForScripts := grpcScriptResponse(x.req, resp)
 	var caps captureResult
 	if err := x.eng.applyCaptures(captureRun{
+		ctx:    x.sendCtx,
+		base:   x.opts.BaseDir,
 		doc:    x.doc,
 		req:    x.req,
 		res:    x.res,
@@ -1141,6 +1143,8 @@ func (x *execCtx) httpRunner() xexec.Runner {
 			ApplyCaptures: func(in xexec.CaptureInput) error {
 				var caps captureResult
 				return x.eng.applyCaptures(captureRun{
+					ctx:    x.sendCtx,
+					base:   x.opts.BaseDir,
 					doc:    in.Doc,
 					req:    in.Req,
 					res:    in.Resolver,

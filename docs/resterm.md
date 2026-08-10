@@ -756,6 +756,27 @@ Troubleshooting:
 - The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
 - `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
 
+### Multiline directives
+
+Some directives can span multiple comment lines. Resterm keeps reading while the directive's expression, matcher, or template is incomplete:
+
+```http
+# @assert licensing.assertResponse(
+#   response,
+#   expected,
+#   options
+# )
+```
+
+- RestermScript expressions continue while an opening `(`, `[`, or `{` remains unmatched outside a string or comment. This applies to `@assert`, `@when`, `@skip-if`, `@capture`, `@apply`, `@patch`, `@for-each`, `@if`, `@elif`, `@switch`, and `@case`.
+- `@match` continues while a quoted or bracketed option value remains open. See [Splitting a long matcher](#splitting-a-long-matcher).
+- Text captures continue while a `{{` marker remains open. See [Captures](#captures).
+- Continuation lines may use any supported comment marker and do not repeat the directive name. Directives such as `@name`, `@tag`, and `@step` remain on one line.
+- Only the expression can keep a directive open. Names, messages, options, and loop variables do not. Separators such as `=>`, `run=`, `as`, and `in` only count outside strings, comments, and nested groups.
+- Options and loop variables after the closing delimiter remain part of the directive.
+- A new directive, a non-comment line, a request separator, or the end of the file stops collection. Resterm reports an unmatched delimiter at the opening line and drops the incomplete directive.
+- Errors inside continued expressions keep their original line and column. Reports and stack frames show the expression on one line.
+
 ### Metadata directives
 
 | Directive | Syntax | Description |
@@ -1005,7 +1026,7 @@ Rules do not inspect array elements. Match an array with `json`, or compare the 
 
 #### Splitting a long matcher
 
-If a bracket is still open, the matcher continues on the next comment line:
+If a quoted or bracketed value remains open, the matcher continues on the next comment line:
 
 ```http
 # @match json-rules={
@@ -1215,6 +1236,14 @@ POST https://httpbin.org/anything/analytics/sessions
 ```
 
 Template captures such as `{{response.json.token}}` remain supported and can be used alongside RTS capture expressions.
+
+`@capture` treats a value with a complete, unquoted `{{...}}` marker as interpolated text. Otherwise it parses the value as RestermScript. In text mode, surrounding characters such as `#` and unmatched brackets are literal. In script mode, `#` starts a comment.
+
+An unquoted marker in a script comment switches the capture to text mode. Resterm warns when the remaining text looks like a function call, but it cannot reliably detect every case. Quote markers mentioned in comments:
+
+```http
+# @capture request x response.statusCode # mention "{{token}}"
+```
 
 Set `# @setting capture.strict true` to make capture-path misses fail instead of silently resolving to an empty string.
 

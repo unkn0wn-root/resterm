@@ -7,14 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"unicode"
 
 	"golang.org/x/net/http/httpguts"
 )
-
-var mockNameRE = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 // MockSequenceDelimiter separates the responses of a mock sequence.
 const MockSequenceDelimiter = "---"
@@ -40,10 +37,6 @@ func (m *Mock) CheckShape() error {
 		return errors.New("mock sequence must define at least two responses")
 	}
 	return nil
-}
-
-func ValidMockName(name string) bool {
-	return mockNameRE.MatchString(name)
 }
 
 func ValidMockStatus(status int) bool {

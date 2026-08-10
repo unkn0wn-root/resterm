@@ -15,28 +15,38 @@ const (
 	directiveRejected
 )
 
-type directiveLine struct {
+// lines covers the directive and its continuation lines. Positions use lines.Start.
+type parsedDirective struct {
 	directive.Call
-	no     int
+	lines  restfile.LineRange
 	argCol int
 }
 
-func (d directiveLine) exprCol(expr string) int {
+// Only the opening line carries a column. An expression starting on a
+// continuation line would count the newline as another character on the line
+// above, so it gets none.
+func (d parsedDirective) exprCol(expr string) int {
 	if d.argCol <= 0 || expr == "" {
 		return 0
 	}
 	off := strings.LastIndex(d.Args, expr)
-	if off < 0 {
+	if off < 0 || strings.Contains(d.Args[:off], "\n") {
 		return 0
 	}
 	return d.argCol + off
+}
+
+func (d parsedDirective) setExprCol(col *int, expr string) {
+	if c := d.exprCol(expr); c > 0 {
+		*col = c
+	}
 }
 
 // Directives are offered to handlers before their required values are checked.
 // This lets inactive features ignore their directives without producing errors.
 // The request handler stays last because checking it may open a request for a
 // directive that belongs to another context.
-var directiveHandlers = []func(*documentBuilder, directiveLine) directiveOutcome{
+var directiveHandlers = []func(*documentBuilder, parsedDirective) directiveOutcome{
 	(*documentBuilder).handleMockDirective,
 	(*documentBuilder).handleWorkflowStart,
 	(*documentBuilder).handleUseDirective,
@@ -51,16 +61,16 @@ var directiveHandlers = []func(*documentBuilder, directiveLine) directiveOutcome
 	(*documentBuilder).handleRequestDirective,
 }
 
-func (b *documentBuilder) routeDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 	out := b.claimDirective(d)
 	if out == directiveApplied && d.Name.ValueRequired() && !directive.HasValue(d.Args) {
-		b.addError(d.no, d.Spelling.Tag()+" value missing")
+		b.addError(d.lines.Start, d.Spelling.Tag()+" value missing")
 		return directiveRejected
 	}
 	return out
 }
 
-func (b *documentBuilder) claimDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) claimDirective(d parsedDirective) directiveOutcome {
 	for _, handle := range directiveHandlers {
 		if out := handle(b, d); out != directiveIgnored {
 			return out
@@ -69,15 +79,21 @@ func (b *documentBuilder) claimDirective(d directiveLine) directiveOutcome {
 	return directiveIgnored
 }
 
-func (b *documentBuilder) redeclared(d directiveLine) bool {
+// Errors point at the line the directive opened on, not the one that closed it.
+func (b *documentBuilder) reject(d parsedDirective, message string) directiveOutcome {
+	b.addError(d.lines.Start, message)
+	return directiveRejected
+}
+
+func (b *documentBuilder) redeclared(d parsedDirective) bool {
 	if !b.inRequest || !b.request.declared[d.Name] {
 		return false
 	}
-	b.addError(d.no, d.Name.Tag()+" directive already defined for this request")
+	b.addError(d.lines.Start, d.Name.Tag()+" directive already defined for this request")
 	return true
 }
 
-func (b *documentBuilder) markDeclared(d directiveLine) {
+func (b *documentBuilder) markDeclared(d parsedDirective) {
 	if b.inRequest && d.Name.DeclaredOnce() {
 		b.request.declared[d.Name] = true
 	}
@@ -86,11 +102,11 @@ func (b *documentBuilder) markDeclared(d directiveLine) {
 // Request directives are allowed to open a request while they are being checked.
 // If no request handler accepts the directive, restore the previous state so a
 // following shorthand variable remains file scoped.
-func (b *documentBuilder) handleRequestDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOutcome {
 	opened := !b.inRequest
-	b.ensureRequest(d.no)
+	b.ensureRequest(d.lines.Start)
 	if handled, err := b.request.protoDirective(d.Name, d.Args); handled {
-		b.report(d.no, err)
+		b.report(d.lines.Start, err)
 		if fatalErr(err) {
 			return directiveRejected
 		}
@@ -109,18 +125,17 @@ func (b *documentBuilder) handleRequestDirective(d directiveLine) directiveOutco
 	return directiveIgnored
 }
 
-func (b *documentBuilder) handleWorkflowStart(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleWorkflowStart(d parsedDirective) directiveOutcome {
 	switch d.Name {
 	case directive.Workflow:
-		b.startWorkflow(d.no, d.Args)
+		b.startWorkflow(d.lines.Start, d.Args)
 		return directiveApplied
 	case directive.Step:
 		if b.workflow == nil {
 			return directiveApplied
 		}
-		if err := b.workflow.addStep(d.no, d.Args); err != nil {
-			b.addError(d.no, err.Error())
-			return directiveRejected
+		if err := b.workflow.addStep(d.lines.Start, d.Args); err != nil {
+			return b.reject(d, err.Error())
 		}
 		return directiveApplied
 	default:
@@ -128,30 +143,29 @@ func (b *documentBuilder) handleWorkflowStart(d directiveLine) directiveOutcome 
 	}
 }
 
-func (b *documentBuilder) handleWorkflowDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleWorkflowDirective(d parsedDirective) directiveOutcome {
 	if b.workflow == nil || b.inRequest {
 		return directiveIgnored
 	}
-	handled, err := b.workflow.handleDirective(d.Call, d.no)
-	switch {
-	case !handled:
+	handled, err := b.workflow.handleDirective(d.Call, d.lines.Start)
+	if !handled {
 		return directiveIgnored
-	case err != nil:
-		b.addError(d.no, err.Error())
-		return directiveRejected
-	default:
-		return directiveApplied
 	}
+	// The workflow owns the directive even when it is rejected, so its range covers every line.
+	b.workflow.touch(d.lines.End)
+	if err != nil {
+		return b.reject(d, err.Error())
+	}
+	return directiveApplied
 }
 
-func (b *documentBuilder) handleUseDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleUseDirective(d parsedDirective) directiveOutcome {
 	if d.Name != directive.Use {
 		return directiveIgnored
 	}
-	spec, err := parseUseSpec(d.Args, d.no)
+	spec, err := parseUseSpec(d.Args, d.lines.Start)
 	if err != nil {
-		b.addError(d.no, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 	if b.inRequest && b.request != nil {
 		b.request.metadata.Uses = append(b.request.metadata.Uses, spec)
@@ -161,41 +175,36 @@ func (b *documentBuilder) handleUseDirective(d directiveLine) directiveOutcome {
 	return directiveApplied
 }
 
-func (b *documentBuilder) handleAuthDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleAuthDirective(d parsedDirective) directiveOutcome {
 	if d.Name != directive.Auth {
 		return directiveIgnored
 	}
 
 	dir, err := parseAuthDirective(d.Args)
 	if err != nil {
-		b.addError(d.no, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 
 	switch dir.Scope {
 	case directive.ScopeFile, directive.ScopeGlobal:
 		if b.inRequest {
-			b.addError(
-				d.no,
-				"@auth "+dir.Scope.String()+" scope must be declared outside a request",
-			)
-			return directiveRejected
+			return b.reject(d, "@auth "+dir.Scope.String()+" scope must be declared outside a request")
 		}
 		if dir.Disable || dir.Spec == nil {
 			return directiveApplied
 		}
 		spec := *dir.Spec.Clone()
 		spec.SourcePath = b.doc.Path
-		spec.Line = d.no
+		spec.Line = d.lines.Start
 		b.file.auth = append(b.file.auth, restfile.AuthProfile{
 			Scope:      dir.Scope,
 			Name:       dir.Name,
 			Spec:       spec,
-			Line:       d.no,
+			Line:       d.lines.Start,
 			SourcePath: b.doc.Path,
 		})
 	case directive.ScopeRequest:
-		b.ensureRequest(d.no)
+		b.ensureRequest(d.lines.Start)
 		if dir.Disable {
 			b.request.metadata.Auth = nil
 			b.request.metadata.AuthDisabled = true
@@ -204,7 +213,7 @@ func (b *documentBuilder) handleAuthDirective(d directiveLine) directiveOutcome 
 		if dir.Spec != nil {
 			spec := dir.Spec.Clone()
 			spec.SourcePath = b.doc.Path
-			spec.Line = d.no
+			spec.Line = d.lines.Start
 			b.request.metadata.Auth = spec
 			b.request.metadata.AuthDisabled = false
 		}
@@ -213,28 +222,24 @@ func (b *documentBuilder) handleAuthDirective(d directiveLine) directiveOutcome 
 	return directiveApplied
 }
 
-func (b *documentBuilder) handlePatchDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handlePatchDirective(d parsedDirective) directiveOutcome {
 	if d.Name != directive.Patch {
 		return directiveIgnored
 	}
 	if b.inRequest {
-		b.addError(d.no, "@patch must be declared outside a request")
-		return directiveRejected
+		return b.reject(d, "@patch must be declared outside a request")
 	}
-	spec, err := parsePatchSpec(d.Args, d.no)
+	spec, err := parsePatchSpec(d.Args, d.lines.Start)
 	if err != nil {
-		b.addError(d.no, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
-	if c := d.exprCol(spec.Expression); c > 0 {
-		spec.Col = c
-	}
+	d.setExprCol(&spec.Col, spec.Expression)
 	spec.SourcePath = b.doc.Path
 	b.file.patches = append(b.file.patches, spec)
 	return directiveApplied
 }
 
-func (b *documentBuilder) handleFileSettingsDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleFileSettingsDirective(d parsedDirective) directiveOutcome {
 	if b.inRequest {
 		return directiveIgnored
 	}
@@ -251,6 +256,6 @@ func (b *documentBuilder) handleFileSettingsDirective(d directiveLine) directive
 		return directiveIgnored
 	}
 	b.file.settings = settings
-	b.report(d.no, err)
+	b.report(d.lines.Start, err)
 	return directiveApplied
 }

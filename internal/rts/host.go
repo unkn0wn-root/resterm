@@ -82,12 +82,13 @@ type Resp struct {
 }
 
 type respObj struct {
-	name  string
-	r     *Resp
-	h     map[string]string
-	jv    any
-	jerr  error
-	jdone bool
+	name    string
+	r       *Resp
+	h       map[string]string
+	jv      any
+	jerr    error
+	jdone   bool
+	unbound string // distinguishes an unavailable response from an empty one
 }
 
 func newRespObj(name string, r *Resp) *respObj {
@@ -110,7 +111,13 @@ func newRespObj(name string, r *Resp) *respObj {
 	return o
 }
 
+func newUnboundRespObj(name, why string) *respObj {
+	return &respObj{name: name, unbound: why}
+}
+
 func (o *respObj) TypeName() string { return o.name }
+
+func (o *respObj) Unbound() string { return o.unbound }
 
 func (o *respObj) GetMember(name string) (Value, bool) {
 	switch name {

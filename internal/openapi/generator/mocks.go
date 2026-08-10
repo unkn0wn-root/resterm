@@ -100,7 +100,7 @@ func (b *Builder) mockCandidatesForResponse(
 	mts := sortedMockMediaTypes(resp.MediaTypes)
 	if len(mts) == 0 {
 		spec := b.mockForResponse(op, model.MediaType{}, model.Example{}, hdrs, status, false)
-		spec.Name = restwriter.UniqueMockName("status-"+strconv.Itoa(status), used)
+		spec.Name = restfile.UniqueMockName("status-"+strconv.Itoa(status), used)
 		return []mockCandidate{{mock: spec, status: status, mediaRank: 99}}
 	}
 
@@ -113,7 +113,7 @@ func (b *Builder) mockCandidatesForResponse(
 		}
 		for _, ex := range examples {
 			spec := b.mockForResponse(op, mt, ex, hdrs, status, multi)
-			spec.Name = restwriter.UniqueMockName(mockScenarioName(status, mt.ContentType, ex, multi), used)
+			spec.Name = restfile.UniqueMockName(mockScenarioName(status, mt.ContentType, ex, multi), used)
 			out = append(out, mockCandidate{
 				mock:      spec,
 				status:    status,
@@ -279,11 +279,11 @@ func jsonMockBody(value any) (string, error) {
 }
 
 func checkedMockBody(body string) (string, error) {
-	return restwriter.NormalizeMockBody(body)
+	return restwriter.CheckMockBody(body)
 }
 
 func checkedBodyText(body string) (string, error) {
-	return restwriter.NormalizeInlineBody(body)
+	return restwriter.CheckInlineBody(body)
 }
 
 func mockHeaderValue(value any) string {
@@ -310,10 +310,10 @@ func mockHeaderValue(value any) string {
 func mockScenarioName(status int, contentType string, example model.Example, multi bool) string {
 	parts := []string{"status", strconv.Itoa(status)}
 	if multi {
-		parts = append(parts, restwriter.MockNameSlug(contentType))
+		parts = append(parts, restfile.MockNameSlug(contentType))
 	}
 	if example.Name != "" {
-		parts = append(parts, restwriter.MockNameSlug(example.Name))
+		parts = append(parts, restfile.MockNameSlug(example.Name))
 	}
 	return strings.Join(parts, "-")
 }
