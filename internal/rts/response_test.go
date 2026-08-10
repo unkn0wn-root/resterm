@@ -16,6 +16,16 @@ func evalRT2(t *testing.T, rt RT, src string) Value {
 	return v
 }
 
+func assertRT(t *testing.T, rt RT, src string) Value {
+	t.Helper()
+	e := NewEng(testStdlib)
+	v, err := e.EvalAssertion(context.Background(), rt, src, Pos{Path: "test", Line: 1, Col: 1})
+	if err != nil {
+		t.Fatalf("assert %q: %v", src, err)
+	}
+	return v
+}
+
 func TestResponseObject(t *testing.T) {
 	resp := &Resp{
 		Status: "200 OK",
@@ -91,10 +101,10 @@ func TestUnboundResponseRejectsEveryRead(t *testing.T) {
 // member and index paths have to stop it themselves.
 func TestUnboundObjectAbortsThroughMemberAndIndex(t *testing.T) {
 	unbound := func() Value { return Obj(newUnboundRespObj("response", unboundResponse)) }
-	rt := RT{Extra: map[string]Value{
+	rt := RT{Locals: NewLocals(map[string]Value{
 		"holder": Dict(map[string]Value{"resp": unbound()}),
 		"items":  List([]Value{unbound()}),
-	}}
+	})}
 
 	tests := map[string]string{
 		"member through a dict": `holder.resp.statusCode`,
@@ -122,24 +132,35 @@ func TestUnboundObjectAbortsThroughMemberAndIndex(t *testing.T) {
 	}
 }
 
-func TestAssertExtra(t *testing.T) {
+func TestAssertionShorthands(t *testing.T) {
 	resp := &Resp{
 		Status: "201 Created",
 		Code:   201,
 		H:      map[string][]string{"Content-Type": {"application/json"}},
 		Body:   []byte(`{"ok":true}`),
 	}
-	rt := RT{Res: resp, Extra: AssertExtra(resp)}
-	v := evalRT2(t, rt, "status == 201")
+	rt := RT{Res: resp}
+	v := assertRT(t, rt, "status == 201")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected status == 201, got %+v", v)
 	}
-	v = evalRT2(t, rt, "header(\"Content-Type\") == \"application/json\"")
+	v = assertRT(t, rt, "header(\"Content-Type\") == \"application/json\"")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected header match, got %+v", v)
 	}
-	v = evalRT2(t, rt, "text() == \"{\\\"ok\\\":true}\"")
+	v = assertRT(t, rt, "text() == \"{\\\"ok\\\":true}\"")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected text match, got %+v", v)
+	}
+}
+
+// Outside an assertion the shorthands stay unbound, so a plain expression
+// cannot read status without naming the response it belongs to.
+func TestAssertionShorthandsAreAssertionOnly(t *testing.T) {
+	e := NewEng(testStdlib)
+	rt := RT{Res: &Resp{Status: "201 Created", Code: 201}}
+	_, err := e.Eval(context.Background(), rt, "status", Pos{Path: "test", Line: 1, Col: 1})
+	if err == nil || !strings.Contains(err.Error(), `undefined name "status"`) {
+		t.Fatalf("eval status outside an assertion: error = %v, want it undefined", err)
 	}
 }

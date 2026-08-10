@@ -551,7 +551,21 @@ RTS provides a small standard library that covers common request needs without e
 
 ## Host objects for request evaluation
 
-Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers. Other available objects are read-only. Lookups in `env` and `vars` are case-insensitive. Header lookups are normalized, while query keys and JSON paths are case-sensitive. The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped. A local value named `mock`, such as an `@for-each` loop variable, takes precedence.
+Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers. Other available objects are read-only. Lookups in `env` and `vars` are case-insensitive. Header lookups are normalized, while query keys and JSON paths are case-sensitive. The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped.
+
+### Name precedence
+
+Every evaluation binds its names in a fixed order, and a later layer wins:
+
+1. The standard library and the host objects below.
+2. Host extensions such as `mock`. These are additive and cannot reuse a name from the first layer.
+3. `@use` aliases. These cannot reuse a name from either layer above.
+4. Local values, currently the `@for-each` loop variable. These shadow every layer above, so `# @for-each [1,2] as json` makes `json` the loop item for that request and hides the `json` namespace.
+5. The `@assert` shorthands, inside assertions only. `status`, `statusCode`, `statusText`, `header(name)`, and `text()` always refer to the response under test, so a loop variable named `status` remains the loop item everywhere except inside an `@assert`.
+
+Reserved words are never bindable at any layer. The parser rejects them in `@for-each` and `@use`, and the runtime rejects them again.
+
+Shadowing applies to expressions. A module or an `@rts pre-request` block still cannot declare a name that is already bound, so `let json = 1` has always been an error. A local extends that rule to its own name: a request with `# @for-each [1,2] as item` cannot also declare `let item` in its pre-request block. Rename the declaration or the loop variable.
 
 ### env
 
@@ -719,6 +733,8 @@ These directives route workflow steps and are not the `switch` statement. They s
 ```
 
 The expression must evaluate to a list. It introduces a loop variable that you can use in RestermScript expressions. In workflows, it also sets `vars.workflow.<name>` and `vars.request.<name>` for legacy templates.
+
+The loop variable is a local, so it shadows any standard library, host object, or `@use` alias of the same name for the whole request, including `@rts pre-request` blocks. JavaScript pre-request blocks do not see it as a typed value and continue to read `vars.request.<name>`. See [Name precedence](#name-precedence).
 
 ## Limits and safety
 

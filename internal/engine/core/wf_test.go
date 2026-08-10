@@ -297,7 +297,7 @@ func (d *fakeDep) EvalCondition(
 	base string,
 	spec *restfile.ConditionSpec,
 	vv map[string]string,
-	extra map[string]rts.Value,
+	locals rts.Locals,
 ) (bool, string, error) {
 	if spec == nil || strings.TrimSpace(spec.Expression) == "" {
 		return true, "", nil
@@ -320,7 +320,7 @@ func (d *fakeDep) EvalForEachItems(
 	base string,
 	spec request.ForEachSpec,
 	vv map[string]string,
-	extra map[string]rts.Value,
+	locals rts.Locals,
 ) ([]rts.Value, error) {
 	if items := d.each[strings.TrimSpace(spec.Expr)]; len(items) > 0 {
 		return append([]rts.Value(nil), items...), nil

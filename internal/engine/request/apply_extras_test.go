@@ -13,7 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
-// @for-each binds its item as a typed value in ExecOptions.Values. Every other
+// @for-each binds its item as a typed value in ExecOptions.Locals. Every other
 // expression in the run reads it, and @apply used to be handed nil instead, so a
 // patch dereferencing the loop item failed with an undefined name.
 func TestApplySeesTypedForEachValues(t *testing.T) {
@@ -64,10 +64,10 @@ func TestApplySeesTypedForEachValues(t *testing.T) {
 			}
 
 			res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{
-				Values: map[string]rts.Value{
+				Locals: rts.NewLocals(map[string]rts.Value{
 					"item": rts.Dict(map[string]rts.Value{"id": rts.Str("42")}),
 					"list": rts.List([]rts.Value{rts.Str("first"), rts.Str("second")}),
-				},
+				}),
 			})
 			if err != nil {
 				t.Fatalf("ExecuteWith: %v", err)

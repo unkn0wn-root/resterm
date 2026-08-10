@@ -46,7 +46,7 @@ type captureRun struct {
 	out    *captureResult
 	env    vars.Environment
 	v      map[string]string
-	x      map[string]rts.Value
+	locals rts.Locals
 }
 
 type captureExpr struct {
@@ -56,15 +56,15 @@ type captureExpr struct {
 }
 
 type captureScope struct {
-	ctx  context.Context
-	base string
-	doc  *restfile.Document
-	req  *restfile.Request
-	env  vars.Environment
-	v    map[string]string
-	x    map[string]rts.Value
-	rr   *rts.Resp
-	rs   *rts.Stream
+	ctx    context.Context
+	base   string
+	doc    *restfile.Document
+	req    *restfile.Request
+	env    vars.Environment
+	v      map[string]string
+	locals rts.Locals
+	rr     *rts.Resp
+	rs     *rts.Stream
 }
 
 type captureValueIn struct {
@@ -128,15 +128,15 @@ func (e *Engine) applyCaptures(in captureRun) error {
 		in.v = e.collectVariables(in.doc, in.req, in.env)
 	}
 	sc := captureScope{
-		ctx:  in.ctx,
-		base: in.base,
-		doc:  in.doc,
-		req:  in.req,
-		env:  in.env,
-		v:    in.v,
-		x:    in.x,
-		rr:   rtsScriptResp(in.resp),
-		rs:   rtsStream(in.stream),
+		ctx:    in.ctx,
+		base:   in.base,
+		doc:    in.doc,
+		req:    in.req,
+		env:    in.env,
+		v:      in.v,
+		locals: in.locals,
+		rr:     rtsScriptResp(in.resp),
+		rs:     rtsStream(in.stream),
 	}
 	res := e.captureResolver(in.res, sc)
 	for _, c := range in.req.Metadata.Captures {
@@ -189,7 +189,7 @@ func (e *Engine) captureResolver(res *vars.Resolver, sc captureScope) *vars.Reso
 		Vars:     sc.v,
 		Response: sc.rr,
 		Stream:   sc.rs,
-		Extra:    sc.x,
+		Locals:   sc.locals,
 	}))
 }
 
@@ -222,7 +222,7 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		env:     in.env,
 		base:    in.base,
 		vars:    in.v,
-		x:       in.x,
+		locals:  in.locals,
 		site:    directive.Capture.Tag() + " " + str.FoldLines(in.ex),
 		resp:    in.rr,
 		res:     in.rr,

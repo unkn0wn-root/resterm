@@ -174,12 +174,12 @@ func (e *Engine) buildResolver(
 	env vars.Environment,
 	base string,
 	globs map[string]vars.GlobalMutation,
-	extra map[string]rts.Value,
+	locals rts.Locals,
 	extras ...map[string]string,
 ) *vars.Resolver {
 	res := vars.NewResolver(e.providers(doc, req, env, globs, keepSecrets, extras...)...)
 	res.AddRefResolver(vars.EnvRefResolver)
-	res.SetExprEval(e.rtsEval(ctx, doc, req, env, base, extra, extras...))
+	res.SetExprEval(e.rtsEval(ctx, doc, req, env, base, locals, extras...))
 	res.SetExprPos(e.rtsPos(doc, req))
 	return res
 }
@@ -192,7 +192,7 @@ func (e *Engine) DisplayResolver(
 	req *restfile.Request,
 	env vars.Environment,
 	base string,
-	extra map[string]rts.Value,
+	locals rts.Locals,
 	extras ...map[string]string,
 ) *vars.Resolver {
 	base = e.rtsBase(doc, base)
@@ -204,7 +204,7 @@ func (e *Engine) DisplayResolver(
 	vv := e.collectVariablesWithGlobals(doc, req, env, globs, omitSecrets, extras...)
 	res.SetExprEval(e.ExprEvalWithOptions(
 		ctx,
-		ExprInput{Doc: doc, Req: req, Env: env, Base: base, Vars: vv, Extra: extra},
+		ExprInput{Doc: doc, Req: req, Env: env, Base: base, Vars: vv, Locals: locals},
 		ExprEvalOptions{OmitSecretGlobals: true},
 	))
 	res.SetExprPos(e.rtsPos(doc, req))

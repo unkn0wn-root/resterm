@@ -48,8 +48,17 @@ type RT struct {
 	ReadFile    func(string) ([]byte, error)
 	AllowRandom bool
 	Site        string
-	Extra       map[string]Value
+	Extensions  Extensions
+	Locals      Locals
 }
+
+// evalKind selects which binding layers an evaluation gets.
+type evalKind uint8
+
+const (
+	evalBase evalKind = iota
+	evalAssert
+)
 
 // Eng evaluates RTS expressions and modules.
 // It is not safe for concurrent use because evaluation updates shared request
@@ -73,6 +82,17 @@ func NewEng(std func() map[string]Value) *Eng {
 }
 
 func (e *Eng) Eval(ctx context.Context, rt RT, src string, pos Pos) (Value, error) {
+	return e.eval(ctx, rt, src, pos, evalBase)
+}
+
+// EvalAssertion evaluates an @assert expression. Assertions add response
+// shorthands such as status and header(name) that are not visible anywhere
+// else, which is why the host cannot supply them itself.
+func (e *Eng) EvalAssertion(ctx context.Context, rt RT, src string, pos Pos) (Value, error) {
+	return e.eval(ctx, rt, src, pos, evalAssert)
+}
+
+func (e *Eng) eval(ctx context.Context, rt RT, src string, pos Pos, kind evalKind) (Value, error) {
 	if e == nil {
 		return Null(), fmt.Errorf("nil engine")
 	}
@@ -83,7 +103,7 @@ func (e *Eng) Eval(ctx context.Context, rt RT, src string, pos Pos) (Value, erro
 	}
 
 	cx := e.newCtx(ctx, rt)
-	pre, err := e.buildPre(cx, rt, pos)
+	pre, err := e.buildPre(cx, rt, pos, kind)
 	if err != nil {
 		return Null(), err
 	}
@@ -132,7 +152,7 @@ func (e *Eng) ExecModule(ctx context.Context, rt RT, src string, pos Pos) (*Comp
 	}
 
 	cx := e.newCtx(ctx, rt)
-	pre, err := e.buildPre(cx, rt, pos)
+	pre, err := e.buildPre(cx, rt, pos, evalBase)
 	if err != nil {
 		return nil, err
 	}
@@ -181,49 +201,60 @@ func responseObj(r *Resp) *respObj {
 	return newRespObj("response", r)
 }
 
-func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
-	pre := e.modulePre()
-	pre["env"] = Obj(newEnvObj(rt.Env, rt.EnvGroups))
-	pre["vars"] = Obj(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
-	pre["last"] = Obj(newRespObj("last", rt.Resp))
-
-	pre["response"] = Obj(responseObj(rt.Res))
-	pre["trace"] = Obj(newTraceObj(rt.Trace))
-	pre["stream"] = Obj(newStreamObj(rt.Stream))
-
-	for k, v := range rt.Extra {
-		if k == "" {
-			continue
-		}
-		if IsKeyword(k) {
-			return nil, Errf(cx, pos, "name is a reserved word: %s", k)
-		}
-		if _, ok := pre[k]; ok {
-			return nil, Errf(cx, pos, "name already defined: %s", k)
-		}
-		pre[k] = v
-	}
-
-	uses, err := e.resolveUses(cx, rt, pre, pos)
-	if err != nil {
+// buildPre assembles the bindings one evaluation sees. The prelude is the only
+// source of truth for what a local may shadow, so binding a new host object
+// here is all it takes to make it shadowable.
+func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos, kind evalKind) (map[string]Value, error) {
+	p := e.basePre(rt)
+	if err := p.addExtensions(cx, pos, rt.Extensions); err != nil {
 		return nil, err
+	}
+	if err := e.addUses(cx, rt, p, pos); err != nil {
+		return nil, err
+	}
+	if err := p.overlayLocals(cx, pos, rt.Locals); err != nil {
+		return nil, err
+	}
+	if kind == evalAssert {
+		p.overlayAsserts(rt.Res)
+	}
+	return p.values, nil
+}
+
+func (e *Eng) basePre(rt RT) pre {
+	p := pre{values: e.modulePre()}
+	p.bind(newEnvObj(rt.Env, rt.EnvGroups))
+	p.bind(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
+	p.bind(newRespObj("last", rt.Resp))
+	p.bind(responseObj(rt.Res))
+	p.bind(newTraceObj(rt.Trace))
+	p.bind(newStreamObj(rt.Stream))
+	return p
+}
+
+func (e *Eng) addUses(cx *Ctx, rt RT, p pre, pos Pos) error {
+	uses, err := e.resolveUses(cx, rt, p.values, pos)
+	if err != nil {
+		return err
 	}
 	for _, u := range uses {
 		cp, _, err := e.C.Load(cx, rt.BaseDir, u.Path)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		pre[u.Alias] = Obj(NewModObj(u.Alias, cp.Exp))
+		// Not p.bind: a module reports itself as module:<name>, while the alias
+		// is the name the file wrote.
+		p.values[u.Alias] = Obj(NewModObj(u.Alias, cp.Exp))
 	}
-	return pre, nil
+	return nil
 }
 
 func (e *Eng) modulePre() map[string]Value {
-	pre := cloneVals(e.Stdlib())
+	p := pre{values: cloneVals(e.Stdlib())}
 	if e.reqObj != nil {
-		pre["request"] = Obj(e.reqObj)
+		p.bind(e.reqObj)
 	}
-	return pre
+	return p.values
 }
 
 func cloneVals(src map[string]Value) map[string]Value {

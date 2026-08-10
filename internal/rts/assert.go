@@ -1,6 +1,9 @@
 package rts
 
-func AssertExtra(r *Resp) map[string]Value {
+// overlayAsserts binds the @assert shorthands for the response under test.
+// They sit above the locals so an @for-each variable named status does not hide
+// the status the assertion is written against.
+func (p pre) overlayAsserts(r *Resp) {
 	o := newRespObj("response", r)
 	code := 0
 	status := ""
@@ -8,11 +11,9 @@ func AssertExtra(r *Resp) map[string]Value {
 		code = r.Code
 		status = r.Status
 	}
-	return map[string]Value{
-		"status":     Num(float64(code)),
-		"statusCode": Num(float64(code)),
-		"statusText": Str(status),
-		"header":     NativeNamed("header", o.headerFn),
-		"text":       NativeNamed("text", o.textFn),
-	}
+	p.values["status"] = Num(float64(code))
+	p.values["statusCode"] = Num(float64(code))
+	p.values["statusText"] = Str(status)
+	p.values["header"] = NativeNamed("header", o.headerFn)
+	p.values["text"] = NativeNamed("text", o.textFn)
 }

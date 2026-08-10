@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
 func TestRunRTSApplyPatch(t *testing.T) {
@@ -36,7 +37,7 @@ func TestRunRTSApplyPatch(t *testing.T) {
 	vars := map[string]string{"existing": "1"}
 
 	if err := model.requestSvc(httpx.Options{}).ApplyPatches(
-		context.Background(), nil, req, testEnv(""), "", vars, nil,
+		context.Background(), nil, req, testEnv(""), "", vars, rts.Locals{},
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -131,7 +132,7 @@ func TestRunRTSApplyOrder(t *testing.T) {
 		testEnv(""),
 		"",
 		map[string]string{},
-		nil,
+		rts.Locals{},
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestRunRTSApplyClearsAuthAndDeletesSetting(t *testing.T) {
 	}
 
 	if err := m.requestSvc(httpx.Options{}).ApplyPatches(
-		context.Background(), nil, req, testEnv(""), "", nil, nil,
+		context.Background(), nil, req, testEnv(""), "", nil, rts.Locals{},
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -192,7 +193,7 @@ func TestRunRTSApplyTemplatedURLQuery(t *testing.T) {
 	}
 
 	if err := model.requestSvc(httpx.Options{}).ApplyPatches(
-		context.Background(), nil, req, testEnv(""), "", nil, nil,
+		context.Background(), nil, req, testEnv(""), "", nil, rts.Locals{},
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -231,7 +232,7 @@ func TestRunRTSApplyTemplatedQueryPreservesTemplate(t *testing.T) {
 	}
 
 	if err := model.requestSvc(httpx.Options{}).ApplyPatches(
-		context.Background(), nil, req, testEnv(""), "", nil, nil,
+		context.Background(), nil, req, testEnv(""), "", nil, rts.Locals{},
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -289,7 +290,7 @@ func TestRunRTSApplyUseProfiles(t *testing.T) {
 	}
 
 	if err := m.requestSvc(httpx.Options{}).ApplyPatches(
-		context.Background(), doc, req, testEnv(""), "", nil, nil,
+		context.Background(), doc, req, testEnv(""), "", nil, rts.Locals{},
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -320,7 +321,7 @@ func TestRunRTSApplyUseMissingProfile(t *testing.T) {
 	}
 
 	err := m.requestSvc(httpx.Options{}).ApplyPatches(
-		context.Background(), nil, req, testEnv(""), "", nil, nil,
+		context.Background(), nil, req, testEnv(""), "", nil, rts.Locals{},
 	)
 	if err == nil {
 		t.Fatalf("expected missing profile error")

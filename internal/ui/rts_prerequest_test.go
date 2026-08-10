@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -47,7 +48,7 @@ vars.global.delete("old")`,
 	}
 
 	out, err := model.requestSvc(httpx.Options{}).
-		RunPreRequest(context.Background(), nil, req, testEnv(""), "", variables, globals)
+		RunPreRequest(context.Background(), nil, req, testEnv(""), "", variables, rts.Locals{}, globals)
 	if err != nil {
 		t.Fatalf("runRTSPreRequest: %v", err)
 	}
@@ -95,7 +96,7 @@ request.setQueryParam("mutated", "true")`,
 	}
 
 	out, err := model.requestSvc(httpx.Options{}).
-		RunPreRequest(context.Background(), nil, req, testEnv(""), "", nil, nil)
+		RunPreRequest(context.Background(), nil, req, testEnv(""), "", nil, rts.Locals{}, nil)
 	if err != nil {
 		t.Fatalf("runRTSPreRequest: %v", err)
 	}
@@ -133,6 +134,7 @@ GET https://example.com
 		testEnv(""),
 		"",
 		nil,
+		rts.Locals{},
 		nil,
 	)
 	if err == nil {
@@ -180,7 +182,7 @@ func TestRunRTSPreRequestErrorRendersIncludedSource(t *testing.T) {
 	}
 
 	_, err := model.requestSvc(httpx.Options{}).
-		RunPreRequest(context.Background(), nil, req, testEnv(""), dir, nil, nil)
+		RunPreRequest(context.Background(), nil, req, testEnv(""), dir, nil, rts.Locals{}, nil)
 	if err == nil {
 		t.Fatalf("expected rts error")
 	}

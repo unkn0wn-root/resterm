@@ -10,6 +10,7 @@ import (
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -58,7 +59,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		},
 	}
 
-	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, nil)
+	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, rts.Locals{})
 	var captures captureResult
 	if err := eng.applyCaptures(captureRun{
 		doc:  doc,
@@ -871,7 +872,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	}
 
 	doc := &restfile.Document{Path: "./stream.http"}
-	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, nil)
+	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, rts.Locals{})
 	var captures captureResult
 	if err := eng.applyCaptures(captureRun{
 		doc:    doc,

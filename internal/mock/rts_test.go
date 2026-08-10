@@ -29,7 +29,7 @@ func (unavailableInspector) Count(context.Context, RequestPattern) (uint64, erro
 func TestRTSInspectorCountAndReceived(t *testing.T) {
 	inspector := &recordingInspector{count: 3}
 	engine := rts.NewEng(nil)
-	runtime := rts.RT{Extra: map[string]rts.Value{"mock": RTSValue(inspector)}}
+	runtime := rts.RT{Extensions: rts.Extension("mock", RTSValue(inspector))}
 	value, err := engine.Eval(context.Background(), runtime, `mock.count({
   method: "POST",
   path: "/webhooks/{id}",
@@ -120,21 +120,17 @@ func TestRTSInspectorReportsUnavailableAndInvalidPatterns(t *testing.T) {
 	}{
 		{
 			name: "unavailable",
-			rt:   rts.RT{Extra: map[string]rts.Value{"mock": RTSValue(unavailableInspector{})}},
+			rt:   rts.RT{Extensions: rts.Extension("mock", RTSValue(unavailableInspector{}))},
 			expr: `mock.count({})`,
 		},
 		{
 			name: "invalid header rule",
-			rt: rts.RT{Extra: map[string]rts.Value{
-				"mock": RTSValue(&recordingInspector{}),
-			}},
+			rt:   rts.RT{Extensions: rts.Extension("mock", RTSValue(&recordingInspector{}))},
 			expr: `mock.count({headers: {Authorization: {prefix: ""}}})`,
 		},
 		{
 			name: "unknown field",
-			rt: rts.RT{Extra: map[string]rts.Value{
-				"mock": RTSValue(&recordingInspector{}),
-			}},
+			rt:   rts.RT{Extensions: rts.Extension("mock", RTSValue(&recordingInspector{}))},
 			expr: `mock.count({verb: "GET"})`,
 		},
 	} {
