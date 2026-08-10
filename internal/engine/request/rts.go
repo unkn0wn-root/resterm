@@ -575,9 +575,10 @@ func (e *Engine) RunPreRequest(
 	env vars.Environment,
 	base string,
 	vv map[string]string,
+	locals rts.Locals,
 	globals map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
-	return e.runRTSPreRequest(ctx, doc, req, env, base, vv, globals)
+	return e.runRTSPreRequest(ctx, doc, req, env, base, vv, locals, globals)
 }
 
 func (e *Engine) runRTSPreRequest(
@@ -587,6 +588,7 @@ func (e *Engine) runRTSPreRequest(
 	env vars.Environment,
 	base string,
 	vv map[string]string,
+	locals rts.Locals,
 	globs map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
 	var out prerequest.Output
@@ -622,6 +624,7 @@ func (e *Engine) runRTSPreRequest(
 				AllowRandom: true,
 				Site:        "@script pre-request",
 				Extensions:  e.rtsExtensions(),
+				Locals:      locals,
 			}
 		},
 	})

@@ -72,6 +72,7 @@ GET https://example.com
 		testEnv(""),
 		"",
 		nil,
+		rts.Locals{},
 		nil,
 	)
 	if err == nil {
@@ -124,6 +125,7 @@ func TestRunRTSPreRequestRejectsResponse(t *testing.T) {
 				testEnv(""),
 				"",
 				nil,
+				rts.Locals{},
 				nil,
 			)
 			if err == nil {

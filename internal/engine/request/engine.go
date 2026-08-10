@@ -559,6 +559,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		x.env,
 		x.opts.BaseDir,
 		vv,
+		x.locals,
 		cloneGlobalValues(x.currentGlobals()),
 	)
 	if err != nil {

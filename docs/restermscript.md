@@ -565,6 +565,8 @@ Every evaluation binds its names in a fixed order, and a later layer wins:
 
 Reserved words are never bindable at any layer. The parser rejects them in `@for-each` and `@use`, and the runtime rejects them again.
 
+Shadowing applies to expressions. A module or an `@rts pre-request` block still cannot declare a name that is already bound, so `let json = 1` has always been an error. A local extends that rule to its own name: a request with `# @for-each [1,2] as item` cannot also declare `let item` in its pre-request block. Rename the declaration or the loop variable.
+
 ### env
 
 `env` provides environment values. You can access values through `env.get("name")`, `env.has("name")`, `env.require("name"[, msg])`, or `env.name`. `require` throws when a value is missing.
@@ -732,7 +734,7 @@ These directives route workflow steps and are not the `switch` statement. They s
 
 The expression must evaluate to a list. It introduces a loop variable that you can use in RestermScript expressions. In workflows, it also sets `vars.workflow.<name>` and `vars.request.<name>` for legacy templates.
 
-The loop variable is a local, so it shadows any standard library, host object, or `@use` alias of the same name for the whole request. See [Name precedence](#name-precedence).
+The loop variable is a local, so it shadows any standard library, host object, or `@use` alias of the same name for the whole request, including `@rts pre-request` blocks. JavaScript pre-request blocks do not see it as a typed value and continue to read `vars.request.<name>`. See [Name precedence](#name-precedence).
 
 ## Limits and safety
 

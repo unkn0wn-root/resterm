@@ -1050,6 +1050,64 @@ func TestRunExecutesRTSPreRequestDirective(t *testing.T) {
 	}
 }
 
+func TestRunPassesForEachLocalToRTSPreRequest(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "rts-pre-request-for-each.http")
+	src := strings.Join([]string{
+		"# @name each",
+		"# @for-each [11, 22] as json",
+		"# @rts pre-request",
+		`> request.setHeader("X-Loop", str(json))`,
+		"GET https://example.com/items/{{vars.request.json}}",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	var got []string
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				got = append(got, req.Header.Get("X-Loop")+" "+req.URL.Path)
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        Select{All: true},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Total != 1 || rep.Passed != 1 {
+		t.Fatalf("unexpected report counts: %+v", rep)
+	}
+	if len(rep.Results) != 1 || len(rep.Results[0].Steps) != 2 {
+		t.Fatalf("expected two loop steps, got %+v", rep.Results)
+	}
+	want := []string{"11 /items/11", "22 /items/22"}
+	if len(got) != len(want) {
+		t.Fatalf("requests = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("request %d = %q, want %q", i+1, got[i], want[i])
+		}
+	}
+}
+
 func TestReportWriteJSON(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "json.http")
