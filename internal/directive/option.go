@@ -53,14 +53,21 @@ func ParseOptions(name Name, input string) (Options, error) {
 	return parseOptions(name, fieldsEscaped(input))
 }
 
-// OptionsOpen reports whether a quoted or bracketed value continues past input.
-func OptionsOpen(input string) bool {
+// OptionsOpen returns the missing delimiter in the last option value, or zero.
+func OptionsOpen(input string) rune {
 	lex := &lexer{src: input, escapes: true}
-	open := false
+	var closer rune
 	for _, ok := lex.next(); ok; _, ok = lex.next() {
-		open = len(lex.closers) > 0 || lex.quote != 0
+		switch {
+		case len(lex.closers) > 0:
+			closer = lex.closers[len(lex.closers)-1]
+		case lex.quote != 0:
+			closer = lex.quote
+		default:
+			closer = 0
+		}
 	}
-	return open
+	return closer
 }
 
 // OptionFields is for callers that already separated the input. It only keeps
@@ -390,24 +397,6 @@ func ParseNameValue(input string) (string, string) {
 		return "", ""
 	}
 	return tr[:end], strings.TrimSpace(val)
-}
-
-// CutOptions splits a directive argument into the head it starts with and the
-// key=value options after it. Both halves come from the original text, so a
-// quoted value keeps the spaces inside it. The span lexer escapes the same way
-// ParseOptions does, or the two would disagree about where a quoted value ends.
-func CutOptions(name Name, input string) (head string, opts Options, err error) {
-	lex := &lexer{src: input, escapes: true}
-	for {
-		tok, ok := lex.next()
-		if !ok {
-			return strings.TrimSpace(input), newOptions(0), nil
-		}
-		if isOption(input[tok.start:tok.end]) {
-			opts, err = ParseOptions(name, input[tok.start:])
-			return strings.TrimSpace(input[:tok.start]), opts, err
-		}
-	}
 }
 
 // FieldSpan locates one field of an option list in its source text. Offsets are

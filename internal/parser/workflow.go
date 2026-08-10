@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -365,10 +366,11 @@ func (sw *workflowSwitchBuilder) addDefault(rest string, line int) error {
 }
 
 func parseExprRun(name directive.Name, rest, miss string) (expr, run, fail string, err error) {
-	expr, opts, err := directive.CutOptions(name, rest)
+	expr, tail := cutBranch(rest)
 	if expr == "" {
 		return "", "", "", errors.New(miss)
 	}
+	opts, err := directive.ParseOptions(name, tail)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -377,6 +379,18 @@ func parseExprRun(name directive.Name, rest, miss string) (expr, run, fail strin
 		return "", "", "", err
 	}
 	return expr, run, fail, nil
+}
+
+// cutBranch ignores options inside strings, comments, and nested groups.
+// It slices the original text so quoted option values keep their spacing.
+func cutBranch(rest string) (expr, opts string) {
+	mask := rts.Mask(rest)
+	for _, f := range directive.FieldSpans(mask) {
+		if f.Eq >= 0 {
+			return strings.TrimSpace(rest[:f.Start]), rest[f.Start:]
+		}
+	}
+	return strings.TrimSpace(rest), ""
 }
 
 func parseWorkflowRunOptions(name directive.Name, opts directive.Options) (run, fail string, err error) {

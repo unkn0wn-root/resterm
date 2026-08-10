@@ -83,35 +83,39 @@ func (sc *exprScanner) openQuote(ch byte) bool {
 	return true
 }
 
-func (sc *exprScanner) templateEnd() (int, bool) {
-	if sc == nil || !hasTemplateOpenAt(sc.s, sc.i) {
-		return 0, false
-	}
-	return nextTemplateEnd(sc.s, sc.i)
-}
-
 func HasUnquotedTemplateMarker(ex string) bool {
-	_, has := stripUnquotedTemplateSegments(ex)
+	_, has, _ := scanTemplates(ex)
 	return has
 }
 
+// OpenMarker returns "}}" when ex contains an unclosed template marker.
+func OpenMarker(ex string) string {
+	_, _, open := scanTemplates(ex)
+	if !open {
+		return ""
+	}
+	return templateClose
+}
+
+// MixedTemplateRTSCall reports template markers mixed with RTS call syntax.
+// It only checks call syntax to avoid flagging ordinary template prefixes.
 func MixedTemplateRTSCall(ex string) bool {
-	rem, has := stripUnquotedTemplateSegments(ex)
+	rem, has, _ := scanTemplates(ex)
 	if !has {
 		return false
 	}
 	return mixedTemplateCallPattern.MatchString(strings.TrimSpace(rem))
 }
 
-func stripUnquotedTemplateSegments(ex string) (string, bool) {
+// scanTemplates ignores markers inside quoted RTS strings.
+func scanTemplates(ex string) (rem string, has, open bool) {
 	s := strings.TrimSpace(ex)
 	if s == "" {
-		return "", false
+		return "", false, false
 	}
 	sc := newExprScanner(s)
 	var b strings.Builder
 	b.Grow(len(s))
-	has := false
 
 	for !sc.done() {
 		ch := sc.ch()
@@ -125,15 +129,19 @@ func stripUnquotedTemplateSegments(ex string) (string, bool) {
 			sc.advance(1)
 			continue
 		}
-		if end, ok := sc.templateEnd(); ok {
-			has = true
-			sc.i = end
+		if !hasTemplateOpenAt(s, sc.i) {
+			b.WriteByte(ch)
+			sc.advance(1)
 			continue
 		}
-		b.WriteByte(ch)
-		sc.advance(1)
+		end, closed := nextTemplateEnd(s, sc.i)
+		if !closed {
+			return b.String(), has, true
+		}
+		has = true
+		sc.i = end
 	}
-	return b.String(), has
+	return b.String(), has, false
 }
 
 func StrictEnabled(ss ...map[string]string) bool {

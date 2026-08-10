@@ -7,8 +7,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
 	testgrpc "google.golang.org/grpc/interop/grpc_testing"
@@ -664,5 +668,287 @@ func TestEngineExpandsDeclaredVariableTemplates(t *testing.T) {
 	}
 	if !uuidRe.MatchString(payload.Inline) || payload.Inline == got.trace {
 		t.Fatalf("expected inline dynamic to stay fresh, got %q vs %q", payload.Inline, got.trace)
+	}
+}
+
+func TestRequestAssertSpansCommentLines(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	src := "# @assert (\n#   status == 200\n#   and  statusText == \"200 OK\"\n# ) => \"healthy\"\nGET " + srv.URL + "\n"
+	doc := parser.Parse("basic.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors: %+v", doc.Errors)
+	}
+
+	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], testSelection(""))
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if res.ScriptErr != nil {
+		t.Fatalf("script error: %v", res.ScriptErr)
+	}
+	if len(res.Tests) != 1 {
+		t.Fatalf("tests = %+v, want 1", res.Tests)
+	}
+	tc := res.Tests[0]
+	if !tc.Passed || tc.Message != "healthy" {
+		t.Fatalf("test = %+v", tc)
+	}
+	if tc.Name != `( status == 200 and  statusText == "200 OK" )` {
+		t.Fatalf("name = %q", tc.Name)
+	}
+}
+
+func TestRequestSpanningConditionSkipReasonIsOneLine(t *testing.T) {
+	src := "# @when (\n#   1 == 2\n#   and 3 == 3\n# )\nGET https://example.invalid/\n"
+	doc := parser.Parse("basic.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors: %+v", doc.Errors)
+	}
+
+	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], testSelection(""))
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if !res.Skipped {
+		t.Fatalf("result = %+v, want a skip", res)
+	}
+	if res.SkipReason != "@when evaluated to false: ( 1 == 2 and 3 == 3 )" {
+		t.Fatalf("reason = %q", res.SkipReason)
+	}
+}
+
+func TestRequestAssertErrorPointsAtTheContinuationLine(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	src := "# @assert (\n#   status == 200\n#   and status status\n# )\nGET " + srv.URL + "\n"
+	doc := parser.Parse("basic.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors: %+v", doc.Errors)
+	}
+
+	res, err := New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(
+		doc,
+		doc.Requests[0],
+		testSelection(""),
+	)
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if res.ScriptErr == nil {
+		t.Fatal("expected a script error for the malformed assertion")
+	}
+	rep := diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) == 0 {
+		t.Fatal("expected diagnostic items")
+	}
+	if span := rep.Items[0].Span.Start; span.Line != 3 || span.Col != 16 {
+		t.Fatalf("span = %d:%d, want the second \"status\" at 3:16", span.Line, span.Col)
+	}
+}
+
+func TestRequestCaptureExpressionTemplateReadsTheCurrentResponse(t *testing.T) {
+	var n int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, atomic.AddInt32(&n, 1)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	src := "### one\n# @capture request first response.json.token\nGET " + srv.URL + "/1\n\n" +
+		"### two\n" +
+		"# @capture request rts response.json.token\n" +
+		"# @capture request plain {{response.json.token}}\n" +
+		"# @capture request expr {{= response.json(\"token\") }}\n" +
+		"# @capture request prev {{= last.json(\"token\") }}\n" +
+		"GET " + srv.URL + "/2\n"
+	doc := parser.Parse("chain.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors: %+v", doc.Errors)
+	}
+
+	eng := New(engine.Config{})
+	got := make(map[string]string)
+	for _, req := range doc.Requests {
+		res, err := eng.ExecuteRequest(doc, req, testSelection(""))
+		if err != nil {
+			t.Fatalf("ExecuteRequest: %v", err)
+		}
+		for _, v := range res.Executed.Variables {
+			got[v.Name] = v.Value
+		}
+	}
+
+	want := map[string]string{
+		"first": "tok-1",
+		"rts":   "tok-2",
+		"plain": "tok-2",
+		"expr":  "tok-2",
+		"prev":  "tok-1",
+	}
+	for name, value := range want {
+		if got[name] != value {
+			t.Errorf("capture %q = %q, want %q", name, got[name], value)
+		}
+	}
+}
+
+func TestRequestPreRequestTemplateRejectsResponse(t *testing.T) {
+	var n int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, atomic.AddInt32(&n, 1)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	run := func(t *testing.T, tail string) engine.RequestResult {
+		t.Helper()
+		src := "### one\nGET " + srv.URL + "/1\n\n### two\n" + tail
+		doc := parser.Parse("chain.http", []byte(src))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("parse errors: %+v", doc.Errors)
+		}
+		eng := New(engine.Config{})
+		var last engine.RequestResult
+		for _, req := range doc.Requests {
+			res, err := eng.ExecuteRequest(doc, req, testSelection(""))
+			if err != nil {
+				t.Fatalf("ExecuteRequest: %v", err)
+			}
+			last = res
+		}
+		return last
+	}
+
+	wantsLast := func(t *testing.T, err error) {
+		t.Helper()
+		if err == nil {
+			t.Fatal("expected an error naming last, got none")
+		}
+		if !strings.Contains(err.Error(), "use last for the previous response") {
+			t.Fatalf("error = %v, want it to name last", err)
+		}
+	}
+
+	t.Run("header", func(t *testing.T) {
+		wantsLast(t, run(t, "GET "+srv.URL+"/2\nX-T: {{= response.json(\"token\") }}\n").Err)
+	})
+
+	t.Run("header behind try", func(t *testing.T) {
+		tail := "GET " + srv.URL + "/2\nX-T: {{= (try response.json(\"token\")).value ?? \"none\" }}\n"
+		wantsLast(t, run(t, tail).Err)
+	})
+
+	t.Run("condition", func(t *testing.T) {
+		wantsLast(t, run(t, "# @when response.statusCode == 200\nGET "+srv.URL+"/2\n").Err)
+	})
+
+	t.Run("bare condition", func(t *testing.T) {
+		wantsLast(t, run(t, "# @when response\nGET "+srv.URL+"/2\n").Err)
+	})
+
+	t.Run("nested variable", func(t *testing.T) {
+		tail := "# @request nested {{= response.statusCode }}\n" +
+			"GET " + srv.URL + "/2\nX-T: {{nested}}\n"
+		wantsLast(t, run(t, tail).Err)
+	})
+
+	t.Run("last still reads the previous response", func(t *testing.T) {
+		var m int32
+		seen := make(chan string, 2)
+		rec := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			seen <- r.Header.Get("X-T")
+			if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, atomic.AddInt32(&m, 1)); err != nil {
+				t.Errorf("write response: %v", err)
+			}
+		}))
+		defer rec.Close()
+
+		src := "### one\nGET " + rec.URL + "/1\n\n### two\nGET " + rec.URL + "/2\n" +
+			"X-T: {{= last.json(\"token\") }}\n"
+		doc := parser.Parse("chain.http", []byte(src))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("parse errors: %+v", doc.Errors)
+		}
+		eng := New(engine.Config{})
+		for _, req := range doc.Requests {
+			res, err := eng.ExecuteRequest(doc, req, testSelection(""))
+			if err != nil {
+				t.Fatalf("ExecuteRequest: %v", err)
+			}
+			if res.Err != nil {
+				t.Fatalf("unexpected error: %v", res.Err)
+			}
+		}
+		close(seen)
+
+		var sent []string
+		for h := range seen {
+			sent = append(sent, h)
+		}
+		if len(sent) != 2 || sent[1] != "tok-1" {
+			t.Fatalf("headers = %q, want the second request to carry the first response", sent)
+		}
+	})
+}
+
+func TestRequestCaptureExpressionsUseTheConfiguredBaseDir(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	// Put the file in both directories so a wrong base returns the wrong value.
+	docDir, baseDir := t.TempDir(), t.TempDir()
+	for dir, where := range map[string]string{docDir: "doc-dir", baseDir: "base-dir"} {
+		body := fmt.Sprintf(`{"where":%q}`, where)
+		if err := os.WriteFile(filepath.Join(dir, "data.json"), []byte(body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", dir, err)
+		}
+	}
+
+	docPath := filepath.Join(docDir, "capture.http")
+	src := "# @capture request tpl {{= (try json.file(\"data.json\")).value.where ?? \"none\" }}\n" +
+		"# @capture request rts (try json.file(\"data.json\")).value.where ?? \"none\"\n" +
+		"GET " + srv.URL + "/\n"
+	if err := os.WriteFile(docPath, []byte(src), 0o600); err != nil {
+		t.Fatalf("write document: %v", err)
+	}
+
+	doc := parser.Parse(docPath, []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors: %+v", doc.Errors)
+	}
+
+	res, err := New(engine.Config{
+		FilePath:    docPath,
+		HTTPOptions: httpx.Options{BaseDir: baseDir},
+	}).ExecuteRequest(doc, doc.Requests[0], testSelection(""))
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+
+	got := make(map[string]string, 2)
+	for _, v := range res.Executed.Variables {
+		got[v.Name] = v.Value
+	}
+	for _, name := range []string{"tpl", "rts"} {
+		if got[name] != "base-dir" {
+			t.Errorf("capture %q = %q, want the file under the configured base directory", name, got[name])
+		}
 	}
 }

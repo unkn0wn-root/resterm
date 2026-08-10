@@ -47,6 +47,21 @@ func FirstTrimmed(values ...string) string {
 	return ""
 }
 
+// FoldLines trims each line, drops blank lines, and joins the rest with spaces.
+// A string without line breaks is returned unchanged.
+func FoldLines(s string) string {
+	if !strings.Contains(s, "\n") {
+		return s
+	}
+	var out []string
+	for ln := range strings.SplitSeq(s, "\n") {
+		if ln = strings.TrimSpace(ln); ln != "" {
+			out = append(out, ln)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
 func AllBlank(lines []string) bool {
 	for _, line := range lines {
 		if strings.TrimSpace(line) != "" {

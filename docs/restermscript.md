@@ -207,7 +207,7 @@ Use in `.http` expressions and directives:
 # @for-each ((try json.file("_data/users.json")).value ?? []) as user
 # @assert try response.json("data")
 
-Authorization: Bearer {{= (try response.json("auth.token")).value ?? "" }}
+Authorization: Bearer {{= (try last.json("auth.token")).value ?? "" }}
 ```
 
 This pattern is most useful for optional files, optional JSON bodies, or helper calls that may fail.
@@ -551,7 +551,7 @@ RTS provides a small standard library that covers common request needs without e
 
 ## Host objects for request evaluation
 
-Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers, while everything else is read-only. Lookups in `env` and `vars` are case-insensitive. Header lookups are normalized, while query keys and JSON paths are case-sensitive. The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped. A local value named `mock`, such as an `@for-each` loop variable, takes precedence.
+Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers. Other available objects are read-only. Lookups in `env` and `vars` are case-insensitive. Header lookups are normalized, while query keys and JSON paths are case-sensitive. The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped. A local value named `mock`, such as an `@for-each` loop variable, takes precedence.
 
 ### env
 
@@ -586,7 +586,9 @@ For gRPC responses, `headers` merges the response metadata with the trailers, ea
 
 ### response
 
-`response` provides a summary of the current response when evaluating `@assert`. It has the same shape as `last`.
+`response` has the same shape as `last`. It is available after the current request completes in `@assert` and both forms of `@capture`, including a `{{= ... }}` expression inside one.
+
+Other expressions run before the current request completes. Use `last` for the previous response in URLs, headers, bodies, and conditions such as `@when`, `@skip-if`, `@for-each`, `@if`, and `@switch`. Using `response` in those contexts is an error that `try` cannot catch.
 
 ### trace
 

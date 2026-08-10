@@ -18,6 +18,11 @@
 # @assert headers.get(headers.normalize({"X-Test":"ok"}), "x-test") == "ok"
 # @assert len(headers.merge({"a":"1"}, {"a": null})) == 0
 # @assert query.parse(query.merge("https://example.com?p=1&q=2", {q: null})).p == "1"
+# Assertions can span comment lines while a group is open.
+# @assert (
+#   response.statusCode == 200
+#   and contains(response.text(), "args")
+# ) => "echo endpoint did not return the query arguments"
 # @assert json.parse("{\"a\":1}").a == 1
 # @assert base64.decode(base64.encode("hi")) == "hi"
 # @assert url.decode(url.encode("a b")) == "a b"

@@ -2,6 +2,7 @@ package rts
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -47,6 +48,42 @@ func TestResponseObject(t *testing.T) {
 	v = evalRT2(t, rt, "response.text()")
 	if v.K != VStr || v.S != `{"ok":true}` {
 		t.Fatalf("expected text body, got %+v", v)
+	}
+}
+
+func TestUnboundResponseRejectsEveryRead(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{name: "bare", expr: "response"},
+		{name: "truthiness", expr: "not response"},
+		{name: "equality", expr: "response == null"},
+		{name: "coalesce", expr: "response ?? last"},
+		{name: "member", expr: "response.statusCode"},
+		{name: "try bare", expr: "try response"},
+		{name: "try member", expr: "try response.statusCode"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eng := NewEng(testStdlib)
+			_, err := eng.Eval(
+				context.Background(),
+				RT{Resp: &Resp{Code: 204}},
+				tt.expr,
+				Pos{Path: "test", Line: 1, Col: 1},
+			)
+			if err == nil {
+				t.Fatalf("eval %q: expected unbound response error", tt.expr)
+			}
+			if !isAbort(err) {
+				t.Fatalf("eval %q: error = %v, want an abort", tt.expr, err)
+			}
+			if !strings.Contains(err.Error(), unboundResponse) {
+				t.Fatalf("eval %q: error = %v, want %q", tt.expr, err, unboundResponse)
+			}
+		})
 	}
 }
 

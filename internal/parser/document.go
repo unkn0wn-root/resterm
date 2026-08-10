@@ -21,6 +21,8 @@ type documentBuilder struct {
 	request              *requestBuilder
 	mock                 *mockBuilder
 	workflow             *workflowBuilder
+	open                 *openDirective
+	openLines            []string
 	pendingTitle         string
 	file                 fileScope
 	inBlock              bool
@@ -124,6 +126,7 @@ func (b *documentBuilder) addWarning(line int, message string) {
 
 func (b *documentBuilder) processLine(no int, raw string) {
 	ln := makeLine(no, raw)
+	b.closeOpenDirective(ln)
 
 	if b.mock != nil {
 		b.handleMockBlockLine(ln)
@@ -218,9 +221,15 @@ func (b *documentBuilder) ensureRequest(line int) {
 	}
 }
 
+// Record active request lines first so a failed continuation cannot shorten the
+// range. Before a request starts, hold continuation lines in case it opens one.
 func (b *documentBuilder) appendLine(raw string) {
 	if b.inRequest {
 		b.request.originalLines = append(b.request.originalLines, raw)
+		return
+	}
+	if b.open != nil {
+		b.openLines = append(b.openLines, raw)
 	}
 }
 
@@ -265,6 +274,9 @@ func (b *documentBuilder) flushWorkflow(line int) {
 }
 
 func (b *documentBuilder) finish() {
+	if b.open != nil {
+		b.failOpenDirective()
+	}
 	b.flushMock()
 	b.flushRequest(0)
 	b.flushWorkflow(0)

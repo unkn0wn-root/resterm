@@ -37,15 +37,11 @@ func checkRTSBinding(kind bindingKind, name string) error {
 }
 
 func parseApplySpec(rest string, line int) (restfile.ApplySpec, error) {
-	raw := strings.TrimSpace(rest)
-	if after, ok := strings.CutPrefix(raw, "="); ok {
-		raw = strings.TrimSpace(after)
-	}
+	raw := cutAssign(rest)
 	if raw == "" {
 		return restfile.ApplySpec{}, fmt.Errorf("@apply expression missing")
 	}
-	l := strings.ToLower(raw)
-	if strings.HasPrefix(l, "use=") {
+	if namesProfiles(raw) {
 		us, err := parseApplyUses(raw)
 		if err != nil {
 			return restfile.ApplySpec{}, err
@@ -61,6 +57,26 @@ func parseApplySpec(rest string, line int) (restfile.ApplySpec, error) {
 		Line:       line,
 		Col:        1,
 	}, nil
+}
+
+func namesProfiles(raw string) bool {
+	return strings.HasPrefix(strings.ToLower(raw), "use=")
+}
+
+func applyExpr(rest string) string {
+	raw := cutAssign(rest)
+	if namesProfiles(raw) {
+		return ""
+	}
+	return raw
+}
+
+func cutAssign(s string) string {
+	s = strings.TrimSpace(s)
+	if after, ok := strings.CutPrefix(s, "="); ok {
+		return strings.TrimSpace(after)
+	}
+	return s
 }
 
 func parseApplyUses(raw string) ([]string, error) {
@@ -91,7 +107,7 @@ func parseApplyUses(raw string) ([]string, error) {
 }
 
 func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
-	scTok, rem := directive.CutToken(rest)
+	scTok, n, ex := cutPatch(rest)
 	if scTok == "" {
 		return restfile.PatchProfile{}, fmt.Errorf(
 			"@patch requires '<scope> <name> <expression>'",
@@ -101,14 +117,8 @@ func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
 	if !ok {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch scope must be file or global")
 	}
-	n, rem := directive.CutToken(rem)
-	n = strings.TrimSpace(n)
 	if !validPatchName(n) {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch name %q is invalid", n)
-	}
-	ex := strings.TrimSpace(rem)
-	if after, ok := strings.CutPrefix(ex, "="); ok {
-		ex = strings.TrimSpace(after)
 	}
 	if ex == "" {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch %q expression missing", n)
@@ -120,6 +130,12 @@ func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
 		Line:       line,
 		Col:        1,
 	}, nil
+}
+
+func cutPatch(rest string) (scope, name, expr string) {
+	scope, rem := directive.CutToken(rest)
+	name, rem = directive.CutToken(rem)
+	return scope, name, cutAssign(rem)
 }
 
 // A patch is only useful where later requests can still see it.
@@ -197,33 +213,33 @@ func parseConditionSpec(rest string, line int, negate bool) (*restfile.Condition
 }
 
 func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
-	rest = strings.TrimSpace(rest)
-	if rest == "" {
+	expr, name, form := cutForEach(rest)
+	switch {
+	case expr == "" && name == "":
 		return nil, fmt.Errorf("@for-each expression missing")
+	case form == "":
+		return nil, fmt.Errorf("@for-each must use 'as' or 'in'")
+	case expr == "" || name == "":
+		return nil, fmt.Errorf("@for-each requires %s", form)
 	}
-	if idx := strings.LastIndex(rest, " as "); idx >= 0 {
-		expr := strings.TrimSpace(rest[:idx])
-		name := strings.TrimSpace(rest[idx+4:])
-		if expr == "" || name == "" {
-			return nil, fmt.Errorf("@for-each requires '<expr> as <name>'")
-		}
-		if err := checkRTSBinding(forEachName, name); err != nil {
-			return nil, err
-		}
-		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
+	if err := checkRTSBinding(forEachName, name); err != nil {
+		return nil, err
 	}
-	if before, after, ok := strings.Cut(rest, " in "); ok {
-		name := strings.TrimSpace(before)
-		expr := strings.TrimSpace(after)
-		if expr == "" || name == "" {
-			return nil, fmt.Errorf("@for-each requires '<name> in <expr>'")
-		}
-		if err := checkRTSBinding(forEachName, name); err != nil {
-			return nil, err
-		}
-		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
+	return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
+}
+
+// cutForEach ignores keywords inside strings, comments, and nested groups.
+// The as form is read from the right so the expression may contain the keyword.
+func cutForEach(rest string) (expr, name, form string) {
+	rest = strings.TrimSpace(rest)
+	mask := rts.Mask(rest)
+	if i := strings.LastIndex(mask, " as "); i >= 0 {
+		return strings.TrimSpace(rest[:i]), strings.TrimSpace(rest[i+4:]), "'<expr> as <name>'"
 	}
-	return nil, fmt.Errorf("@for-each must use 'as' or 'in'")
+	if i := strings.Index(mask, " in "); i >= 0 {
+		return strings.TrimSpace(rest[i+4:]), strings.TrimSpace(rest[:i]), "'<name> in <expr>'"
+	}
+	return rest, "", ""
 }
 
 type authDirective struct {

@@ -47,6 +47,11 @@ type truthyObject interface {
 	Truthy() bool
 }
 
+// unboundObject marks host names that are unavailable in the current phase.
+type unboundObject interface {
+	Unbound() string
+}
+
 // InterfaceValuer lets host objects expose a JSON-compatible representation.
 type InterfaceValuer interface {
 	ToInterface() any

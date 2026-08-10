@@ -9,30 +9,30 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func (b *documentBuilder) handleSSHDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleSSHDirective(d parsedDirective) directiveOutcome {
 	if d.Name != directive.SSH {
 		return directiveIgnored
 	}
 
 	res, err := sshbuilder.ParseDirective(d.Args)
-	b.report(d.no, err)
+	b.report(d.lines.Start, err)
 	if fatalErr(err) {
 		return directiveRejected
 	}
 
 	switch res.Scope {
 	case directive.ScopeRequest:
-		b.ensureRequest(d.no)
+		b.ensureRequest(d.lines.Start)
 		if b.request.k8s != nil {
-			b.addError(d.no, "@ssh cannot be combined with @k8s on the same request")
+			b.addError(d.lines.Start, "@ssh cannot be combined with @k8s on the same request")
 			return directiveRejected
 		}
 		if b.request.ssh != nil {
-			b.addError(d.no, "@ssh already defined for this request")
+			b.addError(d.lines.Start, "@ssh already defined for this request")
 			return directiveRejected
 		}
 		if res.PersistIgnored {
-			b.addWarning(d.no, "@ssh request scope ignores persist")
+			b.addWarning(d.lines.Start, "@ssh request scope ignores persist")
 		}
 		b.request.ssh = res.Spec
 	case directive.ScopeGlobal, directive.ScopeFile:
@@ -42,39 +42,39 @@ func (b *documentBuilder) handleSSHDirective(d directiveLine) directiveOutcome {
 	return directiveApplied
 }
 
-func (b *documentBuilder) handleK8sDirective(d directiveLine) directiveOutcome {
+func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome {
 	if d.Name != directive.K8s {
 		return directiveIgnored
 	}
 
 	res, err := k8sbuilder.ParseDirective(d.Args)
-	b.report(d.no, err)
+	b.report(d.lines.Start, err)
 	if fatalErr(err) {
 		var dirErr *k8sbuilder.DirectiveError
 		if errors.As(err, &dirErr) {
-			b.addInvalidK8sProfile(d.no, dirErr.Profile, err.Error())
+			b.addInvalidK8sProfile(d.lines.Start, dirErr.Profile, err.Error())
 		}
 		return directiveRejected
 	}
 
 	switch res.Scope {
 	case directive.ScopeRequest:
-		b.ensureRequest(d.no)
+		b.ensureRequest(d.lines.Start)
 		if b.request.ssh != nil {
-			b.addError(d.no, "@k8s cannot be combined with @ssh on the same request")
+			b.addError(d.lines.Start, "@k8s cannot be combined with @ssh on the same request")
 			return directiveRejected
 		}
 		if b.request.k8s != nil {
-			b.addError(d.no, "@k8s already defined for this request")
+			b.addError(d.lines.Start, "@k8s already defined for this request")
 			return directiveRejected
 		}
 		if res.PersistIgnored {
-			b.addWarning(d.no, "@k8s request scope ignores persist")
+			b.addWarning(d.lines.Start, "@k8s request scope ignores persist")
 		}
 		b.request.k8s = res.Spec
 	case directive.ScopeGlobal, directive.ScopeFile:
 		res.Profile.Scope = res.Scope
-		res.Profile.Line = d.no
+		res.Profile.Line = d.lines.Start
 		b.file.k8s = append(b.file.k8s, res.Profile)
 	}
 	return directiveApplied

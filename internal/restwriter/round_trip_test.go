@@ -115,3 +115,124 @@ func TestRenderRoundTripsWorkflowsAfterEveryBlock(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderCaptureTemplateKeepsLiteralDelimiters(t *testing.T) {
+	src := `### r
+# @capture request label prefix[{{response.status}}
+# @capture request frag anchor#{{response.status}}
+GET https://example.com/
+`
+	doc := parser.Parse("c.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse: %v", doc.Errors)
+	}
+	got, err := Render(doc, Options{})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{
+		"# @capture request label prefix[{{response.status}}\n",
+		"# @capture request frag anchor#{{response.status}}\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("rendered document lost %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRenderCaptureSpanningTemplateIsIdempotent(t *testing.T) {
+	src := `### r
+# @capture request label prefix[{{
+#   response.status
+# }}
+GET https://example.com/
+`
+	out := src
+	for i := range 3 {
+		doc := parser.Parse("c.http", []byte(out))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("round %d did not parse: %v\n%s", i, doc.Errors, out)
+		}
+		got, err := Render(doc, Options{})
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		if i > 0 && got != out {
+			t.Fatalf("round %d changed the document:\nbefore:\n%s\nafter:\n%s", i, out, got)
+		}
+		out = got
+	}
+	if !strings.Contains(out, "#   response.status") {
+		t.Fatalf("continuation lost its indent:\n%s", out)
+	}
+}
+
+func TestRenderCaptureSpanningExpressionIsIdempotent(t *testing.T) {
+	src := `### r
+# @capture request total sum(
+#   response.json.a,
+#   response.json.b
+# )
+GET https://example.com/
+`
+	out := src
+	for i := range 3 {
+		doc := parser.Parse("c.http", []byte(out))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("round %d did not parse: %v\n%s", i, doc.Errors, out)
+		}
+		got, err := Render(doc, Options{})
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		if i > 0 && got != out {
+			t.Fatalf("round %d changed the document:\nbefore:\n%s\nafter:\n%s", i, out, got)
+		}
+		out = got
+	}
+	if !strings.Contains(out, "#   response.json.a,") {
+		t.Fatalf("continuation lost its indent:\n%s", out)
+	}
+}
+
+func TestRenderBlockCommentCaptureRoundTripsExactly(t *testing.T) {
+	doc := parser.Parse("c.http", []byte(`/*
+@capture request label prefix {{
+value
+}} suffix
+*/
+GET https://example.com/
+`))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse: %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(doc.Requests))
+	}
+	if len(doc.Requests[0].Metadata.Captures) != 1 {
+		t.Fatalf("captures = %d, want 1", len(doc.Requests[0].Metadata.Captures))
+	}
+	want := doc.Requests[0].Metadata.Captures[0].Expression
+	if want != "prefix {{\n value\n }} suffix" {
+		t.Fatalf("initial expression = %q", want)
+	}
+
+	out := mustRender(t, doc)
+	again := parser.Parse("c.http", []byte(out))
+	if len(again.Errors) != 0 {
+		t.Fatalf("rendered document did not parse: %v\n%s", again.Errors, out)
+	}
+	if len(again.Requests) != 1 {
+		t.Fatalf("round-trip requests = %d, want 1", len(again.Requests))
+	}
+	if len(again.Requests[0].Metadata.Captures) != 1 {
+		t.Fatalf("round-trip captures = %d, want 1", len(again.Requests[0].Metadata.Captures))
+	}
+	got := again.Requests[0].Metadata.Captures[0].Expression
+	if got != want {
+		t.Fatalf("expression changed after round trip:\nwant %q\ngot  %q\n%s", want, got, out)
+	}
+	if next := mustRender(t, again); next != out {
+		t.Fatalf("rendering was not idempotent:\nfirst:\n%s\nsecond:\n%s", out, next)
+	}
+}

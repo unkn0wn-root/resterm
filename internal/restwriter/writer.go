@@ -474,6 +474,15 @@ func bodyTextNeedsInlineDirective(req *restfile.Request) bool {
 	return false
 }
 
+// commentLines restores comment markers and indentation in multiline arguments.
+func commentLines(arg string) string {
+	lines := strings.Split(arg, "\n")
+	for i, ln := range lines[1:] {
+		lines[i+1] = "#" + strings.TrimPrefix(ln, " ")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func renderDescription(b *strings.Builder, desc string) {
 	desc = strings.TrimSpace(desc)
 	if desc == "" {
@@ -708,7 +717,7 @@ func renderCaptures(b *strings.Builder, caps []restfile.CaptureSpec) {
 		b.WriteString(" ")
 		b.WriteString(c.Name)
 		b.WriteString(" ")
-		b.WriteString(strings.TrimSpace(c.Expression))
+		b.WriteString(commentLines(strings.TrimSpace(c.Expression)))
 		b.WriteString("\n")
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type WorkflowPlan struct {
@@ -633,7 +634,7 @@ func (r *wfRun) evalStepValue(
 		Env:   r.pl.Run.Env,
 		Base:  baseDir(r.pl.Doc),
 		Expr:  expr,
-		Site:  tag + " " + expr,
+		Site:  tag + " " + str.FoldLines(expr),
 		Pos:   r.dep.PosForLine(r.pl.Doc, req, line),
 		Vars:  vv,
 		Extra: extra,

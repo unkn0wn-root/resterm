@@ -16,6 +16,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -35,6 +36,8 @@ type captureResult struct {
 }
 
 type captureRun struct {
+	ctx    context.Context
+	base   string
 	doc    *restfile.Document
 	req    *restfile.Request
 	res    *vars.Resolver
@@ -53,6 +56,8 @@ type captureExpr struct {
 }
 
 type captureValueIn struct {
+	ctx      context.Context
+	base     string
 	doc      *restfile.Document
 	req      *restfile.Request
 	resolver *vars.Resolver
@@ -66,6 +71,8 @@ type captureValueIn struct {
 }
 
 type captureRTSIn struct {
+	ctx  context.Context
+	base string
 	doc  *restfile.Document
 	req  *restfile.Request
 	env  vars.Environment
@@ -126,11 +133,14 @@ func (e *Engine) applyCaptures(in captureRun) error {
 	if in.v == nil {
 		in.v = e.collectVariables(in.doc, in.req, in.env)
 	}
+	res := e.captureResolver(in, rr, rs)
 	for _, c := range in.req.Metadata.Captures {
 		val, ex, err := e.captureValue(captureValueIn{
+			ctx:      in.ctx,
+			base:     in.base,
 			doc:      in.doc,
 			req:      in.req,
-			resolver: in.res,
+			resolver: res,
 			env:      in.env,
 			spec:     c,
 			v:        in.v,
@@ -171,6 +181,21 @@ func (e *Engine) applyCaptures(in captureRun) error {
 	return nil
 }
 
+// captureResolver derives from the request resolver to keep existing values pinned.
+// It binds the current response and keeps the request context and base directory.
+func (e *Engine) captureResolver(in captureRun, rr *rts.Resp, rs *rts.Stream) *vars.Resolver {
+	return in.res.WithExprEval(e.ExprEval(in.ctx, ExprInput{
+		Doc:      in.doc,
+		Req:      in.req,
+		Env:      in.env,
+		Base:     in.base,
+		Vars:     in.v,
+		Response: rr,
+		Stream:   rs,
+		Extra:    in.x,
+	}))
+}
+
 func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
 	ex := parseCaptureExpr(in.spec.Expression, in.spec.Mode)
 	if ex.raw == "" {
@@ -189,6 +214,8 @@ func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
 		return val, ex, err
 	}
 	val, err := e.captureRTSValue(captureRTSIn{
+		ctx:  in.ctx,
+		base: in.base,
 		doc:  in.doc,
 		req:  in.req,
 		env:  in.env,
@@ -208,15 +235,16 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		doc:     in.doc,
 		req:     in.req,
 		env:     in.env,
+		base:    in.base,
 		vars:    in.v,
 		x:       in.x,
-		site:    directive.Capture.Tag() + " " + in.ex,
+		site:    directive.Capture.Tag() + " " + str.FoldLines(in.ex),
 		resp:    in.rr,
 		res:     in.rr,
 		st:      in.rs,
 		secrets: rtshost.IncludeSecrets,
 	})
-	return e.evalRTSString(context.Background(), in.doc, rt, in.ex, ps)
+	return e.evalRTSString(in.ctx, in.doc, rt, in.ex, ps)
 }
 
 func parseCaptureExpr(raw string, mode restfile.CaptureExprMode) captureExpr {

@@ -1045,6 +1045,8 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	respForScripts := grpcScriptResponse(x.req, resp)
 	var caps captureResult
 	if err := x.eng.applyCaptures(captureRun{
+		ctx:    x.sendCtx,
+		base:   x.opts.BaseDir,
 		doc:    x.doc,
 		req:    x.req,
 		res:    x.res,
@@ -1141,6 +1143,8 @@ func (x *execCtx) httpRunner() xexec.Runner {
 			ApplyCaptures: func(in xexec.CaptureInput) error {
 				var caps captureResult
 				return x.eng.applyCaptures(captureRun{
+					ctx:    x.sendCtx,
+					base:   x.opts.BaseDir,
 					doc:    in.Doc,
 					req:    in.Req,
 					res:    in.Resolver,

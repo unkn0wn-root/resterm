@@ -466,6 +466,9 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 		if !ok {
 			return Null(), Errf(vm.ctx, e.Pos(), "undefined name %q", e.Name)
 		}
+		if err := vm.checkBound(e.Pos(), v); err != nil {
+			return Null(), err
+		}
 		return v, nil
 	case *Literal:
 		switch e.Kind {
@@ -553,6 +556,9 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 			if x.O == nil {
 				return Null(), Errf(vm.ctx, e.Pos(), "object has no index")
 			}
+			if err := vm.checkBound(e.Pos(), x); err != nil {
+				return Null(), err
+			}
 			v, err := x.O.Index(idx)
 			if err != nil {
 				return Null(), WrapErr(vm.ctx, err)
@@ -576,6 +582,9 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 		case VObj:
 			if x.O == nil {
 				return Null(), Errf(vm.ctx, e.Pos(), "object has no members")
+			}
+			if err := vm.checkBound(e.Pos(), x); err != nil {
+				return Null(), err
 			}
 			v, ok := x.O.GetMember(e.Name)
 			if !ok {
@@ -870,4 +879,20 @@ func cmp(ctx *Ctx, pos Pos, op BinOp, a, b Value) (Value, error) {
 		}
 	}
 	return Null(), Errf(ctx, pos, "cannot compare")
+}
+
+// checkBound aborts so try cannot hide an unavailable host name.
+func (vm *VM) checkBound(pos Pos, v Value) error {
+	if v.K != VObj || v.O == nil {
+		return nil
+	}
+	u, ok := v.O.(unboundObject)
+	if !ok {
+		return nil
+	}
+	why := u.Unbound()
+	if why == "" {
+		return nil
+	}
+	return rtAbort(vm.ctx, pos, AbortScript, "%s", why)
 }

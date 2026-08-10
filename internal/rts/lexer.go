@@ -8,6 +8,7 @@ type Lexer struct {
 	src     []byte
 	path    string
 	i       int
+	start   int // byte offset of the current token
 	line    int
 	col     int
 	par     int
@@ -82,6 +83,7 @@ func (l *Lexer) Next() Tok {
 		}
 
 		p := l.pos()
+		l.start = l.i
 
 		switch ch {
 		case '(':

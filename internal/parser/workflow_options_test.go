@@ -259,3 +259,78 @@ GET https://example.com/first
 		t.Fatalf("@if fail = %q, want it empty", branch.Then.Fail)
 	}
 }
+
+func TestCutBranch(t *testing.T) {
+	tests := []struct {
+		name string
+		rest string
+		expr string
+		opts string
+	}{
+		{name: "empty"},
+		{name: "head only", rest: "  last.statusCode == 200  ", expr: "last.statusCode == 200"},
+		{name: "options only", rest: "run=StepOK fail=nope", opts: "run=StepOK fail=nope"},
+		{name: "head and option", rest: "true run=StepOK", expr: "true", opts: "run=StepOK"},
+		{
+			name: "the head is not an option",
+			rest: "run == run run=StepOK",
+			expr: "run == run",
+			opts: "run=StepOK",
+		},
+		{
+			name: "comparison without spaces",
+			rest: "last.statusCode==200 run=StepOK",
+			expr: "last.statusCode==200",
+			opts: "run=StepOK",
+		},
+		{
+			name: "quoted option value",
+			rest: `true fail="explicit failure"`,
+			expr: "true",
+			opts: `fail="explicit failure"`,
+		},
+		{
+			name: "quoted expression",
+			rest: `name == "John Doe" run=StepOK`,
+			expr: `name == "John Doe"`,
+			opts: "run=StepOK",
+		},
+		{
+			name: "escaped quote inside a quoted expression",
+			rest: `response.body.msg == "say \" fail=x" run=StepOK`,
+			expr: `response.body.msg == "say \" fail=x"`,
+			opts: "run=StepOK",
+		},
+		{
+			name: "option shape inside a string",
+			rest: `contains("x run=not-an-option", value) run=Deploy`,
+			expr: `contains("x run=not-an-option", value)`,
+			opts: "run=Deploy",
+		},
+		{
+			name: "option shape inside a call",
+			rest: "pick(a, b) run=Deploy",
+			expr: "pick(a, b)",
+			opts: "run=Deploy",
+		},
+		{
+			name: "option shape inside a comment",
+			rest: "ok # try run=Other",
+			expr: "ok # try run=Other",
+		},
+		{
+			name: "unclosed call keeps the whole argument",
+			rest: "contains(a, run=b",
+			expr: "contains(a, run=b",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			expr, opts := cutBranch(tt.rest)
+			if expr != tt.expr || opts != tt.opts {
+				t.Fatalf("cutBranch(%q) = %q, %q, want %q, %q", tt.rest, expr, opts, tt.expr, tt.opts)
+			}
+		})
+	}
+}

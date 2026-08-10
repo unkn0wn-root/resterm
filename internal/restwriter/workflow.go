@@ -124,7 +124,7 @@ func (w workflowWriter) writeHead(name directive.Name, arg string) {
 	w.b.WriteString(name.Comment())
 	if arg != "" {
 		w.b.WriteString(" ")
-		w.b.WriteString(arg)
+		w.b.WriteString(commentLines(arg))
 	}
 }
 

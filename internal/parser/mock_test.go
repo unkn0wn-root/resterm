@@ -158,17 +158,27 @@ func TestParseMockJSONMatchOptions(t *testing.T) {
 		{
 			name:  "an unterminated bracket is reported",
 			match: "json-rules={\"a\":{\"gt\":1}",
-			want:  "@match option is missing a closing bracket",
+			want:  `@match is missing a closing "}"`,
 		},
 		{
 			name:  "an unterminated headers bracket is reported",
 			match: `headers={"X-Env":"prod"`,
-			want:  "@match option is missing a closing bracket",
+			want:  `@match is missing a closing "}"`,
 		},
 		{
 			name:  "an unterminated query bracket is reported",
 			match: `query={"page":{"gte":2}`,
-			want:  "@match option is missing a closing bracket",
+			want:  `@match is missing a closing "}"`,
+		},
+		{
+			name:  "an unterminated single quote is reported",
+			match: `regex='unfinished`,
+			want:  `@match is missing a closing "'"`,
+		},
+		{
+			name:  "an unterminated double quote is reported",
+			match: `regex="unfinished`,
+			want:  `@match is missing a closing "\""`,
 		},
 		{
 			name:  "headers repeated across lines are folded onto one name",
@@ -386,7 +396,7 @@ HTTP/1.1 200 OK
 
 ok`
 	doc := Parse("mocks.http", []byte(src))
-	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, "missing a closing bracket") {
+	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, `missing a closing "}"`) {
 		t.Fatalf("errors = %+v", doc.Errors)
 	}
 	if doc.Errors[0].Line != 2 {
@@ -817,5 +827,32 @@ func TestParseMockDiagnostics(t *testing.T) {
 	doc := Parse("bad.http", []byte(src))
 	if len(doc.Errors) == 0 || len(doc.Requests) != 0 || len(doc.Mocks) != 1 {
 		t.Fatalf("errors=%+v requests=%d mocks=%d", doc.Errors, len(doc.Requests), len(doc.Mocks))
+	}
+}
+
+func TestParseMockMatchStopsAtTheNextDirective(t *testing.T) {
+	doc := Parse("mocks.http", []byte(`# @mock method=GET path=/x
+# @match headers={
+# @expect calls=1
+HTTP/1.1 200 OK
+`))
+	if len(doc.Errors) != 1 {
+		t.Fatalf("errors = %+v, want 1", doc.Errors)
+	}
+	if doc.Errors[0].Line != 2 || !doc.Errors[0].Mock {
+		t.Fatalf("error = %+v, want a mock error on line 2", doc.Errors[0])
+	}
+	if !strings.Contains(doc.Errors[0].Message, `@match is missing a closing "}"`) {
+		t.Fatalf("message = %q", doc.Errors[0].Message)
+	}
+	if len(doc.Mocks) != 1 {
+		t.Fatalf("mocks = %d, want 1", len(doc.Mocks))
+	}
+	m := doc.Mocks[0]
+	if len(m.Match.Headers) != 0 {
+		t.Fatalf("headers = %+v, want none", m.Match.Headers)
+	}
+	if m.Expectation == nil || m.Expectation.Calls != 1 {
+		t.Fatalf("expectation = %+v, want the @expect below it", m.Expectation)
 	}
 }

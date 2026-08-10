@@ -20,6 +20,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -218,10 +219,8 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 	if resp == nil {
 		resp = e.rtsLast()
 	}
-	res := in.res
-	if res == nil {
-		res = resp
-	}
+	// Keep in.res nil before the request runs. Falling back to resp would make
+	// response refer to last.
 	tr := in.tr
 	if tr == nil {
 		tr = e.rtsLastTrace()
@@ -232,7 +231,7 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 		Vars:        in.vars,
 		Globals:     rtshost.RuntimeGlobals(e.collectGlobalValues(in.doc, in.env), in.secrets),
 		Resp:        resp,
-		Res:         res,
+		Res:         in.res,
 		Trace:       tr,
 		Stream:      in.st,
 		Req:         e.rtsReq(in.req),
@@ -263,13 +262,16 @@ func (e *Engine) rtsExtra(src map[string]rts.Value) map[string]rts.Value {
 // ExprInput binds a {{= expr }} evaluator to one request: the environment it
 // resolves against, the base directory for file access, and the variables it
 // sees. Callers own Vars (full for execution, secret-stripped for preview).
+// Response and Stream remain nil until the current request finishes.
 type ExprInput struct {
-	Doc   *restfile.Document
-	Req   *restfile.Request
-	Env   vars.Environment
-	Base  string
-	Vars  map[string]string
-	Extra map[string]rts.Value
+	Doc      *restfile.Document
+	Req      *restfile.Request
+	Env      vars.Environment
+	Base     string
+	Vars     map[string]string
+	Response *rts.Resp
+	Stream   *rts.Stream
+	Extra    map[string]rts.Value
 }
 
 // EvalInput is one expression evaluation. Expr is the source to evaluate, Site
@@ -333,12 +335,15 @@ func (e *Engine) ExprEvalWithOptions(
 	}
 	return func(expr string, pos vars.ExprPos) (string, error) {
 		rt := e.buildRT(rtIn{
-			doc:     in.Doc,
-			req:     in.Req,
-			env:     in.Env,
-			base:    in.Base,
-			vars:    in.Vars,
-			site:    "{{= " + expr + " }}",
+			doc:  in.Doc,
+			req:  in.Req,
+			env:  in.Env,
+			base: in.Base,
+			vars: in.Vars,
+			site: "{{= " + expr + " }}",
+			// res binds response. resp remains the previous response used by last.
+			res:     in.Response,
+			st:      in.Stream,
 			x:       in.Extra,
 			secrets: secrets,
 		})
@@ -436,13 +441,14 @@ func (e *Engine) EvalCondition(
 	if spec.Negate {
 		tag = directive.SkipIf.Tag()
 	}
+	flat := str.FoldLines(expr)
 	val, err := e.rtsEvalValue(ctx, EvalInput{
 		Doc:   doc,
 		Req:   req,
 		Env:   env,
 		Base:  base,
 		Expr:  expr,
-		Site:  tag + " " + expr,
+		Site:  tag + " " + flat,
 		Pos:   e.rtsPosForLineCol(doc, req, spec.Line, spec.Col),
 		Vars:  vv,
 		Extra: extra,
@@ -454,7 +460,7 @@ func (e *Engine) EvalCondition(
 	if truthy != spec.Negate {
 		return true, "", nil
 	}
-	reason := fmt.Sprintf("%s evaluated to %t: %s", tag, truthy, expr)
+	reason := fmt.Sprintf("%s evaluated to %t: %s", tag, truthy, flat)
 	return false, reason, nil
 }
 
@@ -478,7 +484,7 @@ func (e *Engine) EvalForEachItems(
 		Env:   env,
 		Base:  base,
 		Expr:  expr,
-		Site:  "@for-each " + expr,
+		Site:  "@for-each " + str.FoldLines(expr),
 		Pos:   e.rtsPosForLine(doc, req, spec.Line),
 		Vars:  vv,
 		Extra: extra,
@@ -542,14 +548,15 @@ func (e *Engine) runAsserts(
 		if expr == "" {
 			continue
 		}
-		rt.Site = directive.Assert.Tag() + " " + expr
+		name := str.FoldLines(expr)
+		rt.Site = directive.Assert.Tag() + " " + name
 		start := time.Now()
 		val, err := e.evalRTSValue(ctx, doc, rt, expr, e.rtsPosForLineCol(doc, req, as.Line, as.Col))
 		if err != nil {
 			return out, err
 		}
 		out = append(out, scripts.TestResult{
-			Name:    expr,
+			Name:    name,
 			Message: strings.TrimSpace(as.Message),
 			Passed:  val.IsTruthy(),
 			Elapsed: time.Since(start),
@@ -593,7 +600,6 @@ func (e *Engine) runRTSPreRequest(
 	base = e.rtsBase(doc, base)
 	gv := rtshost.RuntimeGlobals(globs, rtshost.IncludeSecrets)
 	mut := rtshost.NewMutator(&out, e.rtsReq(req), vv, gv)
-	empty := &rts.Resp{}
 
 	err := rtshost.RunPreRequest(ctx, e.re, rtshost.PreRequest{
 		Doc:     doc,
@@ -606,7 +612,6 @@ func (e *Engine) runRTSPreRequest(
 				Vars:        vv,
 				Globals:     gv,
 				Resp:        e.rtsLast(),
-				Res:         empty,
 				Trace:       e.rtsLastTrace(),
 				Req:         mut.Request(),
 				ReqMut:      mut,

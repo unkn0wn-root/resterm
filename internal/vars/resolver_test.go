@@ -538,6 +538,41 @@ func TestLenientResolverReportsExpressionErrors(t *testing.T) {
 	}
 }
 
+func TestWithExprEvalLeavesTheOriginalAlone(t *testing.T) {
+	base := NewResolver()
+	base.SetExprEval(func(expr string, _ ExprPos) (string, error) {
+		return "base:" + expr, nil
+	})
+	derived := base.WithExprEval(func(expr string, _ ExprPos) (string, error) {
+		return "derived:" + expr, nil
+	})
+
+	got, err := derived.ExpandTemplates("{{= x }}")
+	if err != nil || got != "derived:x" {
+		t.Fatalf("derived = %q, %v; want %q", got, err, "derived:x")
+	}
+	got, err = base.ExpandTemplates("{{= x }}")
+	if err != nil || got != "base:x" {
+		t.Fatalf("original = %q, %v; want %q", got, err, "base:x")
+	}
+}
+
+func TestWithExprEvalKeepsPinnedValues(t *testing.T) {
+	base := NewResolver(NewTemplateProvider("file", map[string]string{"id": "{{$uuid}}"}))
+	first, err := base.ExpandTemplates("{{id}}")
+	if err != nil {
+		t.Fatalf("expand: %v", err)
+	}
+	derived := base.WithExprEval(func(string, ExprPos) (string, error) { return "", nil })
+	second, err := derived.ExpandTemplates("{{id}}")
+	if err != nil {
+		t.Fatalf("expand derived: %v", err)
+	}
+	if first != second {
+		t.Fatalf("derived resolver re-rolled the value: %q then %q", first, second)
+	}
+}
+
 func TestLenientResolverCycleNotMaskedByUndefined(t *testing.T) {
 	r := NewResolver(NewTemplateProvider("file", map[string]string{
 		"a": "{{b}}",

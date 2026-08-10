@@ -25,12 +25,15 @@ const (
 //
 // ValueRequired is set only when an empty argument is invalid. Toggles and
 // directives that collect the lines below them must leave it unset.
+//
+// Continues is explicit because one ArgKind may use different grammars.
 type Spec struct {
 	Name          Name
 	Aliases       []Name
 	Summary       string
 	Args          ArgKind
 	Repeat        Repeat
+	Continues     Continuation
 	ValueRequired bool
 	Resets        []Name
 	Topic         string
@@ -47,11 +50,12 @@ var specs = []Spec{
 		Topic:   "mocks",
 	},
 	{
-		Name:    Match,
-		Summary: "Match mock requests by query, header rules, or JSON body",
-		Args:    ArgOptions,
-		Repeat:  Many,
-		Topic:   "mocks",
+		Name:      Match,
+		Summary:   "Match mock requests by query, header rules, or JSON body",
+		Args:      ArgOptions,
+		Repeat:    Many,
+		Continues: ContinueOptions,
+		Topic:     "mocks",
 	},
 	{
 		Name:    Expect,
@@ -134,29 +138,46 @@ var specs = []Spec{
 	},
 	{Name: RTS, Summary: "Start a RestermScript pre-request block", Args: ArgToken, Repeat: Many, Topic: "rts"},
 	{
-		Name:    Patch,
-		Summary: "Define a reusable apply profile at file/global scope",
-		Args:    ArgText,
-		Repeat:  Many,
-		Topic:   "rts",
+		Name:      Patch,
+		Summary:   "Define a reusable apply profile at file/global scope",
+		Args:      ArgText,
+		Repeat:    Many,
+		Continues: ContinueExpr,
+		Topic:     "rts",
 	},
 	{
-		Name:    Apply,
-		Summary: "Apply an inline patch or reuse profiles (use=...) before pre-request scripts",
-		Args:    ArgText,
-		Repeat:  Many,
-		Topic:   "rts",
+		Name:      Apply,
+		Summary:   "Apply an inline patch or reuse profiles (use=...) before pre-request scripts",
+		Args:      ArgText,
+		Repeat:    Many,
+		Continues: ContinueExpr,
+		Topic:     "rts",
 	},
 	{
-		Name:    When,
-		Aliases: []Name{SkipIf},
-		Summary: "Conditionally run or skip a request/step",
-		Args:    ArgText,
-		Repeat:  Once,
-		Topic:   "rts",
+		Name:      When,
+		Aliases:   []Name{SkipIf},
+		Summary:   "Conditionally run or skip a request/step",
+		Args:      ArgText,
+		Repeat:    Once,
+		Continues: ContinueExpr,
+		Topic:     "rts",
 	},
-	{Name: Capture, Summary: "Capture data from the response", Args: ArgText, Repeat: Many, Topic: "rts"},
-	{Name: Assert, Summary: "Evaluate a RestermScript assertion", Args: ArgText, Repeat: Many, Topic: "rts"},
+	{
+		Name:      Capture,
+		Summary:   "Capture data from the response",
+		Args:      ArgText,
+		Repeat:    Many,
+		Continues: ContinueCapture,
+		Topic:     "rts",
+	},
+	{
+		Name:      Assert,
+		Summary:   "Evaluate a RestermScript assertion",
+		Args:      ArgText,
+		Repeat:    Many,
+		Continues: ContinueExpr,
+		Topic:     "rts",
+	},
 	{Name: Trace, Summary: "Enable HTTP tracing and latency budgets", Args: ArgOptions, Repeat: Once, Topic: "tracing"},
 	{
 		Name:    Profile,
@@ -183,13 +204,48 @@ var specs = []Spec{
 	},
 	{Name: Workflow, Summary: "Begin a workflow definition", Args: ArgText, Repeat: Many, Topic: "workflows"},
 	{Name: Step, Summary: "Add a workflow step", Args: ArgText, Repeat: Many, Topic: "workflows"},
-	{Name: If, Summary: "Conditionally run a workflow step", Args: ArgText, Repeat: Many, Topic: "workflows"},
-	{Name: Elif, Summary: "Additional workflow condition", Args: ArgText, Repeat: Many, Topic: "workflows"},
+	{
+		Name:      If,
+		Summary:   "Conditionally run a workflow step",
+		Args:      ArgText,
+		Repeat:    Many,
+		Continues: ContinueExpr,
+		Topic:     "workflows",
+	},
+	{
+		Name:      Elif,
+		Summary:   "Additional workflow condition",
+		Args:      ArgText,
+		Repeat:    Many,
+		Continues: ContinueExpr,
+		Topic:     "workflows",
+	},
 	{Name: Else, Summary: "Fallback workflow branch", Args: ArgOptions, Repeat: Many, Topic: "workflows"},
-	{Name: Switch, Summary: "Branch workflow steps based on a value", Args: ArgText, Repeat: Many, Topic: "workflows"},
-	{Name: Case, Summary: "Match a switch case", Args: ArgText, Repeat: Many, Topic: "workflows"},
+	{
+		Name:      Switch,
+		Summary:   "Branch workflow steps based on a value",
+		Args:      ArgText,
+		Repeat:    Many,
+		Continues: ContinueExpr,
+		Topic:     "workflows",
+	},
+	{
+		Name:      Case,
+		Summary:   "Match a switch case",
+		Args:      ArgText,
+		Repeat:    Many,
+		Continues: ContinueExpr,
+		Topic:     "workflows",
+	},
 	{Name: Default, Summary: "Fallback switch case", Args: ArgOptions, Repeat: Many, Topic: "workflows"},
-	{Name: ForEach, Summary: "Run a request once per list item", Args: ArgText, Repeat: Once, Topic: "workflows"},
+	{
+		Name:      ForEach,
+		Summary:   "Run a request once per list item",
+		Args:      ArgText,
+		Repeat:    Once,
+		Continues: ContinueExpr,
+		Topic:     "workflows",
+	},
 	// Protocol toggles may repeat because disabling them resets their state.
 	{
 		Name:    GraphQL,
@@ -273,6 +329,12 @@ var index = func() map[Name]*Spec {
 	}
 	return ix
 }()
+
+// Known reports whether n is a registered directive name or alias.
+func (n Name) Known() bool {
+	_, ok := index[n]
+	return ok
+}
 
 func (n Name) DeclaredOnce() bool {
 	spec, ok := index[n]

@@ -101,6 +101,49 @@ GET https://example.com
 	}
 }
 
+func TestRunRTSPreRequestRejectsResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "member",
+			body: `request.setHeader("X", response.statusCode)`,
+		},
+		{
+			name: "member behind try",
+			body: `request.setHeader("X", (try response.statusCode).value ?? "none")`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "### RTS\n# @rts pre-request\n> " + tt.body + "\nGET https://example.com\n"
+			doc := parser.Parse("sample.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("parse errors: %+v", doc.Errors)
+			}
+
+			eng := New(engcfg.Config{}, nil)
+			_, err := eng.runRTSPreRequest(
+				context.Background(),
+				doc,
+				doc.Requests[0],
+				testEnv(""),
+				"",
+				nil,
+				nil,
+			)
+			if err == nil {
+				t.Fatal("expected response to be rejected before the request")
+			}
+			if !strings.Contains(err.Error(), "use last for the previous response") {
+				t.Fatalf("error = %v, want it to name last", err)
+			}
+		})
+	}
+}
+
 func TestEvalForEachErrorCarriesSource(t *testing.T) {
 	eng := New(engcfg.Config{SourceDiagnostics: true}, nil)
 	src := `### Req
