@@ -193,7 +193,7 @@ func (w mockWriter) responseBody(resp restfile.MockResponse) (file, body string,
 	if !restfile.ResponseAllowsBody(resp.Status) {
 		return "", "", fmt.Errorf("status %d cannot have a response body", resp.Status)
 	}
-	body, err = NormalizeMockBody(resp.Body.Text)
+	body, err = CheckMockBody(resp.Body.Text)
 	if err != nil {
 		return "", "", err
 	}

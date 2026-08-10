@@ -14,8 +14,8 @@ const maxBodyLineLen = 1 << 20
 
 // A body that is only a file reference would be read back as one, so it has to
 // be rejected rather than written as an inline body that changes meaning.
-func NormalizeMockBody(body string) (string, error) {
-	body, err := NormalizeInlineBody(body)
+func CheckMockBody(body string) (string, error) {
+	body, err := CheckInlineBody(body)
 	if err != nil || body == "" {
 		return body, err
 	}
@@ -27,7 +27,9 @@ func NormalizeMockBody(body string) (string, error) {
 	return body, nil
 }
 
-func NormalizeInlineBody(body string) (string, error) {
+// The returned body is the one to write: line endings are collapsed on the way
+// through, so the argument is not what survived the check.
+func CheckInlineBody(body string) (string, error) {
 	if !utf8.ValidString(body) {
 		return "", errors.New("body is not valid UTF-8")
 	}

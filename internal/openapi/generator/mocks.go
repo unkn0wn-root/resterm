@@ -279,11 +279,11 @@ func jsonMockBody(value any) (string, error) {
 }
 
 func checkedMockBody(body string) (string, error) {
-	return restwriter.NormalizeMockBody(body)
+	return restwriter.CheckMockBody(body)
 }
 
 func checkedBodyText(body string) (string, error) {
-	return restwriter.NormalizeInlineBody(body)
+	return restwriter.CheckInlineBody(body)
 }
 
 func mockHeaderValue(value any) string {
