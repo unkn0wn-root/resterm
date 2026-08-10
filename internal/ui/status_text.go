@@ -7,6 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -30,7 +31,7 @@ func (m *Model) statusResolver(
 	extras ...map[string]string,
 ) *vars.Resolver {
 	rq := m.requestSvc(httpx.Options{})
-	return rq.DisplayResolver(context.Background(), doc, req, m.ws.active, "", nil, extras...)
+	return rq.DisplayResolver(context.Background(), doc, req, m.ws.active, "", rts.Locals{}, extras...)
 }
 
 func (m *Model) statusRequestLabel(

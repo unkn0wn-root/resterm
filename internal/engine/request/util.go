@@ -1,19 +1,6 @@
 package request
 
-import (
-	"maps"
-
-	"github.com/unkn0wn-root/resterm/internal/rts"
-)
-
-func cloneValueMap(src map[string]rts.Value) map[string]rts.Value {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make(map[string]rts.Value, len(src))
-	maps.Copy(out, src)
-	return out
-}
+import "maps"
 
 func copyBytes(src []byte) []byte {
 	if len(src) == 0 {

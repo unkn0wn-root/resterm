@@ -134,13 +134,23 @@ func TestEngineRejectsReservedBindings(t *testing.T) {
 			"alias is a reserved word: default",
 		},
 		{
-			"extra binding",
-			RT{BaseDir: dir, Extra: map[string]Value{"default": Num(1)}},
+			"extension",
+			RT{BaseDir: dir, Extensions: Extension("default", Num(1))},
 			"name is a reserved word: default",
 		},
 		{
-			"extra binding other keyword",
-			RT{BaseDir: dir, Extra: map[string]Value{"range": Num(1)}},
+			"extension other keyword",
+			RT{BaseDir: dir, Extensions: Extension("range", Num(1))},
+			"name is a reserved word: range",
+		},
+		{
+			"local",
+			RT{BaseDir: dir, Locals: Local("default", Num(1))},
+			"name is a reserved word: default",
+		},
+		{
+			"local other keyword",
+			RT{BaseDir: dir, Locals: Local("range", Num(1))},
 			"name is a reserved word: range",
 		},
 	}

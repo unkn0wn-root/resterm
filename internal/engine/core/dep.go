@@ -31,7 +31,7 @@ type Dep interface {
 		base string,
 		spec *restfile.ConditionSpec,
 		vv map[string]string,
-		extra map[string]rts.Value,
+		locals rts.Locals,
 	) (bool, string, error)
 	EvalForEachItems(
 		ctx context.Context,
@@ -41,7 +41,7 @@ type Dep interface {
 		base string,
 		spec request.ForEachSpec,
 		vv map[string]string,
-		extra map[string]rts.Value,
+		locals rts.Locals,
 	) ([]rts.Value, error)
 	EvalValue(ctx context.Context, in request.EvalInput) (rts.Value, error)
 	PosForLine(doc *restfile.Document, req *restfile.Request, line int) rts.Pos

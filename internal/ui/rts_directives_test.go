@@ -8,6 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
 // Directive evaluation is delegated to the request engine, so a @when error must
@@ -22,7 +23,7 @@ func TestEvalConditionErrorCarriesSource(t *testing.T) {
 	spec := &restfile.ConditionSpec{Expression: "missing.value", Line: 2}
 
 	_, _, err := model.requestSvc(httpx.Options{}).EvalCondition(
-		context.Background(), doc, req, testEnv(""), "", spec, nil, nil,
+		context.Background(), doc, req, testEnv(""), "", spec, nil, rts.Locals{},
 	)
 	if err == nil {
 		t.Fatalf("expected @when condition error")

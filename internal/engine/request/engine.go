@@ -59,7 +59,7 @@ const WarningSSHHostKeyVerificationDisabled Warning = "@ssh strict_hostkey=false
 
 type ExecOptions struct {
 	Extra      map[string]string
-	Values     map[string]rts.Value
+	Locals     rts.Locals
 	Record     bool
 	Ctx        context.Context
 	Mode       ExecMode
@@ -267,7 +267,7 @@ type execCtx struct {
 	hasJSPre  bool
 	scriptV   map[string]string
 	extraV    map[string]string
-	extraX    map[string]rts.Value
+	locals    rts.Locals
 
 	res     *vars.Resolver
 	mset    map[string]string
@@ -324,7 +324,7 @@ func newExec(
 		hasRTSPre: hasRTS,
 		hasJSPre:  hasJS,
 		extraV:    cloneStringMap(opt.Extra),
-		extraX:    cloneValueMap(opt.Values),
+		locals:    opt.Locals,
 		exp:       exp,
 		onWarning: opt.OnWarning,
 		onSSE:     opt.AttachSSE,
@@ -481,7 +481,7 @@ func (f flow) EvaluateCondition() *xexec.RequestResult {
 		x.opts.BaseDir,
 		x.req.Metadata.When,
 		x.baseVars,
-		x.extraX,
+		x.locals,
 	)
 	if err != nil {
 		tag := directive.When.Tag()
@@ -525,7 +525,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	}
 	// @for-each binds its item as a typed value, and @apply reads it the same way
 	// every other expression in the run does.
-	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, x.extraX)
+	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, x.locals)
 	if err != nil {
 		x.exp.stage(
 			xplain.StageApply,
@@ -669,7 +669,7 @@ func (x *execCtx) buildResolver() {
 		x.env,
 		x.opts.BaseDir,
 		x.storeG,
-		x.extraX,
+		x.locals,
 		extra...,
 	)
 	x.trace = vars.NewTrace()
@@ -1055,7 +1055,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		out:    &caps,
 		env:    x.env,
 		v:      x.captureVariables(),
-		x:      x.extraX,
+		locals: x.locals,
 	}); err != nil {
 		x.exp.stage(
 			xplain.StageCaptures,
@@ -1085,7 +1085,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		x.env,
 		x.opts.BaseDir,
 		testV,
-		x.extraX,
+		x.locals,
 		rtsGRPC(resp),
 		nil,
 		rtsStream(info),
@@ -1130,7 +1130,7 @@ func (f flow) ExecuteHTTP() xexec.RequestResult {
 		Options:          x.opts,
 		EffectiveTimeout: x.timeout,
 		ScriptVars:       x.scriptV,
-		ExtraVals:        x.extraX,
+		Locals:           x.locals,
 	})
 	return x.finishHTTP(res)
 }
@@ -1153,7 +1153,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					out:    &caps,
 					env:    x.env,
 					v:      in.Vars,
-					x:      in.ExtraVals,
+					locals: in.Locals,
 				})
 			},
 			CollectVariables: func(doc *restfile.Document, req *restfile.Request) map[string]string {
@@ -1170,7 +1170,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					x.env,
 					in.BaseDir,
 					in.Vars,
-					in.ExtraVals,
+					in.Locals,
 					rtsHTTP(in.HTTP),
 					rtsTrace(in.HTTP),
 					rtsStream(in.Stream),

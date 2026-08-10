@@ -231,7 +231,7 @@ func (r *wfRun) runReqStep(
 			baseDir(r.pl.Doc),
 			step.When,
 			vv,
-			nil,
+			rts.Locals{},
 		)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -260,7 +260,7 @@ func (r *wfRun) runReqStep(
 		})
 	}
 	if spec == nil {
-		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
+		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, rts.Locals{})
 		if err != nil {
 			return false, err
 		}
@@ -275,7 +275,7 @@ func (r *wfRun) runReqStep(
 		baseDir(r.pl.Doc),
 		*spec,
 		vv,
-		nil,
+		rts.Locals{},
 	)
 	if err != nil {
 		return r.manualFinish(ctx, step, req, branch, engine.RequestResult{
@@ -328,7 +328,7 @@ func (r *wfRun) runReqStep(
 		if reqKey != "" {
 			loopVars[reqKey] = itemStr
 		}
-		ev := map[string]rts.Value{spec.Var: item}
+		loc := rts.Local(spec.Var, item)
 		vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, loopVars)
 
 		if step.When != nil {
@@ -340,7 +340,7 @@ func (r *wfRun) runReqStep(
 				baseDir(r.pl.Doc),
 				step.When,
 				vv,
-				ev,
+				loc,
 			)
 			if err != nil {
 				if ctx.Err() != nil {
@@ -393,7 +393,7 @@ func (r *wfRun) runReqStep(
 			i+1,
 			len(items),
 			loopVars,
-			ev,
+			loc,
 		)
 		if err != nil {
 			return false, err
@@ -444,7 +444,7 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 		})
 	}
 
-	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
+	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, rts.Locals{})
 	if err != nil {
 		return false, err
 	}
@@ -487,7 +487,7 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 		})
 	}
 
-	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
+	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, rts.Locals{})
 	if err != nil {
 		return false, err
 	}
@@ -503,7 +503,7 @@ func (r *wfRun) execReq(
 	iter int,
 	total int,
 	extra map[string]string,
-	vals map[string]rts.Value,
+	locals rts.Locals,
 ) (engine.RequestResult, error) {
 	clone := request.CloneRequest(req)
 	if err := r.emitReqStart(ctx, i, step, clone, branch, iter, total); err != nil {
@@ -515,7 +515,7 @@ func (r *wfRun) execReq(
 		r.pl.Run.Env,
 		request.ExecOptions{
 			Extra:  extra,
-			Values: vals,
+			Locals: locals,
 			Record: r.pl.Run.Mode == ModeForEach,
 			Ctx:    ctx,
 		},
@@ -585,12 +585,12 @@ func (r *wfRun) executeStepRequest(
 	iter int,
 	total int,
 	extra map[string]string,
-	vals map[string]rts.Value,
+	locals rts.Locals,
 ) (stepOutcome, error) {
 	if err := r.emitStepStart(ctx, r.idx, step, req, branch, iter, total); err != nil {
 		return stepFailed, err
 	}
-	res, err := r.execReq(ctx, r.idx, step, req, branch, iter, total, extra, vals)
+	res, err := r.execReq(ctx, r.idx, step, req, branch, iter, total, extra, locals)
 	if err != nil {
 		return stepFailed, err
 	}
@@ -622,22 +622,22 @@ func (r *wfRun) evalStepValue(
 	tag string,
 	expr string,
 	vv map[string]string,
-	extra map[string]rts.Value,
+	locals rts.Locals,
 ) (rts.Value, error) {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return rts.Value{}, fmt.Errorf("%s expression missing", tag)
 	}
 	return r.dep.EvalValue(ctx, request.EvalInput{
-		Doc:   r.pl.Doc,
-		Req:   req,
-		Env:   r.pl.Run.Env,
-		Base:  baseDir(r.pl.Doc),
-		Expr:  expr,
-		Site:  tag + " " + str.FoldLines(expr),
-		Pos:   r.dep.PosForLine(r.pl.Doc, req, line),
-		Vars:  vv,
-		Extra: extra,
+		Doc:    r.pl.Doc,
+		Req:    req,
+		Env:    r.pl.Run.Env,
+		Base:   baseDir(r.pl.Doc),
+		Expr:   expr,
+		Site:   tag + " " + str.FoldLines(expr),
+		Pos:    r.dep.PosForLine(r.pl.Doc, req, line),
+		Vars:   vv,
+		Locals: locals,
 	})
 }
 
@@ -648,9 +648,9 @@ func (r *wfRun) evalStepBool(
 	tag string,
 	expr string,
 	vv map[string]string,
-	extra map[string]rts.Value,
+	locals rts.Locals,
 ) (bool, error) {
-	val, err := r.evalStepValue(ctx, req, line, tag, expr, vv, extra)
+	val, err := r.evalStepValue(ctx, req, line, tag, expr, vv, locals)
 	if err != nil {
 		return false, err
 	}
@@ -670,7 +670,7 @@ func (r *wfRun) selectIfBranch(
 	step restfile.WorkflowStep,
 	vv map[string]string,
 ) (*restfile.WorkflowIfBranch, error) {
-	ok, err := r.evalStepBool(ctx, nil, step.If.Then.Line, wfTagIf, step.If.Then.Cond, vv, nil)
+	ok, err := r.evalStepBool(ctx, nil, step.If.Then.Line, wfTagIf, step.If.Then.Cond, vv, rts.Locals{})
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassScript, err, wfTagIf)
 	}
@@ -679,7 +679,7 @@ func (r *wfRun) selectIfBranch(
 	}
 	for i := range step.If.Elifs {
 		item := &step.If.Elifs[i]
-		ok, err = r.evalStepBool(ctx, nil, item.Line, wfTagElif, item.Cond, vv, nil)
+		ok, err = r.evalStepBool(ctx, nil, item.Line, wfTagElif, item.Cond, vv, rts.Locals{})
 		if err != nil {
 			return nil, diag.WrapAs(diag.ClassScript, err, wfTagElif)
 		}
@@ -708,7 +708,7 @@ func (r *wfRun) selectSwitchCase(
 		wfTagSwitch,
 		step.Switch.Expr,
 		vv,
-		nil,
+		rts.Locals{},
 	)
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassScript, err, wfTagSwitch)
@@ -719,7 +719,7 @@ func (r *wfRun) selectSwitchCase(
 		if expr == "" {
 			continue
 		}
-		val, err := r.evalStepValue(ctx, nil, item.Line, wfTagCase, expr, vv, nil)
+		val, err := r.evalStepValue(ctx, nil, item.Line, wfTagCase, expr, vv, rts.Locals{})
 		if err != nil {
 			return nil, diag.WrapAs(diag.ClassScript, err, wfTagCase)
 		}

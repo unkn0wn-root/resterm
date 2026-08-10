@@ -21,43 +21,35 @@ func (testMockInspector) Count(context.Context, mock.RequestPattern) (uint64, er
 	return 0, nil
 }
 
-func TestRTSExtraClonesCallerValues(t *testing.T) {
+func TestRTSExtensionsBindMockAndYieldToLocals(t *testing.T) {
 	e := New(engcfg.Config{MockInspector: testMockInspector{}}, nil)
-	src := map[string]rts.Value{"custom": rts.Str("original")}
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
 
-	got := e.rtsExtra(src)
-
-	if value := got["custom"].S; value != "original" {
-		t.Fatalf("custom value = %q, want %q", value, "original")
+	bound, err := e.re.Eval(context.Background(), rts.RT{Extensions: e.rtsExtensions()}, "mock", pos)
+	if err != nil {
+		t.Fatalf("eval mock: %v", err)
 	}
-	if _, ok := got["mock"]; !ok {
-		t.Fatal("mock value is missing")
-	}
-	if _, ok := src["mock"]; ok {
-		t.Fatal("rtsExtra mutated its source map")
-	}
-	got["custom"] = rts.Str("changed")
-	if value := src["custom"].S; value != "original" {
-		t.Fatalf("source value = %q after output mutation, want %q", value, "original")
+	if bound.K != rts.VObj {
+		t.Fatalf("mock = %+v, want the inspector object", bound)
 	}
 
-	if got := e.rtsExtra(nil); len(got) != 1 {
-		t.Fatalf("rtsExtra(nil) has %d values, want the mock value only", len(got))
+	rt := rts.RT{Extensions: e.rtsExtensions(), Locals: rts.Local("mock", rts.Str("loop item"))}
+	shadowed, err := e.re.Eval(context.Background(), rt, "mock", pos)
+	if err != nil {
+		t.Fatalf("eval shadowed mock: %v", err)
+	}
+	if shadowed.K != rts.VStr || shadowed.S != "loop item" {
+		t.Fatalf("mock = %+v, want the loop item to win", shadowed)
 	}
 }
 
-func TestRTSExtraPreservesCallerMockValue(t *testing.T) {
-	e := New(engcfg.Config{MockInspector: testMockInspector{}}, nil)
-	src := map[string]rts.Value{"mock": rts.Str("loop item")}
+func TestRTSExtensionsAreEmptyWithoutAnInspector(t *testing.T) {
+	e := New(engcfg.Config{}, nil)
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
 
-	got := e.rtsExtra(src)
-
-	if value := got["mock"]; value.K != rts.VStr || value.S != "loop item" {
-		t.Fatalf("mock value = %+v, want caller value", value)
-	}
-	got["mock"] = rts.Str("changed")
-	if value := src["mock"].S; value != "loop item" {
-		t.Fatalf("source mock value = %q after output mutation, want %q", value, "loop item")
+	_, err := e.re.Eval(context.Background(), rts.RT{Extensions: e.rtsExtensions()}, "mock", pos)
+	if err == nil || !strings.Contains(err.Error(), `undefined name "mock"`) {
+		t.Fatalf("eval mock without an inspector: error = %v, want it undefined", err)
 	}
 }
 
@@ -163,7 +155,7 @@ GET https://example.com
 		"",
 		ForEachSpec{Expr: "missing.value", Line: 2},
 		nil,
-		nil,
+		rts.Locals{},
 	)
 	if err == nil {
 		t.Fatalf("expected for-each error")

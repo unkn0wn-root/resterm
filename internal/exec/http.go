@@ -27,28 +27,28 @@ type HTTPInput struct {
 	Options          httpx.Options
 	EffectiveTimeout time.Duration
 	ScriptVars       map[string]string
-	ExtraVals        map[string]rts.Value
+	Locals           rts.Locals
 }
 
 type CaptureInput struct {
-	Doc       *restfile.Document
-	Req       *restfile.Request
-	Resolver  *vars.Resolver
-	Response  *scripts.Response
-	Stream    *scripts.StreamInfo
-	Vars      map[string]string
-	ExtraVals map[string]rts.Value
+	Doc      *restfile.Document
+	Req      *restfile.Request
+	Resolver *vars.Resolver
+	Response *scripts.Response
+	Stream   *scripts.StreamInfo
+	Vars     map[string]string
+	Locals   rts.Locals
 }
 
 type AssertInput struct {
-	Context   context.Context
-	Doc       *restfile.Document
-	Req       *restfile.Request
-	BaseDir   string
-	Vars      map[string]string
-	ExtraVals map[string]rts.Value
-	HTTP      *httpx.Response
-	Stream    *scripts.StreamInfo
+	Context context.Context
+	Doc     *restfile.Document
+	Req     *restfile.Request
+	BaseDir string
+	Vars    map[string]string
+	Locals  rts.Locals
+	HTTP    *httpx.Response
+	Stream  *scripts.StreamInfo
 }
 
 type HTTPHooks struct {
@@ -173,13 +173,13 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	respForScripts := httpScriptResponse(resp)
 	if r.Hooks.ApplyCaptures != nil {
 		err := r.Hooks.ApplyCaptures(CaptureInput{
-			Doc:       in.Doc,
-			Req:       in.Req,
-			Resolver:  in.Resolver,
-			Response:  respForScripts,
-			Stream:    streamInfo,
-			Vars:      r.captureVars(in.Doc, in.Req, in.ScriptVars),
-			ExtraVals: in.ExtraVals,
+			Doc:      in.Doc,
+			Req:      in.Req,
+			Resolver: in.Resolver,
+			Response: respForScripts,
+			Stream:   streamInfo,
+			Vars:     r.captureVars(in.Doc, in.Req, in.ScriptVars),
+			Locals:   in.Locals,
 		})
 		if err != nil {
 			res.Err = err
@@ -196,14 +196,14 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	var assertErr error
 	if r.Hooks.RunAsserts != nil {
 		res.Tests, assertErr = r.Hooks.RunAsserts(AssertInput{
-			Context:   ctx,
-			Doc:       in.Doc,
-			Req:       in.Req,
-			BaseDir:   in.Options.BaseDir,
-			Vars:      testVars,
-			ExtraVals: in.ExtraVals,
-			HTTP:      resp,
-			Stream:    streamInfo,
+			Context: ctx,
+			Doc:     in.Doc,
+			Req:     in.Req,
+			BaseDir: in.Options.BaseDir,
+			Vars:    testVars,
+			Locals:  in.Locals,
+			HTTP:    resp,
+			Stream:  streamInfo,
 		})
 	}
 
