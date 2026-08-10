@@ -329,7 +329,7 @@ func routeMocks(docs []*restfile.Document, method, path string) []*restfile.Mock
 }
 
 func nextCapturedMockName(route []*restfile.Mock, label string, status int) string {
-	base := restwriter.MockNameSlug(label)
+	base := restfile.MockNameSlug(label)
 	if base == "" {
 		base = fmt.Sprintf("response-%d", status)
 	}
@@ -342,7 +342,7 @@ func nextCapturedMockName(route []*restfile.Mock, label string, status int) stri
 		used[spec.Name] = struct{}{}
 		used[spec.Sequence] = struct{}{}
 	}
-	return restwriter.UniqueMockName(base, used)
+	return restfile.UniqueMockName(base, used)
 }
 
 func capturedMockIsDefault(route []*restfile.Mock) bool {

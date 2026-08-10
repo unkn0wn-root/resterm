@@ -8,229 +8,201 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
-	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
-func renderMock(b *strings.Builder, mock *restfile.Mock) error {
+// The responses of a sequence share one block, so the writer carries whether it
+// is writing one to keep their bodies clear of the delimiter between them.
+type mockWriter struct {
+	directiveWriter
+	sequence bool
+}
+
+func renderMock(w directiveWriter, mock *restfile.Mock) error {
 	if mock == nil {
 		return errors.New("writer: mock is nil")
 	}
-	if err := mock.CheckShape(); err != nil {
+	mw := mockWriter{directiveWriter: w, sequence: mock.Sequence != ""}
+	if err := mw.write(mock); err != nil {
 		return fmt.Errorf("writer: %w", err)
 	}
-	title := strings.Join(strings.Fields(mock.Title), " ")
-	if title == "" {
-		title = fmt.Sprintf("Mock %s %s", strings.ToUpper(mock.Method), mock.Path)
-	}
-	b.WriteString("### ")
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(directive.Mock.Comment())
-	b.WriteString(" method=")
-	b.WriteString(strings.ToUpper(strings.TrimSpace(mock.Method)))
-	b.WriteString(" path=")
-	b.WriteString(strings.TrimSpace(mock.Path))
-	if mock.Sequence != "" {
-		b.WriteString(" sequence=")
-		b.WriteString(mock.Sequence)
-		if key := mock.SequenceKey.String(); key != "" {
-			b.WriteString(" sequence-key=")
-			b.WriteString(key)
-		}
-	} else if mock.Name != "" {
-		b.WriteString(" name=")
-		b.WriteString(mock.Name)
-	}
-	if mock.Default {
-		b.WriteString(" default=true")
-	}
-	if mock.Latency > 0 {
-		b.WriteString(" latency=")
-		b.WriteString(mock.Latency.String())
-	}
-	if mock.DisableInterpolation {
-		b.WriteString(" interpolate=false")
-	}
-	b.WriteString("\n")
-	if mock.Expectation != nil {
-		fmt.Fprintf(
-			b,
-			"%s calls=%d\n",
-			directive.Expect.Comment(),
-			mock.Expectation.Calls,
-		)
-	}
-	if err := renderMockMatch(b, mock.Match); err != nil {
+	return nil
+}
+
+func (w mockWriter) write(m *restfile.Mock) error {
+	if err := m.CheckShape(); err != nil {
 		return err
 	}
-
-	for i, resp := range mock.Responses {
-		if i > 0 {
-			b.WriteString(restfile.MockSequenceDelimiter + "\n")
-		}
-		if err := renderMockResponse(b, resp, mock.Sequence != ""); err != nil {
-			return err
-		}
+	w.writeTitle(m)
+	w.writeDeclaration(m)
+	w.writeExpectation(m.Expectation)
+	if err := w.writeMatch(m.Match); err != nil {
+		return err
 	}
-	return nil
+	return w.writeResponses(m.Responses)
 }
 
-func renderMockResponse(b *strings.Builder, resp restfile.MockResponse, sequence bool) error {
-	file := strings.TrimSpace(resp.Body.FilePath)
-	body := resp.Body.Text
-	if file == "" && body != "" {
-		if !restfile.ResponseAllowsBody(resp.Status) {
-			return fmt.Errorf("status %d cannot have a response body", resp.Status)
-		}
-		var err error
-		body, err = NormalizeMockBody(body)
-		if err != nil {
-			return err
-		}
-		if sequence {
-			for line := range strings.SplitSeq(body, "\n") {
-				if restfile.IsMockSequenceDelimiter(line) {
-					return errors.New("mock sequence body contains a response delimiter")
-				}
-			}
-		}
+func (w mockWriter) writeTitle(m *restfile.Mock) {
+	title := strings.Join(strings.Fields(m.Title), " ")
+	if title == "" {
+		title = fmt.Sprintf("Mock %s %s", strings.ToUpper(m.Method), m.Path)
 	}
+	w.title(title)
+}
 
-	status := resp.Status
-	fmt.Fprintf(b, "HTTP/1.1 %d", status)
-	if text := http.StatusText(status); text != "" {
-		b.WriteString(" ")
-		b.WriteString(text)
+// A sequence carries its own name, so a mock is either one named response or a
+// sequence of them.
+func (w mockWriter) writeDeclaration(m *restfile.Mock) {
+	w.head(directive.Mock, "")
+	w.option("method", strings.ToUpper(strings.TrimSpace(m.Method)))
+	w.option("path", strings.TrimSpace(m.Path))
+	switch {
+	case m.Sequence != "":
+		w.option("sequence", m.Sequence)
+		if key := m.SequenceKey.String(); key != "" {
+			w.option("sequence-key", key)
+		}
+	case m.Name != "":
+		w.option("name", m.Name)
 	}
-	b.WriteString("\n")
-	renderHeaders(b, resp.Headers)
-	b.WriteString("\n")
-	if file != "" {
-		b.WriteString("< ")
-		b.WriteString(file)
-		b.WriteString("\n")
+	if m.Default {
+		w.option("default", "true")
+	}
+	if m.Latency > 0 {
+		w.option("latency", m.Latency.String())
+	}
+	if m.DisableInterpolation {
+		w.option("interpolate", "false")
+	}
+	w.end()
+}
+
+func (w mockWriter) writeExpectation(e *restfile.MockExpectation) {
+	if e == nil {
+		return
+	}
+	w.head(directive.Expect, "")
+	w.option("calls", strconv.FormatUint(e.Calls, 10))
+	w.end()
+}
+
+func (w mockWriter) writeMatch(m restfile.MockMatch) error {
+	if !m.HasConditions() {
 		return nil
 	}
-	if body != "" {
-		b.WriteString(body)
-		b.WriteString("\n")
+	fields, err := matchFields(m)
+	if err != nil {
+		return err
 	}
+	w.line(directive.Match, strings.Join(fields, " "))
 	return nil
 }
 
-func NormalizeMockBody(body string) (string, error) {
-	body, err := NormalizeInlineBody(body)
-	if err != nil || body == "" {
-		return body, err
+// A json match may be any JSON value, including a bare string, so it is quoted
+// where the bracketed matcher objects are not.
+func matchFields(m restfile.MockMatch) ([]string, error) {
+	fields, err := appendMatchers(nil, "query", m.Query)
+	if err != nil {
+		return nil, err
 	}
-	lines := strings.Split(body, "\n")
-	_, isFile := bodyref.Parse(lines[0], bodyref.Options{Location: bodyref.Line})
-	if isFile && util.AllBlank(lines[1:]) {
-		return "", errors.New("mock body looks like a file reference")
+	fields, err = appendMatchers(fields, "headers", m.Headers)
+	if err != nil {
+		return nil, err
 	}
-	return body, nil
+	if len(m.JSON) > 0 {
+		fields = append(fields, "json="+quoteMockJSON(m.JSON))
+	}
+	if len(m.JSONRules) > 0 {
+		fields = append(fields, "json-rules="+quoteMockJSON(m.JSONRules))
+	}
+	return fields, nil
 }
 
-func MockNameSlug(raw string) string {
-	var b strings.Builder
-	dash := false
-	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '.' {
-			b.WriteRune(r)
-			dash = false
-			continue
-		}
-		if !dash && b.Len() > 0 {
-			b.WriteByte('-')
-			dash = true
-		}
+// Matchers are always an object, which the option lexer groups on its own.
+func appendMatchers[M ~map[string]V, V any](fields []string, key string, matchers M) ([]string, error) {
+	if len(matchers) == 0 {
+		return fields, nil
 	}
-	return strings.Trim(b.String(), "-._")
+	data, err := json.Marshal(matchers)
+	if err != nil {
+		return nil, fmt.Errorf("marshal mock %s matchers: %w", key, err)
+	}
+	return append(fields, key+"="+string(data)), nil
 }
 
-func UniqueMockName(base string, used map[string]struct{}) string {
-	base = strings.Trim(strings.TrimSpace(base), "-")
-	if base == "" {
-		base = "scenario"
-	}
-	if _, exists := used[base]; !exists {
-		used[base] = struct{}{}
-		return base
-	}
-	for suffix := 2; ; suffix++ {
-		candidate := fmt.Sprintf("%s-%d", base, suffix)
-		if _, exists := used[candidate]; exists {
-			continue
-		}
-		used[candidate] = struct{}{}
-		return candidate
-	}
-}
-
-func NormalizeInlineBody(body string) (string, error) {
-	if !utf8.ValidString(body) {
-		return "", errors.New("body is not valid UTF-8")
-	}
-	body = strings.ReplaceAll(body, "\r\n", "\n")
-	lines := strings.SplitSeq(body, "\n")
-	for line := range lines {
-		if len(line) >= 1<<20 {
-			return "", errors.New("body contains a line longer than the parser limit")
-		}
-		if strings.HasPrefix(strings.TrimSpace(line), "###") {
-			return "", errors.New("body contains a request separator")
-		}
-		for _, r := range line {
-			if unicode.IsControl(r) && r != '\t' {
-				return "", errors.New("body contains control characters")
-			}
-		}
-	}
-	return body, nil
-}
-
-func renderMockMatch(b *strings.Builder, match restfile.MockMatch) error {
-	var fields []string
-	if len(match.Query) > 0 {
-		data, err := json.Marshal(match.Query)
-		if err != nil {
-			return fmt.Errorf("writer: marshal mock query matchers: %w", err)
-		}
-		fields = append(fields, "query="+string(data))
-	}
-	if len(match.Headers) > 0 {
-		data, err := json.Marshal(match.Headers)
-		if err != nil {
-			return fmt.Errorf("writer: marshal mock header matchers: %w", err)
-		}
-		fields = append(fields, "headers="+string(data))
-	}
-	if len(match.JSON) > 0 {
-		fields = append(fields, "json="+formatMockJSON(match.JSON))
-	}
-	if len(match.JSONRules) > 0 {
-		fields = append(fields, "json-rules="+formatMockJSON(match.JSONRules))
-	}
-	if len(fields) == 0 {
-		return nil
-	}
-	b.WriteString(directive.Match.Comment())
-	b.WriteString(" ")
-	b.WriteString(strings.Join(fields, " "))
-	b.WriteString("\n")
-	return nil
-}
-
-func formatMockJSON(raw []byte) string {
+func quoteMockJSON(raw []byte) string {
 	var compact bytes.Buffer
 	if err := json.Compact(&compact, raw); err == nil {
 		raw = compact.Bytes()
 	}
 	return strconv.Quote(string(raw))
+}
+
+func (w mockWriter) writeResponses(responses []restfile.MockResponse) error {
+	for i, resp := range responses {
+		if i > 0 {
+			w.b.WriteString(restfile.MockSequenceDelimiter + "\n")
+		}
+		if err := w.writeResponse(resp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w mockWriter) writeResponse(resp restfile.MockResponse) error {
+	file, body, err := w.responseBody(resp)
+	if err != nil {
+		return err
+	}
+
+	w.writeStatusLine(resp.Status)
+	renderHeaders(w.b, resp.Headers)
+	w.b.WriteString("\n")
+	switch {
+	case file != "":
+		fmt.Fprintf(w.b, "< %s\n", file)
+	case body != "":
+		// A body can be large, so it is written straight through.
+		w.b.WriteString(body)
+		w.b.WriteString("\n")
+	}
+	return nil
+}
+
+func (w mockWriter) writeStatusLine(status int) {
+	fmt.Fprintf(w.b, "HTTP/1.1 %d", status)
+	if text := http.StatusText(status); text != "" {
+		fmt.Fprintf(w.b, " %s", text)
+	}
+	w.b.WriteString("\n")
+}
+
+// A response body is written either as a file reference or inline, and only an
+// inline one has to be checked against what the parser will accept when it
+// reads the block back. At most one of the two is returned.
+func (w mockWriter) responseBody(resp restfile.MockResponse) (file, body string, err error) {
+	if file = strings.TrimSpace(resp.Body.FilePath); file != "" {
+		return file, "", nil
+	}
+	if resp.Body.Text == "" {
+		return "", "", nil
+	}
+	if !restfile.ResponseAllowsBody(resp.Status) {
+		return "", "", fmt.Errorf("status %d cannot have a response body", resp.Status)
+	}
+	body, err = NormalizeMockBody(resp.Body.Text)
+	if err != nil {
+		return "", "", err
+	}
+	if w.sequence {
+		for line := range strings.SplitSeq(body, "\n") {
+			if restfile.IsMockSequenceDelimiter(line) {
+				return "", "", errors.New("mock sequence body contains a response delimiter")
+			}
+		}
+	}
+	return "", body, nil
 }

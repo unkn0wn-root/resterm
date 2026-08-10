@@ -11,6 +11,11 @@ import (
 // directiveWriter emits the "# @name arg key=value" lines directives share.
 type directiveWriter struct{ b *strings.Builder }
 
+// title writes the separator that opens a request or mock block.
+func (w directiveWriter) title(text string) {
+	fmt.Fprintf(w.b, "### %s\n", text)
+}
+
 // head opens a directive line and leaves it open for options.
 func (w directiveWriter) head(name directive.Name, arg string) {
 	w.b.WriteString(name.Comment())
@@ -112,7 +117,16 @@ func stepForEachArg(f restfile.WorkflowForEach) (directive.Name, string) {
 }
 
 func captureArg(c restfile.CaptureSpec) (directive.Name, string) {
-	return directive.Capture, fmt.Sprintf("%s %s %s", captureScopeToken(c), c.Name, c.Expression)
+	return directive.Capture, fmt.Sprintf("%s %s %s", scopeToken(c.Scope, c.Secret), c.Name, c.Expression)
+}
+
+// The scope word a @var or @capture line carries. A secret one is its own scope
+// to the parser rather than a flag on the base scope.
+func scopeToken(scope directive.Scope, secret bool) string {
+	if secret {
+		return scope.String() + "-secret"
+	}
+	return scope.String()
 }
 
 func assertArg(a restfile.AssertSpec) (directive.Name, string) {
@@ -132,18 +146,4 @@ func assertMessage(msg string) string {
 		return `"` + msg + `"`
 	}
 	return msg
-}
-
-func captureScopeToken(c restfile.CaptureSpec) string {
-	scope := "request"
-	switch c.Scope {
-	case directive.ScopeFile:
-		scope = "file"
-	case directive.ScopeGlobal:
-		scope = "global"
-	}
-	if c.Secret {
-		scope += "-secret"
-	}
-	return scope
 }

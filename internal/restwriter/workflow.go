@@ -24,8 +24,8 @@ func RenderWorkflow(wf restfile.Workflow, fallback string) string {
 	w.head(directive.Workflow, name)
 	w.writeWorkflowOptions(wf)
 	b.WriteString("\n")
-	renderDescription(&b, wf.Description)
-	renderTags(&b, wf.Tags)
+	renderDescription(w.directiveWriter, wf.Description)
+	renderTags(w.directiveWriter, wf.Tags)
 
 	for _, step := range wf.Steps {
 		w.writeStep(step)

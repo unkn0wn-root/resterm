@@ -76,12 +76,13 @@ func writeFile(dst, content string, overwrite bool) error {
 
 func Render(doc *restfile.Document, opts Options) (string, error) {
 	var b strings.Builder
+	w := directiveWriter{b: &b}
 
-	renderHeader(&b, opts.HeaderComment)
-	renderScopeVariables(&b, doc.Variables)
-	renderScopeVariables(&b, doc.Globals)
-	renderSettings(&b, doc.Settings)
-	if err := renderPatches(directiveWriter{b: &b}, doc.Patches); err != nil {
+	renderHeader(w.b, opts.HeaderComment)
+	renderScopeVariables(w, doc.Variables)
+	renderScopeVariables(w, doc.Globals)
+	renderSettings(w, doc.Settings)
+	if err := renderPatches(w, doc.Patches); err != nil {
 		return "", err
 	}
 
@@ -98,7 +99,7 @@ func Render(doc *restfile.Document, opts Options) (string, error) {
 		if idx > 0 {
 			b.WriteString("\n")
 		}
-		renderRequest(&b, req)
+		renderRequest(w, req)
 		idx++
 	}
 	for _, mock := range doc.Mocks {
@@ -108,7 +109,7 @@ func Render(doc *restfile.Document, opts Options) (string, error) {
 		if idx > 0 {
 			b.WriteString("\n")
 		}
-		if err := renderMock(&b, mock); err != nil {
+		if err := renderMock(w, mock); err != nil {
 			return "", err
 		}
 		idx++
@@ -143,106 +144,72 @@ func renderHeader(b *strings.Builder, text string) {
 	b.WriteString("\n")
 }
 
-func renderScopeVariables(b *strings.Builder, vars []restfile.Variable) {
+// A global variable has a directive of its own, where file and request scope
+// share @var and name their scope in the first word.
+func renderScopeVariables(w directiveWriter, vars []restfile.Variable) {
 	for _, v := range vars {
 		val := strings.TrimSpace(v.Value)
-		switch v.Scope {
-		case directive.ScopeGlobal:
+		if v.Scope == directive.ScopeGlobal {
 			name := directive.Global
 			if v.Secret {
 				name = directive.GlobalSecret
 			}
-			fmt.Fprintf(b, "%s %s %s\n", name.Comment(), v.Name, val)
-		case directive.ScopeFile:
-			scope := "file"
-			if v.Secret {
-				scope = "file-secret"
-			}
-			fmt.Fprintf(
-				b,
-				"%s %s %s %s\n",
-				directive.Var.Comment(),
-				scope,
-				v.Name,
-				val,
-			)
-		default:
-			scope := "request"
-			if v.Secret {
-				scope = "request-secret"
-			}
-			fmt.Fprintf(
-				b,
-				"%s %s %s %s\n",
-				directive.Var.Comment(),
-				scope,
-				v.Name,
-				val,
-			)
+			w.line(name, v.Name+" "+val)
+			continue
 		}
+		w.line(directive.Var, scopeToken(v.Scope, v.Secret)+" "+v.Name+" "+val)
 	}
 }
 
-func renderRequest(b *strings.Builder, req *restfile.Request) {
+func renderRequest(w directiveWriter, req *restfile.Request) {
 	title := req.Metadata.Name
 	if title == "" {
 		title = fmt.Sprintf("%s %s", strings.ToUpper(req.Method), req.URL)
 	}
-	b.WriteString("### ")
-	b.WriteString(title)
-	b.WriteString("\n")
+	w.title(title)
 
 	if req.Metadata.Name != "" {
-		b.WriteString(directive.RequestName.Comment())
-		b.WriteString(" ")
-		b.WriteString(req.Metadata.Name)
-		b.WriteString("\n")
+		w.line(directive.RequestName, req.Metadata.Name)
 	}
-
-	renderDescription(b, req.Metadata.Description)
-	renderTags(b, req.Metadata.Tags)
-	renderLoggingDirectives(b, req.Metadata)
-	renderAuth(b, req.Metadata.Auth)
-	renderSettings(b, req.Settings)
-	renderRequestVariables(b, req.Variables)
-	w := directiveWriter{b: b}
+	renderDescription(w, req.Metadata.Description)
+	renderTags(w, req.Metadata.Tags)
+	renderLoggingDirectives(w, req.Metadata)
+	renderAuth(w, req.Metadata.Auth)
+	renderSettings(w, req.Settings)
+	renderRequestVariables(w, req.Variables)
 	writeOne(w, req.Metadata.When, conditionArg)
 	writeOne(w, req.Metadata.ForEach, forEachArg)
 	writeEach(w, req.Metadata.Applies, applyArg)
 	writeEach(w, req.Metadata.Captures, captureArg)
 	writeEach(w, req.Metadata.Asserts, assertArg)
-	renderBodyOptions(b, req)
+	renderBodyOptions(w, req)
 
-	b.WriteString(reqLine(req))
-	renderHeaders(b, req.Headers)
-	b.WriteString("\n")
+	w.b.WriteString(reqLine(req))
+	renderHeaders(w.b, req.Headers)
+	w.b.WriteString("\n")
 	if req.Body.FilePath != "" {
-		b.WriteString("< ")
-		b.WriteString(strings.TrimSpace(req.Body.FilePath))
-		b.WriteString("\n")
+		fmt.Fprintf(w.b, "< %s\n", strings.TrimSpace(req.Body.FilePath))
 	} else if strings.TrimSpace(req.Body.Text) != "" {
-		b.WriteString(req.Body.Text)
+		w.b.WriteString(req.Body.Text)
 		if !strings.HasSuffix(req.Body.Text, "\n") {
-			b.WriteString("\n")
+			w.b.WriteString("\n")
 		}
 	}
 }
 
-func renderBodyOptions(b *strings.Builder, req *restfile.Request) {
-	if req == nil {
-		return
+func renderBodyOptions(w directiveWriter, req *restfile.Request) {
+	if req.Body.Options.ExpandTemplates {
+		w.line(directive.Body, "expand")
 	}
-	opt := req.Body.Options
-	if opt.ExpandTemplates {
-		b.WriteString(directive.Body.Comment() + " expand\n")
-	}
-	if opt.ForceInline || bodyTextNeedsInlineDirective(req) {
-		b.WriteString(directive.Body.Comment() + " inline\n")
+	if req.Body.Options.ForceInline || bodyTextNeedsInlineDirective(req) {
+		w.line(directive.Body, "inline")
 	}
 }
 
+// An inline body whose first line reads as a file reference needs the directive
+// to survive the trip back through the parser.
 func bodyTextNeedsInlineDirective(req *restfile.Request) bool {
-	if req == nil || strings.TrimSpace(req.Body.FilePath) != "" {
+	if strings.TrimSpace(req.Body.FilePath) != "" {
 		return false
 	}
 	text := strings.TrimSpace(req.Body.Text)
@@ -250,126 +217,90 @@ func bodyTextNeedsInlineDirective(req *restfile.Request) bool {
 		return false
 	}
 	line, _, _ := strings.Cut(text, "\n")
-	opt := bodyref.Options{
-		Location: bodyref.Line,
-	}
-	if _, ok := bodyref.Parse(line, opt); ok {
-		return true
-	}
-	return false
+	_, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Line})
+	return ok
 }
 
-func renderDescription(b *strings.Builder, desc string) {
-	desc = strings.TrimSpace(desc)
-	if desc == "" {
-		return
-	}
-	for line := range strings.SplitSeq(desc, "\n") {
-		t := strings.TrimSpace(line)
-		if t == "" {
-			continue
+func renderDescription(w directiveWriter, desc string) {
+	for line := range strings.SplitSeq(strings.TrimSpace(desc), "\n") {
+		if t := strings.TrimSpace(line); t != "" {
+			w.line(directive.Description, t)
 		}
-		b.WriteString(directive.Description.Comment())
-		b.WriteString(" ")
-		b.WriteString(t)
-		b.WriteString("\n")
 	}
 }
 
-func renderTags(b *strings.Builder, tags []string) {
-	if len(tags) == 0 {
-		return
-	}
+func renderTags(w directiveWriter, tags []string) {
 	out := make([]string, 0, len(tags))
 	for _, tag := range tags {
-		t := strings.TrimSpace(tag)
-		if t != "" {
+		if t := strings.TrimSpace(tag); t != "" {
 			out = append(out, t)
 		}
 	}
-	if len(out) == 0 {
-		return
+	if len(out) > 0 {
+		w.line(directive.Tag, strings.Join(out, " "))
 	}
-	b.WriteString(directive.Tag.Comment())
-	b.WriteString(" ")
-	b.WriteString(strings.Join(out, " "))
-	b.WriteString("\n")
 }
 
-func renderLoggingDirectives(b *strings.Builder, meta restfile.RequestMetadata) {
+func renderLoggingDirectives(w directiveWriter, meta restfile.RequestMetadata) {
 	if meta.NoLog {
-		b.WriteString(directive.NoLog.Comment() + "\n")
+		w.line(directive.NoLog, "")
 	}
 	if meta.AllowSensitiveHeaders {
-		b.WriteString(directive.LogSensitiveHeaders.Comment() + " true\n")
+		w.line(directive.LogSensitiveHeaders, "true")
 	}
 }
 
-func renderAuth(b *strings.Builder, auth *restfile.AuthSpec) {
-	if auth == nil || auth.Type == "" {
+func renderAuth(w directiveWriter, auth *restfile.AuthSpec) {
+	if auth == nil {
 		return
 	}
+	if args := authArgs(*auth); len(args) > 0 {
+		w.line(directive.Auth, strings.Join(args, " "))
+	}
+}
+
+// Every form names itself first and then its parameters in the order @auth
+// reads them back. An unknown form writes nothing.
+func authArgs(auth restfile.AuthSpec) []string {
+	p := auth.Params
 	switch strings.ToLower(auth.Type) {
 	case "basic":
-		b.WriteString(directive.Auth.Comment() + " basic ")
-		b.WriteString(strings.TrimSpace(auth.Params["username"]))
-		b.WriteString(" ")
-		b.WriteString(strings.TrimSpace(auth.Params["password"]))
+		return []string{"basic", strings.TrimSpace(p["username"]), strings.TrimSpace(p["password"])}
 	case "bearer":
-		b.WriteString(directive.Auth.Comment() + " bearer ")
-		b.WriteString(strings.TrimSpace(auth.Params["token"]))
+		return []string{"bearer", strings.TrimSpace(p["token"])}
 	case "apikey", "api-key":
-		place := strings.TrimSpace(auth.Params["placement"])
-		name := strings.TrimSpace(auth.Params["name"])
-		val := strings.TrimSpace(auth.Params["value"])
+		place := strings.TrimSpace(p["placement"])
 		if place == "" {
 			place = "header"
 		}
+		name := strings.TrimSpace(p["name"])
 		if name == "" {
 			name = "X-API-Key"
 		}
-		b.WriteString(directive.Auth.Comment() + " apikey ")
-		b.WriteString(place)
-		b.WriteString(" ")
-		b.WriteString(name)
-		b.WriteString(" ")
-		b.WriteString(val)
+		return []string{"apikey", place, name, strings.TrimSpace(p["value"])}
 	case "oauth2":
-		formatted := formatOAuthParams(auth.Params)
-		if len(formatted) == 0 {
-			return
-		}
-		b.WriteString(directive.Auth.Comment() + " oauth2 ")
-		b.WriteString(strings.Join(formatted, " "))
+		return authFormArgs("oauth2", formatOAuthParams(p))
 	case "command":
-		formatted := formatCommandParams(auth.Params)
-		if len(formatted) == 0 {
-			return
-		}
-		b.WriteString(directive.Auth.Comment() + " command ")
-		b.WriteString(strings.Join(formatted, " "))
+		return authFormArgs("command", formatCommandParams(p))
 	default:
-		return
+		return nil
 	}
-	b.WriteString("\n")
 }
 
-func renderSettings(b *strings.Builder, set map[string]string) {
-	if len(set) == 0 {
-		return
+// A form that resolved to no parameters at all is dropped rather than written
+// as a bare name the parser would reject.
+func authFormArgs(form string, params []string) []string {
+	if len(params) == 0 {
+		return nil
 	}
-	keys := sortedKeys(set)
-	for _, key := range keys {
-		val := strings.TrimSpace(set[key])
-		if val == "" {
-			continue
+	return append([]string{form}, params...)
+}
+
+func renderSettings(w directiveWriter, set map[string]string) {
+	for _, key := range sortedKeys(set) {
+		if val := strings.TrimSpace(set[key]); val != "" {
+			w.line(directive.Setting, key+" "+val)
 		}
-		b.WriteString(directive.Setting.Comment())
-		b.WriteString(" ")
-		b.WriteString(key)
-		b.WriteString(" ")
-		b.WriteString(val)
-		b.WriteString("\n")
 	}
 }
 
@@ -462,25 +393,16 @@ func formatAuthParam(key, val string) string {
 	return fmt.Sprintf("%s=%s", key, val)
 }
 
-func renderRequestVariables(b *strings.Builder, vars []restfile.Variable) {
+func renderRequestVariables(w directiveWriter, vars []restfile.Variable) {
 	for _, v := range vars {
 		if v.Scope != directive.ScopeRequest {
 			continue
 		}
-		scope := "request"
-		if v.Secret {
-			scope = "request-secret"
+		arg := scopeToken(v.Scope, v.Secret) + " " + v.Name
+		if val := strings.TrimSpace(v.Value); val != "" {
+			arg += " " + val
 		}
-		b.WriteString(directive.Var.Comment())
-		b.WriteString(" ")
-		b.WriteString(scope)
-		b.WriteString(" ")
-		b.WriteString(v.Name)
-		if strings.TrimSpace(v.Value) != "" {
-			b.WriteString(" ")
-			b.WriteString(strings.TrimSpace(v.Value))
-		}
-		b.WriteString("\n")
+		w.line(directive.Var, arg)
 	}
 }
 
