@@ -117,18 +117,13 @@ func argExpr(name directive.Name, args string) string {
 	}
 }
 
+// An argument continues while comment lines follow it. Every line of a block
+// comment carries one, and a ### separator ends the directive wherever it sits.
 func (b *documentBuilder) closeOpenDirective(ln line) {
-	if b.open == nil || b.carriesArgument(ln) {
+	if b.open == nil || b.inBlock || (!ln.isSeparator() && ln.isComment()) {
 		return
 	}
 	b.failOpenDirective()
-}
-
-func (b *documentBuilder) carriesArgument(ln line) bool {
-	if b.inBlock {
-		return true
-	}
-	return !ln.isSeparator() && ln.isComment()
 }
 
 func (b *documentBuilder) flushOpenLines() {

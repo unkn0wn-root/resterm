@@ -39,7 +39,7 @@ func OpenGroup(src string) (closer rune) {
 	lx := NewLexer("", []byte(src))
 	var open []rune
 	for {
-		switch tok := lx.Next(); tok.K {
+		switch lx.Next().K {
 		case EOF:
 			if len(open) == 0 {
 				return 0

@@ -484,7 +484,7 @@ func (e *Engine) EvalForEachItems(
 		Env:   env,
 		Base:  base,
 		Expr:  expr,
-		Site:  "@for-each " + str.FoldLines(expr),
+		Site:  directive.ForEach.Tag() + " " + str.FoldLines(expr),
 		Pos:   e.rtsPosForLine(doc, req, spec.Line),
 		Vars:  vv,
 		Extra: extra,

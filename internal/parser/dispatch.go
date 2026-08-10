@@ -22,15 +22,24 @@ type parsedDirective struct {
 	argCol int
 }
 
+// Only the opening line carries a column. An expression starting on a
+// continuation line would count the newline as another character on the line
+// above, so it gets none.
 func (d parsedDirective) exprCol(expr string) int {
 	if d.argCol <= 0 || expr == "" {
 		return 0
 	}
 	off := strings.LastIndex(d.Args, expr)
-	if off < 0 {
+	if off < 0 || strings.Contains(d.Args[:off], "\n") {
 		return 0
 	}
 	return d.argCol + off
+}
+
+func (d parsedDirective) setExprCol(col *int, expr string) {
+	if c := d.exprCol(expr); c > 0 {
+		*col = c
+	}
 }
 
 // Directives are offered to handlers before their required values are checked.
@@ -68,6 +77,12 @@ func (b *documentBuilder) claimDirective(d parsedDirective) directiveOutcome {
 		}
 	}
 	return directiveIgnored
+}
+
+// Errors point at the line the directive opened on, not the one that closed it.
+func (b *documentBuilder) reject(d parsedDirective, message string) directiveOutcome {
+	b.addError(d.lines.Start, message)
+	return directiveRejected
 }
 
 func (b *documentBuilder) redeclared(d parsedDirective) bool {
@@ -120,8 +135,7 @@ func (b *documentBuilder) handleWorkflowStart(d parsedDirective) directiveOutcom
 			return directiveApplied
 		}
 		if err := b.workflow.addStep(d.lines.Start, d.Args); err != nil {
-			b.addError(d.lines.Start, err.Error())
-			return directiveRejected
+			return b.reject(d, err.Error())
 		}
 		return directiveApplied
 	default:
@@ -140,8 +154,7 @@ func (b *documentBuilder) handleWorkflowDirective(d parsedDirective) directiveOu
 	// The workflow owns the directive even when it is rejected, so its range covers every line.
 	b.workflow.touch(d.lines.End)
 	if err != nil {
-		b.addError(d.lines.Start, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 	return directiveApplied
 }
@@ -152,8 +165,7 @@ func (b *documentBuilder) handleUseDirective(d parsedDirective) directiveOutcome
 	}
 	spec, err := parseUseSpec(d.Args, d.lines.Start)
 	if err != nil {
-		b.addError(d.lines.Start, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 	if b.inRequest && b.request != nil {
 		b.request.metadata.Uses = append(b.request.metadata.Uses, spec)
@@ -170,18 +182,13 @@ func (b *documentBuilder) handleAuthDirective(d parsedDirective) directiveOutcom
 
 	dir, err := parseAuthDirective(d.Args)
 	if err != nil {
-		b.addError(d.lines.Start, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 
 	switch dir.Scope {
 	case directive.ScopeFile, directive.ScopeGlobal:
 		if b.inRequest {
-			b.addError(
-				d.lines.Start,
-				"@auth "+dir.Scope.String()+" scope must be declared outside a request",
-			)
-			return directiveRejected
+			return b.reject(d, "@auth "+dir.Scope.String()+" scope must be declared outside a request")
 		}
 		if dir.Disable || dir.Spec == nil {
 			return directiveApplied
@@ -220,17 +227,13 @@ func (b *documentBuilder) handlePatchDirective(d parsedDirective) directiveOutco
 		return directiveIgnored
 	}
 	if b.inRequest {
-		b.addError(d.lines.Start, "@patch must be declared outside a request")
-		return directiveRejected
+		return b.reject(d, "@patch must be declared outside a request")
 	}
 	spec, err := parsePatchSpec(d.Args, d.lines.Start)
 	if err != nil {
-		b.addError(d.lines.Start, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
-	if c := d.exprCol(spec.Expression); c > 0 {
-		spec.Col = c
-	}
+	d.setExprCol(&spec.Col, spec.Expression)
 	spec.SourcePath = b.doc.Path
 	b.file.patches = append(b.file.patches, spec)
 	return directiveApplied

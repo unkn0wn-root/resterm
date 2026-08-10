@@ -87,6 +87,41 @@ func TestUnboundResponseRejectsEveryRead(t *testing.T) {
 	}
 }
 
+// Reaching the object through a container skips the identifier check, so the
+// member and index paths have to stop it themselves.
+func TestUnboundObjectAbortsThroughMemberAndIndex(t *testing.T) {
+	unbound := func() Value { return Obj(newUnboundRespObj("response", unboundResponse)) }
+	rt := RT{Extra: map[string]Value{
+		"holder": Dict(map[string]Value{"resp": unbound()}),
+		"items":  List([]Value{unbound()}),
+	}}
+
+	tests := map[string]string{
+		"member through a dict": `holder.resp.statusCode`,
+		"index through a dict":  `holder.resp["statusCode"]`,
+		"member through a list": `items[0].statusCode`,
+		"index through a list":  `items[0]["statusCode"]`,
+		"member behind try":     `try holder.resp.statusCode`,
+		"index behind try":      `try items[0]["statusCode"]`,
+	}
+
+	for name, expr := range tests {
+		t.Run(name, func(t *testing.T) {
+			eng := NewEng(testStdlib)
+			_, err := eng.Eval(context.Background(), rt, expr, Pos{Path: "test", Line: 1, Col: 1})
+			if err == nil {
+				t.Fatalf("eval %q: expected unbound response error", expr)
+			}
+			if !isAbort(err) {
+				t.Fatalf("eval %q: error = %v, want an abort", expr, err)
+			}
+			if !strings.Contains(err.Error(), unboundResponse) {
+				t.Fatalf("eval %q: error = %v, want %q", expr, err, unboundResponse)
+			}
+		})
+	}
+}
+
 func TestAssertExtra(t *testing.T) {
 	resp := &Resp{
 		Status: "201 Created",

@@ -39,8 +39,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 	case directive.LogSensitiveHeaders:
 		allow, ok := directive.ParseSwitch(rest)
 		if !ok {
-			b.addError(d.lines.Start, d.Spelling.Tag()+" must be true or false")
-			return directiveRejected
+			return b.reject(d, d.Spelling.Tag()+" must be true or false")
 		}
 		b.request.metadata.AllowSensitiveHeaders = allow
 		return directiveApplied
@@ -75,8 +74,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 		return directiveApplied
 	case directive.RTS:
 		if err := b.setRTSScript(rest); err != nil {
-			b.addError(d.lines.Start, err.Error())
-			return directiveRejected
+			return b.reject(d, err.Error())
 		}
 		return directiveApplied
 	case directive.Apply:
@@ -135,12 +133,9 @@ func (b *documentBuilder) addRequestVar(no int, rest string) {
 func (b *documentBuilder) addApply(d parsedDirective) directiveOutcome {
 	spec, err := parseApplySpec(d.Args, d.lines.Start)
 	if err != nil {
-		b.addError(d.lines.Start, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
-	if c := d.exprCol(spec.Expression); c > 0 {
-		spec.Col = c
-	}
+	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
 	return directiveApplied
 }
@@ -150,9 +145,7 @@ func (b *documentBuilder) addCapture(d parsedDirective) directiveOutcome {
 	if !ok {
 		return directiveRejected
 	}
-	if c := d.exprCol(spec.Expression); c > 0 {
-		spec.Col = c
-	}
+	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.Captures = append(b.request.metadata.Captures, spec)
 	return directiveApplied
 }
@@ -160,8 +153,7 @@ func (b *documentBuilder) addCapture(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) addAssert(d parsedDirective) directiveOutcome {
 	spec, ok := b.parseAssertDirective(d.Args, d.lines.Start, d.argCol)
 	if !ok {
-		b.addError(d.lines.Start, "@assert expression missing")
-		return directiveRejected
+		return b.reject(d, "@assert expression missing")
 	}
 	b.request.metadata.Asserts = append(b.request.metadata.Asserts, spec)
 	return directiveApplied
@@ -170,12 +162,9 @@ func (b *documentBuilder) addAssert(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setWhen(d parsedDirective) directiveOutcome {
 	spec, err := parseConditionSpec(d.Args, d.lines.Start, d.Spelling == directive.SkipIf)
 	if err != nil {
-		b.addError(d.lines.Start, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
-	if c := d.exprCol(spec.Expression); c > 0 {
-		spec.Col = c
-	}
+	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.When = spec
 	return directiveApplied
 }
@@ -183,8 +172,7 @@ func (b *documentBuilder) setWhen(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setForEach(d parsedDirective) directiveOutcome {
 	spec, err := parseForEachSpec(d.Args, d.lines.Start)
 	if err != nil {
-		b.addError(d.lines.Start, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 	b.request.metadata.ForEach = spec
 	return directiveApplied
@@ -193,8 +181,7 @@ func (b *documentBuilder) setForEach(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setCompare(d parsedDirective) directiveOutcome {
 	spec, err := parseCompareDirective(d.Args)
 	if err != nil {
-		b.addError(d.lines.Start, err.Error())
-		return directiveRejected
+		return b.reject(d, err.Error())
 	}
 	b.request.metadata.Compare = spec
 	return directiveApplied

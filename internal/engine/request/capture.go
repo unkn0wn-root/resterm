@@ -55,33 +55,29 @@ type captureExpr struct {
 	mode restfile.CaptureExprMode
 }
 
-type captureValueIn struct {
-	ctx      context.Context
-	base     string
-	doc      *restfile.Document
-	req      *restfile.Request
-	resolver *vars.Resolver
-	env      vars.Environment
-	spec     restfile.CaptureSpec
-	v        map[string]string
-	x        map[string]rts.Value
-	rr       *rts.Resp
-	rs       *rts.Stream
-	lc       *captureContext
-}
-
-type captureRTSIn struct {
+type captureScope struct {
 	ctx  context.Context
 	base string
 	doc  *restfile.Document
 	req  *restfile.Request
 	env  vars.Environment
-	spec restfile.CaptureSpec
-	ex   string
 	v    map[string]string
 	x    map[string]rts.Value
 	rr   *rts.Resp
 	rs   *rts.Stream
+}
+
+type captureValueIn struct {
+	captureScope
+	resolver *vars.Resolver
+	spec     restfile.CaptureSpec
+	lc       *captureContext
+}
+
+type captureRTSIn struct {
+	captureScope
+	spec restfile.CaptureSpec
+	ex   string
 }
 
 func (r *captureResult) addRequest(name, value string, secret bool) {
@@ -128,26 +124,27 @@ func (e *Engine) applyCaptures(in captureRun) error {
 	}
 
 	lc := newCaptureContext(in.resp, in.stream, capture.StrictEnabled(in.req.Settings))
-	rr := rtsScriptResp(in.resp)
-	rs := rtsStream(in.stream)
 	if in.v == nil {
 		in.v = e.collectVariables(in.doc, in.req, in.env)
 	}
-	res := e.captureResolver(in, rr, rs)
+	sc := captureScope{
+		ctx:  in.ctx,
+		base: in.base,
+		doc:  in.doc,
+		req:  in.req,
+		env:  in.env,
+		v:    in.v,
+		x:    in.x,
+		rr:   rtsScriptResp(in.resp),
+		rs:   rtsStream(in.stream),
+	}
+	res := e.captureResolver(in.res, sc)
 	for _, c := range in.req.Metadata.Captures {
 		val, ex, err := e.captureValue(captureValueIn{
-			ctx:      in.ctx,
-			base:     in.base,
-			doc:      in.doc,
-			req:      in.req,
-			resolver: res,
-			env:      in.env,
-			spec:     c,
-			v:        in.v,
-			x:        in.x,
-			rr:       rr,
-			rs:       rs,
-			lc:       lc,
+			captureScope: sc,
+			resolver:     res,
+			spec:         c,
+			lc:           lc,
 		})
 		if err != nil {
 			return diag.WrapAsf(diag.ClassScript, err, "%s", captureErrCtx(in.req, c, ex))
@@ -183,16 +180,16 @@ func (e *Engine) applyCaptures(in captureRun) error {
 
 // captureResolver derives from the request resolver to keep existing values pinned.
 // It binds the current response and keeps the request context and base directory.
-func (e *Engine) captureResolver(in captureRun, rr *rts.Resp, rs *rts.Stream) *vars.Resolver {
-	return in.res.WithExprEval(e.ExprEval(in.ctx, ExprInput{
-		Doc:      in.doc,
-		Req:      in.req,
-		Env:      in.env,
-		Base:     in.base,
-		Vars:     in.v,
-		Response: rr,
-		Stream:   rs,
-		Extra:    in.x,
+func (e *Engine) captureResolver(res *vars.Resolver, sc captureScope) *vars.Resolver {
+	return res.WithExprEval(e.ExprEval(sc.ctx, ExprInput{
+		Doc:      sc.doc,
+		Req:      sc.req,
+		Env:      sc.env,
+		Base:     sc.base,
+		Vars:     sc.v,
+		Response: sc.rr,
+		Stream:   sc.rs,
+		Extra:    sc.x,
 	}))
 }
 
@@ -213,19 +210,7 @@ func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
 		val, err := in.lc.evaluate(ex.raw, in.resolver)
 		return val, ex, err
 	}
-	val, err := e.captureRTSValue(captureRTSIn{
-		ctx:  in.ctx,
-		base: in.base,
-		doc:  in.doc,
-		req:  in.req,
-		env:  in.env,
-		spec: in.spec,
-		ex:   ex.norm,
-		v:    in.v,
-		x:    in.x,
-		rr:   in.rr,
-		rs:   in.rs,
-	})
+	val, err := e.captureRTSValue(captureRTSIn{captureScope: in.captureScope, spec: in.spec, ex: ex.norm})
 	return val, ex, err
 }
 

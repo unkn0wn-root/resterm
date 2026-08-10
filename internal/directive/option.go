@@ -54,6 +54,7 @@ func ParseOptions(name Name, input string) (Options, error) {
 }
 
 // OptionsOpen returns the missing delimiter in the last option value, or zero.
+// Each token resets the lexer, so only what is unmatched after the last one counts.
 func OptionsOpen(input string) rune {
 	lex := &lexer{src: input, escapes: true}
 	var closer rune
