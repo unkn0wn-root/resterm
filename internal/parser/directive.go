@@ -268,7 +268,7 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		}
 	}
 
-	if strings.EqualFold(fields[0], "none") {
+	if strings.EqualFold(fields[0], restfile.AuthDisableWord) {
 		if dir.Scope != directive.ScopeRequest {
 			return dir, fmt.Errorf("@auth %s scope does not support none", dir.Scope.String())
 		}
@@ -298,25 +298,25 @@ func parseAuthSpec(rest string) (*restfile.AuthSpec, error) {
 	if len(fields) == 0 {
 		return nil, nil
 	}
-	authType := strings.ToLower(fields[0])
+	authType := restfile.AuthKind(fields[0]).Canonical()
 	params := make(map[string]string)
 	switch authType {
-	case "basic":
+	case restfile.AuthBasic:
 		if len(fields) >= 3 {
 			params["username"] = fields[1]
 			params["password"] = strings.Join(fields[2:], " ")
 		}
-	case "bearer":
+	case restfile.AuthBearer:
 		if len(fields) >= 2 {
 			params["token"] = strings.Join(fields[1:], " ")
 		}
-	case "apikey", "api-key":
+	case restfile.AuthAPIKey:
 		if len(fields) >= 4 {
 			params["placement"] = strings.ToLower(fields[1])
 			params["name"] = fields[2]
 			params["value"] = strings.Join(fields[3:], " ")
 		}
-	case "oauth2":
+	case restfile.AuthOAuth2:
 		if len(fields) < 2 {
 			return nil, nil
 		}
@@ -334,7 +334,7 @@ func parseAuthSpec(rest string) (*restfile.AuthSpec, error) {
 		if params["client_auth"] == "" {
 			params["client_auth"] = "basic"
 		}
-	case "command":
+	case restfile.AuthCommand:
 		if len(fields) < 2 {
 			return nil, nil
 		}
@@ -350,7 +350,7 @@ func parseAuthSpec(rest string) (*restfile.AuthSpec, error) {
 		if len(fields) >= 2 {
 			params["header"] = fields[0]
 			params["value"] = strings.Join(fields[1:], " ")
-			authType = "header"
+			authType = restfile.AuthHeader
 		}
 	}
 	if len(params) == 0 {

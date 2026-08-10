@@ -766,8 +766,8 @@ func (x *execCtx) prepareAuth() *xrunResult {
 	}
 
 	var secs []string
-	switch authKind(x.req.Metadata.Auth) {
-	case authTypeCommand:
+	switch x.req.Metadata.Auth.Kind() {
+	case restfile.AuthCommand:
 		out, err := x.eng.EnsureCommandAuth(x.sendCtx, x.doc, x.req, x.res, x.env, x.timeout)
 		if err != nil {
 			x.exp.stage(

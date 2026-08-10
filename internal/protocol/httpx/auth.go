@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -39,7 +38,7 @@ func AuthValues(
 		return nil, nil
 	}
 
-	kind := strings.ToLower(auth.Type)
+	kind := auth.Kind()
 	expandResult := func(param string) (vars.Expansion, error) {
 		value := auth.Params[param]
 		if value == "" || resolver == nil {
@@ -69,7 +68,7 @@ func AuthValues(
 	}
 
 	switch kind {
-	case string(authTypeBasic):
+	case restfile.AuthBasic:
 		if headerSet(existing, authorizationHeader) {
 			return nil, nil
 		}
@@ -84,7 +83,7 @@ func AuthValues(
 		encoded := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
 		return header(authorizationHeader, basicPrefix+encoded), nil
 
-	case string(authTypeBearer):
+	case restfile.AuthBearer:
 		if headerSet(existing, authorizationHeader) {
 			return nil, nil
 		}
@@ -94,7 +93,7 @@ func AuthValues(
 		}
 		return header(authorizationHeader, bearerTokenPrefix+token), nil
 
-	case string(authTypeAPIKey), legacyAPIKeyAuthType:
+	case restfile.AuthAPIKey:
 		placement, err := expandResult(authParamPlacement)
 		if err != nil {
 			return nil, err
@@ -136,7 +135,7 @@ func AuthValues(
 			return nil, diag.New(diag.ClassAuth, msg, diag.WithComponent(component))
 		}
 
-	case string(authTypeHeader):
+	case restfile.AuthHeader:
 		name, err := expand(authParamHeader)
 		if err != nil {
 			return nil, err

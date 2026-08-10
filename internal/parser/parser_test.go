@@ -4488,7 +4488,7 @@ func wantName(name string) func(*restfile.Request) error {
 	}
 }
 
-func wantAuth(kind string) func(*restfile.Request) error {
+func wantAuth(kind restfile.AuthKind) func(*restfile.Request) error {
 	return func(req *restfile.Request) error {
 		if req.Metadata.Auth == nil || req.Metadata.Auth.Type != kind {
 			return fmt.Errorf("auth = %+v, want a %s spec", req.Metadata.Auth, kind)

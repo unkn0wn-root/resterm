@@ -3,8 +3,6 @@ package generator
 const (
 	authTypeBasic  = "basic"
 	authTypeBearer = "bearer"
-	authTypeOAuth2 = "oauth2"
-	authTypeAPIKey = "apikey"
 
 	defaultSampleValue = "sample"
 

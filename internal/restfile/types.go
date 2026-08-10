@@ -28,7 +28,7 @@ type Constant struct {
 }
 
 type AuthSpec struct {
-	Type   string
+	Type   AuthKind
 	Params map[string]string
 	// SourcePath and Line track where this auth was defined so errors can point
 	// at the definition, and relative command auth execution stays anchored to

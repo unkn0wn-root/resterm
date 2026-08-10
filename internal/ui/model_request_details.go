@@ -203,7 +203,7 @@ func detailMeta(req *restfile.Request) string {
 	}
 	var parts []string
 	if req.Metadata.Auth != nil {
-		typ := strings.ToUpper(strings.TrimSpace(req.Metadata.Auth.Type))
+		typ := strings.ToUpper(req.Metadata.Auth.Kind().String())
 		if typ == "" {
 			parts = append(parts, "Auth")
 		} else {

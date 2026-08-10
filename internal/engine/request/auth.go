@@ -20,9 +20,6 @@ import (
 )
 
 const (
-	authTypeCommand = "command"
-	authTypeOAuth2  = "oauth2"
-
 	authParamArgv = "argv"
 
 	errCommandAuthNotInitialized = "command auth support is not initialised"
@@ -130,23 +127,16 @@ func requestAuth(req *restfile.Request) *restfile.AuthSpec {
 	return req.Metadata.Auth
 }
 
-func requestAuthOfType(req *restfile.Request, kind string) *restfile.AuthSpec {
+func requestAuthOfType(req *restfile.Request, kind restfile.AuthKind) *restfile.AuthSpec {
 	auth := requestAuth(req)
-	if authKind(auth) != kind {
+	if auth.Kind() != kind {
 		return nil
 	}
 	return auth
 }
 
-func authKind(auth *restfile.AuthSpec) string {
-	if auth == nil {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(auth.Type))
-}
-
 func injectedAuthHeader(auth *restfile.AuthSpec) string {
-	if authKind(auth) != authTypeOAuth2 {
+	if auth.Kind() != restfile.AuthOAuth2 {
 		return oauth.DefaultHeader
 	}
 	if name := strings.TrimSpace(auth.Params["header"]); name != "" {
@@ -278,7 +268,7 @@ func (e *Engine) EnsureCommandAuth(
 	env vars.Environment,
 	timeout time.Duration,
 ) (authcmd.Result, error) {
-	auth := requestAuthOfType(req, authTypeCommand)
+	auth := requestAuthOfType(req, restfile.AuthCommand)
 	if auth == nil {
 		return authcmd.Result{}, nil
 	}
@@ -356,7 +346,7 @@ func (e *Engine) EnsureOAuth(
 	env vars.Environment,
 	timeout time.Duration,
 ) error {
-	auth := requestAuthOfType(req, authTypeOAuth2)
+	auth := requestAuthOfType(req, restfile.AuthOAuth2)
 	if auth == nil {
 		return nil
 	}
@@ -577,7 +567,7 @@ func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, key, raw strin
 	}
 	value, err := res.ExpandTemplates(raw)
 	if err != nil {
-		op := fmt.Sprintf("expand %s auth %s", authKind(auth), key)
+		op := fmt.Sprintf("expand %s auth %s", auth.Kind(), key)
 		if at := auth.Origin(); at != "" {
 			op += " (" + at + ")"
 		}

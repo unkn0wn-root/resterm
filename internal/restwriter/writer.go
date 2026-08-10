@@ -99,7 +99,9 @@ func Render(doc *restfile.Document, opts Options) (string, error) {
 		if idx > 0 {
 			b.WriteString("\n")
 		}
-		renderRequest(w, req)
+		if err := renderRequest(w, req); err != nil {
+			return "", err
+		}
 		idx++
 	}
 	for _, mock := range doc.Mocks {
@@ -161,7 +163,7 @@ func renderScopeVariables(w directiveWriter, vars []restfile.Variable) {
 	}
 }
 
-func renderRequest(w directiveWriter, req *restfile.Request) {
+func renderRequest(w directiveWriter, req *restfile.Request) error {
 	title := req.Metadata.Name
 	if title == "" {
 		title = fmt.Sprintf("%s %s", strings.ToUpper(req.Method), req.URL)
@@ -174,7 +176,9 @@ func renderRequest(w directiveWriter, req *restfile.Request) {
 	renderDescription(w, req.Metadata.Description)
 	renderTags(w, req.Metadata.Tags)
 	renderLoggingDirectives(w, req.Metadata)
-	renderAuth(w, req.Metadata.Auth)
+	if err := renderAuth(w, req.Metadata.Auth); err != nil {
+		return err
+	}
 	renderSettings(w, req.Settings)
 	renderRequestVariables(w, req.Variables)
 	writeOne(w, req.Metadata.When, conditionArg)
@@ -195,6 +199,7 @@ func renderRequest(w directiveWriter, req *restfile.Request) {
 			w.b.WriteString("\n")
 		}
 	}
+	return nil
 }
 
 func renderBodyOptions(w directiveWriter, req *restfile.Request) {
@@ -250,25 +255,31 @@ func renderLoggingDirectives(w directiveWriter, meta restfile.RequestMetadata) {
 	}
 }
 
-func renderAuth(w directiveWriter, auth *restfile.AuthSpec) {
+func renderAuth(w directiveWriter, auth *restfile.AuthSpec) error {
 	if auth == nil {
-		return
+		return nil
 	}
-	if args := authArgs(*auth); len(args) > 0 {
+	args, err := authArgs(*auth)
+	if err != nil {
+		return err
+	}
+	if len(args) > 0 {
 		w.line(directive.Auth, strings.Join(args, " "))
 	}
+	return nil
 }
 
 // Every form names itself first and then its parameters in the order @auth
-// reads them back. An unknown form writes nothing.
-func authArgs(auth restfile.AuthSpec) []string {
+// reads them back. A form with no case here fails the render rather than being
+// dropped, because dropping it would send the request unauthenticated.
+func authArgs(auth restfile.AuthSpec) ([]string, error) {
 	p := auth.Params
-	switch strings.ToLower(auth.Type) {
-	case "basic":
-		return []string{"basic", strings.TrimSpace(p["username"]), strings.TrimSpace(p["password"])}
-	case "bearer":
-		return []string{"bearer", strings.TrimSpace(p["token"])}
-	case "apikey", "api-key":
+	switch kind := auth.Kind(); kind {
+	case restfile.AuthBasic:
+		return []string{"basic", strings.TrimSpace(p["username"]), strings.TrimSpace(p["password"])}, nil
+	case restfile.AuthBearer:
+		return []string{"bearer", strings.TrimSpace(p["token"])}, nil
+	case restfile.AuthAPIKey:
 		place := strings.TrimSpace(p["placement"])
 		if place == "" {
 			place = "header"
@@ -277,23 +288,36 @@ func authArgs(auth restfile.AuthSpec) []string {
 		if name == "" {
 			name = "X-API-Key"
 		}
-		return []string{"apikey", place, name, strings.TrimSpace(p["value"])}
-	case "oauth2":
-		return authFormArgs("oauth2", formatOAuthParams(p))
-	case "command":
-		return authFormArgs("command", formatCommandParams(p))
+		return []string{"apikey", place, name, strings.TrimSpace(p["value"])}, nil
+	case restfile.AuthHeader:
+		name := strings.TrimSpace(p["header"])
+		value := strings.TrimSpace(p["value"])
+		switch {
+		case name == "":
+			return nil, fmt.Errorf("writer: @auth custom header form has no header name")
+		case value == "":
+			// The bare form needs both words. One word alone reads as a type.
+			return nil, fmt.Errorf("writer: @auth custom header %q has no value", name)
+		case restfile.ReservedAuthWord(name):
+			return nil, fmt.Errorf("writer: @auth custom header %q would be read back as a different form", name)
+		}
+		return []string{name, value}, nil
+	case restfile.AuthOAuth2:
+		return authFormArgs(kind, formatOAuthParams(p))
+	case restfile.AuthCommand:
+		return authFormArgs(kind, formatCommandParams(p))
 	default:
-		return nil
+		return nil, fmt.Errorf("writer: @auth type %q cannot be written", auth.Type)
 	}
 }
 
-// A form that resolved to no parameters at all is dropped rather than written
-// as a bare name the parser would reject.
-func authFormArgs(form string, params []string) []string {
+// A form that resolved to no parameters at all would be written as a bare name
+// the parser rejects.
+func authFormArgs(kind restfile.AuthKind, params []string) ([]string, error) {
 	if len(params) == 0 {
-		return nil
+		return nil, fmt.Errorf("writer: @auth %s has no parameters", kind)
 	}
-	return append([]string{form}, params...)
+	return append([]string{kind.String()}, params...), nil
 }
 
 func renderSettings(w directiveWriter, set map[string]string) {

@@ -883,7 +883,7 @@ func (e *Engine) parseApplyAuth(
 		pm = nil
 	}
 	return &restfile.AuthSpec{
-		Type:       typ,
+		Type:       restfile.AuthKind(typ),
 		Params:     pm,
 		SourcePath: pos.Path,
 	}, nil
