@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.53.1](https://github.com/unkn0wn-root/resterm/compare/v0.52.1...v0.53.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* **examples:** auth_scopes.http wrong scope ([7274064](https://github.com/unkn0wn-root/resterm/commit/7274064281ab9e7342db51b350ee8b29bac314f8))
+
 ### [0.52.1](https://github.com/unkn0wn-root/resterm/compare/v0.51.3...v0.52.1) (2026-08-09)
 
 
