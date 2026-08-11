@@ -65,7 +65,7 @@ vars.global.delete("old")`,
 	if out.Body == nil || *out.Body != "payload" {
 		t.Fatalf("expected body payload, got %#v", out.Body)
 	}
-	if got := out.Variables["token"]; got != "abc" {
+	if got, _ := out.Variables.Get("token"); got != "abc" {
 		t.Fatalf("expected output vars token=abc, got %q", got)
 	}
 	if got := variables["token"]; got != "abc" {

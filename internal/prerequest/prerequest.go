@@ -3,7 +3,6 @@ package prerequest
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -23,12 +22,13 @@ type Input struct {
 
 // Output is the request mutation set produced by pre-request scripts.
 type Output struct {
-	Headers   http.Header
-	Query     map[string]string
-	Body      *string
-	URL       *string
-	Method    *string
-	Variables map[string]string
+	Headers http.Header
+	Query   map[string]string
+	Body    *string
+	URL     *string
+	Method  *string
+	// Variables contains script writes, normalized to one entry per name.
+	Variables vars.NameMap[string]
 	Globals   map[string]vars.GlobalMutation
 }
 
@@ -74,7 +74,6 @@ func Normalize(out *Output) {
 	}
 	out.Headers = nilIfEmpty(out.Headers)
 	out.Query = nilIfEmpty(out.Query)
-	out.Variables = nilIfEmpty(out.Variables)
 	out.Globals = nilIfEmpty(out.Globals)
 }
 
@@ -109,26 +108,24 @@ func applyQuery(req *restfile.Request, q map[string]string) error {
 
 // SetRequestVars merges script writes into request-scoped variables. Names are
 // matched case-insensitively after trimming whitespace.
-func SetRequestVars(req *restfile.Request, variables map[string]string) {
-	if req == nil || len(variables) == 0 {
+// New variables are appended in deterministic order.
+func SetRequestVars(req *restfile.Request, variables vars.NameMap[string]) {
+	if req == nil || variables.Len() == 0 {
 		return
 	}
 	idxs := make(map[string]int)
 	for i, variable := range req.Variables {
 		idxs[vars.NameKey(variable.Name)] = i
 	}
-	for name, value := range variables {
+	for name, value := range variables.Sorted() {
 		key := vars.NameKey(name)
-		if key == "" {
-			continue
-		}
 		if idx, ok := idxs[key]; ok {
 			req.Variables[idx].Value = value
 			continue
 		}
 		idxs[key] = len(req.Variables)
 		req.Variables = append(req.Variables, restfile.Variable{
-			Name:  strings.TrimSpace(name),
+			Name:  name,
 			Value: value,
 			Scope: directive.ScopeRequest,
 		})

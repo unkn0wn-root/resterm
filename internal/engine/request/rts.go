@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -391,7 +392,7 @@ func (e *Engine) CollectVariables(
 	env vars.Environment,
 	overlay map[string]string,
 ) map[string]string {
-	return e.collectVariables(doc, req, env, runVars{overlay: overlay})
+	return e.collectVariables(doc, req, env, runVars{overlay: vars.CollectNames(overlay)})
 }
 
 func (e *Engine) EvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
@@ -622,7 +623,7 @@ type applyPatch struct {
 	auth       *restfile.AuthSpec
 	authSet    bool
 	settings   map[string]*string
-	vars       map[string]string
+	vars       vars.NameMap[string]
 }
 
 func (e *Engine) parseApplyPatch(
@@ -804,28 +805,26 @@ func (e *Engine) parseApplyQuery(
 	return out, nil
 }
 
+// parseApplyVars sorts keys so equivalent names and validation errors resolve deterministically.
 func (e *Engine) parseApplyVars(
 	ctx context.Context,
 	pos rts.Pos,
 	v rts.Value,
-) (map[string]string, error) {
+) (vars.NameMap[string], error) {
+	var out vars.NameMap[string]
 	if v.K != rts.VDict {
-		return nil, applyErr("vars", "expects dict")
+		return out, applyErr("vars", "expects dict")
 	}
-	out := make(map[string]string)
-	for key, val := range v.M {
+	for _, key := range slices.Sorted(maps.Keys(v.M)) {
 		name := strings.TrimSpace(key)
 		if name == "" {
-			return nil, applyErr("vars", "expects non-empty name")
+			return out, applyErr("vars", "expects non-empty name")
 		}
-		s, err := e.applyScalar(ctx, pos, val, "vars."+name)
+		s, err := e.applyScalar(ctx, pos, v.M[key], "vars."+name)
 		if err != nil {
-			return nil, err
+			return out, err
 		}
-		out[name] = s
-	}
-	if len(out) == 0 {
-		return nil, nil
+		out.Set(name, s)
 	}
 	return out, nil
 }
@@ -1023,15 +1022,15 @@ func applyPatchSettings(req *restfile.Request, in map[string]*string) {
 	}
 }
 
-func applyPatchVars(req *restfile.Request, vv map[string]string, in map[string]string) {
-	if req == nil || len(in) == 0 {
+func applyPatchVars(req *restfile.Request, vv map[string]string, in vars.NameMap[string]) {
+	if req == nil || in.Len() == 0 {
 		return
 	}
 	prerequest.SetRequestVars(req, in)
 	if vv == nil {
 		return
 	}
-	vars.Merge(vv, in)
+	vars.MergeInto(vv, in)
 }
 
 func applyKey(key string) string { return strings.ToLower(strings.TrimSpace(key)) }

@@ -61,10 +61,9 @@ func (r *Runner) RunPreRequest(
 	}
 
 	result := prerequest.Output{
-		Headers:   make(http.Header),
-		Query:     make(map[string]string),
-		Variables: make(map[string]string),
-		Globals:   make(map[string]vars.GlobalMutation),
+		Headers: make(http.Header),
+		Query:   make(map[string]string),
+		Globals: make(map[string]vars.GlobalMutation),
 	}
 
 	for idx, block := range scripts {
@@ -393,10 +392,7 @@ func (api *preRequestAPI) varsAPI() map[string]any {
 }
 
 func (api *preRequestAPI) recordVar(name, value string) {
-	if api.output.Variables == nil {
-		api.output.Variables = make(map[string]string)
-	}
-	vars.Upsert(api.output.Variables, name, value)
+	api.output.Variables.Set(name, value)
 }
 
 func (api *preRequestAPI) globalAPI() map[string]any {

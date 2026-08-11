@@ -3,7 +3,6 @@ package request
 import (
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -55,9 +54,7 @@ type variableEntry struct {
 
 type variableLayer struct {
 	source variableSource
-	// vals holds one value per name, keyed by the form the winning
-	// declaration used.
-	vals map[string]string
+	vals   vars.NameMap[string]
 }
 
 // variablePlan is the shared precedence order for template and script lookups.
@@ -68,9 +65,9 @@ type variablePlan struct {
 }
 
 type runVars struct {
-	scripts map[string]string
+	scripts vars.NameMap[string]
 	// overlay contains workflow step and @for-each bindings.
-	overlay map[string]string
+	overlay vars.NameMap[string]
 }
 
 type varSources struct {
@@ -86,8 +83,8 @@ type varSources struct {
 func (e *Engine) buildVariablePlan(src varSources) variablePlan {
 	plan := variablePlan{layers: make([]variableLayer, 0, len(sourceTable))}
 	plan.add(sourceConst, constEntries(src.doc))
-	plan.add(sourceScript, sortedEntries(src.run.scripts))
-	plan.add(sourceWorkflow, sortedEntries(src.run.overlay))
+	plan.addNames(sourceScript, src.run.scripts)
+	plan.addNames(sourceWorkflow, src.run.overlay)
 	plan.add(sourceRequest, requestEntries(src.req, src.sec))
 	plan.add(sourceRuntimeGlobal, globalEntries(src.globals))
 	plan.add(sourceDocumentGlobal, docGlobalEntries(src.doc, src.sec))
@@ -97,12 +94,22 @@ func (e *Engine) buildVariablePlan(src varSources) variablePlan {
 	return plan
 }
 
-// add appends the layer source contributes, or nothing when the source
-// declared no variables. Every layer is built here, so one holding two forms
-// of a name or a value map the source never filled cannot reach a plan.
+// add preserves declaration order so the last form of a name wins within a source.
 func (p *variablePlan) add(source variableSource, entries []variableEntry) {
-	vals := collapseEntries(entries)
-	if len(vals) == 0 {
+	var vals vars.NameMap[string]
+	for _, e := range entries {
+		vals.Set(e.name, e.value)
+	}
+	p.appendLayer(source, vals)
+}
+
+// addNames snapshots an already-normalized source.
+func (p *variablePlan) addNames(source variableSource, vals vars.NameMap[string]) {
+	p.appendLayer(source, vals.Clone())
+}
+
+func (p *variablePlan) appendLayer(source variableSource, vals vars.NameMap[string]) {
+	if vals.Len() == 0 {
 		return
 	}
 	p.layers = append(p.layers, variableLayer{source: source, vals: vals})
@@ -115,10 +122,10 @@ func (p variablePlan) providers() []vars.Provider {
 	for _, l := range p.layers {
 		t := l.source.traits()
 		if t.template {
-			out = append(out, vars.NewTemplateProvider(t.label, l.vals))
+			out = append(out, vars.NewNameMapTemplateProvider(t.label, l.vals))
 			continue
 		}
-		out = append(out, vars.NewMapProvider(t.label, l.vals))
+		out = append(out, vars.NewNameMapProvider(t.label, l.vals))
 	}
 	// Process environment values are not enumerable, so they remain the final
 	// fallback outside the plan.
@@ -127,37 +134,19 @@ func (p variablePlan) providers() []vars.Provider {
 
 // values flattens the plan for RTS and JavaScript while preserving provider precedence.
 func (p variablePlan) values() map[string]string {
-	out := make(map[string]string)
-	claimed := make(map[string]struct{})
+	var out vars.NameMap[string]
 	for _, l := range p.layers {
 		if l.source.traits().hidden {
 			continue
 		}
-		for name, value := range l.vals {
-			key := vars.NameKey(name)
-			if _, taken := claimed[key]; taken {
+		for name, value := range l.vals.All() {
+			if out.Has(name) {
 				continue
 			}
-			claimed[key] = struct{}{}
-			out[name] = value
+			out.Set(name, value)
 		}
 	}
-	return out
-}
-
-// collapseEntries reduces a layer's declarations to a single value per name,
-// keyed by the form the winning declaration used. Entries are walked in order
-// and a later one replaces an earlier form of the same name, which is the rule
-// environment merging and @capture upserts already follow.
-func collapseEntries(entries []variableEntry) map[string]string {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(entries))
-	for _, e := range entries {
-		vars.Upsert(out, e.name, e.value)
-	}
-	return out
+	return out.Map()
 }
 
 func constEntries(doc *restfile.Document) []variableEntry {
@@ -207,14 +196,10 @@ func globalEntries(globs map[string]vars.GlobalMutation) []variableEntry {
 	out := make([]variableEntry, 0, len(globs))
 	for _, key := range slices.Sorted(maps.Keys(globs)) {
 		g := globs[key]
-		name := strings.TrimSpace(g.Name)
-		if name == "" {
-			name = strings.TrimSpace(key)
-		}
-		if name == "" || g.Delete {
+		if g.Delete {
 			continue
 		}
-		out = append(out, variableEntry{name: name, value: g.Value})
+		out = append(out, variableEntry{name: storedName(g.Name, key), value: g.Value})
 	}
 	return out
 }
@@ -235,19 +220,11 @@ func (e *Engine) runtimeFileEntries(
 		if sec == omitSecrets && v.Secret {
 			continue
 		}
-		name := strings.TrimSpace(v.Name)
-		if name == "" {
-			name = key
-		}
-		out = append(out, variableEntry{name: name, value: v.Value})
+		out = append(out, variableEntry{name: storedName(v.Name, key), value: v.Value})
 	}
 	return out
 }
 
-// sortedEntries orders a map source by name so one set of inputs always builds
-// the same plan. A map has no declaration order, so the layers that come from
-// one hold a single form per name already: writers go through vars.Upsert and
-// the environment, global, and file stores key by name.
 func sortedEntries(src map[string]string) []variableEntry {
 	out := make([]variableEntry, 0, len(src))
 	for _, name := range slices.Sorted(maps.Keys(src)) {

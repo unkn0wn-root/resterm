@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,7 +53,7 @@ type wfRun struct {
 	pl       *WorkflowPlan
 	idx      int
 	seq      int
-	vars     map[string]string
+	vars     vars.NameMap[string]
 	done     bool
 	seen     bool
 	skip     bool
@@ -154,11 +155,8 @@ func RunPlan(ctx context.Context, dep Dep, sink Sink, pl *WorkflowPlan) error {
 		dep:  dep,
 		sink: sink,
 		pl:   pl,
-		vars: cloneStrMap(pl.Vars),
+		vars: vars.CollectNames(pl.Vars),
 		skip: true,
-	}
-	if r.vars == nil {
-		r.vars = make(map[string]string)
 	}
 	if err := r.emitRunStart(ctx); err != nil {
 		return err
@@ -318,19 +316,16 @@ func (r *wfRun) runReqStep(
 			continue
 		}
 
-		loopVars := cloneStrMap(xv)
-		if loopVars == nil {
-			loopVars = make(map[string]string)
-		}
+		loopVars := xv.Clone()
 		if wfKey != "" {
-			vars.Upsert(r.vars, wfKey, itemStr)
-			vars.Upsert(loopVars, wfKey, itemStr)
+			r.vars.Set(wfKey, itemStr)
+			loopVars.Set(wfKey, itemStr)
 		}
 		if reqKey != "" {
-			vars.Upsert(loopVars, reqKey, itemStr)
+			loopVars.Set(reqKey, itemStr)
 		}
 		loc := rts.Local(spec.Var, item)
-		vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, loopVars)
+		vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, loopVars.Map())
 
 		if step.When != nil {
 			ok, reason, err := r.dep.EvalCondition(
@@ -503,7 +498,7 @@ func (r *wfRun) execReq(
 	branch string,
 	iter int,
 	total int,
-	extra map[string]string,
+	extra vars.NameMap[string],
 	locals rts.Locals,
 ) (engine.RequestResult, error) {
 	clone := request.CloneRequest(req)
@@ -515,7 +510,7 @@ func (r *wfRun) execReq(
 		clone,
 		r.pl.Run.Env,
 		request.ExecOptions{
-			Extra:  extra,
+			Extra:  extra.Map(),
 			Locals: locals,
 			Record: r.pl.Run.Mode == ModeForEach,
 			Ctx:    ctx,
@@ -534,10 +529,10 @@ func (r *wfRun) stepScope(
 	step restfile.WorkflowStep,
 	req *restfile.Request,
 	extra map[string]string,
-) (map[string]string, map[string]string) {
-	applyVars(r.vars, step.Vars)
+) (vars.NameMap[string], map[string]string) {
+	applyVars(&r.vars, step.Vars)
 	xv := stepExtras(r.vars, step.Vars, extra)
-	vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, xv)
+	vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, xv.Map())
 	return xv, vv
 }
 
@@ -585,7 +580,7 @@ func (r *wfRun) executeStepRequest(
 	branch string,
 	iter int,
 	total int,
-	extra map[string]string,
+	extra vars.NameMap[string],
 	locals rts.Locals,
 ) (stepOutcome, error) {
 	if err := r.emitStepStart(ctx, r.idx, step, req, branch, iter, total); err != nil {
@@ -991,35 +986,23 @@ func normWfStep(step *restfile.WorkflowStep, fail restfile.WorkflowFailureMode) 
 	}
 }
 
-func applyVars(dst map[string]string, vals map[string]string) {
-	if len(vals) == 0 {
-		return
-	}
-	if dst == nil {
-		return
-	}
-	for k, v := range vals {
+func applyVars(dst *vars.NameMap[string], vals map[string]string) {
+	for _, k := range slices.Sorted(maps.Keys(vals)) {
 		if restfile.IsWorkflowScopedVar(k) {
-			vars.Upsert(dst, k, v)
+			dst.Set(k, vals[k])
 		}
 	}
 }
 
+// stepExtras applies vals, then extra, so later layers take precedence.
 func stepExtras(
-	base map[string]string,
+	base vars.NameMap[string],
 	vals map[string]string,
 	extra map[string]string,
-) map[string]string {
-	n := len(base) + len(vals) + len(extra)
-	if n == 0 {
-		return nil
-	}
-	// Later layers win, including over another form of a name an earlier one
-	// set, so the overlay the engine receives holds one value per variable.
-	out := make(map[string]string, n)
-	vars.Merge(out, base)
-	vars.Merge(out, vals)
-	vars.Merge(out, extra)
+) vars.NameMap[string] {
+	out := base.Clone()
+	out.SetMap(vals)
+	out.SetMap(extra)
 	return out
 }
 
@@ -1060,13 +1043,4 @@ func stepMeta(
 		Iter:   iter,
 		Total:  total,
 	}
-}
-
-func cloneStrMap(src map[string]string) map[string]string {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(src))
-	maps.Copy(out, src)
-	return out
 }

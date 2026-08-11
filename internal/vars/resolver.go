@@ -523,16 +523,15 @@ func splitDynamicOffset(name string) (string, time.Duration, bool) {
 }
 
 type MapProvider struct {
-	values   map[string]string
+	values   NameMap[string]
 	label    string
 	template bool
 }
 
-// Keys are normalized to their NameKey so lookups are case-insensitive. Two
-// forms of one name collapse to whichever the map iteration reaches last, so
-// callers that care about the winner deduplicate before constructing.
+// NewMapProvider normalizes names case-insensitively. Equivalent keys resolve
+// in deterministic name order.
 func NewMapProvider(label string, values map[string]string) Provider {
-	return newMapProvider(label, values, false)
+	return newMapProvider(label, CollectNames(values), false)
 }
 
 // NewTemplateProvider is a MapProvider whose values are authored template
@@ -540,15 +539,21 @@ func NewMapProvider(label string, values map[string]string) Provider {
 // Use it only for values written in source files, never for runtime data such
 // as captured responses.
 func NewTemplateProvider(label string, values map[string]string) Provider {
+	return newMapProvider(label, CollectNames(values), true)
+}
+
+// NewNameMapProvider wraps an already-normalized NameMap without copying it.
+func NewNameMapProvider(label string, values NameMap[string]) Provider {
+	return newMapProvider(label, values, false)
+}
+
+// NewNameMapTemplateProvider is the template-expanding variant of NewNameMapProvider.
+func NewNameMapTemplateProvider(label string, values NameMap[string]) Provider {
 	return newMapProvider(label, values, true)
 }
 
-func newMapProvider(label string, values map[string]string, template bool) Provider {
-	normalized := make(map[string]string, len(values))
-	for k, v := range values {
-		normalized[NameKey(k)] = v
-	}
-	return &MapProvider{values: normalized, label: label, template: template}
+func newMapProvider(label string, values NameMap[string], template bool) Provider {
+	return &MapProvider{values: values, label: label, template: template}
 }
 
 type templateValueProvider interface {
@@ -565,8 +570,7 @@ func expandableProvider(p Provider) bool {
 }
 
 func (p *MapProvider) Resolve(name string) (string, bool) {
-	value, ok := p.values[NameKey(name)]
-	return value, ok
+	return p.values.Get(name)
 }
 
 func (p *MapProvider) Label() string {

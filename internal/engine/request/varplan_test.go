@@ -134,7 +134,10 @@ func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
 		f.eng.rt.Files().Set(f.env.Scope(), f.doc.Path, d.name, d.value, false)
 	}
 
-	f.run = runVars{scripts: scriptVars, overlay: loopVars}
+	f.run = runVars{
+		scripts: vars.CollectNames(scriptVars),
+		overlay: vars.CollectNames(loopVars),
+	}
 	return f
 }
 

@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -278,10 +279,7 @@ func (e *Engine) collectStoredGlobalValues(env vars.Environment) map[string]vars
 	out := make(map[string]vars.GlobalMutation)
 	if snap := gs.Snapshot(env.Scope()); len(snap) > 0 {
 		for k, v := range snap {
-			name := strings.TrimSpace(v.Name)
-			if name == "" {
-				name = k
-			}
+			name := storedName(v.Name, k)
 			out[name] = vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret}
 		}
 	}
@@ -325,6 +323,7 @@ func cloneGlobalValues(src map[string]vars.GlobalMutation) map[string]vars.Globa
 	return dst
 }
 
+// mergeGlobalValues applies changes in key order so equivalent names resolve deterministically.
 func mergeGlobalValues(
 	base map[string]vars.GlobalMutation,
 	changes map[string]vars.GlobalMutation,
@@ -332,33 +331,29 @@ func mergeGlobalValues(
 	if len(base) == 0 && len(changes) == 0 {
 		return nil
 	}
-	out := cloneGlobalValues(base)
-	if out == nil {
-		out = make(map[string]vars.GlobalMutation, len(changes))
-	}
-	for k, v := range changes {
-		name := strings.TrimSpace(v.Name)
-		if name == "" {
-			name = strings.TrimSpace(k)
-		}
-		if name == "" {
+	out := vars.CollectNames(base)
+	for _, key := range slices.Sorted(maps.Keys(changes)) {
+		ch := changes[key]
+		name := storedName(ch.Name, key)
+		if ch.Delete {
+			out.Delete(name)
 			continue
 		}
-		for cur := range out {
-			if strings.EqualFold(strings.TrimSpace(cur), name) {
-				delete(out, cur)
-			}
-		}
-		if v.Delete {
-			continue
-		}
-		v.Name = name
-		out[name] = v
+		ch.Name = name
+		out.Set(name, ch)
 	}
-	if len(out) == 0 {
+	if out.Len() == 0 {
 		return nil
 	}
-	return out
+	return out.Map()
+}
+
+// storedName prefers the recorded name and falls back to the storage key.
+func storedName(name, key string) string {
+	if n := strings.TrimSpace(name); n != "" {
+		return n
+	}
+	return strings.TrimSpace(key)
 }
 
 func (e *Engine) applyGlobalMutations(

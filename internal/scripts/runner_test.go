@@ -48,7 +48,7 @@ func TestRunPreRequestScripts(t *testing.T) {
 	if out.Query["user"] != "alice" {
 		t.Fatalf("expected query param to be set")
 	}
-	if out.Variables["token"] != "abc" {
+	if token, _ := out.Variables.Get("token"); token != "abc" {
 		t.Fatalf("expected script variable to be returned")
 	}
 }
@@ -125,7 +125,7 @@ client.test("vars carried", function () {
 	if preResult.Headers.Get("X-File") != "1" {
 		t.Fatalf("expected header from file script")
 	}
-	if preResult.Variables["fromFile"] != "yes" {
+	if fromFile, _ := preResult.Variables.Get("fromFile"); fromFile != "yes" {
 		t.Fatalf("expected variable from file script")
 	}
 
@@ -138,7 +138,7 @@ client.test("vars carried", function () {
 	testBlocks := []restfile.ScriptBlock{{Kind: "test", FilePath: "test.js"}}
 	results, globals, err := runner.RunTests(
 		testBlocks,
-		TestInput{Response: response, Variables: preResult.Variables, BaseDir: dir},
+		TestInput{Response: response, Variables: preResult.Variables.Map(), BaseDir: dir},
 	)
 	if err != nil {
 		t.Fatalf("test file script: %v", err)

@@ -12,15 +12,14 @@ import (
 func TestNormalize(t *testing.T) {
 	body := "body"
 	out := Output{
-		Headers:   http.Header{},
-		Query:     map[string]string{},
-		Body:      &body,
-		Variables: map[string]string{},
-		Globals:   map[string]vars.GlobalMutation{},
+		Headers: http.Header{},
+		Query:   map[string]string{},
+		Body:    &body,
+		Globals: map[string]vars.GlobalMutation{},
 	}
 
 	Normalize(&out)
-	if out.Headers != nil || out.Query != nil || out.Variables != nil || out.Globals != nil {
+	if out.Headers != nil || out.Query != nil || out.Globals != nil {
 		t.Fatalf("expected empty collections to be nil: %#v", out)
 	}
 	if out.Body == nil || *out.Body != body {

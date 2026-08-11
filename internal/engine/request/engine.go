@@ -298,7 +298,8 @@ func newExec(
 		baseCtx = context.Background()
 	}
 	ctx, cancel := context.WithCancel(baseCtx)
-	base := e.collectVariables(doc, req, env, runVars{overlay: opt.Extra})
+	overlay := vars.CollectNames(opt.Extra)
+	base := e.collectVariables(doc, req, env, runVars{overlay: overlay})
 	hasRTS, hasJS := detectPreRequestScripts(req)
 	exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview)
 	if req != nil &&
@@ -320,10 +321,7 @@ func newExec(
 		storeG:    e.collectStoredGlobalValues(env),
 		hasRTSPre: hasRTS,
 		hasJSPre:  hasJS,
-		run: runVars{
-			scripts: make(map[string]string),
-			overlay: cloneStringMap(opt.Extra),
-		},
+		run:       runVars{overlay: overlay},
 		locals:    opt.Locals,
 		exp:       exp,
 		onWarning: opt.OnWarning,
@@ -394,8 +392,8 @@ func (x *execCtx) reqText() string { return renderRequestText(x.req) }
 
 // addScriptVars makes each pre-request script's writes available to the next
 // script at script precedence.
-func (x *execCtx) addScriptVars(set map[string]string) {
-	vars.Merge(x.run.scripts, set)
+func (x *execCtx) addScriptVars(set vars.NameMap[string]) {
+	x.run.scripts.Merge(set)
 }
 
 // currentVariables uses this run's in-memory globals so previews include
@@ -608,7 +606,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 
 	x.applyRuntimeGlobals(rtsOut.Globals)
 	x.addScriptVars(rtsOut.Variables)
-	if len(rtsOut.Globals) > 0 || len(rtsOut.Variables) > 0 {
+	if len(rtsOut.Globals) > 0 || rtsOut.Variables.Len() > 0 {
 		vv = x.currentVariables()
 	}
 
@@ -1161,7 +1159,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 			CollectVariables: func(
 				doc *restfile.Document,
 				req *restfile.Request,
-				scriptVars map[string]string,
+				scriptVars vars.NameMap[string],
 			) map[string]string {
 				return x.eng.collectVariables(doc, req, x.env, runVars{
 					scripts: scriptVars,

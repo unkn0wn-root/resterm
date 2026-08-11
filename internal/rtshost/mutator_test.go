@@ -73,8 +73,9 @@ func TestMutatorKeepsRuntimeVarsAndGlobalsInSync(t *testing.T) {
 	mut.SetGlobal("NewGlobal", "ng", true)
 	mut.DelGlobal("Old")
 
-	if vv["token"] != "abc" || out.Variables["token"] != "abc" {
-		t.Fatalf("expected token variable, vars=%#v out=%#v", vv, out.Variables)
+	recorded, _ := out.Variables.Get("token")
+	if vv["token"] != "abc" || recorded != "abc" {
+		t.Fatalf("expected token variable, vars=%#v out=%#v", vv, out.Variables.Map())
 	}
 	if gv["newglobal"] != "ng" {
 		t.Fatalf("expected runtime global newglobal=ng, got %#v", gv)
@@ -103,7 +104,7 @@ func TestMutatorWithoutRuntimeViewsOnlyRecords(t *testing.T) {
 	if mut.Request() == nil {
 		t.Fatalf("expected an empty request view instead of nil")
 	}
-	if out.Variables["token"] != "abc" || out.Query["user"] != "alice" {
+	if recorded, _ := out.Variables.Get("token"); recorded != "abc" || out.Query["user"] != "alice" {
 		t.Fatalf("expected recorded mutations, out=%#v", out)
 	}
 	if out.Body == nil || *out.Body != "payload" {
