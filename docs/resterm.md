@@ -533,11 +533,11 @@ When expanding `{{variable}}` templates, Resterm looks in:
 8. Selected environment JSON.
 9. OS environment variables (case-sensitive with an uppercase fallback).
 
-One order backs every way of reading a variable: `{{name}}`, `{{= vars.name }}`, the RTS `vars` object, and the JavaScript `vars` API all pick the same source for a name. Two entries are template-only. `@const` and OS environment variables never appear in `vars`, because `vars` names the values a run can override.
+Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them.
 
-Names match case-insensitively and only the winning declaration survives, so a file-scope `token` hides an environment `TOKEN` on every path, including `vars.get("TOKEN")` in a script. When one source declares both forms, the last one wins: the later `@var` line, or the later `vars.set` call when a script writes both.
+Variable names are case-insensitive and ignore surrounding whitespace. A file variable named `token`, for example, takes precedence over an environment variable named `TOKEN`. When the same source defines a name more than once, the last declaration or script write wins. Global deletes also ignore case.
 
-Surrounding whitespace is not part of a name either, so `vars.set(" token ")` updates `token` rather than declaring a second variable. A name that is blank once trimmed identifies nothing, so a write under one is ignored and reads back as unset.
+Blank names are invalid. RestermScript and `@apply` report an error, while JavaScript and runtime stores ignore the write.
 
 Dynamic helpers are also available: `{{$uuid}}` (alias `{{$guid}}`), `{{$timestamp}}` (Unix seconds), `{{$timestampMs}}` (Unix milliseconds), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
 
@@ -1215,13 +1215,21 @@ Values are taken verbatim which means that quotes are not special, so `# @file g
 
 Declared values may reference other variables and dynamic helpers, so `# @request trace.id {{$uuid}}` works as expected. Nested references expand when the request runs, and a declared dynamic such as `{{$uuid}}` is generated once per execution, so every reference to `{{trace.id}}` in the same request sees the same value. Values captured at runtime (captures, script `vars.set`) are data and are never re-expanded. Self- or mutually-referencing variables fail the request with a `variable cycle` error that lists the reference chain.
 
-You can also use shorthand assignments outside comment blocks: `@requestId = {{$uuid}}`. Shorthand defaults to request scope while you're inside a request block and to file scope elsewhere; add a prefix to override (`@global api.token abc`, `@request trace.id {{$uuid}}`, or `@file base.url https://example.com`).
+You can also use shorthand assignments outside comment blocks: `@requestId = {{$uuid}}`. Shorthand defaults to request scope while you're inside a request block and to file scope elsewhere. Add a prefix to override it (`@global api.token abc`, `@request trace.id {{$uuid}}`, or `@file base.url https://example.com`).
 
-Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stored values in summaries; this works for both comment directives and shorthand lines (`@global-secret token xyz`, `@file-secret base.url ...`, `@request-secret trace.id ...`).
+Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stored values in summaries. This works for both comment directives and shorthand lines (`@global-secret token xyz`, `@file-secret base.url ...`, `@request-secret trace.id ...`).
+
+### Secret redaction
+
+Secret values are masked in errors, script failures, and failed test output before those messages reach the response pane, workflow summaries, or workflow history. A value remains masked for the rest of the run if it is deleted, replaced with a public value, or produced by a script or capture that later fails.
+
+Diagnostic source excerpts show the request file as written. Avoid placing literal secrets in script source. Response bodies are also stored as received unless the request uses `@no-log` or the payload is redacted before it is returned.
 
 ### Captures
 
 `@capture <scope> <name> <expression>` evaluates after the response arrives and stores the result for reuse.
+
+Captures run in declaration order. A capture can read values produced earlier in the same batch through `vars.get`, `{{= ... }}`, or `{{name}}`. Values are stored only after every capture succeeds, so a failed batch leaves request, file, and global values unchanged.
 
 Expressions can reference:
 
@@ -2241,8 +2249,8 @@ Open one in Resterm, switch to the appropriate environment (`resterm.env.json`),
 - Use `Ctrl+P` to force a reparse if the navigator seems out of sync with editor changes.
 - If a template fails to expand (undefined variable), Resterm blocks the send and reports the missing variable. This covers URLs, query parameters, headers, auth values, expanded bodies, gRPC targets and messages, and WebSocket steps. Explain previews keep the placeholder intact and list the unresolved names.
 - Combine `@capture request ...` with test scripts to assert on response headers without cluttering file/global scopes.
-- Inline curl import works best with single commands; complex shell pipelines may need manual cleanup.
-- `Ctrl+Shift+V` pins the focused response pane-ideal for diffing the last good response against the current attempt.
-- Keep secrets in environment files or runtime globals marked as `-secret`. Remember that history stores the raw response unless you add `@no-log` or redact the payload yourself.
+- Inline curl import works best with single commands. Complex shell pipelines may need manual cleanup.
+- `Ctrl+Shift+V` pins the focused response pane, which is useful for comparing the last good response with the current attempt.
+- Keep secrets in environment files or runtime globals marked as `-secret`.
 
 For additional questions or feature requests, open an issue on GitHub.

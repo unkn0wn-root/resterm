@@ -89,6 +89,12 @@ func (m *NameMap[V]) SetMap(src map[string]V) {
 	}
 }
 
+func (m *NameMap[V]) DeleteFunc(del func(name string, value V) bool) {
+	maps.DeleteFunc(m.entries, func(_ string, e namedValue[V]) bool {
+		return del(e.name, e.value)
+	})
+}
+
 // Clone returns an independent copy of m.
 func (m NameMap[V]) Clone() NameMap[V] {
 	return NameMap[V]{entries: maps.Clone(m.entries)}

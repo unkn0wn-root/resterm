@@ -15,9 +15,10 @@ import (
 type Input struct {
 	Request   *restfile.Request
 	Variables map[string]string
-	Globals   map[string]vars.GlobalMutation
+	Globals   vars.Globals
 	BaseDir   string
 	Context   context.Context
+	Secrets   *vars.Secrets
 }
 
 // Output is the request mutation set produced by pre-request scripts.
@@ -29,7 +30,7 @@ type Output struct {
 	Method  *string
 	// Variables contains script writes, normalized to one entry per name.
 	Variables vars.NameMap[string]
-	Globals   map[string]vars.GlobalMutation
+	Globals   vars.Globals
 }
 
 // Apply mutates req with pre-request script output.
@@ -74,7 +75,6 @@ func Normalize(out *Output) {
 	}
 	out.Headers = nilIfEmpty(out.Headers)
 	out.Query = nilIfEmpty(out.Query)
-	out.Globals = nilIfEmpty(out.Globals)
 }
 
 func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {

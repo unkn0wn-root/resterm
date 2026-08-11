@@ -27,6 +27,7 @@ type HTTPInput struct {
 	EffectiveTimeout time.Duration
 	ScriptVars       vars.NameMap[string]
 	Locals           rts.Locals
+	Secrets          *vars.Secrets
 }
 
 type CaptureInput struct {
@@ -57,9 +58,9 @@ type HTTPHooks struct {
 	// CollectVariables rebuilds variables after pre-request scripts; the third
 	// argument contains their writes at script precedence.
 	CollectVariables    func(*restfile.Document, *restfile.Request, vars.NameMap[string]) map[string]string
-	CollectGlobalValues func(*restfile.Document) map[string]vars.GlobalMutation
+	CollectGlobalValues func(*restfile.Document) vars.Globals
 	RunAsserts          func(AssertInput) ([]scripts.TestResult, error)
-	ApplyRuntimeGlobals func(map[string]vars.GlobalMutation)
+	ApplyRuntimeGlobals func(vars.Globals)
 }
 
 type HTTPResult struct {
@@ -221,9 +222,10 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			BaseDir:   in.Options.BaseDir,
 			Stream:    streamInfo,
 			Trace:     traceInput,
+			Secrets:   in.Secrets,
 		},
 	)
-	if len(globalChanges) > 0 && r.Hooks.ApplyRuntimeGlobals != nil {
+	if globalChanges.Len() > 0 && r.Hooks.ApplyRuntimeGlobals != nil {
 		r.Hooks.ApplyRuntimeGlobals(globalChanges)
 	}
 
@@ -243,9 +245,9 @@ func (r Runner) collectVars(
 	return r.Hooks.CollectVariables(doc, req, scriptVars)
 }
 
-func (r Runner) collectGlobals(doc *restfile.Document) map[string]vars.GlobalMutation {
+func (r Runner) collectGlobals(doc *restfile.Document) vars.Globals {
 	if r.Hooks.CollectGlobalValues == nil {
-		return nil
+		return vars.Globals{}
 	}
 	return r.Hooks.CollectGlobalValues(doc)
 }

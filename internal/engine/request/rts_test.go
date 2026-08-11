@@ -71,7 +71,7 @@ GET https://example.com
 		doc.Requests[0],
 		testEnv(""),
 		"",
-		nil,
+		evalScope{},
 		rts.Locals{},
 		nil,
 	)
@@ -124,7 +124,7 @@ func TestRunRTSPreRequestRejectsResponse(t *testing.T) {
 				doc.Requests[0],
 				testEnv(""),
 				"",
-				nil,
+				evalScope{},
 				rts.Locals{},
 				nil,
 			)

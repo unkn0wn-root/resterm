@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestNormalize(t *testing.T) {
@@ -15,11 +14,10 @@ func TestNormalize(t *testing.T) {
 		Headers: http.Header{},
 		Query:   map[string]string{},
 		Body:    &body,
-		Globals: map[string]vars.GlobalMutation{},
 	}
 
 	Normalize(&out)
-	if out.Headers != nil || out.Query != nil || out.Globals != nil {
+	if out.Headers != nil || out.Query != nil {
 		t.Fatalf("expected empty collections to be nil: %#v", out)
 	}
 	if out.Body == nil || *out.Body != body {

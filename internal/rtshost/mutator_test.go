@@ -1,17 +1,19 @@
 package rtshost
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestMutatorNormalizesTokenMutations(t *testing.T) {
 	var out prerequest.Output
 	req := &rts.Req{}
-	mut := NewMutator(&out, req, nil, nil)
+	mut := NewMutator(&out, req, nil, nil, nil)
 
 	mut.SetMethod(" post ")
 	mut.SetURL(" https://api.example.com/users ")
@@ -28,7 +30,7 @@ func TestMutatorNormalizesTokenMutations(t *testing.T) {
 func TestMutatorMirrorsHeadersOntoRequestView(t *testing.T) {
 	var out prerequest.Output
 	req := &rts.Req{H: map[string][]string{"x-drop": {"gone"}}}
-	mut := NewMutator(&out, req, nil, nil)
+	mut := NewMutator(&out, req, nil, nil, nil)
 
 	mut.SetHeader("X-Test", "1")
 	mut.AddHeader("X-Test", "2")
@@ -48,7 +50,7 @@ func TestMutatorMirrorsHeadersOntoRequestView(t *testing.T) {
 func TestMutatorPatchesRequestURLOnQuery(t *testing.T) {
 	var out prerequest.Output
 	req := &rts.Req{URL: "https://example.com/path?seed=1"}
-	mut := NewMutator(&out, req, nil, nil)
+	mut := NewMutator(&out, req, nil, nil, nil)
 
 	mut.SetQuery("user", "alice")
 
@@ -67,7 +69,7 @@ func TestMutatorKeepsRuntimeVarsAndGlobalsInSync(t *testing.T) {
 	var out prerequest.Output
 	vv := map[string]string{}
 	gv := map[string]string{"old": "gone"}
-	mut := NewMutator(&out, nil, vv, gv)
+	mut := NewMutator(&out, nil, vv, gv, nil)
 
 	mut.SetVar("token", "abc")
 	mut.SetGlobal("NewGlobal", "ng", true)
@@ -80,13 +82,13 @@ func TestMutatorKeepsRuntimeVarsAndGlobalsInSync(t *testing.T) {
 	if gv["newglobal"] != "ng" {
 		t.Fatalf("expected runtime global newglobal=ng, got %#v", gv)
 	}
-	if got := out.Globals["NewGlobal"]; got.Value != "ng" || !got.Secret {
+	if got, _ := out.Globals.Get("NewGlobal"); got.Value != "ng" || !got.Secret {
 		t.Fatalf("expected recorded secret global, got %#v", got)
 	}
 	if _, ok := gv["old"]; ok {
 		t.Fatalf("expected deleted global to leave the runtime view: %#v", gv)
 	}
-	if got := out.Globals["Old"]; !got.Delete {
+	if got, _ := out.Globals.Get("Old"); !got.Delete {
 		t.Fatalf("expected recorded global deletion, got %#v", got)
 	}
 }
@@ -94,7 +96,7 @@ func TestMutatorKeepsRuntimeVarsAndGlobalsInSync(t *testing.T) {
 func TestMutatorDropsBlankVariableNames(t *testing.T) {
 	var out prerequest.Output
 	vv := map[string]string{}
-	mut := NewMutator(&out, nil, vv, nil)
+	mut := NewMutator(&out, nil, vv, nil, nil)
 
 	mut.SetVar("  ", "ghost")
 
@@ -106,9 +108,31 @@ func TestMutatorDropsBlankVariableNames(t *testing.T) {
 	}
 }
 
+func TestMutatorKeepsSecretValuesThroughDeleteAndOverwrite(t *testing.T) {
+	var out prerequest.Output
+	var sec vars.Secrets
+	mut := NewMutator(&out, nil, nil, map[string]string{}, &sec)
+
+	mut.SetGlobal("token", "hidden", true)
+	mut.DelGlobal("token")
+	mut.SetGlobal("other", "also-hidden", true)
+	mut.SetGlobal("other", "public", false)
+
+	if entry, _ := out.Globals.Get("token"); !entry.Delete {
+		t.Fatalf("expected the delete to win, got %#v", entry)
+	}
+	if entry, _ := out.Globals.Get("other"); entry.Secret || entry.Value != "public" {
+		t.Fatalf("expected the public overwrite to win, got %#v", entry)
+	}
+	want := []string{"hidden", "also-hidden"}
+	if got := sec.Values(); !slices.Equal(got, want) {
+		t.Fatalf("secrets = %#v, want %#v", got, want)
+	}
+}
+
 func TestMutatorWithoutRuntimeViewsOnlyRecords(t *testing.T) {
 	var out prerequest.Output
-	mut := NewMutator(&out, nil, nil, nil)
+	mut := NewMutator(&out, nil, nil, nil, nil)
 
 	mut.SetVar("token", "abc")
 	mut.SetGlobal("token", "abc", false)

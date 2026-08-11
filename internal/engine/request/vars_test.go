@@ -137,7 +137,7 @@ func TestRunRTSApplyUsesDocumentGlobalPatchProfiles(t *testing.T) {
 		req,
 		testEnv(""),
 		"",
-		nil,
+		evalScope{},
 		rts.Locals{},
 	); err != nil {
 		t.Fatalf("runRTSApply() error = %v", err)
@@ -157,9 +157,9 @@ func TestProvidersExpandDeclaredVariableTemplates(t *testing.T) {
 	req := &restfile.Request{
 		Variables: []restfile.Variable{{Name: "trace.id", Value: "{{$uuid}}"}},
 	}
-	globs := map[string]vars.GlobalMutation{
+	globs := vars.CollectNames(map[string]vars.GlobalMutation{
 		"captured": {Name: "captured", Value: "{{file.greeting}}"},
-	}
+	})
 	plan := e.buildVariablePlan(varSources{
 		doc:     doc,
 		req:     req,

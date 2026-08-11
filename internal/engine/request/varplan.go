@@ -15,6 +15,7 @@ const (
 	sourceConst
 	sourceScript
 	sourceWorkflow
+	sourceRequestCapture
 	sourceRequest
 	sourceRuntimeGlobal
 	sourceDocumentGlobal
@@ -37,6 +38,7 @@ var sourceTable = [...]sourceTraits{
 	sourceConst:          {label: "const", template: true, hidden: true},
 	sourceScript:         {label: "script"},
 	sourceWorkflow:       {label: "workflow"},
+	sourceRequestCapture: {label: "request"},
 	sourceRequest:        {label: "request", template: true},
 	sourceRuntimeGlobal:  {label: "global"},
 	sourceDocumentGlobal: {label: "document-global", template: true},
@@ -74,17 +76,21 @@ type varSources struct {
 	doc     *restfile.Document
 	req     *restfile.Request
 	env     vars.Environment
-	globals map[string]vars.GlobalMutation
+	globals vars.Globals
 	sec     secrecy
 	run     runVars
 }
 
-// buildVariablePlan defines the precedence shared by template and script lookups.
+// Variable plans keep template and script lookups at the same precedence. Each
+// plan includes every source layer because resolver memoization uses provider
+// positions. Authored values may expand nested templates, while runtime values
+// such as captures remain literal.
 func (e *Engine) buildVariablePlan(src varSources) variablePlan {
 	plan := variablePlan{layers: make([]variableLayer, 0, len(sourceTable))}
 	plan.add(sourceConst, constEntries(src.doc))
 	plan.addNames(sourceScript, src.run.scripts)
 	plan.addNames(sourceWorkflow, src.run.overlay)
+	plan.add(sourceRequestCapture, nil)
 	plan.add(sourceRequest, requestEntries(src.req, src.sec))
 	plan.add(sourceRuntimeGlobal, globalEntries(src.globals))
 	plan.add(sourceDocumentGlobal, docGlobalEntries(src.doc, src.sec))
@@ -109,10 +115,16 @@ func (p *variablePlan) addNames(source variableSource, vals vars.NameMap[string]
 }
 
 func (p *variablePlan) appendLayer(source variableSource, vals vars.NameMap[string]) {
-	if vals.Len() == 0 {
-		return
-	}
 	p.layers = append(p.layers, variableLayer{source: source, vals: vals})
+}
+
+func (p *variablePlan) overlay(source variableSource, vals vars.NameMap[string]) {
+	for i := range p.layers {
+		if p.layers[i].source == source {
+			p.layers[i].vals.Merge(vals)
+			return
+		}
+	}
 }
 
 // providers exposes each layer to template resolution. Authored values use
@@ -192,14 +204,13 @@ func declaredEntries(xs []restfile.Variable, sec secrecy) []variableEntry {
 	return out
 }
 
-func globalEntries(globs map[string]vars.GlobalMutation) []variableEntry {
-	out := make([]variableEntry, 0, len(globs))
-	for _, key := range slices.Sorted(maps.Keys(globs)) {
-		g := globs[key]
+func globalEntries(globs vars.Globals) []variableEntry {
+	out := make([]variableEntry, 0, globs.Len())
+	for name, g := range globs.Sorted() {
 		if g.Delete {
 			continue
 		}
-		out = append(out, variableEntry{name: storedName(g.Name, key), value: g.Value})
+		out = append(out, variableEntry{name: name, value: g.Value})
 	}
 	return out
 }

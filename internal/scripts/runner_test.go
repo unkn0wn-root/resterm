@@ -174,8 +174,8 @@ client.test("vars carried", function () {
 			t.Fatalf("expected results to pass: %+v", results)
 		}
 	}
-	if globals != nil {
-		t.Fatalf("expected no global changes, got %+v", globals)
+	if globals.Len() != 0 {
+		t.Fatalf("expected no global changes, got %+v", globals.Map())
 	}
 }
 
@@ -215,8 +215,8 @@ func TestRunTestsScripts(t *testing.T) {
 			t.Fatalf("expected all tests to pass, got %#v", results)
 		}
 	}
-	if globals != nil {
-		t.Fatalf("expected no global changes, got %+v", globals)
+	if globals.Len() != 0 {
+		t.Fatalf("expected no global changes, got %+v", globals.Map())
 	}
 }
 
@@ -301,8 +301,8 @@ client.test("response stream access", function () {
 			t.Fatalf("expected all stream tests to pass, got %+v", results)
 		}
 	}
-	if globals != nil {
-		t.Fatalf("expected no global changes, got %+v", globals)
+	if globals.Len() != 0 {
+		t.Fatalf("expected no global changes, got %+v", globals.Map())
 	}
 }
 
@@ -336,8 +336,8 @@ func TestResponseAPIUsesWireForBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run tests: %v", err)
 	}
-	if globals != nil {
-		t.Fatalf("expected no globals, got %+v", globals)
+	if globals.Len() != 0 {
+		t.Fatalf("expected no globals, got %+v", globals.Map())
 	}
 	if len(results) != 5 {
 		t.Fatalf("expected five results (four asserts + wrapper), got %d", len(results))
@@ -360,21 +360,21 @@ vars.global.delete("removeMe");`,
 	input := prerequest.Input{
 		Request:   &restfile.Request{Method: "GET", URL: "https://example.com"},
 		Variables: map[string]string{},
-		Globals: map[string]vars.GlobalMutation{
+		Globals: vars.CollectNames(map[string]vars.GlobalMutation{
 			"token":    {Name: "token", Value: "seed"},
 			"removeMe": {Name: "removeMe", Value: "gone"},
-		},
+		}),
 	}
 	out, err := runner.RunPreRequest(blocks, input)
 	if err != nil {
 		t.Fatalf("pre-request globals: %v", err)
 	}
-	if out.Globals == nil {
+	if out.Globals.Len() == 0 {
 		t.Fatalf("expected globals map to be populated")
 	}
 	assertGlobal := func(name string, expectDelete bool, expectSecret bool, expectValue string) {
 		found := false
-		for _, entry := range out.Globals {
+		for _, entry := range out.Globals.All() {
 			if entry.Name == name {
 				found = true
 				if entry.Delete != expectDelete {
@@ -394,6 +394,51 @@ vars.global.delete("removeMe");`,
 	}
 	assertGlobal("token", false, true, "updated")
 	assertGlobal("removeMe", true, false, "")
+}
+
+func TestPreRequestKeepsSecretValuesThroughDelete(t *testing.T) {
+	runner := NewRunner(nil)
+	blocks := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Body: `vars.global.set("token", "hidden", true);
+vars.global.delete("token");`,
+	}}
+	var sec vars.Secrets
+	out, err := runner.RunPreRequest(blocks, prerequest.Input{
+		Request:   &restfile.Request{Method: "GET", URL: "https://example.com"},
+		Variables: map[string]string{},
+		Secrets:   &sec,
+	})
+	if err != nil {
+		t.Fatalf("pre-request: %v", err)
+	}
+	if entry, _ := out.Globals.Get("token"); !entry.Delete {
+		t.Fatalf("expected the delete to win, got %#v", entry)
+	}
+	if got := sec.Values(); len(got) != 1 || got[0] != "hidden" {
+		t.Fatalf("secrets = %#v, want the transient secret recorded", got)
+	}
+}
+
+func TestRunTestsKeepsSecretValuesThroughDelete(t *testing.T) {
+	runner := NewRunner(nil)
+	resp := &Response{Kind: ResponseKindHTTP, Status: "200 OK", Code: 200}
+	scripts := []restfile.ScriptBlock{{
+		Kind: "test",
+		Body: `vars.global.set("token", "hidden", true);
+vars.global.delete("token");`,
+	}}
+	var sec vars.Secrets
+	_, changes, err := runner.RunTests(scripts, TestInput{Response: resp, Secrets: &sec})
+	if err != nil {
+		t.Fatalf("run tests: %v", err)
+	}
+	if entry, _ := changes.Get("token"); !entry.Delete {
+		t.Fatalf("expected the delete to win, got %#v", entry)
+	}
+	if got := sec.Values(); len(got) != 1 || got[0] != "hidden" {
+		t.Fatalf("secrets = %#v, want the transient secret recorded", got)
+	}
 }
 
 func TestPreRequestCancellationInterruptsScript(t *testing.T) {
@@ -441,9 +486,9 @@ func TestTestScriptsGlobalMutation(t *testing.T) {
 	results, globals, err := runner.RunTests(scripts, TestInput{
 		Response:  resp,
 		Variables: map[string]string{},
-		Globals: map[string]vars.GlobalMutation{
+		Globals: vars.CollectNames(map[string]vars.GlobalMutation{
 			"token": {Name: "token", Value: "seed"},
-		},
+		}),
 	})
 	if err != nil {
 		t.Fatalf("test globals: %v", err)
@@ -451,18 +496,10 @@ func TestTestScriptsGlobalMutation(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected two results, got %d", len(results))
 	}
-	if globals == nil {
+	if globals.Len() == 0 {
 		t.Fatalf("expected globals to be returned")
 	}
-	var updated vars.GlobalMutation
-	found := false
-	for _, entry := range globals {
-		if entry.Name == "token" {
-			updated = entry
-			found = true
-			break
-		}
-	}
+	updated, found := globals.Get("token")
 	if !found {
 		t.Fatalf("expected updated token entry")
 	}
@@ -575,8 +612,8 @@ func TestTraceBindingProvidesTimeline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("trace test script: %v", err)
 	}
-	if globals != nil {
-		t.Fatalf("expected no globals, got %+v", globals)
+	if globals.Len() != 0 {
+		t.Fatalf("expected no globals, got %+v", globals.Map())
 	}
 	if len(results) == 0 {
 		t.Fatalf("expected trace script results")

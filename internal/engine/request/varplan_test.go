@@ -75,7 +75,7 @@ type planFixture struct {
 	doc   *restfile.Document
 	req   *restfile.Request
 	env   vars.Environment
-	globs map[string]vars.GlobalMutation
+	globs vars.Globals
 	run   runVars
 }
 
@@ -83,10 +83,9 @@ func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
 	t.Helper()
 
 	f := planFixture{
-		eng:   New(engcfg.Config{}, nil),
-		doc:   &restfile.Document{Path: "plan.http"},
-		req:   &restfile.Request{Method: http.MethodGet, URL: "http://example.test"},
-		globs: make(map[string]vars.GlobalMutation),
+		eng: New(engcfg.Config{}, nil),
+		doc: &restfile.Document{Path: "plan.http"},
+		req: &restfile.Request{Method: http.MethodGet, URL: "http://example.test"},
 	}
 	envValues := make(map[string]string)
 	scriptVars := make(map[string]string)
@@ -104,7 +103,7 @@ func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
 		case srcRequest:
 			f.req.Variables = append(f.req.Variables, restfile.Variable{Name: d.name, Value: d.value})
 		case srcRuntimeGlobal:
-			f.globs[vars.NameKey(d.name)] = vars.GlobalMutation{Name: d.name, Value: d.value}
+			f.globs.Set(d.name, vars.GlobalMutation{Name: d.name, Value: d.value})
 		case srcDocGlobal:
 			f.doc.Globals = append(f.doc.Globals, restfile.Variable{Name: d.name, Value: d.value})
 		case srcRuntimeFile:

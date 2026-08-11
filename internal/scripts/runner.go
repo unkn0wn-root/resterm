@@ -38,10 +38,11 @@ func NewRunner(fs filelookup.FileSystem) *Runner {
 type TestInput struct {
 	Response  *Response
 	Variables map[string]string
-	Globals   map[string]vars.GlobalMutation
+	Globals   vars.Globals
 	BaseDir   string
 	Stream    *StreamInfo
 	Trace     *TraceInput
+	Secrets   *vars.Secrets
 }
 
 type TestResult struct {
@@ -63,7 +64,6 @@ func (r *Runner) RunPreRequest(
 	result := prerequest.Output{
 		Headers: make(http.Header),
 		Query:   make(map[string]string),
-		Globals: make(map[string]vars.GlobalMutation),
 	}
 
 	for idx, block := range scripts {
@@ -96,9 +96,9 @@ func (r *Runner) RunPreRequest(
 func (r *Runner) RunTests(
 	scripts []restfile.ScriptBlock,
 	input TestInput,
-) ([]TestResult, map[string]vars.GlobalMutation, error) {
+) ([]TestResult, vars.Globals, error) {
 	var aggregated []TestResult
-	changes := make(map[string]vars.GlobalMutation)
+	var changes vars.Globals
 
 	for idx, block := range scripts {
 		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
@@ -122,12 +122,9 @@ func (r *Runner) RunTests(
 		}
 
 		aggregated = append(aggregated, results...)
-		maps.Copy(changes, globals)
+		changes.Merge(globals)
 	}
 
-	if len(changes) == 0 {
-		changes = nil
-	}
 	return aggregated, changes, nil
 }
 
@@ -182,52 +179,52 @@ func (r *Runner) executePreRequestScript(
 func (r *Runner) executeTestScript(
 	script string,
 	input TestInput,
-) ([]TestResult, map[string]vars.GlobalMutation, error) {
+) ([]TestResult, vars.Globals, error) {
 	vm := goja.New()
 	streamInfo := input.Stream.Clone()
-	tester := newTestAPI(input.Response, input.Variables, input.Globals, streamInfo, input.Trace)
+	tester := newTestAPI(input, streamInfo)
 	tester.vm = vm
 	streamBinding := newStreamAPI(vm, streamInfo)
 
 	if err := bindCommon(vm); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind console api")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind console api")
 	}
 
 	if err := vm.Set("tests", tester.testsAPI()); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind tests api")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind tests api")
 	}
 
 	if err := vm.Set("client", tester.clientAPI()); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind client api")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind client api")
 	}
 
 	if err := vm.Set("resterm", tester.clientAPI()); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind resterm alias")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind resterm alias")
 	}
 
 	if err := vm.Set("response", tester.responseAPI()); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind response api")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind response api")
 	}
 
 	if err := vm.Set("vars", tester.varsAPI()); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind vars api")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind vars api")
 	}
 
 	if err := vm.Set("stream", streamBinding.object()); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind stream api")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind stream api")
 	}
 
 	if err := vm.Set("trace", tester.traceAPI()); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind trace api")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind trace api")
 	}
 
 	_, err := vm.RunString(script)
 	if err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "execute test script")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "execute test script")
 	}
 
 	if err := streamBinding.replay(); err != nil {
-		return nil, nil, diag.WrapAs(diag.ClassScript, err, "execute stream callbacks")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "execute stream callbacks")
 	}
 	return tester.results(), tester.globalChanges(), nil
 }
@@ -313,24 +310,17 @@ type preRequestAPI struct {
 	request   *restfile.Request
 	output    *prerequest.Output
 	variables map[string]string
-	globals   map[string]vars.GlobalMutation
+	globals   vars.Globals
+	secrets   *vars.Secrets
 }
 
 func newPreRequestAPI(output *prerequest.Output, input prerequest.Input) *preRequestAPI {
-	variables := jsVarsView(input.Variables)
-
-	globals := make(map[string]vars.GlobalMutation, len(input.Globals))
-	for key, value := range input.Globals {
-		if strings.TrimSpace(value.Name) == "" {
-			value.Name = key
-		}
-		globals[vars.NameKey(value.Name)] = value
-	}
 	return &preRequestAPI{
 		request:   input.Request,
 		output:    output,
-		variables: variables,
-		globals:   globals,
+		variables: jsVarsView(input.Variables),
+		globals:   input.Globals.Clone(),
+		secrets:   input.Secrets,
 	}
 }
 
@@ -403,10 +393,7 @@ func (api *preRequestAPI) recordVar(name, value string) {
 func (api *preRequestAPI) globalAPI() map[string]any {
 	return map[string]any{
 		"get": func(name string) string {
-			entry, ok := api.globals[vars.NameKey(name)]
-			if !ok {
-				return ""
-			}
+			entry, _ := api.globals.Get(name)
 			return entry.Value
 		},
 		"set": func(call goja.FunctionCall) goja.Value {
@@ -423,8 +410,7 @@ func (api *preRequestAPI) globalAPI() map[string]any {
 			return goja.Undefined()
 		},
 		"has": func(name string) bool {
-			_, ok := api.globals[vars.NameKey(name)]
-			return ok
+			return api.globals.Has(name)
 		},
 		"delete": func(name string) {
 			api.deleteGlobal(name)
@@ -433,32 +419,20 @@ func (api *preRequestAPI) globalAPI() map[string]any {
 }
 
 func (api *preRequestAPI) setGlobal(name, value string, secret bool) {
-	name = strings.TrimSpace(name)
-	if name == "" {
+	entry := vars.GlobalMutation{Name: name, Value: value, Secret: secret}
+	if !api.output.Globals.Set(name, entry) {
 		return
 	}
-
-	key := vars.NameKey(name)
-	entry := vars.GlobalMutation{Name: name, Value: value, Secret: secret}
-	api.globals[key] = entry
-	if api.output.Globals == nil {
-		api.output.Globals = make(map[string]vars.GlobalMutation)
+	if secret {
+		api.secrets.Add(value)
 	}
-	api.output.Globals[key] = entry
+	api.globals.Set(name, entry)
 }
 
 func (api *preRequestAPI) deleteGlobal(name string) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return
+	if api.output.Globals.Set(name, vars.GlobalMutation{Name: name, Delete: true}) {
+		api.globals.Delete(name)
 	}
-
-	key := vars.NameKey(name)
-	delete(api.globals, key)
-	if api.output.Globals == nil {
-		api.output.Globals = make(map[string]vars.GlobalMutation)
-	}
-	api.output.Globals[key] = vars.GlobalMutation{Name: name, Delete: true}
 }
 
 func parseGlobalSecret(value goja.Value) bool {
@@ -476,37 +450,23 @@ func parseGlobalSecret(value goja.Value) bool {
 type testAPI struct {
 	response  *Response
 	variables map[string]string
-	globals   map[string]vars.GlobalMutation
-	changes   map[string]vars.GlobalMutation
+	globals   vars.Globals
+	changes   vars.Globals
+	secrets   *vars.Secrets
 	cases     []TestResult
 	stream    *StreamInfo
 	trace     *traceBinding
 	vm        *goja.Runtime
 }
 
-func newTestAPI(
-	resp *Response,
-	variables map[string]string,
-	globals map[string]vars.GlobalMutation,
-	stream *StreamInfo,
-	trace *TraceInput,
-) *testAPI {
-	copyVars := jsVarsView(variables)
-
-	globalCopy := make(map[string]vars.GlobalMutation, len(globals))
-	for key, value := range globals {
-		if strings.TrimSpace(value.Name) == "" {
-			value.Name = key
-		}
-		globalCopy[vars.NameKey(value.Name)] = value
-	}
+func newTestAPI(in TestInput, stream *StreamInfo) *testAPI {
 	return &testAPI{
-		response:  resp,
-		variables: copyVars,
-		globals:   globalCopy,
-		changes:   make(map[string]vars.GlobalMutation),
+		response:  in.Response,
+		variables: jsVarsView(in.Variables),
+		globals:   in.Globals.Clone(),
+		secrets:   in.Secrets,
 		stream:    stream,
-		trace:     newTraceBinding(trace),
+		trace:     newTraceBinding(in.Trace),
 	}
 }
 
@@ -796,10 +756,7 @@ func (api *testAPI) varsAPI() map[string]any {
 func (api *testAPI) globalAPI() map[string]any {
 	return map[string]any{
 		"get": func(name string) string {
-			entry, ok := api.globals[vars.NameKey(name)]
-			if !ok {
-				return ""
-			}
+			entry, _ := api.globals.Get(name)
 			return entry.Value
 		},
 		"set": func(call goja.FunctionCall) goja.Value {
@@ -818,8 +775,7 @@ func (api *testAPI) globalAPI() map[string]any {
 			return goja.Undefined()
 		},
 		"has": func(name string) bool {
-			_, ok := api.globals[vars.NameKey(name)]
-			return ok
+			return api.globals.Has(name)
 		},
 		"delete": func(name string) {
 			api.deleteGlobal(name)
@@ -828,42 +784,24 @@ func (api *testAPI) globalAPI() map[string]any {
 }
 
 func (api *testAPI) setGlobal(name, value string, secret bool) {
-	name = strings.TrimSpace(name)
-	if name == "" {
+	entry := vars.GlobalMutation{Name: name, Value: value, Secret: secret}
+	if !api.changes.Set(name, entry) {
 		return
 	}
-
-	key := vars.NameKey(name)
-	entry := vars.GlobalMutation{Name: name, Value: value, Secret: secret}
-	api.globals[key] = entry
-	if api.changes == nil {
-		api.changes = make(map[string]vars.GlobalMutation)
+	if secret {
+		api.secrets.Add(value)
 	}
-	api.changes[key] = entry
+	api.globals.Set(name, entry)
 }
 
 func (api *testAPI) deleteGlobal(name string) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return
+	if api.changes.Set(name, vars.GlobalMutation{Name: name, Delete: true}) {
+		api.globals.Delete(name)
 	}
-
-	key := vars.NameKey(name)
-	delete(api.globals, key)
-	if api.changes == nil {
-		api.changes = make(map[string]vars.GlobalMutation)
-	}
-	api.changes[key] = vars.GlobalMutation{Name: name, Delete: true}
 }
 
-func (api *testAPI) globalChanges() map[string]vars.GlobalMutation {
-	if len(api.changes) == 0 {
-		return nil
-	}
-
-	clone := make(map[string]vars.GlobalMutation, len(api.changes))
-	maps.Copy(clone, api.changes)
-	return clone
+func (api *testAPI) globalChanges() vars.Globals {
+	return api.changes.Clone()
 }
 
 func (api *testAPI) assert(condition bool, message string) {

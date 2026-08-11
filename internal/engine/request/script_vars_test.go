@@ -45,21 +45,14 @@ type sentRequest struct {
 	executed *restfile.Request
 }
 
-func sendRequest(
-	t *testing.T,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env vars.Environment,
-	opt ExecOptions,
-) sentRequest {
-	t.Helper()
+type stubTransport struct{ wire *http.Request }
 
-	var sent *http.Request
-	client := httpx.NewClientWithOptions(
+func (s *stubTransport) client() *httpx.Client {
+	return httpx.NewClientWithOptions(
 		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
 			return &http.Client{
 				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-					sent = r
+					s.wire = r
 					return &http.Response{
 						Status:     "200 OK",
 						StatusCode: http.StatusOK,
@@ -71,18 +64,50 @@ func sendRequest(
 			}, nil
 		}),
 	)
+}
 
-	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(doc, req, env, opt)
+func newStubEngine(t *testing.T) (*Engine, *stubTransport) {
+	t.Helper()
+
+	st := &stubTransport{}
+	return New(engcfg.Config{Client: st.client()}, nil), st
+}
+
+func sendRequest(
+	t *testing.T,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env vars.Environment,
+	opt ExecOptions,
+) sentRequest {
+	t.Helper()
+
+	eng, st := newStubEngine(t)
+	return sendWith(t, eng, st, doc, req, env, opt)
+}
+
+func sendWith(
+	t *testing.T,
+	eng *Engine,
+	st *stubTransport,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env vars.Environment,
+	opt ExecOptions,
+) sentRequest {
+	t.Helper()
+
+	res, err := eng.ExecuteWith(doc, req, env, opt)
 	if err != nil {
 		t.Fatalf("ExecuteWith() error = %v", err)
 	}
 	if res.Err != nil {
 		t.Fatalf("ExecuteWith() result error = %v", res.Err)
 	}
-	if sent == nil {
+	if st.wire == nil {
 		t.Fatal("request was never sent")
 	}
-	return sentRequest{wire: sent, executed: res.Executed}
+	return sentRequest{wire: st.wire, executed: res.Executed}
 }
 
 func TestJSPreRequestReadsVariablesCaseInsensitively(t *testing.T) {

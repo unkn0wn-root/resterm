@@ -154,7 +154,7 @@ func (e *Engine) ExecuteWith(
 	}
 	if tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
 		err := diag.New(diag.ClassRoute, "@ssh cannot be combined with @k8s")
-		exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview)
+		exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview, nil)
 		exp.stage(
 			xplain.StageRoute,
 			xplain.StageError,
@@ -184,6 +184,7 @@ func (e *Engine) ExecuteWith(
 	res := xexec.RunRequest(flow{ctx: x})
 	end := time.Now()
 	res.Timing = requestTiming(start, end, res)
+	res = e.redactResult(res, doc, env)
 	if opt.Record {
 		e.record(doc, req, runResult{
 			Response:       res.Response,
@@ -261,7 +262,7 @@ type execCtx struct {
 	cancel  context.CancelFunc
 
 	baseVars  map[string]string
-	storeG    map[string]vars.GlobalMutation
+	storeG    vars.Globals
 	hasRTSPre bool
 	hasJSPre  bool
 	run       runVars
@@ -276,13 +277,13 @@ type execCtx struct {
 	grpcOpts grpcx.Options
 	timeout  time.Duration
 
-	runtimeSecrets []string
-	trace          *vars.Trace
-	exp            *explainBuilder
-	onWarning      func(Warning)
-	onSSE          func(*httpx.StreamHandle, *restfile.Request)
-	onWS           func(*httpx.WebSocketHandle, *restfile.Request)
-	onGRPC         func(*stream.Session, *restfile.Request)
+	secrets   *vars.Secrets
+	trace     *vars.Trace
+	exp       *explainBuilder
+	onWarning func(Warning)
+	onSSE     func(*httpx.StreamHandle, *restfile.Request)
+	onWS      func(*httpx.WebSocketHandle, *restfile.Request)
+	onGRPC    func(*stream.Session, *restfile.Request)
 }
 
 func newExec(
@@ -301,7 +302,8 @@ func newExec(
 	overlay := vars.CollectNames(opt.Extra)
 	base := e.collectVariables(doc, req, env, runVars{overlay: overlay})
 	hasRTS, hasJS := detectPreRequestScripts(req)
-	exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview)
+	secrets := &vars.Secrets{}
+	exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview, secrets)
 	if req != nil &&
 		(req.Metadata.When != nil || len(req.Metadata.Applies) > 0 || hasRTS || hasJS) {
 		exp.warn(
@@ -323,6 +325,7 @@ func newExec(
 		hasJSPre:  hasJS,
 		run:       runVars{overlay: overlay},
 		locals:    opt.Locals,
+		secrets:   secrets,
 		exp:       exp,
 		onWarning: opt.OnWarning,
 		onSSE:     opt.AttachSSE,
@@ -355,7 +358,7 @@ func (x *execCtx) base() xrunResult {
 		Executed:       x.req,
 		Environment:    x.env.Label(),
 		Selection:      x.env.Selection(),
-		RuntimeSecrets: append([]string(nil), x.runtimeSecrets...),
+		RuntimeSecrets: x.secrets.Values(),
 		Preview:        x.preview(),
 	}
 }
@@ -396,24 +399,32 @@ func (x *execCtx) addScriptVars(set vars.NameMap[string]) {
 	x.run.scripts.Merge(set)
 }
 
-// currentVariables uses this run's in-memory globals so previews include
-// script changes without persisting them.
+// Variable views use the run's in-memory globals so previews and later phases
+// can observe script changes without persisting them.
 func (x *execCtx) currentVariables() map[string]string {
 	return x.eng.collectVariablesWithGlobals(x.doc, x.req, x.env, x.storeG, keepSecrets, x.run)
 }
 
-func (x *execCtx) currentGlobals() map[string]vars.GlobalMutation {
+func (x *execCtx) currentGlobals() vars.Globals {
 	return effectiveGlobalValues(x.doc, x.storeG)
+}
+
+func (x *execCtx) evalScope(vv map[string]string) evalScope {
+	return evalScope{vars: vv, globals: x.currentGlobals()}
 }
 
 func (x *execCtx) captureVariables() map[string]string {
 	return x.eng.collectVariables(x.doc, x.req, x.env, x.run)
 }
 
-func (x *execCtx) applyRuntimeGlobals(ch map[string]vars.GlobalMutation) {
-	if len(ch) == 0 {
+// Before applying global changes, preserve any secret they replace or delete.
+// The value may already appear in run output and must remain redacted after it
+// leaves the current global view.
+func (x *execCtx) applyRuntimeGlobals(ch vars.Globals) {
+	if ch.Len() == 0 {
 		return
 	}
+	x.recordEvictedSecrets(ch)
 	if x.preview() {
 		x.storeG = mergeGlobalValues(x.storeG, ch)
 	} else {
@@ -422,6 +433,15 @@ func (x *execCtx) applyRuntimeGlobals(ch map[string]vars.GlobalMutation) {
 	}
 	if x.exp != nil {
 		x.exp.globals = effectiveGlobalValues(x.doc, x.storeG)
+	}
+}
+
+func (x *execCtx) recordEvictedSecrets(ch vars.Globals) {
+	cur := x.currentGlobals()
+	for name := range ch.All() {
+		if g, ok := cur.Get(name); ok && g.Secret {
+			x.secrets.Add(g.Value)
+		}
 	}
 }
 
@@ -479,14 +499,14 @@ func (f flow) EvaluateCondition() *xexec.RequestResult {
 	if x.req.Metadata.When == nil {
 		return nil
 	}
-	ok, reason, err := x.eng.EvalCondition(
+	ok, reason, err := x.eng.evalCondition(
 		x.sendCtx,
 		x.doc,
 		x.req,
 		x.env,
 		x.opts.BaseDir,
 		x.req.Metadata.When,
-		x.baseVars,
+		x.evalScope(x.baseVars),
 		x.locals,
 	)
 	if err != nil {
@@ -531,7 +551,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	}
 	// @for-each binds its item as a typed value, and @apply reads it the same way
 	// every other expression in the run does.
-	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, x.locals)
+	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.evalScope(vv), x.locals)
 	if err != nil {
 		x.exp.stage(
 			xplain.StageApply,
@@ -564,9 +584,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		x.req,
 		x.env,
 		x.opts.BaseDir,
-		vv,
+		x.evalScope(vv),
 		x.locals,
-		cloneGlobalValues(x.currentGlobals()),
+		x.secrets,
 	)
 	if err != nil {
 		x.exp.stage(
@@ -606,7 +626,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 
 	x.applyRuntimeGlobals(rtsOut.Globals)
 	x.addScriptVars(rtsOut.Variables)
-	if len(rtsOut.Globals) > 0 || rtsOut.Variables.Len() > 0 {
+	if rtsOut.Globals.Len() > 0 || rtsOut.Variables.Len() > 0 {
 		vv = x.currentVariables()
 	}
 
@@ -617,9 +637,10 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	jsOut, err := x.eng.sc.RunPreRequest(x.req.Metadata.Scripts, prerequest.Input{
 		Request:   x.req,
 		Variables: vv,
-		Globals:   cloneGlobalValues(x.currentGlobals()),
+		Globals:   x.currentGlobals(),
 		BaseDir:   x.opts.BaseDir,
 		Context:   x.sendCtx,
+		Secrets:   x.secrets,
 	})
 	if err != nil {
 		x.exp.stage(
@@ -724,7 +745,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 	if x.req.Metadata.Auth == nil {
 		return nil
 	}
-	x.exp.addSecrets(AuthSecretValues(x.req.Metadata.Auth, x.res)...)
+	x.secrets.Add(AuthSecretValues(x.req.Metadata.Auth, x.res)...)
 	before := CloneRequest(x.req)
 	if x.preview() {
 		out, err := x.eng.prepareExplainAuthPreview(x.doc, x.req, x.res, x.env)
@@ -754,7 +775,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 			)
 			return x.fail(err, "Auth preparation failed")
 		}
-		x.exp.addSecrets(out.extraSecrets...)
+		x.secrets.Add(out.extraSecrets...)
 		x.exp.stage(
 			xplain.StageAuth,
 			out.status,
@@ -807,8 +828,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 		}
 		secs = InjectedAuthSecrets(x.req.Metadata.Auth, before, x.req)
 	}
-	x.exp.addSecrets(secs...)
-	x.runtimeSecrets = append(x.runtimeSecrets, secs...)
+	x.secrets.Add(secs...)
 	x.exp.stage(xplain.StageAuth, xplain.StageOK, xplain.SummaryAuthPrepared, before, x.req)
 	return nil
 }
@@ -1046,17 +1066,19 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	respForScripts := grpcScriptResponse(x.req, resp)
 	var caps captureResult
 	if err := x.eng.applyCaptures(captureRun{
-		ctx:    x.sendCtx,
-		base:   x.opts.BaseDir,
-		doc:    x.doc,
-		req:    x.req,
-		res:    x.res,
-		resp:   respForScripts,
-		stream: info,
-		out:    &caps,
-		env:    x.env,
-		v:      x.captureVariables(),
-		locals: x.locals,
+		ctx:     x.sendCtx,
+		base:    x.opts.BaseDir,
+		doc:     x.doc,
+		req:     x.req,
+		res:     x.res,
+		resp:    respForScripts,
+		stream:  info,
+		out:     &caps,
+		env:     x.env,
+		store:   x.storeG,
+		secrets: x.secrets,
+		locals:  x.locals,
+		run:     x.run,
 	}); err != nil {
 		x.exp.stage(
 			xplain.StageCaptures,
@@ -1074,8 +1096,8 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		return res
 	}
 
-	testV := x.captureVariables()
-	testG := x.eng.collectGlobalValues(x.doc, x.env)
+	x.applyRuntimeGlobals(caps.globals)
+	testScope := x.evalScope(x.captureVariables())
 	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
 	defer cancelAsserts()
 	asserts, assertErr := x.eng.runAsserts(
@@ -1084,23 +1106,24 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		x.req,
 		x.env,
 		x.opts.BaseDir,
-		testV,
+		testScope,
 		x.locals,
 		rtsGRPC(resp),
 		nil,
 		rtsStream(info),
 	)
-	tests, globs, testErr := x.eng.sc.RunTests(
+	tests, globalChanges, testErr := x.eng.sc.RunTests(
 		x.req.Metadata.Scripts,
 		scripts.TestInput{
 			Response:  respForScripts,
-			Variables: testV,
-			Globals:   testG,
+			Variables: testScope.vars,
+			Globals:   testScope.globals,
 			BaseDir:   x.opts.BaseDir,
 			Stream:    info,
+			Secrets:   x.secrets,
 		},
 	)
-	x.applyRuntimeGlobals(globs)
+	x.applyRuntimeGlobals(globalChanges)
 	x.exp.setPrepared(x.req)
 	x.exp.setGRPC(x.req)
 
@@ -1131,6 +1154,7 @@ func (f flow) ExecuteHTTP() xexec.RequestResult {
 		EffectiveTimeout: x.timeout,
 		ScriptVars:       x.run.scripts,
 		Locals:           x.locals,
+		Secrets:          x.secrets,
 	})
 	return x.finishHTTP(res)
 }
@@ -1142,19 +1166,26 @@ func (x *execCtx) httpRunner() xexec.Runner {
 			AttachWebSocketHandle: x.onWS,
 			ApplyCaptures: func(in xexec.CaptureInput) error {
 				var caps captureResult
-				return x.eng.applyCaptures(captureRun{
-					ctx:    x.sendCtx,
-					base:   x.opts.BaseDir,
-					doc:    in.Doc,
-					req:    in.Req,
-					res:    in.Resolver,
-					resp:   in.Response,
-					stream: in.Stream,
-					out:    &caps,
-					env:    x.env,
-					v:      in.Vars,
-					locals: in.Locals,
+				err := x.eng.applyCaptures(captureRun{
+					ctx:     x.sendCtx,
+					base:    x.opts.BaseDir,
+					doc:     in.Doc,
+					req:     in.Req,
+					res:     in.Resolver,
+					resp:    in.Response,
+					stream:  in.Stream,
+					out:     &caps,
+					env:     x.env,
+					store:   x.storeG,
+					secrets: x.secrets,
+					locals:  in.Locals,
+					run:     x.run,
 				})
+				if err != nil {
+					return err
+				}
+				x.applyRuntimeGlobals(caps.globals)
+				return nil
 			},
 			CollectVariables: func(
 				doc *restfile.Document,
@@ -1166,8 +1197,8 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					overlay: x.run.overlay,
 				})
 			},
-			CollectGlobalValues: func(doc *restfile.Document) map[string]vars.GlobalMutation {
-				return x.eng.collectGlobalValues(doc, x.env)
+			CollectGlobalValues: func(doc *restfile.Document) vars.Globals {
+				return effectiveGlobalValues(doc, x.storeG)
 			},
 			RunAsserts: func(in xexec.AssertInput) ([]scripts.TestResult, error) {
 				return x.eng.runAsserts(
@@ -1176,7 +1207,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					in.Req,
 					x.env,
 					in.BaseDir,
-					in.Vars,
+					x.evalScope(in.Vars),
 					in.Locals,
 					rtsHTTP(in.HTTP),
 					rtsTrace(in.HTTP),

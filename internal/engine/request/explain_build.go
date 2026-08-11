@@ -47,23 +47,23 @@ type explainFinalizeInput struct {
 	settings     map[string]string
 	ssh          *ssh.Plan
 	k8s          *k8s.Plan
-	globals      map[string]vars.GlobalMutation
+	globals      vars.Globals
 	extraSecrets []string
 }
 
 type explainBuilder struct {
-	eng          *Engine
-	doc          *restfile.Document
-	req          *restfile.Request
-	env          vars.Environment
-	preview      bool
-	report       *xplain.Report
-	trace        *vars.Trace
-	settings     map[string]string
-	ssh          *ssh.Plan
-	k8s          *k8s.Plan
-	globals      map[string]vars.GlobalMutation
-	extraSecrets []string
+	eng      *Engine
+	doc      *restfile.Document
+	req      *restfile.Request
+	env      vars.Environment
+	preview  bool
+	report   *xplain.Report
+	trace    *vars.Trace
+	settings map[string]string
+	ssh      *ssh.Plan
+	k8s      *k8s.Plan
+	globals  vars.Globals
+	secrets  *vars.Secrets
 }
 
 func newExplainBuilder(
@@ -72,7 +72,11 @@ func newExplainBuilder(
 	req *restfile.Request,
 	env vars.Environment,
 	preview bool,
+	sec *vars.Secrets,
 ) *explainBuilder {
+	if sec == nil {
+		sec = &vars.Secrets{}
+	}
 	b := &explainBuilder{
 		eng:     e,
 		doc:     doc,
@@ -80,6 +84,7 @@ func newExplainBuilder(
 		env:     env,
 		preview: preview,
 		report:  newExplainReport(req, env.Label()),
+		secrets: sec,
 	}
 	if e != nil {
 		b.globals = effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
@@ -136,15 +141,6 @@ func (b *explainBuilder) setRoute(ssh *ssh.Plan, k8s *k8s.Plan) {
 	b.k8s = k8s
 }
 
-func (b *explainBuilder) addSecrets(vals ...string) {
-	for _, val := range vals {
-		if strings.TrimSpace(val) == "" {
-			continue
-		}
-		b.extraSecrets = append(b.extraSecrets, val)
-	}
-}
-
 func (b *explainBuilder) setPrepared(req *restfile.Request) {
 	setExplainPrepared(b.report, req, b.settings, b.ssh, b.k8s)
 }
@@ -179,7 +175,7 @@ func (b *explainBuilder) finish(
 		ssh:          b.ssh,
 		k8s:          b.k8s,
 		globals:      b.globals,
-		extraSecrets: b.extraSecrets,
+		extraSecrets: b.secrets.Values(),
 	})
 }
 

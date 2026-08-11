@@ -5,7 +5,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -174,7 +173,7 @@ func (e *Engine) buildResolver(
 	req *restfile.Request,
 	env vars.Environment,
 	base string,
-	globs map[string]vars.GlobalMutation,
+	globs vars.Globals,
 	locals rts.Locals,
 	run runVars,
 ) *vars.Resolver {
@@ -186,7 +185,14 @@ func (e *Engine) buildResolver(
 		sec:     keepSecrets,
 		run:     run,
 	})
-	in := ExprInput{Doc: doc, Req: req, Env: env, Base: base, Locals: locals}
+	in := ExprInput{
+		Doc:     doc,
+		Req:     req,
+		Env:     env,
+		Base:    base,
+		Locals:  locals,
+		globals: effectiveGlobalValues(doc, globs),
+	}
 	return e.planResolver(ctx, plan, in, ExprEvalOptions{})
 }
 
@@ -201,7 +207,7 @@ func (e *Engine) DisplayResolver(
 	locals rts.Locals,
 ) *vars.Resolver {
 	globs := e.collectStoredGlobalValues(env)
-	maps.DeleteFunc(globs, func(_ string, v vars.GlobalMutation) bool { return v.Secret })
+	globs.DeleteFunc(func(_ string, v vars.GlobalMutation) bool { return v.Secret })
 
 	plan := e.buildVariablePlan(varSources{
 		doc:     doc,
@@ -210,7 +216,14 @@ func (e *Engine) DisplayResolver(
 		globals: globs,
 		sec:     omitSecrets,
 	})
-	in := ExprInput{Doc: doc, Req: req, Env: env, Base: e.rtsBase(doc, base), Locals: locals}
+	in := ExprInput{
+		Doc:     doc,
+		Req:     req,
+		Env:     env,
+		Base:    e.rtsBase(doc, base),
+		Locals:  locals,
+		globals: effectiveGlobalValues(doc, globs),
+	}
 	return e.planResolver(ctx, plan, in, ExprEvalOptions{OmitSecretGlobals: true})
 }
 
@@ -250,7 +263,7 @@ func (e *Engine) collectVariablesWithGlobals(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	globs map[string]vars.GlobalMutation,
+	globs vars.Globals,
 	sec secrecy,
 	run runVars,
 ) map[string]string {
@@ -264,77 +277,42 @@ func (e *Engine) collectVariablesWithGlobals(
 	}).values()
 }
 
-func (e *Engine) collectGlobalValues(
-	doc *restfile.Document,
-	env vars.Environment,
-) map[string]vars.GlobalMutation {
+func (e *Engine) collectGlobalValues(doc *restfile.Document, env vars.Environment) vars.Globals {
 	return effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
 }
 
-func (e *Engine) collectStoredGlobalValues(env vars.Environment) map[string]vars.GlobalMutation {
+func (e *Engine) collectStoredGlobalValues(env vars.Environment) vars.Globals {
+	var out vars.Globals
 	gs := e.rt.Globals()
 	if gs == nil {
-		return nil
+		return out
 	}
-	out := make(map[string]vars.GlobalMutation)
-	if snap := gs.Snapshot(env.Scope()); len(snap) > 0 {
-		for k, v := range snap {
-			name := storedName(v.Name, k)
-			out[name] = vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret}
-		}
-	}
-	if len(out) == 0 {
-		return nil
+	for key, v := range gs.Snapshot(env.Scope()) {
+		name := storedName(v.Name, key)
+		out.Set(name, vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret})
 	}
 	return out
 }
 
-func collectDocumentGlobalValues(doc *restfile.Document) map[string]vars.GlobalMutation {
-	if doc == nil || len(doc.Globals) == 0 {
-		return nil
+func collectDocumentGlobalValues(doc *restfile.Document) vars.Globals {
+	var out vars.Globals
+	if doc == nil {
+		return out
 	}
-	out := make(map[string]vars.GlobalMutation)
 	for _, v := range doc.Globals {
 		name := strings.TrimSpace(v.Name)
-		if name == "" {
-			continue
-		}
-		out[name] = vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret}
-	}
-	if len(out) == 0 {
-		return nil
+		out.Set(name, vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret})
 	}
 	return out
 }
 
-func effectiveGlobalValues(
-	doc *restfile.Document,
-	globs map[string]vars.GlobalMutation,
-) map[string]vars.GlobalMutation {
+func effectiveGlobalValues(doc *restfile.Document, globs vars.Globals) vars.Globals {
 	return mergeGlobalValues(collectDocumentGlobalValues(doc), globs)
 }
 
-func cloneGlobalValues(src map[string]vars.GlobalMutation) map[string]vars.GlobalMutation {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]vars.GlobalMutation, len(src))
-	maps.Copy(dst, src)
-	return dst
-}
-
-// mergeGlobalValues applies changes in key order so equivalent names resolve deterministically.
-func mergeGlobalValues(
-	base map[string]vars.GlobalMutation,
-	changes map[string]vars.GlobalMutation,
-) map[string]vars.GlobalMutation {
-	if len(base) == 0 && len(changes) == 0 {
-		return nil
-	}
-	out := vars.CollectNames(base)
-	for _, key := range slices.Sorted(maps.Keys(changes)) {
-		ch := changes[key]
-		name := storedName(ch.Name, key)
+func mergeGlobalValues(base, changes vars.Globals) vars.Globals {
+	out := base.Clone()
+	for name, ch := range changes.All() {
 		if ch.Delete {
 			out.Delete(name)
 			continue
@@ -342,10 +320,7 @@ func mergeGlobalValues(
 		ch.Name = name
 		out.Set(name, ch)
 	}
-	if out.Len() == 0 {
-		return nil
-	}
-	return out.Map()
+	return out
 }
 
 // storedName prefers the recorded name and falls back to the storage key.
@@ -356,19 +331,12 @@ func storedName(name, key string) string {
 	return strings.TrimSpace(key)
 }
 
-func (e *Engine) applyGlobalMutations(
-	changes map[string]vars.GlobalMutation,
-	env vars.Environment,
-) {
+func (e *Engine) applyGlobalMutations(changes vars.Globals, env vars.Environment) {
 	gs := e.rt.Globals()
-	if len(changes) == 0 || gs == nil {
+	if gs == nil {
 		return
 	}
-	for _, ch := range changes {
-		name := strings.TrimSpace(ch.Name)
-		if name == "" {
-			continue
-		}
+	for name, ch := range changes.All() {
 		if ch.Delete {
 			gs.Delete(env.Scope(), name)
 			continue

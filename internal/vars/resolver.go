@@ -111,6 +111,17 @@ func (r *Resolver) WithExprEval(fn ExprEval) *Resolver {
 	return &cp
 }
 
+// WithProviders reuses memoized expansions with a new provider set. Providers
+// must retain their order because memoized entries use provider positions.
+func (r *Resolver) WithProviders(providers ...Provider) *Resolver {
+	if r == nil {
+		return r
+	}
+	cp := *r
+	cp.providers = providers
+	return &cp
+}
+
 func (r *Resolver) Resolve(name string) (string, bool) {
 	value, ok, err := r.resolve(name, r.exprPos, true, true, nil)
 	if err != nil {

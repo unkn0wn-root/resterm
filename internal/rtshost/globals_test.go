@@ -7,12 +7,12 @@ import (
 )
 
 func TestRuntimeGlobals(t *testing.T) {
-	globals := map[string]vars.GlobalMutation{
+	globals := vars.CollectNames(map[string]vars.GlobalMutation{
 		"fallback": {Value: "a"},
-		"named":    {Name: "Token", Value: "b"},
-		"secret":   {Name: "Secret", Value: "c", Secret: true},
-		"deleted":  {Name: "Deleted", Value: "d", Delete: true},
-	}
+		"Token":    {Name: "Token", Value: "b"},
+		"Secret":   {Name: "Secret", Value: "c", Secret: true},
+		"Deleted":  {Name: "Deleted", Value: "d", Delete: true},
+	})
 
 	got := RuntimeGlobals(globals, OmitSecrets)
 	if got["fallback"] != "a" || got["token"] != "b" {

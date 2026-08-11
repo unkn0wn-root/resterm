@@ -24,13 +24,19 @@ type Mutator struct {
 	req  *rts.Req
 	vars map[string]string
 	glob map[string]string
+	sec  *vars.Secrets
 }
 
-func NewMutator(out *prerequest.Output, req *rts.Req, vars, globals map[string]string) *Mutator {
+func NewMutator(
+	out *prerequest.Output,
+	req *rts.Req,
+	vals, globals map[string]string,
+	sec *vars.Secrets,
+) *Mutator {
 	if req == nil {
 		req = &rts.Req{}
 	}
-	return &Mutator{out: out, req: req, vars: vars, glob: globals}
+	return &Mutator{out: out, req: req, vars: vals, glob: globals, sec: sec}
 }
 
 func (m *Mutator) Request() *rts.Req { return m.req }
@@ -91,14 +97,21 @@ func (m *Mutator) SetVar(name, value string) {
 }
 
 func (m *Mutator) SetGlobal(name, value string, secret bool) {
-	m.outGlobals()[name] = vars.GlobalMutation{Name: name, Value: value, Secret: secret}
+	if !m.out.Globals.Set(name, vars.GlobalMutation{Name: name, Value: value, Secret: secret}) {
+		return
+	}
+	if secret {
+		m.sec.Add(value)
+	}
 	if m.glob != nil {
 		m.glob[util.Lower(name)] = value
 	}
 }
 
 func (m *Mutator) DelGlobal(name string) {
-	m.outGlobals()[name] = vars.GlobalMutation{Name: name, Delete: true}
+	if !m.out.Globals.Set(name, vars.GlobalMutation{Name: name, Delete: true}) {
+		return
+	}
 	delete(m.glob, util.Lower(name))
 }
 
@@ -124,13 +137,6 @@ func (m *Mutator) outHeaders() http.Header {
 		m.out.Headers = make(http.Header)
 	}
 	return m.out.Headers
-}
-
-func (m *Mutator) outGlobals() map[string]vars.GlobalMutation {
-	if m.out.Globals == nil {
-		m.out.Globals = make(map[string]vars.GlobalMutation)
-	}
-	return m.out.Globals
 }
 
 func (m *Mutator) reqHeaders() map[string][]string {

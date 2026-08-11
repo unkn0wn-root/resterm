@@ -42,10 +42,10 @@ vars.global.delete("old")`,
 		},
 	}
 	variables := map[string]string{"seed": "value"}
-	globals := map[string]vars.GlobalMutation{
-		"secret": {Name: "Secret", Value: "top", Secret: true},
+	globals := vars.CollectNames(map[string]vars.GlobalMutation{
+		"Secret": {Name: "Secret", Value: "top", Secret: true},
 		"old":    {Name: "old", Value: "gone"},
-	}
+	})
 
 	out, err := model.requestSvc(httpx.Options{}).
 		RunPreRequest(context.Background(), nil, req, testEnv(""), "", variables, rts.Locals{}, globals)
@@ -71,10 +71,10 @@ vars.global.delete("old")`,
 	if got := variables["token"]; got != "abc" {
 		t.Fatalf("expected variables map token=abc, got %q", got)
 	}
-	if gv, ok := out.Globals["newglobal"]; !ok || gv.Value != "ng" || gv.Secret {
+	if gv, ok := out.Globals.Get("newglobal"); !ok || gv.Value != "ng" || gv.Secret {
 		t.Fatalf("expected newglobal=ng (non-secret), got %#v", gv)
 	}
-	if gv, ok := out.Globals["old"]; !ok || !gv.Delete {
+	if gv, ok := out.Globals.Get("old"); !ok || !gv.Delete {
 		t.Fatalf("expected old to be marked deleted, got %#v", gv)
 	}
 }
@@ -96,7 +96,7 @@ request.setQueryParam("mutated", "true")`,
 	}
 
 	out, err := model.requestSvc(httpx.Options{}).
-		RunPreRequest(context.Background(), nil, req, testEnv(""), "", nil, rts.Locals{}, nil)
+		RunPreRequest(context.Background(), nil, req, testEnv(""), "", nil, rts.Locals{}, vars.Globals{})
 	if err != nil {
 		t.Fatalf("runRTSPreRequest: %v", err)
 	}
@@ -135,7 +135,7 @@ GET https://example.com
 		"",
 		nil,
 		rts.Locals{},
-		nil,
+		vars.Globals{},
 	)
 	if err == nil {
 		t.Fatalf("expected rts error")
@@ -182,7 +182,7 @@ func TestRunRTSPreRequestErrorRendersIncludedSource(t *testing.T) {
 	}
 
 	_, err := model.requestSvc(httpx.Options{}).
-		RunPreRequest(context.Background(), nil, req, testEnv(""), dir, nil, rts.Locals{}, nil)
+		RunPreRequest(context.Background(), nil, req, testEnv(""), dir, nil, rts.Locals{}, vars.Globals{})
 	if err == nil {
 		t.Fatalf("expected rts error")
 	}
