@@ -59,7 +59,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		},
 	}
 
-	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, rts.Locals{})
+	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, rts.Locals{}, runVars{})
 	var captures captureResult
 	if err := eng.applyCaptures(captureRun{
 		doc:  doc,
@@ -114,7 +114,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	if req.Variables[0].Name != "recentStatus" || req.Variables[0].Value != "200 OK" {
 		t.Fatalf("unexpected request variable %+v", req.Variables[0])
 	}
-	varsWithReq := eng.collectVariables(doc, req, testEnv("dev"))
+	varsWithReq := eng.collectVariables(doc, req, testEnv("dev"), runVars{})
 	if varsWithReq["recentStatus"] != "200 OK" {
 		t.Fatalf(
 			"expected request capture to be available in collected vars, got %q",
@@ -136,7 +136,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 	// simulate a fresh parse of the document (no baked-in variables)
 	freshDoc := &restfile.Document{Path: "./sample.http"}
-	vars := eng.collectVariables(freshDoc, nil, testEnv("dev"))
+	vars := eng.collectVariables(freshDoc, nil, testEnv("dev"), runVars{})
 	if vars["lastTrace"] != "abc" {
 		t.Fatalf("expected file capture to be applied via runtime store, got %q", vars["lastTrace"])
 	}
@@ -872,7 +872,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	}
 
 	doc := &restfile.Document{Path: "./stream.http"}
-	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, rts.Locals{})
+	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, rts.Locals{}, runVars{})
 	var captures captureResult
 	if err := eng.applyCaptures(captureRun{
 		doc:    doc,
@@ -886,7 +886,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
 
-	vars := eng.collectVariables(doc, req, testEnv("dev"))
+	vars := eng.collectVariables(doc, req, testEnv("dev"), runVars{})
 	if vars["streamKind"] != "websocket" {
 		t.Fatalf("expected stream kind capture, got %q", vars["streamKind"])
 	}

@@ -34,7 +34,7 @@ func (t *Trace) Add(it ResolveTrace) {
 		return
 	}
 
-	key := strings.ToLower(name)
+	key := NameKey(name)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()

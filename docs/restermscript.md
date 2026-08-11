@@ -588,6 +588,8 @@ For named environments, `env.name` is unchanged and `env.groups` is empty.
 
 `vars` provides request runtime variables, including globals and workflow overrides. You can access values through `vars.get("key")`, `vars.has("key")`, `vars.require("key"[, msg])`, or `vars.key`. `vars.global` provides global reads and writes in pre-request scripts through `get`, `has`, `require`, `set`, and `delete`.
 
+`vars` names the values a run can override, so `@const` values and OS environment variables are not in it even though `{{name}}` resolves them. Everything else follows the same precedence a template does, and a name resolves to one source through both. See [Variable resolution order](resterm.md#variable-resolution-order).
+
 ### request
 
 `request` provides a summary of the current request. It exposes `method`, `url`, `headers`, `header(name)`, and `query`. `headers` contains the first value per header (lowercased keys), while `header(name)` is case-insensitive. `query` returns strings or lists when a key has multiple values. In `@rts pre-request` blocks, mutation helpers are available, including `request.setMethod`, `request.setURL`, `request.setHeader`, `request.addHeader`, `request.removeHeader`, `request.setQueryParam`, and `request.setBody`. The full `@script pre-request lang=rts` form is equivalent. In `@apply`, the request object is read only, so you return a patch dict instead of mutating it.

@@ -284,29 +284,6 @@ type EvalInput struct {
 	Locals rts.Locals
 }
 
-func (e *Engine) rtsEval(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env vars.Environment,
-	base string,
-	locals rts.Locals,
-	extras ...map[string]string,
-) vars.ExprEval {
-	vv := e.collectVariables(doc, req, env)
-	for _, overlay := range extras {
-		maps.Copy(vv, overlay)
-	}
-	return e.ExprEval(ctx, ExprInput{
-		Doc:    doc,
-		Req:    req,
-		Env:    env,
-		Base:   base,
-		Vars:   vv,
-		Locals: locals,
-	})
-}
-
 // ExprEvalOptions tunes how a {{= expr }} evaluator treats the RTS runtime.
 type ExprEvalOptions struct {
 	// OmitSecretGlobals drops secret global values from the runtime so preview
@@ -389,7 +366,7 @@ func (e *Engine) evalRTSString(
 func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
 	vv := in.Vars
 	if vv == nil {
-		vv = e.collectVariables(in.Doc, in.Req, in.Env)
+		vv = e.collectVariables(in.Doc, in.Req, in.Env, runVars{})
 	}
 	rt := e.buildRT(rtIn{
 		doc:     in.Doc,
@@ -412,9 +389,9 @@ func (e *Engine) CollectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	extras ...map[string]string,
+	overlay map[string]string,
 ) map[string]string {
-	return e.collectVariables(doc, req, env, extras...)
+	return e.collectVariables(doc, req, env, runVars{overlay: overlay})
 }
 
 func (e *Engine) EvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
@@ -526,7 +503,7 @@ func (e *Engine) runAsserts(
 		return nil, nil
 	}
 	if vv == nil {
-		vv = e.collectVariables(doc, req, env)
+		vv = e.collectVariables(doc, req, env, runVars{})
 	}
 	rt := e.buildRT(rtIn{
 		doc:     doc,
@@ -1050,33 +1027,11 @@ func applyPatchVars(req *restfile.Request, vv map[string]string, in map[string]s
 	if req == nil || len(in) == 0 {
 		return
 	}
-	setRequestVars(req, in)
+	prerequest.SetRequestVars(req, in)
 	if vv == nil {
 		return
 	}
-	maps.Copy(vv, in)
-}
-
-func setRequestVars(req *restfile.Request, vv map[string]string) {
-	if req == nil || len(vv) == 0 {
-		return
-	}
-	idxs := make(map[string]int)
-	for i, v := range req.Variables {
-		idxs[strings.ToLower(v.Name)] = i
-	}
-	for name, val := range vv {
-		key := strings.ToLower(name)
-		if idx, ok := idxs[key]; ok {
-			req.Variables[idx].Value = val
-			continue
-		}
-		req.Variables = append(req.Variables, restfile.Variable{
-			Name:  name,
-			Value: val,
-			Scope: directive.ScopeRequest,
-		})
-	}
+	vars.Merge(vv, in)
 }
 
 func applyKey(key string) string { return strings.ToLower(strings.TrimSpace(key)) }

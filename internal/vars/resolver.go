@@ -252,7 +252,7 @@ type lookupHit struct {
 }
 
 func (h lookupHit) key() variableKey {
-	return variableKey{provider: h.idx, name: strings.ToLower(h.subject)}
+	return variableKey{provider: h.idx, name: NameKey(h.subject)}
 }
 
 // lookupValue first tries direct lookup across all providers.
@@ -528,7 +528,9 @@ type MapProvider struct {
 	template bool
 }
 
-// Keys get lowercased so lookups are case-insensitive
+// Keys are normalized to their NameKey so lookups are case-insensitive. Two
+// forms of one name collapse to whichever the map iteration reaches last, so
+// callers that care about the winner deduplicate before constructing.
 func NewMapProvider(label string, values map[string]string) Provider {
 	return newMapProvider(label, values, false)
 }
@@ -544,7 +546,7 @@ func NewTemplateProvider(label string, values map[string]string) Provider {
 func newMapProvider(label string, values map[string]string, template bool) Provider {
 	normalized := make(map[string]string, len(values))
 	for k, v := range values {
-		normalized[strings.ToLower(k)] = v
+		normalized[NameKey(k)] = v
 	}
 	return &MapProvider{values: normalized, label: label, template: template}
 }
@@ -563,7 +565,7 @@ func expandableProvider(p Provider) bool {
 }
 
 func (p *MapProvider) Resolve(name string) (string, bool) {
-	value, ok := p.values[strings.ToLower(name)]
+	value, ok := p.values[NameKey(name)]
 	return value, ok
 }
 

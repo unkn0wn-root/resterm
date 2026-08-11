@@ -64,7 +64,7 @@ func Apply(req *restfile.Request, out Output) error {
 		req.Body.Text = *out.Body
 		req.Body.GraphQL = nil
 	}
-	setRequestVars(req, out.Variables)
+	SetRequestVars(req, out.Variables)
 	return nil
 }
 
@@ -107,22 +107,28 @@ func applyQuery(req *restfile.Request, q map[string]string) error {
 	return nil
 }
 
-func setRequestVars(req *restfile.Request, variables map[string]string) {
+// SetRequestVars merges script writes into request-scoped variables. Names are
+// matched case-insensitively after trimming whitespace.
+func SetRequestVars(req *restfile.Request, variables map[string]string) {
 	if req == nil || len(variables) == 0 {
 		return
 	}
-	existing := make(map[string]int)
+	idxs := make(map[string]int)
 	for i, variable := range req.Variables {
-		existing[strings.ToLower(variable.Name)] = i
+		idxs[vars.NameKey(variable.Name)] = i
 	}
 	for name, value := range variables {
-		key := strings.ToLower(name)
-		if idx, ok := existing[key]; ok {
+		key := vars.NameKey(name)
+		if key == "" {
+			continue
+		}
+		if idx, ok := idxs[key]; ok {
 			req.Variables[idx].Value = value
 			continue
 		}
+		idxs[key] = len(req.Variables)
 		req.Variables = append(req.Variables, restfile.Variable{
-			Name:  name,
+			Name:  strings.TrimSpace(name),
 			Value: value,
 			Scope: directive.ScopeRequest,
 		})

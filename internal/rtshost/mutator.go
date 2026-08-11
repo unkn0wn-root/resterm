@@ -79,13 +79,16 @@ func (m *Mutator) SetBody(value string) {
 	m.out.Body = &value
 }
 
+// Both maps are keyed by the name a script wrote, so a set has to drop any
+// other form of that name. Without it two forms survive and whichever a later
+// map walk reaches last decides the value, which is not the one set last.
 func (m *Mutator) SetVar(name, value string) {
 	if m.out.Variables == nil {
 		m.out.Variables = make(map[string]string)
 	}
-	m.out.Variables[name] = value
+	vars.Upsert(m.out.Variables, name, value)
 	if m.vars != nil {
-		m.vars[name] = value
+		vars.Upsert(m.vars, name, value)
 	}
 }
 

@@ -525,12 +525,17 @@ When expanding `{{variable}}` templates, Resterm looks in:
 
 1. *File constants* (`@const`).
 2. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
-3. *Request-scope* variables (`@var request`, `@capture request`).
-4. *Runtime globals* stored via captures or scripts (per environment).
-5. *Document globals* (`@global`, `@var global`).
-6. *File scope* declarations and `@capture file` values.
-7. Selected environment JSON.
-8. OS environment variables (case-sensitive with an uppercase fallback).
+3. Workflow step variables and the `@for-each` value bound for the current iteration.
+4. *Request-scope* variables (`@var request`, `@capture request`).
+5. *Runtime globals* stored via captures or scripts (per environment).
+6. *Document globals* (`@global`, `@var global`).
+7. *File scope* declarations and `@capture file` values.
+8. Selected environment JSON.
+9. OS environment variables (case-sensitive with an uppercase fallback).
+
+One order backs every way of reading a variable: `{{name}}`, `{{= vars.name }}`, the RTS `vars` object, and the JavaScript `vars` API all pick the same source for a name. Two entries are template-only. `@const` and OS environment variables never appear in `vars`, because `vars` names the values a run can override.
+
+Names match case-insensitively and only the winning declaration survives, so a file-scope `token` hides an environment `TOKEN` on every path, including `vars.get("TOKEN")` in a script. When one source declares both forms, the last one wins: the later `@var` line, or the later `vars.set` call when a script writes both.
 
 Dynamic helpers are also available: `{{$uuid}}` (alias `{{$guid}}`), `{{$timestamp}}` (Unix seconds), `{{$timestampMs}}` (Unix milliseconds), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
 

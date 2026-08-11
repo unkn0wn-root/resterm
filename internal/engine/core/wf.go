@@ -16,6 +16,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type WorkflowPlan struct {
@@ -322,11 +323,11 @@ func (r *wfRun) runReqStep(
 			loopVars = make(map[string]string)
 		}
 		if wfKey != "" {
-			r.vars[wfKey] = itemStr
-			loopVars[wfKey] = itemStr
+			vars.Upsert(r.vars, wfKey, itemStr)
+			vars.Upsert(loopVars, wfKey, itemStr)
 		}
 		if reqKey != "" {
-			loopVars[reqKey] = itemStr
+			vars.Upsert(loopVars, reqKey, itemStr)
 		}
 		loc := rts.Local(spec.Var, item)
 		vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, loopVars)
@@ -999,7 +1000,7 @@ func applyVars(dst map[string]string, vals map[string]string) {
 	}
 	for k, v := range vals {
 		if restfile.IsWorkflowScopedVar(k) {
-			dst[k] = v
+			vars.Upsert(dst, k, v)
 		}
 	}
 }
@@ -1013,10 +1014,12 @@ func stepExtras(
 	if n == 0 {
 		return nil
 	}
+	// Later layers win, including over another form of a name an earlier one
+	// set, so the overlay the engine receives holds one value per variable.
 	out := make(map[string]string, n)
-	maps.Copy(out, base)
-	maps.Copy(out, vals)
-	maps.Copy(out, extra)
+	vars.Merge(out, base)
+	vars.Merge(out, vals)
+	vars.Merge(out, extra)
 	return out
 }
 

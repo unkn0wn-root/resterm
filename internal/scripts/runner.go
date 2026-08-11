@@ -272,8 +272,37 @@ func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string,
 	return normalizeScript(string(data)), nil
 }
 
-func normalizeGlobalKey(name string) string {
-	return strings.ToLower(strings.TrimSpace(name))
+// jsVarsAPI builds the vars object shared by pre-request and test scripts.
+// When non-nil, record receives writes that propagate beyond the script.
+func jsVarsAPI(
+	view map[string]string,
+	record func(name, value string),
+	global map[string]any,
+) map[string]any {
+	return map[string]any{
+		"get": func(name string) string {
+			return view[vars.NameKey(name)]
+		},
+		"has": func(name string) bool {
+			_, ok := view[vars.NameKey(name)]
+			return ok
+		},
+		"set": func(name, value string) {
+			view[vars.NameKey(name)] = value
+			if record != nil {
+				record(name, value)
+			}
+		},
+		"global": global,
+	}
+}
+
+func jsVarsView(src map[string]string) map[string]string {
+	out := make(map[string]string, len(src))
+	for name, value := range src {
+		out[vars.NameKey(name)] = value
+	}
+	return out
 }
 
 type preRequestAPI struct {
@@ -284,15 +313,14 @@ type preRequestAPI struct {
 }
 
 func newPreRequestAPI(output *prerequest.Output, input prerequest.Input) *preRequestAPI {
-	variables := make(map[string]string, len(input.Variables))
-	maps.Copy(variables, input.Variables)
+	variables := jsVarsView(input.Variables)
 
 	globals := make(map[string]vars.GlobalMutation, len(input.Globals))
 	for key, value := range input.Globals {
 		if strings.TrimSpace(value.Name) == "" {
 			value.Name = key
 		}
-		globals[normalizeGlobalKey(value.Name)] = value
+		globals[vars.NameKey(value.Name)] = value
 	}
 	return &preRequestAPI{
 		request:   input.Request,
@@ -361,29 +389,20 @@ func (api *preRequestAPI) requestAPI() map[string]any {
 }
 
 func (api *preRequestAPI) varsAPI() map[string]any {
-	return map[string]any{
-		"get": func(name string) string {
-			return api.variables[name]
-		},
-		"set": func(name, value string) {
-			if api.output.Variables == nil {
-				api.output.Variables = make(map[string]string)
-			}
-			api.output.Variables[name] = value
-			api.variables[name] = value
-		},
-		"has": func(name string) bool {
-			_, ok := api.variables[name]
-			return ok
-		},
-		"global": api.globalAPI(),
+	return jsVarsAPI(api.variables, api.recordVar, api.globalAPI())
+}
+
+func (api *preRequestAPI) recordVar(name, value string) {
+	if api.output.Variables == nil {
+		api.output.Variables = make(map[string]string)
 	}
+	vars.Upsert(api.output.Variables, name, value)
 }
 
 func (api *preRequestAPI) globalAPI() map[string]any {
 	return map[string]any{
 		"get": func(name string) string {
-			entry, ok := api.globals[normalizeGlobalKey(name)]
+			entry, ok := api.globals[vars.NameKey(name)]
 			if !ok {
 				return ""
 			}
@@ -403,7 +422,7 @@ func (api *preRequestAPI) globalAPI() map[string]any {
 			return goja.Undefined()
 		},
 		"has": func(name string) bool {
-			_, ok := api.globals[normalizeGlobalKey(name)]
+			_, ok := api.globals[vars.NameKey(name)]
 			return ok
 		},
 		"delete": func(name string) {
@@ -418,7 +437,7 @@ func (api *preRequestAPI) setGlobal(name, value string, secret bool) {
 		return
 	}
 
-	key := normalizeGlobalKey(name)
+	key := vars.NameKey(name)
 	entry := vars.GlobalMutation{Name: name, Value: value, Secret: secret}
 	api.globals[key] = entry
 	if api.output.Globals == nil {
@@ -433,7 +452,7 @@ func (api *preRequestAPI) deleteGlobal(name string) {
 		return
 	}
 
-	key := normalizeGlobalKey(name)
+	key := vars.NameKey(name)
 	delete(api.globals, key)
 	if api.output.Globals == nil {
 		api.output.Globals = make(map[string]vars.GlobalMutation)
@@ -471,15 +490,14 @@ func newTestAPI(
 	stream *StreamInfo,
 	trace *TraceInput,
 ) *testAPI {
-	copyVars := make(map[string]string, len(variables))
-	maps.Copy(copyVars, variables)
+	copyVars := jsVarsView(variables)
 
 	globalCopy := make(map[string]vars.GlobalMutation, len(globals))
 	for key, value := range globals {
 		if strings.TrimSpace(value.Name) == "" {
 			value.Name = key
 		}
-		globalCopy[normalizeGlobalKey(value.Name)] = value
+		globalCopy[vars.NameKey(value.Name)] = value
 	}
 	return &testAPI{
 		response:  resp,
@@ -769,26 +787,15 @@ func (api *testAPI) responseAPI() map[string]any {
 	}
 }
 
+// Test-script variable writes are local to the script.
 func (api *testAPI) varsAPI() map[string]any {
-	return map[string]any{
-		"get": func(name string) string {
-			return api.variables[name]
-		},
-		"set": func(name, value string) {
-			api.variables[name] = value
-		},
-		"has": func(name string) bool {
-			_, ok := api.variables[name]
-			return ok
-		},
-		"global": api.globalAPI(),
-	}
+	return jsVarsAPI(api.variables, nil, api.globalAPI())
 }
 
 func (api *testAPI) globalAPI() map[string]any {
 	return map[string]any{
 		"get": func(name string) string {
-			entry, ok := api.globals[normalizeGlobalKey(name)]
+			entry, ok := api.globals[vars.NameKey(name)]
 			if !ok {
 				return ""
 			}
@@ -810,7 +817,7 @@ func (api *testAPI) globalAPI() map[string]any {
 			return goja.Undefined()
 		},
 		"has": func(name string) bool {
-			_, ok := api.globals[normalizeGlobalKey(name)]
+			_, ok := api.globals[vars.NameKey(name)]
 			return ok
 		},
 		"delete": func(name string) {
@@ -825,7 +832,7 @@ func (api *testAPI) setGlobal(name, value string, secret bool) {
 		return
 	}
 
-	key := normalizeGlobalKey(name)
+	key := vars.NameKey(name)
 	entry := vars.GlobalMutation{Name: name, Value: value, Secret: secret}
 	api.globals[key] = entry
 	if api.changes == nil {
@@ -840,7 +847,7 @@ func (api *testAPI) deleteGlobal(name string) {
 		return
 	}
 
-	key := normalizeGlobalKey(name)
+	key := vars.NameKey(name)
 	delete(api.globals, key)
 	if api.changes == nil {
 		api.changes = make(map[string]vars.GlobalMutation)

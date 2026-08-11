@@ -125,7 +125,7 @@ func (e *Engine) applyCaptures(in captureRun) error {
 
 	lc := newCaptureContext(in.resp, in.stream, capture.StrictEnabled(in.req.Settings))
 	if in.v == nil {
-		in.v = e.collectVariables(in.doc, in.req, in.env)
+		in.v = e.collectVariables(in.doc, in.req, in.env, runVars{})
 	}
 	sc := captureScope{
 		ctx:    in.ctx,

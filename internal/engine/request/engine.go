@@ -3,7 +3,6 @@ package request
 import (
 	"context"
 	"errors"
-	"maps"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -265,8 +264,7 @@ type execCtx struct {
 	storeG    map[string]vars.GlobalMutation
 	hasRTSPre bool
 	hasJSPre  bool
-	scriptV   map[string]string
-	extraV    map[string]string
+	run       runVars
 	locals    rts.Locals
 
 	res     *vars.Resolver
@@ -300,8 +298,7 @@ func newExec(
 		baseCtx = context.Background()
 	}
 	ctx, cancel := context.WithCancel(baseCtx)
-	base := e.collectVariables(doc, req, env)
-	maps.Copy(base, opt.Extra)
+	base := e.collectVariables(doc, req, env, runVars{overlay: opt.Extra})
 	hasRTS, hasJS := detectPreRequestScripts(req)
 	exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview)
 	if req != nil &&
@@ -323,7 +320,10 @@ func newExec(
 		storeG:    e.collectStoredGlobalValues(env),
 		hasRTSPre: hasRTS,
 		hasJSPre:  hasJS,
-		extraV:    cloneStringMap(opt.Extra),
+		run: runVars{
+			scripts: make(map[string]string),
+			overlay: cloneStringMap(opt.Extra),
+		},
 		locals:    opt.Locals,
 		exp:       exp,
 		onWarning: opt.OnWarning,
@@ -392,8 +392,16 @@ func (x *execCtx) canceled(err error) *xrunResult {
 
 func (x *execCtx) reqText() string { return renderRequestText(x.req) }
 
+// addScriptVars makes each pre-request script's writes available to the next
+// script at script precedence.
+func (x *execCtx) addScriptVars(set map[string]string) {
+	vars.Merge(x.run.scripts, set)
+}
+
+// currentVariables uses this run's in-memory globals so previews include
+// script changes without persisting them.
 func (x *execCtx) currentVariables() map[string]string {
-	return x.eng.collectVariablesWithGlobals(x.doc, x.req, x.env, x.storeG, false, x.extraV)
+	return x.eng.collectVariablesWithGlobals(x.doc, x.req, x.env, x.storeG, keepSecrets, x.run)
 }
 
 func (x *execCtx) currentGlobals() map[string]vars.GlobalMutation {
@@ -401,7 +409,7 @@ func (x *execCtx) currentGlobals() map[string]vars.GlobalMutation {
 }
 
 func (x *execCtx) captureVariables() map[string]string {
-	return mergeStringMaps(x.eng.collectVariables(x.doc, x.req, x.env, x.extraV), x.scriptV)
+	return x.eng.collectVariables(x.doc, x.req, x.env, x.run)
 }
 
 func (x *execCtx) applyRuntimeGlobals(ch map[string]vars.GlobalMutation) {
@@ -599,6 +607,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	}
 
 	x.applyRuntimeGlobals(rtsOut.Globals)
+	x.addScriptVars(rtsOut.Variables)
 	if len(rtsOut.Globals) > 0 || len(rtsOut.Variables) > 0 {
 		vv = x.currentVariables()
 	}
@@ -651,18 +660,11 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	}
 
 	x.applyRuntimeGlobals(jsOut.Globals)
-	x.scriptV = mergeStringMaps(rtsOut.Variables, jsOut.Variables)
+	x.addScriptVars(jsOut.Variables)
 	return nil
 }
 
 func (x *execCtx) buildResolver() {
-	extra := make([]map[string]string, 0, 2)
-	if len(x.scriptV) > 0 {
-		extra = append(extra, x.scriptV)
-	}
-	if len(x.extraV) > 0 {
-		extra = append(extra, x.extraV)
-	}
 	x.res = x.eng.buildResolver(
 		x.sendCtx,
 		x.doc,
@@ -671,7 +673,7 @@ func (x *execCtx) buildResolver() {
 		x.opts.BaseDir,
 		x.storeG,
 		x.locals,
-		extra...,
+		x.run,
 	)
 	x.trace = vars.NewTrace()
 	x.res.SetTrace(x.trace)
@@ -1074,8 +1076,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		return res
 	}
 
-	vv := x.eng.collectVariables(x.doc, x.req, x.env, x.extraV)
-	testV := mergeStringMaps(vv, x.scriptV)
+	testV := x.captureVariables()
 	testG := x.eng.collectGlobalValues(x.doc, x.env)
 	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
 	defer cancelAsserts()
@@ -1130,7 +1131,7 @@ func (f flow) ExecuteHTTP() xexec.RequestResult {
 		Resolver:         x.res,
 		Options:          x.opts,
 		EffectiveTimeout: x.timeout,
-		ScriptVars:       x.scriptV,
+		ScriptVars:       x.run.scripts,
 		Locals:           x.locals,
 	})
 	return x.finishHTTP(res)
@@ -1157,8 +1158,15 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					locals: in.Locals,
 				})
 			},
-			CollectVariables: func(doc *restfile.Document, req *restfile.Request) map[string]string {
-				return x.eng.collectVariables(doc, req, x.env, x.extraV)
+			CollectVariables: func(
+				doc *restfile.Document,
+				req *restfile.Request,
+				scriptVars map[string]string,
+			) map[string]string {
+				return x.eng.collectVariables(doc, req, x.env, runVars{
+					scripts: scriptVars,
+					overlay: x.run.overlay,
+				})
 			},
 			CollectGlobalValues: func(doc *restfile.Document) map[string]vars.GlobalMutation {
 				return x.eng.collectGlobalValues(doc, x.env)

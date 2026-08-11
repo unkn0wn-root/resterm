@@ -17,19 +17,3 @@ func cloneStringMap(src map[string]string) map[string]string {
 	maps.Copy(dst, src)
 	return dst
 }
-
-func mergeStringMaps(xs ...map[string]string) map[string]string {
-	size := 0
-	for _, x := range xs {
-		size += len(x)
-	}
-	if size == 0 {
-		return nil
-	}
-
-	out := make(map[string]string, size)
-	for _, x := range xs {
-		maps.Copy(out, x)
-	}
-	return out
-}

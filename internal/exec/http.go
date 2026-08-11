@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"maps"
 	"strings"
 	"time"
 
@@ -55,10 +54,12 @@ type HTTPHooks struct {
 	AttachSSEHandle       func(*httpx.StreamHandle, *restfile.Request)
 	AttachWebSocketHandle func(*httpx.WebSocketHandle, *restfile.Request)
 	ApplyCaptures         func(CaptureInput) error
-	CollectVariables      func(*restfile.Document, *restfile.Request) map[string]string
-	CollectGlobalValues   func(*restfile.Document) map[string]vars.GlobalMutation
-	RunAsserts            func(AssertInput) ([]scripts.TestResult, error)
-	ApplyRuntimeGlobals   func(map[string]vars.GlobalMutation)
+	// CollectVariables rebuilds variables after pre-request scripts; the third
+	// argument contains their writes at script precedence.
+	CollectVariables    func(*restfile.Document, *restfile.Request, map[string]string) map[string]string
+	CollectGlobalValues func(*restfile.Document) map[string]vars.GlobalMutation
+	RunAsserts          func(AssertInput) ([]scripts.TestResult, error)
+	ApplyRuntimeGlobals func(map[string]vars.GlobalMutation)
 }
 
 type HTTPResult struct {
@@ -178,7 +179,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			Resolver: in.Resolver,
 			Response: respForScripts,
 			Stream:   streamInfo,
-			Vars:     r.captureVars(in.Doc, in.Req, in.ScriptVars),
+			Vars:     r.collectVars(in.Doc, in.Req, in.ScriptVars),
 			Locals:   in.Locals,
 		})
 		if err != nil {
@@ -189,8 +190,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 		}
 	}
 
-	updatedVars := r.collectVars(in.Doc, in.Req)
-	testVars := mergeStringMaps(updatedVars, in.ScriptVars)
+	testVars := r.collectVars(in.Doc, in.Req, in.ScriptVars)
 	testGlobals := r.collectGlobals(in.Doc)
 
 	var assertErr error
@@ -232,19 +232,15 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	return res
 }
 
-func (r Runner) captureVars(
+func (r Runner) collectVars(
 	doc *restfile.Document,
 	req *restfile.Request,
 	scriptVars map[string]string,
 ) map[string]string {
-	return mergeStringMaps(r.collectVars(doc, req), scriptVars)
-}
-
-func (r Runner) collectVars(doc *restfile.Document, req *restfile.Request) map[string]string {
 	if r.Hooks.CollectVariables == nil {
 		return nil
 	}
-	return r.Hooks.CollectVariables(doc, req)
+	return r.Hooks.CollectVariables(doc, req, scriptVars)
 }
 
 func (r Runner) collectGlobals(doc *restfile.Document) map[string]vars.GlobalMutation {
@@ -378,16 +374,6 @@ func cloneHeader(src map[string][]string) map[string][]string {
 		dst[key] = append([]string(nil), values...)
 	}
 	return dst
-}
-
-func mergeStringMaps(base map[string]string, extra map[string]string) map[string]string {
-	if len(base) == 0 && len(extra) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(base)+len(extra))
-	maps.Copy(out, base)
-	maps.Copy(out, extra)
-	return out
 }
 
 func joinErr(a, b error) error {
