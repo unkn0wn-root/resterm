@@ -13,7 +13,7 @@ type GlobalMut interface {
 
 type varsObj struct {
 	name string
-	m    map[string]string
+	m    nameMap
 	g    *globalObj
 	mut  VarsMut
 	s    ms
@@ -21,7 +21,7 @@ type varsObj struct {
 
 type globalObj struct {
 	name string
-	m    map[string]string
+	m    nameMap
 	mut  GlobalMut
 	s    ms
 }
@@ -32,25 +32,31 @@ func newVarsObj(
 	globals map[string]string,
 	mut VarsMut,
 	gmut GlobalMut,
+	norm func(string) string,
 ) *varsObj {
 	if strings.TrimSpace(name) == "" {
 		name = "vars"
 	}
 	v := &varsObj{
 		name: name,
-		m:    lowerMap(vars),
+		m:    newNameMap(vars, norm),
 		mut:  mut,
 		s:    newMS(name),
 	}
-	v.g = newGlobalObj(name+".global", globals, gmut)
+	v.g = newGlobalObj(name+".global", globals, gmut, norm)
 	return v
 }
 
-func newGlobalObj(name string, globals map[string]string, mut GlobalMut) *globalObj {
+func newGlobalObj(
+	name string,
+	globals map[string]string,
+	mut GlobalMut,
+	norm func(string) string,
+) *globalObj {
 	if strings.TrimSpace(name) == "" {
 		name = "vars.global"
 	}
-	return &globalObj{name: name, m: lowerMap(globals), mut: mut, s: newMS(name)}
+	return &globalObj{name: name, m: newNameMap(globals, norm), mut: mut, s: newMS(name)}
 }
 
 func (o *varsObj) TypeName() string { return o.name }
@@ -106,8 +112,7 @@ func (o *varsObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 	o.mut.SetVar(name, val)
-	key := lookupKey(name)
-	o.m[key] = val
+	o.m.set(name, val)
 	return Null(), nil
 }
 
@@ -171,8 +176,7 @@ func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		}
 	}
 	o.mut.SetGlobal(name, val, secret)
-	key := lookupKey(name)
-	o.m[key] = val
+	o.m.set(name, val)
 	return Null(), nil
 }
 
@@ -190,7 +194,6 @@ func (o *globalObj) delFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 	o.mut.DelGlobal(name)
-	key := lookupKey(name)
-	delete(o.m, key)
+	o.m.del(name)
 	return Null(), nil
 }

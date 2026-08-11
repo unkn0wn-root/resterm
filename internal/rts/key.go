@@ -33,6 +33,12 @@ func MapKey(ctx *Ctx, pos Pos, key, sig string) (string, error) {
 	return k, nil
 }
 
-func lookupKey(key string) string {
+// default when callers don't provide anything.
+func defaultNameKey(key string) string {
 	return strings.ToLower(strings.TrimSpace(key))
+}
+
+// HTTP rule.
+func headerKey(name string) string {
+	return strings.ToLower(name)
 }

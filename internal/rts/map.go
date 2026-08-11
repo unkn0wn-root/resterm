@@ -29,43 +29,57 @@ func newMS(n string) ms {
 	}
 }
 
-func lowerMap(src map[string]string) map[string]string {
-	if len(src) == 0 {
-		return map[string]string{}
+// nameMap normalizes host names. Dictionaries a script builds keep exact keys.
+type nameMap struct {
+	m    map[string]string
+	norm func(string) string
+}
+
+func newNameMap(src map[string]string, norm func(string) string) nameMap {
+	if norm == nil {
+		norm = defaultNameKey
 	}
-	out := make(map[string]string, len(src))
+	out := nameMap{m: make(map[string]string, len(src)), norm: norm}
 	for k, v := range src {
-		out[lookupKey(k)] = v
+		out.m[norm(k)] = v
 	}
 	return out
 }
 
-func mapLookup(m map[string]string, name string) (string, bool) {
-	v, ok := m[lookupKey(name)]
+func (n nameMap) lookup(name string) (string, bool) {
+	v, ok := n.m[n.norm(name)]
 	return v, ok
 }
 
-func mapMember(m map[string]string, name string) (Value, bool) {
-	v, ok := mapLookup(m, name)
+func (n nameMap) set(name, value string) {
+	n.m[n.norm(name)] = value
+}
+
+func (n nameMap) del(name string) {
+	delete(n.m, n.norm(name))
+}
+
+func mapMember(m nameMap, name string) (Value, bool) {
+	v, ok := m.lookup(name)
 	if !ok {
 		return Null(), false
 	}
 	return Str(v), true
 }
 
-func mapIndex(m map[string]string, key Value) (Value, error) {
+func mapIndex(m nameMap, key Value) (Value, error) {
 	k, err := Key(Pos{}, key)
 	if err != nil {
 		return Null(), err
 	}
-	v, ok := mapLookup(m, k)
+	v, ok := m.lookup(k)
 	if !ok {
 		return Null(), nil
 	}
 	return Str(v), nil
 }
 
-func mapGet(ctx *Ctx, pos Pos, args []Value, sig string, m map[string]string) (Value, error) {
+func mapGet(ctx *Ctx, pos Pos, args []Value, sig string, m nameMap) (Value, error) {
 	na := NewArgs(ctx, pos, args, sig)
 	if err := na.Count(1); err != nil {
 		return Null(), err
@@ -74,14 +88,14 @@ func mapGet(ctx *Ctx, pos Pos, args []Value, sig string, m map[string]string) (V
 	if err != nil {
 		return Null(), WrapErr(ctx, err)
 	}
-	v, ok := mapLookup(m, k)
+	v, ok := m.lookup(k)
 	if !ok {
 		return Null(), nil
 	}
 	return Str(v), nil
 }
 
-func mapHas(ctx *Ctx, pos Pos, args []Value, sig string, m map[string]string) (Value, error) {
+func mapHas(ctx *Ctx, pos Pos, args []Value, sig string, m nameMap) (Value, error) {
 	na := NewArgs(ctx, pos, args, sig)
 	if err := na.Count(1); err != nil {
 		return Null(), err
@@ -90,7 +104,7 @@ func mapHas(ctx *Ctx, pos Pos, args []Value, sig string, m map[string]string) (V
 	if err != nil {
 		return Null(), WrapErr(ctx, err)
 	}
-	_, ok := mapLookup(m, k)
+	_, ok := m.lookup(k)
 	return Bool(ok), nil
 }
 
@@ -99,7 +113,7 @@ func mapRequire(
 	pos Pos,
 	args []Value,
 	sig, obj string,
-	m map[string]string,
+	m nameMap,
 ) (Value, error) {
 	na := NewArgs(ctx, pos, args, sig)
 	if err := na.CountRange(1, 2); err != nil {
@@ -109,7 +123,7 @@ func mapRequire(
 	if err != nil {
 		return Null(), err
 	}
-	v, ok := mapLookup(m, k)
+	v, ok := m.lookup(k)
 	if ok && strings.TrimSpace(v) != "" {
 		return Str(v), nil
 	}

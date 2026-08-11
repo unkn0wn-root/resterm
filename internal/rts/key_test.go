@@ -5,6 +5,32 @@ import (
 	"testing"
 )
 
+// The supplied rule has to reach the handed-over map and the script's argument.
+func TestRuntimeNameKeyReplacesTheDefault(t *testing.T) {
+	e := NewEng(testStdlib)
+	rt := RT{
+		Vars:    map[string]string{"Token": "abc"},
+		NameKey: func(name string) string { return name },
+	}
+	pos := Pos{Path: "test", Line: 1, Col: 1}
+
+	v, err := e.Eval(context.Background(), rt, `vars.get("Token")`, pos)
+	if err != nil {
+		t.Fatalf(`vars.get("Token"): %v`, err)
+	}
+	if v.K != VStr || v.S != "abc" {
+		t.Fatalf(`vars.get("Token") = %+v, want abc`, v)
+	}
+
+	v, err = e.Eval(context.Background(), rt, `vars.get("token")`, pos)
+	if err != nil {
+		t.Fatalf(`vars.get("token"): %v`, err)
+	}
+	if v.K != VNull {
+		t.Fatalf(`vars.get("token") = %+v, want null under an exact-match rule`, v)
+	}
+}
+
 func TestLookupIgnoresSurroundingWhitespace(t *testing.T) {
 	e := NewEng(testStdlib)
 	rt := RT{

@@ -965,7 +965,7 @@ let env = 1
 	}
 	ctx := NewCtx(context.Background(), Limits{})
 	pre := testStdlib()
-	pre["env"] = Obj(newMapObj("env", map[string]string{}))
+	pre["env"] = Obj(newMapObj("env", map[string]string{}, nil))
 	_, err = Exec(ctx, m, pre)
 	if err == nil || !strings.Contains(err.Error(), "name already defined") {
 		t.Fatalf("expected name already defined error, got %v", err)

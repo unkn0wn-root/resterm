@@ -35,6 +35,7 @@ type RT struct {
 	EnvGroups   map[string]string
 	Vars        map[string]string
 	Globals     map[string]string
+	NameKey     func(string) string
 	Resp        *Resp
 	Res         *Resp
 	Trace       *Trace
@@ -223,8 +224,8 @@ func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos, kind evalKind) (map[string]Value
 
 func (e *Eng) basePre(rt RT) pre {
 	p := pre{values: e.modulePre()}
-	p.bind(newEnvObj(rt.Env, rt.EnvGroups))
-	p.bind(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
+	p.bind(newEnvObj(rt.Env, rt.EnvGroups, rt.NameKey))
+	p.bind(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut, rt.NameKey))
 	p.bind(newRespObj("last", rt.Resp))
 	p.bind(responseObj(rt.Res))
 	p.bind(newTraceObj(rt.Trace))

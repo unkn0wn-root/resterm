@@ -7,12 +7,12 @@ import (
 
 type mapObj struct {
 	name string
-	m    map[string]string
+	m    nameMap
 	s    ms
 }
 
-func newMapObj(name string, src map[string]string) *mapObj {
-	return &mapObj{name: name, m: lowerMap(src), s: newMS(name)}
+func newMapObj(name string, src map[string]string, norm func(string) string) *mapObj {
+	return &mapObj{name: name, m: newNameMap(src, norm), s: newMS(name)}
 }
 
 func (o *mapObj) TypeName() string { return o.name }
@@ -59,10 +59,10 @@ type envObj struct {
 	groups *mapObj
 }
 
-func newEnvObj(values, groups map[string]string) *envObj {
+func newEnvObj(values, groups map[string]string, norm func(string) string) *envObj {
 	return &envObj{
-		mapObj: newMapObj(envName, values),
-		groups: newMapObj(envGroupsObj, groups),
+		mapObj: newMapObj(envName, values, norm),
+		groups: newMapObj(envGroupsObj, groups, norm),
 	}
 }
 
@@ -106,7 +106,7 @@ func newRespObj(name string, r *Resp) *respObj {
 		if len(v) == 0 {
 			continue
 		}
-		o.h[strings.ToLower(k)] = v[0]
+		o.h[headerKey(k)] = v[0]
 	}
 	return o
 }
@@ -176,7 +176,7 @@ func (o *respObj) headerFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), WrapErr(ctx, err)
 	}
 
-	v, ok := o.h[strings.ToLower(k)]
+	v, ok := o.h[headerKey(k)]
 	if !ok {
 		return Str(""), nil
 	}
