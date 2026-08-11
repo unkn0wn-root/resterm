@@ -537,6 +537,8 @@ One order backs every way of reading a variable: `{{name}}`, `{{= vars.name }}`,
 
 Names match case-insensitively and only the winning declaration survives, so a file-scope `token` hides an environment `TOKEN` on every path, including `vars.get("TOKEN")` in a script. When one source declares both forms, the last one wins: the later `@var` line, or the later `vars.set` call when a script writes both.
 
+Surrounding whitespace is not part of a name either, so `vars.set(" token ")` updates `token` rather than declaring a second variable. A name that is blank once trimmed identifies nothing, so a write under one is ignored and reads back as unset.
+
 Dynamic helpers are also available: `{{$uuid}}` (alias `{{$guid}}`), `{{$timestamp}}` (Unix seconds), `{{$timestampMs}}` (Unix milliseconds), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
 
 Timestamp helpers accept optional offsets: `{{$timestamp + 6d}}`, `{{$timestampISO8601 - 90m}}`, `{{$timestampMs + 2h}}`. Supported units are the standard Go duration units plus `d` (days) and `w` (weeks).
