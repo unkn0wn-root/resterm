@@ -38,6 +38,41 @@ func TestEvaluateStepStatusCode(t *testing.T) {
 	}
 }
 
+func TestWorkflowSummaryNamesOnlyATrailingFailure(t *testing.T) {
+	tests := []struct {
+		name string
+		res  []wfStepRes
+		want string
+	}{
+		{
+			name: "continued past the failure",
+			res: []wfStepRes{
+				{name: "Seed", ok: true},
+				{name: "Failure", msg: "unexpected status code 500"},
+				{name: "Check", ok: true},
+			},
+			want: "Workflow Atomic finished with 1 failure(s)",
+		},
+		{
+			name: "stopped at the failure",
+			res: []wfStepRes{
+				{name: "Seed", ok: true},
+				{name: "Failure", msg: "unexpected status code 500"},
+			},
+			want: "Workflow Atomic failed at step Failure: unexpected status code 500",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := &wfState{wf: restfile.Workflow{Name: "Atomic"}, res: tt.res}
+			if got := workflowSummary(st); got != tt.want {
+				t.Fatalf("workflowSummary() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestEvaluateStepScriptErr(t *testing.T) {
 	res := wfStepRes{
 		http: &httpx.Response{

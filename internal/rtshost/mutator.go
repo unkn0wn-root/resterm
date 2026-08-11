@@ -1,7 +1,6 @@
 package rtshost
 
 import (
-	"net/http"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
@@ -56,28 +55,23 @@ func (m *Mutator) SetURL(value string) {
 }
 
 func (m *Mutator) SetHeader(name, value string) {
-	m.outHeaders().Set(name, value)
+	m.out.SetHeader(name, value)
 	m.reqHeaders()[util.Lower(name)] = []string{value}
 }
 
 func (m *Mutator) AddHeader(name, value string) {
-	m.outHeaders().Add(name, value)
+	m.out.AddHeader(name, value)
 	h, key := m.reqHeaders(), util.Lower(name)
 	h[key] = append(h[key], value)
 }
 
 func (m *Mutator) DelHeader(name string) {
-	if m.out.Headers != nil {
-		m.out.Headers.Del(name)
-	}
+	m.out.DelHeader(name)
 	delete(m.req.H, util.Lower(name))
 }
 
 func (m *Mutator) SetQuery(name, value string) {
-	if m.out.Query == nil {
-		m.out.Query = make(map[string]string)
-	}
-	m.out.Query[name] = value
+	m.out.SetQuery(name, value)
 	m.setReqQuery(name, value)
 }
 
@@ -130,13 +124,6 @@ func (m *Mutator) setReqQuery(name, value string) {
 		return
 	}
 	m.req.URL = url
-}
-
-func (m *Mutator) outHeaders() http.Header {
-	if m.out.Headers == nil {
-		m.out.Headers = make(http.Header)
-	}
-	return m.out.Headers
 }
 
 func (m *Mutator) reqHeaders() map[string][]string {

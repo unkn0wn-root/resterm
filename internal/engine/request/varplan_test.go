@@ -200,6 +200,42 @@ func TestVariablePlanPrecedenceMatrix(t *testing.T) {
 	}
 }
 
+func TestVariablePlanExpandsNestedAuthoredValues(t *testing.T) {
+	f := newPlanFixture(t,
+		varDecl{src: srcFileVar, name: "nested.base", value: "inner"},
+		varDecl{src: srcFileVar, name: "nested.derived", value: "{{nested.base}}"},
+	)
+
+	if got := f.expand(t, "{{nested.derived}}"); got != "inner" {
+		t.Fatalf("{{nested.derived}} = %q, want %q", got, "inner")
+	}
+	if got := f.values()["nested.derived"]; got != "inner" {
+		t.Fatalf("values()[nested.derived] = %q, want %q", got, "inner")
+	}
+	if got := f.expand(t, `{{= vars.get("nested.derived") }}`); got != "inner" {
+		t.Fatalf(`{{= vars.get("nested.derived") }} = %q, want %q`, got, "inner")
+	}
+}
+
+func TestVariablePlanKeepsRuntimeValuesLiteral(t *testing.T) {
+	f := newPlanFixture(t,
+		varDecl{src: srcFileVar, name: "nested.base", value: "inner"},
+		varDecl{src: srcScript, name: "captured", value: "{{nested.base}}"},
+	)
+
+	if got := f.values()["captured"]; got != "{{nested.base}}" {
+		t.Fatalf("values()[captured] = %q, want %q", got, "{{nested.base}}")
+	}
+}
+
+func TestVariablePlanKeepsDynamicAuthoredValuesLiteral(t *testing.T) {
+	f := newPlanFixture(t, varDecl{src: srcRequest, name: "trace.id", value: "{{$uuid}}"})
+
+	if got := f.values()["trace.id"]; got != "{{$uuid}}" {
+		t.Fatalf("values()[trace.id] = %q, want %q", got, "{{$uuid}}")
+	}
+}
+
 func TestVariablePlanCollapsesCaseVariantsAcrossLayers(t *testing.T) {
 	f := newPlanFixture(t,
 		varDecl{src: srcFileVar, name: "token", value: "file"},

@@ -242,7 +242,8 @@ func workflowSummary(st *wfState) string {
 	ok := 0
 	skip := 0
 	fail := 0
-	for _, res := range st.res {
+	lastFail := -1
+	for i, res := range st.res {
 		switch {
 		case res.skip:
 			skip++
@@ -250,6 +251,7 @@ func workflowSummary(st *wfState) string {
 			ok++
 		default:
 			fail++
+			lastFail = i
 		}
 	}
 	if fail == 0 {
@@ -258,7 +260,12 @@ func workflowSummary(st *wfState) string {
 		}
 		return fmt.Sprintf("%s completed: %d/%d steps passed", title, ok, len(st.res))
 	}
-	last := st.res[len(st.res)-1]
+	// A workflow may continue after a failure and end on a successful step. In
+	// that case there is no failed step where it stopped, so use a general summary.
+	if lastFail != len(st.res)-1 {
+		return fmt.Sprintf("%s finished with %d failure(s)", title, fail)
+	}
+	last := st.res[lastFail]
 	reason := strings.TrimSpace(last.msg)
 	if reason == "" {
 		reason = "step failed"

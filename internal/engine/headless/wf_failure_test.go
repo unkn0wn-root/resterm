@@ -58,4 +58,7 @@ GET %s/cleanup
 	if out.Success {
 		t.Fatal("a continued failure still has to mark the run unsuccessful")
 	}
+	if want := "Workflow demo finished with 1 failure(s)"; out.Summary != want {
+		t.Fatalf("summary = %q, want %q", out.Summary, want)
+	}
 }

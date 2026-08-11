@@ -22,6 +22,10 @@ type tplSeg struct {
 	ph   bool
 }
 
+func HasPlaceholder(input string) bool {
+	return strings.Contains(input, "{{")
+}
+
 func CompileTemplate(input string) Template {
 	ms := templateVarPattern.FindAllStringSubmatchIndex(input, -1)
 	if len(ms) == 0 {

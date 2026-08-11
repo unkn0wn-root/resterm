@@ -24,13 +24,46 @@ type Input struct {
 // Output is the request mutation set produced by pre-request scripts.
 type Output struct {
 	Headers http.Header
-	Query   map[string]string
-	Body    *string
-	URL     *string
-	Method  *string
+	// Removals are tracked separately because headers declared in the file are
+	// not part of Headers and would otherwise survive the script.
+	HeaderDels map[string]struct{}
+	Query      map[string]string
+	Body       *string
+	URL        *string
+	Method     *string
 	// Variables contains script writes, normalized to one entry per name.
 	Variables vars.NameMap[string]
 	Globals   vars.Globals
+}
+
+func (o *Output) SetHeader(name, value string) {
+	o.headers().Set(name, value)
+}
+
+func (o *Output) AddHeader(name, value string) {
+	o.headers().Add(name, value)
+}
+
+func (o *Output) DelHeader(name string) {
+	o.Headers.Del(name)
+	if o.HeaderDels == nil {
+		o.HeaderDels = make(map[string]struct{})
+	}
+	o.HeaderDels[http.CanonicalHeaderKey(name)] = struct{}{}
+}
+
+func (o *Output) SetQuery(name, value string) {
+	if o.Query == nil {
+		o.Query = make(map[string]string)
+	}
+	o.Query[name] = value
+}
+
+func (o *Output) headers() http.Header {
+	if o.Headers == nil {
+		o.Headers = make(http.Header)
+	}
+	return o.Headers
 }
 
 // Apply mutates req with pre-request script output.
@@ -49,17 +82,7 @@ func Apply(req *restfile.Request, out Output) error {
 			return diag.WrapAs(diag.ClassScript, err, "invalid url after script")
 		}
 	}
-	if out.Headers != nil {
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
-		}
-		for name, values := range out.Headers {
-			req.Headers.Del(name)
-			for _, value := range values {
-				req.Headers.Add(name, value)
-			}
-		}
-	}
+	applyHeaders(req, out.Headers, out.HeaderDels)
 	if out.Body != nil {
 		req.Body.FilePath = ""
 		req.Body.Text = *out.Body
@@ -74,6 +97,7 @@ func Normalize(out *Output) {
 		return
 	}
 	out.Headers = nilIfEmpty(out.Headers)
+	out.HeaderDels = nilIfEmpty(out.HeaderDels)
 	out.Query = nilIfEmpty(out.Query)
 }
 
@@ -83,6 +107,25 @@ func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {
 	}
 	var zero M
 	return zero
+}
+
+// Apply removals first so a value set later in the same script batch is kept.
+func applyHeaders(req *restfile.Request, set http.Header, del map[string]struct{}) {
+	for name := range del {
+		req.Headers.Del(name)
+	}
+	if len(set) == 0 {
+		return
+	}
+	if req.Headers == nil {
+		req.Headers = make(http.Header)
+	}
+	for name, values := range set {
+		req.Headers.Del(name)
+		for _, value := range values {
+			req.Headers.Add(name, value)
+		}
+	}
 }
 
 func applyQuery(req *restfile.Request, q map[string]string) error {

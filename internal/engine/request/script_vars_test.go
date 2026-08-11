@@ -158,6 +158,80 @@ func TestJSPreRequestSeesRTSValueOverWorkflowValue(t *testing.T) {
 	}
 }
 
+func TestJSPreRequestBlocksShareWrites(t *testing.T) {
+	req := &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     "http://example.test",
+		Headers: http.Header{"X-Template": []string{"{{block.chain}}"}},
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{
+				jsPre(`vars.set("block.chain", "first");`),
+				jsPre(`request.setHeader("X-Read", vars.get("block.chain"));`),
+			},
+		},
+	}
+
+	sent := sendRequest(t, nil, req, testEnv(""), ExecOptions{})
+	for _, name := range []string{"X-Read", "X-Template"} {
+		if got := sent.wire.Header.Get(name); got != "first" {
+			t.Fatalf("%s = %q, want %q", name, got, "first")
+		}
+	}
+}
+
+// Checking the value directly would expand it again when the header is built.
+// The length shows what the scripts saw without triggering another expansion.
+func TestScriptsReadNestedAuthoredValuesExpanded(t *testing.T) {
+	doc := &restfile.Document{
+		Path: "nested.http",
+		Variables: []restfile.Variable{
+			{Name: "nested.base", Value: "inner"},
+			{Name: "nested.derived", Value: "{{nested.base}}"},
+		},
+	}
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{
+				rtsPre(`request.setHeader("X-RTS", str(len(vars.get("nested.derived"))))`),
+				jsPre(`request.setHeader("X-JS", String(vars.get("nested.derived").length));`),
+			},
+		},
+	}
+
+	sent := sendRequest(t, doc, req, testEnv(""), ExecOptions{})
+	for _, name := range []string{"X-RTS", "X-JS"} {
+		if got := sent.wire.Header.Get(name); got != "5" {
+			t.Fatalf("%s = %q, want the length of the expanded value", name, got)
+		}
+	}
+}
+
+func TestPreRequestScriptsRemoveDeclaredHeaders(t *testing.T) {
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Headers: http.Header{
+			"X-Rts": []string{"declared"},
+			"X-Js":  []string{"declared"},
+		},
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{
+				rtsPre(`request.removeHeader("X-Rts")`),
+				jsPre(`request.removeHeader("X-Js");`),
+			},
+		},
+	}
+
+	sent := sendRequest(t, nil, req, testEnv(""), ExecOptions{})
+	for _, name := range []string{"X-Rts", "X-Js"} {
+		if got := sent.wire.Header.Get(name); got != "" {
+			t.Fatalf("%s = %q, want it removed", name, got)
+		}
+	}
+}
+
 func TestScriptCaseVariantsResolveToTheLastWrite(t *testing.T) {
 	tests := []struct {
 		name string
@@ -245,6 +319,26 @@ vars.set("TOKEN", "second")`)},
 	sent := sendRequest(t, nil, req, testEnv(""), ExecOptions{})
 	if got := sent.wire.Header.Get("X-Template"); got != "second" {
 		t.Fatalf("X-Template = %q, want %q", got, "second")
+	}
+}
+
+func TestDisplayResolverKeepsNestedSecretsUnexpanded(t *testing.T) {
+	doc := &restfile.Document{
+		Path: "secrets.http",
+		Variables: []restfile.Variable{
+			{Name: "token", Value: "file-secret", Secret: true},
+			{Name: "auth.header", Value: "Bearer {{token}}"},
+		},
+	}
+
+	eng := New(engcfg.Config{}, nil)
+	res := eng.DisplayResolver(context.Background(), doc, nil, envWith(t, "dev", nil), "", rts.Locals{})
+	got, err := res.ExpandTemplates(`{{= vars.get("auth.header") }}`)
+	if err != nil {
+		t.Fatalf(`vars.get("auth.header") error = %v`, err)
+	}
+	if got != "Bearer {{token}}" {
+		t.Fatalf(`vars.get("auth.header") = %q, want the secret left unexpanded`, got)
 	}
 }
 

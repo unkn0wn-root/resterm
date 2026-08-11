@@ -34,5 +34,5 @@ func MapKey(ctx *Ctx, pos Pos, key, sig string) (string, error) {
 }
 
 func lookupKey(key string) string {
-	return strings.ToLower(key)
+	return strings.ToLower(strings.TrimSpace(key))
 }

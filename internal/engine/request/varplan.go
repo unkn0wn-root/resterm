@@ -144,21 +144,40 @@ func (p variablePlan) providers() []vars.Provider {
 	return append(out, vars.EnvProvider{})
 }
 
-// values flattens the plan for RTS and JavaScript while preserving provider precedence.
+// Scripts should see ordinary nested references resolved just as templates do.
+// Dynamic helpers and expressions are left alone because they are evaluated
+// later, after pre-request scripts have run.
 func (p variablePlan) values() map[string]string {
 	var out vars.NameMap[string]
+	var res *vars.Resolver
 	for _, l := range p.layers {
-		if l.source.traits().hidden {
+		t := l.source.traits()
+		if t.hidden {
 			continue
 		}
 		for name, value := range l.vals.All() {
 			if out.Has(name) {
 				continue
 			}
+			if t.template && vars.HasPlaceholder(value) {
+				if res == nil {
+					res = p.staticResolver()
+				}
+				// Leave values that need runtime data or the expression evaluator unchanged.
+				if expanded, err := res.ExpandTemplatesStatic(value); err == nil {
+					value = expanded
+				}
+			}
 			out.Set(name, value)
 		}
 	}
 	return out.Map()
+}
+
+func (p variablePlan) staticResolver() *vars.Resolver {
+	res := vars.NewResolver(p.providers()...)
+	res.AddRefResolver(vars.EnvRefResolver)
+	return res
 }
 
 func constEntries(doc *restfile.Document) []variableEntry {

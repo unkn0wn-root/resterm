@@ -393,8 +393,6 @@ func (x *execCtx) canceled(err error) *xrunResult {
 
 func (x *execCtx) reqText() string { return renderRequestText(x.req) }
 
-// addScriptVars makes each pre-request script's writes available to the next
-// script at script precedence.
 func (x *execCtx) addScriptVars(set vars.NameMap[string]) {
 	x.run.scripts.Merge(set)
 }

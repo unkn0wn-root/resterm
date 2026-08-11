@@ -25,6 +25,33 @@ func TestNormalize(t *testing.T) {
 	}
 }
 
+func TestApplyRemovesDeclaredHeaders(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+		Headers: http.Header{
+			"X-Declared": {"declared"},
+			"X-Replaced": {"declared"},
+		},
+	}
+
+	var out Output
+	out.DelHeader("X-Declared")
+	out.SetHeader("X-Replaced", "script")
+	out.DelHeader("X-Replaced")
+	out.SetHeader("X-Replaced", "final")
+
+	if err := Apply(req, out); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if got, ok := req.Headers["X-Declared"]; ok {
+		t.Fatalf("expected the removed header to be gone, got %#v", got)
+	}
+	if got := req.Headers.Get("X-Replaced"); got != "final" {
+		t.Fatalf("X-Replaced = %q, want %q", got, "final")
+	}
+}
+
 func TestApplyPreservesTemplatedURL(t *testing.T) {
 	req := &restfile.Request{
 		Method: "GET",

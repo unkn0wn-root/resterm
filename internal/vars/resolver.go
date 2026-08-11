@@ -152,7 +152,7 @@ func (r *Resolver) resolve(
 
 	var resolved string
 	var found bool
-	if expandableProvider(hit.prov) && strings.Contains(hit.raw, "{{") {
+	if expandableProvider(hit.prov) && HasPlaceholder(hit.raw) {
 		variable := hit.key()
 		if err := checkExpandState(name, variable, st); err != nil {
 			return "", false, err

@@ -99,6 +99,79 @@ func TestRunPreRequestDropsBlankVariableNames(t *testing.T) {
 	}
 }
 
+func TestRunPreRequestBlocksShareWrites(t *testing.T) {
+	runner := NewRunner(nil)
+	req := &restfile.Request{
+		Method:  "GET",
+		URL:     "https://example.com/api",
+		Headers: http.Header{"X-Seed": {"seed"}},
+	}
+	blocks := []restfile.ScriptBlock{
+		{Kind: "pre-request", Body: `
+			vars.set("block.chain", "first");
+			vars.global.set("global.chain", "first");
+			request.setHeader("X-Chain", "first");
+			request.setURL("https://example.com/second");
+			request.setMethod("post");
+		`},
+		{Kind: "pre-request", Body: `
+			request.setHeader("X-Var", vars.get("block.chain"));
+			request.setHeader("X-Global", vars.global.get("global.chain"));
+			request.setHeader("X-Header", request.getHeader("X-Chain"));
+			request.setHeader("X-URL", request.getURL());
+			request.setHeader("X-Method", request.getMethod());
+			request.setHeader("X-Seen", String(vars.has("block.chain")));
+		`},
+	}
+
+	out, err := runner.RunPreRequest(blocks, prerequest.Input{
+		Request:   req,
+		Variables: map[string]string{},
+		Secrets:   &vars.Secrets{},
+	})
+	if err != nil {
+		t.Fatalf("pre-request runner: %v", err)
+	}
+	want := map[string]string{
+		"X-Var":    "first",
+		"X-Global": "first",
+		"X-Header": "first",
+		"X-URL":    "https://example.com/second",
+		"X-Method": "POST",
+		"X-Seen":   "true",
+	}
+	for name, value := range want {
+		if got := out.Headers.Get(name); got != value {
+			t.Errorf("%s = %q, want %q", name, got, value)
+		}
+	}
+}
+
+func TestRunPreRequestRecordsHeaderRemoval(t *testing.T) {
+	runner := NewRunner(nil)
+	req := &restfile.Request{
+		Method:  "GET",
+		URL:     "https://example.com/api",
+		Headers: http.Header{"X-Declared": {"declared"}},
+	}
+	blocks := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Body: `request.removeHeader("X-Declared");
+			request.setHeader("X-Seen", request.getHeader("X-Declared") || "gone");`,
+	}}
+
+	out, err := runner.RunPreRequest(blocks, prerequest.Input{Request: req})
+	if err != nil {
+		t.Fatalf("pre-request runner: %v", err)
+	}
+	if _, ok := out.HeaderDels["X-Declared"]; !ok {
+		t.Fatalf("expected a recorded removal, got %#v", out.HeaderDels)
+	}
+	if got := out.Headers.Get("X-Seen"); got != "gone" {
+		t.Fatalf("X-Seen = %q, want %q", got, "gone")
+	}
+}
+
 func TestRunPreRequestSkipsRTS(t *testing.T) {
 	runner := NewRunner(nil)
 	req := &restfile.Request{}
