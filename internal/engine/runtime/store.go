@@ -30,7 +30,12 @@ func (s *scopedValueStore) snapshot(scope string) map[string]storedValue {
 	return cloneStoredValues(s.values[scope])
 }
 
+// Keep live state consistent with restore, which also drops blank names.
 func (s *scopedValueStore) set(scope, name, value string, secret bool) {
+	if nameKey(name) == "" {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

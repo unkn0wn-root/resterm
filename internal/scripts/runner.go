@@ -286,8 +286,13 @@ func jsVarsAPI(
 			_, ok := view[vars.NameKey(name)]
 			return ok
 		},
+		// Blank writes must not appear in the script view when recorded output drops them.
 		"set": func(name, value string) {
-			view[vars.NameKey(name)] = value
+			key := vars.NameKey(name)
+			if key == "" {
+				return
+			}
+			view[key] = value
 			if record != nil {
 				record(name, value)
 			}

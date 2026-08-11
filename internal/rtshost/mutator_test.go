@@ -91,6 +91,21 @@ func TestMutatorKeepsRuntimeVarsAndGlobalsInSync(t *testing.T) {
 	}
 }
 
+func TestMutatorDropsBlankVariableNames(t *testing.T) {
+	var out prerequest.Output
+	vv := map[string]string{}
+	mut := NewMutator(&out, nil, vv, nil)
+
+	mut.SetVar("  ", "ghost")
+
+	if out.Variables.Len() != 0 {
+		t.Fatalf("expected no recorded variables, got %#v", out.Variables.Map())
+	}
+	if len(vv) != 0 {
+		t.Fatalf("expected the runtime view to stay empty, got %#v", vv)
+	}
+}
+
 func TestMutatorWithoutRuntimeViewsOnlyRecords(t *testing.T) {
 	var out prerequest.Output
 	mut := NewMutator(&out, nil, nil, nil)

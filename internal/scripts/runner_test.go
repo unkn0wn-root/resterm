@@ -76,6 +76,29 @@ func TestRunPreRequestNormalizesTokenMutations(t *testing.T) {
 	}
 }
 
+func TestRunPreRequestDropsBlankVariableNames(t *testing.T) {
+	runner := NewRunner(nil)
+	req := &restfile.Request{Method: "GET", URL: "https://example.com/api"}
+	scripts := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Body: `vars.set("  ", "ghost"); request.setHeader("X-Seen", String(vars.has("")));`,
+	}}
+
+	out, err := runner.RunPreRequest(
+		scripts,
+		prerequest.Input{Request: req, Variables: map[string]string{}},
+	)
+	if err != nil {
+		t.Fatalf("pre-request runner: %v", err)
+	}
+	if out.Variables.Len() != 0 {
+		t.Fatalf("expected no recorded variables, got %#v", out.Variables.Map())
+	}
+	if got := out.Headers.Get("X-Seen"); got != "false" {
+		t.Fatalf("vars.has(\"\") = %s, want false inside the script too", got)
+	}
+}
+
 func TestRunPreRequestSkipsRTS(t *testing.T) {
 	runner := NewRunner(nil)
 	req := &restfile.Request{}
