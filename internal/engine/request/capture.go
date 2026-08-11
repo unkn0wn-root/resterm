@@ -31,22 +31,25 @@ const (
 )
 
 type captureResult struct {
-	requestVars map[string]restfile.Variable
-	fileVars    map[string]restfile.Variable
+	requestVars vars.NameMap[restfile.Variable]
+	fileVars    vars.NameMap[restfile.Variable]
+	globals     vars.Globals
 }
 
 type captureRun struct {
-	ctx    context.Context
-	base   string
-	doc    *restfile.Document
-	req    *restfile.Request
-	res    *vars.Resolver
-	resp   *scripts.Response
-	stream *scripts.StreamInfo
-	out    *captureResult
-	env    vars.Environment
-	v      map[string]string
-	locals rts.Locals
+	ctx     context.Context
+	base    string
+	doc     *restfile.Document
+	req     *restfile.Request
+	res     *vars.Resolver
+	resp    *scripts.Response
+	stream  *scripts.StreamInfo
+	out     *captureResult
+	env     vars.Environment
+	store   vars.Globals
+	secrets *vars.Secrets
+	locals  rts.Locals
+	run     runVars
 }
 
 type captureExpr struct {
@@ -56,12 +59,12 @@ type captureExpr struct {
 }
 
 type captureScope struct {
-	ctx    context.Context
-	base   string
-	doc    *restfile.Document
-	req    *restfile.Request
-	env    vars.Environment
-	v      map[string]string
+	ctx  context.Context
+	base string
+	doc  *restfile.Document
+	req  *restfile.Request
+	env  vars.Environment
+	evalScope
 	locals rts.Locals
 	rr     *rts.Resp
 	rs     *rts.Stream
@@ -81,65 +84,47 @@ type captureRTSIn struct {
 }
 
 func (r *captureResult) addRequest(name, value string, secret bool) {
-	if r == nil {
-		return
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return
-	}
-	if r.requestVars == nil {
-		r.requestVars = make(map[string]restfile.Variable)
-	}
-	r.requestVars[strings.ToLower(name)] = restfile.Variable{
-		Name:   name,
+	r.requestVars.Set(name, restfile.Variable{
+		Name:   strings.TrimSpace(name),
 		Value:  value,
 		Secret: secret,
 		Scope:  directive.ScopeRequest,
-	}
+	})
 }
 
 func (r *captureResult) addFile(name, value string, secret bool) {
-	if r == nil {
-		return
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return
-	}
-	if r.fileVars == nil {
-		r.fileVars = make(map[string]restfile.Variable)
-	}
-	r.fileVars[strings.ToLower(name)] = restfile.Variable{
-		Name:   name,
+	r.fileVars.Set(name, restfile.Variable{
+		Name:   strings.TrimSpace(name),
 		Value:  value,
 		Secret: secret,
 		Scope:  directive.ScopeFile,
-	}
+	})
 }
 
+// Captures are evaluated in declaration order against staged values and commit
+// only after the entire batch succeeds. Staged values retain their normal
+// precedence. Reusing the resolver memo keeps dynamic values stable between the
+// request and its captures. Secret values enter the redaction set before commit
+// so a later failure cannot expose them.
 func (e *Engine) applyCaptures(in captureRun) error {
 	if in.req == nil || in.resp == nil || len(in.req.Metadata.Captures) == 0 {
 		return nil
 	}
 
 	lc := newCaptureContext(in.resp, in.stream, capture.StrictEnabled(in.req.Settings))
-	if in.v == nil {
-		in.v = e.collectVariables(in.doc, in.req, in.env)
-	}
 	sc := captureScope{
 		ctx:    in.ctx,
 		base:   in.base,
 		doc:    in.doc,
 		req:    in.req,
 		env:    in.env,
-		v:      in.v,
 		locals: in.locals,
 		rr:     rtsScriptResp(in.resp),
 		rs:     rtsStream(in.stream),
 	}
-	res := e.captureResolver(in.res, sc)
+	work := &captureResult{}
 	for _, c := range in.req.Metadata.Captures {
+		res := e.refreshCaptureScope(in, &sc, work)
 		val, ex, err := e.captureValue(captureValueIn{
 			captureScope: sc,
 			resolver:     res,
@@ -149,48 +134,96 @@ func (e *Engine) applyCaptures(in captureRun) error {
 		if err != nil {
 			return diag.WrapAsf(diag.ClassScript, err, "%s", captureErrCtx(in.req, c, ex))
 		}
+		if c.Secret {
+			in.secrets.Add(val)
+		}
 		switch c.Scope {
 		case directive.ScopeRequest:
-			upsertVariable(&in.req.Variables, directive.ScopeRequest, c.Name, val, c.Secret)
-			if in.out != nil {
-				in.out.addRequest(c.Name, val, c.Secret)
-			}
+			work.addRequest(c.Name, val, c.Secret)
 		case directive.ScopeFile:
-			if in.doc != nil {
-				upsertVariable(&in.doc.Variables, directive.ScopeFile, c.Name, val, c.Secret)
-			}
-			if in.out != nil {
-				in.out.addFile(c.Name, val, c.Secret)
-			}
+			work.addFile(c.Name, val, c.Secret)
 		case directive.ScopeGlobal:
-			if gs := e.rt.Globals(); gs != nil {
-				gs.Set(in.env.Scope(), c.Name, val, c.Secret)
-			}
+			work.globals.Set(c.Name, vars.GlobalMutation{Name: c.Name, Value: val, Secret: c.Secret})
 		}
 	}
 
-	if fs := e.rt.Files(); in.out != nil && len(in.out.fileVars) > 0 && fs != nil {
-		path := e.filePath(in.doc)
-		for _, v := range in.out.fileVars {
-			fs.Set(in.env.Scope(), path, v.Name, v.Value, v.Secret)
-		}
+	e.commitCaptures(in, work)
+	if in.out != nil {
+		*in.out = *work
 	}
 	return nil
 }
 
-// captureResolver derives from the request resolver to keep existing values pinned.
-// It binds the current response and keeps the request context and base directory.
-func (e *Engine) captureResolver(res *vars.Resolver, sc captureScope) *vars.Resolver {
-	return res.WithExprEval(e.ExprEval(sc.ctx, ExprInput{
+func (e *Engine) refreshCaptureScope(
+	in captureRun,
+	sc *captureScope,
+	work *captureResult,
+) *vars.Resolver {
+	runtime := mergeGlobalValues(in.store, work.globals)
+	plan := e.buildVariablePlan(varSources{
+		doc:     in.doc,
+		req:     in.req,
+		env:     in.env,
+		globals: runtime,
+		sec:     keepSecrets,
+		run:     in.run,
+	})
+	plan.overlay(sourceRequestCapture, capturedValues(work.requestVars))
+	plan.overlay(sourceRuntimeFile, capturedValues(work.fileVars))
+	sc.vars = plan.values()
+	sc.globals = effectiveGlobalValues(in.doc, runtime)
+
+	ei := ExprInput{
 		Doc:      sc.doc,
 		Req:      sc.req,
 		Env:      sc.env,
 		Base:     sc.base,
-		Vars:     sc.v,
+		Vars:     sc.vars,
 		Response: sc.rr,
 		Stream:   sc.rs,
 		Locals:   sc.locals,
-	}))
+		globals:  sc.globals,
+	}
+	if in.res == nil {
+		return e.planResolver(sc.ctx, plan, ei, ExprEvalOptions{})
+	}
+	res := in.res.WithProviders(plan.providers()...)
+	return res.WithExprEval(e.ExprEval(sc.ctx, ei))
+}
+
+func capturedValues(src vars.NameMap[restfile.Variable]) vars.NameMap[string] {
+	var out vars.NameMap[string]
+	for name, v := range src.All() {
+		out.Set(name, v.Value)
+	}
+	return out
+}
+
+func (e *Engine) commitCaptures(in captureRun, work *captureResult) {
+	for _, c := range in.req.Metadata.Captures {
+		switch c.Scope {
+		case directive.ScopeRequest:
+			if v, ok := work.requestVars.Get(c.Name); ok {
+				upsertVariable(&in.req.Variables, directive.ScopeRequest, v.Name, v.Value, v.Secret)
+			}
+		case directive.ScopeFile:
+			if in.doc == nil {
+				continue
+			}
+			if v, ok := work.fileVars.Get(c.Name); ok {
+				upsertVariable(&in.doc.Variables, directive.ScopeFile, v.Name, v.Value, v.Secret)
+			}
+		}
+	}
+
+	fs := e.rt.Files()
+	if fs == nil || work.fileVars.Len() == 0 {
+		return
+	}
+	path := e.filePath(in.doc)
+	for _, v := range work.fileVars.All() {
+		fs.Set(in.env.Scope(), path, v.Name, v.Value, v.Secret)
+	}
 }
 
 func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
@@ -221,7 +254,8 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		req:     in.req,
 		env:     in.env,
 		base:    in.base,
-		vars:    in.v,
+		vars:    in.vars,
+		globals: in.globals,
 		locals:  in.locals,
 		site:    directive.Capture.Tag() + " " + str.FoldLines(in.ex),
 		resp:    in.rr,

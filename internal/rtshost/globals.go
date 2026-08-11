@@ -15,14 +15,10 @@ const (
 )
 
 // RuntimeGlobals returns global values keyed the way RTS variable lookup expects.
-func RuntimeGlobals(globals map[string]vars.GlobalMutation, policy SecretPolicy) map[string]string {
-	out := make(map[string]string, len(globals))
-	for key, mut := range globals {
+func RuntimeGlobals(globals vars.Globals, policy SecretPolicy) map[string]string {
+	out := make(map[string]string, globals.Len())
+	for name, mut := range globals.All() {
 		if mut.Delete || (policy == OmitSecrets && mut.Secret) {
-			continue
-		}
-		name := util.FirstTrimmed(mut.Name, key)
-		if name == "" {
 			continue
 		}
 		out[util.Lower(name)] = mut.Value

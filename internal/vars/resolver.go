@@ -111,6 +111,17 @@ func (r *Resolver) WithExprEval(fn ExprEval) *Resolver {
 	return &cp
 }
 
+// WithProviders reuses memoized expansions with a new provider set. Providers
+// must retain their order because memoized entries use provider positions.
+func (r *Resolver) WithProviders(providers ...Provider) *Resolver {
+	if r == nil {
+		return r
+	}
+	cp := *r
+	cp.providers = providers
+	return &cp
+}
+
 func (r *Resolver) Resolve(name string) (string, bool) {
 	value, ok, err := r.resolve(name, r.exprPos, true, true, nil)
 	if err != nil {
@@ -141,7 +152,7 @@ func (r *Resolver) resolve(
 
 	var resolved string
 	var found bool
-	if expandableProvider(hit.prov) && strings.Contains(hit.raw, "{{") {
+	if expandableProvider(hit.prov) && HasPlaceholder(hit.raw) {
 		variable := hit.key()
 		if err := checkExpandState(name, variable, st); err != nil {
 			return "", false, err
@@ -252,7 +263,7 @@ type lookupHit struct {
 }
 
 func (h lookupHit) key() variableKey {
-	return variableKey{provider: h.idx, name: strings.ToLower(h.subject)}
+	return variableKey{provider: h.idx, name: NameKey(h.subject)}
 }
 
 // lookupValue first tries direct lookup across all providers.
@@ -523,14 +534,15 @@ func splitDynamicOffset(name string) (string, time.Duration, bool) {
 }
 
 type MapProvider struct {
-	values   map[string]string
+	values   NameMap[string]
 	label    string
 	template bool
 }
 
-// Keys get lowercased so lookups are case-insensitive
+// NewMapProvider normalizes names case-insensitively. Equivalent keys resolve
+// in deterministic name order.
 func NewMapProvider(label string, values map[string]string) Provider {
-	return newMapProvider(label, values, false)
+	return newMapProvider(label, CollectNames(values), false)
 }
 
 // NewTemplateProvider is a MapProvider whose values are authored template
@@ -538,15 +550,21 @@ func NewMapProvider(label string, values map[string]string) Provider {
 // Use it only for values written in source files, never for runtime data such
 // as captured responses.
 func NewTemplateProvider(label string, values map[string]string) Provider {
+	return newMapProvider(label, CollectNames(values), true)
+}
+
+// NewNameMapProvider wraps an already-normalized NameMap without copying it.
+func NewNameMapProvider(label string, values NameMap[string]) Provider {
+	return newMapProvider(label, values, false)
+}
+
+// NewNameMapTemplateProvider is the template-expanding variant of NewNameMapProvider.
+func NewNameMapTemplateProvider(label string, values NameMap[string]) Provider {
 	return newMapProvider(label, values, true)
 }
 
-func newMapProvider(label string, values map[string]string, template bool) Provider {
-	normalized := make(map[string]string, len(values))
-	for k, v := range values {
-		normalized[strings.ToLower(k)] = v
-	}
-	return &MapProvider{values: normalized, label: label, template: template}
+func newMapProvider(label string, values NameMap[string], template bool) Provider {
+	return &MapProvider{values: values, label: label, template: template}
 }
 
 type templateValueProvider interface {
@@ -563,8 +581,7 @@ func expandableProvider(p Provider) bool {
 }
 
 func (p *MapProvider) Resolve(name string) (string, bool) {
-	value, ok := p.values[strings.ToLower(name)]
-	return value, ok
+	return p.values.Get(name)
 }
 
 func (p *MapProvider) Label() string {

@@ -25,24 +25,16 @@ func expandStatusText(r *vars.Resolver, raw string) string {
 	return strings.TrimSpace(expanded)
 }
 
-func (m *Model) statusResolver(
-	doc *restfile.Document,
-	req *restfile.Request,
-	extras ...map[string]string,
-) *vars.Resolver {
+func (m *Model) statusResolver(doc *restfile.Document, req *restfile.Request) *vars.Resolver {
 	rq := m.requestSvc(httpx.Options{})
-	return rq.DisplayResolver(context.Background(), doc, req, m.ws.active, "", rts.Locals{}, extras...)
+	return rq.DisplayResolver(context.Background(), doc, req, m.ws.active, "", rts.Locals{})
 }
 
-func (m *Model) statusRequestLabel(
-	doc *restfile.Document,
-	req *restfile.Request,
-	extras ...map[string]string,
-) string {
+func (m *Model) statusRequestLabel(doc *restfile.Document, req *restfile.Request) string {
 	if req == nil {
 		return ""
 	}
-	r := m.statusResolver(doc, req, extras...)
+	r := m.statusResolver(doc, req)
 	name := expandStatusText(r, req.Metadata.Name)
 	if name == "" {
 		name = expandStatusText(r, req.URL)
@@ -50,15 +42,11 @@ func (m *Model) statusRequestLabel(
 	return name
 }
 
-func (m *Model) statusRequestTitle(
-	doc *restfile.Document,
-	req *restfile.Request,
-	extras ...map[string]string,
-) string {
+func (m *Model) statusRequestTitle(doc *restfile.Document, req *restfile.Request) string {
 	if req == nil {
 		return ""
 	}
-	r := m.statusResolver(doc, req, extras...)
+	r := m.statusResolver(doc, req)
 
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	if method == "" {

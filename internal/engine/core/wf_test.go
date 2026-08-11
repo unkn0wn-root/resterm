@@ -243,7 +243,7 @@ func (d *fakeDep) CollectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	extra ...map[string]string,
+	overlay map[string]string,
 ) map[string]string {
 	out := make(map[string]string)
 	if doc != nil {
@@ -251,9 +251,7 @@ func (d *fakeDep) CollectVariables(
 			out[v.Name] = v.Value
 		}
 	}
-	for _, x := range extra {
-		maps.Copy(out, x)
-	}
+	maps.Copy(out, overlay)
 	return out
 }
 

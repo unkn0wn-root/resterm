@@ -28,6 +28,19 @@ func (s *stubHistory) Close() error {
 	return nil
 }
 
+func TestRuntimeStoresDropBlankNames(t *testing.T) {
+	rt := New(Config{})
+	rt.Globals().Set("dev", "  ", "ghost", false)
+	rt.Files().Set("dev", "/tmp/a.http", "", "ghost", false)
+
+	if got := rt.Globals().Snapshot("dev"); len(got) != 0 {
+		t.Fatalf("Globals().Snapshot() = %#v, want no entries", got)
+	}
+	if got := rt.Files().Snapshot("dev", "/tmp/a.http"); len(got) != 0 {
+		t.Fatalf("Files().Snapshot() = %#v, want no entries", got)
+	}
+}
+
 func TestRuntimeStateRoundTrip(t *testing.T) {
 	rt := New(Config{})
 	rt.Globals().Set("dev", "token", "abc", true)

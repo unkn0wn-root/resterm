@@ -17,7 +17,7 @@ func (e *Engine) redactExplainReport(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	globs map[string]vars.GlobalMutation,
+	globs vars.Globals,
 	extra ...string,
 ) *xplain.Report {
 	if rep == nil {
@@ -25,31 +25,31 @@ func (e *Engine) redactExplainReport(
 	}
 	secs := e.explainSecrets(doc, req, env, globs, extra)
 
-	rep.Name = redactExplainText(rep.Name, secs)
-	rep.Method = redactExplainText(rep.Method, secs)
-	rep.URL = redactExplainText(rep.URL, secs)
-	rep.Decision = redactExplainText(rep.Decision, secs)
-	rep.Failure = redactExplainText(rep.Failure, secs)
+	rep.Name = redactSecretText(rep.Name, secs)
+	rep.Method = redactSecretText(rep.Method, secs)
+	rep.URL = redactSecretText(rep.URL, secs)
+	rep.Decision = redactSecretText(rep.Decision, secs)
+	rep.Failure = redactSecretText(rep.Failure, secs)
 
 	for i := range rep.Vars {
-		rep.Vars[i].Value = redactExplainText(rep.Vars[i].Value, secs)
+		rep.Vars[i].Value = redactSecretText(rep.Vars[i].Value, secs)
 	}
 	for i := range rep.Stages {
-		rep.Stages[i].Summary = redactExplainText(rep.Stages[i].Summary, secs)
+		rep.Stages[i].Summary = redactSecretText(rep.Stages[i].Summary, secs)
 		for j := range rep.Stages[i].Changes {
 			ch := &rep.Stages[i].Changes[j]
 			ch.Before = redactExplainChangeValue(ch.Field, ch.Before, secs)
 			ch.After = redactExplainChangeValue(ch.Field, ch.After, secs)
 		}
 		for j := range rep.Stages[i].Notes {
-			rep.Stages[i].Notes[j] = redactExplainText(rep.Stages[i].Notes[j], secs)
+			rep.Stages[i].Notes[j] = redactSecretText(rep.Stages[i].Notes[j], secs)
 		}
 	}
 	if rep.Final != nil {
-		rep.Final.Method = redactExplainText(rep.Final.Method, secs)
-		rep.Final.URL = redactExplainText(rep.Final.URL, secs)
-		rep.Final.Body = redactExplainText(rep.Final.Body, secs)
-		rep.Final.BodyNote = redactExplainText(rep.Final.BodyNote, secs)
+		rep.Final.Method = redactSecretText(rep.Final.Method, secs)
+		rep.Final.URL = redactSecretText(rep.Final.URL, secs)
+		rep.Final.Body = redactSecretText(rep.Final.Body, secs)
+		rep.Final.BodyNote = redactSecretText(rep.Final.BodyNote, secs)
 		for i := range rep.Final.Headers {
 			h := &rep.Final.Headers[i]
 			if shouldMaskExplainHeader(h.Name) {
@@ -58,36 +58,36 @@ func (e *Engine) redactExplainReport(
 				}
 				continue
 			}
-			h.Value = redactExplainText(h.Value, secs)
+			h.Value = redactSecretText(h.Value, secs)
 		}
 		for i := range rep.Final.Settings {
-			rep.Final.Settings[i].Value = redactExplainText(rep.Final.Settings[i].Value, secs)
+			rep.Final.Settings[i].Value = redactSecretText(rep.Final.Settings[i].Value, secs)
 		}
 		for i := range rep.Final.Details {
 			d := &rep.Final.Details[i]
 			key := d.Key
 			val := d.Value
-			d.Key = redactExplainText(key, secs)
+			d.Key = redactSecretText(key, secs)
 			if shouldMaskExplainPair(key, val) {
 				if strings.TrimSpace(val) != "" {
 					d.Value = explainMask
 				}
 				continue
 			}
-			d.Value = redactExplainText(val, secs)
+			d.Value = redactSecretText(val, secs)
 		}
 		for i := range rep.Final.Steps {
-			rep.Final.Steps[i] = redactExplainText(rep.Final.Steps[i], secs)
+			rep.Final.Steps[i] = redactSecretText(rep.Final.Steps[i], secs)
 		}
 		if rep.Final.Route != nil {
-			rep.Final.Route.Summary = redactExplainText(rep.Final.Route.Summary, secs)
+			rep.Final.Route.Summary = redactSecretText(rep.Final.Route.Summary, secs)
 			for i := range rep.Final.Route.Notes {
-				rep.Final.Route.Notes[i] = redactExplainText(rep.Final.Route.Notes[i], secs)
+				rep.Final.Route.Notes[i] = redactSecretText(rep.Final.Route.Notes[i], secs)
 			}
 		}
 	}
 	for i := range rep.Warnings {
-		rep.Warnings[i] = redactExplainText(rep.Warnings[i], secs)
+		rep.Warnings[i] = redactSecretText(rep.Warnings[i], secs)
 	}
 	return rep
 }
@@ -96,7 +96,7 @@ func (e *Engine) explainSecrets(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	globs map[string]vars.GlobalMutation,
+	globs vars.Globals,
 	extra []string,
 ) []string {
 	vals := make(map[string]struct{})
@@ -110,7 +110,7 @@ func (e *Engine) explainSecrets(
 	for _, v := range e.secretValues(doc, req, env, extra...) {
 		add(v)
 	}
-	for _, gv := range globs {
+	for _, gv := range globs.All() {
 		if gv.Secret && !gv.Delete {
 			add(gv.Value)
 		}
@@ -133,10 +133,10 @@ func redactExplainChangeValue(field, val string, secs []string) string {
 		}
 		return explainMask
 	}
-	return redactExplainText(val, secs)
+	return redactSecretText(val, secs)
 }
 
-func redactExplainText(s string, secs []string) string {
+func redactSecretText(s string, secs []string) string {
 	if strings.TrimSpace(s) == "" || len(secs) == 0 {
 		return s
 	}

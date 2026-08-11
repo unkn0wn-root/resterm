@@ -573,6 +573,28 @@ func TestWithExprEvalKeepsPinnedValues(t *testing.T) {
 	}
 }
 
+func TestWithProvidersKeepsPinnedValues(t *testing.T) {
+	base := NewResolver(NewTemplateProvider("file", map[string]string{"id": "{{$uuid}}"}))
+	first, err := base.ExpandTemplates("{{id}}")
+	if err != nil {
+		t.Fatalf("expand: %v", err)
+	}
+	derived := base.WithProviders(NewTemplateProvider("file", map[string]string{
+		"id":    "{{$uuid}}",
+		"fresh": "staged",
+	}))
+	second, err := derived.ExpandTemplates("{{id}}")
+	if err != nil {
+		t.Fatalf("expand derived: %v", err)
+	}
+	if first != second {
+		t.Fatalf("re-planned resolver re-rolled the value: %q then %q", first, second)
+	}
+	if got, err := derived.ExpandTemplates("{{fresh}}"); err != nil || got != "staged" {
+		t.Fatalf("fresh = %q, %v; want the new provider visible", got, err)
+	}
+}
+
 func TestLenientResolverCycleNotMaskedByUndefined(t *testing.T) {
 	r := NewResolver(NewTemplateProvider("file", map[string]string{
 		"a": "{{b}}",

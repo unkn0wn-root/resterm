@@ -6,6 +6,7 @@ import (
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 // Nothing else stops a secret variable from reaching the explain output, so
@@ -62,7 +63,7 @@ func TestRedactExplainReportMasksSecretsAndSensitiveHeaders(t *testing.T) {
 		Warnings: []string{"warn top-secret"},
 	}
 
-	got := eng.redactExplainReport(rep, nil, req, testEnv(""), nil)
+	got := eng.redactExplainReport(rep, nil, req, testEnv(""), vars.Globals{})
 	if got.Final == nil {
 		t.Fatal("expected final report section")
 	}

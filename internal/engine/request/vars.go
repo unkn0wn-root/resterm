@@ -173,15 +173,27 @@ func (e *Engine) buildResolver(
 	req *restfile.Request,
 	env vars.Environment,
 	base string,
-	globs map[string]vars.GlobalMutation,
+	globs vars.Globals,
 	locals rts.Locals,
-	extras ...map[string]string,
+	run runVars,
 ) *vars.Resolver {
-	res := vars.NewResolver(e.providers(doc, req, env, globs, keepSecrets, extras...)...)
-	res.AddRefResolver(vars.EnvRefResolver)
-	res.SetExprEval(e.rtsEval(ctx, doc, req, env, base, locals, extras...))
-	res.SetExprPos(e.rtsPos(doc, req))
-	return res
+	plan := e.buildVariablePlan(varSources{
+		doc:     doc,
+		req:     req,
+		env:     env,
+		globals: globs,
+		sec:     keepSecrets,
+		run:     run,
+	})
+	in := ExprInput{
+		Doc:     doc,
+		Req:     req,
+		Env:     env,
+		Base:    base,
+		Locals:  locals,
+		globals: effectiveGlobalValues(doc, globs),
+	}
+	return e.planResolver(ctx, plan, in, ExprEvalOptions{})
 }
 
 // DisplayResolver uses normal variable precedence for UI text but leaves out
@@ -193,124 +205,49 @@ func (e *Engine) DisplayResolver(
 	env vars.Environment,
 	base string,
 	locals rts.Locals,
-	extras ...map[string]string,
 ) *vars.Resolver {
-	base = e.rtsBase(doc, base)
 	globs := e.collectStoredGlobalValues(env)
-	maps.DeleteFunc(globs, func(_ string, v vars.GlobalMutation) bool { return v.Secret })
+	globs.DeleteFunc(func(_ string, v vars.GlobalMutation) bool { return v.Secret })
 
-	res := vars.NewResolver(e.providers(doc, req, env, globs, omitSecrets, extras...)...)
+	plan := e.buildVariablePlan(varSources{
+		doc:     doc,
+		req:     req,
+		env:     env,
+		globals: globs,
+		sec:     omitSecrets,
+	})
+	in := ExprInput{
+		Doc:     doc,
+		Req:     req,
+		Env:     env,
+		Base:    e.rtsBase(doc, base),
+		Locals:  locals,
+		globals: effectiveGlobalValues(doc, globs),
+	}
+	return e.planResolver(ctx, plan, in, ExprEvalOptions{OmitSecretGlobals: true})
+}
+
+// planResolver uses one plan for template and RTS lookups so they cannot
+// disagree on precedence.
+func (e *Engine) planResolver(
+	ctx context.Context,
+	plan variablePlan,
+	in ExprInput,
+	opt ExprEvalOptions,
+) *vars.Resolver {
+	in.Vars = plan.values()
+	res := vars.NewResolver(plan.providers()...)
 	res.AddRefResolver(vars.EnvRefResolver)
-	vv := e.collectVariablesWithGlobals(doc, req, env, globs, omitSecrets, extras...)
-	res.SetExprEval(e.ExprEvalWithOptions(
-		ctx,
-		ExprInput{Doc: doc, Req: req, Env: env, Base: base, Vars: vv, Locals: locals},
-		ExprEvalOptions{OmitSecretGlobals: true},
-	))
-	res.SetExprPos(e.rtsPos(doc, req))
+	res.SetExprEval(e.ExprEvalWithOptions(ctx, in, opt))
+	res.SetExprPos(e.rtsPos(in.Doc, in.Req))
 	return res
-}
-
-func (e *Engine) providers(
-	doc *restfile.Document,
-	req *restfile.Request,
-	env vars.Environment,
-	globs map[string]vars.GlobalMutation,
-	sec secrecy,
-	extras ...map[string]string,
-) []vars.Provider {
-	ps := make([]vars.Provider, 0, 8)
-	if doc != nil && len(doc.Constants) > 0 {
-		vals := make(map[string]string, len(doc.Constants))
-		for _, c := range doc.Constants {
-			vals[c.Name] = c.Value
-		}
-		ps = append(ps, vars.NewTemplateProvider("const", vals))
-	}
-	for _, extra := range extras {
-		if len(extra) > 0 {
-			ps = append(ps, vars.NewMapProvider("script", extra))
-		}
-	}
-	if req != nil && len(req.Variables) > 0 {
-		vals := make(map[string]string, len(req.Variables))
-		for _, v := range req.Variables {
-			if sec == omitSecrets && v.Secret {
-				continue
-			}
-			vals[v.Name] = v.Value
-		}
-		if len(vals) > 0 {
-			ps = append(ps, vars.NewTemplateProvider("request", vals))
-		}
-	}
-	if vals := globalValueMap(globs); len(vals) > 0 {
-		ps = append(ps, vars.NewMapProvider("global", vals))
-	}
-	if doc != nil && len(doc.Globals) > 0 {
-		vals := make(map[string]string, len(doc.Globals))
-		for _, v := range doc.Globals {
-			if sec == omitSecrets && v.Secret {
-				continue
-			}
-			vals[v.Name] = v.Value
-		}
-		if len(vals) > 0 {
-			ps = append(ps, vars.NewTemplateProvider("document-global", vals))
-		}
-	}
-	rv := make(map[string]string)
-	e.mergeFileRuntimeVars(rv, doc, env, sec)
-	if len(rv) > 0 {
-		ps = append(ps, vars.NewMapProvider("file", rv))
-	}
-	fv := make(map[string]string)
-	if doc != nil {
-		for _, v := range doc.Variables {
-			if sec == omitSecrets && v.Secret {
-				continue
-			}
-			fv[v.Name] = v.Value
-		}
-	}
-	if len(fv) > 0 {
-		ps = append(ps, vars.NewTemplateProvider("file", fv))
-	}
-	if values := env.Values(); len(values) > 0 {
-		ps = append(ps, vars.NewMapProvider("environment", values))
-	}
-	return append(ps, vars.EnvProvider{})
-}
-
-func (e *Engine) mergeFileRuntimeVars(
-	dst map[string]string,
-	doc *restfile.Document,
-	env vars.Environment,
-	sec secrecy,
-) {
-	fs := e.rt.Files()
-	if dst == nil || fs == nil {
-		return
-	}
-	if snap := fs.Snapshot(env.Scope(), e.filePath(doc)); len(snap) > 0 {
-		for k, v := range snap {
-			if sec == omitSecrets && v.Secret {
-				continue
-			}
-			name := strings.TrimSpace(v.Name)
-			if name == "" {
-				name = k
-			}
-			dst[name] = v.Value
-		}
-	}
 }
 
 func (e *Engine) collectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	extras ...map[string]string,
+	run runVars,
 ) map[string]string {
 	return e.collectVariablesWithGlobals(
 		doc,
@@ -318,7 +255,7 @@ func (e *Engine) collectVariables(
 		env,
 		e.collectStoredGlobalValues(env),
 		keepSecrets,
-		extras...,
+		run,
 	)
 }
 
@@ -326,176 +263,80 @@ func (e *Engine) collectVariablesWithGlobals(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	globs map[string]vars.GlobalMutation,
+	globs vars.Globals,
 	sec secrecy,
-	extras ...map[string]string,
+	run runVars,
 ) map[string]string {
-	out := make(map[string]string)
-	if values := env.Values(); len(values) > 0 {
-		maps.Copy(out, values)
-	}
-	if doc != nil {
-		for _, v := range doc.Variables {
-			if sec == omitSecrets && v.Secret {
-				continue
-			}
-			out[v.Name] = v.Value
-		}
-		for _, v := range doc.Globals {
-			if sec == omitSecrets && v.Secret {
-				continue
-			}
-			out[v.Name] = v.Value
-		}
-	}
-	e.mergeFileRuntimeVars(out, doc, env, sec)
-	maps.Copy(out, globalValueMap(globs))
-	if req != nil {
-		for _, v := range req.Variables {
-			if sec == omitSecrets && v.Secret {
-				continue
-			}
-			out[v.Name] = v.Value
-		}
-	}
-	for _, extra := range extras {
-		maps.Copy(out, extra)
-	}
-	return out
+	return e.buildVariablePlan(varSources{
+		doc:     doc,
+		req:     req,
+		env:     env,
+		globals: globs,
+		sec:     sec,
+		run:     run,
+	}).values()
 }
 
-func (e *Engine) collectGlobalValues(
-	doc *restfile.Document,
-	env vars.Environment,
-) map[string]vars.GlobalMutation {
+func (e *Engine) collectGlobalValues(doc *restfile.Document, env vars.Environment) vars.Globals {
 	return effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
 }
 
-func (e *Engine) collectStoredGlobalValues(env vars.Environment) map[string]vars.GlobalMutation {
+func (e *Engine) collectStoredGlobalValues(env vars.Environment) vars.Globals {
+	var out vars.Globals
 	gs := e.rt.Globals()
 	if gs == nil {
-		return nil
+		return out
 	}
-	out := make(map[string]vars.GlobalMutation)
-	if snap := gs.Snapshot(env.Scope()); len(snap) > 0 {
-		for k, v := range snap {
-			name := strings.TrimSpace(v.Name)
-			if name == "" {
-				name = k
-			}
-			out[name] = vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret}
-		}
-	}
-	if len(out) == 0 {
-		return nil
+	for key, v := range gs.Snapshot(env.Scope()) {
+		name := storedName(v.Name, key)
+		out.Set(name, vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret})
 	}
 	return out
 }
 
-func collectDocumentGlobalValues(doc *restfile.Document) map[string]vars.GlobalMutation {
-	if doc == nil || len(doc.Globals) == 0 {
-		return nil
+func collectDocumentGlobalValues(doc *restfile.Document) vars.Globals {
+	var out vars.Globals
+	if doc == nil {
+		return out
 	}
-	out := make(map[string]vars.GlobalMutation)
 	for _, v := range doc.Globals {
 		name := strings.TrimSpace(v.Name)
-		if name == "" {
-			continue
-		}
-		out[name] = vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret}
-	}
-	if len(out) == 0 {
-		return nil
+		out.Set(name, vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret})
 	}
 	return out
 }
 
-func effectiveGlobalValues(
-	doc *restfile.Document,
-	globs map[string]vars.GlobalMutation,
-) map[string]vars.GlobalMutation {
+func effectiveGlobalValues(doc *restfile.Document, globs vars.Globals) vars.Globals {
 	return mergeGlobalValues(collectDocumentGlobalValues(doc), globs)
 }
 
-func cloneGlobalValues(src map[string]vars.GlobalMutation) map[string]vars.GlobalMutation {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]vars.GlobalMutation, len(src))
-	maps.Copy(dst, src)
-	return dst
-}
-
-func mergeGlobalValues(
-	base map[string]vars.GlobalMutation,
-	changes map[string]vars.GlobalMutation,
-) map[string]vars.GlobalMutation {
-	if len(base) == 0 && len(changes) == 0 {
-		return nil
-	}
-	out := cloneGlobalValues(base)
-	if out == nil {
-		out = make(map[string]vars.GlobalMutation, len(changes))
-	}
-	for k, v := range changes {
-		name := strings.TrimSpace(v.Name)
-		if name == "" {
-			name = strings.TrimSpace(k)
-		}
-		if name == "" {
+func mergeGlobalValues(base, changes vars.Globals) vars.Globals {
+	out := base.Clone()
+	for name, ch := range changes.All() {
+		if ch.Delete {
+			out.Delete(name)
 			continue
 		}
-		for cur := range out {
-			if strings.EqualFold(strings.TrimSpace(cur), name) {
-				delete(out, cur)
-			}
-		}
-		if v.Delete {
-			continue
-		}
-		v.Name = name
-		out[name] = v
-	}
-	if len(out) == 0 {
-		return nil
+		ch.Name = name
+		out.Set(name, ch)
 	}
 	return out
 }
 
-func globalValueMap(globs map[string]vars.GlobalMutation) map[string]string {
-	if len(globs) == 0 {
-		return nil
+// storedName prefers the recorded name and falls back to the storage key.
+func storedName(name, key string) string {
+	if n := strings.TrimSpace(name); n != "" {
+		return n
 	}
-	out := make(map[string]string, len(globs))
-	for k, v := range globs {
-		name := strings.TrimSpace(v.Name)
-		if name == "" {
-			name = strings.TrimSpace(k)
-		}
-		if name == "" || v.Delete {
-			continue
-		}
-		out[name] = v.Value
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
+	return strings.TrimSpace(key)
 }
 
-func (e *Engine) applyGlobalMutations(
-	changes map[string]vars.GlobalMutation,
-	env vars.Environment,
-) {
+func (e *Engine) applyGlobalMutations(changes vars.Globals, env vars.Environment) {
 	gs := e.rt.Globals()
-	if len(changes) == 0 || gs == nil {
+	if gs == nil {
 		return
 	}
-	for _, ch := range changes {
-		name := strings.TrimSpace(ch.Name)
-		if name == "" {
-			continue
-		}
+	for name, ch := range changes.All() {
 		if ch.Delete {
 			gs.Delete(env.Scope(), name)
 			continue

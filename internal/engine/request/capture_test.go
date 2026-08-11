@@ -59,7 +59,16 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		},
 	}
 
-	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, rts.Locals{})
+	resolver := eng.buildResolver(
+		context.Background(),
+		doc,
+		req,
+		testEnv("dev"),
+		"",
+		vars.Globals{},
+		rts.Locals{},
+		runVars{},
+	)
 	var captures captureResult
 	if err := eng.applyCaptures(captureRun{
 		doc:  doc,
@@ -71,12 +80,13 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
 	}
+	eng.applyGlobalMutations(captures.globals, testEnv("dev"))
 
-	if _, ok := captures.requestVars["recentstatus"]; !ok {
-		t.Fatalf("expected request capture to be recorded: %+v", captures.requestVars)
+	if !captures.requestVars.Has("recentStatus") {
+		t.Fatalf("expected request capture to be recorded: %+v", captures.requestVars.Map())
 	}
-	if _, ok := captures.fileVars["lasttrace"]; !ok {
-		t.Fatalf("expected file capture to be recorded: %+v", captures.fileVars)
+	if !captures.fileVars.Has("lastTrace") {
+		t.Fatalf("expected file capture to be recorded: %+v", captures.fileVars.Map())
 	}
 
 	snapshot := eng.rt.Globals().Snapshot(testEnv("dev").Scope())
@@ -114,7 +124,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	if req.Variables[0].Name != "recentStatus" || req.Variables[0].Value != "200 OK" {
 		t.Fatalf("unexpected request variable %+v", req.Variables[0])
 	}
-	varsWithReq := eng.collectVariables(doc, req, testEnv("dev"))
+	varsWithReq := eng.collectVariables(doc, req, testEnv("dev"), runVars{})
 	if varsWithReq["recentStatus"] != "200 OK" {
 		t.Fatalf(
 			"expected request capture to be available in collected vars, got %q",
@@ -136,7 +146,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 	// simulate a fresh parse of the document (no baked-in variables)
 	freshDoc := &restfile.Document{Path: "./sample.http"}
-	vars := eng.collectVariables(freshDoc, nil, testEnv("dev"))
+	vars := eng.collectVariables(freshDoc, nil, testEnv("dev"), runVars{})
 	if vars["lastTrace"] != "abc" {
 		t.Fatalf("expected file capture to be applied via runtime store, got %q", vars["lastTrace"])
 	}
@@ -191,6 +201,7 @@ func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("applyCaptures rst: %v", err)
 	}
+	eng.applyGlobalMutations(captures.globals, testEnv("dev"))
 
 	gl := eng.rt.Globals().Snapshot(testEnv("dev").Scope())
 	if len(gl) != 1 {
@@ -700,6 +711,7 @@ func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("applyCaptures stage: %v", err)
 	}
+	eng.applyGlobalMutations(captures.globals, testEnv("stage"))
 
 	if len(eng.rt.Globals().Snapshot(testEnv("dev").Scope())) != 0 {
 		t.Fatalf("expected no globals in dev env after stage capture")
@@ -776,6 +788,7 @@ func TestApplyCapturesIsolatesGroupedCredentialProfiles(t *testing.T) {
 		if err != nil {
 			t.Fatalf("apply captures for %s: %v", env.Label(), err)
 		}
+		eng.applyGlobalMutations(out.globals, env)
 	}
 	apply(personal, "200 OK")
 	if got := rt.Globals().Snapshot(ci.Scope()); len(got) != 0 {
@@ -872,7 +885,16 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	}
 
 	doc := &restfile.Document{Path: "./stream.http"}
-	resolver := eng.buildResolver(context.Background(), doc, req, testEnv("dev"), "", nil, rts.Locals{})
+	resolver := eng.buildResolver(
+		context.Background(),
+		doc,
+		req,
+		testEnv("dev"),
+		"",
+		vars.Globals{},
+		rts.Locals{},
+		runVars{},
+	)
 	var captures captureResult
 	if err := eng.applyCaptures(captureRun{
 		doc:    doc,
@@ -885,8 +907,9 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
+	eng.applyGlobalMutations(captures.globals, testEnv("dev"))
 
-	vars := eng.collectVariables(doc, req, testEnv("dev"))
+	vars := eng.collectVariables(doc, req, testEnv("dev"), runVars{})
 	if vars["streamKind"] != "websocket" {
 		t.Fatalf("expected stream kind capture, got %q", vars["streamKind"])
 	}

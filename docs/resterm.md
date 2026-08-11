@@ -525,12 +525,21 @@ When expanding `{{variable}}` templates, Resterm looks in:
 
 1. *File constants* (`@const`).
 2. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
-3. *Request-scope* variables (`@var request`, `@capture request`).
-4. *Runtime globals* stored via captures or scripts (per environment).
-5. *Document globals* (`@global`, `@var global`).
-6. *File scope* declarations and `@capture file` values.
-7. Selected environment JSON.
-8. OS environment variables (case-sensitive with an uppercase fallback).
+3. Workflow step variables and the `@for-each` value bound for the current iteration.
+4. *Request-scope* variables (`@var request`, `@capture request`).
+5. *Runtime globals* stored via captures or scripts (per environment).
+6. *Document globals* (`@global`, `@var global`).
+7. *File scope* declarations and `@capture file` values.
+8. Selected environment JSON.
+9. OS environment variables (case-sensitive with an uppercase fallback).
+
+Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them.
+
+Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers and `{{= ... }}` expressions are left unchanged because they are evaluated later, when the request runs. Captured values and values written by scripts are treated as data and are not expanded.
+
+Variable names are case-insensitive and ignore surrounding whitespace. A file variable named `token`, for example, takes precedence over an environment variable named `TOKEN`. When the same source defines a name more than once, the last declaration or script write wins. Global deletes also ignore case.
+
+Blank names are invalid. RestermScript and `@apply` report an error, while JavaScript and runtime stores ignore the write.
 
 Dynamic helpers are also available: `{{$uuid}}` (alias `{{$guid}}`), `{{$timestamp}}` (Unix seconds), `{{$timestampMs}}` (Unix milliseconds), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
 
@@ -1206,15 +1215,23 @@ Accept: application/json
 
 Values are taken verbatim which means that quotes are not special, so `# @file greeting "hello world"` stores the quotes as part of the value. If you need spaces, just write them directly: `# @file greeting hello world`.
 
-Declared values may reference other variables and dynamic helpers, so `# @request trace.id {{$uuid}}` works as expected. Nested references expand when the request runs, and a declared dynamic such as `{{$uuid}}` is generated once per execution, so every reference to `{{trace.id}}` in the same request sees the same value. Values captured at runtime (captures, script `vars.set`) are data and are never re-expanded. Self- or mutually-referencing variables fail the request with a `variable cycle` error that lists the reference chain.
+Declared values can reference other variables and dynamic helpers. For example, `# @request trace.id {{$uuid}}` generates one value per execution, so every `{{trace.id}}` reference in that request sees the same value. Captures and values written with `vars.set` are treated as data and are not expanded again. A self-reference or a cycle between variables fails the request with a `variable cycle` error that lists the reference chain. See [Variable resolution order](#variable-resolution-order) for how declared values are exposed to scripts.
 
-You can also use shorthand assignments outside comment blocks: `@requestId = {{$uuid}}`. Shorthand defaults to request scope while you're inside a request block and to file scope elsewhere; add a prefix to override (`@global api.token abc`, `@request trace.id {{$uuid}}`, or `@file base.url https://example.com`).
+You can also use shorthand assignments outside comment blocks: `@requestId = {{$uuid}}`. Shorthand defaults to request scope while you're inside a request block and to file scope elsewhere. Add a prefix to override it (`@global api.token abc`, `@request trace.id {{$uuid}}`, or `@file base.url https://example.com`).
 
-Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stored values in summaries; this works for both comment directives and shorthand lines (`@global-secret token xyz`, `@file-secret base.url ...`, `@request-secret trace.id ...`).
+Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stored values in summaries. This works for both comment directives and shorthand lines (`@global-secret token xyz`, `@file-secret base.url ...`, `@request-secret trace.id ...`).
+
+### Secret redaction
+
+Secret values are masked in errors, script failures, and failed test output before those messages reach the response pane, workflow summaries, or workflow history. A value remains masked for the rest of the run if it is deleted, replaced with a public value, or produced by a script or capture that later fails.
+
+Diagnostic source excerpts show the request file as written. Avoid placing literal secrets in script source. Response bodies are also stored as received unless the request uses `@no-log` or the payload is redacted before it is returned.
 
 ### Captures
 
 `@capture <scope> <name> <expression>` evaluates after the response arrives and stores the result for reuse.
+
+Captures run in declaration order. A capture can read values produced earlier in the same batch through `vars.get`, `{{= ... }}`, or `{{name}}`. Values are stored only after every capture succeeds, so a failed batch leaves request, file, and global values unchanged.
 
 Expressions can reference:
 
@@ -1711,7 +1728,9 @@ Objects:
   - `global.get(name)`, `global.set(name, value, options)`, `global.has(name)`, `global.delete(name)` (`options.secret` masks values)
 - `console.log/warn/error` (no-op placeholders for compatibility)
 
-Return values from `set*` helpers are ignored; side effects apply to the outgoing request.
+The `set*` helpers do not return a value, but their changes still apply to the outgoing request. `removeHeader` can also remove headers declared in the request itself.
+
+All `@script pre-request` blocks for a request share the same state. Each block sees changes made by earlier blocks through `vars.get`, `vars.global.get`, `getURL`, `getMethod`, and `getHeader`. RTS pre-request blocks run before JavaScript blocks, so their changes are visible too. Query parameters are different because they are merged into the URL after the scripts finish. This means `getURL` does not show changes made by `setQueryParam`.
 
 ### Test scripts (`@script test`)
 
@@ -2234,8 +2253,8 @@ Open one in Resterm, switch to the appropriate environment (`resterm.env.json`),
 - Use `Ctrl+P` to force a reparse if the navigator seems out of sync with editor changes.
 - If a template fails to expand (undefined variable), Resterm blocks the send and reports the missing variable. This covers URLs, query parameters, headers, auth values, expanded bodies, gRPC targets and messages, and WebSocket steps. Explain previews keep the placeholder intact and list the unresolved names.
 - Combine `@capture request ...` with test scripts to assert on response headers without cluttering file/global scopes.
-- Inline curl import works best with single commands; complex shell pipelines may need manual cleanup.
-- `Ctrl+Shift+V` pins the focused response pane-ideal for diffing the last good response against the current attempt.
-- Keep secrets in environment files or runtime globals marked as `-secret`. Remember that history stores the raw response unless you add `@no-log` or redact the payload yourself.
+- Inline curl import works best with single commands. Complex shell pipelines may need manual cleanup.
+- `Ctrl+Shift+V` pins the focused response pane, which is useful for comparing the last good response with the current attempt.
+- Keep secrets in environment files or runtime globals marked as `-secret`.
 
 For additional questions or feature requests, open an issue on GitHub.
