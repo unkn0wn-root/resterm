@@ -1,6 +1,6 @@
 // Package delay parses the delay expressions used by mock latency, such as
 // 150ms, random(100ms,500ms), normal(250ms,50ms) or jitter(200ms,20%), and
-// draws waits from them.
+// turns them into one delay per request.
 package delay
 
 import (
@@ -14,8 +14,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/duration"
 )
 
-// Spec is one parsed delay expression; the zero value waits for nothing. What
-// base and spread hold depends on the kind: the constant wait, the bounds of
+// Spec is one parsed delay expression; the zero value never delays. What base
+// and spread hold depends on the kind: the constant delay, the bounds of
 // random, or a center and the deviation around it. A deviation written as a
 // percentage stays one so the text round-trips.
 type Spec struct {
@@ -81,7 +81,8 @@ func Parse(raw string) (Spec, error) {
 	return s, nil
 }
 
-// Sample draws one wait. It is never negative and is safe for concurrent use.
+// Sample returns the delay for one request. It is never negative and is safe
+// for concurrent use.
 func (s Spec) Sample() time.Duration {
 	return s.draw(globalSource{})
 }
@@ -94,7 +95,7 @@ func (s Spec) IsZero() bool {
 	return s.kind == fixed && s.base <= 0
 }
 
-// String is the canonical expression, empty when there is no wait.
+// String is the canonical expression, empty when there is no delay.
 func (s Spec) String() string {
 	f := forms[s.kind]
 	if f.name == "" {

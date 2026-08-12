@@ -144,7 +144,7 @@ func (globalSource) NormFloat64() float64 { return rand.NormFloat64() }
 
 const maxDurationFloat = float64(math.MaxInt64)
 
-// clamp keeps a draw inside the duration range; below zero nothing is left to wait for.
+// clamp keeps a sampled value inside the duration range; below zero there is no delay.
 func clamp(v float64) time.Duration {
 	switch {
 	case v <= 0:

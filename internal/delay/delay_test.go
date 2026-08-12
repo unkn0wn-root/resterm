@@ -115,7 +115,7 @@ func TestSampleBounds(t *testing.T) {
 		{input: "random(100ms,500ms)", min: 100 * time.Millisecond, max: 500 * time.Millisecond},
 		{input: "jitter(200ms,20%)", min: 160 * time.Millisecond, max: 240 * time.Millisecond},
 		{input: "jitter(200ms,50ms)", min: 150 * time.Millisecond, max: 250 * time.Millisecond},
-		// A spread wider than the base only reaches down to no wait at all.
+		// A spread wider than the base only reaches down to no delay at all.
 		{input: "jitter(100ms,300%)", min: 0, max: 400 * time.Millisecond},
 	}
 

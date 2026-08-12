@@ -859,11 +859,32 @@ resterm mock --source users.http,payments.http ./workspace
 - `sequence` names a response sequence and follows the same naming rules. It cannot be combined with `name`.
 - `sequence-key` optionally gives a sequence its own cursor per `path`, `query`, `header`, or `cookie` value. It requires `sequence`.
 - `default=true` marks the fallback for a route. A route can have at most one default, and a default cannot also have `@match` conditions.
-- `latency` accepts a non-negative Go duration such as `150ms` or `2s`. Waiting stops when the client cancels the request.
+- `latency` takes a non-negative duration such as `150ms` or `2s`, or a [distribution](#response-latency) that changes the delay from request to request. Waiting stops when the client cancels the request.
 - Response interpolation is enabled by default. Set `interpolate=false` to preserve `{{...}}` as literal response text.
 - The response status must be `200` through `599`. Repeated headers are preserved. Connection/framing headers such as `Content-Length`, `Transfer-Encoding`, and `Connection` are managed by the server and rejected in source files.
 - The body is literal text through the next `###`, or a single `< ./fixtures/body.json` file reference. Relative fixtures resolve from the declaring request file and participate in hot reload, but must remain within the selected request file's directory or workspace root. Absolute paths and paths or symlinks that escape that root are rejected.
 - `HEAD` returns the selected status and headers without a body. `204`, `205`, and `304` scenarios must not declare a body.
+
+### Response latency
+
+`latency=150ms` delays every response by the same amount. Real services are less predictable than that, so `latency` also takes a distribution, which gives each request a different delay. That is what makes a mock useful for testing client timeouts, retries, and backoff:
+
+```http
+# @mock method=GET path=/slow latency=random(100ms,500ms)
+# @mock method=GET path=/steady latency=normal(250ms,50ms)
+# @mock method=GET path=/jittery latency=jitter(200ms,20%)
+```
+
+| Form | Delay |
+| --- | --- |
+| `150ms` | The same every time. |
+| `random(min,max)` | Anywhere between the two bounds, evenly spread. `max` cannot be shorter than `min`. |
+| `normal(mean,stddev)` | Around `mean`, most of the time within `stddev` of it, occasionally further out. |
+| `jitter(base,spread)` | Anywhere between `base - spread` and `base + spread`. |
+
+Durations are written as they are everywhere else in Resterm: `250ms`, `1.5s`, `2m30s`. The second argument of `normal` and `jitter` can be a percentage of the first instead of a duration, so `jitter(200ms,20%)` stays between `160ms` and `240ms`, and `normal(250ms,20%)` spreads by `50ms`. When the numbers reach below zero, the response is not delayed at all.
+
+Spaces between arguments are fine, as in `random(100ms, 500ms)`, and the name is case-insensitive. A value that is neither a duration nor a known distribution is reported with the mock's other parse errors.
 
 ### Response interpolation
 
