@@ -127,8 +127,9 @@ func TestMockLatencyArgsCoverEveryDistribution(t *testing.T) {
 			if it.Insert != "latency="+d.Usage() {
 				t.Fatalf("%s inserts %q, want the %q example", label, it.Insert, d.Usage())
 			}
-			if it.CursorBack != 0 {
-				t.Fatalf("%s selects its last %d runes, want no placeholder", label, it.CursorBack)
+			args, _ := strings.CutPrefix(d.Usage(), d.Name()+"(")
+			if it.CursorBack != len(args) {
+				t.Fatalf("%s selects %d runes, want the %q arguments", label, it.CursorBack, args)
 			}
 		}
 		if !found {

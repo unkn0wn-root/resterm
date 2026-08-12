@@ -53,13 +53,14 @@ func mockItems() []Item {
 			CursorBack: len("250ms"),
 		},
 	}
-	// No placeholder: one always runs to the end of the inserted text, so
-	// typing over the arguments would take the closing parenthesis with them.
 	for _, d := range delay.Distributions() {
+		usage := d.Usage()
+		args := usage[strings.Index(usage, "(")+1:]
 		items = append(items, Item{
-			Label:   "latency=" + d.Name(),
-			Summary: d.Summary(),
-			Insert:  "latency=" + d.Usage(),
+			Label:      "latency=" + d.Name(),
+			Summary:    d.Summary(),
+			Insert:     "latency=" + usage,
+			CursorBack: len(args),
 		})
 	}
 	return append(items, Item{
