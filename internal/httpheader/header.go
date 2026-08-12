@@ -1,4 +1,3 @@
-// Package httpheader defines HTTP header-name identity independently of RTS.
 package httpheader
 
 import (
@@ -6,6 +5,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"golang.org/x/net/http/httpguts"
 )
 
 // Values is a header block. Every entry is represented as a list, including
@@ -40,15 +41,7 @@ func (e *CollisionError) Error() string {
 // Valid reports whether name is an HTTP field-name token. Whitespace is never
 // trimmed: callers must decide whether trimming belongs at their own boundary.
 func Valid(name string) bool {
-	if name == "" {
-		return false
-	}
-	for i := range len(name) {
-		if !token[name[i]] {
-			return false
-		}
-	}
-	return true
+	return httpguts.ValidHeaderFieldName(name)
 }
 
 // Parse validates name and returns its case-insensitive identity.
@@ -107,36 +100,7 @@ func Normalize(src map[string][]string) (Values, error) {
 	}
 	out := make(Values, len(src))
 	for _, k := range keys {
-		out[k.Name.Key()] = append([]string(nil), src[k.Source]...)
+		out[k.Name.Key()] = slices.Clone(src[k.Source])
 	}
 	return out, nil
-}
-
-// Clone returns a deep-enough copy for independently mutating the map and its
-// value lists.
-func Clone(src map[string][]string) Values {
-	out := make(Values, len(src))
-	for name, vals := range src {
-		out[name] = append([]string(nil), vals...)
-	}
-	return out
-}
-
-var token = tokenTable()
-
-func tokenTable() [256]bool {
-	var out [256]bool
-	for _, c := range "!#$%&'*+-.^_`|~" {
-		out[c] = true
-	}
-	for c := byte('0'); c <= '9'; c++ {
-		out[c] = true
-	}
-	for c := byte('A'); c <= 'Z'; c++ {
-		out[c] = true
-	}
-	for c := byte('a'); c <= 'z'; c++ {
-		out[c] = true
-	}
-	return out
 }

@@ -88,7 +88,7 @@ func NewGroupedCatalog(shared map[string]string, groups []Group) (Catalog, error
 	if err := checkCollisions(out); err != nil {
 		return Catalog{}, err
 	}
-	return Catalog{groups: out, shared: str.CloneMap(shared)}, nil
+	return Catalog{groups: out, shared: maps.Clone(shared)}, nil
 }
 
 func buildGroup(in Group, groups *names) (Group, error) {

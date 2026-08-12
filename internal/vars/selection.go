@@ -48,7 +48,7 @@ type Environment struct {
 }
 
 func GroupSelection(profiles map[string]string) Selection {
-	return Selection{profiles: str.CloneMap(profiles)}
+	return Selection{profiles: maps.Clone(profiles)}
 }
 
 func (c Catalog) DefaultSelection() Selection {

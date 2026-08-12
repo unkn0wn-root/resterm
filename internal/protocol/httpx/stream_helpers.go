@@ -3,6 +3,7 @@ package httpx
 import (
 	"context"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -49,7 +50,7 @@ func buildStreamMeta(
 		meta.Status = httpResp.Status
 		meta.StatusCode = httpResp.StatusCode
 		meta.Proto = httpResp.Proto
-		meta.Headers = cloneHdr(httpResp.Header)
+		meta.Headers = httpResp.Header.Clone()
 	}
 
 	return meta
@@ -62,10 +63,10 @@ func streamResp(meta StreamMeta, headers http.Header, body []byte, dur time.Dura
 		Proto:          meta.Proto,
 		Headers:        headers,
 		ReqMethod:      meta.RequestMethod,
-		RequestHeaders: cloneHdr(meta.RequestHeaders),
+		RequestHeaders: meta.RequestHeaders.Clone(),
 		ReqHost:        meta.RequestHost,
 		ReqLen:         meta.RequestLength,
-		ReqTE:          cloneStrs(meta.RequestTE),
+		ReqTE:          slices.Clone(meta.RequestTE),
 		Body:           body,
 		Duration:       dur,
 		EffectiveURL:   meta.EffectiveURL,
@@ -76,7 +77,7 @@ func streamResp(meta StreamMeta, headers http.Header, body []byte, dur time.Dura
 // This temporary response lets the UI show an interactive WebSocket before the
 // session closes and its final transcript is available.
 func StreamingWebSocketResponse(meta StreamMeta) *Response {
-	headers := cloneHdr(meta.Headers)
+	headers := meta.Headers.Clone()
 	if headers == nil {
 		headers = make(http.Header)
 	}
