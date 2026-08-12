@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -158,20 +158,20 @@ func normalizeSettings(settings map[string]string) map[string]string {
 	return norm
 }
 
-func applyHTTPVersion(req *http.Request, v httpver.Version) {
+func applyHTTPVersion(req *http.Request, v version.HTTP) {
 	if req == nil {
 		return
 	}
 	switch v {
-	case httpver.V10:
+	case version.V10:
 		req.Proto = "HTTP/1.0"
 		req.ProtoMajor = 1
 		req.ProtoMinor = 0
-	case httpver.V11:
+	case version.V11:
 		req.Proto = "HTTP/1.1"
 		req.ProtoMajor = 1
 		req.ProtoMinor = 1
-	case httpver.V2:
+	case version.V2:
 		// HTTP/2 is negotiated by the transport; net/http ignores req.Proto for h2.
 	}
 }

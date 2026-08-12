@@ -1,9 +1,9 @@
-package httpver
+package version
 
 import "testing"
 
 func TestParseToken(t *testing.T) {
-	cases := map[string]Version{
+	cases := map[string]HTTP{
 		"HTTP/1.0": V10,
 		"HTTP/1.1": V11,
 		"http/2":   V2,
@@ -22,7 +22,7 @@ func TestParseToken(t *testing.T) {
 }
 
 func TestParseValue(t *testing.T) {
-	cases := map[string]Version{
+	cases := map[string]HTTP{
 		"1.0":      V10,
 		"1.1":      V11,
 		"2":        V2,

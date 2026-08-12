@@ -3,7 +3,7 @@ package rtshost
 import (
 	"encoding/json"
 
-	"github.com/unkn0wn-root/resterm/internal/httpheader"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/jsonpath"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/native"
@@ -81,7 +81,7 @@ func (*responseObj) Index(*rts.Ctx, rts.Pos, rts.Value) (rts.Value, error) {
 func (o *responseObj) headerDef() native.Def {
 	sig := o.name + ".header(name)"
 	return native.Fn1(o.name+".header", sig, headerName,
-		func(call native.Call, name httpheader.Name) (rts.Value, error) {
+		func(call native.Call, name header.Name) (rts.Value, error) {
 			if o.resp == nil {
 				return rts.Str(""), nil
 			}

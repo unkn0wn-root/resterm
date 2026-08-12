@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -17,14 +17,14 @@ func isMethodLine(line string) bool {
 	return methodRe.MatchString(line)
 }
 
-func ParseMethodLine(line string) (method string, url string, ver httpver.Version, ok bool) {
+func ParseMethodLine(line string) (method string, url string, ver version.HTTP, ok bool) {
 	if !isMethodLine(line) {
-		return "", "", httpver.Unknown, false
+		return "", "", version.Unknown, false
 	}
 
 	fields := strings.Fields(line)
 	if len(fields) < 2 {
-		return "", "", httpver.Unknown, false
+		return "", "", version.Unknown, false
 	}
 
 	method = str.UpperTrim(fields[0])
@@ -32,9 +32,9 @@ func ParseMethodLine(line string) (method string, url string, ver httpver.Versio
 		method = stdhttp.MethodGet
 	}
 
-	urlFields, ver := httpver.SplitToken(fields[1:])
+	urlFields, ver := version.SplitToken(fields[1:])
 	if len(urlFields) == 0 {
-		return "", "", httpver.Unknown, false
+		return "", "", version.Unknown, false
 	}
 	url = strings.Join(urlFields, " ")
 	return method, url, ver, true

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/httpheader"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
+	"github.com/unkn0wn-root/resterm/internal/http/query"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
-	"github.com/unkn0wn-root/resterm/internal/queryparams"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -30,7 +30,7 @@ func TestMutatorNormalizesTokenMutations(t *testing.T) {
 
 func TestMutatorMirrorsHeadersOntoRequestView(t *testing.T) {
 	var out prerequest.Output
-	req := &Request{Headers: httpheader.Values{"x-drop": {"gone"}}}
+	req := &Request{Headers: header.Values{"x-drop": {"gone"}}}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
 	mut.SetHeader(mustHeaderName(t, "X-Test"), "1")
@@ -48,18 +48,18 @@ func TestMutatorMirrorsHeadersOntoRequestView(t *testing.T) {
 	}
 }
 
-func mustHeaderName(t *testing.T, s string) httpheader.Name {
+func mustHeaderName(t *testing.T, s string) header.Name {
 	t.Helper()
-	n, err := httpheader.Parse(s)
+	n, err := header.Parse(s)
 	if err != nil {
-		t.Fatalf("httpheader.Parse(%q): %v", s, err)
+		t.Fatalf("header.Parse(%q): %v", s, err)
 	}
 	return n
 }
 
 func TestMutatorPatchesRequestURLOnQuery(t *testing.T) {
 	var out prerequest.Output
-	req := &Request{URL: "https://example.com/path?seed=1", Query: queryparams.Values{"seed": {"1"}}}
+	req := &Request{URL: "https://example.com/path?seed=1", Query: query.Values{"seed": {"1"}}}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
 	mut.SetQuery("user", "alice")

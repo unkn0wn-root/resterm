@@ -3,10 +3,10 @@ package rtshost
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/httpheader"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
+	"github.com/unkn0wn-root/resterm/internal/http/query"
+	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
-	"github.com/unkn0wn-root/resterm/internal/queryparams"
-	"github.com/unkn0wn-root/resterm/internal/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -55,18 +55,18 @@ func (m *Mutator) SetURL(value string) {
 	m.req.Query = nil
 }
 
-func (m *Mutator) SetHeader(name httpheader.Name, value string) {
+func (m *Mutator) SetHeader(name header.Name, value string) {
 	m.out.SetHeader(name.Key(), value)
 	m.reqHeaders()[name.Key()] = []string{value}
 }
 
-func (m *Mutator) AddHeader(name httpheader.Name, value string) {
+func (m *Mutator) AddHeader(name header.Name, value string) {
 	m.out.AddHeader(name.Key(), value)
 	h := m.reqHeaders()
 	h[name.Key()] = append(h[name.Key()], value)
 }
 
-func (m *Mutator) DelHeader(name httpheader.Name) {
+func (m *Mutator) DelHeader(name header.Name) {
 	m.out.DelHeader(name.Key())
 	delete(m.req.Headers, name.Key())
 }
@@ -116,7 +116,7 @@ func (m *Mutator) setReqQuery(name, value string) {
 	if m.req.Query == nil {
 		q, err := targetQuery(m.req.URL)
 		if err != nil {
-			q = make(queryparams.Values)
+			q = make(query.Values)
 		}
 		m.req.Query = q
 	}
@@ -131,9 +131,9 @@ func (m *Mutator) setReqQuery(name, value string) {
 	m.req.URL = url
 }
 
-func (m *Mutator) reqHeaders() httpheader.Values {
+func (m *Mutator) reqHeaders() header.Values {
 	if m.req.Headers == nil {
-		m.req.Headers = make(httpheader.Values)
+		m.req.Headers = make(header.Values)
 	}
 	return m.req.Headers
 }

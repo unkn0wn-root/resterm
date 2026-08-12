@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 )
 
 func TestApplyOptionSettingsRejectsInvalidValues(t *testing.T) {
@@ -119,7 +119,7 @@ func TestApplyOptionSettingsAcceptsBooleanSpellings(t *testing.T) {
 // value must not stop the readable ones behind it from being applied.
 func TestApplyRequestSettingsSkipsUnreadableValues(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
-	opts := Options{Timeout: time.Second, HTTPVersion: httpver.V11, CookieJar: jar}
+	opts := Options{Timeout: time.Second, HTTPVersion: version.V11, CookieJar: jar}
 
 	got := applyRequestSettings(opts, map[string]string{
 		"http-version":    "unsupported",
@@ -129,7 +129,7 @@ func TestApplyRequestSettingsSkipsUnreadableValues(t *testing.T) {
 		"no-cookies":      "true",
 	})
 
-	if got.HTTPVersion != httpver.V11 {
+	if got.HTTPVersion != version.V11 {
 		t.Fatalf("HTTPVersion = %v, want it unchanged", got.HTTPVersion)
 	}
 	if got.Timeout != time.Second {

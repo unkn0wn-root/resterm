@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 )
 
-func checkHTTPVersion(resp *http.Response, v httpver.Version) error {
-	if v != httpver.V2 {
+func checkHTTPVersion(resp *http.Response, v version.HTTP) error {
+	if v != version.V2 {
 		return nil
 	}
 	if resp == nil || resp.ProtoMajor != 2 {
@@ -25,8 +25,8 @@ func checkHTTPVersion(resp *http.Response, v httpver.Version) error {
 	return nil
 }
 
-func checkHTTPVersionRequest(req *http.Request, v httpver.Version) error {
-	if v != httpver.V2 {
+func checkHTTPVersionRequest(req *http.Request, v version.HTTP) error {
+	if v != version.V2 {
 		return nil
 	}
 	if req == nil || req.URL == nil {
@@ -41,14 +41,14 @@ func checkHTTPVersionRequest(req *http.Request, v httpver.Version) error {
 	return nil
 }
 
-func checkWebSocketHTTPVersion(v httpver.Version) error {
+func checkWebSocketHTTPVersion(v version.HTTP) error {
 	switch v {
-	case httpver.V10:
+	case version.V10:
 		return diag.Newf(
 			diag.ClassProtocol,
 			"http-version=1.0 is not supported for WebSocket requests",
 		)
-	case httpver.V2:
+	case version.V2:
 		return diag.Newf(
 			diag.ClassProtocol,
 			"http-version=2 is not supported for WebSocket requests",

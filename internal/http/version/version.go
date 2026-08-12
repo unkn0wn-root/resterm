@@ -1,27 +1,27 @@
-package httpver
+package version
 
 import "strings"
 
 const Key = "http-version"
 
-type Version int
+type HTTP int
 
 const (
-	Unknown Version = iota
+	Unknown HTTP = iota
 	V10
 	V11
 	V2
 )
 
-func ParseToken(raw string) (Version, bool) {
+func ParseToken(raw string) (HTTP, bool) {
 	return parse(raw, false)
 }
 
-func ParseValue(raw string) (Version, bool) {
+func ParseValue(raw string) (HTTP, bool) {
 	return parse(raw, true)
 }
 
-func SplitToken(fields []string) ([]string, Version) {
+func SplitToken(fields []string) ([]string, HTTP) {
 	if len(fields) == 0 {
 		return fields, Unknown
 	}
@@ -32,7 +32,7 @@ func SplitToken(fields []string) ([]string, Version) {
 	return fields[:len(fields)-1], v
 }
 
-func Format(v Version) string {
+func Format(v HTTP) string {
 	switch v {
 	case V10:
 		return "1.0"
@@ -45,7 +45,7 @@ func Format(v Version) string {
 	}
 }
 
-func SetIfMissing(m map[string]string, v Version) map[string]string {
+func SetIfMissing(m map[string]string, v HTTP) map[string]string {
 	if v == Unknown {
 		return m
 	}
@@ -61,7 +61,7 @@ func SetIfMissing(m map[string]string, v Version) map[string]string {
 	return m
 }
 
-func parse(raw string, allowBare bool) (Version, bool) {
+func parse(raw string, allowBare bool) (HTTP, bool) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return Unknown, false

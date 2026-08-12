@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -43,11 +43,11 @@ func TestPrepareHTTPRequestAllowsHTTP2OverHTTPS(t *testing.T) {
 }
 
 func TestApplyRequestSettingsIgnoresInvalidHTTPVersion(t *testing.T) {
-	opts := Options{HTTPVersion: httpver.V11}
+	opts := Options{HTTPVersion: version.V11}
 
 	effective := applyRequestSettings(opts, map[string]string{"http-version": "unsupported"})
 
-	if effective.HTTPVersion != httpver.V11 {
+	if effective.HTTPVersion != version.V11 {
 		t.Fatalf("expected HTTP version to remain unchanged, got %v", effective.HTTPVersion)
 	}
 }

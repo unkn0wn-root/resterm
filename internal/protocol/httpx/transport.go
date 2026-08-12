@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"github.com/unkn0wn-root/resterm/internal/tunnel"
 )
@@ -54,11 +54,11 @@ func newBaseTransport() *http.Transport {
 	}
 }
 
-func applyTransportHTTPVersion(transport *http.Transport, version httpver.Version) {
+func applyTransportHTTPVersion(transport *http.Transport, v version.HTTP) {
 	if transport == nil {
 		return
 	}
-	if version == httpver.V10 || version == httpver.V11 {
+	if v == version.V10 || v == version.V11 {
 		transport.ForceAttemptHTTP2 = false
 		transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
 	}
@@ -144,11 +144,11 @@ func applyTunnels(transport *http.Transport, opts Options) error {
 
 func applyTunnel(
 	transport *http.Transport,
-	version httpver.Version,
+	v version.HTTP,
 	kind string,
 	dial tunnel.DialContextFunc,
 ) error {
-	if err := tunnel.ApplyHTTPTransport(transport, version, dial); err != nil {
+	if err := tunnel.ApplyHTTPTransport(transport, v, dial); err != nil {
 		return diag.WrapAsf(diag.ClassRoute, err, "enable http2 over %s", kind)
 	}
 	return nil

@@ -3,11 +3,11 @@ package rtshost
 import (
 	"context"
 
-	"github.com/unkn0wn-root/resterm/internal/httpheader"
-	"github.com/unkn0wn-root/resterm/internal/queryparams"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
+	"github.com/unkn0wn-root/resterm/internal/http/query"
+	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/native"
-	"github.com/unkn0wn-root/resterm/internal/urltpl"
 )
 
 type stateKey struct{}
@@ -37,7 +37,7 @@ type requestObj struct{}
 
 var requestFns = map[string]rts.Value{
 	"header": native.Fn1("request.header", "request.header(name)", headerName,
-		func(call native.Call, name httpheader.Name) (rts.Value, error) {
+		func(call native.Call, name header.Name) (rts.Value, error) {
 			req := requestFrom(call.Ctx)
 			if req == nil {
 				return rts.Str(""), nil
@@ -157,9 +157,9 @@ func headerValues(req *Request) map[string][]string {
 	return req.Headers
 }
 
-func queryValues(req *Request) (queryparams.Values, error) {
+func queryValues(req *Request) (query.Values, error) {
 	if req == nil {
-		return queryparams.Values{}, nil
+		return query.Values{}, nil
 	}
 	if req.Query != nil {
 		return req.Query, nil
@@ -167,22 +167,22 @@ func queryValues(req *Request) (queryparams.Values, error) {
 	return targetQuery(req.URL)
 }
 
-func targetQuery(raw string) (queryparams.Values, error) {
+func targetQuery(raw string) (query.Values, error) {
 	q, err := urltpl.ParseTargetQuery(raw)
 	if err != nil {
 		return nil, err
 	}
-	return queryparams.Clone(q), nil
+	return query.Clone(q), nil
 }
 
-func headerName(call native.Call, v rts.Value) (httpheader.Name, error) {
+func headerName(call native.Call, v rts.Value) (header.Name, error) {
 	name, err := native.String(call, v)
 	if err != nil {
-		return httpheader.Name{}, err
+		return header.Name{}, err
 	}
-	n, err := httpheader.Parse(name)
+	n, err := header.Parse(name)
 	if err != nil {
-		return httpheader.Name{}, call.Errorf("%s expects an HTTP header name, got %q", call.Sig, name)
+		return header.Name{}, call.Errorf("%s expects an HTTP header name, got %q", call.Sig, name)
 	}
 	return n, nil
 }

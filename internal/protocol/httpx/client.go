@@ -8,7 +8,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -28,7 +28,7 @@ type Options struct {
 	RootMode           tlsconfig.RootMode
 	ClientCert         string
 	ClientKey          string
-	HTTPVersion        httpver.Version
+	HTTPVersion        version.HTTP
 	BaseDir            string
 	FallbackBaseDirs   []string
 	NoFallback         bool

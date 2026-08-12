@@ -3,8 +3,8 @@ package rtshost
 import (
 	"fmt"
 
-	"github.com/unkn0wn-root/resterm/internal/httpheader"
-	"github.com/unkn0wn-root/resterm/internal/queryparams"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
+	"github.com/unkn0wn-root/resterm/internal/http/query"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -97,9 +97,9 @@ func strictNames(kind string, src map[string]string) (vars.NameMap[string], erro
 type RequestMutator interface {
 	SetMethod(value string)
 	SetURL(value string)
-	SetHeader(name httpheader.Name, value string)
-	AddHeader(name httpheader.Name, value string)
-	DelHeader(name httpheader.Name)
+	SetHeader(name header.Name, value string)
+	AddHeader(name header.Name, value string)
+	DelHeader(name header.Name)
 	SetQuery(name, value string)
 	SetBody(value string)
 }
@@ -119,20 +119,20 @@ type GlobalMutator interface {
 type Request struct {
 	Method  string
 	URL     string
-	Headers httpheader.Values
-	Query   queryparams.Values
+	Headers header.Values
+	Query   query.Values
 }
 
 // NewRequest validates and copies a request view. A nil query is derived lazily
 // from rawURL. An empty non-nil query represents an explicitly empty query.
-func NewRequest(method, rawURL string, headers, query map[string][]string) (*Request, error) {
-	h, err := httpheader.Normalize(headers)
+func NewRequest(method, rawURL string, headers, rawQuery map[string][]string) (*Request, error) {
+	h, err := header.Normalize(headers)
 	if err != nil {
 		return nil, fmt.Errorf("request headers: %w", err)
 	}
-	var q queryparams.Values
-	if query != nil {
-		q = queryparams.Clone(query)
+	var q query.Values
+	if rawQuery != nil {
+		q = query.Clone(rawQuery)
 	}
 	return &Request{Method: method, URL: rawURL, Headers: h, Query: q}, nil
 }
@@ -141,7 +141,7 @@ func NewRequest(method, rawURL string, headers, query map[string][]string) (*Req
 type Response struct {
 	Status  string
 	Code    int
-	Headers httpheader.Values
+	Headers header.Values
 	Body    []byte
 	URL     string
 }
@@ -154,7 +154,7 @@ func NewResponse(
 	body []byte,
 	rawURL string,
 ) (*Response, error) {
-	h, err := httpheader.Normalize(headers)
+	h, err := header.Normalize(headers)
 	if err != nil {
 		return nil, fmt.Errorf("response headers: %w", err)
 	}
