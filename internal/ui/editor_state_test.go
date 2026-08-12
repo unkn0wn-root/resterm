@@ -2141,6 +2141,10 @@ func TestRequestEditorPlaceholderKeepsClipboard(t *testing.T) {
 	editor := acceptLatencyRandom(t)
 
 	editor = typeRunes(editor, "1s,2s")
+	const want = "# @mock latency=random(1s,2s)"
+	if got := editor.Value(); !strings.HasPrefix(got, want) {
+		t.Fatalf("typed over the example = %q, want it to start with %q", got, want)
+	}
 	if got, err := clipboard.ReadAll(); err != nil || got != "ZZ" {
 		t.Fatalf("clipboard = %q (err %v), want the example not to be yanked", got, err)
 	}
