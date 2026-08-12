@@ -118,6 +118,64 @@ func TestEvalLogic(t *testing.T) {
 	}
 }
 
+// the operators answer with a bool, so 1 && 2 is true and not 2 as in JavaScript
+func TestEvalLogicalSymbols(t *testing.T) {
+	cases := []struct {
+		src  string
+		want bool
+	}{
+		{"true && false", false},
+		{"true && true", true},
+		{"false || true", true},
+		{"false || false", false},
+		{"!false", true},
+		{"!\"\"", true},
+		{"!\"x\"", false},
+		{"1 && 2", true},
+		{"!0", true},
+		{"true && !false || false", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			v := evalExpr(t, tc.src)
+			if v.K != VBool || v.B != tc.want {
+				t.Fatalf("expected %v, got %+v", tc.want, v)
+			}
+		})
+	}
+}
+
+func TestLogicalSymbolsShortCircuit(t *testing.T) {
+	src := `
+let calls = 0
+fn side(v) {
+  calls = calls + 1
+  return v
+}
+let skipped = false && side(true)
+let taken = true && side(true)
+let kept = true || side(false)
+let unresolved = false && missingName
+`
+	comp := execModule(t, src)
+	wantNum(t, comp, "calls", 1)
+
+	for _, tc := range []struct {
+		name string
+		want bool
+	}{
+		{"skipped", false},
+		{"taken", true},
+		{"kept", true},
+		{"unresolved", false},
+	} {
+		v, ok := comp.Env.Get(tc.name)
+		if !ok || v.K != VBool || v.B != tc.want {
+			t.Fatalf("expected %s=%v, got %+v (ok=%v)", tc.name, tc.want, v, ok)
+		}
+	}
+}
+
 // ?? must not evaluate its right side unless the left side is null, so a
 // fallback with side effects or its own failure stays untouched when it is unused
 func TestCoalesceIsLazy(t *testing.T) {

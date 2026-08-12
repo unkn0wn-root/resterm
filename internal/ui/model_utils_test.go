@@ -496,7 +496,7 @@ func TestFormatTestSummaryColorsStatuses(t *testing.T) {
 
 func TestFormatTestSummaryRendersDiagnostic(t *testing.T) {
 	rep := diag.Report{
-		Source: []byte("# @assert status == 200 && ok\n"),
+		Source: []byte("# @assert status == 200 & ok\n"),
 		Items: []diag.Diagnostic{{
 			Class:    diag.ClassScript,
 			Severity: diag.SeverityError,

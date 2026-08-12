@@ -700,17 +700,21 @@ func coalesceOp(k Kind) (BinOp, bool) {
 }
 
 func orOp(k Kind) (BinOp, bool) {
-	if k == KW_OR {
+	switch k {
+	case KW_OR, OROR:
 		return OpOr, true
+	default:
+		return 0, false
 	}
-	return 0, false
 }
 
 func andOp(k Kind) (BinOp, bool) {
-	if k == KW_AND {
+	switch k {
+	case KW_AND, ANDAND:
 		return OpAnd, true
+	default:
+		return 0, false
 	}
-	return 0, false
 }
 
 func eqOp(k Kind) (BinOp, bool) {
@@ -763,6 +767,19 @@ func mulOp(k Kind) (BinOp, bool) {
 	}
 }
 
+// unaryOp maps the word and symbol forms onto the same operator, so not x and
+// !x parse to one node
+func unaryOp(k Kind) (UnOp, bool) {
+	switch k {
+	case KW_NOT, BANG:
+		return UnNot, true
+	case MINUS:
+		return UnNeg, true
+	default:
+		return 0, false
+	}
+}
+
 func (p *Parser) parseUnary() Expr {
 	if p.cur.K == KW_TRY {
 		pos := p.cur.P
@@ -771,18 +788,11 @@ func (p *Parser) parseUnary() Expr {
 		return &TryExpr{P: pos, X: x}
 	}
 
-	if p.cur.K == KW_NOT {
+	if op, ok := unaryOp(p.cur.K); ok {
 		pos := p.cur.P
 		p.next()
 		x := p.parseUnary()
-		return &Unary{P: pos, Op: UnNot, X: x}
-	}
-
-	if p.cur.K == MINUS {
-		pos := p.cur.P
-		p.next()
-		x := p.parseUnary()
-		return &Unary{P: pos, Op: UnNeg, X: x}
+		return &Unary{P: pos, Op: op, X: x}
 	}
 	return p.parsePostfix()
 }

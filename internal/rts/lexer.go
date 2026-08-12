@@ -159,7 +159,22 @@ func (l *Lexer) Next() Tok {
 				l.read()
 				return l.emit(NE, "!=", p)
 			}
-			return l.illegal(p, "unexpected '!'")
+			return l.emit(BANG, "!", p)
+		// there are no bitwise operators, so a lone & or | is a mistyped && or ||
+		case '&':
+			l.read()
+			if l.peek() == '&' {
+				l.read()
+				return l.emit(ANDAND, "&&", p)
+			}
+			return l.illegal(p, "unexpected '&'")
+		case '|':
+			l.read()
+			if l.peek() == '|' {
+				l.read()
+				return l.emit(OROR, "||", p)
+			}
+			return l.illegal(p, "unexpected '|'")
 		case '<':
 			l.read()
 			if l.peek() == '=' {

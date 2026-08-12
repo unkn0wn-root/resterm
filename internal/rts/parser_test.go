@@ -683,11 +683,13 @@ func TestParseExprIllegalTokenMessage(t *testing.T) {
 	cases := []struct {
 		name string
 		src  string
+		msg  string
 		col  int
 	}{
-		{"trailing operator", "a && b", 3},
-		{"inside parens", "(a & b)", 4},
-		{"leading operator", "& a", 1},
+		{"trailing operator", "a & b", "unexpected '&'", 3},
+		{"inside parens", "(a & b)", "unexpected '&'", 4},
+		{"leading operator", "& a", "unexpected '&'", 1},
+		{"lone pipe", "a | b", "unexpected '|'", 3},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -696,8 +698,8 @@ func TestParseExprIllegalTokenMessage(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected *ParseError, got %T", err)
 			}
-			if pe.Msg != "unexpected '&'" {
-				t.Fatalf("msg: got %q, want %q", pe.Msg, "unexpected '&'")
+			if pe.Msg != tc.msg {
+				t.Fatalf("msg: got %q, want %q", pe.Msg, tc.msg)
 			}
 			if pe.Pos.Line != 1 || pe.Pos.Col != tc.col {
 				t.Fatalf("pos: got %d:%d, want 1:%d", pe.Pos.Line, pe.Pos.Col, tc.col)
@@ -707,18 +709,117 @@ func TestParseExprIllegalTokenMessage(t *testing.T) {
 }
 
 func TestParseModuleIllegalTokenMessage(t *testing.T) {
-	_, err := ParseModule("t", []byte("let x = !\n"))
+	_, err := ParseModule("t", []byte("let x = &\n"))
 	pe, ok := err.(*ParseError)
 	if !ok {
 		t.Fatalf("expected *ParseError, got %T", err)
 	}
-	if pe.Msg != "unexpected '!'" {
-		t.Fatalf("msg: got %q, want %q", pe.Msg, "unexpected '!'")
+	if pe.Msg != "unexpected '&'" {
+		t.Fatalf("msg: got %q, want %q", pe.Msg, "unexpected '&'")
 	}
 	if pe.Pos.Line != 1 || pe.Pos.Col != 9 {
 		t.Fatalf("pos: got %d:%d, want 1:9", pe.Pos.Line, pe.Pos.Col)
 	}
-	if got := pe.Error(); got != "t:1:9: unexpected '!'" {
+	if got := pe.Error(); got != "t:1:9: unexpected '&'" {
 		t.Fatalf("error string: got %q", got)
+	}
+}
+
+func mustParseExpr(t *testing.T, src string) Expr {
+	t.Helper()
+	ex, err := ParseExpr("t", 1, 1, src)
+	if err != nil {
+		t.Fatalf("parse %q: %v", src, err)
+	}
+	return ex
+}
+
+func TestParseLogicalSymbolOperators(t *testing.T) {
+	cases := []struct {
+		src string
+		op  BinOp
+	}{
+		{"a && b", OpAnd},
+		{"a and b", OpAnd},
+		{"a || b", OpOr},
+		{"a or b", OpOr},
+		{"a && b or c", OpOr},
+		{"a || b and c", OpOr},
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			bin, ok := mustParseExpr(t, tc.src).(*Binary)
+			if !ok {
+				t.Fatalf("expected binary expr")
+			}
+			if bin.Op != tc.op {
+				t.Fatalf("op: got %v, want %v", bin.Op, tc.op)
+			}
+		})
+	}
+}
+
+func TestParseBangIsNot(t *testing.T) {
+	un, ok := mustParseExpr(t, "!a").(*Unary)
+	if !ok || un.Op != UnNot {
+		t.Fatalf("expected not expr, got %#v", un)
+	}
+	if _, ok := un.X.(*Ident); !ok {
+		t.Fatalf("expected ident operand, got %T", un.X)
+	}
+
+	outer, ok := mustParseExpr(t, "!!a").(*Unary)
+	if !ok || outer.Op != UnNot {
+		t.Fatalf("expected outer not expr")
+	}
+	if inner, ok := outer.X.(*Unary); !ok || inner.Op != UnNot {
+		t.Fatalf("expected inner not expr, got %T", outer.X)
+	}
+}
+
+func TestParseBangDoesNotSplitNotEqual(t *testing.T) {
+	bin, ok := mustParseExpr(t, "a != b").(*Binary)
+	if !ok || bin.Op != OpNe {
+		t.Fatalf("expected not-equal expr, got %#v", bin)
+	}
+}
+
+func TestParseLogicalSymbolPrecedence(t *testing.T) {
+	or, ok := mustParseExpr(t, "!a && b || c").(*Binary)
+	if !ok || or.Op != OpOr {
+		t.Fatalf("expected or at the top, got %#v", or)
+	}
+	and, ok := or.Left.(*Binary)
+	if !ok || and.Op != OpAnd {
+		t.Fatalf("expected and on the left of or, got %T", or.Left)
+	}
+	if not, ok := and.Left.(*Unary); !ok || not.Op != UnNot {
+		t.Fatalf("expected not on the left of and, got %T", and.Left)
+	}
+
+	eq, ok := mustParseExpr(t, "!a == b").(*Binary)
+	if !ok || eq.Op != OpEq {
+		t.Fatalf("expected equality at the top, got %#v", eq)
+	}
+	if not, ok := eq.Left.(*Unary); !ok || not.Op != UnNot {
+		t.Fatalf("expected not on the left of ==, got %T", eq.Left)
+	}
+}
+
+// the brace after the condition must not be read as a dict literal
+func TestParseBangInConditions(t *testing.T) {
+	src := "fn f(ready, done) {\nif !ready { return 1 }\nfor !done { break }\nreturn 0\n}\n"
+	if _, err := ParseModule("t", []byte(src)); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+}
+
+func TestParseLogicalSymbolContinuesLine(t *testing.T) {
+	m, err := ParseModule("t", []byte("let x = a &&\n  b ||\n  c\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(m.Stmts) != 1 {
+		t.Fatalf("expected 1 stmt, got %d", len(m.Stmts))
 	}
 }
