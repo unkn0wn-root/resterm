@@ -1,17 +1,12 @@
 package vars
 
 import (
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/google/uuid"
-	"github.com/unkn0wn-root/resterm/internal/duration"
+	"github.com/unkn0wn-root/resterm/internal/vars/dynamic"
 )
 
 type Provider interface {
@@ -426,15 +421,21 @@ func (r *Resolver) resolveName(
 		if ok {
 			return value, nil
 		}
-		if dynamic, ok := resolveDynamic(name); ok {
+		// A name no helper claims falls through and is reported as undefined.
+		// Anything else is a misused helper, worth saying so.
+		built, err := dynamic.Resolve(name)
+		if err == nil {
 			r.traceVar(ResolveTrace{
 				Name:    name,
 				Source:  "dynamic",
-				Value:   dynamic,
+				Value:   built,
 				Dynamic: true,
 				Uses:    1,
 			})
-			return dynamic, nil
+			return built, nil
+		}
+		if !errors.Is(err, dynamic.ErrUnknown) {
+			return "", err
 		}
 	}
 	value, ok, err := r.resolve(name, pos, allowDynamic, allowExpr, st)
@@ -448,89 +449,11 @@ func (r *Resolver) resolveName(
 	return "", fmt.Errorf("%w: %s", ErrUndefinedVariable, name)
 }
 
-func resolveDynamic(name string) (string, bool) {
-	if base, offset, ok := splitDynamicOffset(name); ok {
-		return resolveDynamicBase(base, offset)
-	}
-	return resolveDynamicBase(name, 0)
-}
-
-// IsDynamic reports whether name identifies a supported dynamic template helper.
-// It defers to resolveDynamic so support and validation share one definition; the
-// generated value is discarded, which is why callers use it only at compile time.
-func IsDynamic(name string) bool {
-	_, ok := resolveDynamic(name)
-	return ok
-}
-
 func (r *Resolver) traceVar(it ResolveTrace) {
 	if r.trace == nil {
 		return
 	}
 	r.trace.Add(it)
-}
-
-func resolveDynamicBase(name string, offset time.Duration) (string, bool) {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "$timestamp":
-		return strconv.FormatInt(time.Now().Add(offset).Unix(), 10), true
-	case "$timestampms":
-		return strconv.FormatInt(time.Now().Add(offset).UnixMilli(), 10), true
-	case "$timestampiso8601":
-		return time.Now().Add(offset).UTC().Format(time.RFC3339), true
-	case "$randomint":
-		if offset != 0 {
-			return "", false
-		}
-		n, err := rand.Int(rand.Reader, big.NewInt(1<<62))
-		if err != nil {
-			return "", false
-		}
-		return n.String(), true
-	case "$uuid", "$guid":
-		if offset != 0 {
-			return "", false
-		}
-		id, err := uuid.NewRandom()
-		if err != nil {
-			return "", false
-		}
-		return id.String(), true
-	default:
-		return "", false
-	}
-}
-
-// splits "$helper +/- duration" into base name and signed offset.
-// "$timestampISO8601 - 90m" -> base "$timestampISO8601", offset -90m.
-func splitDynamicOffset(name string) (string, time.Duration, bool) {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return "", 0, false
-	}
-	for opIdx := len(trimmed) - 1; opIdx > 0; opIdx-- {
-		ch := trimmed[opIdx]
-		if ch != '+' && ch != '-' {
-			continue
-		}
-		base := strings.TrimSpace(trimmed[:opIdx])
-		if base == "" {
-			continue
-		}
-		raw := strings.TrimSpace(trimmed[opIdx+1:])
-		if raw == "" {
-			continue
-		}
-		dur, ok := duration.Parse(raw)
-		if !ok {
-			continue
-		}
-		if ch == '-' {
-			dur = -dur
-		}
-		return base, dur, true
-	}
-	return "", 0, false
 }
 
 type MapProvider struct {
