@@ -29,7 +29,7 @@ func classify(err error) Class {
 	if e, ok := err.(*diagnosticError); ok {
 		return classFromError(e)
 	}
-	if rep, ok := err.(reporter); ok {
+	if rep, ok := err.(Reporter); ok {
 		if class := rep.Diagnostic().Class(); class != ClassUnknown {
 			return class
 		}

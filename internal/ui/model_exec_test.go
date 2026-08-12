@@ -30,6 +30,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
+	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
 	"nhooyr.io/websocket"
@@ -508,19 +510,17 @@ func TestHandleResponseMsgRendersRTSStack(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	err := diag.WrapAs(diag.ClassScript, &rts.StackError{
-		Err: &rts.RuntimeError{
-			Pos: rts.Pos{Path: "hook.rts", Line: 3, Col: 7},
-			Msg: "boom",
-		},
-		Frames: []rts.Frame{{
-			Kind: rts.FrameFn,
-			Pos:  rts.Pos{Path: "hook.rts", Line: 2, Col: 1},
-			Name: "sign",
-		}},
-	},
-		"pre-request rts script",
+	host := rtshost.NewEngine(stdlib.New)
+	_, scriptErr := host.ExecModule(
+		context.Background(),
+		rtshost.Runtime{},
+		"fn sign() {\n  fail(\"boom\")\n}\nsign()\n",
+		rts.Pos{Path: "hook.rts", Line: 1, Col: 1},
 	)
+	if scriptErr == nil {
+		t.Fatal("expected RTS module to fail")
+	}
+	err := diag.WrapAs(diag.ClassScript, scriptErr, "pre-request rts script")
 
 	cmd := model.handleResponseMessage(responseMsg{err: err})
 	if cmd != nil {
@@ -533,10 +533,11 @@ func TestHandleResponseMsgRendersRTSStack(t *testing.T) {
 	plain := stripANSIEscape(model.responseLatest.pretty)
 	for _, want := range []string{
 		"error[script]: boom",
-		"--> hook.rts:3:7",
+		"--> hook.rts:2:7",
 		"pre-request rts script",
 		"Stack:",
-		"at hook.rts:2:1 in sign",
+		"at hook.rts:1:1 in sign",
+		"at hook.rts:2:7 in fail",
 	} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected RTS stack view to contain %q, got %q", want, plain)

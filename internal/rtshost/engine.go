@@ -2,10 +2,12 @@ package rtshost
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
+
+var errNilEngine = errors.New("nil RTS host engine")
 
 // Engine translates host runtime state into language-level bindings and
 // delegates parsing and execution to the RTS evaluator.
@@ -39,9 +41,10 @@ func (e *Engine) Limits() rts.Limits {
 // Eval evaluates one expression against rt.
 func (e *Engine) Eval(ctx context.Context, rt Runtime, src string, pos rts.Pos) (rts.Value, error) {
 	if e == nil || e.core == nil {
-		return rts.Null(), fmt.Errorf("nil RTS host engine")
+		return rts.Null(), errNilEngine
 	}
-	return e.core.Eval(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	value, err := e.core.Eval(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	return value, diagnose(err)
 }
 
 // EvalAssertion evaluates an assertion with response shorthand overrides.
@@ -52,20 +55,22 @@ func (e *Engine) EvalAssertion(
 	pos rts.Pos,
 ) (rts.Value, error) {
 	if e == nil || e.core == nil {
-		return rts.Null(), fmt.Errorf("nil RTS host engine")
+		return rts.Null(), errNilEngine
 	}
 	cfg := evalConfig(rt)
 	cfg.Overrides = assertionOverrides(rt.Response)
-	return e.core.Eval(withRuntime(ctx, rt), cfg, src, pos)
+	value, err := e.core.Eval(withRuntime(ctx, rt), cfg, src, pos)
+	return value, diagnose(err)
 }
 
 // EvalStr evaluates an expression and applies RTS's explicit result-to-string
 // boundary conversion.
 func (e *Engine) EvalStr(ctx context.Context, rt Runtime, src string, pos rts.Pos) (string, error) {
 	if e == nil || e.core == nil {
-		return "", fmt.Errorf("nil RTS host engine")
+		return "", errNilEngine
 	}
-	return e.core.EvalStr(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	value, err := e.core.EvalStr(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	return value, diagnose(err)
 }
 
 // ExecModule executes one module body against rt.
@@ -76,9 +81,10 @@ func (e *Engine) ExecModule(
 	pos rts.Pos,
 ) (*rts.Comp, error) {
 	if e == nil || e.core == nil {
-		return nil, fmt.Errorf("nil RTS host engine")
+		return nil, errNilEngine
 	}
-	return e.core.ExecModule(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	comp, err := e.core.ExecModule(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	return comp, diagnose(err)
 }
 
 func evalConfig(rt Runtime) rts.EvalConfig {

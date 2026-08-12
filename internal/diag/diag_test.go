@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
 func TestRenderReportWithSourceSpan(t *testing.T) {
@@ -313,38 +312,6 @@ func TestRenderJoinedErrorsAsBranches(t *testing.T) {
 		"├─> token rejected",
 		"╰─> command timed out",
 	})
-}
-
-func TestRenderWrappedRTSStack(t *testing.T) {
-	err := diag.WrapAs(
-		diag.ClassScript,
-		&rts.StackError{
-			Err: &rts.RuntimeError{
-				Pos: rts.Pos{Path: "hook.rts", Line: 3, Col: 7},
-				Msg: "boom",
-			},
-			Frames: []rts.Frame{{
-				Kind: rts.FrameFn,
-				Pos:  rts.Pos{Path: "hook.rts", Line: 2, Col: 1},
-				Name: "sign",
-			}},
-		},
-		"pre-request rts script",
-	)
-
-	got := diag.Render(err)
-	for _, want := range []string{
-		"error[script]: boom",
-		"--> hook.rts:3:7",
-		"pre-request rts script",
-		"Stack:",
-		"at hook.rts:2:1 in sign",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("Render() missing %q in %q", want, got)
-		}
-	}
-	assertChainLines(t, err, []string{"pre-request rts script"})
 }
 
 func TestRenderHTTPTransportFailureUsesCauseClass(t *testing.T) {
