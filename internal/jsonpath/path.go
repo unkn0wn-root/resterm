@@ -1,5 +1,3 @@
-// Package jsonpath implements the lightweight JSON path syntax used by RTS and
-// other Resterm features.
 package jsonpath
 
 import (
