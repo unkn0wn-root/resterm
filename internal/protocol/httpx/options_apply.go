@@ -8,7 +8,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 )
 
 type optionSettingKey string
@@ -55,12 +55,12 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 		return nil
 	}
 
-	if val, ok := settingValue(norm, httpver.Key); ok {
-		switch v, valid := httpver.ParseValue(val); {
+	if val, ok := settingValue(norm, version.Key); ok {
+		switch v, valid := version.ParseValue(val); {
 		case valid:
 			opts.HTTPVersion = v
 		case strict:
-			return invalidSetting(httpver.Key, val, "1.0, 1.1, 2 or HTTP/1.1, HTTP/2")
+			return invalidSetting(version.Key, val, "1.0, 1.1, 2 or HTTP/1.1, HTTP/2")
 		}
 	}
 

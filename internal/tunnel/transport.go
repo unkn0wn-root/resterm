@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 )
@@ -38,7 +38,7 @@ func DialerFor[T any](manager DialManager[T], cfg T) DialContextFunc {
 
 func ApplyHTTPTransport(
 	transport *http.Transport,
-	version httpver.Version,
+	v version.HTTP,
 	dialer DialContextFunc,
 ) error {
 	if transport == nil {
@@ -49,7 +49,7 @@ func ApplyHTTPTransport(
 	}
 	transport.Proxy = nil
 	transport.DialContext = dialer
-	if version == httpver.V10 || version == httpver.V11 {
+	if v == version.V10 || v == version.V11 {
 		return nil
 	}
 	return http2.ConfigureTransport(transport)

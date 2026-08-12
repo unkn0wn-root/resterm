@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/parser"
@@ -68,7 +68,7 @@ func TestApplyRequestSettings(t *testing.T) {
 	if effective.ProxyURL != "http://localhost:8080" {
 		t.Fatalf("unexpected proxy url: %s", effective.ProxyURL)
 	}
-	if effective.HTTPVersion != httpver.V2 {
+	if effective.HTTPVersion != version.V2 {
 		t.Fatalf("expected http version 2, got %v", effective.HTTPVersion)
 	}
 	if effective.CookieJar != nil {

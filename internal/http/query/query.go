@@ -1,4 +1,4 @@
-package queryparams
+package query
 
 import (
 	"maps"

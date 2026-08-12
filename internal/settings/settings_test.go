@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
@@ -45,7 +45,7 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 	if httpOpts.ProxyURL != "http://proxy" {
 		t.Fatalf("expected proxy to be set, got %q", httpOpts.ProxyURL)
 	}
-	if httpOpts.HTTPVersion != httpver.V2 {
+	if httpOpts.HTTPVersion != version.V2 {
 		t.Fatalf("expected http version 2, got %v", httpOpts.HTTPVersion)
 	}
 	if httpOpts.CookieJar != nil {
@@ -100,7 +100,7 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	if httpOpts.CookieJar != nil {
 		t.Fatalf("expected cookie jar to be cleared")
 	}
-	if httpOpts.HTTPVersion != httpver.V11 {
+	if httpOpts.HTTPVersion != version.V11 {
 		t.Fatalf("expected http version 1.1, got %v", httpOpts.HTTPVersion)
 	}
 	if httpOpts.RootMode != tlsconfig.RootModeAppend {

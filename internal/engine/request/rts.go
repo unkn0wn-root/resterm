@@ -11,7 +11,8 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
-	"github.com/unkn0wn-root/resterm/internal/httpheader"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
+	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -20,7 +21,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
-	"github.com/unkn0wn-root/resterm/internal/urltpl"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -796,7 +796,7 @@ func (e *Engine) parseApplyHeaders(
 	// same rule: the name has to be one the request can carry, and two forms of
 	// one header are refused because http.Header would fold them and the winner
 	// would depend on map order.
-	keys, err := httpheader.Keys(v.M)
+	keys, err := header.Keys(v.M)
 	if err != nil {
 		return nil, nil, applyErr("headers", err.Error())
 	}

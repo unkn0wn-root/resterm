@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
-	"github.com/unkn0wn-root/resterm/internal/httpheader"
-	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
@@ -82,7 +82,7 @@ func (b *documentBuilder) handleMethodLine(ln line) bool {
 		b.ensureRequest(ln.no)
 
 		b.request.http.SetMethodAndURL(method, url)
-		b.request.settings = httpver.SetIfMissing(b.request.settings, ver)
+		b.request.settings = version.SetIfMissing(b.request.settings, ver)
 		b.appendLine(ln.raw)
 		return true
 	}
@@ -117,7 +117,7 @@ func (b *documentBuilder) handleHeaderLine(ln line) bool {
 		// names are never expanded, so nothing later can rescue it. Report it
 		// here, where the line number points at the fix, and still record it so
 		// the request stays what the file says.
-		if !httpheader.Valid(headerName) {
+		if !header.Valid(headerName) {
 			b.addError(ln.no, fmt.Sprintf("header name %q is not an HTTP field name", headerName))
 		}
 		if headerName != "" {
