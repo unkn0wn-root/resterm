@@ -17,6 +17,10 @@ export fn coalesce(a, b) {
   return a ?? b
 }
 
+export fn shouldSkip(token, offline) {
+  return !token || offline
+}
+
 export fn traceId() {
   return "trace-" + uuid()
 }

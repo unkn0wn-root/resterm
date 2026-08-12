@@ -71,6 +71,54 @@ func TestLexerNoSemiInCaseList(t *testing.T) {
 	}
 }
 
+func TestLexerLogicalSymbols(t *testing.T) {
+	got := lexKinds("!a && b || c")
+	want := []Kind{BANG, IDENT, ANDAND, IDENT, OROR, IDENT, AUTO_SEMI, EOF}
+	if !slices.Equal(got, want) {
+		t.Fatalf("kinds: got %v, want %v", got, want)
+	}
+}
+
+func TestLexerBangKeepsNotEqual(t *testing.T) {
+	got := lexKinds("a != !b")
+	want := []Kind{IDENT, NE, BANG, IDENT, AUTO_SEMI, EOF}
+	if !slices.Equal(got, want) {
+		t.Fatalf("kinds: got %v, want %v", got, want)
+	}
+}
+
+func TestLexerLoneAmpersandOrPipeIsIllegal(t *testing.T) {
+	cases := []struct {
+		src string
+		msg string
+	}{
+		{"a & b", "unexpected '&'"},
+		{"a | b", "unexpected '|'"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			lx := NewLexer("test", []byte(tc.src))
+			lx.Next()
+			tok := lx.Next()
+			if tok.K != ILLEGAL || tok.Lit != tc.msg {
+				t.Fatalf("token: got %v %q, want ILLEGAL %q", tok.K, tok.Lit, tc.msg)
+			}
+			if tok.P.Line != 1 || tok.P.Col != 3 {
+				t.Fatalf("pos: got %d:%d, want 1:3", tok.P.Line, tok.P.Col)
+			}
+		})
+	}
+}
+
+func TestLexerNoSemiAfterLogicalSymbol(t *testing.T) {
+	k := lexKinds("let a = b &&\nc ||\nd\n")
+	for i := 0; i < len(k)-1; i++ {
+		if (k[i] == ANDAND || k[i] == OROR) && k[i+1] == AUTO_SEMI {
+			t.Fatalf("unexpected auto semi after %v", k[i])
+		}
+	}
+}
+
 func TestLexerNoSemiInParens(t *testing.T) {
 	src := "let a = (1\n+2)\n"
 	k := lexKinds(src)

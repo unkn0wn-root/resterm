@@ -237,7 +237,7 @@ func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	src := "# @assert status == 200 && ok\nGET " + srv.URL + "\n"
+	src := "# @assert status == 200 & ok\nGET " + srv.URL + "\n"
 	doc := parser.Parse("basic.http", []byte(src))
 	if len(doc.Requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
@@ -302,7 +302,7 @@ func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	src := "# @capture request id status && ok\nGET " + srv.URL + "\n"
+	src := "# @capture request id status & ok\nGET " + srv.URL + "\n"
 	doc := parser.Parse("capture.http", []byte(src))
 	if len(doc.Requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
@@ -364,7 +364,7 @@ func TestRequestRTSModuleParseErrorCarriesSourceSpan(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	src := "# @rts pre-request\n> let ok = 1 && 2\nGET " + srv.URL + "\n"
+	src := "# @rts pre-request\n> let ok = 1 & 2\nGET " + srv.URL + "\n"
 	doc := parser.Parse("module.http", []byte(src))
 	if len(doc.Requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))

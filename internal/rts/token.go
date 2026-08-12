@@ -46,6 +46,10 @@ const (
 	STAR
 	SLASH
 	PERCENT
+	// symbol forms of not, and, or
+	BANG
+	ANDAND
+	OROR
 	COALESCE
 	QUESTION
 	COLON
@@ -161,6 +165,12 @@ func (k Kind) String() string {
 		return "/"
 	case PERCENT:
 		return "%"
+	case BANG:
+		return "!"
+	case ANDAND:
+		return "&&"
+	case OROR:
+		return "||"
 	case COALESCE:
 		return "??"
 	case QUESTION:

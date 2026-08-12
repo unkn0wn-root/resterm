@@ -109,20 +109,42 @@ String escapes include `\n`, `\r`, `\t`, `\\`, `\"`, and `\'`. Dict keys in lite
 
 Listed from tightest to loosest. Each level binds more tightly than the one below it.
 
-- Postfix operators include function calls, indexing, and member access.
-- Unary operators include `not`, `try`, and unary `-`.
-- Multiplicative operators include `*`, `/`, and `%`.
-- Additive operators include `+` and `-`.
-- Comparison operators include `<`, `<=`, `>`, and `>=`.
-- Equality operators include `==` and `!=`.
-- `and`.
-- `or`.
-- The coalesce operator `??` returns the right side when the left side is null.
-- The ternary operator `cond ? a : b` selects between two values.
+- Postfix: function calls, indexing, and member access.
+- Unary: `not` or `!`, `try`, and unary `-`.
+- Multiplicative: `*`, `/`, and `%`.
+- Additive: `+` and `-`.
+- Comparison: `<`, `<=`, `>`, and `>=`.
+- Equality: `==` and `!=`.
+- Logical AND: `and` or `&&`.
+- Logical OR: `or` or `||`.
+- Coalescing: `??` returns the right side when the left side is null.
+- Ternary: `cond ? a : b` selects between two values.
 
 `??` sits near the bottom, so it binds looser than arithmetic, comparison, and both logical operators. `a ?? b + c` means `a ?? (b + c)`, and `a ?? b or c` means `a ?? (b or c)`. Parenthesise when you want the other grouping.
 
 `+` adds numbers or concatenates strings. Non numeric values are converted to string using `str()`. Comparisons only work for numbers or strings, and equality only works for primitive types.
+
+### Logical operators
+
+RestermScript supports word and symbolic forms for its logical operators: `and` or `&&`, `or` or `||`, and `not` or `!`. Each pair is interchangeable and has the same precedence and short-circuit behavior:
+
+```
+if r.ok && !r.retry { return r.value }
+if r.ok and not r.retry { return r.value }
+```
+
+Logical AND and OR always return a bool, not one of their operands. For example, `1 && 2` evaluates to `true`, not `2`.
+
+Like `not`, `!` binds more tightly than any binary operator. This means `!a == b` is parsed as `(!a) == b`. To negate the equality expression instead, write `!(a == b)` or simply `a != b`.
+
+When a line ends with `&&` or `||`, the expression continues on the next line:
+
+```
+let ready = r.ok &&
+  r.value.count > 0
+```
+
+RestermScript does not have bitwise operators, so a single `&` or `|` is a parse error.
 
 ### Fallback values with ??
 
