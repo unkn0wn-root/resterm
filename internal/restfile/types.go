@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
@@ -96,7 +97,7 @@ type Mock struct {
 	SequenceKey MockSequenceKey
 	Method      string
 	Path        string
-	Latency     time.Duration
+	Latency     delay.Spec
 	Default     bool
 	Match       MockMatch
 	Expectation *MockExpectation

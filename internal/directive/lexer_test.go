@@ -53,6 +53,31 @@ func TestFields(t *testing.T) {
 			input: "  a \t b  ",
 			want:  []string{"a", "b"},
 		},
+		{
+			name:  "argument list keeps its spaces",
+			input: "latency=random(100ms, 500ms) name=slow",
+			want:  []string{"latency=random(100ms, 500ms)", "name=slow"},
+		},
+		{
+			name:  "nested argument list",
+			input: "a=f(g(1, 2), 3) b",
+			want:  []string{"a=f(g(1, 2), 3)", "b"},
+		},
+		{
+			name:  "parenthesis in a plain value is ordinary text",
+			input: "path=/x(y z=1",
+			want:  []string{"path=/x(y", "z=1"},
+		},
+		{
+			name:  "parenthesis without a name is ordinary text",
+			input: "a=(x y)",
+			want:  []string{"a=(x", "y)"},
+		},
+		{
+			name:  "unclosed argument list runs to the end",
+			input: "latency=random(100ms name=slow",
+			want:  []string{"latency=random(100ms name=slow"},
+		},
 		{name: "empty"},
 	}
 

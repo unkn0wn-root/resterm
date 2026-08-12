@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -69,6 +70,32 @@ user`)
 		http.StatusNotFound,
 		"not found",
 	)
+}
+
+func TestLatencyDistributionDelaysTheResponse(t *testing.T) {
+	handler := compileSource(t, `# @mock method=GET path=/x latency=random(20ms, 30ms)
+HTTP/1.1 200 OK
+
+slow`)
+
+	// Only the lower bound is asserted. A busy machine can take longer than the
+	// draw, but it cannot answer before the mock waited.
+	start := time.Now()
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/x", nil), http.StatusOK, "slow")
+	if elapsed := time.Since(start); elapsed < 20*time.Millisecond {
+		t.Fatalf("served after %s, want at least the 20ms lower bound", elapsed)
+	}
+}
+
+func TestDigestFollowsLatency(t *testing.T) {
+	source := "# @mock method=GET path=/x latency=%s\nHTTP/1.1 200 OK\n\nok"
+	fixed := compileSource(t, fmt.Sprintf(source, "100ms"))
+	spread := compileSource(t, fmt.Sprintf(source, "random(100ms,500ms)"))
+	wider := compileSource(t, fmt.Sprintf(source, "random(100ms,900ms)"))
+
+	if fixed.Digest() == spread.Digest() || spread.Digest() == wider.Digest() {
+		t.Fatalf("digests match: %s %s %s", fixed.Digest(), spread.Digest(), wider.Digest())
+	}
 }
 
 func TestCompileRejectsInvalidMocks(t *testing.T) {

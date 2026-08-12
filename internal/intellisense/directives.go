@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
@@ -27,6 +28,44 @@ func directiveItems() []Item {
 		}
 	}
 	return items
+}
+
+var mockArgs = mockItems()
+
+// The latency suggestions mirror the delay registry, so a new distribution
+// needs no second list here.
+func mockItems() []Item {
+	items := []Item{
+		{Label: "method=", Summary: "HTTP method to match", Insert: "method=GET"},
+		{Label: "path=", Summary: "Origin-form route path", Insert: "path=/resource"},
+		{Label: "name=", Summary: "Scenario selector name", Insert: "name=success"},
+		{Label: "sequence=", Summary: "Response sequence name", Insert: "sequence=polling"},
+		{
+			Label:   "sequence-key=",
+			Summary: "Per-key cursor source (path, query, header, or cookie)",
+			Insert:  "sequence-key=path.id",
+		},
+		{Label: "default=true", Summary: "Use as the route fallback"},
+		{
+			Label:      "latency=",
+			Summary:    "Constant response latency",
+			Insert:     "latency=250ms",
+			CursorBack: len("250ms"),
+		},
+	}
+	// No placeholder: one always runs to the end of the inserted text, so
+	// typing over the arguments would take the closing parenthesis with them.
+	for _, d := range delay.Distributions() {
+		items = append(items, Item{
+			Label:   "latency=" + d.Name(),
+			Summary: d.Summary(),
+			Insert:  "latency=" + d.Usage(),
+		})
+	}
+	return append(items, Item{
+		Label:   "interpolate=false",
+		Summary: "Preserve response template syntax literally",
+	})
 }
 
 var scriptArgs = []Item{
@@ -174,20 +213,7 @@ var settingArgs = []Item{
 
 // directiveArgs maps a directive base key to its option/sub-token suggestions.
 var directiveArgs = map[directive.Name][]Item{
-	directive.Mock: {
-		{Label: "method=", Summary: "HTTP method to match", Insert: "method=GET"},
-		{Label: "path=", Summary: "Origin-form route path", Insert: "path=/resource"},
-		{Label: "name=", Summary: "Scenario selector name", Insert: "name=success"},
-		{Label: "sequence=", Summary: "Response sequence name", Insert: "sequence=polling"},
-		{
-			Label:   "sequence-key=",
-			Summary: "Per-key cursor source (path, query, header, or cookie)",
-			Insert:  "sequence-key=path.id",
-		},
-		{Label: "default=true", Summary: "Use as the route fallback"},
-		{Label: "latency=", Summary: "Fixed response latency", Insert: "latency=250ms"},
-		{Label: "interpolate=false", Summary: "Preserve response template syntax literally"},
-	},
+	directive.Mock: mockArgs,
 	directive.Match: {
 		{Label: "query=", Summary: "Query matcher rules as JSON", Insert: `query={"key":"value"}`},
 		{Label: "headers=", Summary: "Header matcher rules as JSON", Insert: `headers={"X-Key":"value"}`},

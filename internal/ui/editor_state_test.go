@@ -9,6 +9,7 @@ import (
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 )
 
 func newTestEditor(content string) requestEditor {
@@ -2043,5 +2044,44 @@ func TestRequestEditorExitSearchMode(t *testing.T) {
 	}
 	if editor.search.index != 0 {
 		t.Fatalf("expected search index 0 after resuming, got %d", editor.search.index)
+	}
+}
+
+// A placeholder covering the arguments of a call would take the closing
+// parenthesis with it on the next keystroke.
+func TestRequestEditorCompletionsInsertWholeLatencyCall(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "@mock lat")
+	if !editor.completion.active {
+		t.Fatalf("expected latency suggestions, got %q", editor.Value())
+	}
+	for editor.completion.filtered[editor.completion.selection].Label != "latency=random" {
+		editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	const want = "# @mock latency=random(100ms,500ms)"
+	if got := editor.Value(); !strings.HasPrefix(got, want) {
+		t.Fatalf("accepted completion = %q, want it to start with %q", got, want)
+	}
+	editor = typeRunes(editor, "method=GET")
+	if got := editor.Value(); !strings.HasPrefix(got, want) {
+		t.Fatalf("typing after the completion left %q, want %q intact", got, want)
+	}
+	assertMockLatencyParses(t, editor.Value())
+}
+
+func assertMockLatencyParses(t *testing.T, line string) {
+	t.Helper()
+	doc := parser.Parse("completion.http", []byte(line+" path=/x\nHTTP/1.1 200 OK\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("parse errors for %q: %+v", line, doc.Errors)
+	}
+	if got := doc.Mocks[0].Latency.String(); got != "random(100ms,500ms)" {
+		t.Fatalf("parsed latency = %q", got)
 	}
 }

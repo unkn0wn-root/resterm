@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
@@ -107,6 +108,32 @@ func TestDirectiveArgsFilterByPrefix(t *testing.T) {
 
 	if opts := argOptions("unknown", ""); opts != nil {
 		t.Fatalf("expected nil for unknown directive, got %v", opts)
+	}
+}
+
+func TestMockLatencyArgsCoverEveryDistribution(t *testing.T) {
+	mock := argOptions("mock", "latency")
+	if !contains(mock, "latency=") {
+		t.Fatalf("mock args missing the constant latency: %v", mock)
+	}
+	for _, d := range delay.Distributions() {
+		label := "latency=" + d.Name()
+		found := false
+		for _, it := range mock {
+			if it.Label != label {
+				continue
+			}
+			found = true
+			if it.Insert != "latency="+d.Usage() {
+				t.Fatalf("%s inserts %q, want the %q example", label, it.Insert, d.Usage())
+			}
+			if it.CursorBack != 0 {
+				t.Fatalf("%s selects its last %d runes, want no placeholder", label, it.CursorBack)
+			}
+		}
+		if !found {
+			t.Fatalf("mock args missing %q: %v", label, mock)
+		}
 	}
 }
 

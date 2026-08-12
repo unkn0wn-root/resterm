@@ -107,8 +107,6 @@ func (c *compiler) newVariant(
 		return nil, err
 	}
 	switch {
-	case spec.Latency < 0:
-		return nil, errors.New("mock latency cannot be negative")
 	case spec.Name != "" && !restfile.ValidMockName(spec.Name):
 		return nil, errors.New("invalid mock scenario name")
 	case spec.Sequence != "" && !restfile.ValidMockName(spec.Sequence):
