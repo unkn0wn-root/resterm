@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -14,7 +15,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
-	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -210,11 +210,11 @@ func wsDialOptions(
 ) *websocket.DialOptions {
 	var hdr http.Header
 	if req != nil {
-		hdr = cloneHdr(req.Header)
+		hdr = req.Header.Clone()
 	}
 	opts := &websocket.DialOptions{
 		HTTPHeader:   hdr,
-		Subprotocols: util.CloneSlice(wsOpts.Subprotocols),
+		Subprotocols: slices.Clone(wsOpts.Subprotocols),
 		HTTPClient:   client,
 	}
 	if on, ok := wsOpts.Compression.Get(); ok {
@@ -315,7 +315,7 @@ func (c *Client) CompleteWebSocket(
 		return nil, diag.WrapAs(diag.ClassProtocol, err, "encode websocket transcript")
 	}
 
-	headers := cloneHdr(handle.Meta.Headers)
+	headers := handle.Meta.Headers.Clone()
 	if headers == nil {
 		headers = make(http.Header)
 	}

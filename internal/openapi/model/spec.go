@@ -66,6 +66,22 @@ const (
 	TypeNull    SchemaType = "null"
 )
 
+// SchemaTypesFromStrings normalizes supported OpenAPI schema type names.
+func SchemaTypesFromStrings(src []string) []SchemaType {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]SchemaType, 0, len(src))
+	for _, s := range src {
+		t := normalizeSchemaType(SchemaType(s))
+		if t == "" {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
 const (
 	StyleForm           = "form"
 	StyleSimple         = "simple"

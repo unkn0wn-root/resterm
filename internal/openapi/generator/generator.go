@@ -241,7 +241,7 @@ func (rb *requestBuilder) buildMetadata() restfile.RequestMetadata {
 		meta.Description = desc
 	}
 	if len(rb.op.Tags) > 0 {
-		meta.Tags = model.CloneStrs(rb.op.Tags)
+		meta.Tags = slices.Clone(rb.op.Tags)
 	}
 	return meta
 }
@@ -620,9 +620,9 @@ func (rb *requestBuilder) buildOAuthAuthSpec(
 		return nil
 	}
 
-	scopes := model.CloneStrs(requirement.Scopes)
+	scopes := slices.Clone(requirement.Scopes)
 	if len(scopes) == 0 {
-		scopes = model.CloneStrs(flow.Scopes)
+		scopes = slices.Clone(flow.Scopes)
 	}
 
 	switch flow.Type {

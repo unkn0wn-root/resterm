@@ -47,3 +47,31 @@ func TestFromURLReportsMalformedEscapes(t *testing.T) {
 		t.Fatalf("FromURL() = %#v after an error, want nil", got)
 	}
 }
+
+func TestClonePreservesShapeAndSeparatesSlices(t *testing.T) {
+	if got := Clone(nil); got != nil {
+		t.Fatalf("Clone(nil) = %#v, want nil", got)
+	}
+
+	src := map[string][]string{
+		"values": {"one", "two"},
+		"empty":  {},
+		"nil":    nil,
+	}
+	got := Clone(src)
+	if !reflect.DeepEqual(got, Values(src)) {
+		t.Fatalf("Clone() = %#v, want %#v", got, Values(src))
+	}
+	if got["empty"] == nil {
+		t.Fatal("Clone changed a non-nil empty value list to nil")
+	}
+
+	src["values"][0] = "changed"
+	if got["values"][0] != "one" {
+		t.Fatal("Clone retained the source value slice")
+	}
+	got["new"] = []string{"value"}
+	if _, ok := src["new"]; ok {
+		t.Fatal("Clone retained the source map")
+	}
+}

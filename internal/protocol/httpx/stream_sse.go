@@ -201,7 +201,7 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 		return nil, diag.WrapAs(diag.ClassProtocol, err, "encode sse transcript")
 	}
 
-	headers := cloneHdr(handle.Meta.Headers)
+	headers := handle.Meta.Headers.Clone()
 	if headers == nil {
 		headers = make(http.Header)
 	}

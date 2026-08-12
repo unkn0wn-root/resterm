@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	hbase "github.com/pb33f/libopenapi/datamodel/high/base"
@@ -70,7 +71,7 @@ func (m *schMap) toSch(src *hbase.Schema) *model.Schema {
 		Max:         clonePtr(src.Maximum),
 		MinLen:      clonePtr(src.MinLength),
 		MaxLen:      clonePtr(src.MaxLength),
-		Required:    model.CloneStrs(src.Required),
+		Required:    slices.Clone(src.Required),
 		Nullable:    clonePtr(src.Nullable),
 		ReadOnly:    clonePtr(src.ReadOnly),
 		WriteOnly:   clonePtr(src.WriteOnly),

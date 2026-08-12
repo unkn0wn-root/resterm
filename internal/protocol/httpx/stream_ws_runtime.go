@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"strconv"
 	"sync"
@@ -306,7 +307,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		}
 
 		payload := append([]byte(nil), msg.payload...)
-		metadata := cloneMetadata(msg.metadata)
+		metadata := maps.Clone(msg.metadata)
 		if metadata == nil {
 			metadata = map[string]string{}
 		}
@@ -339,7 +340,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 				websocketControlMaxPayload,
 			)
 		}
-		metadata := cloneMetadata(msg.metadata)
+		metadata := maps.Clone(msg.metadata)
 		if metadata == nil {
 			metadata = map[string]string{}
 		}
@@ -370,7 +371,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 			)
 		}
 
-		metadata := cloneMetadata(msg.metadata)
+		metadata := maps.Clone(msg.metadata)
 		if metadata == nil {
 			metadata = map[string]string{}
 		}
@@ -393,7 +394,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		return nil
 	case wsOutboundClose:
 		session.MarkClosing()
-		metadata := cloneMetadata(msg.metadata)
+		metadata := maps.Clone(msg.metadata)
 		if metadata == nil {
 			metadata = map[string]string{}
 		}

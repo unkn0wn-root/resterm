@@ -1,4 +1,3 @@
-// Package native adapts typed Go functions to the raw RTS native-function ABI.
 package native
 
 import (

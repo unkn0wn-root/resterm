@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"maps"
 
 	"nhooyr.io/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type WebSocketSender struct {
@@ -94,7 +94,7 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 
 func (s *WebSocketSender) SendText(ctx context.Context, text string, meta map[string]string) error {
 	payload := []byte(text)
-	m := cloneMetadata(meta)
+	m := maps.Clone(meta)
 	if m == nil {
 		m = map[string]string{}
 	}
@@ -118,7 +118,7 @@ func (s *WebSocketSender) SendJSON(
 	if !json.Valid([]byte(jsonPayload)) {
 		return diag.New(diag.ClassProtocol, "invalid json payload for websocket send")
 	}
-	m := cloneMetadata(meta)
+	m := maps.Clone(meta)
 	if m == nil {
 		m = map[string]string{}
 	}
@@ -140,7 +140,7 @@ func (s *WebSocketSender) SendBinary(
 	meta map[string]string,
 ) error {
 	payload := append([]byte(nil), data...)
-	m := cloneMetadata(meta)
+	m := maps.Clone(meta)
 	if m == nil {
 		m = map[string]string{}
 	}
@@ -181,7 +181,7 @@ func (s *WebSocketSender) Ping(ctx context.Context, payload string, meta map[str
 		ctx:      ctx,
 		kind:     wsOutboundPing,
 		payload:  append([]byte(nil), data...),
-		metadata: cloneMetadata(meta),
+		metadata: maps.Clone(meta),
 		result:   make(chan error, 1),
 	}
 	return s.enqueue(msg)
@@ -196,7 +196,7 @@ func (s *WebSocketSender) Pong(ctx context.Context, payload string, meta map[str
 			websocketControlMaxPayload,
 		)
 	}
-	m := cloneMetadata(meta)
+	m := maps.Clone(meta)
 	if m == nil {
 		m = map[string]string{}
 	}
@@ -222,14 +222,10 @@ func (s *WebSocketSender) Close(
 		kind:     wsOutboundClose,
 		code:     code,
 		reason:   reason,
-		metadata: cloneMetadata(meta),
+		metadata: maps.Clone(meta),
 		result:   make(chan error, 1),
 	}
 	return s.enqueue(msg)
-}
-
-func cloneMetadata(in map[string]string) map[string]string {
-	return util.CloneMap(in)
 }
 
 func opcodeToType(op int) string {

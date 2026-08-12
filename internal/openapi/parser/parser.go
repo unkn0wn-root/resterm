@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
@@ -229,7 +230,7 @@ func normalizeOperation(
 		Path:        path,
 		Summary:     raw.Summary,
 		Description: raw.Description,
-		Tags:        model.CloneStrs(raw.Tags),
+		Tags:        slices.Clone(raw.Tags),
 		Deprecated:  boolVal(raw.Deprecated),
 		Servers:     convertServers(selectServers(doc.Servers, pathServers, raw.Servers)),
 	}
@@ -670,7 +671,7 @@ func resolveSecurityRequirements(doc *h3.Document, op *h3.Operation) []model.Sec
 		for _, name := range keys {
 			out = append(out, model.SecurityRequirement{
 				SchemeName: name,
-				Scopes:     model.CloneStrs(req.Requirements.GetOrZero(name)),
+				Scopes:     slices.Clone(req.Requirements.GetOrZero(name)),
 			})
 		}
 	}

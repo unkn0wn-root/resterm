@@ -1,8 +1,9 @@
-// Package queryparams defines parsing for raw query strings and URLs.
 package queryparams
 
 import (
+	"maps"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -18,7 +19,7 @@ func Parse(raw string) (Values, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Clone(vals), nil
+	return Values(vals), nil
 }
 
 // FromURL parses the query component of raw. It does not trim or otherwise
@@ -34,14 +35,14 @@ func FromURL(raw string) (Values, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Clone(vals), nil
+	return Values(vals), nil
 }
 
 // Clone returns an independent copy of a query multimap.
 func Clone(src map[string][]string) Values {
-	out := make(Values, len(src))
+	out := Values(maps.Clone(src))
 	for name, vals := range src {
-		out[name] = append([]string(nil), vals...)
+		out[name] = slices.Clone(vals)
 	}
 	return out
 }

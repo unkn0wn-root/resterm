@@ -2,11 +2,11 @@ package httpx
 
 import (
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func effURL(req *http.Request, resp *http.Response) string {
@@ -17,17 +17,6 @@ func effURL(req *http.Request, resp *http.Response) string {
 		return req.URL.String()
 	}
 	return ""
-}
-
-func cloneHdr(h http.Header) http.Header {
-	if h == nil {
-		return nil
-	}
-	return h.Clone()
-}
-
-func cloneStrs(in []string) []string {
-	return util.CloneSlice(in)
 }
 
 func respFromHTTP(
@@ -51,12 +40,12 @@ func respFromHTTP(
 		Status:         resp.Status,
 		StatusCode:     resp.StatusCode,
 		Proto:          resp.Proto,
-		Headers:        cloneHdr(resp.Header),
+		Headers:        resp.Header.Clone(),
 		ReqMethod:      meta.method,
 		RequestHeaders: meta.headers,
 		ReqHost:        meta.host,
 		ReqLen:         meta.length,
-		ReqTE:          cloneStrs(meta.te),
+		ReqTE:          slices.Clone(meta.te),
 		Body:           body,
 		Duration:       dur,
 		EffectiveURL:   effURL(sent, resp),
