@@ -1,6 +1,7 @@
 package urltpl
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -70,6 +71,44 @@ func TestPatchQueryTemplateQuestionMarkInTemplate(t *testing.T) {
 	want := "{{base?x=1}}/path?keep=1&q=1#frag"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestRawQueryIgnoresDelimitersInsideTemplates(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+		ok   bool
+	}{
+		{name: "query", in: "{{base?x=1}}/path?a=1&a=2#frag", want: "a=1&a=2", ok: true},
+		{name: "fragment in value", in: "/path?q={{value#part}}&a=1#frag", want: "q={{value#part}}&a=1", ok: true},
+		{name: "empty query", in: "/path?", ok: true},
+		{name: "fragment first", in: "/path#frag?q=1"},
+		{name: "no query", in: "{{base?x=1}}/path"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := RawQuery(tt.in)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("RawQuery(%q) = %q, %t; want %q, %t", tt.in, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestParseTargetQueryProtectsTemplateSeparators(t *testing.T) {
+	raw := "{{base?fallback=true}}/path?q={{a&b=c#d}}&{{key}}=1&{{key}}=2#frag"
+	got, err := ParseTargetQuery(raw)
+	if err != nil {
+		t.Fatalf("ParseTargetQuery: %v", err)
+	}
+	want := map[string][]string{
+		"q":       {"{{a&b=c#d}}"},
+		"{{key}}": {"1", "2"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ParseTargetQuery() = %#v, want %#v", got, want)
 	}
 }
 

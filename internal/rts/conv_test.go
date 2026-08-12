@@ -1,7 +1,9 @@
 package rts
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -37,6 +39,25 @@ func TestToIfaceStrictConvertsDataAndRejectsOpaqueValues(t *testing.T) {
 	} {
 		if _, err := ToIfaceStrict(opaque); err == nil {
 			t.Fatalf("ToIfaceStrict(%s) accepted an opaque value", name)
+		}
+	}
+}
+
+func TestFromIfaceChecksDictionaryKeyLimit(t *testing.T) {
+	ctx := NewCtx(context.Background(), Limits{MaxStr: 1, MaxDict: 8})
+	_, err := FromIface(ctx, Pos{}, map[string]any{"ab": true})
+	if err == nil || !strings.Contains(err.Error(), "string too long") {
+		t.Fatalf("FromIface error = %v, want string limit", err)
+	}
+}
+
+func TestFromIfaceValidatesDictionaryKeysDeterministically(t *testing.T) {
+	ctx := NewCtx(context.Background(), Limits{MaxStr: 2, MaxDict: 8})
+	in := map[string]any{"zzzz": true, "aaaa": true}
+	for range 8 {
+		_, err := FromIface(ctx, Pos{}, in)
+		if err == nil || !strings.Contains(err.Error(), `dictionary key "aaaa": string too long`) {
+			t.Fatalf("FromIface error = %v, want the first key in lexical order", err)
 		}
 	}
 }

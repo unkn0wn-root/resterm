@@ -165,3 +165,82 @@ func TestExplainReportCarriesParseWarningsOnEarlyFailure(t *testing.T) {
 	}
 	t.Fatalf("explain warnings = %v, want one to be %q", res.Explain.Warnings, want)
 }
+
+// A patch names headers the way a script does, so it is held to the same rule.
+// It used to accept any non-empty name, which let @apply write a name
+// request.setHeader refuses and http.Header would then fold or reject.
+func TestApplyHoldsHeaderNamesToTheHeaderRule(t *testing.T) {
+	tests := map[string]string{
+		`{headers: {"X Token": "1"}}`:                 `"X Token" is not a header name`,
+		`{headers: {" X-Token ": "1"}}`:               `" X-Token " is not a header name`,
+		`{headers: {"": "1"}}`:                        `"" is not a header name`,
+		`{headers: {"X-Token": "1", "x-token": "2"}}`: `"X-Token" and "x-token" are the same header`,
+	}
+
+	for expr, want := range tests {
+		t.Run(want, func(t *testing.T) {
+			e := New(engcfg.Config{}, nil)
+			req := &restfile.Request{
+				Method: http.MethodGet,
+				URL:    "http://example.test",
+				Metadata: restfile.RequestMetadata{
+					Applies: []restfile.ApplySpec{{Expression: expr}},
+				},
+			}
+
+			res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{})
+			if err != nil {
+				t.Fatalf("ExecuteWith: %v", err)
+			}
+			if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
+				t.Fatalf("res.Err = %v, want one holding %q", res.Err, want)
+			}
+		})
+	}
+
+	// The same patch with names it can key still applies, and applies the same
+	// way every time now that the loop runs in name order.
+	for range 16 {
+		var sent *http.Request
+		client := httpx.NewClientWithOptions(
+			httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
+				return &http.Client{
+					Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+						sent = r
+						return &http.Response{
+							Status:     "200 OK",
+							StatusCode: http.StatusOK,
+							Header:     make(http.Header),
+							Body:       io.NopCloser(strings.NewReader("ok")),
+							Request:    r,
+						}, nil
+					}),
+				}, nil
+			}),
+		)
+
+		e := New(engcfg.Config{Client: client}, nil)
+		req := &restfile.Request{
+			Method: http.MethodGet,
+			URL:    "http://example.test",
+			Metadata: restfile.RequestMetadata{
+				Applies: []restfile.ApplySpec{
+					{Expression: `{headers: {"X-Token": "1", "X-Other": "2"}}`},
+				},
+			},
+		}
+		res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{})
+		if err != nil {
+			t.Fatalf("ExecuteWith: %v", err)
+		}
+		if res.Err != nil {
+			t.Fatalf("ExecuteWith result error: %v", res.Err)
+		}
+		if got := sent.Header.Get("X-Token"); got != "1" {
+			t.Fatalf("X-Token = %q, want the patch applied on every run", got)
+		}
+		if got := sent.Header.Get("X-Other"); got != "2" {
+			t.Fatalf("X-Other = %q, want the patch applied on every run", got)
+		}
+	}
+}

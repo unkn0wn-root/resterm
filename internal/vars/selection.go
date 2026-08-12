@@ -162,7 +162,7 @@ func (c Catalog) Resolve(sel Selection) (Environment, error) {
 	if !c.Grouped() {
 		var values map[string]string
 		if env, ok := c.findEnv(next.name); ok {
-			values = env.values
+			values = collapseNames(env.values)
 		}
 		return Environment{
 			values: values,

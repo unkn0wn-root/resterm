@@ -2,7 +2,6 @@ package request
 
 import (
 	"context"
-	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,13 +157,10 @@ func (e *Engine) rtsBase(doc *restfile.Document, base string) string {
 	return e.fileDir(doc)
 }
 
-func (e *Engine) rtsEnv(env vars.Environment) map[string]string {
-	out := make(map[string]string, len(env.Values())+1)
-	maps.Copy(out, env.Values())
-	if env.Label() != "" {
-		out["name"] = env.Label()
-	}
-	return out
+// hostVars preserves the caller's variable map. The host boundary validates it
+// and reports ambiguous names instead of silently selecting a winner.
+func hostVars(vv map[string]string) map[string]string {
+	return vv
 }
 
 func (e *Engine) buildResolver(

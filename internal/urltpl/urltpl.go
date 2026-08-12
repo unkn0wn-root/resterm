@@ -15,6 +15,66 @@ const (
 	tokenMaxAttempts = 8
 )
 
+// RawQuery returns the literal query component of a request target. Closed
+// {{...}} templates are opaque, so delimiters inside them are not URL syntax.
+func RawQuery(raw string) (string, bool) {
+	q := outsideTemplate(raw, '?')
+	f := outsideTemplate(raw, '#')
+	if q < 0 || f >= 0 && f < q {
+		return "", false
+	}
+
+	raw = raw[q+1:]
+	if f = outsideTemplate(raw, '#'); f >= 0 {
+		raw = raw[:f]
+	}
+	return raw, true
+}
+
+// ParseTargetQuery parses a request target without requiring the non-query
+// portion to be a valid URL. Closed {{...}} templates remain opaque data.
+func ParseTargetQuery(raw string) (map[string][]string, error) {
+	q, ok := RawQuery(raw)
+	if !ok {
+		return map[string][]string{}, nil
+	}
+
+	state := newTemplateState(q)
+	vals, err := url.ParseQuery(state.replace(q))
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(vals))
+	for key, items := range vals {
+		key = state.restore(key)
+		for _, item := range items {
+			out[key] = append(out[key], state.restore(item))
+		}
+	}
+	return out, nil
+}
+
+func outsideTemplate(s string, sep byte) int {
+	for off := 0; off < len(s); {
+		i := strings.IndexByte(s[off:], sep)
+		if i < 0 {
+			return -1
+		}
+		open := strings.Index(s[off:], "{{")
+		if open < 0 || i < open {
+			return off + i
+		}
+
+		open += off
+		close := strings.Index(s[open+2:], "}}")
+		if close < 0 {
+			return off + i
+		}
+		off = open + close + 4
+	}
+	return -1
+}
+
 func PatchQuery(raw string, patch map[string]*string) (string, error) {
 	if len(patch) == 0 {
 		return raw, nil
@@ -48,7 +108,7 @@ func MergeQuery(raw string, patch map[string][]string) (string, error) {
 }
 
 func patchQueryURL(raw string, patch map[string]*string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
+	parsed, err := url.Parse(raw)
 	if err != nil {
 		return "", err
 	}
@@ -66,7 +126,7 @@ func patchQueryURL(raw string, patch map[string]*string) (string, error) {
 }
 
 func mergeQueryURL(raw string, patch map[string][]string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
+	parsed, err := url.Parse(raw)
 	if err != nil {
 		return "", err
 	}
@@ -89,6 +149,7 @@ func mergeQueryURL(raw string, patch map[string][]string) (string, error) {
 type templateState struct {
 	sources []string
 	tokens  map[string]string
+	byValue map[string]string
 	nextID  int
 }
 
@@ -96,6 +157,7 @@ func newTemplateState(sources ...string) *templateState {
 	return &templateState{
 		sources: sources,
 		tokens:  make(map[string]string),
+		byValue: make(map[string]string),
 	}
 }
 
@@ -121,8 +183,12 @@ func (s *templateState) replace(input string) string {
 		end += start + 2
 		b.WriteString(input[:start])
 		tpl := input[start : end+2]
-		token := s.nextToken()
-		s.tokens[token] = tpl
+		token, ok := s.byValue[tpl]
+		if !ok {
+			token = s.nextToken()
+			s.tokens[token] = tpl
+			s.byValue[tpl] = token
+		}
 		b.WriteString(token)
 		input = input[end+2:]
 	}

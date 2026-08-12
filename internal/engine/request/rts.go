@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"net/url"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/httpheader"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -25,58 +25,20 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func (e *Engine) rtsReq(req *restfile.Request) *rts.Req {
+func (e *Engine) rtsReq(req *restfile.Request) (*rtshost.Request, error) {
 	if req == nil {
-		return nil
+		return nil, nil
 	}
-	out := &rts.Req{
-		Method: strings.TrimSpace(req.Method),
-		URL:    strings.TrimSpace(req.URL),
+	out, err := rtshost.NewRequest(
+		strings.TrimSpace(req.Method),
+		strings.TrimSpace(req.URL),
+		req.Headers,
+		nil,
+	)
+	if err != nil {
+		return nil, err
 	}
-	if len(req.Headers) > 0 {
-		h := make(map[string][]string, len(req.Headers))
-		for k, vs := range req.Headers {
-			if len(vs) == 0 {
-				continue
-			}
-			h[strings.ToLower(k)] = append([]string(nil), vs...)
-		}
-		if len(h) > 0 {
-			out.H = h
-		}
-	}
-	if q := requestQuery(out.URL); len(q) > 0 {
-		out.Q = q
-	}
-	return out
-}
-
-func requestQuery(raw string) map[string][]string {
-	if raw == "" {
-		return nil
-	}
-	_, after, ok := strings.Cut(raw, "?")
-	if !ok {
-		return nil
-	}
-	q := after
-	if cut := strings.Index(q, "#"); cut >= 0 {
-		q = q[:cut]
-	}
-	if strings.TrimSpace(q) == "" {
-		return nil
-	}
-	vals, err := url.ParseQuery(q)
-	if err != nil || len(vals) == 0 {
-		return nil
-	}
-	out := make(map[string][]string, len(vals))
-	for k, vs := range vals {
-		if len(vs) > 0 {
-			out[k] = append([]string(nil), vs...)
-		}
-	}
-	return out
+	return out, nil
 }
 
 func (e *Engine) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Use {
@@ -105,83 +67,72 @@ func (e *Engine) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Us
 	return out
 }
 
-func (e *Engine) rtsLast() *rts.Resp {
+func (e *Engine) rtsLast() (*rtshost.Response, error) {
 	switch {
 	case e.last.http != nil:
 		return rtsHTTP(e.last.http)
 	case e.last.grpc != nil:
 		return rtsGRPC(e.last.grpc)
 	default:
-		return nil
+		return nil, nil
 	}
 }
 
 // rtsLastTrace binds the most recent HTTP response's trace so RTS evaluation
 // (trace.enabled(), trace.withinBudget(), trace.breaches()) resolves against it
 // when no explicit trace is supplied.
-func (e *Engine) rtsLastTrace() *rts.Trace {
+func (e *Engine) rtsLastTrace() *rtshost.Trace {
 	if e.last.http != nil {
 		return rtsTrace(e.last.http)
 	}
 	return nil
 }
 
-func rtsHTTP(resp *httpx.Response) *rts.Resp {
+func rtsHTTP(resp *httpx.Response) (*rtshost.Response, error) {
 	if resp == nil {
-		return nil
+		return nil, nil
 	}
 	h := make(map[string][]string, len(resp.Headers))
 	for k, vs := range resp.Headers {
 		h[k] = append([]string(nil), vs...)
 	}
-	return &rts.Resp{
-		Status: resp.Status,
-		Code:   resp.StatusCode,
-		H:      h,
-		Body:   resp.Body,
-		URL:    resp.EffectiveURL,
-	}
+	return rtshost.NewResponse(resp.Status, resp.StatusCode, h, resp.Body, resp.EffectiveURL)
 }
 
-func rtsGRPC(resp *grpcx.Response) *rts.Resp {
+func rtsGRPC(resp *grpcx.Response) (*rtshost.Response, error) {
 	if resp == nil {
-		return nil
+		return nil, nil
 	}
 	// Same map scripts read, so an assertion and a script name a trailer the
 	// same way: prefixed with Grpc-Trailer- and binary metadata base64-encoded.
-	return &rts.Resp{
-		Status: resp.StatusMessage,
-		Code:   int(resp.StatusCode),
-		H:      resp.HeaderMap(),
-		Body:   resp.Body,
-	}
+	return rtshost.NewResponse(
+		resp.StatusMessage,
+		int(resp.StatusCode),
+		resp.HeaderMap(),
+		resp.Body,
+		"",
+	)
 }
 
-func rtsTrace(resp *httpx.Response) *rts.Trace {
+func rtsTrace(resp *httpx.Response) *rtshost.Trace {
 	if resp == nil || resp.TraceReport == nil {
 		return nil
 	}
-	return &rts.Trace{Rep: resp.TraceReport.Clone()}
+	return &rtshost.Trace{Report: resp.TraceReport.Clone()}
 }
 
-func rtsScriptResp(resp *scripts.Response) *rts.Resp {
+func rtsScriptResp(resp *scripts.Response) (*rtshost.Response, error) {
 	if resp == nil {
-		return nil
+		return nil, nil
 	}
 	h := make(map[string][]string, len(resp.Header))
 	for k, vs := range resp.Header {
 		h[k] = append([]string(nil), vs...)
 	}
-	return &rts.Resp{
-		Status: resp.Status,
-		Code:   resp.Code,
-		H:      h,
-		Body:   append([]byte(nil), resp.Body...),
-		URL:    resp.URL,
-	}
+	return rtshost.NewResponse(resp.Status, resp.Code, h, resp.Body, resp.URL)
 }
 
-func rtsStream(info *scripts.StreamInfo) *rts.Stream {
+func rtsStream(info *scripts.StreamInfo) *rtshost.Stream {
 	if info == nil {
 		return nil
 	}
@@ -196,7 +147,7 @@ func rtsStream(info *scripts.StreamInfo) *rts.Stream {
 		maps.Copy(cp, item)
 		evs[i] = cp
 	}
-	return &rts.Stream{Kind: info.Kind, Summary: sum, Events: evs}
+	return &rtshost.Stream{Kind: info.Kind, Summary: sum, Events: evs}
 }
 
 type evalScope struct {
@@ -204,12 +155,18 @@ type evalScope struct {
 	globals vars.Globals
 }
 
+// Keep the caller-owned map so mutations and later expressions share one
+// runtime view. The host validates its names when it builds the scope.
+func newEvalScope(vv map[string]string, globals vars.Globals) evalScope {
+	return evalScope{vars: hostVars(vv), globals: globals}
+}
+
 func (e *Engine) storedScope(
 	doc *restfile.Document,
 	env vars.Environment,
 	vv map[string]string,
 ) evalScope {
-	return evalScope{vars: vv, globals: e.collectGlobalValues(doc, env)}
+	return newEvalScope(vv, e.collectGlobalValues(doc, env))
 }
 
 type rtIn struct {
@@ -220,19 +177,23 @@ type rtIn struct {
 	vars    map[string]string
 	globals vars.Globals
 	site    string
-	resp    *rts.Resp
-	res     *rts.Resp
-	tr      *rts.Trace
-	st      *rts.Stream
+	resp    *rtshost.Response
+	res     *rtshost.Response
+	tr      *rtshost.Trace
+	st      *rtshost.Stream
 	locals  rts.Locals
 	secrets rtshost.SecretPolicy
 }
 
-func (e *Engine) buildRT(in rtIn) rts.RT {
+func (e *Engine) buildRT(in rtIn) (rtshost.Runtime, error) {
 	base := e.rtsBase(in.doc, in.base)
 	resp := in.resp
 	if resp == nil {
-		resp = e.rtsLast()
+		var err error
+		resp, err = e.rtsLast()
+		if err != nil {
+			return rtshost.Runtime{}, err
+		}
 	}
 	// Keep in.res nil before the request runs. Falling back to resp would make
 	// response refer to last.
@@ -240,17 +201,27 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 	if tr == nil {
 		tr = e.rtsLastTrace()
 	}
-	return rts.RT{
-		Env:         e.rtsEnv(in.env),
-		EnvGroups:   in.env.Selection().Groups(),
-		Vars:        in.vars,
-		Globals:     rtshost.RuntimeGlobals(in.globals, in.secrets),
-		NameKey:     vars.NameKey,
-		Resp:        resp,
-		Res:         in.res,
+	scope, err := rtshost.NewScope(
+		in.env.Values(),
+		in.env.Label(),
+		in.env.Selection().Groups(),
+		in.vars,
+		rtshost.RuntimeGlobals(in.globals, in.secrets),
+	)
+	if err != nil {
+		return rtshost.Runtime{}, err
+	}
+	req, err := e.rtsReq(in.req)
+	if err != nil {
+		return rtshost.Runtime{}, err
+	}
+	return rtshost.Runtime{
+		Scope:       scope,
+		Last:        resp,
+		Response:    in.res,
 		Trace:       tr,
 		Stream:      in.st,
-		Req:         e.rtsReq(in.req),
+		Request:     req,
 		BaseDir:     base,
 		ReadFile:    os.ReadFile,
 		AllowRandom: true,
@@ -258,7 +229,7 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 		Uses:        e.rtsUses(in.doc, in.req),
 		Extensions:  e.rtsExtensions(),
 		Locals:      in.locals,
-	}
+	}, nil
 }
 
 // The inspector is a host extension, so it is additive and never shadows a
@@ -281,8 +252,8 @@ type ExprInput struct {
 	Env      vars.Environment
 	Base     string
 	Vars     map[string]string
-	Response *rts.Resp
-	Stream   *rts.Stream
+	Response *rtshost.Response
+	Stream   *rtshost.Stream
 	Locals   rts.Locals
 	globals  vars.Globals
 }
@@ -324,13 +295,16 @@ func (e *Engine) ExprEvalWithOptions(
 	if opt.OmitSecretGlobals {
 		secrets = rtshost.OmitSecrets
 	}
+	// Keep the caller's map: buildRT validates its names for each runtime, and
+	// writes must remain visible to later expressions.
+	vv := hostVars(in.Vars)
 	return func(expr string, pos vars.ExprPos) (string, error) {
-		rt := e.buildRT(rtIn{
+		rt, err := e.buildRT(rtIn{
 			doc:     in.Doc,
 			req:     in.Req,
 			env:     in.Env,
 			base:    in.Base,
-			vars:    in.Vars,
+			vars:    vv,
 			globals: in.globals,
 			site:    "{{= " + expr + " }}",
 			// res binds response. resp remains the previous response used by last.
@@ -339,6 +313,9 @@ func (e *Engine) ExprEvalWithOptions(
 			locals:  in.Locals,
 			secrets: secrets,
 		})
+		if err != nil {
+			return "", err
+		}
 		return e.evalRTSString(
 			ctx,
 			in.Doc,
@@ -352,7 +329,7 @@ func (e *Engine) ExprEvalWithOptions(
 func (e *Engine) evalRTSValue(
 	ctx context.Context,
 	doc *restfile.Document,
-	rt rts.RT,
+	rt rtshost.Runtime,
 	expr string,
 	pos rts.Pos,
 ) (rts.Value, error) {
@@ -363,7 +340,7 @@ func (e *Engine) evalRTSValue(
 func (e *Engine) evalRTSAssert(
 	ctx context.Context,
 	doc *restfile.Document,
-	rt rts.RT,
+	rt rtshost.Runtime,
 	expr string,
 	pos rts.Pos,
 ) (rts.Value, error) {
@@ -374,7 +351,7 @@ func (e *Engine) evalRTSAssert(
 func (e *Engine) evalRTSString(
 	ctx context.Context,
 	doc *restfile.Document,
-	rt rts.RT,
+	rt rtshost.Runtime,
 	expr string,
 	pos rts.Pos,
 ) (string, error) {
@@ -383,11 +360,11 @@ func (e *Engine) evalRTSString(
 }
 
 func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
-	vv := in.Vars
+	vv := hostVars(in.Vars)
 	if vv == nil {
 		vv = e.collectVariables(in.Doc, in.Req, in.Env, runVars{})
 	}
-	rt := e.buildRT(rtIn{
+	rt, err := e.buildRT(rtIn{
 		doc:     in.Doc,
 		req:     in.Req,
 		env:     in.Env,
@@ -398,6 +375,9 @@ func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, err
 		locals:  in.Locals,
 		secrets: rtshost.IncludeSecrets,
 	})
+	if err != nil {
+		return rts.Null(), err
+	}
 	return e.evalRTSValue(ctx, in.Doc, rt, in.Expr, in.Pos)
 }
 
@@ -520,7 +500,7 @@ func (e *Engine) EvalForEachItems(
 }
 
 func (e *Engine) ValueString(ctx context.Context, pos rts.Pos, v rts.Value) (string, error) {
-	cx := rts.NewCtx(ctx, e.re.Lim)
+	cx := rts.NewCtx(ctx, e.re.Limits())
 	return rts.ValueString(cx, pos, v)
 }
 
@@ -532,9 +512,9 @@ func (e *Engine) runAsserts(
 	base string,
 	sc evalScope,
 	locals rts.Locals,
-	resp *rts.Resp,
-	tr *rts.Trace,
-	st *rts.Stream,
+	resp *rtshost.Response,
+	tr *rtshost.Trace,
+	st *rtshost.Stream,
 ) ([]scripts.TestResult, error) {
 	if req == nil || len(req.Metadata.Asserts) == 0 {
 		return nil, nil
@@ -543,7 +523,7 @@ func (e *Engine) runAsserts(
 	if vv == nil {
 		vv = e.collectVariables(doc, req, env, runVars{})
 	}
-	rt := e.buildRT(rtIn{
+	rt, err := e.buildRT(rtIn{
 		doc:     doc,
 		req:     req,
 		env:     env,
@@ -557,6 +537,9 @@ func (e *Engine) runAsserts(
 		locals:  locals,
 		secrets: rtshost.IncludeSecrets,
 	})
+	if err != nil {
+		return nil, err
+	}
 	out := make([]scripts.TestResult, 0, len(req.Metadata.Asserts))
 	for _, as := range req.Metadata.Asserts {
 		expr := strings.TrimSpace(as.Expression)
@@ -593,7 +576,7 @@ func (e *Engine) RunPreRequest(
 	locals rts.Locals,
 	globals vars.Globals,
 ) (prerequest.Output, error) {
-	sc := evalScope{vars: vv, globals: globals}
+	sc := newEvalScope(vv, globals)
 	return e.runRTSPreRequest(ctx, doc, req, env, base, sc, locals, nil)
 }
 
@@ -613,27 +596,36 @@ func (e *Engine) runRTSPreRequest(
 		return out, nil
 	}
 	uses := e.rtsUses(doc, req)
-	envs := e.rtsEnv(env)
+	envs := env.Values()
+	label := env.Label()
 	groups := env.Selection().Groups()
 	base = e.rtsBase(doc, base)
 	gv := rtshost.RuntimeGlobals(sc.globals, rtshost.IncludeSecrets)
-	mut := rtshost.NewMutator(&out, e.rtsReq(req), vv, gv, secrets)
+	reqView, err := e.rtsReq(req)
+	if err != nil {
+		return out, err
+	}
+	last, err := e.rtsLast()
+	if err != nil {
+		return out, err
+	}
+	mut := rtshost.NewMutator(&out, reqView, vv, gv, secrets)
 
-	err := rtshost.RunPreRequest(ctx, e.re, rtshost.PreRequest{
+	err = rtshost.RunPreRequest(ctx, e.re, rtshost.PreRequest{
 		Doc:     doc,
 		Scripts: req.Metadata.Scripts,
 		BaseDir: base,
-		Runtime: func() rts.RT {
-			return rts.RT{
-				Env:         envs,
-				EnvGroups:   groups,
-				Vars:        vv,
-				Globals:     gv,
-				NameKey:     vars.NameKey,
-				Resp:        e.rtsLast(),
+		Runtime: func() (rtshost.Runtime, error) {
+			scope, err := rtshost.NewScope(envs, label, groups, vv, gv)
+			if err != nil {
+				return rtshost.Runtime{}, err
+			}
+			return rtshost.Runtime{
+				Scope:       scope,
+				Last:        last,
 				Trace:       e.rtsLastTrace(),
-				Req:         mut.Request(),
-				ReqMut:      mut,
+				Request:     mut.Request(),
+				RequestMut:  mut,
 				VarsMut:     mut,
 				GlobalMut:   mut,
 				Uses:        uses,
@@ -643,7 +635,7 @@ func (e *Engine) runRTSPreRequest(
 				Site:        "@script pre-request",
 				Extensions:  e.rtsExtensions(),
 				Locals:      locals,
-			}
+			}, nil
 		},
 	})
 	if err != nil {
@@ -766,7 +758,7 @@ func (e *Engine) applyScalar(
 }
 
 func (e *Engine) rtsValueString(ctx context.Context, pos rts.Pos, v rts.Value) (string, error) {
-	cx := rts.NewCtx(ctx, e.re.Lim)
+	cx := rts.NewCtx(ctx, e.re.Limits())
 	return rts.ValueString(cx, pos, v)
 }
 
@@ -778,16 +770,30 @@ func (e *Engine) parseApplyHeaders(
 	if v.K != rts.VDict {
 		return nil, nil, applyErr("headers", "expects dict")
 	}
+	// A patch names headers the same way a script does, so it is held to the
+	// same rule: the name has to be one the request can carry, and two forms of
+	// one header are refused because http.Header would fold them and the winner
+	// would depend on map order. Sort so the same patch always reports the same
+	// name.
 	set := make(map[string][]string)
 	del := make(map[string]struct{})
-	for key, val := range v.M {
-		name := strings.TrimSpace(key)
-		if name == "" {
-			return nil, nil, applyErr("headers", "expects non-empty header name")
+	seen := make(map[string]string, len(v.M))
+	for _, name := range slices.Sorted(maps.Keys(v.M)) {
+		key, err := httpheader.Key(name)
+		if err != nil {
+			return nil, nil, applyErr("headers", fmt.Sprintf("%q is not a header name", name))
 		}
+		if prev, dup := seen[key]; dup {
+			return nil, nil, applyErr(
+				"headers",
+				fmt.Sprintf("%q and %q are the same header", prev, name),
+			)
+		}
+		seen[key] = name
+
+		val := v.M[name]
 		switch val.K {
 		case rts.VNull:
-			delete(set, name)
 			del[name] = struct{}{}
 		case rts.VList:
 			vs, err := e.applyList(ctx, pos, val, "headers."+name)
@@ -795,14 +801,12 @@ func (e *Engine) parseApplyHeaders(
 				return nil, nil, err
 			}
 			set[name] = vs
-			delete(del, name)
 		default:
 			s, err := e.applyScalar(ctx, pos, val, "headers."+name)
 			if err != nil {
 				return nil, nil, err
 			}
 			set[name] = []string{s}
-			delete(del, name)
 		}
 	}
 	if len(set) == 0 {

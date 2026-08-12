@@ -397,20 +397,24 @@ func setValue(out map[string]string, name string, value any) {
 
 // mergeValues merges layers left to right into a new map. Variable names
 // match case-insensitively and a later layer replaces the earlier spelling.
+// Later layers win. Within one layer the names are applied in order, so two
+// forms of one name resolve the same way on every run instead of by map order.
 func mergeValues(layers ...map[string]string) map[string]string {
-	out := make(map[string]string)
-	keys := make(map[string]string)
+	var out NameMap[string]
 	for _, layer := range layers {
-		for name, value := range layer {
-			key := strings.ToLower(name)
-			if prev, ok := keys[key]; ok && prev != name {
-				delete(out, prev)
-			}
-			keys[key] = name
-			out[name] = value
-		}
+		out.SetMap(layer)
 	}
-	return out
+	return out.Map()
+}
+
+// Environment values are read as a plain map, and a reader that keys them
+// refuses one holding two forms of a name. Collapse once per selection so every
+// reader sees the same single entry.
+func collapseNames(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	return CollectNames(values).Map()
 }
 
 func checkCollisions(groups []Group) error {

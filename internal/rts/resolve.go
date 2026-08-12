@@ -5,23 +5,23 @@ import (
 	"strings"
 )
 
-func (e *Eng) resolveUses(cx *Ctx, rt RT, pre map[string]Value, pos Pos) ([]Use, error) {
-	if len(rt.Uses) == 0 {
+func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, pre map[string]Value, pos Pos) ([]Use, error) {
+	if len(cfg.Uses) == 0 {
 		return nil, nil
 	}
-	out := make([]Use, 0, len(rt.Uses))
-	seen := make(map[string]struct{}, len(pre)+len(rt.Uses))
+	out := make([]Use, 0, len(cfg.Uses))
+	seen := make(map[string]struct{}, len(pre)+len(cfg.Uses))
 	for k := range pre {
 		seen[k] = struct{}{}
 	}
-	for _, u := range rt.Uses {
+	for _, u := range cfg.Uses {
 		u, ok := normUse(u)
 		if !ok {
 			continue
 		}
 		al := u.Alias
 		if al == "" {
-			nm, mp, err := e.modHead(rt.BaseDir, u.Path)
+			nm, mp, err := e.modHead(cfg.BaseDir, u.Path)
 			if err != nil {
 				return nil, err
 			}

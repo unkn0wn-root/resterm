@@ -7,11 +7,10 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
 func TestRunPreRequestSkipsNonRTSPreRequestBlocks(t *testing.T) {
-	eng := rts.NewEng(nil)
+	eng := NewEngine(nil)
 	calls := 0
 	scripts := []restfile.ScriptBlock{
 		{Kind: "pre-request", Lang: "js", Body: "not rts"},
@@ -21,9 +20,9 @@ func TestRunPreRequestSkipsNonRTSPreRequestBlocks(t *testing.T) {
 
 	err := RunPreRequest(context.Background(), eng, PreRequest{
 		Scripts: scripts,
-		Runtime: func() rts.RT {
+		Runtime: func() (Runtime, error) {
 			calls++
-			return rts.RT{}
+			return Runtime{}, nil
 		},
 	})
 	if err != nil {
@@ -40,10 +39,10 @@ func TestRunPreRequestNumbersRTSBlocksOnly(t *testing.T) {
 		{Kind: "pre-request", Lang: "rts", FilePath: "missing.rts"},
 	}
 
-	err := RunPreRequest(context.Background(), rts.NewEng(nil), PreRequest{
+	err := RunPreRequest(context.Background(), NewEngine(nil), PreRequest{
 		Scripts: scripts,
 		BaseDir: t.TempDir(),
-		Runtime: func() rts.RT { return rts.RT{} },
+		Runtime: func() (Runtime, error) { return Runtime{}, nil },
 	})
 	if err == nil {
 		t.Fatalf("expected missing script file to fail")
@@ -57,11 +56,11 @@ func TestRunPreRequestStopsOnCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := RunPreRequest(ctx, rts.NewEng(nil), PreRequest{
+	err := RunPreRequest(ctx, NewEngine(nil), PreRequest{
 		Scripts: []restfile.ScriptBlock{{Kind: "pre-request", Lang: "rts", Body: "let x = 1"}},
-		Runtime: func() rts.RT {
+		Runtime: func() (Runtime, error) {
 			t.Fatalf("expected no execution after cancel")
-			return rts.RT{}
+			return Runtime{}, nil
 		},
 	})
 	if !errors.Is(err, context.Canceled) {

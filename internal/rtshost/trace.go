@@ -1,14 +1,17 @@
-package rts
+package rtshost
 
 import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/native"
+
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 )
 
 type Trace struct {
-	Rep *nettrace.Report
+	Report *nettrace.Report
 }
 
 type traceObj struct {
@@ -36,11 +39,13 @@ type trSeg struct {
 	meta  nettrace.PhaseMeta
 }
 
+func phaseKey(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
+
 func newTraceObj(t *Trace) *traceObj {
-	if t == nil || t.Rep == nil || t.Rep.Timeline == nil {
+	if t == nil || t.Report == nil || t.Report.Timeline == nil {
 		return &traceObj{}
 	}
-	rep := t.Rep
+	rep := t.Report
 	if c := rep.Clone(); c != nil {
 		rep = c
 	}
@@ -60,7 +65,12 @@ func newTraceObj(t *Trace) *traceObj {
 			meta:  ph.Meta,
 		}
 		o.seg = append(o.seg, s)
-		k := strings.ToLower(s.name)
+		// A phase with no name cannot be looked up, so it stays out of the
+		// aggregate rather than sitting under a key no argument can reach.
+		if strings.TrimSpace(s.name) == "" {
+			continue
+		}
+		k := phaseKey(s.name)
 		a, ok := o.ag[k]
 		if !ok {
 			a = &trAgg{name: s.name}
@@ -76,46 +86,46 @@ func newTraceObj(t *Trace) *traceObj {
 
 func (o *traceObj) TypeName() string { return "trace" }
 
-func (o *traceObj) GetMember(name string) (Value, bool) {
+func (o *traceObj) Member(_ *rts.Ctx, _ rts.Pos, name string) (rts.Value, bool, error) {
 	switch name {
 	case "enabled":
-		return NativeNamed("trace.enabled", o.enabledFn), true
+		return rts.NativeNamed("trace.enabled", o.enabledFn), true, nil
 	case "durationMs":
-		return NativeNamed("trace.durationMs", o.durMsFn), true
+		return rts.NativeNamed("trace.durationMs", o.durMsFn), true, nil
 	case "durationSeconds":
-		return NativeNamed("trace.durationSeconds", o.durSecFn), true
+		return rts.NativeNamed("trace.durationSeconds", o.durSecFn), true, nil
 	case "durationString":
-		return NativeNamed("trace.durationString", o.durStrFn), true
+		return rts.NativeNamed("trace.durationString", o.durStrFn), true, nil
 	case "error":
-		return NativeNamed("trace.error", o.errFn), true
+		return rts.NativeNamed("trace.error", o.errFn), true, nil
 	case "started":
-		return NativeNamed("trace.started", o.startedFn), true
+		return rts.NativeNamed("trace.started", o.startedFn), true, nil
 	case "completed":
-		return NativeNamed("trace.completed", o.completedFn), true
+		return rts.NativeNamed("trace.completed", o.completedFn), true, nil
 	case "phases":
-		return NativeNamed("trace.phases", o.phasesFn), true
+		return rts.NativeNamed("trace.phases", o.phasesFn), true, nil
 	case "getPhase":
-		return NativeNamed("trace.getPhase", o.getPhaseFn), true
+		return rts.NativeNamed("trace.getPhase", o.getPhaseFn), true, nil
 	case "phaseNames":
-		return NativeNamed("trace.phaseNames", o.phaseNamesFn), true
+		return rts.NativeNamed("trace.phaseNames", o.phaseNamesFn), true, nil
 	case "budgets":
-		return NativeNamed("trace.budgets", o.budgetsFn), true
+		return rts.NativeNamed("trace.budgets", o.budgetsFn), true, nil
 	case "connection":
-		return NativeNamed("trace.connection", o.connFn), true
+		return rts.NativeNamed("trace.connection", o.connFn), true, nil
 	case "tls":
-		return NativeNamed("trace.tls", o.tlsFn), true
+		return rts.NativeNamed("trace.tls", o.tlsFn), true, nil
 	case "breaches":
-		return NativeNamed("trace.breaches", o.breachesFn), true
+		return rts.NativeNamed("trace.breaches", o.breachesFn), true, nil
 	case "withinBudget":
-		return NativeNamed("trace.withinBudget", o.withinFn), true
+		return rts.NativeNamed("trace.withinBudget", o.withinFn), true, nil
 	case "hasBudgets":
-		return NativeNamed("trace.hasBudgets", o.hasBudFn), true
+		return rts.NativeNamed("trace.hasBudgets", o.hasBudFn), true, nil
 	}
-	return Null(), false
+	return rts.Null(), false, nil
 }
 
-func (o *traceObj) Index(key Value) (Value, error) {
-	return Null(), nil
+func (o *traceObj) Index(_ *rts.Ctx, _ rts.Pos, key rts.Value) (rts.Value, error) {
+	return rts.Null(), nil
 }
 
 const (
@@ -135,111 +145,110 @@ const (
 	sigTraceHasBudgets      = "trace.hasBudgets()"
 )
 
-func (o *traceObj) enabledFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceEnabled)
+func (o *traceObj) enabledFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceEnabled)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
-	return Bool(o.tl != nil), nil
+	return rts.Bool(o.tl != nil), nil
 }
 
-func (o *traceObj) durMsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceDurationMs)
+func (o *traceObj) durMsFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceDurationMs)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if o.tl == nil {
-		return Num(0), nil
+		return rts.Num(0), nil
 	}
-	return Num(durMs(o.tl.Duration)), nil
+	return rts.Num(durMs(o.tl.Duration)), nil
 }
 
-func (o *traceObj) durSecFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceDurationSeconds)
+func (o *traceObj) durSecFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceDurationSeconds)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if o.tl == nil {
-		return Num(0), nil
+		return rts.Num(0), nil
 	}
-	return Num(o.tl.Duration.Seconds()), nil
+	return rts.Num(o.tl.Duration.Seconds()), nil
 }
 
-func (o *traceObj) durStrFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceDurationString)
+func (o *traceObj) durStrFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceDurationString)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if o.tl == nil {
-		return Str(""), nil
+		return rts.Str(""), nil
 	}
-	return Str(o.tl.Duration.String()), nil
+	return native.StringValue(ctx, pos, o.tl.Duration.String())
 }
 
-func (o *traceObj) errFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceError)
+func (o *traceObj) errFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceError)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if o.tl == nil {
-		return Str(""), nil
+		return rts.Str(""), nil
 	}
-	return Str(o.tl.Err), nil
+	return native.StringValue(ctx, pos, o.tl.Err)
 }
 
-func (o *traceObj) startedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceStarted)
+func (o *traceObj) startedFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceStarted)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if o.tl == nil || o.tl.Started.IsZero() {
-		return Str(""), nil
+		return rts.Str(""), nil
 	}
-	return Str(o.tl.Started.Format(time.RFC3339Nano)), nil
+	return native.StringValue(ctx, pos, o.tl.Started.Format(time.RFC3339Nano))
 }
 
-func (o *traceObj) completedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceCompleted)
+func (o *traceObj) completedFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceCompleted)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if o.tl == nil || o.tl.Completed.IsZero() {
-		return Str(""), nil
+		return rts.Str(""), nil
 	}
-	return Str(o.tl.Completed.Format(time.RFC3339Nano)), nil
+	return native.StringValue(ctx, pos, o.tl.Completed.Format(time.RFC3339Nano))
 }
 
-func (o *traceObj) phasesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTracePhases)
+func (o *traceObj) phasesFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTracePhases)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if len(o.seg) == 0 {
-		return List(nil), nil
+		return rts.List(nil), nil
 	}
 	out := make([]any, 0, len(o.seg))
 	for _, s := range o.seg {
 		out = append(out, o.segMap(s))
 	}
-	return FromIface(ctx, pos, out)
+	return rts.FromIface(ctx, pos, out)
 }
 
-func (o *traceObj) getPhaseFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func (o *traceObj) getPhaseFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	sig := sigTraceGetPhase
 	if len(args) != 1 {
-		return Null(), Errf(ctx, pos, "%s expects 1 arg", sig)
+		return rts.Null(), rts.Errf(ctx, pos, "%s expects 1 arg", sig)
 	}
-	k, err := Key(pos, args[0])
+	k, err := rts.Key(pos, args[0])
 	if err != nil {
-		return Null(), WrapErr(ctx, err)
+		return rts.Null(), rts.WrapErr(ctx, err)
 	}
-	k = strings.ToLower(strings.TrimSpace(k))
-	if k == "" {
-		return Null(), nil
+	if strings.TrimSpace(k) == "" {
+		return rts.Null(), nil
 	}
-	a, ok := o.ag[k]
+	a, ok := o.ag[phaseKey(k)]
 	if !ok {
-		return Null(), nil
+		return rts.Null(), nil
 	}
 	segs := make([]any, 0, len(a.seg))
 	for _, s := range a.seg {
@@ -253,27 +262,27 @@ func (o *traceObj) getPhaseFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"durationString":  a.dur.String(),
 		"segments":        segs,
 	}
-	return FromIface(ctx, pos, res)
+	return rts.FromIface(ctx, pos, res)
 }
 
-func (o *traceObj) phaseNamesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTracePhaseNames)
+func (o *traceObj) phaseNamesFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTracePhaseNames)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if len(o.ord) == 0 {
-		return List(nil), nil
+		return rts.List(nil), nil
 	}
 	out := make([]any, 0, len(o.ord))
 	for _, name := range o.ord {
 		out = append(out, name)
 	}
-	return FromIface(ctx, pos, out)
+	return rts.FromIface(ctx, pos, out)
 }
 
-func (o *traceObj) connFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func (o *traceObj) connFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	if err := ensureNoArgs(ctx, pos, args, "trace.connection"); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if o.tl == nil || o.tl.Details == nil || o.tl.Details.Connection == nil {
 		return traceUnavailable(), nil
@@ -297,12 +306,12 @@ func (o *traceObj) connFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"k8s":           conn.K8s,
 		"protocol":      conn.Protocol,
 	}
-	return FromIface(ctx, pos, res)
+	return rts.FromIface(ctx, pos, res)
 }
 
-func (o *traceObj) tlsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func (o *traceObj) tlsFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	if err := ensureNoArgs(ctx, pos, args, "trace.tls"); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if o.tl == nil || o.tl.Details == nil || o.tl.Details.TLS == nil {
 		return traceUnavailable(), nil
@@ -329,16 +338,16 @@ func (o *traceObj) tlsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"verified":   det.Verified,
 		"certs":      certs,
 	}
-	return FromIface(ctx, pos, res)
+	return rts.FromIface(ctx, pos, res)
 }
 
-func (o *traceObj) budgetsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceBudgets)
+func (o *traceObj) budgetsFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceBudgets)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if !o.hasBud() {
-		return Dict(map[string]Value{"enabled": Bool(false)}), nil
+		return rts.Dict(map[string]rts.Value{"enabled": rts.Bool(false)}), nil
 	}
 	ph := make(map[string]any)
 	for k, d := range o.bud.Phases {
@@ -352,16 +361,16 @@ func (o *traceObj) budgetsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"toleranceSeconds": o.bud.Tolerance.Seconds(),
 		"phases":           ph,
 	}
-	return FromIface(ctx, pos, res)
+	return rts.FromIface(ctx, pos, res)
 }
 
-func (o *traceObj) breachesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceBreaches)
+func (o *traceObj) breachesFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceBreaches)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
 	if len(o.br) == 0 {
-		return List(nil), nil
+		return rts.List(nil), nil
 	}
 	out := make([]any, 0, len(o.br))
 	for _, b := range o.br {
@@ -375,15 +384,15 @@ func (o *traceObj) breachesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 			"overSeconds":   b.Over.Seconds(),
 		})
 	}
-	return FromIface(ctx, pos, out)
+	return rts.FromIface(ctx, pos, out)
 }
 
-func (o *traceObj) withinFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceWithinBudget)
+func (o *traceObj) withinFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceWithinBudget)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
-	return Bool(len(o.br) == 0), nil
+	return rts.Bool(len(o.br) == 0), nil
 }
 
 func toIfaceList(items []string) []any {
@@ -397,23 +406,23 @@ func toIfaceList(items []string) []any {
 	return out
 }
 
-func ensureNoArgs(ctx *Ctx, pos Pos, args []Value, name string) error {
+func ensureNoArgs(ctx *rts.Ctx, pos rts.Pos, args []rts.Value, name string) error {
 	if len(args) != 0 {
-		return Errf(ctx, pos, "%s() expects 0 args", name)
+		return rts.Errf(ctx, pos, "%s() expects 0 args", name)
 	}
 	return nil
 }
 
-func traceUnavailable() Value {
-	return Dict(map[string]Value{"available": Bool(false)})
+func traceUnavailable() rts.Value {
+	return rts.Dict(map[string]rts.Value{"available": rts.Bool(false)})
 }
 
-func (o *traceObj) hasBudFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := NewArgs(ctx, pos, args, sigTraceHasBudgets)
+func (o *traceObj) hasBudFn(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigTraceHasBudgets)
 	if err := na.None(); err != nil {
-		return Null(), err
+		return rts.Null(), err
 	}
-	return Bool(o.hasBud()), nil
+	return rts.Bool(o.hasBud()), nil
 }
 
 func (o *traceObj) hasBud() bool {

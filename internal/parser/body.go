@@ -1,10 +1,12 @@
 package parser
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/httpheader"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
@@ -100,9 +102,24 @@ func (b *documentBuilder) handleHeaderLine(ln line) bool {
 	if !b.inRequest || !b.request.http.HasMethod() || b.request.http.HeaderDone() {
 		return false
 	}
+	// A feature collecting raw lines takes them before the header block does.
+	// Without this, a @query or @variables block written straight after the
+	// method line loses its content to a header named after whatever sits in
+	// front of the first colon.
+	if b.request.protoBodyLine(ln.raw) {
+		b.appendLine(ln.raw)
+		return true
+	}
 	if before, after, ok := strings.Cut(ln.raw, ":"); ok {
 		headerName := strings.TrimSpace(before)
 		headerValue := strings.TrimSpace(after)
+		// A name that is not an HTTP field name cannot be sent, and header
+		// names are never expanded, so nothing later can rescue it. Report it
+		// here, where the line number points at the fix, and still record it so
+		// the request stays what the file says.
+		if !httpheader.Valid(headerName) {
+			b.addError(ln.no, fmt.Sprintf("header name %q is not an HTTP field name", headerName))
+		}
 		if headerName != "" {
 			b.request.http.AddHeader(headerName, headerValue)
 		}

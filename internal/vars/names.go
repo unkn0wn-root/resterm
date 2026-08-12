@@ -1,6 +1,7 @@
 package vars
 
 import (
+	"fmt"
 	"iter"
 	"maps"
 	"slices"
@@ -21,6 +22,42 @@ type NameMap[V any] struct {
 type namedValue[V any] struct {
 	name  string
 	value V
+}
+
+// NameError reports a blank variable-domain name.
+type NameError struct {
+	Name string
+}
+
+func (e *NameError) Error() string { return fmt.Sprintf("name %q is blank", e.Name) }
+
+// NameCollisionError reports two spellings with the same variable identity.
+type NameCollisionError struct {
+	First  string
+	Second string
+}
+
+func (e *NameCollisionError) Error() string {
+	return fmt.Sprintf("%q and %q are the same name", e.First, e.Second)
+}
+
+// NewNameMap validates src and preserves every accepted spelling. Unlike
+// CollectNames, it rejects duplicate identities instead of selecting a winner.
+func NewNameMap[V any](src map[string]V) (NameMap[V], error) {
+	var out NameMap[V]
+	seen := make(map[string]string, len(src))
+	for _, name := range slices.Sorted(maps.Keys(src)) {
+		key := NameKey(name)
+		if key == "" {
+			return NameMap[V]{}, &NameError{Name: name}
+		}
+		if first, ok := seen[key]; ok {
+			return NameMap[V]{}, &NameCollisionError{First: first, Second: name}
+		}
+		seen[key] = name
+		out.Set(name, src[name])
+	}
+	return out, nil
 }
 
 // Set stores value and reports whether name was non-blank.
@@ -116,10 +153,10 @@ func CollectNames[V any](src map[string]V) NameMap[V] {
 	return out
 }
 
-// Upsert writes value under name and drops any other form of that name, so a
-// plain map contains at most one case or whitespace variant.
+// Upsert stores value under the trimmed name and removes equivalent forms.
 func Upsert(m map[string]string, name, value string) {
 	key := NameKey(name)
+	name = str.Trim(name)
 	for cur := range m {
 		if cur != name && NameKey(cur) == key {
 			delete(m, cur)

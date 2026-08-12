@@ -95,6 +95,18 @@ func TestListIndexRequiresInteger(t *testing.T) {
 	}
 }
 
+func TestDictLiteralChecksKeyStringLimit(t *testing.T) {
+	ex, err := ParseExpr("test", 1, 1, `{"ab": 1}`)
+	if err != nil {
+		t.Fatalf("ParseExpr: %v", err)
+	}
+	ctx := NewCtx(context.Background(), Limits{MaxStr: 1, MaxDict: 8})
+	_, err = (&VM{ctx: ctx}).eval(NewEnv(nil), ex)
+	if err == nil || !strings.Contains(err.Error(), "string too long") {
+		t.Fatalf("eval error = %v, want string limit", err)
+	}
+}
+
 func TestEvalLogic(t *testing.T) {
 	v := evalExpr(t, "true and false")
 	if v.K != VBool || v.B != false {
@@ -240,21 +252,30 @@ func TestTryExprSwallowsError(t *testing.T) {
 	if v.K != VObj {
 		t.Fatalf("expected object, got %+v", v)
 	}
-	ok, has := v.O.GetMember("ok")
+	ok, has, err := v.O.Member(ctx, ex.Pos(), "ok")
+	if err != nil {
+		t.Fatalf("get ok member: %v", err)
+	}
 	if !has {
 		t.Fatalf("expected ok member")
 	}
 	if ok.K != VBool || ok.B {
 		t.Fatalf("expected ok=false, got %+v", ok)
 	}
-	val, has := v.O.GetMember("value")
+	val, has, err := v.O.Member(ctx, ex.Pos(), "value")
+	if err != nil {
+		t.Fatalf("get value member: %v", err)
+	}
 	if !has {
 		t.Fatalf("expected value member")
 	}
 	if val.K != VNull {
 		t.Fatalf("expected null value, got %+v", val)
 	}
-	errVal, has := v.O.GetMember("error")
+	errVal, has, err := v.O.Member(ctx, ex.Pos(), "error")
+	if err != nil {
+		t.Fatalf("get error member: %v", err)
+	}
 	if !has {
 		t.Fatalf("expected error member")
 	}
@@ -965,7 +986,7 @@ let env = 1
 	}
 	ctx := NewCtx(context.Background(), Limits{})
 	pre := testStdlib()
-	pre["env"] = Obj(newMapObj("env", map[string]string{}, nil))
+	pre["env"] = Str("host binding")
 	_, err = Exec(ctx, m, pre)
 	if err == nil || !strings.Contains(err.Error(), "name already defined") {
 		t.Fatalf("expected name already defined error, got %v", err)

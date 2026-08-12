@@ -4583,3 +4583,54 @@ func TestParseTraceRepeatedTarget(t *testing.T) {
 		})
 	}
 }
+
+// A feature that collects raw lines has to claim them before the header block
+// does. Written straight after the method line, the content used to land in a
+// header named after whatever preceded the first colon, and the directive was
+// left with nothing.
+func TestGraphQLVariablesRightAfterTheMethodLine(t *testing.T) {
+	src := "GET https://example.com\n# @graphql\n# @variables\n{\"id\":1}\n"
+	doc := Parse("gql.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+
+	req := doc.Requests[0]
+	if len(req.Headers) != 0 {
+		t.Fatalf("headers = %#v, want the line to belong to the directive", req.Headers)
+	}
+	if req.Body.GraphQL == nil || req.Body.GraphQL.Variables != `{"id":1}` {
+		t.Fatalf("graphql = %+v, want the variables collected", req.Body.GraphQL)
+	}
+}
+
+// A header name that is not an HTTP field name can never be sent, and header
+// names are never expanded, so the line is reported where it can be fixed.
+func TestHeaderNameThatIsNotAFieldNameIsReported(t *testing.T) {
+	src := "GET https://example.com\nX Token: raw\nX-Ok: yes\n{{hdr}}: v\n"
+	doc := Parse("hdr.http", []byte(src))
+
+	want := []string{
+		`header name "X Token" is not an HTTP field name`,
+		`header name "{{hdr}}" is not an HTTP field name`,
+	}
+	if len(doc.Errors) != len(want) {
+		t.Fatalf("errors = %v, want %d", doc.Errors, len(want))
+	}
+	for i, msg := range want {
+		if doc.Errors[i].Message != msg {
+			t.Errorf("errors[%d] = %q, want %q", i, doc.Errors[i].Message, msg)
+		}
+		if doc.Errors[i].Line != i+2 && doc.Errors[i].Line != 4 {
+			t.Errorf("errors[%d].Line = %d, want the header's line", i, doc.Errors[i].Line)
+		}
+	}
+
+	// The header is still recorded, so the request stays what the file says.
+	if got := doc.Requests[0].Headers.Get("X-Ok"); got != "yes" {
+		t.Errorf("X-Ok = %q, want the valid header to survive", got)
+	}
+	if _, ok := doc.Requests[0].Headers["X Token"]; !ok {
+		t.Error("the reported header was dropped, want the request to match the file")
+	}
+}

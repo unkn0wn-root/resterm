@@ -251,7 +251,7 @@ func dictPick(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 
-	keys, err := keyList(ctx, pos, na.Arg(1), sigDictPick)
+	keys, err := keyList(ctx, pos, na, 1)
 	if err != nil {
 		return rts.Null(), err
 	}
@@ -288,7 +288,7 @@ func dictOmit(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	}
 
 	out := rts.CloneDict(m)
-	keys, err := keyList(ctx, pos, na.Arg(1), sigDictOmit)
+	keys, err := keyList(ctx, pos, na, 1)
 	if err != nil {
 		return rts.Null(), err
 	}
@@ -327,12 +327,13 @@ func sortedDictKeys(ctx *rts.Ctx, pos rts.Pos, m map[string]rts.Value) ([]string
 	return keys, nil
 }
 
-func keyList(ctx *rts.Ctx, pos rts.Pos, v rts.Value, sig string) ([]string, error) {
+func keyList(ctx *rts.Ctx, pos rts.Pos, na rts.Args, i int) ([]string, error) {
+	v := na.Arg(i)
 	switch v.K {
 	case rts.VNull:
 		return nil, nil
 	case rts.VStr:
-		k, err := rts.KeyArg(ctx, pos, v, sig)
+		k, err := na.Key(i)
 		if err != nil {
 			return nil, err
 		}
@@ -349,7 +350,7 @@ func keyList(ctx *rts.Ctx, pos rts.Pos, v rts.Value, sig string) ([]string, erro
 			if err := rts.Tick(ctx, pos); err != nil {
 				return nil, err
 			}
-			k, err := rts.KeyArg(ctx, pos, it, sig)
+			k, err := na.KeyOf(it)
 			if err != nil {
 				return nil, err
 			}
@@ -357,7 +358,7 @@ func keyList(ctx *rts.Ctx, pos rts.Pos, v rts.Value, sig string) ([]string, erro
 		}
 		return out, nil
 	default:
-		return nil, rts.Errf(ctx, pos, "%s expects list or string", sig)
+		return nil, rts.Errf(ctx, pos, "%s expects list or string", na.Sig())
 	}
 }
 

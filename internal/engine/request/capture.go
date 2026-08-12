@@ -66,8 +66,8 @@ type captureScope struct {
 	env  vars.Environment
 	evalScope
 	locals rts.Locals
-	rr     *rts.Resp
-	rs     *rts.Stream
+	rr     *rtshost.Response
+	rs     *rtshost.Stream
 }
 
 type captureValueIn struct {
@@ -110,6 +110,10 @@ func (e *Engine) applyCaptures(in captureRun) error {
 	if in.req == nil || in.resp == nil || len(in.req.Metadata.Captures) == 0 {
 		return nil
 	}
+	rr, err := rtsScriptResp(in.resp)
+	if err != nil {
+		return err
+	}
 
 	lc := newCaptureContext(in.resp, in.stream, capture.StrictEnabled(in.req.Settings))
 	sc := captureScope{
@@ -119,7 +123,7 @@ func (e *Engine) applyCaptures(in captureRun) error {
 		req:    in.req,
 		env:    in.env,
 		locals: in.locals,
-		rr:     rtsScriptResp(in.resp),
+		rr:     rr,
 		rs:     rtsStream(in.stream),
 	}
 	work := &captureResult{}
@@ -249,7 +253,7 @@ func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
 
 func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 	ps := e.rtsPosForLineCol(in.doc, in.req, in.spec.Line, in.spec.Col)
-	rt := e.buildRT(rtIn{
+	rt, err := e.buildRT(rtIn{
 		doc:     in.doc,
 		req:     in.req,
 		env:     in.env,
@@ -263,6 +267,9 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		st:      in.rs,
 		secrets: rtshost.IncludeSecrets,
 	})
+	if err != nil {
+		return "", err
+	}
 	return e.evalRTSString(in.ctx, in.doc, rt, in.ex, ps)
 }
 

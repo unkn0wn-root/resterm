@@ -8,6 +8,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rtshost"
 )
 
 type recordingInspector struct {
@@ -28,8 +29,8 @@ func (unavailableInspector) Count(context.Context, RequestPattern) (uint64, erro
 
 func TestRTSInspectorCountAndReceived(t *testing.T) {
 	inspector := &recordingInspector{count: 3}
-	engine := rts.NewEng(nil)
-	runtime := rts.RT{Extensions: rts.Extension("mock", RTSValue(inspector))}
+	engine := rtshost.NewEngine(nil)
+	runtime := rtshost.Runtime{Extensions: rts.Extension("mock", RTSValue(inspector))}
 	value, err := engine.Eval(context.Background(), runtime, `mock.count({
   method: "POST",
   path: "/webhooks/{id}",
@@ -112,25 +113,25 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 }
 
 func TestRTSInspectorReportsUnavailableAndInvalidPatterns(t *testing.T) {
-	engine := rts.NewEng(nil)
+	engine := rtshost.NewEngine(nil)
 	for _, test := range []struct {
 		name string
-		rt   rts.RT
+		rt   rtshost.Runtime
 		expr string
 	}{
 		{
 			name: "unavailable",
-			rt:   rts.RT{Extensions: rts.Extension("mock", RTSValue(unavailableInspector{}))},
+			rt:   rtshost.Runtime{Extensions: rts.Extension("mock", RTSValue(unavailableInspector{}))},
 			expr: `mock.count({})`,
 		},
 		{
 			name: "invalid header rule",
-			rt:   rts.RT{Extensions: rts.Extension("mock", RTSValue(&recordingInspector{}))},
+			rt:   rtshost.Runtime{Extensions: rts.Extension("mock", RTSValue(&recordingInspector{}))},
 			expr: `mock.count({headers: {Authorization: {prefix: ""}}})`,
 		},
 		{
 			name: "unknown field",
-			rt:   rts.RT{Extensions: rts.Extension("mock", RTSValue(&recordingInspector{}))},
+			rt:   rtshost.Runtime{Extensions: rts.Extension("mock", RTSValue(&recordingInspector{}))},
 			expr: `mock.count({verb: "GET"})`,
 		},
 	} {

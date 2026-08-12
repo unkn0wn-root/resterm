@@ -1,9 +1,6 @@
 package rtshost
 
-import (
-	"github.com/unkn0wn-root/resterm/internal/util"
-	"github.com/unkn0wn-root/resterm/internal/vars"
-)
+import "github.com/unkn0wn-root/resterm/internal/vars"
 
 // SecretPolicy decides whether secret globals reach the runtime.
 type SecretPolicy int
@@ -21,7 +18,7 @@ func RuntimeGlobals(globals vars.Globals, policy SecretPolicy) map[string]string
 		if mut.Delete || (policy == OmitSecrets && mut.Secret) {
 			continue
 		}
-		out[util.Lower(name)] = mut.Value
+		out[vars.NameKey(name)] = mut.Value
 	}
 	return out
 }

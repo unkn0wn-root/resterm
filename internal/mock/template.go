@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/net/http/httpguts"
 
-	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/jsonpath"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -109,7 +109,7 @@ func validateTemplateName(name string, pathParams map[string]string) error {
 			return fmt.Errorf("invalid request header template %q", ref.subject)
 		}
 	case "body":
-		if !rts.ValidJSONPath(ref.subject) {
+		if !jsonpath.Valid(ref.subject) {
 			return fmt.Errorf("invalid JSON body template path %q", ref.subject)
 		}
 	default:
@@ -254,7 +254,7 @@ func (p *requestProvider) resolveBody(path, name string) (any, bool) {
 		})
 		return "", false
 	}
-	value, found := rts.JSONPathGet(body, path)
+	value, found := jsonpath.Get(body, path)
 	if !found {
 		p.missing("JSON body field", path)
 		return "", false

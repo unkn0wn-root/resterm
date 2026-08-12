@@ -2,6 +2,14 @@ package rts
 
 import "math"
 
+// Key validates that v is a string key and returns its raw value.
+func Key(pos Pos, v Value) (string, error) {
+	if v.K != VStr {
+		return "", Errf(nil, pos, "expected string key")
+	}
+	return v.S, nil
+}
+
 // Args validates and converts arguments passed to native RTS functions.
 type Args struct {
 	ctx  *Ctx
@@ -140,11 +148,27 @@ func (a Args) Dict(i int) (map[string]Value, error) {
 }
 
 func (a Args) Key(i int) (string, error) {
-	return KeyArg(a.ctx, a.pos, a.args[i], a.sig)
+	return a.KeyOf(a.args[i])
 }
 
-func (a Args) MapKey(key string) (string, error) {
-	return MapKey(a.ctx, a.pos, key, a.sig)
+// KeyOf validates a string key that is not itself an argument, such as an
+// element of a list an argument holds.
+func (a Args) KeyOf(v Value) (string, error) {
+	k, err := Key(a.pos, v)
+	if err != nil {
+		return "", WrapErr(a.ctx, err)
+	}
+	return k, nil
+}
+
+// Sig is the signature these arguments are checked against.
+func (a Args) Sig() string { return a.sig }
+
+// In names one argument, so a helper that takes more than one dictionary can
+// report which of them an error came from.
+func (a Args) In(label string) Args {
+	a.sig += ": " + label
+	return a
 }
 
 func (a Args) Fn(i int) (Value, error) {

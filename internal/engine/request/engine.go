@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
+	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -40,7 +41,7 @@ type Engine struct {
 	hc   *httpx.Client
 	gc   *grpcx.Client
 	sc   *scripts.Runner
-	re   *rts.Eng
+	re   *rtshost.Engine
 	rg   *registry.Index
 	last lastState
 }
@@ -87,7 +88,7 @@ func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 		hc:  hc,
 		gc:  grpcx.NewClient(),
 		sc:  scripts.NewRunner(nil),
-		re:  rts.NewEng(stdlib.New),
+		re:  rtshost.NewEngine(stdlib.New),
 		rg:  cfg.Registry,
 	}
 }
@@ -408,7 +409,7 @@ func (x *execCtx) currentGlobals() vars.Globals {
 }
 
 func (x *execCtx) evalScope(vv map[string]string) evalScope {
-	return evalScope{vars: vv, globals: x.currentGlobals()}
+	return newEvalScope(vv, x.currentGlobals())
 }
 
 func (x *execCtx) captureVariables() map[string]string {
@@ -1098,18 +1099,22 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	testScope := x.evalScope(x.captureVariables())
 	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
 	defer cancelAsserts()
-	asserts, assertErr := x.eng.runAsserts(
-		assertCtx,
-		x.doc,
-		x.req,
-		x.env,
-		x.opts.BaseDir,
-		testScope,
-		x.locals,
-		rtsGRPC(resp),
-		nil,
-		rtsStream(info),
-	)
+	rr, assertErr := rtsGRPC(resp)
+	var asserts []scripts.TestResult
+	if assertErr == nil {
+		asserts, assertErr = x.eng.runAsserts(
+			assertCtx,
+			x.doc,
+			x.req,
+			x.env,
+			x.opts.BaseDir,
+			testScope,
+			x.locals,
+			rr,
+			nil,
+			rtsStream(info),
+		)
+	}
 	tests, globalChanges, testErr := x.eng.sc.RunTests(
 		x.req.Metadata.Scripts,
 		scripts.TestInput{
@@ -1199,6 +1204,10 @@ func (x *execCtx) httpRunner() xexec.Runner {
 				return effectiveGlobalValues(doc, x.storeG)
 			},
 			RunAsserts: func(in xexec.AssertInput) ([]scripts.TestResult, error) {
+				rr, err := rtsHTTP(in.HTTP)
+				if err != nil {
+					return nil, err
+				}
 				return x.eng.runAsserts(
 					in.Context,
 					in.Doc,
@@ -1207,7 +1216,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					in.BaseDir,
 					x.evalScope(in.Vars),
 					in.Locals,
-					rtsHTTP(in.HTTP),
+					rr,
 					rtsTrace(in.HTTP),
 					rtsStream(in.Stream),
 				)

@@ -1,275 +1,179 @@
 package stdlib
 
 import (
-	"strings"
+	"maps"
+	"slices"
 
+	"github.com/unkn0wn-root/resterm/internal/httpheader"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/native"
 )
 
 const (
-	sigHeadersNormalize = "headers.normalize(h)"
-	sigHeadersGet       = "headers.get(h, name)"
-	sigHeadersHas       = "headers.has(h, name)"
-	sigHeadersSet       = "headers.set(h, name, value)"
-	sigHeadersRemove    = "headers.remove(h, name)"
+	sigHeadersNormalize = "headers.normalize(headers)"
+	sigHeadersGet       = "headers.get(headers, name)"
+	sigHeadersHas       = "headers.has(headers, name)"
+	sigHeadersSet       = "headers.set(headers, name, value)"
+	sigHeadersRemove    = "headers.remove(headers, name)"
 	sigHeadersMerge     = "headers.merge(a, b)"
 )
 
+var (
+	headersNormalizeDef = native.Fn1(
+		"headers.normalize", sigHeadersNormalize, headerBlockArg,
+		func(call native.Call, h httpheader.Values) (rts.Value, error) {
+			return headerBlockValue(call, h)
+		},
+	)
+	headersGetDef = native.Fn2(
+		"headers.get", sigHeadersGet, headerBlockArg, headerNameArg,
+		func(_ native.Call, h httpheader.Values, name httpheader.Name) (rts.Value, error) {
+			if len(h[name.Key()]) == 0 {
+				return rts.Null(), nil
+			}
+			return rts.Str(h[name.Key()][0]), nil
+		},
+	)
+	headersHasDef = native.Fn2(
+		"headers.has", sigHeadersHas, headerBlockArg, headerNameArg,
+		func(_ native.Call, h httpheader.Values, name httpheader.Name) (rts.Value, error) {
+			return rts.Bool(len(h[name.Key()]) > 0), nil
+		},
+	)
+	headersSetDef = native.Fn3(
+		"headers.set", sigHeadersSet, headerBlockArg, headerNameArg, native.StringValues,
+		func(call native.Call, h httpheader.Values, name httpheader.Name, vals []string) (rts.Value, error) {
+			h[name.Key()] = vals
+			return headerBlockValue(call, h)
+		},
+	)
+	headersRemoveDef = native.Fn2(
+		"headers.remove", sigHeadersRemove, headerBlockArg, headerNameArg,
+		func(call native.Call, h httpheader.Values, name httpheader.Name) (rts.Value, error) {
+			delete(h, name.Key())
+			return headerBlockValue(call, h)
+		},
+	)
+	headersMergeDef = native.Fn2(
+		"headers.merge", sigHeadersMerge, headerBlockArg, headerPatchArg,
+		func(call native.Call, h httpheader.Values, patch headerPatch) (rts.Value, error) {
+			for name, edit := range patch {
+				if edit.del {
+					delete(h, name)
+					continue
+				}
+				h[name] = edit.vals
+			}
+			return headerBlockValue(call, h)
+		},
+	)
+)
+
 var headersSpec = nsSpec{name: "headers", top: true, fns: map[string]rts.NativeFunc{
-	"get":       headersGet,
-	"has":       headersHas,
-	"set":       headersSet,
-	"remove":    headersRemove,
-	"merge":     headersMerge,
-	"normalize": headersNormalize,
+	"get":       headersGetDef.Func(),
+	"has":       headersHasDef.Func(),
+	"set":       headersSetDef.Func(),
+	"remove":    headersRemoveDef.Func(),
+	"merge":     headersMergeDef.Func(),
+	"normalize": headersNormalizeDef.Func(),
 }}
 
-func headersNormalize(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigHeadersNormalize)
-	if err := na.Count(1); err != nil {
-		return rts.Null(), err
-	}
-
-	m, err := na.Dict(0)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	out, err := normHeaders(ctx, pos, m, sigHeadersNormalize)
-	if err != nil {
-		return rts.Null(), err
-	}
-	return rts.Dict(out), nil
+type headerKey struct {
+	src  string
+	name httpheader.Name
 }
 
-func headersGet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigHeadersGet)
-	if err := na.Count(2); err != nil {
-		return rts.Null(), err
-	}
-
-	m, err := na.Dict(0)
-	if err != nil || m == nil {
-		return rts.Null(), err
-	}
-
-	name, err := na.Key(1)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	val, ok, err := findHeader(ctx, pos, m, name)
-	if err != nil || !ok {
-		return rts.Null(), err
-	}
-	return headValue(ctx, pos, val)
+type headerEdit struct {
+	vals []string
+	del  bool
 }
 
-func headersHas(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigHeadersHas)
-	if err := na.Count(2); err != nil {
-		return rts.Null(), err
-	}
+type headerPatch map[string]headerEdit
 
-	m, err := na.Dict(0)
-	if err != nil || m == nil {
-		return rts.Bool(false), err
-	}
-
-	name, err := na.Key(1)
+func headerBlockArg(call native.Call, v rts.Value) (httpheader.Values, error) {
+	m, err := native.Dict(call, v)
 	if err != nil {
-		return rts.Null(), err
+		return nil, err
 	}
-
-	val, ok, err := findHeader(ctx, pos, m, name)
-	if err != nil || !ok {
-		return rts.Bool(false), err
-	}
-	checked, err := headerValue(ctx, pos, val)
+	keys, err := headerKeys(call, m)
 	if err != nil {
-		return rts.Null(), err
+		return nil, err
 	}
-
-	switch checked.K {
-	case rts.VNull:
-		return rts.Bool(false), nil
-	case rts.VStr:
-		return rts.Bool(true), nil
-	case rts.VList:
-		return rts.Bool(len(checked.L) > 0), nil
-	default:
-		return rts.Null(), rts.Errf(
-			ctx,
-			pos,
-			"%s expects header values as string/list",
-			sigHeadersHas,
-		)
-	}
-}
-
-func headersSet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigHeadersSet)
-	if err := na.Count(3); err != nil {
-		return rts.Null(), err
-	}
-
-	m, err := na.Dict(0)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	name, err := na.Key(1)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	val, err := headerValue(ctx, pos, na.Arg(2))
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	out := rts.CloneDict(m)
-	out[strings.ToLower(name)] = val
-	return rts.Dict(out), nil
-}
-
-func headersRemove(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigHeadersRemove)
-	if err := na.Count(2); err != nil {
-		return rts.Null(), err
-	}
-
-	m, err := na.Dict(0)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	name, err := na.Key(1)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	out := rts.CloneDict(m)
-	delete(out, strings.ToLower(name))
-	return rts.Dict(out), nil
-}
-
-func headersMerge(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigHeadersMerge)
-	if err := na.Count(2); err != nil {
-		return rts.Null(), err
-	}
-
-	a, err := na.Dict(0)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	b, err := na.Dict(1)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	normA, err := normHeaders(ctx, pos, a, sigHeadersMerge)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	normB, err := normHeaders(ctx, pos, b, sigHeadersMerge)
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	out := rts.CloneDict(normA)
-	for k, v := range normB {
-		if v.K == rts.VNull {
-			delete(out, k)
-			continue
-		}
-		out[k] = v
-	}
-	return rts.Dict(out), nil
-}
-
-func normHeaders(
-	ctx *rts.Ctx,
-	pos rts.Pos,
-	m map[string]rts.Value,
-	sig string,
-) (map[string]rts.Value, error) {
-	if len(m) == 0 {
-		return map[string]rts.Value{}, nil
-	}
-
-	out := make(map[string]rts.Value, len(m))
-	for k, v := range m {
-		name, err := rts.MapKey(ctx, pos, k, sig)
+	out := make(httpheader.Values, len(m))
+	for _, k := range keys {
+		vals, err := native.StringValues(call, m[k.src])
 		if err != nil {
 			return nil, err
 		}
-		name = strings.ToLower(name)
-		val, err := headerValue(ctx, pos, v)
-		if err != nil {
-			return nil, err
-		}
-		out[name] = val
+		out[k.name.Key()] = vals
 	}
 	return out, nil
 }
 
-func headerValue(ctx *rts.Ctx, pos rts.Pos, v rts.Value) (rts.Value, error) {
-	switch v.K {
-	case rts.VNull:
-		return rts.Null(), nil
-	case rts.VStr:
-		return rts.Str(v.S), nil
-	case rts.VList:
-		out := make([]rts.Value, 0, len(v.L))
-		for _, it := range v.L {
-			if it.K != rts.VStr {
-				return rts.Null(), rts.Errf(ctx, pos, "headers expect string values")
-			}
-			out = append(out, rts.Str(it.S))
-		}
-		return rts.List(out), nil
-	default:
-		return rts.Null(), rts.Errf(ctx, pos, "headers expect string values")
+func headerPatchArg(call native.Call, v rts.Value) (headerPatch, error) {
+	m, err := native.Dict(call, v)
+	if err != nil {
+		return nil, err
 	}
+	keys, err := headerKeys(call, m)
+	if err != nil {
+		return nil, err
+	}
+	out := make(headerPatch, len(m))
+	for _, k := range keys {
+		v := m[k.src]
+		if v.K == rts.VNull {
+			out[k.name.Key()] = headerEdit{del: true}
+			continue
+		}
+		vals, err := native.StringValues(call, v)
+		if err != nil {
+			return nil, err
+		}
+		out[k.name.Key()] = headerEdit{vals: vals}
+	}
+	return out, nil
 }
 
-func findHeader(
-	ctx *rts.Ctx,
-	pos rts.Pos,
-	m map[string]rts.Value,
-	name string,
-) (rts.Value, bool, error) {
-	key := strings.ToLower(name)
-	if val, ok := m[key]; ok {
-		return val, true, nil
-	}
-	for k, v := range m {
-		if strings.EqualFold(k, name) {
-			return v, true, nil
+func headerKeys(call native.Call, m map[string]rts.Value) ([]headerKey, error) {
+	names := slices.Sorted(maps.Keys(m))
+	out := make([]headerKey, 0, len(names))
+	seen := make(map[string]string, len(names))
+	for _, name := range names {
+		if err := rts.CheckStr(call.Ctx, call.Pos, name); err != nil {
+			return nil, err
 		}
+		n, err := httpheader.Parse(name)
+		if err != nil {
+			return nil, call.Errorf("%s: %v", call.Sig, err)
+		}
+		key := n.Key()
+		if first, ok := seen[key]; ok {
+			return nil, call.Errorf(
+				"%s: %q and %q are the same HTTP header",
+				call.Sig,
+				first,
+				name,
+			)
+		}
+		seen[key] = name
+		out = append(out, headerKey{src: name, name: n})
 	}
-	return rts.Null(), false, nil
+	return out, nil
 }
 
-func headValue(ctx *rts.Ctx, pos rts.Pos, v rts.Value) (rts.Value, error) {
-	switch v.K {
-	case rts.VNull:
-		return rts.Null(), nil
-	case rts.VStr:
-		return rts.Str(v.S), nil
-	case rts.VList:
-		if len(v.L) == 0 {
-			return rts.Null(), nil
-		}
-		if v.L[0].K != rts.VStr {
-			return rts.Null(), rts.Errf(ctx, pos, "headers expect string values")
-		}
-		return rts.Str(v.L[0].S), nil
-	default:
-		return rts.Null(), rts.Errf(ctx, pos, "headers expect string values")
+func headerNameArg(call native.Call, v rts.Value) (httpheader.Name, error) {
+	name, err := native.String(call, v)
+	if err != nil {
+		return httpheader.Name{}, err
 	}
+	n, err := httpheader.Parse(name)
+	if err != nil {
+		return httpheader.Name{}, call.Errorf("%s expects an HTTP header name, got %q", call.Sig, name)
+	}
+	return n, nil
+}
+
+func headerBlockValue(call native.Call, h httpheader.Values) (rts.Value, error) {
+	return native.StringValuesDict(call.Ctx, call.Pos, h)
 }
