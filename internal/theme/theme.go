@@ -39,6 +39,7 @@ type EditorMetadataPalette struct {
 	RTSKeywordControl lipgloss.Color
 	RTSKeywordLiteral lipgloss.Color
 	RTSKeywordLogical lipgloss.Color
+	RTSFunction       lipgloss.Color
 	DirectiveColors   map[string]lipgloss.Color
 }
 
@@ -326,7 +327,7 @@ func DefaultTheme() Theme {
 			CommentMarker:    lipgloss.Color("#8B86A8"),
 			DirectiveDefault: directiveAccent,
 			Value:            lipgloss.Color("#E6E1FF"),
-			SettingKey:       lipgloss.Color("#FFD46A"),
+			SettingKey:       lipgloss.Color("#9EC1DE"),
 			SettingValue:     lipgloss.Color("#FFEBC5"),
 			RequestLine:      lipgloss.Color("#FF6E6E"),
 			RequestSeparator: lipgloss.Color(
@@ -334,9 +335,10 @@ func DefaultTheme() Theme {
 			), // still debating with myself if i want this
 			RTSKeywordDefault: directiveAccent,
 			RTSKeywordDecl:    directiveAccent,
-			RTSKeywordControl: lipgloss.Color("#FFD46A"),
+			RTSKeywordControl: lipgloss.Color("#D48AD0"),
 			RTSKeywordLiteral: lipgloss.Color("#6EF17E"),
 			RTSKeywordLogical: lipgloss.Color("#FF8B39"),
+			RTSFunction:       lipgloss.Color("#B9A5FF"),
 			DirectiveColors: map[string]lipgloss.Color{
 				"name":              directiveAccent,
 				"description":       directiveAccent,

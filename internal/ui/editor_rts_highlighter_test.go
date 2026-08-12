@@ -39,6 +39,25 @@ func TestRTSRuneStylerHighlightsFnDecl(t *testing.T) {
 	}
 }
 
+// function names have their own colour, so a theme that recolours option keys
+// leaves them alone
+func TestRTSRuneStylerFunctionIgnoresSettingKey(t *testing.T) {
+	p := theme.DefaultTheme().EditorMetadata
+	p.SettingKey = lipgloss.Color("#123456")
+	st := newRTSRuneStyler(p)
+	rs, ok := st.(*rtsRuneStyler)
+	if !ok {
+		t.Fatalf("expected rts rune styler")
+	}
+
+	src := "fn add(a, b) {"
+	styles := rs.StylesForLine([]rune(src), 0)
+	idx := strings.Index(src, "add")
+	if got := styles[idx].GetForeground(); got != p.RTSFunction {
+		t.Fatalf("fn name colour = %q, want %q", got, p.RTSFunction)
+	}
+}
+
 func TestRTSRuneStylerHighlightsFnCall(t *testing.T) {
 	p := theme.DefaultTheme().EditorMetadata
 	st := newRTSRuneStyler(p)

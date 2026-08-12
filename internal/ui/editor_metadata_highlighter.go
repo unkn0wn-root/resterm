@@ -85,8 +85,10 @@ func newMetadataRuneStyler(p theme.EditorMetadataPalette) textarea.RuneStyler {
 		s.valueEnabled = true
 	}
 
+	// option keys repeat on every directive line, so they stay unbold and let the
+	// directive name and the values carry the emphasis
 	if c := p.SettingKey; c != "" {
-		s.settingKeyStyle = lipgloss.NewStyle().Foreground(c).Bold(true)
+		s.settingKeyStyle = lipgloss.NewStyle().Foreground(c)
 		s.settingKeyEnabled = true
 	}
 

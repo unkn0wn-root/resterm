@@ -197,6 +197,7 @@ type EditorMetadataSpec struct {
 	RTSKeywordControl *string           `json:"rts_keyword_control" toml:"rts_keyword_control"`
 	RTSKeywordLiteral *string           `json:"rts_keyword_literal" toml:"rts_keyword_literal"`
 	RTSKeywordLogical *string           `json:"rts_keyword_logical" toml:"rts_keyword_logical"`
+	RTSFunction       *string           `json:"rts_function"        toml:"rts_function"`
 	DirectiveColors   map[string]string `json:"directive_colors"    toml:"directive_colors"`
 }
 
@@ -1272,6 +1273,13 @@ func applyEditorMetadata(dst *EditorMetadataPalette, spec EditorMetadataSpec) er
 			return err
 		}
 		dst.RTSKeywordLogical = color
+	}
+	if spec.RTSFunction != nil {
+		color, err := toColor("editor_metadata.rts_function", *spec.RTSFunction)
+		if err != nil {
+			return err
+		}
+		dst.RTSFunction = color
 	}
 	if len(spec.DirectiveColors) > 0 {
 		combined := make(

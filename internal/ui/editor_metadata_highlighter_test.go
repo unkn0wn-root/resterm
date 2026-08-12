@@ -225,6 +225,22 @@ func TestMetadataRuneStylerOptionDirectives(t *testing.T) {
 	}
 }
 
+func TestMetadataRuneStylerSettingKeyIsNotBold(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+
+	line := "# @mock method=POST path=/accounts name=flagged"
+	styles := styler.StylesForLine([]rune(line), 0)
+	for _, key := range []string{"method", "path", "name"} {
+		start, end := metadataTokenRange(t, styles, line, key)
+		for i := start; i < end; i++ {
+			if styles[i].GetBold() {
+				t.Fatalf("StylesForLine(%q) key %q rune %d is bold", line, key, i-start)
+			}
+		}
+	}
+}
+
 func TestMetadataRuneStylerTimeoutUsesGenericValue(t *testing.T) {
 	palette := theme.DefaultTheme().EditorMetadata
 	if palette.Value == palette.SettingValue {

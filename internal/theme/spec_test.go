@@ -357,3 +357,21 @@ func TestApplySpecRTSKeywordOverrides(t *testing.T) {
 		t.Errorf("base theme should remain unchanged")
 	}
 }
+
+func TestApplySpecRTSFunctionOverride(t *testing.T) {
+	base := DefaultTheme()
+	spec := ThemeSpec{
+		EditorMetadata: &EditorMetadataSpec{RTSFunction: strPtr("#555555")},
+	}
+
+	updated, err := ApplySpec(base, spec)
+	if err != nil {
+		t.Fatalf("ApplySpec returned error: %v", err)
+	}
+	if got := updated.EditorMetadata.RTSFunction; got != "#555555" {
+		t.Errorf("expected RTS function %q, got %q", "#555555", got)
+	}
+	if base.EditorMetadata.RTSFunction == "#555555" {
+		t.Errorf("base theme should remain unchanged")
+	}
+}

@@ -74,8 +74,7 @@ func newRTSRuneStyler(p theme.EditorMetadataPalette) textarea.RuneStyler {
 	}
 
 	if c := pickColor(
-		p.SettingKey,
-		p.RTSKeywordControl,
+		p.RTSFunction,
 		p.DirectiveDefault,
 		p.RequestLine,
 	); c != "" {
