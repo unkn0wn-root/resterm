@@ -565,7 +565,7 @@ Helper names are case-insensitive and need no declaration.
 
 Every reference is resolved on its own, so two `{{$uuid}}` in one body give two values. Declare the helper as a variable when a request needs the same value twice: `# @request trace.id {{$uuid}}`.
 
-Generated addresses and hostnames stay under the reserved `example.com`, `example.net`, and `example.org` domains, and phone numbers stay in the fictional `555-01xx` range, so no helper output points at a real host or mailbox.
+Generated addresses and hostnames stay under the reserved `example.com`, `example.net`, and `example.org` domains, and phone numbers come from a range reserved for fiction, so no helper output points at a real host, mailbox, or line.
 
 Arguments accept either quote form and may be left unquoted when they contain no comma: `{{$randomChoice(red, green)}}`. Inside a JSON body prefer single quotes, since a backslash-escaped `\"` is part of the argument rather than a quote. A helper used the wrong way, such as `{{$randomChoice()}}`, fails the request with an error that names the helper instead of reporting a missing variable.
 

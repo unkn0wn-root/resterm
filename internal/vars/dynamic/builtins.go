@@ -123,7 +123,7 @@ var builtins = []helper{
 	},
 	{
 		name:    "$fake.phone",
-		summary: "Random phone number in the fictional 555 range",
+		summary: "Random phone number from a range reserved for fiction",
 		eval:    gen(fakePhone),
 	},
 	{

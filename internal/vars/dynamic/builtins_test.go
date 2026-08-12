@@ -100,7 +100,7 @@ func TestFakeHelpersLookReal(t *testing.T) {
 		{ref: "$fake.username", pattern: `^[a-z]+[0-9]{2}$`},
 		{ref: "$fake.company", pattern: `^[A-Z][a-z]+ [A-Z][a-z]+$`},
 		{ref: "$fake.domain", pattern: `^[a-z]+\.example\.com$`},
-		{ref: "$fake.phone", pattern: `^\+1-555-01[0-9]{2}$`},
+		{ref: "$fake.phone", pattern: `^\+1-[0-9]{3}-555-01[0-9]{2}$`},
 		{ref: "$fake.word", pattern: `^[a-z]+$`},
 		{ref: "$fake.sentence", pattern: `^[A-Z][a-z]+( [a-z]+){3,7}\.$`},
 		{ref: "$fake.city", pattern: `^[A-Z][a-z]+$`},

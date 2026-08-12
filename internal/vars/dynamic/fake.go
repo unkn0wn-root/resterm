@@ -4,9 +4,9 @@ import "strings"
 
 // Sample data for the $fake and $random helpers. Pools are plain ASCII so
 // generated names stay usable inside emails and hostnames. Request files are
-// executed, so helper output must never point a request at a real host or
-// mailbox: addresses and hosts stay under the RFC 2606 example domains, and
-// phone numbers inside the fictional 555-01xx block.
+// executed, so helper output must never point a request at a real host,
+// mailbox or line: addresses and hosts stay under the RFC 2606 example
+// domains, and phone numbers inside the 555-01xx range reserved for fiction.
 
 var (
 	firstNames = []string{
@@ -46,6 +46,7 @@ var (
 		"quartz", "ripple", "spruce", "tide", "umber", "vellum", "willow", "zenith",
 	}
 	emailDomains = []string{"example.com", "example.net", "example.org"}
+	areaCodes    = []string{"202", "212", "213", "312", "415", "503", "617", "718"}
 )
 
 func fakeFirstName() string {
@@ -86,7 +87,7 @@ func fakeCountry() string {
 }
 
 func fakePhone() string {
-	return "+1-555-01" + randomDigits(2)
+	return "+1-" + pick(areaCodes) + "-555-01" + randomDigits(2)
 }
 
 func fakeWord() string {
