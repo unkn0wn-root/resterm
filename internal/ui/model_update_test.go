@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
@@ -138,6 +139,48 @@ func TestTabInInsertModeAcceptsActiveEditorCompletion(t *testing.T) {
 	}
 	if model.editor.completion.active {
 		t.Fatal("expected completion popup to close after accepting with Tab")
+	}
+}
+
+func TestTabInInsertModeFinishesEditorCompletionPlaceholder(t *testing.T) {
+	model := New(Config{})
+	model.editor.SetValue("# ")
+	model.editor.moveCursorTo(0, 2)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(true, false)
+
+	for _, r := range "@mock latency=" {
+		updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		model = updated.(Model)
+	}
+	if !model.editor.completion.active {
+		t.Fatal("expected latency completion to be active")
+	}
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = updated.(Model)
+	const want = "# @mock latency=250ms "
+	if got := model.editor.Value(); got != want {
+		t.Fatalf("accepted completion = %q, want %q", got, want)
+	}
+	if got := model.editor.selectedText(); got != "250ms" {
+		t.Fatalf("selected placeholder = %q, want %q", got, "250ms")
+	}
+	if model.editor.mode != selectionPlaceholder {
+		t.Fatalf("selection mode = %v, want placeholder", model.editor.mode)
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = updated.(Model)
+	if got := model.editor.Value(); got != want {
+		t.Fatalf("finishing placeholder changed content to %q", got)
+	}
+	if model.editor.hasSelection() {
+		t.Fatal("expected Tab to finish the completion placeholder")
+	}
+	wantOffset := utf8.RuneCountInString(want)
+	if got := model.editor.caretPosition().Offset; got != wantOffset {
+		t.Fatalf("caret offset = %d, want %d", got, wantOffset)
 	}
 }
 

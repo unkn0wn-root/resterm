@@ -24,11 +24,26 @@ const (
 type form struct {
 	name     string // empty for a bare duration, which is not a call
 	params   [2]string
+	args     string // example arguments, without the surrounding parentheses
 	summary  string
-	usage    string
 	relative bool // the deviation may be a percentage of base
 	check    func(Spec) error
 	sample   func(Spec, source) time.Duration
+}
+
+// call is the written form of a distribution, shared by examples and by parsed
+// specs so the two cannot drift.
+func call(name, args string) string {
+	return name + "(" + args + ")"
+}
+
+// usage is the example call shown in errors and completions, empty for a bare
+// duration.
+func (f form) usage() string {
+	if f.name == "" {
+		return ""
+	}
+	return call(f.name, f.args)
 }
 
 // Every call form takes a base value and a deviation from it. The table is
@@ -39,24 +54,24 @@ var forms = [...]form{
 	random: {
 		name:    "random",
 		params:  [2]string{"min", "max"},
+		args:    "100ms,500ms",
 		summary: "Uniform wait between two bounds",
-		usage:   "random(100ms,500ms)",
 		check:   checkRandom,
 		sample:  sampleRandom,
 	},
 	normal: {
 		name:     "normal",
 		params:   [2]string{"mean", "stddev"},
+		args:     "250ms,50ms",
 		summary:  "Normally distributed wait around a mean",
-		usage:    "normal(250ms,50ms)",
 		relative: true,
 		sample:   sampleNormal,
 	},
 	jitter: {
 		name:     "jitter",
 		params:   [2]string{"base", "spread"},
+		args:     "200ms,20%",
 		summary:  "Uniform wait within a spread of a base value",
-		usage:    "jitter(200ms,20%)",
 		relative: true,
 		sample:   sampleJitter,
 	},

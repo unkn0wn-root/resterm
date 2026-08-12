@@ -1790,7 +1790,17 @@ func TestRequestEditorCompletionsPreviewToggle(t *testing.T) {
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRight})
 	if !editor.completion.preview {
-		t.Fatal("expected right key to open metadata hint preview")
+		t.Fatal("expected right to open metadata hint preview")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if editor.completion.preview {
+		t.Fatal("expected left to close metadata hint preview")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if !editor.completion.preview {
+		t.Fatal("expected ? to open metadata hint preview")
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -1801,14 +1811,50 @@ func TestRequestEditorCompletionsPreviewToggle(t *testing.T) {
 		t.Fatal("expected esc to keep metadata hints active after closing preview")
 	}
 
-	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
 	if !editor.completion.preview {
-		t.Fatal("expected ? to toggle metadata hint preview on")
+		t.Fatal("expected ctrl+l to toggle metadata hint preview on")
 	}
 
-	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	if editor.completion.preview {
-		t.Fatal("expected ctrl+l to toggle metadata hint preview off")
+		t.Fatal("expected ? to toggle metadata hint preview off")
+	}
+}
+
+func TestRequestEditorRightFinishesCompletionPlaceholder(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "@mock latency=")
+	if !editor.completion.active {
+		t.Fatal("expected latency completion to be active")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	const want = "# @mock latency=250ms "
+	if got := editor.Value(); got != want {
+		t.Fatalf("enter accepted completion = %q, want %q", got, want)
+	}
+	if got := editor.selectedText(); got != "250ms" {
+		t.Fatalf("selected placeholder = %q, want %q", got, "250ms")
+	}
+	if editor.mode != selectionPlaceholder {
+		t.Fatalf("selection mode = %v, want placeholder", editor.mode)
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if editor.hasSelection() {
+		t.Fatal("expected right to finish the completion placeholder")
+	}
+	if got := editor.Value(); got != want {
+		t.Fatalf("right changed accepted completion to %q", got)
+	}
+	wantOffset := utf8.RuneCountInString("# @mock latency=250ms")
+	if got := editor.caretPosition().Offset; got != wantOffset {
+		t.Fatalf("caret offset = %d, want %d", got, wantOffset)
 	}
 }
 
@@ -2066,19 +2112,96 @@ func TestRequestEditorCompletionsInsertLatencyCall(t *testing.T) {
 	if got := editor.Value(); !strings.HasPrefix(got, want) {
 		t.Fatalf("accepted completion = %q, want it to start with %q", got, want)
 	}
-	if got := editor.selectedText(); got != "100ms,500ms)" {
+	if got := editor.selectedText(); got != "100ms,500ms" {
 		t.Fatalf("selected %q, want the arguments left ready to type over", got)
 	}
-	assertMockLatencyParses(t, editor.Value())
+	assertMockLatencyParses(t, editor.Value(), "random(100ms,500ms)")
+
+	editor = typeRunes(editor, "200ms,400ms")
+	const replaced = "# @mock latency=random(200ms,400ms)"
+	if got := editor.Value(); !strings.HasPrefix(got, replaced) {
+		t.Fatalf("replaced completion = %q, want it to start with %q", got, replaced)
+	}
+	assertMockLatencyParses(t, editor.Value(), "random(200ms,400ms)")
 }
 
-func assertMockLatencyParses(t *testing.T, line string) {
+// Keeping a call example has to leave the caret past its closing paren, not
+// inside the argument list.
+func TestRequestEditorTabKeepsDelimitedPlaceholder(t *testing.T) {
+	editor := acceptLatencyRandom(t)
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if editor.hasSelection() {
+		t.Fatal("expected tab to finish the placeholder")
+	}
+	const want = "# @mock latency=random(100ms,500ms) "
+	if got := editor.Value(); got != want {
+		t.Fatalf("tab changed the accepted completion to %q, want %q", got, want)
+	}
+	if got := editor.caretPosition().Offset; got != utf8.RuneCountInString(want) {
+		t.Fatalf("caret offset = %d, want %d", got, utf8.RuneCountInString(want))
+	}
+	assertMockLatencyParses(t, strings.TrimSpace(editor.Value()), "random(100ms,500ms)")
+}
+
+func TestRequestEditorPlaceholderKeepsClipboard(t *testing.T) {
+	if err := clipboard.WriteAll("ZZ"); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := acceptLatencyRandom(t)
+
+	editor = typeRunes(editor, "1s,2s")
+	const want = "# @mock latency=random(1s,2s)"
+	if got := editor.Value(); !strings.HasPrefix(got, want) {
+		t.Fatalf("typed over the example = %q, want it to start with %q", got, want)
+	}
+	if got, err := clipboard.ReadAll(); err != nil || got != "ZZ" {
+		t.Fatalf("clipboard = %q (err %v), want the example not to be yanked", got, err)
+	}
+}
+
+// Extending the selection by hand hands it back to the user, so Tab indents
+// again instead of jumping past the example.
+func TestRequestEditorShiftArrowReleasesPlaceholder(t *testing.T) {
+	editor := acceptLatencyRandom(t)
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyShiftRight})
+	if editor.mode != selectionManual {
+		t.Fatalf("selection mode = %v, want manual", editor.mode)
+	}
+	if editor.handlesTab() {
+		t.Fatal("expected tab to fall back to indentation")
+	}
+}
+
+func acceptLatencyRandom(t *testing.T) requestEditor {
+	t.Helper()
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "@mock lat")
+	if !editor.completion.active {
+		t.Fatalf("expected latency suggestions, got %q", editor.Value())
+	}
+	for editor.completion.filtered[editor.completion.selection].Label != "latency=random" {
+		editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.selectedText(); got != "100ms,500ms" {
+		t.Fatalf("selected %q, want the arguments ready to type over", got)
+	}
+	return editor
+}
+
+func assertMockLatencyParses(t *testing.T, line, want string) {
 	t.Helper()
 	doc := parser.Parse("completion.http", []byte(line+" method=GET path=/x\nHTTP/1.1 200 OK\n"))
 	if len(doc.Errors) != 0 {
 		t.Fatalf("parse errors for %q: %+v", line, doc.Errors)
 	}
-	if got := doc.Mocks[0].Latency.String(); got != "random(100ms,500ms)" {
+	if got := doc.Mocks[0].Latency.String(); got != want {
 		t.Fatalf("parsed latency = %q", got)
 	}
 }
