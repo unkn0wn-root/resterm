@@ -11,13 +11,13 @@ func NewModObj(name string, exp map[string]Value) *ModObj {
 
 func (m *ModObj) TypeName() string { return "module:" + m.name }
 
-func (m *ModObj) GetMember(name string) (Value, bool) {
+func (m *ModObj) Member(_ *Ctx, _ Pos, name string) (Value, bool, error) {
 	v, ok := m.exp[name]
-	return v, ok
+	return v, ok, nil
 }
 
-func (m *ModObj) Index(key Value) (Value, error) {
-	k, err := Key(Pos{}, key)
+func (m *ModObj) Index(_ *Ctx, pos Pos, key Value) (Value, error) {
+	k, err := Key(pos, key)
 	if err != nil {
 		return Null(), err
 	}

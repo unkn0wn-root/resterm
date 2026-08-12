@@ -44,6 +44,7 @@ func (s source) annotate(err error) error {
 	if err == nil {
 		return nil
 	}
+	err = diagnose(err)
 	if s.Path == "" && len(s.Raw) == 0 {
 		return err
 	}

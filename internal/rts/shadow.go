@@ -68,12 +68,6 @@ func (b binds) all() iter.Seq2[string, Value] {
 // map, so a layer applied to a copy is visible to the builder.
 type pre struct{ values map[string]Value }
 
-// bind binds a host object under the name it reports. That name is also the one
-// the object's own errors and signatures use, so the two cannot drift apart.
-func (p pre) bind(o Object) {
-	p.values[o.TypeName()] = Obj(o)
-}
-
 func (p pre) addExtensions(cx *Ctx, pos Pos, ext Extensions) error {
 	for name, v := range ext.all() {
 		if name == "" {

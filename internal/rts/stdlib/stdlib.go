@@ -35,13 +35,13 @@ type objMap struct {
 
 func (o *objMap) TypeName() string { return o.name }
 
-func (o *objMap) GetMember(name string) (rts.Value, bool) {
+func (o *objMap) Member(_ *rts.Ctx, _ rts.Pos, name string) (rts.Value, bool, error) {
 	v, ok := o.m[name]
-	return v, ok
+	return v, ok, nil
 }
 
-func (o *objMap) Index(key rts.Value) (rts.Value, error) {
-	k, err := rts.Key(rts.Pos{}, key)
+func (o *objMap) Index(_ *rts.Ctx, pos rts.Pos, key rts.Value) (rts.Value, error) {
+	k, err := rts.Key(pos, key)
 	if err != nil {
 		return rts.Null(), err
 	}

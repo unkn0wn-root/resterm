@@ -1,5 +1,5 @@
 export fn mutate(request, vars, env) {
-  let mode = (env.has("name") and env.get("name") == "prod") ? "strict" : "debug"
+  let mode = env.meta.name == "prod" ? "strict" : "debug"
   let trace = "trace-" + uuid()
 
   request.setMethod("POST")

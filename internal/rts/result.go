@@ -21,27 +21,34 @@ func newResult(ok bool, val Value, err error) Value {
 
 func (o *resultObj) TypeName() string { return "result" }
 
-func (o *resultObj) GetMember(name string) (Value, bool) {
+func (o *resultObj) Member(ctx *Ctx, pos Pos, name string) (Value, bool, error) {
 	switch name {
 	case "ok":
-		return Bool(o.ok), true
+		return Bool(o.ok), true, nil
 	case "value":
-		return o.val, true
+		return o.val, true, nil
 	case "error":
 		if o.ok || o.err == "" {
-			return Null(), true
+			return Null(), true, nil
 		}
-		return Str(o.err), true
+		if err := CheckStr(ctx, pos, o.err); err != nil {
+			return Null(), true, err
+		}
+		return Str(o.err), true, nil
 	}
-	return Null(), false
+	return Null(), false, nil
 }
 
-func (o *resultObj) Index(key Value) (Value, error) {
-	k, err := Key(Pos{}, key)
+func (o *resultObj) Index(ctx *Ctx, pos Pos, key Value) (Value, error) {
+	k, err := Key(pos, key)
 	if err != nil {
 		return Null(), err
 	}
-	if v, ok := o.GetMember(k); ok {
+	v, ok, err := o.Member(ctx, pos, k)
+	if err != nil {
+		return Null(), err
+	}
+	if ok {
 		return v, nil
 	}
 	return Null(), nil

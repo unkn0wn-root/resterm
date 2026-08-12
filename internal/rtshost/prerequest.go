@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
 type PreRequest struct {
@@ -14,11 +13,11 @@ type PreRequest struct {
 	Scripts []restfile.ScriptBlock
 	BaseDir string
 	// Runtime is called once per executed block and must be set.
-	Runtime func() rts.RT
+	Runtime func() (Runtime, error)
 }
 
 // RunPreRequest executes the RTS pre-request blocks of in.Scripts in document order.
-func RunPreRequest(ctx context.Context, eng *rts.Eng, in PreRequest) error {
+func RunPreRequest(ctx context.Context, eng *Engine, in PreRequest) error {
 	nth := 0
 	for _, block := range in.Scripts {
 		if !restfile.IsPreRequestScript(block, restfile.ScriptLangRTS) {
@@ -35,7 +34,11 @@ func RunPreRequest(ctx context.Context, eng *rts.Eng, in PreRequest) error {
 		if strings.TrimSpace(src.Text) == "" {
 			continue
 		}
-		if _, err := eng.ExecModule(ctx, in.Runtime(), src.Text, src.Pos); err != nil {
+		rt, err := in.Runtime()
+		if err != nil {
+			return src.annotate(err)
+		}
+		if _, err := eng.ExecModule(ctx, rt, src.Text, src.Pos); err != nil {
 			return src.annotate(err)
 		}
 	}

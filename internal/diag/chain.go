@@ -84,7 +84,7 @@ func (s *chainState) entries(err error, depth int) []ChainEntry {
 		return out
 	}
 
-	if rep, ok := err.(reporter); ok {
+	if rep, ok := err.(Reporter); ok {
 		msg := reportMessage(rep.Diagnostic())
 		if msg != "" && !s.shouldSkip(msg) {
 			rep := rep.Diagnostic()

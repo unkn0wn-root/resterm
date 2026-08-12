@@ -3,6 +3,8 @@ package rts
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 )
 
@@ -153,12 +155,15 @@ func FromIface(ctx *Ctx, pos Pos, v any) (Value, error) {
 		}
 		return List(out), nil
 	case map[string]any:
-		if ctx != nil && ctx.Lim.MaxDict > 0 && len(t) > ctx.Lim.MaxDict {
-			return Null(), Errf(ctx, pos, "dict too large")
+		if err := CheckDict(ctx, pos, len(t)); err != nil {
+			return Null(), err
 		}
 		out := make(map[string]Value, len(t))
-		for k, it := range t {
-			v2, err := FromIface(ctx, pos, it)
+		for _, k := range slices.Sorted(maps.Keys(t)) {
+			if err := CheckStr(ctx, pos, k); err != nil {
+				return Null(), Errf(ctx, pos, "dictionary key %q: string too long", k)
+			}
+			v2, err := FromIface(ctx, pos, t[k])
 			if err != nil {
 				return Null(), err
 			}

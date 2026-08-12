@@ -102,21 +102,21 @@ func TestUseAliasCollisionBeforeParse(t *testing.T) {
 	e := NewEng(testStdlib)
 	e.C = NewCache(fs, e.modulePre)
 
-	rt := RT{
+	cfg := EvalConfig{
 		BaseDir: dir,
 		Uses: []Use{
 			{Path: "a.rts"},
 			{Path: "b.rts"},
 		},
 	}
-	_, err := e.Eval(context.Background(), rt, "1", Pos{Path: "test", Line: 1, Col: 1})
+	_, err := e.Eval(context.Background(), cfg, "1", Pos{Path: "test", Line: 1, Col: 1})
 	if err == nil || !strings.Contains(err.Error(), "alias already defined: mod") {
 		t.Fatalf("expected alias collision error, got %v", err)
 	}
 }
 
-// hosts other than the directive parser can build an RT directly, so the engine
-// refuses a reserved binding rather than creating one nothing can reference
+// The evaluator refuses a reserved binding rather than creating one nothing
+// can reference.
 func TestEngineRejectsReservedBindings(t *testing.T) {
 	dir := t.TempDir()
 	fs := &memFS{files: map[string]*memFile{}}
@@ -125,32 +125,32 @@ func TestEngineRejectsReservedBindings(t *testing.T) {
 
 	cases := []struct {
 		name string
-		rt   RT
+		cfg  EvalConfig
 		msg  string
 	}{
 		{
 			"use alias",
-			RT{BaseDir: dir, Uses: []Use{{Path: "a.rts", Alias: "default"}}},
+			EvalConfig{BaseDir: dir, Uses: []Use{{Path: "a.rts", Alias: "default"}}},
 			"alias is a reserved word: default",
 		},
 		{
 			"extension",
-			RT{BaseDir: dir, Extensions: Extension("default", Num(1))},
+			EvalConfig{BaseDir: dir, Bindings: []Extensions{Extension("default", Num(1))}},
 			"name is a reserved word: default",
 		},
 		{
 			"extension other keyword",
-			RT{BaseDir: dir, Extensions: Extension("range", Num(1))},
+			EvalConfig{BaseDir: dir, Bindings: []Extensions{Extension("range", Num(1))}},
 			"name is a reserved word: range",
 		},
 		{
 			"local",
-			RT{BaseDir: dir, Locals: Local("default", Num(1))},
+			EvalConfig{BaseDir: dir, Locals: Local("default", Num(1))},
 			"name is a reserved word: default",
 		},
 		{
 			"local other keyword",
-			RT{BaseDir: dir, Locals: Local("range", Num(1))},
+			EvalConfig{BaseDir: dir, Locals: Local("range", Num(1))},
 			"name is a reserved word: range",
 		},
 	}
@@ -158,7 +158,7 @@ func TestEngineRejectsReservedBindings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := NewEng(testStdlib)
 			e.C = NewCache(fs, e.modulePre)
-			_, err := e.Eval(context.Background(), tc.rt, "1", Pos{Path: "test", Line: 1, Col: 1})
+			_, err := e.Eval(context.Background(), tc.cfg, "1", Pos{Path: "test", Line: 1, Col: 1})
 			if err == nil || !strings.Contains(err.Error(), tc.msg) {
 				t.Fatalf("expected %q, got %v", tc.msg, err)
 			}

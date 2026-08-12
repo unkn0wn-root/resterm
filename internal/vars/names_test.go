@@ -1,10 +1,25 @@
 package vars
 
 import (
+	"errors"
 	"maps"
 	"slices"
 	"testing"
 )
+
+func TestNewNameMapRejectsBlankAndDuplicateIdentities(t *testing.T) {
+	_, err := NewNameMap(map[string]string{" ": "value"})
+	var nameErr *NameError
+	if !errors.As(err, &nameErr) {
+		t.Fatalf("expected NameError, got %v", err)
+	}
+
+	_, err = NewNameMap(map[string]string{"Token": "a", " token ": "b"})
+	var collision *NameCollisionError
+	if !errors.As(err, &collision) {
+		t.Fatalf("expected NameCollisionError, got %v", err)
+	}
+}
 
 func TestNameMapZeroValueTakesWrites(t *testing.T) {
 	var m NameMap[string]

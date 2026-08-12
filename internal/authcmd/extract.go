@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/jsonpath"
 )
 
 const unixMillisThreshold = int64(1_000_000_000_000)
@@ -122,7 +122,7 @@ func scalarAt(doc any, path, name string) (string, bool, error) {
 		return "", false, nil
 	}
 
-	val, ok := rts.JSONPathGet(doc, path)
+	val, ok := jsonpath.Get(doc, path)
 	if !ok {
 		return "", false, nil
 	}

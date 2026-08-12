@@ -99,7 +99,9 @@ type Report struct {
 	Items  []Diagnostic
 }
 
-type reporter interface {
+// Reporter is the contract an error implements to carry its own structured
+// report. ReportOf, ClassOf, and Render all prefer it over the error text.
+type Reporter interface {
 	Diagnostic() Report
 }
 
@@ -213,7 +215,7 @@ func reportOf(err error) Report {
 	if e, ok := err.(*diagnosticError); ok {
 		return reportFromDiagnosticError(e)
 	}
-	if rep, ok := err.(reporter); ok {
+	if rep, ok := err.(Reporter); ok {
 		return rep.Diagnostic()
 	}
 	if wrapped, ok := err.(errsUnwrapper); ok {
@@ -367,7 +369,7 @@ func collectClasses(err error, visit func(Class) bool) bool {
 		}
 		return collectClasses(e.err, visit)
 	}
-	if rep, ok := err.(reporter); ok {
+	if rep, ok := err.(Reporter); ok {
 		for _, it := range rep.Diagnostic().Items {
 			if !visit(it.Class) {
 				return false

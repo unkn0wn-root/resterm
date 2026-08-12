@@ -5,14 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/httpheader"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
-	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/queryparams"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestMutatorNormalizesTokenMutations(t *testing.T) {
 	var out prerequest.Output
-	req := &rts.Req{}
+	req := &Request{}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
 	mut.SetMethod(" post ")
@@ -29,27 +30,36 @@ func TestMutatorNormalizesTokenMutations(t *testing.T) {
 
 func TestMutatorMirrorsHeadersOntoRequestView(t *testing.T) {
 	var out prerequest.Output
-	req := &rts.Req{H: map[string][]string{"x-drop": {"gone"}}}
+	req := &Request{Headers: httpheader.Values{"x-drop": {"gone"}}}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
-	mut.SetHeader("X-Test", "1")
-	mut.AddHeader("X-Test", "2")
-	mut.DelHeader("X-Drop")
+	mut.SetHeader(mustHeaderName(t, "X-Test"), "1")
+	mut.AddHeader(mustHeaderName(t, "X-Test"), "2")
+	mut.DelHeader(mustHeaderName(t, "X-Drop"))
 
 	if got := out.Headers.Values("X-Test"); len(got) != 2 || got[0] != "1" || got[1] != "2" {
 		t.Fatalf("expected recorded header values [1 2], got %#v", got)
 	}
-	if got := req.H["x-test"]; len(got) != 2 || got[0] != "1" || got[1] != "2" {
+	if got := req.Headers["x-test"]; len(got) != 2 || got[0] != "1" || got[1] != "2" {
 		t.Fatalf("expected request view header values [1 2], got %#v", got)
 	}
-	if _, ok := req.H["x-drop"]; ok {
-		t.Fatalf("expected deleted header to leave the request view: %#v", req.H)
+	if _, ok := req.Headers["x-drop"]; ok {
+		t.Fatalf("expected deleted header to leave the request view: %#v", req.Headers)
 	}
+}
+
+func mustHeaderName(t *testing.T, s string) httpheader.Name {
+	t.Helper()
+	n, err := httpheader.Parse(s)
+	if err != nil {
+		t.Fatalf("httpheader.Parse(%q): %v", s, err)
+	}
+	return n
 }
 
 func TestMutatorPatchesRequestURLOnQuery(t *testing.T) {
 	var out prerequest.Output
-	req := &rts.Req{URL: "https://example.com/path?seed=1"}
+	req := &Request{URL: "https://example.com/path?seed=1", Query: queryparams.Values{"seed": {"1"}}}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
 	mut.SetQuery("user", "alice")
@@ -57,11 +67,45 @@ func TestMutatorPatchesRequestURLOnQuery(t *testing.T) {
 	if out.Query["user"] != "alice" {
 		t.Fatalf("expected recorded query user=alice, got %#v", out.Query)
 	}
-	if got := req.Q["user"]; len(got) != 1 || got[0] != "alice" {
-		t.Fatalf("expected request view query user=alice, got %#v", req.Q)
+	if got := req.Query["user"]; len(got) != 1 || got[0] != "alice" {
+		t.Fatalf("expected request view query user=alice, got %#v", req.Query)
 	}
 	if !strings.Contains(req.URL, "seed=1") || !strings.Contains(req.URL, "user=alice") {
 		t.Fatalf("expected patched request url, got %q", req.URL)
+	}
+}
+
+func TestMutatorDerivesQueryAfterSetURL(t *testing.T) {
+	var out prerequest.Output
+	req := &Request{URL: "https://example.com/old?stale=1"}
+	mut := NewMutator(&out, req, nil, nil, nil)
+
+	mut.SetURL("https://example.com/new?keep=1")
+	mut.SetQuery("added", "2")
+
+	if _, ok := req.Query["stale"]; ok {
+		t.Fatalf("request query retained the old URL: %#v", req.Query)
+	}
+	if got := req.Query["keep"]; !slices.Equal(got, []string{"1"}) {
+		t.Fatalf("request query keep = %q, want [1]", got)
+	}
+	if got := req.Query["added"]; !slices.Equal(got, []string{"2"}) {
+		t.Fatalf("request query added = %q, want [2]", got)
+	}
+}
+
+func TestMutatorPatchesTheEmptyQueryName(t *testing.T) {
+	var out prerequest.Output
+	req := &Request{URL: "https://example.com/path"}
+	mut := NewMutator(&out, req, nil, nil, nil)
+
+	mut.SetQuery("", "1")
+
+	if out.Query[""] != "1" {
+		t.Fatalf("recorded query = %#v, want the empty name", out.Query)
+	}
+	if req.URL != "https://example.com/path?=1" {
+		t.Fatalf("request url = %q, want the empty name in the query", req.URL)
 	}
 }
 

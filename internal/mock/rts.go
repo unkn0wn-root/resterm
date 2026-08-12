@@ -19,18 +19,18 @@ type rtsInspector struct {
 
 func (o *rtsInspector) TypeName() string { return "mock" }
 
-func (o *rtsInspector) GetMember(name string) (rts.Value, bool) {
+func (o *rtsInspector) Member(_ *rts.Ctx, _ rts.Pos, name string) (rts.Value, bool, error) {
 	switch name {
 	case "count":
-		return rts.NativeNamed("mock.count", o.count), true
+		return rts.NativeNamed("mock.count", o.count), true, nil
 	case "received":
-		return rts.NativeNamed("mock.received", o.received), true
+		return rts.NativeNamed("mock.received", o.received), true, nil
 	default:
-		return rts.Null(), false
+		return rts.Null(), false, nil
 	}
 }
 
-func (o *rtsInspector) Index(rts.Value) (rts.Value, error) {
+func (o *rtsInspector) Index(*rts.Ctx, rts.Pos, rts.Value) (rts.Value, error) {
 	return rts.Null(), nil
 }
 

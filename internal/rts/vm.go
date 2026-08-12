@@ -559,7 +559,7 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 			if err := vm.checkBound(e.Pos(), x); err != nil {
 				return Null(), err
 			}
-			v, err := x.O.Index(idx)
+			v, err := x.O.Index(vm.ctx, e.Pos(), idx)
 			if err != nil {
 				return Null(), WrapErr(vm.ctx, err)
 			}
@@ -586,7 +586,10 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 			if err := vm.checkBound(e.Pos(), x); err != nil {
 				return Null(), err
 			}
-			v, ok := x.O.GetMember(e.Name)
+			v, ok, err := x.O.Member(vm.ctx, e.Pos(), e.Name)
+			if err != nil {
+				return Null(), WrapErr(vm.ctx, err)
+			}
 			if !ok {
 				return Null(), nil
 			}
@@ -613,6 +616,9 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 		}
 		out := make(map[string]Value, len(e.Entries))
 		for _, it := range e.Entries {
+			if err := vm.checkStr(it.P, it.Key); err != nil {
+				return Null(), err
+			}
 			v, err := vm.eval(env, it.Val)
 			if err != nil {
 				return Null(), err

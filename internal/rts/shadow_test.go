@@ -10,96 +10,56 @@ import (
 
 var shadowPos = Pos{Path: "test", Line: 1, Col: 1}
 
-// shadowRT binds every host object so the prelude under test is the full one an
-// expression really sees.
-func shadowRT() RT {
-	return RT{
-		Env:    map[string]string{"host": "example.test"},
-		Vars:   map[string]string{"token": "abc"},
-		Resp:   &Resp{Status: "200 OK", Code: 200},
-		Res:    &Resp{Status: "201 Created", Code: 201},
-		Trace:  &Trace{},
-		Stream: &Stream{Kind: "sse"},
-		Req:    &Req{Method: "GET", URL: "https://example.test"},
-	}
-}
-
-func preludeNames(t *testing.T, e *Eng, rt RT) []string {
-	t.Helper()
-	cx := NewCtx(context.Background(), e.Lim)
-	pre, err := e.buildPre(cx, rt, shadowPos, evalBase)
-	if err != nil {
-		t.Fatalf("build prelude: %v", err)
-	}
-	if len(pre) == 0 {
-		t.Fatal("prelude is empty")
-	}
-	names := make([]string, 0, len(pre))
-	for name := range pre {
-		names = append(names, name)
-	}
-	return names
-}
-
-// The prelude is the only list of what a local may shadow. Walking the
-// generated one keeps a newly bound host object from quietly staying immune.
-func TestLocalsShadowEveryPreludeName(t *testing.T) {
+func TestLocalsShadowEveryEarlierBindingLayer(t *testing.T) {
 	e := NewEng(testStdlib)
-	rt := shadowRT()
-
-	for _, name := range preludeNames(t, e, rt) {
+	cfg := EvalConfig{
+		Bindings: []Extensions{
+			NewExtensions(map[string]Value{"host": Str("extension")}),
+		},
+	}
+	names := []string{"host", "len", "str"}
+	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
-			rt := rt
-			rt.Locals = Local(name, Str("loop item"))
-			v, err := e.Eval(context.Background(), rt, name, shadowPos)
+			cfg := cfg
+			cfg.Locals = Local(name, Str("local"))
+			v, err := e.Eval(context.Background(), cfg, name, shadowPos)
 			if err != nil {
-				t.Fatalf("eval %s: %v", name, err)
+				t.Fatalf("Eval: %v", err)
 			}
-			if v.K != VStr || v.S != "loop item" {
-				t.Fatalf("%s = %+v, want the local to win", name, v)
-			}
-		})
-	}
-}
-
-func TestExtensionsRejectEveryPreludeName(t *testing.T) {
-	e := NewEng(testStdlib)
-	rt := shadowRT()
-
-	for _, name := range preludeNames(t, e, rt) {
-		t.Run(name, func(t *testing.T) {
-			rt := rt
-			rt.Extensions = Extension(name, Str("host object"))
-			_, err := e.Eval(context.Background(), rt, "1", shadowPos)
-			want := "name already defined: " + name
-			if err == nil || !strings.Contains(err.Error(), want) {
-				t.Fatalf("eval with extension %s: error = %v, want %q", name, err, want)
+			if v.K != VStr || v.S != "local" {
+				t.Fatalf("%s = %+v, want local", name, v)
 			}
 		})
 	}
 }
 
-// A loop variable named status is the item outside assertions and the response
-// status inside them. Both readings have to keep working.
-func TestAssertionShorthandsShadowLocals(t *testing.T) {
+func TestOverridesShadowLocals(t *testing.T) {
 	e := NewEng(testStdlib)
-	rt := shadowRT()
-	rt.Locals = Local("status", Num(11))
-
-	v, err := e.Eval(context.Background(), rt, "status", shadowPos)
-	if err != nil {
-		t.Fatalf("eval status: %v", err)
+	cfg := EvalConfig{
+		Locals:    Local("status", Num(11)),
+		Overrides: Local("status", Num(201)),
 	}
-	if v.K != VNum || v.N != 11 {
-		t.Fatalf("status outside an assertion = %+v, want the loop item", v)
-	}
-
-	v, err = e.EvalAssertion(context.Background(), rt, "status", shadowPos)
+	v, err := e.Eval(context.Background(), cfg, "status", shadowPos)
 	if err != nil {
-		t.Fatalf("assert status: %v", err)
+		t.Fatalf("Eval: %v", err)
 	}
 	if v.K != VNum || v.N != 201 {
-		t.Fatalf("status inside an assertion = %+v, want the response status", v)
+		t.Fatalf("status = %+v, want override", v)
+	}
+}
+
+func TestBindingLayersCannotReplaceExistingNames(t *testing.T) {
+	e := NewEng(testStdlib)
+	cases := []string{"len", "str"}
+	for _, name := range cases {
+		t.Run(name, func(t *testing.T) {
+			cfg := EvalConfig{Bindings: []Extensions{Extension(name, Str("host"))}}
+			_, err := e.Eval(context.Background(), cfg, "1", shadowPos)
+			want := "name already defined: " + name
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want %q", err, want)
+			}
+		})
 	}
 }
 
@@ -112,18 +72,17 @@ func TestLocalsShadowUseAliases(t *testing.T) {
 
 	e := NewEng(testStdlib)
 	e.C = NewCache(fs, e.modulePre)
-	rt := RT{
+	cfg := EvalConfig{
 		BaseDir: dir,
 		Uses:    []Use{{Path: "users.rts"}},
-		Locals:  Local("users", Str("loop item")),
+		Locals:  Local("users", Str("local")),
 	}
-
-	v, err := e.Eval(context.Background(), rt, "users", shadowPos)
+	v, err := e.Eval(context.Background(), cfg, "users", shadowPos)
 	if err != nil {
-		t.Fatalf("eval users: %v", err)
+		t.Fatalf("Eval: %v", err)
 	}
-	if v.K != VStr || v.S != "loop item" {
-		t.Fatalf("users = %+v, want the local to win over the alias", v)
+	if v.K != VStr || v.S != "local" {
+		t.Fatalf("users = %+v, want local", v)
 	}
 }
 
@@ -134,13 +93,12 @@ func TestBindingConstructorsCopyTheirInput(t *testing.T) {
 
 	src["item"] = Str("changed")
 	src["added"] = Str("late")
-
 	for name, layer := range map[string]binds{"extensions": ext.binds, "locals": loc.binds} {
 		if got := layer.values["item"]; got.S != "original" {
-			t.Fatalf("%s item = %q, want %q", name, got.S, "original")
+			t.Fatalf("%s item = %q, want original", name, got.S)
 		}
 		if _, ok := layer.values["added"]; ok {
-			t.Fatalf("%s picked up a name added after construction", name)
+			t.Fatalf("%s retained caller map", name)
 		}
 	}
 }

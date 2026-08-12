@@ -1,6 +1,7 @@
 package urltpl
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -73,6 +74,44 @@ func TestPatchQueryTemplateQuestionMarkInTemplate(t *testing.T) {
 	}
 }
 
+func TestRawQueryIgnoresDelimitersInsideTemplates(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+		ok   bool
+	}{
+		{name: "query", in: "{{base?x=1}}/path?a=1&a=2#frag", want: "a=1&a=2", ok: true},
+		{name: "fragment in value", in: "/path?q={{value#part}}&a=1#frag", want: "q={{value#part}}&a=1", ok: true},
+		{name: "empty query", in: "/path?", ok: true},
+		{name: "fragment first", in: "/path#frag?q=1"},
+		{name: "no query", in: "{{base?x=1}}/path"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := RawQuery(tt.in)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("RawQuery(%q) = %q, %t; want %q, %t", tt.in, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestParseTargetQueryProtectsTemplateSeparators(t *testing.T) {
+	raw := "{{base?fallback=true}}/path?q={{a&b=c#d}}&{{key}}=1&{{key}}=2#frag"
+	got, err := ParseTargetQuery(raw)
+	if err != nil {
+		t.Fatalf("ParseTargetQuery: %v", err)
+	}
+	want := map[string][]string{
+		"q":       {"{{a&b=c#d}}"},
+		"{{key}}": {"1", "2"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ParseTargetQuery() = %#v, want %#v", got, want)
+	}
+}
+
 func TestPatchQueryTemplateValueInPatch(t *testing.T) {
 	raw := "https://example.com/path?keep=1"
 	patch := map[string]*string{"q": strPtr("{{token}}")}
@@ -134,5 +173,18 @@ func TestPatchQueryTemplatePreservesEmptyKey(t *testing.T) {
 	}
 	if !strings.Contains(got, "x=1") {
 		t.Fatalf("expected added query param, got %q", got)
+	}
+}
+
+// Rewriting a URL whose query cannot be decoded stops instead of re-encoding
+// only the pairs that survived, which would delete the rest.
+func TestQueryRewritesRejectMalformedEscapes(t *testing.T) {
+	const raw = "https://example.test/p?bad=%zz&keep=1"
+	value := "2"
+	if got, err := PatchQuery(raw, map[string]*string{"added": &value}); err == nil {
+		t.Errorf("PatchQuery() = %q, want an error", got)
+	}
+	if got, err := MergeQuery(raw, map[string][]string{"added": {"2"}}); err == nil {
+		t.Errorf("MergeQuery() = %q, want an error", got)
 	}
 }

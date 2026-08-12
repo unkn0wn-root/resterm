@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/jsonpath"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
@@ -145,7 +146,7 @@ func jsonGet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.FromIface(ctx, pos, raw)
 	}
 
-	val, ok := rts.JSONPathGet(raw, path)
+	val, ok := jsonpath.Get(raw, path)
 	if !ok {
 		return rts.Null(), nil
 	}
@@ -169,7 +170,7 @@ func jsonHas(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 
-	_, ok := rts.JSONPathGet(raw, path)
+	_, ok := jsonpath.Get(raw, path)
 	return rts.Bool(ok), nil
 }
 

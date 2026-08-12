@@ -67,10 +67,10 @@ func TestStdlibDoesNotExposeDefault(t *testing.T) {
 		if v.K != rts.VObj {
 			t.Fatalf("%s: expected an object, got kind %v", ns, v.K)
 		}
-		if _, ok := v.O.GetMember("default"); ok {
+		if _, ok, err := v.O.Member(nil, rts.Pos{}, "default"); err != nil || ok {
 			t.Fatalf("%s.default is still exposed", ns)
 		}
-		if _, ok := v.O.GetMember("str"); !ok {
+		if _, ok, err := v.O.Member(nil, rts.Pos{}, "str"); err != nil || !ok {
 			t.Fatalf("%s.str went missing, the namespace lookup is not proving anything", ns)
 		}
 	}
@@ -290,11 +290,11 @@ func TestStdlibJSONGet(t *testing.T) {
 
 func TestStdlibHeadersHelpers(t *testing.T) {
 	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
-	v := evalExprCtx(t, ctx, "headers.get(headers.normalize({\"X-Test\":\"ok\"}), \"x-test\")")
+	v := evalExprCtx(t, ctx, `headers.get(headers.normalize({"X-Test":"ok"}), "x-test")`)
 	if v.K != rts.VStr || v.S != "ok" {
 		t.Fatalf("expected header value")
 	}
-	v = evalExprCtx(t, ctx, "len(headers.merge({\"a\":\"1\",\"b\":\"2\"}, {\"b\": null}))")
+	v = evalExprCtx(t, ctx, `len(headers.merge({"a":"1","b":"2"}, {"b":null}))`)
 	if v.K != rts.VNum || v.N != 1 {
 		t.Fatalf("expected merged headers length 1")
 	}
@@ -306,19 +306,19 @@ func TestStdlibHeadersHelpers(t *testing.T) {
 
 func TestStdlibQueryHelpers(t *testing.T) {
 	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
-	v := evalExprCtx(t, ctx, "len(query.parse(\"https://x.test?p=1&p=2\").p)")
+	v := evalExprCtx(t, ctx, `len(query.fromURL("https://x.test?p=1&p=2").p)`)
 	if v.K != rts.VNum || v.N != 2 {
 		t.Fatalf("expected 2 query values")
 	}
-	v = evalExprCtx(t, ctx, "query.parse(query.encode({a:\"1\", b:[\"x\",\"y\"]})).a")
+	v = evalExprCtx(t, ctx, `query.parse(query.encode({a:"1", b:["x","y"]})).a`)
 	if v.K != rts.VStr || v.S != "1" {
 		t.Fatalf("expected query value")
 	}
-	v = evalExprCtx(t, ctx, "len(query.parse(query.merge(\"https://x.test?p=1&q=2\", {q: null})))")
+	v = evalExprCtx(t, ctx, `len(query.fromURL(query.merge("https://x.test?p=1&q=2", {q:[]})))`)
 	if v.K != rts.VNum || v.N != 1 {
 		t.Fatalf("expected query length 1")
 	}
-	v = evalExprCtx(t, ctx, "query.merge(\"{{host}}/path?keep=1\", {q: \"x\"})")
+	v = evalExprCtx(t, ctx, `query.merge("{{host}}/path?keep=1", {q: "x"})`)
 	if v.K != rts.VStr {
 		t.Fatalf("expected query.merge to return string")
 	}

@@ -231,6 +231,31 @@ Truthiness follows consistent rules. Null, false, zero, the empty string, the em
 
 List indexing uses numeric indices such as `list[0]`, and out of range accesses return null. Dict access uses `dict["key"]` or `dict.key`, and missing keys return null. Object member access is supported, while indexing depends on the object implementation.
 
+### Keys and names
+
+Dictionary and query keys are exact strings. Case and whitespace are preserved, including empty query keys. The `rts.dict` helpers behave like `dict[key]`, so `Token`, `token`, and ` token ` are separate keys.
+
+Names used by `env`, `vars`, and request headers have different rules. Resterm makes `env` and `vars` names case-insensitive and ignores surrounding whitespace. Header names are case-insensitive HTTP field names. A name your script supplies is a value, so whitespace around it is rejected instead of trimmed. The header block of a request file is syntax rather than a value, so the parser trims around the colon and then holds what is left to the same rule.
+
+Host maps are validated before evaluation. Blank `env` or `vars` names, and two spellings with the same identity, are errors instead of choices made by map order. Header blocks likewise reject invalid field names and equivalent spellings.
+
+What happens to a name a rule does not accept depends on where it came from. A name your script writes is your own word, and a header name that is not an HTTP field name asks a question no request can answer, so it is reported:
+
+```rts
+request.header("X Token")             // error, not an HTTP field name
+headers.get({"X-Ok": "yes"}, "X Tok") // error, same rule
+headers.set(h, " X-Token ", "1")      // error, whitespace is not trimmed
+```
+
+A malformed host map or header block fails as one value; helpers never silently discard an entry. This keeps all evaluations deterministic and makes bad input visible at the boundary:
+
+```rts
+env.get("   ")                                      // error
+headers.get({"X Token": "a", "X-Ok": "yes"}, "X-Ok") // error
+```
+
+Header names are checked when the file is parsed, so a header whose name is not an HTTP field name is reported against its line before anything runs. Runtime construction and dispatch also reject it; invalid names are never exposed through `request.headers`.
+
 ## Statements
 
 ### let and const
@@ -539,6 +564,27 @@ RTS provides a small standard library that covers common request needs without e
 - `rts.dict.pick(dict, keys)` returns a dict with the specified keys.
 - `rts.dict.omit(dict, keys)` returns a dict without the specified keys.
 
+These helpers use keys exactly as written, like `dict[key]`. See [Keys and names](#keys-and-names).
+
+### Header and query helpers
+
+- `headers.get(h, name)` returns the first value of a header, or null when it is missing.
+- `headers.has(h, name)` returns true when a header carries a value.
+- `headers.set(h, name, value)` returns a new dict with a string or `list<string>` set, replacing the header regardless of name casing.
+- `headers.remove(h, name)` returns a new dict without the header, regardless of name casing.
+- `headers.merge(a, b)` returns a new dict with `b` applied over `a`. A null value in `b` removes that header.
+- `headers.normalize(h)` returns a new dict with the names lowercased.
+- `query.parse(rawQuery)` parses raw query text. It never guesses that its argument is a URL.
+- `query.fromURL(url)` parses the query component of a URL.
+- `query.encode(query)` encodes a query multimap into a query string.
+- `query.merge(url, query)` returns the URL with the parameters applied. Null or an empty list removes a parameter.
+
+Header and query dictionaries use cardinality-based values: `dict<string, string | list<string>>`. One value is a string, multiple values are a list, and zero values are an empty list. The result depends on the number of values rather than the input syntax, so a one-element input list is returned as a string. Helpers do not coerce numbers or booleans into strings. Null is not a stored value; it is accepted only as the removal marker in the patch argument to `headers.merge` and `query.merge`.
+
+Header names are case-insensitive HTTP field names. Two forms of the same header always return an error, because picking one would depend on map order. Every header helper validates the entire input block and the requested name. Returned header names are lowercased, and `headers.get` returns the first value regardless of whether the stored representation is a string or list.
+
+Query helpers keep keys and values exactly as written, including empty keys and whitespace. Encoding preserves the data but may change order and escaping. `query.parse` removes one leading `?` as syntax and treats every other byte as query data. `query.fromURL` and `query.merge` do not trim or repair their URL argument. Use `rts.text.trim` explicitly when that is the behavior you want.
+
 ### Math helpers
 
 - `rts.math.abs(x)` returns the absolute value.
@@ -551,7 +597,7 @@ RTS provides a small standard library that covers common request needs without e
 
 ## Host objects for request evaluation
 
-Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers. Other available objects are read-only. Lookups in `env` and `vars` are case-insensitive. Header lookups are normalized, while query keys and JSON paths are case-sensitive. The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped.
+Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers. Other available objects are read-only. Lookups in `env` and `vars` are case-insensitive and ignore surrounding whitespace. Header lookups are case-insensitive, while query parameters and JSON paths are exact. See [Keys and names](#keys-and-names). The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped.
 
 ### Name precedence
 
@@ -569,20 +615,27 @@ Shadowing applies to expressions. A module or an `@rts pre-request` block still 
 
 ### env
 
-`env` provides environment values. You can access values through `env.get("name")`, `env.has("name")`, `env.require("name"[, msg])`, or `env.name`. `require` throws when a value is missing.
+`env` provides environment values. You can access values through `env.get("key")`, `env.has("key")`, `env.require("key"[, msg])`, or `env.key`. `require` throws when a value is missing.
 
-For grouped environments, `env.name` is the complete selection label, such as `api=dev, app=dev app 1`. `env.groups` exposes the selected profile in each group. Member access is case-insensitive and the same `get`, `has`, and `require` helpers are available:
+`env.meta.name` is the selected environment, and `env.meta.groups` is the profile in each group. Metadata is separate from the environment value namespace, so an environment value may be called `name`, `groups`, or `meta` without ambiguity.
+
+For grouped environments, `env.meta.name` is the complete selection label, such as `api=dev, app=dev app 1`. Group names use the same matching rules as environment names, and the same `get`, `has`, and `require` helpers are available:
 
 ```rts
-env.groups.api
-env.groups.get("credentials")
-env.groups.has("app")
-env.groups.require("api", "API profile is required")
+env.meta.groups.api
+env.meta.groups.get("credentials")
+env.meta.groups.has("app")
+env.meta.groups.require("api", "API profile is required")
 ```
 
-For named environments, `env.name` is unchanged and `env.groups` is empty.
+For named environments, `env.meta.name` is the environment name and `env.meta.groups` is empty.
 
-`groups` is reserved on `env`, alongside `get`, `has`, and `require`. An environment variable named `groups` is still readable through `env.get("groups")`.
+```rts
+env.meta.name     // dev, the selected environment
+env.get("name")  // the environment variable called name, if declared
+env["name"]      // the same variable
+env.NAME          // the same variable, since env names are case-insensitive
+```
 
 ### vars
 
@@ -592,11 +645,11 @@ For named environments, `env.name` is unchanged and `env.groups` is empty.
 
 ### request
 
-`request` provides a summary of the current request. It exposes `method`, `url`, `headers`, `header(name)`, and `query`. `headers` contains the first value per header (lowercased keys), while `header(name)` is case-insensitive. `query` returns strings or lists when a key has multiple values. In `@rts pre-request` blocks, mutation helpers are available, including `request.setMethod`, `request.setURL`, `request.setHeader`, `request.addHeader`, `request.removeHeader`, `request.setQueryParam`, and `request.setBody`. The full `@script pre-request lang=rts` form is equivalent. In `@apply`, the request object is read only, so you return a patch dict instead of mutating it.
+`request` provides a summary of the current request. It exposes `method`, `url`, `headers`, `header(name)`, and `query`. `headers` and `query` are `dict<string, string | list<string>>`: one value is a string, multiple values are a list, and zero values are an empty list. Header keys are lowercased, while query keys are exact. `header(name)` is the explicit first-value convenience lookup. A document header whose name is not an HTTP field name is rejected before evaluation. In `@rts pre-request` blocks, mutation helpers are available, including `request.setMethod`, `request.setURL`, `request.setHeader`, `request.addHeader`, `request.removeHeader`, `request.setQueryParam`, and `request.setBody`. Their string arguments are strict: convert numbers or booleans with `str(...)` yourself. The full `@script pre-request lang=rts` form is equivalent. In `@apply`, the request object is read only, so you return a patch dict instead of mutating it.
 
 ### last
 
-`last` provides a summary of the most recent response. It exposes `status`, `statusCode`, `statusText`, `url`, `headers`, `header(name)`, `text()`, and `json(path)`. `headers` contains the first value per header, while `header(name)` is case-insensitive. `json(path)` accepts a simple dot and `[index]` path (optional leading `$`) and returns null when a value is missing.
+`last` provides a summary of the most recent response. It exposes `status`, `statusCode`, `statusText`, `url`, `headers`, `header(name)`, `text()`, and `json(path)`. Header values use the same cardinality-based representation as `request.headers`; `header(name)` returns the first value. `json(path)` accepts a simple dot and `[index]` path (optional leading `$`) and returns null when a value is missing.
 
 For gRPC responses, `headers` merges the response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`. Values under keys ending in `-bin` are binary and read back base64-encoded without padding, the way they travel on the wire, so a trailer sent as `x-trace-bin` reads as `last.header("grpc-trailer-x-trace-bin")`.
 
@@ -664,6 +717,8 @@ Journal eviction makes inspection fail instead of returning a potentially false 
 ```
 
 `@apply` is a request scoped directive and you can use it multiple times in a request. Each apply expression is evaluated in order before pre-request scripts. The expression must return a dict patch with specific keys.
+
+Header names in a patch follow the same rule as `request.setHeader`: they must be HTTP field names, whitespace is not trimmed, and a patch naming one header twice is an error rather than a choice made by map order. See [Keys and names](#keys-and-names).
 
 You can also reference reusable named patches with `use=`. Comma-separated `use=` entries run left-to-right inside the same `@apply` line.
 

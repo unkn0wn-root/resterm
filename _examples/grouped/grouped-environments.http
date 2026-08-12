@@ -23,9 +23,9 @@
 # @name showSelection
 # @description Every group at once. Switch a profile and rerun to see exactly what moved.
 # @assert response.statusCode == 200
-# @assert env.groups.has("api") and env.groups.has("credentials") and env.groups.has("region")
-# @assert response.json().api == env.groups.get("api")
-# @assert response.json().credentials == env.groups.get("credentials")
+# @assert env.meta.groups.has("api") and env.meta.groups.has("credentials") and env.meta.groups.has("region")
+# @assert response.json().api == env.meta.groups.get("api")
+# @assert response.json().credentials == env.meta.groups.get("credentials")
 # @assert response.json().region == env.get("deployment.code")
 GET {{base.url}}/api/{{api.tier}}/context
 Accept: application/json

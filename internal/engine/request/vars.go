@@ -2,7 +2,6 @@ package request
 
 import (
 	"context"
-	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -156,15 +155,6 @@ func (e *Engine) rtsBase(doc *restfile.Document, base string) string {
 		return base
 	}
 	return e.fileDir(doc)
-}
-
-func (e *Engine) rtsEnv(env vars.Environment) map[string]string {
-	out := make(map[string]string, len(env.Values())+1)
-	maps.Copy(out, env.Values())
-	if env.Label() != "" {
-		out["name"] = env.Label()
-	}
-	return out
 }
 
 func (e *Engine) buildResolver(

@@ -39,8 +39,8 @@ type Func struct {
 // Object is the host extension point for RTS values with members and indexes.
 type Object interface {
 	TypeName() string
-	GetMember(name string) (Value, bool)
-	Index(key Value) (Value, error)
+	Member(ctx *Ctx, pos Pos, name string) (Value, bool, error)
+	Index(ctx *Ctx, pos Pos, key Value) (Value, error)
 }
 
 type truthyObject interface {

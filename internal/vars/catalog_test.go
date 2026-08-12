@@ -427,3 +427,47 @@ func FuzzParseCatalog(f *testing.F) {
 		}
 	})
 }
+
+// A reader that keys environment names refuses a map holding two forms of one
+// name, so Resolve collapses them. Which form wins has to be the same on every
+// run, not whichever the map order produced.
+func TestResolveCollapsesEquivalentNames(t *testing.T) {
+	for range 16 {
+		cat, err := NewCatalog(EnvironmentSet{"dev": {" token": "a", "token": "b", "TOKEN": "c"}})
+		if err != nil {
+			t.Fatalf("catalog: %v", err)
+		}
+		sel, err := cat.Select("dev", nil)
+		if err != nil {
+			t.Fatalf("select: %v", err)
+		}
+		env, err := cat.Resolve(sel)
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		values := env.Values()
+		if len(values) != 1 {
+			t.Fatalf("Values() = %#v, want one entry per name", values)
+		}
+		if got := values["token"]; got != "b" {
+			t.Fatalf("Values()[token] = %q, want %q on every run", got, "b")
+		}
+	}
+}
+
+// Group layers merge the same way: a later layer wins, and two forms of one
+// name inside a layer resolve without depending on map order.
+func TestMergeValuesIsDeterministic(t *testing.T) {
+	shared := map[string]string{"Region": "eu", "region": "us"}
+	over := map[string]string{" REGION ": "apac"}
+
+	for range 16 {
+		got := mergeValues(shared, nil)
+		if len(got) != 1 || got["region"] != "us" {
+			t.Fatalf("mergeValues(shared) = %#v, want region=us on every run", got)
+		}
+		if got := mergeValues(shared, over); len(got) != 1 || got["REGION"] != "apac" {
+			t.Fatalf("mergeValues(shared, over) = %#v, want the later layer to win", got)
+		}
+	}
+}
