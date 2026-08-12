@@ -541,7 +541,33 @@ Variable names are case-insensitive and ignore surrounding whitespace. A file va
 
 Blank names are invalid. RestermScript and `@apply` report an error, while JavaScript and runtime stores ignore the write.
 
-Dynamic helpers are also available: `{{$uuid}}` (alias `{{$guid}}`), `{{$timestamp}}` (Unix seconds), `{{$timestampMs}}` (Unix milliseconds), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
+### Dynamic helpers
+
+Helper names are case-insensitive and need no declaration.
+
+| Helper | Value |
+| --- | --- |
+| `{{$uuid}}` (alias `{{$guid}}`) | Random UUID v4 |
+| `{{$timestamp}}` | Unix time in seconds |
+| `{{$timestampMs}}` | Unix time in milliseconds |
+| `{{$timestampISO8601}}` | Current time, RFC3339 UTC |
+| `{{$randomInt}}` | Random integer. `{{$randomInt(100)}}` gives 0 to 100, `{{$randomInt(1, 6)}}` gives 1 to 6, both ends included |
+| `{{$randomString}}` | Random alphanumeric string of 16 characters. `{{$randomString(24)}}` sets the length, up to 4096 |
+| `{{$randomChoice("a", "b", "c")}}` | Random value from the given list |
+| `{{$randomName}}` | Random full name |
+| `{{$randomEmail}}` | Random email address |
+| `{{$fake.person}}` | Random full name |
+| `{{$fake.firstName}}`, `{{$fake.lastName}}` | Random name parts |
+| `{{$fake.email}}`, `{{$fake.username}}` | Random account details |
+| `{{$fake.company}}`, `{{$fake.domain}}` | Random company name and hostname |
+| `{{$fake.city}}`, `{{$fake.country}}`, `{{$fake.phone}}` | Random address details |
+| `{{$fake.word}}`, `{{$fake.sentence}}` | Random filler text |
+
+Every reference is resolved on its own, so two `{{$uuid}}` in one body give two values. Declare the helper as a variable when a request needs the same value twice: `# @request trace.id {{$uuid}}`.
+
+Generated addresses and hostnames stay under the reserved `example.com`, `example.net`, and `example.org` domains, and phone numbers stay in the fictional `555-01xx` range, so no helper output points at a real host or mailbox.
+
+Arguments accept either quote form and may be left unquoted when they contain no comma: `{{$randomChoice(red, green)}}`. Inside a JSON body prefer single quotes, since a backslash-escaped `\"` is part of the argument rather than a quote. A helper used the wrong way, such as `{{$randomChoice()}}`, fails the request with an error that names the helper instead of reporting a missing variable.
 
 Timestamp helpers accept optional offsets: `{{$timestamp + 6d}}`, `{{$timestampISO8601 - 90m}}`, `{{$timestampMs + 2h}}`. Supported units are the standard Go duration units plus `d` (days) and `w` (weeks).
 
@@ -866,7 +892,7 @@ Available inputs are:
 - `{{query.name}}` for a query value. Repeated values use the first value.
 - `{{headers.Name}}` for a request header, including `{{headers.Host}}`. Header names are case-insensitive and repeated values use the first value.
 - `{{body.path.to.field}}` for a JSON body field. Array indexes and quoted keys use the same forms as `items[0].id` and `$["display.name"]`.
-- Dynamic helpers such as `{{$uuid}}`, `{{$guid}}`, `{{$timestamp}}`, `{{$timestampms}}`, `{{$timestampISO8601}}`, and `{{$randomint}}`. Timestamp offsets such as `{{$timestampISO8601 - 1h}}` are supported.
+- Every [dynamic helper](#dynamic-helpers), such as `{{$uuid}}`, `{{$timestampISO8601 - 1h}}`, `{{$randomChoice("queued", "done")}}`, and `{{$fake.company}}`. A helper reference that names no helper, or one called the wrong way, fails when the mock set compiles.
 
 The placeholders above insert text as-is. Use them in response headers and in plain text or XML bodies. Strings read from a JSON request body are not quoted or escaped. Other JSON values such as numbers, booleans, `null`, arrays, and objects are written as compact JSON. Each occurrence is resolved separately.
 

@@ -35,6 +35,24 @@ Accept: application/json
   "now_unix_ms": "{{$timestampMs}}"
 }
 
+### Random Data Helpers
+# @name randomHelpers
+POST {{base.url}}/anything/signup
+Content-Type: application/json
+Accept: application/json
+
+{
+  "id": "{{$uuid}}",
+  "name": "{{$randomName}}",
+  "email": "{{$randomEmail}}",
+  "employer": "{{$fake.company}}",
+  "city": "{{$fake.city}}",
+  "phone": "{{$fake.phone}}",
+  "password": "{{$randomString(24)}}",
+  "plan": "{{$randomChoice('free', 'pro', 'team')}}",
+  "seats": "{{$randomInt(1, 25)}}"
+}
+
 ### Bearer Auth Example
 # @name bearerEcho
 # @auth bearer {{auth.token}}
