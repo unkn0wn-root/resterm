@@ -1,6 +1,3 @@
-// Package delay parses the delay expressions used by mock latency, such as
-// 150ms, random(100ms,500ms), normal(250ms,50ms) or jitter(200ms,20%), and
-// turns them into one delay per request.
 package delay
 
 import (

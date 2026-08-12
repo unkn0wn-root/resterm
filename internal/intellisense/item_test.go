@@ -39,6 +39,23 @@ func TestCatalogPlaceholdersAreInsertedText(t *testing.T) {
 	}
 }
 
+// An example value is there to be typed over, so an item that inserts more than
+// its label says which part of it is the example. What is left is punctuation
+// (the header colon) and a mode keyword with only one valid value.
+func TestCatalogExamplesAreSelectable(t *testing.T) {
+	for _, it := range catalogItems() {
+		insert := it.InsertText()
+		switch {
+		case it.Placeholder != "",
+			insert == it.Label,
+			insert == it.Label+":",
+			insert == "@rts pre-request":
+			continue
+		}
+		t.Errorf("%s inserts %q with no placeholder to type over", it.Label, insert)
+	}
+}
+
 func TestPlaceholderRange(t *testing.T) {
 	cases := []struct {
 		name  string

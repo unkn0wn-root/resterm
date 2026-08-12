@@ -213,10 +213,11 @@ Popup keys: `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) navigate, `Enter` / `Tab` / `
 accept, `?` or `Ctrl+L` toggles the details preview, `Left` / `Esc` closes the preview,
 and `Esc` dismisses the popup. Styling is controlled by the `editor_hint_*` theme keys.
 
-Suggestions that carry an example value (`@setting timeout=5s`, `@mock
-latency=random(100ms,500ms)`) accept with that value selected, so the next keystroke
-types over it. `Tab` keeps the example and moves the caret past it - past a closing
-paren, if the example is a call - while `Left` / `Right` collapse onto either end of it.
+Many suggestions insert an example value, such as `@setting timeout=5s` or `@mock
+latency=random(100ms,500ms)`. Accepting one leaves the example selected, so the next
+keystroke replaces it. To keep the example instead, press `Tab`. The caret moves to the
+end of the insert, past the closing parenthesis when the example is a call. `Left` and
+`Right` also keep the example, putting the caret at its start or its end.
 
 Completion is deliberately offline: it does not introspect a live gRPC server
 (reflection/descriptors) or a GraphQL schema to complete service, method, or field

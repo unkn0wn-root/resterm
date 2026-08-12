@@ -36,14 +36,35 @@ var mockArgs = mockItems()
 // needs no second list here.
 func mockItems() []Item {
 	items := []Item{
-		{Label: "method=", Summary: "HTTP method to match", Insert: "method=GET"},
-		{Label: "path=", Summary: "Origin-form route path", Insert: "path=/resource"},
-		{Label: "name=", Summary: "Scenario selector name", Insert: "name=success"},
-		{Label: "sequence=", Summary: "Response sequence name", Insert: "sequence=polling"},
 		{
-			Label:   "sequence-key=",
-			Summary: "Per-key cursor source (path, query, header, or cookie)",
-			Insert:  "sequence-key=path.id",
+			Label:       "method=",
+			Summary:     "HTTP method to match",
+			Insert:      "method=GET",
+			Placeholder: "GET",
+		},
+		{
+			Label:       "path=",
+			Summary:     "Origin-form route path",
+			Insert:      "path=/resource",
+			Placeholder: "/resource",
+		},
+		{
+			Label:       "name=",
+			Summary:     "Scenario selector name",
+			Insert:      "name=success",
+			Placeholder: "success",
+		},
+		{
+			Label:       "sequence=",
+			Summary:     "Response sequence name",
+			Insert:      "sequence=polling",
+			Placeholder: "polling",
+		},
+		{
+			Label:       "sequence-key=",
+			Summary:     "Per-key cursor source (path, query, header, or cookie)",
+			Insert:      "sequence-key=path.id",
+			Placeholder: "path.id",
 		},
 		{Label: "default=true", Summary: "Use as the route fallback"},
 		{
@@ -214,17 +235,38 @@ var settingArgs = []Item{
 var directiveArgs = map[directive.Name][]Item{
 	directive.Mock: mockArgs,
 	directive.Match: {
-		{Label: "query=", Summary: "Query matcher rules as JSON", Insert: `query={"key":"value"}`},
-		{Label: "headers=", Summary: "Header matcher rules as JSON", Insert: `headers={"X-Key":"value"}`},
-		{Label: "json=", Summary: "Literal JSON body subset", Insert: `json={"key":"value"}`},
 		{
-			Label:   "json-rules=",
-			Summary: "JSON body matcher rules",
-			Insert:  `json-rules={"key":{"gt":1}}`,
+			Label:       "query=",
+			Summary:     "Query matcher rules as JSON",
+			Insert:      `query={"key":"value"}`,
+			Placeholder: `{"key":"value"}`,
+		},
+		{
+			Label:       "headers=",
+			Summary:     "Header matcher rules as JSON",
+			Insert:      `headers={"X-Key":"value"}`,
+			Placeholder: `{"X-Key":"value"}`,
+		},
+		{
+			Label:       "json=",
+			Summary:     "Literal JSON body subset",
+			Insert:      `json={"key":"value"}`,
+			Placeholder: `{"key":"value"}`,
+		},
+		{
+			Label:       "json-rules=",
+			Summary:     "JSON body matcher rules",
+			Insert:      `json-rules={"key":{"gt":1}}`,
+			Placeholder: `{"key":{"gt":1}}`,
 		},
 	},
 	directive.Expect: {
-		{Label: "calls=", Summary: "Exact matching request count", Insert: "calls=1"},
+		{
+			Label:       "calls=",
+			Summary:     "Exact matching request count",
+			Insert:      "calls=1",
+			Placeholder: "1",
+		},
 	},
 	directive.Auth: {
 		{
