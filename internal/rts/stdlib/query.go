@@ -60,25 +60,16 @@ var querySpec = nsSpec{name: "query", top: true, fns: map[string]rts.NativeFunc{
 }}
 
 func queryArg(call native.Call, v rts.Value) (queryparams.Values, error) {
-	m, err := native.Dict(call, v)
-	if err != nil {
-		return nil, err
-	}
-	out := make(queryparams.Values, len(m))
-	for _, name := range slices.Sorted(maps.Keys(m)) {
-		if err := rts.CheckStr(call.Ctx, call.Pos, name); err != nil {
-			return nil, err
-		}
-		vals, err := native.StringValues(call, m[name])
-		if err != nil {
-			return nil, err
-		}
-		out[name] = vals
-	}
-	return out, nil
+	return queryDict(call, v, false)
 }
 
 func queryPatchArg(call native.Call, v rts.Value) (queryparams.Values, error) {
+	return queryDict(call, v, true)
+}
+
+// queryDict decodes query values in name order. When patch is true, a null
+// value produces an empty list so the caller can remove the parameter.
+func queryDict(call native.Call, v rts.Value, patch bool) (queryparams.Values, error) {
 	m, err := native.Dict(call, v)
 	if err != nil {
 		return nil, err
@@ -88,12 +79,11 @@ func queryPatchArg(call native.Call, v rts.Value) (queryparams.Values, error) {
 		if err := rts.CheckStr(call.Ctx, call.Pos, name); err != nil {
 			return nil, err
 		}
-		v := m[name]
-		if v.K == rts.VNull {
+		if patch && m[name].K == rts.VNull {
 			out[name] = []string{}
 			continue
 		}
-		vals, err := native.StringValues(call, v)
+		vals, err := native.StringValues(call, m[name])
 		if err != nil {
 			return nil, err
 		}

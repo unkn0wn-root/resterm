@@ -384,15 +384,15 @@ func TestRTSRejectsAmbiguousCallerSuppliedVars(t *testing.T) {
 // writes a script makes through the mutator stay visible to the caller.
 func TestRTSKeepsCallerVarMapsUntouched(t *testing.T) {
 	vv := map[string]string{"token": "a"}
-	got := hostVars(vv)
+	got := newEvalScope(vv, vars.Globals{}).vars
 	got["added"] = "b"
 	if vv["added"] != "b" {
-		t.Fatalf("hostVars copied a map that keeps its names apart: %#v", got)
+		t.Fatalf("newEvalScope copied a map that keeps its names apart: %#v", got)
 	}
 
 	amb := map[string]string{"Token": "a", "token": "b"}
-	if out := hostVars(amb); len(out) != 2 || len(amb) != 2 {
-		t.Fatalf("hostVars(ambiguous) = %#v, want the input left intact", out)
+	if out := newEvalScope(amb, vars.Globals{}).vars; len(out) != 2 || len(amb) != 2 {
+		t.Fatalf("newEvalScope(ambiguous) = %#v, want the input left intact", out)
 	}
 }
 

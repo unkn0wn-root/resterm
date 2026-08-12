@@ -235,7 +235,7 @@ List indexing uses numeric indices such as `list[0]`, and out of range accesses 
 
 Dictionary and query keys are exact strings. Case and whitespace are preserved, including empty query keys. The `rts.dict` helpers behave like `dict[key]`, so `Token`, `token`, and ` token ` are separate keys.
 
-Names used by `env`, `vars`, and request headers have different rules. Resterm makes `env` and `vars` names case-insensitive and ignores surrounding whitespace. Header names are case-insensitive HTTP field names. Whitespace around a header name is rejected instead of trimmed.
+Names used by `env`, `vars`, and request headers have different rules. Resterm makes `env` and `vars` names case-insensitive and ignores surrounding whitespace. Header names are case-insensitive HTTP field names. A name your script supplies is a value, so whitespace around it is rejected instead of trimmed. The header block of a request file is syntax rather than a value, so the parser trims around the colon and then holds what is left to the same rule.
 
 Host maps are validated before evaluation. Blank `env` or `vars` names, and two spellings with the same identity, are errors instead of choices made by map order. Header blocks likewise reject invalid field names and equivalent spellings.
 

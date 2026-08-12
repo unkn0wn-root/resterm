@@ -175,3 +175,16 @@ func TestPatchQueryTemplatePreservesEmptyKey(t *testing.T) {
 		t.Fatalf("expected added query param, got %q", got)
 	}
 }
+
+// Rewriting a URL whose query cannot be decoded stops instead of re-encoding
+// only the pairs that survived, which would delete the rest.
+func TestQueryRewritesRejectMalformedEscapes(t *testing.T) {
+	const raw = "https://example.test/p?bad=%zz&keep=1"
+	value := "2"
+	if got, err := PatchQuery(raw, map[string]*string{"added": &value}); err == nil {
+		t.Errorf("PatchQuery() = %q, want an error", got)
+	}
+	if got, err := MergeQuery(raw, map[string][]string{"added": {"2"}}); err == nil {
+		t.Errorf("MergeQuery() = %q, want an error", got)
+	}
+}

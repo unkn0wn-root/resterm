@@ -41,7 +41,7 @@ func (e *Engine) Eval(ctx context.Context, rt Runtime, src string, pos rts.Pos) 
 	if e == nil || e.core == nil {
 		return rts.Null(), fmt.Errorf("nil RTS host engine")
 	}
-	return e.core.Eval(withRuntime(ctx, rt), evalConfig(rt, false), src, pos)
+	return e.core.Eval(withRuntime(ctx, rt), evalConfig(rt), src, pos)
 }
 
 // EvalAssertion evaluates an assertion with response shorthand overrides.
@@ -54,18 +54,18 @@ func (e *Engine) EvalAssertion(
 	if e == nil || e.core == nil {
 		return rts.Null(), fmt.Errorf("nil RTS host engine")
 	}
-	return e.core.Eval(withRuntime(ctx, rt), evalConfig(rt, true), src, pos)
+	cfg := evalConfig(rt)
+	cfg.Overrides = assertionOverrides(rt.Response)
+	return e.core.Eval(withRuntime(ctx, rt), cfg, src, pos)
 }
 
 // EvalStr evaluates an expression and applies RTS's explicit result-to-string
 // boundary conversion.
 func (e *Engine) EvalStr(ctx context.Context, rt Runtime, src string, pos rts.Pos) (string, error) {
-	v, err := e.Eval(ctx, rt, src, pos)
-	if err != nil {
-		return "", err
+	if e == nil || e.core == nil {
+		return "", fmt.Errorf("nil RTS host engine")
 	}
-	cx := rts.NewCtx(ctx, e.Limits())
-	return rts.ToStr(cx, pos, v)
+	return e.core.EvalStr(withRuntime(ctx, rt), evalConfig(rt), src, pos)
 }
 
 // ExecModule executes one module body against rt.
@@ -78,16 +78,23 @@ func (e *Engine) ExecModule(
 	if e == nil || e.core == nil {
 		return nil, fmt.Errorf("nil RTS host engine")
 	}
-	return e.core.ExecModule(withRuntime(ctx, rt), evalConfig(rt, false), src, pos)
+	return e.core.ExecModule(withRuntime(ctx, rt), evalConfig(rt), src, pos)
 }
 
-func evalConfig(rt Runtime, assertion bool) rts.EvalConfig {
+func evalConfig(rt Runtime) rts.EvalConfig {
+	// Assign the interfaces only when Mutator is set. A nil pointer stored in an
+	// interface is non-nil and could allow a read-only write to panic.
+	var varsMut VarsMutator
+	var globalMut GlobalMutator
+	if rt.Mutator != nil {
+		varsMut, globalMut = rt.Mutator, rt.Mutator
+	}
 	bindings := map[string]rts.Value{
 		"env":    rts.Obj(newEnvObj(rt.Scope)),
-		"vars":   rts.Obj(newVarsObj(rt.Scope, rt.VarsMut, rt.GlobalMut)),
+		"vars":   rts.Obj(newVarsObj(rt.Scope, varsMut, globalMut)),
 		"last":   rts.Obj(newResponseObj("last", rt.Last)),
 		"trace":  rts.Obj(newTraceObj(rt.Trace)),
-		"stream": rts.Obj(&streamObj{stream: rt.Stream}),
+		"stream": rts.Obj(newStreamObj(rt.Stream)),
 	}
 	if rt.Response == nil {
 		bindings["response"] = rts.Obj(newUnboundResponseObj("response"))
@@ -99,12 +106,9 @@ func evalConfig(rt Runtime, assertion bool) rts.EvalConfig {
 		Locals:      rt.Locals,
 		Uses:        rt.Uses,
 		BaseDir:     rt.BaseDir,
-		ReadFile:    rt.readFile(),
+		ReadFile:    rt.ReadFile,
 		AllowRandom: rt.AllowRandom,
 		Site:        rt.Site,
-	}
-	if assertion {
-		cfg.Overrides = assertionOverrides(rt.Response)
 	}
 	return cfg
 }

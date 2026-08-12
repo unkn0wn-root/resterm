@@ -18,14 +18,23 @@ type responseObj struct {
 	json    any
 	jsonErr error
 	parsed  bool
+	members map[string]rts.Value
 }
 
 func newResponseObj(name string, resp *Response) *responseObj {
-	return &responseObj{name: name, resp: resp}
+	o := &responseObj{name: name, resp: resp}
+	o.members = map[string]rts.Value{
+		"header": o.headerDef().Value(),
+		"text":   o.textDef().Value(),
+		"json":   o.jsonDef().Value(),
+	}
+	return o
 }
 
 func newUnboundResponseObj(name string) *responseObj {
-	return &responseObj{name: name, unbound: unboundResponse}
+	o := newResponseObj(name, nil)
+	o.unbound = unboundResponse
+	return o
 }
 
 func (o *responseObj) TypeName() string { return o.name }
@@ -57,15 +66,12 @@ func (o *responseObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value,
 		}
 		v, err := native.StringValuesDict(ctx, pos, o.resp.Headers)
 		return v, true, err
-	case "header":
-		return o.headerDef().Value(), true, nil
-	case "text":
-		return o.textDef().Value(), true, nil
-	case "json":
-		return o.jsonDef().Value(), true, nil
-	default:
+	}
+	v, ok := o.members[name]
+	if !ok {
 		return rts.Null(), false, nil
 	}
+	return v, true, nil
 }
 
 func (*responseObj) Index(*rts.Ctx, rts.Pos, rts.Value) (rts.Value, error) {
@@ -127,6 +133,11 @@ func (o *responseObj) jsonDef() native.Def {
 	)
 }
 
+// assertionOverrides binds the shorthand an assertion reads. Every name is
+// bound before the assertion runs, so statusText carries the host status as
+// given: a name is one stored value with no hook on reading it, and checking
+// the string limit here would fail assertions that never mention statusText.
+// response.statusText applies the limit at the point it is read.
 func assertionOverrides(resp *Response) rts.Locals {
 	o := newResponseObj("response", resp)
 	code := 0
@@ -139,7 +150,7 @@ func assertionOverrides(resp *Response) rts.Locals {
 		"status":     rts.Num(float64(code)),
 		"statusCode": rts.Num(float64(code)),
 		"statusText": rts.Str(status),
-		"header":     o.headerDef().Value(),
-		"text":       o.textDef().Value(),
+		"header":     o.members["header"],
+		"text":       o.members["text"],
 	})
 }

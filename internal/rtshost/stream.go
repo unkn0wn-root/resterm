@@ -10,24 +10,29 @@ import (
 )
 
 type streamObj struct {
-	stream *Stream
+	stream  *Stream
+	members map[string]rts.Value
+}
+
+func newStreamObj(s *Stream) *streamObj {
+	o := &streamObj{stream: s}
+	o.members = map[string]rts.Value{
+		"enabled": hostFn0("stream", "enabled", o.enabled),
+		"kind":    hostFn0("stream", "kind", o.kind),
+		"summary": hostFn0("stream", "summary", o.summary),
+		"events":  hostFn0("stream", "events", o.events),
+	}
+	return o
 }
 
 func (*streamObj) TypeName() string { return "stream" }
 
 func (o *streamObj) Member(_ *rts.Ctx, _ rts.Pos, name string) (rts.Value, bool, error) {
-	switch name {
-	case "enabled":
-		return native.Fn0("stream.enabled", "stream.enabled()", o.enabled).Value(), true, nil
-	case "kind":
-		return native.Fn0("stream.kind", "stream.kind()", o.kind).Value(), true, nil
-	case "summary":
-		return native.Fn0("stream.summary", "stream.summary()", o.summary).Value(), true, nil
-	case "events":
-		return native.Fn0("stream.events", "stream.events()", o.events).Value(), true, nil
-	default:
+	v, ok := o.members[name]
+	if !ok {
 		return rts.Null(), false, nil
 	}
+	return v, true, nil
 }
 
 func (*streamObj) Index(*rts.Ctx, rts.Pos, rts.Value) (rts.Value, error) {

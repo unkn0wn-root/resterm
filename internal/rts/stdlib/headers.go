@@ -1,9 +1,6 @@
 package stdlib
 
 import (
-	"maps"
-	"slices"
-
 	"github.com/unkn0wn-root/resterm/internal/httpheader"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/native"
@@ -78,11 +75,6 @@ var headersSpec = nsSpec{name: "headers", top: true, fns: map[string]rts.NativeF
 	"normalize": headersNormalizeDef.Func(),
 }}
 
-type headerKey struct {
-	src  string
-	name httpheader.Name
-}
-
 type headerEdit struct {
 	vals []string
 	del  bool
@@ -101,11 +93,11 @@ func headerBlockArg(call native.Call, v rts.Value) (httpheader.Values, error) {
 	}
 	out := make(httpheader.Values, len(m))
 	for _, k := range keys {
-		vals, err := native.StringValues(call, m[k.src])
+		vals, err := native.StringValues(call, m[k.Source])
 		if err != nil {
 			return nil, err
 		}
-		out[k.name.Key()] = vals
+		out[k.Name.Key()] = vals
 	}
 	return out, nil
 }
@@ -121,45 +113,31 @@ func headerPatchArg(call native.Call, v rts.Value) (headerPatch, error) {
 	}
 	out := make(headerPatch, len(m))
 	for _, k := range keys {
-		v := m[k.src]
+		v := m[k.Source]
 		if v.K == rts.VNull {
-			out[k.name.Key()] = headerEdit{del: true}
+			out[k.Name.Key()] = headerEdit{del: true}
 			continue
 		}
 		vals, err := native.StringValues(call, v)
 		if err != nil {
 			return nil, err
 		}
-		out[k.name.Key()] = headerEdit{vals: vals}
+		out[k.Name.Key()] = headerEdit{vals: vals}
 	}
 	return out, nil
 }
 
-func headerKeys(call native.Call, m map[string]rts.Value) ([]headerKey, error) {
-	names := slices.Sorted(maps.Keys(m))
-	out := make([]headerKey, 0, len(names))
-	seen := make(map[string]string, len(names))
-	for _, name := range names {
-		if err := rts.CheckStr(call.Ctx, call.Pos, name); err != nil {
+func headerKeys(call native.Call, m map[string]rts.Value) ([]httpheader.Named, error) {
+	keys, err := httpheader.Keys(m)
+	if err != nil {
+		return nil, call.Errorf("%s: %v", call.Sig, err)
+	}
+	for _, k := range keys {
+		if err := rts.CheckStr(call.Ctx, call.Pos, k.Source); err != nil {
 			return nil, err
 		}
-		n, err := httpheader.Parse(name)
-		if err != nil {
-			return nil, call.Errorf("%s: %v", call.Sig, err)
-		}
-		key := n.Key()
-		if first, ok := seen[key]; ok {
-			return nil, call.Errorf(
-				"%s: %q and %q are the same HTTP header",
-				call.Sig,
-				first,
-				name,
-			)
-		}
-		seen[key] = name
-		out = append(out, headerKey{src: name, name: n})
 	}
-	return out, nil
+	return keys, nil
 }
 
 func headerNameArg(call native.Call, v rts.Value) (httpheader.Name, error) {

@@ -31,11 +31,73 @@ func runtimeState(ctx *rts.Ctx) *evalState {
 	return state
 }
 
+// requestObj is stateless. Its functions read the active Runtime from the
+// evaluation context, so requestFns can be shared between evaluations.
 type requestObj struct{}
+
+var requestFns = map[string]rts.Value{
+	"header": native.Fn1("request.header", "request.header(name)", headerName,
+		func(call native.Call, name httpheader.Name) (rts.Value, error) {
+			req := requestFrom(call.Ctx)
+			if req == nil {
+				return rts.Str(""), nil
+			}
+			vals := req.Headers[name.Key()]
+			if len(vals) == 0 {
+				return rts.Str(""), nil
+			}
+			return native.StringValue(call.Ctx, call.Pos, vals[0])
+		},
+	).Value(),
+	"setMethod": mut1("request.setMethod", "request.setMethod(method)",
+		native.String, RequestMutator.SetMethod).Value(),
+	"setURL": mut1("request.setURL", "request.setURL(url)",
+		native.String, RequestMutator.SetURL).Value(),
+	"setHeader": mut2("request.setHeader", "request.setHeader(name, value)",
+		headerName, native.String, RequestMutator.SetHeader).Value(),
+	"addHeader": mut2("request.addHeader", "request.addHeader(name, value)",
+		headerName, native.String, RequestMutator.AddHeader).Value(),
+	"removeHeader": mut1("request.removeHeader", "request.removeHeader(name)",
+		headerName, RequestMutator.DelHeader).Value(),
+	"setQueryParam": mut2("request.setQueryParam", "request.setQueryParam(name, value)",
+		native.String, native.String, RequestMutator.SetQuery).Value(),
+	"setBody": mut1("request.setBody", "request.setBody(body)",
+		native.String, RequestMutator.SetBody).Value(),
+}
+
+func mut1[A any](
+	name, sig string,
+	a native.Decoder[A],
+	set func(RequestMutator, A),
+) native.Def {
+	return native.Fn1(name, sig, a, func(call native.Call, av A) (rts.Value, error) {
+		mut, err := requestMutator(call)
+		if err != nil {
+			return rts.Null(), err
+		}
+		set(mut, av)
+		return rts.Null(), nil
+	})
+}
+
+func mut2[A, B any](
+	name, sig string,
+	a native.Decoder[A], b native.Decoder[B],
+	set func(RequestMutator, A, B),
+) native.Def {
+	return native.Fn2(name, sig, a, b, func(call native.Call, av A, bv B) (rts.Value, error) {
+		mut, err := requestMutator(call)
+		if err != nil {
+			return rts.Null(), err
+		}
+		set(mut, av, bv)
+		return rts.Null(), nil
+	})
+}
 
 func (*requestObj) TypeName() string { return "request" }
 
-func (o *requestObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value, bool, error) {
+func (*requestObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value, bool, error) {
 	req := requestFrom(ctx)
 	switch name {
 	case "method":
@@ -53,8 +115,6 @@ func (o *requestObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value, 
 	case "headers":
 		v, err := native.StringValuesDict(ctx, pos, headerValues(req))
 		return v, true, err
-	case "header":
-		return o.headerDef().Value(), true, nil
 	case "query":
 		vals, err := queryValues(req)
 		if err != nil {
@@ -62,23 +122,12 @@ func (o *requestObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value, 
 		}
 		v, err := native.StringValuesDict(ctx, pos, vals)
 		return v, true, err
-	case "setMethod":
-		return o.setMethodDef().Value(), true, nil
-	case "setURL":
-		return o.setURLDef().Value(), true, nil
-	case "setHeader":
-		return o.setHeaderDef().Value(), true, nil
-	case "addHeader":
-		return o.addHeaderDef().Value(), true, nil
-	case "removeHeader":
-		return o.removeHeaderDef().Value(), true, nil
-	case "setQueryParam":
-		return o.setQueryDef().Value(), true, nil
-	case "setBody":
-		return o.setBodyDef().Value(), true, nil
-	default:
+	}
+	v, ok := requestFns[name]
+	if !ok {
 		return rts.Null(), false, nil
 	}
+	return v, true, nil
 }
 
 func (*requestObj) Index(*rts.Ctx, rts.Pos, rts.Value) (rts.Value, error) {
@@ -95,10 +144,10 @@ func requestFrom(ctx *rts.Ctx) *Request {
 
 func requestMutator(call native.Call) (RequestMutator, error) {
 	state := runtimeState(call.Ctx)
-	if state == nil || state.rt.RequestMut == nil {
+	if state == nil || state.rt.Mutator == nil {
 		return nil, call.Errorf("request is read-only")
 	}
-	return state.rt.RequestMut, nil
+	return state.rt.Mutator, nil
 }
 
 func headerValues(req *Request) map[string][]string {
@@ -136,115 +185,4 @@ func headerName(call native.Call, v rts.Value) (httpheader.Name, error) {
 		return httpheader.Name{}, call.Errorf("%s expects an HTTP header name, got %q", call.Sig, name)
 	}
 	return n, nil
-}
-
-func (o *requestObj) headerDef() native.Def {
-	const sig = "request.header(name)"
-	return native.Fn1("request.header", sig, headerName,
-		func(call native.Call, name httpheader.Name) (rts.Value, error) {
-			req := requestFrom(call.Ctx)
-			if req == nil || len(req.Headers[name.Key()]) == 0 {
-				return rts.Str(""), nil
-			}
-			return native.StringValue(call.Ctx, call.Pos, req.Headers[name.Key()][0])
-		},
-	)
-}
-
-func (o *requestObj) setMethodDef() native.Def {
-	const sig = "request.setMethod(method)"
-	return native.Fn1("request.setMethod", sig, native.String,
-		func(call native.Call, value string) (rts.Value, error) {
-			mut, err := requestMutator(call)
-			if err != nil {
-				return rts.Null(), err
-			}
-			mut.SetMethod(value)
-			return rts.Null(), nil
-		},
-	)
-}
-
-func (o *requestObj) setURLDef() native.Def {
-	const sig = "request.setURL(url)"
-	return native.Fn1("request.setURL", sig, native.String,
-		func(call native.Call, value string) (rts.Value, error) {
-			mut, err := requestMutator(call)
-			if err != nil {
-				return rts.Null(), err
-			}
-			mut.SetURL(value)
-			return rts.Null(), nil
-		},
-	)
-}
-
-func (o *requestObj) setHeaderDef() native.Def {
-	const sig = "request.setHeader(name, value)"
-	return native.Fn2("request.setHeader", sig, headerName, native.String,
-		func(call native.Call, name httpheader.Name, value string) (rts.Value, error) {
-			mut, err := requestMutator(call)
-			if err != nil {
-				return rts.Null(), err
-			}
-			mut.SetHeader(name, value)
-			return rts.Null(), nil
-		},
-	)
-}
-
-func (o *requestObj) addHeaderDef() native.Def {
-	const sig = "request.addHeader(name, value)"
-	return native.Fn2("request.addHeader", sig, headerName, native.String,
-		func(call native.Call, name httpheader.Name, value string) (rts.Value, error) {
-			mut, err := requestMutator(call)
-			if err != nil {
-				return rts.Null(), err
-			}
-			mut.AddHeader(name, value)
-			return rts.Null(), nil
-		},
-	)
-}
-
-func (o *requestObj) removeHeaderDef() native.Def {
-	const sig = "request.removeHeader(name)"
-	return native.Fn1("request.removeHeader", sig, headerName,
-		func(call native.Call, name httpheader.Name) (rts.Value, error) {
-			mut, err := requestMutator(call)
-			if err != nil {
-				return rts.Null(), err
-			}
-			mut.DelHeader(name)
-			return rts.Null(), nil
-		},
-	)
-}
-
-func (o *requestObj) setQueryDef() native.Def {
-	const sig = "request.setQueryParam(name, value)"
-	return native.Fn2("request.setQueryParam", sig, native.String, native.String,
-		func(call native.Call, name, value string) (rts.Value, error) {
-			mut, err := requestMutator(call)
-			if err != nil {
-				return rts.Null(), err
-			}
-			mut.SetQuery(name, value)
-			return rts.Null(), nil
-		},
-	)
-}
-
-func (o *requestObj) setBodyDef() native.Def {
-	const sig = "request.setBody(body)"
-	return native.Fn1("request.setBody", sig, native.String,
-		func(call native.Call, value string) (rts.Value, error) {
-			mut, err := requestMutator(call)
-			if err != nil {
-				return rts.Null(), err
-			}
-			mut.SetBody(value)
-			return rts.Null(), nil
-		},
-	)
 }

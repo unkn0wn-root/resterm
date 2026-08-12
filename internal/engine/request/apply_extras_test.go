@@ -1,6 +1,7 @@
 package request
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"slices"
@@ -171,10 +172,10 @@ func TestExplainReportCarriesParseWarningsOnEarlyFailure(t *testing.T) {
 // request.setHeader refuses and http.Header would then fold or reject.
 func TestApplyHoldsHeaderNamesToTheHeaderRule(t *testing.T) {
 	tests := map[string]string{
-		`{headers: {"X Token": "1"}}`:                 `"X Token" is not a header name`,
-		`{headers: {" X-Token ": "1"}}`:               `" X-Token " is not a header name`,
-		`{headers: {"": "1"}}`:                        `"" is not a header name`,
-		`{headers: {"X-Token": "1", "x-token": "2"}}`: `"X-Token" and "x-token" are the same header`,
+		`{headers: {"X Token": "1"}}`:                 `"X Token" is not an HTTP header name`,
+		`{headers: {" X-Token ": "1"}}`:               `" X-Token " is not an HTTP header name`,
+		`{headers: {"": "1"}}`:                        `"" is not an HTTP header name`,
+		`{headers: {"X-Token": "1", "x-token": "2"}}`: `"X-Token" and "x-token" are the same HTTP header`,
 	}
 
 	for expr, want := range tests {
@@ -241,6 +242,30 @@ func TestApplyHoldsHeaderNamesToTheHeaderRule(t *testing.T) {
 		}
 		if got := sent.Header.Get("X-Other"); got != "2" {
 			t.Fatalf("X-Other = %q, want the patch applied on every run", got)
+		}
+	}
+}
+
+// Query keys are exact strings, so a patch names a parameter the way
+// query.merge and request.setQueryParam do. @apply used to trim them and
+// refuse the empty key, which made the same name mean two things.
+func TestApplyPreservesExactQueryKeys(t *testing.T) {
+	e := New(engcfg.Config{}, nil)
+	v := rts.Dict(map[string]rts.Value{
+		" spaced ": rts.Str("1"),
+		"":         rts.Str("2"),
+	})
+	got, err := e.parseApplyQuery(context.Background(), rts.Pos{}, v)
+	if err != nil {
+		t.Fatalf("parseApplyQuery: %v", err)
+	}
+	for _, name := range []string{" spaced ", ""} {
+		val, ok := got[name]
+		if !ok {
+			t.Fatalf("parseApplyQuery() = %#v, want key %q", got, name)
+		}
+		if val == nil {
+			t.Fatalf("key %q = nil, want a value", name)
 		}
 	}
 }

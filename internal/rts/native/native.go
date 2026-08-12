@@ -69,8 +69,8 @@ func FnOptional[A any](
 ) Def {
 	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
-		if len(args) > 1 {
-			return rts.Null(), call.Errorf("%s expects 0 or 1 argument, got %d", sig, len(args))
+		if err := countRange(call, len(args), 0, 1); err != nil {
+			return rts.Null(), err
 		}
 		var av Optional[A]
 		if len(args) == 1 {
@@ -162,8 +162,8 @@ func Fn1Optional[A, B any](
 ) Def {
 	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
-		if len(args) < 1 || len(args) > 2 {
-			return rts.Null(), call.Errorf("%s expects 1 or 2 arguments, got %d", sig, len(args))
+		if err := countRange(call, len(args), 1, 2); err != nil {
+			return rts.Null(), err
 		}
 		av, err := a(call, args[0])
 		if err != nil {
@@ -189,8 +189,8 @@ func Fn2Optional[A, B, C any](
 ) Def {
 	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
-		if len(args) < 2 || len(args) > 3 {
-			return rts.Null(), call.Errorf("%s expects 2 or 3 arguments, got %d", sig, len(args))
+		if err := countRange(call, len(args), 2, 3); err != nil {
+			return rts.Null(), err
 		}
 		av, err := a(call, args[0])
 		if err != nil {
@@ -221,6 +221,17 @@ func count(call Call, got, want int) error {
 		word = "argument"
 	}
 	return call.Errorf("%s expects %d %s, got %d", call.Sig, want, word, got)
+}
+
+func countRange(call Call, got, min, max int) error {
+	if got >= min && got <= max {
+		return nil
+	}
+	word := "arguments"
+	if max == 1 {
+		word = "argument"
+	}
+	return call.Errorf("%s expects %d or %d %s, got %d", call.Sig, min, max, word, got)
 }
 
 // Value leaves an argument in the RTS value domain.
@@ -280,29 +291,6 @@ func List(call Call, v rts.Value) ([]rts.Value, error) {
 	return v.L, nil
 }
 
-// ListOf builds a decoder for an RTS list whose elements are decoded by d. It
-// validates the outer list before invoking d and returns a new slice.
-func ListOf[T any](d Decoder[T]) Decoder[[]T] {
-	return func(call Call, v rts.Value) ([]T, error) {
-		return decodeList(call, v, d)
-	}
-}
-
-func decodeList[T any](call Call, v rts.Value, d Decoder[T]) ([]T, error) {
-	vs, err := List(call, v)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]T, len(vs))
-	for i, v := range vs {
-		out[i], err = d(call, v)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
-}
-
 // Dict decodes only an RTS dictionary. It does not treat null as an empty
 // dictionary.
 func Dict(call Call, v rts.Value) (map[string]rts.Value, error) {
@@ -316,10 +304,19 @@ func Dict(call Call, v rts.Value) (map[string]rts.Value, error) {
 }
 
 // StringList decodes a list whose elements are all strings and returns a copy.
+// The outer list is validated before any element, so a list over the limit
+// reports that rather than whatever its first element happens to be.
 func StringList(call Call, v rts.Value) ([]string, error) {
-	return decodeList(call, v, stringListItem)
-}
-
-func stringListItem(call Call, v rts.Value) (string, error) {
-	return decodeString(call, v, "list<string>")
+	vals, err := List(call, v)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(vals))
+	for i, val := range vals {
+		out[i], err = decodeString(call, val, "list<string>")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }

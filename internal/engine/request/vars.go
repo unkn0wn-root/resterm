@@ -157,12 +157,6 @@ func (e *Engine) rtsBase(doc *restfile.Document, base string) string {
 	return e.fileDir(doc)
 }
 
-// hostVars preserves the caller's variable map. The host boundary validates it
-// and reports ambiguous names instead of silently selecting a winner.
-func hostVars(vv map[string]string) map[string]string {
-	return vv
-}
-
 func (e *Engine) buildResolver(
 	ctx context.Context,
 	doc *restfile.Document,

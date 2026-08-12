@@ -6,7 +6,7 @@ export fn mode(env) {
 }
 
 export fn envLabel(env) {
-  return env.meta.name ?? "default"
+  return env.meta.name ? env.meta.name : "default"
 }
 
 export fn authHeader(token) {

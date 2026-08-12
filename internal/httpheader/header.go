@@ -27,7 +27,7 @@ func (e *NameError) Error() string {
 	return fmt.Sprintf("%q is not an HTTP header name", e.Name)
 }
 
-// CollisionError reports two spellings of the same case-insensitive name.
+// CollisionError reports header names with the same case-insensitive identity.
 type CollisionError struct {
 	First  string
 	Second string
@@ -71,10 +71,17 @@ func Key(name string) (string, error) {
 	return n.Key(), nil
 }
 
-// Normalize validates names, rejects equivalent spellings, copies every value
-// list, and keys the result by header identity.
-func Normalize(src map[string][]string) (Values, error) {
-	out := make(Values, len(src))
+// Named contains a header name and its case-insensitive identity.
+type Named struct {
+	Source string
+	Name   Name
+}
+
+// Keys validates and sorts the names in src. It rejects names with the same
+// case-insensitive identity so map iteration cannot choose which value wins.
+// Sorting also makes validation errors deterministic.
+func Keys[V any](src map[string]V) ([]Named, error) {
+	out := make([]Named, 0, len(src))
 	seen := make(map[string]string, len(src))
 	for _, name := range slices.Sorted(maps.Keys(src)) {
 		n, err := Parse(name)
@@ -86,7 +93,21 @@ func Normalize(src map[string][]string) (Values, error) {
 			return nil, &CollisionError{First: first, Second: name}
 		}
 		seen[key] = name
-		out[key] = append([]string(nil), src[name]...)
+		out = append(out, Named{Source: name, Name: n})
+	}
+	return out, nil
+}
+
+// Normalize validates names, rejects equivalent forms, copies every value
+// list, and keys the result by header identity.
+func Normalize(src map[string][]string) (Values, error) {
+	keys, err := Keys(src)
+	if err != nil {
+		return nil, err
+	}
+	out := make(Values, len(src))
+	for _, k := range keys {
+		out[k.Name.Key()] = append([]string(nil), src[k.Source]...)
 	}
 	return out, nil
 }

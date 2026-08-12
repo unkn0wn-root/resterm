@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -92,11 +92,13 @@ func rtsHTTP(resp *httpx.Response) (*rtshost.Response, error) {
 	if resp == nil {
 		return nil, nil
 	}
-	h := make(map[string][]string, len(resp.Headers))
-	for k, vs := range resp.Headers {
-		h[k] = append([]string(nil), vs...)
-	}
-	return rtshost.NewResponse(resp.Status, resp.StatusCode, h, resp.Body, resp.EffectiveURL)
+	return rtshost.NewResponse(
+		resp.Status,
+		resp.StatusCode,
+		resp.Headers,
+		resp.Body,
+		resp.EffectiveURL,
+	)
 }
 
 func rtsGRPC(resp *grpcx.Response) (*rtshost.Response, error) {
@@ -125,11 +127,7 @@ func rtsScriptResp(resp *scripts.Response) (*rtshost.Response, error) {
 	if resp == nil {
 		return nil, nil
 	}
-	h := make(map[string][]string, len(resp.Header))
-	for k, vs := range resp.Header {
-		h[k] = append([]string(nil), vs...)
-	}
-	return rtshost.NewResponse(resp.Status, resp.Code, h, resp.Body, resp.URL)
+	return rtshost.NewResponse(resp.Status, resp.Code, resp.Header, resp.Body, resp.URL)
 }
 
 func rtsStream(info *scripts.StreamInfo) *rtshost.Stream {
@@ -158,7 +156,7 @@ type evalScope struct {
 // Keep the caller-owned map so mutations and later expressions share one
 // runtime view. The host validates its names when it builds the scope.
 func newEvalScope(vv map[string]string, globals vars.Globals) evalScope {
-	return evalScope{vars: hostVars(vv), globals: globals}
+	return evalScope{vars: vv, globals: globals}
 }
 
 func (e *Engine) storedScope(
@@ -170,8 +168,10 @@ func (e *Engine) storedScope(
 }
 
 type rtIn struct {
-	doc     *restfile.Document
-	req     *restfile.Request
+	doc *restfile.Document
+	req *restfile.Request
+	// buildRT uses env, globals, and secrets to prepare the scope.
+	// buildRTWithScope receives a prepared scope and ignores them.
 	env     vars.Environment
 	base    string
 	vars    map[string]string
@@ -185,7 +185,31 @@ type rtIn struct {
 	secrets rtshost.SecretPolicy
 }
 
+func prepareScope(
+	env vars.Environment,
+	globals vars.Globals,
+	secrets rtshost.SecretPolicy,
+) (rtshost.PreparedScope, error) {
+	return rtshost.PrepareScope(rtshost.ScopeInput{
+		EnvName: env.Label(),
+		Env:     env.Values(),
+		Groups:  env.Selection().Groups(),
+		Globals: rtshost.RuntimeGlobals(globals, secrets),
+	})
+}
+
 func (e *Engine) buildRT(in rtIn) (rtshost.Runtime, error) {
+	prep, err := prepareScope(in.env, in.globals, in.secrets)
+	if err != nil {
+		return rtshost.Runtime{}, err
+	}
+	return e.buildRTWithScope(in, prep)
+}
+
+// buildRTWithScope builds a runtime from prepared scope data. It still binds
+// vars, the request, and the last response on each call because they may change
+// between expressions.
+func (e *Engine) buildRTWithScope(in rtIn, prep rtshost.PreparedScope) (rtshost.Runtime, error) {
 	base := e.rtsBase(in.doc, in.base)
 	resp := in.resp
 	if resp == nil {
@@ -201,13 +225,7 @@ func (e *Engine) buildRT(in rtIn) (rtshost.Runtime, error) {
 	if tr == nil {
 		tr = e.rtsLastTrace()
 	}
-	scope, err := rtshost.NewScope(
-		in.env.Values(),
-		in.env.Label(),
-		in.env.Selection().Groups(),
-		in.vars,
-		rtshost.RuntimeGlobals(in.globals, in.secrets),
-	)
+	scope, err := prep.BindVars(in.vars)
 	if err != nil {
 		return rtshost.Runtime{}, err
 	}
@@ -223,7 +241,6 @@ func (e *Engine) buildRT(in rtIn) (rtshost.Runtime, error) {
 		Stream:      in.st,
 		Request:     req,
 		BaseDir:     base,
-		ReadFile:    os.ReadFile,
 		AllowRandom: true,
 		Site:        in.site,
 		Uses:        e.rtsUses(in.doc, in.req),
@@ -295,24 +312,30 @@ func (e *Engine) ExprEvalWithOptions(
 	if opt.OmitSecretGlobals {
 		secrets = rtshost.OmitSecrets
 	}
-	// Keep the caller's map: buildRT validates its names for each runtime, and
-	// writes must remain visible to later expressions.
-	vv := hostVars(in.Vars)
+	// Keep Vars by reference so script writes are visible to later expressions.
+	vv := in.Vars
+	// Validate the environment and globals on the first RTS expression. Most
+	// templates use only simple variables and never need this work. OnceValues
+	// also ensures every expression receives the same validation result.
+	prepare := sync.OnceValues(func() (rtshost.PreparedScope, error) {
+		return prepareScope(in.Env, in.globals, secrets)
+	})
 	return func(expr string, pos vars.ExprPos) (string, error) {
-		rt, err := e.buildRT(rtIn{
-			doc:     in.Doc,
-			req:     in.Req,
-			env:     in.Env,
-			base:    in.Base,
-			vars:    vv,
-			globals: in.globals,
-			site:    "{{= " + expr + " }}",
+		prep, err := prepare()
+		if err != nil {
+			return "", err
+		}
+		rt, err := e.buildRTWithScope(rtIn{
+			doc:  in.Doc,
+			req:  in.Req,
+			base: in.Base,
+			vars: vv,
+			site: "{{= " + expr + " }}",
 			// res binds response. resp remains the previous response used by last.
-			res:     in.Response,
-			st:      in.Stream,
-			locals:  in.Locals,
-			secrets: secrets,
-		})
+			res:    in.Response,
+			st:     in.Stream,
+			locals: in.Locals,
+		}, prep)
 		if err != nil {
 			return "", err
 		}
@@ -360,7 +383,7 @@ func (e *Engine) evalRTSString(
 }
 
 func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
-	vv := hostVars(in.Vars)
+	vv := in.Vars
 	if vv == nil {
 		vv = e.collectVariables(in.Doc, in.Req, in.Env, runVars{})
 	}
@@ -595,47 +618,46 @@ func (e *Engine) runRTSPreRequest(
 	if req == nil {
 		return out, nil
 	}
-	uses := e.rtsUses(doc, req)
-	envs := env.Values()
-	label := env.Label()
-	groups := env.Selection().Groups()
 	base = e.rtsBase(doc, base)
 	gv := rtshost.RuntimeGlobals(sc.globals, rtshost.IncludeSecrets)
-	reqView, err := e.rtsReq(req)
+	// The mutator and each scope share gv so later blocks see global changes.
+	si := rtshost.ScopeInput{
+		EnvName: env.Label(),
+		Env:     env.Values(),
+		Groups:  env.Selection().Groups(),
+		Globals: gv,
+	}
+	rt, err := e.buildRT(rtIn{
+		doc:     doc,
+		req:     req,
+		env:     env,
+		base:    base,
+		vars:    vv,
+		globals: sc.globals,
+		site:    "@script pre-request",
+		locals:  locals,
+		secrets: rtshost.IncludeSecrets,
+	})
 	if err != nil {
 		return out, err
 	}
-	last, err := e.rtsLast()
-	if err != nil {
-		return out, err
-	}
-	mut := rtshost.NewMutator(&out, reqView, vv, gv, secrets)
+	// Use the mutator's request view so reads reflect earlier writes.
+	mut := rtshost.NewMutator(&out, rt.Request, vv, gv, secrets)
+	rt.Request = mut.Request()
+	rt.Mutator = mut
 
 	err = rtshost.RunPreRequest(ctx, e.re, rtshost.PreRequest{
 		Doc:     doc,
 		Scripts: req.Metadata.Scripts,
 		BaseDir: base,
 		Runtime: func() (rtshost.Runtime, error) {
-			scope, err := rtshost.NewScope(envs, label, groups, vv, gv)
+			// Rebind the scope so each block sees earlier variable and global writes.
+			scope, err := rtshost.NewScope(si, vv)
 			if err != nil {
 				return rtshost.Runtime{}, err
 			}
-			return rtshost.Runtime{
-				Scope:       scope,
-				Last:        last,
-				Trace:       e.rtsLastTrace(),
-				Request:     mut.Request(),
-				RequestMut:  mut,
-				VarsMut:     mut,
-				GlobalMut:   mut,
-				Uses:        uses,
-				BaseDir:     base,
-				ReadFile:    os.ReadFile,
-				AllowRandom: true,
-				Site:        "@script pre-request",
-				Extensions:  e.rtsExtensions(),
-				Locals:      locals,
-			}, nil
+			rt.Scope = scope
+			return rt, nil
 		},
 	})
 	if err != nil {
@@ -773,24 +795,15 @@ func (e *Engine) parseApplyHeaders(
 	// A patch names headers the same way a script does, so it is held to the
 	// same rule: the name has to be one the request can carry, and two forms of
 	// one header are refused because http.Header would fold them and the winner
-	// would depend on map order. Sort so the same patch always reports the same
-	// name.
+	// would depend on map order.
+	keys, err := httpheader.Keys(v.M)
+	if err != nil {
+		return nil, nil, applyErr("headers", err.Error())
+	}
 	set := make(map[string][]string)
 	del := make(map[string]struct{})
-	seen := make(map[string]string, len(v.M))
-	for _, name := range slices.Sorted(maps.Keys(v.M)) {
-		key, err := httpheader.Key(name)
-		if err != nil {
-			return nil, nil, applyErr("headers", fmt.Sprintf("%q is not a header name", name))
-		}
-		if prev, dup := seen[key]; dup {
-			return nil, nil, applyErr(
-				"headers",
-				fmt.Sprintf("%q and %q are the same header", prev, name),
-			)
-		}
-		seen[key] = name
-
+	for _, k := range keys {
+		name := k.Source
 		val := v.M[name]
 		switch val.K {
 		case rts.VNull:
@@ -826,22 +839,21 @@ func (e *Engine) parseApplyQuery(
 	if v.K != rts.VDict {
 		return nil, applyErr("query", "expects dict")
 	}
+	// Query keys are exact strings, so a patch names a parameter the way
+	// query.merge and request.setQueryParam do. Case, surrounding whitespace,
+	// and the empty key are all data the URL can carry.
 	out := make(map[string]*string)
 	for key, val := range v.M {
-		name := strings.TrimSpace(key)
-		if name == "" {
-			return nil, applyErr("query", "expects non-empty key")
-		}
 		if val.K == rts.VNull {
-			out[name] = nil
+			out[key] = nil
 			continue
 		}
-		s, err := e.applyScalar(ctx, pos, val, "query."+name)
+		s, err := e.applyScalar(ctx, pos, val, "query."+key)
 		if err != nil {
 			return nil, err
 		}
 		cp := s
-		out[name] = &cp
+		out[key] = &cp
 	}
 	if len(out) == 0 {
 		return nil, nil

@@ -16,13 +16,12 @@ var testPos = rts.Pos{Path: "test", Line: 1, Col: 1}
 
 func testRuntime(t *testing.T) Runtime {
 	t.Helper()
-	scope, err := NewScope(
-		map[string]string{"NAME": "service", "meta": "value"},
-		"dev",
-		map[string]string{"region": "eu"},
-		map[string]string{"token": "abc"},
-		map[string]string{"shared": "yes"},
-	)
+	scope, err := NewScope(ScopeInput{
+		EnvName: "dev",
+		Env:     map[string]string{"NAME": "service", "meta": "value"},
+		Groups:  map[string]string{"region": "eu"},
+		Globals: map[string]string{"shared": "yes"},
+	}, map[string]string{"token": "abc"})
 	if err != nil {
 		t.Fatalf("NewScope: %v", err)
 	}
@@ -162,7 +161,7 @@ func TestRuntimeExposesCardinalityBasedHeadersAndQuery(t *testing.T) {
 }
 
 func TestRuntimeRejectsAmbiguousNamesAtConstruction(t *testing.T) {
-	_, err := NewScope(nil, "", nil, map[string]string{"Token": "a", " token ": "b"}, nil)
+	_, err := NewScope(ScopeInput{}, map[string]string{"Token": "a", " token ": "b"})
 	if err == nil || !strings.Contains(err.Error(), "same name") {
 		t.Fatalf("NewScope error = %v, want a collision", err)
 	}
@@ -295,9 +294,7 @@ func TestCachedModuleRequestReadsAreEvaluationLocal(t *testing.T) {
 	errCh := make(chan error, len(methods)*8)
 	for range 8 {
 		for _, method := range methods {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				rt := base
 				req, err := NewRequest(method, "https://example.test", nil, nil)
 				if err != nil {
@@ -318,7 +315,7 @@ func TestCachedModuleRequestReadsAreEvaluationLocal(t *testing.T) {
 				if v.K != rts.VStr || v.S != method {
 					errCh <- &methodError{got: v.S, want: method}
 				}
-			}()
+			})
 		}
 	}
 	wg.Wait()
@@ -335,4 +332,123 @@ type methodError struct {
 
 func (e *methodError) Error() string {
 	return "request method = " + e.got + ", want " + e.want
+}
+
+func TestReadOnlyRuntimeRefusesEveryWrite(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+	if rt.Mutator != nil {
+		t.Fatal("testRuntime is not read-only")
+	}
+	tests := map[string]string{
+		`request.setURL("https://example.test")`: "request is read-only",
+		`request.setHeader("X-Test", "one")`:     "request is read-only",
+		`request.setBody("body")`:                "request is read-only",
+		`vars.set("token", "b")`:                 "vars is read-only",
+		`vars.global.set("shared", "no")`:        "vars.global is read-only",
+		`vars.global.delete("shared")`:           "vars.global is read-only",
+	}
+	for src, want := range tests {
+		_, err := eng.Eval(context.Background(), rt, src, testPos)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("Eval(%s) error = %v, want one holding %q", src, err, want)
+		}
+	}
+}
+
+func TestPreparedScopeValidatesLayersAndRebindsVars(t *testing.T) {
+	rejects := map[string]func() error{
+		"env": func() error {
+			_, err := PrepareScope(ScopeInput{Env: map[string]string{"A": "1", " a ": "2"}})
+			return err
+		},
+		"groups": func() error {
+			_, err := PrepareScope(ScopeInput{Groups: map[string]string{"R": "1", "r": "2"}})
+			return err
+		},
+		"globals": func() error {
+			_, err := PrepareScope(ScopeInput{Globals: map[string]string{"G": "1", "g": "2"}})
+			return err
+		},
+		"vars": func() error {
+			p, err := PrepareScope(ScopeInput{})
+			if err != nil {
+				return err
+			}
+			_, err = p.BindVars(map[string]string{"V": "1", " v ": "2"})
+			return err
+		},
+	}
+	for layer, reject := range rejects {
+		if err := reject(); err == nil || !strings.Contains(err.Error(), "same name") {
+			t.Errorf("%s error = %v, want a collision", layer, err)
+		}
+	}
+
+	// Prepared layers are validated before vars, so the global error wins when
+	// both inputs are invalid.
+	_, err := NewScope(
+		ScopeInput{Globals: map[string]string{"G": "1", "g": "2"}},
+		map[string]string{"V": "1", "v": "2"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "vars.global") {
+		t.Fatalf("NewScope error = %v, want the globals collision", err)
+	}
+
+	prep, err := PrepareScope(ScopeInput{
+		EnvName: "dev",
+		Env:     map[string]string{"NAME": "service"},
+		Groups:  map[string]string{"region": "eu"},
+		Globals: map[string]string{"shared": "yes"},
+	})
+	if err != nil {
+		t.Fatalf("PrepareScope: %v", err)
+	}
+	eng := NewEngine(stdlib.New)
+	for _, want := range []string{"first", "second"} {
+		scope, err := prep.BindVars(map[string]string{"token": want})
+		if err != nil {
+			t.Fatalf("BindVars: %v", err)
+		}
+		rt := Runtime{Scope: scope}
+		if v := evalHost(t, eng, rt, "vars.token"); v.S != want {
+			t.Errorf("vars.token = %+v, want %q", v, want)
+		}
+		if v := evalHost(t, eng, rt, `env.NAME + env.meta.name + vars.global.shared`); v.S != "servicedevyes" {
+			t.Errorf("prepared layers = %+v, want them intact", v)
+		}
+	}
+}
+
+// The shorthand is bound before the assertion runs, so it cannot apply the
+// string limit the way response.statusText does when read: an eager check
+// would fail assertions that never mention statusText. This pins that choice.
+func TestAssertionShorthandBindsStatusTextAsGiven(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	eng.Core().Lim = rts.Limits{MaxStr: 2, MaxList: 100, MaxDict: 100, MaxSteps: 1000, MaxCall: 10}
+	resp, err := NewResponse("long", 200, nil, nil, "")
+	if err != nil {
+		t.Fatalf("NewResponse: %v", err)
+	}
+	rt := Runtime{Response: resp, Last: resp}
+
+	// An assertion that never reads statusText is unaffected by its length.
+	for _, src := range []string{"statusCode == 200", "response.statusCode == 200"} {
+		v, err := eng.EvalAssertion(context.Background(), rt, src, testPos)
+		if err != nil || !v.B {
+			t.Errorf("EvalAssertion(%s) = %+v, err = %v, want true", src, v, err)
+		}
+	}
+
+	// The shorthand carries the host status as given.
+	v, err := eng.EvalAssertion(context.Background(), rt, "statusText", testPos)
+	if err != nil || v.S != "long" {
+		t.Errorf("EvalAssertion(statusText) = %+v, err = %v, want \"long\"", v, err)
+	}
+
+	// Reading it through the response applies the limit.
+	if _, err := eng.EvalAssertion(context.Background(), rt, "response.statusText", testPos); err == nil ||
+		!strings.Contains(err.Error(), "string too long") {
+		t.Errorf("EvalAssertion(response.statusText) error = %v, want the string limit", err)
+	}
 }

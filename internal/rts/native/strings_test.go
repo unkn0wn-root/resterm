@@ -63,7 +63,7 @@ func TestStringValuesRejectsOtherShapes(t *testing.T) {
 	}
 }
 
-func TestStringValuesValueUsesCardinality(t *testing.T) {
+func TestEncodeStringsUsesCardinality(t *testing.T) {
 	ctx := rts.NewCtx(context.Background(), rts.Limits{
 		MaxStr:  8,
 		MaxList: 8,
@@ -82,12 +82,12 @@ func TestStringValuesValueUsesCardinality(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := StringValuesValue(ctx, pos, tt.in)
+			got, err := encodeStrings(ctx, pos, tt.in)
 			if err != nil {
-				t.Fatalf("StringValuesValue: %v", err)
+				t.Fatalf("encodeStrings: %v", err)
 			}
 			if got.K != tt.kind || len(got.L) != tt.n {
-				t.Fatalf("StringValuesValue() = %+v, want kind %v and len %d", got, tt.kind, tt.n)
+				t.Fatalf("encodeStrings() = %+v, want kind %v and len %d", got, tt.kind, tt.n)
 			}
 		})
 	}

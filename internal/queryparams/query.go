@@ -28,7 +28,13 @@ func FromURL(raw string) (Values, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Clone(u.Query()), nil
+	// Not u.Query(): that discards pairs it cannot decode, so a malformed
+	// escape would return a shorter query instead of saying what is wrong.
+	vals, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return nil, err
+	}
+	return Clone(vals), nil
 }
 
 // Clone returns an independent copy of a query multimap.

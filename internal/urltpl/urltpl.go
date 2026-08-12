@@ -107,13 +107,23 @@ func MergeQuery(raw string, patch map[string][]string) (string, error) {
 	return state.restore(updated), nil
 }
 
+// queryOf reads the query a rewrite is about to re-encode. url.URL.Query drops
+// pairs it cannot decode, which would delete them from the URL the caller gets
+// back, so a malformed escape stops the rewrite instead.
+func queryOf(u *url.URL) (url.Values, error) {
+	return url.ParseQuery(u.RawQuery)
+}
+
 func patchQueryURL(raw string, patch map[string]*string) (string, error) {
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return "", err
 	}
 
-	vals := parsed.Query()
+	vals, err := queryOf(parsed)
+	if err != nil {
+		return "", err
+	}
 	for key, val := range patch {
 		if val == nil {
 			vals.Del(key)
@@ -131,7 +141,10 @@ func mergeQueryURL(raw string, patch map[string][]string) (string, error) {
 		return "", err
 	}
 
-	vals := parsed.Query()
+	vals, err := queryOf(parsed)
+	if err != nil {
+		return "", err
+	}
 	for key, items := range patch {
 		if len(items) == 0 {
 			vals.Del(key)

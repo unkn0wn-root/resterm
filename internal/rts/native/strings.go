@@ -31,9 +31,9 @@ func StringValues(call Call, v rts.Value) ([]string, error) {
 	return nil, call.Errorf("%s expects string or list<string>", call.Sig)
 }
 
-// StringValuesValue encodes a string collection using the cardinality-based
-// RTS representation.
-func StringValuesValue(ctx *rts.Ctx, pos rts.Pos, vals []string) (rts.Value, error) {
+// encodeStrings encodes strings using the cardinality representation:
+// one value is a scalar; zero or multiple values are a list.
+func encodeStrings(ctx *rts.Ctx, pos rts.Pos, vals []string) (rts.Value, error) {
 	if len(vals) == 1 {
 		return StringValue(ctx, pos, vals[0])
 	}
@@ -63,12 +63,14 @@ func StringValuesDict(
 		return rts.Null(), err
 	}
 
+	// Sorted for the errors, not the result: a map holds no order, so without
+	// this the reported name would depend on which key iteration reached first.
 	out := make(map[string]rts.Value, len(vals))
 	for _, name := range slices.Sorted(maps.Keys(vals)) {
 		if err := rts.CheckStr(ctx, pos, name); err != nil {
 			return rts.Null(), err
 		}
-		v, err := StringValuesValue(ctx, pos, vals[name])
+		v, err := encodeStrings(ctx, pos, vals[name])
 		if err != nil {
 			return rts.Null(), err
 		}

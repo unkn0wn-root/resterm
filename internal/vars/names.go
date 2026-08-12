@@ -137,6 +137,25 @@ func (m NameMap[V]) Clone() NameMap[V] {
 	return NameMap[V]{entries: maps.Clone(m.entries)}
 }
 
+// NameView provides read-only access to a NameMap. Unlike copying NameMap,
+// copying a NameView does not expose mutation of the shared backing map.
+type NameView[V any] struct{ m NameMap[V] }
+
+// View returns a read-only view of m.
+func (m NameMap[V]) View() NameView[V] { return NameView[V]{m: m} }
+
+func (v NameView[V]) Get(name string) (V, bool) { return v.m.Get(name) }
+
+func (v NameView[V]) Has(name string) bool { return v.m.Has(name) }
+
+func (v NameView[V]) Len() int { return v.m.Len() }
+
+// All returns an iterator over entries in unspecified order.
+func (v NameView[V]) All() iter.Seq2[string, V] { return v.m.All() }
+
+// Clone returns a writable copy of the viewed map.
+func (v NameView[V]) Clone() NameMap[V] { return v.m.Clone() }
+
 // Map returns a writable plain map using each entry's preserved name.
 func (m NameMap[V]) Map() map[string]V {
 	out := make(map[string]V, len(m.entries))
