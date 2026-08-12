@@ -1,12 +1,12 @@
 export fn mode(env) {
-  if env.has("name") and env.get("name") == "prod" {
+  if env.meta.name == "prod" {
     return "strict"
   }
   return "debug"
 }
 
 export fn envLabel(env) {
-  return env.has("name") ? env.get("name") : "default"
+  return env.meta.name ?? "default"
 }
 
 export fn authHeader(token) {

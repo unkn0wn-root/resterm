@@ -17,7 +17,7 @@
 # @assert contains(response.text(), "\"url\"")
 # @assert headers.get(headers.normalize({"X-Test":"ok"}), "x-test") == "ok"
 # @assert len(headers.merge({"a":"1"}, {"a": null})) == 0
-# @assert query.parse(query.merge("https://example.com?p=1&q=2", {q: null})).p == "1"
+# @assert query.fromURL(query.merge("https://example.com?p=1&q=2", {q: null})).p == "1"
 # Assertions can span comment lines while a group is open.
 # @assert (
 #   response.statusCode == 200

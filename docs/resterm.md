@@ -1236,7 +1236,7 @@ Captures run in declaration order. A capture can read values produced earlier in
 Expressions can reference:
 
 - `response.statusCode`, `response.statusText`, `response.text()`
-- `response.headers["Header-Name"]` or `response.header("Header-Name")`
+- `response.headers["header-name"]` or `response.header("Header-Name")` for a single-valued header
 - `response.json.path` shorthand (equivalent to `response.json().path`)
 - `stream.kind()`, `stream.summary().sentCount`, `stream.events()[0].text` for streaming transcripts (available when the request used `@sse` or `@websocket`)
 - `vars.*`, `env.*`, `last.*`, imported `@use` modules, and other RestermScript helpers
@@ -1248,7 +1248,7 @@ Example:
 # @name AnalyticsSeedSession
 # @capture global-secret analytics.sessionToken = response.json.sessionToken
 # @capture file analytics.lastJobId = response.json.jobId
-# @capture request analytics.trace = response.headers["x-amzn-trace-id"]
+# @capture request analytics.trace = response.header("x-amzn-trace-id")
 POST https://httpbin.org/anything/analytics/sessions
 ```
 
