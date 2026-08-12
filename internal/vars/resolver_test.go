@@ -180,27 +180,52 @@ func TestDynamicHelpersCaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestIsDynamic(t *testing.T) {
+// A name that no helper claims stays an ordinary variable, so it is reported
+// as undefined instead of as a broken helper call.
+func TestUnknownDollarNameIsUndefined(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		want bool
-	}{
-		{name: "$uuid", want: true},
-		{name: "$TIMESTAMPISO8601 - 1h", want: true},
-		{name: "$guid + 0s", want: true},
-		{name: "$uuid + 1s", want: false},
-		{name: "$unknown", want: false},
-		{name: "$timestamp + missing", want: false},
+	resolver := NewResolver()
+	for _, input := range []string{"{{$unknown}}", "{{$my-custom-var + 1h}}", "{{$timestamp + missing}}"} {
+		out, err := resolver.ExpandTemplates(input)
+		if !errors.Is(err, ErrUndefinedVariable) {
+			t.Fatalf("%s: expected undefined variable, got %v", input, err)
+		}
+		if out != input {
+			t.Fatalf("%s: expected placeholder to stay literal, got %q", input, out)
+		}
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			if got := IsDynamic(test.name); got != test.want {
-				t.Fatalf("IsDynamic(%q) = %t, want %t", test.name, got, test.want)
-			}
-		})
+}
+
+// A recognised helper used the wrong way is a file error, not a missing
+// variable, so the message names the helper.
+func TestMisusedHelperReportsHelperError(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	_, err := resolver.ExpandTemplates("{{$uuid + 1s}}")
+	if err == nil || errors.Is(err, ErrUndefinedVariable) {
+		t.Fatalf("expected a helper error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "$uuid") {
+		t.Fatalf("expected error to name the helper, got %v", err)
+	}
+}
+
+func TestDynamicHelperArguments(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	out, err := resolver.ExpandTemplates(`{{$randomChoice("only")}}-{{$randomString(8)}}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	choice, random, _ := strings.Cut(out, "-")
+	if choice != "only" {
+		t.Fatalf("expected the single option, got %q", choice)
+	}
+	if len(random) != 8 {
+		t.Fatalf("expected 8 random characters, got %q", random)
 	}
 }
 
@@ -243,36 +268,6 @@ func TestDynamicTimestampISOOffset(t *testing.T) {
 	max := end.Add(-1 * time.Hour).Unix()
 	if parsed.Unix() < min || parsed.Unix() > max {
 		t.Fatalf("expected %v to be between %d and %d", parsed, min, max)
-	}
-}
-
-func TestSplitDynamicOffsetNoSpace(t *testing.T) {
-	t.Parallel()
-
-	base, offset, ok := splitDynamicOffset("$timestampISO8601-1h")
-	if !ok {
-		t.Fatalf("expected offset parse to succeed")
-	}
-	if base != "$timestampISO8601" {
-		t.Fatalf("expected base to be $timestampISO8601, got %q", base)
-	}
-	if offset != -1*time.Hour {
-		t.Fatalf("expected -1h offset, got %v", offset)
-	}
-}
-
-func TestSplitDynamicOffsetHyphenatedBase(t *testing.T) {
-	t.Parallel()
-
-	base, offset, ok := splitDynamicOffset("$my-custom-var + 1h")
-	if !ok {
-		t.Fatalf("expected offset parse to succeed")
-	}
-	if base != "$my-custom-var" {
-		t.Fatalf("expected base to be $my-custom-var, got %q", base)
-	}
-	if offset != time.Hour {
-		t.Fatalf("expected 1h offset, got %v", offset)
 	}
 }
 

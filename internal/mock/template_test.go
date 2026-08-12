@@ -371,6 +371,10 @@ func TestCompileRejectsInvalidResponseTemplates(t *testing.T) {
 		{name: "invalid body path", body: "{{body.items[invalid-index]}}", want: "invalid JSON body"},
 		{name: "invalid encoded body path", body: "{{json.body.items[invalid-index]}}", want: "invalid JSON body"},
 		{name: "unsupported dynamic", body: "{{$uuid + 1s}}", want: "unsupported dynamic"},
+		{name: "dynamic helper arity", body: "{{$randomChoice()}}", want: "takes at least 1 argument"},
+		{name: "dynamic helper length", body: "{{$randomString(0)}}", want: "length must be between"},
+		{name: "dynamic helper argument type", body: "{{$randomInt(soon)}}", want: "is not a whole number"},
+		{name: "dynamic helper range", body: "{{$randomInt(9, 4)}}", want: "is above maximum"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

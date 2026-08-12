@@ -2,6 +2,7 @@ package mock
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/jsonpath"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+	"github.com/unkn0wn-root/resterm/internal/vars/dynamic"
 )
 
 type renderedResponse struct {
@@ -87,10 +89,15 @@ func validateTemplateName(name string, pathParams map[string]string) error {
 		return fmt.Errorf("response templates do not support expressions")
 	}
 	if strings.HasPrefix(name, "$") {
-		if vars.IsDynamic(name) {
+		err := dynamic.Validate(name)
+		switch {
+		case err == nil:
 			return nil
+		case errors.Is(err, dynamic.ErrUnknown):
+			return fmt.Errorf("unsupported dynamic response template %q", name)
+		default:
+			return fmt.Errorf("unsupported dynamic response template %q: %w", name, err)
 		}
-		return fmt.Errorf("unsupported dynamic response template %q", name)
 	}
 
 	ref, ok := parseRequestTemplate(name)
