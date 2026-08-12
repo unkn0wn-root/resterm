@@ -228,8 +228,12 @@ func Value(_ Call, v rts.Value) (rts.Value, error) { return v, nil }
 
 // String decodes only an RTS string. It never invokes implicit conversion.
 func String(call Call, v rts.Value) (string, error) {
+	return decodeString(call, v, "string")
+}
+
+func decodeString(call Call, v rts.Value, want string) (string, error) {
 	if v.K != rts.VStr {
-		return "", call.Errorf("%s expects string", call.Sig)
+		return "", call.Errorf("%s expects %s", call.Sig, want)
 	}
 	if err := rts.CheckStr(call.Ctx, call.Pos, v.S); err != nil {
 		return "", err
@@ -276,6 +280,29 @@ func List(call Call, v rts.Value) ([]rts.Value, error) {
 	return v.L, nil
 }
 
+// ListOf builds a decoder for an RTS list whose elements are decoded by d. It
+// validates the outer list before invoking d and returns a new slice.
+func ListOf[T any](d Decoder[T]) Decoder[[]T] {
+	return func(call Call, v rts.Value) ([]T, error) {
+		return decodeList(call, v, d)
+	}
+}
+
+func decodeList[T any](call Call, v rts.Value, d Decoder[T]) ([]T, error) {
+	vs, err := List(call, v)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]T, len(vs))
+	for i, v := range vs {
+		out[i], err = d(call, v)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // Dict decodes only an RTS dictionary. It does not treat null as an empty
 // dictionary.
 func Dict(call Call, v rts.Value) (map[string]rts.Value, error) {
@@ -290,19 +317,9 @@ func Dict(call Call, v rts.Value) (map[string]rts.Value, error) {
 
 // StringList decodes a list whose elements are all strings and returns a copy.
 func StringList(call Call, v rts.Value) ([]string, error) {
-	vals, err := List(call, v)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, len(vals))
-	for i, val := range vals {
-		if val.K != rts.VStr {
-			return nil, call.Errorf("%s expects list<string>", call.Sig)
-		}
-		if err := rts.CheckStr(call.Ctx, call.Pos, val.S); err != nil {
-			return nil, err
-		}
-		out[i] = val.S
-	}
-	return out, nil
+	return decodeList(call, v, stringListItem)
+}
+
+func stringListItem(call Call, v rts.Value) (string, error) {
+	return decodeString(call, v, "list<string>")
 }
