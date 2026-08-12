@@ -54,7 +54,7 @@ func Parse(raw string) (Spec, error) {
 	if len(args) != len(f.params) {
 		return Spec{}, fmt.Errorf(
 			"%s takes %d arguments, got %d: %s",
-			f.name, len(f.params), len(args), f.usage,
+			f.name, len(f.params), len(args), f.usage(),
 		)
 	}
 
@@ -104,7 +104,7 @@ func (s Spec) String() string {
 		}
 		return s.base.String()
 	}
-	return f.name + "(" + s.base.String() + "," + s.argText() + ")"
+	return call(f.name, s.base.String()+","+s.argText())
 }
 
 func (s Spec) argText() string {
@@ -144,7 +144,7 @@ func (s *Spec) UnmarshalText(text []byte) error {
 type Descriptor struct {
 	name    string
 	summary string
-	usage   string
+	args    string
 }
 
 func (d Descriptor) Name() string {
@@ -155,8 +155,15 @@ func (d Descriptor) Summary() string {
 	return d.summary
 }
 
+// Usage is the example call, e.g. random(100ms,500ms).
 func (d Descriptor) Usage() string {
-	return d.usage
+	return call(d.name, d.args)
+}
+
+// Args is the example argument list of Usage without the parentheses, so a
+// caller offering the usage as a template knows what part of it to fill in.
+func (d Descriptor) Args() string {
+	return d.args
 }
 
 // Distributions describes the call forms, in documentation order.
@@ -164,7 +171,7 @@ func Distributions() []Descriptor {
 	out := make([]Descriptor, 0, len(forms)-1)
 	for _, f := range forms {
 		if f.name != "" {
-			out = append(out, Descriptor{name: f.name, summary: f.summary, usage: f.usage})
+			out = append(out, Descriptor{name: f.name, summary: f.summary, args: f.args})
 		}
 	}
 	return out
@@ -196,8 +203,8 @@ var formsHint = describeForms()
 func describeForms() string {
 	usages := make([]string, 0, len(forms))
 	for _, f := range forms {
-		if f.usage != "" {
-			usages = append(usages, f.usage)
+		if usage := f.usage(); usage != "" {
+			usages = append(usages, usage)
 		}
 	}
 	if last := len(usages) - 1; last > 0 {

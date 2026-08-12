@@ -40,9 +40,7 @@ func (s *selectionState) Update(pos cursorPosition) {
 }
 
 func (s *selectionState) Clear() {
-	s.active = false
-	s.anchor = cursorPosition{}
-	s.caret = cursorPosition{}
+	*s = selectionState{}
 }
 
 func (s selectionState) IsActive() bool {
@@ -96,6 +94,7 @@ type requestEditor struct {
 	registerText      string
 	completion        completionState
 	completionEnabled bool
+	placeholderExit   int
 	engine            intellisense.Engine
 	scope             intellisense.Scope
 }
@@ -103,11 +102,12 @@ type requestEditor struct {
 const editorUndoLimit = 64
 
 type editorSnapshot struct {
-	value     string
-	cursor    cursorPosition
-	selection selectionState
-	mode      selectionMode
-	viewStart int
+	value           string
+	cursor          cursorPosition
+	selection       selectionState
+	mode            selectionMode
+	placeholderExit int
+	viewStart       int
 }
 
 type editorSearch struct {
@@ -260,11 +260,12 @@ func (e *requestEditor) SetViewStart(offset int) {
 
 func (e requestEditor) captureSnapshot() editorSnapshot {
 	return editorSnapshot{
-		value:     e.Value(),
-		cursor:    e.caretPosition(),
-		selection: e.selection,
-		mode:      e.mode,
-		viewStart: e.ViewStart(),
+		value:           e.Value(),
+		cursor:          e.caretPosition(),
+		selection:       e.selection,
+		mode:            e.mode,
+		placeholderExit: e.placeholderExit,
+		viewStart:       e.ViewStart(),
 	}
 }
 
@@ -307,6 +308,7 @@ func (e *requestEditor) restoreSnapshot(snapshot editorSnapshot) {
 	e.SetValue(snapshot.value)
 	e.selection = snapshot.selection
 	e.mode = snapshot.mode
+	e.placeholderExit = snapshot.placeholderExit
 	e.pendingMotion = ""
 	e.Model.SetViewStart(snapshot.viewStart)
 	e.moveCursorTo(snapshot.cursor.Line, snapshot.cursor.Column)
@@ -319,6 +321,7 @@ type selectionMode int
 const (
 	selectionNone selectionMode = iota
 	selectionManual
+	selectionPlaceholder
 	selectionVisual
 	selectionVisualLine
 )
@@ -355,6 +358,18 @@ func (e requestEditor) hasSelection() bool {
 	return e.mode != selectionNone
 }
 
+// A placeholder is the example value a completion left selected, so the next
+// keystroke types over it.
+func (e requestEditor) hasPlaceholder() bool {
+	return e.mode == selectionPlaceholder && e.selection.IsActive()
+}
+
+// handlesTab reports whether Tab accepts a suggestion or keeps the example one
+// inserted, rather than indenting.
+func (e requestEditor) handlesTab() bool {
+	return e.hasActiveCompletion() || e.hasPlaceholder()
+}
+
 func (e requestEditor) isVisualMode() bool {
 	return e.mode == selectionVisual || e.mode == selectionVisualLine
 }
@@ -376,6 +391,45 @@ func (e *requestEditor) startSelection(pos cursorPosition, mode selectionMode) {
 	e.selection.Activate(pos)
 	e.mode = mode
 	e.applySelectionHighlight()
+}
+
+// startPlaceholder selects [start, end) and remembers the exit offset, which is
+// where Tab parks the caret when the example is kept. That is past the whole
+// insert, so any delimiter closing the example stays intact.
+func (e *requestEditor) startPlaceholder(start, end, exit int) {
+	e.selection.Activate(e.positionAt(end))
+	e.selection.Update(e.positionAt(start))
+	e.mode = selectionPlaceholder
+	e.placeholderExit = exit
+	e.applySelectionHighlight()
+}
+
+func (e *requestEditor) endPlaceholder(offset int) {
+	line, col := e.positionForOffset(e.clampOffset(offset))
+	e.clearSelection()
+	e.moveCursorTo(line, col)
+	e.undoCoalescing = false
+}
+
+// These keys keep the example instead of typing over it. Tab moves past the
+// whole insert, the arrows collapse onto either end of the selection.
+func (e *requestEditor) handlePlaceholderKey(msg tea.KeyMsg) bool {
+	if !e.hasPlaceholder() {
+		return false
+	}
+
+	start, end := e.selection.Range()
+	switch msg.String() {
+	case "tab":
+		e.endPlaceholder(e.placeholderExit)
+	case "right":
+		e.endPlaceholder(end.Offset)
+	case "left":
+		e.endPlaceholder(start.Offset)
+	default:
+		return false
+	}
+	return true
 }
 
 func (e *requestEditor) clearSelection() {
@@ -502,8 +556,8 @@ func (e *requestEditor) handleCompletionKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
 		e.completion.move(-1)
 		return true, nil
 	case "right":
-		e.completion.setPreview(true)
-		return true, nil
+		cmd := e.applyCompletion()
+		return true, cmd
 	case "left":
 		if e.completion.preview {
 			e.completion.setPreview(false)
@@ -585,10 +639,6 @@ func (e *requestEditor) applyCompletion() tea.Cmd {
 		return nil
 	}
 	selected := e.completion.filtered[e.completion.selection]
-	insert := selected.Label
-	if selected.Insert != "" {
-		insert = selected.Insert
-	}
 	start := e.completion.anchorOffset
 	caret := e.caretPosition()
 	if start < 0 || caret.Offset < start {
@@ -596,60 +646,34 @@ func (e *requestEditor) applyCompletion() tea.Cmd {
 		return nil
 	}
 	runes := []rune(e.Value())
-	end := min(caret.Offset, len(runes))
-	before := runes[:start]
-	after := runes[end:]
-	bodyRunes := []rune(insert)
-	replacementRunes := append([]rune{}, bodyRunes...)
+	after := runes[min(caret.Offset, len(runes)):]
 
 	addSpace := completionAddsSpace(e.completion.ctx.Kind) &&
 		(len(after) == 0 || !unicode.IsSpace(after[0]))
 	e.pushUndoSnapshot()
 
-	updated := append([]rune{}, before...)
-	insertStart := len(updated)
-	updated = append(updated, replacementRunes...)
-	insertEnd := len(updated)
-	newOffset := insertEnd
-	placeholderStart := -1
-	placeholderEnd := -1
-	if back := selected.CursorBack; back > 0 {
-		bodyLen := len(bodyRunes)
-		if bodyLen > 0 {
-			if back > bodyLen {
-				back = bodyLen
-			}
-			cursorMin := insertStart
-			target := max(insertEnd-back, cursorMin)
-			newOffset = target
-			placeholderStart = target
-			placeholderEnd = insertEnd
-		}
-	}
+	updated := append([]rune{}, runes[:start]...)
+	updated = append(updated, []rune(selected.InsertText())...)
 	if addSpace {
+		// The separator goes in now, so the caret can exit past it and be ready
+		// for the next token.
 		updated = append(updated, ' ')
-		if placeholderStart < 0 {
-			// Leave the caret past the separator, ready for the next token.
-			newOffset = insertEnd + 1
-		}
 	}
+	exit := len(updated)
 	updated = append(updated, after...)
-	newValue := string(updated)
+
 	prevView := e.ViewStart()
-	e.SetValue(newValue)
+	e.SetValue(string(updated))
 	e.SetViewStart(prevView)
-	if placeholderStart >= 0 && placeholderEnd > placeholderStart {
-		startLine, startCol := e.positionForOffset(placeholderStart)
-		endLine, endCol := e.positionForOffset(placeholderEnd)
-		startPos := cursorPosition{Line: startLine, Column: startCol, Offset: placeholderStart}
-		endPos := cursorPosition{Line: endLine, Column: endCol, Offset: placeholderEnd}
-		e.startSelection(endPos, selectionManual)
-		e.selection.Update(startPos)
-		newOffset = placeholderStart
+
+	caretOffset := exit
+	if from, to, ok := selected.PlaceholderRange(); ok {
+		e.startPlaceholder(start+from, start+to, exit)
+		caretOffset = start + from
 	} else {
 		e.clearSelection()
 	}
-	line, col := e.positionForOffset(newOffset)
+	line, col := e.positionForOffset(caretOffset)
 	e.moveCursorTo(line, col)
 	e.applySelectionHighlight()
 	e.completion.deactivate()
@@ -685,6 +709,10 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	transformed := keyMsg
 	handled := false
 	var cmds []tea.Cmd
+
+	if e.handlePlaceholderKey(keyMsg) {
+		return e, nil
+	}
 
 	if consumed, hintCmd := e.handleCompletionKeys(keyMsg); consumed {
 		if hintCmd != nil {
@@ -843,6 +871,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		if stripped, ok := stripSelectionMovement(keyMsg); ok {
 			if !e.hasSelection() {
 				e.startSelection(before, selectionManual)
+			} else if e.mode == selectionPlaceholder {
+				// Reaching past the example makes it the user's own selection.
+				e.mode = selectionManual
 			}
 			transformed = stripped
 		} else if isMovementKey(keyMsg) {
@@ -850,7 +881,10 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 				e.clearSelection()
 			}
 		} else if insertsText(keyMsg) && e.hasSelection() {
-			if removedText, removed := (&e).removeSelection(); removed {
+			// An example the editor inserted is not something the user selected,
+			// so typing over it leaves the clipboard alone.
+			yank := e.mode != selectionPlaceholder
+			if removedText, removed := (&e).removeSelection(); removed && yank {
 				if removedText != "" {
 					status := (&e).writeClipboardWithFallback(removedText, "")
 
@@ -2069,6 +2103,11 @@ func (e requestEditor) caretPosition() cursorPosition {
 	column := info.StartColumn + info.ColumnOffset
 	offset := e.offsetForPosition(line, column)
 	return cursorPosition{Line: line, Column: column, Offset: offset}
+}
+
+func (e requestEditor) positionAt(offset int) cursorPosition {
+	line, col := e.positionForOffset(offset)
+	return cursorPosition{Line: line, Column: col, Offset: offset}
 }
 
 func (e requestEditor) selectedText() string {

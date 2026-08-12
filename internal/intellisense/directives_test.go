@@ -127,9 +127,19 @@ func TestMockLatencyArgsCoverEveryDistribution(t *testing.T) {
 			if it.Insert != "latency="+d.Usage() {
 				t.Fatalf("%s inserts %q, want the %q example", label, it.Insert, d.Usage())
 			}
-			args, _ := strings.CutPrefix(d.Usage(), d.Name()+"(")
-			if it.CursorBack != len(args) {
-				t.Fatalf("%s selects %d runes, want the %q arguments", label, it.CursorBack, args)
+			// The arguments are typed over, the parentheses around them are not.
+			if it.Placeholder != d.Args() {
+				t.Fatalf("%s selects %q, want the %q arguments", label, it.Placeholder, d.Args())
+			}
+			start, end, ok := it.PlaceholderRange()
+			if !ok {
+				t.Fatalf("%s has no placeholder range in %q", label, it.Insert)
+			}
+			if got := []rune(it.Insert)[end:]; string(got) != ")" {
+				t.Fatalf("%s selects up to %q, want the closing paren left out", label, string(got))
+			}
+			if got := []rune(it.Insert)[start:end]; string(got) != d.Args() {
+				t.Fatalf("%s selects %q, want %q", label, string(got), d.Args())
 			}
 		}
 		if !found {
@@ -148,8 +158,8 @@ func TestTraceArgsProvidePlaceholders(t *testing.T) {
 	if dns.Insert != "dns<=50ms" {
 		t.Fatalf("expected dns<= insert with placeholder, got %q", dns.Insert)
 	}
-	if dns.CursorBack != len("50ms") {
-		t.Fatalf("expected dns<= cursor back %d, got %d", len("50ms"), dns.CursorBack)
+	if dns.Placeholder != "50ms" {
+		t.Fatalf("expected dns<= to select the budget, got %q", dns.Placeholder)
 	}
 	if !contains(argOptions("trace", "d"), "dns<=") {
 		t.Fatal("expected dns<= in filtered trace args")
