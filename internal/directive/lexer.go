@@ -6,7 +6,8 @@ import (
 	"unicode/utf8"
 )
 
-// Fields keeps quoted values and bracketed JSON after an equals sign together.
+// Fields keeps quoted values together, as well as the bracketed JSON and the
+// call arguments that follow an equals sign.
 // Quotes used to group a value are not included in the returned field.
 func Fields(input string) []string {
 	return (&lexer{src: input}).collect()
@@ -34,7 +35,18 @@ type lexer struct {
 	closers  []rune
 	inString bool
 	strEsc   bool
+	state    nameState
 }
+
+// nameState tracks how much of the token still reads as a name, which is what
+// tells an argument list from a value that merely holds a parenthesis.
+type nameState uint8
+
+const (
+	inKey  nameState = iota // before the equals sign
+	inName                  // every rune of the value so far is a name rune
+	inText                  // the value holds something a name cannot
+)
 
 // A token carries the span it came from because meaning depends on the source.
 // "a=b" and a=b decode to the same text and only one of them is an option.
@@ -63,7 +75,7 @@ func (l *lexer) next() (token, bool) {
 		}
 		switch {
 		case len(l.closers) > 0:
-			l.json(r)
+			l.group(r)
 		case l.escaped:
 			l.escaped = false
 			// Anything else inside quotes keeps the backslash it was typed with,
@@ -80,7 +92,7 @@ func (l *lexer) next() (token, bool) {
 				break
 			}
 			l.write(r)
-		case (r == '[' || r == '{') && l.last == '=':
+		case l.opens(r):
 			l.write(r)
 			l.push(r)
 		case (r == '"' || r == '\'') && l.startsValue():
@@ -91,6 +103,7 @@ func (l *lexer) next() (token, bool) {
 				return token{val: l.tok.String(), start: l.start, end: base + i}, true
 			}
 		default:
+			l.name(r)
 			l.write(r)
 		}
 	}
@@ -114,6 +127,7 @@ func (l *lexer) reset() {
 	l.closers = l.closers[:0]
 	l.inString = false
 	l.strEsc = false
+	l.state = inKey
 }
 
 func (l *lexer) write(r rune) {
@@ -121,14 +135,37 @@ func (l *lexer) write(r rune) {
 	l.last = r
 }
 
+// A value opens a group when a bracket follows the equals sign, or when an
+// argument list follows a name: headers={"a":"b"} and latency=random(1s,2s).
+func (l *lexer) opens(r rune) bool {
+	switch r {
+	case '[', '{':
+		return l.last == '='
+	case '(':
+		return l.state == inName && l.last != '='
+	}
+	return false
+}
+
+func (l *lexer) name(r rune) {
+	switch {
+	case l.state == inKey:
+		if r == '=' && l.tok.Len() > 0 {
+			l.state = inName
+		}
+	case l.state == inName && !IsKeyRune(r):
+		l.state = inText
+	}
+}
+
 // A quote groups a value when it opens the token or follows the equals sign.
 func (l *lexer) startsValue() bool {
 	return l.tok.Len() == 0 || l.last == '='
 }
 
-// Brackets inside JSON strings are ordinary characters. Outside strings we
-// track nesting, but leave mismatched brackets for the value parser to reject.
-func (l *lexer) json(r rune) {
+// Delimiters inside JSON strings are ordinary characters. Outside strings we
+// track nesting, but leave mismatched ones for the value parser to reject.
+func (l *lexer) group(r rune) {
 	l.write(r)
 	switch {
 	case l.inString:
@@ -142,11 +179,15 @@ func (l *lexer) json(r rune) {
 		}
 	case r == '"':
 		l.inString = true
-	case r == '[' || r == '{':
+	case isOpener(r):
 		l.push(r)
 	default:
 		l.pop(r)
 	}
+}
+
+func isOpener(r rune) bool {
+	return r == '[' || r == '{' || r == '('
 }
 
 func (l *lexer) push(r rune) {
@@ -155,6 +196,8 @@ func (l *lexer) push(r rune) {
 		l.closers = append(l.closers, ']')
 	case '{':
 		l.closers = append(l.closers, '}')
+	case '(':
+		l.closers = append(l.closers, ')')
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -18,7 +19,7 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 			Method:  http.MethodPost,
 			Path:    "/payments",
 			Default: true,
-			Latency: 250 * time.Millisecond,
+			Latency: delay.Fixed(250 * time.Millisecond),
 			Match: restfile.MockMatch{
 				Query: map[string]restfile.MockQueryRule{
 					"mode": {Op: restfile.MockOpExact, Values: []string{"test"}},
@@ -71,6 +72,35 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 	}
 	if got := parsed.Mocks[1].Responses[0].Body.FilePath; got != "./fixtures/data.json" {
 		t.Fatalf("fixture path = %q", got)
+	}
+}
+
+func TestRenderMockLatencyRoundTrip(t *testing.T) {
+	for _, latency := range []string{
+		"150ms",
+		"random(100ms,500ms)",
+		"normal(250ms,50ms)",
+		"jitter(200ms,20%)",
+	} {
+		t.Run(latency, func(t *testing.T) {
+			source := "# @mock method=GET path=/x latency=" + latency + "\nHTTP/1.1 200 OK\n\nok\n"
+			parsed := parser.Parse("mocks.http", []byte(source))
+			if len(parsed.Errors) != 0 {
+				t.Fatalf("parse errors: %+v", parsed.Errors)
+			}
+
+			rendered := mustRender(t, parsed)
+			if !strings.Contains(rendered, "latency="+latency) {
+				t.Fatalf("rendered latency is not %q:\n%s", latency, rendered)
+			}
+			again := parser.Parse("generated.http", []byte(rendered))
+			if len(again.Errors) != 0 {
+				t.Fatalf("round-trip errors: %+v\n%s", again.Errors, rendered)
+			}
+			if got := again.Mocks[0].Latency; got != parsed.Mocks[0].Latency {
+				t.Fatalf("round-trip latency = %q, want %q", got, parsed.Mocks[0].Latency)
+			}
+		})
 	}
 }
 

@@ -112,6 +112,7 @@ The same files that hold your requests can serve HTTP mocks.
 
 - Match incoming requests by query, headers or JSON body, then pick a named or default response.
 - Model polling and retry flows with response sequences, including independent cursors per resource or caller.
+- Delay responses by a fixed amount, or give every request a different delay with `random`, `normal`, or `jitter`.
 - Build responses from path, query, header and body values, with generators for dynamic data.
 - Verify call counts with `@expect` or inspect received traffic from RestermScript.
 - Hot reload source files and fixtures, with optional TLS.

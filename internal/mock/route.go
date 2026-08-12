@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -30,7 +31,7 @@ type variant struct {
 	name            string
 	sequence        string
 	def             bool
-	latency         time.Duration
+	latency         delay.Spec
 	matchers        []matcher
 	responses       []response
 	pathParams      map[string]string
@@ -82,8 +83,8 @@ func (rt *route) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		event.SequenceTotal = total
 	}
 
-	if v.latency > 0 {
-		timer := time.NewTimer(v.latency)
+	if wait := v.latency.Sample(); wait > 0 {
+		timer := time.NewTimer(wait)
 		defer timer.Stop()
 		select {
 		case <-timer.C:

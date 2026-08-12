@@ -25,6 +25,16 @@ X-Provider: sandbox
 
 {"id":"pay_123","status":"pending"}
 
+### Slow inventory lookup
+# random gives every request its own delay between the bounds. The other forms
+# are normal(mean,stddev) and jitter(base,spread), whose second argument may
+# also be a percentage, as in jitter(200ms,20%).
+# @mock method=GET path=/inventory latency=random(100ms,500ms)
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"sku":"widget","available":12}
+
 ### User fixture
 # @mock method=GET path=/users/{id} name=user default=true
 HTTP/1.1 200 OK
@@ -182,6 +192,10 @@ Content-Type: application/json
 ### Poll payment until it completes
 # @name poll-payment
 GET {{mock.base}}/payments/pay_42
+
+### Watch the inventory latency move between runs
+# @name fetch-inventory
+GET {{mock.base}}/inventory
 
 ### Spend the quota for one API key
 # @name spend-quota

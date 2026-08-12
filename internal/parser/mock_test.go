@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -38,7 +39,7 @@ GET https://example.com
 	if m.Title != "Payment accepted" || m.Method != "POST" || m.Path != "/payments" {
 		t.Fatalf("unexpected mock route: %+v", m)
 	}
-	if m.Name != "accepted" || !m.Default || m.Latency != 250*time.Millisecond {
+	if m.Name != "accepted" || !m.Default || m.Latency != delay.Fixed(250*time.Millisecond) {
 		t.Fatalf("unexpected mock options: %+v", m)
 	}
 	if len(m.Responses) != 1 {
@@ -64,6 +65,99 @@ GET https://example.com
 	}
 	if string(m.Match.JSONRules) != `{"score":{"gte":10}}` {
 		t.Fatalf("json-rules matcher = %s", m.Match.JSONRules)
+	}
+}
+
+func TestParseMockLatency(t *testing.T) {
+	tests := []struct {
+		name   string
+		option string
+		want   string
+	}{
+		{name: "fixed", option: "latency=150ms", want: "150ms"},
+		{name: "random", option: "latency=random(100ms,500ms)", want: "random(100ms,500ms)"},
+		{name: "normal", option: "latency=normal(250ms,50ms)", want: "normal(250ms,50ms)"},
+		{name: "jitter", option: "latency=jitter(200ms,20%)", want: "jitter(200ms,20%)"},
+		// The lexer keeps an argument list together, so the space neither splits
+		// the value nor swallows the option after it.
+		{name: "spaced arguments", option: "latency=random(100ms, 500ms)", want: "random(100ms,500ms)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "# @mock method=GET path=/x " + tt.option + " name=slow\nHTTP/1.1 200 OK\n"
+			doc := Parse("mocks.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("parse errors: %+v", doc.Errors)
+			}
+			if len(doc.Mocks) != 1 {
+				t.Fatalf("mocks = %d, want 1", len(doc.Mocks))
+			}
+			m := doc.Mocks[0]
+			if got := m.Latency.String(); got != tt.want {
+				t.Fatalf("latency = %q, want %q", got, tt.want)
+			}
+			if m.Name != "slow" {
+				t.Fatalf("name = %q, want the option after the latency", m.Name)
+			}
+		})
+	}
+}
+
+func TestParseMockLatencyDiagnostics(t *testing.T) {
+	tests := []struct {
+		name   string
+		option string
+		want   string
+	}{
+		{
+			name:   "not a duration",
+			option: "latency=soon",
+			want:   "@mock latency must be a duration such as 150ms",
+		},
+		{
+			name:   "negative",
+			option: "latency=-5ms",
+			want:   "@mock latency cannot be negative",
+		},
+		{
+			name:   "unknown distribution",
+			option: "latency=gauss(1s,2s)",
+			want:   `@mock latency "gauss" is not a delay distribution`,
+		},
+		{
+			name:   "inverted bounds",
+			option: "latency=random(500ms,100ms)",
+			want:   "@mock latency random max cannot be shorter than min",
+		},
+		{
+			name:   "percentage bound",
+			option: "latency=random(100ms,20%)",
+			want:   "@mock latency random max must be a duration, not a percentage",
+		},
+		{
+			name:   "unclosed call",
+			option: "latency=jitter(200ms,20%",
+			want:   `@mock latency jitter is missing a closing ")"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "# @mock method=GET path=/x " + tt.option + "\nHTTP/1.1 200 OK\n"
+			doc := Parse("bad.http", []byte(src))
+			found := false
+			for _, err := range doc.Errors {
+				if strings.Contains(err.Message, tt.want) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("errors=%+v, want %q", doc.Errors, tt.want)
+			}
+			if !doc.Mocks[0].Latency.IsZero() {
+				t.Fatalf("latency = %q, want none", doc.Mocks[0].Latency)
+			}
+		})
 	}
 }
 

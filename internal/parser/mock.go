@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/net/http/httpguts"
 
+	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -43,7 +43,7 @@ type mockBuilder struct {
 	name                 string
 	sequence             string
 	sequenceKey          restfile.MockSequenceKey
-	latency              time.Duration
+	latency              delay.Spec
 	isDefault            bool
 	disableInterpolation bool
 	match                restfile.MockMatch
@@ -120,11 +120,11 @@ func (b *documentBuilder) startMock(line int, raw string) {
 		m.isDefault = v
 	}
 	if raw, ok := vals.Lookup("latency"); ok {
-		v, err := time.ParseDuration(strings.TrimSpace(raw))
-		if err != nil || v < 0 {
-			b.addMockError(line, "@mock latency must be a non-negative Go duration")
+		spec, err := delay.Parse(raw)
+		if err != nil {
+			b.addMockError(line, "@mock latency "+err.Error())
 		} else {
-			m.latency = v
+			m.latency = spec
 		}
 	}
 	if v, ok := b.mockBool(line, vals, "interpolate"); ok {

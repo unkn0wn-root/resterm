@@ -70,8 +70,8 @@ func (w mockWriter) writeDeclaration(m *restfile.Mock) {
 	if m.Default {
 		w.option("default", "true")
 	}
-	if m.Latency > 0 {
-		w.option("latency", m.Latency.String())
+	if latency := m.Latency.String(); latency != "" {
+		w.option("latency", latency)
 	}
 	if m.DisableInterpolation {
 		w.option("interpolate", "false")
