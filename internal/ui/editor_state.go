@@ -556,8 +556,8 @@ func (e *requestEditor) handleCompletionKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
 		e.completion.move(-1)
 		return true, nil
 	case "right":
-		cmd := e.applyCompletion()
-		return true, cmd
+		e.completion.setPreview(true)
+		return true, nil
 	case "left":
 		if e.completion.preview {
 			e.completion.setPreview(false)

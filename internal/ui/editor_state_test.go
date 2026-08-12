@@ -1788,6 +1788,16 @@ func TestRequestEditorCompletionsPreviewToggle(t *testing.T) {
 		t.Fatal("expected preview to start closed")
 	}
 
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if !editor.completion.preview {
+		t.Fatal("expected right to open metadata hint preview")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if editor.completion.preview {
+		t.Fatal("expected left to close metadata hint preview")
+	}
+
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	if !editor.completion.preview {
 		t.Fatal("expected ? to open metadata hint preview")
@@ -1812,7 +1822,7 @@ func TestRequestEditorCompletionsPreviewToggle(t *testing.T) {
 	}
 }
 
-func TestRequestEditorRightAcceptsAndFinishesCompletionPlaceholder(t *testing.T) {
+func TestRequestEditorRightFinishesCompletionPlaceholder(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 2)
@@ -1823,10 +1833,10 @@ func TestRequestEditorRightAcceptsAndFinishesCompletionPlaceholder(t *testing.T)
 		t.Fatal("expected latency completion to be active")
 	}
 
-	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRight})
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	const want = "# @mock latency=250ms "
 	if got := editor.Value(); got != want {
-		t.Fatalf("right accepted completion = %q, want %q", got, want)
+		t.Fatalf("enter accepted completion = %q, want %q", got, want)
 	}
 	if got := editor.selectedText(); got != "250ms" {
 		t.Fatalf("selected placeholder = %q, want %q", got, "250ms")

@@ -209,9 +209,10 @@ environment - there are no network calls while you type.
 | `@compare` arguments | Environment names |
 | `use=` on `@apply` / `@ssh` / `@k8s` | Matching `@patch` / `@ssh` / `@k8s` profile names |
 
-Popup keys: `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) navigate, `Enter` / `Tab` / `Right`
-accept, `?` or `Ctrl+L` toggles the details preview, `Left` / `Esc` closes the preview,
-and `Esc` dismisses the popup. Styling is controlled by the `editor_hint_*` theme keys.
+Popup keys: `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) navigate, `Right` or `?` opens the
+details preview (`Ctrl+L` toggles it), `Left` / `Esc` closes the preview, `Enter` or
+`Tab` accepts, and `Esc` dismisses the popup. Styling is controlled by the
+`editor_hint_*` theme keys.
 
 Many suggestions insert an example value, such as `@setting timeout=5s` or `@mock
 latency=random(100ms,500ms)`. Accepting one leaves the example selected, so the next
