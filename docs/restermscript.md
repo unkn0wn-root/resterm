@@ -499,6 +499,8 @@ Modules run with `rts` only. The `request` object is available when the host pro
 
 ## Standard library
 
+Builtins and reserved words can be removed within a major version. One marked for removal is deprecated in a minor release and removed no earlier than the next one. While deprecated it keeps working, and the parser warns on the line that uses it (`WARN line <n>` in the status bar, full text in the Explain pane). Removals are listed in the release notes with their replacement. See [Compatibility](resterm.md#compatibility) for what the version number covers elsewhere.
+
 RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The standard library is available as `rts`; `stdlib` remains as a deprecated alias. Core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also exposed at top level for convenience. `text`, `list`, `dict`, and `math` are available only under `rts`.
 
 ### Core helpers

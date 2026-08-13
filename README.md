@@ -99,10 +99,18 @@ Use `resterm run` to execute `.http` / `.rest` files without opening the TUI.
 ```bash
 mkdir my-api && cd my-api
 resterm init
-resterm run --request Echo requests.http
+resterm mock requests.http
 ```
 
-`resterm init` creates `requests.http` with sample requests and `resterm.env.json` with a `dev` environment pointing at httpbin.org. The last command runs the Echo request, which POSTs a JSON body and prints the response.
+`resterm init` gives you a small project that works without an internet connection. The generated `requests.http` includes local mock scenarios and a few requests that build on each other. They cover assertions, bearer auth, JSON matching, `json-rules`, and `@for-each`.
+
+Keep the mock server running and open another terminal for the request:
+
+```bash
+resterm run --request CreateUser requests.http
+```
+
+In the TUI, press `g Shift+M` instead to start the same mock server from the workspace.
 
 The [CLI documentation](docs/cli.md) covers selectors, output formats and more examples.
 
@@ -399,5 +407,6 @@ Customize colors and keybindings with `themes/*.toml` and `bindings.toml` or `bi
 
 - [`docs/resterm.md`](./docs/resterm.md) covers request syntax, directives, scripting and transports.
 - [`docs/cli.md`](./docs/cli.md) covers `resterm run`, importers, collections and history.
+- [Compatibility](./docs/resterm.md#compatibility) explains Resterm's compatibility guarantees for v1.
 
-Inside the TUI, press `?` or run `:help`; use `:docs` when you want the full web manual for the installed release.
+Inside the TUI, press `?` or run `:help`. Use `:docs` when you want the full web manual for the installed release.
