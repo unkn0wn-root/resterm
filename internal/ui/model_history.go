@@ -1942,7 +1942,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	}
 	if strings.TrimSpace(requestText) == "" {
 		m.setStatusMessage(
-			statusMsg{text: "History entry missing request payload", level: statusWarn},
+			statusMsg{text: "Entry has no request payload", level: statusWarn},
 		)
 		return nil
 	}

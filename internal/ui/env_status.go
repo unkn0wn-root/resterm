@@ -77,7 +77,7 @@ func undiscoveredEnvStatus(ws workspace) statusMsg {
 	if len(names) == 1 {
 		load = "Load " + names[0] + " with --env-file"
 	}
-	return statusMsg{level: statusWarn, text: "No environment file was discovered. " + load}
+	return statusMsg{level: statusWarn, text: load + ". No environment file was discovered."}
 }
 
 // envLookalikes walks again because the session's entry list keeps only

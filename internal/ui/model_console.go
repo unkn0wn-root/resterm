@@ -534,7 +534,7 @@ func (m *Model) toggleWebSocketConsole() tea.Cmd {
 	sender := m.wsSenders[sessionID]
 	if sender == nil {
 		m.setStatusMessage(
-			statusMsg{text: "Websocket session not ready for console", level: statusWarn},
+			statusMsg{text: "Websocket session not ready", level: statusWarn},
 		)
 		return nil
 	}

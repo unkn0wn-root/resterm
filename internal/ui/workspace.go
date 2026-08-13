@@ -157,7 +157,7 @@ func (m *Model) moveBlocked() tea.Cmd {
 	if !m.hasActiveRun() {
 		return nil
 	}
-	return statusCmd(statusWarn, "Finish or cancel the running request before changing workspace")
+	return statusCmd(statusWarn, "Finish or cancel the running request first")
 }
 
 func moveRefusedCmd(err error) tea.Cmd {

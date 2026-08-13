@@ -102,7 +102,7 @@ func (m *Model) startProfileRun(
 	}
 	if req.GRPC != nil {
 		m.setStatusMessage(
-			statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn},
+			statusMsg{text: "Profiling does not support gRPC", level: statusWarn},
 		)
 		run, started := m.startRun(runSpec{doc: doc, req: req, opts: options, sel: m.ws.sel})
 		if !started {
