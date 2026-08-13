@@ -83,7 +83,7 @@ var definitions = []definition{
 	def(ActionToggleHelp, false, "?"),
 	softDef(ActionShowContextHelp, "shift+k"),
 	def(ActionShowRequestDetails, false, "g ,"),
-	def(ActionShowStatusMessage, false, "g ."),
+	softDef(ActionShowStatusMessage, "g ."),
 	def(ActionOpenPathModal, false, "ctrl+o"),
 	def(ActionReloadWorkspace, false, "ctrl+shift+o", "g shift+o"),
 	def(ActionOpenNewFileModal, false, "ctrl+n"),

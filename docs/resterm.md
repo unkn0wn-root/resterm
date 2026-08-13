@@ -256,7 +256,7 @@ show_context_help = ["shift+k"]
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
 | `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
 | `show_context_help` | Open embedded help for the directive, template, or keyword under the editor cursor. | `shift+k` (soft default) |
-| `show_status_message` | Show the current status message in full. | `g .` |
+| `show_status_message` | Show the current status message in full. | `g .` (soft default) |
 | `open_path_modal` | Open the “Open File” modal. | `ctrl+o` |
 | `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
 | `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
@@ -286,7 +286,7 @@ show_context_help = ["shift+k"]
 | `toggle_sidebar_collapse` / `toggle_editor_collapse` / `toggle_response_collapse` | Collapse/expand panes. | `g 1`, `g 2`, `g 3` | ✗ |
 | `toggle_zoom` / `clear_zoom` | Zoom current region / clear zoom. | `g z`, `g shift+z` | ✗ |
 
-`send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. The `show_context_help` default is soft for backward compatibility: an explicit binding that already claims `shift+k` wins unless `show_context_help` is also configured. All other actions can be remapped to any combination within the constraints above.
+`send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. The `show_context_help` and `show_status_message` shortcuts are soft defaults: an explicit binding for another action may claim `shift+k` or `g .`, and the corresponding default is then omitted. Explicit bindings, including bindings configured for those two actions, still follow the conflict rules above.
 
 ### Response panes
 
