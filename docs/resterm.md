@@ -131,7 +131,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 - **Editor**: middle pane with modal editing (view mode by default, `i` to insert, `Esc` to return to view). Inline syntax highlighting marks metadata, headers, and bodies.
 - **Response panes**: right-hand side displays the most recent response, with optional splits for side-by-side comparisons.
 - **Header bar**: shows workspace, active environment, current request, and test summaries.
-- **Command bar & status**: contextual hints, progress animations, and notifications.
+- **Command bar & status**: contextual hints, progress, and notifications. Long messages are shortened to preserve the file, focus, and mode sections. Errors and long warnings open a popup with the complete message; press `Esc` or `Enter` to dismiss it, or `j`/`k` to scroll. Press `g .` to reopen the current status message. Run summaries and confirmation prompts remain in the bar because their details or next action are available elsewhere.
 
 ### Core shortcuts
 
@@ -256,6 +256,7 @@ show_context_help = ["shift+k"]
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
 | `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
 | `show_context_help` | Open embedded help for the directive, template, or keyword under the editor cursor. | `shift+k` (soft default) |
+| `show_status_message` | Show the current status message in full. | `g .` |
 | `open_path_modal` | Open the “Open File” modal. | `ctrl+o` |
 | `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
 | `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
