@@ -80,6 +80,18 @@ func statusCmd(level statusLevel, text string) tea.Cmd {
 	return toEditorEventCmd(editorEvent{status: &status})
 }
 
+// statusCmdQuiet reports in the bar without taking the screen, for a message
+// that follows an action the user just took rather than interrupting one.
+func statusCmdQuiet(level statusLevel, text string) tea.Cmd {
+	status := statusMsg{
+		level:   level,
+		text:    text,
+		noModal: true,
+	}
+
+	return toEditorEventCmd(editorEvent{status: &status})
+}
+
 type requestEditor struct {
 	textarea.Model
 	revision          uint64

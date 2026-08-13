@@ -98,13 +98,13 @@ func TestUndiscoveredEnvStatus(t *testing.T) {
 		{
 			name:  "one candidate names it",
 			files: []string{"dev.env.json"},
-			want:  "No environment file was discovered. Load dev.env.json with --env-file",
+			want:  "Load dev.env.json with --env-file. No environment file was discovered.",
 		},
 		{
 			name:      "several candidates are counted",
 			files:     []string{"dev.env.json", "prod.env.json", "a/test.env.json"},
 			recursive: true,
-			want:      "No environment file was discovered. Load one of 3 *.env.json files with --env-file",
+			want:      "Load one of 3 *.env.json files with --env-file. No environment file was discovered.",
 		},
 		{
 			name:  "nested candidates need a recursive workspace",

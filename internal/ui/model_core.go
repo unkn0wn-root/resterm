@@ -248,11 +248,13 @@ type Model struct {
 	showNewFileModal         bool
 	showLayoutSaveModal      bool
 	showOpenModal            bool
-	showErrorModal           bool
+	showStatusModal          bool
 	showFileChangeModal      bool
 	fileChangeTitle          string
 	fileChangeMessage        string
-	errorModalMessage        string
+	statusModalMessage       string
+	statusModalLevel         statusLevel
+	statusModalViewport      *viewport.Model
 	showHistoryPreview       bool
 	historyPreviewContent    string
 	historyPreviewTitle      string
@@ -582,6 +584,8 @@ func New(cfg Config) Model {
 	helpViewport.SetContent("")
 	mockLogsViewport := viewport.New(0, 0)
 	mockLogsViewport.SetContent("")
+	statusModalViewport := viewport.New(0, 0)
+	statusModalViewport.SetContent("")
 
 	sshMgr := cfg.SSHManager
 	if sshMgr == nil {
@@ -641,6 +645,7 @@ func New(cfg Config) Model {
 		requestDetailViewport:  &detailViewport,
 		helpViewport:           &helpViewport,
 		mockLogsViewport:       &mockLogsViewport,
+		statusModalViewport:    &statusModalViewport,
 		helpFilter:             helpFilter,
 		activeThemeKey:         activeTheme,
 		settingsHandle:         cfg.SettingsHandle,

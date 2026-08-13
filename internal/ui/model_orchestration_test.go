@@ -1041,10 +1041,10 @@ func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
 		Req:    core.ReqMeta{Index: 1, Label: "One", Env: "dev"},
 		Result: res,
 	})
-	if m.showErrorModal {
+	if m.showStatusModal {
 		t.Fatalf(
 			"expected workflow step 502 to stay in workflow UI, got modal %q",
-			m.errorModalMessage,
+			m.statusModalMessage,
 		)
 	}
 	applyRunEvt(t, &m, core.WfStepDone{
@@ -1060,8 +1060,8 @@ func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
 		Meta: core.NewMeta(pl.Run, at.Add(10*time.Millisecond)),
 	})
 
-	if m.showErrorModal {
-		t.Fatalf("expected failed workflow summary not to open modal, got %q", m.errorModalMessage)
+	if m.showStatusModal {
+		t.Fatalf("expected failed workflow summary not to open modal, got %q", m.statusModalMessage)
 	}
 	if m.statusMessage.level != statusWarn ||
 		!strings.Contains(m.statusMessage.text, "unexpected status code 502") {

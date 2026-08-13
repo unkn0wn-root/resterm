@@ -32,6 +32,7 @@ type compareState struct {
 	requestText  string
 	results      []compareResult
 	label        string
+	statusLabel  string
 	canceled     bool
 	cancelReason string
 	latGen       int
@@ -41,19 +42,21 @@ func compareStateFromPlan(
 	pl *core.ComparePlan,
 	opts httpx.Options,
 	label string,
+	statusLabel string,
 ) *compareState {
 	if pl == nil {
 		return nil
 	}
 	return &compareState{
-		id:       strings.TrimSpace(pl.Run.ID),
-		base:     pl.Request.Clone(),
-		options:  opts,
-		targets:  slices.Clone(pl.Targets),
-		group:    pl.Group,
-		baseline: pl.Baseline,
-		results:  make([]compareResult, 0, len(pl.Targets)),
-		label:    label,
+		id:          strings.TrimSpace(pl.Run.ID),
+		base:        pl.Request.Clone(),
+		options:     opts,
+		targets:     slices.Clone(pl.Targets),
+		group:       pl.Group,
+		baseline:    pl.Baseline,
+		results:     make([]compareResult, 0, len(pl.Targets)),
+		label:       label,
+		statusLabel: statusLabel,
 	}
 }
 
@@ -90,10 +93,7 @@ func (m *Model) startCompareRun(
 		return nil
 	}
 
-	title := strings.TrimSpace(m.statusRequestTitle(doc, req))
-	if title == "" {
-		title = requestBaseTitle(req)
-	}
+	title, short := m.statusRunTitles(doc, req)
 	label := fmt.Sprintf("Compare %s", title)
 	spec = core.NormalizeCompareSpec(spec)
 	env := m.ws.active
@@ -122,7 +122,7 @@ func (m *Model) startCompareRun(
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
 		return nil
 	}
-	state := compareStateFromPlan(pl, options, label)
+	state := compareStateFromPlan(pl, options, label, fmt.Sprintf("Compare %s", short))
 	return m.startCompareCoreRun(pl, state)
 }
 
@@ -134,7 +134,7 @@ func (m *Model) beginCompareRun(state *compareState) []tea.Cmd {
 	m.compareBundle = nil
 	state.latGen = m.latencySeries.generation()
 	m.compareRun = state
-	m.statusPulseBase = state.label
+	m.statusPulseBase = state.statusLabel
 	m.statusPulseFrame = -1
 
 	var cmds []tea.Cmd
@@ -347,7 +347,8 @@ func (m *Model) consumeCompareRow(
 	if canceled || !compareResultSuccess(&result) {
 		level = statusWarn
 	}
-	m.setStatusMessage(statusMsg{text: state.statusLine(), level: level})
+	// Keep progress in the status bar; full results are in the compare panes.
+	m.setStatusMessage(statusMsg{text: state.statusLine(), level: level, noModal: true})
 	return canceled, batchCmds(cmds)
 }
 
@@ -395,16 +396,20 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 		m.invalidateCompareTabCaches()
 	}
 
-	label := fmt.Sprintf("%s complete", state.label)
+	label := fmt.Sprintf("%s complete", state.statusLabel)
 	level := statusSuccess
 	if state.canceled {
-		label = fmt.Sprintf("%s canceled", state.label)
+		label = fmt.Sprintf("%s canceled", state.statusLabel)
 		level = statusWarn
 	} else if state.hasFailures() {
 		level = statusWarn
 	}
 	m.setStatusMessage(
-		statusMsg{text: fmt.Sprintf("%s | %s", label, state.progressSummary()), level: level},
+		statusMsg{
+			text:    fmt.Sprintf("%s | %s", label, state.progressSummary()),
+			level:   level,
+			noModal: true,
+		},
 	)
 	m.recordCompareHistory(state)
 	return nil
@@ -635,9 +640,9 @@ func (s *compareState) statusLine() string {
 	}
 	summary := strings.TrimSpace(s.progressSummary())
 	if summary == "" {
-		return s.label
+		return s.statusLabel
 	}
-	return fmt.Sprintf("%s | %s", s.label, summary)
+	return fmt.Sprintf("%s | %s", s.statusLabel, summary)
 }
 
 func (s *compareState) hasFailures() bool {

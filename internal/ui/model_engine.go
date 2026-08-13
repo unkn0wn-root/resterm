@@ -215,7 +215,7 @@ func (m *Model) runBlocked() tea.Cmd {
 	if !m.ws.unselected {
 		return nil
 	}
-	return statusCmd(statusWarn, noEnvSelected+". Choose one with Ctrl+E")
+	return statusCmd(statusWarn, "Press Ctrl+E. "+noEnvSelected+".")
 }
 
 // runSpec describes one request execution. Preview mode bypasses the UI

@@ -69,19 +69,31 @@ func (state *workflowState) runLabel() string {
 }
 
 func (state *workflowState) runDisplayName() string {
-	label := state.runLabel()
-	name := state.runSubject()
-	if name == "" {
-		return label
+	return state.runName(state.runSubject())
+}
+
+// Use a shorter request name in the status bar so step counts remain visible.
+func (state *workflowState) runStatusName() string {
+	return state.runName(state.runStatusSubject())
+}
+
+func (state *workflowState) runName(subject string) string {
+	if subject == "" {
+		return state.runLabel()
 	}
-	return fmt.Sprintf("%s %s", label, name)
+	return fmt.Sprintf("%s %s", state.runLabel(), subject)
 }
 
 func (state *workflowState) runSubject() string {
-	if state.origin == workflowOriginForEach {
-		if req := state.sourceRequest(); req != nil {
-			return requestBaseTitle(req)
-		}
+	if req := state.sourceRequest(); req != nil {
+		return requestBaseTitle(req)
+	}
+	return strings.TrimSpace(state.workflow.Name)
+}
+
+func (state *workflowState) runStatusSubject() string {
+	if req := state.sourceRequest(); req != nil {
+		return statusRunLabel(nil, req)
 	}
 	return strings.TrimSpace(state.workflow.Name)
 }
@@ -313,7 +325,7 @@ func (m *Model) handleWorkflowReqStart(st *workflowState, evt core.ReqStart) tea
 	}
 	st.current = evt.Request.Clone()
 	st.src = st.current
-	title := st.runDisplayName()
+	title := st.runStatusName()
 	msg := fmt.Sprintf("%s %d/%d: %s", title, st.index+1, len(st.steps), evt.Req.Label)
 	m.statusPulseBase = msg
 	m.setStatusMessage(statusMsg{text: msg, level: statusInfo})
@@ -603,7 +615,10 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	m.workflowRun = nil
 	m.stopSending()
 	m.stopStatusPulseIfIdle()
-	m.setStatusMessage(statusMsg{text: summary, level: state.statusLevel()})
+	// Keep the summary in the status bar; full results are in the workflow pane.
+	m.setStatusMessage(
+		statusMsg{text: state.statusSummary(), level: state.statusLevel(), noModal: true},
+	)
 	if state == nil || state.origin != workflowOriginForEach {
 		m.recordWorkflowHistory(state, summary, report)
 	}
@@ -643,7 +658,17 @@ func (state *workflowState) summary() string {
 	if state == nil {
 		return "Workflow complete"
 	}
-	title := state.runDisplayName()
+	return state.summaryFor(state.runDisplayName())
+}
+
+func (state *workflowState) statusSummary() string {
+	if state == nil {
+		return "Workflow complete"
+	}
+	return state.summaryFor(state.runStatusName())
+}
+
+func (state *workflowState) summaryFor(title string) string {
 	if state.canceled {
 		done := len(state.results)
 		total := len(state.steps)

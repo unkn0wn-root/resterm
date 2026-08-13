@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,6 +32,7 @@ const (
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
+	statusBarStatusShare   = 50
 	statusBarMinimizedIcon = "❐"
 )
 
@@ -77,18 +79,38 @@ func styledRunsText(runs []styledRun) string {
 
 func (m Model) renderStatusBar() string {
 	status, level := m.statusBarMessage()
-	width := max(m.width, 1)
-	inset := statusBarUsesOuterInset(width)
-	contentWidth := width
-	if inset {
-		contentWidth -= statusBarHorizontalPad * 2
-	}
 	palette := statusBarPalette(m.theme.StatusBarPalette)
-	line := m.renderStatusBarLine(status, level, contentWidth, palette)
-	if inset {
+	line := m.renderStatusBarLine(status, level, m.statusBarContentWidth(), palette)
+	if statusBarUsesOuterInset(max(m.width, 1)) {
 		line = insetStatusBarLine(line, palette)
 	}
 	return line
+}
+
+func (m Model) statusBarContentWidth() int {
+	width := max(m.width, 1)
+	if statusBarUsesOuterInset(width) {
+		width -= statusBarHorizontalPad * 2
+	}
+	return width
+}
+
+// statusBarFits reports whether packing leaves the status text intact.
+func (m Model) statusBarFits(status string, level statusLevel) bool {
+	if m.width <= 0 {
+		return true
+	}
+	palette := statusBarPalette(m.theme.StatusBarPalette)
+	sections := m.statusBarLeftSections(status, level, palette)
+	want := compactStatusBarSections(sections[:1])
+	if len(want) == 0 {
+		return true
+	}
+	left, _ := m.packStatusBar(sections, m.statusBarContentWidth(), palette)
+	if len(left) == 0 {
+		return false
+	}
+	return left[0].text == want[0].text
 }
 
 func (m Model) renderStatusBarLine(
@@ -101,22 +123,47 @@ func (m Model) renderStatusBarLine(
 		return ""
 	}
 
-	leftSections := m.statusBarLeftSections(status, level, palette)
-	rightLimit := max(width-statusBarLeftReserve(leftSections, width), 0)
-	right := fitStatusBarSections(
-		m.statusBarRightSections(palette),
-		rightLimit,
-	)
-	rightWidth := statusBarSectionsWidth(right)
-	left := fitStatusBarSections(
-		leftSections,
-		width-rightWidth,
+	left, right := m.packStatusBar(
+		m.statusBarLeftSections(status, level, palette),
+		width,
+		palette,
 	)
 	leftView := renderStatusBarSections(left)
 	rightView := renderStatusBarSections(right)
 
 	gap := max(width-lipgloss.Width(leftView)-lipgloss.Width(rightView), 0)
 	return leftView + renderStatusBarBaseFill(gap, palette) + rightView
+}
+
+// packStatusBar applies the layout used by rendering and overflow detection.
+func (m Model) packStatusBar(
+	sections []statusBarSection,
+	width int,
+	palette theme.StatusBarPalette,
+) (left, right []statusBarSection) {
+	sections = capStatusBarStatus(sections, width)
+	rightLimit := max(width-statusBarLeftReserve(sections, width), 0)
+	right = fitStatusBarSections(m.statusBarRightSections(palette), rightLimit)
+	left = fitStatusBarSections(sections, width-statusBarSectionsWidth(right))
+	return left, right
+}
+
+// Limit status text to preserve the file, focus, and mode sections.
+func capStatusBarStatus(sections []statusBarSection, width int) []statusBarSection {
+	if len(sections) == 0 {
+		return sections
+	}
+	limit := max(
+		width*statusBarStatusShare/100-statusBarSectionPad*2,
+		statusBarMinLeftWidth,
+	)
+	if lipgloss.Width(sections[0].text) <= limit {
+		return sections
+	}
+
+	capped := slices.Clone(sections)
+	capped[0].text = truncateToWidth(capped[0].text, limit)
+	return capped
 }
 
 func statusBarUsesOuterInset(width int) bool {

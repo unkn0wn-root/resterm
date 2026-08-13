@@ -48,7 +48,7 @@ func (m *Model) captureMockResponse() tea.Cmd {
 		m.setFocus(focusEditor),
 		m.setInsertMode(false, true),
 		m.scheduleMockReload(0),
-		statusCmd(
+		statusCmdQuiet(
 			statusWarn,
 			fmt.Sprintf(
 				"Captured mock %s. Review headers and body for secrets before saving.",

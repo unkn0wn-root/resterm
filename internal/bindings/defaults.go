@@ -17,6 +17,7 @@ var (
 	ActionToggleHelp              ActionID = "toggle_help"
 	ActionShowContextHelp         ActionID = "show_context_help"
 	ActionShowRequestDetails      ActionID = "show_request_details"
+	ActionShowStatusMessage       ActionID = "show_status_message"
 	ActionOpenPathModal           ActionID = "open_path_modal"
 	ActionReloadWorkspace         ActionID = "reload_workspace"
 	ActionOpenNewFileModal        ActionID = "open_new_file_modal"
@@ -82,6 +83,7 @@ var definitions = []definition{
 	def(ActionToggleHelp, false, "?"),
 	softDef(ActionShowContextHelp, "shift+k"),
 	def(ActionShowRequestDetails, false, "g ,"),
+	softDef(ActionShowStatusMessage, "g ."),
 	def(ActionOpenPathModal, false, "ctrl+o"),
 	def(ActionReloadWorkspace, false, "ctrl+shift+o", "g shift+o"),
 	def(ActionOpenNewFileModal, false, "ctrl+n"),

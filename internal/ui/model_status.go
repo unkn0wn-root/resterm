@@ -3,6 +3,7 @@ package ui
 import "strings"
 
 func (m *Model) setStatusMessage(msg statusMsg) {
+	msg.text = strings.TrimSpace(msg.text)
 	m.statusMessage = msg
 	m.syncPulseBase(msg)
 	m.handleStatusModal(msg)
@@ -24,16 +25,23 @@ func (m *Model) syncPulseBase(msg statusMsg) {
 	if !m.statusPulseOn && !m.hasActiveRun() {
 		return
 	}
-	txt := strings.TrimSpace(msg.text)
-	if txt == "" {
+	if msg.text == "" {
 		return
 	}
-	m.statusPulseBase = txt
+	m.statusPulseBase = msg.text
 }
 
+// Errors always open the modal; warnings open it only when the bar truncates them.
 func (m *Model) handleStatusModal(msg statusMsg) {
-	show := msg.level == statusError && strings.TrimSpace(msg.text) != "" && !msg.noModal
-	if show {
-		m.openErrorModal(msg.text)
+	if msg.text == "" || msg.noModal {
+		return
+	}
+	switch msg.level {
+	case statusError:
+		m.openStatusModal(msg.level, msg.text)
+	case statusWarn:
+		if !m.statusBarFits(msg.text, msg.level) {
+			m.openStatusModal(msg.level, msg.text)
+		}
 	}
 }

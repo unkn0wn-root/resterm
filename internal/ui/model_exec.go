@@ -300,7 +300,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	if st.req.Metadata.Profile != nil {
 		if st.req.GRPC != nil {
 			m.setStatusMessage(
-				statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn},
+				statusMsg{text: "Profiling does not support gRPC", level: statusWarn},
 			)
 		} else {
 			return st.wrap(m.startProfileRun(st.doc, st.req, st.opts))

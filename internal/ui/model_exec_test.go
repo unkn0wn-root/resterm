@@ -309,7 +309,7 @@ func TestHandleResponseMsgShowsHTTPErrorInPane(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	if model.showErrorModal {
+	if model.showStatusModal {
 		t.Fatalf("expected error modal to stay closed for request errors")
 	}
 	if model.responseLatest == nil || !model.responseLatest.ready {
@@ -386,7 +386,7 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	if model.showErrorModal {
+	if model.showStatusModal {
 		t.Fatalf("expected error modal to stay closed for script errors")
 	}
 	if model.statusMessage.text != "Request failed ✗" ||

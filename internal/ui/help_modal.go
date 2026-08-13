@@ -173,6 +173,14 @@ func (m Model) helpSections() []helpSection {
 		}}, editorEntries...)
 	}
 
+	var statusMessageEntries []helpEntry
+	if key := m.helpBindingLabel(bindings.ActionShowStatusMessage); key != "" {
+		statusMessageEntries = append(statusMessageEntries, helpEntry{
+			key:         key,
+			description: "Show the current status message in full",
+		})
+	}
+
 	sections := []helpSection{
 		{
 			title: "Navigation & Focus",
@@ -273,7 +281,7 @@ func (m Model) helpSections() []helpSection {
 		},
 		{
 			title: "Layout & View",
-			entries: sortedHelpEntries([]helpEntry{
+			entries: sortedHelpEntries(append(statusMessageEntries, []helpEntry{
 				{
 					m.helpCombinedKey(
 						[]bindings.ActionID{
@@ -353,7 +361,7 @@ func (m Model) helpSections() []helpSection {
 					),
 					"Toggle sidebar / editor / response minimize",
 				},
-			}),
+			}...)),
 		},
 		{
 			title: "Mock Server",

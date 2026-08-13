@@ -30,6 +30,7 @@ type profileState struct {
 	failures      []profileFailure
 	current       *restfile.Request
 	messageBase   string
+	statusBase    string
 	start         time.Time
 	measuredStart time.Time
 	measuredEnd   time.Time
@@ -67,6 +68,7 @@ func profileStateFromPlan(
 	pl *core.ProfilePlan,
 	opts httpx.Options,
 	msgBase string,
+	statusBase string,
 ) *profileState {
 	if pl == nil {
 		return nil
@@ -82,6 +84,7 @@ func profileStateFromPlan(
 		successes:   make([]time.Duration, 0, pl.Spec.Count),
 		failures:    make([]profileFailure, 0, pl.Spec.Count/2+1),
 		messageBase: msgBase,
+		statusBase:  statusBase,
 		start:       time.Now(),
 	}
 }
@@ -99,7 +102,7 @@ func (m *Model) startProfileRun(
 	}
 	if req.GRPC != nil {
 		m.setStatusMessage(
-			statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn},
+			statusMsg{text: "Profiling does not support gRPC", level: statusWarn},
 		)
 		run, started := m.startRun(runSpec{doc: doc, req: req, opts: options, sel: m.ws.sel})
 		if !started {
@@ -108,10 +111,7 @@ func (m *Model) startProfileRun(
 		// Spinner only, so the not supported warning stays visible.
 		return batchCommands(run, m.sendProgress("", ""))
 	}
-	title := strings.TrimSpace(m.statusRequestTitle(doc, req))
-	if title == "" {
-		title = requestBaseTitle(req)
-	}
+	title, short := m.statusRunTitles(doc, req)
 	msgBase := fmt.Sprintf("Profiling %s", title)
 	pl, err := core.PrepareProfile(doc, req, core.RunMeta{
 		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
@@ -121,7 +121,7 @@ func (m *Model) startProfileRun(
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
 		return nil
 	}
-	state := profileStateFromPlan(pl, options, msgBase)
+	state := profileStateFromPlan(pl, options, msgBase, fmt.Sprintf("Profiling %s", short))
 	state.latGen = m.latencySeries.generation()
 	return m.startProfileCoreRun(pl, state)
 }
@@ -355,16 +355,17 @@ func evaluateProfileOutcome(msg responseMsg) (bool, string) {
 	return true, ""
 }
 
+// Use the short label so the iteration count remains visible.
 func profileProgressLabel(state *profileState) string {
 	if state == nil {
 		return ""
 	}
 	if state.index < state.warmup {
-		return fmt.Sprintf("%s warmup %d/%d", state.messageBase, state.index+1, state.warmup)
+		return fmt.Sprintf("%s warmup %d/%d", state.statusBase, state.index+1, state.warmup)
 	}
 
 	measured := min(state.index-state.warmup+1, state.spec.Count)
-	return fmt.Sprintf("%s run %d/%d", state.messageBase, measured, state.spec.Count)
+	return fmt.Sprintf("%s run %d/%d", state.statusBase, measured, state.spec.Count)
 }
 
 func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd {
@@ -445,7 +446,8 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 	if canceled || (state != nil && state.skipped) {
 		level = statusWarn
 	}
-	m.setStatusMessage(statusMsg{text: summary, level: level})
+	// Keep the summary in the status bar; full results are in the profile pane.
+	m.setStatusMessage(statusMsg{text: summary, level: level, noModal: true})
 
 	for _, id := range m.visiblePaneIDs() {
 		pane := m.pane(id)
