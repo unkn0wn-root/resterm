@@ -253,7 +253,7 @@ var errAuthSpec = errors.New("@auth requires a valid auth spec")
 
 func parseAuthDirective(rest string) (authDirective, error) {
 	dir := authDirective{Scope: directive.ScopeRequest}
-	fields := directive.Fields(strings.TrimSpace(rest))
+	fields := directive.Fields(rest)
 	if len(fields) == 0 {
 		return dir, errAuthSpec
 	}
@@ -279,7 +279,7 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, nil
 	}
 
-	spec, err := parseAuthSpec(strings.Join(fields, " "))
+	spec, err := parseAuthSpec(fields)
 	if err != nil {
 		return dir, err
 	}
@@ -293,8 +293,10 @@ func parseAuthDirective(rest string) (authDirective, error) {
 	return dir, nil
 }
 
-func parseAuthSpec(rest string) (*restfile.AuthSpec, error) {
-	fields := directive.Fields(rest)
+// Fields arrive decoded. Rejoining them loses the boundary around a quoted
+// option value, so scope="read write" would read back as scope=read plus an
+// unrelated bare word.
+func parseAuthSpec(fields []string) (*restfile.AuthSpec, error) {
 	if len(fields) == 0 {
 		return nil, nil
 	}

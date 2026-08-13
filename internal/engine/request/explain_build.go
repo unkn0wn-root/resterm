@@ -10,6 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -526,7 +527,7 @@ func addExplainBodyChange(out *[]xplain.Change, a, b *restfile.Request) {
 
 func addExplainHeaderChanges(out *[]xplain.Change, a, b http.Header) {
 	for _, name := range mergedKeySet(a, b) {
-		addExplainChange(out, "header."+name, headerValue(a, name), headerValue(b, name))
+		addExplainChange(out, "header."+name, header.Value(a, name), header.Value(b, name))
 	}
 }
 
@@ -1201,7 +1202,7 @@ func (e *Engine) prepareExplainAuthPreview(
 }
 
 func authPresentNote(req *restfile.Request, hdr string) string {
-	if grpcMetadataPresent(req, hdr) && !headerPresent(reqHeaders(req), hdr) {
+	if grpcMetadataPresent(req, hdr) && !header.Present(reqHeaders(req), hdr) {
 		return hdr + " already set via @grpc-metadata"
 	}
 	return "auth header already set on request"

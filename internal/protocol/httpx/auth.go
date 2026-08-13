@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -63,13 +64,13 @@ func AuthValues(
 		out, err := expandResult(param)
 		return out.Value, err
 	}
-	header := func(name, value string) []AuthValue {
+	hdr := func(name, value string) []AuthValue {
 		return []AuthValue{{Placement: AuthInHeader, Name: name, Value: value}}
 	}
 
 	switch kind {
 	case restfile.AuthBasic:
-		if headerSet(existing, authorizationHeader) {
+		if header.Present(existing, authorizationHeader) {
 			return nil, nil
 		}
 		user, err := expand(authParamUsername)
@@ -81,17 +82,17 @@ func AuthValues(
 			return nil, err
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
-		return header(authorizationHeader, basicPrefix+encoded), nil
+		return hdr(authorizationHeader, basicPrefix+encoded), nil
 
 	case restfile.AuthBearer:
-		if headerSet(existing, authorizationHeader) {
+		if header.Present(existing, authorizationHeader) {
 			return nil, nil
 		}
 		token, err := expand(authParamToken)
 		if err != nil {
 			return nil, err
 		}
-		return header(authorizationHeader, bearerTokenPrefix+token), nil
+		return hdr(authorizationHeader, bearerTokenPrefix+token), nil
 
 	case restfile.AuthAPIKey:
 		placement, err := expandResult(authParamPlacement)
@@ -113,14 +114,14 @@ func AuthValues(
 			if name == "" {
 				name = defaultAPIKeyHeader
 			}
-			if headerSet(existing, name) {
+			if header.Present(existing, name) {
 				return nil, nil
 			}
 			value, err := expand(authParamValue)
 			if err != nil {
 				return nil, err
 			}
-			return header(name, value), nil
+			return hdr(name, value), nil
 		default:
 			if placement.HasUndefinedVariables {
 				return nil, nil
@@ -140,18 +141,14 @@ func AuthValues(
 		if err != nil {
 			return nil, err
 		}
-		if name == "" || headerSet(existing, name) {
+		if name == "" || header.Present(existing, name) {
 			return nil, nil
 		}
 		value, err := expand(authParamValue)
 		if err != nil {
 			return nil, err
 		}
-		return header(name, value), nil
+		return hdr(name, value), nil
 	}
 	return nil, nil
-}
-
-func headerSet(h http.Header, name string) bool {
-	return h != nil && h.Get(name) != ""
 }

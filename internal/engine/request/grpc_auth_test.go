@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -104,6 +106,46 @@ func TestApplyGRPCAuthKeepsExplicitHeader(t *testing.T) {
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer from-user" {
 		t.Fatalf("Authorization = %q, want the user value kept", got)
+	}
+}
+
+func TestApplyGRPCAuthKeepsLowercaseExplicitHeaderWithoutExpandingAuth(t *testing.T) {
+	req := grpcAuthRequest(&restfile.AuthSpec{
+		Type:   "bearer",
+		Params: map[string]string{"token": "{{missing}}"},
+	})
+	req.Headers = map[string][]string{"authorization": {"Bearer from-user"}}
+
+	if err := applyGRPCAuth(req, vars.NewResolver()); err != nil {
+		t.Fatalf("apply grpc auth: %v", err)
+	}
+	if got := header.Value(req.Headers, "Authorization"); got != "Bearer from-user" {
+		t.Fatalf("authorization = %q, want the user value kept", got)
+	}
+	if len(req.Headers) != 1 {
+		t.Fatalf("auth added a second authorization header: %v", req.Headers)
+	}
+}
+
+func TestApplyGRPCAuthKeepsParsedExplicitHeaderWithoutExpandingAuth(t *testing.T) {
+	doc := parser.Parse("auth.http", []byte(`
+# @auth bearer {{missing}}
+# @grpc pkg.Service/Call
+# @grpc-plaintext true
+GRPC grpc://127.0.0.1:8082
+Authorization: Bearer from-user
+
+{}
+`))
+	if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+		t.Fatalf("parse errors=%v requests=%d", doc.Errors, len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if err := applyGRPCAuth(req, vars.NewResolver()); err != nil {
+		t.Fatalf("apply grpc auth with headers %v: %v", req.Headers, err)
+	}
+	if got := req.Headers.Get("Authorization"); got != "Bearer from-user" {
+		t.Fatalf("authorization = %q, want the parsed value kept: %v", got, req.Headers)
 	}
 }
 

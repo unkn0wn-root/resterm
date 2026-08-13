@@ -155,6 +155,47 @@ GET https://example.com
 	}
 }
 
+func TestParseOAuthPreservesQuotedScope(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		scope string
+	}{
+		{name: "implicit request"},
+		{name: "explicit request", scope: "request "},
+		{name: "file", scope: "file "},
+		{name: "global", scope: "global "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := `# @auth ` + tc.scope + `oauth2 token_url=https://auth.example/token client_id=client client_secret=secret scope="read write" cache_key=api
+GET https://example.com
+`
+
+			doc := Parse("oauth.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("expected no parse errors, got %v", doc.Errors)
+			}
+			var spec *restfile.AuthSpec
+			if tc.scope == "" || tc.scope == "request " {
+				if len(doc.Requests) != 1 {
+					t.Fatalf("requests = %d, want 1", len(doc.Requests))
+				}
+				spec = doc.Requests[0].Metadata.Auth
+			} else {
+				if len(doc.Auth) != 1 {
+					t.Fatalf("auth profiles = %d, want 1", len(doc.Auth))
+				}
+				spec = &doc.Auth[0].Spec
+			}
+			if spec == nil {
+				t.Fatal("expected auth metadata")
+			}
+			if got := spec.Params["scope"]; got != "read write" {
+				t.Fatalf("scope = %q, want %q", got, "read write")
+			}
+		})
+	}
+}
+
 func TestParseMethodLineWithHTTPVersion(t *testing.T) {
 	src := `###
 
@@ -1751,9 +1792,9 @@ GET https://example.com
 }
 
 func TestParseOAuth2AuthSpec(t *testing.T) {
-	spec, _ := parseAuthSpec(
+	spec, _ := parseAuthSpec(directive.Fields(
 		`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`,
-	)
+	))
 	if spec == nil {
 		t.Fatalf("expected oauth2 spec")
 	}
@@ -1779,7 +1820,7 @@ func TestParseOAuth2AuthSpec(t *testing.T) {
 }
 
 func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
-	spec, _ := parseAuthSpec(`oauth2 cache_key=github`)
+	spec, _ := parseAuthSpec(directive.Fields(`oauth2 cache_key=github`))
 	if spec == nil {
 		t.Fatalf("expected oauth2 spec for cache-only directive")
 	}
@@ -1801,9 +1842,9 @@ func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
 }
 
 func TestParseCommandAuthSpec(t *testing.T) {
-	spec, _ := parseAuthSpec(
+	spec, _ := parseAuthSpec(directive.Fields(
 		`command argv='["gh","auth","token"]' header=Authorization cache_key=github timeout=5s`,
-	)
+	))
 	if spec == nil {
 		t.Fatalf("expected command auth spec")
 	}
@@ -1824,9 +1865,9 @@ func TestParseCommandAuthSpec(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
-	spec, _ := parseAuthSpec(
+	spec, _ := parseAuthSpec(directive.Fields(
 		`command argv=["gh", "auth", "token"] header=Authorization cache_key=github timeout=5s`,
-	)
+	))
 	if spec == nil {
 		t.Fatalf("expected command auth spec")
 	}
@@ -1847,7 +1888,7 @@ func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecCacheOnly(t *testing.T) {
-	spec, _ := parseAuthSpec(`command cache_key=github header=X-Token`)
+	spec, _ := parseAuthSpec(directive.Fields(`command cache_key=github header=X-Token`))
 	if spec == nil {
 		t.Fatalf("expected command auth spec")
 	}
@@ -3038,6 +3079,59 @@ query FetchUser($id: ID!) {
 	}
 	if strings.Contains(gql.Query, "# @variables") {
 		t.Fatalf("expected directives stripped from query")
+	}
+}
+
+func TestParseGraphQLBodyWithoutBlankLineKeepsHeadersAndAliases(t *testing.T) {
+	src := `# @graphql
+POST https://example.com/graphql
+X-Token: abc
+{
+  hero: character(id: "1") { name }
+}
+`
+
+	doc := Parse("graphql-alias.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+		t.Fatalf("parse errors=%v requests=%d", doc.Errors, len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if got := req.Headers.Get("X-Token"); got != "abc" {
+		t.Fatalf("X-Token = %q, want abc: %v", got, req.Headers)
+	}
+	if len(req.Headers) != 1 {
+		t.Fatalf("query lines leaked into headers: %v", req.Headers)
+	}
+	if req.Body.GraphQL == nil {
+		t.Fatalf("expected GraphQL body")
+	}
+	if !strings.Contains(req.Body.GraphQL.Query, `hero: character(id: "1")`) {
+		t.Fatalf("alias line missing from query: %q", req.Body.GraphQL.Query)
+	}
+}
+
+func TestParseGRPCHeaderWithoutBlankLineStaysAHeader(t *testing.T) {
+	src := `# @grpc pkg.Service/Call
+GRPC grpc://127.0.0.1:8082
+Authorization: Bearer t
+{
+  "user": "x"
+}
+`
+
+	doc := Parse("grpc-header.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+		t.Fatalf("parse errors=%v requests=%d", doc.Errors, len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if got := req.Headers.Get("Authorization"); got != "Bearer t" {
+		t.Fatalf("Authorization = %q, want Bearer t: %v", got, req.Headers)
+	}
+	if req.GRPC == nil || !strings.Contains(req.GRPC.Message, `"user": "x"`) {
+		t.Fatalf("unexpected grpc message: %+v", req.GRPC)
+	}
+	if strings.Contains(req.GRPC.Message, "Authorization") {
+		t.Fatalf("header leaked into the message: %q", req.GRPC.Message)
 	}
 }
 
