@@ -117,7 +117,7 @@ func TestMockLatencyArgsCoverEveryDistribution(t *testing.T) {
 		t.Fatalf("mock args missing the constant latency: %v", mock)
 	}
 	for _, d := range delay.Distributions() {
-		label := "latency=" + d.Name()
+		label := "latency=" + d.Name
 		found := false
 		for _, it := range mock {
 			if it.Label != label {
@@ -128,8 +128,8 @@ func TestMockLatencyArgsCoverEveryDistribution(t *testing.T) {
 				t.Fatalf("%s inserts %q, want the %q example", label, it.Insert, d.Usage())
 			}
 			// The arguments are typed over, the parentheses around them are not.
-			if it.Placeholder != d.Args() {
-				t.Fatalf("%s selects %q, want the %q arguments", label, it.Placeholder, d.Args())
+			if it.Placeholder != d.Args {
+				t.Fatalf("%s selects %q, want the %q arguments", label, it.Placeholder, d.Args)
 			}
 			start, end, ok := it.PlaceholderRange()
 			if !ok {
@@ -138,8 +138,8 @@ func TestMockLatencyArgsCoverEveryDistribution(t *testing.T) {
 			if got := []rune(it.Insert)[end:]; string(got) != ")" {
 				t.Fatalf("%s selects up to %q, want the closing paren left out", label, string(got))
 			}
-			if got := []rune(it.Insert)[start:end]; string(got) != d.Args() {
-				t.Fatalf("%s selects %q, want %q", label, string(got), d.Args())
+			if got := []rune(it.Insert)[start:end]; string(got) != d.Args {
+				t.Fatalf("%s selects %q, want %q", label, string(got), d.Args)
 			}
 		}
 		if !found {

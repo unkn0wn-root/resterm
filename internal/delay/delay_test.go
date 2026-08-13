@@ -45,6 +45,8 @@ func TestParseText(t *testing.T) {
 		{input: "normal(250ms,20%)", want: "normal(250ms,20%)"},
 		{input: "jitter(200ms,20%)", want: "jitter(200ms,20%)"},
 		{input: "jitter(200ms,12.5%)", want: "jitter(200ms,12.5%)"},
+		{input: "normal(250ms,0%)", want: "normal(250ms,0%)"},
+		{input: "normal(250ms,1e300%)", want: "normal(250ms,1e+300%)"},
 		{input: "jitter(200ms,20ms)", want: "jitter(200ms,20ms)"},
 	}
 
@@ -240,7 +242,7 @@ func TestDistributions(t *testing.T) {
 		t.Fatal("no distributions described")
 	}
 	for _, f := range forms {
-		if f.Name() == "" || f.Summary() == "" {
+		if f.Name == "" || f.Summary == "" {
 			t.Fatalf("incomplete descriptor %+v", f)
 		}
 		s := mustParse(t, f.Usage())

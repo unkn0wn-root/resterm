@@ -76,10 +76,10 @@ func mockItems() []Item {
 	}
 	for _, d := range delay.Distributions() {
 		items = append(items, Item{
-			Label:       "latency=" + d.Name(),
-			Summary:     d.Summary(),
+			Label:       "latency=" + d.Name,
+			Summary:     d.Summary,
 			Insert:      "latency=" + d.Usage(),
-			Placeholder: d.Args(),
+			Placeholder: d.Args,
 		})
 	}
 	return append(items, Item{

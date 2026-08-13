@@ -14,12 +14,13 @@ import (
 // Spec is one parsed delay expression; the zero value never delays. What base
 // and spread hold depends on the kind: the constant delay, the bounds of
 // random, or a center and the deviation around it. A deviation written as a
-// percentage stays one so the text round-trips.
+// percentage is marked relative so the text round-trips.
 type Spec struct {
 	kind   kind
 	base   time.Duration
 	spread time.Duration
 	pct    float64
+	rel    bool
 }
 
 func Fixed(d time.Duration) Spec {
@@ -64,7 +65,7 @@ func Parse(raw string) (Spec, error) {
 	case err != nil:
 		return Spec{}, err
 	case relative:
-		s.pct = pct
+		s.pct, s.rel = pct, true
 	default:
 		if s.spread, err = f.duration(1, args[1]); err != nil {
 			return Spec{}, err
@@ -105,14 +106,14 @@ func (s Spec) String() string {
 }
 
 func (s Spec) argText() string {
-	if s.pct > 0 {
-		return strconv.FormatFloat(s.pct, 'f', -1, 64) + "%"
+	if s.rel {
+		return strconv.FormatFloat(s.pct, 'g', -1, 64) + "%"
 	}
 	return s.spread.String()
 }
 
 func (s Spec) deviation() time.Duration {
-	if s.pct > 0 {
+	if s.rel {
 		return clamp(float64(s.base) * s.pct / 100)
 	}
 	return s.spread
@@ -139,28 +140,14 @@ func (s *Spec) UnmarshalText(text []byte) error {
 
 // Descriptor is one distribution as documentation and completions see it.
 type Descriptor struct {
-	name    string
-	summary string
-	args    string
-}
-
-func (d Descriptor) Name() string {
-	return d.name
-}
-
-func (d Descriptor) Summary() string {
-	return d.summary
+	Name    string
+	Summary string
+	Args    string
 }
 
 // Usage is the example call, e.g. random(100ms,500ms).
 func (d Descriptor) Usage() string {
-	return call(d.name, d.args)
-}
-
-// Args is the example argument list of Usage without the parentheses, so a
-// caller offering the usage as a template knows what part of it to fill in.
-func (d Descriptor) Args() string {
-	return d.args
+	return call(d.Name, d.Args)
 }
 
 // Distributions describes the call forms, in documentation order.
@@ -168,7 +155,7 @@ func Distributions() []Descriptor {
 	out := make([]Descriptor, 0, len(forms)-1)
 	for _, f := range forms {
 		if f.name != "" {
-			out = append(out, Descriptor{name: f.name, summary: f.summary, args: f.args})
+			out = append(out, Descriptor{Name: f.name, Summary: f.summary, Args: f.args})
 		}
 	}
 	return out
