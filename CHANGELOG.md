@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.0](https://github.com/unkn0wn-root/resterm/compare/v0.53.1...v1.0.0) (2026-08-13)
+
+
+### Features
+
+* add mocks to resterms starterpack ([#373](https://github.com/unkn0wn-root/resterm/issues/373)) ([99215f0](https://github.com/unkn0wn-root/resterm/commit/99215f0d5afaa7e966b4485fbb1598ccf786d193))
+* update rts and metadata colors ([ee29248](https://github.com/unkn0wn-root/resterm/commit/ee2924853be9fc29a0d20155d9200af4b2a403fe))
+
+
+### Bug Fixes
+
+* **delay:** keep percentage deviations in the written form ([9796324](https://github.com/unkn0wn-root/resterm/commit/9796324cc03253ed1912c40d8e22cc7b0666a3fb))
+* **parser:** keep grpc and graphql headers out of the body ([#371](https://github.com/unkn0wn-root/resterm/issues/371)) ([a1e54fc](https://github.com/unkn0wn-root/resterm/commit/a1e54fc01c27bf4f53149350e2a218a1160f5d0b))
+
 ### [0.53.1](https://github.com/unkn0wn-root/resterm/compare/v0.52.1...v0.53.1) (2026-08-10)
 
 
