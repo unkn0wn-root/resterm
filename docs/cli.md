@@ -386,6 +386,8 @@ resterm init ./api-tests
 resterm init --template minimal
 ```
 
+The generated sample does not need an external service. Start it with `resterm mock requests.http`. Open another terminal and run a request such as `resterm run --request CreateUser requests.http`.
+
 See [Initializing a Project](./resterm.md#initializing-a-project) for templates and flag details.
 
 ## `resterm collection`

@@ -123,86 +123,137 @@ func cloneTemplate(t template) template {
 	return out
 }
 
-const reqHTTPMinimal = `### Health check
-# @name Health
-GET {{base.url}}/status/200
+const reqHTTPMinimal = `# This starter is entirely local. In the TUI, press g Shift+M to start the
+# mock server, then place the cursor in a request and press Ctrl+Enter.
 
-### Echo JSON
-# @name Echo
-POST {{base.url}}/post
+### Mock: say hello
+# This matcher checks one field and ignores other JSON fields.
+# @mock method=POST path=/hello
+# @match json={"kind":"greeting"}
+HTTP/1.1 200 OK
 Content-Type: application/json
-Authorization: Bearer {{auth.token}}
+
+{"message":"hello from the mock","name":{{json.body.name}}}
+
+### Mock: create an adult member
+# Both the literal JSON field and the numeric rule must match.
+# @mock method=POST path=/users
+# @match headers={"Authorization":{"prefix":"Bearer "}} json={"role":"member"}
+# @match json-rules={"age":{"gte":18}}
+HTTP/1.1 201 Created
+Content-Type: application/json
 
 {
-  "hello": "resterm",
-  "time": "{{$timestampISO8601}}"
+  "id": {{json.body.id}},
+  "name": {{json.body.name}},
+  "role": {{json.body.role}},
+  "displayName": {{json.body.displayName}},
+  "status": {{json.body.status}},
+  "authorization": {{json.headers.Authorization}}
 }
 
-### Capture value from response
-# @name CaptureToken
-# @capture file-secret auth.token = response.json.uuid
-GET {{base.url}}/uuid
+### Mock: reject invalid users
+# @mock method=POST path=/users default=true
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
 
-### Reuse captured value
-# @name UseToken
-GET {{base.url}}/anything
-Authorization: Bearer {{auth.token}}
+{"error":"Bearer auth and a member aged 18 or older are required"}
 
-### Query params
-# @name Query
-# @var request hello resterm
-GET {{base.url}}/get?hello={{hello}}
+### Say hello
+# @name Hello
+# @assert response.statusCode == 200
+# @assert response.json("name") == "Resterm"
+POST {{base.url}}/hello
+Content-Type: application/json
+
+{"kind":"greeting","name":"Resterm"}
+
+### Create a user
+# @name CreateUser
+# @auth bearer {{auth.token}}
+# @assert response.statusCode == 201
+# @assert response.json("id") == "user-1"
+# @assert response.json("authorization") == "Bearer " + env.get("auth.token")
+POST {{base.url}}/users
+Content-Type: application/json
+
+{
+  "id": "user-1",
+  "name": "Ada",
+  "role": "member",
+  "age": 36,
+  "displayName": "Ada",
+  "status": "active"
+}
 `
 
 const reqHTTPStandardSuffix = `
-### Scripted header
-# @name ScriptedHeader
-GET {{base.url}}/anything
-Authorization: {{= helpers.authHeader(vars.get("auth.token"), env.get("auth.token")) }}
+### Create users from a list of names
+# @name CreateUsersFromNames
+# @for-each ["david","damian","bob"] as name
+# @auth bearer {{auth.token}}
+# @assert response.statusCode == 201
+# @assert response.json("name") == name
+POST {{base.url}}/users
+Content-Type: application/json
 
-### Use last response
-# @name UseLast
-# Uses last.* from the most recent request in this session.
-# Run CaptureToken first, otherwise last.json("uuid") is empty.
-GET {{base.url}}/anything
-X-Last-UUID: {{= last.json("uuid") ?? "" }}
+{
+  "id": "user-{{= name }}",
+  "name": "{{= name }}",
+  "role": "member",
+  "age": 18,
+  "displayName": "{{= name }}",
+  "status": "active"
+}
+
+### Create users from RestermScript objects
+# helpers.users() comes from rts/helpers.rts.
+# @name CreateUsersFromModule
+# @for-each helpers.users() as user
+# @auth bearer {{auth.token}}
+# @assert response.statusCode == 201
+# @assert response.json("id") == user.id
+# @assert response.json("displayName") == (user["nickname"] ?? user.name)
+# @assert response.json("status") == (user.active ? "active" : "inactive")
+POST {{base.url}}/users
+Content-Type: application/json
+
+{{= helpers.userPayload(user) }}
 `
 
 const reqHTTPStandard = "# @use ./rts/helpers.rts\n\n" + reqHTTPMinimal + reqHTTPStandardSuffix
 
 const envJSON = `{
-  "dev": {
+  "$shared": {
     "base": {
-      "url": "https://httpbin.org"
-    },
+      "url": "http://127.0.0.1:8080"
+    }
+  },
+  "dev": {
     "auth": {
       "token": "dev-token-123"
     }
   },
-  "prod": {
-    "base": {
-      "url": "https://api.example.com"
-    },
+  "test": {
     "auth": {
-      "token": "prod-token-xyz"
+      "token": "test-token-456"
     }
   }
 }
 `
 
 const envExampleJSON = `{
-  "dev": {
+  "$shared": {
     "base": {
-      "url": "https://httpbin.org"
-    },
+      "url": "http://127.0.0.1:8080"
+    }
+  },
+  "dev": {
     "auth": {
       "token": "REPLACE_ME"
     }
   },
-  "prod": {
-    "base": {
-      "url": "https://api.example.com"
-    },
+  "test": {
     "auth": {
       "token": "REPLACE_ME"
     }
@@ -212,31 +263,46 @@ const envExampleJSON = `{
 
 const helpersRTS = `module helpers
 
-export fn authHeader(primary, fallback) {
-  let token = primary ?? fallback
-  return token ? "Bearer " + token : ""
+export fn users() {
+  return [
+    {id: "user-2", name: "Grace", age: 28, active: true},
+    {id: "user-3", name: "Linus", nickname: "Lin", age: 24, active: false}
+  ]
+}
+
+export fn userPayload(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    role: user["role"] ?? "member",
+    age: user.age,
+    displayName: user["nickname"] ?? user.name,
+    status: user.active ? "active" : "inactive"
+  }
 }
 `
 
 func buildHelpMD() string {
 	var b strings.Builder
 	b.WriteString("# Resterm quickstart\n\n")
-	b.WriteString("1. Run `resterm` in this folder.\n")
-	b.WriteString("2. Press Ctrl+E to switch environments.\n")
+	b.WriteString("1. Run `resterm` in this directory.\n")
+	b.WriteString("2. Press `g Shift+M` to start the local mock server.\n")
 	b.WriteString("3. Open `")
 	b.WriteString(fileRequests)
 	b.WriteString("`, place the cursor inside a request, then press Ctrl+Enter.\n")
-	b.WriteString("4. Edit `")
+	b.WriteString("4. Press Ctrl+E to switch between the local `dev` and `test` environments.\n")
+	b.WriteString("5. Edit `")
 	b.WriteString(fileEnv)
 	b.WriteString("` or copy from `")
 	b.WriteString(fileEnvExample)
 	b.WriteString("`.\n\n")
+	b.WriteString("For CLI runs, start `resterm mock requests.http` in one terminal, then run requests from another.\n\n")
 	b.WriteString("Next steps:\n")
-	b.WriteString("- Captures let you store response values for later requests.\n")
-	b.WriteString("- Workflows chain requests with shared context.\n")
+	b.WriteString("- The mock scenarios demonstrate JSON matching, numeric rules, and response interpolation.\n")
+	b.WriteString("- The requests demonstrate assertions, bearer auth, and two forms of `@for-each`.\n")
 	b.WriteString("- `")
 	b.WriteString(fileRTSHelpers)
-	b.WriteString("` shows a RestermScript module example.\n")
+	b.WriteString("` shows object lists, `??`, and the ternary operator.\n")
 	b.WriteString(
 		"- See docs in [docs/resterm.md](https://github.com/unkn0wn-root/resterm/blob/main/docs/resterm.md) for details.\n",
 	)

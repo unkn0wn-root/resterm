@@ -2,12 +2,19 @@ package initcmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/mock"
+	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestRunStandardCreatesFiles(t *testing.T) {
@@ -37,6 +44,99 @@ func TestRunStandardCreatesFiles(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "resterm.env.json") {
 		t.Fatalf("expected resterm.env.json in .gitignore")
+	}
+}
+
+func TestBuiltinRequestTemplatesUseLocalRunnableMocks(t *testing.T) {
+	tests := []struct {
+		name         string
+		source       string
+		wantRequests int
+	}{
+		{name: "minimal", source: reqHTTPMinimal, wantRequests: 2},
+		{name: "standard", source: reqHTTPStandard, wantRequests: 4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if strings.Contains(tt.source, "httpbin.org") {
+				t.Fatal("starter request template must not depend on httpbin.org")
+			}
+			doc := parser.Parse("requests.http", []byte(tt.source))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("parse errors: %+v", doc.Errors)
+			}
+			if got := len(doc.Mocks); got != 3 {
+				t.Fatalf("mocks = %d, want 3", got)
+			}
+			if got := len(doc.Requests); got != tt.wantRequests {
+				t.Fatalf("requests = %d, want %d", got, tt.wantRequests)
+			}
+			if _, err := mock.Compile([]*restfile.Document{doc}); err != nil {
+				t.Fatalf("compile mocks: %v", err)
+			}
+		})
+	}
+
+	for name, source := range map[string]string{
+		"environment":         envJSON,
+		"example environment": envExampleJSON,
+	} {
+		if strings.Contains(source, "httpbin.org") || strings.Contains(source, "api.example.com") {
+			t.Fatalf("%s template must use only the local starter service", name)
+		}
+		if !strings.Contains(source, `"$shared"`) || strings.Count(source, `"url"`) != 1 {
+			t.Fatalf("%s template must define the common URL once under $shared", name)
+		}
+	}
+
+	for _, want := range []string{
+		`# @match json={"kind":"greeting"}`,
+		`# @match headers={"Authorization":{"prefix":"Bearer "}} json={"role":"member"}`,
+		`# @match json-rules={"age":{"gte":18}}`,
+		`# @for-each ["david","damian","bob"] as name`,
+		`# @for-each helpers.users() as user`,
+		`user["nickname"] ?? user.name`,
+		`user.active ? "active" : "inactive"`,
+	} {
+		if !strings.Contains(reqHTTPStandard, want) && !strings.Contains(helpersRTS, want) {
+			t.Fatalf("standard template is missing %q", want)
+		}
+	}
+}
+
+func TestStarterUserMockSelectsRulesAndFallback(t *testing.T) {
+	doc := parser.Parse("requests.http", []byte(reqHTTPMinimal))
+	handler, err := mock.Compile([]*restfile.Document{doc})
+	if err != nil {
+		t.Fatalf("compile mocks: %v", err)
+	}
+
+	request := func(age int, authorized bool) *httptest.ResponseRecorder {
+		t.Helper()
+		body := fmt.Sprintf(
+			`{"id":"user-1","name":"Ada","role":"member","age":%d,"displayName":"Ada","status":"active"}`,
+			age,
+		)
+		req := httptest.NewRequest(http.MethodPost, "http://starter.test/users", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if authorized {
+			req.Header.Set("Authorization", "Bearer dev-token-123")
+		}
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		return res
+	}
+
+	accepted := request(36, true)
+	if accepted.Code != http.StatusCreated || !strings.Contains(accepted.Body.String(), `"name": "Ada"`) {
+		t.Fatalf("accepted response = %d %q", accepted.Code, accepted.Body.String())
+	}
+
+	for _, res := range []*httptest.ResponseRecorder{request(17, true), request(36, false)} {
+		if res.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("fallback response = %d %q, want 422", res.Code, res.Body.String())
+		}
 	}
 }
 
