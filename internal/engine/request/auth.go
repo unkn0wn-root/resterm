@@ -13,6 +13,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -95,8 +96,8 @@ func InjectedAuthSecrets(
 		return nil
 	}
 	hdr := injectedAuthHeader(auth)
-	beforeVal := headerValue(reqHeaders(before), hdr)
-	afterVal := headerValue(reqHeaders(after), hdr)
+	beforeVal := header.Value(reqHeaders(before), hdr)
+	afterVal := header.Value(reqHeaders(after), hdr)
 	if strings.TrimSpace(afterVal) == "" || afterVal == beforeVal {
 		return nil
 	}
@@ -145,12 +146,8 @@ func injectedAuthHeader(auth *restfile.AuthSpec) string {
 	return oauth.DefaultHeader
 }
 
-func headerPresent(h http.Header, name string) bool {
-	return h != nil && h.Get(name) != ""
-}
-
 func requestHeaderPresent(req *restfile.Request, name string) bool {
-	return headerPresent(reqHeaders(req), name) || grpcMetadataPresent(req, name)
+	return header.Present(reqHeaders(req), name) || grpcMetadataPresent(req, name)
 }
 
 // A key set via @grpc-metadata overrides auth the same way a header does.
@@ -229,13 +226,6 @@ func grpcAuthHeaders(req *restfile.Request) http.Header {
 		out.Add(pair.Key, pair.Value)
 	}
 	return out
-}
-
-func headerValue(h http.Header, name string) string {
-	if h == nil {
-		return ""
-	}
-	return strings.TrimSpace(h.Get(name))
 }
 
 func (e *Engine) authCmdManager() (*authcmd.Manager, error) {

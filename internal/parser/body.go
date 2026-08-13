@@ -102,27 +102,42 @@ func (b *documentBuilder) handleHeaderLine(ln line) bool {
 	if !b.inRequest || !b.request.http.HasMethod() || b.request.http.HeaderDone() {
 		return false
 	}
-	// A feature collecting raw lines takes them before the header block does.
-	// Without this, a @query or @variables block written straight after the
-	// method line loses its content to a header named after whatever sits in
-	// front of the first colon.
-	if b.request.protoBodyLine(ln.raw) {
-		b.appendLine(ln.raw)
-		return true
-	}
 	if before, after, ok := strings.Cut(ln.raw, ":"); ok {
 		headerName := strings.TrimSpace(before)
 		headerValue := strings.TrimSpace(after)
+		// A valid header must win before a GraphQL or gRPC raw-block collector.
+		// Both protocols accept arbitrary body lines, so offering the line to
+		// them first used to swallow valid gRPC headers as protobuf JSON.
+		if header.Valid(headerName) {
+			b.request.http.AddHeader(headerName, headerValue)
+			b.appendLine(ln.raw)
+			return true
+		}
+		// Query/variables and protobuf JSON may contain colons. Give an invalid
+		// header-shaped line to the active protocol before diagnosing it as a
+		// request header.
+		if b.request.protoBodyLine(ln.raw) {
+			b.request.markHeadersDone()
+			b.appendLine(ln.raw)
+			return true
+		}
 		// A name that is not an HTTP field name cannot be sent, and header
 		// names are never expanded, so nothing later can rescue it. Report it
 		// here, where the line number points at the fix, and still record it so
 		// the request stays what the file says.
-		if !header.Valid(headerName) {
-			b.addError(ln.no, fmt.Sprintf("header name %q is not an HTTP field name", headerName))
-		}
+		b.addError(ln.no, fmt.Sprintf("header name %q is not an HTTP field name", headerName))
 		if headerName != "" {
 			b.request.http.AddHeader(headerName, headerValue)
 		}
+	} else if b.request.protoBodyLine(ln.raw) {
+		// A feature collecting a raw block takes non-header lines before the
+		// ordinary body builder. This supports @query/@variables immediately
+		// after the request line as well as protobuf JSON without a blank line.
+		// The block also ends the header span, so a later query line such as a
+		// GraphQL alias is never read back as a header.
+		b.request.markHeadersDone()
+		b.appendLine(ln.raw)
+		return true
 	}
 	b.appendLine(ln.raw)
 	return true

@@ -55,6 +55,29 @@ func TestParseReturnsCaseInsensitiveIdentityWithoutTrimming(t *testing.T) {
 	}
 }
 
+func TestValueAndPresentIgnoreKeyCaseAndBlanks(t *testing.T) {
+	src := map[string][]string{
+		"authorization": {"Bearer from-user"},
+		"X-Blank":       {"", "  "},
+		"X-Second":      {" ", "kept"},
+	}
+	if got := Value(src, "Authorization"); got != "Bearer from-user" {
+		t.Fatalf("Value(Authorization) = %q, want the lowercase entry", got)
+	}
+	if got := Value(src, "x-second"); got != "kept" {
+		t.Fatalf("Value(x-second) = %q, want kept", got)
+	}
+	if Present(src, "X-Blank") {
+		t.Fatal("a blank value counts as present")
+	}
+	if Present(nil, "Authorization") {
+		t.Fatal("a nil block reports a header")
+	}
+	if Present(src, "X-Missing") {
+		t.Fatal("an absent header reports present")
+	}
+}
+
 func TestNormalizeKeepsEveryValueAsAList(t *testing.T) {
 	src := map[string][]string{
 		"X-Test":    {"a", "b"},

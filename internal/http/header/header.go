@@ -64,6 +64,39 @@ func Key(name string) (string, error) {
 	return n.Key(), nil
 }
 
+// Value returns the first non-blank value stored under name. Keys are matched
+// case-insensitively and are never canonicalized, so a block written straight
+// into the map answers the same way one built with the http.Header setters
+// does.
+func Value(src map[string][]string, name string) string {
+	if v := firstValue(src[name]); v != "" {
+		return v
+	}
+	for key, values := range src {
+		if !strings.EqualFold(key, name) {
+			continue
+		}
+		if v := firstValue(values); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// Present reports whether name carries a non-blank value in src.
+func Present(src map[string][]string, name string) bool {
+	return Value(src, name) != ""
+}
+
+func firstValue(values []string) string {
+	for _, value := range values {
+		if v := strings.TrimSpace(value); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // Named contains a header name and its case-insensitive identity.
 type Named struct {
 	Source string

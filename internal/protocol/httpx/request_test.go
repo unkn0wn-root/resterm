@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -162,6 +163,31 @@ func TestApplyAuthenticationSkipsUnusedParams(t *testing.T) {
 	}
 	if got := httpReq.Header.Get("Authorization"); got != "Bearer explicit" {
 		t.Fatalf("authorization header changed: %q", got)
+	}
+}
+
+func TestApplyAuthenticationSkipsUnusedParamsForLowercaseHeader(t *testing.T) {
+	c := NewClient(nil)
+	httpReq, err := http.NewRequest("GET", "https://example.com", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	// A block assigned straight into the header map keeps the case it was
+	// written with, so auth has to see the name without canonicalizing it.
+	httpReq.Header = http.Header{"authorization": {"Bearer explicit"}}
+	auth := &restfile.AuthSpec{
+		Type:   "bearer",
+		Params: map[string]string{"token": "{{missing}}"},
+	}
+
+	if err := c.applyAuthentication(httpReq, vars.NewResolver(), auth); err != nil {
+		t.Fatalf("unexpected error for case-insensitive auth override: %v", err)
+	}
+	if got := header.Value(httpReq.Header, "Authorization"); got != "Bearer explicit" {
+		t.Fatalf("authorization header changed: %q", got)
+	}
+	if len(httpReq.Header) != 1 {
+		t.Fatalf("auth added a second authorization header: %v", httpReq.Header)
 	}
 }
 
