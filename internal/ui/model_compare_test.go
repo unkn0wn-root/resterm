@@ -118,7 +118,7 @@ func TestCompareProgressSummaryMarksGroupedBaseline(t *testing.T) {
 		t.Fatalf("prepare compare: %v", err)
 	}
 
-	state := compareStateFromPlan(pl, httpx.Options{}, "Compare items")
+	state := compareStateFromPlan(pl, httpx.Options{}, "Compare GET items", "Compare items")
 	want := "api=dev, app=one? api=stage, app=one*? api=prod, app=one?"
 	if got := state.progressSummary(); got != want {
 		t.Fatalf("progress summary =\n%q\nwant\n%q", got, want)

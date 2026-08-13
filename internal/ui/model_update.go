@@ -221,15 +221,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.nextStreamMsgCmd())
 	}
 
-	if m.showErrorModal {
+	if m.showStatusModal {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch keyMsg.String() {
-			case "esc", "enter":
-				m.closeErrorModal()
-				return m, batchCommands(cmds...)
-			case "ctrl+q", "ctrl+d":
-				return m, tea.Quit
-			}
+			cmd := modalKey(keyMsg.String(), m.closeStatusModal, m.statusModalViewport)
+			return m, batchCommands(append(cmds, cmd)...)
 		}
 		return m, batchCommands(cmds...)
 	}
@@ -696,9 +691,11 @@ func (m *Model) confirmCrossFileNavigation(
 		retryHint,
 	)
 	m.pendingCrossFile = pending
+	// Keep the prompt in the bar so the next key reaches the confirmation handler.
 	m.setStatusMessage(statusMsg{
-		text:  pending.statusText,
-		level: statusWarn,
+		text:    pending.statusText,
+		level:   statusWarn,
+		noModal: true,
 	})
 	return false
 }
@@ -1030,6 +1027,9 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionShowRequestDetails:
 		m.openRequestDetails()
 		return nil, true
+	case bindings.ActionShowStatusMessage:
+		m.openStatusMessageModal()
+		return nil, true
 	case bindings.ActionOpenPathModal:
 		m.openOpenModal()
 		return nil, true
@@ -1183,7 +1183,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *Model) modalCapturesGlobalKeys() bool {
 	switch {
-	case m.showErrorModal,
+	case m.showStatusModal,
 		m.showOpenModal,
 		m.showNewFileModal,
 		m.showResponseSaveModal,

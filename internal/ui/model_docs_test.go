@@ -69,12 +69,12 @@ func TestDocsCommandFailureShowsCopyableURL(t *testing.T) {
 	msg := model.openDocsQuery([]string{"requests"})().(docsOpenedMsg)
 	model.handleDocsOpened(msg)
 
-	if !model.showErrorModal {
+	if !model.showStatusModal {
 		t.Fatal("expected browser failure to open an error modal")
 	}
 	for _, want := range []string{"browser unavailable", msg.url, "Open this URL manually"} {
-		if !strings.Contains(model.errorModalMessage, want) {
-			t.Fatalf("expected error modal to contain %q, got %q", want, model.errorModalMessage)
+		if !strings.Contains(model.statusModalMessage, want) {
+			t.Fatalf("expected error modal to contain %q, got %q", want, model.statusModalMessage)
 		}
 	}
 }

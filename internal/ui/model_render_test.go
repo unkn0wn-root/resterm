@@ -164,7 +164,7 @@ func TestCenteredModalUnderlayKeepsAppVisible(t *testing.T) {
 	model.theme.PaneBorderFocusFile = lipgloss.Color("#111111")
 	model.theme.PaneDivider = lipgloss.NewStyle().Foreground(lipgloss.Color("#222222"))
 	_ = model.applyLayout()
-	model.openErrorModal("network down")
+	model.openStatusModal(statusError, "network down")
 
 	view := model.View()
 	plain := ansi.Strip(view)
@@ -195,7 +195,7 @@ func TestCenteredModalUnderlayUsesBackdropColor(t *testing.T) {
 	model.ready = true
 	model.theme.ModalBackdrop = lipgloss.Color("#0f1720")
 	_ = model.applyLayout()
-	model.openErrorModal("network down")
+	model.openStatusModal(statusError, "network down")
 
 	view := model.View()
 	if !strings.Contains(view, "\x1b[38;2;15;23;32m") {
@@ -259,9 +259,19 @@ func TestModalTitlesAreCenteredWithinBorders(t *testing.T) {
 			name:  "error",
 			title: "Error",
 			setup: func(m *Model) {
-				m.errorModalMessage = "network down"
+				m.statusModalLevel = statusError
+				m.statusModalMessage = "network down"
 			},
-			render: func(m *Model) string { return m.renderErrorModal() },
+			render: func(m *Model) string { return m.renderStatusModal() },
+		},
+		{
+			name:  "status",
+			title: "Status",
+			setup: func(m *Model) {
+				m.statusModalLevel = statusInfo
+				m.statusModalMessage = "Saved response body to /tmp/out.json"
+			},
+			render: func(m *Model) string { return m.renderStatusModal() },
 		},
 		{
 			name:   "layout save",

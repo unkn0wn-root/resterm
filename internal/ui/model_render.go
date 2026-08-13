@@ -22,6 +22,11 @@ import (
 const helpKeyColumnWidth = 32
 
 const (
+	statusModalMaxBodyHeight = 20
+	statusModalMinBodyHeight = 3
+)
+
+const (
 	filePaneTitle     = "Files"
 	editorPaneTitle   = "Editor"
 	responsePaneTitle = "Response"
@@ -85,8 +90,8 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame("Initialising...")
 	}
 
-	if m.showErrorModal {
-		return m.renderWithinAppFrame(m.renderErrorModal())
+	if m.showStatusModal {
+		return m.renderWithinAppFrame(m.renderStatusModal())
 	}
 	if m.showMockVerification {
 		return m.renderWithinAppFrame(m.renderMockVerificationModal())
@@ -2337,7 +2342,7 @@ func (m Model) renderHistoryPreviewModal() string {
 	return m.renderModalBox(title, bodyView, instructions, width)
 }
 
-func (m Model) renderErrorModal() string {
+func (m Model) renderStatusModal() string {
 	width := min(m.width-10, 72)
 	if width < 32 {
 		candidate := m.width - 4
@@ -2348,18 +2353,22 @@ func (m Model) renderErrorModal() string {
 		}
 	}
 	contentWidth := max(width-4, 24)
-	message := strings.TrimSpace(m.errorModalMessage)
-	if message == "" {
-		message = "An unexpected error occurred."
-	}
-	wrapped := wrapToWidth(message, contentWidth)
-	messageView := m.theme.Error.Render(wrapped)
-	title := m.renderModalTitle("Error", width)
+	wrapped := wrapToWidth(m.statusModalMessage, contentWidth)
+	body, scrolls := m.statusModalBody(wrapped, contentWidth)
+	messageView := m.statusModalStyle().Render(body)
+	title := m.renderModalTitle(statusModalTitle(m.statusModalLevel), width)
 	instructions := fmt.Sprintf(
 		"%s / %s Dismiss",
 		m.theme.CommandBarHint.Render("Esc"),
 		m.theme.CommandBarHint.Render("Enter"),
 	)
+	if scrolls {
+		instructions = fmt.Sprintf(
+			"%s Scroll    %s",
+			m.theme.CommandBarHint.Render("j/k"),
+			instructions,
+		)
+	}
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
@@ -2371,6 +2380,45 @@ func (m Model) renderErrorModal() string {
 	boxStyle := m.theme.BrowserBorder.Width(width)
 	box := boxStyle.Render(content)
 	return m.renderCenteredModal(box)
+}
+
+func (m Model) statusModalBody(wrapped string, contentWidth int) (string, bool) {
+	limit := max(min(m.height-12, statusModalMaxBodyHeight), statusModalMinBodyHeight)
+	vp := m.statusModalViewport
+	if vp == nil || lipgloss.Height(wrapped) <= limit {
+		return wrapped, false
+	}
+	vp.SetContent(wrapped)
+	vp.Width = contentWidth
+	vp.Height = limit
+	return vp.View(), true
+}
+
+// Preserve severity colors without bolding the message body.
+func (m Model) statusModalStyle() lipgloss.Style {
+	switch m.statusModalLevel {
+	case statusError:
+		return m.theme.Error.UnsetBold()
+	case statusWarn:
+		return m.theme.ExplainWarning.UnsetBold()
+	case statusSuccess:
+		return m.theme.Success.UnsetBold()
+	}
+	if m.themeRuntime.isLight() {
+		return theme.ActiveTextStyle(m.theme)
+	}
+	return lipgloss.NewStyle()
+}
+
+func statusModalTitle(level statusLevel) string {
+	switch level {
+	case statusError:
+		return "Error"
+	case statusWarn:
+		return "Warning"
+	default:
+		return "Status"
+	}
 }
 
 func (m Model) renderLayoutSaveModal() string {

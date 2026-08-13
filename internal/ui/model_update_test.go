@@ -204,7 +204,7 @@ func TestHandleKeyIgnoredWhileErrorModalVisible(t *testing.T) {
 	_ = model.setFocus(focusEditor)
 	_ = model.setInsertMode(false, false)
 	model.moveCursorToLine(2)
-	model.showErrorModal = true
+	model.showStatusModal = true
 
 	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {

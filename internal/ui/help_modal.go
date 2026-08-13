@@ -275,6 +275,10 @@ func (m Model) helpSections() []helpSection {
 			title: "Layout & View",
 			entries: sortedHelpEntries([]helpEntry{
 				{
+					m.helpActionKey(bindings.ActionShowStatusMessage, "g ."),
+					"Show the full status bar message",
+				},
+				{
 					m.helpCombinedKey(
 						[]bindings.ActionID{
 							bindings.ActionToggleResponseSplitVert,
