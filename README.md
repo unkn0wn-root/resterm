@@ -14,6 +14,9 @@
 
 Resterm is a keyboard-driven API client that runs in your terminal. Requests are plain `.http` files that you can diff, review and version like code. Everything stays on your machine. No accounts, no cloud sync, no telemetry.
 
+> [!NOTE]
+> Resterm is now v1! See the [v1.0.0 release notes](https://github.com/unkn0wn-root/resterm/releases/tag/v1.0.0) for new features and breaking changes.
+
 Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Documentation](#documentation).
 
 ## Screenshot tour
