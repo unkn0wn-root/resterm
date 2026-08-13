@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -678,18 +677,10 @@ func (m *Model) confirmCrossFileNavigation(
 		m.clearPendingCrossFileNavigation()
 		return true
 	}
-	base := filepath.Base(path)
-	if base == "" {
-		base = path
-	}
 	if strings.TrimSpace(retryHint) == "" {
 		retryHint = "Repeat the action to continue."
 	}
-	pending.statusText = fmt.Sprintf(
-		"Unsaved changes will be discarded when opening %s. %s",
-		base,
-		retryHint,
-	)
+	pending.statusText = fmt.Sprintf("%s Unsaved changes will be discarded.", retryHint)
 	m.pendingCrossFile = pending
 	// Keep the prompt in the bar so the next key reaches the confirmation handler.
 	m.setStatusMessage(statusMsg{

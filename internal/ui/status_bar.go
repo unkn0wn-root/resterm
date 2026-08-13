@@ -32,7 +32,7 @@ const (
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
-	statusBarStatusShare   = 60
+	statusBarStatusShare   = 50
 	statusBarMinimizedIcon = "❐"
 )
 
