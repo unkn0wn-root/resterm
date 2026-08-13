@@ -2353,10 +2353,13 @@ func (m Model) renderStatusModal() string {
 		}
 	}
 	contentWidth := max(width-4, 24)
-	wrapped := wrapToWidth(m.statusModalMessage, contentWidth)
-	body, scrolls := m.statusModalBody(wrapped, contentWidth)
-	messageView := m.statusModalStyle().Render(body)
-	title := m.renderModalTitle(statusModalTitle(m.statusModalLevel), width)
+	viewWidth := max(contentWidth-4, 20)
+	wrapped := wrapToWidth(m.statusModalMessage, viewWidth)
+	body, scrolls := m.statusModalBody(wrapped, viewWidth)
+	bodyView := lipgloss.NewStyle().
+		Padding(0, 2).
+		Width(contentWidth).
+		Render(m.statusModalStyle().Render(body))
 	instructions := fmt.Sprintf(
 		"%s / %s Dismiss",
 		m.theme.CommandBarHint.Render("Esc"),
@@ -2369,27 +2372,22 @@ func (m Model) renderStatusModal() string {
 			instructions,
 		)
 	}
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		"",
-		messageView,
-		"",
+	return m.renderModalBox(
+		statusModalTitle(m.statusModalLevel),
+		bodyView,
 		instructions,
+		width,
 	)
-	boxStyle := m.theme.BrowserBorder.Width(width)
-	box := boxStyle.Render(content)
-	return m.renderCenteredModal(box)
 }
 
-func (m Model) statusModalBody(wrapped string, contentWidth int) (string, bool) {
+func (m Model) statusModalBody(wrapped string, viewWidth int) (string, bool) {
 	limit := max(min(m.height-12, statusModalMaxBodyHeight), statusModalMinBodyHeight)
 	vp := m.statusModalViewport
 	if vp == nil || lipgloss.Height(wrapped) <= limit {
 		return wrapped, false
 	}
 	vp.SetContent(wrapped)
-	vp.Width = contentWidth
+	vp.Width = viewWidth
 	vp.Height = limit
 	return vp.View(), true
 }

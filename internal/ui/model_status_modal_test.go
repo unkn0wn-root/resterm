@@ -172,6 +172,27 @@ func TestStatusModalBodyIsNotBold(t *testing.T) {
 	}
 }
 
+func TestStatusModalPadsMessageAndInstructionsFromFrame(t *testing.T) {
+	m := newStatusModalModel(80)
+	m.openStatusModal(statusWarn, "connection refused")
+
+	view := ansi.Strip(m.renderStatusModal())
+	for _, text := range []string{"connection refused", "Dismiss"} {
+		line := lineWith(view, text)
+		if line == "" {
+			t.Fatalf("expected modal line containing %q, got %q", text, view)
+		}
+		start := strings.Index(line, text)
+		leftBorder := strings.LastIndex(line[:start], "│")
+		if leftBorder < 0 {
+			t.Fatalf("expected a left modal border before %q, got %q", text, line)
+		}
+		if pad := lipgloss.Width(line[leftBorder+len("│") : start]); pad < 2 {
+			t.Fatalf("expected at least two cells before %q, got %d in %q", text, pad, line)
+		}
+	}
+}
+
 // Replay preceding SGR sequences to find the active bold state at needle.
 func sgrBoldBefore(line, needle string) bool {
 	idx := strings.Index(line, needle)
