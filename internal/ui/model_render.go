@@ -268,19 +268,21 @@ func (m Model) renderWithinAppFrame(content string) string {
 }
 
 func (m Model) renderCenteredModal(box string) string {
-	boxWidth := lipgloss.Width(box)
-	boxHeight := lipgloss.Height(box)
-	width := max(m.width, boxWidth)
-	height := max(m.height, boxHeight)
+	x, y, width, height := m.modalPlacement(box)
 	if width <= 0 || height <= 0 {
 		return box
 	}
 
 	base := m.renderModalUnderlay(width, height)
+	return m.renderModalOverlay(base, box, x, y, lipgloss.Width(box), lipgloss.Height(box), width, height)
+}
 
-	x := max((width-boxWidth)/2, 0)
-	y := max((height-boxHeight)/2, 0)
-	return m.renderModalOverlay(base, box, x, y, boxWidth, boxHeight, width, height)
+func (m Model) modalPlacement(box string) (x, y, width, height int) {
+	boxWidth := lipgloss.Width(box)
+	boxHeight := lipgloss.Height(box)
+	width = max(m.width, boxWidth)
+	height = max(m.height, boxHeight)
+	return max((width-boxWidth)/2, 0), max((height-boxHeight)/2, 0), width, height
 }
 
 func (m Model) renderModalUnderlay(width, height int) string {
@@ -2600,19 +2602,21 @@ func (m Model) renderOpenModal() string {
 			Padding(0, 2).
 			Render(inputView),
 	}
-	if popup := m.buildMenuPopup(m.openPathPrompt.menu, openModalSuggestionRows, width-4); len(popup) > 0 {
-		lines = append(lines, lipgloss.NewStyle().
-			Padding(0, 2).
-			Render(strings.Join(popup, "\n")))
-	}
+	// rows above the list, measured before the rest of the box is built
+	anchor := 1 + lipgloss.Height(lipgloss.JoinVertical(lipgloss.Left, lines...))
+
 	if m.openPathError != "" {
 		errorLine := m.theme.Error.
 			Padding(0, 2).
 			Render(m.openPathError)
 		lines = append(lines, "", errorLine)
 	}
-	// Width keeps the padding on every line, so a terminal too narrow for one
-	// row of hints wraps them under the same margin instead of flush left.
+	// the list covers this row, so drop the hints but keep the row or the box
+	// changes height
+	if len(m.openPathPrompt.menu.Items()) > 0 {
+		instructions = ""
+	}
+	// Width keeps the padding when a narrow terminal wraps the hints.
 	lines = append(lines, "", m.theme.HeaderValue.
 		Padding(0, 2).
 		Width(width).
@@ -2620,7 +2624,21 @@ func (m Model) renderOpenModal() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return m.renderCenteredModal(box)
+	return m.overlayOpenPathSuggestions(m.renderCenteredModal(box), box, anchor, width)
+}
+
+// The list hangs off the input on top of the modal, so the box keeps its size
+// while the list grows and shrinks. A long list runs past the bottom of it.
+func (m Model) overlayOpenPathSuggestions(frame, box string, anchor, width int) string {
+	x, y, frameW, frameH := m.modalPlacement(box)
+	top := y + anchor
+	rows := min(openModalSuggestionRows, max(frameH-top-m.editorHintBoxMetrics().frameH, 0))
+
+	popup := m.buildMenuPopup(m.openPathPrompt.menu, rows, width-4)
+	if len(popup) == 0 {
+		return frame
+	}
+	return overlayHintPopup(frame, popup, x+2, top, frameW, frameH)
 }
 
 func (m Model) renderResponseSaveModal() string {

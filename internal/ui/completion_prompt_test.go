@@ -62,6 +62,7 @@ func TestClosedCommandLineIgnoresPathRead(t *testing.T) {
 func TestOpenModalListsItsDirectoryOnOpen(t *testing.T) {
 	model := New(Config{WorkspaceRoot: completionWorkspace(t)})
 	model.width = 100
+	model.height = 32
 
 	model.openOpenModal()
 
@@ -78,6 +79,7 @@ func TestOpenModalCompletesPaths(t *testing.T) {
 	root := completionWorkspace(t)
 	model := New(Config{WorkspaceRoot: root})
 	model.width = 100
+	model.height = 32
 	model.openOpenModal()
 	model.openPathPrompt.input.SetValue("a")
 	model.openPathPrompt.refresh(model.openPathSource())
