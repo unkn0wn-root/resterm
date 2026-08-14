@@ -6,30 +6,58 @@ import (
 )
 
 func TestLogoPlaceholderContentCenters(t *testing.T) {
-	lines := strings.Split(noResponseMessage, "\n")
-	if len(lines) == 0 {
-		t.Fatalf("expected logo lines")
+	width := noResponseWordmarkWidth + 10
+	lines := strings.Split(logoPlaceholder(width, 0), "\n")
+	if len(lines) != len(noResponseLogo) {
+		t.Fatalf("expected %d lines, got %d", len(noResponseLogo), len(lines))
 	}
 
-	lineWidth := visibleWidth(strings.TrimRight(lines[0], " "))
-	if lineWidth == 0 {
-		t.Fatalf("expected non-zero logo width")
+	for i, line := range lines {
+		want := (width-noResponseWordmarkWidth)/2 + visibleWidth(leadingIndent(noResponseLogo[i]))
+		got := visibleWidth(leadingIndent(line))
+		if got != want {
+			t.Fatalf("line %d padding: want %d, got %d", i, want, got)
+		}
+	}
+}
+
+func TestNoResponseWordmarkRows(t *testing.T) {
+	if end := noResponseWordmarkRow + noResponseWordmarkHeight; end > len(noResponseLogo) {
+		t.Fatalf("wordmark ends on row %d, but the logo only has %d rows", end, len(noResponseLogo))
 	}
 
-	width := lineWidth + 10
-	content := logoPlaceholder(width, 0)
-	gotLines := strings.Split(content, "\n")
-	if len(gotLines) != len(lines) {
-		t.Fatalf("expected %d lines, got %d", len(lines), len(gotLines))
+	for i, line := range noResponseLogo {
+		want := i >= noResponseWordmarkRow && i < noResponseWordmarkRow+noResponseWordmarkHeight
+		if strings.HasPrefix(line, "░") != want {
+			t.Fatalf("logo row %d is %q, but the row constants say wordmark=%v", i, line, want)
+		}
 	}
+}
 
-	for i, line := range gotLines {
-		orig := strings.TrimRight(lines[i], " ")
-		origWidth := visibleWidth(orig)
-		wantPadding := (width - origWidth) / 2
-		gotPadding := visibleWidth(leadingIndent(line))
-		if gotPadding != wantPadding {
-			t.Fatalf("line %d padding: want %d, got %d", i, wantPadding, gotPadding)
+func TestLogoPlaceholderCentersWordmarkVertically(t *testing.T) {
+	const height = 15
+	lines := strings.Split(logoPlaceholder(noResponseWordmarkWidth+10, height), "\n")
+	mark := noResponseLogo[noResponseWordmarkRow]
+
+	got := -1
+	for i, line := range lines {
+		if strings.Contains(line, mark) {
+			got = i
+			break
+		}
+	}
+	want := (height - noResponseWordmarkHeight) / 2
+	if got != want {
+		t.Fatalf("wordmark starts on row %d, want %d", got, want)
+	}
+}
+
+func TestLogoPlaceholderFitsNarrowPanes(t *testing.T) {
+	for width := 1; width <= noResponseWordmarkWidth+10; width++ {
+		for i, line := range strings.Split(logoPlaceholder(width, 12), "\n") {
+			if got := visibleWidth(line); got > width {
+				t.Fatalf("pane width %d: line %d is %d columns: %q", width, i, got, line)
+			}
 		}
 	}
 }

@@ -96,7 +96,12 @@ const (
 )
 
 const (
-	noResponseMessage         = "░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█\n░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█\n░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀"
+	noResponseMessage = `                         z
+                      z
+░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█
+░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█
+░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀  >_`
+
 	historySnippetPlaceholder = "[HTML content omitted]"
 	historySnippetMaxLines    = 24
 	tabIndicatorPrefix        = "▹ "
