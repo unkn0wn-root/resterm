@@ -33,9 +33,8 @@ func TestCommandLineCompletesRequestPath(t *testing.T) {
 	}
 
 	model.handlePathRead(completionPathRead(t, nested))
-	want := []string{filepath.Join("api", "payments.rest")}
-	if labels := completionLabels(model.commandLine); !slices.Equal(labels, want) {
-		t.Fatalf("nested suggestions = %q, want %q", labels, want)
+	if labels := completionLabels(model.commandLine); !slices.Equal(labels, []string{"payments.rest"}) {
+		t.Fatalf("nested suggestions = %q", labels)
 	}
 
 	model.commandLine.input.SetValue("mock start --source ../")

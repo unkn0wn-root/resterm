@@ -259,7 +259,7 @@ func (m *Model) applyThemeToInputs() {
 	m.themeRuntime.applyTextInput(&m.helpFilter, m.theme, textInputKindHelp)
 	m.themeRuntime.applyTextInput(&m.newFileInput, m.theme, textInputKindGeneric)
 	m.themeRuntime.applyTextInput(&m.openPathPrompt.input, m.theme, textInputKindGeneric)
-	m.themeRuntime.applyTextInput(&m.responseSaveInput, m.theme, textInputKindGeneric)
+	m.themeRuntime.applyTextInput(&m.responseSavePrompt.input, m.theme, textInputKindGeneric)
 	m.themeRuntime.applyTextInput(&m.streamFilterInput, m.theme, textInputKindGeneric)
 	m.themeRuntime.applyTextInput(&m.historyFilterInput, m.theme, textInputKindHistory)
 	m.themeRuntime.applyTextInput(&m.navigatorFilter, m.theme, textInputKindNavigator)

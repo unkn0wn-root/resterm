@@ -60,9 +60,34 @@ func (s openPathSource) PathAt(input string, cursor int) (prompt.PathRequest, bo
 
 func (openPathSource) Suggest(string) []prompt.Item { return nil }
 
+// responseSavePathSource accepts any file and uses directories for navigation.
+type responseSavePathSource struct {
+	dir string
+}
+
+func (s responseSavePathSource) PathAt(input string, cursor int) (prompt.PathRequest, bool) {
+	runes := []rune(input)
+	if cursor < 0 || cursor > len(runes) {
+		return prompt.PathRequest{}, false
+	}
+	return prompt.PathRequest{
+		Value: string(runes[:cursor]),
+		Edit:  prompt.Edit{End: len(runes)},
+		Spec: prompt.PathSpec{
+			Root:        s.dir,
+			Accept:      func(string) bool { return true },
+			FileSummary: "file",
+			ExpandHome:  true,
+		},
+	}, true
+}
+
+func (responseSavePathSource) Suggest(string) []prompt.Item { return nil }
+
 var (
 	_ completionSource = commandSource{}
 	_ completionSource = openPathSource{}
+	_ completionSource = responseSavePathSource{}
 )
 
 func (m *Model) commandSource() commandSource {
@@ -76,6 +101,10 @@ func (m *Model) commandSource() commandSource {
 
 func (m *Model) openPathSource() openPathSource {
 	return openPathSource{workspace: m.ws.root, envFile: m.ws.envFile}
+}
+
+func (m *Model) responseSavePathSource() responseSavePathSource {
+	return responseSavePathSource{dir: m.responseSaveDir()}
 }
 
 func workspacePathSpec(root, envFile string) prompt.PathSpec {

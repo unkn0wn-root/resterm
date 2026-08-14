@@ -71,7 +71,13 @@ func (m Model) renderModalBox(title, body, instructions string, width int) strin
 		"",
 		body,
 		"",
-		m.theme.HeaderValue.Padding(0, 2).Render(instructions),
+		m.renderModalHints(width, instructions),
 	)
 	return m.renderCenteredModal(m.theme.BrowserBorder.Width(width).Render(content))
+}
+
+const modalPad = 2
+
+func (m Model) renderModalHints(width int, hints string) string {
+	return m.theme.HeaderValue.Render(paddedLeftLine(width, modalPad, hints))
 }

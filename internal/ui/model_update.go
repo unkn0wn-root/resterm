@@ -283,19 +283,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.responseSaveJustOpened = false
 				return m, batchCommands(cmds...)
 			}
-			switch keyMsg.String() {
-			case "esc":
-				m.closeResponseSaveModal()
-				return m, batchCommands(cmds...)
-			case "ctrl+q", "ctrl+d":
-				return m, tea.Quit
-			case "enter":
-				cmd := m.submitResponseSave()
-				return m, batchCommands(append(cmds, cmd)...)
-			}
-			var inputCmd tea.Cmd
-			m.responseSaveInput, inputCmd = m.responseSaveInput.Update(msg)
-			return m, batchCommands(append(cmds, inputCmd)...)
+			cmd := m.handleResponseSaveKey(keyMsg)
+			return m, batchCommands(append(cmds, cmd)...)
 		}
 		return m, batchCommands(cmds...)
 	}

@@ -17,6 +17,7 @@ type promptID uint8
 const (
 	promptCommandLine promptID = iota + 1
 	promptOpenPath
+	promptResponseSave
 )
 
 type pathReadMsg struct {
@@ -36,7 +37,11 @@ func newCompletionPrompt(id promptID, placeholder string) completionPrompt {
 }
 
 func (p *completionPrompt) open(src completionSource) tea.Cmd {
-	p.input.SetValue("")
+	return p.openWith(src, "")
+}
+
+func (p *completionPrompt) openWith(src completionSource, value string) tea.Cmd {
+	p.input.SetValue(value)
 	p.input.CursorEnd()
 	p.menu.Reset(nil)
 	p.paths.Reset()
@@ -161,5 +166,7 @@ func (m *Model) handlePathRead(msg pathReadMsg) {
 		m.commandLine.deliver(msg.read)
 	case promptOpenPath:
 		m.openPathPrompt.deliver(msg.read)
+	case promptResponseSave:
+		m.responseSavePrompt.deliver(msg.read)
 	}
 }

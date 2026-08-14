@@ -374,7 +374,7 @@ type Model struct {
 	saveAsFollowUp         tea.Cmd
 	openPathPrompt         completionPrompt
 	openPathError          string
-	responseSaveInput      textinput.Model
+	responseSavePrompt     completionPrompt
 	responseSaveError      string
 	showResponseSaveModal  bool
 	responseSaveJustOpened bool
@@ -502,7 +502,6 @@ func New(cfg Config) Model {
 	editor.Cursor.SetMode(cursor.CursorStatic)
 
 	newFileInput := newPromptInput("new-request", "")
-	responseSaveInput := newPromptInput("~/Downloads/response.bin", "")
 	searchInput := newPromptInput("pattern", "")
 
 	navFilter := newNavigatorFilterInput()
@@ -686,7 +685,7 @@ func New(cfg Config) Model {
 		editorViewKeyMap:         viewKeyMap,
 		newFileInput:             newFileInput,
 		openPathPrompt:           newCompletionPrompt(promptOpenPath, "./examples/basic.http"),
-		responseSaveInput:        responseSaveInput,
+		responseSavePrompt:       newCompletionPrompt(promptResponseSave, "~/Downloads/response.bin"),
 		searchInput:              searchInput,
 		searchTarget:             searchTargetEditor,
 		commandLine:              newCompletionPrompt(promptCommandLine, "command"),

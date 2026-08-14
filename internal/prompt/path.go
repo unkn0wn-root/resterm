@@ -100,16 +100,17 @@ func (q pathQuery) items(entries []DirEntry) []Item {
 			continue
 		}
 
-		segment := q.typed + entry.Name
+		name := entry.Name
 		summary := q.spec.FileSummary
 		if entry.Dir {
-			segment += string(filepath.Separator)
+			name += string(filepath.Separator)
 			summary = "directory"
 		}
+		// Show only the entry; Edit retains the full path.
 		out = append(out, Item{
-			Label:    segment,
+			Label:    name,
 			Summary:  summary,
-			Edit:     q.replace(q.committed + segment),
+			Edit:     q.replace(q.committed + q.typed + name),
 			Continue: entry.Dir && !q.spec.AcceptDirs,
 		})
 	}

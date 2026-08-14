@@ -31,38 +31,70 @@ func (m *Model) openResponseSaveModal() tea.Cmd {
 
 	m.showResponseSaveModal = true
 	m.responseSaveError = ""
-	m.responseSaveInput.SetValue(m.defaultResponseSavePath(snapshot))
-	m.responseSaveInput.CursorEnd()
-	m.responseSaveInput.Focus()
 	m.responseSaveJustOpened = true
 	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	m.closeOpenModal()
 	m.closeNewFileModal()
-	return nil
+	return m.responseSavePrompt.openWith(
+		m.responseSavePathSource(),
+		m.defaultResponseSavePath(snapshot),
+	)
+}
+
+func (m *Model) handleResponseSaveKey(msg tea.KeyMsg) tea.Cmd {
+	m.responseSaveError = ""
+	src := m.responseSavePathSource()
+
+	switch msg.String() {
+	case "esc":
+		m.closeResponseSaveModal()
+		return nil
+	case "ctrl+q", "ctrl+d":
+		return tea.Quit
+	case "enter":
+		cmd, more, err := m.responseSavePrompt.accept(src)
+		if err != nil {
+			m.responseSaveError = err.Error()
+			return nil
+		}
+		if more {
+			return cmd
+		}
+		return m.submitResponseSave()
+	}
+
+	cmd, err := m.responseSavePrompt.handleKey(msg, src)
+	if err != nil {
+		m.responseSaveError = err.Error()
+		return nil
+	}
+	return cmd
 }
 
 func (m *Model) closeResponseSaveModal() {
 	m.showResponseSaveModal = false
 	m.responseSaveError = ""
 	m.responseSaveJustOpened = false
-	m.responseSaveInput.Blur()
-	m.responseSaveInput.SetValue("")
+	m.responseSavePrompt.close()
+}
+
+func (m *Model) responseSaveDir() string {
+	if dir := strings.TrimSpace(m.lastResponseSaveDir); dir != "" {
+		return dir
+	}
+	if dir := strings.TrimSpace(m.ws.root); dir != "" {
+		return dir
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	return "."
 }
 
 func (m *Model) defaultResponseSavePath(snapshot *responseSnapshot) string {
-	base := strings.TrimSpace(m.lastResponseSaveDir)
-	if base == "" {
-		base = strings.TrimSpace(m.ws.root)
-	}
-	if base == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			base = cwd
-		} else {
-			base = "."
-		}
-	}
+	base := m.responseSaveDir()
 	name := suggestResponseFilename(snapshot)
 	if strings.TrimSpace(name) == "" {
 		name = "response.bin"
@@ -129,7 +161,7 @@ func (m *Model) submitResponseSave() tea.Cmd {
 		return nil
 	}
 
-	input := strings.TrimSpace(m.responseSaveInput.Value())
+	input := strings.TrimSpace(m.responseSavePrompt.value())
 	if input == "" {
 		m.responseSaveError = "Enter a path"
 		return nil
@@ -169,18 +201,7 @@ func (m *Model) submitResponseSave() tea.Cmd {
 func (m *Model) resolveResponseSavePath(input string) (string, error) {
 	path := util.ExpandHome(input)
 	if !filepath.IsAbs(path) {
-		base := strings.TrimSpace(m.lastResponseSaveDir)
-		if base == "" {
-			base = strings.TrimSpace(m.ws.root)
-		}
-		if base == "" {
-			if cwd, err := os.Getwd(); err == nil {
-				base = cwd
-			}
-		}
-		if base != "" {
-			path = filepath.Join(base, path)
-		}
+		path = filepath.Join(m.responseSaveDir(), path)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
