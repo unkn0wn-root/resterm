@@ -6,9 +6,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/prompt"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -56,14 +58,12 @@ func TestClosedCommandLineIgnoresPathRead(t *testing.T) {
 	}
 }
 
-// The modal is useful the moment it opens: the directory it starts on is listed
-// in the frame that draws it, not one frame later.
 func TestOpenModalListsItsDirectoryOnOpen(t *testing.T) {
 	model := New(Config{WorkspaceRoot: completionWorkspace(t)})
 	model.width = 100
 	model.height = 32
 
-	model.openOpenModal()
+	openPathModal(t, &model)
 
 	want := []string{"api" + pathSeparator, "users.http"}
 	if labels := completionLabels(model.openPathPrompt); !slices.Equal(labels, want) {
@@ -79,7 +79,7 @@ func TestOpenModalCompletesPaths(t *testing.T) {
 	model := New(Config{WorkspaceRoot: root})
 	model.width = 100
 	model.height = 32
-	model.openOpenModal()
+	openPathModal(t, &model)
 	model.openPathPrompt.input.SetValue("a")
 	model.openPathPrompt.refresh(model.openPathSource())
 
@@ -119,6 +119,57 @@ func TestEditCommandOpensQuotedPath(t *testing.T) {
 }
 
 var pathSeparator = string(filepath.Separator)
+
+func TestListDirSoonDeliversAFastListing(t *testing.T) {
+	load := prompt.DirLoad{Dir: "api", Gen: 7}
+	listing := prompt.DirRead{DirLoad: load, Entries: []prompt.DirEntry{{Name: "users.http"}}}
+
+	read, later := listDirSoon(promptOpenPath, load, func(prompt.DirLoad) prompt.DirRead {
+		return listing
+	}, time.Minute)
+
+	if later != nil {
+		t.Fatal("a listing that finished in time went back to the update loop")
+	}
+	if len(read.Entries) != 1 || read.Entries[0].Name != "users.http" {
+		t.Fatalf("delivered read = %+v", read)
+	}
+}
+
+func TestListDirSoonHandsASlowListingToTheUpdateLoop(t *testing.T) {
+	load := prompt.DirLoad{Dir: "api", Gen: 7}
+	release := make(chan struct{})
+	slow := func(prompt.DirLoad) prompt.DirRead {
+		<-release
+		return prompt.DirRead{DirLoad: load, Entries: []prompt.DirEntry{{Name: "users.http"}}}
+	}
+
+	read, later := listDirSoon(promptOpenPath, load, slow, time.Millisecond)
+	if later == nil {
+		t.Fatal("a listing past the wait did not go back to the update loop")
+	}
+	if len(read.Entries) != 0 {
+		t.Fatalf("a listing still running was delivered inline: %+v", read)
+	}
+
+	close(release)
+	msg, ok := later().(pathReadMsg)
+	if !ok {
+		t.Fatalf("deferred listing produced %T", msg)
+	}
+	if msg.id != promptOpenPath || len(msg.read.Entries) != 1 {
+		t.Fatalf("deferred listing = %+v", msg)
+	}
+}
+
+// The prompt lists its first directory inline when it can, so drain the read
+// for the times it cannot.
+func openPathModal(t *testing.T, model *Model) {
+	t.Helper()
+	if read, ok := findCompletionPathRead(model.openOpenModal()); ok {
+		model.handlePathRead(read)
+	}
+}
 
 func completionLabels(p completionPrompt) []string {
 	items := p.menu.Items()

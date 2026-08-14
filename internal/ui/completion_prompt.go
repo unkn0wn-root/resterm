@@ -59,9 +59,9 @@ func (p *completionPrompt) openWith(src completionSource, value string) tea.Cmd 
 	// one goes back to reading off the loop.
 	var pending tea.Cmd
 	if load := p.fill(src); load.Pending() {
-		read, wait := listDirSoon(p.id, load)
-		if wait != nil {
-			pending = wait
+		read, later := listDirSoon(p.id, load, readDir, firstListingWait)
+		if later != nil {
+			pending = later
 		} else {
 			p.deliver(read)
 		}
@@ -187,14 +187,19 @@ func readPathDir(id promptID, load prompt.DirLoad) tea.Cmd {
 // listDirSoon gives a fast directory long enough to land in the frame that
 // opens the prompt. A slow one comes back through the update loop instead, so
 // a network mount cannot hold the whole UI.
-func listDirSoon(id promptID, load prompt.DirLoad) (prompt.DirRead, tea.Cmd) {
+func listDirSoon(
+	id promptID,
+	load prompt.DirLoad,
+	read func(prompt.DirLoad) prompt.DirRead,
+	wait time.Duration,
+) (prompt.DirRead, tea.Cmd) {
 	done := make(chan prompt.DirRead, 1)
-	go func() { done <- readDir(load) }()
+	go func() { done <- read(load) }()
 
 	select {
 	case read := <-done:
 		return read, nil
-	case <-time.After(firstListingWait):
+	case <-time.After(wait):
 		return prompt.DirRead{}, func() tea.Msg {
 			return pathReadMsg{id: id, read: <-done}
 		}
