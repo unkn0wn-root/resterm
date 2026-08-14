@@ -28,5 +28,6 @@ coverage/
 
 # test harness services
 _test_services/
+_e2e
 
 resterm_*

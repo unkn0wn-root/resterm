@@ -3,7 +3,7 @@ package ui
 import "strings"
 
 const (
-	noResponseWordmarkRow    = 2
+	noResponseWordmarkRow    = 1
 	noResponseWordmarkHeight = 3
 )
 

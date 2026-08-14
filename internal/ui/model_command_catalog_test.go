@@ -7,6 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/unkn0wn-root/resterm/internal/prompt"
 )
 
 func TestExCatalogSuggestions(t *testing.T) {
@@ -37,7 +39,11 @@ func TestExCatalogSuggestions(t *testing.T) {
 			if len(items) != 1 {
 				t.Fatalf("expected one suggestion, got %+v", items)
 			}
-			if items[0].label != tt.label || items[0].insert != tt.insert {
+			insert, _, err := items[0].Edit.Apply(tt.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if items[0].Label != tt.label || insert != tt.insert {
 				t.Fatalf("unexpected suggestion: %+v", items[0])
 			}
 		})
@@ -49,7 +55,7 @@ func TestCommandSuggestionPopupKeepsBothColumnsReadable(t *testing.T) {
 	for _, width := range []int{80, 120} {
 		model := New(Config{})
 		model.width = width
-		model.commandSuggestions.reset(exCommands.Suggestions("mock "))
+		model.commandLine.menu.Reset(exCommands.Suggestions("mock "))
 		content := strings.Repeat(strings.Repeat(" ", width)+"\n", 13) + strings.Repeat(" ", width)
 
 		plain := ansi.Strip(model.renderCommandSuggestionPopup(content, 1))
@@ -84,12 +90,12 @@ func TestMockArgumentHintCompletesToItself(t *testing.T) {
 	model := New(Config{})
 	model.openCommandLine()
 	model.commandLineJustOpened = false
-	model.commandLineInput.SetValue("mock start 127.0.0.1:9000 --rec")
-	model.refreshCommandSuggestions()
+	model.commandLine.input.SetValue("mock start 127.0.0.1:9000 --rec")
+	model.commandLine.refresh(model.commandSource())
 
 	model.handleCommandLineKey(tea.KeyMsg{Type: tea.KeyTab})
 
-	if got := model.commandLineInput.Value(); got != "mock start 127.0.0.1:9000 --rec" {
+	if got := model.commandLine.value(); got != "mock start 127.0.0.1:9000 --rec" {
 		t.Fatalf("argument hint rewrote the command line to %q", got)
 	}
 }
@@ -122,35 +128,16 @@ func TestCompletionPopupColumnsShareTheRow(t *testing.T) {
 	}
 }
 
-func TestExSuggestionSelectionWraps(t *testing.T) {
-	state := exSuggestionState{}
-	state.reset([]exSuggestion{{label: "one"}, {label: "two"}})
-	if _, ok := state.selected(); ok {
-		t.Fatal("expected refreshed suggestions to start without an explicit selection")
-	}
-
-	state.move(-1)
-	item, ok := state.selected()
-	if !ok || item.label != "two" {
-		t.Fatalf("expected selection to wrap to last item, got %+v (ok=%v)", item, ok)
-	}
-	state.move(1)
-	item, ok = state.selected()
-	if !ok || item.label != "one" {
-		t.Fatalf("expected selection to wrap to first item, got %+v (ok=%v)", item, ok)
-	}
-}
-
 func TestCommandLineTabCompletesSelectedSuggestion(t *testing.T) {
 	model := New(Config{})
 	model.openCommandLine()
 	model.commandLineJustOpened = false
-	model.commandLineInput.SetValue("help unary")
-	model.refreshCommandSuggestions()
+	model.commandLine.input.SetValue("help unary")
+	model.commandLine.refresh(model.commandSource())
 
 	model.handleCommandLineKey(tea.KeyMsg{Type: tea.KeyTab})
 
-	if got := model.commandLineInput.Value(); got != "help grpc" {
+	if got := model.commandLine.value(); got != "help grpc" {
 		t.Fatalf("expected selected topic completion, got %q", got)
 	}
 }
@@ -159,18 +146,18 @@ func TestCommandLineEnterExecutesExplicitSelection(t *testing.T) {
 	model := New(Config{})
 	model.openCommandLine()
 	model.commandLineJustOpened = false
-	model.commandLineInput.SetValue("help req")
-	model.refreshCommandSuggestions()
-	for range model.commandSuggestions.items {
-		model.commandSuggestions.move(1)
-		item, ok := model.commandSuggestions.selected()
-		if ok && item.insert == "help requests" {
+	model.commandLine.input.SetValue("help req")
+	model.commandLine.refresh(model.commandSource())
+	for range model.commandLine.menu.Items() {
+		model.commandLine.menu.Move(1)
+		item, ok := model.commandLine.menu.Selected()
+		if ok && exSuggestionValue(t, "help req", item) == "help requests" {
 			break
 		}
 	}
-	item, ok := model.commandSuggestions.selected()
-	if !ok || item.insert != "help requests" {
-		t.Fatalf("requests suggestion missing from %+v", model.commandSuggestions.items)
+	item, ok := model.commandLine.menu.Selected()
+	if !ok || exSuggestionValue(t, "help req", item) != "help requests" {
+		t.Fatalf("requests suggestion missing from %+v", model.commandLine.menu.Items())
 	}
 
 	model.handleCommandLineKey(tea.KeyMsg{Type: tea.KeyEnter})
@@ -180,12 +167,21 @@ func TestCommandLineEnterExecutesExplicitSelection(t *testing.T) {
 	}
 }
 
+func exSuggestionValue(t *testing.T, input string, item prompt.Item) string {
+	t.Helper()
+	value, _, err := item.Edit.Apply(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+
 func TestCommandLineEnterExecutesTypedPromptWithoutSelection(t *testing.T) {
 	model := New(Config{})
 	model.openCommandLine()
 	model.commandLineJustOpened = false
-	model.commandLineInput.SetValue("help req")
-	model.refreshCommandSuggestions()
+	model.commandLine.input.SetValue("help req")
+	model.commandLine.refresh(model.commandSource())
 
 	model.handleCommandLineKey(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -212,7 +208,7 @@ func TestCommandLineEmptyEnterDoesNotRunFirstSuggestion(t *testing.T) {
 func TestRenderCommandSuggestionPopupOverlaysWithoutReflow(t *testing.T) {
 	model := New(Config{})
 	model.width = 80
-	model.commandSuggestions.reset(exCommands.Suggestions("he"))
+	model.commandLine.menu.Reset(exCommands.Suggestions("he"))
 	content := strings.Repeat(strings.Repeat(" ", 80)+"\n", 11) + strings.Repeat(" ", 80)
 
 	out := model.renderCommandSuggestionPopup(content, 1)

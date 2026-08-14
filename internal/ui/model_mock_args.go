@@ -23,6 +23,11 @@ type mockStartArgs struct {
 	all       bool
 }
 
+const (
+	mockSourceFlagName  = "source"
+	mockSourceFlagAlias = "s"
+)
+
 func (a mockStartArgs) scoped() bool {
 	return a.all || a.recursive || len(a.sources) > 0
 }
@@ -32,11 +37,7 @@ func (a mockStartArgs) scoped() bool {
 //	[host:port] [--addr host:port] [--source file[,file]]... [--recursive] [--all]
 func parseMockStartArgs(args []string) (mockStartArgs, error) {
 	var out mockStartArgs
-	fs := cli.NewFlagSet("mock start")
-	cli.StringVarAliases(fs, &out.addr, "", "Listen address", "addr", "a")
-	cli.StringListVarAliases(fs, &out.sources, "Serve only these request files", "source", "s")
-	cli.BoolVarAliases(fs, &out.recursive, false, "Scan the workspace recursively", "recursive", "r")
-	cli.BoolVarAliases(fs, &out.all, false, "Serve the whole workspace", "all")
+	fs := newMockStartFlagSet(&out)
 
 	// flag stops parsing at the first non-flag argument, so lift a leading
 	// address out of the way first.
@@ -60,6 +61,21 @@ func parseMockStartArgs(args []string) (mockStartArgs, error) {
 		return out, errors.New("--all cannot be combined with --source")
 	}
 	return out, nil
+}
+
+func newMockStartFlagSet(out *mockStartArgs) *flag.FlagSet {
+	fs := cli.NewFlagSet("mock start")
+	cli.StringVarAliases(fs, &out.addr, "", "Listen address", "addr", "a")
+	cli.StringListVarAliases(
+		fs,
+		&out.sources,
+		"Serve only these request files",
+		mockSourceFlagName,
+		mockSourceFlagAlias,
+	)
+	cli.BoolVarAliases(fs, &out.recursive, false, "Scan the workspace recursively", "recursive", "r")
+	cli.BoolVarAliases(fs, &out.all, false, "Serve the whole workspace", "all")
+	return fs
 }
 
 func (a *mockStartArgs) setAddr(addr string) error {

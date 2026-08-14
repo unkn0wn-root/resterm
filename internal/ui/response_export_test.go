@@ -31,13 +31,13 @@ func TestResponseSaveModalPrefillAndSaveWire(t *testing.T) {
 	if !model.showResponseSaveModal {
 		t.Fatalf("expected save modal to be visible")
 	}
-	value := model.responseSaveInput.Value()
+	value := model.responseSavePrompt.value()
 	if !strings.HasPrefix(value, dir) || !strings.HasSuffix(value, "demo.bin") {
 		t.Fatalf("expected prefilled path with workspace and filename, got %q", value)
 	}
 
 	target := filepath.Join(dir, "out.bin")
-	model.responseSaveInput.SetValue(target)
+	model.responseSavePrompt.input.SetValue(target)
 	if cmd := model.submitResponseSave(); cmd != nil {
 		collectMsgs(cmd)
 	}

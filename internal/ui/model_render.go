@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/cellbuf"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/prompt"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -268,19 +269,21 @@ func (m Model) renderWithinAppFrame(content string) string {
 }
 
 func (m Model) renderCenteredModal(box string) string {
-	boxWidth := lipgloss.Width(box)
-	boxHeight := lipgloss.Height(box)
-	width := max(m.width, boxWidth)
-	height := max(m.height, boxHeight)
+	x, y, width, height := m.modalPlacement(box)
 	if width <= 0 || height <= 0 {
 		return box
 	}
 
 	base := m.renderModalUnderlay(width, height)
+	return m.renderModalOverlay(base, box, x, y, lipgloss.Width(box), lipgloss.Height(box), width, height)
+}
 
-	x := max((width-boxWidth)/2, 0)
-	y := max((height-boxHeight)/2, 0)
-	return m.renderModalOverlay(base, box, x, y, boxWidth, boxHeight, width, height)
+func (m Model) modalPlacement(box string) (x, y, width, height int) {
+	boxWidth := lipgloss.Width(box)
+	boxHeight := lipgloss.Height(box)
+	width = max(m.width, boxWidth)
+	height = max(m.height, boxHeight)
+	return max((width-boxWidth)/2, 0), max((height-boxHeight)/2, 0), width, height
 }
 
 func (m Model) renderModalUnderlay(width, height int) string {
@@ -1843,7 +1846,7 @@ func (m Model) renderCommandLinePrompt() string {
 	return m.renderPromptBar(
 		m.theme.CommandBar.Width(m.width),
 		":",
-		m.commandLineInput,
+		m.commandLine.input,
 		"↑/↓ select",
 		"Tab complete",
 		"Enter run",
@@ -2560,27 +2563,34 @@ func (m Model) renderNewFileModal() string {
 			Render(m.newFileError)
 		lines = append(lines, "", errorLine)
 	}
-	headerValue := m.theme.HeaderValue.
-		Padding(0, 2).
-		Render(instructions)
-	lines = append(lines, "", headerValue)
+	lines = append(lines, "", m.renderModalHints(width, instructions))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return m.renderCenteredModal(box)
 }
 
+const modalMenuRows = 8
+
 func (m Model) renderOpenModal() string {
 	width := max(min(m.width-10, 60), 36)
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).
-		Render(m.openPathInput.View())
+		Render(m.openPathPrompt.input.View())
 
 	enter := m.theme.CommandBarHint.Render("Enter")
 	esc := m.theme.CommandBarHint.Render("Esc")
-	info := fmt.Sprintf("%s Open    %s Cancel", enter, esc)
+	tab := m.theme.CommandBarHint.Render("Tab")
+	arrows := m.theme.CommandBarHint.Render("↑/↓")
+	instructions := fmt.Sprintf(
+		"%s Select    %s Complete    %s Open    %s Cancel",
+		arrows,
+		tab,
+		enter,
+		esc,
+	)
 
-	lines := []string{
+	above := []string{
 		m.renderModalTitle("Open File or Workspace", width),
 		"",
 		lipgloss.NewStyle().
@@ -2590,20 +2600,37 @@ func (m Model) renderOpenModal() string {
 			Padding(0, 2).
 			Render(inputView),
 	}
-	if m.openPathError != "" {
-		errorLine := m.theme.Error.
-			Padding(0, 2).
-			Render(m.openPathError)
-		lines = append(lines, "", errorLine)
-	}
-	headerInfo := m.theme.HeaderValue.
-		Padding(0, 2).
-		Render(info)
-	lines = append(lines, "", headerInfo)
 
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return m.renderCenteredModal(box)
+	var below []string
+	if m.openPathError != "" {
+		below = append(below, "", m.theme.Error.
+			Padding(0, 2).
+			Render(m.openPathError))
+	}
+	below = append(below, "", m.renderModalHints(width, instructions))
+
+	return m.renderPromptModal(width, m.openPathPrompt.menu, above, below)
+}
+
+// renderPromptModal overlays suggestions so menu changes do not resize the modal.
+func (m Model) renderPromptModal(width int, menu prompt.Menu, above, below []string) string {
+	rows := make([]string, 0, len(above)+len(below))
+	rows = append(rows, above...)
+	rows = append(rows, below...)
+	box := m.theme.BrowserBorder.
+		Width(width).
+		Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
+	frame := m.renderCenteredModal(box)
+
+	x, y, frameW, frameH := m.modalPlacement(box)
+	top := y + 1 + lipgloss.Height(lipgloss.JoinVertical(lipgloss.Left, above...))
+	limit := min(modalMenuRows, max(frameH-top-m.editorHintBoxMetrics().frameH, 0))
+
+	list := m.buildMenuPopup(menu, limit, width-modalPad*2)
+	if len(list) == 0 {
+		return frame
+	}
+	return overlayHintPopup(frame, list, x+1+modalPad, top, frameW, frameH)
 }
 
 func (m Model) renderResponseSaveModal() string {
@@ -2612,7 +2639,7 @@ func (m Model) renderResponseSaveModal() string {
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).
 		Background(bg).
-		Render(m.responseSaveInput.View())
+		Render(m.responseSavePrompt.input.View())
 	inputBox := lipgloss.NewStyle().
 		Width(width - 8).
 		Background(bg).
@@ -2620,9 +2647,17 @@ func (m Model) renderResponseSaveModal() string {
 
 	enter := m.theme.CommandBarHint.Render("Enter")
 	esc := m.theme.CommandBarHint.Render("Esc")
-	info := fmt.Sprintf("%s Save    %s Cancel", enter, esc)
+	tab := m.theme.CommandBarHint.Render("Tab")
+	arrows := m.theme.CommandBarHint.Render("↑/↓")
+	info := fmt.Sprintf(
+		"%s Select    %s Complete    %s Save    %s Cancel",
+		arrows,
+		tab,
+		enter,
+		esc,
+	)
 
-	lines := []string{
+	above := []string{
 		m.renderModalTitle("Save Response Body", width),
 		"",
 		lipgloss.NewStyle().
@@ -2633,20 +2668,15 @@ func (m Model) renderResponseSaveModal() string {
 			Padding(0, 2).
 			Render(inputBox),
 	}
+	var below []string
 	if m.responseSaveError != "" {
-		errorLine := m.theme.Error.
+		below = append(below, "", m.theme.Error.
 			Padding(0, 2).
-			Render(m.responseSaveError)
-		lines = append(lines, "", errorLine)
+			Render(m.responseSaveError))
 	}
-	headerInfo := m.theme.HeaderValue.
-		Padding(0, 2).
-		Render(info)
-	lines = append(lines, "", headerInfo)
+	below = append(below, "", m.renderModalHints(width, info))
 
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return m.renderCenteredModal(box)
+	return m.renderPromptModal(width, m.responseSavePrompt.menu, above, below)
 }
 
 func (m Model) focusLabel() string {

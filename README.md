@@ -204,7 +204,8 @@ No files yet? Just run `resterm`, type a URL and press `Ctrl+Enter`. A pasted cu
   - `?`: open the searchable offline help index.
   - `K` (editor normal mode): open help for the directive, template or keyword under the cursor.
   - `:help <topic>` / `:man <topic>`: open an embedded topic; `:docs <topic>` opens the version-matched full manual.
-  - `:`: open the command line. Use `Up` / `Down` to select suggestions, `Tab` to complete one, or `Enter` to accept and run a selection.
+  - `Ctrl+O`: open the file/workspace popup. Type to filter, scroll with `Up` / `Down`, and use `Tab` to descend into directories.
+  - `:`: open the command line. Use `Up` / `Down` to select suggestions, `Tab` to complete one, or `Enter` to accept and run a selection. Path arguments such as `:mock start --source` and `:edit` browse the filesystem in the same popup.
 - Responses
   - `Ctrl+V` / `Ctrl+U`: split the response pane for side-by-side comparison.
   - `Ctrl+Shift+C` or `g y` (response focused): copy the whole Pretty, Raw or Headers tab.

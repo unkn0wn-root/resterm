@@ -215,6 +215,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleMockVerify(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case pathReadMsg:
+		m.handlePathRead(typed)
 	case wsConsoleResultMsg:
 		m.handleConsoleResult(typed)
 		cmds = append(cmds, m.nextStreamMsgCmd())
@@ -281,38 +283,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.responseSaveJustOpened = false
 				return m, batchCommands(cmds...)
 			}
-			switch keyMsg.String() {
-			case "esc":
-				m.closeResponseSaveModal()
-				return m, batchCommands(cmds...)
-			case "ctrl+q", "ctrl+d":
-				return m, tea.Quit
-			case "enter":
-				cmd := m.submitResponseSave()
-				return m, batchCommands(append(cmds, cmd)...)
-			}
-			var inputCmd tea.Cmd
-			m.responseSaveInput, inputCmd = m.responseSaveInput.Update(msg)
-			return m, batchCommands(append(cmds, inputCmd)...)
+			cmd := m.handleResponseSaveKey(keyMsg)
+			return m, batchCommands(append(cmds, cmd)...)
 		}
 		return m, batchCommands(cmds...)
 	}
 
 	if m.showOpenModal {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch keyMsg.String() {
-			case "esc":
-				m.closeOpenModal()
-				return m, batchCommands(cmds...)
-			case "ctrl+q", "ctrl+d":
-				return m, tea.Quit
-			case "enter":
-				cmd := m.submitOpenPath()
-				return m, batchCommands(append(cmds, cmd)...)
-			}
-			var inputCmd tea.Cmd
-			m.openPathInput, inputCmd = m.openPathInput.Update(msg)
-			return m, batchCommands(append(cmds, inputCmd)...)
+			cmd := m.handleOpenModalKey(keyMsg)
+			return m, batchCommands(append(cmds, cmd)...)
 		}
 		return m, batchCommands(cmds...)
 	}
@@ -1022,8 +1002,7 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		m.openStatusMessageModal()
 		return nil, true
 	case bindings.ActionOpenPathModal:
-		m.openOpenModal()
-		return nil, true
+		return m.openOpenModal(), true
 	case bindings.ActionReloadWorkspace:
 		return m.reloadWorkspace(), true
 	case bindings.ActionOpenNewFileModal:

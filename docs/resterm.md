@@ -166,7 +166,7 @@ Once the files are in place, run `resterm` in the same directory. Press `g Shift
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |
 | Save layout (prompt) | `g+Shift+L` |
-| Open file picker | `Ctrl+O` |
+| Open file/workspace popup | `Ctrl+O` |
 | Open current/selected file in external editor | `g+e` |
 | New scratch buffer | `Ctrl+T` |
 | Reparse current document | `Ctrl+P` (also `Ctrl+Alt+P`) |
@@ -179,7 +179,7 @@ Once the files are in place, run `resterm` in the same directory. Press `g Shift
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), insert entries (`i`, `a`, `I`, `A`, `o`, `O`; `I` moves to the first non-blank character), visual selections with `v` / `V`, yank and delete/change operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F` or `/`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
 
-Press `:` from normal mode panes to open a Vim-style command line. Supported actions include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help`, `:man`, `:docs`, `:noh`, and the `:mock` command family.
+Press `:` from normal mode panes to open a Vim-style command line. Supported actions include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e [path]`, `:help`, `:man`, `:docs`, `:noh`, and the `:mock` command family. Bare `:e` opens the path prompt; giving it a path opens that file or workspace directly.
 
 ### Finding help
 
@@ -190,7 +190,9 @@ Resterm keeps concise documentation inside the binary, so the first layer of hel
 - In editor normal mode, put the cursor on an `@directive`, an HTTP/protocol keyword, or inside `{{ ... }}`, then press `K` for the relevant topic. If no exact topic is available, Resterm leaves the editor open and shows a short recovery hint.
 - Press `o` from an embedded topic, or run `:docs <topic>`, to open the corresponding full manual section on GitHub. Release builds use their matching Git tag; development builds use `main`. Bare `:docs` opens this manual. If the browser cannot be started, Resterm shows the URL so it can be copied manually.
 
-The command line suggests commands, topics, and `:mock` subcommands as you type. `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) selects a suggestion, `Tab` completes it without running, and `Enter` accepts and runs an explicit selection. If no row has been selected, `Enter` runs the text currently in the prompt.
+The command line suggests commands, topics, `:mock` subcommands, and filesystem paths where the active argument accepts one. `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) selects a suggestion, `Tab` completes it without running, and `Enter` accepts and runs an explicit selection. `Tab` on a directory descends into it; `Enter` also descends when the command requires a file. If no row has been selected, `Enter` runs the text currently in the prompt. Paths containing whitespace are quoted automatically.
+
+`Ctrl+O` opens the same filesystem picker as a standalone “Open File or Workspace” popup. Type a relative, absolute, or `~` path; use `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) to select, `Tab` to complete or descend, and `Enter` to open the selected supported file or directory as a workspace.
 
 The bottom command bar always retains Focus, Commands, and Help entry points. The remaining hints adapt to the focused pane, editor mode, and response tab. Contextual keys use the same flat presentation as the pinned shortcuts by default; themes can add keycap backgrounds through `command_segments`. Configured shortcuts are reflected in both the command bar and help overlay.
 
@@ -258,7 +260,7 @@ show_context_help = ["shift+k"]
 | `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
 | `show_context_help` | Open embedded help for the directive, template, or keyword under the editor cursor. | `shift+k` (soft default) |
 | `show_status_message` | Show the current status message in full. | `g .` (soft default) |
-| `open_path_modal` | Open the “Open File” modal. | `ctrl+o` |
+| `open_path_modal` | Open the filesystem picker for a supported file or workspace. | `ctrl+o` |
 | `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
 | `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
 | `open_file_in_editor` | Open the current or selected supported file in `$RESTERM_EDITOR`, `$VISUAL`, or `$EDITOR`. | `g e` |
@@ -1165,7 +1167,7 @@ Inside the TUI:
 
 - `g Shift+M` toggles the mock server at the remembered session address (initially `127.0.0.1:8080`).
 - `:mock`, `:mock status`, `:mock start [host:port]`, `:mock stop`, and `:mock restart [host:port]` manage it. Both `start` and `restart` also accept the address as `--addr host:port`, and take the same flag names, short aliases, and `--flag=value` form as the `resterm mock` CLI.
-- `:mock start` serves every request file in the workspace. `--source` narrows that to named files, either by repeating the flag or by passing a comma-separated list with no spaces, since arguments are split on whitespace. Paths resolve against the workspace root, must stay inside it, and must be `.http` or `.rest` files. `--recursive` includes subdirectories and `--all` names the full-workspace default. Neither combines with `--source`.
+- `:mock start` serves every request file in the workspace. `--source` narrows that to named files, either by repeating the flag or by passing a comma-separated list. After `--source`, `-s`, or their `--flag=value` forms, the command popup lists workspace directories and `.http` / `.rest` files; a comma list completes only its last path. Paths containing whitespace are quoted automatically. Because commas separate sources, a source filename itself cannot contain a comma. Paths resolve against the workspace root and must stay inside it. `--recursive` includes subdirectories and `--all` names the full-workspace default. Neither combines with `--source`.
 - With `--source`, only the listed files reload. File-based response bodies still resolve relative to each file and stay confined to the workspace root.
 - The scope is remembered like the address, so `:mock restart`, a later `:mock start`, and `g Shift+M` keep serving the same files with the same recursion. Naming a scope again is what changes it: `--source` narrows, `--all` returns to the whole workspace, and `--recursive` adds subdirectories. `:mock status` names the remembered files while the server is stopped, and changing the workspace forgets the scope.
 - `:mock logs` opens the request log, where `c` clears the log. `:mock clear` clears both the log and the verification journal.

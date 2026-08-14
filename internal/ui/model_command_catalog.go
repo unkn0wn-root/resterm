@@ -2,11 +2,13 @@ package ui
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/unkn0wn-root/resterm/internal/helpdoc"
+	"github.com/unkn0wn-root/resterm/internal/prompt"
 )
 
 // usage is only set when it adds argument hints beyond the plain name.
@@ -43,17 +45,6 @@ type exCatalog struct {
 	mock []mockCommandDef
 }
 
-type exSuggestion struct {
-	label   string
-	summary string
-	insert  string
-}
-
-type exSuggestionState struct {
-	items     []exSuggestion
-	selection int
-}
-
 var exCommands = exCatalog{
 	defs: []exCommandDef{
 		{kind: exCommandWrite, name: "write", aliases: []string{"w"}, summary: "Save the current file"},
@@ -66,7 +57,10 @@ var exCommands = exCatalog{
 			kind: exCommandExit, name: "exit", aliases: []string{"x", "xit"},
 			summary: "Save changes when needed, then quit",
 		},
-		{kind: exCommandEdit, name: "edit", aliases: []string{"e"}, summary: "Open the file or folder prompt"},
+		{
+			kind: exCommandEdit, name: "edit", aliases: []string{"e"},
+			usage: "edit [path]", summary: "Open a file or workspace", hasArgs: true,
+		},
 		{
 			kind: exCommandHelp, name: "help", aliases: []string{"h", "man"},
 			usage: "help [topic]", summary: "Open embedded help", hasArgs: true,
@@ -121,15 +115,17 @@ func joinArgs(name, args string) string {
 }
 
 func (c exCatalog) Parse(input string) exCommand {
-	fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(input), ":"))
+	line := prompt.Lex(input)
+	if line.Unclosed != 0 {
+		return exCommand{kind: exCommandInvalid, err: fmt.Errorf("unclosed %q quote", line.Unclosed)}
+	}
+	fields := line.Values()
 	if len(fields) == 0 {
 		return exCommand{kind: exCommandEmpty}
 	}
 
-	rawName := fields[0]
-	bang := strings.HasSuffix(rawName, "!")
-	name := strings.ToLower(strings.TrimSuffix(rawName, "!"))
-	def, ok := c.Lookup(name)
+	bang := strings.HasSuffix(fields[0], "!")
+	def, ok := c.Lookup(commandName(fields[0]))
 	if !ok || (bang && def.noBang) {
 		return exCommand{kind: exCommandUnknown, name: strings.Join(fields, " ")}
 	}
@@ -149,22 +145,45 @@ func (c exCatalog) Lookup(name string) (exCommandDef, bool) {
 	return exCommandDef{}, false
 }
 
-func (c exCatalog) Suggestions(input string) []exSuggestion {
-	body := strings.TrimPrefix(strings.TrimLeftFunc(input, unicode.IsSpace), ":")
-	head, rest, typed := cutSpace(body)
+func commandName(token string) string {
+	return strings.ToLower(strings.TrimSuffix(token, "!"))
+}
+
+type lineBody struct {
+	text  string
+	start int
+	end   int
+}
+
+func commandBody(input string) lineBody {
+	text, start, end := prompt.Body(input)
+	return lineBody{text: text, start: start, end: end}
+}
+
+func (b lineBody) item(label, summary, replacement string) prompt.Item {
+	return prompt.Item{
+		Label:   label,
+		Summary: summary,
+		Edit:    prompt.Edit{Start: b.start, End: b.end, Text: replacement},
+	}
+}
+
+func (c exCatalog) Suggestions(input string) []prompt.Item {
+	body := commandBody(input)
+	head, rest, typed := cutSpace(body.text)
 	if !typed {
 		return c.commandSuggestions(body)
 	}
 
-	def, ok := c.Lookup(strings.ToLower(strings.TrimSuffix(head, "!")))
+	def, ok := c.Lookup(commandName(head))
 	if !ok {
 		return nil
 	}
 	switch def.kind {
 	case exCommandHelp, exCommandDocs:
-		return topicSuggestions(def.name, rest)
+		return topicSuggestions(body, def.name, rest)
 	case exCommandMock:
-		return c.mockSuggestions(rest)
+		return c.mockSuggestions(body, rest)
 	default:
 		return nil
 	}
@@ -188,9 +207,9 @@ func (c exCatalog) mockNames() []string {
 	return names
 }
 
-func (c exCatalog) commandSuggestions(filter string) []exSuggestion {
-	filter = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(filter), "!"))
-	out := make([]exSuggestion, 0, len(c.defs))
+func (c exCatalog) commandSuggestions(body lineBody) []prompt.Item {
+	filter := commandName(strings.TrimSpace(body.text))
+	out := make([]prompt.Item, 0, len(c.defs))
 	for _, def := range c.defs {
 		if filter != "" && !def.matches(filter) {
 			continue
@@ -199,20 +218,16 @@ func (c exCatalog) commandSuggestions(filter string) []exSuggestion {
 		if def.hasArgs {
 			insert += " "
 		}
-		out = append(out, exSuggestion{label: def.label(), summary: def.summary, insert: insert})
+		out = append(out, body.item(def.label(), def.summary, insert))
 	}
 	return out
 }
 
-func topicSuggestions(command, filter string) []exSuggestion {
+func topicSuggestions(body lineBody, command, filter string) []prompt.Item {
 	topics := helpdoc.Suggest(filter)
-	out := make([]exSuggestion, 0, len(topics))
+	out := make([]prompt.Item, 0, len(topics))
 	for _, topic := range topics {
-		out = append(out, exSuggestion{
-			label:   topic.ID,
-			summary: topic.Summary,
-			insert:  command + " " + topic.ID,
-		})
+		out = append(out, body.item(topic.ID, topic.Summary, command+" "+topic.ID))
 	}
 	return out
 }
@@ -221,7 +236,7 @@ func topicSuggestions(command, filter string) []exSuggestion {
 // has nothing left to offer, so it gives way to the grammar of the named
 // subcommand. That hint inserts the line unchanged, so completing it leaves
 // what was typed alone.
-func (c exCatalog) mockSuggestions(rest string) []exSuggestion {
+func (c exCatalog) mockSuggestions(body lineBody, rest string) []prompt.Item {
 	head, _, typing := cutSpace(rest)
 	name := strings.ToLower(head)
 	if typing {
@@ -229,10 +244,10 @@ func (c exCatalog) mockSuggestions(rest string) []exSuggestion {
 		if !ok || !def.acceptsArgs() {
 			return nil
 		}
-		return []exSuggestion{{label: def.usage(), insert: "mock " + rest}}
+		return []prompt.Item{body.item(def.usage(), "", body.text)}
 	}
 
-	out := make([]exSuggestion, 0, len(c.mock))
+	out := make([]prompt.Item, 0, len(c.mock))
 	for _, def := range c.mock {
 		if name != "" && !strings.Contains(def.name, name) {
 			continue
@@ -241,7 +256,7 @@ func (c exCatalog) mockSuggestions(rest string) []exSuggestion {
 		if def.acceptsArgs() {
 			insert += " "
 		}
-		out = append(out, exSuggestion{label: def.label(), summary: def.summary, insert: insert})
+		out = append(out, body.item(def.label(), def.summary, insert))
 	}
 	return out
 }
@@ -266,57 +281,4 @@ func (d exCommandDef) matches(filter string) bool {
 		}
 	}
 	return false
-}
-
-func (s *exSuggestionState) reset(items []exSuggestion) {
-	s.items = items
-	s.selection = -1
-}
-
-func (s *exSuggestionState) move(delta int) {
-	if len(s.items) == 0 {
-		return
-	}
-	if s.selection < 0 {
-		if delta < 0 {
-			s.selection = len(s.items) - 1
-		} else {
-			s.selection = 0
-		}
-		return
-	}
-	idx := (s.selection + delta) % len(s.items)
-	if idx < 0 {
-		idx += len(s.items)
-	}
-	s.selection = idx
-}
-
-func (s exSuggestionState) selected() (exSuggestion, bool) {
-	if s.selection < 0 {
-		return exSuggestion{}, false
-	}
-	return s.items[s.selection], true
-}
-
-func (s exSuggestionState) completion() (exSuggestion, bool) {
-	if item, ok := s.selected(); ok {
-		return item, true
-	}
-	if len(s.items) == 0 {
-		return exSuggestion{}, false
-	}
-	return s.items[0], true
-}
-
-func (s exSuggestionState) display(limit int) ([]exSuggestion, int, bool) {
-	if len(s.items) == 0 || limit <= 0 {
-		return nil, 0, false
-	}
-	start, end := popupWindow(s.selection, limit, len(s.items))
-	selection := -1
-	if s.selection >= 0 {
-		selection = s.selection - start
-	}
-	return s.items[start:end], selection, true
 }

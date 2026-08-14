@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
+	"github.com/unkn0wn-root/resterm/internal/prompt"
 )
 
 const completionPopupMaxWidth = 60
@@ -183,6 +184,38 @@ func (m Model) buildCompletionPopup(
 	return strings.Split(out, "\n")
 }
 
+func (m Model) buildMenuPopup(menu prompt.Menu, limit int, maxOuterW int) []string {
+	items := menu.Items()
+	if len(items) == 0 || limit <= 0 {
+		return nil
+	}
+
+	selection := menu.Selection()
+	start, end := popupWindow(selection, limit, len(items))
+	hints := make([]intellisense.Item, 0, end-start)
+	for _, item := range items[start:end] {
+		hints = append(hints, intellisense.Item{Label: item.Label, Summary: item.Summary})
+	}
+	if selection >= 0 {
+		selection -= start
+	}
+
+	labelW, summaryW := completionPopupPreference(hints)
+	return m.buildCompletionPopup(hints, selection, maxOuterW, labelW, summaryW)
+}
+
+// popupWindow centers the selection inside a window of at most limit items.
+func popupWindow(selection, limit, count int) (int, int) {
+	start := 0
+	if selection > 0 {
+		start = max(selection-limit/2, 0)
+	}
+	if maxStart := max(count-limit, 0); start > maxStart {
+		start = maxStart
+	}
+	return start, min(start+limit, count)
+}
+
 func (m Model) completionPopupLines(
 	items []intellisense.Item,
 	selection int,
@@ -244,18 +277,6 @@ func completionPopupWidth(lines []string) int {
 		}
 	}
 	return w
-}
-
-// popupWindow centers the selection inside a window of at most limit items.
-func popupWindow(selection, limit, count int) (int, int) {
-	start := 0
-	if selection > 0 {
-		start = max(selection-limit/2, 0)
-	}
-	if maxStart := max(count-limit, 0); start > maxStart {
-		start = maxStart
-	}
-	return start, min(start+limit, count)
 }
 
 func overlayHintPopup(

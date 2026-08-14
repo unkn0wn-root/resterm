@@ -41,7 +41,7 @@ func TestParseExCommand(t *testing.T) {
 		{name: "docs topic", input: "docs grpc", kind: exCommandDocs},
 		{name: "docs bang", input: "docs!", kind: exCommandUnknown},
 		{name: "trailing args", input: "w other.http", kind: exCommandTrailing},
-		{name: "edit with path", input: "e file.http", kind: exCommandTrailing},
+		{name: "edit with path", input: "e file.http", kind: exCommandEdit},
 		{name: "unknown", input: "set number", kind: exCommandUnknown},
 	}
 
@@ -81,7 +81,7 @@ func TestColonOpensCommandLineFromNormalModePanes(t *testing.T) {
 			if !model.showCommandLine {
 				t.Fatalf("expected command line to open for focus %v", tt.focus)
 			}
-			if got := model.commandLineInput.Value(); got != "" {
+			if got := model.commandLine.value(); got != "" {
 				t.Fatalf("expected trigger colon to be consumed, got %q", got)
 			}
 		})
@@ -126,7 +126,7 @@ func TestRenderCommandLinePrompt(t *testing.T) {
 	model := New(Config{})
 	model.width = 80
 	model.showCommandLine = true
-	model.commandLineInput.Focus()
+	model.commandLine.input.Focus()
 
 	out := ansi.Strip(model.renderCommandBar())
 	if !strings.HasPrefix(out, " :") {
@@ -144,9 +144,9 @@ func TestRenderCommandLineKeepsCursorTailVisible(t *testing.T) {
 	model := New(Config{})
 	model.width = 24
 	model.showCommandLine = true
-	model.commandLineInput.SetValue(strings.Repeat("a", 30) + "TAIL")
-	model.commandLineInput.CursorEnd()
-	model.commandLineInput.Focus()
+	model.commandLine.input.SetValue(strings.Repeat("a", 30) + "TAIL")
+	model.commandLine.input.CursorEnd()
+	model.commandLine.input.Focus()
 
 	out := ansi.Strip(model.renderCommandBar())
 	if !strings.Contains(out, "TAIL") {

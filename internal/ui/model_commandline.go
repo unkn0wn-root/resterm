@@ -3,14 +3,13 @@ package ui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/unkn0wn-root/resterm/internal/intellisense"
 )
 
 type exCommandKind int
 
 const (
 	exCommandUnknown exCommandKind = iota
+	exCommandInvalid
 	exCommandEmpty
 	exCommandTrailing
 	exCommandWrite
@@ -29,6 +28,7 @@ type exCommand struct {
 	name string
 	bang bool
 	args []string
+	err  error
 }
 
 func isCommandLineTriggerKey(msg tea.KeyMsg) bool {
@@ -52,22 +52,16 @@ func (m *Model) openCommandLine() tea.Cmd {
 	m.closeSearchPrompt()
 	m.showCommandLine = true
 	m.commandLineJustOpened = true
-	m.commandLineInput.SetValue("")
-	m.commandLineInput.CursorEnd()
-	m.refreshCommandSuggestions()
-	return m.commandLineInput.Focus()
+	return m.commandLine.open(m.commandSource())
 }
 
 func (m *Model) closeCommandLine() {
 	m.showCommandLine = false
 	m.commandLineJustOpened = false
-	m.commandLineInput.Blur()
-	m.commandLineInput.SetValue("")
-	m.commandSuggestions.reset(nil)
+	m.commandLine.close()
 }
 
 func (m *Model) handleCommandLineKey(msg tea.KeyMsg) tea.Cmd {
-	keyStr := msg.String()
 	if m.commandLineJustOpened {
 		m.commandLineJustOpened = false
 		if isCommandLineTriggerKey(msg) {
@@ -75,47 +69,31 @@ func (m *Model) handleCommandLineKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	}
 
-	switch keyStr {
+	src := m.commandSource()
+	switch msg.String() {
 	case "esc", "ctrl+c", "ctrl+g":
 		m.closeCommandLine()
 		return nil
 	case "ctrl+q", "ctrl+d":
 		return tea.Quit
 	case "enter":
-		value := m.commandLineInput.Value()
-		if item, ok := m.commandSuggestions.selected(); ok {
-			value = item.insert
+		cmd, more, err := m.commandLine.accept(src)
+		if err != nil {
+			return statusCmd(statusError, err.Error())
 		}
+		if more {
+			return cmd
+		}
+		value := m.commandLine.value()
 		m.closeCommandLine()
 		return m.executeExCommand(value)
-	case "down", "ctrl+n":
-		m.commandSuggestions.move(1)
-		return nil
-	case "up", "ctrl+p":
-		m.commandSuggestions.move(-1)
-		return nil
-	case "tab":
-		item, ok := m.commandSuggestions.completion()
-		if !ok {
-			return nil
-		}
-		m.commandLineInput.SetValue(item.insert)
-		m.commandLineInput.CursorEnd()
-		m.refreshCommandSuggestions()
-		return nil
 	}
 
-	prev := m.commandLineInput.Value()
-	var cmd tea.Cmd
-	m.commandLineInput, cmd = m.commandLineInput.Update(msg)
-	if m.commandLineInput.Value() != prev {
-		m.refreshCommandSuggestions()
+	cmd, err := m.commandLine.handleKey(msg, src)
+	if err != nil {
+		return statusCmd(statusError, err.Error())
 	}
 	return cmd
-}
-
-func (m *Model) refreshCommandSuggestions() {
-	m.commandSuggestions.reset(exCommands.Suggestions(m.commandLineInput.Value()))
 }
 
 func (m *Model) executeExCommand(input string) tea.Cmd {
@@ -123,6 +101,8 @@ func (m *Model) executeExCommand(input string) tea.Cmd {
 	switch cmd.kind {
 	case exCommandEmpty:
 		return statusCmd(statusWarn, "Enter a command")
+	case exCommandInvalid:
+		return statusCmd(statusWarn, cmd.err.Error())
 	case exCommandTrailing:
 		return statusCmd(statusWarn, "Trailing characters: "+cmd.name)
 	case exCommandWrite:
@@ -137,8 +117,14 @@ func (m *Model) executeExCommand(input string) tea.Cmd {
 		}
 		return tea.Quit
 	case exCommandEdit:
-		m.openOpenModal()
-		return nil
+		switch len(cmd.args) {
+		case 0:
+			return m.openOpenModal()
+		case 1:
+			return m.openPathFromCommand(cmd.args[0])
+		default:
+			return statusCmd(statusWarn, "Usage: :edit [path]")
+		}
 	case exCommandHelp:
 		return m.openHelpQuery(cmd.args)
 	case exCommandNoHighlight:
@@ -214,18 +200,8 @@ func (m Model) renderCommandSuggestionPopup(content string, y int) string {
 
 	mx := m.editorHintBoxMetrics()
 	limit := min(commandSuggestionMaxRows, max(h-y-mx.frameH, 0))
-	items, selection, ok := m.commandSuggestions.display(limit)
-	if !ok {
-		return content
-	}
-
-	hints := make([]intellisense.Item, len(items))
-	for i, item := range items {
-		hints[i] = intellisense.Item{Label: item.label, Summary: item.summary}
-	}
-	labelW, summaryW := completionPopupPreference(hints)
 	maxW := min(commandSuggestionMaxWidth, max(w-2, 0))
-	lines := m.buildCompletionPopup(hints, selection, maxW, labelW, summaryW)
+	lines := m.buildMenuPopup(m.commandLine.menu, limit, maxW)
 	if len(lines) == 0 {
 		return content
 	}
