@@ -96,11 +96,11 @@ const (
 )
 
 const (
-	noResponseMessage = `                         ●──●
-                      ●──╯
+	noResponseMessage = `                  ─── GET ▸
 ░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█
 ░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█
-░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀  >_`
+░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀
+        ◂ 200 ───`
 
 	historySnippetPlaceholder = "[HTML content omitted]"
 	historySnippetMaxLines    = 24
