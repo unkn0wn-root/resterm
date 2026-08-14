@@ -57,14 +57,30 @@ func TestClosedCommandLineIgnoresPathRead(t *testing.T) {
 	}
 }
 
+// The modal is useful the moment it opens: the directory it starts on is listed
+// in the frame that draws it, not one frame later.
+func TestOpenModalListsItsDirectoryOnOpen(t *testing.T) {
+	model := New(Config{WorkspaceRoot: completionWorkspace(t)})
+	model.width = 100
+
+	model.openOpenModal()
+
+	want := []string{"api" + pathSeparator, "users.http"}
+	if labels := completionLabels(model.openPathPrompt); !slices.Equal(labels, want) {
+		t.Fatalf("suggestions on open = %q, want %q", labels, want)
+	}
+	if rendered := model.renderOpenModal(); !strings.Contains(rendered, "users.http") {
+		t.Fatalf("opening frame drew no listing: %q", rendered)
+	}
+}
+
 func TestOpenModalCompletesPaths(t *testing.T) {
 	root := completionWorkspace(t)
 	model := New(Config{WorkspaceRoot: root})
 	model.width = 100
-	load := model.openOpenModal()
+	model.openOpenModal()
 	model.openPathPrompt.input.SetValue("a")
 	model.openPathPrompt.refresh(model.openPathSource())
-	model.handlePathRead(completionPathRead(t, load))
 
 	if labels := completionLabels(model.openPathPrompt); !slices.Equal(labels, []string{"api" + pathSeparator}) {
 		t.Fatalf("open suggestions = %q", labels)

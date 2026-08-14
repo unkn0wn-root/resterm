@@ -40,7 +40,16 @@ func (p *completionPrompt) open(src completionSource) tea.Cmd {
 	p.input.CursorEnd()
 	p.menu.Reset(nil)
 	p.paths.Reset()
-	return batchCommands(p.input.Focus(), p.refresh(src))
+
+	// The directory a prompt opens on is listed here instead of off the update
+	// loop, so the prompt draws complete in the frame it opens in rather than
+	// growing into its suggestions a frame later. Every keystroke after this
+	// one goes back to reading off the loop.
+	if load := p.fill(src); load.Pending() {
+		entries, err := prompt.ReadDir(load.Dir)
+		p.deliver(prompt.DirRead{DirLoad: load, Entries: entries, Err: err})
+	}
+	return p.input.Focus()
 }
 
 func (p *completionPrompt) close() {
@@ -109,18 +118,25 @@ func (p *completionPrompt) write(item prompt.Item) error {
 }
 
 func (p *completionPrompt) refresh(src completionSource) tea.Cmd {
-	input, cursor := p.input.Value(), p.input.Position()
-	items, load, isPath := p.paths.Suggest(src, input, cursor)
-	if !isPath {
-		p.menu.Reset(src.Suggest(input))
-		return nil
-	}
-
-	p.menu.Reset(items)
+	load := p.fill(src)
 	if !load.Pending() {
 		return nil
 	}
 	return readPathDir(p.id, load)
+}
+
+// fill sets the menu from what is known already and reports the directory that
+// still has to be listed, if there is one.
+func (p *completionPrompt) fill(src completionSource) prompt.DirLoad {
+	input, cursor := p.input.Value(), p.input.Position()
+	items, load, isPath := p.paths.Suggest(src, input, cursor)
+	if !isPath {
+		p.menu.Reset(src.Suggest(input))
+		return prompt.DirLoad{}
+	}
+
+	p.menu.Reset(items)
+	return load
 }
 
 func (p *completionPrompt) deliver(read prompt.DirRead) {

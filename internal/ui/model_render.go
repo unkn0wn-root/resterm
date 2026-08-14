@@ -2582,8 +2582,13 @@ func (m Model) renderOpenModal() string {
 	esc := m.theme.CommandBarHint.Render("Esc")
 	tab := m.theme.CommandBarHint.Render("Tab")
 	arrows := m.theme.CommandBarHint.Render("↑/↓")
-	info := fmt.Sprintf("%s Open    %s Cancel", enter, esc)
-	navigation := fmt.Sprintf("%s Select    %s Complete", arrows, tab)
+	instructions := fmt.Sprintf(
+		"%s Select    %s Complete    %s Open    %s Cancel",
+		arrows,
+		tab,
+		enter,
+		esc,
+	)
 
 	lines := []string{
 		m.renderModalTitle("Open File or Workspace", width),
@@ -2606,13 +2611,12 @@ func (m Model) renderOpenModal() string {
 			Render(m.openPathError)
 		lines = append(lines, "", errorLine)
 	}
-	headerInfo := m.theme.HeaderValue.
+	// Width keeps the padding on every line, so a terminal too narrow for one
+	// row of hints wraps them under the same margin instead of flush left.
+	lines = append(lines, "", m.theme.HeaderValue.
 		Padding(0, 2).
-		Render(info)
-	headerNavigation := m.theme.HeaderValue.
-		Padding(0, 2).
-		Render(navigation)
-	lines = append(lines, "", headerNavigation, headerInfo)
+		Width(width).
+		Render(instructions))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
