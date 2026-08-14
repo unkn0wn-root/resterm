@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,57 +14,98 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func (m *Model) openOpenModal() {
+func (m *Model) openOpenModal() tea.Cmd {
 	m.showOpenModal = true
 	m.openPathError = ""
-	m.openPathInput.SetValue("")
-	m.openPathInput.Focus()
 	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false
 	m.closeNewFileModal()
+	return m.openPathPrompt.open(m.openPathSource())
 }
 
 func (m *Model) closeOpenModal() {
 	m.showOpenModal = false
 	m.openPathError = ""
-	m.openPathInput.Blur()
-	m.openPathInput.SetValue("")
+	m.openPathPrompt.close()
 }
 
-func (m *Model) submitOpenPath() tea.Cmd {
-	input := strings.TrimSpace(m.openPathInput.Value())
-	if input == "" {
-		m.openPathError = "Enter a path"
+func (m *Model) handleOpenModalKey(msg tea.KeyMsg) tea.Cmd {
+	m.openPathError = ""
+	src := m.openPathSource()
+
+	switch msg.String() {
+	case "esc":
+		m.closeOpenModal()
 		return nil
+	case "ctrl+q", "ctrl+d":
+		return tea.Quit
+	case "enter":
+		cmd, more, err := m.openPathPrompt.accept(src)
+		if err != nil {
+			m.openPathError = err.Error()
+			return nil
+		}
+		if more {
+			return cmd
+		}
+		return m.submitOpenPath()
 	}
 
-	resolved, err := m.resolveOpenPath(input)
+	cmd, err := m.openPathPrompt.handleKey(msg, src)
 	if err != nil {
 		m.openPathError = err.Error()
 		return nil
 	}
+	return cmd
+}
+
+func (m *Model) submitOpenPath() tea.Cmd {
+	cmd, err := m.openPath(m.openPathPrompt.value())
+	if err != nil {
+		m.openPathError = err.Error()
+		return nil
+	}
+	return cmd
+}
+
+func (m *Model) openPath(input string) (tea.Cmd, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil, errors.New("enter a path")
+	}
+
+	resolved, err := m.resolveOpenPath(input)
+	if err != nil {
+		return nil, err
+	}
 
 	info, err := os.Stat(resolved)
 	if err != nil {
-		m.openPathError = fmt.Sprintf("stat path: %v", err)
-		return nil
+		return nil, fmt.Errorf("stat path: %w", err)
 	}
 
 	if info.IsDir() {
-		return m.applyOpenDirectory(resolved)
+		return m.applyOpenDirectory(resolved), nil
 	}
 
 	if !m.isSupportedOpenPath(resolved) {
-		m.openPathError = "Only Resterm-supported workspace files can be opened"
-		return nil
+		return nil, errors.New("only Resterm-supported workspace files can be opened")
 	}
 
-	return m.applyOpenFilePath(resolved)
+	return m.applyOpenFilePath(resolved), nil
+}
+
+func (m *Model) openPathFromCommand(input string) tea.Cmd {
+	cmd, err := m.openPath(input)
+	if err != nil {
+		return statusCmd(statusWarn, err.Error())
+	}
+	return cmd
 }
 
 func (m *Model) resolveOpenPath(input string) (string, error) {
-	path := expandHome(input)
+	path := util.ExpandHome(input)
 	if !filepath.IsAbs(path) {
 		base := m.ws.root
 		if base == "" {
@@ -151,34 +193,18 @@ func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 }
 
 func (m *Model) isSupportedOpenPath(path string) bool {
+	return supportedOpenPath(path, m.ws.envFile)
+}
+
+func supportedOpenPath(path, envFile string) bool {
 	switch {
 	case files.IsWorkspace(path):
 		return true
 	case vars.IsDotEnvPath(path):
 		return true
-	case util.SameFile(path, m.ws.envFile):
+	case util.SameFile(path, envFile):
 		return true
 	default:
 		return false
 	}
-}
-
-func expandHome(path string) string {
-	if path == "" || path[0] != '~' {
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return path
-	}
-	if len(path) == 1 {
-		return home
-	}
-	remainder := path[1:]
-	remainder = strings.TrimPrefix(remainder, string(filepath.Separator))
-	remainder = strings.TrimPrefix(remainder, "/")
-	if remainder == "" {
-		return home
-	}
-	return filepath.Join(home, remainder)
 }

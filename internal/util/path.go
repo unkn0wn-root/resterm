@@ -3,6 +3,7 @@ package util
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // SamePath reports whether two non-empty paths resolve to the same lexical path.
@@ -43,6 +44,23 @@ func SameFile(a, b string) bool {
 	}
 	fb, err := os.Stat(b)
 	return err == nil && os.SameFile(fa, fb)
+}
+
+func ExpandHome(path string) string {
+	if path == "" || path[0] != '~' {
+		return path
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	rest := strings.TrimPrefix(path[1:], string(filepath.Separator))
+	rest = strings.TrimPrefix(rest, "/")
+	if rest == "" {
+		return home
+	}
+	return filepath.Join(home, rest)
 }
 
 // SamePathOrBothEmpty reports whether a and b are both empty or name the same path.

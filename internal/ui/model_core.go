@@ -282,9 +282,8 @@ type Model struct {
 	searchTarget          searchTarget
 	searchResponsePane    responsePaneID
 	showCommandLine       bool
-	commandLineInput      textinput.Model
+	commandLine           completionPrompt
 	commandLineJustOpened bool
-	commandSuggestions    exSuggestionState
 
 	statusMessage    statusMsg
 	statusUser       string
@@ -373,7 +372,7 @@ type Model struct {
 	newFileError           string
 	newFileFromSave        bool
 	saveAsFollowUp         tea.Cmd
-	openPathInput          textinput.Model
+	openPathPrompt         completionPrompt
 	openPathError          string
 	responseSaveInput      textinput.Model
 	responseSaveError      string
@@ -503,10 +502,8 @@ func New(cfg Config) Model {
 	editor.Cursor.SetMode(cursor.CursorStatic)
 
 	newFileInput := newPromptInput("new-request", "")
-	openPathInput := newPromptInput("./examples/basic.http", "")
 	responseSaveInput := newPromptInput("~/Downloads/response.bin", "")
 	searchInput := newPromptInput("pattern", "")
-	commandLineInput := newPromptInput("command", "")
 
 	navFilter := newNavigatorFilterInput()
 
@@ -688,11 +685,11 @@ func New(cfg Config) Model {
 		editorWriteKeyMap:        writeKeyMap,
 		editorViewKeyMap:         viewKeyMap,
 		newFileInput:             newFileInput,
-		openPathInput:            openPathInput,
+		openPathPrompt:           newCompletionPrompt(promptOpenPath, "./examples/basic.http"),
 		responseSaveInput:        responseSaveInput,
 		searchInput:              searchInput,
 		searchTarget:             searchTargetEditor,
-		commandLineInput:         commandLineInput,
+		commandLine:              newCompletionPrompt(promptCommandLine, "command"),
 		streamMgr:                stream.NewManager(),
 		streamMsgChan:            make(chan tea.Msg, 128),
 		streamBatchWindow:        defaultStreamBatchWindow,

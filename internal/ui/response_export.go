@@ -10,6 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/launch"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (m *Model) saveResponseBody() tea.Cmd {
@@ -166,7 +167,7 @@ func (m *Model) submitResponseSave() tea.Cmd {
 }
 
 func (m *Model) resolveResponseSavePath(input string) (string, error) {
-	path := expandHome(input)
+	path := util.ExpandHome(input)
 	if !filepath.IsAbs(path) {
 		base := strings.TrimSpace(m.lastResponseSaveDir)
 		if base == "" {

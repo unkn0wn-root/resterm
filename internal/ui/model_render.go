@@ -1843,7 +1843,7 @@ func (m Model) renderCommandLinePrompt() string {
 	return m.renderPromptBar(
 		m.theme.CommandBar.Width(m.width),
 		":",
-		m.commandLineInput,
+		m.commandLine.input,
 		"↑/↓ select",
 		"Tab complete",
 		"Enter run",
@@ -2570,15 +2570,20 @@ func (m Model) renderNewFileModal() string {
 	return m.renderCenteredModal(box)
 }
 
+const openModalSuggestionRows = 8
+
 func (m Model) renderOpenModal() string {
 	width := max(min(m.width-10, 60), 36)
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).
-		Render(m.openPathInput.View())
+		Render(m.openPathPrompt.input.View())
 
 	enter := m.theme.CommandBarHint.Render("Enter")
 	esc := m.theme.CommandBarHint.Render("Esc")
+	tab := m.theme.CommandBarHint.Render("Tab")
+	arrows := m.theme.CommandBarHint.Render("↑/↓")
 	info := fmt.Sprintf("%s Open    %s Cancel", enter, esc)
+	navigation := fmt.Sprintf("%s Select    %s Complete", arrows, tab)
 
 	lines := []string{
 		m.renderModalTitle("Open File or Workspace", width),
@@ -2590,6 +2595,11 @@ func (m Model) renderOpenModal() string {
 			Padding(0, 2).
 			Render(inputView),
 	}
+	if popup := m.buildMenuPopup(m.openPathPrompt.menu, openModalSuggestionRows, width-4); len(popup) > 0 {
+		lines = append(lines, lipgloss.NewStyle().
+			Padding(0, 2).
+			Render(strings.Join(popup, "\n")))
+	}
 	if m.openPathError != "" {
 		errorLine := m.theme.Error.
 			Padding(0, 2).
@@ -2599,7 +2609,10 @@ func (m Model) renderOpenModal() string {
 	headerInfo := m.theme.HeaderValue.
 		Padding(0, 2).
 		Render(info)
-	lines = append(lines, "", headerInfo)
+	headerNavigation := m.theme.HeaderValue.
+		Padding(0, 2).
+		Render(navigation)
+	lines = append(lines, "", headerNavigation, headerInfo)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Width(width).Render(content)

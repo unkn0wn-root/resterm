@@ -21,7 +21,7 @@ func TestSubmitOpenPathOpensFile(t *testing.T) {
 	model := New(Config{WorkspaceRoot: tmp, Theme: &th})
 	m := &model
 	m.openOpenModal()
-	m.openPathInput.SetValue(file)
+	m.openPathPrompt.input.SetValue(file)
 	if cmd := m.submitOpenPath(); cmd != nil {
 		cmd()
 	}
@@ -56,7 +56,7 @@ func TestSubmitOpenPathSwitchesWorkspace(t *testing.T) {
 	model := New(Config{WorkspaceRoot: tmp, Theme: &th})
 	m := &model
 	m.openOpenModal()
-	m.openPathInput.SetValue(dir)
+	m.openPathPrompt.input.SetValue(dir)
 	if cmd := m.submitOpenPath(); cmd != nil {
 		cmd()
 	}
@@ -80,7 +80,7 @@ func TestSubmitOpenPathRejectsInvalidFile(t *testing.T) {
 	model := New(Config{WorkspaceRoot: tmp, Theme: &th})
 	m := &model
 	m.openOpenModal()
-	m.openPathInput.SetValue(file)
+	m.openPathPrompt.input.SetValue(file)
 	if cmd := m.submitOpenPath(); cmd != nil {
 		cmd()
 	}
@@ -107,7 +107,7 @@ func TestSubmitOpenPathOpensEnvFile(t *testing.T) {
 	model := New(Config{WorkspaceRoot: tmp, Theme: &th, Env: vars.Config{File: file}})
 	m := &model
 	m.openOpenModal()
-	m.openPathInput.SetValue(file)
+	m.openPathPrompt.input.SetValue(file)
 	if cmd := m.submitOpenPath(); cmd != nil {
 		cmd()
 	}
@@ -143,7 +143,7 @@ func TestSubmitOpenPathOpensAuxiliaryWorkspaceFiles(t *testing.T) {
 			model := New(Config{WorkspaceRoot: tmp, Theme: &th})
 			m := &model
 			m.openOpenModal()
-			m.openPathInput.SetValue(file)
+			m.openPathPrompt.input.SetValue(file)
 			if cmd := m.submitOpenPath(); cmd != nil {
 				cmd()
 			}
