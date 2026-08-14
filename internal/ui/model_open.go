@@ -36,6 +36,9 @@ func (m *Model) handleOpenModalKey(msg tea.KeyMsg) tea.Cmd {
 
 	switch msg.String() {
 	case "esc":
+		if m.openPathPrompt.dismiss() {
+			return nil
+		}
 		m.closeOpenModal()
 		return nil
 	case "ctrl+q", "ctrl+d":

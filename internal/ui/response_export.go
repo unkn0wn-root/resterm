@@ -49,6 +49,9 @@ func (m *Model) handleResponseSaveKey(msg tea.KeyMsg) tea.Cmd {
 
 	switch msg.String() {
 	case "esc":
+		if m.responseSavePrompt.dismiss() {
+			return nil
+		}
 		m.closeResponseSaveModal()
 		return nil
 	case "ctrl+q", "ctrl+d":

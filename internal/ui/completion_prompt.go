@@ -26,10 +26,11 @@ type pathReadMsg struct {
 }
 
 type completionPrompt struct {
-	id    promptID
-	input textinput.Model
-	menu  prompt.Menu
-	paths prompt.PathSession
+	id        promptID
+	input     textinput.Model
+	menu      prompt.Menu
+	paths     prompt.PathSession
+	dismissed bool
 }
 
 func newCompletionPrompt(id promptID, placeholder string) completionPrompt {
@@ -66,6 +67,15 @@ func (p *completionPrompt) close() {
 
 func (p *completionPrompt) value() string { return p.input.Value() }
 
+func (p *completionPrompt) dismiss() bool {
+	if len(p.menu.Items()) == 0 {
+		return false
+	}
+	p.menu.Reset(nil)
+	p.dismissed = true
+	return true
+}
+
 func (p *completionPrompt) handleKey(msg tea.KeyMsg, src completionSource) (tea.Cmd, error) {
 	switch msg.String() {
 	case "down", "ctrl+n":
@@ -90,7 +100,7 @@ func (p *completionPrompt) handleKey(msg tea.KeyMsg, src completionSource) (tea.
 func (p *completionPrompt) complete(src completionSource) (tea.Cmd, error) {
 	item, ok := p.menu.Preferred()
 	if !ok {
-		return nil, nil
+		return p.refresh(src), nil
 	}
 	if err := p.write(item); err != nil {
 		return nil, err
@@ -133,6 +143,7 @@ func (p *completionPrompt) refresh(src completionSource) tea.Cmd {
 // fill sets the menu from what is known already and reports the directory that
 // still has to be listed, if there is one.
 func (p *completionPrompt) fill(src completionSource) prompt.DirLoad {
+	p.dismissed = false
 	input, cursor := p.input.Value(), p.input.Position()
 	items, load, isPath := p.paths.Suggest(src, input, cursor)
 	if !isPath {
@@ -145,7 +156,8 @@ func (p *completionPrompt) fill(src completionSource) prompt.DirLoad {
 }
 
 func (p *completionPrompt) deliver(read prompt.DirRead) {
-	if items, ok := p.paths.Deliver(read); ok {
+	items, ok := p.paths.Deliver(read)
+	if ok && !p.dismissed {
 		p.menu.Reset(items)
 	}
 }
