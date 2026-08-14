@@ -149,5 +149,9 @@ func Quote(value string) string {
 		!strings.ContainsAny(value, `"'`) {
 		return value
 	}
-	return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
+
+	// A backslash right before the closing quote would escape it, so a trailing
+	// run of them stays outside. Windows directories end in one.
+	quoted := strings.TrimRight(value, `\`)
+	return `"` + strings.ReplaceAll(quoted, `"`, `\"`) + `"` + value[len(quoted):]
 }

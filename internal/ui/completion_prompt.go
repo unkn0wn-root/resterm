@@ -1,11 +1,17 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/prompt"
 )
+
+// How long a prompt waits for the directory it opens on before handing the read
+// back to the update loop.
+const firstListingWait = 20 * time.Millisecond
 
 type completionSource interface {
 	prompt.PathProvider
@@ -51,11 +57,16 @@ func (p *completionPrompt) openWith(src completionSource, value string) tea.Cmd 
 	// loop, so the prompt draws complete in the frame it opens in rather than
 	// growing into its suggestions a frame later. Every keystroke after this
 	// one goes back to reading off the loop.
+	var pending tea.Cmd
 	if load := p.fill(src); load.Pending() {
-		entries, err := prompt.ReadDir(load.Dir)
-		p.deliver(prompt.DirRead{DirLoad: load, Entries: entries, Err: err})
+		read, wait := listDirSoon(p.id, load)
+		if wait != nil {
+			pending = wait
+		} else {
+			p.deliver(read)
+		}
 	}
-	return p.input.Focus()
+	return batchCommands(p.input.Focus(), pending)
 }
 
 func (p *completionPrompt) close() {
@@ -162,12 +173,30 @@ func (p *completionPrompt) deliver(read prompt.DirRead) {
 	}
 }
 
+func readDir(load prompt.DirLoad) prompt.DirRead {
+	entries, err := prompt.ReadDir(load.Dir)
+	return prompt.DirRead{DirLoad: load, Entries: entries, Err: err}
+}
+
 func readPathDir(id promptID, load prompt.DirLoad) tea.Cmd {
 	return func() tea.Msg {
-		entries, err := prompt.ReadDir(load.Dir)
-		return pathReadMsg{
-			id:   id,
-			read: prompt.DirRead{DirLoad: load, Entries: entries, Err: err},
+		return pathReadMsg{id: id, read: readDir(load)}
+	}
+}
+
+// listDirSoon gives a fast directory long enough to land in the frame that
+// opens the prompt. A slow one comes back through the update loop instead, so
+// a network mount cannot hold the whole UI.
+func listDirSoon(id promptID, load prompt.DirLoad) (prompt.DirRead, tea.Cmd) {
+	done := make(chan prompt.DirRead, 1)
+	go func() { done <- readDir(load) }()
+
+	select {
+	case read := <-done:
+		return read, nil
+	case <-time.After(firstListingWait):
+		return prompt.DirRead{}, func() tea.Msg {
+			return pathReadMsg{id: id, read: <-done}
 		}
 	}
 }
