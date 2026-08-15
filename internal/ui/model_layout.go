@@ -10,6 +10,7 @@ import (
 )
 
 func (m *Model) applyLayout() tea.Cmd {
+	m.invalidateModalRender()
 	if !m.ready {
 		return nil
 	}

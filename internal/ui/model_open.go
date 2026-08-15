@@ -11,7 +11,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/util"
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (m *Model) openOpenModal() tea.Cmd {
@@ -196,18 +195,5 @@ func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 }
 
 func (m *Model) isSupportedOpenPath(path string) bool {
-	return supportedOpenPath(path, m.ws.envFile)
-}
-
-func supportedOpenPath(path, envFile string) bool {
-	switch {
-	case files.IsWorkspace(path):
-		return true
-	case vars.IsDotEnvPath(path):
-		return true
-	case util.SameFile(path, envFile):
-		return true
-	default:
-		return false
-	}
+	return files.WorkspacePathFilter(m.ws.envFile).Accept(path)
 }

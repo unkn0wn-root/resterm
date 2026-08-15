@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/cellbuf"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/prompt"
@@ -88,6 +87,7 @@ func headerLabelTextWithIcon(label, iconOverride string) string {
 
 func (m Model) View() string {
 	if !m.ready {
+		m.invalidateModalRender()
 		return m.renderWithinAppFrame("Initialising...")
 	}
 
@@ -137,6 +137,7 @@ func (m Model) View() string {
 	if m.showEnvSelector {
 		return m.renderWithinAppFrame(m.renderEnvironmentModal())
 	}
+	m.invalidateModalRender()
 	return m.renderWithinAppFrame(m.renderAppContent(renderContext{}))
 }
 
@@ -268,102 +269,11 @@ func (m Model) renderWithinAppFrame(content string) string {
 	return framed
 }
 
-func (m Model) renderCenteredModal(box string) string {
-	x, y, width, height := m.modalPlacement(box)
-	if width <= 0 || height <= 0 {
-		return box
-	}
-
-	base := m.renderModalUnderlay(width, height)
-	return m.renderModalOverlay(base, box, x, y, lipgloss.Width(box), lipgloss.Height(box), width, height)
-}
-
-func (m Model) modalPlacement(box string) (x, y, width, height int) {
-	boxWidth := lipgloss.Width(box)
-	boxHeight := lipgloss.Height(box)
-	width = max(m.width, boxWidth)
-	height = max(m.height, boxHeight)
-	return max((width-boxWidth)/2, 0), max((height-boxHeight)/2, 0), width, height
-}
-
-func (m Model) renderModalUnderlay(width, height int) string {
-	return lipgloss.Place(
-		width,
-		height,
-		lipgloss.Top,
-		lipgloss.Left,
-		m.renderAppContent(renderContext{modalUnderlay: true}),
-		lipgloss.WithWhitespaceChars(" "),
-	)
-}
-
-func (m Model) renderModalOverlay(
-	base, box string,
-	x, y, boxWidth, boxHeight, width, height int,
-) string {
-	buf := cellbuf.NewBuffer(width, height)
-	cellbuf.SetContent(buf, base)
-
-	boxWidth = min(boxWidth, width-x)
-	boxHeight = min(boxHeight, height-y)
-	if boxWidth <= 0 || boxHeight <= 0 {
-		return strings.ReplaceAll(cellbuf.Render(buf), "\r\n", "\n")
-	}
-
-	m.applyModalBackdrop(buf, x, y, boxWidth, boxHeight)
-
-	modal := cellbuf.NewBuffer(boxWidth, boxHeight)
-	cellbuf.SetContent(modal, box)
-	for row := 0; row < boxHeight; row++ {
-		for col := 0; col < boxWidth; col++ {
-			cell := modal.Cell(col, row)
-			if cell == nil || cell.Width == 0 {
-				continue
-			}
-
-			buf.SetCell(x+col, y+row, cell)
-		}
-	}
-
-	return strings.ReplaceAll(cellbuf.Render(buf), "\r\n", "\n")
-}
-
 func (m Model) renderModalTitle(title string, width int) string {
 	return m.theme.HeaderTitle.
 		Width(width).
 		Align(lipgloss.Center).
 		Render(title)
-}
-
-func (m Model) applyModalBackdrop(
-	buf *cellbuf.Buffer,
-	boxX, boxY, boxWidth, boxHeight int,
-) {
-	backdrop, ok := m.themeRuntime.modalBackdropColor(m.theme).(ansi.Color)
-	if !ok || backdrop == nil {
-		return
-	}
-
-	for row := 0; row < buf.Height(); row++ {
-		for col := 0; col < buf.Width(); col++ {
-			if row >= boxY && row < boxY+boxHeight &&
-				col >= boxX && col < boxX+boxWidth {
-				continue
-			}
-
-			cell := buf.Cell(col, row)
-			if cell == nil {
-				cell = cellbuf.NewCell(' ')
-			} else {
-				if cell.Rune != ' ' || len(cell.Comb) != 0 || cell.Width != 1 {
-					continue
-				}
-				cell = cell.Clone()
-			}
-			cell.Style.Fg = backdrop
-			buf.SetCell(col, row, cell)
-		}
-	}
 }
 
 func (m Model) renderFilePane(rc renderContext) string {

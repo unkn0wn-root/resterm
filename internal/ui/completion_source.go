@@ -22,7 +22,8 @@ func (s commandSource) PathAt(input string, cursor int) (prompt.PathRequest, boo
 	if !ok {
 		return prompt.PathRequest{}, false
 	}
-	spec.Quote = prompt.Quote
+	// Path arguments may contain whitespace, so quote them when needed.
+	spec.Quote = true
 	return prompt.PathRequest{Value: arg.value, Edit: arg.edit, Spec: spec}, true
 }
 
@@ -75,7 +76,7 @@ func (s responseSavePathSource) PathAt(input string, cursor int) (prompt.PathReq
 		Edit:  prompt.Edit{End: len(runes)},
 		Spec: prompt.PathSpec{
 			Root:        s.dir,
-			Accept:      func(string) bool { return true },
+			Files:       files.AnyPathFilter(),
 			FileSummary: "file",
 			ExpandHome:  true,
 		},
@@ -109,10 +110,8 @@ func (m *Model) responseSavePathSource() responseSavePathSource {
 
 func workspacePathSpec(root, envFile string) prompt.PathSpec {
 	return prompt.PathSpec{
-		Root: root,
-		Accept: func(path string) bool {
-			return supportedOpenPath(path, envFile)
-		},
+		Root:        root,
+		Files:       files.WorkspacePathFilter(envFile),
 		FileSummary: "workspace file",
 		AcceptDirs:  true,
 		ExpandHome:  true,
@@ -122,7 +121,7 @@ func workspacePathSpec(root, envFile string) prompt.PathSpec {
 func requestPathSpec(root string) prompt.PathSpec {
 	return prompt.PathSpec{
 		Root:        root,
-		Accept:      files.IsRequest,
+		Files:       files.RequestPathFilter(),
 		FileSummary: "request file",
 		Confine:     true,
 		CommaList:   true,

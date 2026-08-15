@@ -4,18 +4,19 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type PathSpec struct {
 	Root        string
-	Accept      func(path string) bool
+	Files       files.PathFilter
 	FileSummary string
 	Confine     bool
 	CommaList   bool
 	AcceptDirs  bool
 	ExpandHome  bool
-	Quote       func(string) string
+	Quote       bool
 }
 
 type PathRequest struct {
@@ -35,6 +36,13 @@ type pathQuery struct {
 	typed     string
 	prefix    string
 	committed string
+}
+
+type pathCandidate struct {
+	name    string
+	summary string
+	dir     bool
+	hidden  bool
 }
 
 func newPathQuery(r PathRequest) (pathQuery, bool) {
@@ -83,16 +91,9 @@ func newPathQuery(r PathRequest) (pathQuery, bool) {
 	}, true
 }
 
-func (q pathQuery) items(entries []DirEntry) []Item {
-	out := make([]Item, 0, len(entries))
-	hidden := strings.HasPrefix(q.prefix, ".")
+func (q pathQuery) classify(entries []DirEntry) []pathCandidate {
+	out := make([]pathCandidate, 0, len(entries))
 	for _, entry := range entries {
-		if !strings.HasPrefix(entry.Name, q.prefix) {
-			continue
-		}
-		if !hidden && strings.HasPrefix(entry.Name, ".") {
-			continue
-		}
 		if q.spec.CommaList && strings.ContainsRune(entry.Name, ',') {
 			continue
 		}
@@ -106,24 +107,37 @@ func (q pathQuery) items(entries []DirEntry) []Item {
 			name += string(filepath.Separator)
 			summary = "directory"
 		}
+		out = append(out, pathCandidate{
+			name:    name,
+			summary: summary,
+			dir:     entry.Dir,
+			hidden:  strings.HasPrefix(entry.Name, "."),
+		})
+	}
+	return out
+}
+
+func (q pathQuery) items(candidates []pathCandidate) []Item {
+	out := make([]Item, 0, len(candidates))
+	for _, candidate := range candidates {
 		// Show only the entry; Edit retains the full path.
 		out = append(out, Item{
-			Label:    name,
-			Summary:  summary,
-			Edit:     q.replace(q.committed + q.typed + name),
-			Continue: entry.Dir && !q.spec.AcceptDirs,
+			Label:    candidate.name,
+			Summary:  candidate.summary,
+			Edit:     q.replace(q.committed + q.typed + candidate.name),
+			Continue: candidate.dir && !q.spec.AcceptDirs,
 		})
 	}
 	return out
 }
 
 func (q pathQuery) accepts(path string) bool {
-	return q.spec.Accept != nil && q.spec.Accept(path)
+	return q.spec.Files.Accept(path)
 }
 
 func (q pathQuery) replace(value string) Edit {
-	if q.spec.Quote != nil {
-		value = q.spec.Quote(value)
+	if q.spec.Quote {
+		value = Quote(value)
 	}
 	return Edit{Start: q.edit.Start, End: q.edit.End, Text: value}
 }

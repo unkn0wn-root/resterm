@@ -317,6 +317,7 @@ type Model struct {
 	updateLastCheck time.Time
 
 	render               pendingRender
+	modalRender          *modalRenderCache
 	responseLoading      bool
 	responseLoadingFrame int
 	respTasks            *respTasks
@@ -661,6 +662,7 @@ func New(cfg Config) Model {
 		reqCompact:               &reqCompact,
 		wfCompact:                &wfCompact,
 		respTasks:                newRespTasks(),
+		modalRender:              &modalRenderCache{},
 		responseLastFocused:      responsePanePrimary,
 		focus:                    focusFile,
 		sidebarWidth:             sidebarWidthDefault,

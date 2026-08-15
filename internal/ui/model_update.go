@@ -40,6 +40,10 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if !m.modalKeepsUnderlay(msg) {
+		m.invalidateModalRender()
+	}
+
 	var cmds []tea.Cmd
 	mouseHandled := false
 
@@ -1149,6 +1153,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 	return m.handleKeyWithChord(msg, true)
+}
+
+// Keep the cached application frame only for messages handled entirely by an
+// open modal. All other messages may change the frame behind it.
+func (m *Model) modalKeepsUnderlay(msg tea.Msg) bool {
+	switch msg.(type) {
+	case tea.KeyMsg:
+		return m.modalCapturesGlobalKeys()
+	case pathReadMsg:
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *Model) modalCapturesGlobalKeys() bool {
