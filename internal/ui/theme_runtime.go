@@ -242,6 +242,7 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 }
 
 func (m *Model) applyThemeDefinition(def theme.Definition) {
+	m.invalidateModalRender()
 	m.theme = def.Theme
 	m.activeThemeDef = def
 	m.activeThemeKey = def.Key

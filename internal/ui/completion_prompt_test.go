@@ -100,6 +100,31 @@ func TestOpenModalCompletesPaths(t *testing.T) {
 	}
 }
 
+func TestOpenModalKeyRepeatKeepsEveryRune(t *testing.T) {
+	model := New(Config{WorkspaceRoot: completionWorkspace(t)})
+	model.width = 100
+	model.height = 32
+	model.frameWidth = 102
+	model.frameHeight = 34
+	model.ready = true
+	_ = model.applyLayout()
+	openPathModal(t, &model)
+
+	want := strings.Repeat("resterm", 12)
+	for _, r := range want {
+		updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		model = updated.(Model)
+		_ = model.View()
+	}
+
+	if got := model.openPathPrompt.value(); got != want {
+		t.Fatalf("key repeat input = %q, want %q", got, want)
+	}
+	if !model.showOpenModal {
+		t.Fatal("key repeat unexpectedly closed the open modal")
+	}
+}
+
 func TestEditCommandOpensQuotedPath(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "space dir")
