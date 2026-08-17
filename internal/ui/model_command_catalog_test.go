@@ -18,7 +18,7 @@ func TestExCatalogSuggestions(t *testing.T) {
 		label  string
 		insert string
 	}{
-		{name: "command alias", input: "ma", label: "help [topic]", insert: "help "},
+		{name: "command alias", input: "ma", label: "help [topic] (:h, :man)", insert: "help "},
 		{name: "help topic", input: "help web", label: "streaming", insert: "help streaming"},
 		{name: "man topic", input: "man grpc", label: "grpc", insert: "help grpc"},
 		{name: "docs topic", input: "docs auth", label: "authentication", insert: "docs authentication"},
@@ -45,6 +45,35 @@ func TestExCatalogSuggestions(t *testing.T) {
 			}
 			if items[0].Label != tt.label || insert != tt.insert {
 				t.Fatalf("unexpected suggestion: %+v", items[0])
+			}
+		})
+	}
+}
+
+func TestExCommandLabelsShowAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{name: "write", want: "write (:w)"},
+		{name: "quit", want: "quit[!] (:q, :qa, :qall)"},
+		{name: "wq", want: "wq"},
+		{name: "exit", want: "exit (:x, :xit)"},
+		{name: "edit", want: "edit [path] (:e)"},
+		{name: "help", want: "help [topic] (:h, :man)"},
+		{name: "nohlsearch", want: "nohlsearch (:noh)"},
+		{name: "mock", want: "mock [command]"},
+		{name: "docs", want: "docs [topic]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			def, ok := exCommands.Lookup(tt.name)
+			if !ok {
+				t.Fatalf("command %q not found", tt.name)
+			}
+			if got := def.label(); got != tt.want {
+				t.Fatalf("label = %q, want %q", got, tt.want)
 			}
 		})
 	}

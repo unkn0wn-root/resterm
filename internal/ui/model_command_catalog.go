@@ -95,10 +95,19 @@ var exCommands = exCatalog{
 }
 
 func (d exCommandDef) label() string {
+	label := d.name
 	if d.usage != "" {
-		return d.usage
+		label = d.usage
 	}
-	return d.name
+	if len(d.aliases) == 0 {
+		return label
+	}
+
+	aliases := make([]string, len(d.aliases))
+	for i, alias := range d.aliases {
+		aliases[i] = ":" + alias
+	}
+	return label + " (" + strings.Join(aliases, ", ") + ")"
 }
 
 // label goes in the picker, where it shares the row with the summary. usage is
