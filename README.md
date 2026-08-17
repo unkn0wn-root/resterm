@@ -5,14 +5,16 @@
 </h1>
 
 <p align="center">
-  <em>A terminal API client for REST, GraphQL, gRPC, WebSocket and SSE.</em>
+  <em>A terminal-native API workbench for REST, GraphQL, gRPC, WebSocket and SSE.</em>
 </p>
 
 <p align="center">
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is a keyboard-driven API client that runs in your terminal. Requests are plain `.http` files that you can diff, review and version like code. Everything stays on your machine. No accounts, no cloud sync, no telemetry.
+Resterm is an _API-as-code_ workbench - or, in more familiar terms, an API client - built around plain `.http` and `.rest` files that you can diff, review and version. It combines interactive request editing with declarative workflows, assertions, mock servers, tracing, profiling and headless automation. Everything stays on your machine. No accounts, no cloud sync, no telemetry.
+
+If you are looking for a Postman-style client centered on GUI collections, Resterm probably is _not_ for you, but give it a try anyway!
 
 > [!NOTE]
 > Resterm is now v1! See the [v1.0.0 release notes](https://github.com/unkn0wn-root/resterm/releases/tag/v1.0.0) for new features and breaking changes.
