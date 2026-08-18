@@ -163,7 +163,7 @@ func SetRequestVars(req *restfile.Request, variables vars.NameMap[string]) {
 	for name, value := range variables.Sorted() {
 		key := vars.NameKey(name)
 		if idx, ok := idxs[key]; ok {
-			req.Variables[idx].Value = value
+			req.Variables[idx].SetRuntimeValue(value)
 			continue
 		}
 		idxs[key] = len(req.Variables)

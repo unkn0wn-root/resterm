@@ -78,19 +78,20 @@ func (c *cmpCollector) OnEvt(_ context.Context, e core.Evt) error {
 func compareRow(meta core.RowMeta, out engine.RequestResult) engine.CompareRow {
 	canceled := out.Err != nil && errors.Is(out.Err, context.Canceled)
 	row := engine.CompareRow{
-		Environment: meta.Env,
-		Profile:     meta.Profile,
-		Selection:   out.Selection,
-		Response:    cloneHTTP(out.Response),
-		GRPC:        out.GRPC.Clone(),
-		Stream:      cloneStream(out.Stream),
-		Transcript:  copyBytes(out.Transcript),
-		Err:         out.Err,
-		Tests:       slices.Clone(out.Tests),
-		ScriptErr:   out.ScriptErr,
-		Skipped:     out.Skipped,
-		SkipReason:  strings.TrimSpace(out.SkipReason),
-		Canceled:    canceled,
+		Environment:    meta.Env,
+		Profile:        meta.Profile,
+		Selection:      out.Selection,
+		Response:       cloneHTTP(out.Response),
+		GRPC:           out.GRPC.Clone(),
+		Stream:         cloneStream(out.Stream),
+		Transcript:     copyBytes(out.Transcript),
+		Err:            out.Err,
+		Tests:          slices.Clone(out.Tests),
+		ScriptErr:      out.ScriptErr,
+		RuntimeSecrets: slices.Clone(out.RuntimeSecrets),
+		Skipped:        out.Skipped,
+		SkipReason:     strings.TrimSpace(out.SkipReason),
+		Canceled:       canceled,
 	}
 	if canceled {
 		row.Err = nil
@@ -249,7 +250,7 @@ func (e *Engine) recordCompare(
 		Duration:    compareDuration(out.Rows),
 		RequestText: redactText(
 			request.RenderRequestText(req),
-			e.secretValues(doc, req, env),
+			e.secretValues(doc, req, env, rowSecrets(out.Rows)...),
 			!req.Metadata.AllowSensitiveHeaders,
 		),
 		Description: strings.TrimSpace(req.Metadata.Description),
@@ -261,7 +262,7 @@ func (e *Engine) recordCompare(
 		},
 	}
 	for _, row := range out.Rows {
-		secs := e.secretValues(doc, req, e.rowEnvironment(row, env))
+		secs := e.secretValues(doc, req, e.rowEnvironment(row, env), row.RuntimeSecrets...)
 		item := history.CompareResult{
 			Environment: row.Environment,
 			Profile:     row.Profile,
@@ -300,6 +301,14 @@ func (e *Engine) recordCompare(
 		ent.Compare.Results = append(ent.Compare.Results, item)
 	}
 	_ = hs.Append(ent)
+}
+
+func rowSecrets(rows []engine.CompareRow) []string {
+	var out []string
+	for _, row := range rows {
+		out = append(out, row.RuntimeSecrets...)
+	}
+	return out
 }
 
 func compareDuration(rows []engine.CompareRow) time.Duration {

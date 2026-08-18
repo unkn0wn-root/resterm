@@ -14,6 +14,29 @@ type Provider interface {
 	Label() string
 }
 
+// Value is a provider result. Its zero value is ordinary empty text.
+type Value struct {
+	Text string
+	// Missing claims the name without allowing fallback to another provider.
+	Missing bool
+	// Final prevents another round of template expansion.
+	Final bool
+}
+
+// ValueProvider returns structured provider results.
+type ValueProvider interface {
+	Provider
+	ResolveValue(name string) (Value, bool)
+}
+
+func providerValue(p Provider, name string) (Value, bool) {
+	if vp, ok := p.(ValueProvider); ok {
+		return vp.ResolveValue(name)
+	}
+	text, ok := p.Resolve(name)
+	return Value{Text: text}, ok
+}
+
 type ExprPos struct {
 	Path string
 	Line int
@@ -31,7 +54,6 @@ type Expansion struct {
 
 type Resolver struct {
 	providers []Provider
-	refs      []RefResolver
 	expr      ExprEval
 	exprPos   ExprPos
 	trace     *Trace
@@ -43,15 +65,7 @@ type Resolver struct {
 // without copying the lock.
 type memoStore struct {
 	mu      sync.Mutex
-	entries map[memoKey]memoEntry
-}
-
-// memoEntry pins the first expansion of a template-valued variable so every
-// later reference in the same resolver sees the same value, which is what
-// makes a declared {{$uuid}} stable across one request execution.
-type memoEntry struct {
-	value string
-	found bool
+	entries map[memoKey]string
 }
 
 // variableKey identifies the declaration selected by provider precedence.
@@ -125,10 +139,7 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 	return value, ok
 }
 
-// resolve looks the name up and, when the winning provider holds authored
-// template text, expands nested placeholders before refs apply. A non-nil
-// error means expansion failed (cycle, depth, or an unresolvable nested
-// placeholder) and the value is unusable.
+// A missing result still wins provider lookup, preventing fallthrough.
 func (r *Resolver) resolve(
 	name string,
 	pos ExprPos,
@@ -144,10 +155,13 @@ func (r *Resolver) resolve(
 	if !ok {
 		return "", false, nil
 	}
+	if hit.val.Missing {
+		r.traceHit(name, hit, "", true)
+		return "", false, nil
+	}
 
-	var resolved string
-	var found bool
-	if expandableProvider(hit.prov) && HasPlaceholder(hit.raw) {
+	resolved := hit.val.Text
+	if !hit.val.Final && expandableProvider(hit.prov) && HasPlaceholder(resolved) {
 		variable := hit.key()
 		if err := checkExpandState(name, variable, st); err != nil {
 			return "", false, err
@@ -158,31 +172,33 @@ func (r *Resolver) resolve(
 			allowDynamic: allowDynamic,
 			allowExpr:    allowExpr,
 		}
-		entry, cached := r.memoized(key)
+		value, cached := r.memoized(key)
 		if !cached {
-			expanded, err := r.expandValue(name, hit.raw, variable, pos, allowDynamic, allowExpr, st)
+			expanded, err := r.expandValue(name, resolved, variable, pos, allowDynamic, allowExpr, st)
 			if err != nil {
 				return "", false, err
 			}
-			value, valueFound := r.applyRefs(expanded)
-			entry = r.memoize(key, memoEntry{value: value, found: valueFound})
+			value = r.memoize(key, expanded)
 		}
-		resolved, found = entry.value, entry.found
-	} else {
-		resolved, found = r.applyRefs(hit.raw)
+		resolved = value
 	}
 
-	if len(hit.sources) > 0 {
-		r.traceVar(ResolveTrace{
-			Name:     name,
-			Source:   hit.sources[0],
-			Value:    resolved,
-			Shadowed: hit.sources[1:],
-			Uses:     1,
-			Missing:  !found,
-		})
+	r.traceHit(name, hit, resolved, false)
+	return resolved, true, nil
+}
+
+func (r *Resolver) traceHit(name string, hit lookupHit, value string, missing bool) {
+	if len(hit.sources) == 0 {
+		return
 	}
-	return resolved, found, nil
+	r.traceVar(ResolveTrace{
+		Name:     name,
+		Source:   hit.sources[0],
+		Value:    value,
+		Shadowed: hit.sources[1:],
+		Uses:     1,
+		Missing:  missing,
+	})
 }
 
 func (r *Resolver) expandValue(
@@ -222,25 +238,25 @@ func checkExpandState(name string, key variableKey, st *expandState) error {
 	return nil
 }
 
-func (r *Resolver) memoized(key memoKey) (memoEntry, bool) {
+func (r *Resolver) memoized(key memoKey) (string, bool) {
 	r.memo.mu.Lock()
 	defer r.memo.mu.Unlock()
-	entry, ok := r.memo.entries[key]
-	return entry, ok
+	value, ok := r.memo.entries[key]
+	return value, ok
 }
 
 // memoize returns the first value stored for key. Multiple goroutines may do
 // the expansion work concurrently, but every caller observes the same winner.
 // Avoiding a wait on another variable's expansion also keeps concurrent roots
 // of a cyclic graph from deadlocking each other.
-func (r *Resolver) memoize(key memoKey, candidate memoEntry) memoEntry {
+func (r *Resolver) memoize(key memoKey, candidate string) string {
 	r.memo.mu.Lock()
 	defer r.memo.mu.Unlock()
 	if r.memo.entries == nil {
-		r.memo.entries = make(map[memoKey]memoEntry)
+		r.memo.entries = make(map[memoKey]string)
 	}
-	if entry, ok := r.memo.entries[key]; ok {
-		return entry
+	if value, ok := r.memo.entries[key]; ok {
+		return value
 	}
 	r.memo.entries[key] = candidate
 	return candidate
@@ -250,7 +266,7 @@ func (r *Resolver) memoize(key memoKey, candidate memoEntry) memoEntry {
 // winning provider actually resolved, which differs from the requested name
 // for prefixed lookups.
 type lookupHit struct {
-	raw     string
+	val     Value
 	prov    Provider
 	idx     int
 	subject string
@@ -265,12 +281,12 @@ func (h lookupHit) key() variableKey {
 // If that fails and the name has a dot, tries to match a provider prefix -
 // so "production.api_key" looks for a provider labeled "production" then asks for "api_key".
 func (r *Resolver) lookupValue(name string) (lookupHit, bool) {
-	hit, ok := r.lookup(func(p Provider) (string, string, bool) {
-		value, found := p.Resolve(name)
+	hit, ok := r.lookup(func(p Provider) (Value, string, bool) {
+		value, found := providerValue(p, name)
 		return value, name, found
 	})
 	if !ok && strings.Contains(name, ".") {
-		hit, ok = r.lookup(func(p Provider) (string, string, bool) {
+		hit, ok = r.lookup(func(p Provider) (Value, string, bool) {
 			return lookupPrefixed(p, name)
 		})
 	}
@@ -280,7 +296,7 @@ func (r *Resolver) lookupValue(name string) (lookupHit, bool) {
 // lookup returns the first value find yields across providers. Without tracing
 // it stops at the first hit. With tracing it keeps scanning and collects every
 // matching provider label so shadowed sources can be reported.
-func (r *Resolver) lookup(find func(Provider) (string, string, bool)) (lookupHit, bool) {
+func (r *Resolver) lookup(find func(Provider) (Value, string, bool)) (lookupHit, bool) {
 	var hit lookupHit
 	matched := false
 	for idx, p := range r.providers {
@@ -289,7 +305,7 @@ func (r *Resolver) lookup(find func(Provider) (string, string, bool)) (lookupHit
 			continue
 		}
 		if !matched {
-			hit = lookupHit{raw: value, prov: p, idx: idx, subject: subject}
+			hit = lookupHit{val: value, prov: p, idx: idx, subject: subject}
 			matched = true
 			if r.trace == nil {
 				return hit, true
@@ -302,33 +318,20 @@ func (r *Resolver) lookup(find func(Provider) (string, string, bool)) (lookupHit
 
 // lookupPrefixed matches "label.name" against the provider label, with any
 // ":detail" suffix stripped, and resolves the remainder against that provider.
-func lookupPrefixed(p Provider, name string) (string, string, bool) {
+func lookupPrefixed(p Provider, name string) (Value, string, bool) {
 	label := strings.TrimSpace(strings.ToLower(p.Label()))
 	if before, _, ok := strings.Cut(label, ":"); ok {
 		label = strings.TrimSpace(before)
 	}
 	if label == "" || !strings.HasPrefix(strings.ToLower(name), label+".") {
-		return "", "", false
+		return Value{}, "", false
 	}
 	subject := strings.TrimSpace(name[len(label)+1:])
 	if subject == "" {
-		return "", "", false
+		return Value{}, "", false
 	}
-	value, ok := p.Resolve(subject)
+	value, ok := providerValue(p, subject)
 	return value, subject, ok
-}
-
-// applyRefs runs the value through registered ref resolvers. The first
-// resolver that claims the value (handled==true) wins. If no resolver
-// handles the value it is returned as-is.
-func (r *Resolver) applyRefs(value string) (string, bool) {
-	for _, ref := range r.refs {
-		resolved, handled, found := ref(value)
-		if handled {
-			return resolved, found
-		}
-	}
-	return value, true
 }
 
 func providerLabel(p Provider) string {
@@ -358,10 +361,6 @@ func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) 
 
 func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
 	return CompileTemplate(input).render(r, r.exprPos, false, false, nil)
-}
-
-func (r *Resolver) AddRefResolver(fn RefResolver) {
-	r.refs = append(r.refs, fn)
 }
 
 func (r *Resolver) SetTrace(tr *Trace) {
@@ -476,18 +475,42 @@ func NewTemplateProvider(label string, values map[string]string) Provider {
 	return newMapProvider(label, CollectNames(values), true)
 }
 
-// NewNameMapProvider wraps an already-normalized NameMap without copying it.
-func NewNameMapProvider(label string, values NameMap[string]) Provider {
-	return newMapProvider(label, values, false)
-}
-
-// NewNameMapTemplateProvider is the template-expanding variant of NewNameMapProvider.
-func NewNameMapTemplateProvider(label string, values NameMap[string]) Provider {
-	return newMapProvider(label, values, true)
-}
-
 func newMapProvider(label string, values NameMap[string], template bool) Provider {
 	return &MapProvider{values: values, label: label, template: template}
+}
+
+// ValueMapProvider is a provider backed by a NameMap of Values.
+type ValueMapProvider struct {
+	values   NameMap[Value]
+	label    string
+	template bool
+}
+
+// NewValueMapProvider wraps a NameMap without copying it.
+func NewValueMapProvider(label string, values NameMap[Value]) Provider {
+	return &ValueMapProvider{values: values, label: label}
+}
+
+// NewValueMapTemplateProvider enables template expansion for non-final values.
+func NewValueMapTemplateProvider(label string, values NameMap[Value]) Provider {
+	return &ValueMapProvider{values: values, label: label, template: true}
+}
+
+func (p *ValueMapProvider) ResolveValue(name string) (Value, bool) {
+	return p.values.Get(name)
+}
+
+func (p *ValueMapProvider) Resolve(name string) (string, bool) {
+	v, ok := p.values.Get(name)
+	return v.Text, ok
+}
+
+func (p *ValueMapProvider) Label() string {
+	return p.label
+}
+
+func (p *ValueMapProvider) templateValues() bool {
+	return p.template
 }
 
 type templateValueProvider interface {

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -243,11 +244,10 @@ func TestNestedExpansionUndefinedFails(t *testing.T) {
 
 func TestNestedExpansionComposesWithEnvRef(t *testing.T) {
 	t.Setenv("RESTERM_TEST_NESTED", "from-os")
-	r := NewResolver(NewTemplateProvider("request", map[string]string{
+	r, refs := envRefResolver(map[string]string{
 		"a":   "env:{{key}}",
 		"key": "RESTERM_TEST_NESTED",
-	}))
-	r.AddRefResolver(EnvRefResolver)
+	})
 
 	out, err := r.ExpandTemplates("{{a}}")
 	if err != nil {
@@ -256,15 +256,28 @@ func TestNestedExpansionComposesWithEnvRef(t *testing.T) {
 	if out != "from-os" {
 		t.Fatalf("expected env ref to resolve after expansion, got %q", out)
 	}
+	if secrets := refs.Secrets(); len(secrets) != 1 || secrets[0] != "from-os" {
+		t.Fatalf("Secrets() = %#v, want the deferred value recorded", secrets)
+	}
+}
+
+func TestNestedEnvRefMissingReturnsUndefined(t *testing.T) {
+	r, _ := envRefResolver(map[string]string{
+		"a":   "env:{{key}}",
+		"key": fmt.Sprintf("RESTERM_TEST_NESTED_MISSING_%d", time.Now().UnixNano()),
+	})
+
+	if out, err := r.ExpandTemplates("{{a}}"); err == nil {
+		t.Fatalf("expected undefined variable error, got %q", out)
+	}
 }
 
 func TestEnvRefResultNotExpanded(t *testing.T) {
 	t.Setenv("RESTERM_TEST_NESTED", "{{secret}}")
-	r := NewResolver(NewTemplateProvider("request", map[string]string{
+	r, _ := envRefResolver(map[string]string{
 		"a":      "env:RESTERM_TEST_NESTED",
 		"secret": "hunter2",
-	}))
-	r.AddRefResolver(EnvRefResolver)
+	})
 
 	out, err := r.ExpandTemplates("{{a}}")
 	if err != nil {

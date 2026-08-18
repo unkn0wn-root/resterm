@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -46,7 +47,8 @@ func (e *Engine) secretValues(
 		}
 		vals[v] = struct{}{}
 	}
-	for _, v := range env.Resolve().Secrets() {
+	snap := request.ResolveEnvironment(env, doc, req)
+	for _, v := range snap.Secrets() {
 		add(v)
 	}
 	if req != nil {

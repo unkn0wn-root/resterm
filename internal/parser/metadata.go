@@ -122,11 +122,13 @@ func (b *documentBuilder) addRequestVar(no int, rest string) {
 	if name == "" {
 		return
 	}
+	b.checkEnvRef(no, value)
 	b.request.variables = append(b.request.variables, restfile.Variable{
-		Name:  name,
-		Value: value,
-		Line:  no,
-		Scope: directive.ScopeRequest,
+		Name:     name,
+		Value:    value,
+		Line:     no,
+		Scope:    directive.ScopeRequest,
+		Authored: true,
 	})
 }
 

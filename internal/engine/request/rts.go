@@ -411,7 +411,12 @@ func (e *Engine) CollectVariables(
 	env vars.Environment,
 	overlay map[string]string,
 ) map[string]string {
-	return e.collectVariables(doc, req, env.Resolve(), runVars{overlay: vars.CollectNames(overlay)})
+	return e.collectVariables(
+		doc,
+		req,
+		ResolveEnvironment(env, doc, req),
+		runVars{overlay: vars.CollectNames(overlay)},
+	)
 }
 
 func (e *Engine) EvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
@@ -435,7 +440,7 @@ func (e *Engine) EvalCondition(
 	vv map[string]string,
 	locals rts.Locals,
 ) (bool, string, error) {
-	env := src.Resolve()
+	env := ResolveEnvironment(src, doc, req)
 	return e.evalCondition(ctx, doc, req, env, base, spec, e.storedScope(doc, env, vv), locals)
 }
 
@@ -498,7 +503,7 @@ func (e *Engine) EvalForEachItems(
 	if expr == "" {
 		return nil, fmt.Errorf("@for-each expression missing")
 	}
-	env := src.Resolve()
+	env := ResolveEnvironment(src, doc, req)
 	sc := e.storedScope(doc, env, vv)
 	val, err := e.rtsEvalValue(ctx, EvalInput{
 		Doc:     doc,
@@ -599,7 +604,7 @@ func (e *Engine) RunPreRequest(
 	globals vars.Globals,
 ) (prerequest.Output, error) {
 	sc := newEvalScope(vv, globals)
-	return e.runRTSPreRequest(ctx, doc, req, env.Resolve(), base, sc, locals, nil)
+	return e.runRTSPreRequest(ctx, doc, req, ResolveEnvironment(env, doc, req), base, sc, locals, nil)
 }
 
 func (e *Engine) runRTSPreRequest(
@@ -1212,7 +1217,7 @@ func (e *Engine) ApplyPatches(
 	vv map[string]string,
 	locals rts.Locals,
 ) error {
-	env := src.Resolve()
+	env := ResolveEnvironment(src, doc, req)
 	return e.runRTSApply(ctx, doc, req, env, base, e.storedScope(doc, env, vv), locals)
 }
 

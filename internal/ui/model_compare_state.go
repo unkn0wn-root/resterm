@@ -26,11 +26,13 @@ type compareResult struct {
 	Err         error
 	Tests       []scripts.TestResult
 	ScriptErr   error
-	Request     *restfile.Request
-	RequestText string
-	Canceled    bool
-	Skipped     bool
-	SkipReason  string
+	// RuntimeSecrets contains the values exposed while this row ran.
+	RuntimeSecrets []string
+	Request        *restfile.Request
+	RequestText    string
+	Canceled       bool
+	Skipped        bool
+	SkipReason     string
 }
 
 func (m *Model) resetCompareState() {

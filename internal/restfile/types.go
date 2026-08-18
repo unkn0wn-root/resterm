@@ -20,12 +20,21 @@ type Variable struct {
 	Scope  directive.Scope
 	Line   int
 	Secret bool
+	// Authored distinguishes declarations from values produced during a run.
+	Authored bool
+}
+
+// SetRuntimeValue replaces the declaration with runtime data.
+func (v *Variable) SetRuntimeValue(value string) {
+	v.Value = value
+	v.Authored = false
 }
 
 type Constant struct {
 	Name  string
 	Value string
 	Line  int
+	Authored bool
 }
 
 type AuthSpec struct {

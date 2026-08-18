@@ -153,11 +153,13 @@ type CompareRow struct {
 	Err         error
 	Tests       []scripts.TestResult
 	ScriptErr   error
-	Skipped     bool
-	SkipReason  string
-	Canceled    bool
-	Success     bool
-	Duration    time.Duration
+	// RuntimeSecrets contains the values exposed while this row ran.
+	RuntimeSecrets []string
+	Skipped        bool
+	SkipReason     string
+	Canceled       bool
+	Success        bool
+	Duration       time.Duration
 }
 
 type ProfileResult struct {

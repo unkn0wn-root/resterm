@@ -175,7 +175,7 @@ func (e *Engine) refreshCaptureScope(
 	plan.overlay(sourceRequestCapture, capturedValues(work.requestVars))
 	plan.overlay(sourceRuntimeFile, capturedValues(work.fileVars))
 	sc.vars = plan.values()
-	sc.globals = effectiveGlobalValues(in.doc, runtime)
+	sc.globals = effectiveGlobalValues(in.doc, runtime, in.env.Refs())
 
 	ei := ExprInput{
 		Doc:      sc.doc,
@@ -827,7 +827,7 @@ func upsertVariable(
 	xs := *list
 	for i := range xs {
 		if strings.ToLower(xs[i].Name) == low {
-			xs[i].Value = value
+			xs[i].SetRuntimeValue(value)
 			xs[i].Scope = scope
 			xs[i].Secret = secret
 			return

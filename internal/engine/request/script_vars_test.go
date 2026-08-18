@@ -47,7 +47,10 @@ type sentRequest struct {
 	executed *restfile.Request
 }
 
-type stubTransport struct{ wire *http.Request }
+type stubTransport struct {
+	wire *http.Request
+	body string
+}
 
 func (s *stubTransport) client() *httpx.Client {
 	return httpx.NewClientWithOptions(
@@ -55,11 +58,15 @@ func (s *stubTransport) client() *httpx.Client {
 			return &http.Client{
 				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					s.wire = r
+					body := s.body
+					if body == "" {
+						body = "ok"
+					}
 					return &http.Response{
 						Status:     "200 OK",
 						StatusCode: http.StatusOK,
 						Header:     make(http.Header),
-						Body:       io.NopCloser(strings.NewReader("ok")),
+						Body:       io.NopCloser(strings.NewReader(body)),
 						Request:    r,
 					}, nil
 				}),
