@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <em>A terminal-native API workbench for REST, GraphQL, gRPC, WebSocket and SSE.</em>
+  <em>A terminal-native API client and workbench for REST, GraphQL, gRPC, WebSocket and SSE.</em>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 
 Resterm is an _API-as-code_ workbench - or, in more familiar terms, an API client - built around plain `.http` and `.rest` files that you can diff, review and version. It combines interactive request editing with declarative workflows, assertions, mock servers, tracing, profiling and headless automation. Everything stays on your machine. No accounts, no cloud sync, no telemetry.
 
-If you are looking for a Postman-style client centered on GUI collections, Resterm probably is _not_ for you, but give it a try anyway!
+If you are looking for a Postman-style client centered on GUI collections, Resterm is probably _not_ for you, but give it a try anyway!
 
 > [!NOTE]
 > Resterm is now v1! See the [v1.0.0 release notes](https://github.com/unkn0wn-root/resterm/releases/tag/v1.0.0) for new features and breaking changes.
@@ -97,22 +97,45 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Streaming transcripts** and an interactive console for WebSocket and SSE.
 - **No AI integration**, ever.
 
+## Quick Start
+
+1. Install Resterm (see [Installation](#installation) for scripts, Windows and manual installs).
+
+   ```bash
+   brew install resterm
+   ```
+
+2. Bootstrap a workspace.
+
+   ```bash
+   mkdir my-api && cd my-api
+   resterm init
+   ```
+
+   `resterm init` gives you a small project that works without an internet connection. The generated `requests.http` includes local mock scenarios and a few requests that build on each other. They cover assertions, bearer auth, JSON matching, `json-rules`, and `@for-each`.
+
+3. Start it and send your first request.
+
+   ```bash
+   resterm
+   ```
+
+   Press `Ctrl+Enter` in the editor to send the highlighted request.
+
+No files yet? Just run `resterm`, type a URL and press `Ctrl+Enter`. A pasted curl command works too.
+
 ## CLI
 
-Use `resterm run` to execute `.http` / `.rest` files without opening the TUI.
-
-```bash
-mkdir my-api && cd my-api
-resterm init
-resterm mock requests.http
-```
-
-`resterm init` gives you a small project that works without an internet connection. The generated `requests.http` includes local mock scenarios and a few requests that build on each other. They cover assertions, bearer auth, JSON matching, `json-rules`, and `@for-each`.
-
-Keep the mock server running and open another terminal for the request:
+`resterm run` executes `.http` / `.rest` files without opening the TUI, which is what CI runs.
 
 ```bash
 resterm run --request CreateUser requests.http
+```
+
+The generated project talks to a local mock server. Start it in another terminal first:
+
+```bash
+resterm mock requests.http
 ```
 
 In the TUI, press `g Shift+M` instead to start the same mock server from the workspace.
@@ -163,31 +186,6 @@ More in the [Mock Servers reference](docs/resterm.md#mock-servers), the [`rester
 The [`headless`](./headless) package is the public Go API for the same engine that powers the TUI and CLI. Use it to run requests, workflows, assertions, compare runs and profiles from your own Go code or CI.
 
 If you would rather not build a runner yourself, there is [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
-
-## Quick Start
-
-1. Install Resterm (see [Installation](#installation) for scripts, Windows and manual installs).
-
-   ```bash
-   brew install resterm
-   ```
-
-2. Bootstrap a workspace.
-
-   ```bash
-   mkdir my-api && cd my-api
-   resterm init
-   ```
-
-3. Start it and send your first request.
-
-   ```bash
-   resterm
-   ```
-
-   Press `Ctrl+Enter` in the editor to send the highlighted request.
-
-No files yet? Just run `resterm`, type a URL and press `Ctrl+Enter`. A pasted curl command works too.
 
 ## Keyboard cheat sheet
 
@@ -369,43 +367,43 @@ Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 
 ## Deep dive
 
-#### OAuth 2.0
+### OAuth 2.0
 
 Client credentials, password grant and authorization code with PKCE. For auth code flows Resterm opens your browser, runs a local callback server on `127.0.0.1`, captures the redirect and exchanges the code. Tokens are cached per environment and refreshed when they expire. Docs: [`docs/resterm.md#oauth-20-directive`](./docs/resterm.md#oauth-20-directive) and `_examples/oauth2.http`.
 
-#### Workflows and scripting
+### Workflows and scripting
 
 Chain requests with `@workflow` and `@step`, pass data between steps and add JS hooks where needed. Docs and sample: [`docs/resterm.md#workflows`](./docs/resterm.md#workflows) and `_examples/workflows.http`.
 
-#### Compare runs
+### Compare runs
 
 Run the same request across environments with `@compare` or `--compare`, then diff the responses side by side with `g+c`. Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
 
-#### Tracing and timeline
+### Tracing and timeline
 
 Add `@trace` with budgets to capture DNS, connect, TLS, TTFB and transfer timings. Resterm highlights overruns and can export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).
 
-#### Streaming (WebSocket and SSE)
+### Streaming (WebSocket and SSE)
 
 Use `@websocket` with `@ws` steps or `@sse` to script and record streams. The Stream tab keeps transcripts and includes an interactive console. Docs: [`docs/resterm.md#streaming-sse--websocket`](./docs/resterm.md#streaming-sse--websocket).
 
-#### gRPC
+### gRPC
 
 Unary and streaming calls with transcripts, metadata and body expansion. Docs: [`docs/resterm.md#grpc`](./docs/resterm.md#grpc).
 
-#### OpenAPI import
+### OpenAPI import
 
 Convert OpenAPI 3 specs into `.http` collections with `--from-openapi`, from a local file or an `http(s)` URL. Choose the generated blocks with `--openapi-mode requests`, `mocks` or `both`. Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
 
-#### SSH tunnels
+### SSH tunnels
 
 Route HTTP, gRPC, WebSocket and SSE traffic through bastions with `@ssh` profiles. Docs: [`docs/resterm.md#ssh-tunnels`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
 
-#### Kubernetes port-forwards
+### Kubernetes port-forwards
 
 Same idea with `@k8s` profiles, targeting pods, services, deployments or statefulsets. Docs: [`docs/resterm.md#kubernetes-port-forwards`](./docs/resterm.md#kubernetes-port-forwards) and `_examples/k8s.http`.
 
-#### Theming and bindings
+### Theming and bindings
 
 Customize colors and keybindings with `themes/*.toml` and `bindings.toml` or `bindings.json` in the config directory. Docs: [`docs/resterm.md#theming`](./docs/resterm.md#theming) and [`docs/resterm.md#custom-bindings`](./docs/resterm.md#custom-bindings).
 
@@ -416,3 +414,7 @@ Customize colors and keybindings with `themes/*.toml` and `bindings.toml` or `bi
 - [Compatibility](./docs/resterm.md#compatibility) explains Resterm's compatibility guarantees for v1.
 
 Inside the TUI, press `?` or run `:help`. Use `:docs` when you want the full web manual for the installed release.
+
+## License
+
+[Apache License 2.0](./LICENSE).
