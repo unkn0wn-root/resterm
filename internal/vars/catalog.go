@@ -64,10 +64,32 @@ func NewCatalog(set EnvironmentSet) (Catalog, error) {
 		)
 	}
 	slices.SortFunc(envs, func(a, b entry) int { return cmpFold(a.name, b.name) })
+	if err := checkEnvRefs(SharedEnvKey, shared); err != nil {
+		return Catalog{}, err
+	}
 	for i := range envs {
+		if err := checkEnvRefs(envs[i].name, envs[i].values); err != nil {
+			return Catalog{}, err
+		}
 		envs[i].values = mergeValues(shared, envs[i].values)
 	}
 	return Catalog{envs: envs}, nil
+}
+
+// checkEnvRefs rejects an env: reference with no variable name. A JSON file has
+// no line to report against, so the catalog refuses to load instead.
+func checkEnvRefs(scope string, values map[string]string) error {
+	for _, name := range slices.Sorted(maps.Keys(values)) {
+		if key, ok := EnvRefKey(values[name]); ok && key == "" {
+			return diag.Newf(
+				diag.ClassParse,
+				"%s: %q has an env: reference with no variable name",
+				scope,
+				name,
+			)
+		}
+	}
+	return nil
 }
 
 func NewGroupedCatalog(shared map[string]string, groups []Group) (Catalog, error) {
@@ -87,6 +109,16 @@ func NewGroupedCatalog(shared map[string]string, groups []Group) (Catalog, error
 	slices.SortFunc(out, func(a, b Group) int { return cmpFold(a.Name, b.Name) })
 	if err := checkCollisions(out); err != nil {
 		return Catalog{}, err
+	}
+	if err := checkEnvRefs(SharedEnvKey, shared); err != nil {
+		return Catalog{}, err
+	}
+	for _, g := range out {
+		for _, p := range slices.Sorted(maps.Keys(g.Profiles)) {
+			if err := checkEnvRefs(g.Name+"."+p, g.Profiles[p]); err != nil {
+				return Catalog{}, err
+			}
+		}
 	}
 	return Catalog{groups: out, shared: maps.Clone(shared)}, nil
 }

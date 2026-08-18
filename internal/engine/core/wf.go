@@ -624,10 +624,12 @@ func (r *wfRun) evalStepValue(
 	if expr == "" {
 		return rts.Value{}, fmt.Errorf("%s expression missing", tag)
 	}
+	// Not Environment.Resolve: a templated env: reference needs the document's
+	// declarations to expand its name.
 	return r.dep.EvalValue(ctx, request.EvalInput{
 		Doc:    r.pl.Doc,
 		Req:    req,
-		Env:    r.pl.Run.Env.Resolve(),
+		Env:    request.ResolveEnvironment(r.pl.Run.Env, r.pl.Doc, req),
 		Base:   baseDir(r.pl.Doc),
 		Expr:   expr,
 		Site:   tag + " " + str.FoldLines(expr),
