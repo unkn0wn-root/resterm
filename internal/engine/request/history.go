@@ -204,7 +204,7 @@ func (e *Engine) recordGRPC(
 func (e *Engine) secretValues(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	extra ...string,
 ) []string {
 	vals := make(map[string]struct{})
@@ -213,6 +213,9 @@ func (e *Engine) secretValues(
 			return
 		}
 		vals[v] = struct{}{}
+	}
+	for _, v := range env.Secrets() {
+		add(v)
 	}
 
 	if req != nil {
@@ -339,7 +342,7 @@ type runResult struct {
 	GRPC           *grpcx.Response
 	RuntimeSecrets []string
 	RequestText    string
-	Env            vars.Environment
+	Env            vars.ResolvedEnv
 	Skipped        bool
 	SkipReason     string
 	Executed       *restfile.Request

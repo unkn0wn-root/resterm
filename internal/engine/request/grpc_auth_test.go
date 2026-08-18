@@ -204,7 +204,7 @@ func TestExplainAuthPreviewHonoursExplicitGRPCMetadata(t *testing.T) {
 			req := grpcAuthRequest(tt.auth)
 			req.GRPC.Metadata = []restfile.MetadataPair{{Key: "authorization", Value: "Bearer from-user"}}
 
-			out, err := e.prepareExplainAuthPreview(nil, req, vars.NewResolver(), testEnv(""))
+			out, err := e.prepareExplainAuthPreview(nil, req, vars.NewResolver(), testEnv("").Resolve())
 			if err != nil {
 				t.Fatalf("prepare auth preview: %v", err)
 			}

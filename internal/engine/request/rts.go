@@ -161,7 +161,7 @@ func newEvalScope(vv map[string]string, globals vars.Globals) evalScope {
 
 func (e *Engine) storedScope(
 	doc *restfile.Document,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	vv map[string]string,
 ) evalScope {
 	return newEvalScope(vv, e.collectGlobalValues(doc, env))
@@ -172,7 +172,7 @@ type rtIn struct {
 	req *restfile.Request
 	// buildRT uses env, globals, and secrets to prepare the scope.
 	// buildRTWithScope receives a prepared scope and ignores them.
-	env     vars.Environment
+	env     vars.ResolvedEnv
 	base    string
 	vars    map[string]string
 	globals vars.Globals
@@ -186,7 +186,7 @@ type rtIn struct {
 }
 
 func prepareScope(
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	globals vars.Globals,
 	secrets rtshost.SecretPolicy,
 ) (rtshost.PreparedScope, error) {
@@ -259,14 +259,11 @@ func (e *Engine) rtsExtensions() rts.Extensions {
 	return rts.Extension("mock", mock.RTSValue(e.cfg.MockInspector))
 }
 
-// ExprInput binds a {{= expr }} evaluator to one request: the environment it
-// resolves against, the base directory for file access, and the variables it
-// sees. Callers own Vars (full for execution, secret-stripped for preview).
-// Response and Stream remain nil until the current request finishes.
+// ExprInput contains the request data available to a {{= expr }} expression.
 type ExprInput struct {
 	Doc      *restfile.Document
 	Req      *restfile.Request
-	Env      vars.Environment
+	Env      vars.ResolvedEnv
 	Base     string
 	Vars     map[string]string
 	Response *rtshost.Response
@@ -280,7 +277,7 @@ type ExprInput struct {
 type EvalInput struct {
 	Doc     *restfile.Document
 	Req     *restfile.Request
-	Env     vars.Environment
+	Env     vars.ResolvedEnv
 	Base    string
 	Expr    string
 	Site    string
@@ -414,7 +411,7 @@ func (e *Engine) CollectVariables(
 	env vars.Environment,
 	overlay map[string]string,
 ) map[string]string {
-	return e.collectVariables(doc, req, env, runVars{overlay: vars.CollectNames(overlay)})
+	return e.collectVariables(doc, req, env.Resolve(), runVars{overlay: vars.CollectNames(overlay)})
 }
 
 func (e *Engine) EvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
@@ -432,12 +429,13 @@ func (e *Engine) EvalCondition(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	src vars.Environment,
 	base string,
 	spec *restfile.ConditionSpec,
 	vv map[string]string,
 	locals rts.Locals,
 ) (bool, string, error) {
+	env := src.Resolve()
 	return e.evalCondition(ctx, doc, req, env, base, spec, e.storedScope(doc, env, vv), locals)
 }
 
@@ -445,7 +443,7 @@ func (e *Engine) evalCondition(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	base string,
 	spec *restfile.ConditionSpec,
 	sc evalScope,
@@ -490,7 +488,7 @@ func (e *Engine) EvalForEachItems(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	src vars.Environment,
 	base string,
 	spec ForEachSpec,
 	vv map[string]string,
@@ -500,6 +498,7 @@ func (e *Engine) EvalForEachItems(
 	if expr == "" {
 		return nil, fmt.Errorf("@for-each expression missing")
 	}
+	env := src.Resolve()
 	sc := e.storedScope(doc, env, vv)
 	val, err := e.rtsEvalValue(ctx, EvalInput{
 		Doc:     doc,
@@ -531,7 +530,7 @@ func (e *Engine) runAsserts(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	base string,
 	sc evalScope,
 	locals rts.Locals,
@@ -600,14 +599,14 @@ func (e *Engine) RunPreRequest(
 	globals vars.Globals,
 ) (prerequest.Output, error) {
 	sc := newEvalScope(vv, globals)
-	return e.runRTSPreRequest(ctx, doc, req, env, base, sc, locals, nil)
+	return e.runRTSPreRequest(ctx, doc, req, env.Resolve(), base, sc, locals, nil)
 }
 
 func (e *Engine) runRTSPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	base string,
 	sc evalScope,
 	locals rts.Locals,
@@ -1156,7 +1155,7 @@ func (e *Engine) runRTSApply(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	base string,
 	sc evalScope,
 	locals rts.Locals,
@@ -1208,11 +1207,12 @@ func (e *Engine) ApplyPatches(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	src vars.Environment,
 	base string,
 	vv map[string]string,
 	locals rts.Locals,
 ) error {
+	env := src.Resolve()
 	return e.runRTSApply(ctx, doc, req, env, base, e.storedScope(doc, env, vv), locals)
 }
 

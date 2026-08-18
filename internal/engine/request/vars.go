@@ -161,7 +161,7 @@ func (e *Engine) buildResolver(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	base string,
 	globs vars.Globals,
 	locals rts.Locals,
@@ -192,10 +192,11 @@ func (e *Engine) DisplayResolver(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	src vars.Environment,
 	base string,
 	locals rts.Locals,
 ) *vars.Resolver {
+	env := src.Resolve().WithoutRefValues()
 	globs := e.collectStoredGlobalValues(env)
 	globs.DeleteFunc(func(_ string, v vars.GlobalMutation) bool { return v.Secret })
 
@@ -227,7 +228,7 @@ func (e *Engine) planResolver(
 ) *vars.Resolver {
 	in.Vars = plan.values()
 	res := vars.NewResolver(plan.providers()...)
-	res.AddRefResolver(vars.EnvRefResolver)
+	res.AddRefResolver(plan.refs)
 	res.SetExprEval(e.ExprEvalWithOptions(ctx, in, opt))
 	res.SetExprPos(e.rtsPos(in.Doc, in.Req))
 	return res
@@ -236,7 +237,7 @@ func (e *Engine) planResolver(
 func (e *Engine) collectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	run runVars,
 ) map[string]string {
 	return e.collectVariablesWithGlobals(
@@ -252,7 +253,7 @@ func (e *Engine) collectVariables(
 func (e *Engine) collectVariablesWithGlobals(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	globs vars.Globals,
 	sec secrecy,
 	run runVars,
@@ -267,11 +268,11 @@ func (e *Engine) collectVariablesWithGlobals(
 	}).values()
 }
 
-func (e *Engine) collectGlobalValues(doc *restfile.Document, env vars.Environment) vars.Globals {
+func (e *Engine) collectGlobalValues(doc *restfile.Document, env vars.ResolvedEnv) vars.Globals {
 	return effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
 }
 
-func (e *Engine) collectStoredGlobalValues(env vars.Environment) vars.Globals {
+func (e *Engine) collectStoredGlobalValues(env vars.ResolvedEnv) vars.Globals {
 	var out vars.Globals
 	gs := e.rt.Globals()
 	if gs == nil {
@@ -321,7 +322,7 @@ func storedName(name, key string) string {
 	return strings.TrimSpace(key)
 }
 
-func (e *Engine) applyGlobalMutations(changes vars.Globals, env vars.Environment) {
+func (e *Engine) applyGlobalMutations(changes vars.Globals, env vars.ResolvedEnv) {
 	gs := e.rt.Globals()
 	if gs == nil {
 		return
@@ -339,7 +340,7 @@ func (e *Engine) resolveSSH(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 ) (*ssh.Plan, error) {
 	if req == nil || req.SSH == nil {
 		return nil, nil
@@ -357,7 +358,7 @@ func (e *Engine) resolveK8s(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 ) (*k8s.Plan, error) {
 	if req == nil || req.K8s == nil {
 		return nil, nil

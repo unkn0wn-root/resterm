@@ -144,7 +144,7 @@ func (f planFixture) values() map[string]string {
 	return f.eng.buildVariablePlan(varSources{
 		doc:     f.doc,
 		req:     f.req,
-		env:     f.env,
+		env:     f.env.Resolve(),
 		globals: f.globs,
 		sec:     keepSecrets,
 		run:     f.run,
@@ -158,7 +158,7 @@ func (f planFixture) expand(t *testing.T, input string) string {
 		context.Background(),
 		f.doc,
 		f.req,
-		f.env,
+		f.env.Resolve(),
 		"",
 		f.globs,
 		rts.Locals{},

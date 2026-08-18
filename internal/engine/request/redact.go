@@ -15,7 +15,7 @@ import (
 func (e *Engine) redactResult(
 	res xrunResult,
 	doc *restfile.Document,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 ) xrunResult {
 	secs := e.secretValues(doc, res.Executed, env, res.RuntimeSecrets...)
 	if len(secs) == 0 {

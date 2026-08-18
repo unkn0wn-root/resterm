@@ -46,6 +46,9 @@ func (e *Engine) secretValues(
 		}
 		vals[v] = struct{}{}
 	}
+	for _, v := range env.Resolve().Secrets() {
+		add(v)
+	}
 	if req != nil {
 		for _, v := range req.Variables {
 			if v.Secret {

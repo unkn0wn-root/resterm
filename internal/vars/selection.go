@@ -38,8 +38,8 @@ type Selection struct {
 	profiles map[string]string
 }
 
-// Environment is an immutable resolved environment. Accessors return internal
-// maps that callers must not mutate.
+// Environment is an immutable selected environment. Its accessors return maps
+// that callers must not modify. Resolve captures env: references for execution.
 type Environment struct {
 	values map[string]string
 	label  string

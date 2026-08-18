@@ -267,3 +267,21 @@ tests.assert(false, "leaked " + vars.global.get("token"));`,
 	}
 	assertSecretStaysRedactable(t, res)
 }
+
+func TestEnvironmentRefValueStaysRedactable(t *testing.T) {
+	key := "RESTERM_REDACTION_ENV_REF"
+	t.Setenv(key, leakedSecret)
+	env := envWith(t, "dev", map[string]string{"auth.token": "env:" + key})
+	req := secretLeakRequest()
+	req.Headers = http.Header{"X-Custom": []string{"{{auth.token}}"}}
+
+	eng, st := newStubEngine(t)
+	res, err := eng.ExecuteWith(nil, req, env, ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if st.wire == nil || st.wire.Header.Get("X-Custom") != leakedSecret {
+		t.Fatalf("mapped secret did not reach the wire: %v", st.wire)
+	}
+	assertSecretStaysRedactable(t, res)
+}

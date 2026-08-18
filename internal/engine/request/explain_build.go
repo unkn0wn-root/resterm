@@ -39,7 +39,7 @@ type explainFinalizeInput struct {
 	report       *xplain.Report
 	doc          *restfile.Document
 	req          *restfile.Request
-	env          vars.Environment
+	env          vars.ResolvedEnv
 	preview      bool
 	status       xplain.Status
 	decision     string
@@ -56,7 +56,7 @@ type explainBuilder struct {
 	eng      *Engine
 	doc      *restfile.Document
 	req      *restfile.Request
-	env      vars.Environment
+	env      vars.ResolvedEnv
 	preview  bool
 	report   *xplain.Report
 	trace    *vars.Trace
@@ -71,7 +71,7 @@ func newExplainBuilder(
 	e *Engine,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	preview bool,
 	sec *vars.Secrets,
 ) *explainBuilder {
@@ -1081,7 +1081,7 @@ func (e *Engine) prepareExplainAuthPreview(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 ) (explainAuthPreviewResult, error) {
 	if req == nil || req.Metadata.Auth == nil {
 		return explainAuthPreviewResult{}, nil
@@ -1212,7 +1212,7 @@ func (e *Engine) PrepareExplainAuthPreview(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 ) (ExplainAuthPreviewResult, error) {
 	out, err := e.prepareExplainAuthPreview(doc, req, res, env)
 	if err != nil {

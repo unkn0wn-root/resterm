@@ -91,7 +91,7 @@ GET https://example.com
 		context.Background(),
 		doc,
 		doc.Requests[0],
-		testEnv(""),
+		testEnv("").Resolve(),
 		"",
 		evalScope{},
 		rts.Locals{},
@@ -144,7 +144,7 @@ func TestRunRTSPreRequestRejectsResponse(t *testing.T) {
 				context.Background(),
 				doc,
 				doc.Requests[0],
-				testEnv(""),
+				testEnv("").Resolve(),
 				"",
 				evalScope{},
 				rts.Locals{},
@@ -315,7 +315,7 @@ func testEnvValues(t *testing.T, name string, values map[string]string) vars.Env
 func TestRTSEnvKeepsTheSelectionOutOfTheValues(t *testing.T) {
 	env := testEnvValues(t, "dev", map[string]string{"NAME": "payments-service"})
 	e := New(engcfg.Config{}, nil)
-	rt, err := e.buildRT(rtIn{env: env})
+	rt, err := e.buildRT(rtIn{env: env.Resolve()})
 	if err != nil {
 		t.Fatalf("buildRT: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestRTSEnvSelectionHasUniqueNames(t *testing.T) {
 	// stable, and reusing one runtime would only re-read a map already keyed.
 	for range 16 {
 		env := testEnvValues(t, "dev", map[string]string{" token": "a", "token": "b"})
-		rt, err := e.buildRT(rtIn{env: env})
+		rt, err := e.buildRT(rtIn{env: env.Resolve()})
 		if err != nil {
 			t.Fatalf("buildRT: %v", err)
 		}
@@ -414,7 +414,7 @@ GET https://example.com
 		context.Background(),
 		doc,
 		doc.Requests[0],
-		testEnvValues(t, "dev", map[string]string{"NAME": "payments-service"}),
+		testEnvValues(t, "dev", map[string]string{"NAME": "payments-service"}).Resolve(),
 		"",
 		evalScope{},
 		rts.Locals{},
