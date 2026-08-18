@@ -10,29 +10,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-var sensHdr = map[string]struct{}{
-	"api-key":                 {},
-	"apikey":                  {},
-	"authorization":           {},
-	"proxy-authorization":     {},
-	"x-access-token":          {},
-	"x-amz-security-token":    {},
-	"x-api-key":               {},
-	"x-apikey":                {},
-	"x-auth-email":            {},
-	"x-auth-key":              {},
-	"x-auth-token":            {},
-	"x-aws-access-token":      {},
-	"x-aws-secret-access-key": {},
-	"x-client-secret":         {},
-	"x-csrf-token":            {},
-	"x-goog-api-key":          {},
-	"x-refresh-token":         {},
-	"x-secret-key":            {},
-	"x-token":                 {},
-	"x-xsrf-token":            {},
-}
-
 func (e *Engine) secretValues(
 	doc *restfile.Document,
 	req *restfile.Request,
@@ -70,8 +47,7 @@ func redactText(text string, secs []string, maskHdr bool) string {
 		if colon <= 0 {
 			continue
 		}
-		name := strings.ToLower(strings.TrimSpace(line[:colon]))
-		if _, ok := sensHdr[name]; !ok {
+		if !request.IsSensitiveHeader(line[:colon]) {
 			continue
 		}
 		rest := line[colon+1:]

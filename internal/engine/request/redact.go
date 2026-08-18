@@ -8,6 +8,34 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+var sensHdr = map[string]struct{}{
+	"api-key":                 {},
+	"apikey":                  {},
+	"authorization":           {},
+	"proxy-authorization":     {},
+	"x-access-token":          {},
+	"x-amz-security-token":    {},
+	"x-api-key":               {},
+	"x-apikey":                {},
+	"x-auth-email":            {},
+	"x-auth-key":              {},
+	"x-auth-token":            {},
+	"x-aws-access-token":      {},
+	"x-aws-secret-access-key": {},
+	"x-client-secret":         {},
+	"x-csrf-token":            {},
+	"x-goog-api-key":          {},
+	"x-refresh-token":         {},
+	"x-secret-key":            {},
+	"x-token":                 {},
+	"x-xsrf-token":            {},
+}
+
+func IsSensitiveHeader(name string) bool {
+	_, ok := sensHdr[strings.ToLower(strings.TrimSpace(name))]
+	return ok
+}
+
 // Results are redacted at the engine boundary because errors and test output
 // can be rendered directly by the UI, workflows, and history. The complete
 // secret set is returned for callers that render additional text. Wrapped

@@ -52,7 +52,7 @@ func (e *Engine) redactExplainReport(
 		rep.Final.BodyNote = redactSecretText(rep.Final.BodyNote, secs)
 		for i := range rep.Final.Headers {
 			h := &rep.Final.Headers[i]
-			if shouldMaskExplainHeader(h.Name) {
+			if IsSensitiveHeader(h.Name) {
 				if strings.TrimSpace(h.Value) != "" {
 					h.Value = explainMask
 				}
@@ -127,7 +127,7 @@ func (e *Engine) explainSecrets(
 }
 
 func redactExplainChangeValue(field, val string, secs []string) string {
-	if hdr, ok := explainHeaderField(field); ok && shouldMaskExplainHeader(hdr) {
+	if hdr, ok := explainHeaderField(field); ok && IsSensitiveHeader(hdr) {
 		if strings.TrimSpace(val) == "" {
 			return val
 		}
@@ -162,14 +162,6 @@ func explainHeaderField(field string) (string, bool) {
 	return textproto.CanonicalMIMEHeaderKey(name), true
 }
 
-func shouldMaskExplainHeader(name string) bool {
-	if name == "" {
-		return false
-	}
-	_, ok := sensHdr[strings.ToLower(name)]
-	return ok
-}
-
 func shouldMaskExplainPair(key, val string) bool {
 	if !strings.EqualFold(strings.TrimSpace(key), "Metadata") {
 		return false
@@ -178,5 +170,5 @@ func shouldMaskExplainPair(key, val string) bool {
 	if !ok {
 		return false
 	}
-	return shouldMaskExplainHeader(strings.TrimSpace(name))
+	return IsSensitiveHeader(name)
 }

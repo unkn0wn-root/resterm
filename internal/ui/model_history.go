@@ -981,11 +981,7 @@ func redactSensitiveHeaders(text string) string {
 		if colon <= 0 {
 			continue
 		}
-		name := strings.TrimSpace(line[:colon])
-		if name == "" {
-			continue
-		}
-		if !shouldMaskHistoryHeader(name) {
+		if !rqeng.IsSensitiveHeader(line[:colon]) {
 			continue
 		}
 		rest := line[colon+1:]

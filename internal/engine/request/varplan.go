@@ -30,7 +30,7 @@ type sourceTraits struct {
 	// template enables nested expansion for authored values; runtime values stay literal.
 	template bool
 	// hidden excludes values from script-facing vars; constants are not overridable.
-	hidden bool
+	hidden       bool
 	allowsEnvRef bool
 }
 
