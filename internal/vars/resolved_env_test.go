@@ -2,9 +2,27 @@ package vars
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 )
+
+func authored(refs *EnvRefs, src map[string]string) NameMap[Value] {
+	var out NameMap[Value]
+	for _, name := range slices.Sorted(maps.Keys(src)) {
+		out.Set(name, refs.Declared(src[name]))
+	}
+	return out
+}
+
+func declaredNames(src map[string]string) *Resolver {
+	var out NameMap[Value]
+	for _, name := range slices.Sorted(maps.Keys(src)) {
+		out.Set(name, Value{Text: src[name]})
+	}
+	return NewResolver(NewValueMapTemplateProvider("file", out))
+}
 
 func TestResolveCapturesEachEnvRefOnce(t *testing.T) {
 	first := "RESTERM_ENV_REF_FIRST"
@@ -23,9 +41,6 @@ func TestResolveCapturesEachEnvRefOnce(t *testing.T) {
 	if got := src.Values()["auth.token"]; got != "env:"+first {
 		t.Fatalf("catalog auth.token = %q, want the authored reference unchanged", got)
 	}
-	if got := env.AuthoredValues()["auth.token"]; got != "env:"+first {
-		t.Fatalf("authored auth.token = %q, want the authored reference", got)
-	}
 	if got := env.Values()["auth.token"]; got != "env:"+second {
 		t.Fatalf("resolved auth.token = %q, want one reference resolution", got)
 	}
@@ -35,9 +50,6 @@ func TestResolveCapturesEachEnvRefOnce(t *testing.T) {
 	if got := env.Values()["plain"]; got != "visible" {
 		t.Fatalf("resolved plain = %q, want %q", got, "visible")
 	}
-	if !env.HasRefs() {
-		t.Fatal("HasRefs() = false, want the declared references reported")
-	}
 	if secrets := env.Secrets(); len(secrets) != 1 || secrets[0] != "env:"+second {
 		t.Fatalf("Secrets() = %#v, want the resolved reference value", secrets)
 	}
@@ -45,19 +57,13 @@ func TestResolveCapturesEachEnvRefOnce(t *testing.T) {
 		t.Fatalf("snapshot changed environment identity: label=%q scope=%q", env.Label(), env.Scope())
 	}
 
-	// Template resolution must use the value captured above.
-	t.Setenv(first, "changed-after-snapshot")
-	res := NewResolver(NewMapProvider("environment", env.AuthoredValues()))
-	res.AddRefResolver(env.RefResolver())
-	got, err := res.ExpandTemplates("{{auth.token}}")
-	if err != nil {
-		t.Fatalf("expand auth.token: %v", err)
+	t.Setenv(missing, "ambient-now")
+	res := NewResolver(NewValueMapProvider("environment", env.ProviderValues()), EnvProvider{})
+	if got, err := res.ExpandTemplates("{{auth.missing}}"); err == nil {
+		t.Fatalf("{{auth.missing}} resolved to %q, want it undefined", got)
 	}
-	if got != "env:"+second {
-		t.Fatalf("template auth.token = %q, want the value already in Values()", got)
-	}
-	if got := env.Values()["auth.token"]; got != "env:"+second {
-		t.Fatalf("snapshot changed to %q after the process environment moved", got)
+	if got, err := res.ExpandTemplates("{{auth.token}}"); err != nil || got != "env:"+second {
+		t.Fatalf("{{auth.token}} = %q, %v, want the value already in Values()", got, err)
 	}
 }
 
@@ -82,12 +88,7 @@ func TestWithoutRefValuesWithholdsMappedValues(t *testing.T) {
 		t.Fatalf("withheld Secrets() = %#v, want none", public.Secrets())
 	}
 
-	// Include EnvProvider to verify that AUTH.TOKEN cannot replace the hidden alias.
-	res := NewResolver(
-		NewMapProvider("environment", public.AuthoredValues()),
-		EnvProvider{},
-	)
-	res.AddRefResolver(public.RefResolver())
+	res := NewResolver(NewValueMapProvider("environment", public.ProviderValues()), EnvProvider{})
 	if got, err := res.ExpandTemplates("{{auth.token}}"); err == nil {
 		t.Fatalf("withheld auth.token resolved to %q, want it undefined", got)
 	}
@@ -97,23 +98,66 @@ func TestWithoutRefValuesWithholdsMappedValues(t *testing.T) {
 	if got := env.Values()["auth.token"]; got != "private" {
 		t.Fatalf("WithoutRefValues() mutated the snapshot it came from: %q", got)
 	}
+
+	if got := public.Refs().Declared("env:" + key); !got.Missing {
+		t.Fatalf("withheld snapshot resolved an authored reference to %#v", got)
+	}
 }
 
-func TestResolveLeavesCatalogsWithoutRefsAlone(t *testing.T) {
-	key := "RESTERM_ENV_REF_UNDECLARED"
-	t.Setenv(key, "ambient")
+func TestEnvRefsReadEachVariableOnce(t *testing.T) {
+	key := "RESTERM_ENV_REFS_ONCE"
+	t.Setenv(key, "first")
 
-	env := testEnvironment(t, "dev", map[string]string{"plain": "visible"}).Resolve()
-	if env.HasRefs() {
-		t.Fatal("HasRefs() = true for a catalog with no env: reference")
+	var refs EnvRefs
+	if got := refs.Resolve(key); got.Text != "first" || !got.Final {
+		t.Fatalf("first read = %#v, want the process value marked final", got)
 	}
-	if len(env.Secrets()) != 0 {
-		t.Fatalf("Secrets() = %#v, want none", env.Secrets())
+	t.Setenv(key, "second")
+	if got := refs.Resolve(key); got.Text != "first" {
+		t.Fatalf("second read = %q, want the captured value", got.Text)
+	}
+	if secrets := refs.Secrets(); len(secrets) != 1 || secrets[0] != "first" {
+		t.Fatalf("Secrets() = %#v, want one entry", secrets)
+	}
+}
+
+func TestEnvRefKeyReadsTheEnvForm(t *testing.T) {
+	for _, raw := range []string{"plain", "environment:X", "envs:X", ""} {
+		if key, ok := EnvRefKey(raw); ok {
+			t.Fatalf("EnvRefKey(%q) = %q, true, want it treated as text", raw, key)
+		}
+	}
+	for raw, want := range map[string]string{
+		"env:NAME":    "NAME",
+		"ENV: NAME ":  "NAME",
+		"  env:name ": "name",
+		"env:":    "",
+		"env:   ": "",
+	} {
+		if key, ok := EnvRefKey(raw); !ok || key != want {
+			t.Fatalf("EnvRefKey(%q) = %q, %t, want %q", raw, key, ok, want)
+		}
+	}
+}
+
+func TestDeclaredEnvRefWithNoNameIsUndefined(t *testing.T) {
+	t.Setenv("TOKEN", "ambient-value")
+
+	var refs EnvRefs
+	for _, raw := range []string{"env:", "env:   "} {
+		if got := refs.Declared(raw); !got.Missing {
+			t.Fatalf("Declared(%q) = %#v, want it undefined", raw, got)
+		}
+	}
+	if len(refs.Secrets()) != 0 {
+		t.Fatalf("Secrets() = %#v, want none", refs.Secrets())
 	}
 
-	value, handled, found := env.RefResolver()("env:" + key)
-	if !handled || !found || value != "ambient" {
-		t.Fatalf("undeclared reference = %q, handled = %t, found = %t", value, handled, found)
+	var vals NameMap[Value]
+	vals.Set("token", refs.Declared("env:"))
+	res := NewResolver(NewValueMapTemplateProvider("file", vals), EnvProvider{})
+	if got, err := res.ExpandTemplates("{{token}}"); err == nil {
+		t.Fatalf("{{token}} resolved to %q, want it undefined", got)
 	}
 }
 

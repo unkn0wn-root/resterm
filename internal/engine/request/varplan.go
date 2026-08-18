@@ -31,34 +31,34 @@ type sourceTraits struct {
 	template bool
 	// hidden excludes values from script-facing vars; constants are not overridable.
 	hidden bool
+	// declared identifies sources allowed to contain env: references.
+	declared bool
 }
 
 var sourceTable = [...]sourceTraits{
 	sourceUnknown:        {},
-	sourceConst:          {label: "const", template: true, hidden: true},
+	sourceConst:          {label: "const", template: true, hidden: true, declared: true},
 	sourceScript:         {label: "script"},
 	sourceWorkflow:       {label: "workflow"},
 	sourceRequestCapture: {label: "request"},
-	sourceRequest:        {label: "request", template: true},
+	sourceRequest:        {label: "request", template: true, declared: true},
 	sourceRuntimeGlobal:  {label: "global"},
-	sourceDocumentGlobal: {label: "document-global", template: true},
+	sourceDocumentGlobal: {label: "document-global", template: true, declared: true},
 	sourceRuntimeFile:    {label: "file"},
-	sourceFile:           {label: "file", template: true},
-	sourceEnvironment:    {label: "environment"},
+	sourceFile:           {label: "file", template: true, declared: true},
+	sourceEnvironment:    {label: "environment", declared: true},
 }
 
 func (s variableSource) traits() sourceTraits { return sourceTable[s] }
 
 type variableEntry struct {
-	name  string
-	value string
+	name string
+	val  vars.Value
 }
 
 type variableLayer struct {
 	source variableSource
-	vals   vars.NameMap[string]
-	// script holds values exposed to scripts when they differ from vals.
-	script *vars.NameMap[string]
+	vals   vars.NameMap[vars.Value]
 }
 
 // variablePlan is the shared precedence order for template and script lookups.
@@ -66,7 +66,6 @@ type variableLayer struct {
 // host bindings use separate lexical scoping and are not included.
 type variablePlan struct {
 	layers []variableLayer
-	refs   vars.RefResolver
 }
 
 type runVars struct {
@@ -86,57 +85,43 @@ type varSources struct {
 
 // Variable plans keep template and script lookups at the same precedence. Each
 // plan includes every source layer because resolver memoization uses provider
-// positions. Authored values may expand nested templates, while runtime values
-// such as captures remain literal.
+// positions.
 func (e *Engine) buildVariablePlan(src varSources) variablePlan {
 	env := src.env
 	if src.sec == omitSecrets {
 		env = env.WithoutRefValues()
 	}
-	plan := variablePlan{
-		layers: make([]variableLayer, 0, len(sourceTable)),
-		refs:   env.RefResolver(),
-	}
-	plan.add(sourceConst, constEntries(src.doc))
-	plan.addNames(sourceScript, src.run.scripts)
-	plan.addNames(sourceWorkflow, src.run.overlay)
-	plan.add(sourceRequestCapture, nil)
-	plan.add(sourceRequest, requestEntries(src.req, src.sec))
-	plan.add(sourceRuntimeGlobal, globalEntries(src.globals))
-	plan.add(sourceDocumentGlobal, docGlobalEntries(src.doc, src.sec))
-	plan.add(sourceRuntimeFile, e.runtimeFileEntries(src.doc, env, src.sec))
-	plan.add(sourceFile, docVarEntries(src.doc, src.sec))
+	refs := env.Refs()
 
-	authored := sortedEntries(env.AuthoredValues())
-	if env.HasRefs() {
-		plan.addSplit(sourceEnvironment, authored, sortedEntries(env.Values()))
-	} else {
-		plan.add(sourceEnvironment, authored)
-	}
+	plan := variablePlan{layers: make([]variableLayer, 0, len(sourceTable))}
+	plan.add(sourceConst, constEntries(src.doc, refs))
+	plan.addLiteral(sourceScript, src.run.scripts)
+	plan.addLiteral(sourceWorkflow, src.run.overlay)
+	plan.add(sourceRequestCapture, nil)
+	plan.add(sourceRequest, requestEntries(src.req, src.sec, refs))
+	plan.add(sourceRuntimeGlobal, literalEntries(globalValues(src.globals)))
+	plan.add(sourceDocumentGlobal, docGlobalEntries(src.doc, src.sec, refs))
+	plan.add(sourceRuntimeFile, literalEntries(e.runtimeFileValues(src.doc, env, src.sec)))
+	plan.add(sourceFile, docVarEntries(src.doc, src.sec, refs))
+	plan.add(sourceEnvironment, valueEntries(env.ProviderValues()))
 	return plan
 }
 
 // add preserves declaration order so the last form of a name wins within a source.
 func (p *variablePlan) add(source variableSource, entries []variableEntry) {
-	p.appendLayer(source, nameMapOf(entries))
-}
-
-func (p *variablePlan) addSplit(source variableSource, authored, script []variableEntry) {
-	sm := nameMapOf(script)
-	p.layers = append(p.layers, variableLayer{
-		source: source,
-		vals:   nameMapOf(authored),
-		script: &sm,
-	})
-}
-
-// addNames snapshots an already-normalized source.
-func (p *variablePlan) addNames(source variableSource, vals vars.NameMap[string]) {
-	p.appendLayer(source, vals.Clone())
-}
-
-func (p *variablePlan) appendLayer(source variableSource, vals vars.NameMap[string]) {
+	var vals vars.NameMap[vars.Value]
+	for _, e := range entries {
+		vals.Set(e.name, e.val)
+	}
 	p.layers = append(p.layers, variableLayer{source: source, vals: vals})
+}
+
+func (p *variablePlan) addLiteral(source variableSource, vals vars.NameMap[string]) {
+	var out vars.NameMap[vars.Value]
+	for name, v := range vals.All() {
+		out.Set(name, vars.Value{Text: v})
+	}
+	p.layers = append(p.layers, variableLayer{source: source, vals: out})
 }
 
 func (p *variablePlan) overlay(source variableSource, vals vars.NameMap[string]) {
@@ -144,20 +129,11 @@ func (p *variablePlan) overlay(source variableSource, vals vars.NameMap[string])
 		if p.layers[i].source != source {
 			continue
 		}
-		p.layers[i].vals.Merge(vals)
-		if p.layers[i].script != nil {
-			p.layers[i].script.Merge(vals)
+		for name, v := range vals.All() {
+			p.layers[i].vals.Set(name, vars.Value{Text: v})
 		}
 		return
 	}
-}
-
-func nameMapOf(entries []variableEntry) vars.NameMap[string] {
-	var out vars.NameMap[string]
-	for _, e := range entries {
-		out.Set(e.name, e.value)
-	}
-	return out
 }
 
 // providers exposes each layer to template resolution. Authored values use
@@ -167,10 +143,10 @@ func (p variablePlan) providers() []vars.Provider {
 	for _, l := range p.layers {
 		t := l.source.traits()
 		if t.template {
-			out = append(out, vars.NewNameMapTemplateProvider(t.label, l.vals))
+			out = append(out, vars.NewValueMapTemplateProvider(t.label, l.vals))
 			continue
 		}
-		out = append(out, vars.NewNameMapProvider(t.label, l.vals))
+		out = append(out, vars.NewValueMapProvider(t.label, l.vals))
 	}
 	// Process environment values are not enumerable, so they remain the final
 	// fallback outside the plan.
@@ -178,124 +154,201 @@ func (p variablePlan) providers() []vars.Provider {
 }
 
 // Scripts should see ordinary nested references resolved just as templates do.
-// Dynamic helpers and expressions are left alone because they are evaluated
-// later, after pre-request scripts have run.
+// Dynamic helpers and expressions are evaluated later, after pre-request
+// scripts have run.
 func (p variablePlan) values() map[string]string {
-	var out vars.NameMap[string]
+	var seen vars.NameMap[vars.Value]
 	var res *vars.Resolver
 	for _, l := range p.layers {
 		t := l.source.traits()
 		if t.hidden {
 			continue
 		}
-		vals := l.vals
-		if l.script != nil {
-			vals = *l.script
-		}
-		for name, value := range vals.All() {
-			if out.Has(name) {
+		for name, val := range l.vals.All() {
+			if seen.Has(name) {
 				continue
 			}
-			if t.template && vars.HasPlaceholder(value) {
+			if !val.Missing && !val.Final && t.template && vars.HasPlaceholder(val.Text) {
 				if res == nil {
-					res = p.staticResolver()
+					res = vars.NewResolver(p.providers()...)
 				}
 				// Leave values that need runtime data or the expression evaluator unchanged.
-				if expanded, err := res.ExpandTemplatesStatic(value); err == nil {
-					value = expanded
+				if expanded, err := res.ExpandTemplatesStatic(val.Text); err == nil {
+					val.Text = expanded
 				}
 			}
-			out.Set(name, value)
+			seen.Set(name, val)
 		}
 	}
-	return out.Map()
+
+	out := make(map[string]string, seen.Len())
+	for name, val := range seen.All() {
+		if val.Missing {
+			continue
+		}
+		out[name] = val.Text
+	}
+	return out
 }
 
-func (p variablePlan) staticResolver() *vars.Resolver {
-	res := vars.NewResolver(p.providers()...)
-	res.AddRefResolver(p.refs)
-	return res
+// Only declarations may choose the OS variable in a templated env: reference.
+func declaredNames(doc *restfile.Document, req *restfile.Request, env vars.Environment) *vars.Resolver {
+	out := make([]vars.Provider, 0, len(sourceTable))
+	for i, t := range sourceTable {
+		if !t.declared {
+			continue
+		}
+		out = append(
+			out,
+			vars.NewValueMapTemplateProvider(t.label, declaredText(variableSource(i), doc, req, env)),
+		)
+	}
+	return vars.NewResolver(out...)
 }
 
-func constEntries(doc *restfile.Document) []variableEntry {
+func declaredText(
+	source variableSource,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env vars.Environment,
+) vars.NameMap[vars.Value] {
+	var out vars.NameMap[vars.Value]
+	set := func(name, text string) { out.Set(name, vars.Value{Text: text}) }
+	switch source {
+	case sourceConst:
+		if doc != nil {
+			for _, c := range doc.Constants {
+				set(c.Name, c.Value)
+			}
+		}
+	case sourceRequest:
+		if req != nil {
+			for _, v := range req.Variables {
+				set(v.Name, v.Value)
+			}
+		}
+	case sourceDocumentGlobal:
+		if doc != nil {
+			for _, v := range doc.Globals {
+				set(v.Name, v.Value)
+			}
+		}
+	case sourceFile:
+		if doc != nil {
+			for _, v := range doc.Variables {
+				set(v.Name, v.Value)
+			}
+		}
+	case sourceEnvironment:
+		for _, name := range slices.Sorted(maps.Keys(env.Values())) {
+			set(name, env.Values()[name])
+		}
+	}
+	return out
+}
+
+func constEntries(doc *restfile.Document, refs *vars.EnvRefs) []variableEntry {
 	if doc == nil {
 		return nil
 	}
 	out := make([]variableEntry, 0, len(doc.Constants))
 	for _, c := range doc.Constants {
-		out = append(out, variableEntry{name: c.Name, value: c.Value})
+		out = append(out, variableEntry{name: c.Name, val: declaredValue(refs, c.Authored, c.Value)})
 	}
 	return out
 }
 
-func requestEntries(req *restfile.Request, sec secrecy) []variableEntry {
+func requestEntries(req *restfile.Request, sec secrecy, refs *vars.EnvRefs) []variableEntry {
 	if req == nil {
 		return nil
 	}
-	return declaredEntries(req.Variables, sec)
+	return declaredEntries(req.Variables, sec, refs)
 }
 
-func docGlobalEntries(doc *restfile.Document, sec secrecy) []variableEntry {
+func docGlobalEntries(doc *restfile.Document, sec secrecy, refs *vars.EnvRefs) []variableEntry {
 	if doc == nil {
 		return nil
 	}
-	return declaredEntries(doc.Globals, sec)
+	return declaredEntries(doc.Globals, sec, refs)
 }
 
-func docVarEntries(doc *restfile.Document, sec secrecy) []variableEntry {
+func docVarEntries(doc *restfile.Document, sec secrecy, refs *vars.EnvRefs) []variableEntry {
 	if doc == nil {
 		return nil
 	}
-	return declaredEntries(doc.Variables, sec)
+	return declaredEntries(doc.Variables, sec, refs)
 }
 
-func declaredEntries(xs []restfile.Variable, sec secrecy) []variableEntry {
+// Unlike -secret values, withheld env: references still shadow lower sources.
+func declaredEntries(xs []restfile.Variable, sec secrecy, refs *vars.EnvRefs) []variableEntry {
 	out := make([]variableEntry, 0, len(xs))
 	for _, v := range xs {
-		if sec == omitSecrets && v.Secret {
+		if sec == omitSecrets && v.Secret && !namesProcessVar(v.Authored, v.Value) {
 			continue
 		}
-		out = append(out, variableEntry{name: v.Name, value: v.Value})
+		out = append(out, variableEntry{name: v.Name, val: declaredValue(refs, v.Authored, v.Value)})
 	}
 	return out
 }
 
-func globalEntries(globs vars.Globals) []variableEntry {
-	out := make([]variableEntry, 0, globs.Len())
+func declaredValue(refs *vars.EnvRefs, authored bool, text string) vars.Value {
+	if !authored {
+		return vars.Value{Text: text}
+	}
+	return refs.Declared(text)
+}
+
+func namesProcessVar(authored bool, text string) bool {
+	if !authored {
+		return false
+	}
+	_, ok := vars.EnvRefKey(text)
+	return ok
+}
+
+func globalValues(globs vars.Globals) map[string]string {
+	out := make(map[string]string, globs.Len())
 	for name, g := range globs.Sorted() {
 		if g.Delete {
 			continue
 		}
-		out = append(out, variableEntry{name: name, value: g.Value})
+		out[name] = g.Value
 	}
 	return out
 }
 
-func (e *Engine) runtimeFileEntries(
+func (e *Engine) runtimeFileValues(
 	doc *restfile.Document,
 	env vars.ResolvedEnv,
 	sec secrecy,
-) []variableEntry {
+) map[string]string {
 	fs := e.rt.Files()
 	if fs == nil {
 		return nil
 	}
 	snap := fs.Snapshot(env.Scope(), e.filePath(doc))
-	out := make([]variableEntry, 0, len(snap))
-	for _, key := range slices.Sorted(maps.Keys(snap)) {
-		v := snap[key]
+	out := make(map[string]string, len(snap))
+	for key, v := range snap {
 		if sec == omitSecrets && v.Secret {
 			continue
 		}
-		out = append(out, variableEntry{name: storedName(v.Name, key), value: v.Value})
+		out[storedName(v.Name, key)] = v.Value
 	}
 	return out
 }
 
-func sortedEntries(src map[string]string) []variableEntry {
+func literalEntries(src map[string]string) []variableEntry {
 	out := make([]variableEntry, 0, len(src))
 	for _, name := range slices.Sorted(maps.Keys(src)) {
-		out = append(out, variableEntry{name: name, value: src[name]})
+		out = append(out, variableEntry{name: name, val: vars.Value{Text: src[name]}})
+	}
+	return out
+}
+
+func valueEntries(src vars.NameMap[vars.Value]) []variableEntry {
+	out := make([]variableEntry, 0, src.Len())
+	for name, val := range src.Sorted() {
+		out = append(out, variableEntry{name: name, val: val})
 	}
 	return out
 }

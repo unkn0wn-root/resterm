@@ -280,16 +280,17 @@ func (m *Model) consumeCompareRow(
 		msg.skipped = false
 	}
 	result := compareResult{
-		Environment: currentEnv,
-		Selection:   msg.selection,
-		Stream:      cloneStreamInfo(msg.stream),
-		Transcript:  append([]byte(nil), msg.transcript...),
-		Tests:       append([]scripts.TestResult(nil), msg.tests...),
-		ScriptErr:   msg.scriptErr,
-		RequestText: state.requestText,
-		Canceled:    canceled,
-		Skipped:     msg.skipped,
-		SkipReason:  msg.skipReason,
+		Environment:    currentEnv,
+		Selection:      msg.selection,
+		Stream:         cloneStreamInfo(msg.stream),
+		Transcript:     append([]byte(nil), msg.transcript...),
+		Tests:          append([]scripts.TestResult(nil), msg.tests...),
+		ScriptErr:      msg.scriptErr,
+		RuntimeSecrets: append([]string(nil), msg.runtimeSecrets...),
+		RequestText:    state.requestText,
+		Canceled:       canceled,
+		Skipped:        msg.skipped,
+		SkipReason:     msg.skipReason,
 	}
 	if state.group != "" {
 		result.Profile, _ = msg.selection.Profile(state.group)
@@ -536,7 +537,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		entry.RequestText = rqeng.RenderRequestText(req)
 	}
 	if req != nil {
-		secrets := m.secretValuesForSelection(result.Selection, req)
+		secrets := m.secretValuesForSelection(result.Selection, req, result.RuntimeSecrets...)
 		maskHeaders := !req.Metadata.AllowSensitiveHeaders
 		entry.RequestText = redactHistoryText(entry.RequestText, secrets, maskHeaders)
 	}
@@ -556,10 +557,10 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		entry.Error = result.Err.Error()
 		entry.BodySnippet = entry.Error
 	case result.Response != nil:
-		entry.BodySnippet = m.compareHTTPSnippet(result.Response, req, result.Selection)
+		entry.BodySnippet = m.compareHTTPSnippet(result.Response, req, result)
 		entry.StatusCode = result.Response.StatusCode
 	case result.GRPC != nil:
-		entry.BodySnippet = m.compareGRPCSnippet(result.GRPC, req, result.Selection)
+		entry.BodySnippet = m.compareGRPCSnippet(result.GRPC, req, result)
 		entry.StatusCode = int(result.GRPC.StatusCode)
 	case result.Stream != nil || len(result.Transcript) > 0:
 		entry.BodySnippet = streamSummaryText(result.Stream)
@@ -577,7 +578,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 func (m *Model) compareHTTPSnippet(
 	resp *httpx.Response,
 	req *restfile.Request,
-	sel vars.Selection,
+	row compareResult,
 ) string {
 	if resp == nil {
 		return ""
@@ -585,13 +586,13 @@ func (m *Model) compareHTTPSnippet(
 	if req != nil && req.Metadata.NoLog {
 		return "<body suppressed>"
 	}
-	return redactHistoryText(string(resp.Body), m.secretValuesForSelection(sel, req), false)
+	return redactHistoryText(string(resp.Body), m.compareRowSecrets(row, req), false)
 }
 
 func (m *Model) compareGRPCSnippet(
 	resp *grpcx.Response,
 	req *restfile.Request,
-	sel vars.Selection,
+	row compareResult,
 ) string {
 	if resp == nil {
 		return ""
@@ -599,7 +600,11 @@ func (m *Model) compareGRPCSnippet(
 	if req != nil && req.Metadata.NoLog {
 		return "<body suppressed>"
 	}
-	return redactHistoryText(resp.Message, m.secretValuesForSelection(sel, req), false)
+	return redactHistoryText(resp.Message, m.compareRowSecrets(row, req), false)
+}
+
+func (m *Model) compareRowSecrets(row compareResult, req *restfile.Request) []string {
+	return m.secretValuesForSelection(row.Selection, req, row.RuntimeSecrets...)
 }
 
 func (s *compareState) progressSummary() string {

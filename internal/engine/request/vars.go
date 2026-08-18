@@ -181,7 +181,7 @@ func (e *Engine) buildResolver(
 		Env:     env,
 		Base:    base,
 		Locals:  locals,
-		globals: effectiveGlobalValues(doc, globs),
+		globals: effectiveGlobalValues(doc, globs, env.Refs()),
 	}
 	return e.planResolver(ctx, plan, in, ExprEvalOptions{})
 }
@@ -196,7 +196,7 @@ func (e *Engine) DisplayResolver(
 	base string,
 	locals rts.Locals,
 ) *vars.Resolver {
-	env := src.Resolve().WithoutRefValues()
+	env := ResolveEnvironment(src, doc, req).WithoutRefValues()
 	globs := e.collectStoredGlobalValues(env)
 	globs.DeleteFunc(func(_ string, v vars.GlobalMutation) bool { return v.Secret })
 
@@ -213,7 +213,7 @@ func (e *Engine) DisplayResolver(
 		Env:     env,
 		Base:    e.rtsBase(doc, base),
 		Locals:  locals,
-		globals: effectiveGlobalValues(doc, globs),
+		globals: effectiveGlobalValues(doc, globs, env.Refs()),
 	}
 	return e.planResolver(ctx, plan, in, ExprEvalOptions{OmitSecretGlobals: true})
 }
@@ -228,7 +228,6 @@ func (e *Engine) planResolver(
 ) *vars.Resolver {
 	in.Vars = plan.values()
 	res := vars.NewResolver(plan.providers()...)
-	res.AddRefResolver(plan.refs)
 	res.SetExprEval(e.ExprEvalWithOptions(ctx, in, opt))
 	res.SetExprPos(e.rtsPos(in.Doc, in.Req))
 	return res
@@ -269,7 +268,36 @@ func (e *Engine) collectVariablesWithGlobals(
 }
 
 func (e *Engine) collectGlobalValues(doc *restfile.Document, env vars.ResolvedEnv) vars.Globals {
-	return effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
+	return effectiveGlobalValues(doc, e.collectStoredGlobalValues(env), env.Refs())
+}
+
+// ResolveEnvironment snapshots every declared env: reference for one run,
+// including unused values that may need redaction.
+func ResolveEnvironment(
+	src vars.Environment,
+	doc *restfile.Document,
+	req *restfile.Request,
+) vars.ResolvedEnv {
+	env := src.ResolveWith(vars.NewEnvRefs(declaredNames(doc, req, src)))
+	refs := env.Refs()
+	read := func(authored bool, text string) { declaredValue(refs, authored, text) }
+	if doc != nil {
+		for _, c := range doc.Constants {
+			read(c.Authored, c.Value)
+		}
+		for _, v := range doc.Variables {
+			read(v.Authored, v.Value)
+		}
+		for _, v := range doc.Globals {
+			read(v.Authored, v.Value)
+		}
+	}
+	if req != nil {
+		for _, v := range req.Variables {
+			read(v.Authored, v.Value)
+		}
+	}
+	return env
 }
 
 func (e *Engine) collectStoredGlobalValues(env vars.ResolvedEnv) vars.Globals {
@@ -285,20 +313,32 @@ func (e *Engine) collectStoredGlobalValues(env vars.ResolvedEnv) vars.Globals {
 	return out
 }
 
-func collectDocumentGlobalValues(doc *restfile.Document) vars.Globals {
+func collectDocumentGlobalValues(doc *restfile.Document, refs *vars.EnvRefs) vars.Globals {
 	var out vars.Globals
 	if doc == nil {
 		return out
 	}
 	for _, v := range doc.Globals {
+		val := declaredValue(refs, v.Authored, v.Value)
+		if val.Missing {
+			continue
+		}
 		name := strings.TrimSpace(v.Name)
-		out.Set(name, vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret})
+		out.Set(name, vars.GlobalMutation{
+			Name:   name,
+			Value:  val.Text,
+			Secret: v.Secret || namesProcessVar(v.Authored, v.Value),
+		})
 	}
 	return out
 }
 
-func effectiveGlobalValues(doc *restfile.Document, globs vars.Globals) vars.Globals {
-	return mergeGlobalValues(collectDocumentGlobalValues(doc), globs)
+func effectiveGlobalValues(
+	doc *restfile.Document,
+	globs vars.Globals,
+	refs *vars.EnvRefs,
+) vars.Globals {
+	return mergeGlobalValues(collectDocumentGlobalValues(doc, refs), globs)
 }
 
 func mergeGlobalValues(base, changes vars.Globals) vars.Globals {

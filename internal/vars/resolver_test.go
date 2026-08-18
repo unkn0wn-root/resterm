@@ -322,14 +322,16 @@ func TestExpandTemplatesExprMissing(t *testing.T) {
 	}
 }
 
-func TestEnvRefResolver(t *testing.T) {
+func envRefResolver(values map[string]string) (*Resolver, *EnvRefs) {
+	refs := NewEnvRefs(declaredNames(values))
+	return NewResolver(NewValueMapTemplateProvider("envfile", authored(refs, values))), refs
+}
+
+func TestEnvRefResolves(t *testing.T) {
 	key := "RESTERM_TEST_ENV_REF"
 	t.Setenv(key, "super-secret")
 
-	resolver := NewResolver(NewMapProvider("envfile", map[string]string{
-		"auth.password": "env:" + key,
-	}))
-	resolver.AddRefResolver(EnvRefResolver)
+	resolver, _ := envRefResolver(map[string]string{"auth.password": "env:" + key})
 
 	out, err := resolver.ExpandTemplates("{{auth.password}}")
 	if err != nil {
@@ -340,14 +342,13 @@ func TestEnvRefResolver(t *testing.T) {
 	}
 }
 
-func TestEnvRefResolverUppercaseFallback(t *testing.T) {
+func TestEnvRefUppercaseFallback(t *testing.T) {
 	key := "RESTERM_TEST_ENV_REF_UPPER"
 	t.Setenv(key, "works")
 
-	resolver := NewResolver(NewMapProvider("envfile", map[string]string{
+	resolver, _ := envRefResolver(map[string]string{
 		"auth.password": "env:" + strings.ToLower(key),
-	}))
-	resolver.AddRefResolver(EnvRefResolver)
+	})
 
 	out, err := resolver.ExpandTemplates("{{auth.password}}")
 	if err != nil {
@@ -358,12 +359,9 @@ func TestEnvRefResolverUppercaseFallback(t *testing.T) {
 	}
 }
 
-func TestEnvRefResolverMissingReturnsUndefined(t *testing.T) {
+func TestEnvRefMissingReturnsUndefined(t *testing.T) {
 	key := fmt.Sprintf("RESTERM_TEST_MISSING_ENV_REF_%d", time.Now().UnixNano())
-	resolver := NewResolver(NewMapProvider("envfile", map[string]string{
-		"auth.password": "env:" + key,
-	}))
-	resolver.AddRefResolver(EnvRefResolver)
+	resolver, _ := envRefResolver(map[string]string{"auth.password": "env:" + key})
 
 	out, err := resolver.ExpandTemplates("{{auth.password}}")
 	if err == nil {
@@ -371,6 +369,23 @@ func TestEnvRefResolverMissingReturnsUndefined(t *testing.T) {
 	}
 	if out != "{{auth.password}}" {
 		t.Fatalf("expected unresolved template placeholder, got %q", out)
+	}
+}
+
+func TestEnvRefInRuntimeValueStaysLiteral(t *testing.T) {
+	key := "RESTERM_TEST_RUNTIME_LITERAL"
+	t.Setenv(key, "leaked")
+
+	var captured NameMap[Value]
+	captured.Set("auth.password", Value{Text: "env:" + key})
+	resolver := NewResolver(NewValueMapProvider("request", captured))
+
+	out, err := resolver.ExpandTemplates("{{auth.password}}")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "env:"+key {
+		t.Fatalf("runtime value resolved to %q, want the text unchanged", out)
 	}
 }
 

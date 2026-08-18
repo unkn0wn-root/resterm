@@ -88,7 +88,7 @@ func newExplainBuilder(
 		secrets: sec,
 	}
 	if e != nil {
-		b.globals = effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
+		b.globals = effectiveGlobalValues(doc, e.collectStoredGlobalValues(env), env.Refs())
 	}
 	// Done here and not in the caller so that reports built on paths which fail
 	// before the request runs carry them too.

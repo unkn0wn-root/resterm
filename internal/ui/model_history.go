@@ -933,7 +933,8 @@ func (m *Model) secretValuesForEnv(
 		}
 		values[value] = struct{}{}
 	}
-	for _, value := range env.Resolve().Secrets() {
+	snap := rqeng.ResolveEnvironment(env, m.doc, req)
+	for _, value := range snap.Secrets() {
 		add(value)
 	}
 
@@ -994,12 +995,16 @@ func (m *Model) secretValuesForEnv(
 	return secrets
 }
 
-func (m *Model) secretValuesForSelection(sel vars.Selection, req *restfile.Request) []string {
+func (m *Model) secretValuesForSelection(
+	sel vars.Selection,
+	req *restfile.Request,
+	extraSecrets ...string,
+) []string {
 	env, err := m.environment(sel)
 	if err != nil {
-		return m.secretValuesForRedaction(req)
+		return m.secretValuesForRedaction(req, extraSecrets...)
 	}
-	return m.secretValuesForEnv(env, req)
+	return m.secretValuesForEnv(env, req, extraSecrets...)
 }
 
 func redactHistoryText(text string, secrets []string, maskHeaders bool) string {

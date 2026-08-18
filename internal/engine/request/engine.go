@@ -144,11 +144,10 @@ func (e *Engine) ExecuteWith(
 	if req == nil {
 		return engine.RequestResult{}, diag.New(diag.ClassUI, "request is nil")
 	}
-	// Resolve once so templates, scripts, and redaction use the same values.
-	env := src.Resolve()
-
 	e.syncRegistry(doc)
 	req = CloneRequest(req)
+	// Snapshot references before scripts can change declarations.
+	env := ResolveEnvironment(src, doc, req)
 	opts := e.resolveHTTPOptions(doc, e.cfg.HTTPOptions)
 	if opts.CookieJar == nil {
 		if cs := e.rt.Cookies(); cs != nil {
@@ -408,7 +407,7 @@ func (x *execCtx) currentVariables() map[string]string {
 }
 
 func (x *execCtx) currentGlobals() vars.Globals {
-	return effectiveGlobalValues(x.doc, x.storeG)
+	return effectiveGlobalValues(x.doc, x.storeG, x.env.Refs())
 }
 
 func (x *execCtx) evalScope(vv map[string]string) evalScope {
@@ -434,7 +433,7 @@ func (x *execCtx) applyRuntimeGlobals(ch vars.Globals) {
 		x.storeG = x.eng.collectStoredGlobalValues(x.env)
 	}
 	if x.exp != nil {
-		x.exp.globals = effectiveGlobalValues(x.doc, x.storeG)
+		x.exp.globals = effectiveGlobalValues(x.doc, x.storeG, x.env.Refs())
 	}
 }
 
@@ -1204,7 +1203,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 				})
 			},
 			CollectGlobalValues: func(doc *restfile.Document) vars.Globals {
-				return effectiveGlobalValues(doc, x.storeG)
+				return effectiveGlobalValues(doc, x.storeG, x.env.Refs())
 			},
 			RunAsserts: func(in xexec.AssertInput) ([]scripts.TestResult, error) {
 				rr, err := rtsHTTP(in.HTTP)

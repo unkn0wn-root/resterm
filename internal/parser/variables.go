@@ -6,6 +6,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 var variableLineRe = regexp.MustCompile(
@@ -46,12 +47,14 @@ func (b *documentBuilder) addScopedVariable(
 	if name == "" {
 		return
 	}
+	b.checkEnvRef(line, value)
 	variable := restfile.Variable{
-		Name:   name,
-		Value:  value,
-		Line:   line,
-		Scope:  scope,
-		Secret: secret,
+		Name:     name,
+		Value:    value,
+		Line:     line,
+		Scope:    scope,
+		Secret:   secret,
+		Authored: true,
 	}
 	switch scope {
 	case directive.ScopeGlobal:
@@ -83,12 +86,20 @@ func (b *documentBuilder) handleScopedVariableDirective(d parsedDirective) direc
 }
 
 func (b *documentBuilder) addConstant(name, value string, line int) {
+	b.checkEnvRef(line, value)
 	constant := restfile.Constant{
-		Name:  name,
-		Value: value,
-		Line:  line,
+		Name:     name,
+		Value:    value,
+		Line:     line,
+		Authored: true,
 	}
 	b.file.consts = append(b.file.consts, constant)
+}
+
+func (b *documentBuilder) checkEnvRef(line int, value string) {
+	if key, ok := vars.EnvRefKey(value); ok && key == "" {
+		b.addError(line, "env: reference is missing a variable name")
+	}
 }
 
 func (b *documentBuilder) handleConstDirective(d parsedDirective) directiveOutcome {

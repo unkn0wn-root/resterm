@@ -424,11 +424,26 @@ Use `env:NAME` when a value should come from an OS environment variable. This ke
 }
 ```
 
-Resterm reads the OS variable once at the start of each request and exposes it under the key from the environment file. In this example, `{{auth.token}}`, `env.get("auth.token")`, and `vars.get("auth.token")` return the same value. The name `RESTERM_TOKEN` is not added to `env` or `vars`.
+Resterm reads the OS variable once at the start of each request and exposes it under the declared name. In this example, `{{auth.token}}`, `env.get("auth.token")`, and `vars.get("auth.token")` return the same value. `RESTERM_TOKEN` itself is not added to `env` or `vars`.
 
-If the OS variable is missing, `auth.token` is omitted from `env` and `vars`. Requests that do not depend on it can still run. Values loaded through `env:NAME` are treated as secrets. Resterm hides them from display and status previews and redacts them from request results, explain output, and history.
+You can also use `env:NAME` in request files:
 
-Resterm first looks up the OS variable exactly as written, then tries the uppercase name.
+```
+# @file token env:RESTERM_TOKEN
+
+### Reports
+# @name Reports
+GET https://api.example.com/reports
+Authorization: Bearer {{token}}
+```
+
+`@const`, `@request`, `@global`, and `@file` all accept this form. The mapped value is available through templates and `vars`; constants remain template-only. File declarations do not appear in `env`, which only contains values from the selected environment.
+
+If the OS variable is missing, the declaration stays undefined and still shadows lower-precedence sources. Resterm first tries the name as written, then its uppercase form.
+
+Values loaded through `env:NAME` are secrets. Resterm hides them from previews and redacts them from results, explain output, and history. References are resolved once, so an OS value that contains `env:OTHER` stays unchanged. Only declarations are interpreted as references; values from captures, workflows, and scripts are plain data. An empty `env:` reference is reported as an error.
+
+A reference name may contain a template, as in `env:{{picked}}`. Only declarations can supply `picked`; runtime data cannot choose which OS variable Resterm reads.
 
 #### Shared variables (`$shared`)
 
@@ -564,7 +579,9 @@ When expanding `{{variable}}` templates, Resterm looks in:
 8. Selected environment JSON.
 9. OS environment variables (case-sensitive with an uppercase fallback).
 
-Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and unmapped OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them. A selected environment can map an OS variable with `env:NAME`. Scripts receive that value under the key from the environment file, not under the OS variable name.
+Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and unmapped OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them.
+
+Any declaration above, or a selected environment value, may use `env:NAME`. The value is exposed under the declared name. A missing reference stays undefined and continues to shadow lower sources, including the OS fallback in step 9. See [Values from OS environment variables](#values-from-os-environment-variables).
 
 Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers and `{{= ... }}` expressions are left unchanged because they are evaluated later, when the request runs. Captured values and values written by scripts are treated as data and are not expanded.
 
