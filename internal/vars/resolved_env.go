@@ -6,7 +6,6 @@ import (
 )
 
 // ResolvedEnv holds environment values and the OS lookups shared by one run.
-// The zero value is not usable.
 type ResolvedEnv struct {
 	env      Environment
 	refs     *EnvRefs
@@ -15,7 +14,6 @@ type ResolvedEnv struct {
 	refNames []string
 }
 
-// Resolve creates a snapshot for callers without document declarations.
 func (e Environment) Resolve() ResolvedEnv {
 	return e.ResolveWith(NewEnvRefs(nil))
 }
@@ -32,7 +30,7 @@ func (e Environment) ResolveWith(refs *EnvRefs) ResolvedEnv {
 		if _, ok := EnvRefKey(raw); ok {
 			out.refNames = append(out.refNames, name)
 		}
-		v := refs.Declared(raw)
+		v := refs.ResolveDeclared(raw)
 		out.vals.Set(name, v)
 		if !v.Missing {
 			out.plain[name] = v.Text
@@ -63,10 +61,10 @@ func (r ResolvedEnv) Secrets() []string {
 
 // WithoutRefValues hides referenced values while preserving their precedence.
 func (r ResolvedEnv) WithoutRefValues() ResolvedEnv {
-	if r.refs.withheld {
+	if r.refs != nil && r.refs.withheld {
 		return r
 	}
-	r.refs = r.refs.Withheld()
+	r.refs = r.refs.withhold()
 	if len(r.refNames) == 0 {
 		return r
 	}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -926,73 +925,15 @@ func (m *Model) secretValuesForEnv(
 	req *restfile.Request,
 	extraSecrets ...string,
 ) []string {
-	values := make(map[string]struct{})
-	add := func(value string) {
-		if strings.TrimSpace(value) == "" {
-			return
-		}
-		values[value] = struct{}{}
-	}
-	snap := rqeng.ResolveEnvironment(env, m.doc, req)
-	for _, value := range snap.Secrets() {
-		add(value)
-	}
-
-	if req != nil {
-		for _, v := range req.Variables {
-			if v.Secret {
-				add(v.Value)
-			}
-		}
-	}
-
-	if doc := m.doc; doc != nil {
-		for _, v := range doc.Variables {
-			if v.Secret {
-				add(v.Value)
-			}
-		}
-		for _, v := range doc.Globals {
-			if v.Secret {
-				add(v.Value)
-			}
-		}
-	}
-
-	if fs := m.fileStore(); fs != nil {
-		path := m.documentRuntimePath(m.doc)
-		if snapshot := fs.Snapshot(env.Scope(), path); len(snapshot) > 0 {
-			for _, entry := range snapshot {
-				if entry.Secret {
-					add(entry.Value)
-				}
-			}
-		}
-	}
-
-	if gs := m.globalsStore(); gs != nil {
-		if snapshot := gs.Snapshot(env.Scope()); len(snapshot) > 0 {
-			for _, entry := range snapshot {
-				if entry.Secret {
-					add(entry.Value)
-				}
-			}
-		}
-	}
-	for _, value := range extraSecrets {
-		add(value)
-	}
-
-	if len(values) == 0 {
-		return nil
-	}
-
-	secrets := make([]string, 0, len(values))
-	for value := range values {
-		secrets = append(secrets, value)
-	}
-	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
-	return secrets
+	return rqeng.SecretSources{
+		Doc:      m.doc,
+		Req:      req,
+		Env:      rqeng.ResolveEnvironment(env, m.doc, req),
+		FilePath: m.documentRuntimePath(m.doc),
+		Files:    m.fileStore(),
+		Globals:  m.globalsStore(),
+		Extra:    extraSecrets,
+	}.Secrets()
 }
 
 func (m *Model) secretValuesForSelection(

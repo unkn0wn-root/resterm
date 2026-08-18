@@ -313,6 +313,7 @@ func (e *Engine) collectStoredGlobalValues(env vars.ResolvedEnv) vars.Globals {
 	return out
 }
 
+// Missing references are omitted because globals have no lower layer to shadow.
 func collectDocumentGlobalValues(doc *restfile.Document, refs *vars.EnvRefs) vars.Globals {
 	var out vars.Globals
 	if doc == nil {
@@ -327,7 +328,7 @@ func collectDocumentGlobalValues(doc *restfile.Document, refs *vars.EnvRefs) var
 		out.Set(name, vars.GlobalMutation{
 			Name:   name,
 			Value:  val.Text,
-			Secret: v.Secret || namesProcessVar(v.Authored, v.Value),
+			Secret: v.Secret || isEnvRef(v.Authored, v.Value),
 		})
 	}
 	return out

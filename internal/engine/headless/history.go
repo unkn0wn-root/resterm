@@ -1,7 +1,6 @@
 package headless
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
@@ -40,68 +39,18 @@ func (e *Engine) secretValues(
 	env vars.Environment,
 	extra ...string,
 ) []string {
-	vals := make(map[string]struct{})
-	add := func(v string) {
-		if strings.TrimSpace(v) == "" {
-			return
-		}
-		vals[v] = struct{}{}
+	src := request.SecretSources{
+		Doc:   doc,
+		Req:   req,
+		Env:   request.ResolveEnvironment(env, doc, req),
+		Extra: extra,
 	}
-	snap := request.ResolveEnvironment(env, doc, req)
-	for _, v := range snap.Secrets() {
-		add(v)
+	if e != nil {
+		src.FilePath = e.filePath(doc)
+		src.Files = e.rt.Files()
+		src.Globals = e.rt.Globals()
 	}
-	if req != nil {
-		for _, v := range req.Variables {
-			if v.Secret {
-				add(v.Value)
-			}
-		}
-	}
-	if doc != nil {
-		for _, v := range doc.Variables {
-			if v.Secret {
-				add(v.Value)
-			}
-		}
-		for _, v := range doc.Globals {
-			if v.Secret {
-				add(v.Value)
-			}
-		}
-	}
-	if e != nil && e.rt != nil {
-		if fs := e.rt.Files(); fs != nil {
-			if snap := fs.Snapshot(env.Scope(), e.filePath(doc)); len(snap) > 0 {
-				for _, v := range snap {
-					if v.Secret {
-						add(v.Value)
-					}
-				}
-			}
-		}
-		if gs := e.rt.Globals(); gs != nil {
-			if snap := gs.Snapshot(env.Scope()); len(snap) > 0 {
-				for _, v := range snap {
-					if v.Secret {
-						add(v.Value)
-					}
-				}
-			}
-		}
-	}
-	for _, v := range extra {
-		add(v)
-	}
-	if len(vals) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(vals))
-	for v := range vals {
-		out = append(out, v)
-	}
-	sort.Slice(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
-	return out
+	return src.Secrets()
 }
 
 func redactText(text string, secs []string, maskHdr bool) string {

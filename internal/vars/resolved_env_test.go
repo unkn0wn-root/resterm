@@ -11,7 +11,7 @@ import (
 func authored(refs *EnvRefs, src map[string]string) NameMap[Value] {
 	var out NameMap[Value]
 	for _, name := range slices.Sorted(maps.Keys(src)) {
-		out.Set(name, refs.Declared(src[name]))
+		out.Set(name, refs.ResolveDeclared(src[name]))
 	}
 	return out
 }
@@ -84,8 +84,9 @@ func TestWithoutRefValuesWithholdsMappedValues(t *testing.T) {
 	if got := public.Values()["plain"]; got != "visible" {
 		t.Fatalf("withheld plain = %q, want %q", got, "visible")
 	}
-	if len(public.Secrets()) != 0 {
-		t.Fatalf("withheld Secrets() = %#v, want none", public.Secrets())
+	// Withheld values still need redaction in case response data echoes them.
+	if got := public.Secrets(); len(got) != 1 || got[0] != "private" {
+		t.Fatalf("withheld Secrets() = %#v, want the value it hides", got)
 	}
 
 	res := NewResolver(NewValueMapProvider("environment", public.ProviderValues()), EnvProvider{})
@@ -99,8 +100,24 @@ func TestWithoutRefValuesWithholdsMappedValues(t *testing.T) {
 		t.Fatalf("WithoutRefValues() mutated the snapshot it came from: %q", got)
 	}
 
-	if got := public.Refs().Declared("env:" + key); !got.Missing {
+	if got := public.Refs().ResolveDeclared("env:" + key); !got.Missing {
 		t.Fatalf("withheld snapshot resolved an authored reference to %#v", got)
+	}
+}
+
+func TestZeroResolvedEnvHasNoReferences(t *testing.T) {
+	var r ResolvedEnv
+	if got := r.Secrets(); got != nil {
+		t.Fatalf("Secrets() = %#v, want none", got)
+	}
+	if got := r.WithoutRefValues().Secrets(); got != nil {
+		t.Fatalf("withheld Secrets() = %#v, want none", got)
+	}
+	if got := r.Refs().ResolveDeclared("env:ANY"); !got.Missing {
+		t.Fatalf("ResolveDeclared() = %#v, want missing", got)
+	}
+	if got := r.Refs().ResolveDeclared("plain"); got.Missing || got.Text != "plain" {
+		t.Fatalf("ResolveDeclared() = %#v, want the text unchanged", got)
 	}
 }
 
@@ -109,11 +126,11 @@ func TestEnvRefsReadEachVariableOnce(t *testing.T) {
 	t.Setenv(key, "first")
 
 	var refs EnvRefs
-	if got := refs.Resolve(key); got.Text != "first" || !got.Final {
+	if got := refs.resolve(key); got.Text != "first" || !got.Final {
 		t.Fatalf("first read = %#v, want the process value marked final", got)
 	}
 	t.Setenv(key, "second")
-	if got := refs.Resolve(key); got.Text != "first" {
+	if got := refs.resolve(key); got.Text != "first" {
 		t.Fatalf("second read = %q, want the captured value", got.Text)
 	}
 	if secrets := refs.Secrets(); len(secrets) != 1 || secrets[0] != "first" {
@@ -145,8 +162,8 @@ func TestDeclaredEnvRefWithNoNameIsUndefined(t *testing.T) {
 
 	var refs EnvRefs
 	for _, raw := range []string{"env:", "env:   "} {
-		if got := refs.Declared(raw); !got.Missing {
-			t.Fatalf("Declared(%q) = %#v, want it undefined", raw, got)
+		if got := refs.ResolveDeclared(raw); !got.Missing {
+			t.Fatalf("ResolveDeclared(%q) = %#v, want it undefined", raw, got)
 		}
 	}
 	if len(refs.Secrets()) != 0 {
@@ -154,7 +171,7 @@ func TestDeclaredEnvRefWithNoNameIsUndefined(t *testing.T) {
 	}
 
 	var vals NameMap[Value]
-	vals.Set("token", refs.Declared("env:"))
+	vals.Set("token", refs.ResolveDeclared("env:"))
 	res := NewResolver(NewValueMapTemplateProvider("file", vals), EnvProvider{})
 	if got, err := res.ExpandTemplates("{{token}}"); err == nil {
 		t.Fatalf("{{token}} resolved to %q, want it undefined", got)

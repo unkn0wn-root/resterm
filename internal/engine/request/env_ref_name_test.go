@@ -208,8 +208,8 @@ func TestOnlyDocumentSourcesMayNameAReference(t *testing.T) {
 		sourceRuntimeFile,
 	}
 	for _, s := range runtime {
-		if s.traits().declared {
-			t.Fatalf("%s is marked declared; a value produced while a request runs must not name a reference",
+		if s.traits().allowsEnvRef {
+			t.Fatalf("%s allows references; a value produced while a request runs must not name one",
 				s.traits().label)
 		}
 	}
@@ -222,12 +222,33 @@ func TestOnlyDocumentSourcesMayNameAReference(t *testing.T) {
 		sourceEnvironment,
 	}
 	for _, s := range declared {
-		if !s.traits().declared {
-			t.Fatalf("%s is not marked declared; its values would stop naming references", s.traits().label)
+		if !s.traits().allowsEnvRef {
+			t.Fatalf("%s disallows references; its values would stop naming them", s.traits().label)
 		}
 		if len(declarations(s, nil, nil)) != 0 {
 			t.Fatalf("%s produced declarations from an empty document", s.traits().label)
 		}
+	}
+}
+
+func TestEnvironmentValuesAreNotTemplatesInEitherRole(t *testing.T) {
+	t.Setenv("RESTERM_ENV_LAYER_TARGET", "os-value")
+
+	doc, req := parseDoc(t, `### one
+# @name one
+GET http://example.test
+`)
+	vv := newTestEngine().CollectVariables(doc, req, envWith(t, "dev", map[string]string{
+		"picked":   "{{indirect}}",
+		"indirect": "RESTERM_ENV_LAYER_TARGET",
+		"token":    "env:{{picked}}",
+	}), nil)
+
+	if got := vv["picked"]; got != "{{indirect}}" {
+		t.Fatalf("picked = %q, want the environment value left literal", got)
+	}
+	if got, ok := vv["token"]; ok {
+		t.Fatalf("token = %q, want it undefined because its name never expanded", got)
 	}
 }
 
