@@ -261,7 +261,7 @@ func environmentOptions(
 		cat, err = groupedCatalog(opt.Environment.Grouped)
 		envFile = ""
 	case envFile != "":
-		cat, err = vars.LoadEnvironmentFile(envFile)
+		cat, err = vars.LoadEnvironmentPath(envFile)
 	default:
 		cat, envFile, err = vars.Discover(envPaths(path, work)...)
 	}

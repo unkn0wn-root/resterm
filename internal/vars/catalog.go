@@ -190,6 +190,52 @@ func (c Catalog) findGroup(name string) (Group, bool) {
 	return c.groups[i], true
 }
 
+// mergePrivate overlays the private catalog's values onto c. Private values
+// win per environment (and per profile for grouped catalogs). The source is
+// kept from c so the merged catalog shares the public file's runtime scope.
+// When the two catalogs have different shapes (one flat, one grouped) the
+// merge is ambiguous, so the public catalog is returned unchanged.
+func (c Catalog) mergePrivate(priv Catalog) Catalog {
+	if priv.Empty() {
+		return c
+	}
+	if c.Grouped() != priv.Grouped() {
+		return c
+	}
+	if c.Grouped() {
+		return c.mergePrivateGrouped(priv)
+	}
+	out := c
+	for i := range out.envs {
+		if pv, ok := priv.findEnv(out.envs[i].name); ok {
+			out.envs[i].values = mergeValues(out.envs[i].values, pv.values)
+		}
+	}
+	return out
+}
+
+// mergePrivateGrouped overlays private profiles onto matching public groups.
+// A private profile only refines what the public file declares; groups or
+// profiles that exist only in the private file are ignored.
+func (c Catalog) mergePrivateGrouped(priv Catalog) Catalog {
+	out := c
+	for gi := range out.groups {
+		pg, ok := priv.findGroup(out.groups[gi].Name)
+		if !ok {
+			continue
+		}
+		profiles := make(EnvironmentSet, len(out.groups[gi].Profiles))
+		for name, values := range out.groups[gi].Profiles {
+			profiles[name] = values
+			if pv, ok := pg.Profiles[name]; ok {
+				profiles[name] = mergeValues(values, pv)
+			}
+		}
+		out.groups[gi].Profiles = profiles
+	}
+	return out
+}
+
 func parseCatalog(data []byte) (Catalog, error) {
 	var root object
 	if err := json.Unmarshal(data, &root); err != nil {

@@ -471,3 +471,72 @@ func TestMergeValuesIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestMergePrivateGrouped(t *testing.T) {
+	pub, err := NewGroupedCatalog(nil, []Group{{
+		Name:    "api",
+		Default: "dev",
+		Profiles: EnvironmentSet{
+			"dev":  {"host": "localhost", "key": "public"},
+			"prod": {"host": "example.com", "key": "public"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("public grouped catalog: %v", err)
+	}
+	priv, err := NewGroupedCatalog(nil, []Group{{
+		Name:    "api",
+		Default: "dev",
+		Profiles: EnvironmentSet{
+			"dev": {"key": "private"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("private grouped catalog: %v", err)
+	}
+
+	merged := pub.mergePrivate(priv)
+	if merged.Empty() {
+		t.Fatal("merge should not empty the catalog")
+	}
+	g, ok := merged.findGroup("api")
+	if !ok {
+		t.Fatal("group api missing")
+	}
+	if got := g.Profiles["dev"]["key"]; got != "private" {
+		t.Fatalf("dev key = %q, want private", got)
+	}
+	if got := g.Profiles["dev"]["host"]; got != "localhost" {
+		t.Fatalf("dev host = %q, want localhost", got)
+	}
+	if got := g.Profiles["prod"]["key"]; got != "public" {
+		t.Fatalf("prod key = %q, want public", got)
+	}
+}
+
+func TestMergePrivateShapeMismatchKeepsPublic(t *testing.T) {
+	pub, err := NewCatalog(EnvironmentSet{"dev": {"host": "a"}})
+	if err != nil {
+		t.Fatalf("flat catalog: %v", err)
+	}
+	priv, err := NewGroupedCatalog(nil, []Group{{
+		Name:     "api",
+		Default:  "dev",
+		Profiles: EnvironmentSet{"dev": {"key": "p"}},
+	}})
+	if err != nil {
+		t.Fatalf("grouped catalog: %v", err)
+	}
+
+	merged := pub.mergePrivate(priv)
+	if merged.Grouped() {
+		t.Fatal("shape mismatch should not turn a flat catalog grouped")
+	}
+	dev, ok := merged.findEnv("dev")
+	if !ok || dev.values["host"] != "a" {
+		t.Fatalf("flat values not preserved: %+v", dev)
+	}
+	if _, ok := dev.values["key"]; ok {
+		t.Fatal("private flat overlay should not apply to a grouped mismatch")
+	}
+}

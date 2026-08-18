@@ -220,3 +220,21 @@ func TestNestedEnvironmentFileWarnsAtStartup(t *testing.T) {
 		t.Fatalf("who = %q, want the root environment to stay active", got)
 	}
 }
+
+func TestInactiveEnvStatusIgnoresActivePrivateSibling(t *testing.T) {
+	active := filepath.Join("/ws", "http-client.env.json")
+	priv := filepath.Join("/ws", "http-client.private.env.json")
+	other := filepath.Join("/ws", "a", "resterm.env.json")
+	entries := []files.Entry{
+		envEntry("http-client.env.json", active),
+		envEntry("http-client.private.env.json", priv),
+		envEntry(filepath.Join("a", "resterm.env.json"), other),
+	}
+
+	got := inactiveEnvStatus(entries, active, true)
+	// The private sibling of the active file is not inactive, but the nested
+	// resterm.env.json still is.
+	if got.text != filepath.Join("a", "resterm.env.json")+" is inactive. This workspace uses http-client.env.json" {
+		t.Fatalf("text = %q, want only the nested file flagged", got.text)
+	}
+}

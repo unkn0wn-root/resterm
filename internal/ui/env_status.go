@@ -41,9 +41,16 @@ func inactiveEnvStatus(entries []files.Entry, active string, recursive bool) sta
 
 	var names []string
 	for _, entry := range entries {
-		if entry.Kind == files.KindEnv && !util.SameFile(entry.Path, active) {
-			names = append(names, entry.Name)
+		if entry.Kind != files.KindEnv || util.SameFile(entry.Path, active) {
+			continue
 		}
+		// The private companion of the active public file is loaded as part of
+		// that file, so it is not a separate inactive environment file.
+		if active != "" && vars.IsPrivateEnvFileName(entry.Path) &&
+			sameDir(entry.Path, active) {
+			continue
+		}
+		names = append(names, entry.Name)
 	}
 	if len(names) == 0 {
 		return statusMsg{}
@@ -95,4 +102,9 @@ func envLookalikes(root string, recursive bool) []string {
 		}
 	}
 	return names
+}
+
+// sameDir reports whether a and b live in the same directory.
+func sameDir(a, b string) bool {
+	return filepath.Dir(a) == filepath.Dir(b)
 }

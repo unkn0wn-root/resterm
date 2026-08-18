@@ -109,3 +109,34 @@ func TestRunInitListArgs(t *testing.T) {
 		t.Fatalf("expected error for extra args")
 	}
 }
+
+func TestLoadEnvironmentDiscoverHTTPClientMergesPrivate(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "http-client.env.json"),
+		[]byte(`{"dev":{"host":"localhost","username":"public"}}`), 0o644); err != nil {
+		t.Fatalf("write public env: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "http-client.private.env.json"),
+		[]byte(`{"dev":{"username":"private","password":"secret"}}`), 0o644); err != nil {
+		t.Fatalf("write private env: %v", err)
+	}
+
+	cat, resolved, err := vars.Discover(dir)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if filepath.Base(resolved) != "http-client.env.json" {
+		t.Fatalf("resolved = %q, want http-client.env.json", resolved)
+	}
+	env, err := cat.Resolve(cat.DefaultSelection())
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	vals := env.Values()
+	if vals["username"] != "private" {
+		t.Fatalf("username = %q, want private", vals["username"])
+	}
+	if vals["password"] != "secret" {
+		t.Fatalf("password = %q, want secret", vals["password"])
+	}
+}

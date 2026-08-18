@@ -302,3 +302,183 @@ func resolveValues(t *testing.T, cat Catalog, name string) map[string]string {
 	}
 	return env.Values()
 }
+
+func TestIsEnvFileNameRecognizesHTTPClient(t *testing.T) {
+	for _, name := range []string{"http-client.env.json", "rest-client.env.json", "resterm.env.json"} {
+		if !IsEnvFileName(name) {
+			t.Fatalf("IsEnvFileName(%q) = false, want true", name)
+		}
+	}
+	if IsEnvFileName("http-client.private.env.json") {
+		t.Fatal("IsEnvFileName(http-client.private.env.json) = true, want false")
+	}
+}
+
+func TestIsPrivateEnvFileName(t *testing.T) {
+	if !IsPrivateEnvFileName("http-client.private.env.json") {
+		t.Fatal("expected private env file to be recognized")
+	}
+	if IsPrivateEnvFileName("http-client.env.json") {
+		t.Fatal("public env file should not read as private")
+	}
+	if IsPrivateEnvFileName("resterm.env.json") {
+		t.Fatal("resterm.env.json should not read as private")
+	}
+}
+
+func TestLoadEnvironmentPairOverlaysPrivate(t *testing.T) {
+	dir := t.TempDir()
+	pub := filepath.Join(dir, "http-client.env.json")
+	priv := filepath.Join(dir, "http-client.private.env.json")
+	writeTestFile(t, pub, `{
+  "dev": {
+    "host": "localhost",
+    "username": "public-user",
+    "port": 8080
+  },
+  "prod": {
+    "host": "example.com",
+    "username": "public-user"
+  }
+}`)
+	writeTestFile(t, priv, `{
+  "dev": {
+    "username": "private-user",
+    "password": "secret"
+  }
+}`)
+
+	cat, err := LoadEnvironmentPair(pub)
+	if err != nil {
+		t.Fatalf("load pair: %v", err)
+	}
+
+	dev := resolveValues(t, cat, "dev")
+	if dev["host"] != "localhost" {
+		t.Fatalf("host = %q, want localhost", dev["host"])
+	}
+	if dev["username"] != "private-user" {
+		t.Fatalf("username = %q, want private-user (private wins)", dev["username"])
+	}
+	if dev["password"] != "secret" {
+		t.Fatalf("password = %q, want secret", dev["password"])
+	}
+	if dev["port"] != "8080" {
+		t.Fatalf("port = %q, want 8080", dev["port"])
+	}
+
+	// prod has no private overlay, so public values survive.
+	prod := resolveValues(t, cat, "prod")
+	if prod["username"] != "public-user" {
+		t.Fatalf("prod username = %q, want public-user", prod["username"])
+	}
+}
+
+func TestLoadEnvironmentPairWithoutPrivateIsUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	pub := filepath.Join(dir, "http-client.env.json")
+	writeTestFile(t, pub, `{"dev": {"host": "localhost"}}`)
+
+	cat, err := LoadEnvironmentPair(pub)
+	if err != nil {
+		t.Fatalf("load pair: %v", err)
+	}
+	dev := resolveValues(t, cat, "dev")
+	if dev["host"] != "localhost" {
+		t.Fatalf("host = %q, want localhost", dev["host"])
+	}
+}
+
+func TestLoadEnvironmentPairKeepsPublicSource(t *testing.T) {
+	dir := t.TempDir()
+	pub := filepath.Join(dir, "http-client.env.json")
+	priv := filepath.Join(dir, "http-client.private.env.json")
+	writeTestFile(t, pub, `{"dev": {"host": "localhost"}}`)
+	writeTestFile(t, priv, `{"dev": {"password": "secret"}}`)
+
+	cat, err := LoadEnvironmentPair(pub)
+	if err != nil {
+		t.Fatalf("load pair: %v", err)
+	}
+	absPub, _ := filepath.Abs(pub)
+	if cat.source != filepath.Clean(absPub) {
+		t.Fatalf("source = %q, want public path %q", cat.source, filepath.Clean(absPub))
+	}
+}
+
+func TestLoadEnvironmentPathDispatchesPair(t *testing.T) {
+	dir := t.TempDir()
+	pub := filepath.Join(dir, "http-client.env.json")
+	priv := filepath.Join(dir, "http-client.private.env.json")
+	writeTestFile(t, pub, `{"dev": {"host": "localhost"}}`)
+	writeTestFile(t, priv, `{"dev": {"token": "secret"}}`)
+
+	cat, err := LoadEnvironmentPath(pub)
+	if err != nil {
+		t.Fatalf("load path: %v", err)
+	}
+	dev := resolveValues(t, cat, "dev")
+	if dev["token"] != "secret" {
+		t.Fatalf("token = %q, want secret from private overlay", dev["token"])
+	}
+
+	// A non-public file is loaded without any private overlay.
+	other := filepath.Join(dir, "resterm.env.json")
+	writeTestFile(t, other, `{"dev": {"host": "localhost"}}`)
+	cat, err = LoadEnvironmentPath(other)
+	if err != nil {
+		t.Fatalf("load path: %v", err)
+	}
+	dev = resolveValues(t, cat, "dev")
+	if _, ok := dev["token"]; ok {
+		t.Fatal("resterm.env.json should not pick up the private overlay")
+	}
+}
+
+func TestDiscoverHTTPClientMergesPrivate(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "http-client.env.json"),
+		`{"dev": {"host": "localhost", "username": "public"}}`)
+	writeTestFile(t, filepath.Join(dir, "http-client.private.env.json"),
+		`{"dev": {"username": "private", "password": "secret"}}`)
+
+	cat, resolved, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if filepath.Base(resolved) != "http-client.env.json" {
+		t.Fatalf("resolved = %q, want http-client.env.json", resolved)
+	}
+	dev := resolveValues(t, cat, "dev")
+	if dev["username"] != "private" {
+		t.Fatalf("username = %q, want private", dev["username"])
+	}
+	if dev["password"] != "secret" {
+		t.Fatalf("password = %q, want secret", dev["password"])
+	}
+}
+
+func TestDiscoverPrefersHTTPClientOverResterm(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "http-client.env.json"), `{"dev": {"host": "hc"}}`)
+	writeTestFile(t, filepath.Join(dir, "resterm.env.json"), `{"dev": {"host": "re"}}`)
+
+	cat, resolved, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if filepath.Base(resolved) != "http-client.env.json" {
+		t.Fatalf("resolved = %q, want http-client.env.json", resolved)
+	}
+	dev := resolveValues(t, cat, "dev")
+	if dev["host"] != "hc" {
+		t.Fatalf("host = %q, want hc", dev["host"])
+	}
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}

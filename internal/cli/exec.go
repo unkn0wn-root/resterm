@@ -228,7 +228,7 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 // directory takes part in discovery.
 func (f ExecFlags) loadEnvironment(filePath, work string) (vars.Catalog, string, error) {
 	if explicit := str.Trim(f.EnvFile); explicit != "" {
-		cat, err := vars.LoadEnvironmentFile(explicit)
+		cat, err := vars.LoadEnvironmentPath(explicit)
 		if err != nil {
 			return vars.Catalog{}, "", err
 		}

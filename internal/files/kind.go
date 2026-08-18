@@ -113,7 +113,7 @@ func ClassifyWorkspace(path string) (Kind, bool) {
 	if kind, ok := requestExt[ext]; ok {
 		return kind, true
 	}
-	if vars.IsEnvFileName(path) {
+	if vars.IsEnvFileName(path) || vars.IsPrivateEnvFileName(path) {
 		return KindEnv, true
 	}
 	kind, ok := dataExt[ext]

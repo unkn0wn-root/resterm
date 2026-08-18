@@ -332,7 +332,7 @@ Binary responses show size and type hints alongside quick previews. For large bi
 
 - The history pane persists responses along with their request and environment metadata. Entries survive restarts (stored under the config directory; see [Configuration](#configuration)).
 - `Ctrl+G` shows current globals (request/file/runtime) with secrets masked. `Ctrl+Shift+G` (or `g Shift+G`) clears globals and cookies for the active environment.
-- `Ctrl+E` opens the environment picker to switch between `resterm.env.json` (or `rest-client.env.json`) entries.
+- `Ctrl+E` opens the environment picker to switch between `http-client.env.json`, `resterm.env.json` (or `rest-client.env.json`) entries.
 
 ---
 
@@ -377,7 +377,9 @@ Resterm automatically searches, in order:
 2. The workspace root.
 3. The current working directory.
 
-It loads the first `resterm.env.json` or `rest-client.env.json` it finds. Each named environment must be an object. Values inside it can contain nested objects and arrays, which are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
+It loads the first `http-client.env.json`, `resterm.env.json` or `rest-client.env.json` it finds. Each named environment must be an object. Values inside it can contain nested objects and arrays, which are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
+
+When the resolved file is `http-client.env.json`, Resterm also looks for a sibling `http-client.private.env.json` and overlays it, so private values win over public ones for the same environment. This matches the JetBrains convention: keep shared values in the public file and passwords, tokens and other secrets in the private one, which is meant to stay out of source control. The private file is never loaded on its own.
 
 One environment file is resolved per workspace. Opening a request *file* from another directory does not reload it, because the active selection also keys globals, file variables, cookie jars and history scopes. So `resterm requests/api.http` picks up `requests/resterm.env.json`, while opening that same file from a workspace root with its own environment file keeps the root one. In a recursive workspace Resterm warns at startup about environment files it will not load. To use one of them, start Resterm in that directory or pass `--env-file`.
 

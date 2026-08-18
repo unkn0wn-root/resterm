@@ -19,7 +19,7 @@ func buildEnvTemplate(rootAbs, rootReal string) ([]byte, error) {
 		return data, nil
 	}
 
-	srcs := []string{defaultEnvSourceFile, altEnvSourceFile}
+	srcs := []string{defaultEnvSourceFile, altEnvSourceFile, "http-client.env.json"}
 	for _, src := range srcs {
 		raw, ok, err := readWorkspaceFileIfExists(rootAbs, rootReal, src)
 		if err != nil {

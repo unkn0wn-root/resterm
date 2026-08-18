@@ -95,6 +95,8 @@ func TestClassifyWorkspacePrecedence(t *testing.T) {
 		{path: "helpers.rts", want: KindScript, ok: true},
 		{path: "resterm.env.json", want: KindEnv, ok: true},
 		{path: "rest-client.env.json", want: KindEnv, ok: true},
+		{path: "http-client.env.json", want: KindEnv, ok: true},
+		{path: "http-client.private.env.json", want: KindEnv, ok: true},
 		{path: "payload.json", want: KindJSON, ok: true},
 		{path: "query.graphql", want: KindGraphQL, ok: true},
 		{path: "query.gql", want: KindGraphQL, ok: true},
