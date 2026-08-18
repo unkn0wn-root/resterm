@@ -255,7 +255,7 @@ func (e *Engine) EnsureCommandAuth(
 	doc *restfile.Document,
 	req *restfile.Request,
 	res *vars.Resolver,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	timeout time.Duration,
 ) (authcmd.Result, error) {
 	auth := requestAuthOfType(req, restfile.AuthCommand)
@@ -314,7 +314,7 @@ func (e *Engine) PrepareCommandAuth(
 	doc *restfile.Document,
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	timeout time.Duration,
 ) (authcmd.Prepared, error) {
 	ac, err := e.authCmdManager()
@@ -333,7 +333,7 @@ func (e *Engine) EnsureOAuth(
 	req *restfile.Request,
 	res *vars.Resolver,
 	opts httpx.Options,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	timeout time.Duration,
 ) error {
 	auth := requestAuthOfType(req, restfile.AuthOAuth2)
@@ -427,7 +427,7 @@ func (e *Engine) BuildCommandAuthConfig(
 func (e *Engine) cmdScope(
 	doc *restfile.Document,
 	auth *restfile.AuthSpec,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 ) string {
 	ws := e.cfg.WorkspaceRoot
 	if ws == "" {
@@ -486,7 +486,7 @@ func (e *Engine) BuildOAuthConfig(
 func (e *Engine) ResolveOAuthConfig(
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 ) (oauth.Config, error) {
 	oa, err := e.oauthManager()
 	if err != nil {

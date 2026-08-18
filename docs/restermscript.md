@@ -661,11 +661,13 @@ env["name"]      // the same variable
 env.NAME          // the same variable, since env names are case-insensitive
 ```
 
+An environment file can map an OS variable to a key, for example `"auth.token": "env:RESTERM_TOKEN"`. Resterm reads the OS value once per request, and `env.get("auth.token")`, `vars.get("auth.token")`, and `{{auth.token}}` return the same value. The name `RESTERM_TOKEN` is not added to `env` or `vars`. If the OS variable is missing, `auth.token` is absent. Resterm treats values loaded this way as secrets.
+
 ### vars
 
 `vars` provides request runtime variables, including globals and workflow overrides. You can access values through `vars.get("key")`, `vars.has("key")`, `vars.require("key"[, msg])`, or `vars.key`. `vars.global` provides global reads and writes in pre-request scripts through `get`, `has`, `require`, `set`, and `delete`.
 
-`vars` names the values a run can override, so `@const` values and OS environment variables are not in it even though `{{name}}` resolves them. Everything else follows the same precedence a template does, and a name resolves to one source through both. See [Variable resolution order](resterm.md#variable-resolution-order).
+`vars` names the values a run can override, so `@const` values and unmapped OS environment variables are not in it even though `{{name}}` resolves them. An OS variable mapped by the selected environment is available under the key from the environment file. All other values use the same precedence as templates, so a name comes from the same source in both places. See [Variable resolution order](resterm.md#variable-resolution-order).
 
 ### request
 

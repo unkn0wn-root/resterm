@@ -45,7 +45,7 @@ type captureRun struct {
 	resp    *scripts.Response
 	stream  *scripts.StreamInfo
 	out     *captureResult
-	env     vars.Environment
+	env     vars.ResolvedEnv
 	store   vars.Globals
 	secrets *vars.Secrets
 	locals  rts.Locals
@@ -63,7 +63,7 @@ type captureScope struct {
 	base string
 	doc  *restfile.Document
 	req  *restfile.Request
-	env  vars.Environment
+	env  vars.ResolvedEnv
 	evalScope
 	locals rts.Locals
 	rr     *rtshost.Response

@@ -73,7 +73,7 @@ func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		5*time.Second,
 	)
 	if err != nil {
@@ -119,7 +119,7 @@ func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth with existing header: %v", err)
@@ -157,7 +157,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		seedReq,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth seed: %v", err)
@@ -169,7 +169,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	)
 	if err != nil {
@@ -211,7 +211,7 @@ func TestEnsureCommandAuthCacheOnlyReuseIgnoresUnrelatedAuthorization(t *testing
 		doc,
 		seedReq,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth seed: %v", err)
@@ -230,7 +230,7 @@ func TestEnsureCommandAuthCacheOnlyReuseIgnoresUnrelatedAuthorization(t *testing
 		doc,
 		req,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth cache-only: %v", err)
@@ -281,7 +281,7 @@ func TestEnsureCommandAuthIsolatesGroupedCredentialProfiles(t *testing.T) {
 			doc,
 			req,
 			vars.NewResolver(),
-			env,
+			env.Resolve(),
 			time.Second,
 		); err != nil {
 			t.Fatalf("ensure command auth for %s: %v", env.Label(), err)
@@ -342,7 +342,7 @@ func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
 		defsDoc,
 		seedReq,
 		vars.NewResolver(),
-		testEnv("dev"),
+		testEnv("dev").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth seed: %v", err)
@@ -363,7 +363,7 @@ func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
 		useDoc,
 		req,
 		vars.NewResolver(),
-		testEnv("dev"),
+		testEnv("dev").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth inherited reuse: %v", err)
@@ -428,7 +428,7 @@ func TestEnsureCommandAuthWorkspaceScope(t *testing.T) {
 		&restfile.Document{Path: "/tmp/workspace-a/request.http"},
 		reqA,
 		vars.NewResolver(),
-		testEnv("dev"),
+		testEnv("dev").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth workspace A: %v", err)
@@ -438,7 +438,7 @@ func TestEnsureCommandAuthWorkspaceScope(t *testing.T) {
 		&restfile.Document{Path: "/tmp/workspace-b/request.http"},
 		reqB,
 		vars.NewResolver(),
-		testEnv("dev"),
+		testEnv("dev").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth workspace B: %v", err)
@@ -533,7 +533,7 @@ func TestEnsureCommandAuthWithoutRuntimeReturnsInitError(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	)
 	if err == nil {
@@ -562,7 +562,7 @@ func TestEnsureOAuthSkipsIncompleteConfigWhenMetadataPresent(t *testing.T) {
 		req,
 		vars.NewResolver(),
 		httpx.Options{},
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("EnsureOAuth with overriding metadata: %v", err)
@@ -584,7 +584,7 @@ func TestEnsureOAuthSkipsIncompleteConfigWhenHeaderPresent(t *testing.T) {
 		req,
 		vars.NewResolver(),
 		httpx.Options{},
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("EnsureOAuth with overriding header: %v", err)
@@ -607,7 +607,7 @@ func TestEnsureOAuthUnrelatedHeaderStillRequiresTokenURL(t *testing.T) {
 		req,
 		vars.NewResolver(),
 		httpx.Options{},
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	)
 	if err == nil {
@@ -627,7 +627,7 @@ func TestEnsureOAuthWithoutOverrideStillRequiresTokenURL(t *testing.T) {
 		req,
 		vars.NewResolver(),
 		httpx.Options{},
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	)
 	if err == nil {
@@ -661,7 +661,7 @@ func TestEnsureCommandAuthSkipsBrokenArgvWhenMetadataPresent(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("EnsureCommandAuth with overriding metadata: %v", err)
@@ -689,7 +689,7 @@ func TestEnsureCommandAuthWithoutOverrideReportsBrokenArgv(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	)
 	if err == nil {
@@ -722,7 +722,7 @@ func TestEnsureCommandAuthSkipsBrokenArgvForCustomHeader(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("EnsureCommandAuth with overriding metadata: %v", err)

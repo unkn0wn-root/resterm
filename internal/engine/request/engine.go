@@ -138,12 +138,14 @@ func (e *Engine) Execute(
 func (e *Engine) ExecuteWith(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	src vars.Environment,
 	opt ExecOptions,
 ) (engine.RequestResult, error) {
 	if req == nil {
 		return engine.RequestResult{}, diag.New(diag.ClassUI, "request is nil")
 	}
+	// Resolve once so templates, scripts, and redaction use the same values.
+	env := src.Resolve()
 
 	e.syncRegistry(doc)
 	req = CloneRequest(req)
@@ -254,7 +256,7 @@ type execCtx struct {
 	eng *Engine
 	doc *restfile.Document
 	req *restfile.Request
-	env vars.Environment
+	env vars.ResolvedEnv
 	mod ExecMode
 
 	opts httpx.Options
@@ -291,7 +293,7 @@ func newExec(
 	e *Engine,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	opts httpx.Options,
 	opt ExecOptions,
 ) *execCtx {
@@ -304,6 +306,7 @@ func newExec(
 	base := e.collectVariables(doc, req, env, runVars{overlay: overlay})
 	hasRTS, hasJS := detectPreRequestScripts(req)
 	secrets := &vars.Secrets{}
+	secrets.Add(env.Secrets()...)
 	exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview, secrets)
 	if req != nil &&
 		(req.Metadata.When != nil || len(req.Metadata.Applies) > 0 || hasRTS || hasJS) {

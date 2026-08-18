@@ -627,7 +627,7 @@ func (r *wfRun) evalStepValue(
 	return r.dep.EvalValue(ctx, request.EvalInput{
 		Doc:    r.pl.Doc,
 		Req:    req,
-		Env:    r.pl.Run.Env,
+		Env:    r.pl.Run.Env.Resolve(),
 		Base:   baseDir(r.pl.Doc),
 		Expr:   expr,
 		Site:   tag + " " + str.FoldLines(expr),

@@ -281,7 +281,7 @@ func TestFailedCaptureBatchLeavesNoPartialState(t *testing.T) {
 		req:  req,
 		resp: resp,
 		out:  &out,
-		env:  testEnv("dev"),
+		env:  testEnv("dev").Resolve(),
 	})
 	if err == nil {
 		t.Fatal("expected the strict capture batch to fail")

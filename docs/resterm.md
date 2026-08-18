@@ -410,6 +410,26 @@ Example environment (`_examples/resterm.env.json`):
 
 Switch environments with `Ctrl+E`. If multiple environments exist, Resterm defaults to `dev`, `default`, or `local` when available.
 
+#### Values from OS environment variables
+
+Use `env:NAME` when a value should come from an OS environment variable. This keeps the value itself out of `resterm.env.json`:
+
+```json
+{
+  "dev": {
+    "auth": {
+      "token": "env:RESTERM_TOKEN"
+    }
+  }
+}
+```
+
+Resterm reads the OS variable once at the start of each request and exposes it under the key from the environment file. In this example, `{{auth.token}}`, `env.get("auth.token")`, and `vars.get("auth.token")` return the same value. The name `RESTERM_TOKEN` is not added to `env` or `vars`.
+
+If the OS variable is missing, `auth.token` is omitted from `env` and `vars`. Requests that do not depend on it can still run. Values loaded through `env:NAME` are treated as secrets. Resterm hides them from display and status previews and redacts them from request results, explain output, and history.
+
+Resterm first looks up the OS variable exactly as written, then tries the uppercase name.
+
 #### Shared variables (`$shared`)
 
 Use the reserved `$shared` key to define variables that apply to **all** environments. This avoids duplicating common values (auth credentials, token URLs, etc.) across every environment. Environment-specific values override `$shared` when names collide.
@@ -544,7 +564,7 @@ When expanding `{{variable}}` templates, Resterm looks in:
 8. Selected environment JSON.
 9. OS environment variables (case-sensitive with an uppercase fallback).
 
-Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them.
+Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and unmapped OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them. A selected environment can map an OS variable with `env:NAME`. Scripts receive that value under the key from the environment file, not under the OS variable name.
 
 Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers and `{{= ... }}` expressions are left unchanged because they are evaluated later, when the request runs. Captured values and values written by scripts are treated as data and are not expanded.
 

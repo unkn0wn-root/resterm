@@ -47,7 +47,7 @@ func TestResolveSSHUsesDocumentGlobalProfiles(t *testing.T) {
 		SSH: &restfile.SSHSpec{Use: "jump"},
 	}
 
-	plan, err := e.resolveSSH(doc, req, nil, testEnv("dev"))
+	plan, err := e.resolveSSH(doc, req, nil, testEnv("dev").Resolve())
 	if err != nil {
 		t.Fatalf("resolveSSH() error = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestResolveK8sUsesDocumentGlobalProfiles(t *testing.T) {
 		K8s: &restfile.K8sSpec{Use: "cluster-api"},
 	}
 
-	plan, err := e.resolveK8s(doc, req, nil, testEnv("dev"))
+	plan, err := e.resolveK8s(doc, req, nil, testEnv("dev").Resolve())
 	if err != nil {
 		t.Fatalf("resolveK8s() error = %v", err)
 	}
@@ -135,7 +135,7 @@ func TestRunRTSApplyUsesDocumentGlobalPatchProfiles(t *testing.T) {
 		context.Background(),
 		doc,
 		req,
-		testEnv(""),
+		testEnv("").Resolve(),
 		"",
 		evalScope{},
 		rts.Locals{},
@@ -163,7 +163,7 @@ func TestProvidersExpandDeclaredVariableTemplates(t *testing.T) {
 	plan := e.buildVariablePlan(varSources{
 		doc:     doc,
 		req:     req,
-		env:     testEnv("dev"),
+		env:     testEnv("dev").Resolve(),
 		globals: globs,
 		sec:     keepSecrets,
 		run:     runVars{scripts: vars.CollectNames(map[string]string{"name": "resterm"})},

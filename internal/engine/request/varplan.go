@@ -57,6 +57,8 @@ type variableEntry struct {
 type variableLayer struct {
 	source variableSource
 	vals   vars.NameMap[string]
+	// script holds values exposed to scripts when they differ from vals.
+	script *vars.NameMap[string]
 }
 
 // variablePlan is the shared precedence order for template and script lookups.
@@ -64,6 +66,7 @@ type variableLayer struct {
 // host bindings use separate lexical scoping and are not included.
 type variablePlan struct {
 	layers []variableLayer
+	refs   vars.RefResolver
 }
 
 type runVars struct {
@@ -75,7 +78,7 @@ type runVars struct {
 type varSources struct {
 	doc     *restfile.Document
 	req     *restfile.Request
-	env     vars.Environment
+	env     vars.ResolvedEnv
 	globals vars.Globals
 	sec     secrecy
 	run     runVars
@@ -86,7 +89,14 @@ type varSources struct {
 // positions. Authored values may expand nested templates, while runtime values
 // such as captures remain literal.
 func (e *Engine) buildVariablePlan(src varSources) variablePlan {
-	plan := variablePlan{layers: make([]variableLayer, 0, len(sourceTable))}
+	env := src.env
+	if src.sec == omitSecrets {
+		env = env.WithoutRefValues()
+	}
+	plan := variablePlan{
+		layers: make([]variableLayer, 0, len(sourceTable)),
+		refs:   env.RefResolver(),
+	}
 	plan.add(sourceConst, constEntries(src.doc))
 	plan.addNames(sourceScript, src.run.scripts)
 	plan.addNames(sourceWorkflow, src.run.overlay)
@@ -94,19 +104,30 @@ func (e *Engine) buildVariablePlan(src varSources) variablePlan {
 	plan.add(sourceRequest, requestEntries(src.req, src.sec))
 	plan.add(sourceRuntimeGlobal, globalEntries(src.globals))
 	plan.add(sourceDocumentGlobal, docGlobalEntries(src.doc, src.sec))
-	plan.add(sourceRuntimeFile, e.runtimeFileEntries(src.doc, src.env, src.sec))
+	plan.add(sourceRuntimeFile, e.runtimeFileEntries(src.doc, env, src.sec))
 	plan.add(sourceFile, docVarEntries(src.doc, src.sec))
-	plan.add(sourceEnvironment, sortedEntries(src.env.Values()))
+
+	authored := sortedEntries(env.AuthoredValues())
+	if env.HasRefs() {
+		plan.addSplit(sourceEnvironment, authored, sortedEntries(env.Values()))
+	} else {
+		plan.add(sourceEnvironment, authored)
+	}
 	return plan
 }
 
 // add preserves declaration order so the last form of a name wins within a source.
 func (p *variablePlan) add(source variableSource, entries []variableEntry) {
-	var vals vars.NameMap[string]
-	for _, e := range entries {
-		vals.Set(e.name, e.value)
-	}
-	p.appendLayer(source, vals)
+	p.appendLayer(source, nameMapOf(entries))
+}
+
+func (p *variablePlan) addSplit(source variableSource, authored, script []variableEntry) {
+	sm := nameMapOf(script)
+	p.layers = append(p.layers, variableLayer{
+		source: source,
+		vals:   nameMapOf(authored),
+		script: &sm,
+	})
 }
 
 // addNames snapshots an already-normalized source.
@@ -120,11 +141,23 @@ func (p *variablePlan) appendLayer(source variableSource, vals vars.NameMap[stri
 
 func (p *variablePlan) overlay(source variableSource, vals vars.NameMap[string]) {
 	for i := range p.layers {
-		if p.layers[i].source == source {
-			p.layers[i].vals.Merge(vals)
-			return
+		if p.layers[i].source != source {
+			continue
 		}
+		p.layers[i].vals.Merge(vals)
+		if p.layers[i].script != nil {
+			p.layers[i].script.Merge(vals)
+		}
+		return
 	}
+}
+
+func nameMapOf(entries []variableEntry) vars.NameMap[string] {
+	var out vars.NameMap[string]
+	for _, e := range entries {
+		out.Set(e.name, e.value)
+	}
+	return out
 }
 
 // providers exposes each layer to template resolution. Authored values use
@@ -155,7 +188,11 @@ func (p variablePlan) values() map[string]string {
 		if t.hidden {
 			continue
 		}
-		for name, value := range l.vals.All() {
+		vals := l.vals
+		if l.script != nil {
+			vals = *l.script
+		}
+		for name, value := range vals.All() {
 			if out.Has(name) {
 				continue
 			}
@@ -176,7 +213,7 @@ func (p variablePlan) values() map[string]string {
 
 func (p variablePlan) staticResolver() *vars.Resolver {
 	res := vars.NewResolver(p.providers()...)
-	res.AddRefResolver(vars.EnvRefResolver)
+	res.AddRefResolver(p.refs)
 	return res
 }
 
@@ -236,7 +273,7 @@ func globalEntries(globs vars.Globals) []variableEntry {
 
 func (e *Engine) runtimeFileEntries(
 	doc *restfile.Document,
-	env vars.Environment,
+	env vars.ResolvedEnv,
 	sec secrecy,
 ) []variableEntry {
 	fs := e.rt.Files()

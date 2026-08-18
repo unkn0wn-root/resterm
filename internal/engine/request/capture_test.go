@@ -63,7 +63,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		context.Background(),
 		doc,
 		req,
-		testEnv("dev"),
+		testEnv("dev").Resolve(),
 		"",
 		vars.Globals{},
 		rts.Locals{},
@@ -76,11 +76,11 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		res:  resolver,
 		resp: resp,
 		out:  &captures,
-		env:  testEnv("dev"),
+		env:  testEnv("dev").Resolve(),
 	}); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
 	}
-	eng.applyGlobalMutations(captures.globals, testEnv("dev"))
+	eng.applyGlobalMutations(captures.globals, testEnv("dev").Resolve())
 
 	if !captures.requestVars.Has("recentStatus") {
 		t.Fatalf("expected request capture to be recorded: %+v", captures.requestVars.Map())
@@ -124,7 +124,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	if req.Variables[0].Name != "recentStatus" || req.Variables[0].Value != "200 OK" {
 		t.Fatalf("unexpected request variable %+v", req.Variables[0])
 	}
-	varsWithReq := eng.collectVariables(doc, req, testEnv("dev"), runVars{})
+	varsWithReq := eng.collectVariables(doc, req, testEnv("dev").Resolve(), runVars{})
 	if varsWithReq["recentStatus"] != "200 OK" {
 		t.Fatalf(
 			"expected request capture to be available in collected vars, got %q",
@@ -146,7 +146,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 	// simulate a fresh parse of the document (no baked-in variables)
 	freshDoc := &restfile.Document{Path: "./sample.http"}
-	vars := eng.collectVariables(freshDoc, nil, testEnv("dev"), runVars{})
+	vars := eng.collectVariables(freshDoc, nil, testEnv("dev").Resolve(), runVars{})
 	if vars["lastTrace"] != "abc" {
 		t.Fatalf("expected file capture to be applied via runtime store, got %q", vars["lastTrace"])
 	}
@@ -197,11 +197,11 @@ func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 		req:  req,
 		resp: resp,
 		out:  &captures,
-		env:  testEnv("dev"),
+		env:  testEnv("dev").Resolve(),
 	}); err != nil {
 		t.Fatalf("applyCaptures rst: %v", err)
 	}
-	eng.applyGlobalMutations(captures.globals, testEnv("dev"))
+	eng.applyGlobalMutations(captures.globals, testEnv("dev").Resolve())
 
 	gl := eng.rt.Globals().Snapshot(testEnv("dev").Scope())
 	if len(gl) != 1 {
@@ -707,11 +707,11 @@ func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 		req:  req,
 		resp: resp,
 		out:  &captures,
-		env:  testEnv("stage"),
+		env:  testEnv("stage").Resolve(),
 	}); err != nil {
 		t.Fatalf("applyCaptures stage: %v", err)
 	}
-	eng.applyGlobalMutations(captures.globals, testEnv("stage"))
+	eng.applyGlobalMutations(captures.globals, testEnv("stage").Resolve())
 
 	if len(eng.rt.Globals().Snapshot(testEnv("dev").Scope())) != 0 {
 		t.Fatalf("expected no globals in dev env after stage capture")
@@ -783,12 +783,12 @@ func TestApplyCapturesIsolatesGroupedCredentialProfiles(t *testing.T) {
 			req:  req,
 			resp: &scripts.Response{Kind: scripts.ResponseKindHTTP, Status: status},
 			out:  &out,
-			env:  env,
+			env:  env.Resolve(),
 		})
 		if err != nil {
 			t.Fatalf("apply captures for %s: %v", env.Label(), err)
 		}
-		eng.applyGlobalMutations(out.globals, env)
+		eng.applyGlobalMutations(out.globals, env.Resolve())
 	}
 	apply(personal, "200 OK")
 	if got := rt.Globals().Snapshot(ci.Scope()); len(got) != 0 {
@@ -889,7 +889,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 		context.Background(),
 		doc,
 		req,
-		testEnv("dev"),
+		testEnv("dev").Resolve(),
 		"",
 		vars.Globals{},
 		rts.Locals{},
@@ -903,13 +903,13 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 		resp:   resp,
 		stream: streamInfo,
 		out:    &captures,
-		env:    testEnv("dev"),
+		env:    testEnv("dev").Resolve(),
 	}); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
-	eng.applyGlobalMutations(captures.globals, testEnv("dev"))
+	eng.applyGlobalMutations(captures.globals, testEnv("dev").Resolve())
 
-	vars := eng.collectVariables(doc, req, testEnv("dev"), runVars{})
+	vars := eng.collectVariables(doc, req, testEnv("dev").Resolve(), runVars{})
 	if vars["streamKind"] != "websocket" {
 		t.Fatalf("expected stream kind capture, got %q", vars["streamKind"])
 	}

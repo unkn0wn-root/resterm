@@ -2,10 +2,12 @@ package request
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -208,6 +210,100 @@ func TestScriptsReadNestedAuthoredValuesExpanded(t *testing.T) {
 	}
 }
 
+func TestEnvironmentRefsAgreeAcrossTemplatesAndScripts(t *testing.T) {
+	second := "RESTERM_SCRIPT_ENV_REF_SECOND"
+	t.Setenv(second, "resolved-twice")
+
+	tests := []struct {
+		name  string
+		key   string
+		value string
+		want  string
+	}{
+		{
+			name:  "ordinary value",
+			key:   "RESTERM_SCRIPT_ENV_REF",
+			value: "secret-value",
+			want:  "secret-value",
+		},
+		{
+			name:  "one pass",
+			key:   "RESTERM_SCRIPT_ENV_REF_ONCE",
+			value: "env:" + second,
+			want:  "env:" + second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.key, tt.value)
+			req := &restfile.Request{
+				Method: http.MethodGet,
+				URL:    "http://example.test",
+				Headers: http.Header{
+					"X-Template": []string{"{{auth.token}}"},
+				},
+				Metadata: restfile.RequestMetadata{
+					Scripts: []restfile.ScriptBlock{
+						rtsPre(`request.setHeader("X-RTS-Env", env.require("auth.token"))
+request.setHeader("X-RTS-Vars", vars.require("auth.token"))`),
+						jsPre(`request.setHeader("X-JS-Vars", vars.get("auth.token"));`),
+					},
+				},
+			}
+
+			sent := sendRequest(t, nil, req, envWith(t, "dev", map[string]string{
+				"auth.token": "env:" + tt.key,
+			}), ExecOptions{})
+			for _, name := range []string{"X-Template", "X-RTS-Env", "X-RTS-Vars", "X-JS-Vars"} {
+				if got := sent.wire.Header.Get(name); got != tt.want {
+					t.Fatalf("%s = %q, want %q", name, got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestMissingEnvironmentRefIsLazyAndBlocksAmbientFallback(t *testing.T) {
+	missing := fmt.Sprintf("RESTERM_SCRIPT_ENV_REF_MISSING_%d", time.Now().UnixNano())
+	t.Setenv("TOKEN_ALIAS", "ambient-alias")
+	env := envWith(t, "dev", map[string]string{"token_alias": "env:" + missing})
+
+	unused := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{
+				rtsPre(`request.setHeader("X-Env-Has", str(env.has("token_alias")))`),
+				jsPre(`request.setHeader("X-Vars-Has", String(vars.has("token_alias")));`),
+			},
+		},
+	}
+	sent := sendRequest(t, nil, unused, env, ExecOptions{})
+	for _, name := range []string{"X-Env-Has", "X-Vars-Has"} {
+		if got := sent.wire.Header.Get(name); got != "false" {
+			t.Fatalf("%s = %q, want the missing mapped alias omitted", name, got)
+		}
+	}
+
+	used := &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     "http://example.test",
+		Headers: http.Header{"X-Token": []string{"{{token_alias}}"}},
+	}
+	eng, st := newStubEngine(t)
+	res, err := eng.ExecuteWith(nil, used, env, ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil {
+		t.Fatal("missing mapped alias resolved through the ambient fallback")
+	}
+	if st.wire != nil {
+		t.Fatal("request with a used missing mapped alias was sent")
+	}
+}
+
 func TestPreRequestScriptsRemoveDeclaredHeaders(t *testing.T) {
 	req := &restfile.Request{
 		Method: http.MethodGet,
@@ -375,6 +471,36 @@ func TestDisplayResolverOmitsSecretsFromBothPaths(t *testing.T) {
 		}
 		if got != "withheld" {
 			t.Fatalf(`vars.get(%q) = %q, want it withheld`, name, got)
+		}
+	}
+}
+
+func TestDisplayResolverOmitsEnvironmentRefFromEveryPath(t *testing.T) {
+	key := "RESTERM_DISPLAY_ENV_REF"
+	t.Setenv(key, "private")
+	t.Setenv("TOKEN_ALIAS", "ambient-alias")
+
+	eng := New(engcfg.Config{}, nil)
+	env := envWith(t, "dev", map[string]string{
+		"token_alias": "env:" + key,
+		"shown":       "visible",
+	})
+	res := eng.DisplayResolver(context.Background(), nil, nil, env, "", rts.Locals{})
+
+	if got, err := res.ExpandTemplates("{{shown}}"); err != nil || got != "visible" {
+		t.Fatalf("{{shown}} = %q, %v, want %q", got, err, "visible")
+	}
+	for _, name := range []string{"token_alias", "environment.token_alias"} {
+		if got, err := res.ExpandTemplates("{{" + name + "}}"); err == nil {
+			t.Fatalf("{{%s}} resolved to %q, want the env ref withheld", name, got)
+		}
+	}
+	for _, expr := range []string{
+		`env.get("token_alias") ?? "withheld"`,
+		`vars.get("token_alias") ?? "withheld"`,
+	} {
+		if got, err := res.ExpandTemplates("{{= " + expr + " }}"); err != nil || got != "withheld" {
+			t.Fatalf("{{= %s }} = %q, %v, want %q", expr, got, err, "withheld")
 		}
 	}
 }

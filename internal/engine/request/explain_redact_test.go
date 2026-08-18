@@ -63,7 +63,7 @@ func TestRedactExplainReportMasksSecretsAndSensitiveHeaders(t *testing.T) {
 		Warnings: []string{"warn top-secret"},
 	}
 
-	got := eng.redactExplainReport(rep, nil, req, testEnv(""), vars.Globals{})
+	got := eng.redactExplainReport(rep, nil, req, testEnv("").Resolve(), vars.Globals{})
 	if got.Final == nil {
 		t.Fatal("expected final report section")
 	}

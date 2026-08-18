@@ -933,6 +933,9 @@ func (m *Model) secretValuesForEnv(
 		}
 		values[value] = struct{}{}
 	}
+	for _, value := range env.Resolve().Secrets() {
+		add(value)
+	}
 
 	if req != nil {
 		for _, v := range req.Variables {

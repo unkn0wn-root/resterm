@@ -918,7 +918,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 		req,
 		resolver,
 		httpx.Options{},
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureOAuth: %v", err)
@@ -940,7 +940,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 		req2,
 		resolver,
 		httpx.Options{},
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureOAuth second: %v", err)
@@ -979,7 +979,7 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 		req,
 		vars.NewResolver(),
 		httpx.Options{},
-		testEnv(""),
+		testEnv("").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureOAuth with existing header: %v", err)
@@ -1015,7 +1015,7 @@ func testEnsureCommandAuth(
 		nil,
 		req,
 		res,
-		testEnv(env),
+		testEnv(env).Resolve(),
 		timeout,
 	)
 }
@@ -1037,7 +1037,7 @@ func testPrepareExplainAuthPreview(
 	env string,
 ) (rqeng.ExplainAuthPreviewResult, error) {
 	return m.requestSvc(httpx.Options{}).
-		PrepareExplainAuthPreview(nil, req, res, testEnv(env))
+		PrepareExplainAuthPreview(nil, req, res, testEnv(env).Resolve())
 }
 
 func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
@@ -1070,7 +1070,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 		req,
 		vars.NewResolver(),
 		httpx.Options{},
-		testEnv("stage"),
+		testEnv("stage").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureOAuth stage: %v", err)
@@ -1081,7 +1081,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 		req,
 		vars.NewResolver(),
 		httpx.Options{},
-		testEnv("stage"),
+		testEnv("stage").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureOAuth stage cached: %v", err)
@@ -1096,7 +1096,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 		req,
 		vars.NewResolver(),
 		httpx.Options{},
-		testEnv("dev"),
+		testEnv("dev").Resolve(),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureOAuth dev: %v", err)
@@ -1133,7 +1133,7 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 			req,
 			resolver,
 			httpx.Options{},
-			testEnv(""),
+			testEnv("").Resolve(),
 			time.Minute,
 		); !errors.Is(
 			err,
