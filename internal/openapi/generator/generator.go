@@ -83,9 +83,10 @@ func (b *Builder) Generate(
 		baseURL = selectBaseURL(spec, opts.PreferredServerIndex)
 		if baseURL != "" {
 			doc.Variables = append(doc.Variables, restfile.Variable{
-				Name:  baseVar,
-				Value: baseURL,
-				Scope: directive.ScopeFile,
+				Name:     baseVar,
+				Value:    baseURL,
+				Scope:    directive.ScopeFile,
+				Authored: true,
 			})
 		}
 	}
@@ -160,10 +161,11 @@ func (b *Builder) registerGlobal(name, value string, secret bool) {
 		return
 	}
 	b.globals[name] = restfile.Variable{
-		Name:   name,
-		Value:  value,
-		Scope:  directive.ScopeGlobal,
-		Secret: secret,
+		Name:     name,
+		Value:    value,
+		Scope:    directive.ScopeGlobal,
+		Secret:   secret,
+		Authored: true,
 	}
 }
 
@@ -261,9 +263,10 @@ func (rb *requestBuilder) processParameters() {
 			rb.cookieParams = append(rb.cookieParams, binding)
 		}
 		rb.variables = append(rb.variables, restfile.Variable{
-			Name:  binding.VarName,
-			Value: binding.SerializedValue,
-			Scope: directive.ScopeRequest,
+			Name:     binding.VarName,
+			Value:    binding.SerializedValue,
+			Scope:    directive.ScopeRequest,
+			Authored: true,
 		})
 	}
 }
@@ -416,9 +419,10 @@ func (rb *requestBuilder) composeURL() string {
 		url := joinBaseAndPath(varRef(rb.baseVarName), path)
 		if operationBase != "" && operationBase != rb.globalBase {
 			rb.variables = append(rb.variables, restfile.Variable{
-				Name:  rb.baseVarName,
-				Value: operationBase,
-				Scope: directive.ScopeRequest,
+				Name:     rb.baseVarName,
+				Value:    operationBase,
+				Scope:    directive.ScopeRequest,
+				Authored: true,
 			})
 		}
 		return url

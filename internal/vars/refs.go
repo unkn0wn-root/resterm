@@ -14,8 +14,6 @@ func EnvRefKey(raw string) (string, bool) {
 	return strings.TrimSpace(trimmed[4:]), true
 }
 
-// EnvRefs caches OS environment lookups for one run and records their values
-// for redaction.
 type EnvRefs struct {
 	seen    map[string]Value
 	named   map[string]Value
@@ -25,38 +23,42 @@ type EnvRefs struct {
 	withheld bool
 }
 
-// NewEnvRefs starts a per-run snapshot.
 func NewEnvRefs(names *Resolver) *EnvRefs {
 	return &EnvRefs{names: names}
 }
 
-// Withheld hides referenced values while preserving their precedence.
-func (s *EnvRefs) Withheld() *EnvRefs {
-	return &EnvRefs{withheld: true}
+// withhold hides referenced values but retains them for redaction.
+func (s *EnvRefs) withhold() *EnvRefs {
+	if s == nil {
+		return &EnvRefs{withheld: true}
+	}
+	return &EnvRefs{secrets: s.secrets, withheld: true}
 }
 
-// Declared resolves env: references found in configuration and request files.
-// Runtime values must bypass it so response data cannot select an OS variable.
-func (s *EnvRefs) Declared(text string) Value {
+// ResolveDeclared resolves env: references authored in configuration or request
+// files. Runtime values must not call it or they could select an OS variable.
+func (s *EnvRefs) ResolveDeclared(text string) Value {
 	ref, ok := EnvRefKey(text)
-	switch {
-	case !ok:
+	if !ok {
 		return Value{Text: text}
-	case s.withheld:
-		return Value{Missing: true}
-	case ref == "":
-		return Value{Missing: true}
-	case !HasPlaceholder(ref):
-		return s.Resolve(ref)
 	}
+	if s == nil || s.withheld || ref == "" {
+		return Value{Missing: true}
+	}
+	if !HasPlaceholder(ref) {
+		return s.resolve(ref)
+	}
+	return s.resolveNamed(ref)
+}
 
+func (s *EnvRefs) resolveNamed(ref string) Value {
 	if v, ok := s.named[ref]; ok {
 		return v
 	}
 	v := Value{Missing: true}
 	if s.names != nil {
 		if expanded, err := s.names.ExpandTemplatesStatic(ref); err == nil {
-			v = s.Resolve(expanded)
+			v = s.resolve(expanded)
 		}
 	}
 	if s.named == nil {
@@ -66,11 +68,7 @@ func (s *EnvRefs) Declared(text string) Value {
 	return v
 }
 
-// Resolve reads an OS environment variable at most once.
-func (s *EnvRefs) Resolve(key string) Value {
-	if s.withheld {
-		return Value{Missing: true}
-	}
+func (s *EnvRefs) resolve(key string) Value {
 	if v, ok := s.seen[key]; ok {
 		return v
 	}
@@ -88,6 +86,9 @@ func (s *EnvRefs) Resolve(key string) Value {
 
 // Secrets returns every OS value read by this snapshot.
 func (s *EnvRefs) Secrets() []string {
+	if s == nil {
+		return nil
+	}
 	return s.secrets.Values()
 }
 

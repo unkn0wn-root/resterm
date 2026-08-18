@@ -30,23 +30,22 @@ type sourceTraits struct {
 	// template enables nested expansion for authored values; runtime values stay literal.
 	template bool
 	// hidden excludes values from script-facing vars; constants are not overridable.
-	hidden bool
-	// declared identifies sources allowed to contain env: references.
-	declared bool
+	hidden       bool
+	allowsEnvRef bool
 }
 
 var sourceTable = [...]sourceTraits{
 	sourceUnknown:        {},
-	sourceConst:          {label: "const", template: true, hidden: true, declared: true},
+	sourceConst:          {label: "const", template: true, hidden: true, allowsEnvRef: true},
 	sourceScript:         {label: "script"},
 	sourceWorkflow:       {label: "workflow"},
 	sourceRequestCapture: {label: "request"},
-	sourceRequest:        {label: "request", template: true, declared: true},
+	sourceRequest:        {label: "request", template: true, allowsEnvRef: true},
 	sourceRuntimeGlobal:  {label: "global"},
-	sourceDocumentGlobal: {label: "document-global", template: true, declared: true},
+	sourceDocumentGlobal: {label: "document-global", template: true, allowsEnvRef: true},
 	sourceRuntimeFile:    {label: "file"},
-	sourceFile:           {label: "file", template: true, declared: true},
-	sourceEnvironment:    {label: "environment", declared: true},
+	sourceFile:           {label: "file", template: true, allowsEnvRef: true},
+	sourceEnvironment:    {label: "environment", allowsEnvRef: true},
 }
 
 func (s variableSource) traits() sourceTraits { return sourceTable[s] }
@@ -141,16 +140,18 @@ func (p *variablePlan) overlay(source variableSource, vals vars.NameMap[string])
 func (p variablePlan) providers() []vars.Provider {
 	out := make([]vars.Provider, 0, len(p.layers)+1)
 	for _, l := range p.layers {
-		t := l.source.traits()
-		if t.template {
-			out = append(out, vars.NewValueMapTemplateProvider(t.label, l.vals))
-			continue
-		}
-		out = append(out, vars.NewValueMapProvider(t.label, l.vals))
+		out = append(out, layerProvider(l.source.traits(), l.vals))
 	}
 	// Process environment values are not enumerable, so they remain the final
 	// fallback outside the plan.
 	return append(out, vars.EnvProvider{})
+}
+
+func layerProvider(t sourceTraits, vals vars.NameMap[vars.Value]) vars.Provider {
+	if t.template {
+		return vars.NewValueMapTemplateProvider(t.label, vals)
+	}
+	return vars.NewValueMapProvider(t.label, vals)
 }
 
 // Scripts should see ordinary nested references resolved just as templates do.
@@ -196,7 +197,7 @@ func (p variablePlan) values() map[string]string {
 func declaredNames(doc *restfile.Document, req *restfile.Request, env vars.Environment) *vars.Resolver {
 	out := make([]vars.Provider, 0, len(sourceTable))
 	for i, t := range sourceTable {
-		if !t.declared {
+		if !t.allowsEnvRef {
 			continue
 		}
 		var vals vars.NameMap[vars.Value]
@@ -211,7 +212,7 @@ func declaredNames(doc *restfile.Document, req *restfile.Request, env vars.Envir
 				vals.Set(d.name, vars.Value{Text: d.text})
 			}
 		}
-		out = append(out, vars.NewValueMapTemplateProvider(t.label, vals))
+		out = append(out, layerProvider(t, vals))
 	}
 	return vars.NewResolver(out...)
 }
@@ -280,7 +281,7 @@ func entries(source variableSource, src varSources, refs *vars.EnvRefs) []variab
 	ds := declarations(source, src.doc, src.req)
 	out := make([]variableEntry, 0, len(ds))
 	for _, d := range ds {
-		if src.sec == omitSecrets && d.secret && !namesProcessVar(d.authored, d.text) {
+		if src.sec == omitSecrets && d.secret && !isEnvRef(d.authored, d.text) {
 			continue
 		}
 		out = append(out, variableEntry{name: d.name, val: declaredValue(refs, d.authored, d.text)})
@@ -292,10 +293,10 @@ func declaredValue(refs *vars.EnvRefs, authored bool, text string) vars.Value {
 	if !authored {
 		return vars.Value{Text: text}
 	}
-	return refs.Declared(text)
+	return refs.ResolveDeclared(text)
 }
 
-func namesProcessVar(authored bool, text string) bool {
+func isEnvRef(authored bool, text string) bool {
 	if !authored {
 		return false
 	}
