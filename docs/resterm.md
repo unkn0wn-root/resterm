@@ -441,9 +441,9 @@ Authorization: Bearer {{token}}
 
 If the OS variable is missing, the declaration stays undefined and still shadows lower-precedence sources. Resterm first tries the name as written, then its uppercase form.
 
-Values loaded through `env:NAME` are secrets. Resterm hides them from previews and redacts them from results, explain output, and history. References are resolved once, so an OS value that contains `env:OTHER` stays unchanged. Only declarations are interpreted as references; values from captures, workflows, and scripts are plain data. An empty `env:` reference is reported as an error.
+Values loaded through `env:NAME` are secrets. Resterm hides them from previews and redacts them from results, explain output, and history. References are resolved once, so an OS value that contains `env:OTHER` stays unchanged. Only declarations are interpreted as references; values from captures, workflows, and scripts are plain data. An empty `env:` reference is reported as an error: a request file reports it on the line where it appears, and an environment file refuses to load.
 
-A reference name may contain a template, as in `env:{{picked}}`. Only declarations can supply `picked`; runtime data cannot choose which OS variable Resterm reads.
+A reference name may contain a template, as in `env:{{picked}}`. Only declarations can supply `picked`; runtime data cannot choose which OS variable Resterm reads. If a capture replaces the declaration that supplied the name, nothing declares it any more and the reference becomes undefined rather than following the captured value.
 
 #### Shared variables (`$shared`)
 
