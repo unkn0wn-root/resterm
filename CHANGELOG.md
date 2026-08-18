@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.2.0](https://github.com/unkn0wn-root/resterm/compare/v1.1.1...v1.2.0) (2026-08-18)
+
+
+### Features
+
+* **vars:** read OS variables from document declarations ([#380](https://github.com/unkn0wn-root/resterm/issues/380)) ([e32f9a8](https://github.com/unkn0wn-root/resterm/commit/e32f9a806ca23b4b1dcb7878f0e3bad6dc33a312))
+
 ### [1.1.1](https://github.com/unkn0wn-root/resterm/compare/v1.1.0...v1.1.1) (2026-08-17)
 
 
