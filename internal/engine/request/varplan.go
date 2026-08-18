@@ -94,15 +94,15 @@ func (e *Engine) buildVariablePlan(src varSources) variablePlan {
 	refs := env.Refs()
 
 	plan := variablePlan{layers: make([]variableLayer, 0, len(sourceTable))}
-	plan.add(sourceConst, constEntries(src.doc, refs))
+	plan.add(sourceConst, entries(sourceConst, src, refs))
 	plan.addLiteral(sourceScript, src.run.scripts)
 	plan.addLiteral(sourceWorkflow, src.run.overlay)
 	plan.add(sourceRequestCapture, nil)
-	plan.add(sourceRequest, requestEntries(src.req, src.sec, refs))
+	plan.add(sourceRequest, entries(sourceRequest, src, refs))
 	plan.add(sourceRuntimeGlobal, literalEntries(globalValues(src.globals)))
-	plan.add(sourceDocumentGlobal, docGlobalEntries(src.doc, src.sec, refs))
+	plan.add(sourceDocumentGlobal, entries(sourceDocumentGlobal, src, refs))
 	plan.add(sourceRuntimeFile, literalEntries(e.runtimeFileValues(src.doc, env, src.sec)))
-	plan.add(sourceFile, docVarEntries(src.doc, src.sec, refs))
+	plan.add(sourceFile, entries(sourceFile, src, refs))
 	plan.add(sourceEnvironment, valueEntries(env.ProviderValues()))
 	return plan
 }
@@ -192,101 +192,98 @@ func (p variablePlan) values() map[string]string {
 }
 
 // Only declarations may choose the OS variable in a templated env: reference.
+// A name from response data would let a server pick what a request sends.
 func declaredNames(doc *restfile.Document, req *restfile.Request, env vars.Environment) *vars.Resolver {
 	out := make([]vars.Provider, 0, len(sourceTable))
 	for i, t := range sourceTable {
 		if !t.declared {
 			continue
 		}
-		out = append(
-			out,
-			vars.NewValueMapTemplateProvider(t.label, declaredText(variableSource(i), doc, req, env)),
-		)
+		var vals vars.NameMap[vars.Value]
+		if variableSource(i) == sourceEnvironment {
+			// An environment file has no runtime writer.
+			for name, text := range env.Values() {
+				vals.Set(name, vars.Value{Text: text})
+			}
+		}
+		for _, d := range declarations(variableSource(i), doc, req) {
+			if d.authored {
+				vals.Set(d.name, vars.Value{Text: d.text})
+			}
+		}
+		out = append(out, vars.NewValueMapTemplateProvider(t.label, vals))
 	}
 	return vars.NewResolver(out...)
 }
 
-func declaredText(
+type declaration struct {
+	name string
+	text string
+	// authored is false once a capture or a script replaces what the document
+	// wrote. Such a value is data: it never reads as a reference nor names one.
+	authored bool
+	secret   bool
+}
+
+// declarations is the one reading of a source, so the variable plan and the
+// reference-name lookup cannot disagree about which values a run produced.
+func declarations(
 	source variableSource,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env vars.Environment,
-) vars.NameMap[vars.Value] {
-	var out vars.NameMap[vars.Value]
-	set := func(name, text string) { out.Set(name, vars.Value{Text: text}) }
+) []declaration {
+	var xs []restfile.Variable
 	switch source {
 	case sourceConst:
-		if doc != nil {
-			for _, c := range doc.Constants {
-				set(c.Name, c.Value)
-			}
+		if doc == nil {
+			return nil
 		}
+		out := make([]declaration, 0, len(doc.Constants))
+		for _, c := range doc.Constants {
+			out = append(out, declaration{name: c.Name, text: c.Value, authored: c.Authored})
+		}
+		return out
 	case sourceRequest:
-		if req != nil {
-			for _, v := range req.Variables {
-				set(v.Name, v.Value)
-			}
+		if req == nil {
+			return nil
 		}
+		xs = req.Variables
 	case sourceDocumentGlobal:
-		if doc != nil {
-			for _, v := range doc.Globals {
-				set(v.Name, v.Value)
-			}
+		if doc == nil {
+			return nil
 		}
+		xs = doc.Globals
 	case sourceFile:
-		if doc != nil {
-			for _, v := range doc.Variables {
-				set(v.Name, v.Value)
-			}
+		if doc == nil {
+			return nil
 		}
-	case sourceEnvironment:
-		for _, name := range slices.Sorted(maps.Keys(env.Values())) {
-			set(name, env.Values()[name])
-		}
-	}
-	return out
-}
-
-func constEntries(doc *restfile.Document, refs *vars.EnvRefs) []variableEntry {
-	if doc == nil {
+		xs = doc.Variables
+	default:
 		return nil
 	}
-	out := make([]variableEntry, 0, len(doc.Constants))
-	for _, c := range doc.Constants {
-		out = append(out, variableEntry{name: c.Name, val: declaredValue(refs, c.Authored, c.Value)})
-	}
-	return out
-}
 
-func requestEntries(req *restfile.Request, sec secrecy, refs *vars.EnvRefs) []variableEntry {
-	if req == nil {
-		return nil
-	}
-	return declaredEntries(req.Variables, sec, refs)
-}
-
-func docGlobalEntries(doc *restfile.Document, sec secrecy, refs *vars.EnvRefs) []variableEntry {
-	if doc == nil {
-		return nil
-	}
-	return declaredEntries(doc.Globals, sec, refs)
-}
-
-func docVarEntries(doc *restfile.Document, sec secrecy, refs *vars.EnvRefs) []variableEntry {
-	if doc == nil {
-		return nil
-	}
-	return declaredEntries(doc.Variables, sec, refs)
-}
-
-// Unlike -secret values, withheld env: references still shadow lower sources.
-func declaredEntries(xs []restfile.Variable, sec secrecy, refs *vars.EnvRefs) []variableEntry {
-	out := make([]variableEntry, 0, len(xs))
+	out := make([]declaration, 0, len(xs))
 	for _, v := range xs {
-		if sec == omitSecrets && v.Secret && !namesProcessVar(v.Authored, v.Value) {
+		out = append(out, declaration{
+			name:     v.Name,
+			text:     v.Value,
+			authored: v.Authored,
+			secret:   v.Secret,
+		})
+	}
+	return out
+}
+
+// Unlike a -secret value, a withheld env: reference keeps shadowing lower
+// sources, so it stays in the layer.
+func entries(source variableSource, src varSources, refs *vars.EnvRefs) []variableEntry {
+	ds := declarations(source, src.doc, src.req)
+	out := make([]variableEntry, 0, len(ds))
+	for _, d := range ds {
+		if src.sec == omitSecrets && d.secret && !namesProcessVar(d.authored, d.text) {
 			continue
 		}
-		out = append(out, variableEntry{name: v.Name, val: declaredValue(refs, v.Authored, v.Value)})
+		out = append(out, variableEntry{name: d.name, val: declaredValue(refs, d.authored, d.text)})
 	}
 	return out
 }

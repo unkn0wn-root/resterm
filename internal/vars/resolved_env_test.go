@@ -131,8 +131,8 @@ func TestEnvRefKeyReadsTheEnvForm(t *testing.T) {
 		"env:NAME":    "NAME",
 		"ENV: NAME ":  "NAME",
 		"  env:name ": "name",
-		"env:":    "",
-		"env:   ": "",
+		"env:":        "",
+		"env:   ":     "",
 	} {
 		if key, ok := EnvRefKey(raw); !ok || key != want {
 			t.Fatalf("EnvRefKey(%q) = %q, %t, want %q", raw, key, ok, want)

@@ -31,9 +31,9 @@ func (v *Variable) SetRuntimeValue(value string) {
 }
 
 type Constant struct {
-	Name  string
-	Value string
-	Line  int
+	Name     string
+	Value    string
+	Line     int
 	Authored bool
 }
 

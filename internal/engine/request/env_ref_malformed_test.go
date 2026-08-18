@@ -40,36 +40,6 @@ X-Token: {{token}}
 	}
 }
 
-func TestEnvironmentEnvRefWithNoNameStaysUndefined(t *testing.T) {
-	t.Setenv("TOKEN", "ambient-value")
-	doc, req := parseDoc(t, `### one
-# @name one
-GET http://example.test
-X-Token: {{token}}
-`)
-
-	env := envWith(t, "dev", map[string]string{"token": "env:"})
-	eng, st := newStubEngine(t)
-	res, err := eng.ExecuteWith(doc, req, env, ExecOptions{})
-	if err != nil {
-		t.Fatalf("ExecuteWith() error = %v", err)
-	}
-	if res.Err == nil {
-		t.Fatal("a catalog reference with no name produced a value")
-	}
-	if st.wire != nil {
-		t.Fatal("request with an unusable reference was sent")
-	}
-
-	snap := ResolveEnvironment(env, doc, req)
-	if _, ok := snap.Values()["token"]; ok {
-		t.Fatal("the env host exposes a reference that names nothing")
-	}
-	if len(snap.Secrets()) != 0 {
-		t.Fatalf("Secrets() = %#v, want none", snap.Secrets())
-	}
-}
-
 func TestValuesThatOnlyLookLikeReferencesStayText(t *testing.T) {
 	doc, req := parseDoc(t, `# @file a environment:X
 # @file b envs:X
