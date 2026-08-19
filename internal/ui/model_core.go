@@ -736,5 +736,9 @@ func New(cfg Config) Model {
 		model.lastResponseSaveDir = model.ws.root
 	}
 	model.startLatAnim()
+	// Startup bypasses setStatusMessage, so open an error modal explicitly.
+	if initialStatus.level == statusError {
+		model.openStatusModal(initialStatus.level, initialStatus.text)
+	}
 	return model
 }

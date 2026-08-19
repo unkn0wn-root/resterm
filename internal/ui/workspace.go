@@ -18,6 +18,7 @@ import (
 const (
 	moveRefused   = "Workspace not changed"
 	noEnvSelected = "No environment selected"
+	envFixHint    = "Fix and save the file to load its environments"
 )
 
 // workspace is the live workspace state. A move goes through plan, which
@@ -29,9 +30,18 @@ type workspace struct {
 	cat        vars.Catalog
 	sel        vars.Selection
 	envFile    string
+	envErr     error
 	envPinned  bool
 	intent     vars.Intent
 	active     vars.Environment
+	unselected bool
+}
+
+type envState struct {
+	cat        vars.Catalog
+	sel        vars.Selection
+	envFile    string
+	envErr     error
 	unselected bool
 }
 
@@ -42,6 +52,7 @@ func newWorkspace(root string, recursive bool, env vars.Config) workspace {
 		cat:       env.Catalog,
 		sel:       env.Selection,
 		envFile:   env.File,
+		envErr:    env.FileErr,
 		envPinned: env.FileExplicit,
 		intent:    env.Intent,
 	}
@@ -59,30 +70,28 @@ func (w *workspace) use(env vars.Environment) {
 }
 
 type wsMove struct {
-	root       string
-	cat        vars.Catalog
-	sel        vars.Selection
-	envFile    string
-	unselected bool
-	reset      bool
-	status     statusMsg
+	root   string
+	env    envState
+	reset  bool
+	status statusMsg
 }
 
-// plan works out what a move to root would activate, without touching the
-// current state. Discovery searches only the new root, and a root whose
-// environment file does not load refuses the move the same way launching
-// there would.
+// plan validates a workspace move without changing the current state. A broken
+// environment file causes the move to fail.
 func (w workspace) plan(root string) (wsMove, error) {
 	text := fmt.Sprintf("Workspace set to %s", filepath.Base(root))
 
 	if w.envPinned {
 		mv := wsMove{
-			root:       root,
-			cat:        w.cat,
-			sel:        w.sel,
-			envFile:    w.envFile,
-			unselected: w.unselected,
-			status:     statusMsg{text: text, level: statusInfo},
+			root: root,
+			env: envState{
+				cat:        w.cat,
+				sel:        w.sel,
+				envFile:    w.envFile,
+				envErr:     w.envErr,
+				unselected: w.unselected,
+			},
+			status: statusMsg{text: text, level: statusInfo},
 		}
 		if own := vars.DiscoverPath(root); own != "" && !util.SameFile(own, w.envFile) {
 			mv.status = statusMsg{
@@ -99,11 +108,10 @@ func (w workspace) plan(root string) (wsMove, error) {
 	}
 
 	mv := wsMove{
-		root:    root,
-		cat:     cat,
-		envFile: envFile,
-		reset:   !w.sameEnv(root, envFile),
-		status:  statusMsg{text: text, level: statusInfo},
+		root:   root,
+		env:    envState{cat: cat, envFile: envFile},
+		reset:  !w.sameEnv(root, envFile),
+		status: statusMsg{text: text, level: statusInfo},
 	}
 	if cat.Empty() {
 		return mv, nil
@@ -113,7 +121,7 @@ func (w workspace) plan(root string) (wsMove, error) {
 	if !ok {
 		// Falling back to the new default could promote a dev session to
 		// prod, so nothing is active until someone picks.
-		mv.unselected = true
+		mv.env.unselected = true
 		mv.status = statusMsg{
 			text: fmt.Sprintf(
 				"%s. %s, %s is not available here",
@@ -126,7 +134,7 @@ func (w workspace) plan(root string) (wsMove, error) {
 		return mv, nil
 	}
 
-	mv.sel = sel
+	mv.env.sel = sel
 	if env, err := cat.Resolve(sel); err == nil {
 		mv.status = statusMsg{
 			text:  fmt.Sprintf("%s. Environment %s", text, env.Label()),
@@ -134,6 +142,51 @@ func (w workspace) plan(root string) (wsMove, error) {
 		}
 	}
 	return mv, nil
+}
+
+func (w workspace) ownsEnvFile(path string) bool {
+	if w.envFile != "" {
+		return sameEnvFile(path, w.envFile)
+	}
+	own := vars.DiscoverPath(w.root)
+	return own != "" && util.SameFile(path, own)
+}
+
+// reloadEnv reads the environment file and reapplies the current selection
+// intent. An unavailable selection never falls back to the file's default.
+func (w workspace) reloadEnv() (envState, statusMsg, error) {
+	cat, envFile, err := w.loadEnv()
+	if err != nil {
+		return envState{}, statusMsg{}, err
+	}
+
+	next := envState{cat: cat, envFile: envFile}
+	if cat.Empty() {
+		return next, statusMsg{text: "No environments loaded", level: statusWarn}, nil
+	}
+
+	sel, ok := w.intent.Resolve(cat)
+	if !ok {
+		next.unselected = true
+		return next, statusMsg{
+			text:  fmt.Sprintf("%s, %s is not available here", noEnvSelected, w.intent.Describe()),
+			level: statusWarn,
+		}, nil
+	}
+
+	next.sel = sel
+	env, _ := cat.Resolve(sel)
+	return next, statusMsg{text: "Environment " + env.Label(), level: statusInfo}, nil
+}
+
+// loadEnv reloads the active file. It uses discovery only before a file is
+// active because an explicit file may be outside the workspace.
+func (w workspace) loadEnv() (vars.Catalog, string, error) {
+	if w.envFile != "" {
+		cat, err := vars.LoadEnvironmentFile(w.envFile)
+		return cat, w.envFile, err
+	}
+	return vars.Discover(w.root)
 }
 
 // sameEnv reports whether a move to root keeps the environment the runtime
@@ -174,7 +227,7 @@ func (m *Model) prepareMove(dir, current string) (wsMove, []files.Entry, tea.Cmd
 	if err != nil {
 		return wsMove{}, nil, moveRefusedCmd(err)
 	}
-	entries, err := listWorkspaceEntries(dir, m.ws.recursive, mv.envFile, current, nil)
+	entries, err := listWorkspaceEntries(dir, m.ws.recursive, mv.env.envFile, current, nil)
 	if err != nil {
 		return wsMove{}, nil, moveRefusedCmd(err)
 	}
@@ -182,7 +235,12 @@ func (m *Model) prepareMove(dir, current string) (wsMove, []files.Entry, tea.Cmd
 	// Surface the same environment file warnings launching with -w would,
 	// unless the move already has something more specific to say.
 	if mv.status.level == statusInfo {
-		next := workspace{root: dir, recursive: m.ws.recursive, cat: mv.cat, envFile: mv.envFile}
+		next := workspace{
+			root:      dir,
+			recursive: m.ws.recursive,
+			cat:       mv.env.cat,
+			envFile:   mv.env.envFile,
+		}
 		if warn := envFileWarning(entries, next); warn.text != "" {
 			mv.status = statusMsg{text: mv.status.text + ". " + warn.text, level: statusWarn}
 		}
@@ -212,26 +270,55 @@ func (m *Model) commitMove(mv wsMove) (statusMsg, tea.Cmd) {
 	m.clearResponseState()
 
 	m.ws.root = mv.root
-	m.ws.cat = mv.cat
-	m.ws.sel = mv.sel
-	m.ws.envFile = mv.envFile
-	m.ws.unselected = mv.unselected
-	if mv.unselected {
-		m.ws.active = vars.Environment{}
-	} else {
-		m.ws.active, _ = mv.cat.Resolve(mv.sel)
-	}
+	m.applyEnv(mv.env)
 
 	// Runs re-derive their base directory from the file they execute.
 	m.cfg.HTTPOptions.BaseDir = ""
 
-	m.envDraft = vars.Selection{}
-	m.envList.ResetFilter()
-	m.envList.SetItems(makeEnvItems(mv.cat, mv.sel))
-	m.envList.SetDelegate(envDelegateForTheme(m.theme, mv.cat))
 	// Document-derived state is the caller's to rebuild. Only it knows whether
 	// the move clears the document or installs a new one.
 	return mv.status, stop
+}
+
+func (m *Model) applyEnv(next envState) {
+	m.ws.cat = next.cat
+	m.ws.sel = next.sel
+	m.ws.envFile = next.envFile
+	m.ws.envErr = next.envErr
+	m.ws.unselected = next.unselected
+	// Resolve would choose the default when the requested selection is
+	// unavailable, so leave the active environment empty in that case.
+	m.ws.active = vars.Environment{}
+	if !next.unselected {
+		m.ws.active, _ = next.cat.Resolve(next.sel)
+	}
+
+	m.envDraft = vars.Selection{}
+	m.envList.ResetFilter()
+	m.envList.SetItems(makeEnvItems(next.cat, next.sel))
+	m.envList.SetDelegate(envDelegateForTheme(m.theme, next.cat))
+}
+
+// reloadEnvFile reloads path when it is the active environment file. If the
+// reload fails after a successful load, the previous catalog stays active. If
+// no catalog has loaded yet, the error is stored and requests remain blocked.
+func (m *Model) reloadEnvFile(path string) statusMsg {
+	if !m.ws.ownsEnvFile(path) {
+		return statusMsg{}
+	}
+
+	next, status, err := m.ws.reloadEnv()
+	if err != nil {
+		if m.ws.cat.Empty() {
+			m.ws.envErr = err
+		}
+		return statusMsg{text: envLoadFailed(err), level: statusError}
+	}
+
+	m.applyEnv(next)
+	m.syncRequestList(m.doc)
+	m.syncHistory()
+	return status
 }
 
 // stopLiveStreams cancels every live session and drops their consoles, so a

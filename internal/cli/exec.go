@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -151,47 +152,65 @@ func (f ExecFlags) TelemetryConfig(version string) telemetry.Config {
 	return cfg
 }
 
+// Resolve builds a run configuration and requires a valid environment file.
 func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
+	cfg, err := f.ResolveSession(filePath)
+	if err != nil {
+		return ExecConfig{}, err
+	}
+	if cfg.Env.FileErr != nil {
+		return ExecConfig{}, cfg.Env.FileErr
+	}
+	return cfg, nil
+}
+
+// ResolveSession builds an editor configuration. Parse errors are returned in
+// Env.FileErr so the editor can open the file, while other load errors remain
+// fatal. Requests stay blocked until the file parses successfully.
+func (f ExecFlags) ResolveSession(filePath string) (ExecConfig, error) {
 	if err := f.ValidateEnvFlag(); err != nil {
 		return ExecConfig{}, err
 	}
 	filePath = CleanExecPath(filePath)
 	work := resolveWorkspace(filePath, f.Workspace)
 
-	cat, envFile, err := f.loadEnvironment(filePath, work)
-	if err != nil {
-		return ExecConfig{}, err
-	}
-	sel, err := cat.Select(f.EnvName, f.EnvGroups)
-	if err != nil {
-		return ExecConfig{}, err
-	}
-	envFallback := ""
-	if f.EnvName == "" && len(f.EnvGroups) == 0 && !cat.Empty() {
-		env, resolveErr := cat.Resolve(sel)
-		if resolveErr != nil {
-			return ExecConfig{}, resolveErr
-		}
-		if cat.Len() > 1 {
-			envFallback = env.Label()
-		}
+	cat, envFile, fileErr := f.loadEnvironment(filePath, work)
+	if fileErr != nil && diag.ClassOf(fileErr) != diag.ClassParse {
+		return ExecConfig{}, fileErr
 	}
 
-	targets, err := ParseCompareTargets(f.CompareTargetsRaw)
+	compare, err := f.compareConfig()
 	if err != nil {
-		return ExecConfig{}, fmt.Errorf("invalid --compare value: %w", err)
+		return ExecConfig{}, err
 	}
-	base := f.CompareBaseline
-	if err := runcheck.ValidateConcreteEnvironment(base, "--compare-base"); err != nil {
-		return ExecConfig{}, fmt.Errorf("invalid --compare-base value: %w", err)
+
+	env := vars.Config{
+		Catalog:      cat,
+		File:         envFile,
+		FileExplicit: str.Trim(f.EnvFile) != "",
+		Intent:       vars.Intent{Name: f.EnvName, Groups: maps.Clone(f.EnvGroups)},
+		FileErr:      fileErr,
 	}
-	group := str.Trim(f.CompareGroup)
-	if group != "" && len(targets) == 0 {
-		return ExecConfig{}, fmt.Errorf("--compare-group requires --compare")
-	}
-	if len(targets) > 0 {
-		if _, err := cat.CompareTargets(sel, group, base, targets); err != nil {
-			return ExecConfig{}, fmt.Errorf("invalid compare selection: %w", err)
+	// Keep selection and compare settings until a catalog is available. They
+	// cannot be checked against the empty catalog left by a parse error.
+	if fileErr == nil {
+		if env.Selection, err = cat.Select(f.EnvName, f.EnvGroups); err != nil {
+			return ExecConfig{}, err
+		}
+		if f.EnvName == "" && len(f.EnvGroups) == 0 && !cat.Empty() {
+			active, err := cat.Resolve(env.Selection)
+			if err != nil {
+				return ExecConfig{}, err
+			}
+			if cat.Len() > 1 {
+				env.Fallback = active.Label()
+			}
+		}
+		if len(compare.Targets) > 0 {
+			_, err := cat.CompareTargets(env.Selection, compare.Group, compare.Base, compare.Targets)
+			if err != nil {
+				return ExecConfig{}, fmt.Errorf("invalid compare selection: %w", err)
+			}
 		}
 	}
 
@@ -209,30 +228,36 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 		FilePath:  filePath,
 		Workspace: work,
 		Recursive: f.Recursive,
-		Env: vars.Config{
-			Catalog:      cat,
-			Selection:    sel,
-			File:         envFile,
-			FileExplicit: str.Trim(f.EnvFile) != "",
-			Intent:       vars.Intent{Name: f.EnvName, Groups: maps.Clone(f.EnvGroups)},
-			Fallback:     envFallback,
-		},
-		HTTPOpts: httpOpts,
-		GRPCOpts: grpcx.Options{DefaultPlaintext: restfile.OptOf(true)},
-		Compare:  engine.CompareConfig{Targets: targets, Base: base, Group: group},
+		Env:       env,
+		HTTPOpts:  httpOpts,
+		GRPCOpts:  grpcx.Options{DefaultPlaintext: restfile.OptOf(true)},
+		Compare:   compare,
 	}, nil
 }
 
+func (f ExecFlags) compareConfig() (engine.CompareConfig, error) {
+	targets, err := ParseCompareTargets(f.CompareTargetsRaw)
+	if err != nil {
+		return engine.CompareConfig{}, fmt.Errorf("invalid --compare value: %w", err)
+	}
+	base := f.CompareBaseline
+	if err := runcheck.ValidateConcreteEnvironment(base, "--compare-base"); err != nil {
+		return engine.CompareConfig{}, fmt.Errorf("invalid --compare-base value: %w", err)
+	}
+	group := str.Trim(f.CompareGroup)
+	if group != "" && len(targets) == 0 {
+		return engine.CompareConfig{}, fmt.Errorf("--compare-group requires --compare")
+	}
+	return engine.CompareConfig{Targets: targets, Base: base, Group: group}, nil
+}
+
 // loadEnvironment loads the file named with --env-file, or discovers one near
-// the launch context. The command line is the one place the ambient working
-// directory takes part in discovery.
+// the launch context. It returns the path with load errors so the editor can
+// open a file that failed to parse.
 func (f ExecFlags) loadEnvironment(filePath, work string) (vars.Catalog, string, error) {
 	if explicit := str.Trim(f.EnvFile); explicit != "" {
 		cat, err := vars.LoadEnvironmentFile(explicit)
-		if err != nil {
-			return vars.Catalog{}, "", err
-		}
-		return cat, explicit, nil
+		return cat, explicit, err
 	}
 
 	var fileDir string

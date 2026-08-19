@@ -962,6 +962,9 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		}
 		return cmd, true
 	case bindings.ActionOpenEnvSelector:
+		if s := m.ws.envLoadStatus(); s.text != "" {
+			return statusMsgCmd(s), true
+		}
 		if m.ws.cat.Empty() {
 			return func() tea.Msg {
 				return statusMsg{text: "No environments configured", level: statusWarn}

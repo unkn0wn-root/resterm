@@ -113,21 +113,22 @@ func (m *Model) saveFileWithOutcome() (saveFileOutcome, tea.Cmd) {
 	}
 	m.watchFile(m.currentFile, content)
 	m.refreshCurrentDocument(content)
-	return saveFileOutcomeSaved, batchCommands(
-		m.refreshGitStatusCmd(),
-		statusCmd(savedStatus(m.currentFile, m.doc)),
-	)
+	status := savedStatus(m.currentFile, m.doc).then(m.reloadEnvFile(m.currentFile))
+	return saveFileOutcomeSaved, batchCommands(m.refreshGitStatusCmd(), statusMsgCmd(status))
 }
 
-func savedStatus(path string, doc *restfile.Document) (statusLevel, string) {
+func savedStatus(path string, doc *restfile.Document) statusMsg {
 	saved := "Saved " + filepath.Base(path)
 	if doc == nil || len(doc.Errors) == 0 {
-		return statusSuccess, saved
+		return statusMsg{text: saved, level: statusSuccess}
 	}
 	if len(doc.Errors) == 1 {
-		return statusWarn, saved + " (1 parse error)"
+		return statusMsg{text: saved + " (1 parse error)", level: statusWarn}
 	}
-	return statusWarn, fmt.Sprintf("%s (%d parse errors)", saved, len(doc.Errors))
+	return statusMsg{
+		text:  fmt.Sprintf("%s (%d parse errors)", saved, len(doc.Errors)),
+		level: statusWarn,
+	}
 }
 
 func (m *Model) reloadWorkspace() tea.Cmd {
@@ -206,27 +207,22 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 		}
 	}
 
-	m.applyDiskContent(path, data, diskContentOptions{})
-
-	return batchCommands(
-		m.refreshGitStatusCmd(),
-		func() tea.Msg {
-			return statusMsg{
-				text:  fmt.Sprintf("Reloaded %s", filepath.Base(path)),
-				level: statusInfo,
-			}
-		},
-	)
+	reload := m.applyDiskContent(path, data, diskContentOptions{})
+	status := statusMsg{text: fmt.Sprintf("Reloaded %s", filepath.Base(path)), level: statusInfo}
+	return batchCommands(m.refreshGitStatusCmd(), statusMsgCmd(status.then(reload)))
 }
 
 func manualDirtyReloadMessage() string {
 	return "Reload from disk? Unsaved changes in Resterm will be discarded."
 }
 
-func (m *Model) applyDiskContent(path string, data []byte, opt diskContentOptions) {
+// applyDiskContent updates the editor from disk. When path is the active
+// environment file, it also reloads the catalog.
+func (m *Model) applyDiskContent(path string, data []byte, opt diskContentOptions) statusMsg {
 	m.replaceEditorContent(string(data), editorContentOptions(opt))
 	m.refreshCurrentDocument(data)
 	m.watchFile(path, data)
+	return m.reloadEnvFile(path)
 }
 
 func (m *Model) replaceEditorWithDocument(

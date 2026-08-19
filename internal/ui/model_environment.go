@@ -254,6 +254,9 @@ func (m Model) envChoices(sel vars.Selection) []envChoice {
 // form keeps the profile, because a header that reads the same on dev and on
 // prod has given up the one thing worth glancing at before sending a request.
 func (m Model) headerEnvVariants() []string {
+	if m.ws.envErr != nil {
+		return []string{"not loaded", "none"}
+	}
 	if m.ws.unselected {
 		return []string{"none selected", "none"}
 	}

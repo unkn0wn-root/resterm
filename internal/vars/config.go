@@ -9,4 +9,6 @@ type Config struct {
 	FileExplicit bool
 	Intent       Intent
 	Fallback     string
+	// FileErr holds a parse error that an editor session can recover from.
+	FileErr error
 }
