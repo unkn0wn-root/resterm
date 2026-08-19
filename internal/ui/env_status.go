@@ -11,6 +11,9 @@ import (
 
 // startupEnvStatus picks the first message worth showing when a session opens.
 func startupEnvStatus(entries []files.Entry, ws workspace, fallback string, wsErr error) statusMsg {
+	if s := ws.envLoadStatus(); s.text != "" {
+		return s
+	}
 	if wsErr != nil {
 		return statusMsg{text: fmt.Sprintf("workspace error: %v", wsErr), level: statusWarn}
 	}
@@ -21,6 +24,17 @@ func startupEnvStatus(entries []files.Entry, ws workspace, fallback string, wsEr
 		return statusMsg{text: fmt.Sprintf("Using environment: %s", fallback), level: statusInfo}
 	}
 	return statusMsg{}
+}
+
+func (w workspace) envLoadStatus() statusMsg {
+	if w.envErr == nil {
+		return statusMsg{}
+	}
+	return statusMsg{text: envLoadFailed(w.envErr) + ". " + envFixHint, level: statusError}
+}
+
+func envLoadFailed(err error) string {
+	return fmt.Sprintf("Environment file failed to load: %v", err)
 }
 
 // envFileWarning surfaces environment files that will not take effect. Startup

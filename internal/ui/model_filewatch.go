@@ -106,14 +106,12 @@ func (m *Model) autoReloadChangedFile(path string) tea.Cmd {
 		return nil
 	}
 
-	m.applyDiskContent(path, data, diskContentOptions{PreserveView: true})
-	text := fmt.Sprintf("↻ Reloaded %s (file changed outside Resterm)", fileDisplayName(path))
-	return batchCommands(
-		m.refreshGitStatusCmd(),
-		func() tea.Msg {
-			return statusMsg{text: text, level: statusWarn}
-		},
-	)
+	reload := m.applyDiskContent(path, data, diskContentOptions{PreserveView: true})
+	status := statusMsg{
+		text:  fmt.Sprintf("↻ Reloaded %s (file changed outside Resterm)", fileDisplayName(path)),
+		level: statusWarn,
+	}
+	return batchCommands(m.refreshGitStatusCmd(), statusMsgCmd(status.then(reload)))
 }
 
 func (m *Model) showFileChangeWarning(path string, kind watcher.EventKind, text string) {

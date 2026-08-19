@@ -386,7 +386,7 @@ Opening a *workspace*, or a request file that lives outside the current one, mov
 - The environment that carries across is the one you asked for, not the one you ended up with. A session started with `--env prod` looks for `prod` in the new workspace, and a later `Ctrl+E` choice becomes what gets replayed instead.
 - When the new workspace does not have it, the catalog loads but nothing is selected, since falling back to that workspace's default could put a `dev` session on `prod`. The header reads `ENV: none selected`, `Ctrl+E` offers what the workspace does have, and requests are refused until you choose.
 - The last response is forgotten. Globals, file variables, cookie jars, OAuth tokens and command auth are kept, but they stay tied to the workspace they came from. Runtime values are keyed by a scope that names both the selection and the environment file it was read from, so the new workspace cannot read them, and switching back restores the old session without logging in again. Two workspaces pointed at one `--env-file` share that scope on purpose. A workspace without an environment file has no file to key its values by, so they are forgotten when you leave. The same goes for environments built through the Go API.
-- An `--env-file` passed on the command line is a choice for the whole session, so it survives the move and Resterm warns when the new workspace has an environment file of its own. A workspace with no environment file leaves the session with none, and one whose environment file fails to load fails closed with an error and no environment.
+- A file passed with `--env-file` remains active when the workspace changes. Resterm warns if the new workspace has its own environment file. Without `--env-file`, moving to a workspace with no environment file clears the current environment. If the new workspace's environment file cannot load, the move is refused and the current workspace and environment remain active.
 - A move is refused while a request is running, because that request can still write runtime values back and undo the reset. Finish or cancel it first.
 
 Example environment (`_examples/resterm.env.json`):
@@ -441,7 +441,9 @@ Authorization: Bearer {{token}}
 
 If the OS variable is missing, the declaration stays undefined and still shadows lower-precedence sources. Resterm first tries the name as written, then its uppercase form.
 
-Values loaded through `env:NAME` are secrets. Resterm hides them from previews and redacts them from results, explain output, and history. References are resolved once, so an OS value that contains `env:OTHER` stays unchanged. Only declarations are interpreted as references; values from captures, workflows, and scripts are plain data. An empty `env:` reference is reported as an error: a request file reports it on the line where it appears, and an environment file refuses to load.
+Values loaded through `env:NAME` are secrets. Resterm hides them from previews and redacts them from results, explain output, and history. References are resolved once, so an OS value that contains `env:OTHER` stays unchanged. Only declarations are interpreted as references. Values from captures, workflows, and scripts are plain data.
+
+An empty `env:` reference is an error. In a request file, Resterm reports the line where it appears. In an environment file, it stops `resterm run`. The TUI still starts so you can fix the file, but it blocks all requests until the file loads successfully.
 
 A reference name may contain a template, as in `env:{{picked}}`. Only declarations can supply `picked`; runtime data cannot choose which OS variable Resterm reads. If a capture replaces the declaration that supplied the name, nothing declares it any more and the reference becomes undefined rather than following the captured value.
 
@@ -527,7 +529,11 @@ resterm \
   --env-group credentials=ci
 ```
 
-`--env` still selects named environments and cannot be combined with `--env-group`. Groups you do not pass keep their defaults. A broken environment file stops TUI and headless startup with a parse error, whether it was discovered or passed explicitly.
+`--env` still selects named environments and cannot be combined with `--env-group`. Groups you do not pass keep their defaults.
+
+`resterm run` and headless execution stop when an environment file is invalid. The TUI can recover from parse errors because the file can be fixed there. It starts without an active environment, shows the error in a modal, displays `ENV: not loaded` in the header, and blocks all requests. Saving a valid file reloads the environment and reapplies the current selection. Changes made outside Resterm are also reloaded while the environment file is open.
+
+Missing or unreadable environment files still prevent the TUI from starting.
 
 The public Go API accepts the same model:
 

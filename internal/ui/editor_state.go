@@ -72,11 +72,10 @@ func toEditorEventCmd(evt editorEvent) tea.Cmd {
 }
 
 func statusCmd(level statusLevel, text string) tea.Cmd {
-	status := statusMsg{
-		level: level,
-		text:  text,
-	}
+	return statusMsgCmd(statusMsg{level: level, text: text})
+}
 
+func statusMsgCmd(status statusMsg) tea.Cmd {
 	return toEditorEventCmd(editorEvent{status: &status})
 }
 

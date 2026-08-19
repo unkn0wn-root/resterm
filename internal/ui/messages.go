@@ -90,6 +90,20 @@ type statusMsg struct {
 	noModal     bool // error shown elsewhere (e.g. response pane); don't also pop the modal
 }
 
+func (s statusMsg) then(next statusMsg) statusMsg {
+	if next.text == "" {
+		return s
+	}
+	if s.text == "" {
+		return next
+	}
+	s.text += ". " + next.text
+	if next.level == statusWarn || next.level == statusError {
+		s.level = next.level
+	}
+	return s
+}
+
 type updateCheckMsg struct {
 	res *update.Result
 	err error

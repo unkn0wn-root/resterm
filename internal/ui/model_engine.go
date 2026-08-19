@@ -209,9 +209,12 @@ func (m *Model) runMsg(fn func(context.Context) tea.Msg) tea.Cmd {
 	}
 }
 
-// runBlocked refuses to execute while no environment is selected. Every path
-// onto the wire passes this one rule.
+// runBlocked prevents requests when the environment file failed to load or the
+// requested selection is unavailable. Every path that can send calls it.
 func (m *Model) runBlocked() tea.Cmd {
+	if s := m.ws.envLoadStatus(); s.text != "" {
+		return statusMsgCmd(s)
+	}
 	if !m.ws.unselected {
 		return nil
 	}

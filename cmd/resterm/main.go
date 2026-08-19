@@ -344,7 +344,7 @@ func run(a []string) error {
 		initialContent = string(data)
 	}
 
-	cfg, err := exec.Resolve(filePath)
+	cfg, err := exec.ResolveSession(filePath)
 	if err != nil {
 		return err
 	}

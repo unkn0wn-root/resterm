@@ -46,8 +46,8 @@ func TestPlanKeepsPinnedEnvFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("plan: %v", err)
 			}
-			if mv.envFile != pinned {
-				t.Fatalf("envFile = %q, want the pinned %q", mv.envFile, pinned)
+			if mv.env.envFile != pinned {
+				t.Fatalf("envFile = %q, want the pinned %q", mv.env.envFile, pinned)
 			}
 			if mv.reset {
 				t.Fatal("a pinned environment has nothing to reset")

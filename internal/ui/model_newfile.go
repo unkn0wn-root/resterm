@@ -119,11 +119,11 @@ func (m *Model) submitNewFile() tea.Cmd {
 	m.closeNewFileModal()
 	focusCmd := m.setFocus(focusEditor)
 	cmd := m.openFile(finalPath)
-	level, text := statusSuccess, "Created "+filepath.Base(finalPath)
+	status := statusMsg{text: "Created " + filepath.Base(finalPath), level: statusSuccess}
 	if fromSave {
-		level, text = savedStatus(finalPath, m.doc)
+		status = savedStatus(finalPath, m.doc)
 	}
-	m.setStatusMessage(statusMsg{text: text, level: level})
+	m.setStatusMessage(status)
 	if followUp != nil {
 		return batchCommands(focusCmd, cmd, followUp)
 	}
