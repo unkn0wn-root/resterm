@@ -1,27 +1,12 @@
 package tunnel
 
 import (
-	"context"
 	"errors"
 	"io"
 	"net"
 	"testing"
 	"time"
 )
-
-func TestWaitWithContextCanceled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := WaitWithContext(ctx, time.Second); !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context cancellation, got %v", err)
-	}
-}
-
-func TestWaitWithContextNoDelay(t *testing.T) {
-	if err := WaitWithContext(context.Background(), 0); err != nil {
-		t.Fatalf("expected nil error for zero delay, got %v", err)
-	}
-}
 
 func TestWrapConnCloseJoinsErrors(t *testing.T) {
 	ce := errors.New("conn close")

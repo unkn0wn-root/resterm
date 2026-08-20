@@ -3,12 +3,14 @@ package tunnel
 import (
 	"context"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/delay"
 )
 
 func OpenRetry[S any](
 	ctx context.Context,
 	attempts int,
-	delay time.Duration,
+	pause time.Duration,
 	open func(context.Context) (S, error),
 ) (S, error) {
 	var zero S
@@ -32,7 +34,7 @@ func OpenRetry[S any](
 			return zero, ctx.Err()
 		}
 		if i+1 < attempts {
-			if err := WaitWithContext(ctx, delay); err != nil {
+			if err := delay.Wait(ctx, pause); err != nil {
 				return zero, err
 			}
 		}
