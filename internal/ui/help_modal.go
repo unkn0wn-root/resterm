@@ -177,7 +177,7 @@ func (m Model) helpSections() []helpSection {
 	if key := m.helpBindingLabel(bindings.ActionShowStatusMessage); key != "" {
 		statusMessageEntries = append(statusMessageEntries, helpEntry{
 			key:         key,
-			description: "Show the current status message in full",
+			description: "Show document warnings or the current status in full",
 		})
 	}
 

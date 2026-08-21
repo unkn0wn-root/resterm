@@ -88,6 +88,9 @@ func (b *workflowBuilder) handleDirective(
 	call directive.Call,
 	line int,
 ) (bool, error) {
+	if !isWorkflowDirective(call.Name) {
+		return false, nil
+	}
 	if err := b.flushOpen(call.Name, line); err != nil {
 		return true, err
 	}
@@ -104,6 +107,24 @@ func (b *workflowBuilder) handleDirective(
 		return true, err
 	}
 	return false, nil
+}
+
+func isWorkflowDirective(name directive.Name) bool {
+	switch name {
+	case directive.Description,
+		directive.Tag,
+		directive.When,
+		directive.ForEach,
+		directive.Switch,
+		directive.Case,
+		directive.Default,
+		directive.If,
+		directive.Elif,
+		directive.Else:
+		return true
+	default:
+		return false
+	}
 }
 
 func (b *workflowBuilder) flushOpen(name directive.Name, line int) error {

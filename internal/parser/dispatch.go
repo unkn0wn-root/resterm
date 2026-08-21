@@ -43,7 +43,8 @@ func (d parsedDirective) setExprCol(col *int, expr string) {
 }
 
 // Directives are offered to handlers before their required values are checked.
-// This lets inactive features ignore their directives without producing errors.
+// This lets inactive features decline their directives without producing errors;
+// the router reports anything left unclaimed as a warning.
 // The request handler stays last because checking it may open a request for a
 // directive that belongs to another context.
 var directiveHandlers = []func(*documentBuilder, parsedDirective) directiveOutcome{
@@ -62,12 +63,31 @@ var directiveHandlers = []func(*documentBuilder, parsedDirective) directiveOutco
 }
 
 func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
+	// Handlers may transition between workflow, file, and request contexts.
+	// An unknown name has no possible owner, so keep it away from that
+	// stateful routing and leave the current context untouched.
+	if !d.Name.Known() {
+		b.addWarning(d.lines.Start, ignoredDirectiveWarning(d.Call))
+		return directiveIgnored
+	}
 	out := b.claimDirective(d)
+	if out == directiveIgnored {
+		b.addWarning(d.lines.Start, ignoredDirectiveWarning(d.Call))
+		return out
+	}
 	if out == directiveApplied && d.Name.ValueRequired() && !directive.HasValue(d.Args) {
 		b.addError(d.lines.Start, d.Spelling.Tag()+" value missing")
 		return directiveRejected
 	}
 	return out
+}
+
+func ignoredDirectiveWarning(call directive.Call) string {
+	tag := call.Spelling.Tag()
+	if call.Name.Known() {
+		return tag + " is not valid in the current context and was ignored"
+	}
+	return tag + " is not a known Resterm directive and was ignored"
 }
 
 func (b *documentBuilder) claimDirective(d parsedDirective) directiveOutcome {
@@ -99,12 +119,30 @@ func (b *documentBuilder) markDeclared(d parsedDirective) {
 	}
 }
 
-// Request directives are allowed to open a request while they are being checked.
-// If no request handler accepts the directive, restore the previous state so a
-// following shorthand variable remains file scoped.
+// Request directives may open a request before its method line. Probe them on a
+// detached builder first so an ignored directive cannot flush an active
+// workflow. Claimed directives adopt that request after the workflow is closed.
 func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOutcome {
-	opened := !b.inRequest
-	b.ensureRequest(d.lines.Start)
+	if b.inRequest {
+		return b.applyRequestDirective(d)
+	}
+
+	probe := &documentBuilder{doc: &restfile.Document{Path: b.doc.Path}}
+	probe.ensureRequest(d.lines.Start)
+	out := probe.applyRequestDirective(d)
+	if out == directiveIgnored {
+		return out
+	}
+
+	b.flushWorkflow(d.lines.Start - 1)
+	b.inRequest = true
+	b.request = probe.request
+	b.doc.Errors = append(b.doc.Errors, probe.doc.Errors...)
+	b.doc.Warnings = append(b.doc.Warnings, probe.doc.Warnings...)
+	return out
+}
+
+func (b *documentBuilder) applyRequestDirective(d parsedDirective) directiveOutcome {
 	if handled, err := b.request.protoDirective(d.Name, d.Args); handled {
 		b.report(d.lines.Start, err)
 		if fatalErr(err) {
@@ -118,10 +156,6 @@ func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOut
 	if out := b.handleRequestMetadataDirective(d); out != directiveIgnored {
 		return out
 	}
-	if opened {
-		b.inRequest = false
-		b.request = nil
-	}
 	return directiveIgnored
 }
 
@@ -132,7 +166,7 @@ func (b *documentBuilder) handleWorkflowStart(d parsedDirective) directiveOutcom
 		return directiveApplied
 	case directive.Step:
 		if b.workflow == nil {
-			return directiveApplied
+			return directiveIgnored
 		}
 		if err := b.workflow.addStep(d.lines.Start, d.Args); err != nil {
 			return b.reject(d, err.Error())

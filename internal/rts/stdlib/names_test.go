@@ -83,8 +83,16 @@ func TestHeaderHelpersRejectMalformedBlocksDeterministically(t *testing.T) {
 		src  string
 		want string
 	}{
-		{name: "invalid name", src: `headers.normalize({"X Token": "a"})`, want: `"X Token" is not an HTTP header name`},
-		{name: "equivalent names", src: `headers.normalize({"X-Token": "a", "x-token": "b"})`, want: `"X-Token" and "x-token" are the same HTTP header`},
+		{
+			name: "invalid name",
+			src:  `headers.normalize({"X Token": "a"})`,
+			want: `"X Token" is not an HTTP header name`,
+		},
+		{
+			name: "equivalent names",
+			src:  `headers.normalize({"X-Token": "a", "x-token": "b"})`,
+			want: `"X-Token" and "x-token" are the same HTTP header`,
+		},
 		{name: "number value", src: `headers.normalize({"X-Token": 1})`, want: "expects string or list<string>"},
 		{name: "null value", src: `headers.normalize({"X-Token": null})`, want: "expects string or list<string>"},
 		{name: "mixed list", src: `headers.normalize({"X-Token": ["a", 1]})`, want: "expects list<string>"},

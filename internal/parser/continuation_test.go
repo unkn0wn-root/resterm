@@ -180,11 +180,19 @@ GET https://example.com/
 }
 
 func TestParseContinuationKeepsAnUnknownAtName(t *testing.T) {
-	as := onlyAssert(t, `# @assert has(
+	doc := Parse("continue.http", []byte(`# @assert has(
 #   "@notADirective"
 # )
 GET https://example.com/
-`)
+`))
+	if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+		t.Fatalf("errors = %v warnings = %v, want none", doc.Errors, doc.Warnings)
+	}
+	req := firstRequest(t, doc)
+	if len(req.Metadata.Asserts) != 1 {
+		t.Fatalf("asserts = %+v, want one", req.Metadata.Asserts)
+	}
+	as := req.Metadata.Asserts[0]
 	if !strings.Contains(as.Expression, "@notADirective") {
 		t.Fatalf("expression = %q", as.Expression)
 	}

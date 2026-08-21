@@ -132,7 +132,7 @@ Once the files are in place, run `resterm` in the same directory. Press `g Shift
 - **Editor**: middle pane with modal editing (view mode by default, `i` to insert, `Esc` to return to view). Inline syntax highlighting marks metadata, headers, and bodies.
 - **Response panes**: right-hand side displays the most recent response, with optional splits for side-by-side comparisons.
 - **Header bar**: shows workspace, active environment, current request, and test summaries.
-- **Command bar & status**: contextual hints, progress, and notifications. Long messages are shortened to preserve the file, focus, and mode sections. Errors and long warnings open a popup with the complete message; press `Esc` or `Enter` to dismiss it, or `j`/`k` to scroll. Press `g .` to reopen the current status message. Run summaries and confirmation prompts remain in the bar because their details or next action are available elsewhere.
+- **Command bar & status**: contextual hints, progress, and notifications. Long messages are shortened to preserve the file, focus, and mode sections. Errors and long warnings open a popup with the complete message; press `Esc` or `Enter` to dismiss it, or `j`/`k` to scroll. Press `g .` to inspect current document warnings, or to reopen the current status message when there are none. Run summaries and confirmation prompts remain in the bar because their details or next action are available elsewhere.
 
 ### Core shortcuts
 
@@ -259,7 +259,7 @@ show_context_help = ["shift+k"]
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
 | `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
 | `show_context_help` | Open embedded help for the directive, template, or keyword under the editor cursor. | `shift+k` (soft default) |
-| `show_status_message` | Show the current status message in full. | `g .` (soft default) |
+| `show_status_message` | Show current document warnings, or the current status message when there are none. | `g .` (soft default) |
 | `open_path_modal` | Open the filesystem picker for a supported file or workspace. | `ctrl+o` |
 | `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
 | `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
@@ -833,15 +833,16 @@ Troubleshooting:
 
 - Begin each request with a line that starts with `###`. Everything up to the next separator belongs to the same request.
 - Lines prefixed with `#`, `//`, or `--` are treated as comments. Metadata directives live inside these comment blocks.
+- A standalone comment whose content starts with `@name` is treated as a directive. Outside an `@mock` preamble, unknown directives and known directives that are not valid in the current parser context are ignored with a warning. Mock preambles are stricter: only `@match` and `@expect` are accepted before the response, and other directive-shaped comments are parse errors. Add another comment marker, such as `## @if ...`, when directive-looking text should remain an ordinary comment.
 - A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](#splitting-a-long-matcher).
 - Alternate spellings count as the same option. For example, you cannot use both `known_hosts` and `known-hosts` on one `@ssh` directive. Empty values are ignored for regular options, but not for switches. `strict_hostkey=` enables the switch, so it conflicts with `strict-hostkey=false`.
 - `@compare` requires non-empty values for its baseline and group options. This is stricter than general alias conflict handling: `# @ssh host=h known-hosts=a known_hosts=` is valid, but `# @compare dev stage base=dev baseline=` reports an empty baseline.
 - Directives that require a value report `value missing` when left empty. This applies to `@name`, `@operation`, `@grpc-descriptor`, `@grpc-authority`, and `@grpc-metadata`. Some directives deliberately accept an empty value. `@graphql` enables GraphQL, `@query` and `@variables` read the lines below them, and `@grpc-reflection` defaults to on.
-- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first valid declaration and reports later duplicates. An invalid declaration does not count, so a valid one may follow it. A GraphQL directive ignored while GraphQL is off does not count either.
+- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first valid declaration and reports later duplicates. An invalid declaration does not count, so a valid one may follow it. A GraphQL directive ignored while GraphQL is off does not count either, but it does produce a warning.
 - Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. For GraphQL, the reset also clears `@operation`, `@variables`, and `@query`, so they may be declared again after `@graphql off`. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
 - Files can be saved with parse errors. The status line shows the number of errors, for example `Saved requests.http (1 parse error)`. Requests cannot run until those errors are fixed.
-- In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. The full text appears in the Explain pane for each run.
+- In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. Press `g .` to open the complete warning list; the same text also appears in the Explain pane for each run.
 - The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
 - `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
 

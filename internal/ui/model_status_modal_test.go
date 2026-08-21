@@ -123,8 +123,8 @@ func statusBarSegmentText(bar, want string) (string, bool) {
 		head := want[:cut]
 		if idx := strings.Index(bar, head); idx >= 0 {
 			shown := bar[idx:]
-			if end := strings.Index(shown, "…"); end >= 0 {
-				return shown[:end] + "…", true
+			if before, _, ok := strings.Cut(shown, "…"); ok {
+				return before + "…", true
 			}
 			return head, true
 		}
