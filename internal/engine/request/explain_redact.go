@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -52,7 +53,7 @@ func (e *Engine) redactExplainReport(
 		rep.Final.BodyNote = redactSecretText(rep.Final.BodyNote, secs)
 		for i := range rep.Final.Headers {
 			h := &rep.Final.Headers[i]
-			if IsSensitiveHeader(h.Name) {
+			if header.Sensitive(h.Name) {
 				if strings.TrimSpace(h.Value) != "" {
 					h.Value = explainMask
 				}
@@ -127,7 +128,7 @@ func (e *Engine) explainSecrets(
 }
 
 func redactExplainChangeValue(field, val string, secs []string) string {
-	if hdr, ok := explainHeaderField(field); ok && IsSensitiveHeader(hdr) {
+	if hdr, ok := explainHeaderField(field); ok && header.Sensitive(hdr) {
 		if strings.TrimSpace(val) == "" {
 			return val
 		}
@@ -170,5 +171,5 @@ func shouldMaskExplainPair(key, val string) bool {
 	if !ok {
 		return false
 	}
-	return IsSensitiveHeader(name)
+	return header.Sensitive(name)
 }
