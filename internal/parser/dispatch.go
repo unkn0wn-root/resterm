@@ -63,6 +63,13 @@ var directiveHandlers = []func(*documentBuilder, parsedDirective) directiveOutco
 }
 
 func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
+	// Handlers may transition between workflow, file, and request contexts.
+	// An unknown name has no possible owner, so keep it away from that
+	// stateful routing and leave the current context untouched.
+	if !d.Name.Known() {
+		b.addWarning(d.lines.Start, ignoredDirectiveWarning(d.Call))
+		return directiveIgnored
+	}
 	out := b.claimDirective(d)
 	if out == directiveIgnored {
 		b.addWarning(d.lines.Start, ignoredDirectiveWarning(d.Call))
@@ -112,12 +119,30 @@ func (b *documentBuilder) markDeclared(d parsedDirective) {
 	}
 }
 
-// Request directives are allowed to open a request while they are being checked.
-// If no request handler accepts the directive, restore the previous state so a
-// following shorthand variable remains file scoped.
+// Request directives may open a request before its method line. Probe them on a
+// detached builder first so an ignored directive cannot flush an active
+// workflow. Claimed directives adopt that request after the workflow is closed.
 func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOutcome {
-	opened := !b.inRequest
-	b.ensureRequest(d.lines.Start)
+	if b.inRequest {
+		return b.applyRequestDirective(d)
+	}
+
+	probe := &documentBuilder{doc: &restfile.Document{Path: b.doc.Path}}
+	probe.ensureRequest(d.lines.Start)
+	out := probe.applyRequestDirective(d)
+	if out == directiveIgnored {
+		return out
+	}
+
+	b.flushWorkflow(d.lines.Start - 1)
+	b.inRequest = true
+	b.request = probe.request
+	b.doc.Errors = append(b.doc.Errors, probe.doc.Errors...)
+	b.doc.Warnings = append(b.doc.Warnings, probe.doc.Warnings...)
+	return out
+}
+
+func (b *documentBuilder) applyRequestDirective(d parsedDirective) directiveOutcome {
 	if handled, err := b.request.protoDirective(d.Name, d.Args); handled {
 		b.report(d.lines.Start, err)
 		if fatalErr(err) {
@@ -130,10 +155,6 @@ func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOut
 	}
 	if out := b.handleRequestMetadataDirective(d); out != directiveIgnored {
 		return out
-	}
-	if opened {
-		b.inRequest = false
-		b.request = nil
 	}
 	return directiveIgnored
 }
