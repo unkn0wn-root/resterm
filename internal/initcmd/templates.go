@@ -296,7 +296,9 @@ func buildHelpMD() string {
 	b.WriteString("` or copy from `")
 	b.WriteString(fileEnvExample)
 	b.WriteString("`.\n\n")
-	b.WriteString("For CLI runs, start `resterm mock requests.http` in one terminal, then run requests from another.\n\n")
+	b.WriteString(
+		"For CLI runs, start `resterm mock requests.http` in one terminal, then run requests from another.\n\n",
+	)
 	b.WriteString("Next steps:\n")
 	b.WriteString("- The mock scenarios demonstrate JSON matching, numeric rules, and response interpolation.\n")
 	b.WriteString("- The requests demonstrate assertions, bearer auth, and two forms of `@for-each`.\n")

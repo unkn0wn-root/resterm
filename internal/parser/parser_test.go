@@ -1448,6 +1448,10 @@ Content-Type: application/json
 `
 
 	doc := Parse("unknown-comment-directive.http", []byte(src))
+	if len(doc.Warnings) != 1 ||
+		!strings.Contains(doc.Warnings[0].Message, "is not a known Resterm directive and was ignored") {
+		t.Fatalf("warnings = %v, want the commented shorthand warning", doc.Warnings)
+	}
 	if len(doc.Requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
@@ -2759,6 +2763,10 @@ POST https://example.com/api
 `
 
 	doc := Parse("inline-angle-invalid.http", []byte(src))
+	wantWarning := "@body is not valid in the current context and was ignored"
+	if len(doc.Warnings) != 1 || doc.Warnings[0].Message != wantWarning {
+		t.Fatalf("warnings = %v, want %q", doc.Warnings, wantWarning)
+	}
 	if len(doc.Requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
@@ -4561,11 +4569,15 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 	}
 }
 
-func TestParseGraphQLDirectivesBeforeEnablingAreIgnored(t *testing.T) {
+func TestParseGraphQLDirectivesBeforeEnablingWarnAndAreIgnored(t *testing.T) {
 	src := "POST https://example.com/graphql\n# @operation\n# @graphql\n# @operation Used\n"
 	doc := Parse("graphql.http", []byte(src))
 	if len(doc.Errors) != 0 {
 		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+	wantWarning := "@operation is not valid in the current context and was ignored"
+	if len(doc.Warnings) != 1 || doc.Warnings[0].Message != wantWarning {
+		t.Fatalf("warnings = %v, want %q", doc.Warnings, wantWarning)
 	}
 	body := firstRequest(t, doc).Body
 	if body.GraphQL == nil || body.GraphQL.OperationName != "Used" {

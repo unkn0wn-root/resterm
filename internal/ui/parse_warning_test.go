@@ -165,6 +165,57 @@ func TestStatusBarWarningLabelHandlesNilDocument(t *testing.T) {
 	}
 }
 
+func TestShowStatusMessageOpensDocumentWarnings(t *testing.T) {
+	src := "### r\n# @if true run=Never\n# @nmae typo\nGET http://x\n"
+	model := New(Config{FilePath: "warn.http", InitialContent: src})
+	model.width = 120
+	model.height = 30
+	model.ready = true
+	model.setStatusMessage(statusMsg{text: "200 OK 12ms", level: statusSuccess})
+
+	updated := applyModelUpdate(t, &model, keyMsgFor("g"))
+	updated = applyModelUpdate(t, updated, keyMsgFor("."))
+
+	if !updated.showStatusModal {
+		t.Fatal("expected g . to open the document warnings")
+	}
+	if updated.statusModalLevel != statusWarn {
+		t.Fatalf("modal level = %v, want warning", updated.statusModalLevel)
+	}
+	for _, want := range []string{
+		"warn.http:2: @if is not valid in the current context and was ignored",
+		"warn.http:3: @nmae is not a known Resterm directive and was ignored",
+	} {
+		if !strings.Contains(updated.statusModalMessage, want) {
+			t.Fatalf("modal message = %q, want %q", updated.statusModalMessage, want)
+		}
+	}
+	if got := updated.statusMessage.text; got != "200 OK 12ms" {
+		t.Fatalf("status message = %q, want it preserved", got)
+	}
+}
+
+func TestShowStatusMessageIgnoresStaleDocumentWarnings(t *testing.T) {
+	warned := "### r\n# @if true run=Never\nGET http://x\n"
+	model := New(Config{FilePath: "warn.http", InitialContent: warned})
+	model.width = 120
+	model.height = 30
+	model.ready = true
+	model.setStatusMessage(statusMsg{text: "Editing request", level: statusInfo})
+	model.editor.SetValue("### r\nGET http://x\n")
+	model.markDirty()
+
+	updated := applyModelUpdate(t, &model, keyMsgFor("g"))
+	updated = applyModelUpdate(t, updated, keyMsgFor("."))
+
+	if !updated.showStatusModal {
+		t.Fatal("expected g . to open the current status message")
+	}
+	if got := updated.statusModalMessage; got != "Editing request" {
+		t.Fatalf("modal message = %q, want the current status without stale warnings", got)
+	}
+}
+
 // Every step's report repeats the document warnings. Labelling each copy with a
 // step name would make one typo look like several problems.
 func TestWorkflowExplainCarriesDocumentWarningsOnce(t *testing.T) {

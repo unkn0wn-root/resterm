@@ -794,7 +794,7 @@ Each expression is evaluated and truthy means pass. Use `response` for the curre
 
 ### @if, @elif, and @else
 
-These directives are used in workflows to branch steps.
+These directives are used in workflows to branch steps. Outside an active workflow they are ignored with a parser warning; use `@when` or `@skip-if` to gate an ordinary request.
 
 ```
 # @if last.statusCode == 200 run=StepOK

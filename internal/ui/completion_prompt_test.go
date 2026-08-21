@@ -40,7 +40,10 @@ func TestCommandLineCompletesRequestPath(t *testing.T) {
 	}
 
 	model.commandLine.input.SetValue("mock start --source ../")
-	if cmd := model.commandLine.refresh(model.commandSource()); cmd != nil || len(completionLabels(model.commandLine)) != 0 {
+	if cmd := model.commandLine.refresh(
+		model.commandSource(),
+	); cmd != nil ||
+		len(completionLabels(model.commandLine)) != 0 {
 		t.Fatal("request completion escaped the workspace")
 	}
 }

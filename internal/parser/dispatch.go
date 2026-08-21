@@ -43,7 +43,8 @@ func (d parsedDirective) setExprCol(col *int, expr string) {
 }
 
 // Directives are offered to handlers before their required values are checked.
-// This lets inactive features ignore their directives without producing errors.
+// This lets inactive features decline their directives without producing errors;
+// the router reports anything left unclaimed as a warning.
 // The request handler stays last because checking it may open a request for a
 // directive that belongs to another context.
 var directiveHandlers = []func(*documentBuilder, parsedDirective) directiveOutcome{
@@ -63,11 +64,23 @@ var directiveHandlers = []func(*documentBuilder, parsedDirective) directiveOutco
 
 func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 	out := b.claimDirective(d)
+	if out == directiveIgnored {
+		b.addWarning(d.lines.Start, ignoredDirectiveWarning(d.Call))
+		return out
+	}
 	if out == directiveApplied && d.Name.ValueRequired() && !directive.HasValue(d.Args) {
 		b.addError(d.lines.Start, d.Spelling.Tag()+" value missing")
 		return directiveRejected
 	}
 	return out
+}
+
+func ignoredDirectiveWarning(call directive.Call) string {
+	tag := call.Spelling.Tag()
+	if call.Name.Known() {
+		return tag + " is not valid in the current context and was ignored"
+	}
+	return tag + " is not a known Resterm directive and was ignored"
 }
 
 func (b *documentBuilder) claimDirective(d parsedDirective) directiveOutcome {
@@ -132,7 +145,7 @@ func (b *documentBuilder) handleWorkflowStart(d parsedDirective) directiveOutcom
 		return directiveApplied
 	case directive.Step:
 		if b.workflow == nil {
-			return directiveApplied
+			return directiveIgnored
 		}
 		if err := b.workflow.addStep(d.lines.Start, d.Args); err != nil {
 			return b.reject(d, err.Error())

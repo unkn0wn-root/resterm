@@ -1,5 +1,11 @@
 package ui
 
+import (
+	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/parser"
+)
+
 func (m *Model) openStatusModal(level statusLevel, message string) {
 	m.showStatusModal = true
 	m.statusModalLevel = level
@@ -13,6 +19,11 @@ func (m *Model) openStatusModal(level statusLevel, message string) {
 }
 
 func (m *Model) openStatusMessageModal() {
+	if m.docMatchesEditor() && len(m.doc.Warnings) > 0 {
+		message := strings.Join(parser.WarningTexts(m.doc), "\n")
+		m.openStatusModal(statusWarn, message)
+		return
+	}
 	text, level := m.statusBarMessage()
 	m.openStatusModal(level, text)
 }
