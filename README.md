@@ -19,7 +19,7 @@ If you are looking for a Postman-style client centered on GUI collections, Reste
 > [!NOTE]
 > Resterm is now v1! See the [v1.0.0 release notes](https://github.com/unkn0wn-root/resterm/releases/tag/v1.0.0) for new features and breaking changes.
 
-Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Examples](#examples), [Installation](#installation), [Documentation](#documentation).
 
 ## Screenshot tour
 
@@ -123,6 +123,65 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
    Press `Ctrl+Enter` in the editor to send the highlighted request.
 
 No files yet? Just run `resterm`, type a URL and press `Ctrl+Enter`. A pasted curl command works too.
+
+## Examples
+
+These examples show some of the directives you can use in `.http` files. Requests and workflows can be run in the TUI or with `resterm run`. Mock responses can be served in the TUI or with `resterm mock`.
+
+### Run a request for each value
+
+```http
+### Create users
+# @for-each ["david", "tom"] as name
+# @assert response.statusCode == 201
+POST {{base.url}}/users
+Content-Type: application/json
+
+{"name":"{{= name }}"}
+```
+
+### Run a request conditionally
+
+```http
+### Seed development
+# @when env.mode == "development"
+POST {{base.url}}/fixtures/seed
+```
+
+### Choose a workflow branch
+
+```http
+### Sign in
+# @workflow sign-in
+# @step Login using=Login
+# @if last.statusCode == 200 run=GetProfile
+# @elif last.statusCode == 401 run=RefreshToken
+# @else fail="unexpected login response"
+```
+
+### Compare environments
+
+```http
+### Health check
+# @compare dev stage prod base=stage
+# @trace ttfb<=300ms total<=500ms
+# @assert trace.withinBudget()
+GET {{base.url}}/health
+```
+
+### Define a mock response
+
+```http
+### Declined payment
+# @mock method=POST path=/payments
+# @match json-rules={"amount":{"lte":0}}
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
+
+{"error":"amount must be positive"}
+```
+
+`@when` applies to an individual request. `@if`, `@elif` and `@else` choose which request to run inside a workflow. See the [RestermScript reference](docs/restermscript.md) for the expression language and the [full documentation](docs/resterm.md) for workflows, comparisons, tracing and mocks.
 
 ## CLI
 
