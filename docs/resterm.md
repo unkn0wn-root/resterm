@@ -833,7 +833,11 @@ Troubleshooting:
 
 - Begin each request with a line that starts with `###`. Everything up to the next separator belongs to the same request.
 - Lines prefixed with `#`, `//`, or `--` are treated as comments. Metadata directives live inside these comment blocks.
-- A standalone comment whose content starts with `@name` is treated as a directive. Outside an `@mock` preamble, unknown directives and known directives that are not valid in the current parser context are ignored with a warning. Mock preambles are stricter: only `@match` and `@expect` are accepted before the response, and other directive-shaped comments are parse errors. Add another comment marker, such as `## @if ...`, when directive-looking text should remain an ordinary comment.
+- A standalone comment whose content starts with `@name` is treated as a directive.
+- At file or request scope, an unknown directive is ignored with a warning. A known directive used in the wrong place is handled the same way.
+- Between `@workflow` and the next request, an unknown directive is a parse error. This catches mistakes such as `@stpe` that would otherwise remove a workflow step. Directives attached to requests are still request-scoped, even when a workflow runs those requests.
+- After `@mock` and before the response, only `@match` and `@expect` are allowed. Any other directive-shaped comment is a parse error.
+- To write a comment that starts like a directive, add another comment marker, for example `## @if ...`.
 - A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](#splitting-a-long-matcher).
 - Alternate spellings count as the same option. For example, you cannot use both `known_hosts` and `known-hosts` on one `@ssh` directive. Empty values are ignored for regular options, but not for switches. `strict_hostkey=` enables the switch, so it conflicts with `strict-hostkey=false`.
@@ -1422,12 +1426,13 @@ Workflows parsed from the current document appear in the **Workflows** list on t
 
 Key directives and tokens:
 
-- `@workflow <name>` starts a workflow. Add `on-failure=<stop|continue>` to change the default behaviour and attach other tokens (e.g. `region=us-east-1`) which are surfaced under `Workflow.Options` for tooling.
+- `@workflow <name>` starts a workflow; the name is required and cannot be replaced by an option. Add `on-failure=<stop|continue>` to change the default behaviour and attach other tokens (e.g. `region=us-east-1`) which are surfaced under `Workflow.Options` for tooling. Empty or invalid `on-failure` values are parse errors on both `@workflow` and `@step`.
 - `@description` / `@tag` lines inside the workflow build the description and tag list shown in the UI and stored in history.
 - `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments. The alias is the first word, so quote it when it holds spaces or an equals sign (`@step "Create Account" using=CreateUser`). `name=` sets it instead when the step starts with an option.
 - `vars.request.*` keys add step-scoped values that are available as `{{vars.request.<name>}}` during that request. They do not rewrite existing `@var` declarations automatically, so reference the namespaced token (or copy it in a pre-request script) when you want the override.
 - `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, letting later requests reuse or mutate shared context (e.g. `vars.workflow.userId`).
 - Unknown tokens on `@workflow` or `@step` are preserved in `Options`, allowing custom scripts or future features to consume them without changing the file format.
+- An unknown directive between `@workflow` and the next request is a parse error. Directives attached to requests remain request-scoped, even when the workflow runs those requests. Resterm continues parsing valid workflow steps to report other problems, but it will not run the file until the error is fixed.
 - `expect.status` supports quoted or escaped values, so you can write `expect.status="201 Created"` alongside `expect.statuscode=201`.
 - `expect.status` / `expect.statuscode` require non-empty values, and `expect.statuscode` must be numeric.
 

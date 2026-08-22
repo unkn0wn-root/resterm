@@ -65,20 +65,23 @@ GET https://example.com
 	}
 }
 
-func TestUnknownDirectiveDoesNotEndWorkflow(t *testing.T) {
+func TestUnknownDirectiveRejectsWithoutEndingWorkflow(t *testing.T) {
 	doc := Parse("ignored.http", []byte(`# @workflow deploy
 # @step Create using=Create
-# @nmae Typo
+# @stpe Omitted using=Omitted
 # @step Verify using=Verify
 `))
-	if len(doc.Errors) != 0 {
-		t.Fatalf("errors = %v, want none", doc.Errors)
+	if len(doc.Errors) != 1 {
+		t.Fatalf("errors = %v, want one", doc.Errors)
 	}
-	if len(doc.Warnings) != 1 {
-		t.Fatalf("warnings = %v, want one", doc.Warnings)
+	if got, want := doc.Errors[0].Line, 3; got != want {
+		t.Fatalf("error line = %d, want %d", got, want)
 	}
-	if got, want := doc.Warnings[0].Message, "@nmae is not a known Resterm directive and was ignored"; got != want {
-		t.Fatalf("warning = %q, want %q", got, want)
+	if got, want := doc.Errors[0].Message, "@stpe is not a known Resterm directive in a workflow"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	if len(doc.Warnings) != 0 {
+		t.Fatalf("warnings = %v, want none beside the error", doc.Warnings)
 	}
 	if len(doc.Workflows) != 1 {
 		t.Fatalf("workflows = %d, want one", len(doc.Workflows))
@@ -92,17 +95,20 @@ func TestUnknownDirectiveDoesNotEndWorkflow(t *testing.T) {
 	}
 }
 
-func TestUnknownDirectiveDoesNotCloseWorkflowBranch(t *testing.T) {
+func TestUnknownDirectiveRejectsWithoutClosingWorkflowBranch(t *testing.T) {
 	doc := Parse("ignored.http", []byte(`# @workflow deploy
 # @if true run=Create
 # @nmae Typo
 # @else run=Verify
 `))
-	if len(doc.Errors) != 0 {
-		t.Fatalf("errors = %v, want none", doc.Errors)
+	if len(doc.Errors) != 1 {
+		t.Fatalf("errors = %v, want one", doc.Errors)
 	}
-	if len(doc.Warnings) != 1 {
-		t.Fatalf("warnings = %v, want one", doc.Warnings)
+	if got, want := doc.Errors[0].Message, "@nmae is not a known Resterm directive in a workflow"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	if len(doc.Warnings) != 0 {
+		t.Fatalf("warnings = %v, want none beside the error", doc.Warnings)
 	}
 	if len(doc.Workflows) != 1 {
 		t.Fatalf("workflows = %d, want one", len(doc.Workflows))
@@ -113,6 +119,42 @@ func TestUnknownDirectiveDoesNotCloseWorkflowBranch(t *testing.T) {
 	}
 	if steps[0].If.Else == nil || steps[0].If.Else.Run != "Verify" {
 		t.Fatalf("else = %+v, want run=Verify", steps[0].If.Else)
+	}
+}
+
+func TestUnknownDirectiveAfterWorkflowBoundaryStillWarns(t *testing.T) {
+	tests := map[string]string{
+		"separator": `# @workflow deploy
+# @step Create using=Create
+### Create
+# @nmae Typo
+GET https://example.com
+`,
+		"request directive": `# @workflow deploy
+# @step Create using=Create
+# @name Create
+# @nmae Typo
+GET https://example.com
+`,
+	}
+
+	for name, src := range tests {
+		t.Run(name, func(t *testing.T) {
+			doc := Parse("ignored.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("errors = %v, want none", doc.Errors)
+			}
+			want := "@nmae is not a known Resterm directive and was ignored"
+			if len(doc.Warnings) != 1 || doc.Warnings[0].Message != want {
+				t.Fatalf("warnings = %v, want %q", doc.Warnings, want)
+			}
+			if len(doc.Workflows) != 1 || len(doc.Workflows[0].Steps) != 1 {
+				t.Fatalf("workflows = %+v, want one workflow with one step", doc.Workflows)
+			}
+			if len(doc.Requests) != 1 {
+				t.Fatalf("requests = %d, want one", len(doc.Requests))
+			}
+		})
 	}
 }
 
@@ -187,15 +229,46 @@ func TestKnownIgnoredDirectiveDoesNotCloseWorkflowBranch(t *testing.T) {
 }
 
 func TestExtraCommentMarkerKeepsDirectiveTextInactive(t *testing.T) {
-	doc := Parse("comment.http", []byte(`## @if true run=Next
+	tests := []struct {
+		name         string
+		src          string
+		wantRequests int
+		wantWorkflow int
+	}{
+		{
+			name: "request",
+			src: `## @if true run=Next
 # ordinary mention of @nmae
 GET https://example.com
-`))
-	if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
-		t.Fatalf("errors = %v warnings = %v, want none", doc.Errors, doc.Warnings)
+`,
+			wantRequests: 1,
+		},
+		{
+			name: "workflow",
+			src: `# @workflow deploy
+## @stpe is ordinary prose
+# @step Create using=Create
+`,
+			wantWorkflow: 1,
+		},
 	}
-	if len(doc.Requests) != 1 {
-		t.Fatalf("requests = %d, want one", len(doc.Requests))
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("comment.http", []byte(tt.src))
+			if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+				t.Fatalf("errors = %v warnings = %v, want none", doc.Errors, doc.Warnings)
+			}
+			if len(doc.Requests) != tt.wantRequests || len(doc.Workflows) != tt.wantWorkflow {
+				t.Fatalf(
+					"requests = %d workflows = %d, want %d/%d",
+					len(doc.Requests),
+					len(doc.Workflows),
+					tt.wantRequests,
+					tt.wantWorkflow,
+				)
+			}
+		})
 	}
 }
 

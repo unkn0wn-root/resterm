@@ -93,6 +93,34 @@ func TestRunPlanLeavesWarningsEmptyForACleanFile(t *testing.T) {
 	}
 }
 
+func TestBuildRejectsUnknownDirectiveInWorkflow(t *testing.T) {
+	src := `# @workflow demo
+# @step First using=First
+# @stpe Omitted using=Omitted
+# @step Last using=Last
+
+### First
+# @name First
+GET https://example.com/first
+
+### Last
+# @name Last
+GET https://example.com/last
+`
+	_, err := Build(Options{
+		FilePath:    "workflow.http",
+		FileContent: []byte(src),
+		Select:      Select{Workflow: "demo"},
+	})
+	if err == nil {
+		t.Fatal("Build succeeded, want the shortened workflow rejected before execution")
+	}
+	want := "@stpe is not a known Resterm directive in a workflow"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("Build error = %q, want %q", err, want)
+	}
+}
+
 func containsAny(items []string, want string) bool {
 	for _, item := range items {
 		if strings.Contains(item, want) {
