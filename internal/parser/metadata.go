@@ -85,6 +85,14 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 		return b.addAssert(d)
 	case directive.When:
 		return b.setWhen(d)
+	case directive.Poll:
+		return b.setPoll(d)
+	case directive.Retry:
+		return b.setRetry(d)
+	case directive.RetryWhen:
+		return b.setRetryWhen(d)
+	case directive.RetryBackoff:
+		return b.setRetryBackoff(d)
 	case directive.ForEach:
 		return b.setForEach(d)
 	case directive.Profile:

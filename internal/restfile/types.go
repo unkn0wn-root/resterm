@@ -325,9 +325,37 @@ type RequestMetadata struct {
 	ForEach               *ForEachSpec
 	Asserts               []AssertSpec
 	Captures              []CaptureSpec
+	Poll                  *PollSpec
+	Retry                 *RetrySpec
 	Profile               *ProfileSpec
 	Trace                 *TraceSpec
 	Compare               *CompareSpec
+}
+
+type ResponsePredicate struct {
+	Expression string
+	Line       int
+	Col        int
+}
+
+type PollSpec struct {
+	Every   time.Duration
+	Timeout time.Duration
+	Until   ResponsePredicate
+	Line    int
+}
+
+type RetrySpec struct {
+	Count   int
+	When    *ResponsePredicate
+	Backoff ExponentialBackoffSpec
+	Line    int
+}
+
+type ExponentialBackoffSpec struct {
+	Initial       time.Duration
+	Max           time.Duration
+	JitterPercent float64
 }
 
 type ProfileSpec struct {
@@ -417,6 +445,19 @@ func (req *Request) Origin() string {
 		return ""
 	}
 	return origin(req.SourcePath, req.LineRange.Start)
+}
+
+// RepeatUnsupported returns the protocol name when @poll or @retry cannot be used.
+func (req *Request) RepeatUnsupported() string {
+	switch {
+	case req.GRPC != nil:
+		return "gRPC"
+	case req.SSE != nil:
+		return "SSE"
+	case req.WebSocket != nil:
+		return "WebSocket"
+	}
+	return ""
 }
 
 type SSERequest struct {
