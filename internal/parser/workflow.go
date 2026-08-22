@@ -68,12 +68,17 @@ func (b *workflowBuilder) applyOptions(opts directive.Options) error {
 	if opts.Len() == 0 {
 		return nil
 	}
-	if val, ok := opts.PopAny("on-failure", "onfailure"); ok {
+	hasFailureMode := opts.Has("on-failure") || opts.Has("onfailure")
+	val, _ := opts.PopAny("on-failure", "onfailure")
+	var modeErr error
+	if hasFailureMode {
 		if mode, ok := parseWorkflowFailureMode(val); ok {
 			b.wf.DefaultOnFailure = mode
+		} else {
+			modeErr = workflowFailureModeError(directive.Workflow)
 		}
 	}
-	err := opts.Conflicts(directive.Workflow)
+	err := errors.Join(opts.Conflicts(directive.Workflow), modeErr)
 	if opts.Len() == 0 {
 		return err
 	}
@@ -448,14 +453,18 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 		OnFailure: b.wf.DefaultOnFailure,
 		Line:      line,
 	}
-	if val := opts.Pop("on-failure"); val != "" {
+	var modeErr error
+	if val, ok := opts.Lookup("on-failure"); ok {
+		opts.Pop("on-failure")
 		if mode, ok := parseWorkflowFailureMode(val); ok {
 			step.OnFailure = mode
+		} else {
+			modeErr = workflowFailureModeError(directive.Step)
 		}
 	}
 	// A step with a bad expect option is still added so the workflow keeps
 	// its shape. The error is reported next to it.
-	expErr := errors.Join(opts.Conflicts(directive.Step), applyStepOpts(&step, opts))
+	expErr := errors.Join(modeErr, opts.Conflicts(directive.Step), applyStepOpts(&step, opts))
 	b.applyPending(&step)
 	b.wf.Steps = append(b.wf.Steps, step)
 	b.touch(line)
@@ -563,6 +572,10 @@ func parseWorkflowFailureMode(value string) (restfile.WorkflowFailureMode, bool)
 	}
 	mode, ok := workflowFailureAliases[s]
 	return mode, ok
+}
+
+func workflowFailureModeError(name directive.Name) error {
+	return fmt.Errorf("%s on-failure must be stop or continue", name.Tag())
 }
 
 func parseTagList(text string) []string {

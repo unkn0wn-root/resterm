@@ -171,6 +171,128 @@ GET https://example.com/first
 	}
 }
 
+func TestParseWorkflowRequiresName(t *testing.T) {
+	tests := map[string]string{
+		"empty":        "# @workflow\n",
+		"options only": "# @workflow on-failure=continue\n",
+	}
+
+	for name, src := range tests {
+		t.Run(name, func(t *testing.T) {
+			doc := Parse("workflow.http", []byte(src))
+			want := "@workflow name missing"
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+				t.Fatalf("errors = %v, want %q", doc.Errors, want)
+			}
+			if len(doc.Warnings) != 0 {
+				t.Fatalf("warnings = %v, want none", doc.Warnings)
+			}
+			if len(doc.Workflows) != 0 {
+				t.Fatalf("workflows = %+v, want none", doc.Workflows)
+			}
+		})
+	}
+}
+
+func TestRejectedWorkflowStartPreservesActiveWorkflow(t *testing.T) {
+	src := `# @workflow deploy
+# @step First using=First
+# @workflow on-failure=continue
+# @step Last using=Last
+`
+	doc := Parse("workflow.http", []byte(src))
+	want := "@workflow name missing"
+	if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+		t.Fatalf("errors = %v, want %q", doc.Errors, want)
+	}
+	if len(doc.Workflows) != 1 {
+		t.Fatalf("workflows = %+v, want one", doc.Workflows)
+	}
+	steps := doc.Workflows[0].Steps
+	if len(steps) != 2 || steps[0].Name != "First" || steps[1].Name != "Last" {
+		t.Fatalf("steps = %+v, want First and Last", steps)
+	}
+}
+
+func TestParseWorkflowRejectsInvalidFailureModes(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		line int
+		tag  string
+	}{
+		{
+			name: "workflow value",
+			src:  "# @workflow demo on-failure=explode\n# @step One using=Req\n",
+			line: 1,
+			tag:  "@workflow",
+		},
+		{
+			name: "empty workflow value",
+			src:  "# @workflow demo on-failure=\n# @step One using=Req\n",
+			line: 1,
+			tag:  "@workflow",
+		},
+		{
+			name: "step value",
+			src:  "# @workflow demo on-failure=continue\n# @step One using=Req on-failure=explode\n# @step Two using=Req\n",
+			line: 2,
+			tag:  "@step",
+		},
+		{
+			name: "empty step value",
+			src:  "# @workflow demo on-failure=continue\n# @step One using=Req on-failure=\n# @step Two using=Req\n",
+			line: 2,
+			tag:  "@step",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("workflow.http", []byte(tt.src))
+			if len(doc.Errors) != 1 {
+				t.Fatalf("errors = %v, want one", doc.Errors)
+			}
+			if got := doc.Errors[0].Line; got != tt.line {
+				t.Fatalf("error line = %d, want %d", got, tt.line)
+			}
+			want := tt.tag + " on-failure must be stop or continue"
+			if got := doc.Errors[0].Message; got != want {
+				t.Fatalf("error = %q, want %q", got, want)
+			}
+			if len(doc.Warnings) != 0 {
+				t.Fatalf("warnings = %v, want none", doc.Warnings)
+			}
+			if len(doc.Workflows) != 1 {
+				t.Fatalf("workflows = %+v, want one", doc.Workflows)
+			}
+			wantSteps := 1
+			if tt.tag == "@step" {
+				wantSteps = 2
+			}
+			if got := len(doc.Workflows[0].Steps); got != wantSteps {
+				t.Fatalf("steps = %d, want %d", got, wantSteps)
+			}
+		})
+	}
+}
+
+func TestParseWorkflowKeepsFailureModeAliases(t *testing.T) {
+	src := `# @workflow demo onfailure=abort
+# @step One using=Req on-failure=skip
+`
+	doc := Parse("workflow.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+		t.Fatalf("errors = %v warnings = %v, want none", doc.Errors, doc.Warnings)
+	}
+	if got := doc.Workflows[0].DefaultOnFailure; got != restfile.WorkflowOnFailureStop {
+		t.Fatalf("workflow on-failure = %q, want stop", got)
+	}
+	if got := doc.Workflows[0].Steps[0].OnFailure; got != restfile.WorkflowOnFailureContinue {
+		t.Fatalf("step on-failure = %q, want continue", got)
+	}
+}
+
 func TestParseWorkflowFailureAliasNeverLeaksIntoOptions(t *testing.T) {
 	src := `# @workflow demo on-failure=continue onfailure=stop region=us-east-1
 # @step one using=First

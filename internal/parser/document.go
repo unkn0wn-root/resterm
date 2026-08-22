@@ -284,13 +284,13 @@ func (b *documentBuilder) finish() {
 	b.file.apply(b.doc)
 }
 
-func (b *documentBuilder) startWorkflow(line int, rest string) {
-	if b.inRequest {
-		b.flushRequest(line - 1)
-	}
+func (b *documentBuilder) startWorkflow(line int, rest string) error {
 	nameToken, remainder := directive.CutToken(rest)
 	if nameToken == "" || strings.Contains(nameToken, "=") {
-		return
+		return errors.New("@workflow name missing")
+	}
+	if b.inRequest {
+		b.flushRequest(line - 1)
 	}
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
@@ -298,4 +298,5 @@ func (b *documentBuilder) startWorkflow(line int, rest string) {
 	b.report(line, errors.Join(err, sb.applyOptions(opts)))
 	sb.touch(line)
 	b.workflow = sb
+	return nil
 }

@@ -67,6 +67,12 @@ func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 	// An unknown name has no possible owner, so keep it away from that
 	// stateful routing and leave the current context untouched.
 	if !d.Name.Known() {
+		if b.workflow != nil {
+			return b.reject(
+				d,
+				d.Spelling.Tag()+" is not a known Resterm directive in a workflow",
+			)
+		}
 		b.addWarning(d.lines.Start, ignoredDirectiveWarning(d.Call))
 		return directiveIgnored
 	}
@@ -162,7 +168,9 @@ func (b *documentBuilder) applyRequestDirective(d parsedDirective) directiveOutc
 func (b *documentBuilder) handleWorkflowStart(d parsedDirective) directiveOutcome {
 	switch d.Name {
 	case directive.Workflow:
-		b.startWorkflow(d.lines.Start, d.Args)
+		if err := b.startWorkflow(d.lines.Start, d.Args); err != nil {
+			return b.reject(d, err.Error())
+		}
 		return directiveApplied
 	case directive.Step:
 		if b.workflow == nil {
