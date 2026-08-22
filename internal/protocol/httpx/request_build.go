@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -184,8 +185,10 @@ func (c *Client) buildHTTPRequest(
 		}
 	}
 
-	if err := c.applyAuthentication(httpReq, resolver, req.Metadata.Auth); err != nil {
+	placed, err := c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
+	if err != nil {
 		return nil, opts, err
 	}
+	opts.CredentialHeaders = slices.Concat(opts.CredentialHeaders, placed)
 	return httpReq, opts, nil
 }

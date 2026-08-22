@@ -12,7 +12,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-// AuthPlacement identifies where a resolved auth value belongs on the wire.
 type AuthPlacement int
 
 const (
@@ -26,17 +25,32 @@ type AuthValue struct {
 	Value     string
 }
 
-// AuthValues resolves auth without mutating a request. This lets HTTP and gRPC
-// share expansion while the engine still registers the values for redaction.
-// Existing headers are never overwritten.
-func AuthValues(
+type AuthPlan struct {
+	Values  []AuthValue
+	Targets []string
+}
+
+func (p *AuthPlan) claim(name string) {
+	p.Targets = append(p.Targets, name)
+}
+
+func (p *AuthPlan) header(name, value string) {
+	p.Values = append(p.Values, AuthValue{Placement: AuthInHeader, Name: name, Value: value})
+}
+
+func (p *AuthPlan) query(name, value string) {
+	p.Values = append(p.Values, AuthValue{Placement: AuthInQuery, Name: name, Value: value})
+}
+
+func ResolveAuth(
 	auth *restfile.AuthSpec,
 	resolver *vars.Resolver,
 	existing http.Header,
 	component diag.Component,
-) ([]AuthValue, error) {
+) (AuthPlan, error) {
+	var plan AuthPlan
 	if auth == nil || len(auth.Params) == 0 {
-		return nil, nil
+		return plan, nil
 	}
 
 	kind := auth.Kind()
@@ -64,67 +78,66 @@ func AuthValues(
 		out, err := expandResult(param)
 		return out.Value, err
 	}
-	hdr := func(name, value string) []AuthValue {
-		return []AuthValue{{Placement: AuthInHeader, Name: name, Value: value}}
-	}
-
 	switch kind {
 	case restfile.AuthBasic:
+		plan.claim(authorizationHeader)
 		if header.Present(existing, authorizationHeader) {
-			return nil, nil
+			return plan, nil
 		}
 		user, err := expand(authParamUsername)
 		if err != nil {
-			return nil, err
+			return AuthPlan{}, err
 		}
 		pass, err := expand(authParamPassword)
 		if err != nil {
-			return nil, err
+			return AuthPlan{}, err
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
-		return hdr(authorizationHeader, basicPrefix+encoded), nil
+		plan.header(authorizationHeader, basicPrefix+encoded)
 
 	case restfile.AuthBearer:
+		plan.claim(authorizationHeader)
 		if header.Present(existing, authorizationHeader) {
-			return nil, nil
+			return plan, nil
 		}
 		token, err := expand(authParamToken)
 		if err != nil {
-			return nil, err
+			return AuthPlan{}, err
 		}
-		return hdr(authorizationHeader, bearerTokenPrefix+token), nil
+		plan.header(authorizationHeader, bearerTokenPrefix+token)
 
 	case restfile.AuthAPIKey:
 		placement, err := expandResult(authParamPlacement)
 		if err != nil {
-			return nil, err
+			return AuthPlan{}, err
 		}
 		name, err := expand(authParamName)
 		if err != nil {
-			return nil, err
+			return AuthPlan{}, err
 		}
 		switch util.LowerTrim(placement.Value) {
 		case authPlacementQuery:
 			value, err := expand(authParamValue)
 			if err != nil {
-				return nil, err
+				return AuthPlan{}, err
 			}
-			return []AuthValue{{Placement: AuthInQuery, Name: name, Value: value}}, nil
+			plan.query(name, value)
 		case "", authPlacementHeader:
 			if name == "" {
 				name = defaultAPIKeyHeader
 			}
+			plan.claim(name)
 			if header.Present(existing, name) {
-				return nil, nil
+				return plan, nil
 			}
 			value, err := expand(authParamValue)
 			if err != nil {
-				return nil, err
+				return AuthPlan{}, err
 			}
-			return hdr(name, value), nil
+			plan.header(name, value)
 		default:
 			if placement.HasUndefinedVariables {
-				return nil, nil
+				return AuthPlan{}, nil
 			}
 			msg := fmt.Sprintf(
 				"invalid apikey auth placement %q, expected header or query",
@@ -133,22 +146,26 @@ func AuthValues(
 			if at := auth.Origin(); at != "" {
 				msg += " (" + at + ")"
 			}
-			return nil, diag.New(diag.ClassAuth, msg, diag.WithComponent(component))
+			return AuthPlan{}, diag.New(diag.ClassAuth, msg, diag.WithComponent(component))
 		}
 
 	case restfile.AuthHeader:
 		name, err := expand(authParamHeader)
 		if err != nil {
-			return nil, err
+			return AuthPlan{}, err
 		}
-		if name == "" || header.Present(existing, name) {
-			return nil, nil
+		if name == "" {
+			return plan, nil
+		}
+		plan.claim(name)
+		if header.Present(existing, name) {
+			return plan, nil
 		}
 		value, err := expand(authParamValue)
 		if err != nil {
-			return nil, err
+			return AuthPlan{}, err
 		}
-		return hdr(name, value), nil
+		plan.header(name, value)
 	}
-	return nil, nil
+	return plan, nil
 }

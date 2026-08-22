@@ -114,6 +114,21 @@ func InjectedAuthSecrets(
 	return out
 }
 
+func InjectedAuthHeaders(before, after *restfile.Request) []string {
+	if after == nil {
+		return nil
+	}
+	prev := reqHeaders(before)
+	var out []string
+	for name, values := range reqHeaders(after) {
+		if !slices.Equal(values, prev[name]) {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 func reqHeaders(req *restfile.Request) http.Header {
 	if req == nil {
 		return nil
@@ -181,7 +196,7 @@ func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
 		return nil
 	}
 
-	values, err := httpx.AuthValues(
+	plan, err := httpx.ResolveAuth(
 		req.Metadata.Auth,
 		res,
 		grpcAuthHeaders(req),
@@ -191,7 +206,7 @@ func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
 		return err
 	}
 
-	for _, v := range values {
+	for _, v := range plan.Values {
 		if v.Placement == httpx.AuthInQuery {
 			return diag.New(
 				diag.ClassAuth,
@@ -213,7 +228,6 @@ func setRequestHeaderIfMissing(req *restfile.Request, name, value string) bool {
 	return true
 }
 
-// AuthValues only looks at headers, so hand it the grpc metadata as headers too.
 func grpcAuthHeaders(req *restfile.Request) http.Header {
 	hdr := reqHeaders(req)
 	meta := req.GRPC.Metadata
@@ -263,7 +277,7 @@ func (e *Engine) EnsureCommandAuth(
 		return authcmd.Result{}, nil
 	}
 	if hdr, ok := e.commandAuthHeader(doc, auth, res); ok && requestHeaderPresent(req, hdr) {
-		return authcmd.Result{}, nil
+		return authcmd.Result{Header: hdr}, nil
 	}
 	prep, err := e.PrepareCommandAuth(doc, auth, res, env, timeout)
 	if err != nil {
@@ -271,7 +285,7 @@ func (e *Engine) EnsureCommandAuth(
 	}
 	hdr := prep.HeaderName()
 	if requestHeaderPresent(req, hdr) {
-		return authcmd.Result{}, nil
+		return authcmd.Result{Header: hdr}, nil
 	}
 
 	ac, err := e.authCmdManager()
@@ -283,7 +297,7 @@ func (e *Engine) EnsureCommandAuth(
 		return authcmd.Result{}, diag.WrapAs(diag.ClassAuth, err, "resolve command auth")
 	}
 	if !setRequestHeaderIfMissing(req, out.Header, out.Value) {
-		return authcmd.Result{}, nil
+		return authcmd.Result{Header: out.Header}, nil
 	}
 	return out, nil
 }
@@ -335,18 +349,18 @@ func (e *Engine) EnsureOAuth(
 	opts httpx.Options,
 	env vars.ResolvedEnv,
 	timeout time.Duration,
-) error {
+) (string, error) {
 	auth := requestAuthOfType(req, restfile.AuthOAuth2)
 	if auth == nil {
-		return nil
+		return "", nil
 	}
 	oa, err := e.oauthManager()
 	if err != nil {
-		return err
+		return "", err
 	}
 	cfg, err := e.BuildOAuthConfig(auth, res)
 	if err != nil {
-		return err
+		return "", err
 	}
 	cfg = oa.MergeCachedConfig(env.Scope(), cfg)
 
@@ -354,13 +368,13 @@ func (e *Engine) EnsureOAuth(
 	// @grpc-metadata never fails on config we are about to discard.
 	hdr := cfg.Header
 	if requestHeaderPresent(req, hdr) {
-		return nil
+		return hdr, nil
 	}
 	if cfg.TokenURL == "" {
-		return diag.New(diag.ClassAuth, errOAuthTokenURLRequired)
+		return "", diag.New(diag.ClassAuth, errOAuthTokenURLRequired)
 	}
 	if e.oauthNeedsHeadlessSeed(oa, env.Scope(), cfg) {
-		return diag.New(diag.ClassAuth, errOAuthHeadlessSeedRequired)
+		return "", diag.New(diag.ClassAuth, errOAuthHeadlessSeedRequired)
 	}
 
 	tmo := oauthTimeout(cfg.GrantType, timeout)
@@ -369,10 +383,10 @@ func (e *Engine) EnsureOAuth(
 
 	tok, err := oa.Token(ctx, env.Scope(), cfg, opts)
 	if err != nil {
-		return diag.WrapAs(diag.ClassAuth, err, "fetch oauth token")
+		return "", diag.WrapAs(diag.ClassAuth, err, "fetch oauth token")
 	}
 	setRequestHeaderIfMissing(req, hdr, oauthHeaderValue(hdr, tok))
-	return nil
+	return hdr, nil
 }
 
 func (e *Engine) allowInteractiveOAuth() bool {

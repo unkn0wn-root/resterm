@@ -172,7 +172,7 @@ func TestApplyAuthenticationBasic(t *testing.T) {
 		Params: map[string]string{"username": "alice", "password": "secret"},
 	}
 	resolver := vars.NewResolver()
-	if err := client.applyAuthentication(httpReq, resolver, auth); err != nil {
+	if _, err := client.applyAuthentication(httpReq, resolver, auth); err != nil {
 		t.Fatalf("apply authentication: %v", err)
 	}
 	if got := httpReq.Header.Get("Authorization"); !strings.HasPrefix(got, "Basic ") {
@@ -193,7 +193,7 @@ func TestApplyAuthenticationBearer(t *testing.T) {
 		Params: map[string]string{"token": "token-123"},
 	}
 	resolver := vars.NewResolver()
-	if err := client.applyAuthentication(httpReq, resolver, auth); err != nil {
+	if _, err := client.applyAuthentication(httpReq, resolver, auth); err != nil {
 		t.Fatalf("apply authentication: %v", err)
 	}
 	if got := httpReq.Header.Get("Authorization"); got != "Bearer token-123" {
