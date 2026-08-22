@@ -152,6 +152,24 @@ var settingArgs = []Item{
 		Placeholder: "true",
 	},
 	{
+		Label:       "forward-credentials-on-redirect=",
+		Summary:     "Origins a redirect may carry credentials to",
+		Insert:      "forward-credentials-on-redirect=https://cdn.example.com",
+		Placeholder: "https://cdn.example.com",
+	},
+	{
+		Label:       "max-redirects=",
+		Summary:     "Redirects to follow (count or none)",
+		Insert:      "max-redirects=20",
+		Placeholder: "20",
+	},
+	{
+		Label:       "max-response-size=",
+		Summary:     "Response body limit (size or none)",
+		Insert:      "max-response-size=100mb",
+		Placeholder: "100mb",
+	},
+	{
 		Label:       "http-version=",
 		Summary:     "HTTP protocol version (1.1|2)",
 		Insert:      "http-version=1.1",

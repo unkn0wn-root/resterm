@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
+	"github.com/unkn0wn-root/resterm/internal/http/origin"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -21,8 +23,14 @@ import (
 
 type Options struct {
 	Timeout            time.Duration
+	MaxResponseBytes   bytesize.Budget
 	BaseURL            string
 	FollowRedirects    bool
+	MaxRedirects       restfile.Opt[int]
+	CredentialHeaders  []string
+	ForwardCredentials origin.Set
+	ConfineToOrigin    bool
+
 	InsecureSkipVerify bool
 	ProxyURL           string
 	RootCAs            []string

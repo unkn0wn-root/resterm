@@ -155,14 +155,13 @@ func applyTunnel(
 }
 
 func newHTTPClient(transport *http.Transport, opts Options) *http.Client {
-	client := &http.Client{Transport: transport, Jar: opts.CookieJar}
+	client := &http.Client{
+		Transport:     transport,
+		Jar:           opts.CookieJar,
+		CheckRedirect: redirectPolicy(opts),
+	}
 	if opts.Timeout > 0 {
 		client.Timeout = opts.Timeout
-	}
-	if !opts.FollowRedirects {
-		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
 	}
 	return client
 }
