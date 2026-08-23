@@ -147,7 +147,7 @@ var settingArgs = []Item{
 	},
 	{
 		Label:       "http-version=",
-		Summary:     "HTTP protocol version (1.0|1.1|2)",
+		Summary:     "HTTP protocol version (1.1|2)",
 		Insert:      "http-version=1.1",
 		Placeholder: "1.1",
 	},

@@ -49,7 +49,7 @@ func ApplyHTTPTransport(
 	}
 	transport.Proxy = nil
 	transport.DialContext = dialer
-	if v == version.V10 || v == version.V11 {
+	if v == version.V11 {
 		return nil
 	}
 	return http2.ConfigureTransport(transport)

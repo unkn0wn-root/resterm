@@ -1,14 +1,19 @@
 package version
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 const Key = "http-version"
 
+const tokenPrefix = "http/"
+
 type HTTP int
 
+// HTTP/1.0 is omitted because net/http cannot send HTTP/1.0 requests.
 const (
 	Unknown HTTP = iota
-	V10
 	V11
 	V2
 )
@@ -21,21 +26,41 @@ func ParseValue(raw string) (HTTP, bool) {
 	return parse(raw, true)
 }
 
-func SplitToken(fields []string) ([]string, HTTP) {
+// UnsupportedError reports an unsupported HTTP version token.
+type UnsupportedError struct {
+	Token string
+}
+
+func (e *UnsupportedError) Error() string {
+	return fmt.Sprintf(
+		"unsupported HTTP version %q (use HTTP/1.1 or HTTP/2)",
+		e.Token,
+	)
+}
+
+// SplitToken removes a supported trailing HTTP version.
+// Unsupported version tokens return an error.
+func SplitToken(fields []string) ([]string, HTTP, error) {
 	if len(fields) == 0 {
-		return fields, Unknown
+		return fields, Unknown, nil
 	}
-	v, ok := ParseToken(fields[len(fields)-1])
+	last := fields[len(fields)-1]
+	v, ok := ParseToken(last)
 	if !ok {
-		return fields, Unknown
+		if isTokenForm(last) {
+			return fields, Unknown, &UnsupportedError{Token: last}
+		}
+		return fields, Unknown, nil
 	}
-	return fields[:len(fields)-1], v
+	return fields[:len(fields)-1], v, nil
+}
+
+func isTokenForm(raw string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(raw)), tokenPrefix)
 }
 
 func Format(v HTTP) string {
 	switch v {
-	case V10:
-		return "1.0"
 	case V11:
 		return "1.1"
 	case V2:
@@ -67,14 +92,12 @@ func parse(raw string, allowBare bool) (HTTP, bool) {
 		return Unknown, false
 	}
 	s = strings.ToLower(s)
-	if after, ok := strings.CutPrefix(s, "http/"); ok {
+	if after, ok := strings.CutPrefix(s, tokenPrefix); ok {
 		s = after
 	} else if !allowBare {
 		return Unknown, false
 	}
 	switch s {
-	case "1.0":
-		return V10, true
 	case "1.1":
 		return V11, true
 	case "2", "2.0":

@@ -225,6 +225,36 @@ GET http://127.0.0.1:5001/games/1 HTTP/1.1
 	}
 }
 
+func TestParseMethodLineRejectsUnsupportedHTTPVersion(t *testing.T) {
+	for _, token := range []string{"HTTP/9.9", "HTTP/3", "http/0.9", "HTTP/1.0"} {
+		t.Run(token, func(t *testing.T) {
+			doc := Parse("bad.http", []byte("GET http://example.com/bad "+token+"\n"))
+			if len(doc.Requests) != 0 {
+				t.Fatalf("expected no request, got %q", doc.Requests[0].URL)
+			}
+			if len(doc.Errors) != 1 {
+				t.Fatalf("expected 1 parse error, got %#v", doc.Errors)
+			}
+			if err := doc.Errors[0]; err.Line != 1 || !strings.Contains(err.Message, token) {
+				t.Fatalf("unexpected error: %#v", err)
+			}
+		})
+	}
+}
+
+func TestParseMethodLineKeepsNonVersionTail(t *testing.T) {
+	doc := Parse("tail.http", []byte("GET http://example.com/a b\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("unexpected parse errors: %#v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if got := doc.Requests[0].URL; got != "http://example.com/a b" {
+		t.Fatalf("url = %q", got)
+	}
+}
+
 func TestHTTPVersionSettingOverridesRequestLine(t *testing.T) {
 	src := `GET https://example.com HTTP/1.1
 # @setting http-version 2

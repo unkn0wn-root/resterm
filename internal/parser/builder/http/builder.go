@@ -17,27 +17,41 @@ func isMethodLine(line string) bool {
 	return methodRe.MatchString(line)
 }
 
-func ParseMethodLine(line string) (method string, url string, ver version.HTTP, ok bool) {
+// MethodLine contains the parsed parts of a request line.
+type MethodLine struct {
+	Method  string
+	URL     string
+	Version version.HTTP
+}
+
+// ParseMethodLine parses an HTTP request line.
+func ParseMethodLine(line string) (ml MethodLine, ok bool, err error) {
 	if !isMethodLine(line) {
-		return "", "", version.Unknown, false
+		return MethodLine{}, false, nil
 	}
 
 	fields := strings.Fields(line)
 	if len(fields) < 2 {
-		return "", "", version.Unknown, false
+		return MethodLine{}, false, nil
 	}
 
-	method = str.UpperTrim(fields[0])
+	urlFields, ver, err := version.SplitToken(fields[1:])
+	if err != nil {
+		return MethodLine{}, false, err
+	}
+	if len(urlFields) == 0 {
+		return MethodLine{}, false, nil
+	}
+
+	method := str.UpperTrim(fields[0])
 	if method == "WS" || method == "WSS" {
 		method = stdhttp.MethodGet
 	}
-
-	urlFields, ver := version.SplitToken(fields[1:])
-	if len(urlFields) == 0 {
-		return "", "", version.Unknown, false
-	}
-	url = strings.Join(urlFields, " ")
-	return method, url, ver, true
+	return MethodLine{
+		Method:  method,
+		URL:     strings.Join(urlFields, " "),
+		Version: ver,
+	}, true, nil
 }
 
 func ParseWebSocketURLLine(line string) (url string, ok bool) {

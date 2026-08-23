@@ -74,7 +74,10 @@ func inlineRequestFromLine(raw string, lineNumber int) *restfile.Request {
 	url := ""
 
 	fields := strings.Fields(trimmed)
-	fields, ver := version.SplitToken(fields)
+	fields, ver, err := version.SplitToken(fields)
+	if err != nil {
+		return nil
+	}
 	if len(fields) == 1 {
 		url = fields[0]
 	} else if len(fields) >= 2 {

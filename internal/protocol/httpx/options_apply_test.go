@@ -21,6 +21,12 @@ func TestApplyOptionSettingsRejectsInvalidValues(t *testing.T) {
 		{name: "insecure", key: "insecure", val: "maybe", want: `invalid insecure "maybe" (use true or false)`},
 		{name: "no-cookies", key: "no-cookies", val: "maybe", want: `invalid no-cookies "maybe" (use true or false)`},
 		{name: "http-version", key: "http-version", val: "unsupported", want: `invalid http-version "unsupported"`},
+		{
+			name: "http-version 1.0",
+			key:  "http-version",
+			val:  "1.0",
+			want: `invalid http-version "1.0" (use 1.1, 2 or HTTP/1.1, HTTP/2)`,
+		},
 		// A bare "@setting insecure" writes no value at all, so say it is missing.
 		{name: "bare bool", key: "insecure", val: "", want: "missing insecure value (use true or false)"},
 		{

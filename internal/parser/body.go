@@ -78,11 +78,18 @@ func (b *documentBuilder) handleMethodLine(ln line) bool {
 		return true
 	}
 
-	if method, url, ver, ok := httpbuilder.ParseMethodLine(ln.raw); ok {
+	// Keep unsupported versions from being parsed as part of the URL.
+	ml, ok, err := httpbuilder.ParseMethodLine(ln.raw)
+	switch {
+	case err != nil:
+		b.addError(ln.no, err.Error())
+		b.appendLine(ln.raw)
+		return true
+	case ok:
 		b.ensureRequest(ln.no)
 
-		b.request.http.SetMethodAndURL(method, url)
-		b.request.settings = version.SetIfMissing(b.request.settings, ver)
+		b.request.http.SetMethodAndURL(ml.Method, ml.URL)
+		b.request.settings = version.SetIfMissing(b.request.settings, ml.Version)
 		b.appendLine(ln.raw)
 		return true
 	}

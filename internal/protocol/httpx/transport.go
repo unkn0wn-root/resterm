@@ -58,7 +58,7 @@ func applyTransportHTTPVersion(transport *http.Transport, v version.HTTP) {
 	if transport == nil {
 		return
 	}
-	if v == version.V10 || v == version.V11 {
+	if v == version.V11 {
 		transport.ForceAttemptHTTP2 = false
 		transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
 	}

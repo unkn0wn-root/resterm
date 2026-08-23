@@ -162,7 +162,6 @@ func (c *Client) buildHTTPRequest(
 			diag.WithComponent(diag.ComponentHTTP),
 		)
 	}
-	applyHTTPVersion(httpReq, opts.HTTPVersion)
 	if verErr := checkHTTPVersionRequest(httpReq, opts.HTTPVersion); verErr != nil {
 		return nil, opts, verErr
 	}
