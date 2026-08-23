@@ -5,6 +5,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/curl"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
+	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -12,34 +13,40 @@ func (m *Model) requestAtCursor(
 	doc *restfile.Document,
 	content string,
 	cursorLine int,
-) (*restfile.Request, bool) {
+) (*restfile.Request, bool, error) {
 	if req, _ := requestAtLine(doc, cursorLine); req != nil {
-		return req, false
+		return req, false, nil
 	}
-	if inline := buildInlineRequest(content, cursorLine); inline != nil {
-		return inline, true
+	// A line the parser refused is still the line the user is on, so report why
+	// instead of falling back to the last request and running something else.
+	inline, err := buildInlineRequest(content, cursorLine)
+	if err != nil {
+		return nil, false, err
+	}
+	if inline != nil {
+		return inline, true, nil
 	}
 	if doc != nil && len(doc.Requests) > 0 {
 		last := doc.Requests[len(doc.Requests)-1]
 		if last != nil && cursorLine > last.LineRange.End {
-			return last, false
+			return last, false, nil
 		}
 	}
-	return nil, false
+	return nil, false, nil
 }
 
-func buildInlineRequest(content string, lineNumber int) *restfile.Request {
+func buildInlineRequest(content string, lineNumber int) (*restfile.Request, error) {
 	if lineNumber < 1 {
-		return nil
+		return nil, nil
 	}
 
 	lines := strings.Split(content, "\n")
 	if req := inlineCurlRequest(lines, lineNumber); req != nil {
-		return req
+		return req, nil
 	}
 
 	if lineNumber > len(lines) {
-		return nil
+		return nil, nil
 	}
 	return inlineRequestFromLine(lines[lineNumber-1], lineNumber)
 }
@@ -64,67 +71,24 @@ func inlineCurlRequest(lines []string, lineNumber int) *restfile.Request {
 	return parsed
 }
 
-func inlineRequestFromLine(raw string, lineNumber int) *restfile.Request {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil
-	}
-
-	method := "GET"
-	url := ""
-
-	fields := strings.Fields(trimmed)
-	fields, ver, err := version.SplitToken(fields)
+// Use the parser grammar so unsupported versions cannot look like non-requests.
+func inlineRequestFromLine(raw string, lineNumber int) (*restfile.Request, error) {
+	ml, ok, err := httpbuilder.ParseRequestLine(raw)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	if len(fields) == 1 {
-		url = fields[0]
-	} else if len(fields) >= 2 {
-		candidate := strings.ToUpper(fields[0])
-		if isInlineHTTPMethod(candidate) {
-			method = candidate
-			url = fields[1]
-		}
-	}
-
-	if url == "" {
-		url = strings.Join(fields, " ")
-	}
-
-	url = strings.Trim(url, "\"'")
-	if !looksLikeHTTPRequestURL(url) {
-		return nil
+	if !ok {
+		return nil, nil
 	}
 
 	return &restfile.Request{
-		Method: method,
-		URL:    url,
+		Method: ml.Method,
+		URL:    ml.URL,
 		LineRange: restfile.LineRange{
 			Start: lineNumber,
 			End:   lineNumber,
 		},
 		OriginalText: raw,
-		Settings:     version.SetIfMissing(nil, ver),
-	}
-}
-
-func isInlineHTTPMethod(method string) bool {
-	switch method {
-	case "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS":
-		return true
-	default:
-		return false
-	}
-}
-
-func looksLikeHTTPRequestURL(url string) bool {
-	if url == "" {
-		return false
-	}
-	lower := strings.ToLower(url)
-	return strings.HasPrefix(lower, "http://") ||
-		strings.HasPrefix(lower, "https://") ||
-		strings.HasPrefix(lower, "ws://") ||
-		strings.HasPrefix(lower, "wss://")
+		Settings:     version.SetIfMissing(nil, ml.Version),
+	}, nil
 }

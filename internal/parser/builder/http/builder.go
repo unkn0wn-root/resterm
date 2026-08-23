@@ -9,8 +9,10 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
+// A method has to be followed by whitespace. A word boundary would also match
+// the colon in "ws://host", which reads that scheme as the WS method.
 var methodRe = regexp.MustCompile(
-	`^(?i)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT|WS|WSS)\b`,
+	`^(?i)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT|WS|WSS)(\s|$)`,
 )
 
 func isMethodLine(line string) bool {
@@ -54,16 +56,51 @@ func ParseMethodLine(line string) (ml MethodLine, ok bool, err error) {
 	}, true, nil
 }
 
-func ParseWebSocketURLLine(line string) (url string, ok bool) {
-	s := str.Trim(line)
-	if s == "" {
-		return "", false
+// ParseRequestLine parses a method request or a bare HTTP/WebSocket URL.
+func ParseRequestLine(line string) (MethodLine, bool, error) {
+	if ml, ok, err := ParseMethodLine(line); ok || err != nil {
+		return ml, ok, err
 	}
-	lower := str.Lower(s)
-	if strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://") {
-		return s, true
+	return parseURLLine(line, requestSchemes)
+}
+
+// ParseWebSocketURLLine parses a bare WebSocket request line.
+func ParseWebSocketURLLine(line string) (MethodLine, bool, error) {
+	return parseURLLine(line, webSocketSchemes)
+}
+
+var (
+	requestSchemes   = []string{"http://", "https://", "ws://", "wss://"}
+	webSocketSchemes = []string{"ws://", "wss://"}
+)
+
+func parseURLLine(line string, schemes []string) (MethodLine, bool, error) {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return MethodLine{}, false, nil
 	}
-	return "", false
+
+	urlFields, ver, err := version.SplitToken(fields)
+	// Check the scheme before reporting a version error so prose ending in
+	// HTTP/<number> is not mistaken for a request.
+	url := strings.Trim(strings.Join(urlFields, " "), `"'`)
+	if !hasScheme(url, schemes) {
+		return MethodLine{}, false, nil
+	}
+	if err != nil {
+		return MethodLine{}, false, err
+	}
+	return MethodLine{Method: stdhttp.MethodGet, URL: url, Version: ver}, true, nil
+}
+
+func hasScheme(url string, schemes []string) bool {
+	lower := str.Lower(url)
+	for _, scheme := range schemes {
+		if strings.HasPrefix(lower, scheme) {
+			return true
+		}
+	}
+	return false
 }
 
 type bodyLine struct {

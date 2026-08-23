@@ -2,12 +2,17 @@ package version
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
 const Key = "http-version"
 
 const tokenPrefix = "http/"
+
+// HTTP/2 is accepted alongside the RFC's dotted version form. Other tails are
+// URL text unless they match this numeric grammar.
+var tokenRe = regexp.MustCompile(`(?i)^http/[0-9]+(\.[0-9]+)?$`)
 
 type HTTP int
 
@@ -45,18 +50,18 @@ func SplitToken(fields []string) ([]string, HTTP, error) {
 		return fields, Unknown, nil
 	}
 	last := fields[len(fields)-1]
+	if !isTokenForm(last) {
+		return fields, Unknown, nil
+	}
 	v, ok := ParseToken(last)
 	if !ok {
-		if isTokenForm(last) {
-			return fields, Unknown, &UnsupportedError{Token: last}
-		}
-		return fields, Unknown, nil
+		return fields, Unknown, &UnsupportedError{Token: last}
 	}
 	return fields[:len(fields)-1], v, nil
 }
 
 func isTokenForm(raw string) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(raw)), tokenPrefix)
+	return tokenRe.MatchString(raw)
 }
 
 func Format(v HTTP) string {

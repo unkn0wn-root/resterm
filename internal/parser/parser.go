@@ -11,7 +11,12 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-const maxScanToken = 1024 * 1024
+// eol.ScanLines retains line endings, so reserve CRLF separately from the
+// one-megabyte content limit.
+const (
+	maxLine      = 1024 * 1024
+	maxScanToken = maxLine + len(eol.CRLF)
+)
 
 func Parse(path string, data []byte) *restfile.Document {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -34,7 +39,7 @@ func Parse(path string, data []byte) *restfile.Document {
 		}
 		msg := fmt.Sprintf("parse error: %v", err)
 		if errors.Is(err, bufio.ErrTooLong) {
-			msg = fmt.Sprintf("parse error: line exceeds %d bytes", maxScanToken)
+			msg = fmt.Sprintf("parse error: line exceeds %d bytes", maxLine)
 		}
 		builder.addError(lineNumber+1, msg)
 	}

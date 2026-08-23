@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -78,8 +77,10 @@ func (b *documentBuilder) handleMethodLine(ln line) bool {
 		return true
 	}
 
-	// Keep unsupported versions from being parsed as part of the URL.
 	ml, ok, err := httpbuilder.ParseMethodLine(ln.raw)
+	if !ok && err == nil {
+		ml, ok, err = httpbuilder.ParseWebSocketURLLine(ln.raw)
+	}
 	switch {
 	case err != nil:
 		b.addError(ln.no, err.Error())
@@ -90,14 +91,6 @@ func (b *documentBuilder) handleMethodLine(ln line) bool {
 
 		b.request.http.SetMethodAndURL(ml.Method, ml.URL)
 		b.request.settings = version.SetIfMissing(b.request.settings, ml.Version)
-		b.appendLine(ln.raw)
-		return true
-	}
-
-	if url, ok := httpbuilder.ParseWebSocketURLLine(ln.raw); ok {
-		b.ensureRequest(ln.no)
-
-		b.request.http.SetMethodAndURL(http.MethodGet, url)
 		b.appendLine(ln.raw)
 		return true
 	}

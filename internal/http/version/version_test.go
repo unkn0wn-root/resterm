@@ -46,21 +46,23 @@ func TestParseValue(t *testing.T) {
 }
 
 func TestSplitToken(t *testing.T) {
-	fields := []string{"http://example.com", "HTTP/1.1"}
-	out, v, err := SplitToken(fields)
-	if err != nil {
-		t.Fatalf("SplitToken: %v", err)
-	}
-	if v != V11 {
-		t.Fatalf("expected V11, got %v", v)
-	}
-	if len(out) != 1 || out[0] != "http://example.com" {
-		t.Fatalf("unexpected fields: %#v", out)
+	for token, want := range map[string]HTTP{
+		"HTTP/1.1": V11,
+		"http/2":   V2,
+		"HTTP/2.0": V2,
+	} {
+		out, got, err := SplitToken([]string{"http://example.com", token})
+		if err != nil {
+			t.Fatalf("SplitToken(%q): %v", token, err)
+		}
+		if got != want || len(out) != 1 || out[0] != "http://example.com" {
+			t.Fatalf("SplitToken(%q) = %#v, %v", token, out, got)
+		}
 	}
 }
 
 func TestSplitTokenRejectsUnsupportedVersion(t *testing.T) {
-	for _, token := range []string{"HTTP/9.9", "HTTP/3", "http/0.9", "HTTP/1.0"} {
+	for _, token := range []string{"HTTP/3", "HTTP/1.0", "HTTP/11"} {
 		out, v, err := SplitToken([]string{"http://example.com/bad", token})
 		var unsupported *UnsupportedError
 		if !errors.As(err, &unsupported) {
@@ -76,13 +78,17 @@ func TestSplitTokenRejectsUnsupportedVersion(t *testing.T) {
 }
 
 func TestSplitTokenKeepsNonVersionTail(t *testing.T) {
-	fields := []string{"http://example.com/a", "b"}
-	out, v, err := SplitToken(fields)
-	if err != nil {
-		t.Fatalf("SplitToken: %v", err)
+	tails := []string{
+		"b", "http/foo", "HTTP/", "HTTP/2/x", "http/2?a=b", "http/1.1.1",
 	}
-	if v != Unknown || len(out) != 2 {
-		t.Fatalf("unexpected split: %#v %v", out, v)
+	for _, tail := range tails {
+		out, v, err := SplitToken([]string{"http://example.com/a", tail})
+		if err != nil {
+			t.Fatalf("SplitToken(%q): %v", tail, err)
+		}
+		if v != Unknown || len(out) != 2 {
+			t.Fatalf("SplitToken(%q) split the tail off: %#v %v", tail, out, v)
+		}
 	}
 }
 
