@@ -864,6 +864,53 @@ GET https://example.com
 	}
 }
 
+func TestParseShorthandEmptyValue(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{name: "spaced equals", src: "@x ="},
+		{name: "tight equals", src: "@x="},
+		{name: "colon", src: "@x:"},
+		{name: "trailing space", src: "@x = "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("empty.http", []byte(tt.src+"\nGET http://example.com/\n"))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("unexpected parse errors: %#v", doc.Errors)
+			}
+			if len(doc.Variables) != 1 {
+				t.Fatalf("expected 1 file variable, got %#v", doc.Variables)
+			}
+			if v := doc.Variables[0]; v.Name != "x" || v.Value != "" {
+				t.Fatalf("variable = %#v, want x with an empty value", v)
+			}
+		})
+	}
+}
+
+func TestParseShorthandKeepsValuesWithSeparators(t *testing.T) {
+	src := `@a = 1
+@b=2
+@c: three
+@d = = four
+@e five
+`
+
+	doc := Parse("values.http", []byte(src+"GET http://example.com/\n"))
+	want := map[string]string{"a": "1", "b": "2", "c": "three", "d": "= four", "e": "five"}
+	if len(doc.Variables) != len(want) {
+		t.Fatalf("expected %d file variables, got %#v", len(want), doc.Variables)
+	}
+	for _, v := range doc.Variables {
+		if got, ok := want[v.Name]; !ok || got != v.Value {
+			t.Fatalf("variable %q = %q, want %q", v.Name, v.Value, got)
+		}
+	}
+}
+
 func TestParseConstDirectives(t *testing.T) {
 	t.Parallel()
 
