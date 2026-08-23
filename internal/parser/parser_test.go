@@ -2,12 +2,15 @@ package parser
 
 import (
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/eol"
+	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -222,6 +225,83 @@ GET http://127.0.0.1:5001/games/1 HTTP/1.1
 	}
 	if doc.Requests[1].Settings["http-version"] != "1.1" {
 		t.Fatalf("expected http-version=1.1, got %q", doc.Requests[1].Settings["http-version"])
+	}
+}
+
+func TestParseMethodLineRejectsUnsupportedHTTPVersion(t *testing.T) {
+	for _, token := range []string{"HTTP/9.9", "HTTP/3", "http/0.9", "HTTP/1.0"} {
+		t.Run(token, func(t *testing.T) {
+			doc := Parse("bad.http", []byte("GET http://example.com/bad "+token+"\n"))
+			if len(doc.Requests) != 0 {
+				t.Fatalf("expected no request, got %q", doc.Requests[0].URL)
+			}
+			if len(doc.Errors) != 1 {
+				t.Fatalf("expected 1 parse error, got %#v", doc.Errors)
+			}
+			if err := doc.Errors[0]; err.Line != 1 || !strings.Contains(err.Message, token) {
+				t.Fatalf("unexpected error: %#v", err)
+			}
+		})
+	}
+}
+
+func TestParseWebSocketURLLineKeepsURLWhole(t *testing.T) {
+	doc := Parse("ws.http", []byte("ws://example.com/s b\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("unexpected parse errors: %#v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if req := doc.Requests[0]; req.Method != http.MethodGet || req.URL != "ws://example.com/s b" {
+		t.Fatalf("request = %s %q", req.Method, req.URL)
+	}
+}
+
+func TestParseWebSocketURLLineReadsHTTPVersion(t *testing.T) {
+	doc := Parse("ws.http", []byte("### Socket\nws://example.com/chat HTTP/1.1\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("unexpected parse errors: %#v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Method != http.MethodGet || req.URL != "ws://example.com/chat" {
+		t.Fatalf("request = %s %q", req.Method, req.URL)
+	}
+	if req.Settings[version.Key] != "1.1" {
+		t.Fatalf("settings = %v, want %s=1.1", req.Settings, version.Key)
+	}
+}
+
+func TestParseWebSocketURLLineRejectsUnsupportedHTTPVersion(t *testing.T) {
+	for _, token := range []string{"HTTP/1.0", "HTTP/3"} {
+		t.Run(token, func(t *testing.T) {
+			doc := Parse("ws.http", []byte("### Socket\nws://example.com/chat "+token+"\n"))
+			if len(doc.Requests) != 0 {
+				t.Fatalf("expected no request, got %q", doc.Requests[0].URL)
+			}
+			if len(doc.Errors) != 1 {
+				t.Fatalf("expected 1 parse error, got %#v", doc.Errors)
+			}
+			if err := doc.Errors[0]; err.Line != 2 || !strings.Contains(err.Message, token) {
+				t.Fatalf("unexpected error: %#v", err)
+			}
+		})
+	}
+}
+
+func TestParseMethodLineKeepsNonVersionTail(t *testing.T) {
+	doc := Parse("tail.http", []byte("GET http://example.com/a http/foo\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("unexpected parse errors: %#v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if got, want := doc.Requests[0].URL, "http://example.com/a http/foo"; got != want {
+		t.Fatalf("url = %q, want %q", got, want)
 	}
 }
 
@@ -861,6 +941,53 @@ GET https://example.com
 	if rv := req.Variables[0]; rv.Name != "trace.id" || rv.Scope != directive.ScopeRequest ||
 		!rv.Secret {
 		t.Fatalf("unexpected request var: %#v", rv)
+	}
+}
+
+func TestParseShorthandEmptyValue(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{name: "spaced equals", src: "@x ="},
+		{name: "tight equals", src: "@x="},
+		{name: "colon", src: "@x:"},
+		{name: "trailing space", src: "@x = "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("empty.http", []byte(tt.src+"\nGET http://example.com/\n"))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("unexpected parse errors: %#v", doc.Errors)
+			}
+			if len(doc.Variables) != 1 {
+				t.Fatalf("expected 1 file variable, got %#v", doc.Variables)
+			}
+			if v := doc.Variables[0]; v.Name != "x" || v.Value != "" {
+				t.Fatalf("variable = %#v, want x with an empty value", v)
+			}
+		})
+	}
+}
+
+func TestParseShorthandKeepsValuesWithSeparators(t *testing.T) {
+	src := `@a = 1
+@b=2
+@c: three
+@d = = four
+@e five
+`
+
+	doc := Parse("values.http", []byte(src+"GET http://example.com/\n"))
+	want := map[string]string{"a": "1", "b": "2", "c": "three", "d": "= four", "e": "five"}
+	if len(doc.Variables) != len(want) {
+		t.Fatalf("expected %d file variables, got %#v", len(want), doc.Variables)
+	}
+	for _, v := range doc.Variables {
+		if got, ok := want[v.Name]; !ok || got != v.Value {
+			t.Fatalf("variable %q = %q, want %q", v.Name, v.Value, got)
+		}
 	}
 }
 
@@ -3028,6 +3155,27 @@ GET https://example.org
 	}
 	if req.Metadata.Tags[0] != "smoke" || req.Metadata.Tags[1] != "regression" {
 		t.Fatalf("unexpected tags: %v", req.Metadata.Tags)
+	}
+}
+
+func TestParseAllowsMaxLineWithEitherLineEnding(t *testing.T) {
+	url := "http://example.com/" + strings.Repeat("a", maxLine-len("GET http://example.com/"))
+	line := "GET " + url
+	if len(line) != maxLine {
+		t.Fatalf("setup: line is %d bytes, want %d", len(line), maxLine)
+	}
+
+	for _, term := range []string{eol.LF, eol.CRLF} {
+		doc := Parse("long.http", []byte(line+term))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("ending %q: unexpected parse errors: %#v", term, doc.Errors)
+		}
+		if len(doc.Requests) != 1 {
+			t.Fatalf("ending %q: expected 1 request, got %d", term, len(doc.Requests))
+		}
+		if doc.Requests[0].URL != url {
+			t.Fatalf("ending %q: url was truncated to %d bytes", term, len(doc.Requests[0].URL))
+		}
 	}
 }
 

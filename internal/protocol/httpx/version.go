@@ -42,18 +42,11 @@ func checkHTTPVersionRequest(req *http.Request, v version.HTTP) error {
 }
 
 func checkWebSocketHTTPVersion(v version.HTTP) error {
-	switch v {
-	case version.V10:
-		return diag.Newf(
-			diag.ClassProtocol,
-			"http-version=1.0 is not supported for WebSocket requests",
-		)
-	case version.V2:
-		return diag.Newf(
-			diag.ClassProtocol,
-			"http-version=2 is not supported for WebSocket requests",
-		)
-	default:
+	if v != version.V2 {
 		return nil
 	}
+	return diag.Newf(
+		diag.ClassProtocol,
+		"http-version=2 is not supported for WebSocket requests",
+	)
 }

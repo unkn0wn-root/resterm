@@ -7,15 +7,21 @@ import (
 	"fmt"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/eol"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-const maxScanToken = 1024 * 1024
+// eol.ScanLines retains line endings, so reserve CRLF separately from the
+// one-megabyte content limit.
+const (
+	maxLine      = 1024 * 1024
+	maxScanToken = maxLine + len(eol.CRLF)
+)
 
 func Parse(path string, data []byte) *restfile.Document {
-	src := bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
-	scanner := bufio.NewScanner(bytes.NewReader(src))
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 0, 1024), maxScanToken)
+	scanner.Split(eol.ScanLines)
 
 	doc := &restfile.Document{Path: path, Raw: data}
 	builder := &documentBuilder{doc: doc}
@@ -23,8 +29,8 @@ func Parse(path string, data []byte) *restfile.Document {
 	lineNumber := 0
 	for scanner.Scan() {
 		lineNumber++
-		line := scanner.Text()
-		builder.processLine(lineNumber, line)
+		text, term := eol.Cut(scanner.Text())
+		builder.processLine(lineNumber, text, term)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -33,7 +39,7 @@ func Parse(path string, data []byte) *restfile.Document {
 		}
 		msg := fmt.Sprintf("parse error: %v", err)
 		if errors.Is(err, bufio.ErrTooLong) {
-			msg = fmt.Sprintf("parse error: line exceeds %d bytes", maxScanToken)
+			msg = fmt.Sprintf("parse error: line exceeds %d bytes", maxLine)
 		}
 		builder.addError(lineNumber+1, msg)
 	}

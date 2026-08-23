@@ -229,7 +229,12 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 	}
 
 	cursorLine := currentCursorLine(m.editor)
-	req, _ := m.requestAtCursor(doc, content, cursorLine)
+	req, _, err := m.requestAtCursor(doc, content, cursorLine)
+	if err != nil {
+		return nil, func() tea.Msg {
+			return statusMsg{text: err.Error(), level: statusWarn}
+		}
+	}
 	if req == nil {
 		return nil, func() tea.Msg {
 			return statusMsg{text: "No request at cursor", level: statusWarn}
@@ -371,7 +376,11 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	}
 
 	cursorLine := currentCursorLine(m.editor)
-	req, _ := m.requestAtCursor(doc, content, cursorLine)
+	req, _, err := m.requestAtCursor(doc, content, cursorLine)
+	if err != nil {
+		m.setStatusMessage(statusMsg{level: statusWarn, text: err.Error()})
+		return nil
+	}
 	if req == nil {
 		m.setStatusMessage(statusMsg{level: statusWarn, text: "No request at cursor"})
 		return nil

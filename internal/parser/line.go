@@ -6,16 +6,16 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
-// line is one source line. Handlers read text, which is raw with the
-// surrounding whitespace already trimmed off.
+// line stores the raw text, a trimmed form for matching, and its line ending.
 type line struct {
 	no   int // 1-based
 	raw  string
 	text string
+	eol  string
 }
 
-func makeLine(no int, raw string) line {
-	return line{no: no, raw: raw, text: strings.TrimSpace(raw)}
+func makeLine(no int, raw, term string) line {
+	return line{no: no, raw: raw, text: strings.TrimSpace(raw), eol: term}
 }
 
 func (ln line) isSeparator() bool {

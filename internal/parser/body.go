@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -37,14 +36,14 @@ func (b *documentBuilder) handleBlankLine(ln line) bool {
 		return true
 	}
 
-	b.request.http.AppendBodyLine("")
+	b.request.http.AppendBodyLine("", ln.eol)
 	b.appendLine(ln.raw)
 	return true
 }
 
 func (b *documentBuilder) handleBodyContinuation(ln line) bool {
 	if b.inRequest && b.request.http.HasMethod() && b.request.http.HeaderDone() {
-		b.handleBodyLine(ln.raw)
+		b.handleBodyLine(ln)
 		b.appendLine(ln.raw)
 		return true
 	}
@@ -58,7 +57,7 @@ func (b *documentBuilder) handleMultipartBodyLine(ln line) bool {
 		!b.request.multipart.bodyLine(ln.text) {
 		return false
 	}
-	b.request.http.AppendBodyLine(ln.raw)
+	b.request.http.AppendBodyLine(ln.raw, ln.eol)
 	b.appendLine(ln.raw)
 	return true
 }
@@ -78,19 +77,20 @@ func (b *documentBuilder) handleMethodLine(ln line) bool {
 		return true
 	}
 
-	if method, url, ver, ok := httpbuilder.ParseMethodLine(ln.raw); ok {
-		b.ensureRequest(ln.no)
-
-		b.request.http.SetMethodAndURL(method, url)
-		b.request.settings = version.SetIfMissing(b.request.settings, ver)
+	ml, ok, err := httpbuilder.ParseMethodLine(ln.raw)
+	if !ok && err == nil {
+		ml, ok, err = httpbuilder.ParseWebSocketURLLine(ln.raw)
+	}
+	switch {
+	case err != nil:
+		b.addError(ln.no, err.Error())
 		b.appendLine(ln.raw)
 		return true
-	}
-
-	if url, ok := httpbuilder.ParseWebSocketURLLine(ln.raw); ok {
+	case ok:
 		b.ensureRequest(ln.no)
 
-		b.request.http.SetMethodAndURL(http.MethodGet, url)
+		b.request.http.SetMethodAndURL(ml.Method, ml.URL)
+		b.request.settings = version.SetIfMissing(b.request.settings, ml.Version)
 		b.appendLine(ln.raw)
 		return true
 	}
@@ -143,16 +143,16 @@ func (b *documentBuilder) handleHeaderLine(ln line) bool {
 	return true
 }
 
-func (b *documentBuilder) handleBodyLine(raw string) {
-	if b.request.protoBodyLine(raw) {
+func (b *documentBuilder) handleBodyLine(ln line) {
+	if b.request.protoBodyLine(ln.raw) {
 		return
 	}
 
-	if file, ok := parseHTTPBodyFile(raw, b.request.bodyOptions.ForceInline); ok {
+	if file, ok := parseHTTPBodyFile(ln.raw, b.request.bodyOptions.ForceInline); ok {
 		b.request.http.SetBodyFromFile(file)
 		return
 	}
-	b.request.http.AppendBodyLine(raw)
+	b.request.http.AppendBodyLine(ln.raw, ln.eol)
 }
 
 func parseHTTPBodyFile(line string, forceInline bool) (string, bool) {

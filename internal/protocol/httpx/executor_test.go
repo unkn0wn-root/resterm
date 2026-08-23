@@ -384,8 +384,8 @@ func TestBuildHTTPRequestMultipartUsesCRLFFramingAfterParse(t *testing.T) {
 		t.Fatalf("expected one request, got %d", len(doc.Requests))
 	}
 	req := doc.Requests[0]
-	if strings.Contains(req.Body.Text, "\r") {
-		t.Fatalf("parser should expose normalized body text before send, got %q", req.Body.Text)
+	if !strings.Contains(req.Body.Text, "\r\n") {
+		t.Fatalf("parser should keep the source CRLF framing, got %q", req.Body.Text)
 	}
 
 	client := NewClient(mapFS{"testfile.txt": []byte("hello\n")})

@@ -124,8 +124,8 @@ func (b *documentBuilder) addWarning(line int, message string) {
 	})
 }
 
-func (b *documentBuilder) processLine(no int, raw string) {
-	ln := makeLine(no, raw)
+func (b *documentBuilder) processLine(no int, raw, term string) {
+	ln := makeLine(no, raw, term)
 	b.closeOpenDirective(ln)
 
 	if b.mock != nil {

@@ -60,7 +60,7 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 		case valid:
 			opts.HTTPVersion = v
 		case strict:
-			return invalidSetting(version.Key, val, "1.0, 1.1, 2 or HTTP/1.1, HTTP/2")
+			return invalidSetting(version.Key, val, "1.1, 2 or HTTP/1.1, HTTP/2")
 		}
 	}
 

@@ -81,7 +81,10 @@ func startUIWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 }
 
 func TestInlineRequestFromLineURL(t *testing.T) {
-	req := inlineRequestFromLine(" https://example.com/v1/users ", 3)
+	req, err := inlineRequestFromLine(" https://example.com/v1/users ", 3)
+	if err != nil {
+		t.Fatalf("inlineRequestFromLine: %v", err)
+	}
 	if req == nil {
 		t.Fatalf("expected inline request to be created")
 	}
@@ -97,7 +100,10 @@ func TestInlineRequestFromLineURL(t *testing.T) {
 }
 
 func TestInlineRequestFromLineWithMethod(t *testing.T) {
-	req := inlineRequestFromLine("POST https://api.example.com/data", 5)
+	req, err := inlineRequestFromLine("POST https://api.example.com/data", 5)
+	if err != nil {
+		t.Fatalf("inlineRequestFromLine: %v", err)
+	}
 	if req == nil {
 		t.Fatalf("expected inline request to be created")
 	}
@@ -110,7 +116,10 @@ func TestInlineRequestFromLineWithMethod(t *testing.T) {
 }
 
 func TestInlineRequestFromLineRejectsInvalid(t *testing.T) {
-	req := inlineRequestFromLine("example.com", 2)
+	req, err := inlineRequestFromLine("example.com", 2)
+	if err != nil {
+		t.Fatalf("inlineRequestFromLine: %v", err)
+	}
 	if req != nil {
 		t.Fatalf("expected non-http line to be ignored")
 	}
@@ -121,7 +130,10 @@ func TestRequestAtCursorBeforeRequestsReturnsNil(t *testing.T) {
 	doc := parser.Parse("sample.http", []byte(content))
 	var model Model
 
-	req, inline := model.requestAtCursor(doc, content, 1)
+	req, inline, err := model.requestAtCursor(doc, content, 1)
+	if err != nil {
+		t.Fatalf("requestAtCursor: %v", err)
+	}
 	if req != nil || inline {
 		t.Fatalf(
 			"expected no request at cursor before first request, got req=%v inline=%v",
@@ -136,7 +148,10 @@ func TestRequestAtCursorFallsBackToLastRequest(t *testing.T) {
 	doc := parser.Parse("sample.http", []byte(content))
 	var model Model
 
-	req, inline := model.requestAtCursor(doc, content, 6)
+	req, inline, err := model.requestAtCursor(doc, content, 6)
+	if err != nil {
+		t.Fatalf("requestAtCursor: %v", err)
+	}
 	if inline {
 		t.Fatalf("expected document request, not inline")
 	}
@@ -147,7 +162,10 @@ func TestRequestAtCursorFallsBackToLastRequest(t *testing.T) {
 
 func TestInlineRequestStripsHTTPVersionToken(t *testing.T) {
 	content := "http://example.com HTTP/1.1"
-	req := buildInlineRequest(content, 1)
+	req, err := buildInlineRequest(content, 1)
+	if err != nil {
+		t.Fatalf("buildInlineRequest: %v", err)
+	}
 	if req == nil {
 		t.Fatalf("expected inline request to be parsed")
 	}
@@ -159,9 +177,29 @@ func TestInlineRequestStripsHTTPVersionToken(t *testing.T) {
 	}
 }
 
+func TestRequestAtCursorReportsUnsupportedVersion(t *testing.T) {
+	content := "### first\nGET https://example.com/one\n\n### second\nGET {{base}}/two HTTP/1.0\n"
+	doc := parser.Parse("sample.http", []byte(content))
+	var model Model
+
+	req, inline, err := model.requestAtCursor(doc, content, 5)
+	if err == nil {
+		t.Fatalf("expected an error, got req=%+v inline=%v", req, inline)
+	}
+	if !strings.Contains(err.Error(), "HTTP/1.0") {
+		t.Fatalf("error = %v, want it to name the token", err)
+	}
+	if req != nil {
+		t.Fatalf("expected no fallback request, got %+v", req)
+	}
+}
+
 func TestInlineCurlRequestSingleLine(t *testing.T) {
 	content := "curl https://example.com"
-	req := buildInlineRequest(content, 1)
+	req, err := buildInlineRequest(content, 1)
+	if err != nil {
+		t.Fatalf("buildInlineRequest: %v", err)
+	}
 	if req == nil {
 		t.Fatalf("expected curl request to be parsed")
 	}
@@ -177,7 +215,10 @@ func TestInlineCurlRequestMultiline(t *testing.T) {
 	content := `curl https://api.example.com/users \
 -H 'Content-Type: application/json' \
 --data '{"name":"Sam"}'`
-	req := buildInlineRequest(content, 2)
+	req, err := buildInlineRequest(content, 2)
+	if err != nil {
+		t.Fatalf("buildInlineRequest: %v", err)
+	}
 	if req == nil {
 		t.Fatalf("expected curl request to be parsed")
 	}
