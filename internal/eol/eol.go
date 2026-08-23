@@ -1,4 +1,3 @@
-// Package eol splits text while preserving line endings.
 package eol
 
 import (

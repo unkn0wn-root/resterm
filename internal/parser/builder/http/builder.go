@@ -83,7 +83,7 @@ func parseURLLine(line string, schemes []string) (MethodLine, bool, error) {
 	urlFields, ver, err := version.SplitToken(fields)
 	// Check the scheme before reporting a version error so prose ending in
 	// HTTP/<number> is not mistaken for a request.
-	url := strings.Trim(strings.Join(urlFields, " "), `"'`)
+	url := unwrapMatchingQuotes(strings.Join(urlFields, " "))
 	if !hasScheme(url, schemes) {
 		return MethodLine{}, false, nil
 	}
@@ -91,6 +91,17 @@ func parseURLLine(line string, schemes []string) (MethodLine, bool, error) {
 		return MethodLine{}, false, err
 	}
 	return MethodLine{Method: stdhttp.MethodGet, URL: url, Version: ver}, true, nil
+}
+
+func unwrapMatchingQuotes(s string) string {
+	if len(s) < 2 {
+		return s
+	}
+	first, last := s[0], s[len(s)-1]
+	if first == last && (first == '"' || first == '\'') {
+		return s[1 : len(s)-1]
+	}
+	return s
 }
 
 func hasScheme(url string, schemes []string) bool {

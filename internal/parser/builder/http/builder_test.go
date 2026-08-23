@@ -19,6 +19,10 @@ func TestParseRequestLine(t *testing.T) {
 		{line: "WS ws://example.com/s", method: "GET", url: "ws://example.com/s"},
 		{line: "GET {{base}}/two", method: "GET", url: "{{base}}/two"},
 		{line: `"https://example.com/q"`, method: "GET", url: "https://example.com/q"},
+		{line: `'https://example.com/q'`, method: "GET", url: "https://example.com/q"},
+		{line: `https://example.com/q'`, method: "GET", url: `https://example.com/q'`},
+		{line: `https://example.com/q"`, method: "GET", url: `https://example.com/q"`},
+		{line: `"https://example.com/q" HTTP/1.1`, method: "GET", url: "https://example.com/q", ver: version.V11},
 		{line: "ws://example.com/s b", method: "GET", url: "ws://example.com/s b"},
 		{line: "http://example.com/a http/foo", method: "GET", url: "http://example.com/a http/foo"},
 		{line: "http://example.com HTTP/1.1", method: "GET", url: "http://example.com", ver: version.V11},
@@ -68,9 +72,19 @@ func TestParseRequestLineRejectsUnsupportedVersion(t *testing.T) {
 }
 
 func TestParseWebSocketURLLine(t *testing.T) {
-	ml, ok, err := ParseWebSocketURLLine("wss://example.com/chat HTTP/2")
-	if err != nil || !ok || ml.URL != "wss://example.com/chat" || ml.Version != version.V2 {
-		t.Fatalf("ParseWebSocketURLLine() = %+v, %v, %v", ml, ok, err)
+	for _, tc := range []struct {
+		line string
+		url  string
+		ver  version.HTTP
+	}{
+		{line: "wss://example.com/chat HTTP/2", url: "wss://example.com/chat", ver: version.V2},
+		{line: `"wss://example.com/chat"`, url: "wss://example.com/chat"},
+		{line: `wss://example.com/chat'`, url: `wss://example.com/chat'`},
+	} {
+		ml, ok, err := ParseWebSocketURLLine(tc.line)
+		if err != nil || !ok || ml.URL != tc.url || ml.Version != tc.ver {
+			t.Fatalf("ParseWebSocketURLLine(%q) = %+v, %v, %v", tc.line, ml, ok, err)
+		}
 	}
 	if _, ok, err := ParseWebSocketURLLine("http://example.com"); ok || err != nil {
 		t.Fatalf("ParseWebSocketURLLine(http) = ok %v, err %v", ok, err)
