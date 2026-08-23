@@ -108,11 +108,11 @@ func (c *Client) StartSSE(
 
 	contentType := strings.ToLower(httpResp.Header.Get("Content-Type"))
 	if httpResp.StatusCode >= 400 || !strings.Contains(contentType, "text/event-stream") {
-		body, readErr := io.ReadAll(httpResp.Body)
+		body, readErr := effectiveOpts.readBody(httpResp.Body)
 		closeErr := httpResp.Body.Close()
 		cancel()
 		if readErr != nil {
-			return nil, nil, diag.WrapAs(diag.ClassProtocol, readErr, "read response body")
+			return nil, nil, readErr
 		}
 		if closeErr != nil {
 			return nil, nil, diag.WrapAs(diag.ClassProtocol, closeErr, "close response body")

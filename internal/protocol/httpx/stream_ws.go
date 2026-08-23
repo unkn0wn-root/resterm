@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"time"
@@ -148,7 +147,7 @@ func (c *Client) StartWebSocket(
 	if err != nil {
 		handshakeCancel()
 		if resp != nil {
-			fallback, convErr := buildWebSocketFallback(resp, req, start)
+			fallback, convErr := buildWebSocketFallback(resp, req, start, effectiveOpts)
 			if convErr != nil {
 				return nil, nil, convErr
 			}
@@ -344,6 +343,7 @@ func buildWebSocketFallback(
 	httpResp *http.Response,
 	req *restfile.Request,
 	started time.Time,
+	opts Options,
 ) (*Response, error) {
 	if httpResp == nil {
 		return nil, diag.New(diag.ClassProtocol, "websocket handshake response unavailable")
@@ -351,10 +351,10 @@ func buildWebSocketFallback(
 
 	var body []byte
 	if httpResp.Body != nil {
-		data, err := io.ReadAll(httpResp.Body)
+		data, err := opts.readBody(httpResp.Body)
 		closeErr := httpResp.Body.Close()
 		if err != nil {
-			return nil, diag.WrapAs(diag.ClassProtocol, err, "read websocket handshake body")
+			return nil, err
 		}
 		if closeErr != nil {
 			return nil, diag.WrapAs(diag.ClassProtocol, closeErr, "close websocket handshake body")

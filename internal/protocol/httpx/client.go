@@ -2,7 +2,6 @@ package httpx
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"time"
 
@@ -274,7 +273,7 @@ func (c *Client) executeHTTPRequest(
 		}
 	}()
 
-	body, err := io.ReadAll(httpResp.Body)
+	body, err := effectiveOpts.readBody(httpResp.Body)
 	if traceSess != nil {
 		traceSess.finishTransfer(err)
 	}
@@ -283,11 +282,7 @@ func (c *Client) executeHTTPRequest(
 			traceSess.fail(err)
 			traceSess.complete(buildTraceExtras(httpReq, httpResp, effectiveOpts, proxy))
 		}
-		return nil, diag.Wrap(
-			err,
-			"read response body",
-			diag.WithComponent(diag.ComponentHTTP),
-		)
+		return nil, err
 	}
 
 	if traceSess != nil {
