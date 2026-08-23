@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/eol"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 )
@@ -49,35 +50,29 @@ func (c *Client) readFile(lookup filelookup.Lookup, path, label string) ([]byte,
 	)
 }
 
-// injectBodyIncludes replaces each "@path" line with the referenced file's
-// bytes. "@{...}" template lines are left alone. crlf rejoins lines with CRLF
-// and always terminates the body with CRLF, like curl -F: readline-based
-// multipart parsers (e.g. Python's cgi) block without it.
+// injectBodyIncludes replaces "@path" lines with file contents and leaves
+// "@{...}" templates unchanged. Other bodies keep their original line endings.
+// Multipart bodies use CRLF throughout and end with CRLF.
 func (c *Client) injectBodyIncludes(body string, lookup filelookup.Lookup, crlf bool) ([]byte, error) {
-	eol := "\n"
-	if crlf {
-		eol = "\r\n"
-	}
-
 	var b bytes.Buffer
 	b.Grow(len(body))
-	for i, line := range strings.Split(strings.TrimSuffix(body, "\n"), "\n") {
-		if i > 0 {
-			b.WriteString(eol)
-		}
-		line = strings.TrimSuffix(line, "\r")
+	for line, term := range eol.Lines(body) {
 		if path, ok := bodyref.IncludeLine(line); ok {
 			data, _, err := c.readFile(lookup, path, "include body file")
 			if err != nil {
 				return nil, err
 			}
 			b.Write(data)
-			continue
+		} else {
+			b.WriteString(line)
 		}
-		b.WriteString(line)
+		if crlf {
+			term = eol.CRLF
+		}
+		b.WriteString(term)
 	}
-	if crlf {
-		b.WriteString(eol)
+	if crlf && !bytes.HasSuffix(b.Bytes(), []byte(eol.CRLF)) {
+		b.WriteString(eol.CRLF)
 	}
 	return b.Bytes(), nil
 }

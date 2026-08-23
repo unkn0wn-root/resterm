@@ -37,14 +37,14 @@ func (b *documentBuilder) handleBlankLine(ln line) bool {
 		return true
 	}
 
-	b.request.http.AppendBodyLine("")
+	b.request.http.AppendBodyLine("", ln.eol)
 	b.appendLine(ln.raw)
 	return true
 }
 
 func (b *documentBuilder) handleBodyContinuation(ln line) bool {
 	if b.inRequest && b.request.http.HasMethod() && b.request.http.HeaderDone() {
-		b.handleBodyLine(ln.raw)
+		b.handleBodyLine(ln)
 		b.appendLine(ln.raw)
 		return true
 	}
@@ -58,7 +58,7 @@ func (b *documentBuilder) handleMultipartBodyLine(ln line) bool {
 		!b.request.multipart.bodyLine(ln.text) {
 		return false
 	}
-	b.request.http.AppendBodyLine(ln.raw)
+	b.request.http.AppendBodyLine(ln.raw, ln.eol)
 	b.appendLine(ln.raw)
 	return true
 }
@@ -143,16 +143,16 @@ func (b *documentBuilder) handleHeaderLine(ln line) bool {
 	return true
 }
 
-func (b *documentBuilder) handleBodyLine(raw string) {
-	if b.request.protoBodyLine(raw) {
+func (b *documentBuilder) handleBodyLine(ln line) {
+	if b.request.protoBodyLine(ln.raw) {
 		return
 	}
 
-	if file, ok := parseHTTPBodyFile(raw, b.request.bodyOptions.ForceInline); ok {
+	if file, ok := parseHTTPBodyFile(ln.raw, b.request.bodyOptions.ForceInline); ok {
 		b.request.http.SetBodyFromFile(file)
 		return
 	}
-	b.request.http.AppendBodyLine(raw)
+	b.request.http.AppendBodyLine(ln.raw, ln.eol)
 }
 
 func parseHTTPBodyFile(line string, forceInline bool) (string, bool) {

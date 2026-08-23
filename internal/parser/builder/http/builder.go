@@ -52,12 +52,17 @@ func ParseWebSocketURLLine(line string) (url string, ok bool) {
 	return "", false
 }
 
+type bodyLine struct {
+	text string
+	term string
+}
+
 type Builder struct {
 	method       string
 	url          string
 	headers      stdhttp.Header
 	headerDone   bool
-	bodyLines    []string
+	bodyLines    []bodyLine
 	bodyFromFile string
 	mimeType     string
 }
@@ -114,8 +119,8 @@ func (b *Builder) MarkHeadersDone() {
 	b.headerDone = true
 }
 
-func (b *Builder) AppendBodyLine(line string) {
-	b.bodyLines = append(b.bodyLines, line)
+func (b *Builder) AppendBodyLine(text, term string) {
+	b.bodyLines = append(b.bodyLines, bodyLine{text: text, term: term})
 }
 
 func (b *Builder) SetBodyFromFile(path string) {
@@ -127,11 +132,17 @@ func (b *Builder) BodyFromFile() string {
 	return b.bodyFromFile
 }
 
+// BodyText rebuilds the body with its original line endings.
+// The final line ending is not part of the body.
 func (b *Builder) BodyText() string {
-	if len(b.bodyLines) == 0 {
-		return ""
+	var sb strings.Builder
+	for i, ln := range b.bodyLines {
+		sb.WriteString(ln.text)
+		if i < len(b.bodyLines)-1 {
+			sb.WriteString(ln.term)
+		}
 	}
-	return strings.Join(b.bodyLines, "\n")
+	return sb.String()
 }
 
 func (b *Builder) MimeType() string {
