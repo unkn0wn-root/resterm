@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.2.3](https://github.com/unkn0wn-root/resterm/compare/v1.2.2...v1.2.3) (2026-08-23)
+
+
+### Bug Fixes
+
+* **parser:** reject invalid workflow definitions ([#387](https://github.com/unkn0wn-root/resterm/issues/387)) ([6419783](https://github.com/unkn0wn-root/resterm/commit/64197839e7a8e0fbec9d4242d6e20ba4217fb782))
+
 ### [1.2.2](https://github.com/unkn0wn-root/resterm/compare/v1.2.1...v1.2.2) (2026-08-21)
 
 
