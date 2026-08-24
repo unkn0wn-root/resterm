@@ -35,6 +35,12 @@ func TestApplyOptionSettingsRejectsInvalidValues(t *testing.T) {
 			val:  "",
 			want: "missing timeout value (use a duration such as 30s)",
 		},
+		{
+			name: "empty base url",
+			key:  "base-url",
+			val:  "",
+			want: "missing base-url value",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := Options{Timeout: time.Second}
@@ -49,6 +55,20 @@ func TestApplyOptionSettingsRejectsInvalidValues(t *testing.T) {
 				t.Fatalf("expected the rejected value to leave options untouched, got %v", opts.Timeout)
 			}
 		})
+	}
+}
+
+func TestApplyOptionSettingsKeepsBaseURLRawForRequestResolution(t *testing.T) {
+	opts := Options{}
+
+	err := ApplyOptionSettings(&opts, map[string]string{
+		"base-url": "  {{api.base}}  ",
+	})
+	if err != nil {
+		t.Fatalf("ApplyOptionSettings returned error: %v", err)
+	}
+	if opts.BaseURL != "{{api.base}}" {
+		t.Fatalf("BaseURL = %q, want raw template", opts.BaseURL)
 	}
 }
 
@@ -125,7 +145,12 @@ func TestApplyOptionSettingsAcceptsBooleanSpellings(t *testing.T) {
 // value must not stop the readable ones behind it from being applied.
 func TestApplyRequestSettingsSkipsUnreadableValues(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
-	opts := Options{Timeout: time.Second, HTTPVersion: version.V11, CookieJar: jar}
+	opts := Options{
+		Timeout:     time.Second,
+		BaseURL:     "https://default.example/",
+		HTTPVersion: version.V11,
+		CookieJar:   jar,
+	}
 
 	got := applyRequestSettings(opts, map[string]string{
 		"http-version":    "unsupported",
@@ -133,6 +158,7 @@ func TestApplyRequestSettingsSkipsUnreadableValues(t *testing.T) {
 		"followredirects": "maybe",
 		"insecure":        "true",
 		"no-cookies":      "true",
+		"base-url":        "{{api.base}}",
 	})
 
 	if got.HTTPVersion != version.V11 {
@@ -149,5 +175,8 @@ func TestApplyRequestSettingsSkipsUnreadableValues(t *testing.T) {
 	}
 	if got.CookieJar != nil {
 		t.Fatal("no-cookies=true follows an unreadable value and still has to apply")
+	}
+	if got.BaseURL != "{{api.base}}" {
+		t.Fatalf("BaseURL = %q, want raw request setting", got.BaseURL)
 	}
 }

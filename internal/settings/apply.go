@@ -9,6 +9,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -27,7 +28,7 @@ func ApplyGRPCSettings(
 		Insecure:   opts.Insecure,
 		RootMode:   opts.RootMode,
 	}
-	if err := applyTLSSettings(&tlsCfg, settings, resolver, "grpc"); err != nil {
+	if err := applyTLSSettings(&tlsCfg, settings, resolver, tlsPrefixGRPC); err != nil {
 		return err
 	}
 	opts.RootCAs = tlsCfg.RootCAs
@@ -56,7 +57,7 @@ func ApplyHTTPSettings(
 		Insecure:   opts.InsecureSkipVerify,
 		RootMode:   opts.RootMode,
 	}
-	if err := applyTLSSettings(&tlsCfg, settings, resolver, "http"); err != nil {
+	if err := applyTLSSettings(&tlsCfg, settings, resolver, tlsPrefixHTTP); err != nil {
 		return err
 	}
 	opts.RootCAs = tlsCfg.RootCAs
@@ -70,17 +71,37 @@ func ApplyHTTPSettings(
 	return httpx.ApplyOptionSettings(opts, settings)
 }
 
+// tlsPrefix is the setting family a TLS block belongs to. Both families spell
+// their keys the same way, so the prefix picks both the keys and the component
+// that errors are reported under.
+type tlsPrefix string
+
+const (
+	tlsPrefixHTTP tlsPrefix = "http"
+	tlsPrefixGRPC tlsPrefix = "grpc"
+)
+
+func (p tlsPrefix) key(name string) string { return string(p) + "-" + name }
+
+func (p tlsPrefix) label(name string) string { return string(p) + " " + name }
+
+func (p tlsPrefix) component() diag.Component {
+	if p == tlsPrefixGRPC {
+		return diag.ComponentGRPC
+	}
+	return diag.ComponentHTTP
+}
+
 func applyTLSSettings(
 	cfg *tlsconfig.Files,
 	settings map[string]string,
 	resolver *vars.Resolver,
-	prefix string,
+	prefix tlsPrefix,
 ) error {
 	if cfg == nil || len(settings) == 0 {
 		return nil
 	}
-	prefixLower := strings.ToLower(strings.TrimSpace(prefix))
-	component := settingsComponent(prefixLower)
+	component := prefix.component()
 	resolve := func(val string, label string) (string, error) {
 		trimmed := strings.TrimSpace(val)
 		if trimmed == "" {
@@ -100,13 +121,14 @@ func applyTLSSettings(
 		}
 		return strings.TrimSpace(expanded), nil
 	}
-	norm := normalize(settings)
+	// A single scope, so this only canonicalizes the keys.
+	norm := Merge(settings)
 
 	// Read straight from the map. firstSetting skips written-empty values, and
 	// those have to reach the missing-value error like every other setting.
-	mode := prefixLower + "-root-mode"
+	mode := prefix.key("root-mode")
 	if raw, ok := norm[mode]; ok {
-		switch strings.ToLower(strings.TrimSpace(raw)) {
+		switch util.LowerTrim(raw) {
 		case string(tlsconfig.RootModeAppend):
 			cfg.RootMode = tlsconfig.RootModeAppend
 		case string(tlsconfig.RootModeReplace):
@@ -116,7 +138,7 @@ func applyTLSSettings(
 		}
 	}
 
-	key := prefixLower + "-insecure"
+	key := prefix.key("insecure")
 	if raw, ok := norm[key]; ok {
 		b, valid := directive.ParseBool(raw)
 		if !valid {
@@ -124,19 +146,14 @@ func applyTLSSettings(
 		}
 		cfg.Insecure = b
 	}
-	val, err := resolveSetting(
-		norm,
-		prefixLower+"-client-cert",
-		prefixLower+" client cert",
-		resolve,
-	)
+	val, err := resolveSetting(norm, prefix.key("client-cert"), prefix.label("client cert"), resolve)
 	if err != nil {
 		return err
 	}
 	if val != "" {
 		cfg.ClientCert = val
 	}
-	val, err = resolveSetting(norm, prefixLower+"-client-key", prefixLower+" client key", resolve)
+	val, err = resolveSetting(norm, prefix.key("client-key"), prefix.label("client key"), resolve)
 	if err != nil {
 		return err
 	}
@@ -144,14 +161,14 @@ func applyTLSSettings(
 		cfg.ClientKey = val
 	}
 
-	if raw := firstSetting(norm, prefixLower+"-root-cas", prefixLower+"-root-ca"); raw != "" {
+	if raw := firstSetting(norm, prefix.key("root-cas"), prefix.key("root-ca")); raw != "" {
 		paths := splitList(raw)
 		resolved := make([]string, 0, len(paths))
 		for _, p := range paths {
 			if p == "" {
 				continue
 			}
-			val, err := resolve(p, prefixLower+" root ca")
+			val, err := resolve(p, prefix.label("root ca"))
 			if err != nil {
 				return err
 			}
@@ -166,15 +183,6 @@ func applyTLSSettings(
 	return nil
 }
 
-func settingsComponent(prefix string) diag.Component {
-	switch prefix {
-	case "grpc":
-		return diag.ComponentGRPC
-	default:
-		return diag.ComponentHTTP
-	}
-}
-
 // Settings come from a file the user edits, so name the key and what it takes.
 // The wording matches the generic HTTP settings in protocol/httpx.
 func invalidSetting(c diag.Component, key, val, want string) error {
@@ -185,14 +193,6 @@ func invalidSetting(c diag.Component, key, val, want string) error {
 		msg = fmt.Sprintf("missing %s value (use %s)", key, want)
 	}
 	return diag.New(diag.ClassProtocol, msg, diag.WithComponent(c))
-}
-
-func normalize(settings map[string]string) map[string]string {
-	norm := make(map[string]string, len(settings))
-	for k, v := range settings {
-		norm[strings.ToLower(strings.TrimSpace(k))] = v
-	}
-	return norm
 }
 
 func firstSetting(m map[string]string, keys ...string) string {

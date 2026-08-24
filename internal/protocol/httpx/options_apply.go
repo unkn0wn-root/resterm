@@ -14,6 +14,7 @@ import (
 type optionSettingKey string
 
 const (
+	optionSettingBaseURL         optionSettingKey = "base-url"
 	optionSettingTimeout         optionSettingKey = "timeout"
 	optionSettingProxy           optionSettingKey = "proxy"
 	optionSettingFollowRedirects optionSettingKey = "followredirects"
@@ -70,6 +71,22 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 			opts.Timeout = dur
 		case strict:
 			return invalidSetting(optionSettingTimeout, val, "a duration such as 30s")
+		}
+	}
+
+	// A base URL may hold templates and an absolute request target ignores it
+	// entirely, so the raw value is kept here and only the request builder
+	// expands and validates it, once a relative target needs it.
+	if val, ok := settingValue(norm, optionSettingBaseURL); ok {
+		switch base := strings.TrimSpace(val); {
+		case base != "":
+			opts.BaseURL = base
+		case strict:
+			return invalidSetting(
+				optionSettingBaseURL,
+				val,
+				"an absolute HTTP URL such as https://api.example.com/v1/",
+			)
 		}
 	}
 

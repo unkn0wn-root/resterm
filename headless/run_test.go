@@ -65,6 +65,46 @@ func TestRunRequestParity(t *testing.T) {
 	assertReportParity(t, reportFromRunner(want), got)
 }
 
+func TestRunUsesBaseURLFromInjectedEnvironment(t *testing.T) {
+	seen := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.URL.RequestURI()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	file := filepath.Join(t.TempDir(), "relative.http")
+	got, err := Run(t.Context(), Options{
+		Source: Source{
+			Path:    file,
+			Content: []byte("# @name users\nGET users?page=2\n"),
+		},
+		Environment: EnvironmentOptions{
+			Set: EnvironmentSet{
+				"dev": {"settings.base-url": srv.URL + "/v1/"},
+			},
+			Name: "dev",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got.Passed != 1 || got.Failed != 0 || len(got.Results) != 1 {
+		t.Fatalf("report = %+v, want one passing request", got)
+	}
+	if want := "users?page=2"; got.Results[0].Target != want {
+		t.Fatalf("source target = %q, want %q", got.Results[0].Target, want)
+	}
+	select {
+	case requestURI := <-seen:
+		if requestURI != "/v1/users?page=2" {
+			t.Fatalf("server request URI = %q, want %q", requestURI, "/v1/users?page=2")
+		}
+	default:
+		t.Fatal("server did not receive the request")
+	}
+}
+
 func TestRunCompareParityWithEnvResolve(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

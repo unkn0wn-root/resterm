@@ -221,6 +221,103 @@ func TestBuildHTTPRequestExpandsHeaderAndAuth(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPRequestResolvesBaseURLFromRequestSettings(t *testing.T) {
+	c := NewClient(nil)
+	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{
+		"api.base": "https://api.example.com/v1/",
+	}))
+	req := &restfile.Request{
+		Method:   http.MethodGet,
+		URL:      "users/42?view=full",
+		Settings: map[string]string{"base-url": "{{api.base}}"},
+	}
+
+	httpReq, effective, _, err := c.BuildHTTPRequest(t.Context(), req, resolver, Options{})
+	if err != nil {
+		t.Fatalf("BuildHTTPRequest() error = %v", err)
+	}
+	if got, want := httpReq.URL.String(), "https://api.example.com/v1/users/42?view=full"; got != want {
+		t.Fatalf("request URL = %q, want %q", got, want)
+	}
+	if effective.BaseURL != "{{api.base}}" {
+		t.Fatalf("effective BaseURL = %q, want raw request setting", effective.BaseURL)
+	}
+	if req.URL != "users/42?view=full" {
+		t.Fatalf("source request URL was mutated to %q", req.URL)
+	}
+}
+
+func TestBuildHTTPRequestResolvesGraphQLGETAgainstBaseURL(t *testing.T) {
+	c := NewClient(nil)
+	req := &restfile.Request{
+		Method:   http.MethodGet,
+		URL:      "graphql?existing=1",
+		Settings: map[string]string{"base-url": "https://api.example.com/v1/"},
+		Body: restfile.BodySource{GraphQL: &restfile.GraphQLBody{
+			Query:         "query { ping }",
+			OperationName: "Ping",
+		}},
+	}
+
+	httpReq, _, _, err := c.BuildHTTPRequest(t.Context(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatalf("BuildHTTPRequest() error = %v", err)
+	}
+	if got, want := httpReq.URL.Path, "/v1/graphql"; got != want {
+		t.Fatalf("request path = %q, want %q", got, want)
+	}
+	query := httpReq.URL.Query()
+	if query.Get("existing") != "1" || query.Get("operationName") != "Ping" ||
+		query.Get("query") == "" {
+		t.Fatalf("request query = %#v, want existing GraphQL parameters", query)
+	}
+}
+
+func TestBuildHTTPRequestUsesBaseURLForHTTPFamilyMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		set  func(*restfile.Request)
+		want string
+	}{
+		{name: "REST", want: "https://api.example.com/events"},
+		{
+			name: "SSE",
+			set: func(req *restfile.Request) {
+				req.SSE = &restfile.SSERequest{}
+			},
+			want: "https://api.example.com/events",
+		},
+		{
+			name: "WebSocket",
+			set: func(req *restfile.Request) {
+				req.WebSocket = &restfile.WebSocketRequest{}
+			},
+			want: "wss://api.example.com/events",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{Method: http.MethodGet, URL: "/events"}
+			if tt.set != nil {
+				tt.set(req)
+			}
+			httpReq, _, _, err := NewClient(nil).BuildHTTPRequest(
+				t.Context(),
+				req,
+				nil,
+				Options{BaseURL: "https://api.example.com/v1/"},
+			)
+			if err != nil {
+				t.Fatalf("BuildHTTPRequest() error = %v", err)
+			}
+			if got := httpReq.URL.String(); got != tt.want {
+				t.Fatalf("request URL = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBuildHTTPRequestLenientResolverKeepsPlaceholders(t *testing.T) {
 	c := NewClient(nil)
 	req := &restfile.Request{
