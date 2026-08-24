@@ -62,7 +62,7 @@ type wfStepRes struct {
 	ok      bool
 	skip    bool
 	cancel  bool
-	dur     time.Duration
+	dur     time.Duration // includes polling and retries
 	http    *httpx.Response
 	grpc    *grpcx.Response
 	stream  *scripts.StreamInfo
@@ -112,6 +112,7 @@ func makeStepRes(
 		branch:  branch,
 		iter:    iter,
 		total:   total,
+		dur:     out.Timing.Total,
 		http:    cloneHTTP(out.Response),
 		grpc:    out.GRPC.Clone(),
 		stream:  cloneStream(out.Stream),
@@ -151,6 +152,7 @@ func assignWorkflowStepIdentity(res *wfStepRes, fallbackReq *restfile.Request) {
 
 func evaluateStep(res wfStepRes) wfStepRes {
 	if res.skip {
+		res.dur = 0
 		res.msg = strings.TrimSpace(res.msg)
 		return res
 	}
@@ -194,18 +196,12 @@ func workflowTransportOutcome(res *wfStepRes) (bool, string) {
 		return false, msg
 	case res.http != nil:
 		res.status = res.http.Status
-		if res.http.Duration > 0 {
-			res.dur = res.http.Duration
-		}
 		if res.http.StatusCode >= 400 && !res.step.Expect.HasStatus() {
 			return false, fmt.Sprintf("unexpected status code %d", res.http.StatusCode)
 		}
 		return true, msg
 	case res.grpc != nil:
 		res.status = res.grpc.StatusCode.String()
-		if res.grpc.Duration > 0 {
-			res.dur = res.grpc.Duration
-		}
 		return true, msg
 	default:
 		return false, "request failed"

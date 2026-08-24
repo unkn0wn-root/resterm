@@ -64,6 +64,7 @@ type ExecOptions struct {
 	Ctx        context.Context
 	Mode       ExecMode
 	OnWarning  func(Warning)
+	OnRepeat   func(xexec.RepeatProgress)
 	AttachSSE  func(*httpx.StreamHandle, *restfile.Request)
 	AttachWS   func(*httpx.WebSocketHandle, *restfile.Request)
 	AttachGRPC func(*stream.Session, *restfile.Request)
@@ -197,6 +198,7 @@ func (e *Engine) ExecuteWith(
 			Skipped:        res.Skipped,
 			SkipReason:     res.SkipReason,
 			Executed:       res.Executed,
+			Elapsed:        res.Timing.Total,
 		})
 	}
 	e.store(res)
@@ -283,6 +285,7 @@ type execCtx struct {
 	trace     *vars.Trace
 	exp       *explainBuilder
 	onWarning func(Warning)
+	onRepeat  func(xexec.RepeatProgress)
 	onSSE     func(*httpx.StreamHandle, *restfile.Request)
 	onWS      func(*httpx.WebSocketHandle, *restfile.Request)
 	onGRPC    func(*stream.Session, *restfile.Request)
@@ -331,6 +334,7 @@ func newExec(
 		secrets:   secrets,
 		exp:       exp,
 		onWarning: opt.OnWarning,
+		onRepeat:  opt.OnRepeat,
 		onSSE:     opt.AttachSSE,
 		onWS:      opt.AttachWS,
 		onGRPC:    opt.AttachGRPC,
@@ -1223,7 +1227,24 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					rtsStream(in.Stream),
 				)
 			},
+			EvaluatePredicate: func(in xexec.PredicateInput) (bool, error) {
+				return x.eng.evaluateResponsePredicate(
+					in.Context,
+					in.Doc,
+					in.Req,
+					x.env,
+					in.BaseDir,
+					x.evalScope(in.Vars),
+					in.Locals,
+					in.HTTP,
+					in.Predicate,
+				)
+			},
 			ApplyRuntimeGlobals: x.applyRuntimeGlobals,
+			OnRepeatProgress:    x.onRepeat,
+			Warn: func(message string) {
+				x.warn(Warning(message))
+			},
 		},
 	}
 }

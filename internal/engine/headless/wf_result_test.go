@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -16,10 +17,11 @@ func TestEvaluateStepStatusCode(t *testing.T) {
 		step: restfile.WorkflowStep{
 			Expect: restfile.WorkflowExpect{StatusCode: &code},
 		},
+		dur: 1500 * time.Millisecond,
 		http: &httpx.Response{
 			Status:     http.StatusText(http.StatusNotFound),
 			StatusCode: http.StatusNotFound,
-			Duration:   1500 * time.Millisecond,
+			Duration:   400 * time.Millisecond,
 		},
 	}
 
@@ -75,10 +77,11 @@ func TestWorkflowSummaryNamesOnlyATrailingFailure(t *testing.T) {
 
 func TestEvaluateStepScriptErr(t *testing.T) {
 	res := wfStepRes{
+		dur: 250 * time.Millisecond,
 		http: &httpx.Response{
 			Status:     http.StatusText(http.StatusOK),
 			StatusCode: http.StatusOK,
-			Duration:   250 * time.Millisecond,
+			Duration:   80 * time.Millisecond,
 		},
 		sErr: errors.New("script crashed"),
 	}
@@ -95,5 +98,44 @@ func TestEvaluateStepScriptErr(t *testing.T) {
 	}
 	if got.dur != 250*time.Millisecond {
 		t.Fatalf("expected duration %s, got %s", 250*time.Millisecond, got.dur)
+	}
+}
+
+func TestMakeStepResReportsLogicalDuration(t *testing.T) {
+	res := makeStepRes(
+		restfile.WorkflowStep{},
+		&restfile.Request{Method: "GET", URL: "https://example.com/jobs/1"},
+		engine.RequestResult{
+			Response: &httpx.Response{
+				Status:     http.StatusText(http.StatusOK),
+				StatusCode: http.StatusOK,
+				Duration:   30 * time.Millisecond,
+			},
+			Timing: engine.Timing{Total: 4 * time.Second},
+		},
+		"",
+		0,
+		0,
+	)
+	if res.dur != 4*time.Second {
+		t.Fatalf("step duration = %s, want the whole request", res.dur)
+	}
+}
+
+func TestMakeStepResSkippedHasNoDuration(t *testing.T) {
+	res := makeStepRes(
+		restfile.WorkflowStep{},
+		&restfile.Request{Method: "GET", URL: "https://example.com/jobs/1"},
+		engine.RequestResult{
+			Skipped:    true,
+			SkipReason: "condition was false",
+			Timing:     engine.Timing{Total: 2 * time.Millisecond},
+		},
+		"",
+		0,
+		0,
+	)
+	if res.dur != 0 {
+		t.Fatalf("skipped step duration = %s, want none", res.dur)
 	}
 }
