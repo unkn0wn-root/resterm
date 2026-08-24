@@ -7,16 +7,30 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
+const DefaultWebSocketTranscriptBytes = 8 << 20
+
 type wsAccumulator struct {
 	events  []WebSocketEvent
 	summary WebSocketSummary
+	bytes   int64
+	limit   int64
 }
 
 func newWSAccumulator() *wsAccumulator {
 	return &wsAccumulator{
-		events:  make([]WebSocketEvent, 0, 16),
-		summary: WebSocketSummary{},
+		events: make([]WebSocketEvent, 0, 16),
+		limit:  DefaultWebSocketTranscriptBytes,
 	}
+}
+
+func (a *wsAccumulator) keep(evt *stream.Event) bool {
+	size := evt.Size()
+	if a.limit > 0 && a.bytes+size > a.limit {
+		a.summary.Dropped++
+		return false
+	}
+	a.bytes += size
+	return true
 }
 
 func (a *wsAccumulator) consume(evt *stream.Event) {
@@ -67,7 +81,9 @@ func (a *wsAccumulator) consume(evt *stream.Event) {
 				jsonEvt.Reason = evt.WS.Reason
 			}
 		}
-		a.events = append(a.events, jsonEvt)
+		if a.keep(evt) {
+			a.events = append(a.events, jsonEvt)
+		}
 		if evt.Direction == stream.DirSend {
 			a.summary.SentCount++
 		} else {

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 )
 
 type DropPolicy int
@@ -15,10 +17,13 @@ const (
 	DropListener
 )
 
+const DefaultMaxBytes = 8 << 20
+
 type Config struct {
 	BufferSize     int
 	ListenerBuffer int
 	DropPolicy     DropPolicy
+	MaxBytes       bytesize.Budget
 }
 
 func defaultConfig(cfg Config) Config {
@@ -28,7 +33,6 @@ func defaultConfig(cfg Config) Config {
 	if cfg.ListenerBuffer <= 0 {
 		cfg.ListenerBuffer = 64
 	}
-
 	switch cfg.DropPolicy {
 	case DropNewest, DropOldest, DropListener:
 	default:
@@ -66,6 +70,7 @@ type Stats struct {
 	EventsTotal uint64
 	BytesTotal  uint64
 	Dropped     uint64
+	Evicted     uint64
 }
 
 type listener struct {
@@ -107,7 +112,7 @@ func NewSession(parent context.Context, kind Kind, cfg Config) *Session {
 		cancel:    cancel,
 		cfg:       cfg,
 		state:     StateConnecting,
-		events:    newRingBuffer(cfg.BufferSize),
+		events:    newRingBuffer(cfg.BufferSize, cfg.MaxBytes.Or(DefaultMaxBytes)),
 		listeners: make(map[int]*listener),
 		done:      make(chan struct{}),
 		stats: Stats{
@@ -236,8 +241,9 @@ func (s *Session) Publish(evt *Event) {
 
 	s.mu.Lock()
 	s.events.append(evt)
+	s.stats.Evicted = s.events.evicted
 	s.stats.EventsTotal++
-	s.stats.BytesTotal += uint64(len(evt.Payload))
+	s.stats.BytesTotal += uint64(evt.Size())
 	listeners := make([]*listener, 0, len(s.listeners))
 	for _, l := range s.listeners {
 		listeners = append(listeners, l)

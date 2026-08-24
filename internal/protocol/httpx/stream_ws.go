@@ -58,6 +58,7 @@ type WebSocketSummary struct {
 	ClosedBy      string        `json:"closedBy"`
 	CloseCode     int           `json:"closeCode,omitempty"`
 	CloseReason   string        `json:"closeReason,omitempty"`
+	Dropped       int64         `json:"dropped,omitempty"`
 }
 
 type WebSocketTranscript struct {
@@ -320,11 +321,7 @@ func (c *Client) CompleteWebSocket(
 	}
 	headers.Set("Content-Type", streamContentTypeJSON)
 	headers.Set(StreamHeaderType, "websocket")
-	headers.Set(StreamHeaderSummary, fmt.Sprintf(
-		"sent=%d recv=%d closed=%s",
-		transcript.Summary.SentCount,
-		transcript.Summary.ReceivedCount,
-		transcript.Summary.ClosedBy))
+	headers.Set(StreamHeaderSummary, webSocketSummaryLine(transcript.Summary))
 
 	meta := handle.Meta
 	if meta.Status == "" {
@@ -337,6 +334,19 @@ func (c *Client) CompleteWebSocket(
 		meta.Proto = "HTTP/1.1"
 	}
 	return streamResp(meta, headers, body, acc.summary.Duration), nil
+}
+
+func webSocketSummaryLine(sum WebSocketSummary) string {
+	line := fmt.Sprintf(
+		"sent=%d recv=%d closed=%s",
+		sum.SentCount,
+		sum.ReceivedCount,
+		sum.ClosedBy,
+	)
+	if sum.Dropped > 0 {
+		line += fmt.Sprintf(" dropped=%d", sum.Dropped)
+	}
+	return line
 }
 
 func buildWebSocketFallback(
