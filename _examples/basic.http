@@ -1,8 +1,10 @@
+// A setting placed before the first request applies to every request in the
+// file, so the host is written once here instead of in each request line.
+// A request may still override it, as the binary download below does.
+# @setting base-url {{base.url}}
+
 ### Status Check
 # @name getStatus
-// base-url can be set for one request. The relative URL below is resolved
-// against that base.
-# @setting base-url {{base.url}}
 GET /status/204
 User-Agent: resterm/0.1
 Accept: application/json
@@ -11,15 +13,16 @@ Accept: application/json
 # @name downloadBinary
 // GitHub returns 404 when an invalid Authorization header is sent. The example
 // environment defines global auth, so disable it for this request.
-// A base URL can include a path. Keep the trailing slash when the path is a
-// directory; otherwise, the relative URL replaces its final segment.
+// A request setting overrides the file default. A base URL can include a path.
+// Keep the trailing slash when the path is a directory, otherwise the relative
+// URL replaces its final segment.
 # @auth none
 # @setting base-url https://raw.githubusercontent.com/unkn0wn-root/resterm/main/
 GET _media/resterm_base.png
 
 ### Create Post
 # @name createPost
-POST {{base.url}}/anything/posts
+POST /anything/posts
 Content-Type: application/json
 Accept: application/json
 
@@ -31,7 +34,7 @@ Accept: application/json
 
 ### Timestamp Helpers
 # @name timestampHelpers
-POST {{base.url}}/anything/time
+POST /anything/time
 Content-Type: application/json
 Accept: application/json
 
@@ -44,7 +47,7 @@ Accept: application/json
 
 ### Random Data Helpers
 # @name randomHelpers
-POST {{base.url}}/anything/signup
+POST /anything/signup
 Content-Type: application/json
 Accept: application/json
 
@@ -63,19 +66,19 @@ Accept: application/json
 ### Bearer Auth Example
 # @name bearerEcho
 # @auth bearer {{auth.token}}
-GET {{base.url}}/bearer
+GET /bearer
 Accept: application/json
 
 ### OAuth2 Directive
 # @name oauthDirectiveDemo
 # @description Demonstrates Resterm's built-in @auth oauth2 support with environment-driven parameters.
 # @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" audience={{oauth.audience}} cache_key={{oauth.cacheKey}}
-GET {{base.url}}/anything/oauth2-demo
+GET /anything/oauth2-demo
 Accept: application/json
 
 ### OAuth2 Directive (Reuse Cached Token)
 # @name oauthDirectiveReuseDemo
 # @description After the cache is seeded above, only cache_key is needed to reuse the token.
 # @auth oauth2 cache_key={{oauth.cacheKey}}
-GET {{base.url}}/anything/oauth2-demo-reuse
+GET /anything/oauth2-demo-reuse
 Accept: application/json
