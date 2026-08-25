@@ -55,30 +55,18 @@ func (a *sseAccumulator) consume(evt *stream.Event) {
 				a.summary.EventCount = count
 			}
 		}
+		if failure, ok := evt.Metadata[sseMetaError]; ok {
+			a.summary.Error = failure
+		}
 	}
 }
 
 func publishSSEEvent(session *stream.Session, evt SSEEvent) {
-	payload := []byte(evt.Data)
-	metadata := make(map[string]string)
-	if evt.Event != "" {
-		metadata["sse.event"] = evt.Event
-	}
-	if evt.ID != "" {
-		metadata["sse.id"] = evt.ID
-	}
-	if evt.Comment != "" {
-		metadata["sse.comment"] = evt.Comment
-	}
-	if evt.Retry > 0 {
-		metadata["sse.retry"] = strconv.Itoa(evt.Retry)
-	}
 	session.Publish(&stream.Event{
 		Kind:      stream.KindSSE,
 		Direction: stream.DirReceive,
 		Timestamp: evt.Timestamp,
-		Metadata:  metadata,
-		Payload:   payload,
+		Payload:   []byte(evt.Data),
 		SSE: stream.SSEMetadata{
 			Name:    evt.Event,
 			ID:      evt.ID,
@@ -89,6 +77,8 @@ func publishSSEEvent(session *stream.Session, evt SSEEvent) {
 }
 
 type sseEventBuilder struct {
+	limit    int64
+	size     int64
 	id       string
 	event    string
 	comment  []string
@@ -98,6 +88,11 @@ type sseEventBuilder struct {
 }
 
 func (b *sseEventBuilder) consume(line string) error {
+	if b.limit > 0 && b.size+int64(len(line)) > b.limit {
+		return errSSEEventTooLarge
+	}
+	b.size += int64(len(line))
+
 	switch {
 	case strings.HasPrefix(line, "data:"):
 		b.data = append(b.data, strings.TrimLeft(line[5:], " \t"))
@@ -144,7 +139,7 @@ func (b *sseEventBuilder) finalize(index int) (SSEEvent, bool) {
 	if b.hasRetry {
 		evt.Retry = b.retry
 	}
-	*b = sseEventBuilder{}
+	*b = sseEventBuilder{limit: b.limit}
 	return evt, true
 }
 
