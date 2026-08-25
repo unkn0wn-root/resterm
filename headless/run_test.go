@@ -105,6 +105,53 @@ func TestRunUsesBaseURLFromInjectedEnvironment(t *testing.T) {
 	}
 }
 
+func TestRunSendsSchemelessTargetThroughTheParser(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{name: "host and port", line: "%s/users?page=2", want: "/users?page=2"},
+		{name: "url valued query", line: "%s/p?next=http://example.com&a=1", want: "/p?next=http://example.com&a=1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seen := make(chan string, 1)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seen <- r.URL.RequestURI()
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer srv.Close()
+
+			target := fmt.Sprintf(tt.line, strings.TrimPrefix(srv.URL, "http://"))
+			got, err := Run(t.Context(), Options{
+				Source: Source{
+					Path:    filepath.Join(t.TempDir(), "schemeless.http"),
+					Content: []byte("# @name probe" + "\n" + "GET " + target + "\n"),
+				},
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if got.Passed != 1 || got.Failed != 0 {
+				t.Fatalf("report = %+v, want one passing request", got)
+			}
+			if got.Results[0].Target != target {
+				t.Fatalf("source target = %q, want it unmodified", got.Results[0].Target)
+			}
+			select {
+			case uri := <-seen:
+				if uri != tt.want {
+					t.Fatalf("server request URI = %q, want %q", uri, tt.want)
+				}
+			default:
+				t.Fatal("server did not receive the request")
+			}
+		})
+	}
+}
+
 func TestRunCompareParityWithEnvResolve(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

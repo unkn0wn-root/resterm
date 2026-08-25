@@ -1,14 +1,21 @@
 ### Status Check
 # @name getStatus
-GET {{base.url}}/status/204
+// base-url can be set for one request. The relative URL below is resolved
+// against that base.
+# @setting base-url {{base.url}}
+GET /status/204
 User-Agent: resterm/0.1
 Accept: application/json
 
 ### Download binary file
 # @name downloadBinary
-// github returns 404 for an invalid Authorization header and _examples defines a global auth profile
+// GitHub returns 404 when an invalid Authorization header is sent. The example
+// environment defines global auth, so disable it for this request.
+// A base URL can include a path. Keep the trailing slash when the path is a
+// directory; otherwise, the relative URL replaces its final segment.
 # @auth none
-GET https://raw.githubusercontent.com/unkn0wn-root/resterm/main/_media/resterm_base.png
+# @setting base-url https://raw.githubusercontent.com/unkn0wn-root/resterm/main/
+GET _media/resterm_base.png
 
 ### Create Post
 # @name createPost
