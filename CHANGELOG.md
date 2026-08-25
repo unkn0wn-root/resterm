@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.3.1](https://github.com/unkn0wn-root/resterm/compare/v1.3.0...v1.3.1) (2026-08-25)
+
+
+### Features
+
+* add go toolchain v1.25.0 ([732a37b](https://github.com/unkn0wn-root/resterm/commit/732a37bdbe66f8d8cffb36cf7aca3043a34ce65d))
+
 ## [1.3.0](https://github.com/unkn0wn-root/resterm/compare/v1.2.4...v1.3.0) (2026-08-25)
 
 
