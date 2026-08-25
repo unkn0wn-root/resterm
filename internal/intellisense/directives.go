@@ -692,6 +692,18 @@ var directiveArgs = map[directive.Name][]Item{
 			Placeholder: "1mb",
 		},
 		{
+			Label:       "max-line-bytes=",
+			Summary:     "Largest SSE line to buffer",
+			Insert:      "max-line-bytes=1mb",
+			Placeholder: "1mb",
+		},
+		{
+			Label:       "max-event-bytes=",
+			Summary:     "Largest SSE event to buffer",
+			Insert:      "max-event-bytes=1mb",
+			Placeholder: "1mb",
+		},
+		{
 			Label:       "limit-bytes=",
 			Summary:     "Stop after N bytes (alias)",
 			Insert:      "limit-bytes=1mb",
