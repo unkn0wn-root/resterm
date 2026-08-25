@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://github.com/unkn0wn-root/resterm/compare/v1.2.4...v1.3.0) (2026-08-25)
+
+
+### Features
+
+* bump go version and dependencies ([#392](https://github.com/unkn0wn-root/resterm/issues/392)) ([08db82e](https://github.com/unkn0wn-root/resterm/commit/08db82e8ed01cce24f73f4adc53cd74bd9e3152c))
+* update basic.http with setting host example ([df158de](https://github.com/unkn0wn-root/resterm/commit/df158debe8afaae5c05adc86f57e36287bce2057))
+
 ### [1.2.4](https://github.com/unkn0wn-root/resterm/compare/v1.2.3...v1.2.4) (2026-08-23)
 
 ### [1.2.3](https://github.com/unkn0wn-root/resterm/compare/v1.2.2...v1.2.3) (2026-08-23)
