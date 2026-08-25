@@ -42,7 +42,12 @@ func resolveRequestTarget(
 		return "", targetError("request url is empty")
 	}
 
-	ref, err := url.Parse(target)
+	form := classifyTarget(target)
+	if form == formCredentials {
+		return "", targetError("request url must not carry credentials, use @auth basic instead")
+	}
+
+	ref, err := form.parse(target)
 	if err != nil {
 		return "", wrapTargetError(err, "parse request url")
 	}
@@ -61,24 +66,111 @@ func resolveRequestTarget(
 		ref = base.ResolveReference(ref)
 	}
 
+	if ref.Hostname() == "" {
+		return "", targetError("request url host is empty")
+	}
 	if err := scheme.apply(ref); err != nil {
 		return "", err
 	}
 	return ref.String(), nil
 }
 
+// targetForm separates relative references, explicit schemes, and hosts that
+// need an http:// prefix.
+type targetForm int
+
+const (
+	formReference targetForm = iota
+	formAbsolute
+	// formAuthority is a host without a scheme, such as localhost:8080/users.
+	formAuthority
+	// formCredentials prevents net/http from turning URL userinfo into an
+	// Authorization header. For example: user@example.com:8080/path.
+	formCredentials
+)
+
+// classifyTarget examines only the first path segment. A colon there separates
+// either a scheme or a port; RFC relative paths cannot contain one there.
+func classifyTarget(raw string) targetForm {
+	front := raw
+	if end := strings.IndexAny(raw, "/?#"); end >= 0 {
+		front = raw[:end]
+	}
+
+	// An "@" can be part of a relative path. Treat it as userinfo only when a
+	// host and port follow it: user@example.com:8080 is rejected, while
+	// user@example.com/path remains relative.
+	if at := strings.LastIndexByte(front, '@'); at >= 0 {
+		if classifyTarget(raw[at+1:]) == formAuthority {
+			return formCredentials
+		}
+	}
+	// A bracketed IPv6 literal cannot begin a path, so it is always a host.
+	if strings.HasPrefix(front, "[") {
+		return formAuthority
+	}
+
+	colon := strings.IndexByte(front, ':')
+	switch {
+	case colon <= 0:
+		return formReference
+	case strings.HasPrefix(raw[colon+1:], "//"):
+		return formAbsolute
+	case isRequestScheme(front[:colon]):
+		// Do not treat https:443/path as a host named "https" and send it over
+		// plain HTTP. Known schemes without "//" remain invalid URLs.
+		return formAbsolute
+	case isPort(front[colon+1:]):
+		return formAuthority
+	default:
+		return formAbsolute
+	}
+}
+
+// isPort accepts one or more ASCII digits. net/url also accepts out-of-range
+// values such as 99999, so this checks the syntax without parsing the number.
+func isPort(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isRequestScheme(head string) bool {
+	switch strings.ToLower(head) {
+	case "http", "https", "ws", "wss":
+		return true
+	}
+	return false
+}
+
+// parse adds http:// when the target is a host without a scheme.
+func (f targetForm) parse(raw string) (*url.URL, error) {
+	if f == formAuthority {
+		return url.Parse("http://" + raw)
+	}
+	return url.Parse(raw)
+}
+
 // apply rejects a scheme the request cannot use and maps http and https onto ws
 // and wss, so a single http base-url serves REST and WebSocket requests alike.
 func (s requestScheme) apply(u *url.URL) error {
-	if u.Hostname() == "" {
-		return targetError("request url host is empty")
-	}
-
 	if s == schemeHTTP {
-		if u.Scheme != "http" && u.Scheme != "https" {
+		switch u.Scheme {
+		case "http", "https":
+			return nil
+		case "ws", "wss":
+			// A ws:// URL still needs @websocket; the method alone does not
+			// start a WebSocket session.
+			return targetError("websocket request url needs a @websocket directive")
+		default:
 			return targetError("request url scheme must be http or https")
 		}
-		return nil
 	}
 
 	switch u.Scheme {

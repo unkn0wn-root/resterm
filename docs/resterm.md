@@ -2111,11 +2111,43 @@ Relative targets follow standard URI-reference resolution, including path-relati
 | `//uploads.example.com/x` | `https://uploads.example.com/x` |
 | `https://other.example.com/x` | unchanged |
 
-Trailing slash semantics are significant: `https://api.example.com/v1/` plus `users` keeps `/v1/`, while `https://api.example.com/v1` plus `users` produces `https://api.example.com/users`. Resterm does not insert a scheme or slash.
+Trailing slash semantics are significant: `https://api.example.com/v1/` plus `users` keeps `/v1/`, while `https://api.example.com/v1` plus `users` produces `https://api.example.com/users`. Resterm does not insert a slash.
 
 The configured base must be an absolute `http` or `https` URL with a host. It may include a port and path, but not userinfo, a query, or a fragment. An explicitly empty value is an error. A relative request without a usable base fails before connecting. Network-path targets (`//host/path`) deliberately may change the destination host; request headers and configured authentication apply to that effective host.
 
 REST, GraphQL, SSE, and WebSocket requests share the setting. For WebSockets, an effective `http` URL becomes `ws` and `https` becomes `wss`; WebSocket fragments are rejected. `base-url` does not change gRPC targets. A request method remains required, so `GET /users` is valid while a bare `/users` line is not a request.
+
+### URLs without a scheme
+
+You can omit `http://` when a request URL starts with a host and port. Resterm uses plain HTTP:
+
+| Request line | Effective URL |
+| --- | --- |
+| `GET localhost:8080/users` | `http://localhost:8080/users` |
+| `GET 127.0.0.1:8080/users` | `http://127.0.0.1:8080/users` |
+| `GET [::1]:8080/users` | `http://[::1]:8080/users` |
+| `GET [::1]/users` | `http://[::1]/users` |
+
+The port distinguishes these URLs from relative paths. Bracketed IPv6 addresses are also clear without a port, so `[::1]/users` works. These URLs are absolute and ignore `base-url`. Resterm always adds `http://`; write `https://` when you want TLS.
+
+Only the start of the request URL is checked. A URL in a query value does not affect the destination: `GET localhost:8080/p?next=http://example.com` still connects to `localhost:8080`. A known scheme without `//`, such as `https:443/path`, is rejected instead of being treated as a host named `https`.
+
+For a request with `# @websocket`, Resterm changes the added scheme to `ws://`. For example, `GET localhost:8080/socket` connects to `ws://localhost:8080/socket`. The `@websocket` directive starts the session; using `WS` as the method does not.
+
+A hostname without a port remains a relative URL. With `base-url` set to `https://api.example.com/v1/`, `GET example.com/users` resolves to `https://api.example.com/v1/example.com/users`. Write `http://example.com/users` when `example.com` is the destination host.
+
+Templates are expanded before these rules are applied. When a variable represents a server, include either a port or a scheme:
+
+| Value of `{{host}}` | Result of `GET {{host}}/users` |
+| --- | --- |
+| `localhost:8080` | `http://localhost:8080/users` |
+| `127.0.0.1:9000` | `http://127.0.0.1:9000/users` |
+| `http://example.com` | `http://example.com/users` |
+| `example.com` | A relative URL; requires `base-url` |
+
+A template can also provide part of the URL. Both `GET http://{{host}}/users` and `GET localhost:{{port}}/users` work.
+
+### Other HTTP settings
 
 - HTTP version: `@setting http-version 1.1` (accepts `1.1`, `2`, `HTTP/1.1`, `HTTP/2`). A trailing `HTTP/1.1` on the request line also sets the version; explicit settings win. `2` is strict and fails if the response is not HTTP/2. WebSocket requests are incompatible with `2`.
 - HTTP/1.0 is not supported. Resterm rejects `http-version 1.0`, trailing `HTTP/1.0`, and other unsupported version tokens such as `HTTP/3`.

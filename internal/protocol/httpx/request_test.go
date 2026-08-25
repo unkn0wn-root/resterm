@@ -3,6 +3,7 @@ package httpx
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -308,6 +309,65 @@ func TestBuildHTTPRequestUsesBaseURLForHTTPFamilyMetadata(t *testing.T) {
 				nil,
 				Options{BaseURL: "https://api.example.com/v1/"},
 			)
+			if err != nil {
+				t.Fatalf("BuildHTTPRequest() error = %v", err)
+			}
+			if got := httpReq.URL.String(); got != tt.want {
+				t.Fatalf("request URL = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildHTTPRequestSendsSchemelessLocalTarget(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.RequestURI() != "/users?page=2" {
+			t.Errorf("server request URI = %q", r.URL.RequestURI())
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	target := strings.TrimPrefix(srv.URL, "http://") + "/users?page=2"
+	req := &restfile.Request{Method: http.MethodGet, URL: target}
+
+	httpReq, _, _, err := NewClient(nil).BuildHTTPRequest(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("BuildHTTPRequest() error = %v", err)
+	}
+	if got, want := httpReq.URL.String(), srv.URL+"/users?page=2"; got != want {
+		t.Fatalf("request URL = %q, want %q", got, want)
+	}
+	if req.URL != target {
+		t.Fatalf("source request URL was mutated to %q", req.URL)
+	}
+
+	resp, err := srv.Client().Do(httpReq)
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %s, want 204", resp.Status)
+	}
+}
+
+func TestBuildHTTPRequestSchemelessWebSocketNeedsMetadata(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		ws   *restfile.WebSocketRequest
+		want string
+	}{
+		{name: "with @websocket", ws: &restfile.WebSocketRequest{}, want: "ws://localhost:8080/socket"},
+		{name: "without @websocket", want: "http://localhost:8080/socket"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{
+				Method:    http.MethodGet,
+				URL:       "localhost:8080/socket",
+				WebSocket: tt.ws,
+			}
+			httpReq, _, _, err := NewClient(nil).BuildHTTPRequest(t.Context(), req, nil, Options{})
 			if err != nil {
 				t.Fatalf("BuildHTTPRequest() error = %v", err)
 			}
