@@ -19,7 +19,7 @@ If you are looking for a Postman-style client centered on GUI collections, Reste
 > [!NOTE]
 > Resterm is now v1! See the [v1.0.0 release notes](https://github.com/unkn0wn-root/resterm/releases/tag/v1.0.0) for new features and breaking changes.
 
-Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Examples](#examples), [Installation](#installation), [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Request files](#request-files), [Installation](#installation), [Documentation](#documentation).
 
 ## Screenshot tour
 
@@ -124,64 +124,24 @@ Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Exam
 
 No files yet? Just run `resterm`, type a URL and press `Ctrl+Enter`. A pasted curl command works too.
 
-## Examples
+## Request files
 
-These examples show some of the directives you can use in `.http` files. Requests and workflows can be run in the TUI or with `resterm run`. Mock responses can be served in the TUI or with `resterm mock`.
-
-### Run a request for each value
+Resterm request files use standard HTTP syntax plus `# @` directives for configuration and automation:
 
 ```http
+# @setting base-url https://api.example.com/v1/
+
 ### Create users
 # @for-each ["david", "tom"] as name
+# @when env.mode == "development"
 # @assert response.statusCode == 201
-POST {{base.url}}/users
+POST users
 Content-Type: application/json
 
 {"name":"{{= name }}"}
 ```
 
-### Run a request conditionally
-
-```http
-### Seed development
-# @when env.mode == "development"
-POST {{base.url}}/fixtures/seed
-```
-
-### Choose a workflow branch
-
-```http
-### Sign in
-# @workflow sign-in
-# @step Login using=Login
-# @if last.statusCode == 200 run=GetProfile
-# @elif last.statusCode == 401 run=RefreshToken
-# @else fail="unexpected login response"
-```
-
-### Compare environments
-
-```http
-### Health check
-# @compare dev stage prod base=stage
-# @trace ttfb<=300ms total<=500ms
-# @assert trace.withinBudget()
-GET {{base.url}}/health
-```
-
-### Define a mock response
-
-```http
-### Declined payment
-# @mock method=POST path=/payments
-# @match json-rules={"amount":{"lte":0}}
-HTTP/1.1 422 Unprocessable Entity
-Content-Type: application/json
-
-{"error":"amount must be positive"}
-```
-
-`@when` applies to an individual request. `@if`, `@elif` and `@else` choose which request to run inside a workflow. See the [RestermScript reference](docs/restermscript.md) for the expression language and the [full documentation](docs/resterm.md) for workflows, comparisons, tracing and mocks.
+Settings before the first request apply to the whole file, `###` separates requests, and directives can repeat, limit or validate a request. More examples here: [`_examples/`](_examples/).
 
 ## CLI
 
@@ -428,39 +388,123 @@ Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 
 ### OAuth 2.0
 
-Client credentials, password grant and authorization code with PKCE. For auth code flows Resterm opens your browser, runs a local callback server on `127.0.0.1`, captures the redirect and exchanges the code. Tokens are cached per environment and refreshed when they expire. Docs: [`docs/resterm.md#oauth-20-directive`](./docs/resterm.md#oauth-20-directive) and `_examples/oauth2.http`.
+Use `@auth oauth2` to acquire and inject tokens. Tokens are cached per environment and refreshed when possible. The client credentials grant is the default. The password grant and authorization code with PKCE are also supported:
+
+```http
+### Service status
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} cache_key=my-api
+GET {{base.url}}/anything/projects
+```
+
+Example: [`_examples/oauth2.http`](_examples/oauth2.http). See the [OAuth 2.0 documentation](./docs/resterm.md#oauth-20-directive).
 
 ### Workflows and scripting
 
-Chain requests with `@workflow` and `@step`, pass data between steps and add JS hooks where needed. Docs and sample: [`docs/resterm.md#workflows`](./docs/resterm.md#workflows) and `_examples/workflows.http`.
+Workflows chain named requests and can choose the next step from a response:
+
+```http
+### Sign in
+# @workflow sign-in
+# @step Login using=Login
+# @if last.statusCode == 200 run=GetProfile
+# @elif last.statusCode == 401 run=RefreshToken
+# @else fail="unexpected login response"
+```
+
+They can also pass data between steps and run RestermScript or JavaScript hooks. Example: [`_examples/workflows.http`](_examples/workflows.http). See the [workflow documentation](./docs/resterm.md#workflows).
 
 ### Compare runs
 
-Run the same request across environments with `@compare` or `--compare`, then diff the responses side by side with `g+c`. Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
+`@compare` runs one request against at least two environments and uses one result as the baseline:
+
+```http
+### Compare health
+# @compare dev stage prod base=prod
+GET {{services.api.base}}/status
+```
+
+Press `g+c` to run it in the TUI, or supply `--compare` on the command line. Example: [`_examples/compare.http`](_examples/compare.http). See the [compare documentation](./docs/resterm.md#compare-runs).
 
 ### Tracing and timeline
 
-Add `@trace` with budgets to capture DNS, connect, TLS, TTFB and transfer timings. Resterm highlights overruns and can export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).
+`@trace` records HTTP phases and can flag requests that exceed latency budgets:
+
+```http
+### Trace API
+# @trace dns<=50ms connect<=120ms total<=400ms tolerance=25ms
+GET https://api.example.com/health
+```
+
+Results appear in the Timeline tab and can be exported to OpenTelemetry. Example: [`_examples/trace.http`](_examples/trace.http). See the [tracing documentation](./docs/resterm.md#timeline--tracing).
 
 ### Streaming (WebSocket and SSE)
 
-Use `@websocket` with `@ws` steps or `@sse` to script and record streams. The Stream tab keeps transcripts and includes an interactive console. Docs: [`docs/resterm.md#streaming-sse--websocket`](./docs/resterm.md#streaming-sse--websocket).
+`@sse` records server events, while `@websocket` and `@ws` script WebSocket frames. Both produce transcripts in the Stream tab:
+
+```http
+### Events
+# @sse duration=30s idle=10s max-events=5
+GET https://api.example.com/events
+
+### Chat
+# @websocket idle=3s
+# @ws send Hello
+# @ws close 1000 done
+GET wss://api.example.com/chat
+```
+
+Example: [`_examples/streaming.http`](_examples/streaming.http). See the [streaming documentation](./docs/resterm.md#streaming-sse--websocket).
 
 ### gRPC
 
-Unary and streaming calls with transcripts, metadata and body expansion. Docs: [`docs/resterm.md#grpc`](./docs/resterm.md#grpc).
+Use a `GRPC` request line for the server and `@grpc` for the fully qualified method. The body is protobuf JSON:
+
+```http
+### Get user
+# @grpc users.UserService/GetUser
+# @grpc-plaintext true
+GRPC {{grpc.host}}
+
+{"tenantId":"{{tenant.id}}"}
+```
+
+Server reflection is enabled by default. Descriptor sets and streaming calls are also supported. Example: [`_examples/grpc.http`](_examples/grpc.http). See the [gRPC documentation](./docs/resterm.md#grpc).
 
 ### OpenAPI import
 
-Convert OpenAPI 3 specs into `.http` collections with `--from-openapi`, from a local file or an `http(s)` URL. Choose the generated blocks with `--openapi-mode requests`, `mocks` or `both`. Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
+Generate requests, mocks or both from a local OpenAPI document or an `http(s)` URL:
+
+```bash
+resterm --from-openapi _examples/openapi-spec.yml --http-out api.http --openapi-mode both
+```
+
+Remote fetches respect `--insecure` and `--proxy`. Example input: [`_examples/openapi-spec.yml`](_examples/openapi-spec.yml). See the [import documentation](./docs/cli.md#import-examples).
 
 ### SSH tunnels
 
-Route HTTP, gRPC, WebSocket and SSE traffic through bastions with `@ssh` profiles. Docs: [`docs/resterm.md#ssh-tunnels`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
+Define an SSH profile before the requests that use it, then select it with `use=`:
+
+```http
+# @ssh file edge host=jump.example.com user=ops key=~/.ssh/id_ed25519
+
+### Internal API
+# @ssh use=edge
+GET http://10.0.0.10/v1/health
+```
+
+Profiles can be file-wide or workspace-wide, and one-off inline tunnels are also supported. Example: [`_examples/ssh.http`](_examples/ssh.http). See the [SSH documentation](./docs/resterm.md#ssh-tunnels).
 
 ### Kubernetes port-forwards
 
-Same idea with `@k8s` profiles, targeting pods, services, deployments or statefulsets. Docs: [`docs/resterm.md#kubernetes-port-forwards`](./docs/resterm.md#kubernetes-port-forwards) and `_examples/k8s.http`.
+`@k8s` opens a managed port-forward to a pod, service, deployment or statefulset:
+
+```http
+### Service health
+# @k8s namespace=default service=api port=http
+GET http://api.default.svc.cluster.local/health
+```
+
+Targets can use numeric or named ports and can be saved as reusable profiles. Example: [`_examples/k8s.http`](_examples/k8s.http). See the [Kubernetes documentation](./docs/resterm.md#kubernetes-port-forwards).
 
 ### Theming and bindings
 
