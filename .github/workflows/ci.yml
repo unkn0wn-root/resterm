@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Run tests
@@ -26,9 +26,27 @@ jobs:
         with:
           version: v2.12.2
 
+  minimum-go:
+    name: Minimum Go compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.0"
+          cache-dependency-path: go.sum
+      - name: Build and test with Go 1.25.0
+        env:
+          GOTOOLCHAIN: local
+          GOFLAGS: -mod=readonly
+        run: |
+          go version
+          go build ./...
+          go test ./...
+
   release-builds:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: lint-and-test
+    needs: [lint-and-test, minimum-go]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -36,7 +54,7 @@ jobs:
         goarch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Build binary
