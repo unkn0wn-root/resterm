@@ -517,6 +517,48 @@ var directiveArgs = map[directive.Name][]Item{
 			Placeholder: "250ms",
 		},
 	},
+	directive.Poll: {
+		{
+			Label:       "every=",
+			Summary:     "Time between polling requests",
+			Insert:      "every=500ms",
+			Placeholder: "500ms",
+		},
+		{
+			Label:       "timeout=",
+			Summary:     "Total time allowed for polling",
+			Insert:      "timeout=30s",
+			Placeholder: "30s",
+		},
+		{
+			Label:       "until=",
+			Summary:     "Condition that stops polling (must be last)",
+			Insert:      "until=response.json().status == \"completed\"",
+			Placeholder: "response.json().status == \"completed\"",
+		},
+	},
+	directive.Retry: {
+		{
+			Label:       "count=",
+			Summary:     "Number of additional attempts",
+			Insert:      "count=4",
+			Placeholder: "4",
+		},
+	},
+	directive.RetryBackoff: {
+		{
+			Label:       "exponential(",
+			Summary:     "Starting and maximum retry delay",
+			Insert:      "exponential(100ms, 2s)",
+			Placeholder: "100ms, 2s",
+		},
+		{
+			Label:       "jitter=",
+			Summary:     "Random delay percentage",
+			Insert:      "jitter=20%",
+			Placeholder: "20%",
+		},
+	},
 	directive.Script:  scriptArgs,
 	directive.RTS:     rtsArgs,
 	directive.If:      workflowRunArgs,
