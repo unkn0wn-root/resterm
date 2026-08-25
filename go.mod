@@ -1,6 +1,8 @@
 module github.com/unkn0wn-root/resterm
 
-go 1.26.7
+go 1.25.0
+
+toolchain go1.26.7
 
 require (
 	github.com/MakeNowJust/heredoc v1.0.0
