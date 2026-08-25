@@ -3,10 +3,10 @@ package httpx
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -148,11 +148,9 @@ func normalizeSettings(settings map[string]string) map[string]string {
 	}
 	norm := make(map[string]string, len(settings))
 	for k, v := range settings {
-		key := strings.ToLower(strings.TrimSpace(k))
-		if key == "" {
-			continue
+		if key := util.LowerTrim(k); key != "" {
+			norm[key] = v
 		}
-		norm[key] = v
 	}
 	return norm
 }

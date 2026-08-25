@@ -21,6 +21,7 @@ import (
 
 type Options struct {
 	Timeout            time.Duration
+	BaseURL            string
 	FollowRedirects    bool
 	InsecureSkipVerify bool
 	ProxyURL           string

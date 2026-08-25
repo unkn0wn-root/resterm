@@ -7,6 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/util"
 
 	// Register gzip support. Requests use it only when grpc-compression is set.
 	_ "google.golang.org/grpc/encoding/gzip"
@@ -56,7 +57,7 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 
 	norm := make(map[string]string, len(settings))
 	for k, v := range settings {
-		norm[strings.ToLower(strings.TrimSpace(k))] = v
+		norm[util.LowerTrim(k)] = v
 	}
 
 	for _, s := range sizeSettings {
@@ -73,7 +74,7 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 	}
 
 	if val, ok := norm[string(optionSettingCompression)]; ok {
-		name, valid := compressors[strings.ToLower(strings.TrimSpace(val))]
+		name, valid := compressors[util.LowerTrim(val)]
 		switch {
 		case valid:
 			opts.Compression = name

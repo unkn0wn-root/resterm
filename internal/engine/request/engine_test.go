@@ -198,6 +198,67 @@ func TestPreviewWithUnresolvedVariablesDoesNotExecute(t *testing.T) {
 	}
 }
 
+func TestPreviewResolvesScopedBaseURLWithoutMutatingSourceTarget(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	doc := &restfile.Document{
+		Settings: map[string]string{"Base-Url": "https://file.example/v1/"},
+	}
+	req := &restfile.Request{
+		Method:   http.MethodGet,
+		URL:      "users",
+		Settings: map[string]string{"BASE-URL": "https://request.example/v2/"},
+	}
+	env := testEnvValues(t, "dev", map[string]string{
+		"settings.base-url": "https://global.example/v0/",
+	})
+
+	res, err := e.ExecuteWith(doc, req, env, ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	if res.Explain == nil || res.Explain.Final == nil {
+		t.Fatalf("expected prepared explain report, got %#v", res.Explain)
+	}
+	if got, want := res.Explain.Final.URL, "https://request.example/v2/users"; got != want {
+		t.Fatalf("explain URL = %q, want %q", got, want)
+	}
+	if res.Executed == nil || res.Executed.URL != "users" {
+		t.Fatalf("executed source target = %#v, want relative target", res.Executed)
+	}
+	if got := res.Executed.Settings["base-url"]; got != "https://request.example/v2/" {
+		t.Fatalf("merged base-url = %q, want request override", got)
+	}
+	if transportCalled() {
+		t.Fatal("preview must not construct a transport")
+	}
+}
+
+func TestPreviewAbsoluteURLDoesNotResolveConfiguredBaseURL(t *testing.T) {
+	e, transportCalled := newPreviewTestEngine(t)
+	req := &restfile.Request{
+		Method:   http.MethodGet,
+		URL:      "https://absolute.example/status",
+		Settings: map[string]string{"base-url": "{{missing}}"},
+	}
+
+	res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{Mode: ExecModePreview})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !res.Preview || res.Err != nil {
+		t.Fatalf("expected clean preview, got preview=%v err=%v", res.Preview, res.Err)
+	}
+	if got := res.Explain.Final.URL; got != "https://absolute.example/status" {
+		t.Fatalf("explain URL = %q, want absolute target unchanged", got)
+	}
+	if transportCalled() {
+		t.Fatal("preview must not construct a transport")
+	}
+}
+
 func TestPreviewBuildFailureStillShortCircuits(t *testing.T) {
 	e, transportCalled := newPreviewTestEngine(t)
 	req := &restfile.Request{
@@ -344,8 +405,9 @@ func TestPreviewCommandAuthStructuralErrorStaysFatal(t *testing.T) {
 func TestPreviewGRPCUnresolvedVariablesStillPreviews(t *testing.T) {
 	e, transportCalled := newPreviewTestEngine(t)
 	req := &restfile.Request{
-		Method: "GRPC",
-		URL:    "{{host}}:50051",
+		Method:   "GRPC",
+		URL:      "{{host}}:50051",
+		Settings: map[string]string{"base-url": "{{missingBase}}"},
 		GRPC: &restfile.GRPCRequest{
 			Target:     "{{host}}:50051",
 			FullMethod: "/pkg.Service/GetUser",

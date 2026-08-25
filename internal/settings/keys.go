@@ -1,8 +1,13 @@
 package settings
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/util"
+)
 
 var httpSettingKeys = map[string]struct{}{
+	"base-url":        {},
 	"timeout":         {},
 	"proxy":           {},
 	"followredirects": {},
@@ -12,7 +17,7 @@ var httpSettingKeys = map[string]struct{}{
 
 // IsHTTPKey reports whether key is a supported HTTP setting key.
 func IsHTTPKey(key string) bool {
-	k := strings.ToLower(strings.TrimSpace(key))
+	k := util.LowerTrim(key)
 
 	if _, ok := httpSettingKeys[k]; ok {
 		return true

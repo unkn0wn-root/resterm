@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"io"
 	"net/http"
@@ -129,31 +130,17 @@ func (c *Client) buildHTTPRequest(
 		)
 	}
 
-	expandedURL := urlOverride
-	if expandedURL == "" {
-		expandedURL = req.URL
-	}
-	if expandedURL == "" {
-		return nil, opts, diag.New(
-			diag.ClassProtocol,
-			"request url is empty",
-			diag.WithComponent(diag.ComponentHTTP),
-		)
-	}
-	if resolver != nil {
-		var err error
-		expandedURL, err = resolver.ExpandTemplates(expandedURL)
-		if err != nil {
-			return nil, opts, diag.WrapAs(
-				diag.ClassProtocol,
-				err,
-				"expand url",
-				diag.WithComponent(diag.ComponentHTTP),
-			)
-		}
+	target, err := resolveRequestTarget(
+		cmp.Or(urlOverride, req.URL),
+		opts.BaseURL,
+		resolver,
+		requestSchemeOf(req),
+	)
+	if err != nil {
+		return nil, opts, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, body)
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, target, body)
 	if err != nil {
 		return nil, opts, diag.WrapAs(
 			diag.ClassProtocol,

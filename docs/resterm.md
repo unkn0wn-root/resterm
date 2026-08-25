@@ -882,7 +882,7 @@ Some directives can span multiple comment lines. Resterm keeps reading while the
 | `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. |
 | `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
 | `@log-sensitive-headers` | `# @log-sensitive-headers [true\|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, API-token headers such as `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
-| `@setting` | `# @setting key value` | Generic settings (transport/TLS today: `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`, `http-*`, `grpc-*`). |
+| `@setting` | `# @setting key value` | Generic settings (transport/TLS today: `base-url`, `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`, `http-*`, `grpc-*`). |
 | `@settings` | `# @settings key1=val1 key2=val2 ...` | Batch settings on one line; supports the same keys as `@setting` and future prefixes. |
 | `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
 
@@ -2063,8 +2063,60 @@ Key points:
 
 ## HTTP Transport & Settings
 
-- Global defaults are passed via CLI flags (`--timeout`, `--follow`, `--insecure`, `--proxy`).
+- CLI-wide transport defaults are available through flags (`--timeout`, `--follow`, `--insecure`, `--proxy`).
 - Per-request overrides use `@setting`, `@settings`, or `@timeout`.
+
+### Relative request URLs
+
+Set `base-url` to resolve shorter HTTP request targets without repeating a host:
+
+```http
+# File default when declared before the first request
+# @setting base-url https://api.example.com/v1/
+
+### List users
+GET users?page=2
+
+### Root-relative health check
+GET /health
+
+### One-request override
+# @setting base-url https://admin.example.com/api/
+GET status
+```
+
+The same setting can be selected globally through an environment:
+
+```json
+{
+  "dev": {
+    "settings.base-url": "https://api.dev.example.com/v1/"
+  },
+  "prod": {
+    "settings.base-url": "https://api.example.com/v1/"
+  }
+}
+```
+
+Environment, file, and request values use the normal global < file < request precedence. Setting keys are case-insensitive. A base or request target may contain templates, such as `# @setting base-url {{services.api.base}}`; the base is expanded only when the final request target is relative. An absolute request target ignores `base-url`, including an invalid or unresolved non-empty value. A skipped request and a gRPC request do not use it either.
+
+Relative targets follow standard URI-reference resolution, including path-relative, root-relative, query-only, parent-segment, and network-path references:
+
+| Base `https://api.example.com/v1/` | Effective URL |
+| --- | --- |
+| `users` | `https://api.example.com/v1/users` |
+| `/users` | `https://api.example.com/users` |
+| `../health` | `https://api.example.com/health` |
+| `?page=2` | `https://api.example.com/v1/?page=2` |
+| `//uploads.example.com/x` | `https://uploads.example.com/x` |
+| `https://other.example.com/x` | unchanged |
+
+Trailing slash semantics are significant: `https://api.example.com/v1/` plus `users` keeps `/v1/`, while `https://api.example.com/v1` plus `users` produces `https://api.example.com/users`. Resterm does not insert a scheme or slash.
+
+The configured base must be an absolute `http` or `https` URL with a host. It may include a port and path, but not userinfo, a query, or a fragment. An explicitly empty value is an error. A relative request without a usable base fails before connecting. Network-path targets (`//host/path`) deliberately may change the destination host; request headers and configured authentication apply to that effective host.
+
+REST, GraphQL, SSE, and WebSocket requests share the setting. For WebSockets, an effective `http` URL becomes `ws` and `https` becomes `wss`; WebSocket fragments are rejected. `base-url` does not change gRPC targets. A request method remains required, so `GET /users` is valid while a bare `/users` line is not a request.
+
 - HTTP version: `@setting http-version 1.1` (accepts `1.1`, `2`, `HTTP/1.1`, `HTTP/2`). A trailing `HTTP/1.1` on the request line also sets the version; explicit settings win. `2` is strict and fails if the response is not HTTP/2. WebSocket requests are incompatible with `2`.
 - HTTP/1.0 is not supported. Resterm rejects `http-version 1.0`, trailing `HTTP/1.0`, and other unsupported version tokens such as `HTTP/3`.
 - Only a trailing `HTTP/<major>` or `HTTP/<major>.<minor>` is read as a version. Any other trailing text stays part of the URL, so `GET https://example.com/a http/foo` requests `/a%20http/foo`.
@@ -2076,10 +2128,10 @@ Key points:
 - If the SQLite history file is detected as corrupted, Resterm quarantines it to `history.db.corrupt-<timestamp>` and initializes a fresh `history.db`.
 - Custom root CAs replace system roots by default (strict). Set `http-root-mode append` or `grpc-root-mode append` if you want to keep system roots in addition to your own.
 - File-level defaults: place `# @setting key value` or `# @settings key1=val1 ...` before the first request to apply to all requests in that file. Request-level overrides still win.
-- Settings are generic. Today the recognized prefixes are transport/TLS (`http-*`, `grpc-*`, `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`). Future features can add more prefixes; unknown keys are ignored for now to stay forward-compatible.
+- Settings are generic. Today the recognized prefixes are transport/TLS (`base-url`, `http-*`, `grpc-*`, `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`). Future features can add more prefixes; unknown keys are ignored for now to stay forward-compatible.
 - Boolean settings (`followredirects`, `insecure`, `no-cookies`, `http-insecure`, `grpc-insecure`) accept `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0`. A key written on its own is a flag meaning `true`, so `# @setting insecure`, `# @settings insecure`, and `# @setting insecure true` are the same thing. `@setting` also accepts the `key=value` spelling, so `# @setting insecure=false` means what `# @settings insecure=false` does.
-- Settings validate their values. A value outside a setting's vocabulary fails the request instead of falling back to a default, so a typo cannot silently leave TLS verification or redirects at the wrong setting. This covers booleans, `timeout` (a Go duration such as `30s`), `proxy` (a URL with a scheme and host, such as `http://host:8080`), `http-version`, and `http-root-mode`/`grpc-root-mode`. Writing a key with an empty value (`# @settings insecure=`, or `"settings.insecure": ""` in an environment file) is reported as a missing value rather than treated as a flag.
-- Environment defaults: `resterm.env.json` can carry global settings under the `settings.` prefix (e.g., `"settings.http-root-cas": "ca-dev.pem"`, `"settings.grpc-insecure": "false"`). Precedence is global (env) < file < request.
+- Settings validate their values. A value outside a setting's vocabulary fails the request instead of falling back to a default, so a typo cannot silently leave TLS verification or redirects at the wrong setting. This covers booleans, `timeout` (a Go duration such as `30s`), `proxy` (a URL with a scheme and host, such as `http://host:8080`), `http-version`, and `http-root-mode`/`grpc-root-mode`. A non-empty `base-url` is resolved and validated only when a relative HTTP-family target needs it. Writing a key with an empty value (`# @settings insecure=`, or `"settings.insecure": ""` in an environment file) is reported as a missing value rather than treated as a flag.
+- Environment defaults: `resterm.env.json` can carry global settings under the `settings.` prefix (e.g., `"settings.base-url": "https://api.example.com/v1/"`, `"settings.http-root-cas": "ca-dev.pem"`, `"settings.grpc-insecure": "false"`). Precedence is global (env) < file < request.
 - OAuth token exchanges reuse the same HTTP TLS settings (root CAs, client cert/key, `http-insecure`) as the main request.
 
 Body helpers:

@@ -15,6 +15,12 @@ func TestParseRequestLine(t *testing.T) {
 		ver    version.HTTP
 	}{
 		{line: "GET http://example.com", method: "GET", url: "http://example.com"},
+		{line: "GET /users", method: "GET", url: "/users"},
+		{line: "POST users", method: "POST", url: "users"},
+		{line: "GET ../health", method: "GET", url: "../health"},
+		{line: "GET ?page=2", method: "GET", url: "?page=2"},
+		{line: "GET //uploads.example.com/x", method: "GET", url: "//uploads.example.com/x"},
+		{line: "GET /users HTTP/1.1", method: "GET", url: "/users", ver: version.V11},
 		{line: "CONNECT proxy.example.com:443", method: "CONNECT", url: "proxy.example.com:443"},
 		{line: "WS ws://example.com/s", method: "GET", url: "ws://example.com/s"},
 		{line: "GET {{base}}/two", method: "GET", url: "{{base}}/two"},

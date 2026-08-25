@@ -116,6 +116,12 @@ var workflowRunArgs = []Item{
 
 var settingArgs = []Item{
 	{
+		Label:       "base-url=",
+		Summary:     "Base URL for relative HTTP requests",
+		Insert:      "base-url=https://api.example.com/v1/",
+		Placeholder: "https://api.example.com/v1/",
+	},
+	{
 		Label:       "timeout=",
 		Summary:     "Request timeout (e.g. 5s)",
 		Insert:      "timeout=5s",

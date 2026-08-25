@@ -106,6 +106,12 @@ func TestDirectiveArgsFilterByPrefix(t *testing.T) {
 		t.Fatal("expect args missing calls=")
 	}
 
+	for _, directive := range []string{"setting", "settings"} {
+		if !contains(argOptions(directive, "base"), "base-url=") {
+			t.Fatalf("%s args missing base-url=", directive)
+		}
+	}
+
 	if opts := argOptions("unknown", ""); opts != nil {
 		t.Fatalf("expected nil for unknown directive, got %v", opts)
 	}
