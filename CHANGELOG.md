@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.0](https://github.com/unkn0wn-root/resterm/compare/v1.3.1...v1.4.0) (2026-08-26)
+
+
+### Features
+
+* add failed retry to _examples ([d7a088d](https://github.com/unkn0wn-root/resterm/commit/d7a088df56993d941302b9bec1138f7bb6b1a42e))
+
 ### [1.3.1](https://github.com/unkn0wn-root/resterm/compare/v1.3.0...v1.3.1) (2026-08-25)
 
 
