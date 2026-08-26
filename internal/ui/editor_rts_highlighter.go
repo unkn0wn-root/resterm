@@ -163,6 +163,9 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 			}
 			token := string(line[start:i])
 			class := rts.KeywordClassOf(token)
+			if class == rts.KeywordNone && token == "in" && rtsInIsOperator(line, start) {
+				class = rts.KeywordLogical
+			}
 			if class != rts.KeywordNone {
 				if style, ok := s.keywordStyleForClass(class); ok {
 					p.paint(start, i, style)
@@ -279,6 +282,44 @@ func isRTSCall(line []rune, end int) bool {
 func isRTSMethod(line []rune, start int) bool {
 	i := prevNonSpace(line, start-1)
 	return i >= 0 && line[i] == '.'
+}
+
+// in is a contextual keyword, so it reads as the membership operator only when
+// it follows a complete operand on the same line. not in is that same operator,
+// so a not right before it is part of it and not the operand
+func rtsInIsOperator(line []rune, start int) bool {
+	i := prevNonSpace(line, start-1)
+	if word, ws := wordEndingAt(line, i); word == "not" {
+		i = prevNonSpace(line, ws-1)
+	}
+	return rtsEndsOperand(line, i)
+}
+
+func rtsEndsOperand(line []rune, i int) bool {
+	if i < 0 {
+		return false
+	}
+	switch ch := line[i]; {
+	case ch == ')' || ch == ']' || ch == '}' || ch == '"' || ch == '\'':
+		return true
+	case isRTSIdent(ch):
+		word, _ := wordEndingAt(line, i)
+		class := rts.KeywordClassOf(word)
+		return class == rts.KeywordNone || class == rts.KeywordLiteral
+	default:
+		return false
+	}
+}
+
+func wordEndingAt(line []rune, i int) (string, int) {
+	if i < 0 || !isRTSIdent(line[i]) {
+		return "", -1
+	}
+	start := i
+	for start > 0 && isRTSIdent(line[start-1]) {
+		start--
+	}
+	return string(line[start : i+1]), start
 }
 
 func prevNonSpace(line []rune, idx int) int {

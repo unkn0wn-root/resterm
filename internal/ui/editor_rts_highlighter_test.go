@@ -176,3 +176,55 @@ func TestRTSRuneStylerHighlightsMethodCall(t *testing.T) {
 		t.Fatalf("method call style mismatch:\nwant %q\n got %q", want, got)
 	}
 }
+
+func TestRTSRuneStylerHighlightsMembershipOperator(t *testing.T) {
+	p := theme.DefaultTheme().EditorMetadata
+	p.RTSKeywordLogical = lipgloss.Color("#112233")
+	st := newRTSRuneStyler(p)
+	rs, ok := st.(*rtsRuneStyler)
+	if !ok {
+		t.Fatalf("expected rts rune styler")
+	}
+
+	logical, ok := rs.keywordStyleForClass(rts.KeywordLogical)
+	if !ok {
+		t.Fatalf("expected logical keyword style")
+	}
+
+	tests := []struct {
+		src      string
+		at       string
+		operator bool
+	}{
+		{src: "let ok = code in [200, 201]", at: "in [", operator: true},
+		{src: "let ok = code not in [400]", at: "in [", operator: true},
+		{src: `let ok = "json" in ct`, at: "in ct", operator: true},
+		{src: "let ok = pick(1) in [1]", at: "in [", operator: true},
+		{src: "let ok = true in [true]", at: "in [", operator: true},
+		{src: "let ok = 1 in [1]", at: "in [", operator: true},
+		{src: "let in = 1", at: "in =", operator: false},
+		{src: "let x = in.field", at: "in.", operator: false},
+		{src: "fn pick(in) {", at: "in)", operator: false},
+		{src: "let d = {in: 1}", at: "in:", operator: false},
+		{src: "let y = not in", at: "in", operator: false},
+		{src: "in = pick(in)", at: "in =", operator: false},
+	}
+	for i, tt := range tests {
+		t.Run(tt.src, func(t *testing.T) {
+			idx := strings.Index(tt.src, tt.at)
+			if idx < 0 {
+				t.Fatalf("anchor %q missing from %q", tt.at, tt.src)
+			}
+
+			styles := rs.StylesForLine([]rune(tt.src), i)
+			got := styles[idx].GetForeground()
+			want := logical.GetForeground()
+			if tt.operator && got != want {
+				t.Fatalf("in color = %v, want logical %v", got, want)
+			}
+			if !tt.operator && got == want {
+				t.Fatalf("in used the logical keyword color as a name")
+			}
+		})
+	}
+}
