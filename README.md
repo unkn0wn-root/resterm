@@ -132,7 +132,7 @@ Resterm request files use standard HTTP syntax plus `# @` directives for configu
 # @setting base-url https://api.example.com/v1/
 
 ### Create users
-# Send this request once for each name in the list.
+// Send this request once for each name in the list.
 # @for-each ["david", "tom"] as name
 # @when env.mode == "development"
 # @assert response.statusCode == 201
@@ -407,8 +407,8 @@ Workflows chain named requests and can choose the next step from a response:
 ### Sign in
 # @workflow sign-in
 # @step Login using=Login
-# GetProfile and RefreshToken are request names.
-# The first true condition runs the named request.
+// GetProfile and RefreshToken are request names.
+// The first true condition runs the named request.
 # @if last.statusCode == 200 run=GetProfile
 # @elif last.statusCode == 401 run=RefreshToken
 # @else fail="unexpected login response"
@@ -423,7 +423,7 @@ Use `@poll` to repeat a request until a response condition becomes true. Add `@r
 ```http
 ### Wait for job
 # @retry count=4
-# @retry-when contains([429, 502, 503], response.statusCode)
+# @retry-when response.statusCode in [429, 502, 503]
 # @retry-backoff exponential(100ms, 2s) jitter=20%
 # @poll every=500ms timeout=30s until=response.json().status == "completed"
 GET {{base.url}}/jobs/{{job.id}}
@@ -503,7 +503,7 @@ Remote fetches respect `--insecure` and `--proxy`. Example input: [`_examples/op
 Define an SSH profile before the requests that use it, then select it with `use=`:
 
 ```http
-# Set key to choose a key file. Leave it out to use your SSH agent or a default key.
+// Set key to choose a key file. Leave it out to use your SSH agent or a default key.
 # @ssh file edge host=jump.example.com user=ops key=~/.ssh/id_ed25519
 
 ### Internal API
