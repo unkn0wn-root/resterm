@@ -1130,6 +1130,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		)
 	}
 	tests, globalChanges, testErr := x.eng.sc.RunTests(
+		x.sendCtx,
 		x.req.Metadata.Scripts,
 		scripts.TestInput{
 			Response:  respForScripts,

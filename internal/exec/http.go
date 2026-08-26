@@ -285,6 +285,7 @@ func (r Runner) finalizeHTTP(
 	}
 	traceInput := scripts.NewTraceInput(resp.Timeline, traceSpec)
 	tests, globalChanges, testErr := in.Scripts.RunTests(
+		in.Context,
 		in.Req.Metadata.Scripts,
 		scripts.TestInput{
 			Response:  respForScripts,

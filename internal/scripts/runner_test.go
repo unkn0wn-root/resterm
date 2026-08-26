@@ -233,6 +233,7 @@ client.test("vars carried", function () {
 	}
 	testBlocks := []restfile.ScriptBlock{{Kind: "test", FilePath: "test.js"}}
 	results, globals, err := runner.RunTests(
+		t.Context(),
 		testBlocks,
 		TestInput{Response: response, Variables: preResult.Variables.Map(), BaseDir: dir},
 	)
@@ -274,6 +275,7 @@ func TestRunTestsScripts(t *testing.T) {
 	}
 
 	results, globals, err := runner.RunTests(
+		t.Context(),
 		scripts,
 		TestInput{Response: response, Variables: map[string]string{}},
 	)
@@ -356,6 +358,7 @@ client.test("response stream access", function () {
 });`
 
 	results, globals, err := runner.RunTests(
+		t.Context(),
 		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
 		TestInput{
 			Response:  response,
@@ -400,6 +403,7 @@ func TestResponseAPIUsesWireForBinary(t *testing.T) {
 });`
 
 	results, globals, err := runner.RunTests(
+		t.Context(),
 		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
 		TestInput{
 			Response:  response,
@@ -502,7 +506,7 @@ func TestRunTestsKeepsSecretValuesThroughDelete(t *testing.T) {
 vars.global.delete("token");`,
 	}}
 	var sec vars.Secrets
-	_, changes, err := runner.RunTests(scripts, TestInput{Response: resp, Secrets: &sec})
+	_, changes, err := runner.RunTests(t.Context(), scripts, TestInput{Response: resp, Secrets: &sec})
 	if err != nil {
 		t.Fatalf("run tests: %v", err)
 	}
@@ -556,7 +560,7 @@ func TestTestScriptsGlobalMutation(t *testing.T) {
   vars.global.set("token", "after");
 });`,
 	}}
-	results, globals, err := runner.RunTests(scripts, TestInput{
+	results, globals, err := runner.RunTests(t.Context(), scripts, TestInput{
 		Response:  resp,
 		Variables: map[string]string{},
 		Globals: vars.CollectNames(map[string]vars.GlobalMutation{
@@ -675,6 +679,7 @@ func TestTraceBindingProvidesTimeline(t *testing.T) {
 });`
 
 	results, globals, err := runner.RunTests(
+		t.Context(),
 		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
 		TestInput{
 			Response:  response,
@@ -707,6 +712,7 @@ func TestTraceBindingDisabled(t *testing.T) {
   tests.assert(trace.withinBudget() === true, "within budget default");
 });`
 	results, _, err := runner.RunTests(
+		t.Context(),
 		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
 		TestInput{Response: resp},
 	)
@@ -751,6 +757,7 @@ func TestResponseAPIExposesBinaryHelpers(t *testing.T) {
 	}
 
 	results, _, err := runner.RunTests(
+		t.Context(),
 		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
 		TestInput{Response: resp, Variables: map[string]string{}},
 	)
