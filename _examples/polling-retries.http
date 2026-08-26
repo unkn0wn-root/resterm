@@ -47,7 +47,28 @@ X-Demo-Run: {{$uuid}}
 ### Retry transient responses
 # @name retry-transient
 # @retry count=3
-# @retry-when contains([429, 502, 503], response.statusCode)
+# @retry-when response.statusCode in [429, 502, 503]
 # @retry-backoff exponential(100ms, 500ms) jitter=20%
 GET {{mock.base}}/unstable
 X-Demo-Run: {{$uuid}}
+
+### Poll timeout (expected failure)
+# Pinning the sequence to 202 keeps the job pending until @poll times out.
+# @name poll-timeout
+# @retry count=3
+# @retry-when response.statusCode in [429, 502, 503]
+# @retry-backoff exponential(100ms, 500ms) jitter=20%
+# @poll every=250ms timeout=2s until=response.json().status == "completed"
+GET {{mock.base}}/jobs/job_stuck
+X-Demo-Run: {{$uuid}}
+X-Resterm-Mock-Status: 202
+
+### Exhaust retries (expected failure)
+# Pinning the sequence to 503 prevents it from reaching the successful response.
+# @name retry-exhausted
+# @retry count=3
+# @retry-when response.statusCode in [429, 502, 503]
+# @retry-backoff exponential(100ms, 500ms) jitter=20%
+GET {{mock.base}}/unstable
+X-Demo-Run: {{$uuid}}
+X-Resterm-Mock-Status: 503
