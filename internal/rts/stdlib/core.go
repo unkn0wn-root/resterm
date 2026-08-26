@@ -3,7 +3,6 @@ package stdlib
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -70,29 +69,11 @@ func coreContains(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error
 		return rts.Null(), err
 	}
 
-	h := na.Arg(0)
-	n := na.Arg(1)
-	s, err := na.ToStr(1)
+	ok, err := rts.ValueContains(ctx, pos, na.Arg(0), na.Arg(1))
 	if err != nil {
 		return rts.Null(), err
 	}
-
-	switch h.K {
-	case rts.VStr:
-		return rts.Bool(strings.Contains(h.S, s)), nil
-	case rts.VList:
-		for _, it := range h.L {
-			if rts.ValueEqual(it, n) {
-				return rts.Bool(true), nil
-			}
-		}
-		return rts.Bool(false), nil
-	case rts.VDict:
-		_, ok := h.M[s]
-		return rts.Bool(ok), nil
-	default:
-		return rts.Null(), rts.Errf(ctx, pos, "contains unsupported")
-	}
+	return rts.Bool(ok), nil
 }
 
 func coreMatch(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {

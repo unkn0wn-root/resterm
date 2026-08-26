@@ -113,7 +113,7 @@ Listed from tightest to loosest. Each level binds more tightly than the one belo
 - Unary: `not` or `!`, `try`, and unary `-`.
 - Multiplicative: `*`, `/`, and `%`.
 - Additive: `+` and `-`.
-- Comparison: `<`, `<=`, `>`, and `>=`.
+- Comparison: `<`, `<=`, `>`, `>=`, `in`, and `not in`.
 - Equality: `==` and `!=`.
 - Logical AND: `and` or `&&`.
 - Logical OR: `or` or `||`.
@@ -122,7 +122,52 @@ Listed from tightest to loosest. Each level binds more tightly than the one belo
 
 `??` sits near the bottom, so it binds looser than arithmetic, comparison, and both logical operators. `a ?? b + c` means `a ?? (b + c)`, and `a ?? b or c` means `a ?? (b or c)`. Parenthesise when you want the other grouping.
 
-`+` adds numbers or concatenates strings. Non numeric values are converted to string using `str()`. Comparisons only work for numbers or strings, and equality only works for primitive types.
+`+` adds numbers or concatenates strings. Non numeric values are converted to string using `str()`. Ordering comparisons only work for numbers or strings, and equality only works for primitive types.
+
+### Membership operators
+
+`value in container` is the infix form of `contains(container, value)`. `value not in container` applies the same membership test and negates its result:
+
+```rts
+response.statusCode in [200, 201, 204]
+"json" in response.header("Content-Type")
+"request_id" in response.json()
+response.statusCode not in [400, 404, 500]
+```
+
+The container determines how membership works:
+
+- A list compares each item to the value with RestermScript equality. Kinds must match, primitive values compare by value, and lists, dicts, functions, and objects are never deeply equal.
+- A string converts the value with `str()` and tests for a substring. The empty string is contained in every string.
+- A dict converts the value with `str()` and checks for an exact, case-sensitive key. `null` converts to the empty string, so `null in dict` asks for a `""` key.
+- Any other container is an evaluation error.
+
+Host bindings such as `response`, `vars`, and `env` are objects, not containers, so they take the error branch instead of testing membership. Use the accessor each one already provides: `vars.has("token")` rather than `"token" in vars`, and `"request_id" in response.json()` rather than `"request_id" in response`.
+
+`not in` is one comparison operator. Because unary `not` binds more tightly than every binary operator, write `value not in container`, not `not value in container`, when you want to negate membership. Like the existing ordering operators, membership is left-associative; comparisons are not rewritten into chained tests.
+
+`in` is contextual rather than reserved. It remains valid as a binding, function or module name, member, and dict key when it is not between two expressions:
+
+```rts
+let in = {in: true}
+in.in
+```
+
+In `.rts` modules and `@rts` blocks, a line may end after either membership operator:
+
+```rts
+let allowed = code in
+  [200, 201, 204]
+```
+
+Request-file directives retain their delimiter-based multiline rule. Open a group when a directive needs to span lines:
+
+```http
+# @assert (
+#   response.statusCode in
+#   [200, 201, 204]
+# )
+```
 
 ### Logical operators
 
@@ -507,7 +552,7 @@ RTS provides a small standard library that covers common request needs without e
 
 - `rts.fail(msg)` stops evaluation and returns an error message.
 - `rts.len(x)` returns the length of a string, list, or dict.
-- `rts.contains(haystack, needle)` checks whether a value is contained in a string, list, or dict.
+- `rts.contains(container, value)` applies the same membership relation as `value in container`.
 - `rts.match(pattern, text)` applies a regular expression to text and returns true when it matches.
 - `rts.str(x)` converts a value to a string, using JSON for lists and dicts.
 - `rts.num(x[, def])` converts a value to a number, or returns `def` when conversion fails.
@@ -787,7 +832,7 @@ These directives are evaluated before pre-request scripts. If the condition is f
 
 ```
 # @assert response.statusCode == 200
-# @assert contains(response.header("Content-Type"), "json")
+# @assert "json" in response.header("Content-Type")
 ```
 
 Each expression is evaluated and truthy means pass. Use `response` for the current request response.

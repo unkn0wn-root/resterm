@@ -59,6 +59,25 @@ func TestKeywordClassSwitchCase(t *testing.T) {
 	}
 }
 
+func TestLexerKeepsInAsAnIdentifier(t *testing.T) {
+	got := lexKinds("in object.in {in: 1}")
+	want := []Kind{
+		IDENT,
+		IDENT, DOT, IDENT,
+		LBRACE, IDENT, COLON, NUMBER, RBRACE,
+		AUTO_SEMI, EOF,
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("kinds: got %v, want %v", got, want)
+	}
+	if IsKeyword("in") {
+		t.Fatal("in must remain available as a binding name")
+	}
+	if got := KeywordClassOf("in"); got != KeywordNone {
+		t.Fatalf("in keyword class = %v, want none", got)
+	}
+}
+
 func TestLexerNoSemiInCaseList(t *testing.T) {
 	k := lexKinds("switch x {\ncase 1,\n2:\n}\n")
 	for i := 0; i < len(k)-1; i++ {

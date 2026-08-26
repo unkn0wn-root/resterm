@@ -9,7 +9,8 @@
 ### RTS Core Expressions + Standard Library
 # @name RTS_Core
 # @description Exercises expressions, operators, rts stdlib, and module calls.
-# @assert response.statusCode == 200
+# @assert response.statusCode in [200, 201, 204]
+# @assert response.statusCode not in [400, 404, 500]
 # @assert response.json("args.mode") == helpers.mode(env)
 # @assert response.json("args.tag") == loops.sampleTag
 # @assert response.json("headers.X-Encoded") == base64.encode("hello")

@@ -759,6 +759,94 @@ func TestParseLogicalSymbolOperators(t *testing.T) {
 	}
 }
 
+func TestParseMembershipOperators(t *testing.T) {
+	tests := []struct {
+		src string
+		op  BinOp
+	}{
+		{"value in container", OpIn},
+		{"value not in container", OpNotIn},
+	}
+	for _, tt := range tests {
+		t.Run(tt.src, func(t *testing.T) {
+			bin, ok := mustParseExpr(t, tt.src).(*Binary)
+			if !ok || bin.Op != tt.op {
+				t.Fatalf("expected operator %v, got %#v", tt.op, bin)
+			}
+		})
+	}
+}
+
+func TestParseMembershipPrecedence(t *testing.T) {
+	eq, ok := mustParseExpr(t, "1 + 1 in [2] == true").(*Binary)
+	if !ok || eq.Op != OpEq {
+		t.Fatalf("expected equality at the top, got %#v", eq)
+	}
+	in, ok := eq.Left.(*Binary)
+	if !ok || in.Op != OpIn {
+		t.Fatalf("expected membership below equality, got %T", eq.Left)
+	}
+	if add, ok := in.Left.(*Binary); !ok || add.Op != OpAdd {
+		t.Fatalf("expected addition below membership, got %T", in.Left)
+	}
+
+	and, ok := mustParseExpr(t, "value in container and ready").(*Binary)
+	if !ok || and.Op != OpAnd {
+		t.Fatalf("expected and at the top, got %#v", and)
+	}
+	if member, ok := and.Left.(*Binary); !ok || member.Op != OpIn {
+		t.Fatalf("expected membership below and, got %T", and.Left)
+	}
+
+	member, ok := mustParseExpr(t, "1 < 2 in [true]").(*Binary)
+	if !ok || member.Op != OpIn {
+		t.Fatalf("expected left-associated membership, got %#v", member)
+	}
+	if less, ok := member.Left.(*Binary); !ok || less.Op != OpLt {
+		t.Fatalf("expected comparison on the left, got %T", member.Left)
+	}
+}
+
+func TestParseMembershipKeepsInContextual(t *testing.T) {
+	src := `module in
+let in = {in: 1}
+let member = in.in
+fn pick(in) { return {in: in}.in }
+in = pick(in)
+let present = in in [in]
+let negated = not in
+`
+	if _, err := ParseModule("test", []byte(src)); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+}
+
+func TestParseMembershipContinuesAfterOperator(t *testing.T) {
+	tests := map[string]string{
+		"in":      "let x = 1 in\n  [1]\n",
+		"not in":  "let x = 1 not in\n  [2]\n",
+		"comment": "let x = 1 in # allowed values\n  [1]\n",
+	}
+	for name, src := range tests {
+		t.Run(name, func(t *testing.T) {
+			mod, err := ParseModule("test", []byte(src))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if len(mod.Stmts) != 1 {
+				t.Fatalf("statements = %d, want 1", len(mod.Stmts))
+			}
+		})
+	}
+}
+
+func TestParseMembershipDoesNotContinueAfterExplicitSemicolon(t *testing.T) {
+	_, err := ParseModule("test", []byte("let x = 1 in;\n  [1]\n"))
+	if err == nil {
+		t.Fatal("expected explicit semicolon after in to be rejected")
+	}
+}
+
 func TestParseBangIsNot(t *testing.T) {
 	un, ok := mustParseExpr(t, "!a").(*Unary)
 	if !ok || un.Op != UnNot {

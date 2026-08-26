@@ -11,7 +11,7 @@ func evalExpr(t *testing.T, src string) Value {
 	if err != nil {
 		t.Fatalf("parse expr: %v", err)
 	}
-	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	ctx := NewCtx(t.Context(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	vm := &VM{ctx: ctx}
 	env := NewEnv(nil)
 	for k, v := range testStdlib() {
@@ -30,7 +30,7 @@ func execModule(t *testing.T, src string) *Comp {
 		t.Fatalf("parse: %v", err)
 	}
 	ctx := NewCtx(
-		context.Background(),
+		t.Context(),
 		Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 10000},
 	)
 	comp, err := Exec(ctx, m, testStdlib())
@@ -46,7 +46,7 @@ func execModuleErr(t *testing.T, src string, lim Limits) error {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if _, err := Exec(NewCtx(context.Background(), lim), m, testStdlib()); err != nil {
+	if _, err := Exec(NewCtx(t.Context(), lim), m, testStdlib()); err != nil {
 		return err
 	}
 	t.Fatalf("expected exec error")
@@ -65,6 +65,14 @@ func wantNum(t *testing.T, comp *Comp, name string, want float64) {
 	t.Helper()
 	v, ok := comp.Env.Get(name)
 	if !ok || v.K != VNum || v.N != want {
+		t.Fatalf("expected %s=%v, got %+v (ok=%v)", name, want, v, ok)
+	}
+}
+
+func wantBool(t *testing.T, comp *Comp, name string, want bool) {
+	t.Helper()
+	v, ok := comp.Env.Get(name)
+	if !ok || v.K != VBool || v.B != want {
 		t.Fatalf("expected %s=%v, got %+v (ok=%v)", name, want, v, ok)
 	}
 }
@@ -115,6 +123,92 @@ func TestEvalLogic(t *testing.T) {
 	v = evalExpr(t, "null ?? 3")
 	if v.K != VNum || v.N != 3 {
 		t.Fatalf("expected 3")
+	}
+}
+
+func TestEvalMembership(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want bool
+	}{
+		{name: "list member", src: `2 in [1, 2, 3]`, want: true},
+		{name: "list missing", src: `4 in [1, 2, 3]`, want: false},
+		{name: "list kind mismatch", src: `"2" in [2]`, want: false},
+		{name: "list null", src: `null in [null]`, want: true},
+		{name: "list collections are not deeply equal", src: `[1] in [[1]]`, want: false},
+		{name: "string substring", src: `"ell" in "hello"`, want: true},
+		{name: "string missing", src: `"world" in "hello"`, want: false},
+		{name: "string empty value", src: `"" in "hello"`, want: true},
+		{name: "string converts number", src: `23 in "1234"`, want: true},
+		{name: "string converts collection", src: `[1] in "[1]"`, want: true},
+		{name: "dict key", src: `"a" in {a: 1}`, want: true},
+		{name: "dict key is exact", src: `"A" in {a: 1}`, want: false},
+		{name: "dict converts key", src: `1 in {"1": true}`, want: true},
+		{name: "not in", src: `2 not in [1, 3]`, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := evalExpr(t, tt.src)
+			if v.K != VBool || v.B != tt.want {
+				t.Fatalf("%s = %+v, want %v", tt.src, v, tt.want)
+			}
+		})
+	}
+}
+
+func TestMembershipListValueIsNotStringified(t *testing.T) {
+	comp := execModule(t, `
+fn f() { return 1 }
+let present = f in [f]
+let absent = f not in [f]
+`)
+	wantBool(t, comp, "present", false)
+	wantBool(t, comp, "absent", true)
+}
+
+func TestMembershipStringValueConversionErrors(t *testing.T) {
+	err := execModuleErr(t, `
+fn f() { return 1 }
+let value = f in "function"
+`, Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 100})
+	if !strings.Contains(err.Error(), "cannot stringify") {
+		t.Fatalf("error = %v, want string conversion failure", err)
+	}
+}
+
+func TestMembershipRejectsUnsupportedContainers(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{name: "null", src: "let value = 1 in null\n"},
+		{name: "bool through not in", src: "let value = 1 not in true\n"},
+		{name: "number", src: "let value = 1 in 2\n"},
+		{name: "native", src: "let value = 1 in str\n"},
+		{name: "object", src: "let value = 1 in (try 1)\n"},
+		{name: "function", src: "fn f() { return 1 }\nlet value = 1 in f\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := execModuleErr(
+				t,
+				tt.src,
+				Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 100},
+			)
+			if !strings.Contains(err.Error(), "membership container must be string, list, or dict") {
+				t.Fatalf("error = %v, want unsupported membership container", err)
+			}
+		})
+	}
+
+	err := execModuleErr(
+		t,
+		"let value = 1 in 2\n",
+		Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 100},
+	)
+	if !strings.Contains(err.Error(), "test:1:15:") {
+		t.Fatalf("error = %v, want operator position test:1:15", err)
 	}
 }
 

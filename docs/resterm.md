@@ -1241,7 +1241,7 @@ RestermScript (RST) powers templates (`{{= ... }}`) and directive expressions. I
 | `@apply` | `# @apply use=jsonApi,use=authProd` | Reuse named `@patch` profiles; entries run left-to-right and resolve file scope first, then globals. |
 | `@when` | `# @when vars.has("token")` | Run the request only when the expression is truthy. |
 | `@skip-if` | `# @skip-if env.mode == "dry-run"` | Skip the request when the expression is truthy. |
-| `@assert` | `# @assert response.statusCode == 200` | Evaluate an assertion after the response arrives. |
+| `@assert` | `# @assert response.statusCode in [200, 201]` | Evaluate an assertion after the response arrives. |
 | `@for-each` | `# @for-each json.file("users.json") as user` | Repeat the request for each item in a list. |
 | `@rts pre-request` | `# @rts pre-request` | Run a pre-request RST block with request/vars mutation helpers. Use `@assert` for RST response checks. The full `# @script pre-request lang=rts` form remains supported. |
 

@@ -61,7 +61,7 @@ func testRuntime(t *testing.T) Runtime {
 
 func evalHost(t *testing.T, eng *Engine, rt Runtime, src string) rts.Value {
 	t.Helper()
-	v, err := eng.Eval(context.Background(), rt, src, testPos)
+	v, err := eng.Eval(t.Context(), rt, src, testPos)
 	if err != nil {
 		t.Fatalf("Eval(%s): %v", src, err)
 	}
@@ -208,11 +208,14 @@ func TestRuntimeResponseAndAssertionBindings(t *testing.T) {
 	for _, src := range []string{
 		`status == 200`,
 		`statusCode == 200`,
+		`statusCode in [199, 200, 201]`,
+		`response.statusCode in [200]`,
+		`response.statusCode not in [400, 500]`,
 		`statusText == "200 OK"`,
 		`header("Content-Type") == "application/json"`,
 		`text() == "{\"ok\":true}"`,
 	} {
-		v, err := eng.EvalAssertion(context.Background(), rt, src, testPos)
+		v, err := eng.EvalAssertion(t.Context(), rt, src, testPos)
 		if err != nil {
 			t.Errorf("EvalAssertion(%s): %v", src, err)
 			continue
