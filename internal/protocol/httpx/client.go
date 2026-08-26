@@ -192,7 +192,15 @@ func (c *Client) Execute(
 	if err != nil {
 		return nil, err
 	}
+	return c.executeHTTPRequest(httpReq, req, effectiveOpts, client)
+}
 
+func (c *Client) executeHTTPRequest(
+	httpReq *http.Request,
+	req *restfile.Request,
+	effectiveOpts Options,
+	client *http.Client,
+) (resp *Response, err error) {
 	proxy := proxyForRequest(httpReq, effectiveOpts, client)
 
 	var (

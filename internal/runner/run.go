@@ -324,6 +324,7 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		EffectiveTarget:      requestTarget(runReq, res.Response),
 		Environment:          envName,
 		EnvironmentSelection: res.Selection.Groups(),
+		Duration:             res.Timing.Total,
 		Response:             res.Response,
 		GRPC:                 res.GRPC,
 		Err:                  res.Err,

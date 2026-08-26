@@ -14,7 +14,11 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-const StageCaptures = "captures"
+const (
+	StageCaptures = "captures"
+
+	decisionSent = "HTTP request sent"
+)
 
 type HTTPInput struct {
 	Client           *httpx.Client
@@ -51,6 +55,54 @@ type AssertInput struct {
 	Stream  *scripts.StreamInfo
 }
 
+type PredicateInput struct {
+	Context   context.Context
+	Doc       *restfile.Document
+	Req       *restfile.Request
+	BaseDir   string
+	Vars      map[string]string
+	Locals    rts.Locals
+	HTTP      *httpx.Response
+	Predicate restfile.ResponsePredicate
+}
+
+type RepeatPhase uint8
+
+const (
+	RepeatAttempt RepeatPhase = iota
+	RepeatRetryWait
+	RepeatPollWait
+)
+
+type RepeatProgress struct {
+	Phase      RepeatPhase
+	Attempt    int
+	Poll       int
+	StatusCode int
+	Delay      time.Duration
+	Err        error
+}
+
+type RepeatCount struct {
+	Attempts int
+	Polls    int
+}
+
+func (c RepeatCount) describe(decision string) string {
+	switch {
+	case c.Polls > 1:
+		return fmt.Sprintf(
+			"%s after %d attempts across %d polling cycles",
+			decision,
+			c.Attempts,
+			c.Polls,
+		)
+	case c.Attempts > 1:
+		return fmt.Sprintf("%s after %d attempts", decision, c.Attempts)
+	}
+	return decision
+}
+
 type HTTPHooks struct {
 	AttachSSEHandle       func(*httpx.StreamHandle, *restfile.Request)
 	AttachWebSocketHandle func(*httpx.WebSocketHandle, *restfile.Request)
@@ -60,7 +112,10 @@ type HTTPHooks struct {
 	CollectVariables    func(*restfile.Document, *restfile.Request, vars.NameMap[string]) map[string]string
 	CollectGlobalValues func(*restfile.Document) vars.Globals
 	RunAsserts          func(AssertInput) ([]scripts.TestResult, error)
+	EvaluatePredicate   func(PredicateInput) (bool, error)
 	ApplyRuntimeGlobals func(vars.Globals)
+	OnRepeatProgress    func(RepeatProgress)
+	Warn                func(string)
 }
 
 type HTTPResult struct {
@@ -71,6 +126,7 @@ type HTTPResult struct {
 	Err       error
 	Decision  string
 	ErrStage  string
+	Repeat    RepeatCount
 }
 
 type Runner struct {
@@ -106,6 +162,9 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	ctx := in.Context
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if in.Req.Metadata.Poll != nil || in.Req.Metadata.Retry != nil {
+		return r.runRepeatedHTTP(ctx, in)
 	}
 	ctx, cancel := context.WithTimeout(ctx, in.EffectiveTimeout)
 	defer cancel()
@@ -163,7 +222,19 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 		res.Decision = httpFailureDecision(in.Req)
 		return res
 	}
+	return r.finalizeHTTP(ctx, in, resp)
+}
 
+func (r Runner) finalizeHTTP(
+	ctx context.Context,
+	in HTTPInput,
+	resp *httpx.Response,
+) HTTPResult {
+	res := HTTPResult{
+		Response: resp,
+		Decision: decisionSent,
+		Repeat:   RepeatCount{Attempts: 1, Polls: 1},
+	}
 	streamInfo, streamErr := streamInfoFromResponse(in.Req, resp)
 	if streamErr != nil {
 		res.Err = diag.WrapAs(diag.ClassProtocol, streamErr, "decode stream transcript")

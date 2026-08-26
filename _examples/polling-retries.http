@@ -1,0 +1,53 @@
+# Serve these mocks with `resterm mock _examples/polling-retries.http`, or open
+# this file in the TUI and press `g Shift+M`.
+# @const mock.base http://127.0.0.1:8080
+
+### Job lifecycle
+# Each X-Demo-Run value gets its own sequence cursor.
+# @mock method=GET path=/jobs/{id} sequence=poll-demo sequence-key=header.X-Demo-Run
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"id":{{json.path.id}},"status":"pending"}
+---
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"id":{{json.path.id}},"status":"pending"}
+---
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"id":{{json.path.id}},"status":"completed"}
+
+### Temporarily unavailable service
+# @mock method=GET path=/unstable sequence=retry-demo sequence-key=header.X-Demo-Run
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/json
+Retry-After: 1
+
+{"error":"service overloaded"}
+---
+HTTP/1.1 502 Bad Gateway
+Content-Type: application/json
+
+{"error":"upstream unavailable"}
+---
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"ok"}
+
+### Poll until the job completes
+# @name poll-job
+# @poll every=250ms timeout=5s until=response.json().status == "completed"
+GET {{mock.base}}/jobs/job_42
+X-Demo-Run: {{$uuid}}
+
+### Retry transient responses
+# @name retry-transient
+# @retry count=3
+# @retry-when contains([429, 502, 503], response.statusCode)
+# @retry-backoff exponential(100ms, 500ms) jitter=20%
+GET {{mock.base}}/unstable
+X-Demo-Run: {{$uuid}}

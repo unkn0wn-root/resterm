@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
+	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/parser"
@@ -49,44 +50,21 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.testResults = nil
 		m.scriptError = nil
 		cmd := m.consumeSkippedRequest(msg)
-		if msg.historyDone {
-			m.syncRecordedHistory()
-		} else {
-			m.recordSkippedHistory(
-				msg.executed,
-				msg.requestText,
-				msg.environment,
-				msg.skipReason,
-				msg.selection,
-				msg.runtimeSecrets...,
-			)
-		}
+		m.recordRunHistory(msg)
 		return cmd
 	}
 
 	if msg.grpc != nil {
-		if msg.err != nil {
-			m.lastError = msg.err
-		} else {
-			m.lastError = nil
-		}
+		m.lastError = msg.err
 		cmd := m.consumeGRPCResponse(msg)
-		if msg.historyDone {
-			m.syncRecordedHistory()
-		} else {
-			m.recordGRPCHistory(
-				msg.grpc,
-				msg.executed,
-				msg.requestText,
-				msg.environment,
-				msg.selection,
-				msg.runtimeSecrets...,
-			)
-		}
+		m.recordRunHistory(msg)
 		return cmd
 	}
 
 	if msg.err != nil {
+		if errors.Is(msg.err, xexec.ErrPollTimeout) && msg.response != nil {
+			return m.consumePollTimeout(msg)
+		}
 		canceled := errors.Is(msg.err, context.Canceled)
 		if !canceled {
 			m.lastError = msg.err
@@ -102,9 +80,51 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	}
 
 	cmd := m.consumeHTTPResponse(msg)
+	m.recordRunHistory(msg)
+	return cmd
+}
+
+// Show the last response from a timed-out poll without exposing it as `last`.
+func (m *Model) consumePollTimeout(msg responseMsg) tea.Cmd {
+	previousHTTP, previousGRPC := m.lastResponse, m.lastGRPC
+	m.lastError = msg.err
+	cmd := m.consumeHTTPResponse(msg)
+	m.lastResponse, m.lastGRPC = previousHTTP, previousGRPC
+	m.setStatusMessage(statusMsg{
+		text:    "Polling timed out ✗ · last response shown",
+		level:   statusError,
+		noModal: true,
+	})
+	m.recordRunHistory(msg)
+	return cmd
+}
+
+// Write history unless the request engine already did.
+func (m *Model) recordRunHistory(msg responseMsg) {
 	if msg.historyDone {
 		m.syncRecordedHistory()
-	} else {
+		return
+	}
+	switch {
+	case msg.skipped:
+		m.recordSkippedHistory(
+			msg.executed,
+			msg.requestText,
+			msg.environment,
+			msg.skipReason,
+			msg.selection,
+			msg.runtimeSecrets...,
+		)
+	case msg.grpc != nil:
+		m.recordGRPCHistory(
+			msg.grpc,
+			msg.executed,
+			msg.requestText,
+			msg.environment,
+			msg.selection,
+			msg.runtimeSecrets...,
+		)
+	default:
 		m.recordHTTPHistory(
 			msg.response,
 			msg.executed,
@@ -114,7 +134,6 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 			msg.runtimeSecrets...,
 		)
 	}
-	return cmd
 }
 
 func requestErrorStatus(canceled bool) statusMsg {

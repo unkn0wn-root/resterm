@@ -109,6 +109,9 @@ func argExpr(name directive.Name, args string) string {
 	case directive.ForEach:
 		expr, _, _ := cutForEach(args)
 		return expr
+	case directive.Poll:
+		_, expr, _ := cutPollUntil(args)
+		return expr
 	case directive.If, directive.Elif, directive.Case:
 		expr, _ := cutBranch(args)
 		return expr

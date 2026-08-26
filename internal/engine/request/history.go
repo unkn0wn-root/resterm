@@ -79,7 +79,7 @@ func (e *Engine) recordHTTP(
 		URL:         req.URL,
 		Status:      resp.Status,
 		StatusCode:  resp.StatusCode,
-		Duration:    resp.Duration,
+		Duration:    res.Elapsed,
 		BodySnippet: snip,
 		RequestText: txt,
 		Description: strings.TrimSpace(req.Metadata.Description),
@@ -168,7 +168,7 @@ func (e *Engine) recordGRPC(
 		URL:         req.URL,
 		Status:      resp.StatusCode.String(),
 		StatusCode:  int(resp.StatusCode),
-		Duration:    resp.Duration,
+		Duration:    res.Elapsed,
 		BodySnippet: snip,
 		RequestText: redactText(res.RequestText, secs, mask),
 		Description: strings.TrimSpace(req.Metadata.Description),
@@ -267,4 +267,6 @@ type runResult struct {
 	Skipped        bool
 	SkipReason     string
 	Executed       *restfile.Request
+	// Elapsed includes time spent polling and retrying.
+	Elapsed time.Duration
 }

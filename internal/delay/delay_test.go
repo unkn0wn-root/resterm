@@ -1,7 +1,9 @@
 package delay
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"math/rand/v2"
 	"strings"
 	"testing"
@@ -252,5 +254,18 @@ func TestDistributions(t *testing.T) {
 		if !strings.Contains(formsHint, f.Usage()) {
 			t.Fatalf("hint %q omits %q", formsHint, f.Usage())
 		}
+	}
+}
+
+func TestWaitStopsOnContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := Wait(ctx, time.Second); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Wait() error = %v, want context cancellation", err)
+	}
+	if err := Wait(t.Context(), 0); err != nil {
+		t.Fatalf("Wait() with no delay error = %v", err)
 	}
 }

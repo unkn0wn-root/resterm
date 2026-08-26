@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
+	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -98,6 +99,13 @@ func (e *uiRequestEngine) ExecuteWith(
 			nextWarning(warning)
 		}
 		e.queueWarning(string(warning))
+	}
+	nextRepeat := opt.OnRepeat
+	opt.OnRepeat = func(progress xexec.RepeatProgress) {
+		if nextRepeat != nil {
+			nextRepeat(progress)
+		}
+		emitQueuedMsg(e.model.runMsgChan, repeatProgressMsg{progress: progress})
 	}
 	// Every protocol reports its session the same way, so each hook only has to
 	// unwrap its own handle. The hooks run on this goroutine, which is what

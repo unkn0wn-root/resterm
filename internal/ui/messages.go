@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -15,6 +16,10 @@ import (
 
 type statusPulseMsg struct {
 	seq int
+}
+
+type repeatProgressMsg struct {
+	progress xexec.RepeatProgress
 }
 
 type tabSpinMsg struct {

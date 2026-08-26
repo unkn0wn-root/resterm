@@ -2,6 +2,7 @@ package delay
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -25,6 +26,25 @@ type Spec struct {
 
 func Fixed(d time.Duration) Spec {
 	return Spec{base: d}
+}
+
+// Jitter returns a random delay up to the given percentage above or below d.
+func Jitter(d time.Duration, percent float64) Spec {
+	return Spec{kind: jitter, base: d, pct: percent, rel: true}
+}
+
+func Wait(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-timer.C:
+		return nil
+	}
 }
 
 // Parse reads a duration such as "150ms" or a call such as "random(100ms,500ms)".

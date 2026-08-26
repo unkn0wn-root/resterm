@@ -593,6 +593,53 @@ func (e *Engine) runAsserts(
 	return out, nil
 }
 
+func (e *Engine) evaluateResponsePredicate(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env vars.ResolvedEnv,
+	base string,
+	sc evalScope,
+	locals rts.Locals,
+	resp *httpx.Response,
+	predicate restfile.ResponsePredicate,
+) (bool, error) {
+	current, err := rtsHTTP(resp)
+	if err != nil {
+		return false, err
+	}
+	rt, err := e.buildRT(rtIn{
+		doc:     doc,
+		req:     req,
+		env:     env,
+		base:    base,
+		vars:    sc.vars,
+		globals: sc.globals,
+		res:     current,
+		tr:      rtsTrace(resp),
+		locals:  locals,
+		secrets: rtshost.IncludeSecrets,
+		site:    "response predicate",
+	})
+	if err != nil {
+		return false, err
+	}
+	value, err := e.evalRTSAssert(
+		ctx,
+		doc,
+		rt,
+		predicate.Expression,
+		e.rtsPosForLineCol(doc, req, predicate.Line, predicate.Col),
+	)
+	if err != nil {
+		return false, err
+	}
+	if value.K != rts.VBool {
+		return false, fmt.Errorf("response predicate must evaluate to a boolean")
+	}
+	return value.B, nil
+}
+
 func (e *Engine) RunPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,

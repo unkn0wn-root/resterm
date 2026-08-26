@@ -37,10 +37,21 @@ func (meta RequestMetadata) Clone() RequestMetadata {
 	meta.ForEach = clonePtr(meta.ForEach)
 	meta.Asserts = slices.Clone(meta.Asserts)
 	meta.Captures = slices.Clone(meta.Captures)
+	meta.Poll = clonePtr(meta.Poll)
+	meta.Retry = meta.Retry.Clone()
 	meta.Profile = clonePtr(meta.Profile)
 	meta.Trace = meta.Trace.Clone()
 	meta.Compare = meta.Compare.Clone()
 	return meta
+}
+
+func (spec *RetrySpec) Clone() *RetrySpec {
+	if spec == nil {
+		return nil
+	}
+	dst := *spec
+	dst.When = clonePtr(spec.When)
+	return &dst
 }
 
 func (e WorkflowExpect) Clone() WorkflowExpect {

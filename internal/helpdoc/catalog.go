@@ -298,6 +298,13 @@ func topicDefs() []topicDef {
 			doc:     manual("Profiling requests"),
 		},
 		{
+			id: "polling", title: "Polling and Retries",
+			summary:  "Retry failed requests or poll until a response matches",
+			aliases:  []string{"poll", "retry", "retries", "backoff"},
+			doc:      manual("Polling and retries"),
+			keywords: []string{"retry-after", "long-running jobs"},
+		},
+		{
 			id: "comparison", title: "Compare Runs",
 			summary: "Run one request across multiple environments",
 			aliases: []string{"compare", "compare-runs"},

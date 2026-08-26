@@ -37,6 +37,7 @@ type requestBuilder struct {
 	multipart         *multipartSpan
 	ssh               *restfile.SSHSpec
 	k8s               *restfile.K8sSpec
+	retry             *retryDraft
 	declared          map[directive.Name]bool
 }
 
