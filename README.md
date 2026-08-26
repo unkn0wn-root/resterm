@@ -162,51 +162,6 @@ In the TUI, press `g Shift+M` instead to start the same mock server from the wor
 
 The [CLI documentation](docs/cli.md) covers selectors, output formats and more examples.
 
-## Mock Servers
-
-The same files that hold your requests can serve HTTP mocks.
-
-- Match incoming requests by query, headers or JSON body, then pick a named or default response.
-- Model polling and retry flows with response sequences, including independent cursors per resource or caller.
-- Delay responses by a fixed amount, or give every request a different delay with `random`, `normal`, or `jitter`.
-- Build responses from path, query, header and body values, with generators for dynamic data.
-- Verify call counts with `@expect` or inspect received traffic from RestermScript.
-- Hot reload source files and fixtures, with optional TLS.
-
-Two scenarios on one route:
-
-```http
-### Payment accepted
-# @mock method=POST path=/payments name=accepted default=true latency=150ms
-HTTP/1.1 202 Accepted
-Content-Type: application/json
-
-{"id":"pay_123","status":"pending"}
-
-### Payment declined
-# @mock method=POST path=/payments name=declined
-# @match query={"mode":"decline"} headers={"X-Tenant":"demo"} json={"amount":0}
-HTTP/1.1 422 Unprocessable Entity
-Content-Type: application/json
-
-{"error":"amount must be positive"}
-```
-
-Serve one file or a whole directory:
-
-```bash
-resterm mock ./requests.http
-resterm mock --recursive --addr 127.0.0.1:9090 ./requests
-```
-
-More in the [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock) and the [working example](_examples/mocks.http).
-
-## Headless
-
-The [`headless`](./headless) package is the public Go API for the same engine that powers the TUI and CLI. Use it to run requests, workflows, assertions, compare runs and profiles from your own Go code or CI.
-
-If you would rather not build a runner yourself, there is [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
-
 ## Keyboard cheat sheet
 
 - Pane focus and layout
@@ -323,6 +278,51 @@ The first command reports whether a newer release is available. The second downl
   - macOS: `~/Library/Application Support/resterm`
   - Windows: `%APPDATA%\resterm`
   - Linux/Unix: `~/.config/resterm`
+
+## Mock Servers
+
+You can define mock responses in the same `.http` files as your requests.
+
+- Match incoming requests by query, headers or JSON body, then pick a named or default response.
+- Return a sequence of responses for polling and retry tests. Use a path, query, header, or cookie value to track each sequence separately.
+- Delay responses by a fixed amount, or give every request a different delay with `random`, `normal`, or `jitter`.
+- Build responses from path, query, header and body values, with generators for dynamic data.
+- Verify call counts with `@expect` or inspect received traffic from RestermScript.
+- Hot reload source files and fixtures, with optional TLS.
+
+Two scenarios on one route:
+
+```http
+### Payment accepted
+# @mock method=POST path=/payments name=accepted default=true latency=150ms
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"id":"pay_123","status":"pending"}
+
+### Payment declined
+# @mock method=POST path=/payments name=declined
+# @match query={"mode":"decline"} headers={"X-Tenant":"demo"} json={"amount":0}
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
+
+{"error":"amount must be positive"}
+```
+
+Serve one file or a whole directory:
+
+```bash
+resterm mock ./requests.http
+resterm mock --recursive --addr 127.0.0.1:9090 ./requests
+```
+
+More in the [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock) and the [working example](_examples/mocks.http).
+
+## Headless
+
+The [`headless`](./headless) package is the public Go API for the same engine that powers the TUI and CLI. Use it to run requests, workflows, assertions, compare runs and profiles from your own Go code or CI.
+
+If you would rather not build a runner yourself, there is [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
 
 ## Collections
 
