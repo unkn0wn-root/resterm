@@ -423,13 +423,13 @@ Use `@poll` to repeat a request until a response condition becomes true. Add `@r
 ```http
 ### Wait for job
 # @retry count=4
-# @retry-when response.statusCode in [429, 502, 503]
+# @retry-when contains([429, 502, 503], response.statusCode)
 # @retry-backoff exponential(100ms, 2s) jitter=20%
 # @poll every=500ms timeout=30s until=response.json().status == "completed"
 GET {{base.url}}/jobs/{{job.id}}
 ```
 
-Each polling cycle receives its own retry budget. See the [polling and retries documentation](./docs/resterm.md#polling-and-retries).
+Each polling cycle receives its own retry budget. Example: [`_examples/polling-retries.http`](_examples/polling-retries.http). See the [polling and retries documentation](./docs/resterm.md#polling-and-retries).
 
 ### Compare runs
 

@@ -17,7 +17,7 @@ attempt, so `count=4` allows five attempts:
 
 ```http
 # @retry count=4
-# @retry-when response.statusCode in [429, 502, 503]
+# @retry-when contains([429, 502, 503], response.statusCode)
 # @retry-backoff exponential(100ms, 2s) jitter=20%
 POST {{base.url}}/jobs
 ```
