@@ -817,6 +817,15 @@ func (vm *VM) evalBin(env *Env, e *Binary) (Value, error) {
 		return Bool(!ValueEqual(l, r)), nil
 	case OpLt, OpLe, OpGt, OpGe:
 		return cmp(vm.ctx, e.Pos(), e.Op, l, r)
+	case OpIn, OpNotIn:
+		ok, err := ValueContains(vm.ctx, e.Pos(), r, l)
+		if err != nil {
+			return Null(), err
+		}
+		if e.Op == OpNotIn {
+			ok = !ok
+		}
+		return Bool(ok), nil
 	}
 
 	return Null(), Errf(vm.ctx, e.Pos(), "bad op")

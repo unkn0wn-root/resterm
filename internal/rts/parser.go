@@ -681,7 +681,36 @@ func (p *Parser) parseEq() Expr {
 }
 
 func (p *Parser) parseCmp() Expr {
-	return p.parseBinary(p.parseAdd, cmpOp)
+	left := p.parseAdd()
+	for {
+		pos := p.cur.P
+		op, ok := cmpOp(p.cur.K)
+		membership := false
+		switch {
+		case ok:
+			p.next()
+		case p.cur.K == IDENT && p.cur.Lit == "in":
+			op = OpIn
+			membership = true
+			p.next()
+		case p.cur.K == KW_NOT && p.peek.K == IDENT && p.peek.Lit == "in":
+			op = OpNotIn
+			membership = true
+			p.next()
+			p.next()
+		default:
+			return left
+		}
+
+		// in stays an identifier in the lexer, so it receives an automatic
+		// semicolon at a line boundary. Once the parser has identified it as
+		// an operator, that semicolon is continuation rather than punctuation.
+		if membership && p.cur.K == AUTO_SEMI {
+			p.next()
+		}
+		right := p.parseAdd()
+		left = &Binary{P: pos, Op: op, Left: left, Right: right}
+	}
 }
 
 func (p *Parser) parseAdd() Expr {

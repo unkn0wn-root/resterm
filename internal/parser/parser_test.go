@@ -4195,6 +4195,22 @@ GET https://example.com
 	}
 }
 
+func TestParseAllowsContextualInAsRTSBindingName(t *testing.T) {
+	tests := map[string]string{
+		"use alias":   "# @use ./rts/helpers.rts as in\n",
+		"for-each as": "# @for-each [1] as in\n",
+		"for-each in": "# @for-each in in [1]\n",
+	}
+	for name, directive := range tests {
+		t.Run(name, func(t *testing.T) {
+			doc := Parse("contextual-in.http", []byte(directive+"GET https://example.com\n"))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("expected no parse errors, got %v", doc.Errors)
+			}
+		})
+	}
+}
+
 func TestParseRecordsAuthAndRequestOrigin(t *testing.T) {
 	src := `# @auth file bearer {{fileToken}}
 

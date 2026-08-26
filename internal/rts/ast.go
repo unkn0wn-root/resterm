@@ -190,6 +190,8 @@ const (
 	OpLe
 	OpGt
 	OpGe
+	OpIn
+	OpNotIn
 	OpAnd
 	OpOr
 	OpCoalesce

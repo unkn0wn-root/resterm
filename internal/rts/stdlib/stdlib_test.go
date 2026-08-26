@@ -35,8 +35,21 @@ func evalExprMod(t *testing.T, ctx *rts.Ctx, modSrc, expr string) rts.Value {
 	return comp.Exp["__v"]
 }
 
+func evalExprErrCtx(t *testing.T, ctx *rts.Ctx, src string) error {
+	t.Helper()
+	mod, err := rts.ParseModule("test", []byte("export let __v = "+src))
+	if err != nil {
+		t.Fatalf("parse mod: %v", err)
+	}
+	if _, err := rts.Exec(ctx, mod, New()); err != nil {
+		return err
+	}
+	t.Fatalf("expected eval error for %q", src)
+	return nil
+}
+
 func TestStdlibCore(t *testing.T) {
-	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "len([1,2,3])")
 	if v.K != rts.VNum || v.N != 3 {
 		t.Fatalf("expected 3")
@@ -48,6 +61,58 @@ func TestStdlibCore(t *testing.T) {
 	v = evalExprCtx(t, ctx, "match(\"a.*\", \"abc\")")
 	if v.K != rts.VBool || v.B != true {
 		t.Fatalf("expected true")
+	}
+}
+
+func TestContainsMatchesMembershipOperators(t *testing.T) {
+	tests := []struct {
+		name     string
+		operator string
+		call     string
+	}{
+		{name: "list", operator: `2 in [1, 2]`, call: `contains([1, 2], 2)`},
+		{name: "string", operator: `"ell" in "hello"`, call: `contains("hello", "ell")`},
+		{name: "dict", operator: `"a" in {a: 1}`, call: `contains({a: 1}, "a")`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+			op := evalExprCtx(t, ctx, tt.operator)
+			call := evalExprCtx(t, ctx, tt.call)
+			if op.K != rts.VBool || call.K != rts.VBool || op.B != call.B {
+				t.Fatalf("operator=%+v call=%+v, want matching bools", op, call)
+			}
+		})
+	}
+}
+
+func TestContainsListValueIsNotStringified(t *testing.T) {
+	mod := `fn f() { return 1 }`
+	for _, expr := range []string{
+		`f in [f]`,
+		`contains([f], f)`,
+		`rts.contains([f], f)`,
+		`stdlib.contains([f], f)`,
+	} {
+		t.Run(expr, func(t *testing.T) {
+			ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+			v := evalExprMod(t, ctx, mod, expr)
+			if v.K != rts.VBool || v.B {
+				t.Fatalf("%s = %+v, want false", expr, v)
+			}
+		})
+	}
+}
+
+func TestContainsAndMembershipRejectSameContainer(t *testing.T) {
+	for _, expr := range []string{`1 in 2`, `contains(2, 1)`} {
+		t.Run(expr, func(t *testing.T) {
+			ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+			err := evalExprErrCtx(t, ctx, expr)
+			if !strings.Contains(err.Error(), "membership container must be string, list, or dict") {
+				t.Fatalf("error = %v, want unsupported membership container", err)
+			}
+		})
 	}
 }
 
