@@ -102,6 +102,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case runWarningMsg:
 		m.setStatusMessage(statusMsg{text: typed.text, level: statusWarn})
 		cmds = append(cmds, m.nextRunMsgCmd())
+	case repeatProgressMsg:
+		m.setStatusMessage(repeatProgressStatus(typed.progress))
+		cmds = append(cmds, m.nextRunMsgCmd())
 	case statusMsg:
 		m.setStatusMessage(typed)
 	case docsOpenedMsg:
