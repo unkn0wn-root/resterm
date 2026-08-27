@@ -115,7 +115,7 @@ func (m *manager) Start(ctx context.Context, info RequestStart) (context.Context
 		return ctx, noopSpan{}
 	}
 
-	attrs := buildSpanAttributes(info)
+	attrs := buildSpanAttributes(info, sanitizeURL(info.HTTPRequest.URL))
 	spanName := spanNameFor(info)
 	ctx, span := m.tracer.Start(
 		ctx,
@@ -160,7 +160,7 @@ func (rs *requestSpan) RecordTrace(tl *nettrace.Timeline, report *nettrace.Repor
 	if strings.TrimSpace(tl.Err) != "" {
 		rs.span.AddEvent(
 			"resterm.trace.error",
-			trace.WithAttributes(attribute.String("resterm.error", tl.Err)),
+			trace.WithAttributes(attribute.String("resterm.error", scrubText(tl.Err))),
 		)
 	}
 
@@ -179,7 +179,10 @@ func (rs *requestSpan) RecordTrace(tl *nettrace.Timeline, report *nettrace.Repor
 			attrs = append(attrs, attribute.Bool("resterm.trace.cached", true))
 		}
 		if strings.TrimSpace(phase.Err) != "" {
-			attrs = append(attrs, attribute.String("resterm.trace.phase_error", phase.Err))
+			attrs = append(
+				attrs,
+				attribute.String("resterm.trace.phase_error", scrubText(phase.Err)),
+			)
 		}
 
 		options := []trace.EventOption{trace.WithAttributes(attrs...)}
@@ -217,9 +220,9 @@ func (rs *requestSpan) End(result RequestResult) {
 	statusMsg := ""
 
 	if result.Err != nil {
-		rs.span.RecordError(result.Err)
+		rs.span.RecordError(scrubbedError(result.Err))
 		statusCode = codes.Error
-		statusMsg = result.Err.Error()
+		statusMsg = scrubText(result.Err.Error())
 	}
 
 	if result.Report != nil && len(result.Report.BudgetReport.Breaches) > 0 {
@@ -244,6 +247,20 @@ func (rs *requestSpan) End(result RequestResult) {
 	rs.span.SetStatus(statusCode, statusMsg)
 	rs.span.End()
 }
+
+func scrubbedError(err error) error {
+	text := scrubText(err.Error())
+	if text == err.Error() {
+		return err
+	}
+	return redactedError{text: text}
+}
+
+type redactedError struct {
+	text string
+}
+
+func (e redactedError) Error() string { return e.text }
 
 func Noop() Instrumenter {
 	return noopInstrumenter{}
@@ -300,7 +317,7 @@ func buildResourceAttributes(cfg Config) []attribute.KeyValue {
 	return attrs
 }
 
-func buildSpanAttributes(info RequestStart) []attribute.KeyValue {
+func buildSpanAttributes(info RequestStart, safe safeURL) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attribute.Bool("resterm.trace.enabled", true),
 	}
@@ -319,11 +336,11 @@ func buildSpanAttributes(info RequestStart) []attribute.KeyValue {
 		if host := req.URL.Host; host != "" {
 			attrs = append(attrs, httpHostKey.String(host))
 		}
-		if target := req.URL.RequestURI(); target != "" {
-			attrs = append(attrs, semconv.HTTPTargetKey.String(target))
+		if safe.target != "" {
+			attrs = append(attrs, semconv.HTTPTargetKey.String(safe.target))
 		}
-		if full := req.URL.String(); full != "" {
-			attrs = append(attrs, semconv.HTTPURLKey.String(full))
+		if safe.full != "" {
+			attrs = append(attrs, semconv.HTTPURLKey.String(safe.full))
 		}
 	}
 
