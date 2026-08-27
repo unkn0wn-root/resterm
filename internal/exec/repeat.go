@@ -28,6 +28,9 @@ type repeatRun struct {
 	poll   *restfile.PollSpec
 	retry  *restfile.RetrySpec
 
+	// A poll deadline can interrupt an attempt, and the partial response it
+	// returns must not replace the last completed one.
+	last   *httpx.Response
 	counts RepeatCount
 	warned bool
 }
@@ -125,6 +128,9 @@ func (x *repeatRun) retryCycle(ctx context.Context) (cycle, error) {
 		x.counts.Attempts++
 		resp, err := x.send(ctx)
 		at := time.Now()
+		if err == nil {
+			x.last = resp
+		}
 		x.progress(RepeatAttempt, resp, 0, err)
 
 		if ctx.Err() != nil {
@@ -251,6 +257,7 @@ func (x *repeatRun) exhausted(ctx context.Context, resp *httpx.Response) HTTPRes
 func (x *repeatRun) failed(resp *httpx.Response, err error) HTTPResult {
 	switch {
 	case errors.Is(err, ErrPollTimeout):
+		resp = x.last
 		err = diag.WrapAs(
 			diag.ClassTimeout,
 			fmt.Errorf(

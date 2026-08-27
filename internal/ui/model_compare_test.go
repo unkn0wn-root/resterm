@@ -3,6 +3,7 @@ package ui
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
@@ -143,5 +144,33 @@ func TestCompareSpecForRequestRequiresMetadata(t *testing.T) {
 	}
 	if spec := model.compareSpecForRequest(req); spec != nil {
 		t.Fatalf("expected nil spec when request lacks metadata, got %#v", spec)
+	}
+}
+
+func TestConsumeCompareRowKeepsPollWallTime(t *testing.T) {
+	m := New(Config{})
+	st := &compareState{}
+	msg := m.responseMsgFromRunState(engine.RequestResult{
+		Environment: "dev",
+		Response:    &httpx.Response{Status: "200 OK", StatusCode: 200, Duration: 5 * time.Millisecond},
+		Timing:      engine.Timing{Total: 30 * time.Second, Transport: 5 * time.Millisecond},
+	}, false)
+
+	if _, _ = m.consumeCompareRow(
+		st,
+		&restfile.Request{Method: "GET", URL: "https://example.com"},
+		"dev",
+		msg,
+	); len(
+		st.results,
+	) != 1 {
+		t.Fatalf("rows = %d, want 1", len(st.results))
+	}
+	if got := st.results[0].Duration; got != 30*time.Second {
+		t.Fatalf("row duration = %s, want 30s", got)
+	}
+	bundle := buildCompareBundle(st.results, "dev")
+	if bundle.Rows[0].Duration != 30*time.Second {
+		t.Fatalf("bundle row duration = %s, want 30s", bundle.Rows[0].Duration)
 	}
 }

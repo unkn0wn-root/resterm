@@ -291,6 +291,7 @@ func (m *Model) consumeCompareRow(
 		Canceled:       canceled,
 		Skipped:        msg.skipped,
 		SkipReason:     msg.skipReason,
+		Duration:       msg.elapsed,
 	}
 	if state.group != "" {
 		result.Profile, _ = msg.selection.Profile(state.group)
@@ -528,7 +529,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		Profile:              result.Profile,
 		EnvironmentSelection: history.EnvironmentSelection(result.Selection.Groups()),
 		Status:               status,
-		Duration:             compareRowDuration(&result),
+		Duration:             result.Duration,
 		RequestText:          strings.TrimSpace(result.RequestText),
 	}
 

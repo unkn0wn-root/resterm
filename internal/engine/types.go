@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"slices"
 	"time"
 
@@ -117,6 +118,12 @@ type Timing struct {
 	End       time.Time
 	Total     time.Duration
 	Transport time.Duration
+}
+
+// Elapsed is the wall time the run took, including @poll and @retry waits. It
+// falls back to transport time for results that were not timed.
+func (t Timing) Elapsed() time.Duration {
+	return cmp.Or(t.Total, t.Transport)
 }
 
 type CompareResult struct {

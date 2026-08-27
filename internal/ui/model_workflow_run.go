@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -414,7 +415,7 @@ func workflowResultFromRun(
 ) workflowStepResult {
 	out := workflowStepResult{
 		Step:       step,
-		Duration:   dur,
+		Duration:   cmp.Or(res.Timing.Elapsed(), dur),
 		Iteration:  meta.Iter,
 		Total:      meta.Total,
 		Branch:     meta.Branch,
@@ -446,18 +447,12 @@ func workflowResultFromRun(
 	switch {
 	case res.Response != nil:
 		out.Status = res.Response.Status
-		if res.Response.Duration > 0 {
-			out.Duration = res.Response.Duration
-		}
 		if res.Response.StatusCode >= 400 && res.Err == nil && !hasExp {
 			ok = false
 			out.Message = fmt.Sprintf("unexpected status code %d", res.Response.StatusCode)
 		}
 	case res.GRPC != nil:
 		out.Status = res.GRPC.StatusCode.String()
-		if res.GRPC.Duration > 0 {
-			out.Duration = res.GRPC.Duration
-		}
 	case res.Stream != nil || len(res.Transcript) > 0:
 		out.Status = strings.TrimSpace(streamSummaryText(res.Stream))
 		if out.Status == "" {

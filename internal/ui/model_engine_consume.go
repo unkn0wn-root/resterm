@@ -59,6 +59,7 @@ func (m *Model) responseMsgFromRunState(res engine.RequestResult, done bool) res
 		preview:        res.Preview,
 		explain:        res.Explain,
 		historyDone:    done,
+		elapsed:        res.Timing.Elapsed(),
 	}
 }
 

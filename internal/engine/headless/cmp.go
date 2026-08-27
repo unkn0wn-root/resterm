@@ -92,15 +92,10 @@ func compareRow(meta core.RowMeta, out engine.RequestResult) engine.CompareRow {
 		Skipped:        out.Skipped,
 		SkipReason:     strings.TrimSpace(out.SkipReason),
 		Canceled:       canceled,
+		Duration:       out.Timing.Elapsed(),
 	}
 	if canceled {
 		row.Err = nil
-	}
-	switch {
-	case row.Response != nil:
-		row.Duration = row.Response.Duration
-	case row.GRPC != nil:
-		row.Duration = row.GRPC.Duration
 	}
 	return row
 }

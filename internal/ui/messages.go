@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
@@ -60,6 +62,7 @@ type responseMsg struct {
 	historyDone    bool
 	latGen         int
 	target         runTarget
+	elapsed        time.Duration
 }
 
 // runTarget remembers which response pane a run was launched from so a late
