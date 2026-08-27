@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.4.1](https://github.com/unkn0wn-root/resterm/compare/v1.4.0...v1.4.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **poll:** timeout response and repeat durations ([#396](https://github.com/unkn0wn-root/resterm/issues/396)) ([83b31f2](https://github.com/unkn0wn-root/resterm/commit/83b31f2ba5f9710eff95fefd8818e6755bc20c71))
+
 ## [1.4.0](https://github.com/unkn0wn-root/resterm/compare/v1.3.1...v1.4.0) (2026-08-26)
 
 
