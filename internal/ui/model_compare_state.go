@@ -33,6 +33,7 @@ type compareResult struct {
 	Canceled       bool
 	Skipped        bool
 	SkipReason     string
+	Duration       time.Duration
 }
 
 func (m *Model) resetCompareState() {
@@ -104,7 +105,7 @@ func buildCompareBundle(results []compareResult, baseline string) *compareBundle
 			Result:   res,
 			Status:   status,
 			Code:     code,
-			Duration: compareRowDuration(res),
+			Duration: res.Duration,
 			Summary:  summarizeCompareDelta(base, res),
 		})
 	}
@@ -143,19 +144,6 @@ func compareRowStatus(result *compareResult) (string, string) {
 		return result.GRPC.StatusCode.String(), fmt.Sprintf("%d", result.GRPC.StatusCode)
 	default:
 		return "pending", "-"
-	}
-}
-
-func compareRowDuration(result *compareResult) time.Duration {
-	switch {
-	case result == nil:
-		return 0
-	case result.Response != nil:
-		return result.Response.Duration
-	case result.GRPC != nil:
-		return result.GRPC.Duration
-	default:
-		return 0
 	}
 }
 

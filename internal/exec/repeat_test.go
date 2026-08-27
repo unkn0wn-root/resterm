@@ -110,7 +110,12 @@ func TestRunHTTPResponseRetryHonorsRetryAfter(t *testing.T) {
 		client := repeatTestClient(func(req *http.Request) (*http.Response, error) {
 			attempts++
 			if attempts == 1 {
-				return repeatTestResponse(req, http.StatusServiceUnavailable, "busy", http.Header{"Retry-After": {"1"}}), nil
+				return repeatTestResponse(
+					req,
+					http.StatusServiceUnavailable,
+					"busy",
+					http.Header{"Retry-After": {"1"}},
+				), nil
 			}
 			return repeatTestResponse(req, http.StatusOK, "ok", nil), nil
 		})
@@ -230,6 +235,75 @@ func TestRunHTTPPollTimeoutKeepsLastResponseWithoutFinalizing(t *testing.T) {
 	})
 }
 
+func TestRunHTTPPollTimeoutDuringAttemptKeepsLastCompletedResponse(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		attempts := 0
+		client := repeatTestClient(func(req *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts == 1 {
+				return repeatTestResponse(req, http.StatusAccepted, "pending", nil), nil
+			}
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		})
+		req := repeatTestRequest(nil)
+		req.Metadata.Poll = &restfile.PollSpec{
+			Every:   200 * time.Millisecond,
+			Timeout: time.Second,
+			Until:   restfile.ResponsePredicate{Expression: "false"},
+		}
+		result := Runner{Hooks: HTTPHooks{
+			EvaluatePredicate: func(PredicateInput) (bool, error) { return false, nil },
+		}}.RunHTTP(HTTPInput{
+			Client:           client,
+			Context:          t.Context(),
+			Req:              req,
+			EffectiveTimeout: 10 * time.Second,
+		})
+		if result.Err == nil || diag.ClassOf(result.Err) != diag.ClassTimeout {
+			t.Fatalf("RunHTTP() error = %v, want timeout", result.Err)
+		}
+		if result.Response == nil {
+			t.Fatal("last response = nil, want the completed attempt")
+		}
+		if got := string(result.Response.Body); got != "pending" {
+			t.Fatalf("last response body = %q, want %q", got, "pending")
+		}
+		if result.Response.StatusCode != http.StatusAccepted {
+			t.Fatalf("last response status = %d, want %d", result.Response.StatusCode, http.StatusAccepted)
+		}
+	})
+}
+
+func TestRunHTTPPollTimeoutWithoutCompletedAttemptHasNoResponse(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := repeatTestClient(func(req *http.Request) (*http.Response, error) {
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		})
+		req := repeatTestRequest(nil)
+		req.Metadata.Poll = &restfile.PollSpec{
+			Every:   200 * time.Millisecond,
+			Timeout: time.Second,
+			Until:   restfile.ResponsePredicate{Expression: "false"},
+		}
+		result := Runner{Hooks: HTTPHooks{
+			EvaluatePredicate: func(PredicateInput) (bool, error) { return false, nil },
+		}}.RunHTTP(HTTPInput{
+			Client:           client,
+			Context:          t.Context(),
+			Req:              req,
+			EffectiveTimeout: 10 * time.Second,
+		})
+		if result.Err == nil || diag.ClassOf(result.Err) != diag.ClassTimeout {
+			t.Fatalf("RunHTTP() error = %v, want timeout", result.Err)
+		}
+		if result.Response != nil {
+			t.Fatalf("response = %+v, want nil", result.Response)
+		}
+	})
+}
+
 func TestRunHTTPRetryWhenExhaustionIsFailedTest(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		client := repeatTestClient(func(req *http.Request) (*http.Response, error) {
@@ -253,7 +327,8 @@ func TestRunHTTPRetryWhenExhaustionIsFailedTest(t *testing.T) {
 		if result.Err != nil {
 			t.Fatalf("RunHTTP() error = %v", result.Err)
 		}
-		if len(result.Tests) != 1 || result.Tests[0].Passed || !strings.Contains(result.Tests[0].Message, "3 attempts") {
+		if len(result.Tests) != 1 || result.Tests[0].Passed ||
+			!strings.Contains(result.Tests[0].Message, "3 attempts") {
 			t.Fatalf("retry exhaustion tests = %+v", result.Tests)
 		}
 	})
@@ -365,7 +440,12 @@ func TestInvalidRetryAfterWarnsOnce(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		warnings := 0
 		client := repeatTestClient(func(req *http.Request) (*http.Response, error) {
-			return repeatTestResponse(req, http.StatusServiceUnavailable, "busy", http.Header{"Retry-After": {"later"}}), nil
+			return repeatTestResponse(
+				req,
+				http.StatusServiceUnavailable,
+				"busy",
+				http.Header{"Retry-After": {"later"}},
+			), nil
 		})
 		result := Runner{Hooks: HTTPHooks{
 			EvaluatePredicate: statusPredicate(http.StatusServiceUnavailable),

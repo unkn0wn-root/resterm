@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
@@ -213,5 +214,62 @@ func TestExecuteGroupedCompareValidatesAllProfilesBeforeRequest(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("compare made %d requests before validation", calls)
+	}
+}
+
+func TestCompareRowDurationIncludesPollWaits(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		status := "pending"
+		if calls%3 == 0 {
+			status = "completed"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := fmt.Fprintf(w, `{"status":%q}`, status); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	cl := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return srv.Client(), nil
+	})
+	rt := rtrun.New(rtrun.Config{Client: cl})
+	t.Cleanup(func() { _ = rt.Close() })
+	cfg := engine.Config{Client: cl}
+	eng := newWithDeps(request.New(cfg, rt), rt, cfg)
+
+	const every = 100 * time.Millisecond
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    srv.URL + "/jobs/1",
+		Metadata: restfile.RequestMetadata{
+			Name: "poll",
+			Poll: &restfile.PollSpec{
+				Every:   every,
+				Timeout: 10 * time.Second,
+				Until: restfile.ResponsePredicate{
+					Expression: `response.json().status == "completed"`,
+				},
+			},
+		},
+	}
+	doc := &restfile.Document{Path: "test.http", Requests: []*restfile.Request{req}}
+
+	out, err := eng.ExecuteCompare(doc, req, &restfile.CompareSpec{
+		Environments: []string{"one", "two"},
+		Baseline:     "one",
+	}, testSelection(""))
+	if err != nil {
+		t.Fatalf("ExecuteCompare: %v", err)
+	}
+	if len(out.Rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(out.Rows))
+	}
+	for _, row := range out.Rows {
+		if row.Duration < 2*every {
+			t.Fatalf("row %q duration = %s, want at least two poll waits", row.Environment, row.Duration)
+		}
 	}
 }
