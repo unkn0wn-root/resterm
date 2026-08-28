@@ -39,7 +39,9 @@ These flags are shared by `resterm` and `resterm run` when request execution is 
 | `--timeout <duration>` | `-t <duration>` | Default HTTP timeout. |
 | `--insecure` | `-k` | Skip TLS certificate verification. |
 | `--follow` | `-L` | Follow redirects. Pass `--follow=false` or `-L=false` to disable it. |
+| `--max-redirects <n>` | | Maximum redirects to follow. The default is 10. Use `0` to disable redirects. |
 | `--proxy <url>` | `-x <url>` | HTTP proxy URL. |
+| `--max-response-size <size>` | | Largest response body to read, such as `100mb`. The default is 32 MiB. Use `none` to remove the limit. |
 | `--compare <envs>` | `-C <envs>` | Default comma/space-delimited compare targets. |
 | `--compare-base <env>` | `-B <env>` | Baseline environment for compare runs. |
 | `--compare-group <group>` |  | In grouped mode, vary this group while holding all other groups fixed. |
