@@ -633,6 +633,11 @@ func readFile(t *testing.T, path string) string {
 }
 
 func TestExecuteCapturesTraceTimeline(t *testing.T) {
+	var (
+		body   *slowBody
+		hooked time.Duration
+		pause  = func(d time.Duration) { hooked += d; time.Sleep(d) }
+	)
 	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			trace := httptrace.ContextClientTrace(req.Context())
@@ -640,7 +645,7 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 				if trace.DNSStart != nil {
 					trace.DNSStart(httptrace.DNSStartInfo{Host: "example.com"})
 				}
-				time.Sleep(200 * time.Microsecond)
+				pause(200 * time.Microsecond)
 				if trace.DNSDone != nil {
 					trace.DNSDone(
 						httptrace.DNSDoneInfo{
@@ -648,37 +653,37 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 						},
 					)
 				}
-				time.Sleep(200 * time.Microsecond)
+				pause(200 * time.Microsecond)
 				if trace.ConnectStart != nil {
 					trace.ConnectStart("tcp", "93.184.216.34:443")
 				}
-				time.Sleep(200 * time.Microsecond)
+				pause(200 * time.Microsecond)
 				if trace.ConnectDone != nil {
 					trace.ConnectDone("tcp", "93.184.216.34:443", nil)
 				}
-				time.Sleep(200 * time.Microsecond)
+				pause(200 * time.Microsecond)
 				if trace.TLSHandshakeStart != nil {
 					trace.TLSHandshakeStart()
 				}
-				time.Sleep(200 * time.Microsecond)
+				pause(200 * time.Microsecond)
 				if trace.TLSHandshakeDone != nil {
 					trace.TLSHandshakeDone(tls.ConnectionState{}, nil)
 				}
-				time.Sleep(200 * time.Microsecond)
+				pause(200 * time.Microsecond)
 				if trace.WroteHeaders != nil {
 					trace.WroteHeaders()
 				}
-				time.Sleep(200 * time.Microsecond)
+				pause(200 * time.Microsecond)
 				if trace.WroteRequest != nil {
 					trace.WroteRequest(httptrace.WroteRequestInfo{})
 				}
-				time.Sleep(300 * time.Microsecond)
+				pause(300 * time.Microsecond)
 				if trace.GotFirstResponseByte != nil {
 					trace.GotFirstResponseByte()
 				}
 			}
 
-			body := &slowBody{data: []byte("ok"), delay: 300 * time.Microsecond}
+			body = &slowBody{data: []byte("ok"), delay: 300 * time.Microsecond}
 			resp := &http.Response{
 				Status:     "200 OK",
 				StatusCode: http.StatusOK,
@@ -741,11 +746,15 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 			resp.Timeline.Duration,
 		)
 	}
-	if diff := resp.Duration - resp.Timeline.Duration; diff > time.Millisecond ||
-		diff < -time.Millisecond {
+	// Every sleep above runs between the first trace hook and the end of the
+	// transfer, so the timeline has to span all of them. This is a floor rather
+	// than a match because the time before the first hook belongs to no phase,
+	// and a busy machine can spend milliseconds there.
+	if slept := hooked + body.slept; resp.Timeline.Duration < slept {
 		t.Fatalf(
-			"expected response duration and timeline duration to match within 1ms, got diff %v",
-			diff,
+			"timeline duration %v does not cover the %v the request spent sleeping",
+			resp.Timeline.Duration,
+			slept,
 		)
 	}
 }
@@ -848,14 +857,15 @@ type slowBody struct {
 	data   []byte
 	delay  time.Duration
 	offset int
+	slept  time.Duration
 }
 
 func (b *slowBody) Read(p []byte) (int, error) {
+	b.slept += b.delay
+	time.Sleep(b.delay)
 	if b.offset >= len(b.data) {
-		time.Sleep(b.delay)
 		return 0, io.EOF
 	}
-	time.Sleep(b.delay)
 	n := copy(p, b.data[b.offset:])
 	b.offset += n
 	return n, nil
