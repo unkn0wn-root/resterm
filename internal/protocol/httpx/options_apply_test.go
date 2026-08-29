@@ -180,3 +180,40 @@ func TestApplyRequestSettingsSkipsUnreadableValues(t *testing.T) {
 		t.Fatalf("BaseURL = %q, want raw request setting", got.BaseURL)
 	}
 }
+
+func TestApplyOptionSettingsReadsStreamLimits(t *testing.T) {
+	var opts Options
+	err := ApplyOptionSettings(&opts, map[string]string{
+		"sse-max-line-bytes":   "2mb",
+		"sse-max-event-bytes":  "16mb",
+		"ws-max-message-bytes": "64kb",
+	})
+	if err != nil {
+		t.Fatalf("ApplyOptionSettings: %v", err)
+	}
+	if opts.SSEMaxLineBytes != 2<<20 {
+		t.Errorf("SSEMaxLineBytes = %d, want %d", opts.SSEMaxLineBytes, 2<<20)
+	}
+	if opts.SSEMaxEventBytes != 16<<20 {
+		t.Errorf("SSEMaxEventBytes = %d, want %d", opts.SSEMaxEventBytes, 16<<20)
+	}
+	if opts.WSMaxMessageBytes != 64<<10 {
+		t.Errorf("WSMaxMessageBytes = %d, want %d", opts.WSMaxMessageBytes, 64<<10)
+	}
+}
+
+func TestApplyOptionSettingsRejectsInvalidStreamLimits(t *testing.T) {
+	for _, key := range []string{
+		"sse-max-line-bytes",
+		"sse-max-event-bytes",
+		"ws-max-message-bytes",
+	} {
+		t.Run(key, func(t *testing.T) {
+			var opts Options
+			err := ApplyOptionSettings(&opts, map[string]string{key: "none"})
+			if err == nil || !strings.Contains(err.Error(), key) {
+				t.Fatalf("error = %v, want it to name %s", err, key)
+			}
+		})
+	}
+}

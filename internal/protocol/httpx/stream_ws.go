@@ -217,7 +217,7 @@ func (c *Client) StartWebSocket(
 	}
 	runtime.touchActivity()
 
-	conn.SetReadLimit(webSocketReadLimit(wsOpts.MaxMessageBytes))
+	conn.SetReadLimit(webSocketReadLimit(wsOpts.MaxMessageBytes, effectiveOpts.WSMaxMessageBytes))
 
 	if wsOpts.IdleTimeout > 0 {
 		go runtime.idleWatch(wsOpts.IdleTimeout)

@@ -29,6 +29,9 @@ const (
 	optionSettingMaxResponse     optionSettingKey = "max-response-size"
 	optionSettingMaxRedirects    optionSettingKey = "max-redirects"
 	optionSettingForwardCreds    optionSettingKey = "forward-credentials-on-redirect"
+	optionSettingSSELineBytes    optionSettingKey = "sse-max-line-bytes"
+	optionSettingSSEEventBytes   optionSettingKey = "sse-max-event-bytes"
+	optionSettingWSMessageBytes  optionSettingKey = "ws-max-message-bytes"
 )
 
 // Settings come from a file the user edits, so name the key and what it takes.
@@ -164,6 +167,26 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 				val,
 				"a size such as 100mb, or none to read without a limit",
 			)
+		}
+	}
+
+	for _, size := range []struct {
+		key optionSettingKey
+		dst *int64
+	}{
+		{optionSettingSSELineBytes, &opts.SSEMaxLineBytes},
+		{optionSettingSSEEventBytes, &opts.SSEMaxEventBytes},
+		{optionSettingWSMessageBytes, &opts.WSMaxMessageBytes},
+	} {
+		val, ok := settingValue(norm, size.key)
+		if !ok {
+			continue
+		}
+		switch limit, err := bytesize.Parse(val); {
+		case err == nil:
+			*size.dst = limit
+		case strict:
+			return invalidSetting(size.key, val, "a size such as 8mb")
 		}
 	}
 

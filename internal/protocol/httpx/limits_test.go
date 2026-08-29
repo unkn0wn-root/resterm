@@ -222,6 +222,7 @@ func TestSSELineBudgetTracksTheStreamLimit(t *testing.T) {
 	tests := []struct {
 		name string
 		opts restfile.SSEOptions
+		set  Options
 		read int64
 		want int
 	}{
@@ -243,23 +244,74 @@ func TestSSELineBudgetTracksTheStreamLimit(t *testing.T) {
 			opts: restfile.SSEOptions{MaxLineBytes: 4096},
 			want: 4096,
 		},
+		{
+			name: "the setting supplies the line limit",
+			set:  Options{SSEMaxLineBytes: 2048},
+			want: 2048,
+		},
+		{
+			name: "the directive beats the setting",
+			opts: restfile.SSEOptions{MaxLineBytes: 4096},
+			set:  Options{SSEMaxLineBytes: 2048},
+			want: 4096,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := sseLimitsFor(tt.opts).lineBudget(tt.read); got != tt.want {
+			if got := sseLimitsFor(tt.opts, tt.set).lineBudget(tt.read); got != tt.want {
 				t.Fatalf("lineBudget() = %d, want %d", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestWebSocketReadLimit(t *testing.T) {
-	if got := webSocketReadLimit(0); got != defaultWebSocketMessageBytes {
-		t.Fatalf("webSocketReadLimit(0) = %d, want %d", got, defaultWebSocketMessageBytes)
+func TestSSEEventLimitFallsBackToTheSetting(t *testing.T) {
+	tests := []struct {
+		name string
+		opts restfile.SSEOptions
+		set  Options
+		want int64
+	}{
+		{name: "default", want: DefaultSSEMaxEventBytes},
+		{name: "setting", set: Options{SSEMaxEventBytes: 2048}, want: 2048},
+		{
+			name: "directive wins",
+			opts: restfile.SSEOptions{MaxEventBytes: 4096},
+			set:  Options{SSEMaxEventBytes: 2048},
+			want: 4096,
+		},
 	}
-	if got := webSocketReadLimit(4096); got != 4096 {
-		t.Fatalf("webSocketReadLimit(4096) = %d, want 4096", got)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sseLimitsFor(tt.opts, tt.set).event; got != tt.want {
+				t.Fatalf("event limit = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWebSocketReadLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured int64
+		setting    int64
+		want       int64
+	}{
+		{name: "default", want: defaultWebSocketMessageBytes},
+		{name: "directive", configured: 4096, want: 4096},
+		{name: "setting", setting: 2048, want: 2048},
+		{name: "directive wins", configured: 4096, setting: 2048, want: 4096},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := webSocketReadLimit(tt.configured, tt.setting); got != tt.want {
+				t.Fatalf("webSocketReadLimit(%d, %d) = %d, want %d",
+					tt.configured, tt.setting, got, tt.want)
+			}
+		})
 	}
 }
 

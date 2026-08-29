@@ -16,6 +16,9 @@ var httpSettingKeys = map[string]struct{}{
 	"max-response-size":               {},
 	"max-redirects":                   {},
 	"forward-credentials-on-redirect": {},
+	"sse-max-line-bytes":              {},
+	"sse-max-event-bytes":             {},
+	"ws-max-message-bytes":            {},
 }
 
 // IsHTTPKey reports whether key is a supported HTTP setting key.

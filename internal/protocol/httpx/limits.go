@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 
@@ -51,9 +52,6 @@ func readResponseBody(r io.Reader, limit int64) ([]byte, error) {
 
 const defaultWebSocketMessageBytes = 32 << 10
 
-func webSocketReadLimit(configured int64) int64 {
-	if configured > 0 {
-		return configured
-	}
-	return defaultWebSocketMessageBytes
+func webSocketReadLimit(configured, setting int64) int64 {
+	return cmp.Or(configured, setting, defaultWebSocketMessageBytes)
 }

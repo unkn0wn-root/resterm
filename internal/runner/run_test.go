@@ -2093,3 +2093,55 @@ func TestRunPassesWhenAStreamStopsAtAnEventLimit(t *testing.T) {
 		t.Fatalf("a stream that stopped where it was told to failed: %+v", rep.Results[0].Failure)
 	}
 }
+
+func TestRunAppliesFileLevelSSELineLimit(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "stream.http")
+	src := strings.Join([]string{
+		"# @setting sse-max-line-bytes 16",
+		"",
+		"### Events",
+		"# @name events",
+		"# @sse",
+		"GET https://example.com/events",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				hdr := make(http.Header)
+				hdr.Set("Content-Type", "text/event-stream")
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body: io.NopCloser(
+						strings.NewReader("data: " + strings.Repeat("x", 4096) + "\n\n"),
+					),
+					Request: req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	res := rep.Results[0]
+	if res.Passed {
+		t.Fatal("the file level line limit was not applied to the stream")
+	}
+	if !strings.Contains(res.Failure.Message, "sse line exceeds 16 bytes") {
+		t.Fatalf("Failure.Message = %q, want the limit the setting named", res.Failure.Message)
+	}
+}

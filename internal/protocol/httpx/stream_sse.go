@@ -58,11 +58,13 @@ type sseLimits struct {
 	event  int64
 }
 
-func sseLimitsFor(opts restfile.SSEOptions) sseLimits {
+// The @sse directive is the most specific place a limit can be set, then the
+// setting it falls back to, then the built-in default.
+func sseLimitsFor(sse restfile.SSEOptions, opts Options) sseLimits {
 	return sseLimits{
-		stream: opts.MaxBytes,
-		line:   cmp.Or(opts.MaxLineBytes, DefaultSSEMaxLineBytes),
-		event:  cmp.Or(opts.MaxEventBytes, DefaultSSEMaxEventBytes),
+		stream: sse.MaxBytes,
+		line:   cmp.Or(sse.MaxLineBytes, opts.SSEMaxLineBytes, DefaultSSEMaxLineBytes),
+		event:  cmp.Or(sse.MaxEventBytes, opts.SSEMaxEventBytes, DefaultSSEMaxEventBytes),
 	}
 }
 
@@ -193,8 +195,9 @@ func (c *Client) StartSSE(
 
 	meta := buildStreamMeta(req, httpReq, httpResp, effectiveOpts.BaseDir, metaDefaults{})
 
+	limits := sseLimitsFor(streamOpts, effectiveOpts)
 	session := stream.NewSession(streamCtx, stream.KindSSE, stream.Config{
-		MaxBytes: sseLimitsFor(streamOpts).sessionBytes(),
+		MaxBytes: limits.sessionBytes(),
 	})
 	session.MarkOpen()
 
@@ -203,7 +206,7 @@ func (c *Client) StartSSE(
 		defer func() {
 			_ = httpResp.Body.Close()
 		}()
-		runSSESession(session, httpResp.Body, streamOpts, cancel)
+		runSSESession(session, httpResp.Body, streamOpts, limits, cancel)
 	}()
 
 	return &StreamHandle{Session: session, Meta: meta}, nil, nil
@@ -289,9 +292,9 @@ func runSSESession(
 	session *stream.Session,
 	body io.ReadCloser,
 	opts restfile.SSEOptions,
+	limits sseLimits,
 	stopRead context.CancelFunc,
 ) {
-	limits := sseLimitsFor(opts)
 	run := &sseRun{
 		session: session,
 		reader:  bufio.NewReader(body),
