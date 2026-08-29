@@ -70,6 +70,47 @@ func TestSessionDropNewestPolicy(t *testing.T) {
 	listener.Cancel()
 }
 
+func TestSessionDropOldestPolicyReportsLoss(t *testing.T) {
+	s := NewSession(
+		t.Context(),
+		KindSSE,
+		Config{ListenerBuffer: 1, DropPolicy: DropOldest},
+	)
+	s.MarkOpen()
+	listener := s.Subscribe()
+	t.Cleanup(listener.Cancel)
+
+	s.Publish(&Event{Kind: KindSSE, Direction: DirReceive, Payload: []byte("first")})
+	s.Publish(&Event{Kind: KindSSE, Direction: DirReceive, Payload: []byte("second")})
+
+	select {
+	case evt := <-listener.C:
+		if string(evt.Payload) != "second" {
+			t.Fatalf("received %q, want the newest event", evt.Payload)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the newest event")
+	}
+	if got := listener.Dropped(); got != 1 {
+		t.Fatalf("listener dropped %d events, want 1", got)
+	}
+	if got := s.StatsSnapshot().Dropped; got != 1 {
+		t.Fatalf("session dropped %d events, want 1", got)
+	}
+}
+
+func TestSessionSnapshotReportsEvictedEvents(t *testing.T) {
+	s := NewSession(t.Context(), KindWebSocket, Config{BufferSize: 1})
+	s.Publish(&Event{Kind: KindWebSocket, Payload: []byte("first")})
+	s.Publish(&Event{Kind: KindWebSocket, Payload: []byte("second")})
+
+	listener := s.Subscribe()
+	t.Cleanup(listener.Cancel)
+	if got := listener.Snapshot.Evicted; got != 1 {
+		t.Fatalf("snapshot evicted %d events, want 1", got)
+	}
+}
+
 func TestSessionSubscribeAfterClose(t *testing.T) {
 	s := NewSession(context.Background(), KindGRPC, Config{})
 	s.Publish(&Event{Kind: KindGRPC, Direction: DirReceive, Payload: []byte("last")})

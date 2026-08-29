@@ -1024,7 +1024,7 @@ func TestExecuteSSEReadErrorSummary(t *testing.T) {
 		URL:    "https://example.com/events",
 		SSE:    &restfile.SSERequest{},
 	}
-	resp, err := client.ExecuteSSE(context.Background(), req, vars.NewResolver(), Options{})
+	resp, err := client.ExecuteSSE(t.Context(), req, vars.NewResolver(), Options{})
 	if err != nil {
 		t.Fatalf("execute sse read error: %v", err)
 	}
@@ -1033,11 +1033,11 @@ func TestExecuteSSEReadErrorSummary(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &transcript); err != nil {
 		t.Fatalf("unmarshal transcript: %v", err)
 	}
-	if transcript.Summary.Reason == "" || transcript.Summary.Reason == "eof" {
-		t.Fatalf("expected error reason, got %q", transcript.Summary.Reason)
+	if transcript.Summary.Reason != sseReasonErr {
+		t.Fatalf("Reason = %q, want %q", transcript.Summary.Reason, sseReasonErr)
 	}
-	if !strings.Contains(transcript.Summary.Reason, "read sse stream") {
-		t.Fatalf("expected read error in reason, got %q", transcript.Summary.Reason)
+	if !strings.Contains(transcript.Summary.Error, "read sse stream") {
+		t.Fatalf("expected read error in summary.error, got %q", transcript.Summary.Error)
 	}
 }
 

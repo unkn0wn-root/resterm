@@ -387,6 +387,8 @@ func convertSSETranscript(t *httpx.SSETranscript) *scripts.StreamInfo {
 		"byteCount":  t.Summary.ByteCount,
 		"duration":   t.Summary.Duration,
 		"reason":     t.Summary.Reason,
+		"dropped":    t.Summary.Dropped,
+		"error":      t.Summary.Error,
 	}
 	if len(t.Events) > 0 {
 		events := make([]map[string]any, len(t.Events))
@@ -418,6 +420,7 @@ func convertWebSocketTranscript(t *httpx.WebSocketTranscript) *scripts.StreamInf
 		"closedBy":      t.Summary.ClosedBy,
 		"closeCode":     t.Summary.CloseCode,
 		"closeReason":   t.Summary.CloseReason,
+		"dropped":       t.Summary.Dropped,
 	}
 	if len(t.Events) > 0 {
 		events := make([]map[string]any, len(t.Events))

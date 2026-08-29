@@ -257,6 +257,7 @@ func (c *Client) CompleteWebSocket(
 	defer listener.Cancel()
 
 	acc := newWSAccumulator()
+	retentionDropped := listener.Snapshot.Evicted
 	for _, evt := range listener.Snapshot.Events {
 		acc.consume(evt)
 	}
@@ -297,6 +298,8 @@ func (c *Client) CompleteWebSocket(
 	}
 
 	<-eventsDone
+	retentionDropped += listener.Dropped()
+	acc.summary.Dropped += int64(retentionDropped)
 
 	state, stateErr := session.State()
 	stats := session.StatsSnapshot()

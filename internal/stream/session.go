@@ -85,12 +85,21 @@ type Listener struct {
 	C        <-chan *Event
 	Cancel   func()
 	Snapshot Snapshot
+	dropped  func() uint64
+}
+
+func (l Listener) Dropped() uint64 {
+	if l.dropped == nil {
+		return 0
+	}
+	return l.dropped()
 }
 
 type Snapshot struct {
-	Events []*Event
-	State  State
-	Err    error
+	Events  []*Event
+	State   State
+	Err     error
+	Evicted uint64
 }
 
 var sessionCounter uint64
@@ -177,12 +186,17 @@ func (s *Session) Subscribe() Listener {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	snapshot := Snapshot{
-		Events: s.events.snapshot(),
-		State:  s.state,
-		Err:    s.err,
+		Events:  s.events.snapshot(),
+		State:   s.state,
+		Err:     s.err,
+		Evicted: s.stats.Evicted,
 	}
 	if s.ended() {
-		return Listener{C: closedEvents, Cancel: func() {}, Snapshot: snapshot}
+		return Listener{
+			C:        closedEvents,
+			Cancel:   func() {},
+			Snapshot: snapshot,
+		}
 	}
 
 	id := s.nextLID
@@ -199,6 +213,7 @@ func (s *Session) Subscribe() Listener {
 			s.removeListener(id)
 		},
 		Snapshot: snapshot,
+		dropped:  l.dropped,
 	}
 }
 
@@ -250,64 +265,72 @@ func (s *Session) Publish(evt *Event) {
 	}
 	s.mu.Unlock()
 
-	dropped := 0
+	var dropped uint64
 	for _, l := range listeners {
-		if !l.emit(evt) {
-			dropped++
-		}
+		dropped += l.emit(evt)
 	}
 	if dropped > 0 {
 		s.mu.Lock()
-		s.stats.Dropped += uint64(dropped)
+		s.stats.Dropped += dropped
 		s.mu.Unlock()
 	}
 }
 
-func (l *listener) emit(evt *Event) bool {
+func (l *listener) emit(evt *Event) uint64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if l.closed {
-		return false
+		l.dropCnt++
+		return 1
 	}
 
 	switch l.policy {
 	case DropNewest:
 		select {
 		case l.ch <- evt:
-			return true
+			return 0
 		default:
 			l.dropCnt++
-			return false
+			return 1
 		}
 	case DropListener:
 		select {
 		case l.ch <- evt:
-			return true
+			return 0
 		default:
 			l.dropCnt++
 			l.closed = true
 			close(l.ch)
-			return false
+			return 1
 		}
 	default: // DropOldest - when buffer is full, try to discard one old event to make room
 		select {
 		case l.ch <- evt:
-			return true
+			return 0
 		default:
+			var dropped uint64
 			select {
 			case <-l.ch:
+				l.dropCnt++
+				dropped++
 			default:
 			}
 			select {
 			case l.ch <- evt:
-				return true
+				return dropped
 			default:
 				l.dropCnt++
-				return false
+				return dropped + 1
 			}
 		}
 	}
+}
+
+func (l *listener) dropped() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.dropCnt
 }
 
 func (s *Session) MarkOpen() {

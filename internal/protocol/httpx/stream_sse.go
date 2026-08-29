@@ -243,19 +243,13 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 		acc.summary.Error = serr.Error()
 	}
 	if acc.summary.Reason == "" {
-		if serr != nil {
-			acc.summary.Reason = serr.Error()
-		} else if state == stream.StateFailed {
+		if serr != nil || state == stream.StateFailed {
 			acc.summary.Reason = sseReasonErr
 		} else {
 			acc.summary.Reason = sseReasonEOF
 		}
 	} else if acc.summary.Reason == sseReasonEOF && (state == stream.StateFailed || serr != nil) {
-		if serr != nil {
-			acc.summary.Reason = serr.Error()
-		} else {
-			acc.summary.Reason = sseReasonErr
-		}
+		acc.summary.Reason = sseReasonErr
 	}
 
 	transcript := SSETranscript{Events: acc.events, Summary: acc.summary}

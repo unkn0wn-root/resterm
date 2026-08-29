@@ -86,6 +86,8 @@ type Selection struct {
 type HTTPOptions struct {
 	Timeout            time.Duration `json:"timeout,omitempty"`
 	FollowRedirects    *bool         `json:"followRedirects,omitempty"`
+	MaxRedirects       *int          `json:"maxRedirects,omitempty"`
+	MaxResponseBytes   *int64        `json:"maxResponseBytes,omitempty"`
 	InsecureSkipVerify bool          `json:"insecureSkipVerify,omitempty"`
 	ProxyURL           string        `json:"proxyURL,omitempty"`
 }

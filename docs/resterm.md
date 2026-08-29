@@ -1345,7 +1345,7 @@ Expressions can reference:
 - `response.statusCode`, `response.statusText`, `response.text()`
 - `response.headers["header-name"]` or `response.header("Header-Name")` for a single-valued header
 - `response.json.path` shorthand (equivalent to `response.json().path`)
-- `stream.kind()`, `stream.summary().sentCount`, `stream.events()[0].text` for streaming transcripts (available when the request used `@sse` or `@websocket`)
+- `stream.kind()`, `stream.summary().sentCount`, `stream.summary().dropped`, and `stream.events()[0].text` for streaming transcripts (available when the request used `@sse` or `@websocket`). A non-zero `dropped` value means the retained transcript is incomplete.
 - `vars.*`, `env.*`, `last.*`, imported `@use` modules, and other RestermScript helpers
 
 Example:
@@ -1510,7 +1510,7 @@ GET https://api.example.com/notifications
 | `max-line-bytes` | Largest allowed line. The default is 4 MiB. A larger line stops the stream with an error. |
 | `max-event-bytes` | Largest allowed event, counting every line it is built from. The default is 8 MiB. A larger event stops the stream with an error. |
 
-If the server returns a non-2xx status or a content type other than `text/event-stream`, Resterm shows a normal HTTP response so you can inspect it. For a successful stream, Resterm shows the events and their details in the Stream tab and saves them in history. Templates and scripts can read `eventCount`, `byteCount`, `duration`, and `reason` from the summary. `reason` has one of these values:
+If the server returns a non-2xx status or a content type other than `text/event-stream`, Resterm shows a normal HTTP response so you can inspect it. For a successful stream, Resterm shows the events and their details in the Stream tab and saves them in history. Templates and scripts can read `eventCount`, `byteCount`, `duration`, `reason`, `error`, and `dropped` from the summary. A non-zero `dropped` value means the retained transcript is incomplete. `reason` has one of these values:
 
 | Reason | Meaning |
 | --- | --- |
@@ -1913,7 +1913,7 @@ Objects:
 - `stream`
   - `enabled()` - returns `true` when the current response is an SSE or WebSocket transcript.
   - `kind()` - returns `"sse"` or `"websocket"`.
-  - `summary()` - copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.).
+  - `summary()` - copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.). `dropped` is always present; require it to be `0` when a test or capture needs the complete transcript. SSE failures use `reason: "error"` and put the detailed message in `error`.
   - `events()` - array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
   - `onEvent(fn)` - registers a callback invoked for each event after the script runs; useful for assertions over the entire stream.
   - `onClose(fn)` - registers a callback invoked once with the summary after all events replay.

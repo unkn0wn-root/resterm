@@ -77,6 +77,16 @@ func TestJSONTags(t *testing.T) {
 			name: "FollowRedirects",
 			tag:  "followRedirects,omitempty",
 		},
+		{
+			typ:  reflect.TypeFor[HTTPOptions](),
+			name: "MaxRedirects",
+			tag:  "maxRedirects,omitempty",
+		},
+		{
+			typ:  reflect.TypeFor[HTTPOptions](),
+			name: "MaxResponseBytes",
+			tag:  "maxResponseBytes,omitempty",
+		},
 		{typ: reflect.TypeFor[GRPCOptions](), name: "Plaintext", tag: "plaintext,omitempty"},
 		{typ: reflect.TypeFor[Report](), name: "SchemaVersion", tag: ""},
 		{typ: reflect.TypeFor[Report](), name: "FilePath", tag: ""},

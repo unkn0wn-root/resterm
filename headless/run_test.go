@@ -310,6 +310,12 @@ func TestBuildOptionsUseDefaults(t *testing.T) {
 	if got.HTTPOptions.Timeout != DefaultHTTPTimeout || !got.HTTPOptions.FollowRedirects {
 		t.Fatalf("unexpected http defaults: %+v", got.HTTPOptions)
 	}
+	if _, ok := got.HTTPOptions.MaxRedirects.Get(); ok {
+		t.Fatalf("default MaxRedirects is explicitly set: %+v", got.HTTPOptions.MaxRedirects)
+	}
+	if got.HTTPOptions.MaxResponseBytes.Set() {
+		t.Fatalf("default MaxResponseBytes is explicitly set: %+v", got.HTTPOptions.MaxResponseBytes)
+	}
 	if v, ok := got.GRPCOptions.DefaultPlaintext.Get(); !ok || !v {
 		t.Fatalf("unexpected grpc defaults: %+v", got.GRPCOptions)
 	}
@@ -352,6 +358,84 @@ func TestBuildOptionsRespectExplicitBoolOptions(t *testing.T) {
 	}
 	if got.GRPCOptions.DefaultPlaintext.Or(true) {
 		t.Fatalf("expected plaintext=false, got %+v", got.GRPCOptions)
+	}
+}
+
+func TestBuildOptionsRespectHTTPBounds(t *testing.T) {
+	dir := t.TempDir()
+	maxRedirects := 3
+	maxResponseBytes := int64(64 << 20)
+	got, err := buildOptions(Options{
+		Source: Source{Path: filepath.Join(dir, "one.http")},
+		HTTP: HTTPOptions{
+			MaxRedirects:     &maxRedirects,
+			MaxResponseBytes: &maxResponseBytes,
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildOptions: %v", err)
+	}
+	if value, ok := got.HTTPOptions.MaxRedirects.Get(); !ok || value != maxRedirects {
+		t.Fatalf("MaxRedirects = %d (set %t), want %d", value, ok, maxRedirects)
+	}
+	if value := got.HTTPOptions.MaxResponseBytes.Or(-1); value != maxResponseBytes {
+		t.Fatalf("MaxResponseBytes = %d, want %d", value, maxResponseBytes)
+	}
+}
+
+func TestBuildOptionsAllowDisablingHTTPBounds(t *testing.T) {
+	dir := t.TempDir()
+	zeroRedirects := 0
+	unlimitedResponse := int64(0)
+	got, err := buildOptions(Options{
+		Source: Source{Path: filepath.Join(dir, "one.http")},
+		HTTP: HTTPOptions{
+			MaxRedirects:     &zeroRedirects,
+			MaxResponseBytes: &unlimitedResponse,
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildOptions: %v", err)
+	}
+	if value, ok := got.HTTPOptions.MaxRedirects.Get(); !ok || value != 0 {
+		t.Fatalf("MaxRedirects = %d (set %t), want an explicit zero", value, ok)
+	}
+	if !got.HTTPOptions.MaxResponseBytes.Set() || got.HTTPOptions.MaxResponseBytes.Or(-1) != 0 {
+		t.Fatalf("MaxResponseBytes = %+v, want an explicit unlimited budget",
+			got.HTTPOptions.MaxResponseBytes)
+	}
+}
+
+func TestBuildOptionsRejectNegativeHTTPBounds(t *testing.T) {
+	negativeInt := -1
+	negativeInt64 := int64(-1)
+	tests := []struct {
+		name string
+		http HTTPOptions
+		want string
+	}{
+		{
+			name: "redirects",
+			http: HTTPOptions{MaxRedirects: &negativeInt},
+			want: "http.maxRedirects",
+		},
+		{
+			name: "response bytes",
+			http: HTTPOptions{MaxResponseBytes: &negativeInt64},
+			want: "http.maxResponseBytes",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := buildOptions(Options{
+				Source: Source{Path: filepath.Join(t.TempDir(), "one.http")},
+				HTTP:   tt.http,
+			})
+			if !IsUsageError(err) || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want a usage error containing %q", err, tt.want)
+			}
+		})
 	}
 }
 
