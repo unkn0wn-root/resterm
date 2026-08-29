@@ -2,8 +2,10 @@ package httpx
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -151,8 +153,35 @@ func TestSSEFallbackBodyStopsAtTheLimit(t *testing.T) {
 	tooLarge(t, err)
 }
 
+// countingConn records how much the client pulls off the socket. Counting what
+// the server managed to write instead would measure kernel socket buffers,
+// which hold megabytes on some machines and almost nothing on others.
+type countingConn struct {
+	net.Conn
+	read *atomic.Int64
+}
+
+func (c *countingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.read.Add(int64(n))
+	return n, err
+}
+
+func countingDialClient(read *atomic.Int64) *Client {
+	return NewClientWithOptions(WithHTTPFactory(func(Options) (*http.Client, error) {
+		return &http.Client{Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				conn, err := (&net.Dialer{}).DialContext(ctx, network, addr)
+				if err != nil {
+					return nil, err
+				}
+				return &countingConn{Conn: conn, read: read}, nil
+			},
+		}}, nil
+	}))
+}
+
 func TestSSEStopsOnAnUnterminatedLine(t *testing.T) {
-	var written atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -160,9 +189,7 @@ func TestSSEStopsOnAnUnterminatedLine(t *testing.T) {
 		_, _ = w.Write([]byte("data: "))
 		chunk := []byte(strings.Repeat("A", 1<<16))
 		for range 512 {
-			n, err := w.Write(chunk)
-			written.Add(int64(n))
-			if err != nil {
+			if _, err := w.Write(chunk); err != nil {
 				return
 			}
 			if flusher != nil {
@@ -172,6 +199,7 @@ func TestSSEStopsOnAnUnterminatedLine(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	var read atomic.Int64
 	req := &restfile.Request{
 		Method: "GET",
 		URL:    srv.URL,
@@ -180,10 +208,12 @@ func TestSSEStopsOnAnUnterminatedLine(t *testing.T) {
 			TotalTimeout: 30 * time.Second,
 		}},
 	}
-	if _, err := NewClient(nil).ExecuteSSE(t.Context(), req, nil, Options{}); err != nil {
+	if _, err := countingDialClient(&read).ExecuteSSE(t.Context(), req, nil, Options{}); err != nil {
 		t.Fatalf("ExecuteSSE: %v", err)
 	}
-	if n := written.Load(); n > 1<<20 {
+	// The reader stops within one buffered fill of the limit. The transport has
+	// a buffer of its own, so allow for both plus the response headers.
+	if n := read.Load(); n > 64<<10 {
 		t.Fatalf("the reader consumed %d bytes of one line against a 1KiB stream limit", n)
 	}
 }
