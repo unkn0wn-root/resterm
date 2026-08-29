@@ -454,6 +454,10 @@ func (x *execCtx) preview() bool {
 	return x != nil && x.mod == ExecModePreview
 }
 
+func (x *execCtx) addCredentialHeaders(names ...string) {
+	x.opts.CredentialHeaders = append(x.opts.CredentialHeaders, names...)
+}
+
 func (x *execCtx) warn(warning Warning) {
 	x.exp.warn(string(warning))
 	if x.preview() || x.onWarning == nil {
@@ -808,8 +812,10 @@ func (x *execCtx) prepareAuth() *xrunResult {
 			return x.fail(err, "Auth preparation failed")
 		}
 		secs = CommandAuthSecrets(out)
+		x.addCredentialHeaders(out.Header)
 	default:
-		if err := x.eng.EnsureOAuth(x.sendCtx, x.req, x.res, x.opts, x.env, x.timeout); err != nil {
+		hdr, err := x.eng.EnsureOAuth(x.sendCtx, x.req, x.res, x.opts, x.env, x.timeout)
+		if err != nil {
 			x.exp.stage(
 				xplain.StageAuth,
 				xplain.StageError,
@@ -820,6 +826,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 			)
 			return x.fail(err, "Auth preparation failed")
 		}
+		x.addCredentialHeaders(hdr)
 		if err := applyGRPCAuth(x.req, x.res); err != nil {
 			x.exp.stage(
 				xplain.StageAuth,
@@ -834,6 +841,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 		secs = InjectedAuthSecrets(x.req.Metadata.Auth, before, x.req)
 	}
 	x.secrets.Add(secs...)
+	x.addCredentialHeaders(InjectedAuthHeaders(before, x.req)...)
 	x.exp.stage(xplain.StageAuth, xplain.StageOK, xplain.SummaryAuthPrepared, before, x.req)
 	return nil
 }
@@ -1122,6 +1130,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		)
 	}
 	tests, globalChanges, testErr := x.eng.sc.RunTests(
+		x.sendCtx,
 		x.req.Metadata.Scripts,
 		scripts.TestInput{
 			Response:  respForScripts,

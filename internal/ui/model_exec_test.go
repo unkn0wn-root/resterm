@@ -37,7 +37,6 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// runCmd flattens startRun's pair for tests that only need the command.
 func runCmd(cmd tea.Cmd, _ bool) tea.Cmd { return cmd }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -954,7 +953,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 	resolver := vars.NewResolver()
-	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
+	if _, err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		resolver,
@@ -976,7 +975,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}
 
 	req2 := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
-	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
+	if _, err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req2,
 		resolver,
@@ -1015,7 +1014,7 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 			}},
 		},
 	}
-	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
+	if _, err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1106,7 +1105,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 
-	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
+	if _, err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1117,7 +1116,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 		t.Fatalf("ensureOAuth stage: %v", err)
 	}
 	req.Headers = nil
-	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
+	if _, err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1132,7 +1131,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}
 
 	req.Headers = nil
-	if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
+	if _, err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1169,7 +1168,7 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := model.requestSvc(httpx.Options{}).EnsureOAuth(
+		if _, err := model.requestSvc(httpx.Options{}).EnsureOAuth(
 			ctx,
 			req,
 			resolver,
@@ -2003,13 +2002,11 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 		ws: workspace{sel: testSelection("dev")},
 	}
 
-	// Prepare the cookie jar
 	u, _ := url.Parse(srv.URL)
 	model.cookieStore().Jar(testEnv("dev").Scope()).SetCookies(u, []*http.Cookie{
 		{Name: "session", Value: "active"},
 	})
 
-	// First request to check the cookie is set by default
 	req := &restfile.Request{
 		Method: "GET",
 		URL:    srv.URL,
@@ -2035,7 +2032,6 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 		t.Fatalf("expected cookie session=active in dev env, got %q", respBodyString)
 	}
 
-	// Second request with setting to skip cookies
 	reqWithSetting := &restfile.Request{
 		Method:   "GET",
 		URL:      srv.URL,

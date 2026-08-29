@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -68,7 +69,9 @@ func buildOptions(o Options) (runner.Options, error) {
 	if err := b.buildCompare(); err != nil {
 		return runner.Options{}, err
 	}
-	b.buildHTTP()
+	if err := b.buildHTTP(); err != nil {
+		return runner.Options{}, err
+	}
 	b.buildGRPC()
 	b.finalize()
 	return b.out, nil
@@ -148,8 +151,13 @@ func (b *builder) buildCompare() error {
 	return nil
 }
 
-func (b *builder) buildHTTP() {
-	b.out.HTTPOptions = httpOptions(b.opt.HTTP)
+func (b *builder) buildHTTP() error {
+	opts, err := httpOptions(b.opt.HTTP)
+	if err != nil {
+		return err
+	}
+	b.out.HTTPOptions = opts
+	return nil
 }
 
 func (b *builder) buildGRPC() {
@@ -169,13 +177,34 @@ func (b *builder) finalize() {
 	b.out.Profile = b.opt.Profile.Enabled
 }
 
-func httpOptions(opt HTTPOptions) httpx.Options {
-	return httpx.Options{
+func httpOptions(opt HTTPOptions) (httpx.Options, error) {
+	out := httpx.Options{
 		Timeout:            timeoutOf(opt.Timeout),
 		FollowRedirects:    boolOr(opt.FollowRedirects, true),
 		InsecureSkipVerify: opt.InsecureSkipVerify,
 		ProxyURL:           str.Trim(opt.ProxyURL),
 	}
+	if opt.MaxRedirects != nil {
+		if err := nonNegative("http.maxRedirects", int64(*opt.MaxRedirects)); err != nil {
+			return httpx.Options{}, err
+		}
+		out.MaxRedirects = restfile.OptOf(*opt.MaxRedirects)
+	}
+	if opt.MaxResponseBytes != nil {
+		if err := nonNegative("http.maxResponseBytes", *opt.MaxResponseBytes); err != nil {
+			return httpx.Options{}, err
+		}
+		// Zero means no limit, the same as max-response-size none.
+		out.MaxResponseBytes = bytesize.Of(*opt.MaxResponseBytes)
+	}
+	return out, nil
+}
+
+func nonNegative(name string, value int64) error {
+	if value < 0 {
+		return UsageError{err: fmt.Errorf("%s: %d must be non-negative", name, value)}
+	}
+	return nil
 }
 
 func grpcOptions(opt GRPCOptions) grpcx.Options {

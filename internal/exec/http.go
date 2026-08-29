@@ -285,6 +285,7 @@ func (r Runner) finalizeHTTP(
 	}
 	traceInput := scripts.NewTraceInput(resp.Timeline, traceSpec)
 	tests, globalChanges, testErr := in.Scripts.RunTests(
+		in.Context,
 		in.Req.Metadata.Scripts,
 		scripts.TestInput{
 			Response:  respForScripts,
@@ -380,12 +381,14 @@ func convertSSETranscript(t *httpx.SSETranscript) *scripts.StreamInfo {
 	if t == nil {
 		return nil
 	}
-	info := &scripts.StreamInfo{Kind: "sse"}
+	info := &scripts.StreamInfo{Kind: "sse", Err: t.Summary.Err()}
 	info.Summary = map[string]any{
 		"eventCount": t.Summary.EventCount,
 		"byteCount":  t.Summary.ByteCount,
 		"duration":   t.Summary.Duration,
 		"reason":     t.Summary.Reason,
+		"dropped":    t.Summary.Dropped,
+		"error":      t.Summary.Error,
 	}
 	if len(t.Events) > 0 {
 		events := make([]map[string]any, len(t.Events))
@@ -409,7 +412,7 @@ func convertWebSocketTranscript(t *httpx.WebSocketTranscript) *scripts.StreamInf
 	if t == nil {
 		return nil
 	}
-	info := &scripts.StreamInfo{Kind: "websocket"}
+	info := &scripts.StreamInfo{Kind: "websocket", Err: t.Summary.Err()}
 	info.Summary = map[string]any{
 		"sentCount":     t.Summary.SentCount,
 		"receivedCount": t.Summary.ReceivedCount,
@@ -417,6 +420,7 @@ func convertWebSocketTranscript(t *httpx.WebSocketTranscript) *scripts.StreamInf
 		"closedBy":      t.Summary.ClosedBy,
 		"closeCode":     t.Summary.CloseCode,
 		"closeReason":   t.Summary.CloseReason,
+		"dropped":       t.Summary.Dropped,
 	}
 	if len(t.Events) > 0 {
 		events := make([]map[string]any, len(t.Events))

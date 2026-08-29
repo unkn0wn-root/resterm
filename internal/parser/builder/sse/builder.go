@@ -69,15 +69,35 @@ func (b *Builder) applyOption(name, value string) error {
 		}
 		b.options.MaxEvents = n
 	case "max-bytes", "limit-bytes":
-		size, err := bytesize.Parse(value)
+		size, err := sseSize(name, value)
 		if err != nil {
-			return fmt.Errorf("invalid @sse %s %q: %w", name, value, err)
+			return err
 		}
 		b.options.MaxBytes = size
+	case "max-line-bytes":
+		size, err := sseSize(name, value)
+		if err != nil {
+			return err
+		}
+		b.options.MaxLineBytes = size
+	case "max-event-bytes":
+		size, err := sseSize(name, value)
+		if err != nil {
+			return err
+		}
+		b.options.MaxEventBytes = size
 	default:
 		return directive.UnknownOption(directive.SSE, name)
 	}
 	return nil
+}
+
+func sseSize(name, value string) (int64, error) {
+	size, err := bytesize.Parse(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid @sse %s %q: %w", name, value, err)
+	}
+	return size, nil
 }
 
 func sseDuration(name, value string) (time.Duration, error) {

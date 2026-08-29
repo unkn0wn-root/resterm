@@ -1,22 +1,39 @@
 package httpx
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
 	"strconv"
 
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
+const DefaultWebSocketTranscriptBytes = 8 << 20
+
 type wsAccumulator struct {
 	events  []WebSocketEvent
 	summary WebSocketSummary
+	bytes   int64
+	limit   int64
+	closed  bool
 }
 
 func newWSAccumulator() *wsAccumulator {
 	return &wsAccumulator{
-		events:  make([]WebSocketEvent, 0, 16),
-		summary: WebSocketSummary{},
+		events: make([]WebSocketEvent, 0, 16),
+		limit:  DefaultWebSocketTranscriptBytes,
 	}
+}
+
+func (a *wsAccumulator) keep(evt *stream.Event) bool {
+	size := evt.Size()
+	if a.limit > 0 && a.bytes+size > a.limit {
+		a.summary.Dropped++
+		return false
+	}
+	a.bytes += size
+	return true
 }
 
 func (a *wsAccumulator) consume(evt *stream.Event) {
@@ -67,13 +84,20 @@ func (a *wsAccumulator) consume(evt *stream.Event) {
 				jsonEvt.Reason = evt.WS.Reason
 			}
 		}
-		a.events = append(a.events, jsonEvt)
+		if a.keep(evt) {
+			a.events = append(a.events, jsonEvt)
+		}
 		if evt.Direction == stream.DirSend {
 			a.summary.SentCount++
 		} else {
 			a.summary.ReceivedCount++
 		}
-		if typ == "close" {
+		// Both sides send a close frame, so only the first one names who ended
+		// the session. A close resterm sends is published before the reply it
+		// gets back, and a close it never managed to send is not published at
+		// all, which leaves the peer's frame first.
+		if typ == "close" && !a.closed {
+			a.closed = true
 			if meta != nil {
 				if by, ok := meta[wsMetaClosedBy]; ok {
 					a.summary.ClosedBy = by
@@ -122,21 +146,30 @@ func directionToString(dir stream.Direction) string {
 	}
 }
 
+// applyWebSocketSummaryDefaults fills in who ended a session when the events did
+// not say. A timeout and a canceled run get their own names because neither one
+// is a failure.
 func applyWebSocketSummaryDefaults(sum *WebSocketSummary, state stream.State, stateErr error) {
 	if sum == nil {
 		return
 	}
 	if sum.ClosedBy == "" {
-		if state == stream.StateFailed || stateErr != nil {
-			sum.ClosedBy = "error"
-			if sum.CloseReason == "" && stateErr != nil {
-				sum.CloseReason = stateErr.Error()
-			}
-		} else {
-			sum.ClosedBy = "client"
+		switch {
+		case errors.Is(stateErr, context.Canceled):
+			sum.ClosedBy = wsClosedByCanceled
+		case errors.Is(stateErr, context.DeadlineExceeded):
+			sum.ClosedBy = wsClosedByTimeout
+		case state == stream.StateFailed || stateErr != nil:
+			sum.ClosedBy = wsClosedByError
+		default:
+			sum.ClosedBy = wsClosedByClient
 		}
 	}
-	if sum.CloseReason == "" && stateErr != nil && sum.ClosedBy == "error" {
+	if sum.CloseReason != "" || stateErr == nil {
+		return
+	}
+	switch sum.ClosedBy {
+	case wsClosedByCanceled, wsClosedByTimeout, wsClosedByError:
 		sum.CloseReason = stateErr.Error()
 	}
 }

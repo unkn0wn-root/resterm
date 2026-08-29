@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -18,7 +19,10 @@ import (
 type liveSession struct {
 	id          string
 	events      []*stream.Event
+	bytes       int64
 	maxEvents   int
+	maxBytes    int64
+	lost        streamLoss
 	state       stream.State
 	err         error
 	kind        stream.Kind
@@ -31,67 +35,102 @@ type liveSession struct {
 	done        bool
 }
 
+// streamLoss counts the events a pane is not showing, split by where they were
+// lost. The three sources update differently, so they cannot share a counter.
+type streamLoss struct {
+	evicted  uint64 // dropped by the session before the pane subscribed
+	listener uint64 // dropped on the way from the session to the pane
+	trimmed  uint64 // dropped by the pane's own limits
+}
+
+func (l streamLoss) total() uint64 {
+	return l.evicted + l.listener + l.trimmed
+}
+
 func (ls *liveSession) failed() bool {
 	return ls != nil && (ls.err != nil || ls.state == stream.StateFailed)
 }
+
+const defaultLiveSessionBytes = 16 << 20
 
 func newLiveSession(id string, max int) *liveSession {
 	if max <= 0 {
 		max = 5000
 	}
-	return &liveSession{id: id, maxEvents: max, pausedIndex: -1, bookmarkIdx: -1}
+	return &liveSession{
+		id:          id,
+		maxEvents:   max,
+		maxBytes:    defaultLiveSessionBytes,
+		pausedIndex: -1,
+		bookmarkIdx: -1,
+	}
 }
 
 func (ls *liveSession) append(events []*stream.Event) {
 	if len(events) == 0 {
 		return
 	}
-	ls.events = append(ls.events, cloneEventSlice(events)...)
-	if len(ls.events) > ls.maxEvents {
-		trim := len(ls.events) - ls.maxEvents
-		ls.events = append([]*stream.Event(nil), ls.events[trim:]...)
-		if ls.paused && ls.pausedIndex >= 0 {
-			ls.pausedIndex -= trim
-			if ls.pausedIndex < 0 {
-				ls.pausedIndex = 0
-			}
-			if ls.pausedIndex > len(ls.events) {
-				ls.pausedIndex = len(ls.events)
-			}
-		}
-		if len(ls.bookmarks) > 0 {
-			filtered := ls.bookmarks[:0]
-			for _, bm := range ls.bookmarks {
-				idx := bm.Index - trim
-				if idx < 0 {
-					continue
-				}
-				if idx > len(ls.events) {
-					idx = len(ls.events)
-				}
-				bm.Index = idx
-				filtered = append(filtered, bm)
-			}
-			ls.bookmarks = filtered
-			if len(ls.bookmarks) == 0 {
-				ls.bookmarkIdx = -1
-			} else if ls.bookmarkIdx >= len(ls.bookmarks) {
-				ls.bookmarkIdx = len(ls.bookmarks) - 1
-			}
-		}
+	added := cloneEventSlice(events)
+	ls.events = append(ls.events, added...)
+	for _, evt := range added {
+		ls.bytes += evt.Size()
 	}
+	ls.trimOverflow()
 	if ls.paused && ls.pausedIndex == -1 {
 		ls.pausedIndex = len(ls.events)
 	}
 }
 
+func (ls *liveSession) trimOverflow() {
+	trim := 0
+	bytes := ls.bytes
+	for trim < len(ls.events)-1 {
+		if len(ls.events)-trim <= ls.maxEvents && (ls.maxBytes <= 0 || bytes <= ls.maxBytes) {
+			break
+		}
+		bytes -= ls.events[trim].Size()
+		trim++
+	}
+	if trim == 0 {
+		return
+	}
+
+	ls.lost.trimmed += uint64(trim)
+	ls.events = slices.Clone(ls.events[trim:])
+	ls.bytes = bytes
+	if ls.paused && ls.pausedIndex >= 0 {
+		ls.pausedIndex = min(max(ls.pausedIndex-trim, 0), len(ls.events))
+	}
+	if len(ls.bookmarks) == 0 {
+		return
+	}
+
+	filtered := ls.bookmarks[:0]
+	for _, bm := range ls.bookmarks {
+		idx := bm.Index - trim
+		if idx < 0 {
+			continue
+		}
+		bm.Index = min(idx, len(ls.events))
+		filtered = append(filtered, bm)
+	}
+	ls.bookmarks = filtered
+	if len(ls.bookmarks) == 0 {
+		ls.bookmarkIdx = -1
+	} else if ls.bookmarkIdx >= len(ls.bookmarks) {
+		ls.bookmarkIdx = len(ls.bookmarks) - 1
+	}
+}
+
 // reset empties the buffer and every view applied to it. The session itself
-// keeps running, so new events land in a clean transcript.
+// keeps running, so new events land in a clean transcript. Events the pane never
+// received stay counted, because clearing the view does not bring them back.
 func (ls *liveSession) reset() {
 	if ls == nil {
 		return
 	}
 	ls.events = nil
+	ls.bytes = 0
 	ls.filter = ""
 	ls.paused = false
 	ls.pausedIndex = -1

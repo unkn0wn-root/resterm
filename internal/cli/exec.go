@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -28,6 +29,8 @@ type ExecFlags struct {
 	Insecure          bool
 	Follow            bool
 	ProxyURL          string
+	MaxResponseSize   string
+	MaxRedirects      int
 	Recursive         bool
 	CompareTargetsRaw string
 	CompareBaseline   string
@@ -50,9 +53,10 @@ type ExecConfig struct {
 func NewExecFlags() ExecFlags {
 	tc := telemetry.ConfigFromEnv(os.Getenv)
 	return ExecFlags{
-		Timeout:   30 * time.Second,
-		Follow:    true,
-		telemetry: tc,
+		Timeout:      30 * time.Second,
+		Follow:       true,
+		MaxRedirects: httpx.DefaultMaxRedirects,
+		telemetry:    tc,
 	}
 }
 
@@ -74,7 +78,21 @@ func (f *ExecFlags) Bind(fs *flag.FlagSet) {
 	DurationVarAliases(fs, &f.Timeout, f.Timeout, "Request timeout", "timeout", "t")
 	BoolVarAliases(fs, &f.Insecure, false, "Skip TLS certificate verification", "insecure", "k")
 	BoolVarAliases(fs, &f.Follow, f.Follow, "Follow redirects", "follow", "L")
+	IntVarAliases(
+		fs,
+		&f.MaxRedirects,
+		f.MaxRedirects,
+		"Redirects to follow before giving up (0 follows none)",
+		"max-redirects",
+	)
 	StringVarAliases(fs, &f.ProxyURL, "", "HTTP proxy URL", "proxy", "x")
+	StringVarAliases(
+		fs,
+		&f.MaxResponseSize,
+		"",
+		"Response body limit such as 100mb, or none to read without a limit",
+		"max-response-size",
+	)
 	BoolVarAliases(
 		fs,
 		&f.Recursive,
@@ -219,6 +237,20 @@ func (f ExecFlags) ResolveSession(filePath string) (ExecConfig, error) {
 		FollowRedirects:    f.Follow,
 		InsecureSkipVerify: f.Insecure,
 		ProxyURL:           f.ProxyURL,
+	}
+	if f.MaxRedirects < 0 {
+		return ExecConfig{}, fmt.Errorf(
+			"invalid --max-redirects value: %d must be non-negative",
+			f.MaxRedirects,
+		)
+	}
+	httpOpts.MaxRedirects = restfile.OptOf(f.MaxRedirects)
+	if f.MaxResponseSize != "" {
+		limit, err := bytesize.ParseBudget(f.MaxResponseSize)
+		if err != nil {
+			return ExecConfig{}, fmt.Errorf("invalid --max-response-size value: %w", err)
+		}
+		httpOpts.MaxResponseBytes = limit
 	}
 	if filePath != "" {
 		httpOpts.BaseDir = filepath.Dir(filePath)

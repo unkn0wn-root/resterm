@@ -1,10 +1,10 @@
 package httpx
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"time"
@@ -24,6 +24,15 @@ const (
 	wsMetaClosedBy    = "resterm.ws.closed.by"
 	wsMetaCloseCode   = "resterm.ws.close.code"
 	wsMetaCloseReason = "resterm.ws.close.reason"
+)
+
+// Values used for WebSocketSummary.ClosedBy.
+const (
+	wsClosedByServer   = "server"
+	wsClosedByClient   = "client"
+	wsClosedByTimeout  = "timeout"
+	wsClosedByCanceled = "canceled"
+	wsClosedByError    = "error"
 )
 
 const defaultWebSocketSendQueue = 32
@@ -59,11 +68,31 @@ type WebSocketSummary struct {
 	ClosedBy      string        `json:"closedBy"`
 	CloseCode     int           `json:"closeCode,omitempty"`
 	CloseReason   string        `json:"closeReason,omitempty"`
+	Dropped       int64         `json:"dropped,omitempty"`
 }
 
 type WebSocketTranscript struct {
 	Events  []WebSocketEvent `json:"events"`
 	Summary WebSocketSummary `json:"summary"`
+}
+
+// Err reports the failure that ended the session. A close either side asked for
+// and a timeout are normal endings and return nil.
+func (s WebSocketSummary) Err() error {
+	switch s.ClosedBy {
+	case wsClosedByCanceled:
+		return diag.New(
+			diag.ClassCanceled,
+			cmp.Or(s.CloseReason, "websocket stream canceled"),
+		)
+	case wsClosedByError:
+		return diag.New(
+			diag.ClassProtocol,
+			cmp.Or(s.CloseReason, "websocket stream failed"),
+		)
+	default:
+		return nil
+	}
 }
 
 type WebSocketHandle struct {
@@ -148,7 +177,7 @@ func (c *Client) StartWebSocket(
 	if err != nil {
 		handshakeCancel()
 		if resp != nil {
-			fallback, convErr := buildWebSocketFallback(resp, req, start)
+			fallback, convErr := buildWebSocketFallback(resp, req, start, effectiveOpts)
 			if convErr != nil {
 				return nil, nil, convErr
 			}
@@ -188,9 +217,7 @@ func (c *Client) StartWebSocket(
 	}
 	runtime.touchActivity()
 
-	if wsOpts.MaxMessageBytes > 0 {
-		conn.SetReadLimit(wsOpts.MaxMessageBytes)
-	}
+	conn.SetReadLimit(webSocketReadLimit(wsOpts.MaxMessageBytes))
 
 	if wsOpts.IdleTimeout > 0 {
 		go runtime.idleWatch(wsOpts.IdleTimeout)
@@ -259,6 +286,7 @@ func (c *Client) CompleteWebSocket(
 	defer listener.Cancel()
 
 	acc := newWSAccumulator()
+	lost := listener.Snapshot.Evicted
 	for _, evt := range listener.Snapshot.Events {
 		acc.consume(evt)
 	}
@@ -299,6 +327,9 @@ func (c *Client) CompleteWebSocket(
 	}
 
 	<-eventsDone
+	// The listener's count is only final once it has drained.
+	lost += listener.Dropped()
+	acc.summary.Dropped += int64(lost)
 
 	state, stateErr := session.State()
 	stats := session.StatsSnapshot()
@@ -321,11 +352,7 @@ func (c *Client) CompleteWebSocket(
 	}
 	headers.Set("Content-Type", streamContentTypeJSON)
 	headers.Set(StreamHeaderType, "websocket")
-	headers.Set(StreamHeaderSummary, fmt.Sprintf(
-		"sent=%d recv=%d closed=%s",
-		transcript.Summary.SentCount,
-		transcript.Summary.ReceivedCount,
-		transcript.Summary.ClosedBy))
+	headers.Set(StreamHeaderSummary, webSocketSummaryLine(transcript.Summary))
 
 	meta := handle.Meta
 	if meta.Status == "" {
@@ -340,10 +367,24 @@ func (c *Client) CompleteWebSocket(
 	return streamResp(meta, headers, body, acc.summary.Duration), nil
 }
 
+func webSocketSummaryLine(sum WebSocketSummary) string {
+	line := fmt.Sprintf(
+		"sent=%d recv=%d closed=%s",
+		sum.SentCount,
+		sum.ReceivedCount,
+		sum.ClosedBy,
+	)
+	if sum.Dropped > 0 {
+		line += fmt.Sprintf(" dropped=%d", sum.Dropped)
+	}
+	return line
+}
+
 func buildWebSocketFallback(
 	httpResp *http.Response,
 	req *restfile.Request,
 	started time.Time,
+	opts Options,
 ) (*Response, error) {
 	if httpResp == nil {
 		return nil, diag.New(diag.ClassProtocol, "websocket handshake response unavailable")
@@ -351,10 +392,10 @@ func buildWebSocketFallback(
 
 	var body []byte
 	if httpResp.Body != nil {
-		data, err := io.ReadAll(httpResp.Body)
+		data, err := opts.readBody(httpResp.Body)
 		closeErr := httpResp.Body.Close()
 		if err != nil {
-			return nil, diag.WrapAs(diag.ClassProtocol, err, "read websocket handshake body")
+			return nil, err
 		}
 		if closeErr != nil {
 			return nil, diag.WrapAs(diag.ClassProtocol, closeErr, "close websocket handshake body")

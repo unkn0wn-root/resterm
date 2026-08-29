@@ -159,7 +159,7 @@ func TestApplyAuthenticationSkipsUnusedParams(t *testing.T) {
 		Params: map[string]string{"token": "{{missing}}"},
 	}
 
-	if err := c.applyAuthentication(httpReq, vars.NewResolver(), auth); err != nil {
+	if _, err := c.applyAuthentication(httpReq, vars.NewResolver(), auth); err != nil {
 		t.Fatalf("unexpected error for unused auth param: %v", err)
 	}
 	if got := httpReq.Header.Get("Authorization"); got != "Bearer explicit" {
@@ -173,15 +173,13 @@ func TestApplyAuthenticationSkipsUnusedParamsForLowercaseHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	// A block assigned straight into the header map keeps the case it was
-	// written with, so auth has to see the name without canonicalizing it.
 	httpReq.Header = http.Header{"authorization": {"Bearer explicit"}}
 	auth := &restfile.AuthSpec{
 		Type:   "bearer",
 		Params: map[string]string{"token": "{{missing}}"},
 	}
 
-	if err := c.applyAuthentication(httpReq, vars.NewResolver(), auth); err != nil {
+	if _, err := c.applyAuthentication(httpReq, vars.NewResolver(), auth); err != nil {
 		t.Fatalf("unexpected error for case-insensitive auth override: %v", err)
 	}
 	if got := header.Value(httpReq.Header, "Authorization"); got != "Bearer explicit" {
@@ -484,7 +482,7 @@ func TestApplyAuthenticationInvalidPlacementErrors(t *testing.T) {
 		},
 	}
 
-	err = c.applyAuthentication(httpReq, vars.NewResolver(), auth)
+	_, err = c.applyAuthentication(httpReq, vars.NewResolver(), auth)
 	if err == nil || !strings.Contains(err.Error(), `invalid apikey auth placement "qurey"`) {
 		t.Fatalf("expected invalid placement error, got %v", err)
 	}
@@ -504,7 +502,7 @@ func TestApplyAuthenticationEmptyPlacementDefaultsToHeader(t *testing.T) {
 		Params: map[string]string{"name": "X-Key", "value": "k-123"},
 	}
 
-	if err := c.applyAuthentication(httpReq, vars.NewResolver(), auth); err != nil {
+	if _, err := c.applyAuthentication(httpReq, vars.NewResolver(), auth); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := httpReq.Header.Get("X-Key"); got != "k-123" {
@@ -555,7 +553,7 @@ func TestApplyAuthenticationLenientAPIKeyPlacement(t *testing.T) {
 				},
 			}
 
-			err = c.applyAuthentication(httpReq, vars.NewResolver().Lenient(), auth)
+			_, err = c.applyAuthentication(httpReq, vars.NewResolver().Lenient(), auth)
 			if tt.wantError == "" && err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

@@ -8,6 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/history"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -218,7 +219,7 @@ func redactText(text string, secs []string, maskHdr bool) string {
 		if colon <= 0 {
 			continue
 		}
-		if !IsSensitiveHeader(ln[:colon]) {
+		if !header.Sensitive(ln[:colon]) {
 			continue
 		}
 		rest := ln[colon+1:]

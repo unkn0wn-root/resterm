@@ -182,6 +182,8 @@ func renderSSEDirectiveLine(opts restfile.SSEOptions) string {
 		durationDirectivePart("idle", opts.IdleTimeout),
 		intDirectivePart("max-events", opts.MaxEvents),
 		int64DirectivePart("max-bytes", opts.MaxBytes),
+		int64DirectivePart("max-line-bytes", opts.MaxLineBytes),
+		int64DirectivePart("max-event-bytes", opts.MaxEventBytes),
 	)
 }
 

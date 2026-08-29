@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,8 +11,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -23,16 +26,68 @@ const (
 	sseMetaReason = "resterm.summary.reason"
 	sseMetaBytes  = "resterm.summary.bytes"
 	sseMetaEvents = "resterm.summary.events"
+	sseMetaError  = "resterm.summary.error"
 )
 
 const (
-	sseReasonEOF       = "eof"
-	sseReasonErr       = "error"
-	sseReasonIdle      = "timeout:idle"
-	sseReasonMaxBytes  = "limit:max_bytes"
-	sseReasonMaxEvents = "limit:max_events"
-	sseReasonCanceled  = "context_canceled"
+	sseReasonEOF        = "eof"
+	sseReasonErr        = "error"
+	sseReasonIdle       = "timeout:idle"
+	sseReasonMaxBytes   = "limit:max_bytes"
+	sseReasonMaxEvents  = "limit:max_events"
+	sseReasonLineBytes  = "limit:line_bytes"
+	sseReasonEventBytes = "limit:event_bytes"
+	sseReasonTotal      = "timeout:total"
+	sseReasonCanceled   = "context_canceled"
 )
+
+const (
+	DefaultSSEMaxLineBytes  = 4 << 20
+	DefaultSSEMaxEventBytes = 8 << 20
+	DefaultSSESessionBytes  = 16 << 20
+)
+
+var (
+	errSSELineTooLong   = errors.New("sse line exceeds the line limit")
+	errSSEEventTooLarge = errors.New("sse event exceeds the event limit")
+)
+
+type sseLimits struct {
+	stream int64
+	line   int64
+	event  int64
+}
+
+func sseLimitsFor(opts restfile.SSEOptions) sseLimits {
+	return sseLimits{
+		stream: opts.MaxBytes,
+		line:   cmp.Or(opts.MaxLineBytes, DefaultSSEMaxLineBytes),
+		event:  cmp.Or(opts.MaxEventBytes, DefaultSSEMaxEventBytes),
+	}
+}
+
+func (l sseLimits) sessionBytes() bytesize.Budget {
+	// Keep room for a full event and the summary event that follows it.
+	return bytesize.Of(max(int64(DefaultSSESessionBytes), 2*l.event))
+}
+
+func (l sseLimits) lineBudget(read int64) int {
+	budget := l.line
+	if l.stream > 0 {
+		budget = min(budget, l.stream-read+1)
+	}
+	return int(budget)
+}
+
+func sseOverrun(subject string, limit int64, option string) error {
+	return diag.Newf(
+		diag.ClassProtocol,
+		"sse %s exceeds %d bytes, raise it with @sse %s",
+		subject,
+		limit,
+		option,
+	)
+}
 
 type SSEEvent struct {
 	Index     int       `json:"index"`
@@ -49,11 +104,27 @@ type SSESummary struct {
 	ByteCount  int64         `json:"byteCount"`
 	Duration   time.Duration `json:"duration"`
 	Reason     string        `json:"reason"`
+	Dropped    int64         `json:"dropped,omitempty"`
+	Error      string        `json:"error,omitempty"`
 }
 
 type SSETranscript struct {
 	Events  []SSEEvent `json:"events"`
 	Summary SSESummary `json:"summary"`
+}
+
+// Err reports the failure that ended the stream. Reaching a configured limit or
+// timeout is a normal ending and returns nil. A broken read, or a line or event
+// larger than its limit, is a failure.
+func (s SSESummary) Err() error {
+	switch {
+	case s.Reason == sseReasonCanceled:
+		return diag.New(diag.ClassCanceled, cmp.Or(s.Error, "sse stream canceled"))
+	case s.Reason == sseReasonErr, s.Error != "":
+		return diag.New(diag.ClassProtocol, cmp.Or(s.Error, "sse stream failed"))
+	default:
+		return nil
+	}
 }
 
 func (c *Client) StartSSE(
@@ -108,11 +179,11 @@ func (c *Client) StartSSE(
 
 	contentType := strings.ToLower(httpResp.Header.Get("Content-Type"))
 	if httpResp.StatusCode >= 400 || !strings.Contains(contentType, "text/event-stream") {
-		body, readErr := io.ReadAll(httpResp.Body)
+		body, readErr := effectiveOpts.readBody(httpResp.Body)
 		closeErr := httpResp.Body.Close()
 		cancel()
 		if readErr != nil {
-			return nil, nil, diag.WrapAs(diag.ClassProtocol, readErr, "read response body")
+			return nil, nil, readErr
 		}
 		if closeErr != nil {
 			return nil, nil, diag.WrapAs(diag.ClassProtocol, closeErr, "close response body")
@@ -122,7 +193,9 @@ func (c *Client) StartSSE(
 
 	meta := buildStreamMeta(req, httpReq, httpResp, effectiveOpts.BaseDir, metaDefaults{})
 
-	session := stream.NewSession(streamCtx, stream.KindSSE, stream.Config{})
+	session := stream.NewSession(streamCtx, stream.KindSSE, stream.Config{
+		MaxBytes: sseLimitsFor(streamOpts).sessionBytes(),
+	})
 	session.MarkOpen()
 
 	go func() {
@@ -130,7 +203,7 @@ func (c *Client) StartSSE(
 		defer func() {
 			_ = httpResp.Body.Close()
 		}()
-		runSSESession(session, httpResp.Body, streamOpts)
+		runSSESession(session, httpResp.Body, streamOpts, cancel)
 	}()
 
 	return &StreamHandle{Session: session, Meta: meta}, nil, nil
@@ -167,6 +240,7 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	}
 
 	stats := session.StatsSnapshot()
+	acc.summary.Dropped = int64(stats.Evicted)
 	if !stats.EndedAt.IsZero() {
 		acc.summary.Duration = stats.EndedAt.Sub(stats.StartedAt)
 	} else {
@@ -179,20 +253,17 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 		acc.summary.EventCount = len(acc.events)
 	}
 	state, serr := session.State()
-	if acc.summary.Reason == "" {
-		if serr != nil {
-			acc.summary.Reason = serr.Error()
-		} else if state == stream.StateFailed {
-			acc.summary.Reason = sseReasonErr
-		} else {
-			acc.summary.Reason = sseReasonEOF
-		}
-	} else if acc.summary.Reason == sseReasonEOF && (state == stream.StateFailed || serr != nil) {
-		if serr != nil {
-			acc.summary.Reason = serr.Error()
-		} else {
-			acc.summary.Reason = sseReasonErr
-		}
+	if acc.summary.Error == "" && serr != nil {
+		acc.summary.Error = serr.Error()
+	}
+	// The run already set a reason naming the limit it stopped at, so keep it.
+	// Only "eof" gives way, because a failed session contradicts it.
+	failed := serr != nil || state == stream.StateFailed
+	switch {
+	case failed && (acc.summary.Reason == "" || acc.summary.Reason == sseReasonEOF):
+		acc.summary.Reason = sseReasonErr
+	case acc.summary.Reason == "":
+		acc.summary.Reason = sseReasonEOF
 	}
 
 	transcript := SSETranscript{Events: acc.events, Summary: acc.summary}
@@ -207,124 +278,219 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	}
 	headers.Set("Content-Type", streamContentTypeJSON)
 	headers.Set(StreamHeaderType, "sse")
-	headers.Set(
-		StreamHeaderSummary,
-		fmt.Sprintf(
-			"events=%d bytes=%d reason=%s",
-			transcript.Summary.EventCount,
-			transcript.Summary.ByteCount,
-			transcript.Summary.Reason,
-		),
-	)
+	headers.Set(StreamHeaderSummary, sseSummaryLine(transcript.Summary))
 
 	return streamResp(handle.Meta, headers, body, acc.summary.Duration), nil
 }
 
 // Idle timer watches for activity resets - each incoming byte triggers a reset.
 // The drain logic after Stop() handles the race where the timer fires just before we reset.
-func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SSEOptions) {
+func runSSESession(
+	session *stream.Session,
+	body io.ReadCloser,
+	opts restfile.SSEOptions,
+	stopRead context.CancelFunc,
+) {
+	limits := sseLimitsFor(opts)
+	run := &sseRun{
+		session: session,
+		reader:  bufio.NewReader(body),
+		opts:    opts,
+		limits:  limits,
+		builder: sseEventBuilder{limit: limits.event},
+		summary: SSESummary{Reason: sseReasonEOF},
+	}
+
 	ctx := session.Context()
-	reader := bufio.NewReader(body)
-	summary := SSESummary{Reason: sseReasonEOF}
-
-	var (
-		builder    sseEventBuilder
-		index      int
-		byteCount  int64
-		eventCount int
-	)
-
-	idleReset, stopIdle := startIdleWatch(ctx, opts.IdleTimeout, func() {
-		summary.Reason = sseReasonIdle
-		session.Cancel()
+	var stopIdle func()
+	run.idle, stopIdle = startIdleWatch(ctx, opts.IdleTimeout, func() {
+		run.idled.Store(true)
+		// Cancel the request because stopping the session does not unblock the read.
+		stopRead()
 	})
 	defer stopIdle()
 
+	run.finish(ctx, run.loop(ctx))
+}
+
+type sseRun struct {
+	session *stream.Session
+	reader  *bufio.Reader
+	opts    restfile.SSEOptions
+	limits  sseLimits
+	builder sseEventBuilder
+	summary SSESummary
+	failure error
+	idle    chan<- struct{}
+	idled   atomic.Bool
+	index   int
+	events  int
+	bytes   int64
+}
+
+func (r *sseRun) loop(ctx context.Context) error {
 	for {
-		if opts.MaxBytes > 0 && byteCount >= opts.MaxBytes {
-			if summary.Reason == "" || summary.Reason == sseReasonEOF {
-				summary.Reason = sseReasonMaxBytes
-			}
-			break
+		if r.capped() {
+			r.stop(sseReasonMaxBytes)
+			return nil
 		}
 
-		line, err := reader.ReadString('\n')
-		if len(line) > 0 {
-			byteCount += int64(len(line))
-			if idleReset != nil {
-				select {
-				case idleReset <- struct{}{}:
-				default:
-				}
+		line, err := r.next()
+
+		if errors.Is(err, errSSELineTooLong) {
+			if r.capped() {
+				r.summary.Reason = sseReasonMaxBytes
+				return nil
 			}
+			r.summary.Reason = sseReasonLineBytes
+			r.failure = sseOverrun("line", r.limits.line, "max-line-bytes")
+			return nil
 		}
 
-		limitReached := opts.MaxBytes > 0 && byteCount >= opts.MaxBytes
+		capped := r.capped()
 
 		if err != nil && !errors.Is(err, io.EOF) {
-			session.Close(diag.WrapAs(diag.ClassProtocol, err, "read sse stream"))
-			return
+			if ctx.Err() != nil {
+				r.stop(r.ended(ctx))
+				return nil
+			}
+			return diag.WrapAs(diag.ClassProtocol, err, "read sse stream")
 		}
 
-		trimmed := strings.TrimRight(line, "\r\n")
-		if trimmed == "" {
-			if evt, ok := builder.finalize(index); ok {
-				publishSSEEvent(session, evt)
-				index++
-				eventCount++
-				if opts.MaxEvents > 0 && eventCount >= opts.MaxEvents {
-					summary.Reason = sseReasonMaxEvents
-					break
-				}
+		if trimmed := strings.TrimRight(line, "\r\n"); trimmed == "" {
+			if r.flush() && r.opts.MaxEvents > 0 && r.events >= r.opts.MaxEvents {
+				r.summary.Reason = sseReasonMaxEvents
+				return nil
 			}
-		} else {
-			if err := builder.consume(trimmed); err != nil {
-				session.Close(err)
-				return
+		} else if cerr := r.builder.consume(trimmed); cerr != nil {
+			if !errors.Is(cerr, errSSEEventTooLarge) {
+				return cerr
 			}
+			r.summary.Reason = sseReasonEventBytes
+			r.failure = sseOverrun("event", r.limits.event, "max-event-bytes")
+			return nil
 		}
 
-		if limitReached {
-			if summary.Reason == "" || summary.Reason == sseReasonEOF {
-				summary.Reason = sseReasonMaxBytes
-			}
-			break
+		if capped {
+			r.stop(sseReasonMaxBytes)
+			return nil
 		}
 
 		if errors.Is(err, io.EOF) {
-			if evt, ok := builder.finalize(index); ok {
-				publishSSEEvent(session, evt)
-				eventCount++
-			}
-			break
+			r.flush()
+			return nil
 		}
 
 		if ctx.Err() != nil {
-			if summary.Reason == "" || summary.Reason == sseReasonEOF {
-				summary.Reason = sseReasonCanceled
-			}
-			break
+			r.stop(r.ended(ctx))
+			return nil
 		}
 	}
+}
 
-	summary.EventCount = eventCount
-	summary.ByteCount = byteCount
-
-	metadata := map[string]string{
-		sseMetaReason: summary.Reason,
-		sseMetaBytes:  strconv.FormatInt(summary.ByteCount, 10),
-		sseMetaEvents: strconv.Itoa(summary.EventCount),
+func (r *sseRun) next() (string, error) {
+	line, err := readSSELine(r.reader, r.limits.lineBudget(r.bytes))
+	if len(line) > 0 {
+		r.bytes += int64(len(line))
+		select {
+		case r.idle <- struct{}{}:
+		default:
+		}
 	}
-	session.Publish(&stream.Event{
+	return line, err
+}
+
+func (r *sseRun) capped() bool {
+	return r.limits.stream > 0 && r.bytes >= r.limits.stream
+}
+
+func (r *sseRun) ended(ctx context.Context) string {
+	switch {
+	case r.idled.Load():
+		return sseReasonIdle
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return sseReasonTotal
+	default:
+		return sseReasonCanceled
+	}
+}
+
+func (r *sseRun) stop(reason string) {
+	if r.summary.Reason == "" || r.summary.Reason == sseReasonEOF {
+		r.summary.Reason = reason
+	}
+}
+
+func (r *sseRun) flush() bool {
+	evt, ok := r.builder.finalize(r.index)
+	if !ok {
+		return false
+	}
+	publishSSEEvent(r.session, evt)
+	r.index++
+	r.events++
+	return true
+}
+
+func (r *sseRun) finish(ctx context.Context, err error) {
+	if err != nil {
+		r.session.Close(err)
+		return
+	}
+
+	// The transport may report a cancelled read as EOF, so check the context.
+	if ctx.Err() != nil {
+		r.stop(r.ended(ctx))
+	}
+
+	r.summary.EventCount = r.events
+	r.summary.ByteCount = r.bytes
+	metadata := map[string]string{
+		sseMetaReason: r.summary.Reason,
+		sseMetaBytes:  strconv.FormatInt(r.summary.ByteCount, 10),
+		sseMetaEvents: strconv.Itoa(r.summary.EventCount),
+	}
+	if r.failure != nil {
+		metadata[sseMetaError] = r.failure.Error()
+	}
+	r.session.Publish(&stream.Event{
 		Kind:      stream.KindSSE,
 		Direction: stream.DirNA,
 		Timestamp: time.Now(),
 		Metadata:  metadata,
 	})
 
-	var closeErr error
-	if ctx.Err() != nil && summary.Reason == sseReasonCanceled {
+	closeErr := r.failure
+	if closeErr == nil && ctx.Err() != nil && r.summary.Reason == sseReasonCanceled {
 		closeErr = ctx.Err()
 	}
-	session.Close(closeErr)
+	r.session.Close(closeErr)
+}
+
+func readSSELine(r *bufio.Reader, limit int) (string, error) {
+	var line strings.Builder
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if line.Len()+len(chunk) > limit {
+			line.Write(chunk[:limit-line.Len()])
+			return line.String(), errSSELineTooLong
+		}
+		line.Write(chunk)
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return line.String(), err
+		}
+	}
+}
+
+func sseSummaryLine(sum SSESummary) string {
+	line := fmt.Sprintf(
+		"events=%d bytes=%d reason=%s",
+		sum.EventCount,
+		sum.ByteCount,
+		sum.Reason,
+	)
+	if sum.Dropped > 0 {
+		line += fmt.Sprintf(" dropped=%d", sum.Dropped)
+	}
+	return line
 }

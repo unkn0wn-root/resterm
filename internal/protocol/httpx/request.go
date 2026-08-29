@@ -69,13 +69,13 @@ func (c *Client) applyAuthentication(
 	req *http.Request,
 	resolver *vars.Resolver,
 	auth *restfile.AuthSpec,
-) error {
-	values, err := AuthValues(auth, resolver, req.Header, diag.ComponentHTTP)
+) ([]string, error) {
+	plan, err := ResolveAuth(auth, resolver, req.Header, diag.ComponentHTTP)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	for _, v := range values {
+	for _, v := range plan.Values {
 		switch v.Placement {
 		case AuthInQuery:
 			q := req.URL.Query()
@@ -85,7 +85,7 @@ func (c *Client) applyAuthentication(
 			req.Header.Set(v.Name, v.Value)
 		}
 	}
-	return nil
+	return plan.Targets, nil
 }
 
 type reqMeta struct {

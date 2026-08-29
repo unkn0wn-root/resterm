@@ -97,3 +97,62 @@ func TestNormalizeKeepsEveryValueAsAList(t *testing.T) {
 		t.Fatal("Normalize retained the caller's value slice")
 	}
 }
+
+func TestSensitive(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{name: "Authorization", want: true},
+		{name: "authorization", want: true},
+		{name: "  X-API-Key  ", want: true},
+		{name: "x-auth-token", want: true},
+		{name: "Proxy-Authorization", want: true},
+		{name: "Cookie", want: true},
+		{name: "Cookie2", want: true},
+		{name: "X-Goog-Api-Key", want: true},
+		{name: "Content-Type", want: false},
+		{name: "X-Request-Id", want: false},
+		{name: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Sensitive(tt.name); got != tt.want {
+				t.Fatalf("Sensitive(%q) = %t, want %t", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetMatchesNamesByIdentity(t *testing.T) {
+	s := NewSet("X-Registry-Token", " x-tenant ", "", "   ")
+
+	for _, name := range []string{"x-registry-token", "X-REGISTRY-TOKEN", " X-Tenant "} {
+		if !s.Has(name) {
+			t.Errorf("Has(%q) = false, want the stored identity to match", name)
+		}
+	}
+	if s.Has("x-other") {
+		t.Error("Has(x-other) = true, want an absent name to miss")
+	}
+	if len(s) != 2 {
+		t.Fatalf("len(Set) = %d, want the blank names dropped", len(s))
+	}
+	if (Set)(nil).Has("authorization") {
+		t.Error("a nil Set reports a name")
+	}
+}
+
+func TestIsCookie(t *testing.T) {
+	for _, name := range []string{"Cookie", "COOKIE2", " cookie "} {
+		if !IsCookie(name) {
+			t.Errorf("IsCookie(%q) = false", name)
+		}
+	}
+	for _, name := range []string{"Authorization", "Set-Cookie", ""} {
+		if IsCookie(name) {
+			t.Errorf("IsCookie(%q) = true", name)
+		}
+	}
+}

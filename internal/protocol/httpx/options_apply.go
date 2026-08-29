@@ -1,14 +1,20 @@
 package httpx
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/http/origin"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type optionSettingKey string
@@ -20,6 +26,9 @@ const (
 	optionSettingFollowRedirects optionSettingKey = "followredirects"
 	optionSettingInsecure        optionSettingKey = "insecure"
 	optionSettingNoCookies       optionSettingKey = "no-cookies"
+	optionSettingMaxResponse     optionSettingKey = "max-response-size"
+	optionSettingMaxRedirects    optionSettingKey = "max-redirects"
+	optionSettingForwardCreds    optionSettingKey = "forward-credentials-on-redirect"
 )
 
 // Settings come from a file the user edits, so name the key and what it takes.
@@ -119,6 +128,45 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 		}
 	}
 
+	if val, ok := settingValue(norm, optionSettingForwardCreds); ok {
+		switch allowed, err := ParseForwardCredentials(val); {
+		case err == nil:
+			opts.ForwardCredentials = allowed
+		case strict:
+			return invalidSetting(
+				optionSettingForwardCreds,
+				val,
+				"origins such as https://cdn.example.com, or true to allow any redirect target",
+			)
+		}
+	}
+
+	if val, ok := settingValue(norm, optionSettingMaxRedirects); ok {
+		switch limit, err := parseRedirectLimit(val); {
+		case err == nil:
+			opts.MaxRedirects = restfile.OptOf(limit)
+		case strict:
+			return invalidSetting(
+				optionSettingMaxRedirects,
+				val,
+				"a count such as 20, or none to stop at the first redirect",
+			)
+		}
+	}
+
+	if val, ok := settingValue(norm, optionSettingMaxResponse); ok {
+		switch size, err := bytesize.ParseBudget(val); {
+		case err == nil:
+			opts.MaxResponseBytes = size
+		case strict:
+			return invalidSetting(
+				optionSettingMaxResponse,
+				val,
+				"a size such as 100mb, or none to read without a limit",
+			)
+		}
+	}
+
 	if val, ok := settingValue(norm, optionSettingNoCookies); ok {
 		switch b, valid := directive.ParseBool(val); {
 		case !valid && strict:
@@ -129,6 +177,45 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 	}
 
 	return nil
+}
+
+func ParseForwardCredentials(val string) (origin.Set, error) {
+	word := util.LowerTrim(val)
+	if on, ok := directive.ParseBool(word); ok {
+		if on {
+			return origin.Any(), nil
+		}
+		return origin.Set{}, nil
+	}
+	switch word {
+	case "all", "any":
+		return origin.Any(), nil
+	case "none":
+		return origin.Set{}, nil
+	}
+
+	allowed, err := origin.ParseSet(val)
+	if err != nil {
+		return origin.Set{}, err
+	}
+	if allowed.Empty() {
+		return origin.Set{}, errors.New("expected an origin, or true or false")
+	}
+	return allowed, nil
+}
+
+func parseRedirectLimit(val string) (int, error) {
+	if util.LowerTrim(val) == "none" || directive.IsOff(val) {
+		return 0, nil
+	}
+	limit, err := strconv.Atoi(strings.TrimSpace(val))
+	if err != nil {
+		return 0, err
+	}
+	if limit < 0 {
+		return 0, errors.New("count must be non-negative")
+	}
+	return limit, nil
 }
 
 func settingValue[K ~string](settings map[string]string, key K) (string, bool) {

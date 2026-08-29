@@ -7,12 +7,15 @@ import (
 )
 
 var httpSettingKeys = map[string]struct{}{
-	"base-url":        {},
-	"timeout":         {},
-	"proxy":           {},
-	"followredirects": {},
-	"insecure":        {},
-	"no-cookies":      {},
+	"base-url":                        {},
+	"timeout":                         {},
+	"proxy":                           {},
+	"followredirects":                 {},
+	"insecure":                        {},
+	"no-cookies":                      {},
+	"max-response-size":               {},
+	"max-redirects":                   {},
+	"forward-credentials-on-redirect": {},
 }
 
 // IsHTTPKey reports whether key is a supported HTTP setting key.

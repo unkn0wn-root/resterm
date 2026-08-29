@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 )
 
 type DropPolicy int
@@ -15,10 +17,13 @@ const (
 	DropListener
 )
 
+const DefaultMaxBytes = 8 << 20
+
 type Config struct {
 	BufferSize     int
 	ListenerBuffer int
 	DropPolicy     DropPolicy
+	MaxBytes       bytesize.Budget
 }
 
 func defaultConfig(cfg Config) Config {
@@ -28,7 +33,6 @@ func defaultConfig(cfg Config) Config {
 	if cfg.ListenerBuffer <= 0 {
 		cfg.ListenerBuffer = 64
 	}
-
 	switch cfg.DropPolicy {
 	case DropNewest, DropOldest, DropListener:
 	default:
@@ -66,6 +70,7 @@ type Stats struct {
 	EventsTotal uint64
 	BytesTotal  uint64
 	Dropped     uint64
+	Evicted     uint64
 }
 
 type listener struct {
@@ -80,12 +85,23 @@ type Listener struct {
 	C        <-chan *Event
 	Cancel   func()
 	Snapshot Snapshot
+	sub      *listener
+}
+
+// Dropped counts the events this listener never received. Events lost before it
+// subscribed are counted by Snapshot.Evicted instead.
+func (l Listener) Dropped() uint64 {
+	if l.sub == nil {
+		return 0
+	}
+	return l.sub.dropped()
 }
 
 type Snapshot struct {
-	Events []*Event
-	State  State
-	Err    error
+	Events  []*Event
+	State   State
+	Err     error
+	Evicted uint64
 }
 
 var sessionCounter uint64
@@ -107,7 +123,7 @@ func NewSession(parent context.Context, kind Kind, cfg Config) *Session {
 		cancel:    cancel,
 		cfg:       cfg,
 		state:     StateConnecting,
-		events:    newRingBuffer(cfg.BufferSize),
+		events:    newRingBuffer(cfg.BufferSize, cfg.MaxBytes.Or(DefaultMaxBytes)),
 		listeners: make(map[int]*listener),
 		done:      make(chan struct{}),
 		stats: Stats{
@@ -172,12 +188,17 @@ func (s *Session) Subscribe() Listener {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	snapshot := Snapshot{
-		Events: s.events.snapshot(),
-		State:  s.state,
-		Err:    s.err,
+		Events:  s.events.snapshot(),
+		State:   s.state,
+		Err:     s.err,
+		Evicted: s.stats.Evicted,
 	}
 	if s.ended() {
-		return Listener{C: closedEvents, Cancel: func() {}, Snapshot: snapshot}
+		return Listener{
+			C:        closedEvents,
+			Cancel:   func() {},
+			Snapshot: snapshot,
+		}
 	}
 
 	id := s.nextLID
@@ -194,6 +215,7 @@ func (s *Session) Subscribe() Listener {
 			s.removeListener(id)
 		},
 		Snapshot: snapshot,
+		sub:      l,
 	}
 }
 
@@ -236,72 +258,81 @@ func (s *Session) Publish(evt *Event) {
 
 	s.mu.Lock()
 	s.events.append(evt)
+	s.stats.Evicted = s.events.evicted
 	s.stats.EventsTotal++
-	s.stats.BytesTotal += uint64(len(evt.Payload))
+	s.stats.BytesTotal += uint64(evt.Size())
 	listeners := make([]*listener, 0, len(s.listeners))
 	for _, l := range s.listeners {
 		listeners = append(listeners, l)
 	}
 	s.mu.Unlock()
 
-	dropped := 0
+	var dropped uint64
 	for _, l := range listeners {
-		if !l.emit(evt) {
-			dropped++
-		}
+		dropped += l.emit(evt)
 	}
 	if dropped > 0 {
 		s.mu.Lock()
-		s.stats.Dropped += uint64(dropped)
+		s.stats.Dropped += dropped
 		s.mu.Unlock()
 	}
 }
 
-func (l *listener) emit(evt *Event) bool {
+func (l *listener) emit(evt *Event) uint64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if l.closed {
-		return false
+		l.dropCnt++
+		return 1
 	}
 
 	switch l.policy {
 	case DropNewest:
 		select {
 		case l.ch <- evt:
-			return true
+			return 0
 		default:
 			l.dropCnt++
-			return false
+			return 1
 		}
 	case DropListener:
 		select {
 		case l.ch <- evt:
-			return true
+			return 0
 		default:
 			l.dropCnt++
 			l.closed = true
 			close(l.ch)
-			return false
+			return 1
 		}
 	default: // DropOldest - when buffer is full, try to discard one old event to make room
 		select {
 		case l.ch <- evt:
-			return true
+			return 0
 		default:
+			var dropped uint64
 			select {
 			case <-l.ch:
+				l.dropCnt++
+				dropped++
 			default:
 			}
 			select {
 			case l.ch <- evt:
-				return true
+				return dropped
 			default:
 				l.dropCnt++
-				return false
+				return dropped + 1
 			}
 		}
 	}
+}
+
+func (l *listener) dropped() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.dropCnt
 }
 
 func (s *Session) MarkOpen() {

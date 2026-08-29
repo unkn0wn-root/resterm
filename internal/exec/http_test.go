@@ -55,7 +55,11 @@ func TestRunnerRunHTTPSSE(t *testing.T) {
 		Metadata: restfile.RequestMetadata{
 			Scripts: []restfile.ScriptBlock{{
 				Kind: "test",
-				Body: `{% tests.assert(response.json().summary.eventCount === 1, "event count"); %}`,
+				Body: `{%
+						const summary = stream.summary();
+						tests.assert(response.json().summary.eventCount === 1, "event count");
+						tests.assert(summary.dropped === 0, "complete transcript");
+					%}`,
 			}},
 		},
 	}
@@ -94,17 +98,44 @@ func TestRunnerRunHTTPSSE(t *testing.T) {
 	if res.Stream == nil || res.Stream.Kind != "sse" {
 		t.Fatalf("expected sse stream info, got %+v", res.Stream)
 	}
-	if len(res.Tests) != 1 {
-		t.Fatalf("expected 1 test result, got %d", len(res.Tests))
+	if len(res.Tests) != 2 {
+		t.Fatalf("expected 2 test results, got %d", len(res.Tests))
 	}
-	if !res.Tests[0].Passed {
-		t.Fatalf("expected test to pass, got %+v", res.Tests[0])
+	for _, result := range res.Tests {
+		if !result.Passed {
+			t.Fatalf("expected test to pass, got %+v", result)
+		}
 	}
 	if seenStream == nil {
 		t.Fatalf("expected capture hook to observe stream info")
 	}
 	if seenStream.kind != "sse" || seenStream.count != 1 {
 		t.Fatalf("unexpected stream info %+v", seenStream)
+	}
+}
+
+func TestConvertSSETranscriptExposesCompletionMetadata(t *testing.T) {
+	info := convertSSETranscript(&httpx.SSETranscript{
+		Summary: httpx.SSESummary{
+			Reason:  "error",
+			Dropped: 4,
+			Error:   "read sse stream: boom",
+		},
+	})
+	if got := info.Summary["dropped"]; got != int64(4) {
+		t.Fatalf("summary.dropped = %#v, want 4", got)
+	}
+	if got := info.Summary["error"]; got != "read sse stream: boom" {
+		t.Fatalf("summary.error = %#v, want the stream error", got)
+	}
+}
+
+func TestConvertWebSocketTranscriptExposesDroppedEvents(t *testing.T) {
+	info := convertWebSocketTranscript(&httpx.WebSocketTranscript{
+		Summary: httpx.WebSocketSummary{Dropped: 3},
+	})
+	if got := info.Summary["dropped"]; got != int64(3) {
+		t.Fatalf("summary.dropped = %#v, want 3", got)
 	}
 }
 

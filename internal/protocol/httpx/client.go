@@ -2,12 +2,13 @@ package httpx
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
+	"github.com/unkn0wn-root/resterm/internal/http/origin"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -21,8 +22,14 @@ import (
 
 type Options struct {
 	Timeout            time.Duration
+	MaxResponseBytes   bytesize.Budget
 	BaseURL            string
 	FollowRedirects    bool
+	MaxRedirects       restfile.Opt[int]
+	CredentialHeaders  []string
+	ForwardCredentials origin.Set
+	ConfineToOrigin    bool
+
 	InsecureSkipVerify bool
 	ProxyURL           string
 	RootCAs            []string
@@ -266,7 +273,7 @@ func (c *Client) executeHTTPRequest(
 		}
 	}()
 
-	body, err := io.ReadAll(httpResp.Body)
+	body, err := effectiveOpts.readBody(httpResp.Body)
 	if traceSess != nil {
 		traceSess.finishTransfer(err)
 	}
@@ -275,11 +282,7 @@ func (c *Client) executeHTTPRequest(
 			traceSess.fail(err)
 			traceSess.complete(buildTraceExtras(httpReq, httpResp, effectiveOpts, proxy))
 		}
-		return nil, diag.Wrap(
-			err,
-			"read response body",
-			diag.WithComponent(diag.ComponentHTTP),
-		)
+		return nil, err
 	}
 
 	if traceSess != nil {

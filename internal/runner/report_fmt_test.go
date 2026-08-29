@@ -264,3 +264,13 @@ func TestReportModelUsesResponseDuration(t *testing.T) {
 		t.Fatalf("expected response duration fallback, got %+v", got.Results)
 	}
 }
+
+func TestFormatStreamCarriesTheFailure(t *testing.T) {
+	got := formatStream(&StreamInfo{Kind: "sse", Err: errors.New("sse line exceeds 16 bytes")})
+	if got.Error != "sse line exceeds 16 bytes" {
+		t.Fatalf("Error = %q, want the stream failure", got.Error)
+	}
+	if plain := formatStream(&StreamInfo{Kind: "sse"}); plain.Error != "" {
+		t.Fatalf("Error = %q, want a complete transcript to report none", plain.Error)
+	}
+}

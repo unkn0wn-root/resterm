@@ -111,6 +111,8 @@ func (m *Manager) Token(
 	cfg Config,
 	opts httpx.Options,
 ) (Token, error) {
+	// A 307 or 308 redirect can resend the client secret in the request body.
+	opts.ConfineToOrigin = true
 	cfg, key, fallback := m.lookupKeys(env, cfg)
 
 	if token, ok, usedKey := m.cachedToken(key, fallback); ok && token.valid() {

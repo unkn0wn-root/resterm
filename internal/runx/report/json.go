@@ -160,6 +160,7 @@ type jsonStream struct {
 	EventCount     int            `json:"eventCount,omitempty"`
 	Summary        map[string]any `json:"summary,omitempty"`
 	TranscriptPath string         `json:"transcriptPath,omitempty"`
+	Error          string         `json:"error,omitempty"`
 }
 
 type jsonTrace struct {
@@ -515,6 +516,7 @@ func (stream *Stream) json() *jsonStream {
 		Kind:           stream.Kind,
 		EventCount:     stream.EventCount,
 		TranscriptPath: stream.TranscriptPath,
+		Error:          stream.Error,
 	}
 	if len(stream.Summary) > 0 {
 		out.Summary = jsonAnyMap(stream.Summary)

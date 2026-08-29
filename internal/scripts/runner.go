@@ -1,10 +1,10 @@
 package scripts
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -25,7 +25,12 @@ import (
 )
 
 type Runner struct {
-	fs filelookup.FileSystem
+	fs      filelookup.FileSystem
+	timeout time.Duration
+}
+
+func (r *Runner) scriptTimeout() time.Duration {
+	return cmp.Or(r.timeout, DefaultScriptTimeout)
 }
 
 func NewRunner(fs filelookup.FileSystem) *Runner {
@@ -96,13 +101,21 @@ func (r *Runner) RunPreRequest(
 }
 
 func (r *Runner) RunTests(
+	ctx context.Context,
 	scripts []restfile.ScriptBlock,
 	input TestInput,
 ) ([]TestResult, vars.Globals, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var aggregated []TestResult
 	var changes vars.Globals
 
 	for idx, block := range scripts {
+		if err := ctx.Err(); err != nil {
+			return aggregated, changes, err
+		}
 		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
 			continue
 		}
@@ -118,7 +131,7 @@ func (r *Runner) RunTests(
 			continue
 		}
 
-		results, globals, err := r.executeTestScript(script, input)
+		results, globals, err := r.executeTestScript(ctx, script, input)
 		if err != nil {
 			return aggregated, changes, diag.WrapAsf(diag.ClassScript, err, "test script %d", idx+1)
 		}
@@ -136,17 +149,8 @@ func (r *Runner) executePreRequestScript(
 	api *preRequestAPI,
 ) error {
 	vm := goja.New()
-	if ctx != nil {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if done := ctx.Done(); done != nil {
-			go func() {
-				<-done
-				vm.Interrupt(ctx.Err())
-			}()
-		}
-	}
+	stopGuard := guardVM(ctx, vm, r.scriptTimeout())
+	defer stopGuard()
 
 	if err := bindCommon(vm); err != nil {
 		return diag.WrapAs(diag.ClassScript, err, "bind console api")
@@ -160,16 +164,9 @@ func (r *Runner) executePreRequestScript(
 		return diag.WrapAs(diag.ClassScript, err, "bind vars api")
 	}
 
-	_, err := vm.RunString(script)
-	if err != nil {
-		if ctx != nil {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			var interrupted *goja.InterruptedError
-			if errors.As(err, &interrupted) && ctx.Err() != nil {
-				return ctx.Err()
-			}
+	if _, err := vm.RunString(script); err != nil {
+		if reason := stopReason(ctx, err); reason != nil {
+			return reason
 		}
 		return diag.WrapAs(diag.ClassScript, err, "execute pre-request script")
 	}
@@ -177,10 +174,14 @@ func (r *Runner) executePreRequestScript(
 }
 
 func (r *Runner) executeTestScript(
+	ctx context.Context,
 	script string,
 	input TestInput,
 ) ([]TestResult, vars.Globals, error) {
 	vm := goja.New()
+	stopGuard := guardVM(ctx, vm, r.scriptTimeout())
+	defer stopGuard()
+
 	streamInfo := input.Stream.Clone()
 	tester := newTestAPI(input, streamInfo)
 	tester.vm = vm
@@ -218,12 +219,17 @@ func (r *Runner) executeTestScript(
 		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind trace api")
 	}
 
-	_, err := vm.RunString(script)
-	if err != nil {
+	if _, err := vm.RunString(script); err != nil {
+		if reason := stopReason(ctx, err); reason != nil {
+			return nil, vars.Globals{}, reason
+		}
 		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "execute test script")
 	}
 
 	if err := streamBinding.replay(); err != nil {
+		if reason := stopReason(ctx, err); reason != nil {
+			return nil, vars.Globals{}, reason
+		}
 		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "execute stream callbacks")
 	}
 	return tester.results(), tester.globalChanges(), nil

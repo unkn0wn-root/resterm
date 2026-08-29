@@ -17,6 +17,7 @@ import (
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -1000,7 +1001,7 @@ func redactSensitiveHeaders(text string) string {
 		if colon <= 0 {
 			continue
 		}
-		if !rqeng.IsSensitiveHeader(line[:colon]) {
+		if !header.Sensitive(line[:colon]) {
 			continue
 		}
 		rest := line[colon+1:]

@@ -465,10 +465,12 @@ type SSERequest struct {
 }
 
 type SSEOptions struct {
-	TotalTimeout time.Duration
-	IdleTimeout  time.Duration
-	MaxEvents    int
-	MaxBytes     int64
+	TotalTimeout  time.Duration
+	IdleTimeout   time.Duration
+	MaxEvents     int
+	MaxBytes      int64
+	MaxLineBytes  int64
+	MaxEventBytes int64
 }
 
 type WebSocketRequest struct {

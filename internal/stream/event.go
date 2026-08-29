@@ -46,6 +46,17 @@ type Event struct {
 	WS  WSMetadata
 }
 
+func (e *Event) Size() int64 {
+	if e == nil {
+		return 0
+	}
+	size := len(e.Payload) + len(e.SSE.Name) + len(e.SSE.ID) + len(e.SSE.Comment) + len(e.WS.Reason)
+	for key, value := range e.Metadata {
+		size += len(key) + len(value)
+	}
+	return int64(size)
+}
+
 type SSEMetadata struct {
 	Name    string
 	ID      string

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -311,4 +312,65 @@ func newStreamFilterPromptModel(t *testing.T) Model {
 	model.requestSessions[req] = "stream-1"
 	model.liveSessions["stream-1"] = newLiveSession("stream-1", 10)
 	return model
+}
+
+func TestStreamPaneReportsEveryLossSource(t *testing.T) {
+	model := New(Config{})
+	sess := stream.NewSession(context.Background(), stream.KindSSE, stream.Config{BufferSize: 1})
+	sess.MarkOpen()
+	sess.Publish(&stream.Event{Kind: stream.KindSSE, Payload: []byte("evicted")})
+	sess.Publish(&stream.Event{Kind: stream.KindSSE, Payload: []byte("kept")})
+
+	ls := model.attachStreamSession(sess)
+	if ls == nil {
+		t.Fatal("the session did not attach")
+	}
+	t.Cleanup(sess.Cancel)
+	if ls.lost.evicted != 1 {
+		t.Fatalf("lost.evicted = %d, want the event the session had already dropped", ls.lost.evicted)
+	}
+
+	model.handleStreamEvents(streamEventMsg{
+		sessionID: ls.id,
+		events:    []*stream.Event{{Kind: stream.KindSSE, Payload: []byte("late")}},
+		dropped:   2,
+	})
+	if ls.lost.listener != 2 {
+		t.Fatalf("lost.listener = %d, want the listener's running total", ls.lost.listener)
+	}
+
+	ls.maxEvents = 1
+	ls.append(streamEvents(3, 8))
+	if ls.lost.trimmed == 0 {
+		t.Fatal("the pane trimmed events without recording the loss")
+	}
+
+	view := model.formatStreamContent(ls)
+	if !strings.Contains(view, "Transcript incomplete") {
+		t.Fatalf("stream pane does not mark the loss:\n%s", view)
+	}
+	if want := fmt.Sprintf("%d events dropped", ls.lost.total()); !strings.Contains(view, want) {
+		t.Fatalf("stream pane does not name the loss %q:\n%s", want, view)
+	}
+}
+
+func TestStreamPaneStaysQuietWhenNothingIsLost(t *testing.T) {
+	model := New(Config{})
+	ls := newLiveSession("sse-1", 10)
+	ls.append([]*stream.Event{{Kind: stream.KindSSE, Payload: []byte("one")}})
+
+	if view := model.formatStreamContent(ls); strings.Contains(view, "Transcript incomplete") {
+		t.Fatalf("a complete transcript was marked incomplete:\n%s", view)
+	}
+}
+
+func TestStreamCompletionCarriesTheFinalDropCount(t *testing.T) {
+	model := New(Config{})
+	ls := newLiveSession("sse-1", 10)
+	model.liveSessions[ls.id] = ls
+
+	model.handleStreamComplete(streamCompleteMsg{sessionID: ls.id, dropped: 7})
+	if ls.lost.listener != 7 {
+		t.Fatalf("lost.listener = %d, want the count the listener finished on", ls.lost.listener)
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -47,7 +48,7 @@ func redactText(text string, secs []string, maskHdr bool) string {
 		if colon <= 0 {
 			continue
 		}
-		if !request.IsSensitiveHeader(line[:colon]) {
+		if !header.Sensitive(line[:colon]) {
 			continue
 		}
 		rest := line[colon+1:]

@@ -186,8 +186,6 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	}
 }
 
-// A cache-only directive inherits its header from the seeded entry, so an
-// unrelated Authorization header must not be mistaken for the auth output.
 func TestEnsureCommandAuthCacheOnlyReuseIgnoresUnrelatedAuthorization(t *testing.T) {
 	var calls int32
 
@@ -548,8 +546,6 @@ func oauthSpec(params map[string]string) *restfile.AuthSpec {
 	return &restfile.AuthSpec{Type: "oauth2", Params: params}
 }
 
-// An explicit credential means the oauth config is never used, so an
-// incomplete one must not fail the request.
 func TestEnsureOAuthSkipsIncompleteConfigWhenMetadataPresent(t *testing.T) {
 	eng := newTestEngine()
 	req := grpcAuthRequest(
@@ -557,7 +553,7 @@ func TestEnsureOAuthSkipsIncompleteConfigWhenMetadataPresent(t *testing.T) {
 		restfile.MetadataPair{Key: "authorization", Value: "Bearer manually-supplied"},
 	)
 
-	if err := eng.EnsureOAuth(
+	if _, err := eng.EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -579,7 +575,7 @@ func TestEnsureOAuthSkipsIncompleteConfigWhenHeaderPresent(t *testing.T) {
 		Metadata: restfile.RequestMetadata{Auth: oauthSpec(map[string]string{"client_id": "example"})},
 	}
 
-	if err := eng.EnsureOAuth(
+	if _, err := eng.EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -594,7 +590,6 @@ func TestEnsureOAuthSkipsIncompleteConfigWhenHeaderPresent(t *testing.T) {
 	}
 }
 
-// A custom header only counts as an override when it is the one oauth targets.
 func TestEnsureOAuthUnrelatedHeaderStillRequiresTokenURL(t *testing.T) {
 	eng := newTestEngine()
 	req := grpcAuthRequest(
@@ -602,7 +597,7 @@ func TestEnsureOAuthUnrelatedHeaderStillRequiresTokenURL(t *testing.T) {
 		restfile.MetadataPair{Key: "authorization", Value: "Bearer manually-supplied"},
 	)
 
-	err := eng.EnsureOAuth(
+	_, err := eng.EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -622,7 +617,7 @@ func TestEnsureOAuthWithoutOverrideStillRequiresTokenURL(t *testing.T) {
 	eng := newTestEngine()
 	req := grpcAuthRequest(oauthSpec(map[string]string{"client_id": "example"}))
 
-	err := eng.EnsureOAuth(
+	_, err := eng.EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -638,8 +633,6 @@ func TestEnsureOAuthWithoutOverrideStillRequiresTokenURL(t *testing.T) {
 	}
 }
 
-// argv is only needed to run the command, so an override skips its templates
-// the same way it skips the execution.
 func TestEnsureCommandAuthSkipsBrokenArgvWhenMetadataPresent(t *testing.T) {
 	called := int32(0)
 
