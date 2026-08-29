@@ -7,10 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -106,7 +108,7 @@ func quietSSE(t *testing.T) string {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "data: ping\n\n")
+		_, _ = fmt.Fprint(w, "data: ping\n\n")
 		w.(http.Flusher).Flush()
 		<-r.Context().Done()
 	}))
@@ -278,9 +280,9 @@ func multiLineSSE(t *testing.T, lines, each int) string {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		for range lines {
-			fmt.Fprintf(w, "data: %s\n", strings.Repeat("x", each))
+			_, _ = fmt.Fprintf(w, "data: %s\n", strings.Repeat("x", each))
 		}
-		fmt.Fprint(w, "\n")
+		_, _ = fmt.Fprint(w, "\n")
 		w.(http.Flusher).Flush()
 	}))
 	t.Cleanup(srv.Close)
@@ -349,7 +351,7 @@ func TestSSEReportsEventsTheBufferDiscarded(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		for range 24 {
-			fmt.Fprintf(w, "data: %s\n\n", strings.Repeat("x", 1<<20))
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", strings.Repeat("x", 1<<20))
 			w.(http.Flusher).Flush()
 		}
 	}))
@@ -379,7 +381,7 @@ func TestSSEKeepsSeveralLargeEventsInTheTranscript(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		for range events {
-			fmt.Fprintf(w, "data: %s\n\n", strings.Repeat("x", each))
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", strings.Repeat("x", each))
 			w.(http.Flusher).Flush()
 		}
 	}))
@@ -406,7 +408,7 @@ func TestSSEBudgetsEventsThatCarryOnlyAComment(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		for range count {
-			fmt.Fprintf(w, ": %s\n\n", strings.Repeat("x", each))
+			_, _ = fmt.Fprintf(w, ": %s\n\n", strings.Repeat("x", each))
 			w.(http.Flusher).Flush()
 		}
 	}))
@@ -428,5 +430,60 @@ func TestSSEBudgetsEventsThatCarryOnlyAComment(t *testing.T) {
 	}
 	if tr.Summary.Dropped == 0 {
 		t.Fatal("Dropped = 0, want the comments the buffer discarded to be counted")
+	}
+}
+
+func TestSSESummaryErr(t *testing.T) {
+	tests := []struct {
+		name    string
+		summary SSESummary
+		class   diag.Class
+	}{
+		{name: "server closed the stream", summary: SSESummary{Reason: sseReasonEOF}},
+		{name: "stopped at max events", summary: SSESummary{Reason: sseReasonMaxEvents}},
+		{name: "stopped at max bytes", summary: SSESummary{Reason: sseReasonMaxBytes}},
+		{name: "went quiet", summary: SSESummary{Reason: sseReasonIdle}},
+		{name: "ran out of time", summary: SSESummary{Reason: sseReasonTotal}},
+		{
+			name:    "read failed",
+			summary: SSESummary{Reason: sseReasonErr, Error: "read sse stream: boom"},
+			class:   diag.ClassProtocol,
+		},
+		{
+			name:    "line over the limit",
+			summary: SSESummary{Reason: sseReasonLineBytes, Error: "sse line exceeds 16 bytes"},
+			class:   diag.ClassProtocol,
+		},
+		{
+			name:    "event over the limit",
+			summary: SSESummary{Reason: sseReasonEventBytes, Error: "sse event exceeds 16 bytes"},
+			class:   diag.ClassProtocol,
+		},
+		{
+			name:    "canceled",
+			summary: SSESummary{Reason: sseReasonCanceled, Error: "context canceled"},
+			class:   diag.ClassCanceled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.summary.Err()
+			if tt.class == "" {
+				if err != nil {
+					t.Fatalf("Err() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Err() = nil, want a %s failure", tt.class)
+			}
+			if got := diag.Classes(err); !slices.Contains(got, tt.class) {
+				t.Fatalf("Err() classes = %v, want %s", got, tt.class)
+			}
+			if tt.summary.Error != "" && err.Error() != tt.summary.Error {
+				t.Fatalf("Err() = %q, want %q", err, tt.summary.Error)
+			}
+		})
 	}
 }

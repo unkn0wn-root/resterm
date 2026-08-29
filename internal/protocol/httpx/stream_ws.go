@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,15 @@ const (
 	wsMetaClosedBy    = "resterm.ws.closed.by"
 	wsMetaCloseCode   = "resterm.ws.close.code"
 	wsMetaCloseReason = "resterm.ws.close.reason"
+)
+
+// Values used for WebSocketSummary.ClosedBy.
+const (
+	wsClosedByServer   = "server"
+	wsClosedByClient   = "client"
+	wsClosedByTimeout  = "timeout"
+	wsClosedByCanceled = "canceled"
+	wsClosedByError    = "error"
 )
 
 const defaultWebSocketSendQueue = 32
@@ -64,6 +74,25 @@ type WebSocketSummary struct {
 type WebSocketTranscript struct {
 	Events  []WebSocketEvent `json:"events"`
 	Summary WebSocketSummary `json:"summary"`
+}
+
+// Err reports the failure that ended the session. A close either side asked for
+// and a timeout are normal endings and return nil.
+func (s WebSocketSummary) Err() error {
+	switch s.ClosedBy {
+	case wsClosedByCanceled:
+		return diag.New(
+			diag.ClassCanceled,
+			cmp.Or(s.CloseReason, "websocket stream canceled"),
+		)
+	case wsClosedByError:
+		return diag.New(
+			diag.ClassProtocol,
+			cmp.Or(s.CloseReason, "websocket stream failed"),
+		)
+	default:
+		return nil
+	}
 }
 
 type WebSocketHandle struct {
@@ -257,7 +286,7 @@ func (c *Client) CompleteWebSocket(
 	defer listener.Cancel()
 
 	acc := newWSAccumulator()
-	retentionDropped := listener.Snapshot.Evicted
+	lost := listener.Snapshot.Evicted
 	for _, evt := range listener.Snapshot.Events {
 		acc.consume(evt)
 	}
@@ -298,8 +327,9 @@ func (c *Client) CompleteWebSocket(
 	}
 
 	<-eventsDone
-	retentionDropped += listener.Dropped()
-	acc.summary.Dropped += int64(retentionDropped)
+	// The listener's count is only final once it has drained.
+	lost += listener.Dropped()
+	acc.summary.Dropped += int64(lost)
 
 	state, stateErr := session.State()
 	stats := session.StatsSnapshot()

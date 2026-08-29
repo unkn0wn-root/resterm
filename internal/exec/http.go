@@ -381,7 +381,7 @@ func convertSSETranscript(t *httpx.SSETranscript) *scripts.StreamInfo {
 	if t == nil {
 		return nil
 	}
-	info := &scripts.StreamInfo{Kind: "sse"}
+	info := &scripts.StreamInfo{Kind: "sse", Err: t.Summary.Err()}
 	info.Summary = map[string]any{
 		"eventCount": t.Summary.EventCount,
 		"byteCount":  t.Summary.ByteCount,
@@ -412,7 +412,7 @@ func convertWebSocketTranscript(t *httpx.WebSocketTranscript) *scripts.StreamInf
 	if t == nil {
 		return nil
 	}
-	info := &scripts.StreamInfo{Kind: "websocket"}
+	info := &scripts.StreamInfo{Kind: "websocket", Err: t.Summary.Err()}
 	info.Summary = map[string]any{
 		"sentCount":     t.Summary.SentCount,
 		"receivedCount": t.Summary.ReceivedCount,

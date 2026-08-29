@@ -155,6 +155,9 @@ func resultLine(res Result) string {
 		return fmt.Sprintf("%s [%s]", base, res.ScriptError)
 	}
 
+	if msg := streamFailureText(res.Stream); msg != "" {
+		return fmt.Sprintf("%s [%s]", base, msg)
+	}
 	if n := failedTestCount(res.Tests); n > 0 {
 		return fmt.Sprintf("%s [%d test(s) failed]", base, n)
 	}
@@ -271,6 +274,9 @@ func stepLine(step Step) string {
 		return fmt.Sprintf("%s [%s]", base, step.ScriptError)
 	}
 
+	if msg := streamFailureText(step.Stream); msg != "" {
+		return fmt.Sprintf("%s [%s]", base, msg)
+	}
 	if n := failedTestCount(step.Tests); n > 0 {
 		return fmt.Sprintf("%s [%d test(s) failed]", base, n)
 	}
@@ -315,6 +321,13 @@ func failedTests(tests []Test) []Test {
 		}
 	}
 	return out
+}
+
+func streamFailureText(info *Stream) string {
+	if info == nil {
+		return ""
+	}
+	return info.Error
 }
 
 func traceFailureText(info *Trace) string {

@@ -22,6 +22,7 @@ type liveSession struct {
 	bytes       int64
 	maxEvents   int
 	maxBytes    int64
+	lost        streamLoss
 	state       stream.State
 	err         error
 	kind        stream.Kind
@@ -32,6 +33,18 @@ type liveSession struct {
 	bookmarkIdx int
 	bound       bool
 	done        bool
+}
+
+// streamLoss counts the events a pane is not showing, split by where they were
+// lost. The three sources update differently, so they cannot share a counter.
+type streamLoss struct {
+	evicted  uint64 // dropped by the session before the pane subscribed
+	listener uint64 // dropped on the way from the session to the pane
+	trimmed  uint64 // dropped by the pane's own limits
+}
+
+func (l streamLoss) total() uint64 {
+	return l.evicted + l.listener + l.trimmed
 }
 
 func (ls *liveSession) failed() bool {
@@ -82,6 +95,7 @@ func (ls *liveSession) trimOverflow() {
 		return
 	}
 
+	ls.lost.trimmed += uint64(trim)
 	ls.events = slices.Clone(ls.events[trim:])
 	ls.bytes = bytes
 	if ls.paused && ls.pausedIndex >= 0 {
@@ -109,7 +123,8 @@ func (ls *liveSession) trimOverflow() {
 }
 
 // reset empties the buffer and every view applied to it. The session itself
-// keeps running, so new events land in a clean transcript.
+// keeps running, so new events land in a clean transcript. Events the pane never
+// received stay counted, because clearing the view does not bring them back.
 func (ls *liveSession) reset() {
 	if ls == nil {
 		return

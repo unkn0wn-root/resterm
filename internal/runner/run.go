@@ -145,6 +145,9 @@ type StreamInfo struct {
 	EventCount     int
 	Summary        map[string]any
 	TranscriptPath string
+	// Err reports a stream that did not finish cleanly. The events it collected
+	// are still reported and still written as an artifact.
+	Err error
 }
 
 type TraceInfo struct {
@@ -360,7 +363,7 @@ func skippedRequestResult(req *restfile.Request, env vars.Environment, reason st
 }
 
 func requestFailed(item Result) bool {
-	if item.Err != nil || item.ScriptErr != nil {
+	if item.Err != nil || item.ScriptErr != nil || streamFailed(item.Stream) {
 		return true
 	}
 	for _, test := range item.Tests {
@@ -597,6 +600,10 @@ func traceFailed(info *TraceInfo) bool {
 	return info != nil && info.Summary != nil && len(info.Summary.Breaches) > 0
 }
 
+func streamFailed(info *StreamInfo) bool {
+	return info != nil && info.Err != nil
+}
+
 func streamResult(info *scripts.StreamInfo) *StreamInfo {
 	if info == nil {
 		return nil
@@ -604,6 +611,7 @@ func streamResult(info *scripts.StreamInfo) *StreamInfo {
 	out := &StreamInfo{
 		Kind:       str.Trim(info.Kind),
 		EventCount: streamEventCount(info),
+		Err:        info.Err,
 	}
 	if len(info.Summary) > 0 {
 		out.Summary = cloneStreamSummary(info.Summary)
@@ -662,7 +670,8 @@ func stepFailed(step StepResult) bool {
 	if step.Failure.Code != "" {
 		return true
 	}
-	if step.Canceled || step.Err != nil || step.ScriptErr != nil || traceFailed(step.Trace) {
+	if step.Canceled || step.Err != nil || step.ScriptErr != nil ||
+		streamFailed(step.Stream) || traceFailed(step.Trace) {
 		return true
 	}
 	for _, test := range step.Tests {

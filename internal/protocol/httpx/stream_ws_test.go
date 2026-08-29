@@ -8,12 +8,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"nhooyr.io/websocket"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -283,6 +285,64 @@ func TestApplyWebSocketSummaryDefaults(t *testing.T) {
 	applyWebSocketSummaryDefaults(&sumClient, stream.StateClosed, nil)
 	if sumClient.ClosedBy != "client" {
 		t.Fatalf("expected default closedBy to client, got %q", sumClient.ClosedBy)
+	}
+
+	sumCanceled := WebSocketSummary{}
+	applyWebSocketSummaryDefaults(&sumCanceled, stream.StateFailed, context.Canceled)
+	if sumCanceled.ClosedBy != wsClosedByCanceled {
+		t.Fatalf("closedBy = %q, want a canceled run named as one", sumCanceled.ClosedBy)
+	}
+
+	sumTimeout := WebSocketSummary{}
+	applyWebSocketSummaryDefaults(&sumTimeout, stream.StateFailed, context.DeadlineExceeded)
+	if sumTimeout.ClosedBy != wsClosedByTimeout {
+		t.Fatalf("closedBy = %q, want the elapsed duration named as a timeout", sumTimeout.ClosedBy)
+	}
+}
+
+func TestWebSocketSummaryErr(t *testing.T) {
+	tests := []struct {
+		name    string
+		summary WebSocketSummary
+		class   diag.Class
+	}{
+		{name: "server closed", summary: WebSocketSummary{ClosedBy: wsClosedByServer}},
+		{name: "client closed", summary: WebSocketSummary{ClosedBy: wsClosedByClient}},
+		{name: "timed out", summary: WebSocketSummary{ClosedBy: wsClosedByTimeout}},
+		{
+			name:    "read failed",
+			summary: WebSocketSummary{ClosedBy: wsClosedByError, CloseReason: "read: boom"},
+			class:   diag.ClassProtocol,
+		},
+		{
+			name: "canceled",
+			summary: WebSocketSummary{
+				ClosedBy:    wsClosedByCanceled,
+				CloseReason: "context canceled",
+			},
+			class: diag.ClassCanceled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.summary.Err()
+			if tt.class == "" {
+				if err != nil {
+					t.Fatalf("Err() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Err() = nil, want a %s failure", tt.class)
+			}
+			if got := diag.Classes(err); !slices.Contains(got, tt.class) {
+				t.Fatalf("Err() classes = %v, want %s", got, tt.class)
+			}
+			if err.Error() != tt.summary.CloseReason {
+				t.Fatalf("Err() = %q, want %q", err, tt.summary.CloseReason)
+			}
+		})
 	}
 }
 

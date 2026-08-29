@@ -185,28 +185,26 @@ func httpOptions(opt HTTPOptions) (httpx.Options, error) {
 		ProxyURL:           str.Trim(opt.ProxyURL),
 	}
 	if opt.MaxRedirects != nil {
-		if *opt.MaxRedirects < 0 {
-			return httpx.Options{}, UsageError{err: fmt.Errorf(
-				"http.maxRedirects: %d must be non-negative",
-				*opt.MaxRedirects,
-			)}
+		if err := nonNegative("http.maxRedirects", int64(*opt.MaxRedirects)); err != nil {
+			return httpx.Options{}, err
 		}
 		out.MaxRedirects = restfile.OptOf(*opt.MaxRedirects)
 	}
 	if opt.MaxResponseBytes != nil {
-		if *opt.MaxResponseBytes < 0 {
-			return httpx.Options{}, UsageError{err: fmt.Errorf(
-				"http.maxResponseBytes: %d must be non-negative",
-				*opt.MaxResponseBytes,
-			)}
+		if err := nonNegative("http.maxResponseBytes", *opt.MaxResponseBytes); err != nil {
+			return httpx.Options{}, err
 		}
-		if *opt.MaxResponseBytes == 0 {
-			out.MaxResponseBytes = bytesize.Unlimited()
-		} else {
-			out.MaxResponseBytes = bytesize.Of(*opt.MaxResponseBytes)
-		}
+		// Zero means no limit, the same as max-response-size none.
+		out.MaxResponseBytes = bytesize.Of(*opt.MaxResponseBytes)
 	}
 	return out, nil
+}
+
+func nonNegative(name string, value int64) error {
+	if value < 0 {
+		return UsageError{err: fmt.Errorf("%s: %d must be non-negative", name, value)}
+	}
+	return nil
 }
 
 func grpcOptions(opt GRPCOptions) grpcx.Options {

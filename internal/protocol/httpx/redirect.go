@@ -12,6 +12,8 @@ import (
 
 const DefaultMaxRedirects = 10
 
+const refererHeader = "Referer"
+
 // net/http can forward custom credential headers to another origin. The guard
 // removes them unless the user allows the target origin.
 type redirectGuard struct {
@@ -46,24 +48,27 @@ func (g redirectGuard) check(req *http.Request, via []*http.Request) error {
 		)
 	}
 
+	// Credentials, cookies and confinement belong to the origin that owns the
+	// request. The Referer belongs to the single hop being taken, so it is
+	// compared against the previous URL instead.
 	owner, previous := via[0], via[len(via)-1]
-	if origin.Same(owner.URL, req.URL) {
-		g.restore(req.Header, owner.Header)
-		return nil
+	if !origin.Same(owner.URL, req.URL) {
+		if g.confined {
+			return diag.Newf(
+				diag.ClassProtocol,
+				"refusing to follow a redirect from %s to %s",
+				origin.Of(owner.URL),
+				origin.Of(req.URL),
+			)
+		}
+		deleteCookies(req.Header)
 	}
 
-	if g.confined {
-		return diag.Newf(
-			diag.ClassProtocol,
-			"refusing to follow a redirect from %s to %s",
-			origin.Of(owner.URL),
-			origin.Of(req.URL),
-		)
+	if !origin.Same(previous.URL, req.URL) {
+		narrowReferer(req.Header, owner.Header, previous.URL)
 	}
 
-	deleteCookies(req.Header)
-
-	if keepsCredentials(previous.URL, req.URL, g.forwardTo) {
+	if g.keepsCredentials(via, req.URL) {
 		g.restore(req.Header, owner.Header)
 		return nil
 	}
@@ -95,12 +100,41 @@ func (g redirectGuard) restore(dst, initial http.Header) {
 	}
 }
 
-func keepsCredentials(previous, next *url.URL, forwardTo origin.Set) bool {
-	last, dst := origin.Of(previous), origin.Of(next)
-	if last.Secure() && !dst.Secure() {
+func (g redirectGuard) keepsCredentials(via []*http.Request, next *url.URL) bool {
+	if leftTLS(via, next) {
 		return false
 	}
-	return forwardTo.Allows(dst)
+	return origin.Same(via[0].URL, next) || g.forwardTo.Allows(origin.Of(next))
+}
+
+// leftTLS reports whether the chain has gone from an https hop to a plain http
+// one. Trust does not come back if a later hop returns to https, because
+// whoever sat on the plain http hop picked every redirect after it.
+func leftTLS(via []*http.Request, next *url.URL) bool {
+	secure := false
+	for _, hop := range via {
+		o := origin.Of(hop.URL)
+		if secure && !o.Secure() {
+			return true
+		}
+		secure = secure || o.Secure()
+	}
+	return secure && !origin.Of(next).Secure()
+}
+
+// narrowReferer cuts the Referer down to an origin, the way a browser does
+// across a site boundary. net/http fills it in from the previous URL before this
+// policy runs, and that URL can carry a credential in its query. A Referer the
+// request set itself is left alone, and a hop without one does not gain one.
+func narrowReferer(dst, initial http.Header, previous *url.URL) {
+	if dst.Get(refererHeader) == "" || initial.Get(refererHeader) != "" {
+		return
+	}
+	if o := origin.Of(previous); o.Valid() {
+		dst.Set(refererHeader, o.String()+"/")
+		return
+	}
+	dst.Del(refererHeader)
 }
 
 func redirectLimit(opts Options) int {

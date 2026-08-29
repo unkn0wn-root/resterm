@@ -31,13 +31,13 @@ func serveBytes(t *testing.T, contentType string, size int) *httptest.Server {
 	return srv
 }
 
-func tooLarge(t *testing.T, err error) *ResponseTooLargeError {
+func tooLarge(t *testing.T, err error) int64 {
 	t.Helper()
 	var limit *ResponseTooLargeError
 	if !errors.As(err, &limit) {
 		t.Fatalf("error = %v, want a ResponseTooLargeError", err)
 	}
-	return limit
+	return limit.Limit
 }
 
 func TestResponseBodyStopsAtTheLimit(t *testing.T) {
@@ -49,7 +49,7 @@ func TestResponseBodyStopsAtTheLimit(t *testing.T) {
 		nil,
 		Options{MaxResponseBytes: bytesize.Of(1 << 20), Timeout: 30 * time.Second},
 	)
-	if got := tooLarge(t, err).Limit; got != 1<<20 {
+	if got := tooLarge(t, err); got != 1<<20 {
 		t.Fatalf("Limit = %d, want %d", got, 1<<20)
 	}
 }

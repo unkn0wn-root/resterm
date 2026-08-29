@@ -344,6 +344,9 @@ func formatStream(info *StreamInfo) *runfmt.Stream {
 		EventCount:     info.EventCount,
 		TranscriptPath: str.Trim(info.TranscriptPath),
 	}
+	if info.Err != nil {
+		out.Error = info.Err.Error()
+	}
 	if len(info.Summary) > 0 {
 		out.Summary = runfmt.CloneAnyMap(info.Summary)
 	}

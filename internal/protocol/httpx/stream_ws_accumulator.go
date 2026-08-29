@@ -1,7 +1,9 @@
 package httpx
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
 	"strconv"
 
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -138,21 +140,30 @@ func directionToString(dir stream.Direction) string {
 	}
 }
 
+// applyWebSocketSummaryDefaults fills in who ended a session when the events did
+// not say. A timeout and a canceled run get their own names because neither one
+// is a failure.
 func applyWebSocketSummaryDefaults(sum *WebSocketSummary, state stream.State, stateErr error) {
 	if sum == nil {
 		return
 	}
 	if sum.ClosedBy == "" {
-		if state == stream.StateFailed || stateErr != nil {
-			sum.ClosedBy = "error"
-			if sum.CloseReason == "" && stateErr != nil {
-				sum.CloseReason = stateErr.Error()
-			}
-		} else {
-			sum.ClosedBy = "client"
+		switch {
+		case errors.Is(stateErr, context.Canceled):
+			sum.ClosedBy = wsClosedByCanceled
+		case errors.Is(stateErr, context.DeadlineExceeded):
+			sum.ClosedBy = wsClosedByTimeout
+		case state == stream.StateFailed || stateErr != nil:
+			sum.ClosedBy = wsClosedByError
+		default:
+			sum.ClosedBy = wsClosedByClient
 		}
 	}
-	if sum.CloseReason == "" && stateErr != nil && sum.ClosedBy == "error" {
+	if sum.CloseReason != "" || stateErr == nil {
+		return
+	}
+	switch sum.ClosedBy {
+	case wsClosedByCanceled, wsClosedByTimeout, wsClosedByError:
 		sum.CloseReason = stateErr.Error()
 	}
 }

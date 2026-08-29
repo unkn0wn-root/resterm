@@ -85,14 +85,16 @@ type Listener struct {
 	C        <-chan *Event
 	Cancel   func()
 	Snapshot Snapshot
-	dropped  func() uint64
+	sub      *listener
 }
 
+// Dropped counts the events this listener never received. Events lost before it
+// subscribed are counted by Snapshot.Evicted instead.
 func (l Listener) Dropped() uint64 {
-	if l.dropped == nil {
+	if l.sub == nil {
 		return 0
 	}
-	return l.dropped()
+	return l.sub.dropped()
 }
 
 type Snapshot struct {
@@ -213,7 +215,7 @@ func (s *Session) Subscribe() Listener {
 			s.removeListener(id)
 		},
 		Snapshot: snapshot,
-		dropped:  l.dropped,
+		sub:      l,
 	}
 }
 

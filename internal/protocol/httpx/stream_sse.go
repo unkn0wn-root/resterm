@@ -113,6 +113,20 @@ type SSETranscript struct {
 	Summary SSESummary `json:"summary"`
 }
 
+// Err reports the failure that ended the stream. Reaching a configured limit or
+// timeout is a normal ending and returns nil. A broken read, or a line or event
+// larger than its limit, is a failure.
+func (s SSESummary) Err() error {
+	switch {
+	case s.Reason == sseReasonCanceled:
+		return diag.New(diag.ClassCanceled, cmp.Or(s.Error, "sse stream canceled"))
+	case s.Reason == sseReasonErr, s.Error != "":
+		return diag.New(diag.ClassProtocol, cmp.Or(s.Error, "sse stream failed"))
+	default:
+		return nil
+	}
+}
+
 func (c *Client) StartSSE(
 	ctx context.Context,
 	req *restfile.Request,
@@ -242,14 +256,14 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	if acc.summary.Error == "" && serr != nil {
 		acc.summary.Error = serr.Error()
 	}
-	if acc.summary.Reason == "" {
-		if serr != nil || state == stream.StateFailed {
-			acc.summary.Reason = sseReasonErr
-		} else {
-			acc.summary.Reason = sseReasonEOF
-		}
-	} else if acc.summary.Reason == sseReasonEOF && (state == stream.StateFailed || serr != nil) {
+	// The run already set a reason naming the limit it stopped at, so keep it.
+	// Only "eof" gives way, because a failed session contradicts it.
+	failed := serr != nil || state == stream.StateFailed
+	switch {
+	case failed && (acc.summary.Reason == "" || acc.summary.Reason == sseReasonEOF):
 		acc.summary.Reason = sseReasonErr
+	case acc.summary.Reason == "":
+		acc.summary.Reason = sseReasonEOF
 	}
 
 	transcript := SSETranscript{Events: acc.events, Summary: acc.summary}

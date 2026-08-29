@@ -1524,7 +1524,7 @@ If the server returns a non-2xx status or a content type other than `text/event-
 | `context_canceled` | The run was cancelled. |
 | `error` | The stream failed. `summary.error` contains the error message. |
 
-Reaching `idle`, `duration`, `max-events`, or `max-bytes` ends the stream without an error. The saved data includes everything read before the limit was reached.
+Reaching `idle`, `duration`, `max-events`, or `max-bytes` ends the stream without an error. The saved data includes everything read before the limit was reached. If the stream ends for any other reason, the request fails and `summary.error` contains the error message. Resterm still saves the transcript.
 
 ### WebSockets (`@websocket`, `@ws`)
 
@@ -1564,7 +1564,17 @@ Supported `@ws` steps:
 | `@ws wait <duration>` | Pause for the specified duration (e.g. `500ms`). |
 | `@ws close [code] [reason]` | Close the connection with an optional status code (defaults to `1000`). |
 
-Handshake failures surface the HTTP response so upgrade issues are easy to debug. Successful sessions stream events into the UI and history with metadata for direction, opcode, sizes, and close status. The summary exposed to templates and scripts includes `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, and `closeReason`.
+When the handshake fails, Resterm shows the HTTP response to help you find the problem. During a successful session, events appear in the UI and history together with their direction, opcode, size, and close status. Templates and scripts can read `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, and `dropped` from the summary. `closedBy` has one of these values:
+
+| Value | Meaning |
+| --- | --- |
+| `server` | The server closed the connection. |
+| `client` | Resterm closed the connection through `@ws close` or after the last step. |
+| `timeout` | The session reached its `idle` or `duration` limit. |
+| `canceled` | The run was cancelled. |
+| `error` | The session failed. `closeReason` contains the error message. |
+
+Only `error` and `canceled` cause the request to fail. Resterm keeps the transcript in every case.
 
 > **Heads-up:** When you keep a WebSocket URL in `@const`, `@global`, or `@var`, write the request line as `GET {{ws.url}}` (or whichever variable you use). The parser needs the explicit method to recognise the line as a WebSocket request before template expansion. Literal `ws://` / `wss://` URLs without a method still work when written directly.
 
@@ -1913,7 +1923,7 @@ Objects:
 - `stream`
   - `enabled()` - returns `true` when the current response is an SSE or WebSocket transcript.
   - `kind()` - returns `"sse"` or `"websocket"`.
-  - `summary()` - copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.). `dropped` is always present; require it to be `0` when a test or capture needs the complete transcript. SSE failures use `reason: "error"` and put the detailed message in `error`.
+  - `summary()` - copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.). The summary always includes `dropped`. If a test or capture needs every event, check that its value is `0`. For an SSE failure, `reason` is `"error"` and `error` contains the error message. Resterm also fails the request when the stream fails, so a test does not need to check for that separately.
   - `events()` - array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
   - `onEvent(fn)` - registers a callback invoked for each event after the script runs; useful for assertions over the entire stream.
   - `onClose(fn)` - registers a callback invoked once with the summary after all events replay.
@@ -2222,14 +2232,17 @@ A template can also provide part of the URL. Both `GET http://{{host}}/users` an
 
   These rules cannot be changed:
 
-  - Credentials are never sent when a redirect moves from HTTPS to HTTP.
+  - If a redirect chain moves from HTTPS to HTTP, Resterm stops sending credentials for the rest of the chain. This also applies if a later redirect returns to HTTPS or to the original origin. The HTTP server controls every redirect that follows.
   - A `Cookie` header is never copied to another origin. The cookie jar may still add cookies that belong to the new origin.
   - OAuth token requests stay on the token endpoint's origin. A 307 or 308 redirect can resend the client secret in the body, so removing headers would not protect it.
+  - When a redirect goes to another origin, Resterm sends only the origin of the previous URL in the `Referer` header. It removes the path and query, so a key added with `@auth ... query` does not reach the new origin. Resterm checks each redirect separately. If the next URL has the same origin, the `Referer` keeps the full previous URL, even if an earlier redirect crossed an origin boundary. Resterm leaves an explicitly set `Referer` unchanged.
+
 - Resterm follows up to 10 redirects by default. Set another limit with `@setting max-redirects 20` or `--max-redirects`. Use `0` or `none` to stop at the first redirect. `@setting followredirects false` also stops at the first redirect. There is no unlimited setting because the request must stop if the server sends a redirect loop.
 - Response bodies are limited to 32 MiB. Change the limit with `@setting max-response-size 100mb`, `@setting max-response-size none`, or `--max-response-size`. Resterm checks the size after decompressing the body. A larger body stops the request with an error.
 - SSE lines are limited to 4 MiB and SSE events to 8 MiB. Change these limits with `@sse max-line-bytes` and `@sse max-event-bytes`. A larger line or event stops the stream with an error naming the limit to raise. Reaching `@sse max-bytes` ends the stream without an error. WebSocket messages are limited to 32 KiB unless `@websocket max-message-bytes` sets another limit.
 - Most events arrive as a single `data:` line, so the line limit is the one they reach first. Raise `max-line-bytes` along with `max-event-bytes` when a single line carries the whole payload. Base64 adds about a third to a payload, so a 3 MiB file needs roughly 4 MiB of headroom.
-- Resterm limits the stream data kept in memory. An SSE session keeps up to 1024 events and 16 MiB, or twice `max-event-bytes` when that is larger. The size of an SSE event includes its data, comment, id, name, and other saved fields. A WebSocket session and its saved transcript each have an 8 MiB limit. The Stream pane keeps up to 5000 events or 16 MiB. The summary reports removed events as `dropped`.
+- Resterm limits how much stream data it keeps in memory. An SSE session keeps up to 1024 events and 16 MiB, or twice `max-event-bytes` when that is larger. The size of an SSE event includes its data, comment, id, name, and other saved fields. A WebSocket session and its saved transcript each have an 8 MiB limit. The Stream pane keeps up to 5000 events or 16 MiB. If Resterm removes older events, the summary counts them in `dropped`. The Stream tab shows `Transcript incomplete` when its view is missing events.
+- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end. Other problems fail the request. These include a read error, an SSE line or event that exceeds its limit, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a stream error returns `26` and a cancelled run returns `130`.
 - Requests use an in-memory cookie jar per environment. Cookies are isolated between environments, and `@setting no-cookies true` disables cookies for a request without clearing the stored jar. Use `Ctrl+Shift+G` (or `g Shift+G`) to clear cookies for the current environment.
 - TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts space/comma/semicolon separated lists; paths are relative). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.
@@ -2271,7 +2284,8 @@ Resterm does not keep these actions inside the workspace. Review files you did n
 ### Safety limits
 
 - **Scripts.** Each script block stops after 30 seconds or when the run is canceled. Script memory has no limit.
-- **Redirects.** Resterm removes credential headers when a redirect goes to another origin. It also removes custom headers named by `@auth`. It cannot remove secrets from a request body. A 307 or 308 redirect can send the same body to the new target. OAuth token requests cannot leave the token endpoint's origin. See [HTTP Transport & Settings](#http-transport--settings).
+- **Redirects.** When a redirect goes to another origin, Resterm removes credential headers and any custom headers named by `@auth`. It also removes the path and query from the `Referer`, so a key in the query does not travel to the new origin. If the chain moves from HTTPS to HTTP, Resterm stops sending credentials for the rest of that chain. Resterm cannot remove secrets from a request body. A 307 or 308 redirect can send the same body to the new target. OAuth token requests cannot leave the token endpoint's origin. See [HTTP Transport & Settings](#http-transport--settings).
+- **Streams.** A stream can end normally when it reaches a configured limit. If it ends because of an error, the request fails. Resterm still saves and reports the events it collected.
 - **Response size.** Response bodies, SSE lines and events, WebSocket messages, and saved stream data have size limits.
 - **Secrets in output.** Resterm masks secrets it knows about and credential headers in history, explain output, and errors. Telemetry removes usernames, passwords, and fragments from URLs. It replaces query values with `REDACTED`.
 

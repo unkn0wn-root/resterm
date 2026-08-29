@@ -204,6 +204,7 @@ type Stream struct {
 	EventCount     int
 	Summary        map[string]any
 	TranscriptPath string
+	Error          string
 }
 
 type Trace struct {

@@ -167,7 +167,7 @@ func (rt *wsRuntime) readLoop() {
 			if errors.As(err, &ce) {
 				meta := map[string]string{
 					wsMetaType:        "close",
-					wsMetaClosedBy:    "server",
+					wsMetaClosedBy:    wsClosedByServer,
 					wsMetaCloseCode:   strconv.Itoa(int(ce.Code)),
 					wsMetaCloseReason: ce.Reason,
 				}
@@ -233,7 +233,7 @@ func (rt *wsRuntime) idleWatch(limit time.Duration) {
 			return
 		case <-timer.C:
 			meta := map[string]string{
-				wsMetaClosedBy:    "timeout",
+				wsMetaClosedBy:    wsClosedByTimeout,
 				wsMetaCloseReason: fmt.Sprintf("idle timeout after %s", limit),
 			}
 			rt.closeTerminalNow(&stream.Event{
@@ -399,7 +399,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 			metadata = map[string]string{}
 		}
 		metadata[wsMetaType] = "close"
-		metadata[wsMetaClosedBy] = "client"
+		metadata[wsMetaClosedBy] = wsClosedByClient
 		metadata[wsMetaCloseCode] = strconv.Itoa(int(msg.code))
 		if msg.reason != "" {
 			metadata[wsMetaCloseReason] = msg.reason

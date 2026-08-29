@@ -172,66 +172,104 @@ func TestRedirectWithinTheSameOriginKeepsCredentials(t *testing.T) {
 func TestKeepsCredentials(t *testing.T) {
 	tests := []struct {
 		name     string
-		previous string
+		chain    []string
 		next     string
 		forwards string
 		want     bool
 	}{
-		{name: "no forwarding", previous: "https://a.example.com/x", next: "https://cdn.example.net/y"},
+		{
+			name:  "back to the origin that owns them",
+			chain: []string{"https://a.example.com/x"},
+			next:  "https://a.example.com/y",
+			want:  true,
+		},
+		{
+			name:  "no forwarding",
+			chain: []string{"https://a.example.com/x"},
+			next:  "https://cdn.example.net/y",
+		},
 		{
 			name:     "named origin",
-			previous: "https://a.example.com/x",
+			chain:    []string{"https://a.example.com/x"},
 			next:     "https://cdn.example.net/y",
 			forwards: "https://cdn.example.net",
 			want:     true,
 		},
 		{
 			name:     "an origin outside the list stays outside",
-			previous: "https://a.example.com/x",
+			chain:    []string{"https://a.example.com/x"},
 			next:     "https://evil.example.net/y",
 			forwards: "https://cdn.example.net",
 		},
 		{
 			name:     "a listed origin on another port is another origin",
-			previous: "https://a.example.com/x",
+			chain:    []string{"https://a.example.com/x"},
 			next:     "https://cdn.example.net:8443/y",
 			forwards: "https://cdn.example.net",
 		},
 		{
 			name:     "any origin",
-			previous: "https://a.example.com/x",
+			chain:    []string{"https://a.example.com/x"},
 			next:     "https://anywhere.example.net/y",
 			forwards: "true",
 			want:     true,
 		},
 		{
 			name:     "any origin still refuses a downgrade",
-			previous: "https://a.example.com/x",
+			chain:    []string{"https://a.example.com/x"},
 			next:     "http://a.example.com/y",
 			forwards: "true",
 		},
 		{
 			name:     "a listed origin still refuses a downgrade",
-			previous: "https://a.example.com/x",
+			chain:    []string{"https://a.example.com/x"},
 			next:     "http://cdn.example.net/y",
 			forwards: "http://cdn.example.net",
 		},
 		{
 			name:     "a downgrade partway along a chain",
-			previous: "https://trusted.example.net/x",
+			chain:    []string{"https://a.example.com/x", "https://trusted.example.net/x"},
 			next:     "http://other.example.net/y",
 			forwards: "true",
 		},
 		{
+			name: "a downgrade earlier in the chain is not forgotten",
+			chain: []string{
+				"https://a.example.com/x",
+				"http://other.example.net/one",
+			},
+			next:     "http://other.example.net/two",
+			forwards: "true",
+		},
+		{
+			name: "climbing back onto https does not restore trust",
+			chain: []string{
+				"https://a.example.com/x",
+				"http://other.example.net/one",
+			},
+			next:     "https://a.example.com/y",
+			forwards: "true",
+		},
+		{
 			name:     "plain http to plain http is not a downgrade",
-			previous: "http://a.example.com/x",
+			chain:    []string{"http://a.example.com/x"},
 			next:     "http://cdn.example.net/y",
 			forwards: "http://cdn.example.net",
 			want:     true,
 		},
 		{
+			name: "a chain that never had TLS keeps forwarding",
+			chain: []string{
+				"http://a.example.com/x",
+				"http://other.example.net/one",
+			},
+			next:     "http://other.example.net/two",
+			forwards: "true",
+			want:     true,
+		},
+		{
 			name:     "an upgrade to https is allowed when the origin is listed",
-			previous: "http://a.example.com/x",
+			chain:    []string{"http://a.example.com/x"},
 			next:     "https://cdn.example.net/y",
 			forwards: "https://cdn.example.net",
 			want:     true,
@@ -240,10 +278,6 @@ func TestKeepsCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			previous, err := url.Parse(tt.previous)
-			if err != nil {
-				t.Fatal(err)
-			}
 			next, err := url.Parse(tt.next)
 			if err != nil {
 				t.Fatal(err)
@@ -254,11 +288,31 @@ func TestKeepsCredentials(t *testing.T) {
 					t.Fatalf("ParseForwardCredentials(%q): %v", tt.forwards, err)
 				}
 			}
-			if got := keepsCredentials(previous, next, forwards); got != tt.want {
-				t.Fatalf("keepsCredentials(%s, %s) = %t, want %t", tt.previous, tt.next, got, tt.want)
+			g := redirectGuard{forwardTo: forwards}
+			if got := g.keepsCredentials(chain(t, tt.chain...), next); got != tt.want {
+				t.Fatalf(
+					"keepsCredentials(%v, %s) = %t, want %t",
+					tt.chain,
+					tt.next,
+					got,
+					tt.want,
+				)
 			}
 		})
 	}
+}
+
+func chain(t *testing.T, urls ...string) []*http.Request {
+	t.Helper()
+	out := make([]*http.Request, len(urls))
+	for i, raw := range urls {
+		req, err := http.NewRequest(http.MethodGet, raw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[i] = req
+	}
+	return out
 }
 
 func TestRedirectLoopStops(t *testing.T) {
@@ -924,5 +978,145 @@ func TestRedirectRefusesADowngradePartwayAlongAChain(t *testing.T) {
 		if leaked := got.Get(name); leaked != "" {
 			t.Errorf("%s left TLS partway along the chain as %q", name, leaked)
 		}
+	}
+}
+
+func TestRedirectNarrowsTheRefererToTheOrigin(t *testing.T) {
+	target := newRecorder(t)
+	first := redirectTo(t, otherHost(target.URL)+"/next")
+
+	execute(t, &restfile.Request{
+		Method: "GET",
+		URL:    first.URL + "/tokens",
+		Metadata: restfile.RequestMetadata{Auth: &restfile.AuthSpec{
+			Type: restfile.AuthAPIKey,
+			Params: map[string]string{
+				authParamName:      "api_key",
+				authParamValue:     "secret",
+				authParamPlacement: authPlacementQuery,
+			},
+		}},
+	}, Options{})
+
+	got := target.received(t).Get("Referer")
+	if strings.Contains(got, "secret") || strings.Contains(got, "/tokens") {
+		t.Fatalf("Referer = %q, want the path and query left behind", got)
+	}
+	if want := first.URL + "/"; got != want {
+		t.Fatalf("Referer = %q, want %q", got, want)
+	}
+}
+
+func TestRedirectKeepsTheRefererTheRequestSet(t *testing.T) {
+	target := newRecorder(t)
+	first := redirectTo(t, otherHost(target.URL)+"/next")
+
+	hdr := make(http.Header)
+	hdr.Set("Referer", "https://docs.example.com/guide")
+	execute(t, &restfile.Request{Method: "GET", URL: first.URL + "/start", Headers: hdr}, Options{})
+
+	if got := target.received(t).Get("Referer"); got != "https://docs.example.com/guide" {
+		t.Fatalf("Referer = %q, want the value the request set", got)
+	}
+}
+
+func TestRedirectWithinTheOriginKeepsTheWholeReferer(t *testing.T) {
+	var got http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/moved" {
+			got = req.Header.Clone()
+			return
+		}
+		http.Redirect(w, req, "/moved", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	execute(t, &restfile.Request{Method: "GET", URL: srv.URL + "/start?api_key=secret"}, Options{})
+
+	if want := srv.URL + "/start?api_key=secret"; got.Get("Referer") != want {
+		t.Fatalf("Referer = %q, want %q", got.Get("Referer"), want)
+	}
+}
+
+func TestRedirectNeverRestoresCredentialsAfterADowngrade(t *testing.T) {
+	last := newRecorder(t)
+	middle := redirectTo(t, otherHost(last.URL)+"/last")
+	first := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, middle.URL+"/next", http.StatusFound)
+	}))
+	defer first.Close()
+
+	forward, err := ParseForwardCredentials("true")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hdr := make(http.Header)
+	hdr.Set("Authorization", "Bearer secret")
+	hdr.Set("X-Api-Key", "secret")
+	execute(t, &restfile.Request{Method: "GET", URL: first.URL, Headers: hdr}, Options{
+		ForwardCredentials: forward,
+		InsecureSkipVerify: true,
+	})
+
+	got := last.received(t)
+	for _, name := range []string{"Authorization", "X-Api-Key"} {
+		if leaked := got.Get(name); leaked != "" {
+			t.Errorf("%s came back a hop after the chain left TLS, as %q", name, leaked)
+		}
+	}
+}
+
+func TestRedirectWithinTheOriginKeepsTheWholeRefererMidChain(t *testing.T) {
+	got := make(chan http.Header, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/two" {
+			got <- r.Header.Clone()
+			return
+		}
+		http.Redirect(w, r, "/two", http.StatusFound)
+	}))
+	t.Cleanup(target.Close)
+	first := redirectTo(t, otherHost(target.URL)+"/one?secret=shh")
+
+	execute(t, &restfile.Request{Method: "GET", URL: first.URL + "/start"}, Options{})
+
+	want := otherHost(target.URL) + "/one?secret=shh"
+	select {
+	case hdr := <-got:
+		if hdr.Get("Referer") != want {
+			t.Fatalf("Referer = %q, want the whole URL of the same-origin hop %q", hdr.Get("Referer"), want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the redirect target was never reached")
+	}
+}
+
+func TestRedirectBackToTheOwnerOriginNarrowsTheReferer(t *testing.T) {
+	got := make(chan http.Header, 1)
+	var owner, hop *httptest.Server
+	owner = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/back" {
+			got <- r.Header.Clone()
+			return
+		}
+		http.Redirect(w, r, otherHost(hop.URL)+"/hop?secret=shh", http.StatusFound)
+	}))
+	t.Cleanup(owner.Close)
+	hop = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, owner.URL+"/back", http.StatusFound)
+	}))
+	t.Cleanup(hop.Close)
+
+	execute(t, &restfile.Request{Method: "GET", URL: owner.URL + "/start"}, Options{})
+
+	want := otherHost(hop.URL) + "/"
+	select {
+	case hdr := <-got:
+		if hdr.Get("Referer") != want {
+			t.Fatalf("Referer = %q, want only the origin the hop came from %q", hdr.Get("Referer"), want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the redirect target was never reached")
 	}
 }

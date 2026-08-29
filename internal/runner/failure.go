@@ -23,6 +23,8 @@ func resultFailure(res Result) runfail.Failure {
 		return runfail.FromErrorSource(res.Err, "error")
 	case res.ScriptErr != nil:
 		return runfail.Script(res.ScriptErr.Error(), "scriptError")
+	case streamFailed(res.Stream):
+		return runfail.FromErrorSource(res.Stream.Err, "stream")
 	case anyScriptTestFailed(res.Tests):
 		return runfail.Assertion(scriptTestFailureMessage(res.Tests), "tests")
 	case traceFailed(res.Trace):
@@ -57,6 +59,8 @@ func stepFailure(step StepResult) runfail.Failure {
 		return runfail.FromErrorSource(step.Err, "error")
 	case step.ScriptErr != nil:
 		return runfail.Script(step.ScriptErr.Error(), "scriptError")
+	case streamFailed(step.Stream):
+		return runfail.FromErrorSource(step.Stream.Err, "stream")
 	case anyScriptTestFailed(step.Tests):
 		return runfail.Assertion(scriptTestFailureMessage(step.Tests), "tests")
 	case traceFailed(step.Trace):

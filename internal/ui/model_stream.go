@@ -52,6 +52,7 @@ func (m *Model) attachStreamSession(session *stream.Session) *liveSession {
 	ls := newLiveSession(id, m.streamMaxEvents)
 	ls.kind = session.Kind()
 	listener := session.Subscribe()
+	ls.lost.evicted = listener.Snapshot.Evicted
 	ls.append(listener.Snapshot.Events)
 	ls.setState(listener.Snapshot.State, listener.Snapshot.Err)
 	m.liveSessions[id] = ls
@@ -116,18 +117,28 @@ func (m *Model) runStreamSession(session *stream.Session, listener stream.Listen
 		if len(batch) == 0 {
 			return
 		}
-		m.emitStreamMsg(streamEventMsg{sessionID: session.ID(), events: cloneEventSlice(batch)})
+		m.emitStreamMsg(streamEventMsg{
+			sessionID: session.ID(),
+			events:    cloneEventSlice(batch),
+			dropped:   listener.Dropped(),
+		})
 		batch = batch[:0]
+	}
+
+	// The last batch can be empty, so the final count goes on the completion
+	// message too.
+	finish := func() {
+		flush()
+		state, err := session.State()
+		m.emitStreamMsg(streamStateMsg{sessionID: session.ID(), state: state, err: err})
+		m.emitStreamMsg(streamCompleteMsg{sessionID: session.ID(), dropped: listener.Dropped()})
 	}
 
 	for {
 		if timer == nil {
 			evt, ok := <-listener.C
 			if !ok {
-				flush()
-				state, err := session.State()
-				m.emitStreamMsg(streamStateMsg{sessionID: session.ID(), state: state, err: err})
-				m.emitStreamMsg(streamCompleteMsg{sessionID: session.ID()})
+				finish()
 				return
 			}
 			batch = append(batch, evt)
@@ -142,10 +153,7 @@ func (m *Model) runStreamSession(session *stream.Session, listener stream.Listen
 					<-timer.C
 				}
 				timer = nil
-				flush()
-				state, err := session.State()
-				m.emitStreamMsg(streamStateMsg{sessionID: session.ID(), state: state, err: err})
-				m.emitStreamMsg(streamCompleteMsg{sessionID: session.ID()})
+				finish()
 				return
 			}
 			batch = append(batch, evt)
@@ -319,6 +327,7 @@ func (m *Model) handleStreamEvents(msg streamEventMsg) {
 	if ls == nil {
 		return
 	}
+	ls.lost.listener = msg.dropped
 	ls.append(msg.events)
 	if ls.state == stream.StateConnecting {
 		ls.state = stream.StateOpen
@@ -362,6 +371,7 @@ func (m *Model) handleStreamComplete(msg streamCompleteMsg) {
 	if ls == nil {
 		return
 	}
+	ls.lost.listener = msg.dropped
 	if ls.state != stream.StateFailed {
 		ls.state = stream.StateClosed
 	}
@@ -670,6 +680,12 @@ func (m *Model) formatStreamContent(ls *liveSession) string {
 	}
 	if ls.err != nil {
 		builder.WriteString(th.StreamError.Render(fmt.Sprintf("Error: %v", ls.err)))
+		builder.WriteByte('\n')
+	}
+	if lost := ls.lost.total(); lost > 0 {
+		builder.WriteString(th.StreamError.Render(
+			fmt.Sprintf("Transcript incomplete: %d events dropped", lost),
+		))
 		builder.WriteByte('\n')
 	}
 

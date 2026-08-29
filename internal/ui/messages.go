@@ -120,6 +120,8 @@ type updateCheckMsg struct {
 type streamEventMsg struct {
 	sessionID string
 	events    []*stream.Event
+	// dropped is a running total, not an increment.
+	dropped uint64
 }
 
 type streamStateMsg struct {
@@ -130,6 +132,7 @@ type streamStateMsg struct {
 
 type streamCompleteMsg struct {
 	sessionID string
+	dropped   uint64
 }
 
 // streamAttachMsg hands a session opened on the engine goroutine to the update

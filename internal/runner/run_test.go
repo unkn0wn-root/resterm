@@ -17,6 +17,7 @@ import (
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -1981,5 +1982,114 @@ func TestRunRejectsUnseededHeadlessOAuthAuthorizationCode(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("expected request to stop before network call, got %d calls", calls)
+	}
+}
+
+func TestRunFailsOnTruncatedStreamAndKeepsTheTranscript(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "stream.http")
+	artifacts := filepath.Join(dir, "artifacts")
+	src := strings.Join([]string{
+		"### Events",
+		"# @name events",
+		"# @sse max-line-bytes=16",
+		"GET https://example.com/events",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				hdr := make(http.Header)
+				hdr.Set("Content-Type", "text/event-stream")
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body: io.NopCloser(
+						strings.NewReader("data: " + strings.Repeat("x", 4096) + "\n\n"),
+					),
+					Request: req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		ArtifactDir:   artifacts,
+		Client:        client,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Failed != 1 {
+		t.Fatalf("report failed = %d, want the truncated stream to fail the run", rep.Failed)
+	}
+
+	res := rep.Results[0]
+	if res.Passed {
+		t.Fatal("a stream that stopped at its line limit was reported as passing")
+	}
+	if res.Failure.Code != runfail.CodeProtocol || res.Failure.Source != "stream" {
+		t.Fatalf("Failure = %+v, want a protocol failure sourced from the stream", res.Failure)
+	}
+	if !strings.Contains(res.Failure.Message, "max-line-bytes") {
+		t.Fatalf("Failure.Message = %q, want the limit to raise", res.Failure.Message)
+	}
+	if res.Stream == nil || res.Stream.TranscriptPath == "" {
+		t.Fatalf("Stream = %+v, want the transcript kept", res.Stream)
+	}
+	if _, err := os.ReadFile(res.Stream.TranscriptPath); err != nil {
+		t.Fatalf("read transcript: %v", err)
+	}
+}
+
+func TestRunPassesWhenAStreamStopsAtAnEventLimit(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "stream.http")
+	src := strings.Join([]string{
+		"### Events",
+		"# @name events",
+		"# @sse max-events=1",
+		"GET https://example.com/events",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				hdr := make(http.Header)
+				hdr.Set("Content-Type", "text/event-stream")
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body:       io.NopCloser(strings.NewReader("data: one\n\ndata: two\n\n")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !rep.Results[0].Passed {
+		t.Fatalf("a stream that stopped where it was told to failed: %+v", rep.Results[0].Failure)
 	}
 }
