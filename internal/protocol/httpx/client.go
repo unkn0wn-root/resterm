@@ -23,6 +23,9 @@ import (
 type Options struct {
 	Timeout            time.Duration
 	MaxResponseBytes   bytesize.Budget
+	SSEMaxLineBytes    int64
+	SSEMaxEventBytes   int64
+	WSMaxMessageBytes  int64
 	BaseURL            string
 	FollowRedirects    bool
 	MaxRedirects       restfile.Opt[int]

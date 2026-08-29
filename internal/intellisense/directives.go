@@ -170,6 +170,24 @@ var settingArgs = []Item{
 		Placeholder: "100mb",
 	},
 	{
+		Label:       "sse-max-line-bytes=",
+		Summary:     "Default SSE line limit for every request",
+		Insert:      "sse-max-line-bytes=4mb",
+		Placeholder: "4mb",
+	},
+	{
+		Label:       "sse-max-event-bytes=",
+		Summary:     "Default SSE event limit for every request",
+		Insert:      "sse-max-event-bytes=8mb",
+		Placeholder: "8mb",
+	},
+	{
+		Label:       "ws-max-message-bytes=",
+		Summary:     "Default WebSocket message limit for every request",
+		Insert:      "ws-max-message-bytes=32kb",
+		Placeholder: "32kb",
+	},
+	{
 		Label:       "http-version=",
 		Summary:     "HTTP protocol version (1.1|2)",
 		Insert:      "http-version=1.1",
