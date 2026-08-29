@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/unkn0wn-root/resterm/compare/v1.4.1...v1.5.0) (2026-08-29)
+
+
+### Features
+
+* **stream:** set SSE and WebSocket size limits globally ([#398](https://github.com/unkn0wn-root/resterm/issues/398)) ([4e64087](https://github.com/unkn0wn-root/resterm/commit/4e64087aac0b670d94c780a7d8680330e7461afc))
+
 ### [1.4.1](https://github.com/unkn0wn-root/resterm/compare/v1.4.0...v1.4.1) (2026-08-27)
 
 
