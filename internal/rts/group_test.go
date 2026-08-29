@@ -75,3 +75,35 @@ func TestMask(t *testing.T) {
 		})
 	}
 }
+
+func TestGroupScannerMatchesOpenGroup(t *testing.T) {
+	sources := []string{
+		"sum(1, 2)",
+		"contains(\"x\\\n)\")",
+		"contains(\"x\\\r\n)\")",
+		"contains(\"x\n)\")",
+		"call(\n # ) ignored\n)",
+		"[a mismatched) still open",
+		"call(\x00) ignored",
+		"(\"\\\x00\")",
+	}
+
+	for _, src := range sources {
+		for cut := range len(src) + 1 {
+			var scan GroupScanner
+			scan.Feed(src[:cut])
+			scan.Feed(src[cut:])
+			if got, want := scan.Closer(), OpenGroup(src); got != want {
+				t.Fatalf("chunks [%q, %q] closed with %q, whole read gives %q", src[:cut], src[cut:], got, want)
+			}
+		}
+
+		var scan GroupScanner
+		for i := range len(src) {
+			scan.Feed(src[i : i+1])
+		}
+		if got, want := scan.Closer(), OpenGroup(src); got != want {
+			t.Fatalf("byte chunks over %q closed with %q, whole read gives %q", src, got, want)
+		}
+	}
+}
