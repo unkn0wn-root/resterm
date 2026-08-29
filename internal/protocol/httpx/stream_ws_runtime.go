@@ -169,6 +169,9 @@ func (rt *wsRuntime) readLoop() {
 		if err != nil {
 			var ce websocket.CloseError
 			if errors.As(err, &ce) {
+				// Read completes the close handshake before returning a close error.
+				// Do not let shutdown try to close the connection again.
+				rt.closeStarted.Store(true)
 				meta := map[string]string{
 					wsMetaType:        "close",
 					wsMetaClosedBy:    wsClosedByServer,

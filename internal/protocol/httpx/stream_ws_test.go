@@ -299,6 +299,66 @@ func TestWebSocketServerCloseIsAttributedToTheServer(t *testing.T) {
 	}
 }
 
+func TestWebSocketServerCloseDuringOutboundPublication(t *testing.T) {
+	closeNow := make(chan struct{}, 1)
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	server := httptest.NewUnstartedServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+			if err != nil {
+				return
+			}
+			<-closeNow
+			_ = conn.Close(websocket.StatusGoingAway, "server going away")
+		}),
+	)
+	server.Listener = ln
+	server.Start()
+	defer server.Close()
+	defer func() {
+		select {
+		case closeNow <- struct{}{}:
+		default:
+		}
+	}()
+
+	conn, _, err := websocket.Dial(
+		t.Context(),
+		strings.Replace(server.URL, "http", "ws", 1),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+
+	session := stream.NewSession(t.Context(), stream.KindWebSocket, stream.Config{})
+	session.MarkOpen()
+	runtime := &wsRuntime{
+		conn:    conn,
+		session: session,
+		writeCh: make(chan wsOutbound),
+		cancel:  session.Cancel,
+	}
+
+	if !runtime.beginOutbound() {
+		t.Fatal("begin outbound publication")
+	}
+	closeNow <- struct{}{}
+	runtime.readLoop()
+	runtime.finishOutbound(nil, false)
+
+	state, stateErr := session.State()
+	if stateErr != nil {
+		t.Fatalf("normal server close became a session failure: %v", stateErr)
+	}
+	if state != stream.StateClosed {
+		t.Fatalf("session state = %v, want %v", state, stream.StateClosed)
+	}
+}
+
 func TestExecuteWebSocketPingPayloadTranscript(t *testing.T) {
 	server, cleanup := startEchoWebSocketServer(t)
 	defer cleanup()
