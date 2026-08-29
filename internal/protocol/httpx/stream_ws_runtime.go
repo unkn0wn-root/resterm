@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -32,6 +33,9 @@ type wsRuntime struct {
 	endErr error
 	done   bool
 	once   sync.Once
+	// closeStarted is claimed by whoever sends the first close frame, so the
+	// connection is never closed a second time.
+	closeStarted atomic.Bool
 }
 
 func (rt *wsRuntime) publishReceive(evt *stream.Event) {
@@ -393,6 +397,9 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		}
 		return nil
 	case wsOutboundClose:
+		if !rt.closeStarted.CompareAndSwap(false, true) {
+			return nil
+		}
 		session.MarkClosing()
 		metadata := maps.Clone(msg.metadata)
 		if metadata == nil {
@@ -433,13 +440,16 @@ func (rt *wsRuntime) shutdown() {
 		if rt.cancel != nil {
 			rt.cancel()
 		}
+		// A close that already started sent its own frame and ends the session
+		// its own way. Closing again reports a second, bogus failure.
+		if !rt.closeStarted.CompareAndSwap(false, true) {
+			return
+		}
 		if err := rt.conn.Close(websocket.StatusNormalClosure, ""); err != nil &&
 			!errors.Is(err, net.ErrClosed) && !errors.Is(err, context.Canceled) {
-			if rt.session != nil {
-				rt.session.Close(
-					diag.WrapAs(diag.ClassProtocol, err, "close websocket connection"),
-				)
-			}
+			rt.session.Close(
+				diag.WrapAs(diag.ClassProtocol, err, "close websocket connection"),
+			)
 		}
 	})
 }

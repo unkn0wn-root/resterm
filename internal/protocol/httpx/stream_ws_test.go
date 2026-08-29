@@ -115,7 +115,7 @@ func TestExecuteWebSocketChat(t *testing.T) {
 		URL:    wsURL,
 		WebSocket: &restfile.WebSocketRequest{
 			Options: restfile.WebSocketOptions{
-				IdleTimeout: 500 * time.Millisecond,
+				IdleTimeout: 2 * time.Second,
 			},
 			Steps: []restfile.WebSocketStep{
 				{Type: restfile.WebSocketStepSendText, Value: "Hello from resterm!"},
@@ -142,16 +142,17 @@ func TestExecuteWebSocketChat(t *testing.T) {
 		t.Fatalf("expected websocket stream header, got %q", got)
 	}
 
-	var transcript struct {
-		Events []struct {
-			Direction string `json:"direction"`
-			Type      string `json:"type"`
-			Text      string `json:"text"`
-		}
-	}
+	var transcript WebSocketTranscript
 	if err := json.Unmarshal(resp.Body, &transcript); err != nil {
 		t.Fatalf("failed to decode transcript: %v", err)
 	}
+	if err := transcript.Summary.Err(); err != nil {
+		t.Fatalf("scripted close ended as a stream failure: %v", err)
+	}
+	if transcript.Summary.ClosedBy != wsClosedByClient {
+		t.Fatalf("scripted close ended by %q, want %q", transcript.Summary.ClosedBy, wsClosedByClient)
+	}
+
 	foundPong := false
 	for _, evt := range transcript.Events {
 		if evt.Direction == "send" && evt.Type == "pong" && evt.Text == "client-pong" {
@@ -161,6 +162,140 @@ func TestExecuteWebSocketChat(t *testing.T) {
 	}
 	if !foundPong {
 		t.Fatalf("expected pong event in transcript: %+v", transcript.Events)
+	}
+}
+
+func TestWebSocketShutdownDoesNotRepeatAStartedClose(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	session := stream.NewSession(ctx, stream.KindWebSocket, stream.Config{})
+	session.MarkOpen()
+	session.MarkClosing()
+
+	runtime := &wsRuntime{
+		session: session,
+		writeCh: make(chan wsOutbound),
+		cancel:  cancel,
+	}
+	runtime.closeStarted.Store(true)
+	runtime.shutdown()
+
+	state, err := session.State()
+	if state != stream.StateClosing || err != nil {
+		t.Fatalf("shutdown changed a closing session to state %v with error %v", state, err)
+	}
+}
+
+// Both sides send a close frame. Only the first one says who ended the session.
+func TestAccumulatorKeepsTheFirstCloseFrame(t *testing.T) {
+	acc := newWSAccumulator()
+	acc.consume(&stream.Event{
+		Kind:      stream.KindWebSocket,
+		Direction: stream.DirSend,
+		Metadata: map[string]string{
+			wsMetaType:        "close",
+			wsMetaClosedBy:    wsClosedByClient,
+			wsMetaCloseCode:   "1000",
+			wsMetaCloseReason: "resterm closed",
+		},
+	})
+	acc.consume(&stream.Event{
+		Kind:      stream.KindWebSocket,
+		Direction: stream.DirReceive,
+		Metadata: map[string]string{
+			wsMetaType:        "close",
+			wsMetaClosedBy:    wsClosedByServer,
+			wsMetaCloseCode:   "1001",
+			wsMetaCloseReason: "server going away",
+		},
+	})
+
+	if acc.summary.ClosedBy != wsClosedByClient {
+		t.Fatalf("closedBy = %q, want the side that closed first", acc.summary.ClosedBy)
+	}
+	if acc.summary.CloseCode != 1000 || acc.summary.CloseReason != "resterm closed" {
+		t.Fatalf("close = %d %q, want the first frame kept",
+			acc.summary.CloseCode, acc.summary.CloseReason)
+	}
+}
+
+func TestWebSocketAutoCloseIsAttributedToTheClient(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	req := &restfile.Request{
+		Method:    http.MethodGet,
+		URL:       strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+		WebSocket: &restfile.WebSocketRequest{},
+	}
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("ExecuteWebSocket: %v", err)
+	}
+
+	var transcript WebSocketTranscript
+	if err := json.Unmarshal(resp.Body, &transcript); err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
+	if transcript.Summary.ClosedBy != wsClosedByClient {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByClient)
+	}
+	if err := transcript.Summary.Err(); err != nil {
+		t.Fatalf("an auto close ended as a stream failure: %v", err)
+	}
+}
+
+// The server has to win the close for this to mean anything, so the session is
+// never completed. Completing it would send a close of our own first.
+func TestWebSocketServerCloseIsAttributedToTheServer(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	server := httptest.NewUnstartedServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+			if err != nil {
+				return
+			}
+			_ = conn.Close(websocket.StatusGoingAway, "server going away")
+		}),
+	)
+	server.Listener = ln
+	server.Start()
+	defer server.Close()
+
+	req := &restfile.Request{
+		Method:    http.MethodGet,
+		URL:       strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+		WebSocket: &restfile.WebSocketRequest{},
+	}
+	handle, fallback, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("StartWebSocket: %v", err)
+	}
+	if fallback != nil {
+		t.Fatalf("expected a live websocket handle, got a fallback response")
+	}
+	t.Cleanup(handle.Session.Cancel)
+
+	select {
+	case <-handle.Session.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the session did not end after the server closed it")
+	}
+
+	acc := newWSAccumulator()
+	for _, evt := range handle.Session.EventsSnapshot() {
+		acc.consume(evt)
+	}
+	state, stateErr := handle.Session.State()
+	applyWebSocketSummaryDefaults(&acc.summary, state, stateErr)
+
+	if acc.summary.ClosedBy != wsClosedByServer {
+		t.Fatalf("closedBy = %q, want %q", acc.summary.ClosedBy, wsClosedByServer)
+	}
+	if acc.summary.CloseReason != "server going away" {
+		t.Fatalf("closeReason = %q, want the reason the server sent", acc.summary.CloseReason)
 	}
 }
 
