@@ -105,6 +105,41 @@ func TestOpenMarker(t *testing.T) {
 	}
 }
 
+func TestTemplateScannerMatchesBatchScanAtEveryChunkBoundary(t *testing.T) {
+	inputs := []string{
+		`response.json.token`,
+		`Bearer {{token}}`,
+		`Bearer {{token`,
+		`{{a}} and {{b`,
+		`contains(response.text(), "{{token")`,
+		"contains(\"escaped\\\n{{token}}\")",
+		"{{\n response.status\n}}",
+		`{{a}"{{b}}"{{c}}`,
+	}
+
+	for _, input := range inputs {
+		for cut := range len(input) + 1 {
+			var scanner TemplateScanner
+			scanner.Feed(input[:cut])
+			scanner.Feed(input[cut:])
+			if got, want := scanner.State(), templateState(input); got != want {
+				t.Fatalf("chunks [%q, %q] have state %d, whole read gives %d", input[:cut], input[cut:], got, want)
+			}
+		}
+	}
+}
+
+func templateState(input string) TemplateState {
+	scan := scanTemplates(input)
+	if scan.open {
+		return TemplateOpen
+	}
+	if scan.has {
+		return TemplateClosed
+	}
+	return TemplateNone
+}
+
 func TestMixedTemplateRTSCall(t *testing.T) {
 	if !MixedTemplateRTSCall(`contains({{name}}, "x")`) {
 		t.Fatalf("expected mixed template+call form to be detected")
