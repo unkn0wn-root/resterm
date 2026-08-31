@@ -924,8 +924,16 @@ func TestCompleteWebSocketReportsAStepFailureInTheSummary(t *testing.T) {
 		!strings.Contains(transcript.Summary.CloseReason, "websocket payload file") {
 		t.Fatalf("closeReason = %q, want the step and why it failed", transcript.Summary.CloseReason)
 	}
-	if err := transcript.Summary.Err(); err == nil {
+	// A payload Resterm could not read is a filesystem failure, not a protocol one.
+	if transcript.Summary.ErrorClass != diag.ClassFilesystem {
+		t.Fatalf("errorClass = %q, want %q", transcript.Summary.ErrorClass, diag.ClassFilesystem)
+	}
+	err = transcript.Summary.Err()
+	if err == nil {
 		t.Fatal("Err() = nil, want the failure to fail the request")
+	}
+	if !slices.Contains(diag.Classes(err), diag.ClassFilesystem) {
+		t.Fatalf("Err() classes = %v, want %s", diag.Classes(err), diag.ClassFilesystem)
 	}
 	if !wsSent(transcript, "hello") {
 		t.Fatalf("the transcript lost the frames sent before the failure: %+v", transcript.Events)
@@ -965,5 +973,109 @@ func TestCompleteWebSocketNamesACancelledRunAndKeepsTheTranscript(t *testing.T) 
 	}
 	if !wsSent(transcript, "hello") {
 		t.Fatalf("the transcript lost the frames sent before the cancel: %+v", transcript.Events)
+	}
+}
+
+func TestWebSocketStepFailureKeepsItsClass(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	tests := []struct {
+		name string
+		step restfile.WebSocketStep
+		want diag.Class
+	}{
+		{
+			name: "unreadable payload file",
+			step: restfile.WebSocketStep{
+				Type: restfile.WebSocketStepSendFile,
+				File: "no-such-payload.bin",
+			},
+			want: diag.ClassFilesystem,
+		},
+		{
+			name: "payload that is not base64",
+			step: restfile.WebSocketStep{
+				Type:  restfile.WebSocketStepSendBase64,
+				Value: "not base64 at all",
+			},
+			want: diag.ClassProtocol,
+		},
+		{
+			name: "payload that is not json",
+			step: restfile.WebSocketStep{
+				Type:  restfile.WebSocketStepSendJSON,
+				Value: "{oops",
+			},
+			want: diag.ClassProtocol,
+		},
+		{
+			name: "control frame over its payload limit",
+			step: restfile.WebSocketStep{
+				Type:  restfile.WebSocketStepPing,
+				Value: strings.Repeat("A", websocketControlMaxPayload+1),
+			},
+			want: diag.ClassProtocol,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{
+				Method: http.MethodGet,
+				URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+				WebSocket: &restfile.WebSocketRequest{
+					Steps: []restfile.WebSocketStep{tt.step},
+				},
+			}
+
+			resp, err := NewClient(nil).ExecuteWebSocket(
+				t.Context(),
+				req,
+				nil,
+				Options{BaseDir: t.TempDir()},
+			)
+			if err != nil {
+				t.Fatalf("a failed step returned before the transcript was built: %v", err)
+			}
+
+			sum := wsTranscript(t, resp).Summary
+			if sum.ClosedBy != wsClosedByError {
+				t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, wsClosedByError)
+			}
+			if sum.ErrorClass != tt.want {
+				t.Fatalf("errorClass = %q, want %q", sum.ErrorClass, tt.want)
+			}
+			if got := diag.Classes(sum.Err()); !slices.Contains(got, tt.want) {
+				t.Fatalf("Err() classes = %v, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+// A transcript another build wrote can name a class this one does not have.
+func TestStreamSummaryErrFallsBackToProtocol(t *testing.T) {
+	tests := []struct {
+		name  string
+		class diag.Class
+		want  diag.Class
+	}{
+		{name: "no class", want: diag.ClassProtocol},
+		{name: "unknown class", class: "wormhole", want: diag.ClassProtocol},
+		{name: "unclassified", class: diag.ClassUnknown, want: diag.ClassProtocol},
+		{name: "a class this build knows", class: diag.ClassNetwork, want: diag.ClassNetwork},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := WebSocketSummary{ClosedBy: wsClosedByError, ErrorClass: tt.class}
+			if got := diag.ClassOf(ws.Err()); got != tt.want {
+				t.Fatalf("websocket Err() class = %q, want %q", got, tt.want)
+			}
+			sse := SSESummary{Reason: sseReasonErr, ErrorClass: tt.class}
+			if got := diag.ClassOf(sse.Err()); got != tt.want {
+				t.Fatalf("sse Err() class = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

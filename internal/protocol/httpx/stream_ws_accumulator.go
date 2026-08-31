@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
@@ -165,7 +166,16 @@ func applyWebSocketSummaryDefaults(sum *WebSocketSummary, state stream.State, st
 			sum.ClosedBy = wsClosedByClient
 		}
 	}
-	if sum.CloseReason != "" || stateErr == nil {
+	if stateErr == nil {
+		return
+	}
+	// Only a failure needs a class. The other endings are named by closedBy.
+	if sum.ClosedBy == wsClosedByError {
+		if class := diag.ClassOf(stateErr); class.Known() {
+			sum.ErrorClass = class
+		}
+	}
+	if sum.CloseReason != "" {
 		return
 	}
 	switch sum.ClosedBy {

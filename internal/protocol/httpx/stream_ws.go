@@ -69,6 +69,7 @@ type WebSocketSummary struct {
 	CloseCode     int           `json:"closeCode,omitempty"`
 	CloseReason   string        `json:"closeReason,omitempty"`
 	Dropped       int64         `json:"dropped,omitempty"`
+	ErrorClass    diag.Class    `json:"errorClass,omitempty"`
 }
 
 type WebSocketTranscript struct {
@@ -87,7 +88,7 @@ func (s WebSocketSummary) Err() error {
 		)
 	case wsClosedByError:
 		return diag.New(
-			diag.ClassProtocol,
+			s.ErrorClass.KnownOr(diag.ClassProtocol),
 			cmp.Or(s.CloseReason, "websocket stream failed"),
 		)
 	default:

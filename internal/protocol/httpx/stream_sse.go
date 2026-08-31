@@ -108,6 +108,7 @@ type SSESummary struct {
 	Reason     string        `json:"reason"`
 	Dropped    int64         `json:"dropped,omitempty"`
 	Error      string        `json:"error,omitempty"`
+	ErrorClass diag.Class    `json:"errorClass,omitempty"`
 }
 
 type SSETranscript struct {
@@ -123,7 +124,10 @@ func (s SSESummary) Err() error {
 	case s.Reason == sseReasonCanceled:
 		return diag.New(diag.ClassCanceled, cmp.Or(s.Error, "sse stream canceled"))
 	case s.Reason == sseReasonErr, s.Error != "":
-		return diag.New(diag.ClassProtocol, cmp.Or(s.Error, "sse stream failed"))
+		return diag.New(
+			s.ErrorClass.KnownOr(diag.ClassProtocol),
+			cmp.Or(s.Error, "sse stream failed"),
+		)
 	default:
 		return nil
 	}
@@ -250,8 +254,13 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 		acc.summary.Duration = time.Since(handle.Meta.ConnectedAt)
 	}
 	state, serr := session.State()
-	if acc.summary.Error == "" && serr != nil {
-		acc.summary.Error = serr.Error()
+	if serr != nil {
+		if acc.summary.Error == "" {
+			acc.summary.Error = serr.Error()
+		}
+		if class := diag.ClassOf(serr); class.Known() {
+			acc.summary.ErrorClass = class
+		}
 	}
 	// The run already set a reason naming the limit it stopped at, so keep it.
 	// Only "eof" gives way, because a failed session contradicts it.
@@ -351,7 +360,7 @@ func (r *sseRun) loop(ctx context.Context) error {
 				r.stop(r.ended(ctx))
 				return nil
 			}
-			return diag.WrapAs(diag.ClassProtocol, err, "read sse stream")
+			return diag.Wrap(err, "read sse stream")
 		}
 
 		if trimmed := strings.TrimRight(line, "\r\n"); trimmed == "" {

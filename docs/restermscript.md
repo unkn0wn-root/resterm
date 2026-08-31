@@ -740,7 +740,7 @@ Other expressions run before the current request completes. Use `last` for the p
 
 ### stream
 
-`stream` provides information about SSE and WebSocket requests. Its helpers include `stream.enabled()`, `stream.kind()`, `stream.summary()`, and `stream.events()`. The summary and event fields depend on the stream type. SSE summaries include `eventCount`, `byteCount`, `duration`, `reason`, `error`, and `dropped`. WebSocket summaries include `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, and `dropped`. A non-zero `dropped` value means that some events are missing from the transcript. If a stream fails, its request fails too.
+`stream` provides information about SSE and WebSocket requests. Its helpers include `stream.enabled()`, `stream.kind()`, `stream.summary()`, and `stream.events()`. The summary and event fields depend on the stream type. SSE summaries include `eventCount`, `byteCount`, `duration`, `reason`, `error`, `errorClass`, and `dropped`. WebSocket summaries include `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped`. When a stream fails, `errorClass` names the kind of failure and decides the detailed exit code. A non-zero `dropped` value means that some events are missing from the transcript. If a stream fails, its request fails too.
 
 ### mock
 

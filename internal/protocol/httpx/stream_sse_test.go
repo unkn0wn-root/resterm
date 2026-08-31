@@ -3,9 +3,11 @@ package httpx
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -522,6 +524,9 @@ func TestSSEFailureSummaryCountsWhatTheRunRead(t *testing.T) {
 	if !strings.Contains(sum.Error, "retry directive") {
 		t.Fatalf("Error = %q, want the parser failure", sum.Error)
 	}
+	if sum.ErrorClass != diag.ClassProtocol {
+		t.Fatalf("ErrorClass = %q, want %q", sum.ErrorClass, diag.ClassProtocol)
+	}
 	if sum.EventCount != events {
 		t.Fatalf("EventCount = %d, want the %d events the run read", sum.EventCount, events)
 	}
@@ -563,5 +568,87 @@ func TestSSEStreamWithoutEventsCountsNothing(t *testing.T) {
 	}
 	if sum.EventCount != 0 || sum.ByteCount != 0 {
 		t.Fatalf("summary = %d events and %d bytes, want an empty stream", sum.EventCount, sum.ByteCount)
+	}
+}
+
+// sseBody serves one event and then fails, so the run ends on a read error.
+type sseBody struct {
+	data []byte
+	err  error
+}
+
+func (b *sseBody) Read(p []byte) (int, error) {
+	if len(b.data) == 0 {
+		return 0, b.err
+	}
+	n := copy(p, b.data)
+	b.data = b.data[n:]
+	return n, nil
+}
+
+func (b *sseBody) Close() error { return nil }
+
+func failingSSEClient(t *testing.T, err error) *Client {
+	t.Helper()
+	return newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
+		rt := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       &sseBody{data: []byte("data: ping\n\n"), err: err},
+				Request:    req,
+			}
+			resp.Header.Set("Content-Type", "text/event-stream")
+			return resp, nil
+		})
+		return &http.Client{Transport: rt}, nil
+	})
+}
+
+func TestSSEReadFailureKeepsItsClass(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want diag.Class
+	}{
+		{
+			name: "the connection dropped",
+			err:  &net.OpError{Op: "read", Err: errors.New("connection reset by peer")},
+			want: diag.ClassNetwork,
+		},
+		{
+			name: "a read that names nothing",
+			err:  errors.New("the stream broke"),
+			want: diag.ClassProtocol,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{
+				Method: "GET",
+				URL:    "https://example.com/events",
+				SSE:    &restfile.SSERequest{},
+			}
+			resp, err := failingSSEClient(t, tt.err).ExecuteSSE(t.Context(), req, nil, Options{})
+			if err != nil {
+				t.Fatalf("ExecuteSSE: %v", err)
+			}
+
+			transcript, err := DecodeSSETranscript(resp.Body)
+			if err != nil {
+				t.Fatalf("decode transcript: %v", err)
+			}
+			if transcript.Summary.Reason != sseReasonErr {
+				t.Fatalf("Reason = %q, want %q", transcript.Summary.Reason, sseReasonErr)
+			}
+			if len(transcript.Events) != 1 {
+				t.Fatalf("kept %d events, want the one read before the failure", len(transcript.Events))
+			}
+			if got := diag.ClassOf(transcript.Summary.Err()); got != tt.want {
+				t.Fatalf("Err() class = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

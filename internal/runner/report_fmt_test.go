@@ -274,3 +274,65 @@ func TestFormatStreamCarriesTheFailure(t *testing.T) {
 		t.Fatalf("Error = %q, want a complete transcript to report none", plain.Error)
 	}
 }
+
+// A stream carries its failure as text, so the class it recorded is what sets
+// the reported failure and the exit code.
+func TestStreamFailureKeepsItsExitCode(t *testing.T) {
+	tests := []struct {
+		name string
+		sum  httpx.WebSocketSummary
+		code runfail.Code
+		exit int
+	}{
+		{
+			name: "unreadable payload file",
+			sum: httpx.WebSocketSummary{
+				ClosedBy:    "error",
+				CloseReason: "websocket step 2:send_file: open payload.bin: no such file",
+				ErrorClass:  diag.ClassFilesystem,
+			},
+			code: runfail.CodeFilesystem,
+			exit: runfail.ExitFilesystem,
+		},
+		{
+			name: "broken frame",
+			sum: httpx.WebSocketSummary{
+				ClosedBy:    "error",
+				CloseReason: "read websocket message: bad frame",
+				ErrorClass:  diag.ClassProtocol,
+			},
+			code: runfail.CodeProtocol,
+			exit: runfail.ExitProtocol,
+		},
+		{
+			name: "connection dropped",
+			sum: httpx.WebSocketSummary{
+				ClosedBy:    "error",
+				CloseReason: "read websocket message: connection reset by peer",
+				ErrorClass:  diag.ClassNetwork,
+			},
+			code: runfail.CodeNetwork,
+			exit: runfail.ExitNetwork,
+		},
+		{
+			name: "a transcript with no class",
+			sum:  httpx.WebSocketSummary{ClosedBy: "error", CloseReason: "something broke"},
+			code: runfail.CodeProtocol,
+			exit: runfail.ExitProtocol,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := Result{Stream: &StreamInfo{Kind: "websocket", Err: tt.sum.Err()}}
+
+			got := resultFailure(res)
+			if got.Code != tt.code || got.ExitCode != tt.exit {
+				t.Fatalf("failure = %s/%d, want %s/%d", got.Code, got.ExitCode, tt.code, tt.exit)
+			}
+			if got.Source != "stream" {
+				t.Fatalf("source = %q, want %q", got.Source, "stream")
+			}
+		})
+	}
+}

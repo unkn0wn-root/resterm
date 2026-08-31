@@ -87,7 +87,7 @@ func (c *Client) runWSSteps(
 		if err != nil {
 			if ctx.Err() == nil {
 				// The session is still open, so the step itself failed.
-				sender.fail(diag.WrapAs(diag.ClassProtocol, err, "websocket step "+label))
+				sender.fail(diag.Wrap(err, "websocket step "+label))
 			}
 			return closedByScript
 		}

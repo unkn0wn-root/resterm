@@ -1510,7 +1510,7 @@ GET https://api.example.com/notifications
 | `max-line-bytes` | Largest allowed line. The default is 4 MiB, or whatever `@setting sse-max-line-bytes` sets. A larger line stops the stream with an error. |
 | `max-event-bytes` | Largest allowed event, counting every line it is built from. The default is 8 MiB, or whatever `@setting sse-max-event-bytes` sets. A larger event stops the stream with an error. |
 
-If the server returns a non-2xx status or a content type other than `text/event-stream`, Resterm shows a normal HTTP response so you can inspect it. For a successful stream, Resterm shows the events and their details in the Stream tab and saves them in history. Templates and scripts can read `eventCount`, `byteCount`, `duration`, `reason`, `error`, and `dropped` from the summary. A non-zero `dropped` value means the retained transcript is incomplete. `reason` has one of these values:
+If the server returns a non-2xx status or a content type other than `text/event-stream`, Resterm shows a normal HTTP response so you can inspect it. For a successful stream, Resterm shows the events and their details in the Stream tab and saves them in history. Templates and scripts can read `eventCount`, `byteCount`, `duration`, `reason`, `error`, `errorClass`, and `dropped` from the summary. A non-zero `dropped` value means the retained transcript is incomplete. `reason` has one of these values:
 
 | Reason | Meaning |
 | --- | --- |
@@ -1522,7 +1522,7 @@ If the server returns a non-2xx status or a content type other than `text/event-
 | `limit:line_bytes` | One line was larger than `max-line-bytes`. |
 | `limit:event_bytes` | One event was larger than `max-event-bytes`. |
 | `context_canceled` | The run was cancelled. |
-| `error` | The stream failed. `summary.error` contains the error message. |
+| `error` | The stream failed. `summary.error` contains the error message and `summary.errorClass` names what kind of failure it was. |
 
 Reaching `idle`, `duration`, `max-events`, or `max-bytes` ends the stream without an error. The saved data includes everything read before the limit was reached. If the stream ends for any other reason, the request fails and `summary.error` contains the error message. Resterm still saves the transcript.
 
@@ -1564,7 +1564,7 @@ Supported `@ws` steps:
 | `@ws wait <duration>` | Pause for the specified duration (e.g. `500ms`). |
 | `@ws close [code] [reason]` | Close the connection with an optional status code (defaults to `1000`). |
 
-When the handshake fails, Resterm shows the HTTP response to help you find the problem. During a successful session, events appear in the UI and history together with their direction, opcode, size, and close status. Templates and scripts can read `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, and `dropped` from the summary. `closedBy` has one of these values:
+When the handshake fails, Resterm shows the HTTP response to help you find the problem. During a successful session, events appear in the UI and history together with their direction, opcode, size, and close status. Templates and scripts can read `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped` from the summary. `closedBy` has one of these values:
 
 | Value | Meaning |
 | --- | --- |
@@ -1572,7 +1572,7 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
 | `client` | Resterm closed the connection through `@ws close` or after the last step. |
 | `timeout` | The session reached its `idle` or `duration` limit. |
 | `canceled` | The run was cancelled. |
-| `error` | The session failed. `closeReason` contains the error message. |
+| `error` | The session failed. `closeReason` contains the error message and `errorClass` names what kind of failure it was. |
 
 Only `error` and `canceled` cause the request to fail. Resterm keeps the transcript in every case.
 
@@ -1923,7 +1923,7 @@ Objects:
 - `stream`
   - `enabled()` - returns `true` when the current response is an SSE or WebSocket transcript.
   - `kind()` - returns `"sse"` or `"websocket"`.
-  - `summary()` - copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.). The summary always includes `dropped`. If a test or capture needs every event, check that its value is `0`. For an SSE failure, `reason` is `"error"` and `error` contains the error message. Resterm also fails the request when the stream fails, so a test does not need to check for that separately.
+  - `summary()` - copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.). The summary always includes `dropped`. If a test or capture needs every event, check that its value is `0`. For an SSE failure, `reason` is `"error"`, `error` contains the error message, and `errorClass` names the kind of failure. Resterm also fails the request when the stream fails, so a test does not need to check for that separately.
   - `events()` - array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
   - `onEvent(fn)` - registers a callback invoked for each event after the script runs; useful for assertions over the entire stream.
   - `onClose(fn)` - registers a callback invoked once with the summary after all events replay.
@@ -2248,7 +2248,7 @@ A template can also provide part of the URL. Both `GET http://{{host}}/users` an
   ```
 - Most events arrive as a single `data:` line, so the line limit is the one they reach first. Raise `max-line-bytes` along with `max-event-bytes` when a single line carries the whole payload. Base64 adds about a third to a payload, so a 3 MiB file needs roughly 4 MiB of headroom.
 - Resterm limits how much stream data it keeps in memory. An SSE session keeps up to 1024 events and 16 MiB, or twice `max-event-bytes` when that is larger. The size of an SSE event includes its data, comment, id, name, and other saved fields. A WebSocket session and its saved transcript each have an 8 MiB limit. The Stream pane keeps up to 5000 events or 16 MiB. If Resterm removes older events, the summary counts them in `dropped`. The Stream tab shows `Transcript incomplete` when its view is missing events.
-- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end. Other problems fail the request. These include a read error, an SSE line or event that exceeds its limit, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a stream error returns `26` and a cancelled run returns `130`.
+- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end. Other problems fail the request. These include a read error, an SSE line or event that exceeds its limit, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a cancelled run returns `130` and a stream error returns the code for the failure named in `summary.errorClass`: `21` for `network`, `22` for `tls`, `25` for `filesystem` such as an `@ws send-file` payload Resterm could not read, and `26` for `protocol`. A stream that failed for a reason Resterm cannot name reports `protocol`.
 - Requests use an in-memory cookie jar per environment. Cookies are isolated between environments, and `@setting no-cookies true` disables cookies for a request without clearing the stored jar. Use `Ctrl+Shift+G` (or `g Shift+G`) to clear cookies for the current environment.
 - TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts space/comma/semicolon separated lists; paths are relative). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.
