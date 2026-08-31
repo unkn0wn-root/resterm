@@ -38,6 +38,51 @@ func TestOfNormalizes(t *testing.T) {
 		},
 		{name: "ws shares the http origin", a: "ws://a.example.com/socket", b: "http://a.example.com", same: true},
 		{name: "ws is not the https origin", a: "ws://a.example.com", b: "https://a.example.com"},
+		{
+			name: "ipv6 address case",
+			a:    "https://[FE80::1]",
+			b:    "https://[fe80::1]",
+			same: true,
+		},
+		// The operating system decides what a zone id names, so a differently
+		// cased one is not known to be the same interface.
+		{
+			name: "ipv6 zone case",
+			a:    "https://[fe80::1%25En0]",
+			b:    "https://[fe80::1%25en0]",
+		},
+		{
+			name: "matching ipv6 zone",
+			a:    "https://[FE80::1%25En0]/x",
+			b:    "https://[fe80::1%25En0]/y",
+			same: true,
+		},
+		// A name has no zone, so the percent sign it decodes to is just part of
+		// the name and folds case with the rest of it.
+		{
+			name: "percent in a registered name",
+			a:    "https://EXAMPLE%25FOO.com",
+			b:    "https://example%25foo.com",
+			same: true,
+		},
+		{
+			name: "international name case",
+			a:    "https://M%C3%9CNCHEN.de",
+			b:    "https://m%C3%BCnchen.de",
+			same: true,
+		},
+		// Only an IPv6 address has a zone, so nothing here is worth preserving.
+		{
+			name: "percent after an ipv4 address",
+			a:    "https://127.0.0.1%25FOO",
+			b:    "https://127.0.0.1%25foo",
+			same: true,
+		},
+		{
+			name: "zone on an ipv4 mapped address",
+			a:    "https://[::ffff:127.0.0.1%25En0]",
+			b:    "https://[::ffff:127.0.0.1%25en0]",
+		},
 	}
 
 	for _, tt := range tests {
@@ -173,5 +218,62 @@ func TestSecure(t *testing.T) {
 		if got := o.Secure(); got != want {
 			t.Fatalf("%s Secure() = %t, want %t", raw, got, want)
 		}
+	}
+}
+
+func TestStringRoundTripsThroughParse(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "ipv4", raw: "https://127.0.0.1:8443", want: "https://127.0.0.1:8443"},
+		{name: "host", raw: "https://cdn.example.com", want: "https://cdn.example.com"},
+		{name: "ipv6 on the default port", raw: "https://[::1]", want: "https://[::1]"},
+		{name: "ipv6 with a port", raw: "https://[::1]:8443", want: "https://[::1]:8443"},
+		{
+			name: "ipv6 written out",
+			raw:  "http://[2001:db8::1]:8080",
+			want: "http://[2001:db8::1]:8080",
+		},
+		{
+			name: "link local ipv6 with a zone",
+			raw:  "https://[fe80::1%25en0]",
+			want: "https://[fe80::1%25en0]",
+		},
+		{
+			name: "link local ipv6 with a zone and a port",
+			raw:  "https://[fe80::1%25en0]:8443",
+			want: "https://[fe80::1%25en0]:8443",
+		},
+		{
+			name: "a zone keeps its case",
+			raw:  "https://[FE80::1%25En0]:8443",
+			want: "https://[fe80::1%25En0]:8443",
+		},
+		{
+			name: "international name",
+			raw:  "https://M%C3%9CNCHEN.de",
+			want: "https://m%C3%BCnchen.de",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			o, err := Parse(tt.raw)
+			if err != nil {
+				t.Fatalf("Parse(%q): %v", tt.raw, err)
+			}
+			if got := o.String(); got != tt.want {
+				t.Fatalf("String() = %q, want %q", got, tt.want)
+			}
+			back, err := Parse(o.String())
+			if err != nil {
+				t.Fatalf("Parse(%q): %v", o.String(), err)
+			}
+			if back != o {
+				t.Fatalf("Parse(%q) = %v, want the origin it came from", o.String(), back)
+			}
+		})
 	}
 }

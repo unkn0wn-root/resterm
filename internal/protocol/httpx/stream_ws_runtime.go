@@ -196,7 +196,7 @@ func (rt *wsRuntime) readLoop() {
 			} else {
 				rt.closeTerminalNow(
 					nil,
-					diag.WrapAs(diag.ClassProtocol, err, "read websocket message"),
+					diag.Wrap(err, "read websocket message"),
 				)
 			}
 			return
@@ -335,7 +335,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.writeAndPublish(func() error {
 			return rt.conn.Write(ctx, msg.msgType, msg.payload)
 		}, evt); err != nil {
-			return diag.WrapAs(diag.ClassProtocol, err, "send websocket frame")
+			return diag.Wrap(err, "send websocket frame")
 		}
 		return nil
 	case wsOutboundPing:
@@ -365,7 +365,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.writeAndPublish(func() error {
 			return wsWriteControl(rt.conn, ctx, wsOpcodePing, payload)
 		}, evt); err != nil {
-			return diag.WrapAs(diag.ClassProtocol, err, "send websocket ping")
+			return diag.Wrap(err, "send websocket ping")
 		}
 		return nil
 	case wsOutboundPong:
@@ -396,7 +396,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.writeAndPublish(func() error {
 			return wsWriteControl(rt.conn, ctx, wsOpcodePong, payload)
 		}, evt); err != nil {
-			return diag.WrapAs(diag.ClassProtocol, err, "send websocket pong")
+			return diag.Wrap(err, "send websocket pong")
 		}
 		return nil
 	case wsOutboundClose:
@@ -428,7 +428,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.writeAndPublish(func() error {
 			return rt.conn.Close(msg.code, msg.reason)
 		}, evt); err != nil {
-			return diag.WrapAs(diag.ClassProtocol, err, "close websocket")
+			return diag.Wrap(err, "close websocket")
 		}
 		rt.closeTerminalNow(nil, nil)
 		return nil
@@ -451,7 +451,7 @@ func (rt *wsRuntime) shutdown() {
 		if err := rt.conn.Close(websocket.StatusNormalClosure, ""); err != nil &&
 			!errors.Is(err, net.ErrClosed) && !errors.Is(err, context.Canceled) {
 			rt.session.Close(
-				diag.WrapAs(diag.ClassProtocol, err, "close websocket connection"),
+				diag.Wrap(err, "close websocket connection"),
 			)
 		}
 	})

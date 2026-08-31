@@ -1,6 +1,9 @@
 package bytesize
 
-import "strings"
+import (
+	"math"
+	"strings"
+)
 
 type Budget struct {
 	limit int64
@@ -18,6 +21,15 @@ func (b Budget) Or(def int64) int64 {
 		return def
 	}
 	return b.limit
+}
+
+// Add stops at the largest byte size instead of wrapping, so a limit set near
+// that size does not go negative. Both values must be zero or more.
+func Add(a, b int64) int64 {
+	if sum := a + b; sum >= a {
+		return sum
+	}
+	return math.MaxInt64
 }
 
 func ParseBudget(raw string) (Budget, error) {

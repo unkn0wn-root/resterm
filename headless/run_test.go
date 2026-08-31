@@ -16,10 +16,14 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 
+	"nhooyr.io/websocket"
+
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -771,4 +775,75 @@ func stableResult(src Result) Result {
 		out.Steps = append(out.Steps, step)
 	}
 	return out
+}
+
+func TestRunKeepsAWebSocketStepFailureClass(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		defer func() {
+			_ = conn.Close(websocket.StatusNormalClosure, "bye")
+		}()
+		for {
+			typ, data, err := conn.Read(r.Context())
+			if err != nil {
+				return
+			}
+			if err := conn.Write(r.Context(), typ, data); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "ws.http")
+	src := fmt.Sprintf(
+		"# @name chat\n# @ws send hello\n# @ws send-file missing-payload.bin\nGET %s\n",
+		strings.Replace(srv.URL, "http", "ws", 1),
+	)
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	rep, err := Run(context.Background(), Options{Source: Source{Path: file}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(rep.Results) != 1 {
+		t.Fatalf("got %d results, want 1", len(rep.Results))
+	}
+
+	res := rep.Results[0]
+	if res.Failure == nil {
+		t.Fatalf("result carries no failure: %+v", res)
+	}
+	if res.Failure.Code != FailureCode(runfail.CodeFilesystem) {
+		t.Fatalf("failure code = %q, want %q", res.Failure.Code, runfail.CodeFilesystem)
+	}
+	if res.Failure.ExitCode != runfail.ExitFilesystem {
+		t.Fatalf("exit code = %d, want %d", res.Failure.ExitCode, runfail.ExitFilesystem)
+	}
+	if res.Failure.Source != "stream" {
+		t.Fatalf("failure source = %q, want %q", res.Failure.Source, "stream")
+	}
+	if rep.ExitCode(ExitCodeDetailed) != runfail.ExitFilesystem {
+		t.Fatalf("report exit code = %d, want %d", rep.ExitCode(ExitCodeDetailed), runfail.ExitFilesystem)
+	}
+
+	if res.Stream == nil {
+		t.Fatalf("result kept no stream: %+v", res)
+	}
+	if !strings.Contains(res.Stream.Error, "send_file") {
+		t.Fatalf("stream error = %q, want the step that failed", res.Stream.Error)
+	}
+	if res.Stream.Summary["errorClass"] != string(diag.ClassFilesystem) {
+		t.Fatalf("stream summary = %+v, want a filesystem errorClass", res.Stream.Summary)
+	}
+	if res.Stream.Summary["sentCount"] != 1 {
+		t.Fatalf("sentCount = %v, want the frame sent before the failure",
+			res.Stream.Summary["sentCount"])
+	}
 }

@@ -69,6 +69,7 @@ type WebSocketSummary struct {
 	CloseCode     int           `json:"closeCode,omitempty"`
 	CloseReason   string        `json:"closeReason,omitempty"`
 	Dropped       int64         `json:"dropped,omitempty"`
+	ErrorClass    diag.Class    `json:"errorClass,omitempty"`
 }
 
 type WebSocketTranscript struct {
@@ -76,18 +77,23 @@ type WebSocketTranscript struct {
 	Summary WebSocketSummary `json:"summary"`
 }
 
-// Err reports the failure that ended the session. A close either side asked for
-// and a timeout are normal endings and return nil.
+// Err reports an error when the session fails, is canceled, or exceeds a caller
+// deadline. A close from either side and an idle timeout are normal endings.
 func (s WebSocketSummary) Err() error {
 	switch s.ClosedBy {
 	case wsClosedByCanceled:
 		return diag.New(
-			diag.ClassCanceled,
+			s.ErrorClass.KnownOr(diag.ClassCanceled),
 			cmp.Or(s.CloseReason, "websocket stream canceled"),
 		)
+	case wsClosedByTimeout:
+		if !s.ErrorClass.Known() {
+			return nil
+		}
+		return diag.New(s.ErrorClass, cmp.Or(s.CloseReason, "websocket stream ran out of time"))
 	case wsClosedByError:
 		return diag.New(
-			diag.ClassProtocol,
+			s.ErrorClass.KnownOr(diag.ClassProtocol),
 			cmp.Or(s.CloseReason, "websocket stream failed"),
 		)
 	default:
@@ -137,7 +143,7 @@ func (c *Client) StartWebSocket(
 	}
 
 	wsOpts := req.WebSocket.Options
-	handshakeCtx, handshakeCancel := ctxWithTimeout(ctx, wsOpts.HandshakeTimeout)
+	handshakeCtx, handshakeCancel := ctxWithTimeout(ctx, wsOpts.HandshakeTimeout, nil)
 	defer handshakeCancel()
 
 	httpReq, effectiveOpts, err := c.prepareHTTPRequestWithOpts(
@@ -280,6 +286,9 @@ func (c *Client) CompleteWebSocket(
 	if handle == nil || handle.Session == nil || handle.Sender == nil {
 		return nil, diag.New(diag.ClassProtocol, "websocket session not available")
 	}
+	if req == nil || req.WebSocket == nil {
+		return nil, diag.New(diag.ClassProtocol, "websocket request missing")
+	}
 
 	session := handle.Session
 	listener := session.Subscribe()
@@ -305,12 +314,8 @@ func (c *Client) CompleteWebSocket(
 	if baseDir == "" {
 		baseDir = opts.BaseDir
 	}
-	closedByScript, err := c.runWSSteps(session, sender, req, baseDir, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	if !closedByScript {
+	// A session that already ended needs no close frame.
+	if !c.runWSSteps(session, sender, req, baseDir, opts) && session.Context().Err() == nil {
 		_ = sender.Close(
 			session.Context(),
 			websocket.StatusNormalClosure,

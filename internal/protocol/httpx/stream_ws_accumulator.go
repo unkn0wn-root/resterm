@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
@@ -146,9 +147,8 @@ func directionToString(dir stream.Direction) string {
 	}
 }
 
-// applyWebSocketSummaryDefaults fills in who ended a session when the events did
-// not say. A timeout and a canceled run get their own names because neither one
-// is a failure.
+// applyWebSocketSummaryDefaults fills fields not set by terminal events. Idle
+// timeouts have no error class, while caller deadlines do.
 func applyWebSocketSummaryDefaults(sum *WebSocketSummary, state stream.State, stateErr error) {
 	if sum == nil {
 		return
@@ -165,11 +165,16 @@ func applyWebSocketSummaryDefaults(sum *WebSocketSummary, state stream.State, st
 			sum.ClosedBy = wsClosedByClient
 		}
 	}
-	if sum.CloseReason != "" || stateErr == nil {
+	if stateErr == nil {
 		return
 	}
 	switch sum.ClosedBy {
 	case wsClosedByCanceled, wsClosedByTimeout, wsClosedByError:
-		sum.CloseReason = stateErr.Error()
+		if class := diag.ClassOf(stateErr); class.Known() {
+			sum.ErrorClass = class
+		}
+		if sum.CloseReason == "" {
+			sum.CloseReason = stateErr.Error()
+		}
 	}
 }

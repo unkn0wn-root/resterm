@@ -3,6 +3,7 @@ package runner
 import (
 	"errors"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"google.golang.org/grpc/codes"
@@ -272,5 +274,123 @@ func TestFormatStreamCarriesTheFailure(t *testing.T) {
 	}
 	if plain := formatStream(&StreamInfo{Kind: "sse"}); plain.Error != "" {
 		t.Fatalf("Error = %q, want a complete transcript to report none", plain.Error)
+	}
+}
+
+// A stream carries its failure as text, so the class it recorded is what sets
+// the reported failure and the exit code.
+func TestStreamFailureKeepsItsExitCode(t *testing.T) {
+	tests := []struct {
+		name string
+		sum  httpx.WebSocketSummary
+		code runfail.Code
+		exit int
+	}{
+		{
+			name: "unreadable payload file",
+			sum: httpx.WebSocketSummary{
+				ClosedBy:    "error",
+				CloseReason: "websocket step 2:send_file: open payload.bin: no such file",
+				ErrorClass:  diag.ClassFilesystem,
+			},
+			code: runfail.CodeFilesystem,
+			exit: runfail.ExitFilesystem,
+		},
+		{
+			name: "broken frame",
+			sum: httpx.WebSocketSummary{
+				ClosedBy:    "error",
+				CloseReason: "read websocket message: bad frame",
+				ErrorClass:  diag.ClassProtocol,
+			},
+			code: runfail.CodeProtocol,
+			exit: runfail.ExitProtocol,
+		},
+		{
+			name: "connection dropped",
+			sum: httpx.WebSocketSummary{
+				ClosedBy:    "error",
+				CloseReason: "read websocket message: connection reset by peer",
+				ErrorClass:  diag.ClassNetwork,
+			},
+			code: runfail.CodeNetwork,
+			exit: runfail.ExitNetwork,
+		},
+		{
+			name: "a transcript with no class",
+			sum:  httpx.WebSocketSummary{ClosedBy: "error", CloseReason: "something broke"},
+			code: runfail.CodeProtocol,
+			exit: runfail.ExitProtocol,
+		},
+		{
+			name: "a deadline the caller set",
+			sum: httpx.WebSocketSummary{
+				ClosedBy:    "timeout",
+				CloseReason: "context deadline exceeded",
+				ErrorClass:  diag.ClassTimeout,
+			},
+			code: runfail.CodeTimeout,
+			exit: runfail.ExitTimeout,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := Result{Stream: &StreamInfo{Kind: "websocket", Err: tt.sum.Err()}}
+
+			got := resultFailure(res)
+			if got.Code != tt.code || got.ExitCode != tt.exit {
+				t.Fatalf("failure = %s/%d, want %s/%d", got.Code, got.ExitCode, tt.code, tt.exit)
+			}
+			if got.Source != "stream" {
+				t.Fatalf("source = %q, want %q", got.Source, "stream")
+			}
+		})
+	}
+}
+
+func TestWebSocketHandshakeTimeoutExitCode(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+		}
+	}()
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws://" + ln.Addr().String() + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{HandshakeTimeout: 200 * time.Millisecond},
+		},
+	}
+	_, _, err = httpx.NewClient(nil).StartWebSocket(t.Context(), req, nil, httpx.Options{})
+
+	got := resultFailure(Result{Err: err})
+	if got.Code != runfail.CodeTimeout || got.ExitCode != runfail.ExitTimeout {
+		t.Fatalf("failure = %s/%d, want %s/%d",
+			got.Code, got.ExitCode, runfail.CodeTimeout, runfail.ExitTimeout)
+	}
+}
+
+func TestReachedStreamLimitIsNotAFailure(t *testing.T) {
+	sums := []httpx.WebSocketSummary{
+		{ClosedBy: "timeout", CloseReason: "idle timeout after 5s"},
+		{ClosedBy: "server", CloseReason: "bye"},
+		{ClosedBy: "client"},
+	}
+
+	for _, sum := range sums {
+		if err := sum.Err(); err != nil {
+			t.Fatalf("closedBy %q ended as a failure: %v", sum.ClosedBy, err)
+		}
 	}
 }

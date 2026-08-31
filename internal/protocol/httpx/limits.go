@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
@@ -40,7 +41,7 @@ func readResponseBody(r io.Reader, limit int64) ([]byte, error) {
 		return io.ReadAll(r)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r, limit+1))
+	body, err := io.ReadAll(io.LimitReader(r, bytesize.Add(limit, 1)))
 	if err != nil {
 		return nil, err
 	}

@@ -39,6 +39,7 @@ const (
 	sseReasonEventBytes = "limit:event_bytes"
 	sseReasonTotal      = "timeout:total"
 	sseReasonCanceled   = "context_canceled"
+	sseReasonDeadline   = "context_deadline"
 )
 
 const (
@@ -70,13 +71,13 @@ func sseLimitsFor(sse restfile.SSEOptions, opts Options) sseLimits {
 
 func (l sseLimits) sessionBytes() bytesize.Budget {
 	// Keep room for a full event and the summary event that follows it.
-	return bytesize.Of(max(int64(DefaultSSESessionBytes), 2*l.event))
+	return bytesize.Of(max(int64(DefaultSSESessionBytes), bytesize.Add(l.event, l.event)))
 }
 
 func (l sseLimits) lineBudget(read int64) int {
 	budget := l.line
 	if l.stream > 0 {
-		budget = min(budget, l.stream-read+1)
+		budget = min(budget, bytesize.Add(l.stream-read, 1))
 	}
 	return int(budget)
 }
@@ -108,6 +109,7 @@ type SSESummary struct {
 	Reason     string        `json:"reason"`
 	Dropped    int64         `json:"dropped,omitempty"`
 	Error      string        `json:"error,omitempty"`
+	ErrorClass diag.Class    `json:"errorClass,omitempty"`
 }
 
 type SSETranscript struct {
@@ -115,15 +117,25 @@ type SSETranscript struct {
 	Summary SSESummary `json:"summary"`
 }
 
-// Err reports the failure that ended the stream. Reaching a configured limit or
-// timeout is a normal ending and returns nil. A broken read, or a line or event
-// larger than its limit, is a failure.
+// Err reports an error when the stream fails, is canceled, or exceeds a caller
+// deadline. Configured stream limits are normal endings.
 func (s SSESummary) Err() error {
 	switch {
 	case s.Reason == sseReasonCanceled:
-		return diag.New(diag.ClassCanceled, cmp.Or(s.Error, "sse stream canceled"))
+		return diag.New(
+			s.ErrorClass.KnownOr(diag.ClassCanceled),
+			cmp.Or(s.Error, "sse stream canceled"),
+		)
+	case s.Reason == sseReasonDeadline:
+		return diag.New(
+			s.ErrorClass.KnownOr(diag.ClassTimeout),
+			cmp.Or(s.Error, "sse stream ran out of time"),
+		)
 	case s.Reason == sseReasonErr, s.Error != "":
-		return diag.New(diag.ClassProtocol, cmp.Or(s.Error, "sse stream failed"))
+		return diag.New(
+			s.ErrorClass.KnownOr(diag.ClassProtocol),
+			cmp.Or(s.Error, "sse stream failed"),
+		)
 	default:
 		return nil
 	}
@@ -140,7 +152,7 @@ func (c *Client) StartSSE(
 	}
 
 	streamOpts := req.SSE.Options
-	streamCtx, cancel := ctxWithTimeout(ctx, streamOpts.TotalTimeout)
+	streamCtx, cancel := ctxWithTimeout(ctx, streamOpts.TotalTimeout, errStreamLimit)
 
 	httpReq, effectiveOpts, err := c.prepareHTTPRequest(streamCtx, req, resolver, opts)
 	if err != nil {
@@ -249,15 +261,14 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	} else {
 		acc.summary.Duration = time.Since(handle.Meta.ConnectedAt)
 	}
-	if acc.summary.ByteCount == 0 {
-		acc.summary.ByteCount = int64(stats.BytesTotal)
-	}
-	if acc.summary.EventCount == 0 {
-		acc.summary.EventCount = len(acc.events)
-	}
 	state, serr := session.State()
-	if acc.summary.Error == "" && serr != nil {
-		acc.summary.Error = serr.Error()
+	if serr != nil {
+		if acc.summary.Error == "" {
+			acc.summary.Error = serr.Error()
+		}
+		if class := diag.ClassOf(serr); class.Known() {
+			acc.summary.ErrorClass = class
+		}
 	}
 	// The run already set a reason naming the limit it stopped at, so keep it.
 	// Only "eof" gives way, because a failed session contradicts it.
@@ -357,7 +368,7 @@ func (r *sseRun) loop(ctx context.Context) error {
 				r.stop(r.ended(ctx))
 				return nil
 			}
-			return diag.WrapAs(diag.ClassProtocol, err, "read sse stream")
+			return diag.Wrap(err, "read sse stream")
 		}
 
 		if trimmed := strings.TrimRight(line, "\r\n"); trimmed == "" {
@@ -411,8 +422,10 @@ func (r *sseRun) ended(ctx context.Context) string {
 	switch {
 	case r.idled.Load():
 		return sseReasonIdle
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+	case errors.Is(context.Cause(ctx), errStreamLimit):
 		return sseReasonTotal
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return sseReasonDeadline
 	default:
 		return sseReasonCanceled
 	}
@@ -435,14 +448,15 @@ func (r *sseRun) flush() bool {
 	return true
 }
 
+// A failed run publishes its summary too, so the counts come from the run and
+// not from what the buffer kept.
 func (r *sseRun) finish(ctx context.Context, err error) {
-	if err != nil {
-		r.session.Close(err)
-		return
-	}
-
-	// The transport may report a cancelled read as EOF, so check the context.
-	if ctx.Err() != nil {
+	switch {
+	case err != nil:
+		r.failure = err
+		r.stop(sseReasonErr)
+	case ctx.Err() != nil:
+		// The transport may report a cancelled read as EOF, so check the context.
 		r.stop(r.ended(ctx))
 	}
 
@@ -464,8 +478,11 @@ func (r *sseRun) finish(ctx context.Context, err error) {
 	})
 
 	closeErr := r.failure
-	if closeErr == nil && ctx.Err() != nil && r.summary.Reason == sseReasonCanceled {
-		closeErr = ctx.Err()
+	if closeErr == nil && ctx.Err() != nil {
+		switch r.summary.Reason {
+		case sseReasonCanceled, sseReasonDeadline:
+			closeErr = context.Cause(ctx)
+		}
 	}
 	r.session.Close(closeErr)
 }

@@ -3,6 +3,7 @@ package diag
 import (
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // Class identifies the stable failure class for a diagnostic.
@@ -25,6 +26,25 @@ const (
 	ClassUI         Class = "ui"
 	ClassInternal   Class = "internal"
 )
+
+var classes = []Class{
+	ClassConfig, ClassParse, ClassTimeout, ClassCanceled, ClassNetwork,
+	ClassTLS, ClassAuth, ClassProtocol, ClassRoute, ClassFilesystem,
+	ClassScript, ClassHistory, ClassUI, ClassInternal,
+}
+
+// Known reports whether c is one of the classes resterm uses. The zero value
+// and ClassUnknown are not.
+func (c Class) Known() bool { return slices.Contains(classes, c) }
+
+// KnownOr returns c when it is a known class, otherwise fallback. A transcript
+// another build wrote can name a class this one does not have.
+func (c Class) KnownOr(fallback Class) Class {
+	if c.Known() {
+		return c
+	}
+	return fallback
+}
 
 // Component identifies where a diagnostic originated.
 type Component string
@@ -98,7 +118,8 @@ func Newf(class Class, format string, args ...any) error {
 	return New(class, fmt.Sprintf(format, args...))
 }
 
-// Wrap records operation context on err while preserving err for errors.Is/As.
+// Wrap records operation context on err while preserving err for errors.Is/As
+// and the class err already carries.
 func Wrap(err error, operation string, opts ...Option) error {
 	if err == nil {
 		return nil

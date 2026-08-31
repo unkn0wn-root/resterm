@@ -41,12 +41,11 @@ func startEchoWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 			if err != nil {
-				t.Fatalf("websocket accept failed: %v", err)
+				return
 			}
+			// A hijacked connection outlives Server.Close, so the handler must not touch t.
 			defer func() {
-				if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
-					t.Logf("close websocket: %v", err)
-				}
+				_ = conn.Close(websocket.StatusNormalClosure, "bye")
 			}()
 
 			ctx := r.Context()
@@ -84,12 +83,11 @@ func startSilentWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 			if err != nil {
-				t.Fatalf("websocket accept failed: %v", err)
+				return
 			}
+			// A hijacked connection outlives Server.Close, so the handler must not touch t.
 			defer func() {
-				if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
-					t.Logf("close websocket: %v", err)
-				}
+				_ = conn.Close(websocket.StatusNormalClosure, "bye")
 			}()
 			<-r.Context().Done()
 		}),
@@ -817,5 +815,366 @@ loop:
 	case <-session.Done():
 	case <-time.After(2 * time.Second):
 		t.Fatal("session did not terminate after close")
+	}
+}
+
+func startClosingWebSocketServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	srv := httptest.NewUnstartedServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+			if err != nil {
+				return
+			}
+			typ, data, err := conn.Read(r.Context())
+			if err != nil {
+				return
+			}
+			if err := conn.Write(r.Context(), typ, data); err != nil {
+				return
+			}
+			_ = conn.Close(websocket.StatusGoingAway, "server going away")
+		}),
+	)
+	srv.Listener = ln
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func wsTranscript(t *testing.T, resp *Response) WebSocketTranscript {
+	t.Helper()
+	if resp == nil {
+		t.Fatal("no response to read a transcript from")
+	}
+	transcript, err := DecodeWebSocketTranscript(resp.Body)
+	if err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
+	return *transcript
+}
+
+func wsSent(transcript WebSocketTranscript, text string) bool {
+	return slices.ContainsFunc(transcript.Events, func(evt WebSocketEvent) bool {
+		return evt.Direction == "send" && evt.Text == text
+	})
+}
+
+func TestCompleteWebSocketKeepsTheTranscriptWhenTheServerClosesMidScript(t *testing.T) {
+	server := startClosingWebSocketServer(t)
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepSendText, Value: "hello"},
+				{Type: restfile.WebSocketStepWait, Duration: 5 * time.Second},
+				{Type: restfile.WebSocketStepSendText, Value: "never sent"},
+			},
+		},
+	}
+
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("a server closing mid-script failed the request: %v", err)
+	}
+
+	transcript := wsTranscript(t, resp)
+	if err := transcript.Summary.Err(); err != nil {
+		t.Fatalf("a normal server close ended as a stream failure: %v", err)
+	}
+	if transcript.Summary.ClosedBy != wsClosedByServer {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByServer)
+	}
+	if !wsSent(transcript, "hello") {
+		t.Fatalf("the transcript lost the frames sent before the close: %+v", transcript.Events)
+	}
+}
+
+func TestCompleteWebSocketReportsAStepFailureInTheSummary(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepSendText, Value: "hello"},
+				{Type: restfile.WebSocketStepSendFile, File: "no-such-payload.bin"},
+			},
+		},
+	}
+
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{BaseDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("a failed step returned before the transcript was built: %v", err)
+	}
+
+	transcript := wsTranscript(t, resp)
+	if transcript.Summary.ClosedBy != wsClosedByError {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByError)
+	}
+	if !strings.Contains(transcript.Summary.CloseReason, "step 2:send_file") ||
+		!strings.Contains(transcript.Summary.CloseReason, "websocket payload file") {
+		t.Fatalf("closeReason = %q, want the step and why it failed", transcript.Summary.CloseReason)
+	}
+	// A payload Resterm could not read is a filesystem failure, not a protocol one.
+	if transcript.Summary.ErrorClass != diag.ClassFilesystem {
+		t.Fatalf("errorClass = %q, want %q", transcript.Summary.ErrorClass, diag.ClassFilesystem)
+	}
+	err = transcript.Summary.Err()
+	if err == nil {
+		t.Fatal("Err() = nil, want the failure to fail the request")
+	}
+	if !slices.Contains(diag.Classes(err), diag.ClassFilesystem) {
+		t.Fatalf("Err() classes = %v, want %s", diag.Classes(err), diag.ClassFilesystem)
+	}
+	if !wsSent(transcript, "hello") {
+		t.Fatalf("the transcript lost the frames sent before the failure: %+v", transcript.Events)
+	}
+}
+
+func TestCompleteWebSocketNamesACancelledRunAndKeepsTheTranscript(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepSendText, Value: "hello"},
+				{Type: restfile.WebSocketStepWait, Duration: 5 * time.Second},
+			},
+		},
+	}
+
+	time.AfterFunc(300*time.Millisecond, cancel)
+	resp, err := NewClient(nil).ExecuteWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatalf("a cancelled run returned before the transcript was built: %v", err)
+	}
+
+	transcript := wsTranscript(t, resp)
+	if transcript.Summary.ClosedBy != wsClosedByCanceled {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByCanceled)
+	}
+	if !slices.Contains(diag.Classes(transcript.Summary.Err()), diag.ClassCanceled) {
+		t.Fatalf("Err() = %v, want a cancelled run", transcript.Summary.Err())
+	}
+	if !wsSent(transcript, "hello") {
+		t.Fatalf("the transcript lost the frames sent before the cancel: %+v", transcript.Events)
+	}
+}
+
+func TestWebSocketStepFailureKeepsItsClass(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	tests := []struct {
+		name string
+		step restfile.WebSocketStep
+		want diag.Class
+	}{
+		{
+			name: "unreadable payload file",
+			step: restfile.WebSocketStep{
+				Type: restfile.WebSocketStepSendFile,
+				File: "no-such-payload.bin",
+			},
+			want: diag.ClassFilesystem,
+		},
+		{
+			name: "payload that is not base64",
+			step: restfile.WebSocketStep{
+				Type:  restfile.WebSocketStepSendBase64,
+				Value: "not base64 at all",
+			},
+			want: diag.ClassProtocol,
+		},
+		{
+			name: "payload that is not json",
+			step: restfile.WebSocketStep{
+				Type:  restfile.WebSocketStepSendJSON,
+				Value: "{oops",
+			},
+			want: diag.ClassProtocol,
+		},
+		{
+			name: "control frame over its payload limit",
+			step: restfile.WebSocketStep{
+				Type:  restfile.WebSocketStepPing,
+				Value: strings.Repeat("A", websocketControlMaxPayload+1),
+			},
+			want: diag.ClassProtocol,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{
+				Method: http.MethodGet,
+				URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+				WebSocket: &restfile.WebSocketRequest{
+					Steps: []restfile.WebSocketStep{tt.step},
+				},
+			}
+
+			resp, err := NewClient(nil).ExecuteWebSocket(
+				t.Context(),
+				req,
+				nil,
+				Options{BaseDir: t.TempDir()},
+			)
+			if err != nil {
+				t.Fatalf("a failed step returned before the transcript was built: %v", err)
+			}
+
+			sum := wsTranscript(t, resp).Summary
+			if sum.ClosedBy != wsClosedByError {
+				t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, wsClosedByError)
+			}
+			if sum.ErrorClass != tt.want {
+				t.Fatalf("errorClass = %q, want %q", sum.ErrorClass, tt.want)
+			}
+			if got := diag.Classes(sum.Err()); !slices.Contains(got, tt.want) {
+				t.Fatalf("Err() classes = %v, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+// A transcript another build wrote can name a class this one does not have.
+func TestStreamSummaryErrFallsBackToProtocol(t *testing.T) {
+	tests := []struct {
+		name  string
+		class diag.Class
+		want  diag.Class
+	}{
+		{name: "no class", want: diag.ClassProtocol},
+		{name: "unknown class", class: "wormhole", want: diag.ClassProtocol},
+		{name: "unclassified", class: diag.ClassUnknown, want: diag.ClassProtocol},
+		{name: "a class this build knows", class: diag.ClassNetwork, want: diag.ClassNetwork},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := WebSocketSummary{ClosedBy: wsClosedByError, ErrorClass: tt.class}
+			if got := diag.ClassOf(ws.Err()); got != tt.want {
+				t.Fatalf("websocket Err() class = %q, want %q", got, tt.want)
+			}
+			sse := SSESummary{Reason: sseReasonErr, ErrorClass: tt.class}
+			if got := diag.ClassOf(sse.Err()); got != tt.want {
+				t.Fatalf("sse Err() class = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWebSocketTellsACallerDeadlineFromTheIdleLimit(t *testing.T) {
+	tests := []struct {
+		name     string
+		idle     time.Duration
+		deadline time.Duration
+		want     diag.Class
+	}{
+		{name: "the idle limit", idle: 200 * time.Millisecond},
+		{name: "a deadline the caller set", deadline: 300 * time.Millisecond, want: diag.ClassTimeout},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, cleanup := startSilentWebSocketServer(t)
+			defer cleanup()
+
+			ctx := t.Context()
+			if tt.deadline > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tt.deadline)
+				defer cancel()
+			}
+
+			req := &restfile.Request{
+				Method: http.MethodGet,
+				URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+				WebSocket: &restfile.WebSocketRequest{
+					Options: restfile.WebSocketOptions{IdleTimeout: tt.idle},
+					Steps: []restfile.WebSocketStep{
+						{Type: restfile.WebSocketStepWait, Duration: 10 * time.Second},
+					},
+				},
+			}
+
+			resp, err := NewClient(nil).ExecuteWebSocket(ctx, req, nil, Options{})
+			if err != nil {
+				t.Fatalf("ExecuteWebSocket: %v", err)
+			}
+
+			sum := wsTranscript(t, resp).Summary
+			if sum.ClosedBy != wsClosedByTimeout {
+				t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, wsClosedByTimeout)
+			}
+			if sum.ErrorClass != tt.want {
+				t.Fatalf("errorClass = %q, want %q", sum.ErrorClass, tt.want)
+			}
+			if tt.want == "" {
+				if err := sum.Err(); err != nil {
+					t.Fatalf("a reached idle limit ended as a failure: %v", err)
+				}
+				return
+			}
+			if got := diag.ClassOf(sum.Err()); got != tt.want {
+				t.Fatalf("Err() class = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStartWebSocketHandshakeTimeoutIsATimeout(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	// Keep accepted connections open until the client reaches its deadline.
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+		}
+	}()
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws://" + ln.Addr().String() + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{HandshakeTimeout: 200 * time.Millisecond},
+		},
+	}
+
+	_, _, err = NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+	if err == nil {
+		t.Fatal("StartWebSocket = nil, want the handshake to run out of time")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want a deadline the caller can recognise", err)
+	}
+	if !slices.Contains(diag.Classes(err), diag.ClassTimeout) {
+		t.Fatalf("classes = %v, want %s", diag.Classes(err), diag.ClassTimeout)
+	}
+	if strings.Contains(err.Error(), errStreamLimit.Error()) {
+		t.Fatalf("error = %q, want no internal cause in the message", err)
 	}
 }

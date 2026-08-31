@@ -418,3 +418,41 @@ func assertChainLines(t *testing.T, err error, want []string) {
 		}
 	}
 }
+
+func TestClassKnown(t *testing.T) {
+	tests := []struct {
+		name  string
+		class diag.Class
+		known bool
+	}{
+		{name: "a class", class: diag.ClassFilesystem, known: true},
+		{name: "the zero value", class: ""},
+		{name: "unknown", class: diag.ClassUnknown},
+		{name: "a name this build does not have", class: "wormhole"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.class.Known(); got != tt.known {
+				t.Fatalf("Known() = %t, want %t", got, tt.known)
+			}
+			want := tt.class
+			if !tt.known {
+				want = diag.ClassNetwork
+			}
+			if got := tt.class.KnownOr(diag.ClassNetwork); got != want {
+				t.Fatalf("KnownOr(%q) = %q, want %q", diag.ClassNetwork, got, want)
+			}
+		})
+	}
+}
+
+func TestWrapKeepsTheCauseClass(t *testing.T) {
+	cause := diag.New(diag.ClassFilesystem, "open payload.bin: no such file")
+	if got := diag.ClassOf(diag.Wrap(cause, "websocket step 2:send_file")); got != diag.ClassFilesystem {
+		t.Fatalf("ClassOf() = %q, want %q", got, diag.ClassFilesystem)
+	}
+	if got := diag.ClassOf(diag.Wrap(errors.New("boom"), "read")); got != diag.ClassUnknown {
+		t.Fatalf("ClassOf() = %q, want %q", got, diag.ClassUnknown)
+	}
+}
