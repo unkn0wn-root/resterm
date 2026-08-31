@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"time"
@@ -15,9 +16,18 @@ type metaDefaults struct {
 	proto  string
 }
 
-func ctxWithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+// errStreamLimit identifies an SSE duration limit. It must not be used for
+// timeouts returned directly to callers because it replaces the timeout cause.
+var errStreamLimit = errors.New("stream duration limit")
+
+// A nil cause keeps context.DeadlineExceeded, matching context.WithTimeout.
+func ctxWithTimeout(
+	ctx context.Context,
+	d time.Duration,
+	cause error,
+) (context.Context, context.CancelFunc) {
 	if d > 0 {
-		return context.WithTimeout(ctx, d)
+		return context.WithTimeoutCause(ctx, d, cause)
 	}
 	return context.WithCancel(ctx)
 }

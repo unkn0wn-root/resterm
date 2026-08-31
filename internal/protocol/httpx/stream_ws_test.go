@@ -1079,3 +1079,102 @@ func TestStreamSummaryErrFallsBackToProtocol(t *testing.T) {
 		})
 	}
 }
+
+func TestWebSocketTellsACallerDeadlineFromTheIdleLimit(t *testing.T) {
+	tests := []struct {
+		name     string
+		idle     time.Duration
+		deadline time.Duration
+		want     diag.Class
+	}{
+		{name: "the idle limit", idle: 200 * time.Millisecond},
+		{name: "a deadline the caller set", deadline: 300 * time.Millisecond, want: diag.ClassTimeout},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, cleanup := startSilentWebSocketServer(t)
+			defer cleanup()
+
+			ctx := t.Context()
+			if tt.deadline > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tt.deadline)
+				defer cancel()
+			}
+
+			req := &restfile.Request{
+				Method: http.MethodGet,
+				URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+				WebSocket: &restfile.WebSocketRequest{
+					Options: restfile.WebSocketOptions{IdleTimeout: tt.idle},
+					Steps: []restfile.WebSocketStep{
+						{Type: restfile.WebSocketStepWait, Duration: 10 * time.Second},
+					},
+				},
+			}
+
+			resp, err := NewClient(nil).ExecuteWebSocket(ctx, req, nil, Options{})
+			if err != nil {
+				t.Fatalf("ExecuteWebSocket: %v", err)
+			}
+
+			sum := wsTranscript(t, resp).Summary
+			if sum.ClosedBy != wsClosedByTimeout {
+				t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, wsClosedByTimeout)
+			}
+			if sum.ErrorClass != tt.want {
+				t.Fatalf("errorClass = %q, want %q", sum.ErrorClass, tt.want)
+			}
+			if tt.want == "" {
+				if err := sum.Err(); err != nil {
+					t.Fatalf("a reached idle limit ended as a failure: %v", err)
+				}
+				return
+			}
+			if got := diag.ClassOf(sum.Err()); got != tt.want {
+				t.Fatalf("Err() class = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStartWebSocketHandshakeTimeoutIsATimeout(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	// Keep accepted connections open until the client reaches its deadline.
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+		}
+	}()
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws://" + ln.Addr().String() + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{HandshakeTimeout: 200 * time.Millisecond},
+		},
+	}
+
+	_, _, err = NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+	if err == nil {
+		t.Fatal("StartWebSocket = nil, want the handshake to run out of time")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want a deadline the caller can recognise", err)
+	}
+	if !slices.Contains(diag.Classes(err), diag.ClassTimeout) {
+		t.Fatalf("classes = %v, want %s", diag.Classes(err), diag.ClassTimeout)
+	}
+	if strings.Contains(err.Error(), errStreamLimit.Error()) {
+		t.Fatalf("error = %q, want no internal cause in the message", err)
+	}
+}

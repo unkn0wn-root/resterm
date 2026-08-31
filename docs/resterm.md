@@ -1522,9 +1522,10 @@ If the server returns a non-2xx status or a content type other than `text/event-
 | `limit:line_bytes` | One line was larger than `max-line-bytes`. |
 | `limit:event_bytes` | One event was larger than `max-event-bytes`. |
 | `context_canceled` | The run was cancelled. |
+| `context_deadline` | The run's deadline expired before the stream reached one of its own limits. |
 | `error` | The stream failed. `summary.error` contains the error message and `summary.errorClass` names what kind of failure it was. |
 
-Reaching `idle`, `duration`, `max-events`, or `max-bytes` ends the stream without an error. The saved data includes everything read before the limit was reached. If the stream ends for any other reason, the request fails and `summary.error` contains the error message. Resterm still saves the transcript.
+Reaching `idle`, `duration`, `max-events`, or `max-bytes` ends the stream without an error. The saved data includes everything read before the limit was reached. If the stream ends for any other reason, the request fails and `summary.error` contains the error message. Resterm still saves the transcript. A configured `duration` is a normal limit; an expired run deadline is a `timeout` failure.
 
 ### WebSockets (`@websocket`, `@ws`)
 
@@ -1570,11 +1571,11 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
 | --- | --- |
 | `server` | The server closed the connection. |
 | `client` | Resterm closed the connection through `@ws close` or after the last step. |
-| `timeout` | The session reached its `idle` or `duration` limit. |
+| `timeout` | The idle limit was reached, or the run's deadline expired. An idle timeout is a normal ending. An expired run deadline is a failure and sets `errorClass` to `timeout`. |
 | `canceled` | The run was cancelled. |
 | `error` | The session failed. `closeReason` contains the error message and `errorClass` names what kind of failure it was. |
 
-Only `error` and `canceled` cause the request to fail. Resterm keeps the transcript in every case.
+`error`, `canceled`, and a `timeout` with an `errorClass` cause the request to fail. Resterm keeps the transcript in every case.
 
 > **Heads-up:** When you keep a WebSocket URL in `@const`, `@global`, or `@var`, write the request line as `GET {{ws.url}}` (or whichever variable you use). The parser needs the explicit method to recognise the line as a WebSocket request before template expansion. Literal `ws://` / `wss://` URLs without a method still work when written directly.
 
@@ -2248,7 +2249,7 @@ A template can also provide part of the URL. Both `GET http://{{host}}/users` an
   ```
 - Most events arrive as a single `data:` line, so the line limit is the one they reach first. Raise `max-line-bytes` along with `max-event-bytes` when a single line carries the whole payload. Base64 adds about a third to a payload, so a 3 MiB file needs roughly 4 MiB of headroom.
 - Resterm limits how much stream data it keeps in memory. An SSE session keeps up to 1024 events and 16 MiB, or twice `max-event-bytes` when that is larger. The size of an SSE event includes its data, comment, id, name, and other saved fields. A WebSocket session and its saved transcript each have an 8 MiB limit. The Stream pane keeps up to 5000 events or 16 MiB. If Resterm removes older events, the summary counts them in `dropped`. The Stream tab shows `Transcript incomplete` when its view is missing events.
-- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end. Other problems fail the request. These include a read error, an SSE line or event that exceeds its limit, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a cancelled run returns `130` and a stream error returns the code for the failure named in `summary.errorClass`: `21` for `network`, `22` for `tls`, `25` for `filesystem` such as an `@ws send-file` payload Resterm could not read, and `26` for `protocol`. A stream that failed for a reason Resterm cannot name reports `protocol`.
+- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end. Other problems fail the request. These include an expired run deadline, a read error, an SSE line or event that exceeds its limit, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a cancelled run returns `130` and a stream error returns the code for the failure named in `summary.errorClass`: `20` for `timeout`, `21` for `network`, `22` for `tls`, `25` for `filesystem` such as an `@ws send-file` payload Resterm could not read, and `26` for `protocol`. A stream that failed for a reason Resterm cannot name reports `protocol`.
 - Requests use an in-memory cookie jar per environment. Cookies are isolated between environments, and `@setting no-cookies true` disables cookies for a request without clearing the stored jar. Use `Ctrl+Shift+G` (or `g Shift+G`) to clear cookies for the current environment.
 - TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts space/comma/semicolon separated lists; paths are relative). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.

@@ -3,6 +3,7 @@ package runner
 import (
 	"errors"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"google.golang.org/grpc/codes"
@@ -320,6 +322,16 @@ func TestStreamFailureKeepsItsExitCode(t *testing.T) {
 			code: runfail.CodeProtocol,
 			exit: runfail.ExitProtocol,
 		},
+		{
+			name: "a deadline the caller set",
+			sum: httpx.WebSocketSummary{
+				ClosedBy:    "timeout",
+				CloseReason: "context deadline exceeded",
+				ErrorClass:  diag.ClassTimeout,
+			},
+			code: runfail.CodeTimeout,
+			exit: runfail.ExitTimeout,
+		},
 	}
 
 	for _, tt := range tests {
@@ -334,5 +346,51 @@ func TestStreamFailureKeepsItsExitCode(t *testing.T) {
 				t.Fatalf("source = %q, want %q", got.Source, "stream")
 			}
 		})
+	}
+}
+
+func TestWebSocketHandshakeTimeoutExitCode(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+		}
+	}()
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws://" + ln.Addr().String() + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{HandshakeTimeout: 200 * time.Millisecond},
+		},
+	}
+	_, _, err = httpx.NewClient(nil).StartWebSocket(t.Context(), req, nil, httpx.Options{})
+
+	got := resultFailure(Result{Err: err})
+	if got.Code != runfail.CodeTimeout || got.ExitCode != runfail.ExitTimeout {
+		t.Fatalf("failure = %s/%d, want %s/%d",
+			got.Code, got.ExitCode, runfail.CodeTimeout, runfail.ExitTimeout)
+	}
+}
+
+func TestReachedStreamLimitIsNotAFailure(t *testing.T) {
+	sums := []httpx.WebSocketSummary{
+		{ClosedBy: "timeout", CloseReason: "idle timeout after 5s"},
+		{ClosedBy: "server", CloseReason: "bye"},
+		{ClosedBy: "client"},
+	}
+
+	for _, sum := range sums {
+		if err := sum.Err(); err != nil {
+			t.Fatalf("closedBy %q ended as a failure: %v", sum.ClosedBy, err)
+		}
 	}
 }

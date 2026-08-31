@@ -64,11 +64,17 @@ func TestSSERunReportsAnIdleTimeoutOnEveryExit(t *testing.T) {
 }
 
 func TestSSERunNamesWhatCancelledTheRead(t *testing.T) {
-	deadline, cancelDeadline := context.WithDeadline(
+	limit, cancelLimit := ctxWithTimeout(context.Background(), time.Nanosecond, errStreamLimit)
+	defer cancelLimit()
+	<-limit.Done()
+
+	caller, cancelCaller := context.WithDeadline(
 		context.Background(),
 		time.Now().Add(-time.Second),
 	)
-	defer cancelDeadline()
+	defer cancelCaller()
+	outlived, cancelOutlived := ctxWithTimeout(caller, time.Hour, errStreamLimit)
+	defer cancelOutlived()
 
 	stopped, stop := context.WithCancel(context.Background())
 	stop()
@@ -80,7 +86,9 @@ func TestSSERunNamesWhatCancelledTheRead(t *testing.T) {
 		want  string
 	}{
 		{name: "the idle watcher", ctx: stopped, idled: true, want: sseReasonIdle},
-		{name: "the total timeout", ctx: deadline, want: sseReasonTotal},
+		{name: "the duration the request asked for", ctx: limit, want: sseReasonTotal},
+		{name: "a deadline the caller set", ctx: caller, want: sseReasonDeadline},
+		{name: "a caller deadline inside a longer duration", ctx: outlived, want: sseReasonDeadline},
 		{name: "the caller gave up", ctx: stopped, want: sseReasonCanceled},
 	}
 
@@ -647,6 +655,83 @@ func TestSSEReadFailureKeepsItsClass(t *testing.T) {
 				t.Fatalf("kept %d events, want the one read before the failure", len(transcript.Events))
 			}
 			if got := diag.ClassOf(transcript.Summary.Err()); got != tt.want {
+				t.Fatalf("Err() class = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSSETellsACallerDeadlineFromTheDurationLimit(t *testing.T) {
+	tests := []struct {
+		name     string
+		total    time.Duration
+		deadline time.Duration
+		reason   string
+		want     diag.Class
+	}{
+		{
+			name:   "the duration the request asked for",
+			total:  250 * time.Millisecond,
+			reason: sseReasonTotal,
+		},
+		{
+			name:     "a deadline the caller set",
+			deadline: 250 * time.Millisecond,
+			reason:   sseReasonDeadline,
+			want:     diag.ClassTimeout,
+		},
+		{
+			name:     "a caller deadline inside a longer duration",
+			total:    time.Minute,
+			deadline: 250 * time.Millisecond,
+			reason:   sseReasonDeadline,
+			want:     diag.ClassTimeout,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+				_, _ = w.Write([]byte("data: ping\n\n"))
+				flush()
+				<-t.Context().Done()
+			})
+
+			ctx := t.Context()
+			if tt.deadline > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tt.deadline)
+				defer cancel()
+			}
+
+			req := &restfile.Request{
+				Method: "GET",
+				URL:    srv.URL,
+				SSE:    &restfile.SSERequest{Options: restfile.SSEOptions{TotalTimeout: tt.total}},
+			}
+			resp, err := NewClient(nil).ExecuteSSE(ctx, req, nil, Options{})
+			if err != nil {
+				t.Fatalf("ExecuteSSE: %v", err)
+			}
+
+			transcript, err := DecodeSSETranscript(resp.Body)
+			if err != nil {
+				t.Fatalf("decode transcript: %v", err)
+			}
+			sum := transcript.Summary
+			if sum.Reason != tt.reason {
+				t.Fatalf("Reason = %q, want %q", sum.Reason, tt.reason)
+			}
+			if len(transcript.Events) != 1 {
+				t.Fatalf("kept %d events, want the one read before the stop", len(transcript.Events))
+			}
+			if tt.want == "" {
+				if err := sum.Err(); err != nil {
+					t.Fatalf("a reached duration limit ended as a failure: %v", err)
+				}
+				return
+			}
+			if got := diag.ClassOf(sum.Err()); got != tt.want {
 				t.Fatalf("Err() class = %q, want %q", got, tt.want)
 			}
 		})

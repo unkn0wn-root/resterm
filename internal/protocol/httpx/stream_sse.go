@@ -39,6 +39,7 @@ const (
 	sseReasonEventBytes = "limit:event_bytes"
 	sseReasonTotal      = "timeout:total"
 	sseReasonCanceled   = "context_canceled"
+	sseReasonDeadline   = "context_deadline"
 )
 
 const (
@@ -116,13 +117,20 @@ type SSETranscript struct {
 	Summary SSESummary `json:"summary"`
 }
 
-// Err reports the failure that ended the stream. Reaching a configured limit or
-// timeout is a normal ending and returns nil. A broken read, or a line or event
-// larger than its limit, is a failure.
+// Err reports an error when the stream fails, is canceled, or exceeds a caller
+// deadline. Configured stream limits are normal endings.
 func (s SSESummary) Err() error {
 	switch {
 	case s.Reason == sseReasonCanceled:
-		return diag.New(diag.ClassCanceled, cmp.Or(s.Error, "sse stream canceled"))
+		return diag.New(
+			s.ErrorClass.KnownOr(diag.ClassCanceled),
+			cmp.Or(s.Error, "sse stream canceled"),
+		)
+	case s.Reason == sseReasonDeadline:
+		return diag.New(
+			s.ErrorClass.KnownOr(diag.ClassTimeout),
+			cmp.Or(s.Error, "sse stream ran out of time"),
+		)
 	case s.Reason == sseReasonErr, s.Error != "":
 		return diag.New(
 			s.ErrorClass.KnownOr(diag.ClassProtocol),
@@ -144,7 +152,7 @@ func (c *Client) StartSSE(
 	}
 
 	streamOpts := req.SSE.Options
-	streamCtx, cancel := ctxWithTimeout(ctx, streamOpts.TotalTimeout)
+	streamCtx, cancel := ctxWithTimeout(ctx, streamOpts.TotalTimeout, errStreamLimit)
 
 	httpReq, effectiveOpts, err := c.prepareHTTPRequest(streamCtx, req, resolver, opts)
 	if err != nil {
@@ -414,8 +422,10 @@ func (r *sseRun) ended(ctx context.Context) string {
 	switch {
 	case r.idled.Load():
 		return sseReasonIdle
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+	case errors.Is(context.Cause(ctx), errStreamLimit):
 		return sseReasonTotal
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return sseReasonDeadline
 	default:
 		return sseReasonCanceled
 	}
@@ -468,8 +478,11 @@ func (r *sseRun) finish(ctx context.Context, err error) {
 	})
 
 	closeErr := r.failure
-	if closeErr == nil && ctx.Err() != nil && r.summary.Reason == sseReasonCanceled {
-		closeErr = ctx.Err()
+	if closeErr == nil && ctx.Err() != nil {
+		switch r.summary.Reason {
+		case sseReasonCanceled, sseReasonDeadline:
+			closeErr = context.Cause(ctx)
+		}
 	}
 	r.session.Close(closeErr)
 }
