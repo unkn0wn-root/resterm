@@ -1,6 +1,9 @@
 package bytesize
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestParseBudget(t *testing.T) {
 	const noDefault = 4096
@@ -46,5 +49,27 @@ func TestBudgetZeroValueTakesTheDefault(t *testing.T) {
 	}
 	if got := Of(0).Or(4096); got != 0 {
 		t.Fatalf("Of(0).Or(4096) = %d, want no limit", got)
+	}
+}
+
+func TestAddCapsInsteadOfWrapping(t *testing.T) {
+	tests := []struct {
+		name string
+		a    int64
+		b    int64
+		want int64
+	}{
+		{name: "ordinary sizes", a: 1 << 20, b: 1, want: 1<<20 + 1},
+		{name: "zero", want: 0},
+		{name: "one past the maximum", a: math.MaxInt64, b: 1, want: math.MaxInt64},
+		{name: "twice the maximum", a: math.MaxInt64, b: math.MaxInt64, want: math.MaxInt64},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Add(tt.a, tt.b); got != tt.want {
+				t.Fatalf("Add(%d, %d) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
 	}
 }

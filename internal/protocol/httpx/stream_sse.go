@@ -70,13 +70,13 @@ func sseLimitsFor(sse restfile.SSEOptions, opts Options) sseLimits {
 
 func (l sseLimits) sessionBytes() bytesize.Budget {
 	// Keep room for a full event and the summary event that follows it.
-	return bytesize.Of(max(int64(DefaultSSESessionBytes), 2*l.event))
+	return bytesize.Of(max(int64(DefaultSSESessionBytes), bytesize.Add(l.event, l.event)))
 }
 
 func (l sseLimits) lineBudget(read int64) int {
 	budget := l.line
 	if l.stream > 0 {
-		budget = min(budget, l.stream-read+1)
+		budget = min(budget, bytesize.Add(l.stream-read, 1))
 	}
 	return int(budget)
 }

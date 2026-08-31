@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -71,6 +72,18 @@ func TestResponseBodyAtTheLimitIsKept(t *testing.T) {
 	}
 	if len(resp.Body) != size {
 		t.Fatalf("len(Body) = %d, want %d", len(resp.Body), size)
+	}
+}
+
+func TestResponseBodyAcceptsTheLargestLimit(t *testing.T) {
+	const body = "hello world"
+
+	got, err := readResponseBody(strings.NewReader(body), math.MaxInt64)
+	if err != nil {
+		t.Fatalf("readResponseBody: %v", err)
+	}
+	if string(got) != body {
+		t.Fatalf("body = %q, want %q", got, body)
 	}
 }
 
@@ -233,6 +246,11 @@ func TestSSELineBudgetTracksTheStreamLimit(t *testing.T) {
 			want: DefaultSSEMaxLineBytes,
 		},
 		{name: "stream limit is smaller", opts: restfile.SSEOptions{MaxBytes: 1024}, want: 1025},
+		{
+			name: "the largest stream limit still budgets a line",
+			opts: restfile.SSEOptions{MaxBytes: math.MaxInt64},
+			want: DefaultSSEMaxLineBytes,
+		},
 		{
 			name: "part of the stream is read",
 			opts: restfile.SSEOptions{MaxBytes: 1024},
