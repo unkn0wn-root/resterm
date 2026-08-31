@@ -1120,3 +1120,18 @@ func TestRedirectBackToTheOwnerOriginNarrowsTheReferer(t *testing.T) {
 		t.Fatal("the redirect target was never reached")
 	}
 }
+
+// The narrowed Referer goes out on the wire, so an IPv6 hop keeps its brackets.
+func TestNarrowRefererBracketsAnIPv6Hop(t *testing.T) {
+	previous, err := url.Parse("https://[2001:db8::1]:8443/tokens?api_key=secret")
+	if err != nil {
+		t.Fatalf("url.Parse: %v", err)
+	}
+
+	dst := http.Header{refererHeader: []string{previous.String()}}
+	narrowReferer(dst, http.Header{}, previous)
+
+	if want := "https://[2001:db8::1]:8443/"; dst.Get(refererHeader) != want {
+		t.Fatalf("Referer = %q, want %q", dst.Get(refererHeader), want)
+	}
+}

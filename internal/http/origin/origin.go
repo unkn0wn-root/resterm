@@ -2,6 +2,7 @@ package origin
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -75,9 +76,16 @@ func (o Origin) String() string {
 		return ""
 	}
 	if o.port == defaultPorts[o.scheme] {
-		return o.scheme + "://" + o.host
+		return o.scheme + "://" + hostLiteral(o.host)
 	}
-	return o.scheme + "://" + o.host + ":" + o.port
+	return o.scheme + "://" + net.JoinHostPort(o.host, o.port)
+}
+
+func hostLiteral(host string) string {
+	if strings.ContainsRune(host, ':') {
+		return "[" + host + "]"
+	}
+	return host
 }
 
 func Same(a, b *url.URL) bool {

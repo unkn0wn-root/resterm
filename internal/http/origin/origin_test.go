@@ -175,3 +175,40 @@ func TestSecure(t *testing.T) {
 		}
 	}
 }
+
+func TestStringBracketsIPv6(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "ipv4", raw: "https://127.0.0.1:8443", want: "https://127.0.0.1:8443"},
+		{name: "host", raw: "https://cdn.example.com", want: "https://cdn.example.com"},
+		{name: "ipv6 on the default port", raw: "https://[::1]", want: "https://[::1]"},
+		{name: "ipv6 with a port", raw: "https://[::1]:8443", want: "https://[::1]:8443"},
+		{
+			name: "ipv6 written out",
+			raw:  "http://[2001:db8::1]:8080",
+			want: "http://[2001:db8::1]:8080",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			o, err := Parse(tt.raw)
+			if err != nil {
+				t.Fatalf("Parse(%q): %v", tt.raw, err)
+			}
+			if got := o.String(); got != tt.want {
+				t.Fatalf("String() = %q, want %q", got, tt.want)
+			}
+			back, err := Parse(o.String())
+			if err != nil {
+				t.Fatalf("Parse(%q): %v", o.String(), err)
+			}
+			if back != o {
+				t.Fatalf("Parse(%q) = %v, want the origin it came from", o.String(), back)
+			}
+		})
+	}
+}
