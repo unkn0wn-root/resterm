@@ -419,31 +419,46 @@ func assertChainLines(t *testing.T, err error, want []string) {
 	}
 }
 
-func TestClassKnown(t *testing.T) {
-	tests := []struct {
-		name  string
-		class diag.Class
-		known bool
-	}{
-		{name: "a class", class: diag.ClassFilesystem, known: true},
-		{name: "the zero value", class: ""},
-		{name: "unknown", class: diag.ClassUnknown},
-		{name: "a name this build does not have", class: "wormhole"},
+func TestClassKnownMembership(t *testing.T) {
+	known := []diag.Class{
+		diag.ClassConfig,
+		diag.ClassParse,
+		diag.ClassTimeout,
+		diag.ClassCanceled,
+		diag.ClassNetwork,
+		diag.ClassTLS,
+		diag.ClassAuth,
+		diag.ClassProtocol,
+		diag.ClassRoute,
+		diag.ClassFilesystem,
+		diag.ClassScript,
+		diag.ClassHistory,
+		diag.ClassUI,
+		diag.ClassInternal,
+	}
+	for _, class := range known {
+		if !class.Known() {
+			t.Errorf("%q.Known() = false, want true", class)
+		}
+		if got := class.KnownOr(diag.ClassNetwork); got != class {
+			t.Errorf("%q.KnownOr(%q) = %q, want %q", class, diag.ClassNetwork, got, class)
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.class.Known(); got != tt.known {
-				t.Fatalf("Known() = %t, want %t", got, tt.known)
-			}
-			want := tt.class
-			if !tt.known {
-				want = diag.ClassNetwork
-			}
-			if got := tt.class.KnownOr(diag.ClassNetwork); got != want {
-				t.Fatalf("KnownOr(%q) = %q, want %q", diag.ClassNetwork, got, want)
-			}
-		})
+	unknown := []diag.Class{"", diag.ClassUnknown, "wormhole"}
+	for _, class := range unknown {
+		if class.Known() {
+			t.Errorf("%q.Known() = true, want false", class)
+		}
+		if got := class.KnownOr(diag.ClassNetwork); got != diag.ClassNetwork {
+			t.Errorf(
+				"%q.KnownOr(%q) = %q, want %q",
+				class,
+				diag.ClassNetwork,
+				got,
+				diag.ClassNetwork,
+			)
+		}
 	}
 }
 

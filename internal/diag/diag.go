@@ -27,15 +27,26 @@ const (
 	ClassInternal   Class = "internal"
 )
 
-var classes = []Class{
-	ClassConfig, ClassParse, ClassTimeout, ClassCanceled, ClassNetwork,
-	ClassTLS, ClassAuth, ClassProtocol, ClassRoute, ClassFilesystem,
-	ClassScript, ClassHistory, ClassUI, ClassInternal,
+var knownClasses = [...]Class{
+	ClassConfig,
+	ClassParse,
+	ClassTimeout,
+	ClassCanceled,
+	ClassNetwork,
+	ClassTLS,
+	ClassAuth,
+	ClassProtocol,
+	ClassRoute,
+	ClassFilesystem,
+	ClassScript,
+	ClassHistory,
+	ClassUI,
+	ClassInternal,
 }
 
 // Known reports whether c is one of the classes resterm uses. The zero value
 // and ClassUnknown are not.
-func (c Class) Known() bool { return slices.Contains(classes, c) }
+func (c Class) Known() bool { return slices.Contains(knownClasses[:], c) }
 
 // KnownOr returns c when it is a known class, otherwise fallback. A transcript
 // another build wrote can name a class this one does not have.
