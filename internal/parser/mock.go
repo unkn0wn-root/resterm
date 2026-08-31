@@ -203,8 +203,8 @@ func (m *mockBuilder) parsePreamble(b *documentBuilder, ln line) {
 	if ln.text == "" {
 		return
 	}
-	if text, col, ok := ln.comment(); ok {
-		if d, ok := b.readDirective(ln.no, col, text); ok {
+	if c, ok := ln.comment(); ok {
+		if d, ok := b.readDirective(ln.no, c.col(), c.text); ok {
 			m.declare(b, d)
 		}
 		return

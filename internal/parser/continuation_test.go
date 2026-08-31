@@ -256,7 +256,9 @@ GET https://example.com/
 
 func TestParseBlockCommentOptionContinuationKeepsZeroPadding(t *testing.T) {
 	b := &documentBuilder{}
-	if _, ok := b.readDirective(1, 0, `@match regex="first`); ok || b.open == nil {
+	_, complete := b.readDirective(1, 0, `@match regex="first`)
+	_, pending := b.reader.pending()
+	if complete || !pending {
 		t.Fatal("expected the quoted option to remain open")
 	}
 
@@ -295,6 +297,16 @@ GET https://example.com/
 	}
 	if cap.Line != 5 || cap.Col != 26 {
 		t.Fatalf("capture position = %d:%d, want 5:26", cap.Line, cap.Col)
+	}
+}
+
+func TestParseContinuationKeepsAnEscapedRTSLineEndingInsideAString(t *testing.T) {
+	req := parseOneRequest(t, "# @when contains(\n#   \"x\\\n#   \")\nGET https://example.com/\n")
+	if req.Metadata.When == nil {
+		t.Fatal("multiline @when was not applied")
+	}
+	if got, want := req.Metadata.When.Expression, "contains(\n    \"x\\\n    \")"; got != want {
+		t.Fatalf("expression = %q, want %q", got, want)
 	}
 }
 

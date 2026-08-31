@@ -8,14 +8,37 @@ import (
 
 // line stores the raw text, a trimmed form for matching, and its line ending.
 type line struct {
-	no   int // 1-based
-	raw  string
-	text string
-	eol  string
+	no     int // 1-based
+	raw    string
+	text   string
+	eol    string
+	indent int
 }
 
 func makeLine(no int, raw, term string) line {
-	return line{no: no, raw: raw, text: strings.TrimSpace(raw), eol: term}
+	body := str.TrimLeft(raw)
+	return line{
+		no:     no,
+		raw:    raw,
+		text:   str.TrimRight(body),
+		eol:    term,
+		indent: len(raw) - len(body),
+	}
+}
+
+type commentText struct {
+	text  string
+	start int
+	end   int
+}
+
+func (c commentText) col() int {
+	return c.start + 1
+}
+
+func (ln line) span(text string, off int) commentText {
+	start := ln.indent + off
+	return commentText{text: text, start: start, end: start + len(text)}
 }
 
 func (ln line) isSeparator() bool {
@@ -35,17 +58,16 @@ func (ln line) isComment() bool {
 	return ok
 }
 
-func (ln line) comment() (string, int, bool) {
-	text, col, ok := stripComment(ln.text)
+func (ln line) comment() (commentText, bool) {
+	text, off, ok := stripComment(ln.text)
 	if !ok {
-		return "", 0, false
+		return commentText{}, false
 	}
-	return text, strings.Index(ln.raw, ln.text) + col, true
+	return ln.span(text, off), true
 }
 
 // stripComment strips a leading //, # or -- marker. It returns the comment
-// text, the 1-based column of that text inside the input and whether the
-// input was a comment at all.
+// text and its byte offset.
 func stripComment(text string) (string, int, bool) {
 	var n int
 	switch {
@@ -58,30 +80,29 @@ func stripComment(text string) (string, int, bool) {
 	default:
 		return "", 0, false
 	}
-	body := text[n:]
-	lead := len(body) - len(strings.TrimLeft(body, " \t"))
-	return strings.TrimSpace(body), n + lead + 1, true
+	body := str.TrimLeft(text[n:])
+	return str.TrimRight(body), len(text) - len(body), true
 }
 
-// cutBlockCommentStart strips the opening "/*" and parses the remainder as a
-// block comment line.
-func cutBlockCommentStart(text string) (string, bool) {
-	return parseBlockCommentLine(strings.TrimPrefix(text, "/*"))
-}
-
-func parseBlockCommentLine(text string) (string, bool) {
-	working := text
-	closed := false
-	if idx := strings.Index(working, "*/"); idx >= 0 {
-		closed = true
-		working = working[:idx]
+func (ln line) blockComment(opening bool) (c commentText, closed bool) {
+	body := ln.text
+	off := 0
+	if opening {
+		rest := strings.TrimPrefix(body, "/*")
+		off, body = len(body)-len(rest), rest
+	}
+	if end := strings.Index(body, "*/"); end >= 0 {
+		body, closed = body[:end], true
 	}
 
-	working = strings.TrimSpace(working)
-	for strings.HasPrefix(working, "*") {
-		working = strings.TrimSpace(strings.TrimPrefix(working, "*"))
+	text := str.TrimLeft(body)
+	off += len(body) - len(text)
+	for strings.HasPrefix(text, "*") {
+		rest := str.TrimLeft(text[1:])
+		off += len(text) - len(rest)
+		text = rest
 	}
-	return working, closed
+	return ln.span(str.TrimRight(text), off), closed
 }
 
 func (ln line) isScriptBlockStart() bool {

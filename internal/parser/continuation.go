@@ -12,53 +12,167 @@ import (
 type openDirective struct {
 	d      parsedDirective
 	closer string
+	args   strings.Builder
+	state  continuationState
 }
 
-func (b *documentBuilder) readDirective(no, col int, text string) (parsedDirective, bool) {
-	call, ok := directive.Parse(text)
-	if b.open != nil {
-		// A known directive ends the current one instead of becoming its argument.
-		if !ok || !call.Name.Known() {
-			return b.growDirective(no, col, text)
+func (o *openDirective) write(text string) {
+	o.args.WriteString(text)
+	o.state.feed(text)
+}
+
+func (o *openDirective) add(col int, text string) {
+	padding := max(col-1, 0)
+	if padding == 0 {
+		switch o.d.Name.Continuation() {
+		case directive.ContinueExpr, directive.ContinueCapture:
+			// Expression columns include one byte for the missing comment marker.
+			padding = 1
 		}
-		b.failOpenDirective()
 	}
-	if !ok {
+	o.write("\n")
+	if padding > 0 {
+		o.write(strings.Repeat(" ", padding))
+	}
+	o.write(text)
+}
+
+func (o *openDirective) collect() string {
+	o.d.Args = o.args.String()
+	return o.d.Args
+}
+
+// Parsing and editor highlighting share this reader for multiline directives.
+type directiveReader struct {
+	open *openDirective
+}
+
+type directiveReadKind uint8
+
+const (
+	directiveReadNone directiveReadKind = iota
+	directiveReadStarted
+	directiveReadContinued
+	directiveReadCompleted
+	directiveReadContinuationCompleted
+)
+
+type directiveReadResult struct {
+	kind      directiveReadKind
+	directive parsedDirective
+	owner     directive.Name
+	cut       *openDirective
+}
+
+func (r directiveReadResult) completed() (parsedDirective, bool) {
+	switch r.kind {
+	case directiveReadCompleted, directiveReadContinuationCompleted:
+		return r.directive, true
+	default:
 		return parsedDirective{}, false
 	}
+}
 
+func (r *directiveReader) pending() (directive.Name, bool) {
+	if r.open == nil {
+		return "", false
+	}
+	return r.open.d.Name, true
+}
+
+func (r *directiveReader) abandon() *openDirective {
+	o := r.open
+	if o == nil {
+		return nil
+	}
+	r.open = nil
+	if closer := openCloser(o.d.Name, o.collect()); closer != "" {
+		o.closer = closer
+	}
+	return o
+}
+
+func (r *directiveReader) read(no, col int, text string) directiveReadResult {
+	call, parsed := directive.Parse(text)
+	if r.open != nil {
+		// A known directive ends the unfinished directive.
+		if !parsed || !call.Name.Known() {
+			owner := r.open.d.Name
+			d, done := r.grow(no, col, text)
+			if done {
+				return directiveReadResult{
+					kind:      directiveReadContinuationCompleted,
+					directive: d,
+					owner:     owner,
+				}
+			}
+			return directiveReadResult{kind: directiveReadContinued, owner: owner}
+		}
+		cut := r.abandon()
+		return r.readNew(no, col, call, cut)
+	}
+	if !parsed {
+		return directiveReadResult{}
+	}
+	return r.readNew(no, col, call, nil)
+}
+
+func (r *directiveReader) readNew(no, col int, call directive.Call, cut *openDirective) directiveReadResult {
 	d := parsedDirective{Call: call, lines: restfile.LineRange{Start: no, End: no}}
 	if col > 0 {
 		d.argCol = col + call.ArgOffset
 	}
 	if closer := openCloser(d.Name, d.Args); closer != "" {
-		b.open = &openDirective{d: d, closer: closer}
-		return parsedDirective{}, false
-	}
-	return d, true
-}
-
-func (b *documentBuilder) growDirective(no, col int, text string) (parsedDirective, bool) {
-	o := b.open
-	o.d.lines.End = no
-	// Preserve newlines and indentation so diagnostics keep their source positions.
-	padding := max(col-1, 0)
-	if padding == 0 {
-		switch o.d.Name.Continuation() {
-		case directive.ContinueExpr, directive.ContinueCapture:
-			// The writer replaces one leading padding byte with its "#" marker.
-			// These grammars ignore that whitespace, so keep their model stable.
-			padding = 1
+		o := &openDirective{d: d, closer: closer}
+		o.args.WriteString(d.Args)
+		o.state = newContinuationState(d.Name, d.Args)
+		r.open = o
+		return directiveReadResult{
+			kind:  directiveReadStarted,
+			owner: d.Name,
+			cut:   cut,
 		}
 	}
-	o.d.Args += "\n" + strings.Repeat(" ", padding) + text
+	return directiveReadResult{
+		kind:      directiveReadCompleted,
+		directive: d,
+		owner:     d.Name,
+		cut:       cut,
+	}
+}
 
-	if closer := openCloser(o.d.Name, o.d.Args); closer != "" {
-		o.closer = closer
+func (r *directiveReader) grow(no, col int, text string) (parsedDirective, bool) {
+	o := r.open
+	o.d.lines.End = no
+	o.add(col, text)
+
+	if !o.state.mayComplete() {
 		return parsedDirective{}, false
 	}
-	b.open = nil
+	if closer := openCloser(o.d.Name, o.collect()); closer != "" {
+		o.closer = closer
+		// The full parse found more input to collect, so rebuild the scan state.
+		o.state = newContinuationState(o.d.Name, o.d.Args)
+		return parsedDirective{}, false
+	}
+	r.open = nil
 	return o.d, true
+}
+
+// Only comments can continue an argument. A separator always ends it.
+func (r *directiveReader) close(ln line, inBlock bool) *openDirective {
+	if r.open == nil || inBlock || (!ln.isSeparator() && ln.isComment()) {
+		return nil
+	}
+	return r.abandon()
+}
+
+func (b *documentBuilder) readDirective(no, col int, text string) (parsedDirective, bool) {
+	result := b.reader.read(no, col, text)
+	if result.cut != nil {
+		b.failOpenDirective(result.cut)
+	}
+	return result.completed()
 }
 
 func openCloser(name directive.Name, args string) string {
@@ -96,7 +210,7 @@ func captureCloser(expr string) string {
 func argExpr(name directive.Name, args string) string {
 	switch name {
 	case directive.Assert:
-		expr, _ := splitAssert(args)
+		expr, _, _ := splitAssert(args)
 		return expr
 	case directive.Capture:
 		_, _, expr := cutCapture(args)
@@ -120,13 +234,10 @@ func argExpr(name directive.Name, args string) string {
 	}
 }
 
-// An argument continues while comment lines follow it. Every line of a block
-// comment carries one, and a ### separator ends the directive wherever it sits.
 func (b *documentBuilder) closeOpenDirective(ln line) {
-	if b.open == nil || b.inBlock || (!ln.isSeparator() && ln.isComment()) {
-		return
+	if cut := b.reader.close(ln, b.inBlock); cut != nil {
+		b.failOpenDirective(cut)
 	}
-	b.failOpenDirective()
 }
 
 func (b *documentBuilder) flushOpenLines() {
@@ -137,9 +248,7 @@ func (b *documentBuilder) flushOpenLines() {
 	}
 }
 
-func (b *documentBuilder) failOpenDirective() {
-	o := b.open
-	b.open = nil
+func (b *documentBuilder) failOpenDirective(o *openDirective) {
 	b.openLines = nil
 	err := &directive.UnclosedError{Directive: o.d.Spelling, Closer: o.closer}
 	if b.mock != nil {

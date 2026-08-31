@@ -311,7 +311,7 @@ func cutCapture(rest string) (scope, name, expr string) {
 }
 
 func (b *documentBuilder) parseAssertDirective(rest string, line, col int) (restfile.AssertSpec, bool) {
-	expr, msg := splitAssert(rest)
+	expr, msg, _ := splitAssert(rest)
 	if expr == "" {
 		return restfile.AssertSpec{}, false
 	}
@@ -324,13 +324,13 @@ func (b *documentBuilder) parseAssertDirective(rest string, line, col int) (rest
 }
 
 // splitAssert ignores arrows inside strings, comments, and nested groups.
-func splitAssert(text string) (expr, msg string) {
+func splitAssert(text string) (expr, msg string, cut bool) {
 	s := strings.TrimSpace(text)
 	i := strings.Index(rts.Mask(s), "=>")
 	if i < 0 {
-		return s, ""
+		return s, "", false
 	}
-	return strings.TrimSpace(s[:i]), directive.TrimQuotes(strings.TrimSpace(s[i+2:]))
+	return strings.TrimSpace(s[:i]), directive.TrimQuotes(strings.TrimSpace(s[i+2:])), true
 }
 
 func (b *documentBuilder) lintRequestCaptures(req *restfile.Request) {

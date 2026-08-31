@@ -217,7 +217,7 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 	switch {
 	case expr == "" && name == "":
 		return nil, fmt.Errorf("@for-each expression missing")
-	case form == "":
+	case form == forEachNone:
 		return nil, fmt.Errorf("@for-each must use 'as' or 'in'")
 	case expr == "" || name == "":
 		return nil, fmt.Errorf("@for-each requires %s", form)
@@ -228,18 +228,36 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 	return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
 }
 
+type forEachForm uint8
+
+const (
+	forEachNone forEachForm = iota
+	forEachAs
+	forEachIn
+)
+
+func (f forEachForm) String() string {
+	switch f {
+	case forEachAs:
+		return "'<expr> as <name>'"
+	case forEachIn:
+		return "'<name> in <expr>'"
+	}
+	return ""
+}
+
 // cutForEach ignores keywords inside strings, comments, and nested groups.
 // The as form is read from the right so the expression may contain the keyword.
-func cutForEach(rest string) (expr, name, form string) {
+func cutForEach(rest string) (expr, name string, form forEachForm) {
 	rest = strings.TrimSpace(rest)
 	mask := rts.Mask(rest)
 	if i := strings.LastIndex(mask, " as "); i >= 0 {
-		return strings.TrimSpace(rest[:i]), strings.TrimSpace(rest[i+4:]), "'<expr> as <name>'"
+		return strings.TrimSpace(rest[:i]), strings.TrimSpace(rest[i+4:]), forEachAs
 	}
 	if i := strings.Index(mask, " in "); i >= 0 {
-		return strings.TrimSpace(rest[i+4:]), strings.TrimSpace(rest[:i]), "'<name> in <expr>'"
+		return strings.TrimSpace(rest[i+4:]), strings.TrimSpace(rest[:i]), forEachIn
 	}
-	return rest, "", ""
+	return rest, "", forEachNone
 }
 
 type authDirective struct {
