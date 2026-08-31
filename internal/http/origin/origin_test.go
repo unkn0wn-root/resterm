@@ -191,6 +191,16 @@ func TestStringBracketsIPv6(t *testing.T) {
 			raw:  "http://[2001:db8::1]:8080",
 			want: "http://[2001:db8::1]:8080",
 		},
+		{
+			name: "link local ipv6 with a zone",
+			raw:  "https://[fe80::1%25en0]",
+			want: "https://[fe80::1%25en0]",
+		},
+		{
+			name: "link local ipv6 with a zone and a port",
+			raw:  "https://[fe80::1%25en0]:8443",
+			want: "https://[fe80::1%25en0]:8443",
+		},
 	}
 
 	for _, tt := range tests {

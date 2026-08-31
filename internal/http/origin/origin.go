@@ -75,10 +75,13 @@ func (o Origin) String() string {
 	if !o.Valid() {
 		return ""
 	}
-	if o.port == defaultPorts[o.scheme] {
-		return o.scheme + "://" + hostLiteral(o.host)
+	u := url.URL{Scheme: o.scheme, Host: hostLiteral(o.host)}
+	if o.port != defaultPorts[o.scheme] {
+		u.Host = net.JoinHostPort(o.host, o.port)
 	}
-	return o.scheme + "://" + net.JoinHostPort(o.host, o.port)
+	// The host is stored unescaped, so the zone id of a link-local IPv6
+	// address needs its percent sign back before the text is a URL again.
+	return u.String()
 }
 
 func hostLiteral(host string) string {
