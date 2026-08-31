@@ -38,6 +38,51 @@ func TestOfNormalizes(t *testing.T) {
 		},
 		{name: "ws shares the http origin", a: "ws://a.example.com/socket", b: "http://a.example.com", same: true},
 		{name: "ws is not the https origin", a: "ws://a.example.com", b: "https://a.example.com"},
+		{
+			name: "ipv6 address case",
+			a:    "https://[FE80::1]",
+			b:    "https://[fe80::1]",
+			same: true,
+		},
+		// The operating system decides what a zone id names, so a differently
+		// cased one is not known to be the same interface.
+		{
+			name: "ipv6 zone case",
+			a:    "https://[fe80::1%25En0]",
+			b:    "https://[fe80::1%25en0]",
+		},
+		{
+			name: "matching ipv6 zone",
+			a:    "https://[FE80::1%25En0]/x",
+			b:    "https://[fe80::1%25En0]/y",
+			same: true,
+		},
+		// A name has no zone, so the percent sign it decodes to is just part of
+		// the name and folds case with the rest of it.
+		{
+			name: "percent in a registered name",
+			a:    "https://EXAMPLE%25FOO.com",
+			b:    "https://example%25foo.com",
+			same: true,
+		},
+		{
+			name: "international name case",
+			a:    "https://M%C3%9CNCHEN.de",
+			b:    "https://m%C3%BCnchen.de",
+			same: true,
+		},
+		// Only an IPv6 address has a zone, so nothing here is worth preserving.
+		{
+			name: "percent after an ipv4 address",
+			a:    "https://127.0.0.1%25FOO",
+			b:    "https://127.0.0.1%25foo",
+			same: true,
+		},
+		{
+			name: "zone on an ipv4 mapped address",
+			a:    "https://[::ffff:127.0.0.1%25En0]",
+			b:    "https://[::ffff:127.0.0.1%25en0]",
+		},
 	}
 
 	for _, tt := range tests {
@@ -176,7 +221,7 @@ func TestSecure(t *testing.T) {
 	}
 }
 
-func TestStringBracketsIPv6(t *testing.T) {
+func TestStringRoundTripsThroughParse(t *testing.T) {
 	tests := []struct {
 		name string
 		raw  string
@@ -200,6 +245,16 @@ func TestStringBracketsIPv6(t *testing.T) {
 			name: "link local ipv6 with a zone and a port",
 			raw:  "https://[fe80::1%25en0]:8443",
 			want: "https://[fe80::1%25en0]:8443",
+		},
+		{
+			name: "a zone keeps its case",
+			raw:  "https://[FE80::1%25En0]:8443",
+			want: "https://[fe80::1%25En0]:8443",
+		},
+		{
+			name: "international name",
+			raw:  "https://M%C3%9CNCHEN.de",
+			want: "https://m%C3%BCnchen.de",
 		},
 	}
 

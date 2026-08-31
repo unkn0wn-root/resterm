@@ -3,6 +3,7 @@ package origin
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -32,7 +33,7 @@ func Of(u *url.URL) Origin {
 	}
 
 	scheme, dialed := httpSchemes[strings.ToLower(u.Scheme)]
-	host := strings.ToLower(u.Hostname())
+	host := normalizeHost(u.Hostname())
 	if !dialed || host == "" {
 		return Origin{}
 	}
@@ -82,6 +83,23 @@ func (o Origin) String() string {
 	// The host is stored unescaped, so the zone id of a link-local IPv6
 	// address needs its percent sign back before the text is a URL again.
 	return u.String()
+}
+
+// normalizeHost lowercases the name or address but leaves the zone id of an
+// IPv6 address alone. The operating system decides what a zone id names, so two
+// that differ only in case are not known to be one interface, and treating them
+// as one would send credentials across a redirect that changed interface. Only
+// an IPv6 address carries a zone. Everything else is case insensitive all the
+// way through, including the percent-encoded octets of an international name.
+func normalizeHost(host string) string {
+	addr, zone, ok := strings.Cut(host, "%")
+	if !ok {
+		return strings.ToLower(host)
+	}
+	if ip, err := netip.ParseAddr(addr); err != nil || !ip.Is6() {
+		return strings.ToLower(host)
+	}
+	return strings.ToLower(addr) + "%" + zone
 }
 
 func hostLiteral(host string) string {

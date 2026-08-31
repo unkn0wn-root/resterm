@@ -1123,10 +1123,7 @@ func TestRedirectBackToTheOwnerOriginNarrowsTheReferer(t *testing.T) {
 
 // The narrowed Referer goes out on the wire, so an IPv6 hop keeps its brackets.
 func TestNarrowRefererBracketsAnIPv6Hop(t *testing.T) {
-	previous, err := url.Parse("https://[2001:db8::1]:8443/tokens?api_key=secret")
-	if err != nil {
-		t.Fatalf("url.Parse: %v", err)
-	}
+	previous := mustParseURL(t, "https://[2001:db8::1]:8443/tokens?api_key=secret")
 
 	dst := http.Header{refererHeader: []string{previous.String()}}
 	narrowReferer(dst, http.Header{}, previous)
@@ -1134,4 +1131,51 @@ func TestNarrowRefererBracketsAnIPv6Hop(t *testing.T) {
 	if want := "https://[2001:db8::1]:8443/"; dst.Get(refererHeader) != want {
 		t.Fatalf("Referer = %q, want %q", dst.Get(refererHeader), want)
 	}
+}
+
+// The operating system decides what an IPv6 zone id names, so a redirect that
+// only changes its case may be reaching another interface. Credentials stay
+// behind unless the zone matches.
+func TestRedirectStripsCredentialsWhenOnlyTheIPv6ZoneCaseDiffers(t *testing.T) {
+	tests := []struct {
+		name string
+		next string
+		keep bool
+	}{
+		{name: "same zone", next: "https://[fe80::1%25en0]/next", keep: true},
+		{name: "zone case differs", next: "https://[fe80::1%25En0]/next"},
+		{name: "another zone", next: "https://[fe80::1%25en1]/next"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			owner := &http.Request{
+				URL:    mustParseURL(t, "https://[fe80::1%25en0]/tokens"),
+				Header: http.Header{"Authorization": []string{"Bearer secret"}},
+			}
+			next := &http.Request{
+				URL:    mustParseURL(t, tt.next),
+				Header: http.Header{"Authorization": []string{"Bearer secret"}},
+			}
+
+			guard := newRedirectGuard(Options{FollowRedirects: true})
+			if err := guard.check(next, []*http.Request{owner}); err != nil {
+				t.Fatalf("check: %v", err)
+			}
+
+			got := next.Header.Get("Authorization") != ""
+			if got != tt.keep {
+				t.Fatalf("credentials kept = %t, want %t", got, tt.keep)
+			}
+		})
+	}
+}
+
+func mustParseURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("url.Parse(%q): %v", raw, err)
+	}
+	return u
 }
