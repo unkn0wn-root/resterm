@@ -1,7 +1,9 @@
 package headless
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -517,5 +519,35 @@ func TestReportFromRunnerStrings(t *testing.T) {
 		len(step.Trace.Breaches) != 1 ||
 		step.Trace.Breaches[0].Kind != "dns" {
 		t.Fatalf("expected step trace strings to be trimmed, got %+v", step.Trace)
+	}
+}
+
+// A caller reads the Report and then encodes it, so both directions are checked.
+func TestReportKeepsTheStreamError(t *testing.T) {
+	src := &runner.Report{
+		Results: []runner.Result{{
+			Kind:   runner.ResultKindRequest,
+			Name:   "events",
+			Method: "GET",
+			Target: "https://example.com/events",
+			Stream: &runner.StreamInfo{
+				Kind:       "sse",
+				EventCount: 3,
+				Err:        errors.New("sse stream failed"),
+			},
+		}},
+	}
+
+	rep := reportFromRunner(src)
+	if rep.Results[0].Stream == nil || rep.Results[0].Stream.Error != "sse stream failed" {
+		t.Fatalf("adapted stream = %+v, want the failure kept", rep.Results[0].Stream)
+	}
+
+	var out bytes.Buffer
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+	if !strings.Contains(out.String(), `"error": "sse stream failed"`) {
+		t.Fatalf("json dropped the stream error:\n%s", out.String())
 	}
 }

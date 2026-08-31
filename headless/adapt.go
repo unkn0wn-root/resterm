@@ -233,14 +233,14 @@ func streamFromFmt(stream *runfmt.Stream) *Stream {
 	if stream == nil {
 		return nil
 	}
-	out := &Stream{
+	return &Stream{
 		Kind:           stream.Kind,
 		EventCount:     stream.EventCount,
 		TranscriptPath: stream.TranscriptPath,
+		Error:          stream.Error,
 		// ReportModel already deep-clones stream summary maps.
 		Summary: stream.Summary,
 	}
-	return out
 }
 
 func traceFromFmt(trace *runfmt.Trace) *Trace {
