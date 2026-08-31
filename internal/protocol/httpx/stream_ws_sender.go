@@ -22,6 +22,15 @@ func (s *WebSocketSender) touch() {
 	s.runtime.touchActivity()
 }
 
+// fail ends the session with err and stops publishing, so a close frame from
+// the peer cannot replace the real reason the run stopped.
+func (s *WebSocketSender) fail(err error) {
+	if s == nil || s.runtime == nil {
+		return
+	}
+	s.runtime.closeTerminalNow(nil, err)
+}
+
 // Multiple contexts race here: per-message timeout, session lifetime, and write
 // completion. Nested selects give priority to results that are already available.
 func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {

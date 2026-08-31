@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -25,17 +26,16 @@ func wsRecvWindow(opts restfile.WebSocketOptions) time.Duration {
 	return win
 }
 
+// runWSSteps reports whether a step closed the connection. A step that fails
+// ends the session with its error instead of returning it, so the caller can
+// still build the transcript.
 func (c *Client) runWSSteps(
 	session *stream.Session,
 	sender *WebSocketSender,
 	req *restfile.Request,
 	baseDir string,
 	opts Options,
-) (bool, error) {
-	if req == nil || req.WebSocket == nil {
-		return false, diag.New(diag.ClassProtocol, "websocket request missing")
-	}
-
+) bool {
 	wsReq := req.WebSocket
 	ctx := session.Context()
 	recvWindow := wsRecvWindow(wsReq.Options)
@@ -45,83 +45,68 @@ func (c *Client) runWSSteps(
 	for idx, step := range wsReq.Steps {
 		sender.touch()
 
-		if err := ensureSessionAlive(session); err != nil {
-			return false, err
+		if ctx.Err() != nil {
+			return closedByScript
 		}
 
 		label := fmt.Sprintf("%d:%s", idx+1, string(step.Type))
 		meta := map[string]string{wsMetaStep: label}
+
+		var err error
 		switch step.Type {
 		case restfile.WebSocketStepSendText:
 			meta[wsMetaType] = "text"
-			if err := sender.SendText(ctx, step.Value, meta); err != nil {
-				session.Cancel()
-				return false, err
-			}
-			waitForWindow(ctx, recvWindow)
+			err = sender.SendText(ctx, step.Value, meta)
 		case restfile.WebSocketStepSendJSON:
-			payload := strings.TrimSpace(step.Value)
-			if payload == "" {
-				payload = "{}"
-			}
 			meta[wsMetaType] = "json"
-			if err := sender.SendJSON(ctx, payload, meta); err != nil {
-				session.Cancel()
-				return false, err
-			}
-			waitForWindow(ctx, recvWindow)
+			err = sender.SendJSON(ctx, cmp.Or(strings.TrimSpace(step.Value), "{}"), meta)
 		case restfile.WebSocketStepSendBase64:
 			meta[wsMetaType] = "binary"
-			if err := sender.SendBase64(ctx, step.Value, meta); err != nil {
-				session.Cancel()
-				return false, err
-			}
-			waitForWindow(ctx, recvWindow)
+			err = sender.SendBase64(ctx, step.Value, meta)
 		case restfile.WebSocketStepSendFile:
-			data, _, readErr := c.readFile(lookup, step.File, "websocket payload file")
-			if readErr != nil {
-				session.Cancel()
-				return false, readErr
-			}
 			meta[wsMetaType] = "binary"
-			if err := sender.SendBinary(ctx, data, meta); err != nil {
-				session.Cancel()
-				return false, err
+			var data []byte
+			data, _, err = c.readFile(lookup, step.File, "websocket payload file")
+			if err == nil {
+				err = sender.SendBinary(ctx, data, meta)
 			}
-			waitForWindow(ctx, recvWindow)
 		case restfile.WebSocketStepPing:
 			meta[wsMetaType] = "ping"
-			if err := sender.Ping(ctx, step.Value, meta); err != nil {
-				session.Cancel()
-				return false, err
-			}
-			waitForWindow(ctx, recvWindow)
+			err = sender.Ping(ctx, step.Value, meta)
 		case restfile.WebSocketStepPong:
-			if err := sender.Pong(ctx, step.Value, meta); err != nil {
-				session.Cancel()
-				return false, err
-			}
-			waitForWindow(ctx, recvWindow)
+			err = sender.Pong(ctx, step.Value, meta)
 		case restfile.WebSocketStepWait:
-			if err := waitForDuration(ctx, step.Duration); err != nil {
-				session.Cancel()
-				return false, err
-			}
+			err = waitForDuration(ctx, step.Duration)
 		case restfile.WebSocketStepClose:
 			meta[wsMetaType] = "close"
-			code := websocket.StatusNormalClosure
-			if step.Code != 0 {
-				code = websocket.StatusCode(step.Code)
+			code := cmp.Or(websocket.StatusCode(step.Code), websocket.StatusNormalClosure)
+			err = sender.Close(ctx, code, step.Reason, meta)
+			closedByScript = err == nil
+		}
+
+		if err != nil {
+			if ctx.Err() == nil {
+				// The session is still open, so the step itself failed.
+				sender.fail(diag.WrapAs(diag.ClassProtocol, err, "websocket step "+label))
 			}
-			if err := sender.Close(ctx, code, step.Reason, meta); err != nil {
-				session.Cancel()
-				return false, err
-			}
-			closedByScript = true
+			return closedByScript
+		}
+
+		if wsStepSettles(step.Type) {
+			waitForWindow(ctx, recvWindow)
 		}
 	}
 
-	return closedByScript, nil
+	return closedByScript
+}
+
+// A step that sent a frame pauses for the answer. Wait and close have their own timing.
+func wsStepSettles(step restfile.WebSocketStepType) bool {
+	switch step {
+	case restfile.WebSocketStepWait, restfile.WebSocketStepClose:
+		return false
+	}
+	return true
 }
 
 func waitForWindow(ctx context.Context, d time.Duration) {
@@ -143,17 +128,4 @@ func waitForDuration(ctx context.Context, d time.Duration) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-func ensureSessionAlive(session *stream.Session) error {
-	if session == nil {
-		return diag.New(diag.ClassProtocol, "websocket session missing")
-	}
-	if err := session.Context().Err(); err != nil {
-		if sessErr := session.Err(); sessErr != nil {
-			return sessErr
-		}
-		return diag.WrapAs(diag.ClassProtocol, err, "websocket session closed")
-	}
-	return nil
 }

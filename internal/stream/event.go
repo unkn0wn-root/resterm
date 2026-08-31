@@ -58,6 +58,7 @@ func (e *Event) Size() int64 {
 }
 
 type SSEMetadata struct {
+	Index   int
 	Name    string
 	ID      string
 	Comment string

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -485,5 +486,82 @@ func TestSSESummaryErr(t *testing.T) {
 				t.Fatalf("Err() = %q, want %q", err, tt.summary.Error)
 			}
 		})
+	}
+}
+
+func TestSSEAcceptsTheLargestByteLimit(t *testing.T) {
+	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+		_, _ = w.Write([]byte("data: hello\n\n"))
+		flush()
+	})
+
+	transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{MaxBytes: math.MaxInt64})
+	if len(transcript.Events) != 1 || transcript.Events[0].Data != "hello" {
+		t.Fatalf("events = %+v, want the one event the server sent", transcript.Events)
+	}
+}
+
+func TestSSEFailureSummaryCountsWhatTheRunRead(t *testing.T) {
+	const events = 5
+
+	var raw strings.Builder
+	for i := range events {
+		_, _ = fmt.Fprintf(&raw, "data: event-%d\n\n", i)
+	}
+	raw.WriteString("retry: notanumber\n")
+
+	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+		_, _ = w.Write([]byte(raw.String()))
+		flush()
+	})
+
+	sum := sseTranscript(t, srv.URL, restfile.SSEOptions{}).Summary
+	if sum.Reason != sseReasonErr {
+		t.Fatalf("Reason = %q, want %q", sum.Reason, sseReasonErr)
+	}
+	if !strings.Contains(sum.Error, "retry directive") {
+		t.Fatalf("Error = %q, want the parser failure", sum.Error)
+	}
+	if sum.EventCount != events {
+		t.Fatalf("EventCount = %d, want the %d events the run read", sum.EventCount, events)
+	}
+	if sum.ByteCount != int64(raw.Len()) {
+		t.Fatalf("ByteCount = %d, want the %d bytes the run read", sum.ByteCount, raw.Len())
+	}
+}
+
+func TestSSEEventsKeepTheirStreamIndex(t *testing.T) {
+	const sent = 1200
+
+	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+		for i := range sent {
+			_, _ = fmt.Fprintf(w, "data: event-%d\n\n", i)
+		}
+		flush()
+	})
+
+	transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{})
+	if transcript.Summary.EventCount != sent {
+		t.Fatalf("EventCount = %d, want every event read", transcript.Summary.EventCount)
+	}
+	if len(transcript.Events) >= sent {
+		t.Fatalf("kept %d events, want the buffer to have discarded some", len(transcript.Events))
+	}
+	for _, evt := range transcript.Events {
+		if want := fmt.Sprintf("event-%d", evt.Index); evt.Data != want {
+			t.Fatalf("event at index %d holds %q, want %q", evt.Index, evt.Data, want)
+		}
+	}
+}
+
+func TestSSEStreamWithoutEventsCountsNothing(t *testing.T) {
+	srv := sseServer(t, func(w http.ResponseWriter, flush func()) { flush() })
+
+	sum := sseTranscript(t, srv.URL, restfile.SSEOptions{}).Summary
+	if sum.Reason != sseReasonEOF {
+		t.Fatalf("Reason = %q, want %q", sum.Reason, sseReasonEOF)
+	}
+	if sum.EventCount != 0 || sum.ByteCount != 0 {
+		t.Fatalf("summary = %d events and %d bytes, want an empty stream", sum.EventCount, sum.ByteCount)
 	}
 }

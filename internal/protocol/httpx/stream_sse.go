@@ -249,12 +249,6 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	} else {
 		acc.summary.Duration = time.Since(handle.Meta.ConnectedAt)
 	}
-	if acc.summary.ByteCount == 0 {
-		acc.summary.ByteCount = int64(stats.BytesTotal)
-	}
-	if acc.summary.EventCount == 0 {
-		acc.summary.EventCount = len(acc.events)
-	}
 	state, serr := session.State()
 	if acc.summary.Error == "" && serr != nil {
 		acc.summary.Error = serr.Error()
@@ -435,14 +429,15 @@ func (r *sseRun) flush() bool {
 	return true
 }
 
+// A failed run publishes its summary too, so the counts come from the run and
+// not from what the buffer kept.
 func (r *sseRun) finish(ctx context.Context, err error) {
-	if err != nil {
-		r.session.Close(err)
-		return
-	}
-
-	// The transport may report a cancelled read as EOF, so check the context.
-	if ctx.Err() != nil {
+	switch {
+	case err != nil:
+		r.failure = err
+		r.stop(sseReasonErr)
+	case ctx.Err() != nil:
+		// The transport may report a cancelled read as EOF, so check the context.
 		r.stop(r.ended(ctx))
 	}
 

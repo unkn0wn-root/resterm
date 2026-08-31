@@ -29,7 +29,7 @@ func (a *sseAccumulator) consume(evt *stream.Event) {
 	case stream.DirReceive:
 		data := string(evt.Payload)
 		item := SSEEvent{
-			Index:     len(a.events),
+			Index:     evt.SSE.Index,
 			ID:        evt.SSE.ID,
 			Event:     evt.SSE.Name,
 			Data:      data,
@@ -68,6 +68,7 @@ func publishSSEEvent(session *stream.Session, evt SSEEvent) {
 		Timestamp: evt.Timestamp,
 		Payload:   []byte(evt.Data),
 		SSE: stream.SSEMetadata{
+			Index:   evt.Index,
 			Name:    evt.Event,
 			ID:      evt.ID,
 			Comment: evt.Comment,

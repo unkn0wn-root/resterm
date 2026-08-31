@@ -41,12 +41,11 @@ func startEchoWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 			if err != nil {
-				t.Fatalf("websocket accept failed: %v", err)
+				return
 			}
+			// A hijacked connection outlives Server.Close, so the handler must not touch t.
 			defer func() {
-				if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
-					t.Logf("close websocket: %v", err)
-				}
+				_ = conn.Close(websocket.StatusNormalClosure, "bye")
 			}()
 
 			ctx := r.Context()
@@ -84,12 +83,11 @@ func startSilentWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 			if err != nil {
-				t.Fatalf("websocket accept failed: %v", err)
+				return
 			}
+			// A hijacked connection outlives Server.Close, so the handler must not touch t.
 			defer func() {
-				if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
-					t.Logf("close websocket: %v", err)
-				}
+				_ = conn.Close(websocket.StatusNormalClosure, "bye")
 			}()
 			<-r.Context().Done()
 		}),
@@ -817,5 +815,155 @@ loop:
 	case <-session.Done():
 	case <-time.After(2 * time.Second):
 		t.Fatal("session did not terminate after close")
+	}
+}
+
+func startClosingWebSocketServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	srv := httptest.NewUnstartedServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+			if err != nil {
+				return
+			}
+			typ, data, err := conn.Read(r.Context())
+			if err != nil {
+				return
+			}
+			if err := conn.Write(r.Context(), typ, data); err != nil {
+				return
+			}
+			_ = conn.Close(websocket.StatusGoingAway, "server going away")
+		}),
+	)
+	srv.Listener = ln
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func wsTranscript(t *testing.T, resp *Response) WebSocketTranscript {
+	t.Helper()
+	if resp == nil {
+		t.Fatal("no response to read a transcript from")
+	}
+	transcript, err := DecodeWebSocketTranscript(resp.Body)
+	if err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
+	return *transcript
+}
+
+func wsSent(transcript WebSocketTranscript, text string) bool {
+	return slices.ContainsFunc(transcript.Events, func(evt WebSocketEvent) bool {
+		return evt.Direction == "send" && evt.Text == text
+	})
+}
+
+func TestCompleteWebSocketKeepsTheTranscriptWhenTheServerClosesMidScript(t *testing.T) {
+	server := startClosingWebSocketServer(t)
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepSendText, Value: "hello"},
+				{Type: restfile.WebSocketStepWait, Duration: 5 * time.Second},
+				{Type: restfile.WebSocketStepSendText, Value: "never sent"},
+			},
+		},
+	}
+
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("a server closing mid-script failed the request: %v", err)
+	}
+
+	transcript := wsTranscript(t, resp)
+	if err := transcript.Summary.Err(); err != nil {
+		t.Fatalf("a normal server close ended as a stream failure: %v", err)
+	}
+	if transcript.Summary.ClosedBy != wsClosedByServer {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByServer)
+	}
+	if !wsSent(transcript, "hello") {
+		t.Fatalf("the transcript lost the frames sent before the close: %+v", transcript.Events)
+	}
+}
+
+func TestCompleteWebSocketReportsAStepFailureInTheSummary(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepSendText, Value: "hello"},
+				{Type: restfile.WebSocketStepSendFile, File: "no-such-payload.bin"},
+			},
+		},
+	}
+
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{BaseDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("a failed step returned before the transcript was built: %v", err)
+	}
+
+	transcript := wsTranscript(t, resp)
+	if transcript.Summary.ClosedBy != wsClosedByError {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByError)
+	}
+	if !strings.Contains(transcript.Summary.CloseReason, "step 2:send_file") ||
+		!strings.Contains(transcript.Summary.CloseReason, "websocket payload file") {
+		t.Fatalf("closeReason = %q, want the step and why it failed", transcript.Summary.CloseReason)
+	}
+	if err := transcript.Summary.Err(); err == nil {
+		t.Fatal("Err() = nil, want the failure to fail the request")
+	}
+	if !wsSent(transcript, "hello") {
+		t.Fatalf("the transcript lost the frames sent before the failure: %+v", transcript.Events)
+	}
+}
+
+func TestCompleteWebSocketNamesACancelledRunAndKeepsTheTranscript(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    strings.Replace(server.URL, "http", "ws", 1) + "/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepSendText, Value: "hello"},
+				{Type: restfile.WebSocketStepWait, Duration: 5 * time.Second},
+			},
+		},
+	}
+
+	time.AfterFunc(300*time.Millisecond, cancel)
+	resp, err := NewClient(nil).ExecuteWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatalf("a cancelled run returned before the transcript was built: %v", err)
+	}
+
+	transcript := wsTranscript(t, resp)
+	if transcript.Summary.ClosedBy != wsClosedByCanceled {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByCanceled)
+	}
+	if !slices.Contains(diag.Classes(transcript.Summary.Err()), diag.ClassCanceled) {
+		t.Fatalf("Err() = %v, want a cancelled run", transcript.Summary.Err())
+	}
+	if !wsSent(transcript, "hello") {
+		t.Fatalf("the transcript lost the frames sent before the cancel: %+v", transcript.Events)
 	}
 }

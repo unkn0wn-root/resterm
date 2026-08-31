@@ -280,6 +280,9 @@ func (c *Client) CompleteWebSocket(
 	if handle == nil || handle.Session == nil || handle.Sender == nil {
 		return nil, diag.New(diag.ClassProtocol, "websocket session not available")
 	}
+	if req == nil || req.WebSocket == nil {
+		return nil, diag.New(diag.ClassProtocol, "websocket request missing")
+	}
 
 	session := handle.Session
 	listener := session.Subscribe()
@@ -305,12 +308,8 @@ func (c *Client) CompleteWebSocket(
 	if baseDir == "" {
 		baseDir = opts.BaseDir
 	}
-	closedByScript, err := c.runWSSteps(session, sender, req, baseDir, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	if !closedByScript {
+	// A session that already ended needs no close frame.
+	if !c.runWSSteps(session, sender, req, baseDir, opts) && session.Context().Err() == nil {
 		_ = sender.Close(
 			session.Context(),
 			websocket.StatusNormalClosure,
