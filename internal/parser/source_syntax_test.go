@@ -1,0 +1,230 @@
+package parser
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/directive"
+)
+
+func TestSourceSyntaxComments(t *testing.T) {
+	lines := []string{
+		"\t# ✅ hash comment",
+		"  // slash comment",
+		"-- dash comment",
+		"## @if this stays prose",
+		"/**",
+		" * block prose",
+		" * @name Blocked",
+		" **/",
+		"### named request",
+		"GET https://example.test",
+	}
+
+	got := classifySource(strings.Join(lines, "\r\n"))
+	assertSourceKinds(t, got, []SourceLineKind{
+		SourceLineComment,
+		SourceLineComment,
+		SourceLineComment,
+		SourceLineComment,
+		SourceLineComment,
+		SourceLineComment,
+		SourceLineDirective,
+		SourceLineComment,
+		SourceLineRequestSeparator,
+		SourceLineCode,
+	})
+
+	for no, want := range []string{
+		"✅ hash comment",
+		"slash comment",
+		"dash comment",
+		"# @if this stays prose",
+		"",
+		"block prose",
+		"@name Blocked",
+		"",
+	} {
+		if text := sourceContent(lines[no], got[no]); text != want {
+			t.Fatalf("line %d content = %q, want %q", no+1, text, want)
+		}
+	}
+}
+
+func TestSourceSyntaxMultilineDirectives(t *testing.T) {
+	source := strings.Join([]string{
+		"# @assert (",
+		"# true",
+		"# )",
+		"# ordinary prose",
+		"# @match json={",
+		`# "a": 1`,
+		"# }",
+		"# @mock method=GET path=/health",
+		"HTTP/1.1 200 OK",
+		"",
+		"# response body",
+	}, "\n")
+
+	got := classifySource(source)
+	assertSourceKinds(t, got, []SourceLineKind{
+		SourceLineDirective,
+		SourceLineDirectiveValue,
+		SourceLineDirectiveValue,
+		SourceLineComment,
+		SourceLineDirective,
+		SourceLineDirectiveValue,
+		SourceLineDirectiveValue,
+		SourceLineDirective,
+		SourceLineCode,
+		SourceLineCode,
+		SourceLineComment,
+	})
+
+	for _, no := range []int{0, 1, 2} {
+		if got[no].Args != directive.ArgText {
+			t.Fatalf("line %d args = %d, want text", no+1, got[no].Args)
+		}
+	}
+	for _, no := range []int{4, 5, 6} {
+		if got[no].Args != directive.ArgOptions {
+			t.Fatalf("line %d args = %d, want options", no+1, got[no].Args)
+		}
+	}
+	if mocks := Parse("complete.http", []byte(source)).Mocks; len(mocks) != 0 {
+		t.Fatalf("parser created %d mocks after a request-opening assertion, want none", len(mocks))
+	}
+}
+
+func TestSourceSyntaxKeepsLiteralContentUnclassified(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		line   int
+	}{
+		{
+			name: "multipart body",
+			source: strings.Join([]string{
+				"POST https://example.test/upload",
+				"Content-Type: multipart/form-data; boundary=B",
+				"",
+				"--B",
+				"Content-Disposition: form-data; name=script",
+				"",
+				"# literal body",
+				"--B--",
+			}, "\n"),
+			line: 6,
+		},
+		{
+			name:   "mock response body",
+			source: "# @mock method=GET path=/health\nHTTP/1.1 200 OK\n\n# literal body",
+			line:   3,
+		},
+		{
+			name:   "script block",
+			source: "# @script test\n> {%\n// JavaScript comment\n> %}",
+			line:   2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifySource(tt.source)[tt.line].Kind; got != SourceLineLiteral {
+				t.Fatalf("line kind = %v, want literal", got)
+			}
+		})
+	}
+}
+
+func TestSourceSyntaxReuseAndBounds(t *testing.T) {
+	var syntax SourceSyntax
+	syntax.Classify("// one\n// two\n// three")
+	syntax.Classify("GET https://example.test\n")
+
+	if syntax.Len() != 2 {
+		t.Fatalf("classified %d lines, want 2", syntax.Len())
+	}
+	for _, no := range []int{0, 1, 7} {
+		if kind := syntax.Line(no).Kind; kind != SourceLineCode {
+			t.Fatalf("line %d kind = %v, want code", no+1, kind)
+		}
+	}
+
+	line := SourceLine{Kind: SourceLineComment, ContentStart: 2, ContentEnd: 40}
+	start, end, ok := line.ContentRange(6)
+	if !ok || start != 2 || end != 6 {
+		t.Fatalf("ContentRange(6) = (%d, %d, %v), want (2, 6, true)", start, end, ok)
+	}
+}
+
+func TestSourceSyntaxMockAgreesWithParser(t *testing.T) {
+	prefixes := []string{
+		"",
+		"GET https://example.test",
+		"@request value = 1",
+		"# @assert sum(",
+		"# @workflow flow\n# @step login using=Login",
+	}
+	for _, spec := range directive.Specs() {
+		prefixes = append(prefixes, "# "+spec.Name.Tag(), "# "+spec.Name.Tag()+" value")
+	}
+
+	for no, prefix := range prefixes {
+		source := prefix
+		if source != "" {
+			source += "\n"
+		}
+		source += "# @mock method=GET path=/health\nHTTP/1.1 200 OK\n\n# body marker\n"
+
+		body := strings.Count(source, "\n") - 1
+		got := classifySource(source)[body].Kind
+		mocked := len(Parse("agree.http", []byte(source)).Mocks) == 1
+		if (got == SourceLineLiteral) != mocked {
+			t.Fatalf("case %d: body kind = %v, parser found mock = %v", no, got, mocked)
+		}
+	}
+}
+
+func TestArgKindComesFromCatalog(t *testing.T) {
+	for name, want := range map[directive.Name]directive.ArgKind{
+		"nolog":       directive.ArgNone,
+		"settings":    directive.ArgOptions,
+		"grpc-method": directive.ArgToken,
+	} {
+		if got := argKind(name); got != want {
+			t.Fatalf("argKind(%q) = %d, want %d", name, got, want)
+		}
+	}
+}
+
+func classifySource(source string) []SourceLine {
+	var syntax SourceSyntax
+	syntax.Classify(source)
+	out := make([]SourceLine, syntax.Len())
+	for no := range out {
+		out[no] = syntax.Line(no)
+	}
+	return out
+}
+
+func assertSourceKinds(t *testing.T, got []SourceLine, want []SourceLineKind) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("classified %d lines, want %d", len(got), len(want))
+	}
+	for no := range want {
+		if got[no].Kind != want[no] {
+			t.Fatalf("line %d kind = %v, want %v", no+1, got[no].Kind, want[no])
+		}
+	}
+}
+
+func sourceContent(line string, syntax SourceLine) string {
+	runes := []rune(line)
+	start, end, ok := syntax.ContentRange(len(runes))
+	if !ok {
+		return ""
+	}
+	return string(runes[start:end])
+}
