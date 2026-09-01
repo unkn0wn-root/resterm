@@ -1882,6 +1882,20 @@ func TestUnfocusedSplitResponseColumnKeepsPrettyContentReadable(t *testing.T) {
 	}
 }
 
+func framedLineWith(view, needle string) string {
+	for line := range strings.SplitSeq(view, "\n") {
+		plain := ansi.Strip(line)
+		idx := strings.Index(plain, needle)
+		if idx < 0 {
+			continue
+		}
+		if strings.Contains(plain[:idx], "│") && strings.Contains(plain[idx+len(needle):], "│") {
+			return line
+		}
+	}
+	return ""
+}
+
 func lineWith(view, needle string) string {
 	for line := range strings.SplitSeq(view, "\n") {
 		if strings.Contains(ansi.Strip(line), needle) {
@@ -1913,7 +1927,7 @@ func assertTitleCenteredWithinNearestBorders(t *testing.T, view, title string) {
 	t.Helper()
 
 	plain := ansi.Strip(view)
-	line := lineWith(plain, title)
+	line := framedLineWith(plain, title)
 	if line == "" {
 		t.Fatalf("expected modal title %q in view, got %q", title, plain)
 	}

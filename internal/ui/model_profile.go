@@ -198,7 +198,7 @@ func (m *Model) handleProfileIterDone(state *profileState, evt core.ProIterDone)
 	}
 	msg := m.responseMsgFromRunState(evt.Result, false)
 	msg.latGen = state.latGen
-	m.recordResponseLatency(msg)
+	m.recordHeaderTelemetry(msg)
 	return m.consumeProfileResult(state, msg, evt.Meta.At)
 }
 

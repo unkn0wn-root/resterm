@@ -23,7 +23,14 @@ func TestBuildHeaderLineFitsWidth(t *testing.T) {
 	sep := " "
 	right := "▁▁▁▁ ms"
 	width := 20
-	line := buildHeaderLine(headerTextSegments(left...), sep, right, lipgloss.NewStyle(), width)
+	line := buildHeaderLine(
+		headerTextSegments(left...),
+		sep,
+		right,
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+		width,
+	)
 	if strings.Contains(line, "\n") {
 		t.Fatalf("expected single-line header, got %q", line)
 	}
@@ -39,7 +46,7 @@ func TestBuildHeaderLineRightOnly(t *testing.T) {
 	sep := " "
 	right := "▁▁▁▁ ms"
 	width := 4
-	line := buildHeaderLine(nil, sep, right, lipgloss.NewStyle(), width)
+	line := buildHeaderLine(nil, sep, right, lipgloss.NewStyle(), lipgloss.NewStyle(), width)
 	if strings.Contains(line, "\n") {
 		t.Fatalf("expected single-line header, got %q", line)
 	}
@@ -53,7 +60,7 @@ func TestBuildHeaderLineRightOnly(t *testing.T) {
 
 func TestBuildHeaderLineTruncatesStyledRight(t *testing.T) {
 	right := "\x1b[31mLATENCY\x1b[0m"
-	line := buildHeaderLine(nil, " ", right, lipgloss.NewStyle(), 5)
+	line := buildHeaderLine(nil, " ", right, lipgloss.NewStyle(), lipgloss.NewStyle(), 5)
 
 	if got := ansi.Strip(line); got != "LATE…" {
 		t.Fatalf("expected ANSI-aware truncation, got %q", got)
@@ -68,7 +75,7 @@ func TestBuildHeaderLineTruncatesMultiSegmentRight(t *testing.T) {
 		"\x1b[31m█ 120ms\x1b[0m" +
 		"\x1b[2m · p95 \x1b[0m" +
 		"\x1b[31m120ms\x1b[0m"
-	line := buildHeaderLine(nil, " ", right, lipgloss.NewStyle(), 15)
+	line := buildHeaderLine(nil, " ", right, lipgloss.NewStyle(), lipgloss.NewStyle(), 15)
 
 	if got := ansi.Strip(line); got != "Latency ▁▁▁█ 1…" {
 		t.Fatalf("expected ANSI-aware truncation, got %q", got)
@@ -83,7 +90,14 @@ func TestBuildHeaderLineDropsTrailingSegments(t *testing.T) {
 	sep := " "
 	right := "▁▁▁▁ ms"
 	width := 16
-	line := buildHeaderLine(headerTextSegments(left...), sep, right, lipgloss.NewStyle(), width)
+	line := buildHeaderLine(
+		headerTextSegments(left...),
+		sep,
+		right,
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+		width,
+	)
 	if strings.Contains(line, "THREE") {
 		t.Fatalf("expected trailing segments to be dropped, got %q", line)
 	}
@@ -97,7 +111,14 @@ func TestBuildHeaderLineNarrowWidthDropsRight(t *testing.T) {
 	sep := " "
 	right := "▁▁▁▁ ms"
 	width := 4
-	line := buildHeaderLine(headerTextSegments(left...), sep, right, lipgloss.NewStyle(), width)
+	line := buildHeaderLine(
+		headerTextSegments(left...),
+		sep,
+		right,
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+		width,
+	)
 	if strings.Contains(line, "▁") {
 		t.Fatalf("expected right text to be dropped, got %q", line)
 	}
@@ -110,7 +131,14 @@ func TestBuildHeaderLineLeftOnly(t *testing.T) {
 	left := []string{"BRAND", "ONE"}
 	sep := " "
 	width := 10
-	line := buildHeaderLine(headerTextSegments(left...), sep, "", lipgloss.NewStyle(), width)
+	line := buildHeaderLine(
+		headerTextSegments(left...),
+		sep,
+		"",
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+		width,
+	)
 	if strings.Contains(line, "▁") {
 		t.Fatalf("expected no right text, got %q", line)
 	}
@@ -125,7 +153,14 @@ func TestBuildHeaderLineRightStylePadding(t *testing.T) {
 	right := "LATENCY"
 	width := 18
 	style := lipgloss.NewStyle().Padding(0, 1)
-	line := buildHeaderLine(headerTextSegments(left...), sep, right, style, width)
+	line := buildHeaderLine(
+		headerTextSegments(left...),
+		sep,
+		right,
+		style,
+		lipgloss.NewStyle(),
+		width,
+	)
 	if got := lipgloss.Width(line); got > width {
 		t.Fatalf("expected width <= %d, got %d", width, got)
 	}

@@ -31,7 +31,7 @@ const responseLoadingTickInterval = 200 * time.Millisecond
 type responseLoadingTickMsg struct{}
 
 func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
-	m.recordResponseLatency(msg)
+	m.recordHeaderTelemetry(msg)
 
 	m.lastError = nil
 	m.testResults = msg.tests
@@ -161,21 +161,6 @@ func responseTestStatusSummary(tests []scripts.TestResult, scriptErr error) (str
 		return fmt.Sprintf("✗ %d %s failed", fails, n), statusWarn
 	default:
 		return "", statusInfo
-	}
-}
-
-func (m *Model) recordResponseLatency(msg responseMsg) {
-	// A response can land after the series was reset (environment or
-	// workspace switch); don't let it contaminate the new context.
-	if msg.latGen != m.latencySeries.generation() {
-		return
-	}
-	if msg.response != nil {
-		m.latencySeries.add(msg.response.Duration)
-		return
-	}
-	if msg.grpc != nil {
-		m.latencySeries.add(msg.grpc.Duration)
 	}
 }
 

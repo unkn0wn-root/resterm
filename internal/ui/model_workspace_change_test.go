@@ -154,6 +154,7 @@ func TestOpenWorkspaceKeepsDormantState(t *testing.T) {
 	scope := m.ws.active.Scope()
 	m.globalsStore().Set(scope, "captured.token", "A-DEV", true)
 	m.lastResponse = &httpx.Response{Status: "200 OK"}
+	m.headerTransport = headerTransportStatus{label: "200", level: statusSuccess}
 	if m.cookieStore().Jar(scope) == nil {
 		t.Fatal("expected a cookie jar for the active scope")
 	}
@@ -169,6 +170,9 @@ func TestOpenWorkspaceKeepsDormantState(t *testing.T) {
 	}
 	if m.lastResponse != nil {
 		t.Fatalf("last response survived the move: %v", m.lastResponse.Status)
+	}
+	if m.headerTransport.label != "" {
+		t.Fatalf("header transport survived the move: %q", m.headerTransport.label)
 	}
 
 	m.applyOpenDirectory(filepath.Join(base, "A"))

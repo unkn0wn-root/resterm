@@ -37,14 +37,19 @@ const (
 	paneTitleTrail = 1
 )
 
-var headerSegmentIcons = map[string]string{
-	"resterm":   ">_",
-	"workspace": "▣",
-	"env":       "⬢",
-	"requests":  "⇄",
-	"active":    "◨",
-	"tests":     "⧗",
-}
+const (
+	headerBrandName = ">_ RESTERM"
+	headerCellSep   = " · "
+	headerAnchorSep = " │ "
+)
+
+const (
+	iconHeaderWorkspace = "▣"
+	iconHeaderEnv       = "⬢"
+	iconHeaderRequests  = "⇄"
+	iconHeaderActive    = "◨"
+	labelHeaderEnv      = "env"
+)
 
 type testStatus string
 
@@ -56,33 +61,6 @@ const (
 
 type renderContext struct {
 	modalUnderlay bool
-}
-
-func headerIconFor(label string) string {
-	key := strings.ToLower(strings.TrimSpace(label))
-	if icon, ok := headerSegmentIcons[key]; ok {
-		return icon
-	}
-	return "✦"
-}
-
-func headerLabelText(label string) string {
-	return headerLabelTextWithIcon(label, "")
-}
-
-func headerLabelTextWithIcon(label, iconOverride string) string {
-	labelText := strings.ToUpper(strings.TrimSpace(label))
-	if labelText == "" {
-		labelText = "-"
-	}
-	icon := iconOverride
-	if icon == "" {
-		icon = headerIconFor(label)
-	}
-	if icon == "" {
-		return labelText
-	}
-	return fmt.Sprintf("%s %s", icon, labelText)
 }
 
 func (m Model) View() string {
@@ -1934,10 +1912,86 @@ func renderCommandKeycap(
 // headerCell is a header segment before rendering. values carries the same
 // information from longest to shortest.
 type headerCell struct {
+	icon     string
 	label    string
 	values   []string
-	icon     string
+	style    lipgloss.Style
 	priority int
+}
+
+// Each style includes the header background because ANSI resets clear it.
+type headerStyles struct {
+	bg     lipgloss.TerminalColor
+	brand  lipgloss.Style
+	icon   lipgloss.Style
+	label  lipgloss.Style
+	value  lipgloss.Style
+	pass   lipgloss.Style
+	warn   lipgloss.Style
+	fail   lipgloss.Style
+	help   lipgloss.Style
+	fill   lipgloss.Style
+	sep    string
+	anchor string
+}
+
+func headerStyleOnBackground(
+	st lipgloss.Style,
+	bg lipgloss.TerminalColor,
+) lipgloss.Style {
+	if theme.ColorDefined(bg) {
+		return st.Background(bg)
+	}
+	return st
+}
+
+func (m Model) headerStyles() headerStyles {
+	bg := m.theme.Header.GetBackground()
+	on := func(st lipgloss.Style) lipgloss.Style { return headerStyleOnBackground(st, bg) }
+	separator := on(m.theme.HeaderSeparator)
+	warn := lipgloss.NewStyle().
+		Foreground(foregroundColor(m.theme.HeaderWarn, headerWarnFallback)).
+		Bold(true)
+	return headerStyles{
+		bg:     bg,
+		brand:  m.theme.HeaderBrand,
+		icon:   on(m.theme.HeaderIcon),
+		label:  on(m.theme.HeaderLabel),
+		value:  on(m.theme.HeaderValue.Bold(true)),
+		pass:   on(m.theme.Success.Bold(true)),
+		warn:   on(warn),
+		fail:   on(m.theme.Error.Bold(true)),
+		help:   on(m.theme.HeaderHelp),
+		fill:   on(lipgloss.NewStyle()),
+		sep:    separator.Render(headerCellSep),
+		anchor: separator.Render(headerAnchorSep),
+	}
+}
+
+func (s headerStyles) forLevel(level statusLevel) lipgloss.Style {
+	switch level {
+	case statusSuccess:
+		return s.pass
+	case statusWarn:
+		return s.warn
+	default:
+		return s.fail
+	}
+}
+
+func (s headerStyles) forTests(status testStatus) lipgloss.Style {
+	if status == testStatusPass {
+		return s.pass
+	}
+	return s.fail
+}
+
+func (s headerStyles) cell(c headerCell, value string) string {
+	prefix := s.icon.Render(c.icon)
+	if c.label != "" {
+		prefix += s.label.Render(" " + c.label)
+	}
+	return prefix + s.label.Render(" ") + c.style.Render(value)
 }
 
 func (m Model) renderHeader() string {
@@ -1948,27 +2002,37 @@ func (m Model) renderHeader() string {
 	request := requestBaseTitle(m.currentRequest)
 	if strings.TrimSpace(request) == "" {
 		request = strings.TrimSpace(m.activeRequestTitle)
-		if request == "" {
-			request = "∅"
-		}
 	}
 
+	styles := m.headerStyles()
 	cells := []headerCell{
-		{label: "Workspace", values: []string{workspace}, priority: headerPriorityWorkspace},
-		{label: "Env", values: m.headerEnvVariants(), priority: headerPriorityEnv},
 		{
-			label:    "Requests",
+			icon:     iconHeaderEnv,
+			label:    labelHeaderEnv,
+			values:   m.headerEnvVariants(),
+			style:    styles.value,
+			priority: headerPriorityEnv,
+		},
+		{
+			icon:     iconHeaderWorkspace,
+			values:   []string{workspace},
+			style:    styles.value,
+			priority: headerPriorityWorkspace,
+		},
+		{
+			icon:     iconHeaderRequests,
 			values:   []string{strconv.Itoa(len(m.requestItems))},
+			style:    styles.value,
 			priority: headerPriorityRequests,
 		},
-		{label: "Active", values: []string{request}, priority: headerPriorityActive},
+		m.headerActiveCell(styles, request),
 	}
 
 	if summary, status, ok := m.headerTestStatus(); ok {
 		cells = append(cells, headerCell{
-			label:    "Tests",
-			values:   []string{summary},
 			icon:     headerTestIcon(status),
+			values:   []string{summary},
+			style:    styles.forTests(status),
 			priority: headerPriorityTests,
 		})
 	}
@@ -1979,14 +2043,14 @@ func (m Model) renderHeader() string {
 
 	segments := make([]headerSegment, 0, len(cells)+1)
 	segments = append(segments, headerSegment{
-		text:     []string{m.theme.HeaderBrand.Render(headerLabelText("RESTERM"))},
+		text:     []string{styles.brand.Render(headerBrandName)},
 		priority: headerPriorityBrand,
 	})
-	for i, cell := range cells {
+	for _, cell := range cells {
 		values, lossy := headerCellVariants(cell.values, limit)
 		text := make([]string, 0, len(values))
 		for _, value := range values {
-			text = append(text, m.renderHeaderButton(i, cell.label, value, cell.icon))
+			text = append(text, styles.cell(cell, value))
 		}
 		segments = append(segments, headerSegment{
 			text:     text,
@@ -1995,88 +2059,90 @@ func (m Model) renderHeader() string {
 		})
 	}
 
+	anchors := m.renderHeaderAnchors(styles, contentWidth-headerGap-minHeaderWidth(segments))
 	headerLine := buildHeaderLine(
 		segments,
-		m.theme.HeaderSeparator.Render(" "),
-		m.renderLatency(),
+		styles.sep,
+		anchors,
 		lipgloss.NewStyle(),
+		styles.fill,
 		contentWidth,
 	)
-	return m.theme.Header.Width(totalWidth).Render(headerLine)
+	band := m.theme.Header
+	return band.Width(max(totalWidth-band.GetHorizontalBorderSize(), 1)).Render(headerLine) + "\n" +
+		headerRule(m.theme.PaneDivider, totalWidth)
 }
 
-func (m Model) renderHeaderButton(idx int, label, value, icon string) string {
-	palette := m.theme.HeaderSegment(idx)
-	labelText := headerLabelTextWithIcon(label, icon)
-	valueText := strings.TrimSpace(value)
-	if after, ok := strings.CutPrefix(valueText, tabIndicatorPrefix); ok {
-		valueText = strings.TrimSpace(
-			after,
-		)
+func headerRule(st lipgloss.Style, width int) string {
+	if width < 3 {
+		return dividerLine(st, width)
 	}
-	if valueText == "" {
-		valueText = "-"
+	return st.Render(" " + strings.Repeat("─", width-2) + " ")
+}
+
+func (m Model) headerActiveCell(styles headerStyles, request string) headerCell {
+	cell := headerCell{icon: iconHeaderActive, priority: headerPriorityActive}
+	if request == "" {
+		cell.values = []string{"no request", "none"}
+		cell.style = styles.label
+		return cell
 	}
 
-	fg := palette.Foreground
-	if fg == "" {
-		fg = lipgloss.Color("#F5F2FF")
+	cell.values = []string{request}
+	cell.style = styles.value
+	if m.currentRequest != nil {
+		cell.style = cell.style.Foreground(methodColor(m.theme, m.currentRequest.Method))
 	}
-	accent := palette.Accent
-	if accent == "" {
-		accent = fg
-	}
-	border := palette.Border
-	if border == "" {
-		border = accent
+	return cell
+}
+
+func (m Model) renderHeaderAnchors(styles headerStyles, limit int) string {
+	readings := m.renderLatencyOn(styles.bg)
+	if status := m.renderTransportStatus(styles); status != "" {
+		reading := status + styles.sep + readings
+		if lipgloss.Width(reading) <= limit {
+			readings = reading
+		}
 	}
 
-	borderSpec := lipgloss.Border{
-		Top:         "",
-		Bottom:      "",
-		Left:        "┃",
-		Right:       "┃",
-		TopLeft:     "",
-		TopRight:    "",
-		BottomLeft:  "",
-		BottomRight: "",
+	rest := limit - lipgloss.Width(readings) - lipgloss.Width(styles.anchor)
+	if rest <= 0 {
+		return readings
 	}
 
-	button := lipgloss.NewStyle().
-		BorderStyle(borderSpec).
-		BorderForeground(border).
-		Foreground(fg).
-		Padding(0, 1)
-	if palette.Background != "" {
-		button = button.Background(palette.Background)
+	help := m.helpAnchor(styles, rest)
+	if help == "" {
+		return readings
+	}
+	return readings + styles.anchor + help
+}
+
+// Hide the label when Help would use more than half of the available space.
+func (m Model) helpAnchor(styles headerStyles, limit int) string {
+	hint := m.commandActionHint(bindings.ActionToggleHelp, "Help")
+	if hint.key == "" {
+		return ""
 	}
 
-	labelStyle := lipgloss.NewStyle().
-		Foreground(accent).
-		Bold(true)
-	if palette.Background != "" {
-		labelStyle = labelStyle.Background(palette.Background)
+	key := styles.help.Render(hint.key)
+	cell := key + styles.label.Render(" "+hint.label)
+	if limit <= 0 {
+		return cell
 	}
-	valueStyle := lipgloss.NewStyle().
-		Foreground(fg).
-		Bold(true)
-	if palette.Background != "" {
-		valueStyle = valueStyle.Background(palette.Background)
+	if lipgloss.Width(cell) > limit/2 {
+		cell = key
 	}
-	colonStyle := lipgloss.NewStyle().
-		Foreground(accent)
-	if palette.Background != "" {
-		colonStyle = colonStyle.Background(palette.Background)
+	if lipgloss.Width(cell) > limit {
+		return ""
 	}
+	return cell
+}
 
-	content := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		labelStyle.Render(labelText),
-		colonStyle.Render(": "),
-		valueStyle.Render(valueText),
-	)
-
-	return button.Render(content)
+func (m Model) renderTransportStatus(styles headerStyles) string {
+	if m.headerTransport.label == "" {
+		return ""
+	}
+	return styles.forLevel(m.headerTransport.level).Render(m.headerTransport.label)
 }
 
 func (m Model) headerTestStatus() (string, testStatus, bool) {
@@ -2101,10 +2167,8 @@ func headerTestIcon(status testStatus) string {
 		return iconTestPass
 	case testStatusFail:
 		return "✗"
-	case testStatusError:
-		return "!"
 	default:
-		return headerIconFor("tests")
+		return "!"
 	}
 }
 

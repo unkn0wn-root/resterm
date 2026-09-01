@@ -300,6 +300,7 @@ type Model struct {
 	lastResponse     *httpx.Response
 	lastGRPC         *grpcx.Response
 	lastError        error
+	headerTransport  headerTransportStatus
 	latencySeries    *latencySeries
 	latAnimOn        bool
 	latAnimT0        time.Time

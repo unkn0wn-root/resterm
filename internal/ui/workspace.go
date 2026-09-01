@@ -354,7 +354,7 @@ func (m *Model) clearResponseState() {
 	m.responsePrevious = nil
 	m.compareBundle = nil
 	m.resetCompareState()
-	m.latencySeries.reset()
+	m.resetHeaderTelemetry()
 	m.resetResponsePanes()
 }
 

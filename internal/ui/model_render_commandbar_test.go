@@ -164,38 +164,16 @@ func TestRenderCommandHintFallsBackToFlatWithoutBackground(t *testing.T) {
 	}
 }
 
-func TestRenderCommandBarKeepsStableAnchors(t *testing.T) {
+func TestRenderCommandBarOmitsGlobalShortcuts(t *testing.T) {
 	model := New(Config{})
 	model.width = 220
 	model.focus = focusEditor
 
 	out := ansi.Strip(model.renderCommandBar())
-	if strings.ContainsAny(out, "▐▌") {
-		t.Fatalf("expected default command hints to render flat, got %q", out)
-	}
-	// ^N New belongs to the files context, so it must not leak into the editor bar.
-	if strings.Contains(out, "^N New") {
-		t.Fatalf("did not expect files hint %q, got %q", "^N New", out)
-	}
-	prev := -1
-	for _, want := range []string{
-		"Tab Focus", "^Q Quit", ": Cmd", "? Help",
-	} {
-		idx := strings.Index(out, want)
-		if idx < 0 {
-			t.Fatalf("expected stable command-bar anchor %q, got %q", want, out)
+	for _, unwanted := range []string{"Tab Focus", "^Q Quit", ": Cmd", "? Help"} {
+		if strings.Contains(out, unwanted) {
+			t.Fatalf("command bar contains global shortcut %q: %q", unwanted, out)
 		}
-		if idx < prev {
-			t.Fatalf("expected anchor %q after the previous one, got %q", want, out)
-		}
-		prev = idx
-	}
-	if !strings.HasSuffix(strings.TrimRight(out, " "), "? Help") {
-		t.Fatalf("expected anchors pinned to the right edge, got %q", out)
-	}
-	insert := strings.Index(out, "i Insert")
-	if insert < 0 || insert > strings.Index(out, "Tab Focus") {
-		t.Fatalf("expected context hints before the anchors, got %q", out)
 	}
 }
 
@@ -221,10 +199,7 @@ func TestRenderCommandBarCustomBackgroundsEnableKeycaps(t *testing.T) {
 	for idx, key := range []string{"i", "Enter", "Shift+K", "/", "^S"} {
 		assertKeycapBackground(t, plain, backgrounds, key, model.theme.CommandSegment(idx).Background)
 	}
-	for _, flat := range []string{
-		" Insert", " Send", " Docs", " Search", " Save",
-		"Tab Focus", "^Q Quit", ": Cmd", "? Help",
-	} {
+	for _, flat := range []string{" Insert", " Send", " Docs", " Search", " Save"} {
 		assertCommandHintBackground(t, plain, backgrounds, flat, nil)
 	}
 }
@@ -438,7 +413,7 @@ func TestRenderCommandBarUsesFocusedContext(t *testing.T) {
 	}
 }
 
-func TestRenderCommandBarCompactsStableAnchorsAtNarrowWidth(t *testing.T) {
+func TestRenderCommandBarFitsNarrowWidth(t *testing.T) {
 	model := New(Config{})
 	model.width = 24
 	model.focus = focusEditor
@@ -447,10 +422,8 @@ func TestRenderCommandBarCompactsStableAnchorsAtNarrowWidth(t *testing.T) {
 	if got := lipgloss.Width(out); got > model.width {
 		t.Fatalf("expected command bar to fit width %d, got %d in %q", model.width, got, out)
 	}
-	for _, want := range []string{"Tab", ":", "?"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("expected compact anchor %q, got %q", want, out)
-		}
+	if !strings.Contains(out, "i Insert") {
+		t.Fatalf("expected the leading context hint to survive, got %q", out)
 	}
 }
 

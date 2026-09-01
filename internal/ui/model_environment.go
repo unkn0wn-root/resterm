@@ -124,7 +124,7 @@ func (m *Model) applyEnvironmentSelection() {
 	}
 
 	m.ws.use(env)
-	m.latencySeries.reset()
+	m.resetHeaderTelemetry()
 	if gs := m.globalsStore(); gs != nil {
 		gs.Clear(env.Scope())
 	}

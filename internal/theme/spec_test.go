@@ -55,10 +55,6 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			GitModified:             strPtr("#445500"),
 			GitBranch:               strPtr("#445566"),
 		},
-		HeaderSegments: []HeaderSegmentSpec{{
-			Background: strPtr("#111111"),
-			Foreground: strPtr("#eeeeee"),
-		}},
 		CommandSegments: []CommandSegmentSpec{{
 			Background: strPtr("#222222"),
 			Key:        strPtr("#abcdef"),
@@ -116,6 +112,7 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			PaneTitleEditor:            &StyleSpec{Foreground: strPtr("#445566")},
 			PaneTitleResponse:          &StyleSpec{Foreground: strPtr("#665544")},
 			StreamContent:              &StyleSpec{Foreground: strPtr("#123123")},
+			HeaderIcon:                 &StyleSpec{Foreground: strPtr("#2563eb")},
 		},
 	}
 
@@ -147,15 +144,6 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if got := updated.GitColors.Branch; got != "#445566" {
 		t.Errorf("expected git branch color %q, got %q", "#445566", got)
-	}
-	if len(updated.HeaderSegments) != 1 {
-		t.Fatalf("expected 1 header segment, got %d", len(updated.HeaderSegments))
-	}
-	if updated.HeaderSegments[0].Background != "#111111" {
-		t.Errorf(
-			"expected header background override, got %q",
-			updated.HeaderSegments[0].Background,
-		)
 	}
 	if len(updated.CommandSegments) != 1 {
 		t.Fatalf("expected 1 command segment, got %d", len(updated.CommandSegments))
@@ -258,8 +246,19 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	if color := updated.StreamContent.GetForeground(); color != lipgloss.Color("#123123") {
 		t.Errorf("expected stream content foreground #123123, got %v", color)
 	}
+	if color := updated.HeaderIcon.GetForeground(); color != lipgloss.Color("#2563eb") {
+		t.Errorf("expected header icon foreground #2563eb, got %v", color)
+	}
 	if base.PaneActiveForeground == "#123456" {
 		t.Errorf("base theme should remain unchanged")
+	}
+}
+
+func TestApplySpecAcceptsLegacyHeaderSegments(t *testing.T) {
+	if _, err := ApplySpec(DefaultTheme(), ThemeSpec{
+		HeaderSegments: []HeaderSegmentSpec{{Background: strPtr("#111111")}},
+	}); err != nil {
+		t.Fatalf("ApplySpec returned error: %v", err)
 	}
 }
 

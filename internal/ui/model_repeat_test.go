@@ -36,6 +36,9 @@ func TestPollTimeoutShowsLastAttemptWithoutReplacingLogicalLast(t *testing.T) {
 	if model.lastResponse != logicalLast {
 		t.Fatalf("logical last response was replaced: %+v", model.lastResponse)
 	}
+	if got := model.headerTransport.label; got != "200" {
+		t.Fatalf("header transport = %q, want the displayed polling attempt", got)
+	}
 	if !errors.Is(model.lastError, xexec.ErrPollTimeout) {
 		t.Fatalf("last error = %v", model.lastError)
 	}
@@ -44,6 +47,23 @@ func TestPollTimeoutShowsLastAttemptWithoutReplacingLogicalLast(t *testing.T) {
 	}
 	if !strings.Contains(model.statusMessage.text, "last response shown") {
 		t.Fatalf("status = %q", model.statusMessage.text)
+	}
+}
+
+func TestSkippedRunPreservesHeaderTransport(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+	model.headerTransport = headerTransportStatus{label: "201", level: statusSuccess}
+
+	model.handleResponseMessage(responseMsg{skipped: true, skipReason: "condition was false"})
+
+	if got := model.headerTransport.label; got != "201" {
+		t.Fatalf("skipped run changed header transport to %q", got)
 	}
 }
 

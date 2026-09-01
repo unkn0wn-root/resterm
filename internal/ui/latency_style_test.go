@@ -68,8 +68,12 @@ func TestLatStyleThresholds(t *testing.T) {
 	if fg := latStyle(th, latOKMax).GetForeground(); fg != th.HeaderValue.GetForeground() {
 		t.Fatalf("expected neutral colour at threshold, got %v", fg)
 	}
-	if fg := latStyle(th, latOKMax+time.Millisecond).GetForeground(); fg != latWarnFg {
+	if fg := latStyle(th, latOKMax+time.Millisecond).GetForeground(); fg != headerWarnFallback {
 		t.Fatalf("expected warn colour, got %v", fg)
+	}
+	th.HeaderWarn = lipgloss.NewStyle().Foreground(lipgloss.Color("#a16207"))
+	if fg := latStyle(th, latOKMax+time.Millisecond).GetForeground(); fg != lipgloss.Color("#a16207") {
+		t.Fatalf("expected themed warn colour, got %v", fg)
 	}
 	if fg := latStyle(th, latWarnMax+time.Millisecond).GetForeground(); fg != th.Error.GetForeground() {
 		t.Fatalf("expected error colour, got %v", fg)

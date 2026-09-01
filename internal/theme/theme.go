@@ -2,13 +2,6 @@ package theme
 
 import "github.com/charmbracelet/lipgloss"
 
-type HeaderSegmentStyle struct {
-	Background lipgloss.Color
-	Border     lipgloss.Color
-	Foreground lipgloss.Color
-	Accent     lipgloss.Color
-}
-
 type CommandSegmentStyle struct {
 	Background lipgloss.Color
 	Border     lipgloss.Color
@@ -78,7 +71,10 @@ type Theme struct {
 	Error                         lipgloss.Style
 	Success                       lipgloss.Style
 	HeaderBrand                   lipgloss.Style
-	HeaderSegments                []HeaderSegmentStyle
+	HeaderIcon                    lipgloss.Style
+	HeaderLabel                   lipgloss.Style
+	HeaderHelp                    lipgloss.Style
+	HeaderWarn                    lipgloss.Style
 	CommandSegments               []CommandSegmentStyle
 	CommandDivider                lipgloss.Style
 	PaneTitle                     lipgloss.Style
@@ -191,7 +187,7 @@ func DefaultTheme() Theme {
 		Header:           lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E1FF")).Padding(0, 1),
 		HeaderTitle:      lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
 		HeaderValue:      lipgloss.NewStyle().Foreground(lipgloss.Color("#D1CFF6")),
-		HeaderSeparator:  lipgloss.NewStyle().Foreground(lipgloss.Color("#867CC1")).Bold(true),
+		HeaderSeparator:  lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
 		StatusBar:        lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Padding(0, 1),
 		StatusBarPalette: DefaultStatusBarPalette(),
 		StatusBarKey:     lipgloss.NewStyle().Foreground(lipgloss.Color("#FF8B39")).Bold(true),
@@ -218,56 +214,13 @@ func DefaultTheme() Theme {
 			Foreground(lipgloss.Color("#E0DEF4")).
 			Background(lipgloss.Color("#433C59")).
 			Padding(0, 1),
-		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")),
-		Success: lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
-		HeaderBrand: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#1A1020")).
-			Background(lipgloss.Color("#FBC859")).
-			Bold(true).
-			Padding(0, 1).
-			BorderStyle(lipgloss.Border{
-				Top:         "",
-				Bottom:      "",
-				Left:        "┃",
-				Right:       "┃",
-				TopLeft:     "",
-				TopRight:    "",
-				BottomLeft:  "",
-				BottomRight: "",
-			}).
-			BorderForeground(lipgloss.Color("#FFE29B")),
-		HeaderSegments: []HeaderSegmentStyle{
-			{
-				Background: lipgloss.Color("#9CD6FF"),
-				Border:     lipgloss.Color("#B9E1FF"),
-				Foreground: lipgloss.Color("#0D2C3D"),
-				Accent:     lipgloss.Color("#134158"),
-			},
-			{
-				Background: lipgloss.Color("#B8F5C9"),
-				Border:     lipgloss.Color("#D3FBE0"),
-				Foreground: lipgloss.Color("#0F2E1A"),
-				Accent:     lipgloss.Color("#18472A"),
-			},
-			{
-				Background: lipgloss.Color("#FF7A45"),
-				Border:     lipgloss.Color("#FF9F70"),
-				Foreground: lipgloss.Color("#1F0F0A"),
-				Accent:     lipgloss.Color("#301B15"),
-			},
-			{
-				Background: lipgloss.Color("#33C481"),
-				Border:     lipgloss.Color("#5EE0A0"),
-				Foreground: lipgloss.Color("#052817"),
-				Accent:     lipgloss.Color("#06331D"),
-			},
-			{
-				Background: lipgloss.Color("#FFB61E"),
-				Border:     lipgloss.Color("#FFD46A"),
-				Foreground: lipgloss.Color("#1F1500"),
-				Accent:     lipgloss.Color("#332300"),
-			},
-		},
+		Error:       lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")),
+		Success:     lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
+		HeaderBrand: lipgloss.NewStyle().Foreground(lipgloss.Color("#FBC859")).Bold(true),
+		HeaderIcon:  lipgloss.NewStyle().Foreground(lipgloss.Color("#9683D8")),
+		HeaderLabel: lipgloss.NewStyle().Foreground(lipgloss.Color("#8B86A8")),
+		HeaderHelp:  lipgloss.NewStyle().Foreground(lipgloss.Color("#7DD3FC")).Bold(true),
+		HeaderWarn:  lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")),
 		CommandSegments: []CommandSegmentStyle{
 			{
 				Background: lipgloss.Color(""),
@@ -488,18 +441,6 @@ func DefaultTheme() Theme {
 			BorderForeground(lipgloss.Color("#7D56F4")).
 			Padding(0, 1),
 	}
-}
-
-func (t Theme) HeaderSegment(idx int) HeaderSegmentStyle {
-	if len(t.HeaderSegments) == 0 {
-		return HeaderSegmentStyle{
-			Background: lipgloss.Color("#3B355D"),
-			Border:     lipgloss.Color("#5F5689"),
-			Foreground: lipgloss.Color("#F5F2FF"),
-			Accent:     lipgloss.Color("#FFFFFF"),
-		}
-	}
-	return t.HeaderSegments[idx%len(t.HeaderSegments)]
 }
 
 func (t Theme) CommandSegment(idx int) CommandSegmentStyle {
