@@ -147,6 +147,48 @@ func TestBuildHeaderLineLeftOnly(t *testing.T) {
 	}
 }
 
+func TestFitHeaderSegmentsUsesSegmentSeparatorWidth(t *testing.T) {
+	segs := headerTextSegments("A", "BB")
+	segs[0].separatorAfter = " || "
+
+	line, width := fitHeaderSegments(segs, " ", 1, 6)
+	if got := ansi.Strip(line); got != "A" {
+		t.Fatalf("expected the oversized separated segment to be dropped, got %q", got)
+	}
+	if width != lipgloss.Width(line) {
+		t.Fatalf("reported width %d does not match rendered width %d", width, lipgloss.Width(line))
+	}
+}
+
+func TestBuildHeaderLineUsesGroupSeparatorWithoutTrailingDivider(t *testing.T) {
+	segs := headerTextSegments("BRAND", "ENV", "WORKSPACE")
+	segs[0].separatorAfter = " │ "
+
+	line := buildHeaderLine(
+		segs,
+		"   ",
+		"",
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+		30,
+	)
+	if got, want := ansi.Strip(line), "BRAND │ ENV   WORKSPACE"; got != want {
+		t.Fatalf("header = %q, want %q", got, want)
+	}
+
+	line = buildHeaderLine(
+		segs,
+		"   ",
+		"",
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+		5,
+	)
+	if got := ansi.Strip(line); got != "BRAND" {
+		t.Fatalf("narrow header has a trailing divider: %q", got)
+	}
+}
+
 func TestBuildHeaderLineRightStylePadding(t *testing.T) {
 	left := []string{"BRAND"}
 	sep := " "

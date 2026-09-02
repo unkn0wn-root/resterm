@@ -39,7 +39,8 @@ const (
 
 const (
 	headerBrandName = ">_ RESTERM"
-	headerCellSep   = " · "
+	headerGroupSep  = " │ "
+	headerCellSep   = "   "
 	headerAnchorSep = " │ "
 )
 
@@ -1932,6 +1933,7 @@ type headerStyles struct {
 	fail   lipgloss.Style
 	help   lipgloss.Style
 	fill   lipgloss.Style
+	group  string
 	sep    string
 	anchor string
 }
@@ -1964,6 +1966,7 @@ func (m Model) headerStyles() headerStyles {
 		fail:   on(m.theme.Error.Bold(true)),
 		help:   on(m.theme.HeaderHelp),
 		fill:   on(lipgloss.NewStyle()),
+		group:  separator.Render(headerGroupSep),
 		sep:    separator.Render(headerCellSep),
 		anchor: separator.Render(headerAnchorSep),
 	}
@@ -2045,8 +2048,9 @@ func (m Model) renderHeader() string {
 
 	segments := make([]headerSegment, 0, len(cells)+1)
 	segments = append(segments, headerSegment{
-		text:     []string{styles.brand.Render(headerBrandName)},
-		priority: headerPriorityBrand,
+		text:           []string{styles.brand.Render(headerBrandName)},
+		priority:       headerPriorityBrand,
+		separatorAfter: styles.group,
 	})
 	for _, cell := range cells {
 		values, lossy := headerCellVariants(cell.values, limit)

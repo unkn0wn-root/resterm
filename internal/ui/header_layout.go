@@ -34,9 +34,10 @@ const headerValueFloor = 8
 // less room. The fitter shrinks cells one step at a time, spending every lossless
 // rendering before it truncates anything and truncating before it drops a cell.
 type headerSegment struct {
-	text     []string
-	lossy    int
-	priority int
+	text           []string
+	lossy          int
+	priority       int
+	separatorAfter string
 }
 
 func headerContentWidth(total int, style lipgloss.Style) int {
@@ -157,8 +158,13 @@ func fitHeaderSegments(segs []headerSegment, sep string, sepW, limit int) (strin
 	}
 
 	widths := make([][]int, len(segs))
+	separatorWidths := make([]int, len(segs))
 	for i, seg := range segs {
 		widths[i] = headerSegmentWidths(seg.text)
+		separatorWidths[i] = sepW
+		if seg.separatorAfter != "" {
+			separatorWidths[i] = lipgloss.Width(seg.separatorAfter)
+		}
 	}
 
 	keep := make([]int, len(segs))
@@ -168,7 +174,7 @@ func fitHeaderSegments(segs []headerSegment, sep string, sepW, limit int) (strin
 	levels := make([]int, len(segs))
 
 	for {
-		if w := headerLineWidth(widths, keep, levels, sepW); w <= limit {
+		if w := headerLineWidth(widths, separatorWidths, keep, levels); w <= limit {
 			return joinHeaderSegments(segs, keep, levels, sep), w
 		}
 		next, ok := shrinkHeaderSegment(segs, keep, levels, widths)
@@ -180,11 +186,11 @@ func fitHeaderSegments(segs []headerSegment, sep string, sepW, limit int) (strin
 
 	for len(keep) > 1 {
 		keep = dropHeaderSegment(segs, keep)
-		if w := headerLineWidth(widths, keep, levels, sepW); w <= limit {
+		if w := headerLineWidth(widths, separatorWidths, keep, levels); w <= limit {
 			return joinHeaderSegments(segs, keep, levels, sep), w
 		}
 	}
-	return joinHeaderSegments(segs, keep, levels, sep), headerLineWidth(widths, keep, levels, sepW)
+	return joinHeaderSegments(segs, keep, levels, sep), headerLineWidth(widths, separatorWidths, keep, levels)
 }
 
 // shrinkHeaderSegment picks the next cell to shorten: a lossless rendering ahead
@@ -242,11 +248,11 @@ func headerSegmentWidths(segs []string) []int {
 	return out
 }
 
-func headerLineWidth(widths [][]int, keep, levels []int, sepW int) int {
+func headerLineWidth(widths [][]int, separatorWidths, keep, levels []int) int {
 	total := 0
 	for n, i := range keep {
 		if n > 0 {
-			total += sepW
+			total += separatorWidths[keep[n-1]]
 		}
 		total += widths[i][levels[i]]
 	}
@@ -256,8 +262,14 @@ func headerLineWidth(widths [][]int, keep, levels []int, sepW int) int {
 func joinHeaderSegments(segs []headerSegment, keep, levels []int, sep string) string {
 	parts := make([]string, 0, 2*len(keep))
 	for n, i := range keep {
-		if n > 0 && sep != "" {
-			parts = append(parts, sep)
+		if n > 0 {
+			separator := segs[keep[n-1]].separatorAfter
+			if separator == "" {
+				separator = sep
+			}
+			if separator != "" {
+				parts = append(parts, separator)
+			}
 		}
 		parts = append(parts, segs[i].text[levels[i]])
 	}

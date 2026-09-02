@@ -62,6 +62,14 @@ func TestHeaderRendersLayout(t *testing.T) {
 			t.Errorf("header contains %q:\n%s", unwanted, lines[0])
 		}
 	}
+	for _, want := range []string{
+		headerBrandName + headerGroupSep + iconHeaderEnv,
+		iconHeaderEnv + " " + labelHeaderEnv + " default" + headerCellSep + iconHeaderWorkspace,
+	} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("header is missing separator layout %q:\n%s", want, lines[0])
+		}
+	}
 	wantRule := " " + strings.Repeat("─", model.width-2) + " "
 	if lines[1] != wantRule {
 		t.Fatalf("header rule = %q, want %q", lines[1], wantRule)
