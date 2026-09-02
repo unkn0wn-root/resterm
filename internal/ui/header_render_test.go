@@ -46,7 +46,7 @@ func TestHeaderRendersLayout(t *testing.T) {
 		headerBrandName,
 		iconHeaderEnv + " " + labelHeaderEnv + " default",
 		iconHeaderWorkspace + " acme-api",
-		iconHeaderRequests,
+		iconHeaderRequests + " " + labelHeaderRequests,
 		iconHeaderActive + " GET create-user",
 		"✗ 1 fail",
 		"201",

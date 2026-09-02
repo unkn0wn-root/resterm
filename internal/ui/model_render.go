@@ -49,6 +49,7 @@ const (
 	iconHeaderRequests  = "⇄"
 	iconHeaderActive    = "◨"
 	labelHeaderEnv      = "env"
+	labelHeaderRequests = "req"
 )
 
 type testStatus string
@@ -2021,6 +2022,7 @@ func (m Model) renderHeader() string {
 		},
 		{
 			icon:     iconHeaderRequests,
+			label:    labelHeaderRequests,
 			values:   []string{strconv.Itoa(len(m.requestItems))},
 			style:    styles.value,
 			priority: headerPriorityRequests,
