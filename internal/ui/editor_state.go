@@ -110,6 +110,11 @@ type requestEditor struct {
 	scope             intellisense.Scope
 }
 
+type sourceStyler interface {
+	textarea.RuneStyler
+	SetSource(source string)
+}
+
 const editorUndoLimit = 64
 
 type editorSnapshot struct {
@@ -241,8 +246,18 @@ func (e requestEditor) Revision() uint64 {
 	return e.revision
 }
 
-func (e *requestEditor) noteContentChanged() {
+func (e *requestEditor) noteContentChanged(value string) {
 	e.revision++
+	if styler, ok := e.RuneStyler().(sourceStyler); ok {
+		styler.SetSource(value)
+	}
+}
+
+func (e *requestEditor) SetRuneStyler(styler textarea.RuneStyler) {
+	e.Model.SetRuneStyler(styler)
+	if source, ok := styler.(sourceStyler); ok {
+		source.SetSource(e.Value())
+	}
 }
 
 func (e *requestEditor) SetValue(value string) {
@@ -250,8 +265,9 @@ func (e *requestEditor) SetValue(value string) {
 		return
 	}
 
-	e.noteContentChanged()
 	e.Model.SetValue(value)
+	// Classify the normalized text stored by the textarea.
+	e.noteContentChanged(e.Value())
 }
 
 func (e *requestEditor) SetMotionsEnabled(enabled bool) {
@@ -707,8 +723,8 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	if !isKey {
 		var innerCmd tea.Cmd
 		e.Model, innerCmd = e.Model.Update(msg)
-		if e.Value() != beforeValue && e.revision == beforeRevision {
-			e.noteContentChanged()
+		if value := e.Value(); value != beforeValue && e.revision == beforeRevision {
+			e.noteContentChanged(value)
 		}
 		return e, innerCmd
 	}
@@ -916,8 +932,8 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		}
 		var innerCmd tea.Cmd
 		e.Model, innerCmd = e.Model.Update(transformed)
-		if e.Value() != beforeValue && e.revision == beforeRevision {
-			e.noteContentChanged()
+		if value := e.Value(); value != beforeValue && e.revision == beforeRevision {
+			e.noteContentChanged(value)
 		}
 		if innerCmd != nil {
 			cmds = append(cmds, innerCmd)

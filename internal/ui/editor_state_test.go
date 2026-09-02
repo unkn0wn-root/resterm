@@ -8,9 +8,22 @@ import (
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 )
+
+type sourceRecordingRuneStyler struct {
+	source string
+}
+
+func (s *sourceRecordingRuneStyler) SetSource(source string) {
+	s.source = source
+}
+
+func (s *sourceRecordingRuneStyler) StylesForLine([]rune, int) []lipgloss.Style {
+	return nil
+}
 
 func newTestEditor(content string) requestEditor {
 	editor := newRequestEditor()
@@ -89,6 +102,36 @@ func TestRequestEditorSetValueNoopsWhenUnchanged(t *testing.T) {
 	}
 	if got := editor.Revision(); got != beforeRevision {
 		t.Fatalf("expected revision to remain %d, got %d", beforeRevision, got)
+	}
+}
+
+func TestRequestEditorKeepsSourceAwareRuneStylerInSync(t *testing.T) {
+	editor := newTestEditor("alpha")
+	styler := &sourceRecordingRuneStyler{}
+	editor.SetRuneStyler(styler)
+	if styler.source != "alpha" {
+		t.Fatalf("source after installing styler = %q, want alpha", styler.source)
+	}
+
+	editor.SetValue("beta")
+	if styler.source != "beta" {
+		t.Fatalf("source after SetValue = %q, want beta", styler.source)
+	}
+
+	editor.SetMotionsEnabled(false)
+	editor.moveCursorTo(0, len([]rune(editor.Value())))
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
+	if styler.source != "beta!" {
+		t.Fatalf("source after typing = %q, want beta!", styler.source)
+	}
+
+	input := "\t# @name tabbed\rother"
+	editor.SetValue(input)
+	if editor.Value() == input {
+		t.Fatal("expected the textarea to rewrite the input")
+	}
+	if styler.source != editor.Value() {
+		t.Fatalf("styler source = %q, editor holds %q", styler.source, editor.Value())
 	}
 }
 

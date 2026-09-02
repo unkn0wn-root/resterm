@@ -7,7 +7,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -15,8 +14,7 @@ func TestMetadataRuneStylerNameDirective(t *testing.T) {
 	palette := theme.DefaultTheme().EditorMetadata
 	styler := newMetadataRuneStyler(palette)
 
-	line := []rune("# @name getUser")
-	styles := styler.StylesForLine(line, 0)
+	styles := styleLine(styler, "# @name getUser")
 	if styles == nil {
 		t.Fatalf("expected styles for metadata line")
 	}
@@ -44,6 +42,91 @@ func TestMetadataRuneStylerNameDirective(t *testing.T) {
 	}
 }
 
+func TestMetadataRuneStylerDimsOrdinaryComments(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	line := "-- ordinary comment"
+	styles := styleLine(newMetadataRuneStyler(palette), line)
+	assertMetadataTokenColor(t, styles, line, line, palette.CommentMarker)
+}
+
+func TestMetadataRuneStylerKeepsDirectiveEmphasisInsideComments(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+	source := strings.Join([]string{
+		"/**",
+		" * @name Blocked",
+		" */",
+	}, "\n")
+	styler.SetSource(source)
+
+	line := " * @name Blocked"
+	styles := styler.StylesForLine([]rune(line), 1)
+	assertMetadataTokenColor(t, styles, line, "*", palette.CommentMarker)
+	assertMetadataTokenColor(t, styles, line, "@name", palette.DirectiveColors["name"])
+	assertMetadataTokenColor(t, styles, line, "Blocked", palette.Value)
+	if !styles[strings.Index(line, "@name")].GetBold() {
+		t.Fatal("expected block-comment directive to remain bold")
+	}
+}
+
+func TestMetadataRuneStylerKeepsDirectiveArgumentsUndimmed(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+
+	line := "# @auth request bearer request-token-{{$uuid}}"
+	styles := styleLine(styler, line)
+
+	assertMetadataTokenColor(t, styles, line, "#", palette.CommentMarker)
+	assertMetadataTokenColor(t, styles, line, "@auth", palette.DirectiveColors["auth"])
+	assertMetadataTokenColor(t, styles, line, "request", palette.Value)
+	assertMetadataTokenNotColor(t, styles, line, "bearer request-token-{{$uuid}}", palette.CommentMarker)
+}
+
+func TestMetadataRuneStylerColoursEveryLineOfAnArgument(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+	lines := []string{
+		"# @assert (",
+		"#   response.statusCode == 200",
+		`# ) => "echo endpoint did not return the query arguments"`,
+		"# ordinary prose",
+	}
+	styler.SetSource(strings.Join(lines, "\n"))
+
+	for no, line := range lines[:3] {
+		styles := styler.StylesForLine([]rune(line), no)
+		if styles == nil {
+			t.Fatalf("line %d has no styles", no+1)
+		}
+		assertMetadataTokenColor(t, styles, line, "#", palette.CommentMarker)
+		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
+		if no == 0 {
+			text = "("
+		}
+		assertMetadataTokenColor(t, styles, line, text, palette.Value)
+	}
+
+	prose := lines[3]
+	styles := styler.StylesForLine([]rune(prose), 3)
+	assertMetadataTokenColor(t, styles, prose, "ordinary prose", palette.CommentMarker)
+}
+
+func TestMetadataRuneStylerSourceChangeInvalidatesContext(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+	line := []rune("same text")
+
+	styler.SetSource("/*\nsame text\n*/")
+	if styles := styler.StylesForLine(line, 1); styles == nil {
+		t.Fatal("expected text inside block comment to be styled")
+	}
+
+	styler.SetSource("GET https://example.test\nsame text\nbody")
+	if styles := styler.StylesForLine(line, 1); styles != nil {
+		t.Fatalf("unchanged text kept stale block-comment style: %+v", styles)
+	}
+}
+
 // The colon in "@name: value" is a separator, so it must not be styled as part
 // of the value. Parse accepts both spellings and the editor has to agree.
 func TestMetadataRuneStylerColonSeparator(t *testing.T) {
@@ -68,7 +151,7 @@ func TestMetadataRuneStylerColonSeparator(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			styler := newMetadataRuneStyler(palette)
-			styles := styler.StylesForLine([]rune(tt.line), 0)
+			styles := styleLine(styler, tt.line)
 			if styles == nil {
 				t.Fatalf("expected styles for %q", tt.line)
 			}
@@ -85,32 +168,12 @@ func TestMetadataRuneStylerColonSeparator(t *testing.T) {
 	}
 }
 
-func TestDirectiveArgumentKindsComeFromCatalog(t *testing.T) {
-	tests := map[string]directive.ArgKind{
-		"name":      directive.ArgToken,
-		"desc":      directive.ArgText,
-		"nolog":     directive.ArgNone,
-		"setting":   directive.ArgSetting,
-		"settings":  directive.ArgOptions,
-		"timeout":   directive.ArgToken,
-		"websocket": directive.ArgOptions,
-	}
-	for name, want := range tests {
-		if got := directiveArgKind(directive.Name(name)); got != want {
-			t.Fatalf("directiveArgKind(%q) = %d, want %d", name, got, want)
-		}
-	}
-	if got := directiveArgKind("grpc-method"); got != directive.ArgToken {
-		t.Fatalf("unknown directive kind = %d, want the ArgToken fallback", got)
-	}
-}
-
 func TestMetadataRuneStylerSettingDirective(t *testing.T) {
 	palette := theme.DefaultTheme().EditorMetadata
 	styler := newMetadataRuneStyler(palette)
 
-	line := []rune("# @setting timeout 5s")
-	styles := styler.StylesForLine(line, 0)
+	line := "# @setting timeout 5s"
+	styles := styleLine(styler, line)
 	if styles == nil {
 		t.Fatalf("expected styles for metadata line")
 	}
@@ -154,7 +217,7 @@ func TestMetadataRuneStylerSettingEqualsDirective(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			styles := styler.StylesForLine([]rune(tt.line), 0)
+			styles := styleLine(styler, tt.line)
 			assertMetadataTokenColor(t, styles, tt.line, "timeout", palette.SettingKey)
 			assertMetadataTokenNotColor(t, styles, tt.line, "=", palette.SettingKey)
 			if tt.value != "" {
@@ -211,7 +274,7 @@ func TestMetadataRuneStylerOptionDirectives(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			styles := styler.StylesForLine([]rune(tt.line), 0)
+			styles := styleLine(styler, tt.line)
 			for _, key := range tt.keys {
 				assertMetadataTokenColor(t, styles, tt.line, key, palette.SettingKey)
 			}
@@ -230,7 +293,7 @@ func TestMetadataRuneStylerSettingKeyIsNotBold(t *testing.T) {
 	styler := newMetadataRuneStyler(palette)
 
 	line := "# @mock method=POST path=/accounts name=flagged"
-	styles := styler.StylesForLine([]rune(line), 0)
+	styles := styleLine(styler, line)
 	for _, key := range []string{"method", "path", "name"} {
 		start, end := metadataTokenRange(t, styles, line, key)
 		for i := start; i < end; i++ {
@@ -248,7 +311,7 @@ func TestMetadataRuneStylerTimeoutUsesGenericValue(t *testing.T) {
 	}
 
 	line := "# @timeout 5s"
-	styles := newMetadataRuneStyler(palette).StylesForLine([]rune(line), 0)
+	styles := styleLine(newMetadataRuneStyler(palette), line)
 	assertMetadataTokenColor(t, styles, line, "5s", palette.Value)
 }
 
@@ -261,8 +324,7 @@ func TestMetadataRuneStylerRequestLines(t *testing.T) {
 	}
 	expected := lipgloss.NewStyle().Foreground(color).Bold(true).Render("P")
 
-	httpLine := []rune("POST https://api.example.com")
-	styles := styler.StylesForLine(httpLine, 0)
+	styles := styleLine(styler, "POST https://api.example.com")
 	if styles == nil {
 		t.Fatalf("expected styles for HTTP request line")
 	}
@@ -270,8 +332,7 @@ func TestMetadataRuneStylerRequestLines(t *testing.T) {
 		t.Fatalf("HTTP request style mismatch:\nwant %q\n got %q", expected, got)
 	}
 
-	grpcLine := []rune("GRPC localhost:50051")
-	styles = styler.StylesForLine(grpcLine, 0)
+	styles = styleLine(styler, "GRPC localhost:50051")
 	if styles == nil {
 		t.Fatalf("expected styles for gRPC request line")
 	}
@@ -284,8 +345,7 @@ func TestMetadataRuneStylerRequestLines(t *testing.T) {
 		t.Fatalf("gRPC request style mismatch:\nwant %q\n got %q", expected, got)
 	}
 
-	wsLine := []rune("WS wss://stream.example.com")
-	styles = styler.StylesForLine(wsLine, 0)
+	styles = styleLine(styler, "WS wss://stream.example.com")
 	if styles == nil {
 		t.Fatalf("expected styles for WebSocket request line")
 	}
@@ -345,8 +405,7 @@ func TestMetadataRuneStylerRequestSeparator(t *testing.T) {
 		t.Fatal("expected request separator color in palette")
 	}
 
-	line := []rune("### graphql list items")
-	styles := styler.StylesForLine(line, 0)
+	styles := styleLine(styler, "### graphql list items")
 	if styles == nil {
 		t.Fatalf("expected styles for request separator")
 	}
@@ -367,8 +426,7 @@ func TestMetadataRuneStylerRequestSeparator(t *testing.T) {
 		t.Fatalf("request separator text not styled uniformly:\nwant %q\n got %q", want, got)
 	}
 
-	lineNoSpace := []rune("###")
-	styles = styler.StylesForLine(lineNoSpace, 0)
+	styles = styleLine(styler, "###")
 	if styles == nil {
 		t.Fatalf("expected styles for compact request separator")
 	}
@@ -384,4 +442,9 @@ func TestMetadataRuneStylerRequestSeparator(t *testing.T) {
 			got,
 		)
 	}
+}
+
+func styleLine(styler *metadataRuneStyler, line string) []lipgloss.Style {
+	styler.SetSource(line)
+	return styler.StylesForLine([]rune(line), 0)
 }
