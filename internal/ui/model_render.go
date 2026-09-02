@@ -2083,7 +2083,7 @@ func headerRule(st lipgloss.Style, width int) string {
 func (m Model) headerActiveCell(styles headerStyles, request string) headerCell {
 	cell := headerCell{icon: iconHeaderActive, priority: headerPriorityActive}
 	if request == "" {
-		cell.values = []string{"no request", "none"}
+		cell.values = []string{"none selected", "none"}
 		cell.style = styles.label
 		return cell
 	}

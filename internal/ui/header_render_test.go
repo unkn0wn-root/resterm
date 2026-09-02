@@ -85,12 +85,12 @@ func TestHeaderDropsHelpBeforeLatency(t *testing.T) {
 	t.Fatal("expected Help to be hidden at a narrow width")
 }
 
-func TestHeaderShowsNoRequest(t *testing.T) {
+func TestHeaderShowsNoSelectedRequest(t *testing.T) {
 	model := headerTestModel(t, 160)
 	model.activeRequestTitle = ""
 
-	if view := ansi.Strip(model.renderHeader()); !strings.Contains(view, iconHeaderActive+" no request") {
-		t.Fatalf("header does not show an empty request:\n%s", view)
+	if view := ansi.Strip(model.renderHeader()); !strings.Contains(view, iconHeaderActive+" none selected") {
+		t.Fatalf("header does not show that no request is selected:\n%s", view)
 	}
 
 	model.width = 70
