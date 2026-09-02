@@ -2070,7 +2070,7 @@ func (m Model) renderHeader() string {
 	)
 	band := m.theme.Header
 	return band.Width(max(totalWidth-band.GetHorizontalBorderSize(), 1)).Render(headerLine) + "\n" +
-		headerRule(m.theme.PaneDivider, totalWidth)
+		headerRule(m.theme.PaneDivider.Faint(true), totalWidth)
 }
 
 func headerRule(st lipgloss.Style, width int) string {
