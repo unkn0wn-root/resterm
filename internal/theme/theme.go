@@ -160,6 +160,7 @@ func DefaultTheme() Theme {
 	accent := lipgloss.Color("#7D56F4")
 	editorAccent := lipgloss.Color("#56A9DD")
 	responseAccent := lipgloss.Color("#33C481")
+	muted := lipgloss.Color("#8B86A8")
 	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#dcd7ff"))
 	directiveAccent := editorAccent
 
@@ -208,7 +209,7 @@ func DefaultTheme() Theme {
 			Bold(true).
 			Padding(0, 2),
 		TabInactive: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#8B86A8")).
+			Foreground(muted).
 			Padding(0, 1),
 		Notification: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#E0DEF4")).
@@ -218,7 +219,7 @@ func DefaultTheme() Theme {
 		Success:     lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
 		HeaderBrand: lipgloss.NewStyle().Foreground(lipgloss.Color("#FBC859")).Bold(true),
 		HeaderIcon:  lipgloss.NewStyle().Foreground(lipgloss.Color("#9683D8")),
-		HeaderLabel: lipgloss.NewStyle().Foreground(lipgloss.Color("#8B86A8")),
+		HeaderLabel: lipgloss.NewStyle().Foreground(muted),
 		HeaderHelp:  lipgloss.NewStyle().Foreground(lipgloss.Color("#7DD3FC")).Bold(true),
 		HeaderWarn:  lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")),
 		CommandSegments: []CommandSegmentStyle{
@@ -226,31 +227,31 @@ func DefaultTheme() Theme {
 				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#7D56F4"),
 				Key:        lipgloss.Color("#F6E3FF"),
-				Text:       lipgloss.Color("#E5E1FF"),
+				Text:       muted,
 			},
 			{
 				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#15AABF"),
 				Key:        lipgloss.Color("#A7F2FF"),
-				Text:       lipgloss.Color("#D6F7FF"),
+				Text:       muted,
 			},
 			{
 				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#FF7A45"),
 				Key:        lipgloss.Color("#FFE0D3"),
-				Text:       lipgloss.Color("#FFD4C2"),
+				Text:       muted,
 			},
 			{
 				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#33C481"),
 				Key:        lipgloss.Color("#C0F5DF"),
-				Text:       lipgloss.Color("#D6F9E8"),
+				Text:       muted,
 			},
 			{
 				Background: lipgloss.Color(""),
 				Border:     lipgloss.Color("#FFB61E"),
 				Key:        lipgloss.Color("#FFECC0"),
-				Text:       lipgloss.Color("#FFF3D8"),
+				Text:       muted,
 			},
 		},
 		CommandDivider: lipgloss.NewStyle().

@@ -411,9 +411,9 @@ custom = "#f97316"
 [[command_segments]]
 background = "#e2e8f0"
 key = "#1e40af"
-text = "#1f2933"
+text = "#64748b"
 
 [[command_segments]]
 background = "#dbeafe"
 key = "#0f172a"
-text = "#1f2933"
+text = "#64748b"

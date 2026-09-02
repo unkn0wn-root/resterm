@@ -202,9 +202,9 @@ custom = "#94a3b8"
 [[command_segments]]
 background = "#0b1220"
 key = "#34d399"
-text = "#e2e8f0"
+text = "#64748b"
 
 [[command_segments]]
 background = "#111c33"
 key = "#f97316"
-text = "#f8fafc"
+text = "#64748b"
