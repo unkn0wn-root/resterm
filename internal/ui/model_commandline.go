@@ -191,7 +191,7 @@ const (
 	commandSuggestionMaxWidth = 96
 )
 
-func (m Model) renderCommandSuggestionPopup(content string, y int) string {
+func (m *Model) renderCommandSuggestionPopup(content string, y int) string {
 	w := max(m.width, lipgloss.Width(content))
 	h := lipgloss.Height(content)
 	if w <= 0 || h <= y {

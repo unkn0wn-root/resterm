@@ -46,7 +46,7 @@ func (m *Model) failErr(err error) tea.Cmd {
 	return m.handleResponseMessage(responseMsg{err: err})
 }
 
-func (m Model) errView(err error) eView {
+func (m *Model) errView(err error) eView {
 	if err == nil {
 		return eView{}
 	}
@@ -68,7 +68,7 @@ func firstErrLine(s string) string {
 	return ""
 }
 
-func (m Model) styleLines(ls []diag.Line) string {
+func (m *Model) styleLines(ls []diag.Line) string {
 	st := m.errSty()
 	out := make([]string, 0, len(ls))
 	for _, l := range ls {
@@ -77,7 +77,7 @@ func (m Model) styleLines(ls []diag.Line) string {
 	return strings.TrimRight(strings.Join(out, "\n"), "\n")
 }
 
-func (m Model) errSty() eSty {
+func (m *Model) errSty() eSty {
 	return m.themeRuntime.errSty(m.theme)
 }
 

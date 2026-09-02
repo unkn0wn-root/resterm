@@ -77,7 +77,7 @@ func styledRunsText(runs []styledRun) string {
 	return b.String()
 }
 
-func (m Model) renderStatusBar() string {
+func (m *Model) renderStatusBar() string {
 	status, level := m.statusBarMessage()
 	palette := statusBarPalette(m.theme.StatusBarPalette)
 	line := m.renderStatusBarLine(status, level, m.statusBarContentWidth(), palette)
@@ -87,7 +87,7 @@ func (m Model) renderStatusBar() string {
 	return line
 }
 
-func (m Model) statusBarContentWidth() int {
+func (m *Model) statusBarContentWidth() int {
 	width := max(m.width, 1)
 	if statusBarUsesOuterInset(width) {
 		width -= statusBarHorizontalPad * 2
@@ -96,7 +96,7 @@ func (m Model) statusBarContentWidth() int {
 }
 
 // statusBarFits reports whether packing leaves the status text intact.
-func (m Model) statusBarFits(status string, level statusLevel) bool {
+func (m *Model) statusBarFits(status string, level statusLevel) bool {
 	if m.width <= 0 {
 		return true
 	}
@@ -113,7 +113,7 @@ func (m Model) statusBarFits(status string, level statusLevel) bool {
 	return left[0].text == want[0].text
 }
 
-func (m Model) renderStatusBarLine(
+func (m *Model) renderStatusBarLine(
 	status string,
 	level statusLevel,
 	width int,
@@ -136,7 +136,7 @@ func (m Model) renderStatusBarLine(
 }
 
 // packStatusBar applies the layout used by rendering and overflow detection.
-func (m Model) packStatusBar(
+func (m *Model) packStatusBar(
 	sections []statusBarSection,
 	width int,
 	palette theme.StatusBarPalette,
@@ -248,7 +248,7 @@ func statusBarOneLine(text string) string {
 	return folded.String()
 }
 
-func (m Model) statusBarMessage() (string, statusLevel) {
+func (m *Model) statusBarMessage() (string, statusLevel) {
 	if m.statusMessage.text != "" {
 		return m.statusMessage.text, m.statusMessage.level
 	}
@@ -297,14 +297,14 @@ func (m Model) statusBarSegments() []statusBarSeg {
 	return segs
 }
 
-func (m Model) editorPositionLabel() string {
+func (m *Model) editorPositionLabel() string {
 	line := m.editor.Line() + 1
 	total := max(m.editor.LineCount(), 1)
 	col := m.editor.LineInfo().ColumnOffset + 1
 	return fmt.Sprintf("Ln %d/%d Col %d", line, total, col)
 }
 
-func (m Model) editorModeLabel() string {
+func (m *Model) editorModeLabel() string {
 	switch {
 	case m.editorInsertMode:
 		return "INSERT"
@@ -317,7 +317,7 @@ func (m Model) editorModeLabel() string {
 	}
 }
 
-func (m Model) statusBarLeftSections(
+func (m *Model) statusBarLeftSections(
 	status string,
 	level statusLevel,
 	palette theme.StatusBarPalette,
@@ -346,7 +346,7 @@ func (m Model) statusBarLeftSections(
 // Parse warnings describe the file rather than a run, so they get a segment of
 // their own. The status bar never clears its message, so a warning written there
 // would be lost behind the first run result and never come back.
-func (m Model) statusBarWarningSection(
+func (m *Model) statusBarWarningSection(
 	palette theme.StatusBarPalette,
 ) (statusBarSection, bool) {
 	if !m.docMatchesEditor() {
@@ -372,7 +372,7 @@ func parseWarningLabel(doc *restfile.Document) string {
 	return label
 }
 
-func (m Model) statusBarTestSection(
+func (m *Model) statusBarTestSection(
 	palette theme.StatusBarPalette,
 ) (statusBarSection, bool) {
 	if m.statusMessage.testSummary == "" {
@@ -384,7 +384,7 @@ func (m Model) statusBarTestSection(
 	}, true
 }
 
-func (m Model) statusBarRightSections(
+func (m *Model) statusBarRightSections(
 	palette theme.StatusBarPalette,
 ) []statusBarSection {
 	segs := make([]statusBarSection, 0, 4)
@@ -415,7 +415,7 @@ func (m Model) statusBarRightSections(
 	return segs
 }
 
-func (m Model) statusBarGitRuns(valueStyle lipgloss.Style) []styledRun {
+func (m *Model) statusBarGitRuns(valueStyle lipgloss.Style) []styledRun {
 	if m.gitStatus.RepoRoot == "" {
 		return nil
 	}
@@ -463,7 +463,7 @@ func (m Model) statusBarGitRuns(valueStyle lipgloss.Style) []styledRun {
 	return runs
 }
 
-func (m Model) statusBarVersion() string {
+func (m *Model) statusBarVersion() string {
 	version := strings.TrimSpace(m.cfg.Version)
 	if version == "" {
 		version = strings.TrimSpace(m.updateVersion)
@@ -471,7 +471,7 @@ func (m Model) statusBarVersion() string {
 	return version
 }
 
-func (m Model) statusBarUpdateVersion() string {
+func (m *Model) statusBarUpdateVersion() string {
 	if m.updateInfo == nil {
 		return ""
 	}
@@ -480,7 +480,7 @@ func (m Model) statusBarUpdateVersion() string {
 
 // updateInfo is only set when the update check finds a newer release,
 // so any version it carries means there is an update worth showing.
-func (m Model) statusBarVersionSection(
+func (m *Model) statusBarVersionSection(
 	palette theme.StatusBarPalette,
 ) (statusBarSection, bool) {
 	current := m.statusBarVersion()
@@ -562,7 +562,7 @@ func statusBarModeIcon(mode string) string {
 	}
 }
 
-func (m Model) statusBarContextSection(
+func (m *Model) statusBarContextSection(
 	seg statusBarSeg,
 	palette theme.StatusBarPalette,
 ) (statusBarSection, bool) {
@@ -585,7 +585,7 @@ func (m Model) statusBarContextSection(
 	}, true
 }
 
-func (m Model) statusBarModeSection(seg statusBarSeg) statusBarSection {
+func (m *Model) statusBarModeSection(seg statusBarSeg) statusBarSection {
 	mode := seg.val
 	valueStyle := statusBarModeInlineStyle(m.theme.StatusBarValue)
 	runs := []styledRun{{text: mode, style: valueStyle}}
@@ -602,7 +602,7 @@ func (m Model) statusBarModeSection(seg statusBarSeg) statusBarSection {
 	}
 }
 
-func (m Model) statusBarEditorPosSection(
+func (m *Model) statusBarEditorPosSection(
 	text string,
 	palette theme.StatusBarPalette,
 ) statusBarSection {
@@ -826,7 +826,7 @@ type minimizedStatusItem struct {
 	label  string
 }
 
-func (m Model) minimizedStatusItems() []minimizedStatusItem {
+func (m *Model) minimizedStatusItems() []minimizedStatusItem {
 	items := []struct {
 		on     bool
 		region paneRegion
@@ -849,7 +849,7 @@ func (m Model) minimizedStatusItems() []minimizedStatusItem {
 	return out
 }
 
-func (m Model) minimizedStatusSections(
+func (m *Model) minimizedStatusSections(
 	palette theme.StatusBarPalette,
 ) []statusBarSection {
 	items := m.minimizedStatusItems()
@@ -866,7 +866,7 @@ func (m Model) minimizedStatusSections(
 	return sections
 }
 
-func (m Model) minimizedStatusStyle(
+func (m *Model) minimizedStatusStyle(
 	region paneRegion,
 	palette theme.StatusBarPalette,
 ) theme.StatusBarSegmentStyle {
@@ -885,7 +885,7 @@ func (m Model) minimizedStatusStyle(
 	}
 }
 
-func (m Model) minimizedPaneBackground(region paneRegion) lipgloss.Color {
+func (m *Model) minimizedPaneBackground(region paneRegion) lipgloss.Color {
 	switch region {
 	case paneRegionSidebar:
 		return m.theme.PaneBorderFocusFile

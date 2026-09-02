@@ -17,7 +17,7 @@ type gitStatusMsg struct {
 	err      error
 }
 
-func (m Model) initialGitStatusCmd() tea.Cmd {
+func (m *Model) initialGitStatusCmd() tea.Cmd {
 	return newGitStatusCmd(m.gitStatusSeq, m.ws.root, m.gitStatusPaths())
 }
 

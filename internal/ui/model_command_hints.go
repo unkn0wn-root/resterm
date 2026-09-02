@@ -19,7 +19,7 @@ func caretKey(h commandHint) commandHint {
 	return h
 }
 
-func (m Model) contextCommandHints() []commandHint {
+func (m *Model) contextCommandHints() []commandHint {
 	switch m.focus {
 	case focusFile:
 		return []commandHint{
@@ -55,7 +55,7 @@ func (m Model) contextCommandHints() []commandHint {
 	}
 }
 
-func (m Model) editorCommandHints() []commandHint {
+func (m *Model) editorCommandHints() []commandHint {
 	if m.editorInsertMode {
 		return []commandHint{
 			{key: "Esc", label: "Normal"},
@@ -113,7 +113,7 @@ func (m Model) responseCommandHints() []commandHint {
 	return hints
 }
 
-func (m Model) commandActionHint(action bindings.ActionID, label string) commandHint {
+func (m *Model) commandActionHint(action bindings.ActionID, label string) commandHint {
 	items := m.bindingsMap.Bindings(action)
 	if len(items) == 0 {
 		return commandHint{}
@@ -122,7 +122,7 @@ func (m Model) commandActionHint(action bindings.ActionID, label string) command
 }
 
 // Apply the background to each hint because ANSI resets clear the container background.
-func (m Model) renderCommandHints(style lipgloss.Style) string {
+func (m *Model) renderCommandHints(style lipgloss.Style) string {
 	limit := commandBarContentWidth(style)
 	barBg := style.GetBackground()
 	// Hint cells render flush, so the divider carries all spacing between them.
@@ -144,7 +144,7 @@ func (m Model) renderCommandHints(style lipgloss.Style) string {
 
 // renderHintRow joins bound hints with divider. A positive limit drops any
 // hint that would push the row past it.
-func (m Model) renderHintRow(
+func (m *Model) renderHintRow(
 	hints []commandHint,
 	divider string,
 	limit int,
@@ -175,7 +175,7 @@ func (m Model) renderHintRow(
 	return lipgloss.JoinHorizontal(lipgloss.Top, cells...)
 }
 
-func (m Model) renderCommandHint(hint commandHint, idx int, keycap bool, barBg lipgloss.TerminalColor) string {
+func (m *Model) renderCommandHint(hint commandHint, idx int, keycap bool, barBg lipgloss.TerminalColor) string {
 	seg := m.theme.CommandSegment(idx)
 	if keycap && seg.Background != "" {
 		return renderCommandKeycap(hint.key, hint.label, seg, barBg)

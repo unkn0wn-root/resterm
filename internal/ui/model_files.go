@@ -291,7 +291,7 @@ func (m *Model) setDocument(doc *restfile.Document) {
 
 // Editing does not reparse, so anything describing the file has to ask this
 // first and stay quiet until the next parse.
-func (m Model) docMatchesEditor() bool {
+func (m *Model) docMatchesEditor() bool {
 	return m.doc != nil && m.docRev == m.editor.Revision()
 }
 

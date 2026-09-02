@@ -182,20 +182,19 @@ type operatorState struct {
 }
 
 type Model struct {
-	cfg            Config
-	ws             workspace
-	run            *rtrun.Runtime
-	rq             *rqeng.Engine
-	bindingsMap    *bindings.Map
-	docsOpener     urlOpener
-	docsRef        string
-	theme          theme.Theme
-	activeThemeDef theme.Definition
-	themeRuntime   themeRuntime
-	themeCatalog   theme.Catalog
-	client         *httpx.Client
-	grpcOptions    grpcx.Options
-	rg             *registry.Index
+	cfg          Config
+	ws           workspace
+	run          *rtrun.Runtime
+	rq           *rqeng.Engine
+	bindingsMap  *bindings.Map
+	docsOpener   urlOpener
+	docsRef      string
+	theme        theme.Theme
+	themeRuntime themeRuntime
+	themeCatalog theme.Catalog
+	client       *httpx.Client
+	grpcOptions  grpcx.Options
+	rg           *registry.Index
 
 	fileWatcher   *watcher.Watcher
 	fileWatchChan chan tea.Msg

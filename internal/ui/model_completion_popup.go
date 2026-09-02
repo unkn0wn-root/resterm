@@ -30,7 +30,7 @@ type hintBoxMetrics struct {
 	hPad   int
 }
 
-func (m Model) editorHintBoxMetrics() hintBoxMetrics {
+func (m *Model) editorHintBoxMetrics() hintBoxMetrics {
 	s := m.theme.EditorHintBox
 	return hintBoxMetrics{
 		frameW: s.GetHorizontalPadding() + s.GetHorizontalBorderSize(),
@@ -39,7 +39,7 @@ func (m Model) editorHintBoxMetrics() hintBoxMetrics {
 	}
 }
 
-func (m Model) renderCompletionPopup(content string) string {
+func (m *Model) renderCompletionPopup(content string) string {
 	st := m.editor.completion
 	if !st.active || len(st.filtered) == 0 {
 		return content
@@ -100,7 +100,7 @@ func (m Model) renderCompletionPopup(content string) string {
 	return overlayHintPopup(out, preview.lines, preview.x, preview.y, w, h)
 }
 
-func (m Model) completionPopupLayout(
+func (m *Model) completionPopupLayout(
 	contentW, contentH, cursorX, cursorY, count int,
 ) (completionPopupLayout, bool) {
 	if contentW <= 0 || contentH <= 0 || count <= 0 {
@@ -150,7 +150,7 @@ func (m Model) completionPopupLayout(
 	}, true
 }
 
-func (m Model) buildCompletionPopup(
+func (m *Model) buildCompletionPopup(
 	items []intellisense.Item,
 	selection int,
 	maxOuterW int,
@@ -184,7 +184,7 @@ func (m Model) buildCompletionPopup(
 	return strings.Split(out, "\n")
 }
 
-func (m Model) buildMenuPopup(menu prompt.Menu, limit int, maxOuterW int) []string {
+func (m *Model) buildMenuPopup(menu prompt.Menu, limit int, maxOuterW int) []string {
 	items := menu.Items()
 	if len(items) == 0 || limit <= 0 {
 		return nil
@@ -216,7 +216,7 @@ func popupWindow(selection, limit, count int) (int, int) {
 	return start, min(start+limit, count)
 }
 
-func (m Model) completionPopupLines(
+func (m *Model) completionPopupLines(
 	items []intellisense.Item,
 	selection int,
 	labelW, summaryW int,
@@ -349,7 +349,7 @@ type hintOverlayBox struct {
 	lines []string
 }
 
-func (m Model) completionPreviewBox(
+func (m *Model) completionPreviewBox(
 	item intellisense.Item,
 	list hintOverlayBox,
 	contentW, contentH int,
@@ -430,7 +430,7 @@ func (m Model) completionPreviewBox(
 	return hintOverlayBox{}, false
 }
 
-func (m Model) buildCompletionPreview(
+func (m *Model) buildCompletionPreview(
 	item intellisense.Item,
 	maxOuterW, maxOuterH int,
 ) []string {

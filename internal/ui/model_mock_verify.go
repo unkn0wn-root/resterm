@@ -101,7 +101,7 @@ func (m *Model) closeMockVerification() {
 	m.mockVerificationText = ""
 }
 
-func (m Model) renderMockVerificationModal() string {
+func (m *Model) renderMockVerificationModal() string {
 	size := m.modalSize(110, 24)
 	body := m.mockVerificationText
 	if vp := m.mockVerificationViewport; vp != nil {

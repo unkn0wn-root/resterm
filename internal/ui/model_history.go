@@ -1236,7 +1236,7 @@ func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 	}
 }
 
-func (m Model) historyHeaderHeight() int {
+func (m *Model) historyHeaderHeight() int {
 	return 3
 }
 

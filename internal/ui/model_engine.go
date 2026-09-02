@@ -45,7 +45,7 @@ func (m *Model) runCfg(opts httpx.Options) engine.Config {
 
 // runOptions points BaseDir at the file being run. The launch file's directory
 // stops meaning anything once another file or workspace is active.
-func (m Model) runOptions() httpx.Options {
+func (m *Model) runOptions() httpx.Options {
 	opts := m.cfg.HTTPOptions
 	if m.currentFile != "" {
 		opts.BaseDir = filepath.Dir(m.currentFile)
