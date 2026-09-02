@@ -40,7 +40,8 @@ const (
 const (
 	headerBrandName = ">_ RESTERM"
 	headerGroupSep  = " │ "
-	headerCellSep   = "  "
+	headerCellSep   = "   "
+	headerMetricSep = "  "
 	headerAnchorSep = " │ "
 )
 
@@ -1935,6 +1936,7 @@ type headerStyles struct {
 	fill   lipgloss.Style
 	group  string
 	sep    string
+	metric string
 	anchor string
 }
 
@@ -1968,6 +1970,7 @@ func (m Model) headerStyles() headerStyles {
 		fill:   on(lipgloss.NewStyle()),
 		group:  separator.Render(headerGroupSep),
 		sep:    separator.Render(headerCellSep),
+		metric: separator.Render(headerMetricSep),
 		anchor: separator.Render(headerAnchorSep),
 	}
 }
@@ -2105,7 +2108,7 @@ func (m Model) headerActiveCell(styles headerStyles, request string) headerCell 
 func (m Model) renderHeaderAnchors(styles headerStyles, limit int) string {
 	readings := m.renderLatencyOn(styles.bg)
 	if status := m.renderTransportStatus(styles); status != "" {
-		reading := status + styles.sep + readings
+		reading := status + styles.metric + readings
 		if lipgloss.Width(reading) <= limit {
 			readings = reading
 		}
