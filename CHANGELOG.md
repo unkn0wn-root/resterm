@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.5.3](https://github.com/unkn0wn-root/resterm/compare/v1.5.2...v1.5.3) (2026-09-02)
+
+
+### Features
+
+* 3 space headers separator ([78d0520](https://github.com/unkn0wn-root/resterm/commit/78d052054ffbfeb5b84d711d4a456bc150ba998c))
+
+
+### Bug Fixes
+
+* old test ([b9d14c8](https://github.com/unkn0wn-root/resterm/commit/b9d14c88fda79e20bca3506909305241143fef4a))
+
 ### [1.5.2](https://github.com/unkn0wn-root/resterm/compare/v1.5.1...v1.5.2) (2026-09-02)
 
 
