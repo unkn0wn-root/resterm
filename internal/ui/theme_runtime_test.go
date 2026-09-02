@@ -35,6 +35,36 @@ func TestThemeRuntimeInactiveStyleUsesFaintOnlyForNonLightThemes(t *testing.T) {
 	}
 }
 
+func TestThemeRuntimeKeepsDerivedSyntaxHighlightStyle(t *testing.T) {
+	tests := []struct {
+		name string
+		def  theme.Definition
+		want string
+	}{
+		{
+			name: "dark",
+			def:  theme.DefaultDefinition(),
+			want: "monokai",
+		},
+		{
+			name: "light",
+			def: theme.Definition{
+				Metadata: theme.Metadata{Tags: []string{"light"}},
+				Theme:    theme.DefaultTheme(),
+			},
+			want: "github",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := newThemeRuntime(tt.def).syntaxHighlightStyle(); got != tt.want {
+				t.Fatalf("syntax highlight style = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestApplyThemeDefinitionStylesFiltersUseDistinctPromptAndTextColors(t *testing.T) {
 	model := New(Config{})
 

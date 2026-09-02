@@ -15,7 +15,7 @@ func (m *Model) startLatAnim() {
 	m.latAnimT0 = time.Now()
 }
 
-func (m Model) scheduleLatAnim() tea.Cmd {
+func (m *Model) scheduleLatAnim() tea.Cmd {
 	if !m.latAnimOn || !m.latencySeries.empty() {
 		return nil
 	}
@@ -32,7 +32,7 @@ func (m *Model) handleLatAnim() tea.Cmd {
 	return m.scheduleLatAnim()
 }
 
-func (m Model) latAnimP() float64 {
+func (m *Model) latAnimP() float64 {
 	return min(float64(time.Since(m.latAnimT0))/float64(latAnimDur), 1)
 }
 

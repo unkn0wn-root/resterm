@@ -491,7 +491,7 @@ func helpTopicSection(topics []helpdoc.Topic) helpSection {
 // surfaces documentation topics whose metadata or body match the query. The
 // unfiltered index lists only shortcuts because the :help popup already
 // suggests every topic.
-func (m Model) filteredHelpSections() []helpSection {
+func (m *Model) filteredHelpSections() []helpSection {
 	sections := m.helpSections()
 	tokens := filterQueryTokens(m.helpFilter.Value())
 	if len(tokens) == 0 {
@@ -542,7 +542,7 @@ func sortedHelpEntries(entries []helpEntry) []helpEntry {
 	return entries
 }
 
-func (m Model) renderHelpOverlay() string {
+func (m *Model) renderHelpOverlay() string {
 	box, _ := m.helpOverlayBox()
 	return m.renderCenteredModal(box)
 }
@@ -617,7 +617,7 @@ func helpColor() termcolor.Config {
 	return termcolor.Config{Enabled: true, Profile: p}
 }
 
-func (m Model) helpIndexBody(viewWidth int) string {
+func (m *Model) helpIndexBody(viewWidth int) string {
 	sections := m.filteredHelpSections()
 	if len(sections) == 0 {
 		return m.theme.HeaderValue.Render("No help entries match the current filter.")
@@ -636,7 +636,7 @@ func (m Model) helpIndexBody(viewWidth int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-func (m Model) renderHelpViewport(body string, viewWidth, contentWidth, bodyHeight int) string {
+func (m *Model) renderHelpViewport(body string, viewWidth, contentWidth, bodyHeight int) string {
 	vp := m.helpViewport
 	vp.Width = viewWidth
 	vp.Height = bodyHeight
@@ -648,7 +648,7 @@ func (m Model) renderHelpViewport(body string, viewWidth, contentWidth, bodyHeig
 		Render(vp.View())
 }
 
-func (m Model) helpOverlayBodyRect(box string, topHeight, bodyHeight int) mouseRect {
+func (m *Model) helpOverlayBodyRect(box string, topHeight, bodyHeight int) mouseRect {
 	boxWidth := lipgloss.Width(box)
 	boxHeight := lipgloss.Height(box)
 	width := max(m.width, boxWidth)
@@ -694,7 +694,7 @@ func (m Model) renderHelpFilter(width int) string {
 	)
 }
 
-func (m Model) helpRow(key, description string) string {
+func (m *Model) helpRow(key, description string) string {
 	keyStyled := m.theme.HeaderTitle.
 		Width(helpKeyColumnWidth).
 		Align(lipgloss.Left).

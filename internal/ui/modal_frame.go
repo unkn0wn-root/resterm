@@ -76,7 +76,7 @@ func (m *Model) invalidateModalRender() {
 	m.modalRender.invalidate()
 }
 
-func (m Model) renderCenteredModal(box string) string {
+func (m *Model) renderCenteredModal(box string) string {
 	x, y, width, height := m.modalPlacement(box)
 	if width <= 0 || height <= 0 {
 		return box
@@ -99,7 +99,7 @@ func (m Model) renderCenteredModal(box string) string {
 	return screen.with(box, x, y, boxWidth, boxHeight)
 }
 
-func (m Model) modalPlacement(box string) (x, y, width, height int) {
+func (m *Model) modalPlacement(box string) (x, y, width, height int) {
 	boxWidth := lipgloss.Width(box)
 	boxHeight := lipgloss.Height(box)
 	width = max(m.width, boxWidth)
@@ -107,7 +107,7 @@ func (m Model) modalPlacement(box string) (x, y, width, height int) {
 	return max((width-boxWidth)/2, 0), max((height-boxHeight)/2, 0), width, height
 }
 
-func (m Model) renderModalUnderlay(width, height int) string {
+func (m *Model) renderModalUnderlay(width, height int) string {
 	return lipgloss.Place(
 		width,
 		height,
@@ -118,7 +118,7 @@ func (m Model) renderModalUnderlay(width, height int) string {
 	)
 }
 
-func (m Model) applyModalBackdrop(
+func (m *Model) applyModalBackdrop(
 	buf *cellbuf.Buffer,
 	boxX, boxY, boxWidth, boxHeight int,
 ) {

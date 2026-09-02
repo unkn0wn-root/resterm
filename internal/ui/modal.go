@@ -50,7 +50,7 @@ type modalSize struct {
 	body    int
 }
 
-func (m Model) modalSize(maxWidth, maxBody int) modalSize {
+func (m *Model) modalSize(maxWidth, maxBody int) modalSize {
 	width := min(m.width-6, maxWidth)
 	if width < 48 {
 		width = max(m.width-4, 36)
@@ -64,7 +64,7 @@ func (m Model) modalSize(maxWidth, maxBody int) modalSize {
 	return modalSize{width: width, content: content, view: view, body: body}
 }
 
-func (m Model) renderModalBox(title, body, instructions string, width int) string {
+func (m *Model) renderModalBox(title, body, instructions string, width int) string {
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.renderModalTitle(title, width),
@@ -78,6 +78,6 @@ func (m Model) renderModalBox(title, body, instructions string, width int) strin
 
 const modalPad = 2
 
-func (m Model) renderModalHints(width int, hints string) string {
+func (m *Model) renderModalHints(width int, hints string) string {
 	return m.theme.HeaderValue.Render(paddedLeftLine(width, modalPad, hints))
 }

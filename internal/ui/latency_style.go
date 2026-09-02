@@ -19,11 +19,11 @@ var (
 	latErrFg           = lipgloss.Color("#FF6E6E")
 )
 
-func (m Model) renderLatency() string {
+func (m *Model) renderLatency() string {
 	return m.renderLatencyOn(nil)
 }
 
-func (m Model) renderLatencyOn(bg lipgloss.TerminalColor) string {
+func (m *Model) renderLatencyOn(bg lipgloss.TerminalColor) string {
 	s, ok := m.latencySeries.summary()
 	if !ok {
 		return headerStyleOnBackground(m.latMutedStyle(), bg).
@@ -39,11 +39,11 @@ func (m Model) renderLatencyOn(bg lipgloss.TerminalColor) string {
 	return muted.Render(latLabel+" "+string(rs[:last])) +
 		headerStyleOnBackground(latStyle(m.theme, s.cur), bg).
 			Render(string(rs[last])+" "+cur) +
-		muted.Render(" · p95 ") +
+		muted.Render(headerMetricSep+"p95 ") +
 		headerStyleOnBackground(latStyle(m.theme, s.p95), bg).Render(p95)
 }
 
-func (m Model) latMutedStyle() lipgloss.Style {
+func (m *Model) latMutedStyle() lipgloss.Style {
 	if m.themeRuntime.isLight() {
 		return m.themeRuntime.subtleTextStyle(m.theme)
 	}

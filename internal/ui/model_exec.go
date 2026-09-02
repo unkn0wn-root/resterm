@@ -56,7 +56,7 @@ func (m *Model) hasActiveRun() bool {
 	return m.sending || m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil
 }
 
-func (m Model) hasReflowPending() bool {
+func (m *Model) hasReflowPending() bool {
 	for i := range m.responsePanes {
 		pane := &m.responsePanes[i]
 		if pane.reflow == nil {
@@ -71,7 +71,7 @@ func (m Model) hasReflowPending() bool {
 	return false
 }
 
-func (m Model) spinnerActive() bool {
+func (m *Model) spinnerActive() bool {
 	return m.sending || m.responseLoading || m.hasReflowPending()
 }
 

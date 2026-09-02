@@ -40,8 +40,8 @@ const (
 const (
 	headerBrandName = ">_ RESTERM"
 	headerGroupSep  = " │ "
-	headerCellSep   = "   "
-	headerMetricSep = "  "
+	headerCellSep   = "  "
+	headerMetricSep = " · "
 	headerAnchorSep = " │ "
 )
 
@@ -122,7 +122,7 @@ func (m Model) View() string {
 	return m.renderWithinAppFrame(m.renderAppContent(renderContext{}))
 }
 
-func (m Model) renderAppContent(rc renderContext) string {
+func (m *Model) renderAppContent(rc renderContext) string {
 	filePane := m.renderFilePane(rc)
 	fileWidth := lipgloss.Width(filePane)
 	editorPane := m.renderEditorPane(rc)
@@ -205,7 +205,7 @@ func (m Model) renderAppContent(rc renderContext) string {
 	return content
 }
 
-func (m Model) renderWithinAppFrame(content string) string {
+func (m *Model) renderWithinAppFrame(content string) string {
 	innerWidth := max(m.width, lipgloss.Width(content))
 	innerHeight := max(m.height, lipgloss.Height(content))
 
@@ -250,7 +250,7 @@ func (m Model) renderWithinAppFrame(content string) string {
 	return framed
 }
 
-func (m Model) renderModalTitle(title string, width int) string {
+func (m *Model) renderModalTitle(title string, width int) string {
 	return m.theme.HeaderTitle.
 		Width(width).
 		Align(lipgloss.Center).
@@ -327,7 +327,7 @@ func (m Model) renderFilePane(rc renderContext) string {
 	)
 }
 
-func (m Model) navigatorPaneFocused() bool {
+func (m *Model) navigatorPaneFocused() bool {
 	switch m.focus {
 	case focusFile, focusRequests, focusWorkflows:
 		return true
@@ -336,14 +336,14 @@ func (m Model) navigatorPaneFocused() bool {
 	}
 }
 
-func (m Model) navigatorRenderState() navigator.RenderState {
+func (m *Model) navigatorRenderState() navigator.RenderState {
 	return navigator.RenderState{
 		ActiveFilePath: m.currentFile,
 		ActiveNodeID:   m.activeRequestNavigatorNodeID(),
 	}
 }
 
-func (m Model) activeRequestNavigatorNodeID() string {
+func (m *Model) activeRequestNavigatorNodeID() string {
 	if m.currentFile == "" || m.doc == nil {
 		return ""
 	}
@@ -371,7 +371,7 @@ func (m Model) activeRequestNavigatorNodeID() string {
 	return ""
 }
 
-func (m Model) navigatorRequestNodeID(path string, reqIdx int) string {
+func (m *Model) navigatorRequestNodeID(path string, reqIdx int) string {
 	if m.navigator == nil || reqIdx < 0 {
 		return ""
 	}
@@ -392,7 +392,7 @@ func (m Model) navigatorRequestNodeID(path string, reqIdx int) string {
 	return n.ID
 }
 
-func (m Model) navigatorFileNode(path string) *navigator.Node[any] {
+func (m *Model) navigatorFileNode(path string) *navigator.Node[any] {
 	if m.navigator == nil {
 		return nil
 	}
@@ -412,7 +412,7 @@ func (m Model) navigatorFileNode(path string) *navigator.Node[any] {
 	return nil
 }
 
-func (m Model) sidebarFrameStyle(active bool) lipgloss.Style {
+func (m *Model) sidebarFrameStyle(active bool) lipgloss.Style {
 	st := m.theme.BrowserBorder
 	if active {
 		switch m.focus {
@@ -522,7 +522,7 @@ func padHorizontal(content string, padding int) string {
 	return lipgloss.NewStyle().Padding(0, padding).Render(content)
 }
 
-func (m Model) renderNavigatorFilter(width int, active bool, rc renderContext) string {
+func (m *Model) renderNavigatorFilter(width int, active bool, rc renderContext) string {
 	input := m.navigatorFilter
 	if input.Prompt == "" {
 		input = newNavigatorFilterInput()
@@ -545,7 +545,7 @@ func (m Model) renderNavigatorFilter(width int, active bool, rc renderContext) s
 	return lipgloss.NewStyle().Width(width).Render(row)
 }
 
-func (m Model) navigatorFilterVisible() bool {
+func (m *Model) navigatorFilterVisible() bool {
 	if m.navigatorFilter.Focused() || strings.TrimSpace(m.navigatorFilter.Value()) != "" {
 		return true
 	}
@@ -555,7 +555,7 @@ func (m Model) navigatorFilterVisible() bool {
 	return len(m.navigator.MethodFilters()) > 0 || len(m.navigator.TagFilters()) > 0
 }
 
-func (m Model) navigatorMethodChips() string {
+func (m *Model) navigatorMethodChips() string {
 	if m.navigator == nil {
 		return ""
 	}
@@ -581,7 +581,7 @@ func (m Model) navigatorMethodChips() string {
 	return strings.Join(parts, " ")
 }
 
-func (m Model) navigatorTagChips() string {
+func (m *Model) navigatorTagChips() string {
 	if m.navigator == nil {
 		return ""
 	}
@@ -608,7 +608,7 @@ func (m Model) navigatorTagChips() string {
 	return strings.Join(parts, " ")
 }
 
-func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) ([]string, bool) {
+func (m *Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) ([]string, bool) {
 	if m.navigator == nil || limit <= 0 {
 		return nil, false
 	}
@@ -755,7 +755,7 @@ func (m Model) renderEditorPane(rc renderContext) string {
 	)
 }
 
-func (m Model) editorFrameStyle(active bool) lipgloss.Style {
+func (m *Model) editorFrameStyle(active bool) lipgloss.Style {
 	st := m.theme.EditorBorder
 	if active {
 		st = st.
@@ -904,7 +904,7 @@ func (m Model) renderResponsePane(availableWidth int, rc renderContext) string {
 	)
 }
 
-func (m Model) respFrameStyle(active bool) lipgloss.Style {
+func (m *Model) respFrameStyle(active bool) lipgloss.Style {
 	st := m.theme.ResponseBorder
 	if active {
 		st = st.
@@ -943,7 +943,7 @@ func renderTitledPaneFrame(
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) paneTitleStyle(
+func (m *Model) paneTitleStyle(
 	base lipgloss.Style,
 	frame lipgloss.Style,
 	active bool,
@@ -1069,7 +1069,7 @@ func repeatToCellWidth(value string, width int) string {
 	return ansi.Truncate(out.String(), width, "")
 }
 
-func (m Model) dimFrame(st lipgloss.Style) lipgloss.Style {
+func (m *Model) dimFrame(st lipgloss.Style) lipgloss.Style {
 	if fg := m.theme.PaneDivider.GetForeground(); theme.ColorDefined(fg) {
 		st = st.BorderForeground(fg)
 	}
@@ -1239,7 +1239,7 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 	return block
 }
 
-func (m Model) renderResponseDivider(left, right string) string {
+func (m *Model) renderResponseDivider(left, right string) string {
 	if !m.responseSplit {
 		return ""
 	}
@@ -1270,7 +1270,7 @@ func paneModeLabel(pane *responsePaneState) string {
 	}
 }
 
-func (m Model) buildTabRowContent(
+func (m *Model) buildTabRowContent(
 	tabs []responseTab,
 	pane *responsePaneState,
 	focused bool,
@@ -1373,7 +1373,7 @@ const (
 	responseExplainPreviewBase = "Preparing explain preview"
 )
 
-func (m Model) tabSpinner() string {
+func (m *Model) tabSpinner() string {
 	if !m.spinnerActive() || len(tabSpinFrames) == 0 {
 		return ""
 	}
@@ -1399,7 +1399,7 @@ func (m Model) spinnerView(
 	return m.applyResponseContentStyles(pane.activeTab, centered)
 }
 
-func (m Model) sendingView(pane *responsePaneState, width, height int) string {
+func (m *Model) sendingView(pane *responsePaneState, width, height int) string {
 	base := m.sendingOverlayBase
 	if base == "" {
 		base = responseSendingBase
@@ -1407,7 +1407,7 @@ func (m Model) sendingView(pane *responsePaneState, width, height int) string {
 	return m.spinnerView(pane, width, height, base, m.sending)
 }
 
-func (m Model) formattingView(pane *responsePaneState, width, height int) string {
+func (m *Model) formattingView(pane *responsePaneState, width, height int) string {
 	if pane != nil && pane.activeTab == responseTabExplain && pane.hasExplainReport() {
 		return ""
 	}
@@ -1426,14 +1426,14 @@ func (m Model) reflowView(pane *responsePaneState, width, height int) string {
 	return m.applyResponseContentStyles(pane.activeTab, centered)
 }
 
-func (m Model) paneAllowsOverlay(pane *responsePaneState) bool {
+func (m *Model) paneAllowsOverlay(pane *responsePaneState) bool {
 	if pane == nil {
 		return false
 	}
 	return tabAllowsOverlay(pane.activeTab)
 }
 
-func (m Model) reflowActiveForPane(pane *responsePaneState) bool {
+func (m *Model) reflowActiveForPane(pane *responsePaneState) bool {
 	if !m.paneAllowsOverlay(pane) {
 		return false
 	}
@@ -1462,15 +1462,15 @@ func (m Model) reflowActiveForPane(pane *responsePaneState) bool {
 	return true
 }
 
-func (m Model) tabBadgeText(mode string) string {
+func (m *Model) tabBadgeText(mode string) string {
 	return strings.ToUpper(strings.TrimSpace(mode))
 }
 
-func (m Model) tabBadgeShort(mode string) string {
+func (m *Model) tabBadgeShort(mode string) string {
 	return firstRuneUpper(mode)
 }
 
-func (m Model) buildStaticTabRow(
+func (m *Model) buildStaticTabRow(
 	tabs []responseTab,
 	labels []string,
 	active responseTab,
@@ -1494,7 +1494,7 @@ func (m Model) buildStaticTabRow(
 	return row, lipgloss.Width(row) <= limit && !strings.Contains(row, "\n")
 }
 
-func (m Model) buildAdaptiveTabRow(
+func (m *Model) buildAdaptiveTabRow(
 	tabs []responseTab,
 	labels []string,
 	active responseTab,
@@ -1547,7 +1547,7 @@ func (m Model) buildAdaptiveTabRow(
 	return row, true
 }
 
-func (m Model) renderTabRowFromStates(
+func (m *Model) renderTabRowFromStates(
 	states []tabLabelState,
 	plan tabRowPlan,
 	focused bool,
@@ -1691,14 +1691,14 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 	)
 }
 
-func (m Model) renderHistoryHeader(width int) string {
+func (m *Model) renderHistoryHeader(width int) string {
 	scope := historyScopeLabel(m.historyScope)
 	sortLabel := historySortLabel(m.historySort)
 	text := fmt.Sprintf("Scope (c): %s  Sort (s): %s", scope, sortLabel)
 	return m.theme.HeaderValue.Width(width).MaxHeight(1).Render(text)
 }
 
-func (m Model) renderHistoryFilterLine(width int) string {
+func (m *Model) renderHistoryFilterLine(width int) string {
 	input := m.historyFilterInput
 	if width > 2 {
 		input.Width = width - 2
@@ -1718,7 +1718,7 @@ func clampPositive(value, maxValue int) int {
 	return value
 }
 
-func (m Model) renderCommandBar() string {
+func (m *Model) renderCommandBar() string {
 	if m.showCommandLine {
 		return m.renderCommandLinePrompt()
 	}
@@ -1729,11 +1729,11 @@ func (m Model) renderCommandBar() string {
 	return m.renderCommandHints(m.theme.CommandBar.Width(m.width))
 }
 
-func (m Model) renderSearchPrompt() string {
+func (m *Model) renderSearchPrompt() string {
 	return m.renderSearchCommandBar(m.theme.CommandBar.Width(m.width))
 }
 
-func (m Model) renderCommandLinePrompt() string {
+func (m *Model) renderCommandLinePrompt() string {
 	return m.renderPromptBar(
 		m.theme.CommandBar.Width(m.width),
 		":",
@@ -1744,7 +1744,7 @@ func (m Model) renderCommandLinePrompt() string {
 	)
 }
 
-func (m Model) renderResponseSearchPrompt(width int) string {
+func (m *Model) renderResponseSearchPrompt(width int) string {
 	if width <= 0 {
 		width = defaultResponseViewportWidth
 	}
@@ -1752,7 +1752,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 	return m.renderSearchCommandBar(style)
 }
 
-func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
+func (m *Model) renderSearchCommandBar(style lipgloss.Style) string {
 	mode, hint := "LITERAL", "^R regex"
 	if m.searchIsRegex {
 		mode, hint = "REGEX", "^R literal"
@@ -1761,7 +1761,7 @@ func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
 }
 
 // guides are subtle helper segments shown only while the input is empty.
-func (m Model) renderPromptBar(style lipgloss.Style, prompt string, input textinput.Model, guides ...string) string {
+func (m *Model) renderPromptBar(style lipgloss.Style, prompt string, input textinput.Model, guides ...string) string {
 	label := lipgloss.NewStyle().Bold(true).Render(prompt)
 	reserved := lipgloss.Width(label)
 
@@ -1950,7 +1950,7 @@ func headerStyleOnBackground(
 	return st
 }
 
-func (m Model) headerStyles() headerStyles {
+func (m *Model) headerStyles() headerStyles {
 	bg := m.theme.Header.GetBackground()
 	on := func(st lipgloss.Style) lipgloss.Style { return headerStyleOnBackground(st, bg) }
 	separator := on(m.theme.HeaderSeparator)
@@ -2001,7 +2001,7 @@ func (s headerStyles) cell(c headerCell, value string) string {
 	return prefix + s.label.Render(" ") + c.style.Render(value)
 }
 
-func (m Model) renderHeader() string {
+func (m *Model) renderHeader() string {
 	workspace := filepath.Base(m.ws.root)
 	if workspace == "" {
 		workspace = "."
@@ -2089,7 +2089,7 @@ func headerRule(st lipgloss.Style, width int) string {
 	return st.Render(" " + strings.Repeat("─", width-2) + " ")
 }
 
-func (m Model) headerActiveCell(styles headerStyles, request string) headerCell {
+func (m *Model) headerActiveCell(styles headerStyles, request string) headerCell {
 	cell := headerCell{icon: iconHeaderActive, priority: headerPriorityActive}
 	if request == "" {
 		cell.values = []string{"none selected", "none"}
@@ -2105,7 +2105,7 @@ func (m Model) headerActiveCell(styles headerStyles, request string) headerCell 
 	return cell
 }
 
-func (m Model) renderHeaderAnchors(styles headerStyles, limit int) string {
+func (m *Model) renderHeaderAnchors(styles headerStyles, limit int) string {
 	readings := m.renderLatencyOn(styles.bg)
 	if status := m.renderTransportStatus(styles); status != "" {
 		reading := status + styles.metric + readings
@@ -2127,7 +2127,7 @@ func (m Model) renderHeaderAnchors(styles headerStyles, limit int) string {
 }
 
 // Hide the label when Help would use more than half of the available space.
-func (m Model) helpAnchor(styles headerStyles, limit int) string {
+func (m *Model) helpAnchor(styles headerStyles, limit int) string {
 	hint := m.commandActionHint(bindings.ActionToggleHelp, "Help")
 	if hint.key == "" {
 		return ""
@@ -2147,14 +2147,14 @@ func (m Model) helpAnchor(styles headerStyles, limit int) string {
 	return cell
 }
 
-func (m Model) renderTransportStatus(styles headerStyles) string {
+func (m *Model) renderTransportStatus(styles headerStyles) string {
 	if m.headerTransport.label == "" {
 		return ""
 	}
 	return styles.forLevel(m.headerTransport.level).Render(m.headerTransport.label)
 }
 
-func (m Model) headerTestStatus() (string, testStatus, bool) {
+func (m *Model) headerTestStatus() (string, testStatus, bool) {
 	if m.scriptError != nil {
 		return "error", testStatusError, true
 	}
@@ -2216,7 +2216,7 @@ func truncateToWidth(text string, maxWidth int) string {
 	return trimmed + "…"
 }
 
-func (m Model) renderRequestDetailsModal() string {
+func (m *Model) renderRequestDetailsModal() string {
 	width := min(m.width-6, 100)
 	if width < 48 {
 		candidate := m.width - 4
@@ -2272,7 +2272,7 @@ func (m Model) renderRequestDetailsModal() string {
 	return m.renderModalBox(title, bodyView, instructions, width)
 }
 
-func (m Model) renderHistoryPreviewModal() string {
+func (m *Model) renderHistoryPreviewModal() string {
 	width := min(m.width-6, 100)
 	if width < 48 {
 		candidate := m.width - 4
@@ -2328,7 +2328,7 @@ func (m Model) renderHistoryPreviewModal() string {
 	return m.renderModalBox(title, bodyView, instructions, width)
 }
 
-func (m Model) renderStatusModal() string {
+func (m *Model) renderStatusModal() string {
 	width := min(m.width-10, 72)
 	if width < 32 {
 		candidate := m.width - 4
@@ -2366,7 +2366,7 @@ func (m Model) renderStatusModal() string {
 	)
 }
 
-func (m Model) statusModalBody(wrapped string, viewWidth int) (string, bool) {
+func (m *Model) statusModalBody(wrapped string, viewWidth int) (string, bool) {
 	limit := max(min(m.height-12, statusModalMaxBodyHeight), statusModalMinBodyHeight)
 	vp := m.statusModalViewport
 	if vp == nil || lipgloss.Height(wrapped) <= limit {
@@ -2379,7 +2379,7 @@ func (m Model) statusModalBody(wrapped string, viewWidth int) (string, bool) {
 }
 
 // Preserve severity colors without bolding the message body.
-func (m Model) statusModalStyle() lipgloss.Style {
+func (m *Model) statusModalStyle() lipgloss.Style {
 	switch m.statusModalLevel {
 	case statusError:
 		return m.theme.Error.UnsetBold()
@@ -2405,7 +2405,7 @@ func statusModalTitle(level statusLevel) string {
 	}
 }
 
-func (m Model) renderLayoutSaveModal() string {
+func (m *Model) renderLayoutSaveModal() string {
 	bodyText := "Save current pane sizes and splits to your settings file?"
 	hintsText := fmt.Sprintf(
 		"Yes (%s)    No (%s)    Exit (%s)",
@@ -2484,7 +2484,7 @@ func (m Model) renderFileChangeModal() string {
 	return m.renderCenteredModal(box)
 }
 
-func (m Model) renderThemeModal() string {
+func (m *Model) renderThemeModal() string {
 	width := max(min(m.width-10, 60), 28)
 
 	commands := fmt.Sprintf(
@@ -2504,7 +2504,7 @@ func (m Model) renderThemeModal() string {
 	return m.renderCenteredModal(box)
 }
 
-func (m Model) renderNewFileModal() string {
+func (m *Model) renderNewFileModal() string {
 	width := max(min(m.width-10, 60), 36)
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).
@@ -2555,7 +2555,7 @@ func (m Model) renderNewFileModal() string {
 
 const modalMenuRows = 8
 
-func (m Model) renderOpenModal() string {
+func (m *Model) renderOpenModal() string {
 	width := max(min(m.width-10, 60), 36)
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).
@@ -2596,7 +2596,7 @@ func (m Model) renderOpenModal() string {
 }
 
 // renderPromptModal overlays suggestions so menu changes do not resize the modal.
-func (m Model) renderPromptModal(width int, menu prompt.Menu, above, below []string) string {
+func (m *Model) renderPromptModal(width int, menu prompt.Menu, above, below []string) string {
 	rows := make([]string, 0, len(above)+len(below))
 	rows = append(rows, above...)
 	rows = append(rows, below...)
@@ -2616,7 +2616,7 @@ func (m Model) renderPromptModal(width int, menu prompt.Menu, above, below []str
 	return overlayHintPopup(frame, list, x+1+modalPad, top, frameW, frameH)
 }
 
-func (m Model) renderResponseSaveModal() string {
+func (m *Model) renderResponseSaveModal() string {
 	width := max(min(m.width-10, 72), 40)
 	bg := m.themeRuntime.modalInputBackground(m.theme)
 	inputView := lipgloss.NewStyle().
@@ -2662,7 +2662,7 @@ func (m Model) renderResponseSaveModal() string {
 	return m.renderPromptModal(width, m.responseSavePrompt.menu, above, below)
 }
 
-func (m Model) focusLabel() string {
+func (m *Model) focusLabel() string {
 	switch m.focus {
 	case focusFile:
 		return "Files"

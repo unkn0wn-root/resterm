@@ -39,7 +39,7 @@ func (m *Model) closeEnvironmentSelector() {
 
 // envSelection is the staged draft while the picker is open, and the applied
 // selection otherwise: closing the picker clears the draft.
-func (m Model) envSelection() vars.Selection {
+func (m *Model) envSelection() vars.Selection {
 	if m.envDraft.Empty() {
 		return m.ws.sel
 	}
@@ -145,7 +145,7 @@ type envModalLayout struct {
 	list    int
 }
 
-func (m Model) environmentModalLayout() envModalLayout {
+func (m *Model) environmentModalLayout() envModalLayout {
 	size := m.modalSize(envModalMaxWidth, envModalMaxBody)
 	summary := m.renderEnvironmentSummary(size.view)
 	return envModalLayout{
@@ -165,7 +165,7 @@ func (m *Model) resizeEnvList() {
 	m.envList.SetSize(layout.view, layout.list)
 }
 
-func (m Model) renderEnvironmentModal() string {
+func (m *Model) renderEnvironmentModal() string {
 	layout := m.environmentModalLayout()
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -180,7 +180,7 @@ func (m Model) renderEnvironmentModal() string {
 	return m.renderModalBox("Environments", body, m.renderEnvironmentHints(layout.view), layout.width)
 }
 
-func (m Model) renderEnvironmentHints(width int) string {
+func (m *Model) renderEnvironmentHints(width int) string {
 	hint := m.theme.CommandBarHint.Render
 	if !m.ws.cat.Grouped() {
 		return fmt.Sprintf("%s Select  %s Search  %s Cancel", hint("Enter"), hint("/"), hint("Esc"))
@@ -195,7 +195,7 @@ func (m Model) renderEnvironmentHints(width int) string {
 	return stage + sep + leave
 }
 
-func (m Model) renderEnvironmentSummary(width int) string {
+func (m *Model) renderEnvironmentSummary(width int) string {
 	label := "Active"
 	if m.ws.cat.Grouped() {
 		label = "Selection"
@@ -212,7 +212,7 @@ func (m Model) renderEnvironmentSummary(width int) string {
 	)
 }
 
-func (m Model) environmentSelectionSummary() string {
+func (m *Model) environmentSelectionSummary() string {
 	if m.ws.unselected {
 		return "none selected, " + m.ws.intent.Describe() + " is not available here"
 	}
@@ -236,7 +236,7 @@ type envChoice struct {
 // envChoices pairs every group with its selected profile in declaration order,
 // which is the order the picker lists them in and the order the header trusts
 // when it names only the first one.
-func (m Model) envChoices(sel vars.Selection) []envChoice {
+func (m *Model) envChoices(sel vars.Selection) []envChoice {
 	groups := m.ws.cat.Groups()
 	out := make([]envChoice, 0, len(groups))
 	for _, group := range groups {
@@ -253,7 +253,7 @@ func (m Model) envChoices(sel vars.Selection) []envChoice {
 // profile names like "personal" or "admin" are ambiguous on their own, and every
 // form keeps the profile, because a header that reads the same on dev and on
 // prod has given up the one thing worth glancing at before sending a request.
-func (m Model) headerEnvVariants() []string {
+func (m *Model) headerEnvVariants() []string {
 	if m.ws.envErr != nil {
 		return []string{"not loaded", "none"}
 	}

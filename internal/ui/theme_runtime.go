@@ -18,14 +18,14 @@ const (
 )
 
 type themeRuntime struct {
-	definition theme.Definition
-	appearance theme.Appearance
+	appearance      theme.Appearance
+	syntaxHighlight string
 }
 
 func newThemeRuntime(def theme.Definition) themeRuntime {
 	return themeRuntime{
-		definition: def,
-		appearance: def.Appearance(),
+		appearance:      def.Appearance(),
+		syntaxHighlight: theme.SyntaxHighlightStyle(def),
 	}
 }
 
@@ -141,7 +141,7 @@ func (rt themeRuntime) statsPalette(th theme.Theme) statsPalette {
 }
 
 func (rt themeRuntime) syntaxHighlightStyle() string {
-	return theme.SyntaxHighlightStyle(rt.definition)
+	return rt.syntaxHighlight
 }
 
 func (rt themeRuntime) responseRenderer(th theme.Theme) responseRenderer {
@@ -244,7 +244,6 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 func (m *Model) applyThemeDefinition(def theme.Definition) {
 	m.invalidateModalRender()
 	m.theme = def.Theme
-	m.activeThemeDef = def
 	m.activeThemeKey = def.Key
 	m.themeRuntime = newThemeRuntime(def)
 	m.editor.SetRuneStyler(selectEditorRuneStyler(m.currentFile, m.theme.EditorMetadata))

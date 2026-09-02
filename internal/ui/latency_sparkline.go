@@ -37,7 +37,7 @@ var (
 	latPlaceholder = string(latRamp) + " ms"
 )
 
-func (m Model) latIdleText() string {
+func (m *Model) latIdleText() string {
 	if m.latAnimOn {
 		return latClimb(m.latAnimP()) + " ms"
 	}
