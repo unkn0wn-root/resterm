@@ -39,7 +39,7 @@ func (m *Model) renderLatencyOn(bg lipgloss.TerminalColor) string {
 	return muted.Render(latLabel+" "+string(rs[:last])) +
 		headerStyleOnBackground(latStyle(m.theme, s.cur), bg).
 			Render(string(rs[last])+" "+cur) +
-		muted.Render(" · p95 ") +
+		muted.Render(headerMetricSep+"p95 ") +
 		headerStyleOnBackground(latStyle(m.theme, s.p95), bg).Render(p95)
 }
 

@@ -65,7 +65,7 @@ func TestHeaderRendersLayout(t *testing.T) {
 	for _, want := range []string{
 		headerBrandName + headerGroupSep + iconHeaderEnv,
 		iconHeaderEnv + " " + labelHeaderEnv + " default" + headerCellSep + iconHeaderWorkspace,
-		"201" + headerMetricSep + latLabel,
+		"201 · " + latLabel,
 	} {
 		if !strings.Contains(lines[0], want) {
 			t.Errorf("header is missing separator layout %q:\n%s", want, lines[0])

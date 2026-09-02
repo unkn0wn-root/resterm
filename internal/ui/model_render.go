@@ -41,7 +41,7 @@ const (
 	headerBrandName = ">_ RESTERM"
 	headerGroupSep  = " │ "
 	headerCellSep   = "   "
-	headerMetricSep = "  "
+	headerMetricSep = " · "
 	headerAnchorSep = " │ "
 )
 
