@@ -74,7 +74,7 @@ func TestHeaderShowsCompactGroupedEnvironment(t *testing.T) {
 	model.height = 30
 
 	view := ansi.Strip(model.renderHeader())
-	if !strings.Contains(view, "ENV: api=prod +2") {
+	if !strings.Contains(view, labelHeaderEnv+" api=prod +2") {
 		t.Fatalf("header does not summarise the selection:\n%s", view)
 	}
 	for _, unwanted := range []string{"app=ci", "region=eu"} {
@@ -84,8 +84,6 @@ func TestHeaderShowsCompactGroupedEnvironment(t *testing.T) {
 	}
 }
 
-// A grouped selection used to reach the header in full, and because ENV sits
-// left of the other segments it pushed all of them off the line.
 func TestHeaderKeepsActiveAndTestsWithGroupedEnvironment(t *testing.T) {
 	cat, err := vars.NewGroupedCatalog(nil, []vars.Group{
 		{
@@ -116,7 +114,7 @@ func TestHeaderKeepsActiveAndTestsWithGroupedEnvironment(t *testing.T) {
 	model.testResults = []scripts.TestResult{{Name: "ok", Passed: true}}
 
 	view := ansi.Strip(model.renderHeader())
-	for _, want := range []string{"ENV", "ACTIVE", "GET users", "TESTS"} {
+	for _, want := range []string{labelHeaderEnv, iconHeaderActive, "GET users", iconTestPass} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("header dropped %q:\n%s", want, view)
 		}
@@ -138,7 +136,7 @@ func TestHeaderCapsSingleValue(t *testing.T) {
 	if strings.Contains(view, strings.Repeat("long", 10)) {
 		t.Fatalf("uncapped value monopolised the header:\n%s", view)
 	}
-	for _, want := range []string{"ENV", "dev", "ACTIVE"} {
+	for _, want := range []string{labelHeaderEnv, "dev", iconHeaderActive} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("header dropped %q:\n%s", want, view)
 		}

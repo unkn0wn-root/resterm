@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -51,6 +52,9 @@ func TestApplyEnvironmentSelectionResetsLatency(t *testing.T) {
 
 	model := New(cfg)
 	model.latencySeries.add(120 * time.Millisecond)
+	logicalLast := &httpx.Response{Status: "201 Created", StatusCode: 201}
+	model.lastResponse = logicalLast
+	model.headerTransport = headerTransportStatus{label: "201", level: statusSuccess}
 	model.openEnvironmentSelector()
 	for i, item := range model.envList.Items() {
 		if env, ok := item.(envItem); ok && env.name == "prod" {
@@ -61,6 +65,12 @@ func TestApplyEnvironmentSelectionResetsLatency(t *testing.T) {
 	model.applyEnvironmentSelection()
 	if _, ok := model.latencySeries.summary(); ok {
 		t.Fatal("expected latency series reset on environment switch")
+	}
+	if model.headerTransport.label != "" {
+		t.Fatalf("expected header transport reset, got %q", model.headerTransport.label)
+	}
+	if model.lastResponse != logicalLast {
+		t.Fatal("environment telemetry reset changed the logical last response")
 	}
 }
 

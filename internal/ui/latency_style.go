@@ -15,26 +15,32 @@ const (
 )
 
 var (
-	latWarnFg = lipgloss.Color("#FFD46A")
-	latErrFg  = lipgloss.Color("#FF6E6E")
+	headerWarnFallback = lipgloss.Color("#FFD46A")
+	latErrFg           = lipgloss.Color("#FF6E6E")
 )
 
 func (m Model) renderLatency() string {
+	return m.renderLatencyOn(nil)
+}
+
+func (m Model) renderLatencyOn(bg lipgloss.TerminalColor) string {
 	s, ok := m.latencySeries.summary()
 	if !ok {
-		return m.latMutedStyle().Render(latLabel + " " + m.latIdleText())
+		return headerStyleOnBackground(m.latMutedStyle(), bg).
+			Render(latLabel + " " + m.latIdleText())
 	}
 
-	muted := m.latMutedStyle()
+	muted := headerStyleOnBackground(m.latMutedStyle(), bg)
 	rs := []rune(s.bars)
 	last := len(rs) - 1
 	cur := formatLatencyDuration(s.cur)
 	p95 := formatLatencyDuration(s.p95)
 
 	return muted.Render(latLabel+" "+string(rs[:last])) +
-		latStyle(m.theme, s.cur).Render(string(rs[last])+" "+cur) +
+		headerStyleOnBackground(latStyle(m.theme, s.cur), bg).
+			Render(string(rs[last])+" "+cur) +
 		muted.Render(" · p95 ") +
-		latStyle(m.theme, s.p95).Render(p95)
+		headerStyleOnBackground(latStyle(m.theme, s.p95), bg).Render(p95)
 }
 
 func (m Model) latMutedStyle() lipgloss.Style {
@@ -50,7 +56,7 @@ func latStyle(th theme.Theme, d time.Duration) lipgloss.Style {
 	case d <= latOKMax:
 		return st
 	case d <= latWarnMax:
-		return st.Foreground(latWarnFg)
+		return st.Foreground(foregroundColor(th.HeaderWarn, headerWarnFallback))
 	default:
 		return st.Foreground(foregroundColor(th.Error, latErrFg))
 	}

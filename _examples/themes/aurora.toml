@@ -5,12 +5,28 @@ author = "resterm"
 version = "1.1.0"
 tags = ["dark", "contrast"]
 
+[styles.pane_divider]
+foreground = "#1f3a5f"
+
 [styles.header_title]
 foreground = "#38bdf8"
 bold = true
 
 [styles.header_value]
 foreground = "#e2e8f0"
+
+[styles.header_label]
+foreground = "#64748b"
+
+[styles.header_icon]
+foreground = "#38bdf8"
+
+[styles.header_warn]
+foreground = "#fbbf24"
+
+[styles.header_brand]
+foreground = "#38bdf8"
+bold = true
 
 [styles.header_separator]
 foreground = "#2563eb"
@@ -182,17 +198,6 @@ request_separator = "#2563eb"
 graphql = "#c084fc"
 workflow = "#34d399"
 custom = "#94a3b8"
-
-[[header_segments]]
-background = "#280CCC"
-foreground = "#f8fafc"
-border = "#2563eb"
-accent = "#E9E9F2"
-
-[[header_segments]]
-background = "#E0A643"
-foreground = "#302C27"
-border = "#2563eb"
 
 [[command_segments]]
 background = "#0b1220"

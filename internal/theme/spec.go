@@ -17,10 +17,11 @@ type Metadata struct {
 }
 
 type ThemeSpec struct {
-	Metadata        *Metadata            `json:"metadata"         toml:"metadata"`
-	Styles          StylesSpec           `json:"styles"           toml:"styles"`
-	Colors          ColorsSpec           `json:"colors"           toml:"colors"`
-	StatusBar       *StatusBarSpec       `json:"status_bar"       toml:"status_bar"`
+	Metadata  *Metadata      `json:"metadata"   toml:"metadata"`
+	Styles    StylesSpec     `json:"styles"     toml:"styles"`
+	Colors    ColorsSpec     `json:"colors"     toml:"colors"`
+	StatusBar *StatusBarSpec `json:"status_bar" toml:"status_bar"`
+	// HeaderSegments is kept so older theme files still load.
 	HeaderSegments  []HeaderSegmentSpec  `json:"header_segments"  toml:"header_segments"`
 	CommandSegments []CommandSegmentSpec `json:"command_segments" toml:"command_segments"`
 	EditorMetadata  *EditorMetadataSpec  `json:"editor_metadata"  toml:"editor_metadata"`
@@ -40,6 +41,10 @@ type StylesSpec struct {
 	Header                        *StyleSpec `json:"header"                           toml:"header"`
 	HeaderTitle                   *StyleSpec `json:"header_title"                     toml:"header_title"`
 	HeaderValue                   *StyleSpec `json:"header_value"                     toml:"header_value"`
+	HeaderIcon                    *StyleSpec `json:"header_icon"                      toml:"header_icon"`
+	HeaderLabel                   *StyleSpec `json:"header_label"                     toml:"header_label"`
+	HeaderHelp                    *StyleSpec `json:"header_help"                      toml:"header_help"`
+	HeaderWarn                    *StyleSpec `json:"header_warn"                      toml:"header_warn"`
 	HeaderSeparator               *StyleSpec `json:"header_separator"                 toml:"header_separator"`
 	StatusBar                     *StyleSpec `json:"status_bar"                       toml:"status_bar"`
 	StatusBarInfo                 *StyleSpec `json:"status_bar_info"                  toml:"status_bar_info"`
@@ -297,6 +302,18 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		return Theme{}, err
 	}
 	if err := apply("header_value", &cloned.HeaderValue, spec.Styles.HeaderValue); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("header_icon", &cloned.HeaderIcon, spec.Styles.HeaderIcon); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("header_label", &cloned.HeaderLabel, spec.Styles.HeaderLabel); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("header_help", &cloned.HeaderHelp, spec.Styles.HeaderHelp); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("header_warn", &cloned.HeaderWarn, spec.Styles.HeaderWarn); err != nil {
 		return Theme{}, err
 	}
 	if err := apply(
@@ -918,14 +935,6 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		cloned.MethodColors.Default = color
 	}
 
-	if len(spec.HeaderSegments) > 0 {
-		segments, err := applyHeaderSegments(cloned.HeaderSegments, spec.HeaderSegments)
-		if err != nil {
-			return Theme{}, err
-		}
-		cloned.HeaderSegments = segments
-	}
-
 	if len(spec.CommandSegments) > 0 {
 		segments, err := applyCommandSegments(cloned.CommandSegments, spec.CommandSegments)
 		if err != nil {
@@ -1016,52 +1025,6 @@ func (s *StyleSpec) apply(base lipgloss.Style) (lipgloss.Style, error) {
 		current = current.Align(align)
 	}
 	return current, nil
-}
-
-func applyHeaderSegments(
-	base []HeaderSegmentStyle,
-	overrides []HeaderSegmentSpec,
-) ([]HeaderSegmentStyle, error) {
-	if len(overrides) == 0 {
-		return base, nil
-	}
-	if len(base) == 0 {
-		base = []HeaderSegmentStyle{{}}
-	}
-	result := make([]HeaderSegmentStyle, len(overrides))
-	for i, spec := range overrides {
-		template := base[i%len(base)]
-		if spec.Background != nil {
-			color, err := toColor("header_segments.background", *spec.Background)
-			if err != nil {
-				return nil, err
-			}
-			template.Background = color
-		}
-		if spec.Border != nil {
-			color, err := toColor("header_segments.border", *spec.Border)
-			if err != nil {
-				return nil, err
-			}
-			template.Border = color
-		}
-		if spec.Foreground != nil {
-			color, err := toColor("header_segments.foreground", *spec.Foreground)
-			if err != nil {
-				return nil, err
-			}
-			template.Foreground = color
-		}
-		if spec.Accent != nil {
-			color, err := toColor("header_segments.accent", *spec.Accent)
-			if err != nil {
-				return nil, err
-			}
-			template.Accent = color
-		}
-		result[i] = template
-	}
-	return result, nil
 }
 
 func applyCommandSegments(
@@ -1307,9 +1270,6 @@ func applyEditorMetadata(dst *EditorMetadataPalette, spec EditorMetadataSpec) er
 
 func cloneTheme(src Theme) Theme {
 	clone := src
-	if len(src.HeaderSegments) > 0 {
-		clone.HeaderSegments = append([]HeaderSegmentStyle(nil), src.HeaderSegments...)
-	}
 	if len(src.CommandSegments) > 0 {
 		clone.CommandSegments = append([]CommandSegmentStyle(nil), src.CommandSegments...)
 	}

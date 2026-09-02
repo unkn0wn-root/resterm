@@ -15,7 +15,7 @@ import (
 const (
 	workflowStatsSplitMinWidth = 96
 	workflowStatsSplitMinH     = 12
-	workflowStatsGap           = " | "
+	workflowStatsGap           = " │ "
 )
 
 type workflowStatsView struct {
@@ -831,7 +831,7 @@ func workflowDivider(width int) string {
 	if width < 1 {
 		width = 1
 	}
-	return statsSubLabelStyle.Render(strings.Repeat("-", width))
+	return statsSubLabelStyle.Render(strings.Repeat("─", width))
 }
 
 func workflowFitLines(lines []string, width, height int) []string {

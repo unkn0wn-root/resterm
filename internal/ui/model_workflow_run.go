@@ -343,7 +343,7 @@ func (m *Model) handleWorkflowReqDone(st *workflowState, evt core.ReqDone) tea.C
 	msg := m.responseMsgFromRunState(evt.Result, st.origin == workflowOriginForEach)
 	msg.latGen = st.latGen
 	st.pendingExplain = msg.explain
-	m.recordResponseLatency(msg)
+	m.recordHeaderTelemetry(msg)
 	if isCanceled(evt.Result.Err) {
 		m.lastError = nil
 		return nil

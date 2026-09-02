@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const headerGap = 1
+const headerGap = 3
 
 // Header segments are dropped lowest priority first, so a narrow terminal keeps
 // the environment and the active request rather than the decoration around them.
@@ -106,6 +106,7 @@ func buildHeaderLine(
 	sep string,
 	right string,
 	rightStyle lipgloss.Style,
+	fillStyle lipgloss.Style,
 	width int,
 ) string {
 	if width <= 0 {
@@ -139,7 +140,7 @@ func buildHeaderLine(
 	line = lipgloss.JoinHorizontal(
 		lipgloss.Center,
 		line,
-		strings.Repeat(" ", pad),
+		fillStyle.Render(strings.Repeat(" ", pad)),
 		rs,
 	)
 	return trimHeaderLine(line, width)

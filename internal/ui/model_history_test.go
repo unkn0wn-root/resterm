@@ -1140,19 +1140,25 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 	}
 }
 
-func TestRecordResponseLatencyDropsPreResetSamples(t *testing.T) {
+func TestRecordHeaderTelemetryDropsPreResetSamples(t *testing.T) {
 	m := &Model{latencySeries: newLatencySeries(latCap)}
-	resp := &httpx.Response{Duration: 120 * time.Millisecond}
+	resp := &httpx.Response{StatusCode: http.StatusCreated, Duration: 120 * time.Millisecond}
 
 	gen := m.latencySeries.gen
 	m.latencySeries.reset()
-	m.recordResponseLatency(responseMsg{response: resp, latGen: gen})
+	m.recordHeaderTelemetry(responseMsg{response: resp, latGen: gen})
 	if _, ok := m.latencySeries.summary(); ok {
 		t.Fatal("expected pre-reset sample to be dropped")
 	}
+	if m.headerTransport.label != "" {
+		t.Fatalf("expected pre-reset status to be dropped, got %q", m.headerTransport.label)
+	}
 
-	m.recordResponseLatency(responseMsg{response: resp, latGen: m.latencySeries.gen, environment: "other"})
+	m.recordHeaderTelemetry(responseMsg{response: resp, latGen: m.latencySeries.gen, environment: "other"})
 	if _, ok := m.latencySeries.summary(); !ok {
 		t.Fatal("expected current-generation sample to be recorded regardless of environment")
+	}
+	if got := m.headerTransport.label; got != "201" {
+		t.Fatalf("expected current-generation status 201, got %q", got)
 	}
 }

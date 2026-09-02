@@ -18,10 +18,21 @@ foreground = "#0f172a"
 [styles.header_separator]
 foreground = "#2563eb"
 
+[styles.header_label]
+foreground = "#64748b"
+
+[styles.header_icon]
+foreground = "#2563eb"
+
+[styles.header_help]
+foreground = "#1d4ed8"
+bold = true
+
+[styles.header_warn]
+foreground = "#b45309"
+
 [styles.header_brand]
-foreground = "#f8fafc"
-background = "#1d4ed8"
-border_color = "#93c5fd"
+foreground = "#1d4ed8"
 bold = true
 
 [styles.browser_border]
@@ -396,16 +407,6 @@ setting = "#9a3412"
 timeout = "#9a3412"
 workflow = "#0f766e"
 custom = "#f97316"
-
-[[header_segments]]
-background = "#2563eb"
-foreground = "#f8fafc"
-border = "#1d4ed8"
-
-[[header_segments]]
-background = "#0d9488"
-foreground = "#f8fafc"
-border = "#0f766e"
 
 [[command_segments]]
 background = "#e2e8f0"

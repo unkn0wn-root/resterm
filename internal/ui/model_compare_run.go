@@ -220,7 +220,7 @@ func (m *Model) handleCompareRowDone(st *compareState, evt core.CmpRowDone) tea.
 	}
 	msg := m.responseMsgFromRunState(evt.Result, false)
 	msg.latGen = st.latGen
-	m.recordResponseLatency(msg)
+	m.recordHeaderTelemetry(msg)
 	env := st.currentEnv
 	if strings.TrimSpace(env) == "" {
 		env = compareEnvAt(st, evt.Row.Index, evt.Row.Env)

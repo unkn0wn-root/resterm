@@ -63,8 +63,7 @@ func (s *latencySeries) add(d time.Duration) {
 	s.sum = s.summarize()
 }
 
-// reset starts a new generation: responses stamped with an older gen (in
-// flight when the context switched) are dropped by recordResponseLatency.
+// reset starts a generation so old responses can be ignored.
 func (s *latencySeries) reset() {
 	s.vals = nil
 	s.sum = latencySummary{}

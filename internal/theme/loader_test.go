@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestLoadCatalogIncludesDefaultAndUserThemes(t *testing.T) {
@@ -16,6 +18,9 @@ author = "QA"
 
 [styles.header]
 foreground = "#ddeeff"
+
+[styles.header_icon]
+foreground = "#0ea5e9"
 
 [colors]
 pane_active_foreground = "#335577"
@@ -77,6 +82,9 @@ background = "#223344"
 			"expected status bar info background override, got %q",
 			oceanic.Theme.StatusBarPalette.Info.Background,
 		)
+	}
+	if got := oceanic.Theme.HeaderIcon.GetForeground(); got != lipgloss.Color("#0ea5e9") {
+		t.Fatalf("expected header icon override, got %q", got)
 	}
 
 	duplicate, ok := catalog.Get("oceanic-1")
