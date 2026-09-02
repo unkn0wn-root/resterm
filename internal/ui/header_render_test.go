@@ -64,7 +64,7 @@ func TestHeaderRendersLayout(t *testing.T) {
 	}
 	for _, want := range []string{
 		headerBrandName + headerGroupSep + iconHeaderEnv,
-		iconHeaderEnv + " " + labelHeaderEnv + " default" + headerCellSep + iconHeaderWorkspace,
+		iconHeaderEnv + " " + labelHeaderEnv + " default  " + iconHeaderWorkspace,
 		"201 · " + latLabel,
 	} {
 		if !strings.Contains(lines[0], want) {
