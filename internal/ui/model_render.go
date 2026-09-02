@@ -40,7 +40,7 @@ const (
 const (
 	headerBrandName = ">_ RESTERM"
 	headerGroupSep  = " │ "
-	headerCellSep   = "   "
+	headerCellSep   = "  "
 	headerAnchorSep = " │ "
 )
 

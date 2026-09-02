@@ -162,23 +162,23 @@ func TestFitHeaderSegmentsUsesSegmentSeparatorWidth(t *testing.T) {
 
 func TestBuildHeaderLineUsesGroupSeparatorWithoutTrailingDivider(t *testing.T) {
 	segs := headerTextSegments("BRAND", "ENV", "WORKSPACE")
-	segs[0].separatorAfter = " │ "
+	segs[0].separatorAfter = headerGroupSep
 
 	line := buildHeaderLine(
 		segs,
-		"   ",
+		headerCellSep,
 		"",
 		lipgloss.NewStyle(),
 		lipgloss.NewStyle(),
 		30,
 	)
-	if got, want := ansi.Strip(line), "BRAND │ ENV   WORKSPACE"; got != want {
+	if got, want := ansi.Strip(line), "BRAND"+headerGroupSep+"ENV"+headerCellSep+"WORKSPACE"; got != want {
 		t.Fatalf("header = %q, want %q", got, want)
 	}
 
 	line = buildHeaderLine(
 		segs,
-		"   ",
+		headerCellSep,
 		"",
 		lipgloss.NewStyle(),
 		lipgloss.NewStyle(),
