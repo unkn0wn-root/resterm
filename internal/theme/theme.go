@@ -219,7 +219,7 @@ func DefaultTheme() Theme {
 		Success:     lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
 		HeaderBrand: lipgloss.NewStyle().Foreground(lipgloss.Color("#FBC859")).Bold(true),
 		HeaderIcon:  lipgloss.NewStyle().Foreground(lipgloss.Color("#9683D8")),
-		HeaderLabel: lipgloss.NewStyle().Foreground(muted),
+		HeaderLabel: lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
 		HeaderHelp:  lipgloss.NewStyle().Foreground(lipgloss.Color("#7DD3FC")).Bold(true),
 		HeaderWarn:  lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")),
 		CommandSegments: []CommandSegmentStyle{

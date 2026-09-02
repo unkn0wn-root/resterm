@@ -32,6 +32,18 @@ func TestApplySpecCommandSegmentBackgroundNone(t *testing.T) {
 	}
 }
 
+func TestDefaultThemeSeparatesHeaderAndCommandLabels(t *testing.T) {
+	th := DefaultTheme()
+	if got, want := th.HeaderLabel.GetForeground(), lipgloss.Color("#A6A1BB"); got != want {
+		t.Fatalf("header label foreground = %q, want %q", got, want)
+	}
+	for i, segment := range th.CommandSegments {
+		if got, want := segment.Text, lipgloss.Color("#8B86A8"); got != want {
+			t.Errorf("command segment %d text = %q, want %q", i, got, want)
+		}
+	}
+}
+
 func TestApplySpecCommandSegmentBackgroundEmptyErrors(t *testing.T) {
 	spec := ThemeSpec{
 		CommandSegments: []CommandSegmentSpec{{Background: strPtr("")}},

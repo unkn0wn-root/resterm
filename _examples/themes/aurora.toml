@@ -16,7 +16,7 @@ bold = true
 foreground = "#e2e8f0"
 
 [styles.header_label]
-foreground = "#64748b"
+foreground = "#94a3b8"
 
 [styles.header_icon]
 foreground = "#38bdf8"

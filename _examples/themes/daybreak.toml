@@ -19,7 +19,7 @@ foreground = "#0f172a"
 foreground = "#2563eb"
 
 [styles.header_label]
-foreground = "#64748b"
+foreground = "#475569"
 
 [styles.header_icon]
 foreground = "#2563eb"
