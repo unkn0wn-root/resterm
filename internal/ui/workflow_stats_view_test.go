@@ -82,6 +82,17 @@ func TestWorkflowStatsRenderSplitListAndSelectedDetail(t *testing.T) {
 	}
 }
 
+func TestWorkflowStatsUsesContinuousDividers(t *testing.T) {
+	if got := stripANSIEscape(workflowDivider(4)); got != "────" {
+		t.Fatalf("expected a continuous horizontal divider, got %q", got)
+	}
+
+	joined := workflowJoinColumns([]string{"A"}, []string{"B"}, 1, 1)
+	if got := stripANSIEscape(joined[0]); got != "A │ B" {
+		t.Fatalf("expected a continuous vertical divider, got %q", got)
+	}
+}
+
 func TestWorkflowStatsFocusHeadingsUseActiveMarker(t *testing.T) {
 	view := workflowStatsTestView()
 
