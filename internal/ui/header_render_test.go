@@ -112,13 +112,18 @@ func TestHeaderDropsResponseCodeBeforeLatency(t *testing.T) {
 	model.headerTransport = headerTransportStatus{label: "200", level: statusSuccess}
 	model.latencySeries.add(180 * time.Millisecond)
 
-	view := ansi.Strip(model.renderHeader())
-	if strings.Contains(view, "200") {
-		t.Fatalf("narrow header kept the status code:\n%s", view)
+	for width := 50; width >= 30; width-- {
+		model.width = width
+		view := ansi.Strip(model.renderHeader())
+		if strings.Contains(view, "200") {
+			continue
+		}
+		if !strings.Contains(view, latLabel) {
+			t.Fatalf("header dropped latency with the status code at width %d:\n%s", width, view)
+		}
+		return
 	}
-	if !strings.Contains(view, latLabel) {
-		t.Fatalf("narrow header dropped latency:\n%s", view)
-	}
+	t.Fatal("expected the response code to be hidden at a narrow width")
 }
 
 func TestHeaderKeepsThemeBackground(t *testing.T) {
