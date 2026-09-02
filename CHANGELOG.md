@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.5.2](https://github.com/unkn0wn-root/resterm/compare/v1.5.1...v1.5.2) (2026-09-02)
+
+
+### Features
+
+* mute shortcut labels ([f6d3de1](https://github.com/unkn0wn-root/resterm/commit/f6d3de10cc3c02b4614f0e20188b2e3f16a80881))
+
 ### [1.5.1](https://github.com/unkn0wn-root/resterm/compare/v1.5.0...v1.5.1) (2026-08-31)
 
 ## [1.5.0](https://github.com/unkn0wn-root/resterm/compare/v1.4.1...v1.5.0) (2026-08-29)
