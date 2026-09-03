@@ -93,13 +93,14 @@ func (s *SourceSyntax) Line(i int) SourceLine {
 }
 
 type sourceScan struct {
-	inBlock  bool
-	inScript bool
-	workflow bool
-	request  requestScan
-	mock     mockScan
-	reader   directiveReader
-	effects  map[directiveKey]directiveEffect
+	inBlock    bool
+	inScript   bool
+	workflow   bool
+	request    requestScan
+	mock       mockScan
+	reader     directiveReader
+	optionScan directive.OptionsScanner
+	effects    map[directiveKey]directiveEffect
 }
 
 type directiveKey struct {
@@ -309,13 +310,17 @@ func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.
 	result := s.reader.read(ln.no, c.col(), c.text)
 	switch result.kind {
 	case directiveReadStarted:
+		s.optionScan = directive.OptionsScanner{}
+		if result.owner.Continuation() == directive.ContinueOptions {
+			s.optionScan.Feed(s.reader.open.d.Args)
+		}
 		return sourceComment(ln, c, SourceLineDirective, argKind(result.owner)), directive.Call{}, false
 	case directiveReadContinued:
-		return sourceDirectiveValue(ln, c, result), directive.Call{}, false
+		return sourceDirectiveValue(ln, c, result, &s.optionScan), directive.Call{}, false
 	case directiveReadCompleted:
 		return sourceComment(ln, c, SourceLineDirective, argKind(result.owner)), result.directive.Call, true
 	case directiveReadContinuationCompleted:
-		return sourceDirectiveValue(ln, c, result), result.directive.Call, true
+		return sourceDirectiveValue(ln, c, result, &s.optionScan), result.directive.Call, true
 	case directiveReadMark:
 		return sourceComment(ln, c, SourceLineDirective, directive.ArgNone), directive.Call{}, false
 	default:
@@ -323,13 +328,43 @@ func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.
 	}
 }
 
-func sourceDirectiveValue(ln line, c commentText, result directiveReadResult) SourceLine {
+func sourceDirectiveValue(
+	ln line,
+	c commentText,
+	result directiveReadResult,
+	optionValue *directive.OptionsScanner,
+) SourceLine {
 	syntax := sourceComment(ln, c, SourceLineDirectiveValue, argKind(result.owner))
-	if result.optionValueEnd > 0 {
-		end := min(result.optionValueEnd, len(c.text))
+	if result.owner.Continuation() == directive.ContinueOptions {
+		end := feedOpenOptionValue(optionValue, c.text)
 		syntax.OptionValueEnd = syntax.ContentStart + utf8.RuneCountInString(c.text[:end])
 	}
 	return syntax
+}
+
+func feedOpenOptionValue(scan *directive.OptionsScanner, src string) int {
+	if scan.Closer() == 0 {
+		scan.Feed(src)
+		return 0
+	}
+
+	for offset := 0; offset < len(src); {
+		closer := scan.Closer()
+		i := strings.IndexRune(src[offset:], closer)
+		if i < 0 {
+			scan.Feed(src[offset:])
+			return len(src)
+		}
+
+		end := offset + i + utf8.RuneLen(closer)
+		scan.Feed(src[offset:end])
+		if scan.Closer() == 0 {
+			scan.Feed(src[end:])
+			return end
+		}
+		offset = end
+	}
+	return len(src)
 }
 
 func argKind(name directive.Name) directive.ArgKind {

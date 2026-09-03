@@ -21,7 +21,7 @@ func (o *openDirective) write(text string) {
 	o.state.feed(text)
 }
 
-func (o *openDirective) add(col int, text string) int {
+func (o *openDirective) add(col int, text string) {
 	padding := max(col-1, 0)
 	if padding == 0 {
 		switch o.d.Name.Continuation() {
@@ -34,8 +34,7 @@ func (o *openDirective) add(col int, text string) int {
 	if padding > 0 {
 		o.write(strings.Repeat(" ", padding))
 	}
-	o.args.WriteString(text)
-	return o.state.feedLine(text)
+	o.write(text)
 }
 
 func (o *openDirective) collect() string {
@@ -60,11 +59,10 @@ const (
 )
 
 type directiveReadResult struct {
-	kind           directiveReadKind
-	directive      parsedDirective
-	owner          directive.Name
-	cut            *openDirective
-	optionValueEnd int
+	kind      directiveReadKind
+	directive parsedDirective
+	owner     directive.Name
+	cut       *openDirective
 }
 
 func (r directiveReadResult) completed() (parsedDirective, bool) {
@@ -101,20 +99,15 @@ func (r *directiveReader) read(no, col int, text string) directiveReadResult {
 		// A known directive ends the unfinished directive.
 		if !parsed || !call.Name.Known() {
 			owner := r.open.d.Name
-			d, done, optionValueEnd := r.grow(no, col, text)
+			d, done := r.grow(no, col, text)
 			if done {
 				return directiveReadResult{
-					kind:           directiveReadContinuationCompleted,
-					directive:      d,
-					owner:          owner,
-					optionValueEnd: optionValueEnd,
+					kind:      directiveReadContinuationCompleted,
+					directive: d,
+					owner:     owner,
 				}
 			}
-			return directiveReadResult{
-				kind:           directiveReadContinued,
-				owner:          owner,
-				optionValueEnd: optionValueEnd,
-			}
+			return directiveReadResult{kind: directiveReadContinued, owner: owner}
 		}
 		cut := r.abandon()
 		return r.readNew(no, col, call, cut)
@@ -152,22 +145,22 @@ func (r *directiveReader) readNew(no, col int, call directive.Call, cut *openDir
 	}
 }
 
-func (r *directiveReader) grow(no, col int, text string) (parsedDirective, bool, int) {
+func (r *directiveReader) grow(no, col int, text string) (parsedDirective, bool) {
 	o := r.open
 	o.d.lines.End = no
-	optionValueEnd := o.add(col, text)
+	o.add(col, text)
 
 	if !o.state.mayComplete() {
-		return parsedDirective{}, false, optionValueEnd
+		return parsedDirective{}, false
 	}
 	if closer := openCloser(o.d.Name, o.collect()); closer != "" {
 		o.closer = closer
 		// The full parse found more input to collect, so rebuild the scan state.
 		o.state = newContinuationState(o.d.Name, o.d.Args)
-		return parsedDirective{}, false, optionValueEnd
+		return parsedDirective{}, false
 	}
 	r.open = nil
-	return o.d, true, optionValueEnd
+	return o.d, true
 }
 
 // Only comments can continue an argument. A separator always ends it.
