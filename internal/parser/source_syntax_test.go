@@ -102,6 +102,53 @@ func TestSourceSyntaxMultilineDirectives(t *testing.T) {
 	}
 }
 
+func TestSourceSyntaxMultilineOptionTruncatedUTF8(t *testing.T) {
+	sources := []string{
+		"# @match json={\"a\":\"\xe2\x80\n#  \"} query={}",
+		"# @match regex=\"first\xf0\x9f\n# \" query={}",
+		"# @match json={\"a\":\"\xc3",
+	}
+
+	for _, source := range sources {
+		got := classifySource(source)
+		if got[0].Kind != SourceLineDirective {
+			t.Fatalf("classify(%q) first line kind = %s, want directive", source, got[0].Kind)
+		}
+	}
+}
+
+func TestSourceSyntaxMultilineOptionEscapeAtLineEnd(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		valueRunes int
+	}{
+		{
+			name:       "quoted value",
+			source:     "# @match regex=\"first\\\n# \" query={\"page\":\"2\"}",
+			valueRunes: 1,
+		},
+		{
+			name:       "JSON string",
+			source:     "# @match json={\"value\":\"first\\\n# \"} query={\"page\":\"2\"}",
+			valueRunes: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifySource(tt.source)
+			line := got[1]
+			if line.Kind != SourceLineDirectiveValue {
+				t.Fatalf("line kind = %s, want directive value", line.Kind)
+			}
+			if want := line.ContentStart + tt.valueRunes; line.OptionValueEnd != want {
+				t.Fatalf("option value end = %d, want %d", line.OptionValueEnd, want)
+			}
+		})
+	}
+}
+
 func TestSourceSyntaxMarksADirectiveBeingTyped(t *testing.T) {
 	tests := []struct {
 		name   string

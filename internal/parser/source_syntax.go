@@ -40,7 +40,8 @@ func (k SourceLineKind) String() string {
 	}
 }
 
-// Offsets are rune positions in the source line.
+// Offsets are rune positions in the source line. OptionValueEnd is zero unless
+// the line starts inside an option value.
 type SourceLine struct {
 	Kind           SourceLineKind
 	Args           directive.ArgKind
@@ -325,9 +326,8 @@ func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.
 
 func sourceDirectiveValue(ln line, c commentText, result directiveReadResult) SourceLine {
 	syntax := sourceComment(ln, c, SourceLineDirectiveValue, argKind(result.owner))
-	if result.optionValueEnd > 0 {
-		end := min(result.optionValueEnd, len(c.text))
-		syntax.OptionValueEnd = syntax.ContentStart + utf8.RuneCountInString(c.text[:end])
+	if n := result.optionValueLen; n > 0 {
+		syntax.OptionValueEnd = syntax.ContentStart + utf8.RuneCountInString(c.text[:n])
 	}
 	return syntax
 }

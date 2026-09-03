@@ -157,6 +157,20 @@ func TestMetadataRuneStylerColoursMultilineOptionValues(t *testing.T) {
 		assertMetadataTokenColor(t, styles, lines[1], `{"page":"2"}`, palette.SettingValue)
 	})
 
+	t.Run("escaped line ending", func(t *testing.T) {
+		lines := []string{
+			`# @match regex="first\`,
+			`# " query={"page":"2"}`,
+		}
+		styler := newMetadataRuneStyler(palette)
+		styler.SetSource(strings.Join(lines, "\n"))
+
+		styles := styler.StylesForLine([]rune(lines[1]), 1)
+		assertMetadataTokenColor(t, styles, lines[1], `"`, palette.SettingValue)
+		assertMetadataTokenColor(t, styles, lines[1], "query", palette.SettingKey)
+		assertMetadataTokenColor(t, styles, lines[1], `{"page":"2"}`, palette.SettingValue)
+	})
+
 	t.Run("expression continuation", func(t *testing.T) {
 		lines := []string{
 			"# @retry-backoff exponential(",

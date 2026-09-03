@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"unicode/utf8"
-
 	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -242,22 +240,12 @@ func (s *continuationState) feed(src string) {
 	}
 }
 
-func (s *continuationState) feedLine(src string) int {
-	if s.mode != directive.ContinueOptions || !s.options.ValueOpen() {
+func (s *continuationState) feedOpen(src string) int {
+	if s.mode != directive.ContinueOptions {
 		s.feed(src)
 		return 0
 	}
-
-	for i := range src {
-		_, size := utf8.DecodeRuneInString(src[i:])
-		end := i + size
-		s.options.Feed(src[i:end])
-		if s.options.Closer() == 0 {
-			s.options.Feed(src[end:])
-			return end
-		}
-	}
-	return len(src)
+	return s.options.FeedOpen(src)
 }
 
 func (s *continuationState) mayComplete() bool {
