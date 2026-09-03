@@ -77,7 +77,13 @@ GET https://example.com/jobs/123
 			History:     history,
 		})
 		t.Cleanup(func() { _ = eng.Close() })
-		if seed, err := eng.ExecuteRequestContext(t.Context(), doc, doc.Requests[0], testSelection("")); err != nil || seed.Err != nil {
+		if seed, err := eng.ExecuteRequestContext(
+			t.Context(),
+			doc,
+			doc.Requests[0],
+			testSelection(""),
+		); err != nil ||
+			seed.Err != nil {
 			t.Fatalf("seed request = err %v, result error %v", err, seed.Err)
 		}
 		result, err := eng.ExecuteRequestContext(t.Context(), doc, doc.Requests[1], testSelection(""))
@@ -119,7 +125,10 @@ func TestExecuteRequestRejectsNonBooleanPollPredicate(t *testing.T) {
 			}, nil
 		})}, nil
 	})
-	doc := parser.Parse("jobs.http", []byte("# @poll timeout=1s until=response.json().status\nGET https://example.com/jobs/123\n"))
+	doc := parser.Parse(
+		"jobs.http",
+		[]byte("# @poll timeout=1s until=response.json().status\nGET https://example.com/jobs/123\n"),
+	)
 	if err := parser.Check(doc); err != nil {
 		t.Fatalf("parse request: %v", err)
 	}

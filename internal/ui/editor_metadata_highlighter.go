@@ -11,19 +11,10 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
-
-// An unknown name still paints a token value. The zero Spec.Args is ArgNone,
-// which would hide the value, so the fallback has to be spelled out.
-func directiveArgKind(name directive.Name) directive.ArgKind {
-	spec, ok := directive.Lookup(name)
-	if !ok {
-		return directive.ArgToken
-	}
-	return spec.Args
-}
 
 // stylePainter fills styles lazily so a line with nothing painted returns nil.
 type stylePainter struct {
@@ -58,6 +49,7 @@ type metadataRuneStyler struct {
 	requestLineEnabled  bool
 	requestSepStyle     lipgloss.Style
 	requestSepEnabled   bool
+	syntax              parser.SourceSyntax
 	cache               map[int]lineCache
 }
 
@@ -68,7 +60,7 @@ type lineCache struct {
 	styles   []lipgloss.Style
 }
 
-func newMetadataRuneStyler(p theme.EditorMetadataPalette) textarea.RuneStyler {
+func newMetadataRuneStyler(p theme.EditorMetadataPalette) *metadataRuneStyler {
 	s := &metadataRuneStyler{
 		palette:         p,
 		directiveStyles: make(map[string]lipgloss.Style),
@@ -121,6 +113,11 @@ func selectEditorRuneStyler(path string, palette theme.EditorMetadataPalette) te
 	return newMetadataRuneStyler(palette)
 }
 
+func (s *metadataRuneStyler) SetSource(source string) {
+	s.syntax.Classify(source)
+	clear(s.cache)
+}
+
 func (s *metadataRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Style {
 	if len(line) == 0 {
 		delete(s.cache, idx)
@@ -133,72 +130,107 @@ func (s *metadataRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Styl
 		return cached.styles
 	}
 
-	styles := s.computeStyles(line)
+	styles := s.computeStyles(line, s.syntax.Line(idx))
 	s.cache[idx] = lineCache{hash: lineHash, length: len(line), computed: true, styles: styles}
 	return styles
 }
 
-func (s *metadataRuneStyler) computeStyles(line []rune) []lipgloss.Style {
-	i := skipSpace(line, 0)
-	if i >= len(line) {
+func (s *metadataRuneStyler) computeStyles(line []rune, syntax parser.SourceLine) []lipgloss.Style {
+	start := skipSpace(line, 0)
+	if start >= len(line) {
 		return nil
 	}
 
-	if styles := s.requestLineStyles(line, i); styles != nil {
-		return styles
-	}
-
-	if styles := s.requestSeparatorStyles(line, i); styles != nil {
-		return styles
-	}
-
-	markerStart := i
-	markerLen := commentMarkerLength(line, i)
-	if markerLen == 0 {
+	switch syntax.Kind {
+	case parser.SourceLineCode:
+		return s.requestLineStyles(line, start)
+	case parser.SourceLineComment:
+		return s.proseStyles(line, start)
+	case parser.SourceLineDirective:
+		return s.directiveLineStyles(line, start, syntax)
+	case parser.SourceLineDirectiveValue:
+		return s.directiveValueStyles(line, start, syntax)
+	case parser.SourceLineRequestSeparator:
+		return s.separatorStyles(line, start)
+	default:
 		return nil
 	}
+}
 
-	directiveStart := skipSpace(line, markerStart+markerLen)
-	if directiveStart >= len(line) || line[directiveStart] != '@' {
+func (s *metadataRuneStyler) proseStyles(line []rune, start int) []lipgloss.Style {
+	if !s.commentEnabled {
 		return nil
 	}
+	return fillFrom(line, start, s.commentStyle)
+}
 
+func (s *metadataRuneStyler) directiveLineStyles(
+	line []rune,
+	start int,
+	syntax parser.SourceLine,
+) []lipgloss.Style {
 	p := &stylePainter{n: len(line)}
+	nameStart, end, ok := syntax.ContentRange(len(line))
 	if s.commentEnabled {
-		p.paint(markerStart, markerStart+markerLen, s.commentStyle)
+		p.paint(start, nameStart, s.commentStyle)
 	}
-
-	directiveEnd := directiveStart + 1
-	for directiveEnd < len(line) && isDirectiveRune(line[directiveEnd]) {
-		directiveEnd++
-	}
-	directiveKey := strings.ToLower(string(line[directiveStart+1 : directiveEnd]))
-
-	if dirStyle, ok := s.directiveStyle(directiveKey); ok {
-		p.paint(directiveStart, directiveEnd, dirStyle)
-	}
-
-	valueStart := skipArgSep(line, directiveEnd)
-	if valueStart >= len(line) {
+	if !ok {
 		return p.styles
 	}
 
-	switch directiveArgKind(directive.Name(directiveKey)) {
+	nameEnd := nameStart + 1
+	for nameEnd < end && isDirectiveRune(line[nameEnd]) {
+		nameEnd++
+	}
+	if style, ok := s.directiveStyle(strings.ToLower(string(line[nameStart+1 : nameEnd]))); ok {
+		p.paint(nameStart, nameEnd, style)
+	}
+
+	s.paintArgument(p, line, syntax.Args, skipArgSep(line, nameEnd, end), end)
+	return p.styles
+}
+
+func (s *metadataRuneStyler) directiveValueStyles(
+	line []rune,
+	start int,
+	syntax parser.SourceLine,
+) []lipgloss.Style {
+	p := &stylePainter{n: len(line)}
+	valueStart, end, ok := syntax.ContentRange(len(line))
+	if s.commentEnabled {
+		p.paint(start, valueStart, s.commentStyle)
+	}
+	if ok {
+		s.paintArgument(p, line, syntax.Args, valueStart, end)
+	}
+	return p.styles
+}
+
+func (s *metadataRuneStyler) paintArgument(
+	p *stylePainter,
+	line []rune,
+	args directive.ArgKind,
+	start, end int,
+) {
+	if start >= end {
+		return
+	}
+
+	switch args {
 	case directive.ArgNone:
 	case directive.ArgSetting:
-		s.applySettingStyles(p, line, valueStart)
+		s.applySettingStyles(p, line, start, end)
 	case directive.ArgOptions:
-		s.applyOptionStyles(p, line, valueStart)
+		s.applyOptionStyles(p, line, start, end)
 	case directive.ArgText:
 		if s.valueEnabled {
-			p.paint(valueStart, len(line), s.valueStyle)
+			p.paint(start, end, s.valueStyle)
 		}
 	case directive.ArgToken:
 		if s.valueEnabled {
-			p.paint(valueStart, readToken(line, valueStart), s.valueStyle)
+			p.paint(start, readToken(line, start, end), s.valueStyle)
 		}
 	}
-	return p.styles
 }
 
 func (s *metadataRuneStyler) directiveStyle(key string) (lipgloss.Style, bool) {
@@ -220,16 +252,19 @@ func (s *metadataRuneStyler) directiveStyle(key string) (lipgloss.Style, bool) {
 	return style, true
 }
 
-func (s *metadataRuneStyler) applySettingStyles(p *stylePainter, line []rune, start int) {
+func (s *metadataRuneStyler) applySettingStyles(
+	p *stylePainter,
+	line []rune,
+	start, end int,
+) {
 	if !s.settingKeyEnabled && !s.settingValueEnabled {
 		return
 	}
 
-	// The @settings spelling. putSetting reads it with ParseOptions, so it gets
-	// painted the way @settings is.
-	tokEnd := readToken(line, start)
+	// @setting also accepts the @settings key=value form.
+	tokEnd := readToken(line, start, end)
 	if slices.Contains(line[start:tokEnd], '=') {
-		s.applyOptionStyles(p, line, start)
+		s.applyOptionStyles(p, line, start, end)
 		return
 	}
 
@@ -241,20 +276,24 @@ func (s *metadataRuneStyler) applySettingStyles(p *stylePainter, line []rune, st
 		p.paint(start, keyEnd, s.settingKeyStyle)
 	}
 	if s.settingValueEnabled {
-		p.paint(skipSpace(line, tokEnd), len(line), s.settingValueStyle)
+		p.paint(skipSpaceTo(line, tokEnd, end), end, s.settingValueStyle)
 	}
 }
 
-func (s *metadataRuneStyler) applyOptionStyles(p *stylePainter, line []rune, start int) {
+func (s *metadataRuneStyler) applyOptionStyles(
+	p *stylePainter,
+	line []rune,
+	start, end int,
+) {
 	if s.valueEnabled {
-		p.paint(start, len(line), s.valueStyle)
+		p.paint(start, end, s.valueStyle)
 	}
 	if !s.settingKeyEnabled && !s.settingValueEnabled {
 		return
 	}
 
 	// Spans are byte offsets in rest. The cursor turns them into rune indexes.
-	rest := string(line[start:])
+	rest := string(line[start:end])
 	b, r := 0, start
 	runeAt := func(off int) int {
 		for b < off {
@@ -289,40 +328,32 @@ func hashRunes(runes []rune) uint64 {
 }
 
 func (s *metadataRuneStyler) requestLineStyles(line []rune, start int) []lipgloss.Style {
-	if !s.requestLineEnabled {
+	if !s.requestLineEnabled || !isRequestLine(line, start) {
 		return nil
 	}
-
-	if !isRequestLine(line, start) {
-		return nil
-	}
-
-	styles := make([]lipgloss.Style, len(line))
-	for idx := start; idx < len(line); idx++ {
-		styles[idx] = s.requestLineStyle
-	}
-	return styles
+	return fillFrom(line, start, s.requestLineStyle)
 }
 
-func (s *metadataRuneStyler) requestSeparatorStyles(line []rune, start int) []lipgloss.Style {
+func (s *metadataRuneStyler) separatorStyles(line []rune, start int) []lipgloss.Style {
 	if !s.requestSepEnabled {
 		return nil
 	}
+	return fillFrom(line, start, s.requestSepStyle)
+}
 
-	if !hasRequestSeparatorPrefix(line, start) {
-		return nil
-	}
-
-	styles := make([]lipgloss.Style, len(line))
-	for idx := start; idx < len(line); idx++ {
-		styles[idx] = s.requestSepStyle
-	}
-	return styles
+func fillFrom(line []rune, start int, style lipgloss.Style) []lipgloss.Style {
+	p := stylePainter{n: len(line)}
+	p.paint(start, len(line), style)
+	return p.styles
 }
 
 func skipSpace(line []rune, start int) int {
+	return skipSpaceTo(line, start, len(line))
+}
+
+func skipSpaceTo(line []rune, start, end int) int {
 	i := start
-	for i < len(line) && unicode.IsSpace(line[i]) {
+	for i < end && unicode.IsSpace(line[i]) {
 		i++
 	}
 	return i
@@ -330,45 +361,21 @@ func skipSpace(line []rune, start int) int {
 
 // The colon in "@name: value" separates, it is not part of the value, so the
 // styling starts past it.
-func skipArgSep(line []rune, start int) int {
+func skipArgSep(line []rune, start, end int) int {
 	i := start
-	for i < len(line) && directive.IsArgSep(line[i]) {
+	for i < end && directive.IsArgSep(line[i]) {
 		i++
 	}
 	return i
-}
-
-func hasRequestSeparatorPrefix(line []rune, start int) bool {
-	if len(line)-start < 3 {
-		return false
-	}
-	if string(line[start:start+3]) != "###" {
-		return false
-	}
-	if len(line) == start+3 {
-		return true
-	}
-	return unicode.IsSpace(line[start+3])
-}
-
-func commentMarkerLength(line []rune, idx int) int {
-	switch {
-	case line[idx] == '#':
-		return 1
-	case line[idx] == '/' && idx+1 < len(line) && line[idx+1] == '/':
-		return 2
-	default:
-		return 0
-	}
 }
 
 func isDirectiveRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.'
 }
 
-func readToken(line []rune, start int) int {
+func readToken(line []rune, start, end int) int {
 	i := start
-	for i < len(line) && !unicode.IsSpace(line[i]) {
+	for i < end && !unicode.IsSpace(line[i]) {
 		i++
 	}
 	return i
@@ -379,7 +386,7 @@ func isRequestLine(line []rune, start int) bool {
 		return false
 	}
 
-	end := readToken(line, start)
+	end := readToken(line, start, len(line))
 	if end <= start {
 		return false
 	}

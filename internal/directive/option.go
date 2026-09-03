@@ -59,14 +59,7 @@ func OptionsOpen(input string) rune {
 	lex := &lexer{src: input, escapes: true}
 	var closer rune
 	for _, ok := lex.next(); ok; _, ok = lex.next() {
-		switch {
-		case len(lex.closers) > 0:
-			closer = lex.closers[len(lex.closers)-1]
-		case lex.quote != 0:
-			closer = lex.quote
-		default:
-			closer = 0
-		}
+		closer = lex.field.closer()
 	}
 	return closer
 }

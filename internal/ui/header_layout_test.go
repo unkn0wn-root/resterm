@@ -149,7 +149,7 @@ func TestBuildHeaderLineLeftOnly(t *testing.T) {
 
 func TestFitHeaderSegmentsUsesSegmentSeparatorWidth(t *testing.T) {
 	segs := headerTextSegments("A", "BB")
-	segs[0].separatorAfter = " || "
+	segs[1].separator = " || "
 
 	line, width := fitHeaderSegments(segs, " ", 1, 6)
 	if got := ansi.Strip(line); got != "A" {
@@ -162,7 +162,7 @@ func TestFitHeaderSegmentsUsesSegmentSeparatorWidth(t *testing.T) {
 
 func TestBuildHeaderLineUsesGroupSeparatorWithoutTrailingDivider(t *testing.T) {
 	segs := headerTextSegments("BRAND", "ENV", "WORKSPACE")
-	segs[0].separatorAfter = headerGroupSep
+	segs[1].separator = headerGroupSep
 
 	line := buildHeaderLine(
 		segs,

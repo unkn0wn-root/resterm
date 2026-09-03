@@ -548,6 +548,31 @@ func TestOptionsOpen(t *testing.T) {
 	}
 }
 
+func TestOptionsScannerMatchesOptionsOpenAtEveryChunkBoundary(t *testing.T) {
+	inputs := []string{
+		`json={"a":{"b":[1, 2]}} regex="^v[0-9]+$"`,
+		`json={"a":"\\\"}"}`,
+		`regex="first\nsecond"`,
+		"one=true\u2003json={\"a\": 1}",
+		`latency=random(1s, 2s)`,
+		`json={ headers={"X":"y"}`,
+		`regex="unfinished\\`,
+		`json={"a": 1}	"`,
+		"\"\xe2\x80",
+	}
+
+	for _, input := range inputs {
+		for cut := range len(input) + 1 {
+			var scan OptionsScanner
+			scan.Feed(input[:cut])
+			scan.Feed(input[cut:])
+			if got, want := scan.Closer(), OptionsOpen(input); got != want {
+				t.Fatalf("chunks [%q, %q] closed with %q, whole read gives %q", input[:cut], input[cut:], got, want)
+			}
+		}
+	}
+}
+
 // Options only ever fill through put, so tests see what a directive would store.
 func testOptions(vals map[string]string) Options {
 	opts := newOptions(len(vals))

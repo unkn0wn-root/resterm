@@ -12,38 +12,26 @@ func (b *documentBuilder) handleComment(no, baseCol int, text string) {
 }
 
 func (b *documentBuilder) handleBlockComment(ln line) bool {
-	if b.inBlock {
-		content, closed := parseBlockCommentLine(ln.text)
-		if content != "" {
-			b.handleComment(ln.no, 0, content)
-		}
-		b.appendLine(ln.raw)
-		if closed {
-			b.inBlock = false
-		}
-		return true
+	opening := !b.inBlock
+	if opening && !ln.isBlockCommentStart() {
+		return false
 	}
 
-	if ln.isBlockCommentStart() {
-		content, closed := cutBlockCommentStart(ln.text)
-		if content != "" {
-			b.handleComment(ln.no, 0, content)
-		}
-		b.appendLine(ln.raw)
-		if !closed {
-			b.inBlock = true
-		}
-		return true
+	c, closed := ln.blockComment(opening)
+	if c.text != "" {
+		b.handleComment(ln.no, 0, c.text)
 	}
-	return false
+	b.appendLine(ln.raw)
+	b.inBlock = !closed
+	return true
 }
 
 func (b *documentBuilder) handleCommentLine(ln line) bool {
-	text, col, ok := ln.comment()
+	c, ok := ln.comment()
 	if !ok {
 		return false
 	}
-	b.handleComment(ln.no, col, text)
+	b.handleComment(ln.no, c.col(), c.text)
 	b.appendLine(ln.raw)
 	return true
 }

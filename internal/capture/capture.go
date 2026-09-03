@@ -34,30 +34,12 @@ type strictAliasState struct {
 	conflict bool
 }
 
-type exprScanner struct {
-	s   string
-	i   int
+type quoteScan struct {
 	q   byte
 	esc bool
 }
 
-func newExprScanner(s string) *exprScanner {
-	return &exprScanner{s: s}
-}
-
-func (sc *exprScanner) done() bool {
-	return sc.i >= len(sc.s)
-}
-
-func (sc *exprScanner) ch() byte {
-	return sc.s[sc.i]
-}
-
-func (sc *exprScanner) advance(n int) {
-	sc.i += n
-}
-
-func (sc *exprScanner) inQuoted(ch byte) bool {
+func (sc *quoteScan) inQuoted(ch byte) bool {
 	if sc.q == 0 {
 		return false
 	}
@@ -75,12 +57,34 @@ func (sc *exprScanner) inQuoted(ch byte) bool {
 	return true
 }
 
-func (sc *exprScanner) openQuote(ch byte) bool {
+func (sc *quoteScan) openQuote(ch byte) bool {
 	if !isQuote(ch) {
 		return false
 	}
 	sc.q = ch
 	return true
+}
+
+type exprScanner struct {
+	quoteScan
+	s string
+	i int
+}
+
+func newExprScanner(s string) *exprScanner {
+	return &exprScanner{s: s}
+}
+
+func (sc *exprScanner) done() bool {
+	return sc.i >= len(sc.s)
+}
+
+func (sc *exprScanner) ch() byte {
+	return sc.s[sc.i]
+}
+
+func (sc *exprScanner) advance(n int) {
+	sc.i += n
 }
 
 func HasUnquotedTemplateMarker(ex string) bool {
@@ -109,6 +113,76 @@ type templateScan struct {
 	rem  string // the text left once the closed markers are cut out
 	has  bool   // a marker closed
 	open bool   // the last marker never closed
+}
+
+type TemplateState uint8
+
+const (
+	TemplateNone TemplateState = iota
+	TemplateClosed
+	TemplateOpen
+)
+
+type TemplateScanner struct {
+	quoteScan
+	pendingOpen  bool
+	pendingClose bool
+	open         bool
+	closed       bool
+}
+
+func (s *TemplateScanner) Feed(src string) {
+	for i := range len(src) {
+		s.feedByte(src[i])
+	}
+}
+
+func (s *TemplateScanner) State() TemplateState {
+	if s.open {
+		return TemplateOpen
+	}
+	if s.closed {
+		return TemplateClosed
+	}
+	return TemplateNone
+}
+
+func (s *TemplateScanner) feedByte(ch byte) {
+	if s.open {
+		s.feedMarkerByte(ch)
+		return
+	}
+	if s.inQuoted(ch) {
+		return
+	}
+	// Clear a pending "{" before a quote starts.
+	if s.pendingOpen {
+		s.pendingOpen = false
+		if ch == '{' {
+			s.open = true
+			return
+		}
+	}
+	if s.openQuote(ch) {
+		return
+	}
+	if ch == '{' {
+		s.pendingOpen = true
+	}
+}
+
+func (s *TemplateScanner) feedMarkerByte(ch byte) {
+	if s.pendingClose {
+		s.pendingClose = false
+		if ch == '}' {
+			s.open = false
+			s.closed = true
+			return
+		}
+	}
+	if ch == '}' {
+		s.pendingClose = true
+	}
 }
 
 // scanTemplates ignores markers inside quoted RTS strings.

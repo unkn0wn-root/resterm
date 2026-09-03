@@ -410,7 +410,7 @@ func TestParseDirectiveExpressionColumns(t *testing.T) {
 }
 
 func TestSplitAssertEscapes(t *testing.T) {
-	expr, msg := splitAssert(`contains(body, "a=>b") => "ok"`)
+	expr, msg, _ := splitAssert(`contains(body, "a=>b") => "ok"`)
 	if expr != `contains(body, "a=>b")` {
 		t.Fatalf("unexpected expr: %q", expr)
 	}
@@ -418,7 +418,7 @@ func TestSplitAssertEscapes(t *testing.T) {
 		t.Fatalf("unexpected msg: %q", msg)
 	}
 
-	expr, msg = splitAssert(`contains(body, "a\"=>b") => "ok"`)
+	expr, msg, _ = splitAssert(`contains(body, "a\"=>b") => "ok"`)
 	if expr != `contains(body, "a\"=>b")` {
 		t.Fatalf("unexpected escaped expr: %q", expr)
 	}

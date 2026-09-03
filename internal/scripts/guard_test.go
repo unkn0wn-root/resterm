@@ -92,8 +92,7 @@ func TestPreRequestStopsAtTheScriptTimeout(t *testing.T) {
 }
 
 func TestGuardReleasesItsWatcher(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	before := runtime.NumGoroutine()
 	runner := NewRunner(nil)

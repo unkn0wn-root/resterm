@@ -46,12 +46,13 @@ const (
 )
 
 const (
-	iconHeaderWorkspace = "▣"
-	iconHeaderEnv       = "⬢"
-	iconHeaderRequests  = "⇄"
-	iconHeaderActive    = "◨"
-	labelHeaderEnv      = "env"
-	labelHeaderRequests = "req"
+	iconHeaderWorkspace  = "▣"
+	iconHeaderEnv        = "⬢"
+	iconHeaderRequests   = "⇄"
+	iconHeaderActive     = "›"
+	labelHeaderEnv       = "env"
+	labelHeaderRequests  = "req"
+	labelHeaderWorkspace = "workspace"
 )
 
 type testStatus string
@@ -1912,14 +1913,18 @@ func renderCommandKeycap(
 	return content
 }
 
-// headerCell is a header segment before rendering. values carries the same
-// information from longest to shortest.
+// headerCell is a header segment before rendering. labels and values each carry
+// the same information from longest to shortest, so a cell can give up words
+// before it gives up characters. A labels list ending in "" drops the label
+// entirely and leaves the icon to stand for it. separator is the glue drawn
+// before the cell, so it survives whichever neighbour the fitter keeps.
 type headerCell struct {
-	icon     string
-	label    string
-	values   []string
-	style    lipgloss.Style
-	priority int
+	icon      string
+	labels    []string
+	values    []string
+	style     lipgloss.Style
+	priority  int
+	separator string
 }
 
 // Each style includes the header background because ANSI resets clear it.
@@ -1993,12 +1998,40 @@ func (s headerStyles) forTests(status testStatus) lipgloss.Style {
 	return s.fail
 }
 
-func (s headerStyles) cell(c headerCell, value string) string {
+func (s headerStyles) cell(c headerCell, label, value string) string {
 	prefix := s.icon.Render(c.icon)
-	if c.label != "" {
-		prefix += s.label.Render(" " + c.label)
+	if label != "" {
+		prefix += s.label.Render(" " + label)
 	}
 	return prefix + s.label.Render(" ") + c.style.Render(value)
+}
+
+// cellVariants renders a cell widest first: every label wording against the
+// widest value, then the shortest label against each narrower value. Both lists
+// must run widest to narrowest, since the fitter needs each step to save room.
+func (s headerStyles) cellVariants(c headerCell, limit int) ([]string, int) {
+	values, lossy := headerCellVariants(c.values, limit)
+	labels := c.labels
+	if len(labels) == 0 {
+		labels = []string{""}
+	}
+
+	short := labels[len(labels)-1]
+	text := make([]string, 0, len(labels)-1+len(values))
+	for _, label := range labels[:len(labels)-1] {
+		text = append(text, s.cell(c, label, values[0]))
+	}
+	for _, value := range values {
+		text = append(text, s.cell(c, short, value))
+	}
+
+	// Shorter label wordings say the same thing, so truncation still starts at
+	// the same value, just further down the list. A lossy of 0 stays 0: values[0]
+	// is already truncated, so every label wording of it is too.
+	if lossy > 0 {
+		lossy += len(labels) - 1
+	}
+	return text, lossy
 }
 
 func (m *Model) renderHeader() string {
@@ -2014,26 +2047,30 @@ func (m *Model) renderHeader() string {
 	styles := m.headerStyles()
 	cells := []headerCell{
 		{
-			icon:     iconHeaderEnv,
-			label:    labelHeaderEnv,
-			values:   m.headerEnvVariants(),
-			style:    styles.value,
-			priority: headerPriorityEnv,
+			icon:      iconHeaderEnv,
+			labels:    []string{labelHeaderEnv},
+			values:    m.headerEnvVariants(),
+			style:     styles.value,
+			priority:  headerPriorityEnv,
+			separator: styles.group,
 		},
 		{
 			icon:     iconHeaderWorkspace,
+			labels:   []string{labelHeaderWorkspace, ""},
 			values:   []string{workspace},
 			style:    styles.value,
 			priority: headerPriorityWorkspace,
 		},
 		{
 			icon:     iconHeaderRequests,
-			label:    labelHeaderRequests,
+			labels:   []string{labelHeaderRequests},
 			values:   []string{strconv.Itoa(len(m.requestItems))},
 			style:    styles.value,
 			priority: headerPriorityRequests,
 		},
-		m.headerActiveCell(styles, request),
+	}
+	if request != "" {
+		cells = append(cells, m.headerActiveCell(styles, request))
 	}
 
 	if summary, status, ok := m.headerTestStatus(); ok {
@@ -2051,20 +2088,16 @@ func (m *Model) renderHeader() string {
 
 	segments := make([]headerSegment, 0, len(cells)+1)
 	segments = append(segments, headerSegment{
-		text:           []string{styles.brand.Render(headerBrandName)},
-		priority:       headerPriorityBrand,
-		separatorAfter: styles.group,
+		text:     []string{styles.brand.Render(headerBrandName)},
+		priority: headerPriorityBrand,
 	})
 	for _, cell := range cells {
-		values, lossy := headerCellVariants(cell.values, limit)
-		text := make([]string, 0, len(values))
-		for _, value := range values {
-			text = append(text, styles.cell(cell, value))
-		}
+		text, lossy := styles.cellVariants(cell, limit)
 		segments = append(segments, headerSegment{
-			text:     text,
-			lossy:    lossy,
-			priority: cell.priority,
+			text:      text,
+			lossy:     lossy,
+			priority:  cell.priority,
+			separator: cell.separator,
 		})
 	}
 
@@ -2090,15 +2123,13 @@ func headerRule(st lipgloss.Style, width int) string {
 }
 
 func (m *Model) headerActiveCell(styles headerStyles, request string) headerCell {
-	cell := headerCell{icon: iconHeaderActive, priority: headerPriorityActive}
-	if request == "" {
-		cell.values = []string{"none selected", "none"}
-		cell.style = styles.label
-		return cell
+	cell := headerCell{
+		icon:      iconHeaderActive,
+		values:    []string{request},
+		style:     styles.value,
+		priority:  headerPriorityActive,
+		separator: styles.fill.Render(" "),
 	}
-
-	cell.values = []string{request}
-	cell.style = styles.value
 	if m.currentRequest != nil {
 		cell.style = cell.style.Foreground(methodColor(m.theme, m.currentRequest.Method))
 	}

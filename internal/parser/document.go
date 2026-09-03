@@ -21,7 +21,7 @@ type documentBuilder struct {
 	request              *requestBuilder
 	mock                 *mockBuilder
 	workflow             *workflowBuilder
-	open                 *openDirective
+	reader               directiveReader
 	openLines            []string
 	pendingTitle         string
 	file                 fileScope
@@ -228,7 +228,7 @@ func (b *documentBuilder) appendLine(raw string) {
 		b.request.originalLines = append(b.request.originalLines, raw)
 		return
 	}
-	if b.open != nil {
+	if _, open := b.reader.pending(); open {
 		b.openLines = append(b.openLines, raw)
 	}
 }
@@ -276,8 +276,8 @@ func (b *documentBuilder) flushWorkflow(line int) {
 }
 
 func (b *documentBuilder) finish() {
-	if b.open != nil {
-		b.failOpenDirective()
+	if cut := b.reader.abandon(); cut != nil {
+		b.failOpenDirective(cut)
 	}
 	b.flushMock()
 	b.flushRequest(0)

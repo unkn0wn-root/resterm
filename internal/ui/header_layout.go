@@ -33,11 +33,13 @@ const headerValueFloor = 8
 // everything before it is an alternative wording that says the same thing in
 // less room. The fitter shrinks cells one step at a time, spending every lossless
 // rendering before it truncates anything and truncating before it drops a cell.
+// separator is the glue drawn before this segment, so a cell that needs unusual
+// glue keeps it whichever neighbour survives.
 type headerSegment struct {
-	text           []string
-	lossy          int
-	priority       int
-	separatorAfter string
+	text      []string
+	lossy     int
+	priority  int
+	separator string
 }
 
 func headerContentWidth(total int, style lipgloss.Style) int {
@@ -162,8 +164,8 @@ func fitHeaderSegments(segs []headerSegment, sep string, sepW, limit int) (strin
 	for i, seg := range segs {
 		widths[i] = headerSegmentWidths(seg.text)
 		separatorWidths[i] = sepW
-		if seg.separatorAfter != "" {
-			separatorWidths[i] = lipgloss.Width(seg.separatorAfter)
+		if seg.separator != "" {
+			separatorWidths[i] = lipgloss.Width(seg.separator)
 		}
 	}
 
@@ -252,7 +254,7 @@ func headerLineWidth(widths [][]int, separatorWidths, keep, levels []int) int {
 	total := 0
 	for n, i := range keep {
 		if n > 0 {
-			total += separatorWidths[keep[n-1]]
+			total += separatorWidths[i]
 		}
 		total += widths[i][levels[i]]
 	}
@@ -263,7 +265,7 @@ func joinHeaderSegments(segs []headerSegment, keep, levels []int, sep string) st
 	parts := make([]string, 0, 2*len(keep))
 	for n, i := range keep {
 		if n > 0 {
-			separator := segs[keep[n-1]].separatorAfter
+			separator := segs[i].separator
 			if separator == "" {
 				separator = sep
 			}
