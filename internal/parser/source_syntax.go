@@ -315,6 +315,8 @@ func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.
 		return sourceComment(ln, c, SourceLineDirective, argKind(result.owner)), result.directive.Call, true
 	case directiveReadContinuationCompleted:
 		return sourceComment(ln, c, SourceLineDirectiveValue, argKind(result.owner)), result.directive.Call, true
+	case directiveReadMark:
+		return sourceComment(ln, c, SourceLineDirective, directive.ArgNone), directive.Call{}, false
 	default:
 		return sourceComment(ln, c, SourceLineComment, 0), directive.Call{}, false
 	}

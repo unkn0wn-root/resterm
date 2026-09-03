@@ -96,6 +96,84 @@ func TestSourceSyntaxMultilineDirectives(t *testing.T) {
 	}
 }
 
+func TestSourceSyntaxMarksADirectiveBeingTyped(t *testing.T) {
+	tests := []struct {
+		name   string
+		source []string
+		line   int
+		want   SourceLineKind
+	}{
+		{
+			name:   "file scope",
+			source: []string{"# @"},
+			want:   SourceLineDirective,
+		},
+		{
+			name:   "separator instead of a name",
+			source: []string{"# @:"},
+			want:   SourceLineComment,
+		},
+		{
+			name:   "separator before a name",
+			source: []string{"# @:x"},
+			want:   SourceLineComment,
+		},
+		{
+			name:   "block comment",
+			source: []string{"/**", " * @", " */"},
+			line:   1,
+			want:   SourceLineDirective,
+		},
+		{
+			name:   "mock preamble",
+			source: []string{"# @mock method=GET path=/health", "# @", "HTTP/1.1 200 OK"},
+			line:   1,
+			want:   SourceLineDirective,
+		},
+		{
+			name:   "line an argument runs on",
+			source: []string{"# @assert sum(", "# @"},
+			line:   1,
+			want:   SourceLineDirectiveValue,
+		},
+		{
+			name:   "script block",
+			source: []string{"# @script test", "> {%", "# @", "> %}"},
+			line:   2,
+			want:   SourceLineLiteral,
+		},
+		{
+			name:   "mock response body",
+			source: []string{"# @mock method=GET path=/health", "HTTP/1.1 200 OK", "", "# @"},
+			line:   3,
+			want:   SourceLineLiteral,
+		},
+		{
+			name: "multipart part",
+			source: []string{
+				"POST https://example.test",
+				"Content-Type: multipart/form-data; boundary=B",
+				"",
+				"--B",
+				"",
+				"# @",
+				"--B--",
+			},
+			line: 5,
+			want: SourceLineLiteral,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifySource(strings.Join(tt.source, "\n"))[tt.line]
+			if got.Kind != tt.want {
+				t.Fatalf("line %d kind = %v, want %v", tt.line+1, got.Kind, tt.want)
+			}
+		})
+	}
+}
+
 func TestSourceSyntaxKeepsLiteralContentUnclassified(t *testing.T) {
 	tests := []struct {
 		name   string

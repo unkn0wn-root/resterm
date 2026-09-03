@@ -7,8 +7,15 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/unkn0wn-root/resterm/internal/intellisense"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
+
+type completionLines []string
+
+func (l completionLines) LineCount() int         { return len(l) }
+func (l completionLines) LineRunes(i int) []rune { return []rune(l[i]) }
 
 func TestMetadataRuneStylerNameDirective(t *testing.T) {
 	palette := theme.DefaultTheme().EditorMetadata
@@ -109,6 +116,35 @@ func TestMetadataRuneStylerColoursEveryLineOfAnArgument(t *testing.T) {
 	prose := lines[3]
 	styles := styler.StylesForLine([]rune(prose), 3)
 	assertMetadataTokenColor(t, styles, prose, "ordinary prose", palette.CommentMarker)
+}
+
+func TestDirectiveMarkMatchesCompletion(t *testing.T) {
+	lines := completionLines{"# @", "# @:", "# @:x", "# @::", "# ordinary prose", "#"}
+
+	var syntax parser.SourceSyntax
+	syntax.Classify(strings.Join(lines, "\n"))
+
+	for no, line := range lines {
+		ctx, ok := intellisense.Analyze(lines, no, len([]rune(line)))
+		opens := ok && ctx.Kind == intellisense.KindDirective
+		coloured := syntax.Line(no).Kind == parser.SourceLineDirective
+		if opens != coloured {
+			t.Fatalf("%q: completion opens = %v, editor colours a directive = %v", line, opens, coloured)
+		}
+	}
+}
+
+func TestMetadataRuneStylerColoursADirectiveMarkBeingTyped(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+
+	line := "# @"
+	styles := styleLine(styler, line)
+	if styles == nil {
+		t.Fatal("a directive being typed has no styles")
+	}
+	assertMetadataTokenColor(t, styles, line, "#", palette.CommentMarker)
+	assertMetadataTokenColor(t, styles, line, "@", palette.DirectiveDefault)
 }
 
 func TestMetadataRuneStylerSourceChangeInvalidatesContext(t *testing.T) {

@@ -51,6 +51,7 @@ type directiveReadKind uint8
 
 const (
 	directiveReadNone directiveReadKind = iota
+	directiveReadMark                   // Bare @ typed before a directive name.
 	directiveReadStarted
 	directiveReadContinued
 	directiveReadCompleted
@@ -112,6 +113,9 @@ func (r *directiveReader) read(no, col int, text string) directiveReadResult {
 		return r.readNew(no, col, call, cut)
 	}
 	if !parsed {
+		if text == "@" {
+			return directiveReadResult{kind: directiveReadMark}
+		}
 		return directiveReadResult{}
 	}
 	return r.readNew(no, col, call, nil)
