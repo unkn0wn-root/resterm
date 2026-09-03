@@ -58,8 +58,8 @@ func TestSourceSyntaxMultilineDirectives(t *testing.T) {
 		"# )",
 		"# ordinary prose",
 		"# @match json={",
-		`# "a": 1`,
-		"# }",
+		`# "å": 1`,
+		`# } headers={"X-Env":"test"}`,
 		"# @mock method=GET path=/health",
 		"HTTP/1.1 200 OK",
 		"",
@@ -91,8 +91,61 @@ func TestSourceSyntaxMultilineDirectives(t *testing.T) {
 			t.Fatalf("line %d args = %d, want options", no+1, got[no].Args)
 		}
 	}
+	if got[5].OptionValueEnd != got[5].ContentEnd {
+		t.Fatalf("line 6 option value end = %d, want %d", got[5].OptionValueEnd, got[5].ContentEnd)
+	}
+	if want := got[6].ContentStart + 1; got[6].OptionValueEnd != want {
+		t.Fatalf("line 7 option value end = %d, want %d", got[6].OptionValueEnd, want)
+	}
 	if mocks := Parse("complete.http", []byte(source)).Mocks; len(mocks) != 0 {
 		t.Fatalf("parser created %d mocks after a request-opening assertion, want none", len(mocks))
+	}
+}
+
+func TestSourceSyntaxMultilineOptionTruncatedUTF8(t *testing.T) {
+	sources := []string{
+		"# @match json={\"a\":\"\xe2\x80\n#  \"} query={}",
+		"# @match regex=\"first\xf0\x9f\n# \" query={}",
+		"# @match json={\"a\":\"\xc3",
+	}
+
+	for _, source := range sources {
+		got := classifySource(source)
+		if got[0].Kind != SourceLineDirective {
+			t.Fatalf("classify(%q) first line kind = %s, want directive", source, got[0].Kind)
+		}
+	}
+}
+
+func TestSourceSyntaxMultilineOptionEscapeAtLineEnd(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		valueRunes int
+	}{
+		{
+			name:       "quoted value",
+			source:     "# @match regex=\"first\\\n# \" query={\"page\":\"2\"}",
+			valueRunes: 1,
+		},
+		{
+			name:       "JSON string",
+			source:     "# @match json={\"value\":\"first\\\n# \"} query={\"page\":\"2\"}",
+			valueRunes: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifySource(tt.source)
+			line := got[1]
+			if line.Kind != SourceLineDirectiveValue {
+				t.Fatalf("line kind = %s, want directive value", line.Kind)
+			}
+			if want := line.ContentStart + tt.valueRunes; line.OptionValueEnd != want {
+				t.Fatalf("option value end = %d, want %d", line.OptionValueEnd, want)
+			}
+		})
 	}
 }
 

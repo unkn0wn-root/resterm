@@ -556,9 +556,14 @@ func TestOptionsScannerMatchesOptionsOpenAtEveryChunkBoundary(t *testing.T) {
 		"one=true\u2003json={\"a\": 1}",
 		`latency=random(1s, 2s)`,
 		`json={ headers={"X":"y"}`,
+		`json={"a":1} regex="unfinished`,
+		`json={"a":1} headers={`,
 		`regex="unfinished\\`,
 		`json={"a": 1}	"`,
 		"\"\xe2\x80",
+		"\"\xe2\x80A\"",
+		"json={\"a\":\"\xf0\x9f\"}",
+		"regex=\"\xc3 second\"",
 	}
 
 	for _, input := range inputs {
@@ -569,7 +574,99 @@ func TestOptionsScannerMatchesOptionsOpenAtEveryChunkBoundary(t *testing.T) {
 			if got, want := scan.Closer(), OptionsOpen(input); got != want {
 				t.Fatalf("chunks [%q, %q] closed with %q, whole read gives %q", input[:cut], input[cut:], got, want)
 			}
+
+			var open OptionsScanner
+			open.FeedOpen(input[:cut])
+			open.FeedOpen(input[cut:])
+			if got, want := open.Closer(), scan.Closer(); got != want {
+				t.Fatalf("FeedOpen chunks [%q, %q] closed with %q, Feed gives %q", input[:cut], input[cut:], got, want)
+			}
 		}
+	}
+}
+
+func TestOptionsScannerFeedOpenReportsValueEnd(t *testing.T) {
+	tests := []struct {
+		name         string
+		start        string
+		continuation string
+		wantEnd      int
+		wantCloser   rune
+	}{
+		{
+			name:         "value stays open",
+			start:        `json={`,
+			continuation: `"a": 1`,
+			wantEnd:      len(`"a": 1`),
+			wantCloser:   '}',
+		},
+		{
+			name:         "value closes before another option",
+			start:        `json={`,
+			continuation: `} headers={"X":"y"}`,
+			wantEnd:      len(`}`),
+		},
+		{
+			name:         "nested value closes",
+			start:        `json={"a":[`,
+			continuation: `1, 2]} query={}`,
+			wantEnd:      len(`1, 2]}`),
+		},
+		{
+			name:         "escaped quote does not close",
+			start:        `regex="first`,
+			continuation: `\" second" query={}`,
+			wantEnd:      len(`\" second"`),
+		},
+		{
+			name:         "unicode precedes closer",
+			start:        `regex="first`,
+			continuation: `å" query={}`,
+			wantEnd:      len(`å"`),
+		},
+		{
+			name:         "remainder opens another value",
+			start:        `json={`,
+			continuation: `} headers={`,
+			wantEnd:      len(`}`),
+			wantCloser:   '}',
+		},
+		{
+			name:         "rune spans chunks",
+			start:        "regex=\"first\xc3",
+			continuation: "\xa5\" query={}",
+			wantEnd:      len("\xa5\""),
+		},
+		{
+			name:         "no value was open",
+			start:        `method=GET`,
+			continuation: `path=/health`,
+		},
+		{
+			name:         "bare quoted field is not an option value",
+			start:        `"first`,
+			continuation: `second" query={}`,
+		},
+		{
+			name:         "bare bracket group is not an option value",
+			start:        `latency=1s [a,`,
+			continuation: `b] query={}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var scan OptionsScanner
+			if got := scan.FeedOpen(tt.start); got != 0 {
+				t.Fatalf("FeedOpen(%q) value end = %d, want 0", tt.start, got)
+			}
+			if got := scan.FeedOpen(tt.continuation); got != tt.wantEnd {
+				t.Fatalf("FeedOpen(%q) value end = %d, want %d", tt.continuation, got, tt.wantEnd)
+			}
+			if got := scan.Closer(); got != tt.wantCloser {
+				t.Fatalf("closer = %q, want %q", got, tt.wantCloser)
+			}
+		})
 	}
 }
 

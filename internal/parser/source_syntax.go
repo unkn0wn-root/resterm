@@ -40,12 +40,14 @@ func (k SourceLineKind) String() string {
 	}
 }
 
-// ContentStart and ContentEnd are rune offsets for comment text without its marker or spaces.
+// Offsets are rune positions in the source line. OptionValueEnd is zero unless
+// the line starts inside an option value.
 type SourceLine struct {
-	Kind         SourceLineKind
-	Args         directive.ArgKind
-	ContentStart int
-	ContentEnd   int
+	Kind           SourceLineKind
+	Args           directive.ArgKind
+	ContentStart   int
+	ContentEnd     int
+	OptionValueEnd int
 }
 
 func (l SourceLine) ContentRange(n int) (start, end int, ok bool) {
@@ -310,16 +312,24 @@ func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.
 	case directiveReadStarted:
 		return sourceComment(ln, c, SourceLineDirective, argKind(result.owner)), directive.Call{}, false
 	case directiveReadContinued:
-		return sourceComment(ln, c, SourceLineDirectiveValue, argKind(result.owner)), directive.Call{}, false
+		return sourceDirectiveValue(ln, c, result), directive.Call{}, false
 	case directiveReadCompleted:
 		return sourceComment(ln, c, SourceLineDirective, argKind(result.owner)), result.directive.Call, true
 	case directiveReadContinuationCompleted:
-		return sourceComment(ln, c, SourceLineDirectiveValue, argKind(result.owner)), result.directive.Call, true
+		return sourceDirectiveValue(ln, c, result), result.directive.Call, true
 	case directiveReadMark:
 		return sourceComment(ln, c, SourceLineDirective, directive.ArgNone), directive.Call{}, false
 	default:
 		return sourceComment(ln, c, SourceLineComment, 0), directive.Call{}, false
 	}
+}
+
+func sourceDirectiveValue(ln line, c commentText, result directiveReadResult) SourceLine {
+	syntax := sourceComment(ln, c, SourceLineDirectiveValue, argKind(result.owner))
+	if n := result.optionValueLen; n > 0 {
+		syntax.OptionValueEnd = syntax.ContentStart + utf8.RuneCountInString(c.text[:n])
+	}
+	return syntax
 }
 
 func argKind(name directive.Name) directive.ArgKind {

@@ -21,7 +21,12 @@ func (o *openDirective) write(text string) {
 	o.state.feed(text)
 }
 
-func (o *openDirective) add(col int, text string) {
+func (o *openDirective) writeOpen(text string) int {
+	o.args.WriteString(text)
+	return o.state.feedOpen(text)
+}
+
+func (o *openDirective) add(col int, text string) int {
 	padding := max(col-1, 0)
 	if padding == 0 {
 		switch o.d.Name.Continuation() {
@@ -34,7 +39,7 @@ func (o *openDirective) add(col int, text string) {
 	if padding > 0 {
 		o.write(strings.Repeat(" ", padding))
 	}
-	o.write(text)
+	return o.writeOpen(text)
 }
 
 func (o *openDirective) collect() string {
@@ -63,6 +68,8 @@ type directiveReadResult struct {
 	directive parsedDirective
 	owner     directive.Name
 	cut       *openDirective
+	// Bytes used by the option value on this line.
+	optionValueLen int
 }
 
 func (r directiveReadResult) completed() (parsedDirective, bool) {
@@ -98,16 +105,7 @@ func (r *directiveReader) read(no, col int, text string) directiveReadResult {
 	if r.open != nil {
 		// A known directive ends the unfinished directive.
 		if !parsed || !call.Name.Known() {
-			owner := r.open.d.Name
-			d, done := r.grow(no, col, text)
-			if done {
-				return directiveReadResult{
-					kind:      directiveReadContinuationCompleted,
-					directive: d,
-					owner:     owner,
-				}
-			}
-			return directiveReadResult{kind: directiveReadContinued, owner: owner}
+			return r.grow(no, col, text)
 		}
 		cut := r.abandon()
 		return r.readNew(no, col, call, cut)
@@ -145,22 +143,30 @@ func (r *directiveReader) readNew(no, col int, call directive.Call, cut *openDir
 	}
 }
 
-func (r *directiveReader) grow(no, col int, text string) (parsedDirective, bool) {
+func (r *directiveReader) grow(no, col int, text string) directiveReadResult {
 	o := r.open
 	o.d.lines.End = no
-	o.add(col, text)
+	valueLen := o.add(col, text)
+	res := directiveReadResult{
+		kind:           directiveReadContinued,
+		owner:          o.d.Name,
+		optionValueLen: valueLen,
+	}
 
 	if !o.state.mayComplete() {
-		return parsedDirective{}, false
+		return res
 	}
 	if closer := openCloser(o.d.Name, o.collect()); closer != "" {
 		o.closer = closer
 		// The full parse found more input to collect, so rebuild the scan state.
 		o.state = newContinuationState(o.d.Name, o.d.Args)
-		return parsedDirective{}, false
+		return res
 	}
+
 	r.open = nil
-	return o.d, true
+	res.kind = directiveReadContinuationCompleted
+	res.directive = o.d
+	return res
 }
 
 // Only comments can continue an argument. A separator always ends it.

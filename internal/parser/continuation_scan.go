@@ -240,6 +240,14 @@ func (s *continuationState) feed(src string) {
 	}
 }
 
+func (s *continuationState) feedOpen(src string) int {
+	if s.mode != directive.ContinueOptions {
+		s.feed(src)
+		return 0
+	}
+	return s.options.FeedOpen(src)
+}
+
 func (s *continuationState) mayComplete() bool {
 	switch s.mode {
 	case directive.ContinueOptions:
