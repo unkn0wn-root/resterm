@@ -400,22 +400,45 @@ type FieldSpan struct {
 	Start, End, Eq int
 }
 
+// Field pairs a decoded option field with its byte offsets in the source.
+type Field struct {
+	FieldSpan
+	Value string
+}
+
+// ScanFields yields the values returned by Fields with their source byte offsets.
+// It accepts incomplete quotes, JSON, and calls, and preserves bare backslashes.
+func ScanFields(input string) iter.Seq[Field] {
+	return scanFields(input, false)
+}
+
+func scanFields(input string, escapes bool) iter.Seq[Field] {
+	return func(yield func(Field) bool) {
+		lex := &lexer{src: input, escapes: escapes}
+		for {
+			tok, ok := lex.next()
+			if !ok {
+				return
+			}
+			eq := optionEq(input[tok.start:tok.end])
+			if eq >= 0 {
+				eq += tok.start
+			}
+			if !yield(Field{FieldSpan: FieldSpan{Start: tok.start, End: tok.end, Eq: eq}, Value: tok.val}) {
+				return
+			}
+		}
+	}
+}
+
 // FieldSpans reports where each field sits, scanning the way ParseOptions does,
 // so a span never splits a quoted or bracketed value.
 func FieldSpans(input string) []FieldSpan {
-	lex := &lexer{src: input, escapes: true}
 	var spans []FieldSpan
-	for {
-		tok, ok := lex.next()
-		if !ok {
-			return spans
-		}
-		eq := optionEq(input[tok.start:tok.end])
-		if eq >= 0 {
-			eq += tok.start
-		}
-		spans = append(spans, FieldSpan{Start: tok.start, End: tok.end, Eq: eq})
+	for field := range scanFields(input, true) {
+		spans = append(spans, field.FieldSpan)
 	}
+	return spans
 }
 
 // A name, then an equals sign typed outside quotes, then the value. This has to
