@@ -6,6 +6,9 @@ type Edit struct {
 	Start int
 	End   int
 	Text  string
+
+	// CursorBack leaves the caret this many runes before the end of Text.
+	CursorBack int
 }
 
 func (e Edit) Apply(input string) (string, int, error) {
@@ -24,7 +27,7 @@ func (e Edit) Apply(input string) (string, int, error) {
 	out = append(out, runes[:e.Start]...)
 	out = append(out, text...)
 	out = append(out, runes[e.End:]...)
-	return string(out), e.Start + len(text), nil
+	return string(out), e.Start + len(text) - e.CursorBack, nil
 }
 
 type Item struct {

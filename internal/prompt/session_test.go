@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
@@ -189,6 +190,49 @@ func TestPathSessionKeepsFiltersSeparate(t *testing.T) {
 	}
 	if got := itemLabels(items); !slices.Equal(got, []string{"one.http", "two.json"}) {
 		t.Fatalf("all-file items = %q", got)
+	}
+}
+
+func TestPathSessionCompletesCurrentPathListSegment(t *testing.T) {
+	for _, tt := range []struct{ input, want string }{
+		{"first.pem; second.pem, th|", `"first.pem; second.pem, third.pem"|`},
+		{"først.pem,th|ird.pem,last.pem", "først.pem,third.pem|,last.pem"},
+		{"first.pem; th|ird.pem; last.pem", `"first.pem; third.pem|; last.pem"`},
+		{`først"file.pem,th|ird.pem; last.pem`, `"først\"file.pem,third.pem|; last.pem"`},
+		{`first.pem; th|ird.pem; C:\certs\`, `"first.pem; third.pem|; C:\certs"\`},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			before, after, _ := strings.Cut(tt.input, "|")
+			input := before + after
+			var session PathSession
+			_, load := session.SuggestPath(PathRequest{
+				Value:  before,
+				Suffix: after,
+				Edit:   Edit{End: len([]rune(input))},
+				Spec: PathSpec{
+					Root:        t.TempDir(),
+					Files:       files.AnyPathFilter(),
+					FileSummary: "certificate",
+					Separators:  SeparatorPathList,
+					Quote:       true,
+				},
+			})
+			items, ok := session.Deliver(DirRead{
+				DirLoad: load,
+				Entries: []DirEntry{{Name: "third.pem"}, {Name: "three words.pem"}},
+			})
+			if !ok || len(items) != 1 {
+				t.Fatalf("path-list items = %#v", items)
+			}
+			got, cursor, err := items[0].Edit.Apply(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prefix, suffix, _ := strings.Cut(tt.want, "|")
+			if got != prefix+suffix || cursor != len([]rune(prefix)) {
+				t.Fatalf("path-list edit = %q at %d, want %q at %d", got, cursor, prefix+suffix, len([]rune(prefix)))
+			}
+		})
 	}
 }
 

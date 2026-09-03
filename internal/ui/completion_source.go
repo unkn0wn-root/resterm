@@ -124,6 +124,6 @@ func requestPathSpec(root string) prompt.PathSpec {
 		Files:       files.RequestPathFilter(),
 		FileSummary: "request file",
 		Confine:     true,
-		CommaList:   true,
+		Separators:  prompt.SeparatorComma,
 	}
 }

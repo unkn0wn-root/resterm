@@ -24,11 +24,7 @@ type pathCandidates struct {
 }
 
 func (s *PathSession) Reset() {
-	s.gen++
-	s.live = false
-	s.current = pathQuery{}
-	s.cache = make(map[string]*pathListing)
-	s.pending = make(map[string]bool)
+	*s = PathSession{gen: s.gen + 1}
 }
 
 func (s *PathSession) Suggest(
@@ -41,10 +37,16 @@ func (s *PathSession) Suggest(
 		s.forget()
 		return nil, DirLoad{}, false
 	}
+	items, load = s.SuggestPath(request)
+	return items, load, true
+}
+
+// SuggestPath completes a path whose value and replacement range the caller has supplied.
+func (s *PathSession) SuggestPath(request PathRequest) ([]Item, DirLoad) {
 	query, ok := newPathQuery(request)
 	if !ok {
 		s.forget()
-		return nil, DirLoad{}, true
+		return nil, DirLoad{}
 	}
 
 	if s.cache == nil {
@@ -55,13 +57,13 @@ func (s *PathSession) Suggest(
 	s.current = query
 
 	if listing, ok := s.cache[query.dir]; ok {
-		return listing.items(query), DirLoad{}, true
+		return listing.items(query), DirLoad{}
 	}
 	if s.pending[query.dir] {
-		return nil, DirLoad{}, true
+		return nil, DirLoad{}
 	}
 	s.pending[query.dir] = true
-	return nil, DirLoad{Dir: query.dir, Gen: s.gen}, true
+	return nil, DirLoad{Dir: query.dir, Gen: s.gen}
 }
 
 func (s *PathSession) Deliver(r DirRead) ([]Item, bool) {
@@ -82,6 +84,7 @@ func (s *PathSession) Deliver(r DirRead) ([]Item, bool) {
 	return listing.items(s.current), true
 }
 
+// forget drops the current query but keeps the directory listings.
 func (s *PathSession) forget() {
 	s.live = false
 	s.current = pathQuery{}
