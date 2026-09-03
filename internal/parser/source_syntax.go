@@ -40,10 +40,6 @@ func (k SourceLineKind) String() string {
 	}
 }
 
-func (k SourceLineKind) hasContent() bool {
-	return k == SourceLineComment || k == SourceLineDirective || k == SourceLineDirectiveValue
-}
-
 // ContentStart and ContentEnd are rune offsets for comment text without its marker or spaces.
 type SourceLine struct {
 	Kind         SourceLineKind
