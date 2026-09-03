@@ -66,6 +66,7 @@ func TestHeaderRendersLayout(t *testing.T) {
 		headerBrandName + headerGroupSep + iconHeaderEnv,
 		iconHeaderEnv + " " + labelHeaderEnv + " default  " + iconHeaderWorkspace + " " +
 			labelHeaderWorkspace,
+		iconHeaderRequests + " " + labelHeaderRequests + " 0 " + iconHeaderActive + " GET create-user",
 		"201 · " + latLabel,
 	} {
 		if !strings.Contains(lines[0], want) {
