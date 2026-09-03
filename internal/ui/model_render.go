@@ -49,7 +49,7 @@ const (
 	iconHeaderWorkspace = "▣"
 	iconHeaderEnv       = "⬢"
 	iconHeaderRequests  = "⇄"
-	iconHeaderActive    = "◨"
+	iconHeaderActive    = "›"
 	labelHeaderEnv      = "env"
 	labelHeaderRequests = "req"
 )
@@ -2033,7 +2033,9 @@ func (m *Model) renderHeader() string {
 			style:    styles.value,
 			priority: headerPriorityRequests,
 		},
-		m.headerActiveCell(styles, request),
+	}
+	if request != "" {
+		cells = append(cells, m.headerActiveCell(styles, request))
 	}
 
 	if summary, status, ok := m.headerTestStatus(); ok {
@@ -2090,15 +2092,12 @@ func headerRule(st lipgloss.Style, width int) string {
 }
 
 func (m *Model) headerActiveCell(styles headerStyles, request string) headerCell {
-	cell := headerCell{icon: iconHeaderActive, priority: headerPriorityActive}
-	if request == "" {
-		cell.values = []string{"none selected", "none"}
-		cell.style = styles.label
-		return cell
+	cell := headerCell{
+		icon:     iconHeaderActive,
+		values:   []string{request},
+		style:    styles.value,
+		priority: headerPriorityActive,
 	}
-
-	cell.values = []string{request}
-	cell.style = styles.value
 	if m.currentRequest != nil {
 		cell.style = cell.style.Foreground(methodColor(m.theme, m.currentRequest.Method))
 	}

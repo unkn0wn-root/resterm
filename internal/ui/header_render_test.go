@@ -94,17 +94,39 @@ func TestHeaderDropsHelpBeforeLatency(t *testing.T) {
 	t.Fatal("expected Help to be hidden at a narrow width")
 }
 
-func TestHeaderShowsNoSelectedRequest(t *testing.T) {
-	model := headerTestModel(t, 160)
-	model.activeRequestTitle = ""
-
-	if view := ansi.Strip(model.renderHeader()); !strings.Contains(view, iconHeaderActive+" none selected") {
-		t.Fatalf("header does not show that no request is selected:\n%s", view)
+func TestHeaderOmitsActiveRequestWhenNoneSelected(t *testing.T) {
+	tests := []struct {
+		name  string
+		items []requestListItem
+		count string
+	}{
+		{name: "no requests", count: "0"},
+		{name: "requests without a selection", items: make([]requestListItem, 17), count: "17"},
 	}
 
-	model.width = 70
-	if view := ansi.Strip(model.renderHeader()); !strings.Contains(view, iconHeaderActive+" none") {
-		t.Fatalf("narrow header does not use the short empty value:\n%s", view)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := headerTestModel(t, 160)
+			model.currentRequest = nil
+			model.activeRequestTitle = ""
+			model.requestItems = tt.items
+			model.testResults = []scripts.TestResult{{Name: "passed", Passed: true}}
+
+			for _, width := range []int{160, 70} {
+				model.width = width
+				view := ansi.Strip(model.renderHeader())
+				if strings.Contains(view, iconHeaderActive) {
+					t.Fatalf("width %d header contains an active-request cell:\n%s", width, view)
+				}
+				if width == 160 {
+					want := iconHeaderRequests + " " + labelHeaderRequests + " " + tt.count +
+						headerCellSep + iconTestPass
+					if !strings.Contains(view, want) {
+						t.Fatalf("header does not join request count to the following cell with %q:\n%s", want, view)
+					}
+				}
+			}
+		})
 	}
 }
 
@@ -146,18 +168,28 @@ func TestHeaderKeepsThemeBackground(t *testing.T) {
 
 func TestHeaderFitsSupportedWidths(t *testing.T) {
 	model := headerTestModel(t, 200)
+	activeRequests := []string{"GET create-user", ""}
 	statuses := []headerTransportStatus{
 		{},
 		{label: "ResourceExhausted", level: statusWarn},
 	}
 
-	for _, status := range statuses {
-		model.headerTransport = status
-		for width := 3; width <= 200; width++ {
-			model.width = width
-			for _, line := range strings.Split(model.renderHeader(), "\n") {
-				if got := lipgloss.Width(line); got > width {
-					t.Fatalf("status %q width %d rendered %d cells", status.label, width, got)
+	for _, activeRequest := range activeRequests {
+		model.activeRequestTitle = activeRequest
+		for _, status := range statuses {
+			model.headerTransport = status
+			for width := 3; width <= 200; width++ {
+				model.width = width
+				for _, line := range strings.Split(model.renderHeader(), "\n") {
+					if got := lipgloss.Width(line); got > width {
+						t.Fatalf(
+							"active request %q status %q width %d rendered %d cells",
+							activeRequest,
+							status.label,
+							width,
+							got,
+						)
+					}
 				}
 			}
 		}
