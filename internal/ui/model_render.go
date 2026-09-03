@@ -46,12 +46,13 @@ const (
 )
 
 const (
-	iconHeaderWorkspace = "▣"
-	iconHeaderEnv       = "⬢"
-	iconHeaderRequests  = "⇄"
-	iconHeaderActive    = "›"
-	labelHeaderEnv      = "env"
-	labelHeaderRequests = "req"
+	iconHeaderWorkspace  = "▣"
+	iconHeaderEnv        = "⬢"
+	iconHeaderRequests   = "⇄"
+	iconHeaderActive     = "›"
+	labelHeaderEnv       = "env"
+	labelHeaderRequests  = "req"
+	labelHeaderWorkspace = "workspace"
 )
 
 type testStatus string
@@ -1915,11 +1916,12 @@ func renderCommandKeycap(
 // headerCell is a header segment before rendering. values carries the same
 // information from longest to shortest.
 type headerCell struct {
-	icon     string
-	label    string
-	values   []string
-	style    lipgloss.Style
-	priority int
+	icon         string
+	label        string
+	compactLabel bool
+	values       []string
+	style        lipgloss.Style
+	priority     int
 }
 
 // Each style includes the header background because ANSI resets clear it.
@@ -2001,6 +2003,22 @@ func (s headerStyles) cell(c headerCell, value string) string {
 	return prefix + s.label.Render(" ") + c.style.Render(value)
 }
 
+func (s headerStyles) cellVariants(c headerCell, limit int) ([]string, int) {
+	values, lossy := headerCellVariants(c.values, limit)
+	text := make([]string, 0, len(values)+1)
+	if c.compactLabel && c.label != "" {
+		text = append(text, s.cell(c, values[0]))
+		c.label = ""
+		if lossy > 0 {
+			lossy++
+		}
+	}
+	for _, value := range values {
+		text = append(text, s.cell(c, value))
+	}
+	return text, lossy
+}
+
 func (m *Model) renderHeader() string {
 	workspace := filepath.Base(m.ws.root)
 	if workspace == "" {
@@ -2021,10 +2039,12 @@ func (m *Model) renderHeader() string {
 			priority: headerPriorityEnv,
 		},
 		{
-			icon:     iconHeaderWorkspace,
-			values:   []string{workspace},
-			style:    styles.value,
-			priority: headerPriorityWorkspace,
+			icon:         iconHeaderWorkspace,
+			label:        labelHeaderWorkspace,
+			compactLabel: true,
+			values:       []string{workspace},
+			style:        styles.value,
+			priority:     headerPriorityWorkspace,
 		},
 		{
 			icon:     iconHeaderRequests,
@@ -2058,11 +2078,7 @@ func (m *Model) renderHeader() string {
 		separatorAfter: styles.group,
 	})
 	for _, cell := range cells {
-		values, lossy := headerCellVariants(cell.values, limit)
-		text := make([]string, 0, len(values))
-		for _, value := range values {
-			text = append(text, styles.cell(cell, value))
-		}
+		text, lossy := styles.cellVariants(cell, limit)
 		segments = append(segments, headerSegment{
 			text:     text,
 			lossy:    lossy,

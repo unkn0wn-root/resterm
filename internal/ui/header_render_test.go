@@ -45,7 +45,7 @@ func TestHeaderRendersLayout(t *testing.T) {
 	for _, want := range []string{
 		headerBrandName,
 		iconHeaderEnv + " " + labelHeaderEnv + " default",
-		iconHeaderWorkspace + " acme-api",
+		iconHeaderWorkspace + " " + labelHeaderWorkspace + " acme-api",
 		iconHeaderRequests + " " + labelHeaderRequests,
 		iconHeaderActive + " GET create-user",
 		"✗ 1 fail",
@@ -64,7 +64,8 @@ func TestHeaderRendersLayout(t *testing.T) {
 	}
 	for _, want := range []string{
 		headerBrandName + headerGroupSep + iconHeaderEnv,
-		iconHeaderEnv + " " + labelHeaderEnv + " default  " + iconHeaderWorkspace,
+		iconHeaderEnv + " " + labelHeaderEnv + " default  " + iconHeaderWorkspace + " " +
+			labelHeaderWorkspace,
 		"201 · " + latLabel,
 	} {
 		if !strings.Contains(lines[0], want) {
@@ -92,6 +93,23 @@ func TestHeaderDropsHelpBeforeLatency(t *testing.T) {
 		return
 	}
 	t.Fatal("expected Help to be hidden at a narrow width")
+}
+
+func TestHeaderCompactsWorkspaceLabelBeforeDroppingWorkspace(t *testing.T) {
+	model := headerTestModel(t, 160)
+
+	for width := 159; width >= 30; width-- {
+		model.width = width
+		view := ansi.Strip(model.renderHeader())
+		if strings.Contains(view, labelHeaderWorkspace) {
+			continue
+		}
+		if !strings.Contains(view, iconHeaderWorkspace+" acme-api") {
+			t.Fatalf("workspace label and value disappeared together at width %d:\n%s", width, view)
+		}
+		return
+	}
+	t.Fatal("expected the workspace label to be hidden at a narrow width")
 }
 
 func TestHeaderOmitsActiveRequestWhenNoneSelected(t *testing.T) {
