@@ -157,6 +157,20 @@ func TestMetadataRuneStylerColoursMultilineOptionValues(t *testing.T) {
 		assertMetadataTokenColor(t, styles, lines[1], `{"page":"2"}`, palette.SettingValue)
 	})
 
+	t.Run("bare quoted field", func(t *testing.T) {
+		lines := []string{
+			`# @match "first`,
+			`# second" query={"page":"2"}`,
+		}
+		styler := newMetadataRuneStyler(palette)
+		styler.SetSource(strings.Join(lines, "\n"))
+
+		styles := styler.StylesForLine([]rune(lines[1]), 1)
+		assertMetadataTokenColor(t, styles, lines[1], `second"`, palette.Value)
+		assertMetadataTokenColor(t, styles, lines[1], "query", palette.SettingKey)
+		assertMetadataTokenColor(t, styles, lines[1], `{"page":"2"}`, palette.SettingValue)
+	})
+
 	t.Run("escaped line ending", func(t *testing.T) {
 		lines := []string{
 			`# @match regex="first\`,

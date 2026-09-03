@@ -17,13 +17,13 @@ func (s *OptionsScanner) Feed(src string) {
 // FeedOpen consumes src and returns how many leading bytes belong to a value
 // that was already open. It returns zero if no value was open.
 func (s *OptionsScanner) FeedOpen(src string) int {
-	if s.Closer() == 0 {
+	if !s.valueOpen() {
 		s.Feed(src)
 		return 0
 	}
 
 	rest := s.resume(src)
-	for s.Closer() != 0 && rest != "" {
+	for s.valueOpen() && rest != "" {
 		n := s.step(rest)
 		if n == 0 {
 			rest = ""
@@ -40,6 +40,11 @@ func (s *OptionsScanner) Closer() rune {
 		return 0
 	}
 	return s.field.closer()
+}
+
+// A quoted word with no key also has a closer. Only a key makes it an option value.
+func (s *OptionsScanner) valueOpen() bool {
+	return s.field.state != inKey && s.Closer() != 0
 }
 
 func (s *OptionsScanner) scan(src string) {

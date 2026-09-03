@@ -642,6 +642,16 @@ func TestOptionsScannerFeedOpenReportsValueEnd(t *testing.T) {
 			start:        `method=GET`,
 			continuation: `path=/health`,
 		},
+		{
+			name:         "bare quoted field is not an option value",
+			start:        `"first`,
+			continuation: `second" query={}`,
+		},
+		{
+			name:         "bare bracket group is not an option value",
+			start:        `latency=1s [a,`,
+			continuation: `b] query={}`,
+		},
 	}
 
 	for _, tt := range tests {
