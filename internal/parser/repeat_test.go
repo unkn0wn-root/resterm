@@ -46,7 +46,8 @@ GET https://example.com/jobs/123
 	if retry.When == nil || retry.When.Expression != "response.statusCode in [429, 502, 503]" {
 		t.Fatalf("@retry-when = %+v", retry.When)
 	}
-	if retry.Backoff.Initial != 100*time.Millisecond || retry.Backoff.Max != 2*time.Second || retry.Backoff.JitterPercent != 20 {
+	if retry.Backoff.Initial != 100*time.Millisecond || retry.Backoff.Max != 2*time.Second ||
+		retry.Backoff.JitterPercent != 20 {
 		t.Fatalf("@retry-backoff = %+v", retry.Backoff)
 	}
 }
@@ -78,18 +79,58 @@ func TestParseRepeatPolicyErrors(t *testing.T) {
 		want string
 	}{
 		{name: "poll missing until", src: "# @poll every=1s\nGET https://example.com\n", want: "requires until="},
-		{name: "zero interval", src: "# @poll every=0 timeout=1s until=true\nGET https://example.com\n", want: "positive duration"},
-		{name: "retry missing count", src: "# @retry enabled=true\nGET https://example.com\n", want: "count is required"},
+		{
+			name: "zero interval",
+			src:  "# @poll every=0 timeout=1s until=true\nGET https://example.com\n",
+			want: "positive duration",
+		},
+		{
+			name: "retry missing count",
+			src:  "# @retry enabled=true\nGET https://example.com\n",
+			want: "count is required",
+		},
 		{name: "retry zero", src: "# @retry count=0\nGET https://example.com\n", want: "greater than zero"},
 		{name: "orphan condition", src: "# @retry-when true\nGET https://example.com\n", want: "requires @retry"},
-		{name: "orphan backoff", src: "# @retry-backoff exponential(1ms, 1s)\nGET https://example.com\n", want: "requires @retry"},
-		{name: "bad backoff bound", src: "# @retry count=1\n# @retry-backoff exponential(2s, 1s)\nGET https://example.com\n", want: "maximum must be at least"},
-		{name: "bad jitter", src: "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=101%\nGET https://example.com\n", want: "between 0% and 100%"},
-		{name: "non-finite jitter", src: "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=NaN%\nGET https://example.com\n", want: "between 0% and 100%"},
-		{name: "profile conflict", src: "# @profile count=2\n# @retry count=1\nGET https://example.com\n", want: "cannot be combined with @profile"},
-		{name: "grpc unsupported", src: "# @poll until=true\nGRPC example.Service/Call\n{}\n", want: "not supported for gRPC"},
-		{name: "sse unsupported", src: "# @sse\n# @retry count=1\nGET https://example.com/events\n", want: "not supported for SSE"},
-		{name: "websocket unsupported", src: "# @websocket\n# @poll until=true\nGET wss://example.com/events\n", want: "not supported for WebSocket"},
+		{
+			name: "orphan backoff",
+			src:  "# @retry-backoff exponential(1ms, 1s)\nGET https://example.com\n",
+			want: "requires @retry",
+		},
+		{
+			name: "bad backoff bound",
+			src:  "# @retry count=1\n# @retry-backoff exponential(2s, 1s)\nGET https://example.com\n",
+			want: "maximum must be at least",
+		},
+		{
+			name: "bad jitter",
+			src:  "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=101%\nGET https://example.com\n",
+			want: "between 0% and 100%",
+		},
+		{
+			name: "non-finite jitter",
+			src:  "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=NaN%\nGET https://example.com\n",
+			want: "between 0% and 100%",
+		},
+		{
+			name: "profile conflict",
+			src:  "# @profile count=2\n# @retry count=1\nGET https://example.com\n",
+			want: "cannot be combined with @profile",
+		},
+		{
+			name: "grpc unsupported",
+			src:  "# @poll until=true\nGRPC example.Service/Call\n{}\n",
+			want: "not supported for gRPC",
+		},
+		{
+			name: "sse unsupported",
+			src:  "# @sse\n# @retry count=1\nGET https://example.com/events\n",
+			want: "not supported for SSE",
+		},
+		{
+			name: "websocket unsupported",
+			src:  "# @websocket\n# @poll until=true\nGET wss://example.com/events\n",
+			want: "not supported for WebSocket",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

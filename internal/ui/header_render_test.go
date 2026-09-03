@@ -199,7 +199,7 @@ func TestHeaderFitsSupportedWidths(t *testing.T) {
 			model.headerTransport = status
 			for width := 3; width <= 200; width++ {
 				model.width = width
-				for _, line := range strings.Split(model.renderHeader(), "\n") {
+				for line := range strings.SplitSeq(model.renderHeader(), "\n") {
 					if got := lipgloss.Width(line); got > width {
 						t.Fatalf(
 							"active request %q status %q width %d rendered %d cells",

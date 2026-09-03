@@ -1885,11 +1885,11 @@ func TestUnfocusedSplitResponseColumnKeepsPrettyContentReadable(t *testing.T) {
 func framedLineWith(view, needle string) string {
 	for line := range strings.SplitSeq(view, "\n") {
 		plain := ansi.Strip(line)
-		idx := strings.Index(plain, needle)
-		if idx < 0 {
+		before, after, ok := strings.Cut(plain, needle)
+		if !ok {
 			continue
 		}
-		if strings.Contains(plain[:idx], "│") && strings.Contains(plain[idx+len(needle):], "│") {
+		if strings.Contains(before, "│") && strings.Contains(after, "│") {
 			return line
 		}
 	}
