@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"unicode/utf8"
+
 	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -238,6 +240,24 @@ func (s *continuationState) feed(src string) {
 	case directive.ContinueCapture:
 		s.capture.feed(src)
 	}
+}
+
+func (s *continuationState) feedLine(src string) int {
+	if s.mode != directive.ContinueOptions || !s.options.ValueOpen() {
+		s.feed(src)
+		return 0
+	}
+
+	for i := range src {
+		_, size := utf8.DecodeRuneInString(src[i:])
+		end := i + size
+		s.options.Feed(src[i:end])
+		if s.options.Closer() == 0 {
+			s.options.Feed(src[end:])
+			return end
+		}
+	}
+	return len(src)
 }
 
 func (s *continuationState) mayComplete() bool {

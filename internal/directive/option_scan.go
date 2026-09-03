@@ -35,3 +35,7 @@ func (s *OptionsScanner) Closer() rune {
 	}
 	return s.field.closer()
 }
+
+func (s *OptionsScanner) ValueOpen() bool {
+	return s.field.state != inKey && s.Closer() != 0
+}

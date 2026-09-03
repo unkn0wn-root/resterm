@@ -118,6 +118,61 @@ func TestMetadataRuneStylerColoursEveryLineOfAnArgument(t *testing.T) {
 	assertMetadataTokenColor(t, styles, prose, "ordinary prose", palette.CommentMarker)
 }
 
+func TestMetadataRuneStylerColoursMultilineOptionValues(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+
+	t.Run("bracketed value and following option", func(t *testing.T) {
+		lines := []string{
+			"# @match json-rules={",
+			`#   "score": {"lt": 40}`,
+			`# } headers={"X-Env":"test"}`,
+		}
+		styler := newMetadataRuneStyler(palette)
+		styler.SetSource(strings.Join(lines, "\n"))
+
+		styles := styler.StylesForLine([]rune(lines[0]), 0)
+		assertMetadataTokenColor(t, styles, lines[0], "json-rules", palette.SettingKey)
+		assertMetadataTokenColor(t, styles, lines[0], "{", palette.SettingValue)
+
+		styles = styler.StylesForLine([]rune(lines[1]), 1)
+		assertMetadataTokenColor(t, styles, lines[1], `"score": {"lt": 40}`, palette.SettingValue)
+
+		styles = styler.StylesForLine([]rune(lines[2]), 2)
+		assertMetadataTokenColor(t, styles, lines[2], "}", palette.SettingValue)
+		assertMetadataTokenColor(t, styles, lines[2], "headers", palette.SettingKey)
+		assertMetadataTokenColor(t, styles, lines[2], `{"X-Env":"test"}`, palette.SettingValue)
+	})
+
+	t.Run("quoted value", func(t *testing.T) {
+		lines := []string{
+			`# @match regex="first`,
+			`# second" query={"page":"2"}`,
+		}
+		styler := newMetadataRuneStyler(palette)
+		styler.SetSource(strings.Join(lines, "\n"))
+
+		styles := styler.StylesForLine([]rune(lines[1]), 1)
+		assertMetadataTokenColor(t, styles, lines[1], `second"`, palette.SettingValue)
+		assertMetadataTokenColor(t, styles, lines[1], "query", palette.SettingKey)
+		assertMetadataTokenColor(t, styles, lines[1], `{"page":"2"}`, palette.SettingValue)
+	})
+
+	t.Run("expression continuation", func(t *testing.T) {
+		lines := []string{
+			"# @retry-backoff exponential(",
+			"#   100ms,",
+			"#   2s",
+			"# ) jitter=10%",
+		}
+		styler := newMetadataRuneStyler(palette)
+		styler.SetSource(strings.Join(lines, "\n"))
+
+		styles := styler.StylesForLine([]rune(lines[1]), 1)
+		assertMetadataTokenColor(t, styles, lines[1], "100ms", palette.Value)
+		assertMetadataTokenNotColor(t, styles, lines[1], "100ms", palette.SettingValue)
+	})
+}
+
 func TestDirectiveMarkMatchesCompletion(t *testing.T) {
 	lines := completionLines{"# @", "# @:", "# @:x", "# @::", "# ordinary prose", "#"}
 

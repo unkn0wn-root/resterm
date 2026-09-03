@@ -58,8 +58,8 @@ func TestSourceSyntaxMultilineDirectives(t *testing.T) {
 		"# )",
 		"# ordinary prose",
 		"# @match json={",
-		`# "a": 1`,
-		"# }",
+		`# "å": 1`,
+		`# } headers={"X-Env":"test"}`,
 		"# @mock method=GET path=/health",
 		"HTTP/1.1 200 OK",
 		"",
@@ -90,6 +90,12 @@ func TestSourceSyntaxMultilineDirectives(t *testing.T) {
 		if got[no].Args != directive.ArgOptions {
 			t.Fatalf("line %d args = %d, want options", no+1, got[no].Args)
 		}
+	}
+	if got[5].OptionValueEnd != got[5].ContentEnd {
+		t.Fatalf("line 6 option value end = %d, want %d", got[5].OptionValueEnd, got[5].ContentEnd)
+	}
+	if want := got[6].ContentStart + 1; got[6].OptionValueEnd != want {
+		t.Fatalf("line 7 option value end = %d, want %d", got[6].OptionValueEnd, want)
 	}
 	if mocks := Parse("complete.http", []byte(source)).Mocks; len(mocks) != 0 {
 		t.Fatalf("parser created %d mocks after a request-opening assertion, want none", len(mocks))

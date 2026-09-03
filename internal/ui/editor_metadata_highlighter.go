@@ -201,7 +201,18 @@ func (s *metadataRuneStyler) directiveValueStyles(
 		p.paint(start, valueStart, s.commentStyle)
 	}
 	if ok {
-		s.paintArgument(p, line, syntax.Args, valueStart, end)
+		optionValueEnd := min(syntax.OptionValueEnd, end)
+		if syntax.Args == directive.ArgOptions && optionValueEnd > valueStart {
+			if s.valueEnabled {
+				p.paint(valueStart, end, s.valueStyle)
+			}
+			if s.settingValueEnabled {
+				p.paint(valueStart, optionValueEnd, s.settingValueStyle)
+			}
+			s.applyOptionFieldStyles(p, line, optionValueEnd, end)
+		} else {
+			s.paintArgument(p, line, syntax.Args, valueStart, end)
+		}
 	}
 	return p.styles
 }
@@ -288,6 +299,14 @@ func (s *metadataRuneStyler) applyOptionStyles(
 	if s.valueEnabled {
 		p.paint(start, end, s.valueStyle)
 	}
+	s.applyOptionFieldStyles(p, line, start, end)
+}
+
+func (s *metadataRuneStyler) applyOptionFieldStyles(
+	p *stylePainter,
+	line []rune,
+	start, end int,
+) {
 	if !s.settingKeyEnabled && !s.settingValueEnabled {
 		return
 	}
