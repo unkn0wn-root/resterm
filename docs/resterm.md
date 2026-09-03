@@ -2516,7 +2516,7 @@ The segmented bottom bar uses `[status_bar]` for section backgrounds and text co
 Setting `editor_metadata.directive_default` recolours every built-in directive (`@name`, `@tag`, etc.) that still uses the inherited default. Specify entries inside `[editor_metadata.directive_colors]` only when you need a directive to diverge from that default.
 
 Set `editor_metadata.request_line` to recolour the full request line (`POST https://…`). If you omit it, Resterm falls back to the directive default.
-Use `editor_metadata.request_separator` for the `###` section dividers and `editor_metadata.comment_marker` for the `#` / `//` prefixes at the start of comment lines.
+Use `editor_metadata.request_separator` for the `###` section dividers. `editor_metadata.comment_marker` colours ordinary `#`, `//`, `--`, and `/* … */` comments. Directive names and values keep their metadata colours. Comment markers inside multipart bodies, mock responses, and script blocks are treated as data and are not coloured.
 
 `styles.stream_*` keys control the transcript viewer (events, timestamps, direction badges). `styles.stream_console_*` tweak the interactive WebSocket console (prompt, status line, input field).
 
