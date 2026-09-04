@@ -170,6 +170,39 @@ func TestUnexpectedArgs(t *testing.T) {
 	}
 }
 
+func TestWasSet(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "absent", args: []string{"requests.http"}, want: false},
+		{name: "long name", args: []string{"--request", "health"}, want: true},
+		{name: "short alias", args: []string{"-r", "health"}, want: true},
+		{name: "inline value", args: []string{"--request=health"}, want: true},
+		{name: "after a positional", args: []string{"requests.http", "-r", "health"}, want: true},
+		{name: "value equal to the default", args: []string{"--request", "auto"}, want: true},
+		{name: "another flag only", args: []string{"-a"}, want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fs := NewFlagSet("test")
+			var request string
+			var all bool
+			fs.StringVarAliases(&request, "auto", "request", "request", "r")
+			fs.BoolVarAliases(&all, false, "all", "all", "a")
+
+			if err := fs.Parse(test.args); err != nil {
+				t.Fatalf("Parse(%q): %v", test.args, err)
+			}
+			if got := fs.WasSet("request"); got != test.want {
+				t.Errorf("WasSet(\"request\") = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func TestStringVarTrimsDefaultAndParsedValue(t *testing.T) {
 	fs := NewFlagSet("trim")
 	var got string

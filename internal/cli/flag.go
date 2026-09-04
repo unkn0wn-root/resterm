@@ -99,6 +99,22 @@ func (f *FlagSet) UnexpectedArgs() error {
 	return fmt.Errorf("%s: unexpected args: %s", f.Name(), strings.Join(f.args, " "))
 }
 
+// WasSet reports whether the flag, or one of its aliases, appeared in the
+// arguments, even when its value is the same as the default.
+func (f *FlagSet) WasSet(name string) bool {
+	set := false
+	f.Visit(func(fl *flag.Flag) {
+		if fl.Name == name {
+			set = true
+			return
+		}
+		if target, ok := aliasTarget(fl.Usage); ok && target == name {
+			set = true
+		}
+	})
+	return set
+}
+
 func (f *FlagSet) split(args []string) (flags, positional []string) {
 	flags = make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {

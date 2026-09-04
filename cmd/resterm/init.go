@@ -76,7 +76,7 @@ func (c *initCmd) run() error {
 		return initcmd.Run(initcmd.Opt{List: true, Out: os.Stdout})
 	}
 	if len(extra) > 0 {
-		if c.dir == initcmd.DefaultDir && len(extra) == 1 {
+		if !c.fs.WasSet("dir") && len(extra) == 1 {
 			c.dir = extra[0]
 		} else {
 			return fmt.Errorf("init: unexpected args: %s", strings.Join(extra, " "))
