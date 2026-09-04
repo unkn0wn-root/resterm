@@ -11,7 +11,7 @@ type Kind int
 
 const (
 	KindNone         Kind = iota
-	KindDirective         // @directive name on a comment line
+	KindDirective         // @directive name, optionally before its comment prefix is inserted
 	KindDirectiveArg      // a sub-token of a directive (auth/k8s/trace/...)
 	KindMethod            // first token of a request line
 	KindScheme            // URL scheme after a request method
@@ -21,11 +21,14 @@ const (
 )
 
 type Context struct {
-	Kind      Kind
-	Directive string // base key (KindDirectiveArg) or header name (KindHeaderValue)
-	ArgKey    string // option key when completing a value, e.g. "use"
-	Query     string // partial token being completed, lowercased
-	Start     int    // rune offset within the caret line where Query begins
+	Kind          Kind
+	DirectiveName directive.Name // base key for KindDirectiveArg
+	HeaderName    string         // lowercased name for KindHeaderValue
+	ArgKey        string         // option key when completing a value, e.g. "use"
+	Query         string         // partial token being completed, lowercased
+	Start         int            // rune offset within the caret line where Query begins
+
+	needsCommentPrefix bool
 }
 
 // Lines exposes the buffer's logical lines to Analyze - LineRunes(i) is the
@@ -52,6 +55,9 @@ func Analyze(lines Lines, line, col int) (Context, bool) {
 	}
 	if marker := commentPrefixLen(cur); marker >= 0 {
 		return analyzeDirective(cur, marker, col)
+	}
+	if ctx, ok := analyzeBareDirective(cur, col); ok {
+		return ctx, true
 	}
 	return analyzeRequest(lines, line, cur, col)
 }
@@ -111,6 +117,21 @@ func analyzeDirective(cur []rune, marker, col int) (Context, bool) {
 	return ctx, true
 }
 
+func analyzeBareDirective(cur []rune, col int) (Context, bool) {
+	at := leadingSpaceLen(cur)
+	if at >= col || cur[at] != '@' {
+		return Context{}, false
+	}
+
+	ctx, ok := analyzeDirectiveArea(cur[at+1 : col])
+	if !ok || ctx.Kind != KindDirective {
+		return Context{}, false
+	}
+	ctx.Start = at
+	ctx.needsCommentPrefix = true
+	return ctx, true
+}
+
 func analyzeDirectiveArea(area []rune) (Context, bool) {
 	if len(area) == 0 {
 		return Context{Kind: KindDirective}, true
@@ -135,14 +156,14 @@ func analyzeDirectiveArea(area []rune) (Context, bool) {
 		return Context{}, false
 	}
 
-	base := strings.ToLower(string(area[:sep]))
+	base := directive.Name(strings.ToLower(string(area[:sep])))
 
 	start, token, ok := splitToken(area, skipArgSep(area, sep))
 	if !ok {
 		return Context{}, false
 	}
 
-	ctx := Context{Kind: KindDirectiveArg, Directive: base, Start: start}
+	ctx := Context{Kind: KindDirectiveArg, DirectiveName: base, Start: start}
 	if key, val, found := splitValueToken(token); found {
 		ctx.ArgKey = key
 		ctx.Query = strings.ToLower(val)
@@ -258,18 +279,15 @@ func headerContext(cur []rune, col int) (Context, bool) {
 		start++
 	}
 	return Context{
-		Kind:      KindHeaderValue,
-		Directive: name,
-		Query:     strings.ToLower(string(cur[start:col])),
-		Start:     start,
+		Kind:       KindHeaderValue,
+		HeaderName: name,
+		Query:      strings.ToLower(string(cur[start:col])),
+		Start:      start,
 	}, true
 }
 
 func commentPrefixLen(cur []rune) int {
-	i := 0
-	for i < len(cur) && unicode.IsSpace(cur[i]) {
-		i++
-	}
+	i := leadingSpaceLen(cur)
 	rest := cur[i:]
 	switch {
 	case hasRunePrefix(rest, "//"), hasRunePrefix(rest, "/*"), hasRunePrefix(rest, "--"):
@@ -279,6 +297,14 @@ func commentPrefixLen(cur []rune) int {
 	default:
 		return -1
 	}
+}
+
+func leadingSpaceLen(cur []rune) int {
+	i := 0
+	for i < len(cur) && unicode.IsSpace(cur[i]) {
+		i++
+	}
+	return i
 }
 
 func looksLikeRequestLine(line string) bool {

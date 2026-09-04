@@ -207,7 +207,7 @@ environment - there are no network calls while you type.
 | --- | --- |
 | Start of a request line | HTTP methods plus `WS` / `WSS` / `GRPC` |
 | Start of a request URL | Schemes: `http://`, `https://`, `ws://`, `wss://` |
-| `@` on a comment line | Metadata directives and their options (e.g. `@auth bearer`, `@k8s target=`) |
+| Line-leading `@` (with or without a comment marker) | Metadata directives and their options (e.g. `@auth bearer`, `@k8s target=`) |
 | Header section (after the request line, before the blank line) | Header names, then values for well-known headers such as `Content-Type` |
 | Inside `{{ ... }}` | Variables in scope (file/global/request, `@const`, current-environment keys) and dynamic builtins (`$uuid`, `$timestamp`, ...) |
 | `@compare` arguments | Environment names |
@@ -217,6 +217,11 @@ Popup keys: `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) navigate, `Right` or `?` open
 details preview (`Ctrl+L` toggles it), `Left` / `Esc` closes the preview, `Enter` or
 `Tab` accepts, and `Esc` dismisses the popup. Styling is controlled by the
 `editor_hint_*` theme keys.
+
+When a directive completion starts with bare `@`, accepting it adds the canonical
+`# ` comment marker automatically. For example, completing `@na` produces `# @name `.
+The marker is added only on acceptance, so in-place variables such as `@name = value`
+remain unchanged when you keep typing.
 
 Many suggestions insert an example value, such as `@setting timeout=5s` or `@mock
 latency=random(100ms,500ms)`. Accepting one leaves the example selected, so the next

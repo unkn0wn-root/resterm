@@ -675,7 +675,7 @@ func (e *requestEditor) applyCompletion() tea.Cmd {
 	runes := []rune(e.Value())
 	after := runes[min(caret.Offset, len(runes)):]
 
-	addSpace := completionAddsSpace(e.completion.ctx.Kind) &&
+	addSpace := selected.AppendsSpace(e.completion.ctx.Kind) &&
 		(len(after) == 0 || !unicode.IsSpace(after[0]))
 	e.pushUndoSnapshot()
 
@@ -705,15 +705,6 @@ func (e *requestEditor) applyCompletion() tea.Cmd {
 	e.applySelectionHighlight()
 	e.completion.deactivate()
 	return nil
-}
-
-func completionAddsSpace(kind intellisense.Kind) bool {
-	switch kind {
-	case intellisense.KindVariable, intellisense.KindHeaderValue, intellisense.KindScheme:
-		return false
-	default:
-		return true
-	}
 }
 
 func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {

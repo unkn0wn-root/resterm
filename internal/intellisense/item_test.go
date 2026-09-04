@@ -3,6 +3,8 @@ package intellisense
 import (
 	"slices"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
 // catalogItems is every static suggestion the engine can offer, so a new entry
@@ -121,5 +123,58 @@ func TestInsertTextFallsBackToLabel(t *testing.T) {
 	}
 	if got := (Item{Label: "Accept", Insert: "Accept:"}).InsertText(); got != "Accept:" {
 		t.Fatalf("InsertText = %q, want the insert", got)
+	}
+}
+
+func TestWithInsertPrefixPreservesPlaceholder(t *testing.T) {
+	original := Item{
+		Label:       "@setting",
+		Insert:      "@setting timeout=5s",
+		Placeholder: "5s",
+	}
+	prefixed := original.withInsertPrefix(directive.CommentPrefix)
+
+	if got := prefixed.InsertText(); got != "# @setting timeout=5s" {
+		t.Fatalf("prefixed insert = %q, want %q", got, "# @setting timeout=5s")
+	}
+	start, end, ok := prefixed.PlaceholderRange()
+	if !ok {
+		t.Fatal("prefixed item lost its placeholder")
+	}
+	if got := string([]rune(prefixed.InsertText())[start:end]); got != "5s" {
+		t.Fatalf("prefixed placeholder = %q, want %q", got, "5s")
+	}
+	if got := original.InsertText(); got != "@setting timeout=5s" {
+		t.Fatalf("prefixing mutated the original item: %q", got)
+	}
+}
+
+func TestItemAppendsSpace(t *testing.T) {
+	tests := []struct {
+		name string
+		item Item
+		kind Kind
+		want bool
+	}{
+		{name: "directive with arguments", kind: KindDirective, want: true},
+		{
+			name: "directive without arguments",
+			item: Item{noTrailingSpace: true},
+			kind: KindDirective,
+		},
+		{name: "method", kind: KindMethod, want: true},
+		{name: "header name", kind: KindHeaderName, want: true},
+		{name: "directive argument", kind: KindDirectiveArg, want: true},
+		{name: "variable", kind: KindVariable},
+		{name: "header value", kind: KindHeaderValue},
+		{name: "scheme", kind: KindScheme},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.item.AppendsSpace(tt.kind); got != tt.want {
+				t.Fatalf("AppendsSpace(%v) = %v, want %v", tt.kind, got, tt.want)
+			}
+		})
 	}
 }

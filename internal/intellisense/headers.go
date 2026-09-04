@@ -66,7 +66,7 @@ func (headerSource) Provide(ctx Context, _ Scope) []Item {
 	case KindHeaderName:
 		return filter(headerNameItems, ctx.Query)
 	case KindHeaderValue:
-		return filter(headerValues[ctx.Directive], ctx.Query)
+		return filter(headerValues[ctx.HeaderName], ctx.Query)
 	default:
 		return nil
 	}

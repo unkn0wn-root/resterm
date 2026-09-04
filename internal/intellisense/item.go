@@ -19,6 +19,8 @@ type Item struct {
 	// caret offset keeps delimiters around the value, such as a closing paren,
 	// outside the selection.
 	Placeholder string
+
+	noTrailingSpace bool
 }
 
 // InsertText is what an editor writes when the item is accepted.
@@ -27,6 +29,27 @@ func (it Item) InsertText() string {
 		return it.Insert
 	}
 	return it.Label
+}
+
+func (it Item) withInsertPrefix(prefix string) Item {
+	if prefix != "" {
+		it.Insert = prefix + it.InsertText()
+	}
+	return it
+}
+
+// AppendsSpace reports whether accepting the item should leave the caret ready
+// for another token in the current completion context.
+func (it Item) AppendsSpace(kind Kind) bool {
+	if it.noTrailingSpace {
+		return false
+	}
+	switch kind {
+	case KindVariable, KindHeaderValue, KindScheme:
+		return false
+	default:
+		return true
+	}
 }
 
 // PlaceholderRange locates Placeholder in InsertText as rune offsets. The last

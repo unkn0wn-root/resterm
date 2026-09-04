@@ -19,9 +19,10 @@ func directiveItems() []Item {
 			aliases[j] = alias.Tag()
 		}
 		items[i] = Item{
-			Label:   spec.Name.Tag(),
-			Aliases: aliases,
-			Summary: spec.Summary,
+			Label:           spec.Name.Tag(),
+			Aliases:         aliases,
+			Summary:         spec.Summary,
+			noTrailingSpace: spec.Args == directive.ArgNone,
 		}
 		if spec.Name == directive.RTS {
 			items[i].Insert = directive.RTS.Tag() + " pre-request"
@@ -981,9 +982,15 @@ type directiveSource struct{}
 func (directiveSource) Provide(ctx Context, sc Scope) []Item {
 	switch ctx.Kind {
 	case KindDirective:
-		return filter(directives, ctx.Query)
+		items := filter(directives, ctx.Query)
+		if ctx.needsCommentPrefix {
+			for i, item := range items {
+				items[i] = item.withInsertPrefix(directive.CommentPrefix)
+			}
+		}
+		return items
 	case KindDirectiveArg:
-		name := directive.Name(ctx.Directive).Canonical()
+		name := ctx.DirectiveName.Canonical()
 		if ctx.ArgKey == "use" {
 			return filter(profileItems(name, sc.Profiles), ctx.Query)
 		}
