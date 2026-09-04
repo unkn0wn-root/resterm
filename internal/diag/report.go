@@ -1,6 +1,9 @@
 package diag
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // Pos identifies a source location. Line and Col are one-based when present.
 type Pos struct {
@@ -170,7 +173,10 @@ func (r Report) Summary() string {
 		msg = "operation failed"
 	}
 	if len(r.Items) > 1 {
-		if it.Class == ClassParse {
+		allParseErrors := !slices.ContainsFunc(r.Items, func(d Diagnostic) bool {
+			return d.Class != ClassParse || d.Severity != SeverityError
+		})
+		if allParseErrors {
 			if it.Span.Start.Line > 0 {
 				return fmt.Sprintf(
 					"%d parse errors, first at line %d: %s",
@@ -191,7 +197,7 @@ func (r Report) Summary() string {
 		}
 		return fmt.Sprintf("%d diagnostics, first: %s", len(r.Items), msg)
 	}
-	if it.Class == ClassParse {
+	if it.Class == ClassParse && it.Severity == SeverityError {
 		if it.Span.Start.Line > 0 {
 			return fmt.Sprintf("parse error at line %d: %s", it.Span.Start.Line, msg)
 		}

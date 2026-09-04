@@ -14,7 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func hasParseMessage(list []restfile.ParseError, sub string) bool {
+func hasParseMessage(list []restfile.ParseDiagnostic, sub string) bool {
 	for _, e := range list {
 		if strings.Contains(e.Message, sub) {
 			return true

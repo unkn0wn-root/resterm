@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/delay"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
@@ -527,7 +528,7 @@ type Document struct {
 	Requests  []*Request
 	Mocks     []*Mock
 	Workflows []Workflow
-	Errors    []ParseError
+	Errors    []ParseDiagnostic
 	Warnings  []ParseDiagnostic
 	Raw       []byte
 }
@@ -664,18 +665,20 @@ type WorkflowForEach struct {
 	Line int
 }
 
-type ParseError struct {
+type ParseDiagnostic struct {
 	Line    int
 	Column  int
 	Message string
+	// Span and Labels use one-based lines and UTF-8 byte columns with exclusive
+	// ends. Line keeps the location that Check and WarningTexts report.
+	Span   diag.Span
+	Labels []diag.Label
 	// Mock marks @mock/@match errors so the mock compiler can reject a
 	// document without matching on message text.
 	Mock bool
 }
 
-type ParseDiagnostic = ParseError
-
-func (e ParseError) Error() string {
+func (e ParseDiagnostic) Error() string {
 	return e.Message
 }
 

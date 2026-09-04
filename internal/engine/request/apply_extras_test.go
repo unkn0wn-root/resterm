@@ -107,7 +107,7 @@ func TestExplainReportCarriesParseWarnings(t *testing.T) {
 
 	doc := &restfile.Document{
 		Path: "warn.http",
-		Warnings: []restfile.ParseError{
+		Warnings: []restfile.ParseDiagnostic{
 			{Line: 3, Message: `unknown @sse option "max-event"`},
 		},
 	}
@@ -138,7 +138,7 @@ func TestExplainReportCarriesParseWarnings(t *testing.T) {
 func TestExplainReportCarriesParseWarningsOnEarlyFailure(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "warn.http",
-		Warnings: []restfile.ParseError{
+		Warnings: []restfile.ParseDiagnostic{
 			{Line: 3, Message: `unknown @sse option "max-event"`},
 		},
 	}

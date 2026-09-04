@@ -16,8 +16,17 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
-func (b *documentBuilder) addMockError(line int, message string) {
-	b.doc.Errors = append(b.doc.Errors, restfile.ParseError{Line: line, Message: message, Mock: true})
+func (b *documentBuilder) addMockError(line int, msg string) {
+	b.pushMockError(b.diagnostic(line, msg, nil))
+}
+
+func (b *documentBuilder) reportMock(line int, err error) {
+	b.pushMockError(b.diagnostic(line, err.Error(), err))
+}
+
+func (b *documentBuilder) pushMockError(item restfile.ParseDiagnostic) {
+	item.Mock = true
+	b.pushError(item)
 }
 
 // One error per key, so a typo next to a usable option still names what broke.
@@ -29,7 +38,7 @@ func (b *documentBuilder) checkMockOptions(
 ) {
 	for _, key := range vals.Keys() {
 		if !slices.Contains(known, key) {
-			b.addMockError(line, fmt.Sprintf("unknown %s option %q", name.Tag(), key))
+			b.reportMock(line, directive.UnknownOption(name, key))
 		}
 	}
 }
@@ -80,7 +89,7 @@ func (b *documentBuilder) handleMockDirective(d parsedDirective) directiveOutcom
 func (b *documentBuilder) startMock(line int, raw string) {
 	vals, err := directive.ParseOptions(directive.Mock, raw)
 	if err != nil {
-		b.addMockError(line, err.Error())
+		b.reportMock(line, err)
 	}
 	b.checkMockOptions(
 		line, directive.Mock, vals,
@@ -155,7 +164,7 @@ func (b *documentBuilder) checkMockRoute(line int, m *mockBuilder) {
 	if m.path == "" {
 		b.addMockError(line, "@mock path is required")
 	} else if err := restfile.ValidateMockPath(m.path); err != nil {
-		b.addMockError(line, err.Error())
+		b.reportMock(line, err)
 	}
 	if m.name != "" && !restfile.ValidMockName(m.name) {
 		b.addMockError(line, "@mock name may contain only letters, digits, '.', '_' and '-'")
@@ -204,7 +213,7 @@ func (m *mockBuilder) parsePreamble(b *documentBuilder, ln line) {
 		return
 	}
 	if c, ok := ln.comment(); ok {
-		if d, ok := b.readDirective(ln.no, c.col(), c.text); ok {
+		if d, ok := b.readDirective(ln.no, c); ok {
 			m.declare(b, d)
 		}
 		return
@@ -258,7 +267,7 @@ func (m *mockBuilder) addHeader(b *documentBuilder, ln int, line string) {
 func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
 	vals, err := directive.ParseOptions(directive.Match, raw)
 	if err != nil {
-		b.addMockError(line, err.Error())
+		b.reportMock(line, err)
 	}
 	b.checkMockOptions(line, directive.Match, vals, "query", "headers", "json", "json-rules")
 
@@ -298,7 +307,7 @@ func (b *documentBuilder) setMockJSON(line int, opt string, dst *[]byte, compact
 func (m *mockBuilder) addExpectation(b *documentBuilder, line int, raw string) {
 	vals, err := directive.ParseOptions(directive.Expect, raw)
 	if err != nil {
-		b.addMockError(line, err.Error())
+		b.reportMock(line, err)
 	}
 	b.checkMockOptions(line, directive.Expect, vals, "calls")
 
@@ -343,7 +352,7 @@ func addMatchers[T restfile.MockQueryRule | restfile.MockHeaderRule](
 		}
 		name, err := canon(name)
 		if err != nil {
-			b.addMockError(line, err.Error())
+			b.reportMock(line, err)
 			continue
 		}
 		if _, exists := dst[name]; exists {

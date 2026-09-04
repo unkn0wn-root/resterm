@@ -28,6 +28,8 @@ type documentBuilder struct {
 	inBlock              bool
 	inScriptBlock        bool
 	scriptBlockStartLine int
+	// current anchors errors within the directive being applied; cleared on the next line.
+	current *parsedDirective
 }
 
 // fileScope accumulates declarations made at file level, outside any request,
@@ -68,15 +70,35 @@ func (s *fileScope) apply(doc *restfile.Document) {
 	doc.Patches = append(doc.Patches, s.patches...)
 }
 
-func (b *documentBuilder) addError(line int, message string) {
-	msg := strings.TrimSpace(message)
-	if msg == "" {
-		return
+func (b *documentBuilder) addError(line int, msg string) {
+	b.pushError(b.diagnostic(line, msg, nil))
+}
+
+func (b *documentBuilder) addWarning(line int, msg string) {
+	b.pushWarning(b.diagnostic(line, msg, nil))
+}
+
+func (b *documentBuilder) pushError(item restfile.ParseDiagnostic) {
+	b.doc.Errors = pushDiagnostic(b.doc.Errors, item)
+}
+
+func (b *documentBuilder) pushWarning(item restfile.ParseDiagnostic) {
+	b.doc.Warnings = pushDiagnostic(b.doc.Warnings, item)
+}
+
+func pushDiagnostic(items []restfile.ParseDiagnostic, item restfile.ParseDiagnostic) []restfile.ParseDiagnostic {
+	item.Message = strings.TrimSpace(item.Message)
+	if item.Message == "" {
+		return items
 	}
-	b.doc.Errors = append(b.doc.Errors, restfile.ParseError{
-		Line:    line,
-		Message: msg,
-	})
+	return append(items, item)
+}
+
+func (b *documentBuilder) diagnostic(line int, msg string, cause error) restfile.ParseDiagnostic {
+	if d := b.current; d != nil && d.lines.Start == line {
+		return d.diagnostic(msg, cause)
+	}
+	return restfile.ParseDiagnostic{Line: line, Message: msg}
 }
 
 // Joined errors are reported separately so the editor can show every problem on
@@ -92,12 +114,13 @@ func (b *documentBuilder) report(line int, err error) {
 		}
 		return
 	}
+	item := b.diagnostic(line, err.Error(), err)
 	var unknown *directive.UnknownOptionsError
 	if errors.As(err, &unknown) {
-		b.addWarning(line, err.Error())
+		b.pushWarning(item)
 		return
 	}
-	b.addError(line, err.Error())
+	b.pushError(item)
 }
 
 // True if err is more than unknown option warnings. When it is false the
@@ -113,18 +136,8 @@ func fatalErr(err error) bool {
 	return !errors.As(err, &unknown)
 }
 
-func (b *documentBuilder) addWarning(line int, message string) {
-	msg := strings.TrimSpace(message)
-	if msg == "" {
-		return
-	}
-	b.doc.Warnings = append(b.doc.Warnings, restfile.ParseError{
-		Line:    line,
-		Message: msg,
-	})
-}
-
 func (b *documentBuilder) processLine(no int, raw, term string) {
+	b.current = nil
 	ln := makeLine(no, raw, term)
 	b.closeOpenDirective(ln)
 
@@ -276,6 +289,7 @@ func (b *documentBuilder) flushWorkflow(line int) {
 }
 
 func (b *documentBuilder) finish() {
+	b.current = nil
 	if cut := b.reader.abandon(); cut != nil {
 		b.failOpenDirective(cut)
 	}

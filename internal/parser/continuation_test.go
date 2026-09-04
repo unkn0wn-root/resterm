@@ -256,13 +256,13 @@ GET https://example.com/
 
 func TestParseBlockCommentOptionContinuationKeepsZeroPadding(t *testing.T) {
 	b := &documentBuilder{}
-	_, complete := b.readDirective(1, 0, `@match regex="first`)
+	_, complete := b.readDirective(1, commentText{text: `@match regex="first`, block: true})
 	_, pending := b.reader.pending()
 	if complete || !pending {
 		t.Fatal("expected the quoted option to remain open")
 	}
 
-	d, ok := b.readDirective(2, 0, `second"`)
+	d, ok := b.readDirective(2, commentText{text: `second"`, block: true})
 	if !ok {
 		t.Fatal("expected the quoted option to close")
 	}

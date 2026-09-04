@@ -74,7 +74,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 		return directiveApplied
 	case directive.RTS:
 		if err := b.setRTSScript(rest); err != nil {
-			return b.reject(d, err.Error())
+			return b.rejectError(d, err)
 		}
 		return directiveApplied
 	case directive.Apply:
@@ -143,7 +143,7 @@ func (b *documentBuilder) addRequestVar(no int, rest string) {
 func (b *documentBuilder) addApply(d parsedDirective) directiveOutcome {
 	spec, err := parseApplySpec(d.Args, d.lines.Start)
 	if err != nil {
-		return b.reject(d, err.Error())
+		return b.rejectError(d, err)
 	}
 	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
@@ -172,7 +172,7 @@ func (b *documentBuilder) addAssert(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setWhen(d parsedDirective) directiveOutcome {
 	spec, err := parseConditionSpec(d.Args, d.lines.Start, d.Spelling == directive.SkipIf)
 	if err != nil {
-		return b.reject(d, err.Error())
+		return b.rejectError(d, err)
 	}
 	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.When = spec
@@ -182,7 +182,7 @@ func (b *documentBuilder) setWhen(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setForEach(d parsedDirective) directiveOutcome {
 	spec, err := parseForEachSpec(d.Args, d.lines.Start)
 	if err != nil {
-		return b.reject(d, err.Error())
+		return b.rejectError(d, err)
 	}
 	b.request.metadata.ForEach = spec
 	return directiveApplied
@@ -191,7 +191,7 @@ func (b *documentBuilder) setForEach(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setCompare(d parsedDirective) directiveOutcome {
 	spec, err := parseCompareDirective(d.Args)
 	if err != nil {
-		return b.reject(d, err.Error())
+		return b.rejectError(d, err)
 	}
 	b.request.metadata.Compare = spec
 	return directiveApplied

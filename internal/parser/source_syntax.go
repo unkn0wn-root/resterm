@@ -44,6 +44,7 @@ func (k SourceLineKind) String() string {
 // the line starts inside an option value.
 type SourceLine struct {
 	Kind           SourceLineKind
+	Directive      directive.Name
 	Args           directive.ArgKind
 	ContentStart   int
 	ContentEnd     int
@@ -307,14 +308,14 @@ func (s *sourceScan) observeHeader(raw string) {
 }
 
 func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.Call, bool) {
-	result := s.reader.read(ln.no, c.col(), c.text)
+	result := s.reader.read(ln.no, c)
 	switch result.kind {
 	case directiveReadStarted:
-		return sourceComment(ln, c, SourceLineDirective, argKind(result.owner)), directive.Call{}, false
+		return sourceDirectiveLine(ln, c, result.owner), directive.Call{}, false
 	case directiveReadContinued:
 		return sourceDirectiveValue(ln, c, result), directive.Call{}, false
 	case directiveReadCompleted:
-		return sourceComment(ln, c, SourceLineDirective, argKind(result.owner)), result.directive.Call, true
+		return sourceDirectiveLine(ln, c, result.owner), result.directive.Call, true
 	case directiveReadContinuationCompleted:
 		return sourceDirectiveValue(ln, c, result), result.directive.Call, true
 	case directiveReadMark:
@@ -324,8 +325,15 @@ func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.
 	}
 }
 
+func sourceDirectiveLine(ln line, c commentText, owner directive.Name) SourceLine {
+	syntax := sourceComment(ln, c, SourceLineDirective, argKind(owner))
+	syntax.Directive = owner
+	return syntax
+}
+
 func sourceDirectiveValue(ln line, c commentText, result directiveReadResult) SourceLine {
 	syntax := sourceComment(ln, c, SourceLineDirectiveValue, argKind(result.owner))
+	syntax.Directive = result.owner
 	if n := result.optionValueLen; n > 0 {
 		syntax.OptionValueEnd = syntax.ContentStart + utf8.RuneCountInString(c.text[:n])
 	}

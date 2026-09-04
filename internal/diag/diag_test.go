@@ -471,3 +471,17 @@ func TestWrapKeepsTheCauseClass(t *testing.T) {
 		t.Fatalf("ClassOf() = %q, want %q", got, diag.ClassUnknown)
 	}
 }
+
+func TestParseSummaryRespectsSeverity(t *testing.T) {
+	for _, severities := range [][]diag.Severity{
+		{diag.SeverityWarning}, {diag.SeverityWarning, diag.SeverityWarning}, {diag.SeverityError, diag.SeverityWarning},
+	} {
+		var rep diag.Report
+		for _, severity := range severities {
+			rep.Items = append(rep.Items, diag.Diagnostic{Class: diag.ClassParse, Severity: severity, Message: "problem"})
+		}
+		if got := rep.Summary(); strings.Contains(got, "parse error") {
+			t.Fatalf("misleading summary %q", got)
+		}
+	}
+}

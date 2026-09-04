@@ -329,6 +329,34 @@ func (e *AliasConflictError) Error() string {
 	return fmt.Sprintf("%s options %s are the same option", e.Directive.Tag(), quoteKeys(e.Keys))
 }
 
+// OptionKeys lists the option names an error reports, across joined errors.
+func OptionKeys(err error) []string {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var keys []string
+		for _, child := range joined.Unwrap() {
+			for _, key := range OptionKeys(child) {
+				if !slices.Contains(keys, key) {
+					keys = append(keys, key)
+				}
+			}
+		}
+		return keys
+	}
+	var unknown *UnknownOptionsError
+	var repeated *RepeatedOptionsError
+	var conflict *AliasConflictError
+	switch {
+	case errors.As(err, &unknown):
+		return unknown.Keys
+	case errors.As(err, &repeated):
+		return repeated.Keys
+	case errors.As(err, &conflict):
+		return conflict.Keys
+	default:
+		return nil
+	}
+}
+
 func (o Options) Conflicts(name Name) error {
 	if len(o.clash) == 0 {
 		return nil
