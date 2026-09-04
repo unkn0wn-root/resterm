@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -29,6 +32,19 @@ func headerTestModel(t *testing.T, width int) *Model {
 	model.ws.root = "/tmp/acme-api"
 	model.activeRequestTitle = "GET create-user"
 	return model
+}
+
+func assertHeaderFits(t *testing.T, model *Model, label string) {
+	t.Helper()
+
+	for width := 3; width <= 200; width++ {
+		model.width = width
+		for line := range strings.SplitSeq(model.renderHeader(), "\n") {
+			if got := lipgloss.Width(line); got > width {
+				t.Fatalf("%s width %d rendered %d cells: %q", label, width, got, ansi.Strip(line))
+			}
+		}
+	}
 }
 
 func TestHeaderRendersLayout(t *testing.T) {
@@ -77,6 +93,116 @@ func TestHeaderRendersLayout(t *testing.T) {
 	if lines[1] != wantRule {
 		t.Fatalf("header rule = %q, want %q", lines[1], wantRule)
 	}
+}
+
+func TestHeaderMockVariantsSummariseSourceScope(t *testing.T) {
+	root := t.TempDir()
+	tests := []struct {
+		name string
+		src  mock.Sources
+		want []string
+	}{
+		{name: "workspace", src: mock.Sources{Path: root}, want: []string{"workspace"}},
+		{
+			name: "recursive workspace",
+			src:  mock.Sources{Path: root, Recursive: true},
+			want: []string{"workspace/**"},
+		},
+		{
+			name: "one file",
+			src: mock.Sources{
+				Path:  root,
+				Files: []string{filepath.Join(root, "mock.http")},
+			},
+			want: []string{"mock.http"},
+		},
+		{
+			name: "several files",
+			src: mock.Sources{
+				Path: root,
+				Files: []string{
+					filepath.Join(root, "nested", "users.http"),
+					filepath.Join(root, "payments.http"),
+					filepath.Join(root, "errors.rest"),
+				},
+			},
+			want: []string{filepath.Join("nested", "users.http") + " +2", "users.http +2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := headerMockVariants(tt.src); !slices.Equal(got, tt.want) {
+				t.Fatalf("headerMockVariants() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHeaderShowsMockScopeOnlyWhileRunning(t *testing.T) {
+	model := headerTestModel(t, 160)
+	model.mock.src = mock.Sources{
+		Path:  model.ws.root,
+		Files: []string{filepath.Join(model.ws.root, "fixtures", "mock.http")},
+	}
+	want := iconHeaderMock + " " + labelHeaderMock + " " + filepath.Join("fixtures", "mock.http")
+
+	if view := ansi.Strip(model.renderHeader()); strings.Contains(view, want) {
+		t.Fatalf("stopped header contains mock scope %q:\n%s", want, view)
+	}
+
+	model.mock.server = &mock.Server{}
+	if view := ansi.Strip(model.renderHeader()); !strings.Contains(view, want) {
+		t.Fatalf("running header is missing mock scope %q:\n%s", want, view)
+	}
+
+	model.mock.server = nil
+	if view := ansi.Strip(model.renderHeader()); strings.Contains(view, want) {
+		t.Fatalf("stopped header kept mock scope %q:\n%s", want, view)
+	}
+}
+
+func TestHeaderShortensMockScopeBeforeTruncating(t *testing.T) {
+	model := headerTestModel(t, 160)
+	model.mock.server = &mock.Server{}
+	model.mock.src = mock.Sources{
+		Path: model.ws.root,
+		Files: []string{
+			filepath.Join(model.ws.root, "nested", "users.http"),
+			filepath.Join(model.ws.root, "payments.http"),
+			filepath.Join(model.ws.root, "errors.rest"),
+		},
+	}
+	full := filepath.Join("nested", "users.http") + " +2"
+	base := "users.http +2"
+
+	for width := 160; width >= 30; width-- {
+		model.width = width
+		view := ansi.Strip(model.renderHeader())
+		if strings.Contains(view, full) {
+			continue
+		}
+		if !strings.Contains(view, base) {
+			t.Fatalf("mock scope lost characters before shortening at width %d:\n%s", width, view)
+		}
+		return
+	}
+	t.Fatal("expected the nested mock scope to shorten at a narrow width")
+}
+
+func TestHeaderWithMockFitsSupportedWidths(t *testing.T) {
+	model := headerTestModel(t, 200)
+	model.mock.server = &mock.Server{}
+	model.mock.src = mock.Sources{
+		Path: model.ws.root,
+		Files: []string{
+			filepath.Join(model.ws.root, "fixtures", strings.Repeat("long-source-", 4)+"users.http"),
+			filepath.Join(model.ws.root, "payments.http"),
+		},
+	}
+	model.testResults = []scripts.TestResult{{Name: "passed", Passed: true}}
+
+	assertHeaderFits(t, model, "running mock")
 }
 
 func TestHeaderDropsHelpBeforeLatency(t *testing.T) {
@@ -197,20 +323,11 @@ func TestHeaderFitsSupportedWidths(t *testing.T) {
 		model.activeRequestTitle = activeRequest
 		for _, status := range statuses {
 			model.headerTransport = status
-			for width := 3; width <= 200; width++ {
-				model.width = width
-				for line := range strings.SplitSeq(model.renderHeader(), "\n") {
-					if got := lipgloss.Width(line); got > width {
-						t.Fatalf(
-							"active request %q status %q width %d rendered %d cells",
-							activeRequest,
-							status.label,
-							width,
-							got,
-						)
-					}
-				}
-			}
+			assertHeaderFits(
+				t,
+				model,
+				fmt.Sprintf("active request %q status %q", activeRequest, status.label),
+			)
 		}
 	}
 }

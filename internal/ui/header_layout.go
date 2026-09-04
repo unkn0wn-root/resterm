@@ -12,10 +12,13 @@ const headerGap = 3
 
 // Header segments are dropped lowest priority first, so a narrow terminal keeps
 // the environment and the active request rather than the decoration around them.
+type headerPriority int
+
 const (
-	headerPriorityRequests = iota
+	headerPriorityRequests headerPriority = iota
 	headerPriorityWorkspace
 	headerPriorityBrand
+	headerPriorityMock
 	headerPriorityTests
 	headerPriorityActive
 	headerPriorityEnv
@@ -38,7 +41,7 @@ const headerValueFloor = 8
 type headerSegment struct {
 	text      []string
 	lossy     int
-	priority  int
+	priority  headerPriority
 	separator string
 }
 
@@ -220,7 +223,7 @@ func shrinkHeaderSegment(segs []headerSegment, keep, levels []int, widths [][]in
 // minHeaderWidth is the narrowest the left side can get: the segment
 // fitHeaderSegments always keeps, at its shortest rendering.
 func minHeaderWidth(segs []headerSegment) int {
-	width, best := 0, -1
+	width, best := 0, headerPriority(-1)
 	for _, seg := range segs {
 		if seg.priority > best && len(seg.text) > 0 {
 			best = seg.priority
