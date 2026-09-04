@@ -98,7 +98,7 @@ Both templates add `resterm.env.json` to `.gitignore` so secrets stay out of ver
 
 | Flag | Description |
 | --- | --- |
-| `-dir <path>` | Target directory. You can also pass the path as a positional argument. |
+| `-dir <path>` | Target directory. You can also pass the path as a positional argument, but not both. |
 | `-template <name>` | Template to use (`standard` or `minimal`). |
 | `-force` | Overwrite existing files instead of aborting. |
 | `-dry-run` | Print actions without writing anything. |

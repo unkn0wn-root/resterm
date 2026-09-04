@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -86,90 +85,56 @@ func run(a []string) error {
 
 	exec := cli.NewExecFlags()
 	fs := cli.NewFlagSet("resterm")
-	cli.StringVarAliases(fs, &filePath, "", "Path to .http/.rest file to open", "file", "f")
+	fs.StringVarAliases(&filePath, "", "Path to .http/.rest file to open", "file", "f")
 	exec.Bind(fs)
-	cli.BoolVarAliases(fs, &showVersion, false, "Show resterm version", "version", "v")
-	cli.BoolVarAliases(
-		fs,
-		&checkUpdate,
-		false,
-		"Check for newer releases and exit",
-		"check-update",
-		"c",
-	)
-	cli.BoolVarAliases(
-		fs,
-		&doUpdate,
-		false,
-		"Download and install the latest release, if available",
-		"update",
-		"u",
-	)
-	cli.StringVarAliases(
-		fs,
-		&curlSrc,
-		"",
-		"Curl command or file path to convert",
-		"from-curl",
-		"fc",
-	)
-	cli.StringVarAliases(
-		fs,
+	fs.BoolVarAliases(&showVersion, false, "Show resterm version", "version", "v")
+	fs.BoolVarAliases(&checkUpdate, false, "Check for newer releases and exit", "check-update", "c")
+	fs.BoolVarAliases(&doUpdate, false, "Download and install the latest release, if available", "update", "u")
+	fs.StringVarAliases(&curlSrc, "", "Curl command or file path to convert", "from-curl", "fc")
+	fs.StringVarAliases(
 		&openapiSpec,
 		"",
 		"Path or URL (http/https) to an OpenAPI specification to convert",
 		"from-openapi",
 		"fo",
 	)
-	cli.StringVarAliases(
-		fs,
-		&httpOut,
-		"",
-		"Destination path for generated .http file",
-		"http-out",
-		"o",
-	)
-	cli.StringVarAliases(
-		fs,
+	fs.StringVarAliases(&httpOut, "", "Destination path for generated .http file", "http-out", "o")
+	fs.StringVarAliases(
 		&openapiBase,
 		openapi.DefaultBaseURLVariable,
 		"Variable name for the generated base URL",
 		"openapi-base-var",
 		"ob",
 	)
-	cli.BoolVarAliases(
-		fs,
+	fs.BoolVarAliases(
 		&openapiResolveRefs,
 		false,
 		"Resolve external $ref references during OpenAPI import",
 		"openapi-resolve-refs",
 		"or",
 	)
-	cli.BoolVarAliases(
-		fs,
+	fs.BoolVarAliases(
 		&openapiIncludeDeprecated,
 		false,
 		"Include deprecated operations when generating requests",
 		"openapi-include-deprecated",
 		"od",
 	)
-	cli.IntVarAliases(
-		fs,
+	fs.IntVarAliases(
 		&openapiServerIndex,
 		0,
 		"Preferred server index (0-based) from the spec to use as the base URL",
 		"openapi-server-index",
 		"os",
 	)
-	cli.StringVarAliases(
-		fs,
+	fs.StringVarAliases(
 		&openapiMode,
 		string(openapi.GenerationRequests),
 		"OpenAPI output mode: requests, mocks, or both",
 		"openapi-mode",
 	)
 	if err := fs.Parse(a); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			printMainUsage(os.Stderr, fs)
 			return nil
 		}
@@ -438,7 +403,7 @@ func run(a []string) error {
 	return nil
 }
 
-func printMainUsage(w io.Writer, fs *flag.FlagSet) {
+func printMainUsage(w io.Writer, fs *cli.FlagSet) {
 	if _, err := fmt.Fprintf(w, "Usage: %s [flags] [file]\n\n", fs.Name()); err != nil {
 		return
 	}

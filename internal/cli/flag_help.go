@@ -25,13 +25,13 @@ const (
 // MaxTextWidth caps wrapped CLI text output at a readable line length.
 const MaxTextWidth = 100
 
-func PrintFlagSetUsage(w io.Writer, app string, fs *flag.FlagSet) {
+func PrintFlagSetUsage(w io.Writer, app string, fs *FlagSet) {
 	_, _ = fmt.Fprintf(w, "Usage: %s %s [flags]\n\n", app, fs.Name())
 	_, _ = fmt.Fprintln(w, "Flags:")
 	PrintFlagDefaults(w, fs)
 }
 
-func PrintFlagDefaults(w io.Writer, fs *flag.FlagSet) {
+func PrintFlagDefaults(w io.Writer, fs *FlagSet) {
 	rows := collectRows(fs)
 	lay := newLayout(rows, DetectWidth(w))
 	for _, row := range rows {
@@ -44,7 +44,7 @@ type flagRow struct {
 	help  string // description, including any "(default ...)" suffix
 }
 
-func collectRows(fs *flag.FlagSet) []flagRow {
+func collectRows(fs *FlagSet) []flagRow {
 	canonical, aliases := splitAliases(fs)
 
 	names := make([]string, 0, len(canonical))
@@ -72,7 +72,7 @@ func collectRows(fs *flag.FlagSet) []flagRow {
 	return rows
 }
 
-func splitAliases(fs *flag.FlagSet) (canonical map[string]*flag.Flag, aliases map[string][]string) {
+func splitAliases(fs *FlagSet) (canonical map[string]*flag.Flag, aliases map[string][]string) {
 	canonical = map[string]*flag.Flag{}
 	aliases = map[string][]string{}
 	fs.VisitAll(func(f *flag.Flag) {

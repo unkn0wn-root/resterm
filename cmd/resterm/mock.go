@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -108,49 +107,38 @@ func mockUsageError(err error) error {
 func runMockServe(args []string) error {
 	fs := cli.NewFlagSet("mock")
 	cfg := defaultMockConfig()
-	cli.StringVarAliases(fs, &cfg.addr, cfg.addr, "Listen address", "addr", "a")
-	cli.StringListVarAliases(
-		fs,
+	fs.StringVarAliases(&cfg.addr, cfg.addr, "Listen address", "addr", "a")
+	fs.StringListVarAliases(
 		&cfg.sources,
 		"Serve only these request files (repeatable, comma lists allowed)",
 		"source",
 		"s",
 	)
-	cli.StringVarAliases(fs, &cfg.cors, cfg.cors, "CORS policy: auto, off, *, or comma-separated origins", "cors")
-	cli.StringVarAliases(
-		fs,
-		&cfg.tlsCert,
-		"",
-		"Serve HTTPS using this PEM certificate (requires --tls-key)",
-		"tls-cert",
-	)
-	cli.StringVarAliases(fs, &cfg.tlsKey, "", "PEM private key for --tls-cert", "tls-key")
-	cli.BoolVarAliases(fs, &cfg.recursive, false, "Scan workspace recursively", "recursive", "r")
-	cli.BoolVarAliases(fs, &cfg.watch, true, "Reload changed sources and fixtures", "watch", "w")
-	cli.BoolVarAliases(fs, &cfg.quiet, false, "Suppress per-request access summaries", "quiet", "q")
-	cli.IntVarAliases(
-		fs,
+	fs.StringVarAliases(&cfg.cors, cfg.cors, "CORS policy: auto, off, *, or comma-separated origins", "cors")
+	fs.StringVarAliases(&cfg.tlsCert, "", "Serve HTTPS using this PEM certificate (requires --tls-key)", "tls-cert")
+	fs.StringVarAliases(&cfg.tlsKey, "", "PEM private key for --tls-cert", "tls-key")
+	fs.BoolVarAliases(&cfg.recursive, false, "Scan workspace recursively", "recursive", "r")
+	fs.BoolVarAliases(&cfg.watch, true, "Reload changed sources and fixtures", "watch", "w")
+	fs.BoolVarAliases(&cfg.quiet, false, "Suppress per-request access summaries", "quiet", "q")
+	fs.IntVarAliases(
 		&cfg.sequenceKeyLimit,
 		cfg.sequenceKeyLimit,
 		"Maximum distinct keys retained by each sequence",
 		"sequence-key-limit",
 	)
-	cli.IntVarAliases(
-		fs,
+	fs.IntVarAliases(
 		&cfg.journalEntries,
 		cfg.journalEntries,
 		"Maximum requests retained for verification",
 		"journal-entries",
 	)
-	cli.StringVarAliases(
-		fs,
+	fs.StringVarAliases(
 		&cfg.journalBytes,
 		cfg.journalBytes,
 		"Maximum memory retained by the request journal",
 		"journal-bytes",
 	)
-	cli.StringVarAliases(
-		fs,
+	fs.StringVarAliases(
 		&cfg.journalBodyLimit,
 		cfg.journalBodyLimit,
 		"Maximum body bytes retained per request",
@@ -166,7 +154,7 @@ func runMockServe(args []string) error {
 		}
 	}
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return mockUsageError(err)
@@ -322,7 +310,7 @@ func closeMockServer(server *mock.Server) error {
 	return nil
 }
 
-func printMockUsage(w io.Writer, fs *flag.FlagSet) {
+func printMockUsage(w io.Writer, fs *cli.FlagSet) {
 	_, _ = fmt.Fprintln(w, "Usage: resterm mock [flags] [file|dir]")
 	_, _ = fmt.Fprintln(w, "       resterm mock reset [flags] [sequence]")
 	_, _ = fmt.Fprintln(w, "       resterm mock clear [flags]")
