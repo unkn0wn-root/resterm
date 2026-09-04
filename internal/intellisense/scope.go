@@ -5,6 +5,7 @@ type Scope struct {
 	Environments      []string
 	EnvironmentGroups map[string][]string
 	Profiles          ProfileSet
+	RequestNames      []string
 }
 
 type VarRef struct {

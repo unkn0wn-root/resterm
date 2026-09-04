@@ -7,8 +7,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
-// catalogItems is every static suggestion the engine can offer, so a new entry
-// is checked without being listed here.
 func catalogItems() []Item {
 	items := slices.Clone(directives)
 	items = append(items, methods...)
@@ -18,8 +16,13 @@ func catalogItems() []Item {
 	for _, values := range headerValues {
 		items = append(items, values...)
 	}
-	for _, args := range directiveArgs {
-		items = append(items, args...)
+	for _, table := range argTable {
+		if table.value != nil {
+			items = append(items, table.value.items()...)
+		}
+		for _, arg := range table.named {
+			items = append(items, arg.items()...)
+		}
 	}
 	return items
 }
@@ -41,9 +44,7 @@ func TestCatalogPlaceholdersAreInsertedText(t *testing.T) {
 	}
 }
 
-// An example value is there to be typed over, so an item that inserts more than
-// its label says which part of it is the example. What is left is punctuation
-// (the header colon) and a mode keyword with only one valid value.
+// Header colons and the fixed @rts mode need no placeholder.
 func TestCatalogExamplesAreSelectable(t *testing.T) {
 	for _, it := range catalogItems() {
 		insert := it.InsertText()

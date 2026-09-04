@@ -51,14 +51,14 @@ func TestHeaderSource(t *testing.T) {
 	}
 
 	values := headerSource{}.Provide(
-		Context{Kind: KindHeaderValue, HeaderName: "content-type", Query: "app"},
+		Context{Kind: KindHeaderValue, header: "content-type", Query: "app"},
 		Scope{},
 	)
 	if !contains(values, "application/json") {
 		t.Fatalf("content-type values missing application/json: %v", values)
 	}
 	if got := (headerSource{}).Provide(
-		Context{Kind: KindHeaderValue, HeaderName: "x-unknown"},
+		Context{Kind: KindHeaderValue, header: "x-unknown"},
 		Scope{},
 	); got != nil {
 		t.Fatalf("expected nil for unknown header values, got %v", got)

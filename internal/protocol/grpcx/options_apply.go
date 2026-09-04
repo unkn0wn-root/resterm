@@ -2,7 +2,9 @@ package grpcx
 
 import (
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
@@ -34,6 +36,11 @@ var sizeSettings = []struct {
 var compressors = map[string]string{
 	compressionNone: "",
 	"gzip":          "gzip",
+}
+
+// CompressionNames returns the supported grpc-compression values in sorted order.
+func CompressionNames() []string {
+	return slices.Sorted(maps.Keys(compressors))
 }
 
 func invalidSetting(key optionSettingKey, val, want string) error {

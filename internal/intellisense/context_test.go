@@ -8,6 +8,13 @@ import (
 
 type testLines []string
 
+func argKey(ctx Context) string {
+	if ctx.arg == nil {
+		return ""
+	}
+	return ctx.arg.key
+}
+
 func (t testLines) LineCount() int         { return len(t) }
 func (t testLines) LineRunes(i int) []rune { return []rune(t[i]) }
 
@@ -266,24 +273,20 @@ func TestAnalyzeClassifiesContexts(t *testing.T) {
 			if ctx.Kind != tc.wantKind {
 				t.Fatalf("kind = %d, want %d", ctx.Kind, tc.wantKind)
 			}
-			if ctx.DirectiveName != tc.wantDir {
-				t.Fatalf("directive = %q, want %q", ctx.DirectiveName, tc.wantDir)
+			if ctx.name != tc.wantDir {
+				t.Fatalf("directive = %q, want %q", ctx.name, tc.wantDir)
 			}
-			if ctx.HeaderName != tc.wantHeader {
-				t.Fatalf("header = %q, want %q", ctx.HeaderName, tc.wantHeader)
+			if ctx.header != tc.wantHeader {
+				t.Fatalf("header = %q, want %q", ctx.header, tc.wantHeader)
 			}
-			if ctx.ArgKey != tc.wantArg {
-				t.Fatalf("argKey = %q, want %q", ctx.ArgKey, tc.wantArg)
+			if got := argKey(ctx); got != tc.wantArg {
+				t.Fatalf("argKey = %q, want %q", got, tc.wantArg)
 			}
 			if ctx.Query != tc.wantQuery {
 				t.Fatalf("query = %q, want %q", ctx.Query, tc.wantQuery)
 			}
-			if ctx.needsCommentPrefix != tc.wantCommentPrefix {
-				t.Fatalf(
-					"needsCommentPrefix = %v, want %v",
-					ctx.needsCommentPrefix,
-					tc.wantCommentPrefix,
-				)
+			if ctx.bare != tc.wantCommentPrefix {
+				t.Fatalf("bare directive = %v, want %v", ctx.bare, tc.wantCommentPrefix)
 			}
 		})
 	}
@@ -302,7 +305,7 @@ func TestAnalyzeStartMarksReplacementToken(t *testing.T) {
 	// The indentation is kept outside the replacement and the accepted item
 	// supplies the missing canonical comment prefix.
 	ctx, ok = Analyze(testLines{"\t@na"}, 0, 4)
-	if !ok || ctx.Kind != KindDirective || !ctx.needsCommentPrefix {
+	if !ok || ctx.Kind != KindDirective || !ctx.bare {
 		t.Fatalf("expected bare directive context, got %+v ok=%v", ctx, ok)
 	}
 	if ctx.Start != 1 {

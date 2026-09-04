@@ -1,12 +1,6 @@
 package intellisense
 
-import (
-	"slices"
-	"strings"
-
-	"github.com/unkn0wn-root/resterm/internal/delay"
-	"github.com/unkn0wn-root/resterm/internal/directive"
-)
+import "github.com/unkn0wn-root/resterm/internal/directive"
 
 var directives = directiveItems()
 
@@ -22,6 +16,7 @@ func directiveItems() []Item {
 			Label:           spec.Name.Tag(),
 			Aliases:         aliases,
 			Summary:         spec.Summary,
+			Continue:        !argsFor(spec.Name).empty(),
 			noTrailingSpace: spec.Args == directive.ArgNone,
 		}
 		if spec.Name == directive.RTS {
@@ -31,1055 +26,100 @@ func directiveItems() []Item {
 	return items
 }
 
-var mockArgs = mockItems()
-
-// The latency suggestions mirror the delay registry, so a new distribution
-// needs no second list here.
-func mockItems() []Item {
-	items := []Item{
-		{
-			Label:       "method=",
-			Summary:     "HTTP method to match",
-			Insert:      "method=GET",
-			Placeholder: "GET",
-		},
-		{
-			Label:       "path=",
-			Summary:     "Origin-form route path",
-			Insert:      "path=/resource",
-			Placeholder: "/resource",
-		},
-		{
-			Label:       "name=",
-			Summary:     "Scenario selector name",
-			Insert:      "name=success",
-			Placeholder: "success",
-		},
-		{
-			Label:       "sequence=",
-			Summary:     "Response sequence name",
-			Insert:      "sequence=polling",
-			Placeholder: "polling",
-		},
-		{
-			Label:       "sequence-key=",
-			Summary:     "Per-key cursor source (path, query, header, or cookie)",
-			Insert:      "sequence-key=path.id",
-			Placeholder: "path.id",
-		},
-		{Label: "default=true", Summary: "Use as the route fallback"},
-		{
-			Label:       "latency=",
-			Summary:     "Constant response latency",
-			Insert:      "latency=250ms",
-			Placeholder: "250ms",
-		},
-	}
-	for _, d := range delay.Distributions() {
-		items = append(items, Item{
-			Label:       "latency=" + d.Name,
-			Summary:     d.Summary,
-			Insert:      "latency=" + d.Usage(),
-			Placeholder: d.Args,
-		})
-	}
-	return append(items, Item{
-		Label:   "interpolate=false",
-		Summary: "Preserve response template syntax literally",
-	})
-}
-
-var scriptArgs = []Item{
-	{Label: "pre-request", Summary: "Run script before the request"},
-	{Label: "test", Summary: "Run script after the response"},
-	{Label: "lang=rts", Aliases: []string{"language=rts"}, Summary: "Use RestermScript (RST)"},
-	{Label: "lang=js", Aliases: []string{"language=js"}, Summary: "Use JavaScript (Goja)"},
-}
-
-var rtsArgs = []Item{
-	{Label: "pre-request", Summary: "Run RestermScript before the request"},
-}
-
-var workflowRunArgs = []Item{
-	{
-		Label:       "run=",
-		Summary:     "Run workflow step",
-		Insert:      "run=StepName",
-		Placeholder: "StepName",
-	},
-	{
-		Label:       "fail=",
-		Summary:     "Fail workflow branch with message",
-		Insert:      "fail=\"message\"",
-		Placeholder: "\"message\"",
-	},
-}
-
-var settingArgs = []Item{
-	{
-		Label:       "base-url=",
-		Summary:     "Base URL for relative HTTP requests",
-		Insert:      "base-url=https://api.example.com/v1/",
-		Placeholder: "https://api.example.com/v1/",
-	},
-	{
-		Label:       "timeout=",
-		Summary:     "Request timeout (e.g. 5s)",
-		Insert:      "timeout=5s",
-		Placeholder: "5s",
-	},
-	{
-		Label:       "proxy=",
-		Summary:     "HTTP proxy URL",
-		Insert:      "proxy=http://proxy",
-		Placeholder: "http://proxy",
-	},
-	{
-		Label:       "followredirects=",
-		Summary:     "Follow redirects (true/false)",
-		Insert:      "followredirects=false",
-		Placeholder: "false",
-	},
-	{
-		Label:       "insecure=",
-		Summary:     "Skip TLS verify (HTTP)",
-		Insert:      "insecure=true",
-		Placeholder: "true",
-	},
-	{
-		Label:       "no-cookies=",
-		Summary:     "Disable cookies for this request",
-		Insert:      "no-cookies=true",
-		Placeholder: "true",
-	},
-	{
-		Label:       "forward-credentials-on-redirect=",
-		Summary:     "Origins a redirect may carry credentials to",
-		Insert:      "forward-credentials-on-redirect=https://cdn.example.com",
-		Placeholder: "https://cdn.example.com",
-	},
-	{
-		Label:       "max-redirects=",
-		Summary:     "Redirects to follow (count or none)",
-		Insert:      "max-redirects=20",
-		Placeholder: "20",
-	},
-	{
-		Label:       "max-response-size=",
-		Summary:     "Response body limit (size or none)",
-		Insert:      "max-response-size=100mb",
-		Placeholder: "100mb",
-	},
-	{
-		Label:       "sse-max-line-bytes=",
-		Summary:     "Default SSE line limit for every request",
-		Insert:      "sse-max-line-bytes=4mb",
-		Placeholder: "4mb",
-	},
-	{
-		Label:       "sse-max-event-bytes=",
-		Summary:     "Default SSE event limit for every request",
-		Insert:      "sse-max-event-bytes=8mb",
-		Placeholder: "8mb",
-	},
-	{
-		Label:       "ws-max-message-bytes=",
-		Summary:     "Default WebSocket message limit for every request",
-		Insert:      "ws-max-message-bytes=32kb",
-		Placeholder: "32kb",
-	},
-	{
-		Label:       "http-version=",
-		Summary:     "HTTP protocol version (1.1|2)",
-		Insert:      "http-version=1.1",
-		Placeholder: "1.1",
-	},
-	{
-		Label:       "http-insecure=",
-		Summary:     "Skip TLS verify (HTTP)",
-		Insert:      "http-insecure=true",
-		Placeholder: "true",
-	},
-	{
-		Label:       "http-root-cas=",
-		Summary:     "Extra root CAs (comma/space separated)",
-		Insert:      "http-root-cas=ca.pem",
-		Placeholder: "ca.pem",
-	},
-	{
-		Label:       "http-root-mode=",
-		Summary:     "Root CA mode (append|replace)",
-		Insert:      "http-root-mode=append",
-		Placeholder: "append",
-	},
-	{
-		Label:       "http-client-cert=",
-		Summary:     "Client certificate path",
-		Insert:      "http-client-cert=cert.pem",
-		Placeholder: "cert.pem",
-	},
-	{
-		Label:       "http-client-key=",
-		Summary:     "Client key path",
-		Insert:      "http-client-key=key.pem",
-		Placeholder: "key.pem",
-	},
-	{
-		Label:       "grpc-insecure=",
-		Summary:     "Skip TLS verify (gRPC)",
-		Insert:      "grpc-insecure=true",
-		Placeholder: "true",
-	},
-	{
-		Label:       "grpc-root-cas=",
-		Summary:     "Extra gRPC root CAs",
-		Insert:      "grpc-root-cas=ca.pem",
-		Placeholder: "ca.pem",
-	},
-	{
-		Label:       "grpc-root-mode=",
-		Summary:     "gRPC root mode (append|replace)",
-		Insert:      "grpc-root-mode=append",
-		Placeholder: "append",
-	},
-	{
-		Label:       "grpc-client-cert=",
-		Summary:     "gRPC client cert path",
-		Insert:      "grpc-client-cert=cert.pem",
-		Placeholder: "cert.pem",
-	},
-	{
-		Label:       "grpc-client-key=",
-		Summary:     "gRPC client key path",
-		Insert:      "grpc-client-key=key.pem",
-		Placeholder: "key.pem",
-	},
-	{
-		Label:       "grpc-max-recv-size=",
-		Summary:     "Max gRPC response size",
-		Insert:      "grpc-max-recv-size=16MB",
-		Placeholder: "16MB",
-	},
-	{
-		Label:       "grpc-max-send-size=",
-		Summary:     "Max gRPC request size",
-		Insert:      "grpc-max-send-size=16MB",
-		Placeholder: "16MB",
-	},
-	{
-		Label:       "grpc-compression=",
-		Summary:     "gRPC request compression (gzip|none)",
-		Insert:      "grpc-compression=gzip",
-		Placeholder: "gzip",
-	},
-}
-
-// directiveArgs maps a directive base key to its option/sub-token suggestions.
-var directiveArgs = map[directive.Name][]Item{
-	directive.Mock: mockArgs,
-	directive.Match: {
-		{
-			Label:       "query=",
-			Summary:     "Query matcher rules as JSON",
-			Insert:      `query={"key":"value"}`,
-			Placeholder: `{"key":"value"}`,
-		},
-		{
-			Label:       "headers=",
-			Summary:     "Header matcher rules as JSON",
-			Insert:      `headers={"X-Key":"value"}`,
-			Placeholder: `{"X-Key":"value"}`,
-		},
-		{
-			Label:       "json=",
-			Summary:     "Literal JSON body subset",
-			Insert:      `json={"key":"value"}`,
-			Placeholder: `{"key":"value"}`,
-		},
-		{
-			Label:       "json-rules=",
-			Summary:     "JSON body matcher rules",
-			Insert:      `json-rules={"key":{"gt":1}}`,
-			Placeholder: `{"key":{"gt":1}}`,
-		},
-	},
-	directive.Expect: {
-		{
-			Label:       "calls=",
-			Summary:     "Exact matching request count",
-			Insert:      "calls=1",
-			Placeholder: "1",
-		},
-	},
-	directive.Auth: {
-		{
-			Label:       "request",
-			Summary:     "Make the auth directive explicitly request-scoped",
-			Insert:      "request bearer {{token}}",
-			Placeholder: "bearer {{token}}",
-		},
-		{
-			Label:       "file",
-			Summary:     "Define auth inherited by later requests in this file",
-			Insert:      "file bearer {{token}}",
-			Placeholder: "bearer {{token}}",
-		},
-		{
-			Label:       "global",
-			Summary:     "Define auth inherited across the workspace",
-			Insert:      "global bearer {{token}}",
-			Placeholder: "bearer {{token}}",
-		},
-		{Label: "none", Summary: "Disable inherited auth for the current request"},
-		{
-			Label:       "basic",
-			Summary:     "Basic auth with username and password",
-			Insert:      "basic user pass",
-			Placeholder: "user pass",
-		},
-		{
-			Label:       "bearer",
-			Summary:     "Bearer token auth",
-			Insert:      "bearer {{token}}",
-			Placeholder: "{{token}}",
-		},
-		{
-			Label:       "apikey",
-			Summary:     "API key auth in header or query",
-			Insert:      "apikey header X-API-Key {{key}}",
-			Placeholder: "header X-API-Key {{key}}",
-		},
-		{
-			Label:   "oauth2",
-			Summary: "Built-in OAuth 2.0 token acquisition and caching",
-		},
-		{
-			Label:       "command",
-			Summary:     "Run a CLI command and inject its token output",
-			Insert:      `command argv=["gh","auth","token"]`,
-			Placeholder: `["gh","auth","token"]`,
-		},
-		{Label: "header", Summary: "API key placement in headers"},
-		{Label: "query", Summary: "API key placement in query string"},
-		{
-			Label:       "token_url=",
-			Summary:     "OAuth2 token endpoint URL",
-			Insert:      "token_url=https://auth.example.com/oauth/token",
-			Placeholder: "https://auth.example.com/oauth/token",
-		},
-		{
-			Label:       "auth_url=",
-			Summary:     "OAuth2 authorization endpoint URL",
-			Insert:      "auth_url=https://auth.example.com/authorize",
-			Placeholder: "https://auth.example.com/authorize",
-		},
-		{
-			Label:       "client_id=",
-			Summary:     "OAuth2 client ID",
-			Insert:      "client_id={{clientId}}",
-			Placeholder: "{{clientId}}",
-		},
-		{
-			Label:       "client_secret=",
-			Summary:     "OAuth2 client secret",
-			Insert:      "client_secret={{clientSecret}}",
-			Placeholder: "{{clientSecret}}",
-		},
-		{
-			Label:       "grant=",
-			Summary:     "OAuth2 grant type",
-			Insert:      "grant=client_credentials",
-			Placeholder: "client_credentials",
-		},
-		{
-			Label:       "scope=",
-			Summary:     "OAuth2 scope list",
-			Insert:      `scope="read write"`,
-			Placeholder: `"read write"`,
-		},
-		{
-			Label:       "audience=",
-			Summary:     "OAuth2 audience",
-			Insert:      "audience=https://api.example.com",
-			Placeholder: "https://api.example.com",
-		},
-		{
-			Label:       "resource=",
-			Summary:     "OAuth2 resource indicator",
-			Insert:      "resource=https://graph.microsoft.com",
-			Placeholder: "https://graph.microsoft.com",
-		},
-		{
-			Label:       "client_auth=",
-			Summary:     "OAuth2 client credential transport",
-			Insert:      "client_auth=basic",
-			Placeholder: "basic",
-		},
-		{
-			Label:       "username=",
-			Summary:     "Password grant username",
-			Insert:      "username={{user.email}}",
-			Placeholder: "{{user.email}}",
-		},
-		{
-			Label:       "password=",
-			Summary:     "Password grant password",
-			Insert:      "password={{user.password}}",
-			Placeholder: "{{user.password}}",
-		},
-		{
-			Label:       "cache_key=",
-			Summary:     "Reuse cached auth state across requests",
-			Insert:      "cache_key=myapi",
-			Placeholder: "myapi",
-		},
-		{
-			Label:       "redirect_uri=",
-			Summary:     "OAuth2 redirect URI",
-			Insert:      "redirect_uri=http://127.0.0.1:8484/callback",
-			Placeholder: "http://127.0.0.1:8484/callback",
-		},
-		{
-			Label:       "code_verifier=",
-			Summary:     "PKCE code verifier",
-			Insert:      "code_verifier={{pkce.verifier}}",
-			Placeholder: "{{pkce.verifier}}",
-		},
-		{
-			Label:       "code_challenge_method=",
-			Summary:     "PKCE challenge method",
-			Insert:      "code_challenge_method=s256",
-			Placeholder: "s256",
-		},
-		{
-			Label:       "state=",
-			Summary:     "OAuth2 state value",
-			Insert:      "state={{oauth.state}}",
-			Placeholder: "{{oauth.state}}",
-		},
-		{
-			Label:       "header=",
-			Summary:     "Override injected header name",
-			Insert:      "header=Authorization",
-			Placeholder: "Authorization",
-		},
-		{
-			Label:       "argv=",
-			Summary:     "Command argv as JSON array",
-			Insert:      `argv=["gh","auth","token"]`,
-			Placeholder: `["gh","auth","token"]`,
-		},
-		{
-			Label:       "format=",
-			Summary:     "Command output format",
-			Insert:      "format=json",
-			Placeholder: "json",
-		},
-		{
-			Label:       "scheme=",
-			Summary:     "Command auth header scheme",
-			Insert:      "scheme=Bearer",
-			Placeholder: "Bearer",
-		},
-		{
-			Label:       "token_path=",
-			Summary:     "JSON path to token value",
-			Insert:      "token_path=access_token",
-			Placeholder: "access_token",
-		},
-		{
-			Label:       "type_path=",
-			Summary:     "JSON path to token type",
-			Insert:      "type_path=token_type",
-			Placeholder: "token_type",
-		},
-		{
-			Label:       "expiry_path=",
-			Summary:     "JSON path to absolute expiry",
-			Insert:      "expiry_path=expires_at",
-			Placeholder: "expires_at",
-		},
-		{
-			Label:       "expires_in_path=",
-			Summary:     "JSON path to relative expiry seconds",
-			Insert:      "expires_in_path=expires_in",
-			Placeholder: "expires_in",
-		},
-		{
-			Label:       "ttl=",
-			Summary:     "Fallback command auth cache TTL",
-			Insert:      "ttl=10m",
-			Placeholder: "10m",
-		},
-		{
-			Label:       "timeout=",
-			Summary:     "Command auth timeout",
-			Insert:      "timeout=5s",
-			Placeholder: "5s",
-		},
-	},
-	directive.Apply: {
-		{
-			Label:       "use=",
-			Summary:     "Reference a named patch profile",
-			Insert:      "use=jsonApi",
-			Placeholder: "jsonApi",
-		},
-	},
-	directive.Patch: {
-		{Label: "file", Summary: "Define a file-scoped reusable patch profile"},
-		{Label: "global", Summary: "Define a workspace-global reusable patch profile"},
-	},
-	directive.Body: {
-		{Label: "expand", Summary: "Expand templates before sending body (incl. gRPC files)"},
-		{Label: "expand-templates", Summary: "Synonym for expand (explicit form)"},
-	},
-	directive.Profile: {
-		{
-			Label:       "count=",
-			Summary:     "Number of measured runs",
-			Insert:      "count=10",
-			Placeholder: "10",
-		},
-		{
-			Label:       "warmup=",
-			Summary:     "Warmup runs (excluded from stats)",
-			Insert:      "warmup=2",
-			Placeholder: "2",
-		},
-		{
-			Label:       "delay=",
-			Summary:     "Delay between runs (e.g. 250ms)",
-			Insert:      "delay=250ms",
-			Placeholder: "250ms",
-		},
-	},
-	directive.Poll: {
-		{
-			Label:       "every=",
-			Summary:     "Time between polling requests",
-			Insert:      "every=500ms",
-			Placeholder: "500ms",
-		},
-		{
-			Label:       "timeout=",
-			Summary:     "Total time allowed for polling",
-			Insert:      "timeout=30s",
-			Placeholder: "30s",
-		},
-		{
-			Label:       "until=",
-			Summary:     "Condition that stops polling (must be last)",
-			Insert:      "until=response.json().status == \"completed\"",
-			Placeholder: "response.json().status == \"completed\"",
-		},
-	},
-	directive.Retry: {
-		{
-			Label:       "count=",
-			Summary:     "Number of additional attempts",
-			Insert:      "count=4",
-			Placeholder: "4",
-		},
-	},
-	directive.RetryBackoff: {
-		{
-			Label:       "exponential(",
-			Summary:     "Starting and maximum retry delay",
-			Insert:      "exponential(100ms, 2s)",
-			Placeholder: "100ms, 2s",
-		},
-		{
-			Label:       "jitter=",
-			Summary:     "Random delay percentage",
-			Insert:      "jitter=20%",
-			Placeholder: "20%",
-		},
-	},
-	directive.Script:  scriptArgs,
-	directive.RTS:     rtsArgs,
-	directive.If:      workflowRunArgs,
-	directive.Elif:    workflowRunArgs,
-	directive.Else:    workflowRunArgs,
-	directive.Case:    workflowRunArgs,
-	directive.Default: workflowRunArgs,
-	directive.Trace: {
-		{Label: "enabled=true", Summary: "Turn tracing on"},
-		{Label: "enabled=false", Summary: "Turn tracing off"},
-		{
-			Label:       "total<=",
-			Summary:     "Set overall latency budget",
-			Insert:      "total<=400ms",
-			Placeholder: "400ms",
-		},
-		{
-			Label:       "total=",
-			Summary:     "Set overall latency budget (alternate syntax)",
-			Insert:      "total=400ms",
-			Placeholder: "400ms",
-		},
-		{
-			Label:       "dns<=",
-			Summary:     "Budget for DNS lookup",
-			Insert:      "dns<=50ms",
-			Placeholder: "50ms",
-		},
-		{
-			Label:       "connect<=",
-			Summary:     "Budget for TCP connect",
-			Insert:      "connect<=120ms",
-			Placeholder: "120ms",
-		},
-		{
-			Label:       "tls<=",
-			Summary:     "Budget for TLS handshake",
-			Insert:      "tls<=150ms",
-			Placeholder: "150ms",
-		},
-		{
-			Label:       "request-headers<=",
-			Summary:     "Budget for sending request headers",
-			Insert:      "request-headers<=20ms",
-			Placeholder: "20ms",
-		},
-		{
-			Label:       "request-body<=",
-			Summary:     "Budget for sending request body",
-			Insert:      "request-body<=100ms",
-			Placeholder: "100ms",
-		},
-		{
-			Label:       "ttfb<=",
-			Summary:     "Budget until first response byte",
-			Insert:      "ttfb<=200ms",
-			Placeholder: "200ms",
-		},
-		{
-			Label:       "transfer<=",
-			Summary:     "Budget for response transfer",
-			Insert:      "transfer<=250ms",
-			Placeholder: "250ms",
-		},
-		{
-			Label:       "tolerance=",
-			Summary:     "Allow extra shared tolerance",
-			Insert:      "tolerance=25ms",
-			Placeholder: "25ms",
-		},
-		{
-			Label:       "allowance=",
-			Summary:     "Alias for tolerance",
-			Insert:      "allowance=25ms",
-			Placeholder: "25ms",
-		},
-	},
-	directive.SSE: {
-		{
-			Label:       "timeout=",
-			Summary:     "Total stream timeout",
-			Insert:      "timeout=30s",
-			Placeholder: "30s",
-		},
-		{
-			Label:       "duration=",
-			Summary:     "Total stream timeout (alias)",
-			Insert:      "duration=30s",
-			Placeholder: "30s",
-		},
-		{
-			Label:       "idle=",
-			Summary:     "Idle timeout between events",
-			Insert:      "idle=10s",
-			Placeholder: "10s",
-		},
-		{
-			Label:       "idle-timeout=",
-			Summary:     "Idle timeout (long form)",
-			Insert:      "idle-timeout=10s",
-			Placeholder: "10s",
-		},
-		{
-			Label:       "max-events=",
-			Summary:     "Stop after N events",
-			Insert:      "max-events=100",
-			Placeholder: "100",
-		},
-		{
-			Label:       "max-bytes=",
-			Summary:     "Stop after N bytes",
-			Insert:      "max-bytes=1mb",
-			Placeholder: "1mb",
-		},
-		{
-			Label:       "max-line-bytes=",
-			Summary:     "Largest SSE line to buffer",
-			Insert:      "max-line-bytes=1mb",
-			Placeholder: "1mb",
-		},
-		{
-			Label:       "max-event-bytes=",
-			Summary:     "Largest SSE event to buffer",
-			Insert:      "max-event-bytes=1mb",
-			Placeholder: "1mb",
-		},
-		{
-			Label:       "limit-bytes=",
-			Summary:     "Stop after N bytes (alias)",
-			Insert:      "limit-bytes=1mb",
-			Placeholder: "1mb",
-		},
-		{Label: "off", Summary: "Disable SSE for this request"},
-	},
-	directive.WebSocket: {
-		{
-			Label:       "timeout=",
-			Summary:     "Handshake deadline",
-			Insert:      "timeout=10s",
-			Placeholder: "10s",
-		},
-		{
-			Label:       "idle-timeout=",
-			Summary:     "Idle timeout (resets on any activity)",
-			Insert:      "idle-timeout=5s",
-			Placeholder: "5s",
-		},
-		{
-			Label:       "idle=",
-			Summary:     "Idle timeout (short form)",
-			Insert:      "idle=5s",
-			Placeholder: "5s",
-		},
-		{
-			Label:       "max-message-bytes=",
-			Summary:     "Max inbound frame size",
-			Insert:      "max-message-bytes=1mb",
-			Placeholder: "1mb",
-		},
-		{
-			Label:       "subprotocols=",
-			Summary:     "Comma-separated subprotocols",
-			Insert:      "subprotocols=chat,json",
-			Placeholder: "chat,json",
-		},
-		{
-			Label:       "compression=",
-			Summary:     "Enable/disable compression",
-			Insert:      "compression=true",
-			Placeholder: "true",
-		},
-	},
-	directive.WS: {
-		{Label: "send", Summary: "Send a text frame"},
-		{Label: "send-json", Summary: "Send a JSON frame"},
-		{Label: "send-base64", Summary: "Send base64-decoded binary data"},
-		{Label: "send-file", Summary: "Send file contents"},
-		{Label: "ping", Summary: "Send a ping frame"},
-		{Label: "pong", Summary: "Send a pong frame"},
-		{Label: "wait", Summary: "Wait for a duration or incoming message"},
-		{Label: "close", Summary: "Close the connection with code and reason"},
-	},
-	directive.Compare: {
-		{
-			Label:       "base=",
-			Summary:     "Set the baseline environment",
-			Insert:      "base=dev",
-			Placeholder: "dev",
-		},
-		{
-			Label:       "baseline=",
-			Summary:     "Alias for base",
-			Insert:      "baseline=prod",
-			Placeholder: "prod",
-		},
-		{
-			Label:       "group=",
-			Summary:     "Select the environment group to vary",
-			Insert:      "group=api",
-			Placeholder: "api",
-		},
-	},
-	directive.SSH: {
-		{
-			Label:       "host=",
-			Summary:     "Jump host (supports env:VAR and templates)",
-			Insert:      "host=env:SSH_HOST",
-			Placeholder: "env:SSH_HOST",
-		},
-		{Label: "port=", Summary: "Port (default 22)", Insert: "port=22", Placeholder: "22"},
-		{Label: "user=", Summary: "SSH user", Insert: "user=ops", Placeholder: "ops"},
-		{
-			Label:       "password=",
-			Summary:     "Password auth",
-			Insert:      "password=env:SSH_PW",
-			Placeholder: "env:SSH_PW",
-		},
-		{
-			Label:       "key=",
-			Summary:     "Private key path",
-			Insert:      "key=~/.ssh/id_ed25519",
-			Placeholder: "~/.ssh/id_ed25519",
-		},
-		{
-			Label:       "passphrase=",
-			Summary:     "Key passphrase",
-			Insert:      "passphrase=env:SSH_KEY_PW",
-			Placeholder: "env:SSH_KEY_PW",
-		},
-		{
-			Label:       "agent=",
-			Summary:     "Use SSH agent (default true)",
-			Insert:      "agent=false",
-			Placeholder: "false",
-		},
-		{
-			Label:       "known_hosts=",
-			Summary:     "Known hosts file",
-			Insert:      "known_hosts=~/.ssh/known_hosts",
-			Placeholder: "~/.ssh/known_hosts",
-		},
-		{
-			Label:       "strict_hostkey=",
-			Summary:     "Toggle host key checking",
-			Insert:      "strict_hostkey=false",
-			Placeholder: "false",
-		},
-		{Label: "persist", Summary: "Keep tunnel open (global/file scope only)"},
-		{
-			Label:       "timeout=",
-			Summary:     "SSH dial timeout",
-			Insert:      "timeout=15s",
-			Placeholder: "15s",
-		},
-		{
-			Label:       "keepalive=",
-			Summary:     "Server keepalive interval",
-			Insert:      "keepalive=30s",
-			Placeholder: "30s",
-		},
-		{
-			Label:       "retries=",
-			Summary:     "Retry count for tunnel attach",
-			Insert:      "retries=2",
-			Placeholder: "2",
-		},
-		{
-			Label:       "use=",
-			Summary:     "Reference named profile",
-			Insert:      "use=edge",
-			Placeholder: "edge",
-		},
-		{
-			Label:       "persist=",
-			Summary:     "Explicit persist toggle",
-			Insert:      "persist=true",
-			Placeholder: "true",
-		},
-	},
-	directive.K8s: {
-		{
-			Label:       "target=",
-			Summary:     "Target ref (pod:/service:/deployment:/statefulset:)",
-			Insert:      "target=pod:api-server",
-			Placeholder: "pod:api-server",
-		},
-		{
-			Label:       "namespace=",
-			Summary:     "Kubernetes namespace (default: default)",
-			Insert:      "namespace=default",
-			Placeholder: "default",
-		},
-		{
-			Label:       "pod=",
-			Summary:     "Pod name for port-forward target",
-			Insert:      "pod=api-server",
-			Placeholder: "api-server",
-		},
-		{
-			Label:       "service=",
-			Summary:     "Service name for target pod selection",
-			Insert:      "service=api",
-			Placeholder: "api",
-		},
-		{
-			Label:       "deployment=",
-			Summary:     "Deployment name for target pod selection",
-			Insert:      "deployment=api",
-			Placeholder: "api",
-		},
-		{
-			Label:       "statefulset=",
-			Summary:     "StatefulSet name for target pod selection",
-			Insert:      "statefulset=db",
-			Placeholder: "db",
-		},
-		{
-			Label:       "port=",
-			Summary:     "Remote port (number or named port)",
-			Insert:      "port=8080",
-			Placeholder: "8080",
-		},
-		{
-			Label:       "context=",
-			Summary:     "Kubeconfig context override",
-			Insert:      "context=dev-cluster",
-			Placeholder: "dev-cluster",
-		},
-		{
-			Label:       "kubeconfig=",
-			Summary:     "Kubeconfig path override",
-			Insert:      "kubeconfig=~/.kube/config",
-			Placeholder: "~/.kube/config",
-		},
-		{
-			Label:       "container=",
-			Summary:     "Container name in selected pod",
-			Insert:      "container=api",
-			Placeholder: "api",
-		},
-		{
-			Label:       "local_port=",
-			Summary:     "Local port to bind (optional)",
-			Insert:      "local_port=18080",
-			Placeholder: "18080",
-		},
-		{
-			Label:       "address=",
-			Summary:     "Local bind address",
-			Insert:      "address=127.0.0.1",
-			Placeholder: "127.0.0.1",
-		},
-		{
-			Label:       "pod_running_timeout=",
-			Summary:     "Wait timeout for running pod",
-			Insert:      "pod_running_timeout=20s",
-			Placeholder: "20s",
-		},
-		{
-			Label:       "retries=",
-			Summary:     "Retry count for forward attach",
-			Insert:      "retries=2",
-			Placeholder: "2",
-		},
-		{
-			Label:       "use=",
-			Summary:     "Reference named profile",
-			Insert:      "use=cluster-api",
-			Placeholder: "cluster-api",
-		},
-		{
-			Label:       "persist=",
-			Summary:     "Keep forwarder open (global/file scope)",
-			Insert:      "persist=true",
-			Placeholder: "true",
-		},
-	},
-	directive.Setting:  settingArgs,
-	directive.Settings: settingArgs,
-}
+// @query and @variables require "<" before a file path.
+var loadMarker = Item{Label: "<", Summary: "Load from a file", Continue: true}
 
 type directiveSource struct{}
 
 func (directiveSource) Provide(ctx Context, sc Scope) []Item {
 	switch ctx.Kind {
 	case KindDirective:
-		items := filter(directives, ctx.Query)
-		if ctx.needsCommentPrefix {
-			for i, item := range items {
-				items[i] = item.withInsertPrefix(directive.CommentPrefix)
-			}
-		}
-		return items
+		return directiveNameItems(ctx)
 	case KindDirectiveArg:
-		name := ctx.DirectiveName.Canonical()
-		if ctx.ArgKey == "use" {
-			return filter(profileItems(name, sc.Profiles), ctx.Query)
+		if ctx.arg != nil {
+			return valueItems(ctx.arg, ctx, sc)
 		}
-		if name == directive.Compare {
-			return compareItems(ctx, sc)
-		}
-		opts := directiveArgs[name]
-		if len(opts) == 0 {
-			return nil
-		}
-		return filter(opts, ctx.Query)
+		return argumentItems(ctx, sc)
 	default:
 		return nil
 	}
 }
 
-func compareItems(ctx Context, sc Scope) []Item {
-	if ctx.ArgKey == "group" {
-		return filter(environmentItems(groupNames(sc.EnvironmentGroups), "environment group"), ctx.Query)
+func directiveNameItems(ctx Context) []Item {
+	items := filter(directives, ctx.Query)
+	if !ctx.bare {
+		return items
 	}
-
-	profiles := groupProfiles(sc.EnvironmentGroups)
-	if ctx.ArgKey == "base" || ctx.ArgKey == "baseline" {
-		return filter(environmentItems(profiles, "environment profile"), ctx.Query)
+	for i, item := range items {
+		items[i] = item.withInsertPrefix(directive.CommentPrefix)
 	}
-
-	opts := directiveArgs[directive.Compare]
-	opts = slices.Concat(opts, environmentItems(sc.Environments, "environment"))
-	opts = slices.Concat(opts, environmentItems(profiles, "environment profile"))
-	for _, group := range groupNames(sc.EnvironmentGroups) {
-		opts = append(opts, Item{
-			Label:   "group=" + group,
-			Summary: "environment group",
-		})
-	}
-	return filter(opts, ctx.Query)
+	return items
 }
 
-func profileItems(name directive.Name, profiles ProfileSet) []Item {
-	var names []string
-	switch name {
-	case directive.Apply:
-		names = profiles.Patch
-	case directive.SSH:
-		names = profiles.SSH
-	case directive.K8s:
-		names = profiles.K8s
+func argumentItems(ctx Context, sc Scope) []Item {
+	table := argsFor(ctx.name)
+	if table.empty() {
+		return nil
 	}
-	out := make([]Item, len(names))
-	for i, n := range names {
-		out[i] = Item{Label: n, Summary: name.String() + " profile"}
+	items := make([]Item, 0, len(table.named)+1)
+	for i := range table.named {
+		arg := &table.named[i]
+		if !arg.repeat && ctx.completed.has(arg.key) {
+			continue
+		}
+		items = append(items, arg.items()...)
 	}
-	return out
-}
-
-func environmentItems(names []string, summary string) []Item {
-	out := make([]Item, len(names))
-	for i, n := range names {
-		out[i] = Item{Label: n, Summary: summary}
-	}
-	return out
-}
-
-func groupNames(groups map[string][]string) []string {
-	names := make([]string, 0, len(groups))
-	for name := range groups {
-		names = append(names, name)
-	}
-	slices.SortFunc(names, compareFold)
-	return names
-}
-
-func groupProfiles(groups map[string][]string) []string {
-	seen := make(map[string]struct{})
-	var profiles []string
-	for _, group := range groupNames(groups) {
-		for _, profile := range groups[group] {
-			key := strings.ToLower(profile)
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			profiles = append(profiles, profile)
+	if v := table.value; v != nil {
+		switch {
+		case v.value.kind == valuePath && v.value.path.form == pathLoadOnly:
+			items = append(items, loadMarker)
+		case v.value.kind != valuePath && (v.repeat || !ctx.completed.has(v.key)):
+			items = append(items, valueItems(v, ctx, sc)...)
 		}
 	}
-	slices.SortFunc(profiles, compareFold)
-	return profiles
+	if table.extraItems != nil {
+		items = append(items, table.extraItems(ctx, sc)...)
+	}
+	return filter(items, ctx.Query)
 }
 
-func compareFold(a, b string) int {
-	return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+func valueItems(arg *argument, ctx Context, sc Scope) []Item {
+	var items []Item
+	// The editor handles KindPath by reading the filesystem.
+	switch arg.value.kind {
+	case valueChoice:
+		items = labeledItems(arg.value.choices, "value")
+	case valueText:
+		items = arg.exampleItems()
+	case valueNames:
+		items = labeledItems(arg.value.names(ctx, sc))
+	}
+
+	single := argsFor(ctx.name).single
+	out := make([]Item, 0, len(items))
+	for _, item := range filter(items, ctx.Query) {
+		if ctx.completed.holds(arg.key, item.Label) {
+			continue
+		}
+		if arg.value.kind == valueNames {
+			item.Insert = directive.Quote(item.Label)
+		}
+		switch {
+		case arg.repeat && arg.form != formWord:
+			// Keep the caret next to the value for a following list separator.
+			item = item.WithoutTrailingSpace()
+		case !single && item.Placeholder == "":
+			item.Continue = true
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func labeledItems(names []string, summary string) []Item {
+	out := make([]Item, len(names))
+	for i, name := range names {
+		out[i] = Item{Label: name, Summary: summary}
+	}
+	return out
 }

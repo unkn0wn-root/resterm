@@ -11,19 +11,29 @@ type Item struct {
 	Aliases []string
 	Summary string
 
-	// Insert is written in place of the typed token. Empty inserts Label.
+	// Insert replaces the typed token. If empty, Label is used.
 	Insert string
 
-	// Placeholder is the example value inside the inserted text that an editor
-	// selects, so the next keystroke types over it. Writing it out instead of a
-	// caret offset keeps delimiters around the value, such as a closing paren,
-	// outside the selection.
+	// CursorBack leaves the caret this many runes before the end of InsertText.
+	CursorBack int
+
+	// Placeholder is the inserted example text selected for replacement.
+	// Surrounding delimiters, such as parentheses, stay outside the selection.
 	Placeholder string
+
+	// Continue opens suggestions at the new caret position after insertion.
+	Continue bool
 
 	noTrailingSpace bool
 }
 
-// InsertText is what an editor writes when the item is accepted.
+// WithoutTrailingSpace returns a copy that adds no space after insertion.
+func (it Item) WithoutTrailingSpace() Item {
+	it.noTrailingSpace = true
+	return it
+}
+
+// InsertText returns the text to insert when the item is accepted.
 func (it Item) InsertText() string {
 	if it.Insert != "" {
 		return it.Insert
@@ -31,17 +41,26 @@ func (it Item) InsertText() string {
 	return it.Label
 }
 
-func (it Item) withInsertPrefix(prefix string) Item {
-	if prefix != "" {
-		it.Insert = prefix + it.InsertText()
+func cutCall(usage string) (call, argv string) {
+	name, rest, ok := strings.Cut(usage, "(")
+	if !ok {
+		return usage, ""
 	}
+	args, ok := strings.CutSuffix(rest, ")")
+	if !ok {
+		return usage, ""
+	}
+	return name, args
+}
+
+func (it Item) withInsertPrefix(prefix string) Item {
+	it.Insert = prefix + it.InsertText()
 	return it
 }
 
-// AppendsSpace reports whether accepting the item should leave the caret ready
-// for another token in the current completion context.
+// AppendsSpace reports whether to add a space after insertion in this context.
 func (it Item) AppendsSpace(kind Kind) bool {
-	if it.noTrailingSpace {
+	if it.noTrailingSpace || it.CursorBack > 0 {
 		return false
 	}
 	switch kind {
@@ -52,8 +71,8 @@ func (it Item) AppendsSpace(kind Kind) bool {
 	}
 }
 
-// PlaceholderRange locates Placeholder in InsertText as rune offsets. The last
-// match wins because a placeholder is the value at the end of an example.
+// PlaceholderRange returns the rune range [start, end) of Placeholder in InsertText.
+// It uses the last match to select the value if the same text appears earlier.
 func (it Item) PlaceholderRange() (start, end int, ok bool) {
 	if it.Placeholder == "" {
 		return 0, 0, false

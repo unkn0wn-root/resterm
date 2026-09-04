@@ -17,11 +17,17 @@ func contains(items []Item, label string) bool {
 	return false
 }
 
+// suggest places the caret at the end of the line.
+func suggest(line string, sc Scope) []Item {
+	ctx, ok := Analyze(testLines{line}, 0, len([]rune(line)))
+	if !ok {
+		return nil
+	}
+	return directiveSource{}.Provide(ctx, sc)
+}
+
 func argOptions(name, query string) []Item {
-	return directiveSource{}.Provide(
-		Context{Kind: KindDirectiveArg, DirectiveName: directive.Name(name), Query: query},
-		Scope{},
-	)
+	return suggest("# @"+name+" "+query, Scope{})
 }
 
 func TestDirectiveCatalogContainsRequiredDirectives(t *testing.T) {
@@ -58,11 +64,7 @@ func TestRTSDirectiveInsertsExplicitPreRequestMode(t *testing.T) {
 }
 
 func TestBareDirectiveSuggestionsInsertCanonicalComment(t *testing.T) {
-	bare := directiveSource{}.Provide(Context{
-		Kind:               KindDirective,
-		Query:              "rt",
-		needsCommentPrefix: true,
-	}, Scope{})
+	bare := suggest("@rt", Scope{})
 	if len(bare) != 1 || bare[0].Label != "@rts" {
 		t.Fatalf("bare @rt suggestions = %v, want @rts", bare)
 	}
@@ -70,11 +72,7 @@ func TestBareDirectiveSuggestionsInsertCanonicalComment(t *testing.T) {
 		t.Fatalf("bare @rts insert = %q, want %q", got, "# @rts pre-request")
 	}
 
-	alias := directiveSource{}.Provide(Context{
-		Kind:               KindDirective,
-		Query:              "desc",
-		needsCommentPrefix: true,
-	}, Scope{})
+	alias := suggest("@desc", Scope{})
 	if len(alias) != 1 || alias[0].Label != "@description" {
 		t.Fatalf("bare @desc suggestions = %v, want canonical @description", alias)
 	}
@@ -82,10 +80,7 @@ func TestBareDirectiveSuggestionsInsertCanonicalComment(t *testing.T) {
 		t.Fatalf("bare @desc insert = %q, want %q", got, "# @description")
 	}
 
-	commented := directiveSource{}.Provide(
-		Context{Kind: KindDirective, Query: "rt"},
-		Scope{},
-	)
+	commented := suggest("# @rt", Scope{})
 	if got := commented[0].InsertText(); got != "@rts pre-request" {
 		t.Fatalf("bare completion mutated the directive catalog: %q", got)
 	}
@@ -144,7 +139,7 @@ func TestDirectiveArgsFilterByPrefix(t *testing.T) {
 	}
 
 	mock := argOptions("mock", "")
-	for _, label := range []string{"sequence=", "sequence-key=", "interpolate=false"} {
+	for _, label := range []string{"sequence=", "sequence-key=", "interpolate="} {
 		if !contains(mock, label) {
 			t.Fatalf("mock args missing %q: %v", label, mock)
 		}
@@ -221,16 +216,15 @@ func TestTraceArgsProvidePlaceholders(t *testing.T) {
 
 func TestCompareArgsIncludeEnvironments(t *testing.T) {
 	sc := Scope{Environments: []string{"dev", "prod"}}
-	ctx := Context{Kind: KindDirectiveArg, DirectiveName: directive.Compare, Query: ""}
-	items := directiveSource{}.Provide(ctx, sc)
+	items := suggest("# @compare ", sc)
 	for _, label := range []string{"base=", "baseline=", "group=", "dev", "prod"} {
 		if !contains(items, label) {
 			t.Fatalf("compare suggestions missing %q: %v", label, items)
 		}
 	}
-	// Static options must not be mutated by appended environments.
-	if got := len(directiveArgs[directive.Compare]); got != 3 {
-		t.Fatalf("compare static args mutated, len = %d", got)
+	// Suggestions must not modify the shared catalog.
+	if got := len(argsFor(directive.Compare).named); got != 2 {
+		t.Fatalf("compare declares %d options, want base and group", got)
 	}
 }
 
@@ -239,8 +233,7 @@ func TestCompareArgsIncludeGroupsAndProfiles(t *testing.T) {
 		"api": {"dev", "prod"},
 		"app": {"dev app 1", "dev app 2"},
 	}}
-	ctx := Context{Kind: KindDirectiveArg, DirectiveName: directive.Compare}
-	items := directiveSource{}.Provide(ctx, sc)
+	items := suggest("# @compare ", sc)
 	for _, label := range []string{
 		"group=",
 		"group=api",
@@ -255,22 +248,14 @@ func TestCompareArgsIncludeGroupsAndProfiles(t *testing.T) {
 		}
 	}
 
-	groups := directiveSource{}.Provide(Context{
-		Kind:          KindDirectiveArg,
-		DirectiveName: directive.Compare,
-		ArgKey:        "group",
-	}, sc)
+	groups := suggest("# @compare group=", sc)
 	for _, label := range []string{"api", "app"} {
 		if !contains(groups, label) {
 			t.Fatalf("group value suggestions missing %q: %v", label, groups)
 		}
 	}
 
-	bases := directiveSource{}.Provide(Context{
-		Kind:          KindDirectiveArg,
-		DirectiveName: directive.Compare,
-		ArgKey:        "base",
-	}, sc)
+	bases := suggest("# @compare base=", sc)
 	if !contains(bases, "dev app 2") {
 		t.Fatalf("baseline suggestions missing grouped profile: %v", bases)
 	}
@@ -285,24 +270,15 @@ func TestUseValueOffersProfileNames(t *testing.T) {
 		},
 	}
 
-	apply := directiveSource{}.Provide(
-		Context{Kind: KindDirectiveArg, DirectiveName: directive.Apply, ArgKey: "use"},
-		sc,
-	)
+	apply := suggest("# @apply use=", sc)
 	if !contains(apply, "jsonApi") {
 		t.Fatalf("apply use= missing patch profile: %v", apply)
 	}
-	ssh := directiveSource{}.Provide(
-		Context{Kind: KindDirectiveArg, DirectiveName: directive.SSH, ArgKey: "use"},
-		sc,
-	)
+	ssh := suggest("# @ssh use=", sc)
 	if !contains(ssh, "edge") {
 		t.Fatalf("ssh use= missing profile: %v", ssh)
 	}
-	k8s := directiveSource{}.Provide(
-		Context{Kind: KindDirectiveArg, DirectiveName: directive.K8s, ArgKey: "use"},
-		sc,
-	)
+	k8s := suggest("# @k8s use=", sc)
 	if !contains(k8s, "cluster") {
 		t.Fatalf("k8s use= missing profile: %v", k8s)
 	}

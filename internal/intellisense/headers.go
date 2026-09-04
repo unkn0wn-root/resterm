@@ -66,7 +66,7 @@ func (headerSource) Provide(ctx Context, _ Scope) []Item {
 	case KindHeaderName:
 		return filter(headerNameItems, ctx.Query)
 	case KindHeaderValue:
-		return filter(headerValues[ctx.HeaderName], ctx.Query)
+		return filter(headerValues[ctx.header], ctx.Query)
 	default:
 		return nil
 	}
@@ -76,6 +76,7 @@ var headerNameItems = func() []Item {
 	out := make([]Item, len(headerNames))
 	for i, h := range headerNames {
 		h.Insert = h.Label + ":"
+		h.Continue = true
 		out[i] = h
 	}
 	return out

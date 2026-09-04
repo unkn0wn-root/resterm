@@ -2148,8 +2148,8 @@ func TestRequestEditorCompletionsVariableFromScope(t *testing.T) {
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := editor.Value(); got != "GET https://{{host" {
-		t.Fatalf("expected variable inserted without trailing space, got %q", got)
+	if got := editor.Value(); got != "GET https://{{host}}" {
+		t.Fatalf("expected variable inserted with its missing closers, got %q", got)
 	}
 }
 

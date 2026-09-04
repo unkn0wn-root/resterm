@@ -120,18 +120,18 @@ func pickState(raw string) (string, error) {
 func pickMethod(raw string) string {
 	v := strings.ToLower(strings.TrimSpace(raw))
 	switch v {
-	case "plain":
-		return "plain"
+	case CodeChallengePlain:
+		return CodeChallengePlain
 	default:
-		return "s256"
+		return CodeChallengeS256
 	}
 }
 
 func buildChallenge(verifier, method string) (string, error) {
 	switch strings.ToLower(method) {
-	case "plain":
+	case CodeChallengePlain:
 		return verifier, nil
-	case "s256":
+	case CodeChallengeS256:
 		sum := sha256Sum([]byte(verifier))
 		return base64.RawURLEncoding.EncodeToString(sum), nil
 	default:
