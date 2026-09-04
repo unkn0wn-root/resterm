@@ -2,9 +2,7 @@ package ui
 
 import (
 	"errors"
-	"flag"
 	"fmt"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/files"
@@ -39,20 +37,13 @@ func parseMockStartArgs(args []string) (mockStartArgs, error) {
 	var out mockStartArgs
 	fs := newMockStartFlagSet(&out)
 
-	// flag stops parsing at the first non-flag argument, so lift a leading
-	// address out of the way first.
-	var pos []string
-	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		pos = append(pos, args[0])
-		args = args[1:]
-	}
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return out, errMockArgsUsage
 		}
 		return out, err
 	}
-	for _, arg := range append(pos, fs.Args()...) {
+	for _, arg := range fs.Args() {
 		if err := out.setAddr(arg); err != nil {
 			return out, err
 		}
@@ -63,18 +54,12 @@ func parseMockStartArgs(args []string) (mockStartArgs, error) {
 	return out, nil
 }
 
-func newMockStartFlagSet(out *mockStartArgs) *flag.FlagSet {
+func newMockStartFlagSet(out *mockStartArgs) *cli.FlagSet {
 	fs := cli.NewFlagSet("mock start")
-	cli.StringVarAliases(fs, &out.addr, "", "Listen address", "addr", "a")
-	cli.StringListVarAliases(
-		fs,
-		&out.sources,
-		"Serve only these request files",
-		mockSourceFlagName,
-		mockSourceFlagAlias,
-	)
-	cli.BoolVarAliases(fs, &out.recursive, false, "Scan the workspace recursively", "recursive", "r")
-	cli.BoolVarAliases(fs, &out.all, false, "Serve the whole workspace", "all")
+	fs.StringVarAliases(&out.addr, "", "Listen address", "addr", "a")
+	fs.StringListVarAliases(&out.sources, "Serve only these request files", mockSourceFlagName, mockSourceFlagAlias)
+	fs.BoolVarAliases(&out.recursive, false, "Scan the workspace recursively", "recursive", "r")
+	fs.BoolVarAliases(&out.all, false, "Serve the whole workspace", "all")
 	return fs
 }
 

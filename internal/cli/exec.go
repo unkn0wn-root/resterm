@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"maps"
 	"os"
@@ -60,95 +59,62 @@ func NewExecFlags() ExecFlags {
 	}
 }
 
-func (f *ExecFlags) Bind(fs *flag.FlagSet) {
-	if fs == nil || f == nil {
-		return
-	}
-	StringVarAliases(fs, &f.EnvName, "", "Environment name to use", "env", "e")
+func (f *ExecFlags) Bind(fs *FlagSet) {
+	fs.StringVarAliases(&f.EnvName, "", "Environment name to use", "env", "e")
 	fs.Var(&f.EnvGroups, "env-group", "Select a grouped environment as group=profile (repeatable)")
-	StringVarAliases(fs, &f.EnvFile, "", "Path to environment file", "env-file", "E")
-	StringVarAliases(
-		fs,
-		&f.Workspace,
-		"",
-		"Workspace directory to scan for request files",
-		"workspace",
-		"w",
-	)
-	DurationVarAliases(fs, &f.Timeout, f.Timeout, "Request timeout", "timeout", "t")
-	BoolVarAliases(fs, &f.Insecure, false, "Skip TLS certificate verification", "insecure", "k")
-	BoolVarAliases(fs, &f.Follow, f.Follow, "Follow redirects", "follow", "L")
-	IntVarAliases(
-		fs,
+	fs.StringVarAliases(&f.EnvFile, "", "Path to environment file", "env-file", "E")
+	fs.StringVarAliases(&f.Workspace, "", "Workspace directory to scan for request files", "workspace", "w")
+	fs.DurationVarAliases(&f.Timeout, f.Timeout, "Request timeout", "timeout", "t")
+	fs.BoolVarAliases(&f.Insecure, false, "Skip TLS certificate verification", "insecure", "k")
+	fs.BoolVarAliases(&f.Follow, f.Follow, "Follow redirects", "follow", "L")
+	fs.IntVarAliases(
 		&f.MaxRedirects,
 		f.MaxRedirects,
 		"Redirects to follow before giving up (0 follows none)",
 		"max-redirects",
 	)
-	StringVarAliases(fs, &f.ProxyURL, "", "HTTP proxy URL", "proxy", "x")
-	StringVarAliases(
-		fs,
+	fs.StringVarAliases(&f.ProxyURL, "", "HTTP proxy URL", "proxy", "x")
+	fs.StringVarAliases(
 		&f.MaxResponseSize,
 		"",
 		"Response body limit such as 100mb, or none to read without a limit",
 		"max-response-size",
 	)
-	BoolVarAliases(
-		fs,
-		&f.Recursive,
-		false,
-		"Recursively scan workspace for request files",
-		"recursive",
-		"R",
-	)
+	fs.BoolVarAliases(&f.Recursive, false, "Recursively scan workspace for request files", "recursive", "R")
 	f.BindTelemetryFlags(fs)
-	StringVarAliases(
-		fs,
+	fs.StringVarAliases(
 		&f.CompareTargetsRaw,
 		"",
 		"Default environments or profiles for manual compare runs (comma separated)",
 		"compare",
 		"C",
 	)
-	StringVarAliases(
-		fs,
+	fs.StringVarAliases(
 		&f.CompareBaseline,
 		"",
 		"Baseline environment when --compare is used (defaults to first target)",
 		"compare-base",
 		"B",
 	)
-	StringVarAliases(
-		fs,
-		&f.CompareGroup,
-		"",
-		"Environment group varied by --compare",
-		"compare-group",
-	)
+	fs.StringVarAliases(&f.CompareGroup, "", "Environment group varied by --compare", "compare-group")
 }
 
-func (f *ExecFlags) BindTelemetryFlags(fs *flag.FlagSet) {
-	if fs == nil || f == nil {
-		return
-	}
-	StringVarAliases(
-		fs,
+func (f *ExecFlags) BindTelemetryFlags(fs *FlagSet) {
+	fs.StringVarAliases(
 		&f.telemetry.Endpoint,
 		f.telemetry.Endpoint,
 		"OTLP collector endpoint used when @trace is enabled",
 		"trace-otel-endpoint",
 		"toe",
 	)
-	BoolVarAliases(
-		fs,
+	fs.BoolVarAliases(
 		&f.telemetry.Insecure,
 		f.telemetry.Insecure,
 		"Disable TLS for OTLP trace export",
 		"trace-otel-insecure",
 		"toi",
 	)
-	StringVarAliases(
-		fs,
+	fs.StringVarAliases(
 		&f.telemetry.ServiceName,
 		f.telemetry.ServiceName,
 		"Override service.name resource attribute for exported spans",

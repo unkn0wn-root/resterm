@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -64,15 +63,14 @@ func runHistoryExport(args []string) error {
 	var out string
 	fs.StringVar(&out, "out", "", "Output JSON file path")
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("history export: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf("history export: unexpected args: %s", strings.Join(fs.Args(), " "))
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
-	out = str.Trim(out)
 	if out == "" {
 		return errors.New("history export: --out is required")
 	}
@@ -98,15 +96,14 @@ func runHistoryImport(args []string) error {
 	var in string
 	fs.StringVar(&in, "in", "", "Input JSON file path")
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("history import: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf("history import: unexpected args: %s", strings.Join(fs.Args(), " "))
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
-	in = str.Trim(in)
 	if in == "" {
 		return errors.New("history import: --in is required")
 	}
@@ -132,15 +129,14 @@ func runHistoryBackup(args []string) error {
 	var out string
 	fs.StringVar(&out, "out", "", "Output SQLite backup file path")
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("history backup: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf("history backup: unexpected args: %s", strings.Join(fs.Args(), " "))
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
-	out = str.Trim(out)
 	if out == "" {
 		return errors.New("history backup: --out is required")
 	}
@@ -163,13 +159,13 @@ func runHistoryBackup(args []string) error {
 func runHistoryStats(args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "history stats", os.Stderr)
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("history stats: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf("history stats: unexpected args: %s", strings.Join(fs.Args(), " "))
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
 
 	s, err := openHistoryStore(true)
@@ -204,13 +200,13 @@ func runHistoryStats(args []string) error {
 func runHistoryCompact(args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "history compact", os.Stderr)
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("history compact: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf("history compact: unexpected args: %s", strings.Join(fs.Args(), " "))
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
 
 	s, err := openHistoryStore(true)
@@ -249,13 +245,13 @@ func runHistoryCheck(args []string) error {
 	var full bool
 	fs.BoolVar(&full, "full", false, "Use full integrity check")
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("history check: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf("history check: unexpected args: %s", strings.Join(fs.Args(), " "))
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
 
 	s, err := openHistoryStore(true)

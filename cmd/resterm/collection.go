@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -65,27 +64,21 @@ func runCollectionExport(args []string) error {
 	fs.BoolVar(&force, "force", false, "Overwrite existing output directory")
 
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("collection export: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf(
-			"collection export: unexpected args: %s",
-			strings.Join(fs.Args(), " "),
-		)
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
 
-	workspace = str.Trim(workspace)
 	if workspace == "" {
 		return errors.New("collection export: --workspace is required")
 	}
-	out = str.Trim(out)
 	if out == "" {
 		return errors.New("collection export: --out is required")
 	}
-	name = str.Trim(name)
 
 	res, err := collection.ExportBundle(collection.ExportOptions{
 		Workspace: workspace,
@@ -129,23 +122,18 @@ func runCollectionImport(args []string) error {
 	fs.BoolVar(&dry, "dry-run", false, "Plan import without writing files")
 
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("collection import: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf(
-			"collection import: unexpected args: %s",
-			strings.Join(fs.Args(), " "),
-		)
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
 
-	in = str.Trim(in)
 	if in == "" {
 		return errors.New("collection import: --in is required")
 	}
-	workspace = str.Trim(workspace)
 	if workspace == "" {
 		return errors.New("collection import: --workspace is required")
 	}
@@ -196,23 +184,18 @@ func runCollectionPack(args []string) error {
 	fs.BoolVar(&force, "force", false, "Overwrite existing archive file")
 
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("collection pack: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf(
-			"collection pack: unexpected args: %s",
-			strings.Join(fs.Args(), " "),
-		)
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
 
-	in = str.Trim(in)
 	if in == "" {
 		return errors.New("collection pack: --in is required")
 	}
-	out = str.Trim(out)
 	if out == "" {
 		return errors.New("collection pack: --out is required")
 	}
@@ -248,23 +231,18 @@ func runCollectionUnpack(args []string) error {
 	fs.BoolVar(&force, "force", false, "Overwrite existing output directory")
 
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return fmt.Errorf("collection unpack: %w", err)
 	}
-	if len(fs.Args()) > 0 {
-		return fmt.Errorf(
-			"collection unpack: unexpected args: %s",
-			strings.Join(fs.Args(), " "),
-		)
+	if err := fs.UnexpectedArgs(); err != nil {
+		return err
 	}
 
-	in = str.Trim(in)
 	if in == "" {
 		return errors.New("collection unpack: --in is required")
 	}
-	out = str.Trim(out)
 	if out == "" {
 		return errors.New("collection unpack: --out is required")
 	}

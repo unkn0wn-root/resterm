@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -28,7 +27,7 @@ func handleInitSubcommand(args []string) (bool, error) {
 func runInit(args []string) error {
 	c := newInitCmd()
 	if err := c.parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
 		return err
@@ -37,7 +36,7 @@ func runInit(args []string) error {
 }
 
 type initCmd struct {
-	fs    *flag.FlagSet
+	fs    *cli.FlagSet
 	dir   string
 	tpl   string
 	force bool

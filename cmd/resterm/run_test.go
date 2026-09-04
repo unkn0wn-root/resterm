@@ -188,6 +188,43 @@ func TestRunCmdShortAliases(t *testing.T) {
 	}
 }
 
+func TestRunCmdAllowsFlagsAfterSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantPath string
+		wantReq  string
+	}{
+		{
+			name:     "file path",
+			args:     []string{"requests.http", "-r", "createPost"},
+			wantPath: "requests.http",
+			wantReq:  "createPost",
+		},
+		{
+			name:     "stdin",
+			args:     []string{"-", "--request", "health"},
+			wantPath: "-",
+			wantReq:  "health",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := newRunCmd()
+			if err := cmd.parse(test.args); err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cmd.request != test.wantReq {
+				t.Errorf("request = %q, want %q", cmd.request, test.wantReq)
+			}
+			if got := cmd.fs.Args(); len(got) != 1 || got[0] != test.wantPath {
+				t.Errorf("args = %q, want [%q]", got, test.wantPath)
+			}
+		})
+	}
+}
+
 func TestRunDispatchesRunSubcommand(t *testing.T) {
 	stdout, stderr, err := captureRunIO(t, func() error {
 		return run([]string{"run", "-h"})

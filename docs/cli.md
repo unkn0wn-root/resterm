@@ -25,6 +25,10 @@ Use this guide for command-line behavior. For request syntax, directives, workfl
 | `resterm --from-openapi ...` | Generate `.http` collections from OpenAPI documents. |
 | `resterm --check-update`, `resterm --update`, `resterm --version` | Inspect or update the installed binary. |
 
+## Argument Order
+
+Flags and positional arguments may be interspersed, so `resterm run requests.http --request createPost` and `resterm run --request createPost requests.http` are the same command. Everything after a `--` terminator is treated as a positional argument, which is how you pass a file whose name starts with a dash.
+
 ## Shared Execution Flags
 
 These flags are shared by `resterm` and `resterm run` when request execution is involved.
@@ -78,6 +82,7 @@ resterm run [flags] <file|->
 
 - Pass a file path to execute a request document from disk.
 - Pass `-` to read the request file from stdin.
+- Flags may appear before or after the file argument. See [Argument Order](#argument-order).
 
 ### Selecting What To Run
 
@@ -365,7 +370,7 @@ resterm mock verify payments.http
 resterm mock verify --recursive .
 ```
 
-The operations connect to `http://127.0.0.1:8080` by default. Each accepts `--url`, `--timeout`, and `--insecure`, and `verify` also accepts `--recursive`. Put flags before the optional sequence or source argument, for example:
+The operations connect to `http://127.0.0.1:8080` by default. Each accepts `--url`, `--timeout`, and `--insecure`, and `verify` also accepts `--recursive`. Flags may go on either side of the optional sequence or source argument, for example:
 
 ```bash
 resterm mock reset --url http://127.0.0.1:9090 polling

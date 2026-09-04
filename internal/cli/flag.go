@@ -2,6 +2,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -10,6 +11,16 @@ import (
 )
 
 const aliasUsagePrefix = "Alias for --"
+
+// ErrHelp is returned when Parse sees -h or --help.
+var ErrHelp = flag.ErrHelp
+
+// FlagSet accepts flags before or after positional arguments.
+// String flags are trimmed.
+type FlagSet struct {
+	*flag.FlagSet
+	args []string
+}
 
 type stringValue struct {
 	dst *string
@@ -43,13 +54,13 @@ func (v stringListValue) Set(s string) error {
 	return nil
 }
 
-func NewFlagSet(name string) *flag.FlagSet {
-	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+func NewFlagSet(name string) *FlagSet {
+	fs := &FlagSet{FlagSet: flag.NewFlagSet(name, flag.ContinueOnError)}
 	fs.SetOutput(io.Discard)
 	return fs
 }
 
-func NewSubcommandFlagSet(app, name string, w io.Writer) *flag.FlagSet {
+func NewSubcommandFlagSet(app, name string, w io.Writer) *FlagSet {
 	fs := NewFlagSet(name)
 	fs.Usage = func() {
 		PrintFlagSetUsage(w, app, fs)
@@ -57,50 +68,115 @@ func NewSubcommandFlagSet(app, name string, w io.Writer) *flag.FlagSet {
 	return fs
 }
 
-func StringVar(fs *flag.FlagSet, dst *string, name, value, usage string) {
+// Parse accepts flags before or after positional arguments until "--".
+func (f *FlagSet) Parse(args []string) error {
+	flags, positional := f.split(args)
+	f.args = positional
+	return f.FlagSet.Parse(flags)
+}
+
+// Args returns the positional arguments in their original order.
+func (f *FlagSet) Args() []string {
+	return f.args
+}
+
+func (f *FlagSet) Arg(i int) string {
+	if i < 0 || i >= len(f.args) {
+		return ""
+	}
+	return f.args[i]
+}
+
+func (f *FlagSet) NArg() int {
+	return len(f.args)
+}
+
+// UnexpectedArgs returns an error if the command received positional arguments.
+func (f *FlagSet) UnexpectedArgs() error {
+	if len(f.args) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s: unexpected args: %s", f.Name(), strings.Join(f.args, " "))
+}
+
+func (f *FlagSet) split(args []string) (flags, positional []string) {
+	flags = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return flags, append(positional, args[i+1:]...)
+		}
+
+		name, inline, ok := flagArg(arg)
+		if !ok {
+			positional = append(positional, arg)
+			continue
+		}
+
+		flags = append(flags, arg)
+		if inline || i+1 >= len(args) {
+			continue
+		}
+		// A non-boolean flag consumes the next argument, even if it starts with "-".
+		if def := f.Lookup(name); def != nil && !isBoolFlag(def.Value) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	return flags, positional
+}
+
+func flagArg(arg string) (name string, inline, ok bool) {
+	if len(arg) < 2 || arg[0] != '-' {
+		return "", false, false
+	}
+
+	name = strings.TrimPrefix(arg[1:], "-")
+	name, _, inline = strings.Cut(name, "=")
+	return name, inline, true
+}
+
+func isBoolFlag(value flag.Value) bool {
+	b, ok := value.(interface{ IsBoolFlag() bool })
+	return ok && b.IsBoolFlag()
+}
+
+func (f *FlagSet) StringVar(dst *string, name, value, usage string) {
 	*dst = str.Trim(value)
-	fs.Var(stringValue{dst: dst}, name, usage)
+	f.Var(stringValue{dst: dst}, name, usage)
 }
 
-func StringVarAliases(fs *flag.FlagSet, dst *string, value, usage string, names ...string) {
+func (f *FlagSet) StringVarAliases(dst *string, value, usage string, names ...string) {
 	registerAliases(names, usage, func(name, usage string) {
-		StringVar(fs, dst, name, value, usage)
+		f.StringVar(dst, name, value, usage)
 	})
 }
 
-func StringListVarAliases(fs *flag.FlagSet, dst *[]string, usage string, names ...string) {
+func (f *FlagSet) StringListVarAliases(dst *[]string, usage string, names ...string) {
 	registerAliases(names, usage, func(name, usage string) {
-		fs.Var(stringListValue{dst: dst}, name, usage)
+		f.Var(stringListValue{dst: dst}, name, usage)
 	})
 }
 
-func BoolVarAliases(fs *flag.FlagSet, dst *bool, value bool, usage string, names ...string) {
+func (f *FlagSet) BoolVarAliases(dst *bool, value bool, usage string, names ...string) {
 	registerAliases(names, usage, func(name, usage string) {
-		fs.BoolVar(dst, name, value, usage)
+		f.BoolVar(dst, name, value, usage)
 	})
 }
 
-func IntVarAliases(fs *flag.FlagSet, dst *int, value int, usage string, names ...string) {
+func (f *FlagSet) IntVarAliases(dst *int, value int, usage string, names ...string) {
 	registerAliases(names, usage, func(name, usage string) {
-		fs.IntVar(dst, name, value, usage)
+		f.IntVar(dst, name, value, usage)
 	})
 }
 
-func DurationVarAliases(
-	fs *flag.FlagSet,
-	dst *time.Duration,
-	value time.Duration,
-	usage string,
-	names ...string,
-) {
+func (f *FlagSet) DurationVarAliases(dst *time.Duration, value time.Duration, usage string, names ...string) {
 	registerAliases(names, usage, func(name, usage string) {
-		fs.DurationVar(dst, name, value, usage)
+		f.DurationVar(dst, name, value, usage)
 	})
 }
 
-// registerAliases binds names[0] as the canonical flag and every later name
-// as an alias; the alias usage string is what PrintFlagDefaults folds back
-// into the canonical flag's row.
+// The first name is shown in help. Later names are marked as aliases so help can combine them.
 func registerAliases(names []string, usage string, bind func(name, usage string)) {
 	for i, name := range names {
 		flagUsage := usage

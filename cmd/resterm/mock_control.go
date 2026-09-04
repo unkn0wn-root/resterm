@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -25,10 +24,10 @@ type mockControlConfig struct {
 	insecure bool
 }
 
-func (c *mockControlConfig) bind(fs *flag.FlagSet) {
-	cli.StringVarAliases(fs, &c.url, defaultMockURL, "Mock server URL", "url", "u")
-	cli.DurationVarAliases(fs, &c.timeout, 5*time.Second, "Control request timeout", "timeout", "t")
-	cli.BoolVarAliases(fs, &c.insecure, false, "Skip HTTPS certificate verification", "insecure", "k")
+func (c *mockControlConfig) bind(fs *cli.FlagSet) {
+	fs.StringVarAliases(&c.url, defaultMockURL, "Mock server URL", "url", "u")
+	fs.DurationVarAliases(&c.timeout, 5*time.Second, "Control request timeout", "timeout", "t")
+	fs.BoolVarAliases(&c.insecure, false, "Skip HTTPS certificate verification", "insecure", "k")
 }
 
 func (c mockControlConfig) client() (*mock.Client, error) {
@@ -47,7 +46,7 @@ func controlSetup(
 	cmd string,
 	args []string,
 	errOut io.Writer,
-	extra func(*flag.FlagSet),
+	extra func(*cli.FlagSet),
 ) (client *mock.Client, pos []string, done bool, err error) {
 	fs := cli.NewSubcommandFlagSet("resterm", cmd, errOut)
 	var cfg mockControlConfig
@@ -56,7 +55,7 @@ func controlSetup(
 		extra(fs)
 	}
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, cli.ErrHelp) {
 			return nil, nil, true, nil
 		}
 		return nil, nil, false, mockUsageError(err)
@@ -120,10 +119,9 @@ func runMockClear(args []string, out, errOut io.Writer) error {
 func runMockVerify(args []string, out, errOut io.Writer) error {
 	var recursive bool
 	var sources []string
-	client, pos, done, err := controlSetup("mock verify", args, errOut, func(fs *flag.FlagSet) {
-		cli.BoolVarAliases(fs, &recursive, false, "Scan workspace recursively", "recursive", "r")
-		cli.StringListVarAliases(
-			fs,
+	client, pos, done, err := controlSetup("mock verify", args, errOut, func(fs *cli.FlagSet) {
+		fs.BoolVarAliases(&recursive, false, "Scan workspace recursively", "recursive", "r")
+		fs.StringListVarAliases(
 			&sources,
 			"Verify only these request files (repeatable, comma lists allowed)",
 			"source",
