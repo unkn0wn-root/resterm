@@ -222,13 +222,10 @@ func statusBarSegmentStyle(
 	return style
 }
 
-// The bar is one row, and its width math measures the widest line only, so a
-// line break silently grows it and pushes the view past the terminal height. A
-// tab measures as zero width here but expands in the terminal, so it overflows
-// the row the same way. Fold both without touching the spacing inside a line.
+// Replace line breaks and tabs before measuring the one-line status bar.
 func statusBarOneLine(text string) string {
 	if !strings.ContainsAny(text, "\r\n\t") {
-		return text
+		return displayText(text)
 	}
 
 	var folded strings.Builder
@@ -245,7 +242,7 @@ func statusBarOneLine(text string) string {
 		}
 		folded.WriteString(part)
 	}
-	return folded.String()
+	return displayText(folded.String())
 }
 
 func (m *Model) statusBarMessage() (string, statusLevel) {

@@ -9,7 +9,7 @@ import (
 func (m *Model) openStatusModal(level statusLevel, message string) {
 	m.showStatusModal = true
 	m.statusModalLevel = level
-	m.statusModalMessage = message
+	m.statusModalMessage = displayLines(message)
 	m.closeHelp()
 	m.showEnvSelector = false
 	m.showThemeSelector = false

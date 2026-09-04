@@ -17,6 +17,7 @@ import (
 const (
 	mockReloadInterval = time.Second
 	mockCloseTimeout   = 3 * time.Second
+	mockStatusSep      = " · "
 )
 
 type mockServerState struct {
@@ -169,7 +170,7 @@ func (m *Model) mockStartFromArgs(def mockCommandDef, args []string) tea.Cmd {
 		if (parsed.addr != "" && parsed.addr != m.mock.addr) || parsed.scoped() {
 			return statusCmd(
 				statusWarn,
-				"Mock server is already running on "+m.mock.addr+"; use :mock restart "+strings.Join(args, " "),
+				"Mock server is already running on "+m.mock.addr+". Use :mock restart "+strings.Join(args, " "),
 			)
 		}
 		return statusCmd(statusInfo, m.mockStatus())
@@ -246,15 +247,14 @@ func (m *Model) startMockServer(spec mockStartSpec) tea.Cmd {
 		handler.Routes(),
 		handler.Scenarios(),
 	)
-	text += mockSourceSuffix(src)
 	level := statusSuccess
 	if warning != "" {
 		level = statusWarn
-		text += "; " + warning
+		text += mockStatusSep + warning
 	}
 	if !mock.IsLoopbackAddr(addr) {
 		level = statusWarn
-		text += "; server is exposed beyond this machine"
+		text += mockStatusSep + "server is exposed beyond this machine"
 	}
 
 	return batchCommands(
@@ -378,35 +378,75 @@ func (m *Model) mockSources() mock.Sources {
 
 func (m *Model) mockStatus() string {
 	if m.mock.server == nil {
-		return "Mock server stopped; next address " + m.mockAddress() + mockSourceSuffix(m.mock.src)
+		return strings.Join(compactStrings(
+			"Mock server stopped",
+			"next address "+m.mockAddress(),
+			mockSourceSummary(m.mock.src),
+		), mockStatusSep)
 	}
 	stats := m.mock.server.Stats()
-	text := fmt.Sprintf(
-		"Mock http://%s: %d routes, %d scenarios, %d calls",
-		stats.Addr,
-		stats.Routes,
-		stats.Scenarios,
-		stats.Calls,
+	parts := compactStrings(
+		fmt.Sprintf(
+			"Mock http://%s: %d routes, %d scenarios, %d calls",
+			stats.Addr,
+			stats.Routes,
+			stats.Scenarios,
+			stats.Calls,
+		),
+		mockSourceSummary(m.mock.src),
 	)
-	text += mockSourceSuffix(m.mock.src)
 	if m.mock.reloadErr != "" {
-		text += "; reload error: " + m.mock.reloadErr
+		parts = append(parts, "reload error: "+m.mock.reloadErr)
 	}
-	return text
+	return strings.Join(parts, mockStatusSep)
 }
 
-// mockSourceSuffix names a listed file scope for status text. Whole workspace
+// mockSourceSummary names a listed file scope for status text. Whole workspace
 // scope adds nothing.
-func mockSourceSuffix(src mock.Sources) string {
-	if len(src.Files) == 0 {
+func mockSourceSummary(src mock.Sources) string {
+	names := mockSourceNames(src)
+	if len(names) == 0 {
 		return ""
 	}
+	label := "source"
+	if len(names) > 1 {
+		label = "sources"
+	}
+	return label + " " + strings.Join(names, ", ")
+}
+
+func mockSourceNames(src mock.Sources) []string {
 	names := make([]string, len(src.Files))
 	for i, f := range src.Files {
-		if rel, err := filepath.Rel(src.Path, f); err == nil && filepath.IsLocal(rel) {
-			f = rel
-		}
-		names[i] = f
+		names[i] = mockSourceName(src.Path, f)
 	}
-	return "; sources: " + strings.Join(names, ", ")
+	return names
+}
+
+func mockSourceName(root, path string) string {
+	if rel, err := filepath.Rel(root, path); err == nil && filepath.IsLocal(rel) {
+		return rel
+	}
+	return path
+}
+
+// headerMockVariants names the served scope for the header, widest first. Only
+// the first file is named, and :mock status lists them all.
+func headerMockVariants(src mock.Sources) []string {
+	if len(src.Files) == 0 {
+		if src.Recursive {
+			return []string{"workspace/**"}
+		}
+		return []string{"workspace"}
+	}
+
+	first := mockSourceName(src.Path, src.Files[0])
+	more := ""
+	if rest := len(src.Files) - 1; rest > 0 {
+		more = fmt.Sprintf(" +%d", rest)
+	}
+	if base := filepath.Base(first); base != first {
+		return []string{first + more, base + more}
+	}
+	return []string{first + more}
 }

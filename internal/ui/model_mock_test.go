@@ -82,6 +82,9 @@ func TestTUIStartsReloadsAndStopsMockServer(t *testing.T) {
 	if model.mock.reloadErr == "" {
 		t.Fatal("invalid edit did not report a reload error")
 	}
+	if status := model.mockStatus(); !strings.Contains(status, mockStatusSep+"reload error: ") {
+		t.Fatalf("mock status does not use the compact separator: %q", status)
+	}
 	if got := request(); got != `{"id":"new"}` {
 		t.Fatalf("invalid reload replaced last valid response: %q", got)
 	}
@@ -186,10 +189,22 @@ func TestTUIMockStartWithSourceSubset(t *testing.T) {
 	model := &value
 	t.Cleanup(func() { _ = model.Close() })
 
-	if cmd := model.executeMockCommand(
+	start := model.executeMockCommand(
 		[]string{"start", "--addr", "127.0.0.1:0", "--source", "users.http"},
-	); cmd == nil {
+	)
+	if start == nil {
 		t.Fatal("start command is nil")
+	}
+	status, ok := firstStatus(start)
+	if !ok {
+		t.Fatal("start command has no status")
+	}
+	if !strings.Contains(status.text, "Mock server listening on http://") ||
+		!strings.Contains(status.text, "routes, 1 scenarios)") {
+		t.Fatalf("start status = %q, want address and compiled counts", status.text)
+	}
+	if strings.Contains(status.text, mockStatusSep+"source") {
+		t.Fatalf("start status includes source scope already shown in the header: %q", status.text)
 	}
 	if model.activeMockServer() == nil {
 		t.Fatal("mock server was not started")
@@ -209,7 +224,7 @@ func TestTUIMockStartWithSourceSubset(t *testing.T) {
 	if got := get("/payments"); got != http.StatusNotFound {
 		t.Fatalf("unlisted /payments = %d, want 404", got)
 	}
-	if status := model.mockStatus(); !strings.Contains(status, "sources: users.http") {
+	if status := model.mockStatus(); !strings.Contains(status, mockStatusSep+"source users.http") {
 		t.Fatalf("status = %q, want source list", status)
 	}
 
@@ -238,6 +253,12 @@ func TestTUIMockStartWithSourceSubset(t *testing.T) {
 	restart("-s", "users.http,payments.http")
 	if got := get("/payments"); got != http.StatusOK {
 		t.Fatalf("comma list /payments = %d", got)
+	}
+	if status := model.mockStatus(); !strings.Contains(
+		status,
+		mockStatusSep+"sources users.http, payments.http",
+	) {
+		t.Fatalf("status = %q, want plural source list", status)
 	}
 	if got := get("/errors"); got != http.StatusNotFound {
 		t.Fatalf("comma list /errors = %d, want 404", got)
@@ -389,7 +410,7 @@ func TestMockFileScopeOutlivesStopButNotWorkspaceMove(t *testing.T) {
 	}
 	stop()
 
-	if status := model.mockStatus(); !strings.Contains(status, "sources: payments.http") {
+	if status := model.mockStatus(); !strings.Contains(status, mockStatusSep+"source payments.http") {
 		t.Fatalf("stopped status = %q, want the remembered scope", status)
 	}
 	if !slices.Equal(model.mockSources().Files, []string{payments}) {

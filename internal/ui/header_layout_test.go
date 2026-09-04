@@ -210,3 +210,15 @@ func TestBuildHeaderLineRightStylePadding(t *testing.T) {
 		t.Fatalf("expected right text to be present, got %q", line)
 	}
 }
+
+func TestHeaderCellVariantsEscapeUnprintableValues(t *testing.T) {
+	values, _ := headerCellVariants([]string{"us\ners.http", "us\x1b[2Jers.http"}, 40)
+	if len(values) == 0 {
+		t.Fatal("headerCellVariants() returned no variants")
+	}
+	for _, v := range values {
+		if strings.ContainsAny(v, "\n\r\x1b") {
+			t.Fatalf("variant kept a control character: %q", v)
+		}
+	}
+}
