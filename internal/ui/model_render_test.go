@@ -712,6 +712,17 @@ func TestStatusBarOneLineFoldsBreaksAndTabs(t *testing.T) {
 			want: "first value",
 		},
 		{name: "single line untouched", text: " first  value ", want: " first  value "},
+		{name: "terminal escape is quoted", text: "first\x1b[2Jvalue", want: `first\x1b[2Jvalue`},
+		{
+			name: "escape after a fold",
+			text: "first\n\x1b[2Jsecond",
+			want: `first \x1b[2Jsecond`,
+		},
+		{
+			name: "invalid UTF-8 is quoted",
+			text: string([]byte{'f', 0xff, 'v'}),
+			want: `f\xffv`,
+		},
 	}
 
 	for _, tt := range tests {

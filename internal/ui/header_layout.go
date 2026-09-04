@@ -82,10 +82,12 @@ func headerCellVariants(values []string, limit int) (text []string, lossy int) {
 		text = append(text, rendered)
 	}
 
+	// Escape before measuring so control characters cannot add header rows.
 	for _, value := range values {
+		value = displayText(value)
 		add(value, truncateToWidth(value, limit))
 	}
-	last := values[len(values)-1]
+	last := displayText(values[len(values)-1])
 	add(last, truncateToWidth(last, min(limit, headerValueTight)))
 
 	if lossy < 0 {

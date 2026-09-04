@@ -39,7 +39,11 @@ func assertHeaderFits(t *testing.T, model *Model, label string) {
 
 	for width := 3; width <= 200; width++ {
 		model.width = width
-		for line := range strings.SplitSeq(model.renderHeader(), "\n") {
+		view := model.renderHeader()
+		if got := lipgloss.Height(view); got != 2 {
+			t.Fatalf("%s width %d rendered %d rows, want 2: %q", label, width, got, ansi.Strip(view))
+		}
+		for line := range strings.SplitSeq(view, "\n") {
 			if got := lipgloss.Width(line); got > width {
 				t.Fatalf("%s width %d rendered %d cells: %q", label, width, got, ansi.Strip(line))
 			}
@@ -203,6 +207,49 @@ func TestHeaderWithMockFitsSupportedWidths(t *testing.T) {
 	model.testResults = []scripts.TestResult{{Name: "passed", Passed: true}}
 
 	assertHeaderFits(t, model, "running mock")
+}
+
+func TestHeaderKeepsUnprintableNamesOnOneRow(t *testing.T) {
+	const raw = "\n\x1b[2J"
+
+	tests := []struct {
+		name  string
+		apply func(*Model)
+	}{
+		{
+			name:  "workspace",
+			apply: func(m *Model) { m.ws.root = "/tmp/ac" + raw + "me-api" },
+		},
+		{
+			name: "mock source",
+			apply: func(m *Model) {
+				m.mock.server = &mock.Server{}
+				m.mock.src = mock.Sources{
+					Path:  m.ws.root,
+					Files: []string{filepath.Join(m.ws.root, "us"+raw+"ers.http")},
+				}
+			},
+		},
+		{
+			name:  "active request",
+			apply: func(m *Model) { m.activeRequestTitle = "GET cre" + raw + "ate-user" },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := headerTestModel(t, 160)
+			tt.apply(model)
+			assertHeaderFits(t, model, tt.name)
+
+			for width := 3; width <= 200; width++ {
+				model.width = width
+				if view := model.renderHeader(); strings.Contains(view, "\x1b[2J") {
+					t.Fatalf("%s width %d printed a raw escape: %q", tt.name, width, view)
+				}
+			}
+		})
+	}
 }
 
 func TestHeaderDropsHelpBeforeLatency(t *testing.T) {
