@@ -373,8 +373,8 @@ resterm mock verify --recursive .
 The operations connect to `http://127.0.0.1:8080` by default. Each accepts `--url`, `--timeout`, and `--insecure`, and `verify` also accepts `--recursive`. Flags may go on either side of the optional sequence or source argument, for example:
 
 ```bash
-resterm mock reset --url http://127.0.0.1:9090 polling
-resterm mock verify --url https://localhost:9443 --insecure payments.http
+resterm mock reset polling --url http://127.0.0.1:9090
+resterm mock verify payments.http --url https://localhost:9443 --insecure
 ```
 
 The URL must contain only the `http` or `https` scheme and host. Operational commands intentionally do not support proxy base paths. Source files or directories named `reset`, `clear`, or `verify` should be passed with an explicit path such as `./reset` so they are not interpreted as operations.
