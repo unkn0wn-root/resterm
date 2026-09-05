@@ -153,6 +153,8 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m Model) helpSections() []helpSection {
 	editorEntries := []helpEntry{
+		{"Ctrl+N / Up / Down", "Open or move through contextual completions in insert mode"},
+		{"Tab / Enter", "Accept the selected editor completion"},
 		{"h / j / k / l", "Move left / down / up / right"},
 		{"w / b / e", "Word forward / back / end (W / B / E for WORD)"},
 		{"0 / ^ / $", "Line start / first non-blank / line end"},
@@ -234,7 +236,10 @@ func (m Model) helpSections() []helpSection {
 					m.helpActionKey(bindings.ActionOpenFileInEditor, "g e"),
 					"Open file in external editor",
 				},
-				{m.helpActionKey(bindings.ActionOpenNewFileModal, "Ctrl+N"), "Create request file"},
+				{
+					m.helpActionKey(bindings.ActionOpenNewFileModal, "Ctrl+N"),
+					"Create request file (outside editor insert mode)",
+				},
 				{m.helpActionKey(bindings.ActionOpenPathModal, "Ctrl+O"), "Browse for a file or workspace"},
 				{
 					m.helpActionKey(bindings.ActionReloadWorkspace, "Ctrl+Shift+O"),

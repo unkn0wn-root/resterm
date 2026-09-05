@@ -60,6 +60,7 @@ func (m *Model) editorCommandHints() []commandHint {
 		return []commandHint{
 			{key: "Esc", label: "Normal"},
 			m.commandActionHint(bindings.ActionSendRequest, "Send"),
+			{key: "Ctrl+N", label: "Choices"},
 			{key: "Tab", label: "Complete"},
 		}
 	}

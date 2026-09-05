@@ -2,25 +2,26 @@ package intellisense
 
 import "github.com/unkn0wn-root/resterm/internal/vars/dynamic"
 
-// builtinVars mirrors the helper registry, so a new helper needs no second
-// list here.
 var builtinVars = builtinItems()
 
 func builtinItems() []Item {
 	helpers := dynamic.Helpers()
 	items := make([]Item, 0, len(helpers))
 	for _, h := range helpers {
-		items = append(items, Item{
+		item := Item{
 			Label:   h.Name(),
 			Aliases: h.Aliases(),
 			Summary: helperSummary(h),
-		})
+		}
+		if usage := h.Usage(); usage != "" {
+			item.Insert = usage
+			_, item.Placeholder = cutCall(usage)
+		}
+		items = append(items, item)
 	}
 	return items
 }
 
-// helperSummary shows the call form, since the label alone does not say a
-// helper takes arguments.
 func helperSummary(h dynamic.Descriptor) string {
 	if h.Usage() == "" {
 		return h.Summary()
@@ -39,7 +40,15 @@ func (variableSource) Provide(ctx Context, sc Scope) []Item {
 		items = append(items, Item{Label: v.Name, Summary: varSummary(v)})
 	}
 	items = append(items, builtinVars...)
-	return filter(items, ctx.Query)
+	items = filter(items, ctx.Query)
+	for i := range items {
+		if ctx.call {
+			items[i].Insert, items[i].Placeholder = items[i].Label, ""
+			continue
+		}
+		items[i].Insert = items[i].InsertText() + ctx.closing
+	}
+	return items
 }
 
 func varSummary(v VarRef) string {

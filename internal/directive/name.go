@@ -1,5 +1,8 @@
 package directive
 
+// CommentPrefix is the canonical prefix for a directive comment.
+const CommentPrefix = "# "
+
 // Name is the lowercase spelling without the leading @.
 type Name string
 
@@ -83,7 +86,7 @@ func (n Name) Tag() string {
 }
 
 func (n Name) Comment() string {
-	return "# " + n.Tag()
+	return CommentPrefix + n.Tag()
 }
 
 // Unknown names pass through so each parser can decide whether they are valid.

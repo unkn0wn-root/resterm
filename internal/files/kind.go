@@ -79,22 +79,6 @@ func IsRequest(path string) bool {
 	return requestExt[fileExt(path)] == KindRequest
 }
 
-func IsRTS(path string) bool {
-	return requestExt[fileExt(path)] == KindScript
-}
-
-func IsGraphQL(path string) bool {
-	return dataExt[fileExt(path)] == KindGraphQL
-}
-
-func IsJSON(path string) bool {
-	return dataExt[fileExt(path)] == KindJSON
-}
-
-func IsJavaScript(path string) bool {
-	return dataExt[fileExt(path)] == KindJavaScript
-}
-
 func IsWorkspace(path string) bool {
 	_, ok := ClassifyWorkspace(path)
 	return ok
@@ -115,6 +99,16 @@ func ClassifyWorkspace(path string) (Kind, bool) {
 	}
 	if vars.IsEnvFileName(path) {
 		return KindEnv, true
+	}
+	kind, ok := dataExt[ext]
+	return kind, ok
+}
+
+// classifyExt uses only the extension, so environment JSON files also count as JSON.
+func classifyExt(path string) (Kind, bool) {
+	ext := fileExt(path)
+	if kind, ok := requestExt[ext]; ok {
+		return kind, true
 	}
 	kind, ok := dataExt[ext]
 	return kind, ok

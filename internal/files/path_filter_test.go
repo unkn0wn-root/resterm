@@ -28,6 +28,10 @@ func TestPathFilter(t *testing.T) {
 		{"workspace accepts dotenv", WorkspacePathFilter(env), filepath.Join(dir, ".env.local"), true},
 		{"workspace accepts active env", WorkspacePathFilter(env), env, true},
 		{"workspace rejects unrelated", WorkspacePathFilter(env), filepath.Join(dir, "notes.txt"), false},
+		{"rts rejects javascript", KindPathFilter(KindScript), filepath.Join(dir, "helpers.js"), false},
+		{"script accepts rts", KindPathFilter(KindScript, KindJavaScript), filepath.Join(dir, "pre.rts"), true},
+		{"script accepts javascript", KindPathFilter(KindScript, KindJavaScript), filepath.Join(dir, "pre.mjs"), true},
+		{"script rejects text", KindPathFilter(KindScript, KindJavaScript), filepath.Join(dir, "pre.txt"), false},
 	}
 
 	for _, tt := range tests {

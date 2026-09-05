@@ -1,21 +1,34 @@
 package intellisense
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/directive"
+)
 
 type testLines []string
+
+func argKey(ctx Context) string {
+	if ctx.arg == nil {
+		return ""
+	}
+	return ctx.arg.key
+}
 
 func (t testLines) LineCount() int         { return len(t) }
 func (t testLines) LineRunes(i int) []rune { return []rune(t[i]) }
 
 func TestAnalyzeClassifiesContexts(t *testing.T) {
 	cases := []struct {
-		name      string
-		lines     []string
-		line, col int
-		wantKind  Kind
-		wantDir   string
-		wantArg   string
-		wantQuery string
+		name              string
+		lines             []string
+		line, col         int
+		wantKind          Kind
+		wantDir           directive.Name
+		wantHeader        string
+		wantArg           string
+		wantQuery         string
+		wantCommentPrefix bool
 	}{
 		{
 			name:     "directive name after comment marker",
@@ -30,6 +43,55 @@ func TestAnalyzeClassifiesContexts(t *testing.T) {
 			line:     0,
 			col:      3,
 			wantKind: KindDirective, wantQuery: "",
+		},
+		{
+			name:     "directive name without comment marker",
+			lines:    []string{"@na"},
+			line:     0,
+			col:      3,
+			wantKind: KindDirective, wantQuery: "na", wantCommentPrefix: true,
+		},
+		{
+			name:     "bare at sign without comment marker",
+			lines:    []string{"@"},
+			line:     0,
+			col:      1,
+			wantKind: KindDirective, wantQuery: "", wantCommentPrefix: true,
+		},
+		{
+			name:     "indented directive name without comment marker",
+			lines:    []string{"\t@au"},
+			line:     0,
+			col:      4,
+			wantKind: KindDirective, wantQuery: "au", wantCommentPrefix: true,
+		},
+		{
+			name:     "directive name without comment marker after body",
+			lines:    []string{"POST https://example.test", "", "@na"},
+			line:     2,
+			col:      3,
+			wantKind: KindDirective, wantQuery: "na", wantCommentPrefix: true,
+		},
+		{
+			name:     "embedded at sign is not a directive",
+			lines:    []string{"prefix @na"},
+			line:     0,
+			col:      10,
+			wantKind: KindNone,
+		},
+		{
+			name:     "bare directive stops at an argument separator",
+			lines:    []string{"@name "},
+			line:     0,
+			col:      6,
+			wantKind: KindNone,
+		},
+		{
+			name:     "in-place variable remains outside directive completion",
+			lines:    []string{"@name = value"},
+			line:     0,
+			col:      13,
+			wantKind: KindNone,
 		},
 		{
 			name:     "slash comment directive",
@@ -113,7 +175,7 @@ func TestAnalyzeClassifiesContexts(t *testing.T) {
 			lines:    []string{"GET https://x", "Content-Type: app"},
 			line:     1,
 			col:      17,
-			wantKind: KindHeaderValue, wantDir: "content-type", wantQuery: "app",
+			wantKind: KindHeaderValue, wantHeader: "content-type", wantQuery: "app",
 		},
 		{
 			name:     "no completion in body",
@@ -211,14 +273,20 @@ func TestAnalyzeClassifiesContexts(t *testing.T) {
 			if ctx.Kind != tc.wantKind {
 				t.Fatalf("kind = %d, want %d", ctx.Kind, tc.wantKind)
 			}
-			if ctx.Directive != tc.wantDir {
-				t.Fatalf("directive = %q, want %q", ctx.Directive, tc.wantDir)
+			if ctx.name != tc.wantDir {
+				t.Fatalf("directive = %q, want %q", ctx.name, tc.wantDir)
 			}
-			if ctx.ArgKey != tc.wantArg {
-				t.Fatalf("argKey = %q, want %q", ctx.ArgKey, tc.wantArg)
+			if ctx.header != tc.wantHeader {
+				t.Fatalf("header = %q, want %q", ctx.header, tc.wantHeader)
+			}
+			if got := argKey(ctx); got != tc.wantArg {
+				t.Fatalf("argKey = %q, want %q", got, tc.wantArg)
 			}
 			if ctx.Query != tc.wantQuery {
 				t.Fatalf("query = %q, want %q", ctx.Query, tc.wantQuery)
+			}
+			if ctx.bare != tc.wantCommentPrefix {
+				t.Fatalf("bare directive = %v, want %v", ctx.bare, tc.wantCommentPrefix)
 			}
 		})
 	}
@@ -232,6 +300,16 @@ func TestAnalyzeStartMarksReplacementToken(t *testing.T) {
 	}
 	if ctx.Start != 2 {
 		t.Fatalf("directive start = %d, want 2", ctx.Start)
+	}
+
+	// The indentation is kept outside the replacement and the accepted item
+	// supplies the missing canonical comment prefix.
+	ctx, ok = Analyze(testLines{"\t@na"}, 0, 4)
+	if !ok || ctx.Kind != KindDirective || !ctx.bare {
+		t.Fatalf("expected bare directive context, got %+v ok=%v", ctx, ok)
+	}
+	if ctx.Start != 1 {
+		t.Fatalf("bare directive start = %d, want 1", ctx.Start)
 	}
 
 	// Variable token starts right after the leading "{{".

@@ -14,7 +14,12 @@ func TestBuildCompletionScope(t *testing.T) {
 		Globals:   []restfile.Variable{{Name: "gToken", Secret: true}},
 		Variables: []restfile.Variable{{Name: "host"}},
 		Requests: []*restfile.Request{
-			{Variables: []restfile.Variable{{Name: "reqId"}}},
+			{
+				Metadata:  restfile.RequestMetadata{Name: "Create User"},
+				Variables: []restfile.Variable{{Name: "reqId"}},
+			},
+			{Metadata: restfile.RequestMetadata{Name: "create user"}},
+			{Metadata: restfile.RequestMetadata{Name: " Health "}},
 		},
 		Constants: []restfile.Constant{{Name: "apiVersion"}},
 		Patches:   []restfile.PatchProfile{{Name: "jsonApi"}},
@@ -74,6 +79,9 @@ func TestBuildCompletionScope(t *testing.T) {
 	}
 	if !reflect.DeepEqual(scope.Profiles, wantProfiles) {
 		t.Fatalf("profiles = %+v, want %+v", scope.Profiles, wantProfiles)
+	}
+	if want := []string{"Create User", "Health"}; !reflect.DeepEqual(scope.RequestNames, want) {
+		t.Fatalf("request names = %q, want stable case-folded de-duplication %q", scope.RequestNames, want)
 	}
 }
 

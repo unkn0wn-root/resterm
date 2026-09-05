@@ -1463,6 +1463,100 @@ func TestRequestEditorCompletionsSuggestAndAccept(t *testing.T) {
 	}
 }
 
+func TestRequestEditorCompletionsAddMissingDirectiveComment(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial string
+		typed   string
+		want    string
+	}{
+		{name: "bare", typed: "@na", want: "# @name "},
+		{name: "indented", initial: "  ", typed: "@na", want: "  # @name "},
+		{name: "hash comment unchanged", initial: "# ", typed: "@na", want: "# @name "},
+		{name: "slash comment unchanged", initial: "// ", typed: "@na", want: "// @name "},
+		{name: "dash comment unchanged", initial: "-- ", typed: "@na", want: "-- @name "},
+		{name: "special insert preserved", typed: "@rt", want: "# @rts pre-request "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			editor := newTestEditor(tt.initial)
+			editorPtr := &editor
+			editorPtr.moveCursorTo(0, utf8.RuneCountInString(tt.initial))
+			editorPtr.SetCompletionEnabled(true)
+
+			editor = typeRunes(editor, tt.typed)
+			if !editor.completion.active {
+				t.Fatalf("expected completion for %q", editor.Value())
+			}
+			editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			if got := editor.Value(); got != tt.want {
+				t.Fatalf("accepted completion = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequestEditorBareNoArgDirectiveDoesNotAddSpace(t *testing.T) {
+	editor := newTestEditor("")
+	editorPtr := &editor
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "@no-l")
+	if !editor.completion.active {
+		t.Fatal("expected completion for bare @no-l")
+	}
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "# @no-log" {
+		t.Fatalf("accepted completion = %q, want %q", got, "# @no-log")
+	}
+
+	doc := parser.Parse(
+		"completion.http",
+		[]byte(editor.Value()+"\nGET https://example.test\n"),
+	)
+	if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+		t.Fatalf("completed directive did not parse: errors=%v requests=%d", doc.Errors, len(doc.Requests))
+	}
+	if !doc.Requests[0].Metadata.NoLog {
+		t.Fatal("completed @no-log directive was not applied")
+	}
+}
+
+func TestRequestEditorBareDirectiveCompletionIsOneUndoStep(t *testing.T) {
+	editor := newTestEditor("")
+	editorPtr := &editor
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "@na")
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	editor, cmd := editor.UndoLastChange()
+	_ = editorEventFromCmd(t, cmd)
+	if got := editor.Value(); got != "@na" {
+		t.Fatalf("undo restored %q, want %q", got, "@na")
+	}
+}
+
+func TestRequestEditorBareDirectiveCompletionCanBeDismissed(t *testing.T) {
+	editor := newTestEditor("")
+	editorPtr := &editor
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "@na")
+	if !editor.completion.active {
+		t.Fatal("expected completion for bare @na")
+	}
+	if !(&editor).dismissCompletion() {
+		t.Fatal("expected active completion to be dismissed")
+	}
+	if got := editor.Value(); got != "@na" {
+		t.Fatalf("dismiss changed editor value to %q", got)
+	}
+	if editor.completion.active {
+		t.Fatal("expected completion to close after dismissal")
+	}
+}
+
 func TestRequestEditorCompletionsStayClosedAfterSpaces(t *testing.T) {
 	editor := newTestEditor("")
 	editor.SetCompletionEnabled(true)
@@ -1901,14 +1995,26 @@ func TestRequestEditorRightFinishesCompletionPlaceholder(t *testing.T) {
 	}
 }
 
-func TestRequestEditorCompletionsIgnoreNonCommentContext(t *testing.T) {
-	editor := newTestEditor("")
-	editorPtr := &editor
-	editorPtr.SetCompletionEnabled(true)
+func TestRequestEditorCompletionsPreserveBareVariablesAndEmbeddedAt(t *testing.T) {
+	tests := []string{
+		"@name = value",
+		"@future",
+		"prefix @na",
+	}
+	for _, input := range tests {
+		t.Run(input, func(t *testing.T) {
+			editor := newTestEditor("")
+			editorPtr := &editor
+			editorPtr.SetCompletionEnabled(true)
 
-	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
-	if editor.completion.active {
-		t.Fatal("expected completion to stay inactive when typing @ outside a comment")
+			editor = typeRunes(editor, input)
+			if got := editor.Value(); got != input {
+				t.Fatalf("typed value = %q, want %q", got, input)
+			}
+			if editor.completion.active {
+				t.Fatal("expected completion to stay inactive")
+			}
+		})
 	}
 }
 
@@ -1993,6 +2099,9 @@ func TestRequestEditorCompletionsHeaderNameInHeaderSection(t *testing.T) {
 	if got := editor.Value(); got != "GET https://example.com\nContent-Type: " {
 		t.Fatalf("expected header name with colon and space, got %q", got)
 	}
+	if !editor.hasActiveCompletion() || !collectHintLabels(editor.completion.filtered)["application/json"] {
+		t.Fatalf("expected chained header values, got %+v", editor.completion)
+	}
 }
 
 func TestRequestEditorCompletionsHeaderValue(t *testing.T) {
@@ -2042,8 +2151,8 @@ func TestRequestEditorCompletionsVariableFromScope(t *testing.T) {
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := editor.Value(); got != "GET https://{{host" {
-		t.Fatalf("expected variable inserted without trailing space, got %q", got)
+	if got := editor.Value(); got != "GET https://{{host}}" {
+		t.Fatalf("expected variable inserted with its missing closers, got %q", got)
 	}
 }
 

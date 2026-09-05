@@ -10,6 +10,9 @@ const (
 	ClientAuthBasic = "basic"
 	ClientAuthBody  = "body"
 
+	CodeChallengePlain = "plain"
+	CodeChallengeS256  = "s256"
+
 	DefaultHeader = "Authorization"
 )
 

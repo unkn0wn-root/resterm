@@ -145,13 +145,24 @@ func (l Line) clamp(cursor int) int {
 }
 
 func Quote(value string) string {
+	text, _ := quoteAt(value, len([]rune(value)))
+	return text
+}
+
+// quoteAt quotes value and adjusts the caret's rune offset.
+func quoteAt(value string, cursor int) (string, int) {
 	if value != "" && !strings.ContainsFunc(value, unicode.IsSpace) &&
 		!strings.ContainsAny(value, `"'`) {
-		return value
+		return value, cursor
 	}
 
-	// A backslash right before the closing quote would escape it, so a trailing
-	// run of them stays outside. Windows directories end in one.
+	// Keep trailing backslashes outside the quotes so they cannot escape the closing quote.
 	quoted := strings.TrimRight(value, `\`)
-	return `"` + strings.ReplaceAll(quoted, `"`, `\"`) + `"` + value[len(quoted):]
+	text := `"` + strings.ReplaceAll(quoted, `"`, `\"`) + `"` + value[len(quoted):]
+
+	runes := []rune(quoted)
+	if cursor >= len(runes) {
+		return text, cursor + 2 + strings.Count(quoted, `"`)
+	}
+	return text, cursor + 1 + strings.Count(string(runes[:cursor]), `"`)
 }

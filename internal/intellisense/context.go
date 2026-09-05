@@ -1,6 +1,7 @@
 package intellisense
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 
@@ -11,25 +12,80 @@ type Kind int
 
 const (
 	KindNone         Kind = iota
-	KindDirective         // @directive name on a comment line
+	KindDirective         // @directive name, optionally before its comment prefix is inserted
 	KindDirectiveArg      // a sub-token of a directive (auth/k8s/trace/...)
 	KindMethod            // first token of a request line
 	KindScheme            // URL scheme after a request method
 	KindHeaderName        // start of a header line
 	KindHeaderValue       // value after "Name:" on a header line
 	KindVariable          // identifier inside an open {{ ... }}
+	KindPath              // a filesystem path, in a directive or a body reference
 )
 
-type Context struct {
-	Kind      Kind
-	Directive string // base key (KindDirectiveArg) or header name (KindHeaderValue)
-	ArgKey    string // option key when completing a value, e.g. "use"
-	Query     string // partial token being completed, lowercased
-	Start     int    // rune offset within the caret line where Query begins
+// PathKind identifies which file types to suggest.
+type PathKind uint8
+
+const (
+	PathNone PathKind = iota
+	PathAny
+	PathRTS
+	PathGraphQL
+	PathJSON
+	PathScript
+)
+
+// PathContext describes the syntax allowed for a path completion.
+type PathContext struct {
+	Kind      PathKind
+	Quote     bool   // quote paths that contain spaces
+	List      bool   // complete one entry in a list of paths
+	Home      bool   // expand a leading "~"
+	Continues bool   // more arguments may follow the path
+	Suffix    string // decoded value after the caret in a list
 }
 
-// Lines exposes the buffer's logical lines to Analyze - LineRunes(i) is the
-// 0-based line i (the same sequence as strings.Split(value, "\n")).
+type Context struct {
+	Kind  Kind
+	Query string // the partial token being completed
+	Start int    // first rune offset to replace on the current line
+	End   int    // rune offset after the text to replace
+	Path  PathContext
+
+	name      directive.Name
+	header    string    // lowercased header name for KindHeaderValue
+	arg       *argument // argument whose value is being completed
+	completed completed
+	closing   string // text that completes an unfinished template
+	call      bool   // the identifier is followed by an argument list
+	bare      bool   // the directive was typed without its comment marker
+}
+
+// completed stores values already on the line under each argument's canonical name.
+type completed map[string][]string
+
+func (c completed) add(key, value string) {
+	c[key] = append(c[key], value)
+}
+
+func (c completed) has(key string) bool {
+	return len(c[key]) > 0
+}
+
+func (c completed) holds(key, value string) bool {
+	return slices.ContainsFunc(c[key], func(v string) bool {
+		return strings.EqualFold(v, value)
+	})
+}
+
+func (c completed) last(key string) (string, bool) {
+	values := c[key]
+	if len(values) == 0 {
+		return "", false
+	}
+	return values[len(values)-1], true
+}
+
+// Lines exposes newline-separated buffer lines to Analyze. Line indexes start at zero.
 type Lines interface {
 	LineCount() int
 	LineRunes(i int) []rune
@@ -40,18 +96,19 @@ func Analyze(lines Lines, line, col int) (Context, bool) {
 		return Context{}, false
 	}
 	cur := lines.LineRunes(line)
-	if col < 0 {
-		col = 0
-	}
-	if col > len(cur) {
-		col = len(cur)
-	}
+	col = clamp(col, 0, len(cur))
 
 	if ctx, ok := analyzeVariable(cur, col); ok {
 		return ctx, true
 	}
 	if marker := commentPrefixLen(cur); marker >= 0 {
-		return analyzeDirective(cur, marker, col)
+		return analyzeDirective(cur, marker, col, false)
+	}
+	if ctx, ok := analyzeDirective(cur, 0, col, true); ok {
+		return ctx, true
+	}
+	if ctx, ok := analyzeBodyPath(cur, col); ok {
+		return ctx, true
 	}
 	return analyzeRequest(lines, line, cur, col)
 }
@@ -74,83 +131,60 @@ func analyzeVariable(cur []rune, col int) (Context, bool) {
 	for start > open && IsTokenRune(cur[start-1]) {
 		start--
 	}
-	return Context{
-		Kind:  KindVariable,
-		Query: strings.ToLower(string(cur[start:col])),
-		Start: start,
-	}, true
-}
+	end := col
+	for end < len(cur) && IsTokenRune(cur[end]) {
+		end++
+	}
+	ctx := Context{Kind: KindVariable, Query: string(cur[start:col]), Start: start, End: end}
 
-func analyzeDirective(cur []rune, marker, col int) (Context, bool) {
-	at := -1
-	for i := col - 1; i >= marker; i-- {
-		if cur[i] == '@' {
-			at = i
-			break
-		}
+	next := skipSpace(cur, end)
+	if next < len(cur) && cur[next] == '(' {
+		ctx.call = true
+		return ctx, true
 	}
-	if at < 0 {
-		return Context{}, false
-	}
-	// everything between the marker and '@' must be blank for this to be a
-	// directive anchor (e.g. "# @", "/* @"), not an '@' inside other text.
-	if strings.TrimSpace(string(cur[marker:at])) != "" {
-		return Context{}, false
-	}
-
-	ctx, ok := analyzeDirectiveArea(cur[at+1 : col])
-	if !ok {
-		return Context{}, false
-	}
-	// area offsets are relative to the rune after '@'.
-	if ctx.Kind == KindDirective {
-		ctx.Start = at
-	} else {
-		ctx.Start += at + 1
+	// Missing braces go after the whitespace, so the replacement covers it.
+	if closers := skipPartial(cur, next, "}}") - next; closers < 2 {
+		ctx.End = next
+		ctx.closing = string(cur[end:next]) + strings.Repeat("}", 2-closers)
 	}
 	return ctx, true
 }
 
-func analyzeDirectiveArea(area []rune) (Context, bool) {
-	if len(area) == 0 {
-		return Context{Kind: KindDirective}, true
+// analyzeBodyPath handles body files ("< file"), script includes ("> < file"),
+// and inline body includes ("@ file").
+func analyzeBodyPath(cur []rune, col int) (Context, bool) {
+	start := leadingSpaceLen(cur)
+	if start >= len(cur) || col < start {
+		return Context{}, false
 	}
-
-	// A colon ends the name the same way a space does. Parse takes both, so
-	// "@auth:bea" has to complete like "@auth bea".
-	sep := -1
-	for i, r := range area {
-		if directive.IsArgSep(r) {
-			sep = i
-			break
-		}
-		if !isQueryRune(r) {
+	kind := PathAny
+	switch cur[start] {
+	case '<', '@':
+		start++
+	case '>':
+		start = skipSpace(cur, start+1)
+		if start >= len(cur) || cur[start] != '<' {
 			return Context{}, false
 		}
-	}
-	if sep == -1 {
-		return Context{Kind: KindDirective, Query: strings.ToLower(string(area))}, true
-	}
-	if sep == 0 {
+		start++
+		kind = PathScript
+	default:
 		return Context{}, false
 	}
-
-	base := strings.ToLower(string(area[:sep]))
-
-	start, token, ok := splitToken(area, skipArgSep(area, sep))
-	if !ok {
+	if start < len(cur) && !unicode.IsSpace(cur[start]) {
 		return Context{}, false
 	}
-
-	ctx := Context{Kind: KindDirectiveArg, Directive: base, Start: start}
-	if key, val, found := splitValueToken(token); found {
-		ctx.ArgKey = key
-		ctx.Query = strings.ToLower(val)
-		ctx.Start = start + (len(token) - len([]rune(val)))
-	} else {
-		ctx.Query = strings.ToLower(string(token))
+	start = skipSpace(cur, start)
+	if col < start {
+		return Context{}, false
 	}
-	return ctx, true
+	return Context{
+		Kind:  KindPath,
+		Query: string(cur[start:col]),
+		Start: start,
+		End:   len(cur),
+		Path:  PathContext{Kind: kind},
+	}, true
 }
 
 func analyzeRequest(lines Lines, line int, cur []rune, col int) (Context, bool) {
@@ -182,10 +216,7 @@ func analyzeRequest(lines Lines, line int, cur []rune, col int) (Context, bool) 
 }
 
 func requestLineContext(cur []rune, col int) (Context, bool) {
-	start := 0
-	for start < len(cur) && unicode.IsSpace(cur[start]) {
-		start++
-	}
+	start := skipSpace(cur, 0)
 	end := start
 	for end < len(cur) && !unicode.IsSpace(cur[end]) {
 		end++
@@ -197,79 +228,70 @@ func requestLineContext(cur []rune, col int) (Context, bool) {
 			return Context{}, false
 		}
 		for _, r := range cur[start:col] {
-			if !isMethodRune(r) {
+			if !unicode.IsLetter(r) {
 				return Context{}, false
 			}
 		}
-		return Context{Kind: KindMethod, Query: strings.ToLower(string(cur[start:col])), Start: start}, true
+		return Context{
+			Kind:  KindMethod,
+			Query: strings.ToLower(string(cur[start:col])),
+			Start: start,
+			End:   end,
+		}, true
 	}
 
 	// Second token: the URL scheme, while still typing scheme letters (before "://").
-	u := end
-	for u < len(cur) && unicode.IsSpace(cur[u]) {
-		u++
-	}
+	u := skipSpace(cur, end)
 	uEnd := u
-	for uEnd < len(cur) && !unicode.IsSpace(cur[uEnd]) {
+	for uEnd < len(cur) && unicode.IsLetter(cur[uEnd]) {
 		uEnd++
 	}
 	if col <= u || col > uEnd {
 		return Context{}, false
 	}
-	for _, r := range cur[u:col] {
-		if !unicode.IsLetter(r) {
-			return Context{}, false
-		}
-	}
-	return Context{Kind: KindScheme, Query: strings.ToLower(string(cur[u:col])), Start: u}, true
+	return Context{
+		Kind:  KindScheme,
+		Query: strings.ToLower(string(cur[u:col])),
+		Start: u,
+		End:   skipPartial(cur, uEnd, "://"),
+	}, true
 }
 
 func headerContext(cur []rune, col int) (Context, bool) {
-	colon := -1
-	for i, r := range cur {
-		if r == ':' {
-			colon = i
-			break
-		}
-	}
+	colon := slices.Index(cur, ':')
 
 	if colon < 0 || col <= colon {
-		start := 0
-		for start < len(cur) && unicode.IsSpace(cur[start]) {
-			start++
-		}
-		end := col
-		if colon >= 0 && colon < end {
-			end = colon
-		}
-		if end < start {
+		start := skipSpace(cur, 0)
+		if col < start {
 			return Context{}, false
+		}
+		end := len(cur)
+		if colon >= 0 {
+			end = colon + 1
 		}
 		return Context{
 			Kind:  KindHeaderName,
-			Query: strings.ToLower(strings.TrimSpace(string(cur[start:end]))),
+			Query: strings.ToLower(strings.TrimSpace(string(cur[start:col]))),
 			Start: start,
+			End:   end,
 		}, true
 	}
 
-	name := strings.ToLower(strings.TrimSpace(string(cur[:colon])))
 	start := colon + 1
 	for start < col && unicode.IsSpace(cur[start]) {
 		start++
 	}
 	return Context{
-		Kind:      KindHeaderValue,
-		Directive: name,
-		Query:     strings.ToLower(string(cur[start:col])),
-		Start:     start,
+		Kind:   KindHeaderValue,
+		header: strings.ToLower(strings.TrimSpace(string(cur[:colon]))),
+		Query:  strings.ToLower(string(cur[start:col])),
+		Start:  start,
+		End:    len(cur),
 	}, true
 }
 
 func commentPrefixLen(cur []rune) int {
-	i := 0
-	for i < len(cur) && unicode.IsSpace(cur[i]) {
-		i++
-	}
+	i := leadingSpaceLen(cur)
 	rest := cur[i:]
 	switch {
 	case hasRunePrefix(rest, "//"), hasRunePrefix(rest, "/*"), hasRunePrefix(rest, "--"):
@@ -279,6 +301,32 @@ func commentPrefixLen(cur []rune) int {
 	default:
 		return -1
 	}
+}
+
+func leadingSpaceLen(cur []rune) int {
+	return skipSpace(cur, 0)
+}
+
+func skipSpace(cur []rune, i int) int {
+	for i < len(cur) && unicode.IsSpace(cur[i]) {
+		i++
+	}
+	return i
+}
+
+// skipPartial consumes the matching prefix of want at i.
+func skipPartial(cur []rune, i int, want string) int {
+	for _, r := range want {
+		if i >= len(cur) || cur[i] != r {
+			break
+		}
+		i++
+	}
+	return i
+}
+
+func clamp(v, lo, hi int) int {
+	return min(max(v, lo), hi)
 }
 
 func looksLikeRequestLine(line string) bool {
@@ -295,54 +343,6 @@ func looksLikeRequestLine(line string) bool {
 	}
 	lower := strings.ToLower(t)
 	return strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://")
-}
-
-func splitValueToken(token []rune) (key, value string, ok bool) {
-	for i, r := range token {
-		if r == '=' {
-			// only use= gets value completion. Other key=value tokens stay whole
-			// so their label still prefix-matches (e.g. enabled=true).
-			if k := strings.ToLower(string(token[:i])); k == "use" {
-				return k, string(token[i+1:]), true
-			}
-			return "", "", false
-		}
-		if !isQueryRune(r) {
-			return "", "", false
-		}
-	}
-	return "", "", false
-}
-
-func skipArgSep(area []rune, start int) int {
-	for start < len(area) {
-		if !directive.IsArgSep(area[start]) {
-			return start
-		}
-		start++
-	}
-	return len(area)
-}
-
-func splitToken(area []rune, start int) (int, []rune, bool) {
-	tokenStart := start
-	pos := start
-	for pos < len(area) {
-		r := area[pos]
-		if unicode.IsSpace(r) {
-			pos++
-			for pos < len(area) && unicode.IsSpace(area[pos]) {
-				pos++
-			}
-			tokenStart = pos
-			continue
-		}
-		if !isSubcommandRune(r) {
-			return 0, nil, false
-		}
-		pos++
-	}
-	return tokenStart, area[tokenStart:], true
 }
 
 func hasRunePrefix(s []rune, prefix string) bool {
@@ -365,22 +365,6 @@ func isQueryRune(r rune) bool {
 	return r == '-' || r == '_'
 }
 
-func isSubcommandRune(r rune) bool {
-	if isQueryRune(r) {
-		return true
-	}
-	switch r {
-	case '=', '<', '>', ',':
-		return true
-	default:
-		return false
-	}
-}
-
 func IsTokenRune(r rune) bool {
 	return isQueryRune(r) || r == '$' || r == '.'
-}
-
-func isMethodRune(r rune) bool {
-	return unicode.IsLetter(r)
 }

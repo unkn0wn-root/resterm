@@ -24,6 +24,7 @@ const (
 	promptCommandLine promptID = iota + 1
 	promptOpenPath
 	promptResponseSave
+	promptEditor
 )
 
 type pathReadMsg struct {
@@ -214,5 +215,7 @@ func (m *Model) handlePathRead(msg pathReadMsg) {
 		m.openPathPrompt.deliver(msg.read)
 	case promptResponseSave:
 		m.responseSavePrompt.deliver(msg.read)
+	case promptEditor:
+		m.editor.deliverPathCompletion(msg.read)
 	}
 }

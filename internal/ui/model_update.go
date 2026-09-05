@@ -1164,11 +1164,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 // Keep the cached application frame only for messages handled entirely by an
 // open modal. All other messages may change the frame behind it.
 func (m *Model) modalKeepsUnderlay(msg tea.Msg) bool {
-	switch msg.(type) {
+	switch typed := msg.(type) {
 	case tea.KeyMsg:
 		return m.modalCapturesGlobalKeys()
 	case pathReadMsg:
-		return true
+		return typed.id != promptEditor
 	default:
 		return false
 	}
@@ -1314,6 +1314,15 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		if cmd := m.sendRequestFromList(false); cmd != nil {
 			return combine(cmd)
 		}
+	}
+
+	// In editor insert mode, Ctrl+N takes priority over the New Request binding.
+	if m.focus == focusEditor && m.editorInsertMode && keyStr == "ctrl+n" {
+		cmd := m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
+			return ed.NextCompletion()
+		})
+		m.suppressEditorKey = true
+		return combine(cmd)
 	}
 
 	if shortcutKey != "" {

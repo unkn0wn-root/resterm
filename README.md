@@ -5,16 +5,14 @@
 </h1>
 
 <p align="center">
-  <em>A terminal-native API client and workbench for REST, GraphQL, gRPC, WebSocket and SSE.</em>
+  <em>A terminal API client for REST, GraphQL, gRPC, WebSocket and SSE.</em>
 </p>
 
 <p align="center">
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is an _API-as-code_ workbench - or, in more familiar terms, an API client - built around plain `.http` and `.rest` files that you can diff, review and version. It combines interactive request editing with declarative workflows, assertions, mock servers, tracing, profiling and headless automation. Everything stays on your machine. No accounts, no cloud sync, no telemetry.
-
-If you are looking for a Postman-style client centered on GUI collections, Resterm is probably _not_ for you, but give it a try anyway!
+Resterm stores API requests in plain `.http` and `.rest` files that you can diff, review and track in version control. Edit and send requests in the terminal, or run them from scripts and CI. Request files support workflows, assertions, mock servers, tracing and profiling. No accounts, cloud sync or telemetry.
 
 > [!NOTE]
 > Resterm is now v1! See the [v1.0.0 release notes](https://github.com/unkn0wn-root/resterm/releases/tag/v1.0.0) for new features and breaking changes.
@@ -86,11 +84,11 @@ Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Requ
 
 ## Why Resterm
 
-- **HTTP, GraphQL, gRPC, WebSocket and SSE** out of the box.
-- **Automation lives in the request files:** conditions (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
+- **HTTP, GraphQL, gRPC, WebSocket and SSE** support.
+- **Automation in request files:** conditions (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
 - **RestermScript**, a small expression language built for Resterm, with JavaScript hooks when you want them.
-- **Vim-style controls** with contextual bottom bar hints, searchable offline help, `K` help under the cursor, `/` search and commands like `:w`, `:q`, `:help` and `:docs`.
-- **Built-in auth and tunneling:** OAuth 2.0 (client credentials, password, auth code with PKCE), auth backed by your existing CLIs, SSH tunnels and Kubernetes port-forwards. No extra tools needed.
+- **Vim-style controls** with shortcut hints, searchable offline help, `K` help under the cursor, `/` search and commands like `:w`, `:q`, `:help` and `:docs`.
+- **Auth and tunneling:** OAuth 2.0 (client credentials, password, authorization code with PKCE), auth through existing CLIs, SSH tunnels and Kubernetes port-forwards.
 - **CLI runner:** `resterm run` for scripted runs and CI, with JSON and JUnit output.
 - **Mock servers** declared next to the requests they mimic, with matching rules, sequences, call verification and hot reload.
 - **Timeline tracing, profiling and compare runs** across environments.
@@ -105,7 +103,7 @@ Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Requ
    brew install resterm
    ```
 
-2. Bootstrap a workspace.
+2. Create a workspace.
 
    ```bash
    mkdir my-api && cd my-api
@@ -114,7 +112,7 @@ Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Requ
 
    `resterm init` gives you a small project that works without an internet connection. The generated `requests.http` includes local mock scenarios and a few requests that build on each other. They cover assertions, bearer auth, JSON matching, `json-rules`, and `@for-each`.
 
-3. Start it and send your first request.
+3. Open Resterm and send your first request.
 
    ```bash
    resterm
@@ -142,11 +140,11 @@ Content-Type: application/json
 {"name":"{{= name }}"}
 ```
 
-Settings before the first request apply to the whole file, `###` separates requests, and directives can repeat, limit or validate a request. More examples here: [`_examples/`](_examples/).
+Settings before the first request apply to the whole file. `###` separates requests, and directives can repeat, limit or validate a request. More examples: [`_examples/`](_examples/).
 
 ## CLI
 
-`resterm run` executes `.http` / `.rest` files without opening the TUI, which is what CI runs.
+Use `resterm run` to execute `.http` / `.rest` files from scripts or CI without opening the TUI.
 
 ```bash
 resterm run --request CreateUser requests.http
@@ -235,13 +233,13 @@ The scripts detect your architecture, download the latest release and install th
 **Linux / macOS**
 
 ```bash
-# Detect latest tag
+# Find the latest release tag
 LATEST_TAG=$(curl -fsSL https://api.github.com/repos/unkn0wn-root/resterm/releases/latest | jq -r .tag_name)
 
 # Download the matching binary (Darwin/Linux + amd64/arm64)
 curl -fL -o resterm "https://github.com/unkn0wn-root/resterm/releases/download/${LATEST_TAG}/resterm_$(uname -s)_$(uname -m)"
 
-# Make it executable and move it onto your PATH
+# Install on PATH
 chmod +x resterm
 sudo install -m 0755 resterm /usr/local/bin/resterm
 ```
@@ -252,7 +250,7 @@ sudo install -m 0755 resterm /usr/local/bin/resterm
 $latest = Invoke-RestMethod https://api.github.com/repos/unkn0wn-root/resterm/releases/latest
 $asset  = $latest.assets | Where-Object { $_.name -like 'resterm_Windows_*' } | Select-Object -First 1
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile resterm.exe
-# Optionally relocate to a directory on PATH, e.g.:
+# Optionally move to a directory on PATH:
 Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe"
 ```
 
@@ -273,8 +271,8 @@ The first command reports whether a newer release is available. The second downl
 
 ## Configuration
 
-- Environments are JSON files (`resterm.env.json`) discovered in the request directory, workspace root or CWD. A file can define named environments or independent groups, for example api, app, and credentials, that combine into one environment. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace. See [grouped environments](./docs/resterm.md#grouped-environments) and the runnable sample in `_examples/grouped/`.
-- Config is stored per OS and can be overridden with `RESTERM_CONFIG_DIR`:
+- Resterm looks for environment files (`resterm.env.json`) in the request directory, workspace root or current working directory. A file can define named environments or groups, such as api, app and credentials, that combine into one environment. Use `--env-file` to load dotenv files (`.env`, `.env.*`) for the current workspace. See [grouped environments](./docs/resterm.md#grouped-environments) and the example in `_examples/grouped/`.
+- Configuration is stored in the directory below. Set `RESTERM_CONFIG_DIR` to use another location:
   - macOS: `~/Library/Application Support/resterm`
   - Windows: `%APPDATA%\resterm`
   - Linux/Unix: `~/.config/resterm`
@@ -288,7 +286,7 @@ You can define mock responses in the same `.http` files as your requests.
 - Delay responses by a fixed amount, or give every request a different delay with `random`, `normal`, or `jitter`.
 - Build responses from path, query, header and body values, with generators for dynamic data.
 - Verify call counts with `@expect` or inspect received traffic from RestermScript.
-- Hot reload source files and fixtures, with optional TLS.
+- Reload source files and fixtures when they change. TLS is optional.
 
 Two scenarios on one route:
 
@@ -320,13 +318,13 @@ More in the [Mock Servers reference](docs/resterm.md#mock-servers), the [`rester
 
 ## Headless
 
-The [`headless`](./headless) package is the public Go API for the same engine that powers the TUI and CLI. Use it to run requests, workflows, assertions, compare runs and profiles from your own Go code or CI.
+The [`headless`](./headless) package is the public Go API for the engine used by the TUI and CLI. Use it to run requests, workflows, assertions, compare runs and profiles from your own Go code or CI.
 
 If you would rather not build a runner yourself, there is [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
 
 ## Collections
 
-Export a workspace as a Git-friendly bundle and import it into another one. Bundles carry a `manifest.json` with checksums, so imports verify file integrity first. Environment values are exported as `REPLACE_ME` placeholders, so secrets never leave your machine.
+Export a workspace as a bundle you can track in Git and import into another workspace. Each bundle includes a `manifest.json` with checksums that are verified during import. Environment values are replaced with `REPLACE_ME` placeholders.
 
 ```bash
 resterm collection export --workspace ./my-api --out ./shared/my-api-bundle
@@ -337,7 +335,7 @@ Add `--dry-run` to preview an import and `--force` to overwrite existing files. 
 
 ## Curl import
 
-Paste a curl command into the editor and press `Ctrl+Enter` to turn it into a structured request. Resterm understands the common flags, merges repeated data segments and keeps multipart uploads intact. Shell prefixes like `sudo` or `$` are ignored. The CLI does the same conversion with `--from-curl`.
+Paste a curl command into the editor and press `Ctrl+Enter` to convert it to a request. Resterm supports common flags, combines repeated data arguments and preserves multipart uploads. Shell prefixes like `sudo` or `$` are ignored. The CLI supports the same conversion with `--from-curl`.
 
 This:
 
@@ -363,7 +361,7 @@ Docs: [inline requests](./docs/resterm.md#inline-requests) and [import examples]
 
 ## RestermScript
 
-RestermScript (RTS) is a small expression language built for Resterm. It targets the request format, workflows and directives directly, which keeps scripts short and predictable. JavaScript hooks remain available when you need more.
+RestermScript (RTS) is an expression language for requests, workflows and directives. JavaScript hooks are also available.
 
 Quick example (RTS module + request):
 
@@ -389,7 +387,7 @@ Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 
 ### OAuth 2.0
 
-Use `@auth oauth2` to acquire and inject tokens. Tokens are cached per environment and refreshed when possible. The client credentials grant is the default. The password grant and authorization code with PKCE are also supported:
+Use `@auth oauth2` to fetch tokens and add them to requests. Tokens are cached per environment and refreshed when possible. The client credentials grant is the default. The password grant and authorization code with PKCE are also supported:
 
 ```http
 ### Service status
@@ -511,11 +509,11 @@ Define an SSH profile before the requests that use it, then select it with `use=
 GET http://10.0.0.10/v1/health
 ```
 
-Profiles can be file-wide or workspace-wide, and one-off inline tunnels are also supported. Example: [`_examples/ssh.http`](_examples/ssh.http). See the [SSH documentation](./docs/resterm.md#ssh-tunnels).
+Profiles can apply to a file or workspace. You can also define a tunnel directly on a request. Example: [`_examples/ssh.http`](_examples/ssh.http). See the [SSH documentation](./docs/resterm.md#ssh-tunnels).
 
 ### Kubernetes port-forwards
 
-`@k8s` opens a managed port-forward to a pod, service, deployment or statefulset:
+`@k8s` opens a port-forward to a pod, service, deployment or statefulset:
 
 ```http
 ### Service health

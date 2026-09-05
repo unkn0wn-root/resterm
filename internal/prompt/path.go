@@ -13,16 +13,37 @@ type PathSpec struct {
 	Files       files.PathFilter
 	FileSummary string
 	Confine     bool
-	CommaList   bool
+	Separators  SeparatorPolicy
 	AcceptDirs  bool
 	ExpandHome  bool
 	Quote       bool
 }
 
+// SeparatorPolicy defines which characters separate paths in a list.
+type SeparatorPolicy uint8
+
+const (
+	SeparatorNone SeparatorPolicy = iota
+	SeparatorComma
+	SeparatorPathList
+)
+
+func (p SeparatorPolicy) separates(r rune) bool {
+	switch p {
+	case SeparatorComma:
+		return r == ','
+	case SeparatorPathList:
+		return strings.ContainsRune(",; \t\n", r)
+	default:
+		return false
+	}
+}
+
 type PathRequest struct {
-	Value string
-	Edit  Edit
-	Spec  PathSpec
+	Value  string // decoded value before the caret
+	Suffix string // decoded value after the caret
+	Edit   Edit
+	Spec   PathSpec
 }
 
 type PathProvider interface {
@@ -36,6 +57,7 @@ type pathQuery struct {
 	typed     string
 	prefix    string
 	committed string
+	suffix    string
 }
 
 type pathCandidate struct {
@@ -48,10 +70,13 @@ type pathCandidate struct {
 func newPathQuery(r PathRequest) (pathQuery, bool) {
 	value := r.Value
 	committed := ""
-	if r.Spec.CommaList {
-		if comma := strings.LastIndexByte(value, ','); comma >= 0 {
-			committed, value = value[:comma+1], value[comma+1:]
-		}
+	if at := strings.LastIndexFunc(value, r.Spec.Separators.separates); at >= 0 {
+		committed, value = value[:at+1], value[at+1:]
+	}
+	// Preserve later paths when replacing the current entry.
+	suffix := ""
+	if at := strings.IndexFunc(r.Suffix, r.Spec.Separators.separates); at >= 0 {
+		suffix = r.Suffix[at:]
 	}
 
 	typed, prefix := filepath.Split(value)
@@ -88,13 +113,14 @@ func newPathQuery(r PathRequest) (pathQuery, bool) {
 		typed:     typed,
 		prefix:    prefix,
 		committed: committed,
+		suffix:    suffix,
 	}, true
 }
 
 func (q pathQuery) classify(entries []DirEntry) []pathCandidate {
 	out := make([]pathCandidate, 0, len(entries))
 	for _, entry := range entries {
-		if q.spec.CommaList && strings.ContainsRune(entry.Name, ',') {
+		if strings.IndexFunc(entry.Name, q.spec.Separators.separates) >= 0 {
 			continue
 		}
 		if !entry.Dir && !q.accepts(filepath.Join(q.dir, entry.Name)) {
@@ -136,10 +162,17 @@ func (q pathQuery) accepts(path string) bool {
 }
 
 func (q pathQuery) replace(value string) Edit {
+	cursor := len([]rune(value))
+	value += q.suffix
 	if q.spec.Quote {
-		value = Quote(value)
+		value, cursor = quoteAt(value, cursor)
 	}
-	return Edit{Start: q.edit.Start, End: q.edit.End, Text: value}
+	return Edit{
+		Start:      q.edit.Start,
+		End:        q.edit.End,
+		Text:       value,
+		CursorBack: len([]rune(value)) - cursor,
+	}
 }
 
 func within(root, path string) bool {

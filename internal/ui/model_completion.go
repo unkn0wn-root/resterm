@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -11,6 +14,11 @@ import (
 func (m *Model) refreshCompletionScope() {
 	scope := buildCompletionScope(m.doc, m.ws.cat, m.ws.sel)
 	m.editor.SetCompletionScope(scope)
+	root := m.ws.root
+	if m.currentFile != "" {
+		root = filepath.Dir(m.currentFile)
+	}
+	m.editor.SetCompletionRoot(root)
 }
 
 func buildCompletionScope(
@@ -46,6 +54,7 @@ func buildCompletionScope(
 			for _, v := range req.Variables {
 				add(v.Name, "request", v.Secret)
 			}
+			scope.RequestNames = appendRequestName(scope.RequestNames, req.Metadata.Name)
 		}
 		for _, c := range doc.Constants {
 			add(c.Name, "const", false)
@@ -65,6 +74,17 @@ func buildCompletionScope(
 	}
 	scope.Environments, scope.EnvironmentGroups = completionEnvironments(cat)
 	return scope
+}
+
+// Keep the first spelling of each request name, ignoring case.
+func appendRequestName(names []string, name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" || slices.ContainsFunc(names, func(known string) bool {
+		return strings.EqualFold(known, name)
+	}) {
+		return names
+	}
+	return append(names, name)
 }
 
 func completionEnvironments(cat vars.Catalog) ([]string, map[string][]string) {
