@@ -1,0 +1,121 @@
+---
+import { site } from '../site';
+import { version } from '../lib/version';
+
+interface Props {
+  file: string;
+  focus: string;
+  source?: { line: number; url: string };
+}
+
+const { file, focus, source } = Astro.props;
+---
+
+<footer class="status" aria-label="Status bar">
+  <span class="seg msg" id="status-msg" role="status" data-idle="Press ? for help">
+    Press ? for help
+  </span>
+  <span class="seg file">
+    <span aria-hidden="true">⇄</span>
+    {file}
+  </span>
+  <span class="seg focus">
+    <span aria-hidden="true">≡</span>
+    {focus}
+  </span>
+  <span class="plain mode">▸ NORMAL</span>
+  {source && (
+    <a class="plain pos" href={source.url} title="View this section in the source file">
+      Ln {source.line}
+    </a>
+  )}
+  <span class="plain" id="status-scroll">
+    Top
+  </span>
+  <span class="fill"></span>
+  <a class="plain branch" href={site.repo}>
+    ⎇ main
+  </a>
+  <span class="seg version">
+    <span aria-hidden="true">◇</span>v{version}
+  </span>
+  <span class="seg host">{site.license}</span>
+</footer>
+
+<style>
+  .status {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    align-items: stretch;
+    height: var(--status-h);
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+    font-size: 0.8125rem;
+    line-height: var(--status-h);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .seg,
+  .plain {
+    padding: 0 1ch;
+    display: inline-flex;
+    gap: 0.6ch;
+  }
+
+  .seg {
+    color: var(--sb-fg);
+  }
+
+  .msg {
+    background: var(--sb-info);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file {
+    background: var(--sb-file);
+  }
+
+  .focus {
+    background: var(--sb-focus);
+  }
+
+  .version {
+    background: var(--sb-version);
+  }
+
+  .host {
+    background: var(--sb-host);
+  }
+
+  .plain {
+    color: var(--fg-muted);
+    text-decoration: none;
+  }
+
+  .mode {
+    color: var(--fg);
+  }
+
+  a.plain:hover {
+    color: var(--fg-strong);
+  }
+
+  .branch {
+    color: var(--accent-text);
+  }
+
+  .fill {
+    flex: 1;
+  }
+
+  @media (max-width: 760px) {
+    .status {
+      display: none;
+    }
+  }
+</style>

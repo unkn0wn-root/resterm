@@ -1,0 +1,77 @@
+---
+import { bindings } from '../scripts/bindings';
+---
+
+<dialog class="keys pane pane-accent" id="keys" aria-label="Keyboard shortcuts">
+  <span class="pane-title">Help</span>
+  <p class="lead">These keys work like the ones in the TUI.</p>
+  <dl>
+    {bindings.map((b) => (
+      <div class="row">
+        <dt>
+          <kbd>{b.label}</kbd>
+        </dt>
+        <dd>{b.help}</dd>
+      </div>
+    ))}
+  </dl>
+  <form method="dialog">
+    <button class="close">
+      <kbd>Esc</kbd> close
+    </button>
+  </form>
+</dialog>
+
+<style>
+  .keys {
+    width: min(30rem, calc(100vw - 2rem));
+    margin: 14vh auto auto;
+    padding: 1.4rem 1.5rem 1rem;
+    overflow: visible;
+    color: var(--fg);
+  }
+
+  .keys::backdrop {
+    background: rgb(0 0 0 / 0.55);
+  }
+
+  .keys .pane-title {
+    background: var(--bg-pane);
+  }
+
+  .lead {
+    color: var(--fg-muted);
+    font-size: 0.8125rem;
+    margin-bottom: 1rem;
+  }
+
+  dl {
+    margin: 0;
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 9ch 1fr;
+    gap: 2ch;
+  }
+
+  dt kbd {
+    color: var(--key);
+  }
+
+  dd {
+    margin: 0;
+    color: var(--fg-muted);
+  }
+
+  .close {
+    margin-top: 1.2rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--fg-dim);
+    font-size: 0.8125rem;
+  }
+</style>

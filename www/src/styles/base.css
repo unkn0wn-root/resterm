@@ -1,0 +1,189 @@
+@import '@fontsource-variable/ibm-plex-sans/wght.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+@import '@fontsource/silkscreen/latin-400.css';
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--header-h) + 1rem);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+figure,
+pre {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: var(--bg-sel);
+  color: var(--fg-strong);
+}
+
+:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.pane {
+  --pane-border: var(--line-strong);
+  --pane-title: var(--fg-dim);
+  position: relative;
+  border: 1px solid var(--pane-border);
+  border-radius: var(--radius);
+  background: var(--bg-pane);
+}
+
+/* A modal dialog that is not fixed opens at the top of the document, and the
+   browser scrolls there to focus it. */
+dialog.pane {
+  position: fixed;
+}
+
+.pane-title {
+  position: absolute;
+  top: 0;
+  right: 1.25ch;
+  translate: 0 -55%;
+  padding: 0 0.75ch;
+  background: var(--bg);
+  color: var(--pane-title);
+  font-size: 0.8125rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.pane-editor {
+  --pane-border: color-mix(in srgb, var(--editor) 70%, transparent);
+  --pane-title: var(--editor);
+}
+
+.pane-response {
+  --pane-border: color-mix(in srgb, var(--response) 70%, transparent);
+  --pane-title: var(--response);
+}
+
+.pane-accent {
+  --pane-border: color-mix(in srgb, var(--accent) 80%, transparent);
+  --pane-title: var(--accent-text);
+}
+
+kbd {
+  color: var(--key);
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.method {
+  font-weight: 500;
+}
+
+.method-get {
+  color: var(--m-get);
+}
+.method-post {
+  color: var(--m-post);
+}
+.method-put {
+  color: var(--m-put);
+}
+.method-patch {
+  color: var(--m-patch);
+}
+.method-delete {
+  color: var(--m-delete);
+}
+.method-grpc {
+  color: var(--m-grpc);
+}
+.method-ws {
+  color: var(--m-ws);
+}
+.method-options {
+  color: var(--m-options);
+}
+.method-rts {
+  color: var(--m-rts);
+}
+
+.label-pixel {
+  font-family: var(--font-pixel);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
