@@ -246,7 +246,7 @@ func (m *Model) applyThemeDefinition(def theme.Definition) {
 	m.theme = def.Theme
 	m.activeThemeKey = def.Key
 	m.themeRuntime = newThemeRuntime(def)
-	m.editor.SetRuneStyler(selectEditorRuneStyler(m.currentFile, m.theme.EditorMetadata))
+	m.updateEditorStyler(m.currentFile)
 	m.applyThemeToInputs()
 	m.applyThemeToLists()
 	m.invalidateThemedCaches()

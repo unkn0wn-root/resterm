@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 type sourceRecordingRuneStyler struct {
@@ -19,6 +20,10 @@ type sourceRecordingRuneStyler struct {
 
 func (s *sourceRecordingRuneStyler) SetSource(source string) {
 	s.source = source
+}
+
+func (s *sourceRecordingRuneStyler) sourceLine(int) parser.SourceLine {
+	return parser.SourceLine{}
 }
 
 func (s *sourceRecordingRuneStyler) StylesForLine([]rune, int) []lipgloss.Style {
@@ -108,7 +113,7 @@ func TestRequestEditorSetValueNoopsWhenUnchanged(t *testing.T) {
 func TestRequestEditorKeepsSourceAwareRuneStylerInSync(t *testing.T) {
 	editor := newTestEditor("alpha")
 	styler := &sourceRecordingRuneStyler{}
-	editor.SetRuneStyler(styler)
+	editor.setStyler(styler, theme.DefaultTheme())
 	if styler.source != "alpha" {
 		t.Fatalf("source after installing styler = %q, want alpha", styler.source)
 	}

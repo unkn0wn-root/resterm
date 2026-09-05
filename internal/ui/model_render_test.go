@@ -1686,9 +1686,9 @@ func TestInactiveEditorPaneKeepsCursorRuneStyle(t *testing.T) {
 	model.editor.BlurredStyle.Text = lipgloss.NewStyle().Foreground(baseColor)
 	model.editor.BlurredStyle.CursorLine = lipgloss.NewStyle().Foreground(baseColor)
 	model.editor.Blur()
-	model.editor.SetRuneStyler(newMetadataRuneStyler(theme.EditorMetadataPalette{
+	model.editor.setStyler(newMetadataRuneStyler(theme.EditorMetadataPalette{
 		RequestLine: reqColor,
-	}))
+	}), model.theme)
 
 	view := model.renderEditorPane(renderContext{})
 	line := lineWith(view, "GET")

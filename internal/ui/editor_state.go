@@ -8,6 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
+	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
@@ -93,6 +95,7 @@ func statusCmdQuiet(level statusLevel, text string) tea.Cmd {
 
 type requestEditor struct {
 	textarea.Model
+	styler            *editorDiagnosticStyler
 	revision          uint64
 	selection         selectionState
 	mode              selectionMode
@@ -109,11 +112,6 @@ type requestEditor struct {
 	engine            intellisense.Engine
 	scope             intellisense.Scope
 	paths             editorPathCompletion
-}
-
-type sourceStyler interface {
-	textarea.RuneStyler
-	SetSource(source string)
 }
 
 const editorUndoLimit = 64
@@ -150,16 +148,23 @@ func (e requestEditor) Revision() uint64 {
 
 func (e *requestEditor) noteContentChanged(value string) {
 	e.revision++
-	if styler, ok := e.RuneStyler().(sourceStyler); ok {
-		styler.SetSource(value)
+	if e.styler != nil {
+		e.styler.SetSource(value)
 	}
 }
 
-func (e *requestEditor) SetRuneStyler(styler textarea.RuneStyler) {
-	e.Model.SetRuneStyler(styler)
-	if source, ok := styler.(sourceStyler); ok {
-		source.SetSource(e.Value())
-	}
+func (e *requestEditor) setStyler(base textarea.RuneStyler, th theme.Theme) {
+	e.styler = newEditorDiagnosticStyler(base, th)
+	e.styler.SetSource(e.Value())
+	e.SetRuneStyler(e.styler)
+}
+
+func (e *requestEditor) setDiagnostics(s *diagnosticSnapshot) {
+	e.styler.snapshot = s
+}
+
+func (e requestEditor) sourceLine(line int) parser.SourceLine {
+	return e.styler.sourceLine(line)
 }
 
 func (e *requestEditor) SetValue(value string) {
