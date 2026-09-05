@@ -250,7 +250,8 @@ and move to the start or end of the selected text.
 
 Dynamic helpers with call examples insert the call and select only its arguments.
 Variable completion adds any missing closing braces, so completing `{{ho`, `{{ho}`,
-and `{{ho}}` with `host` produces `{{host}}` in each case.
+and `{{ho}}` with `host` produces `{{host}}` in each case. Inside `{{= ... }}`
+expressions and helper arguments, completion leaves the closing braces unchanged.
 
 Completion does not use gRPC reflection, descriptors, or GraphQL schemas to suggest
 service, method, or field names.

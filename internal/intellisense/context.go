@@ -142,6 +142,11 @@ func analyzeVariable(cur []rune, col int) (Context, bool) {
 		ctx.call = true
 		return ctx, true
 	}
+	// Only close a template's first token. Expressions and helper arguments
+	// may have operators or delimiters after the identifier being completed.
+	if skipSpace(cur, open) != start {
+		return ctx, true
+	}
 	// Missing braces go after the whitespace, so the replacement covers it.
 	if closers := skipPartial(cur, next, "}}") - next; closers < 2 {
 		ctx.End = next
