@@ -1,0 +1,142 @@
+---
+import source from '../../content/demo.http?raw';
+import { highlightHtml } from '../../lib/highlight';
+
+// The transcript is a real run of src/content/demo.http against its own mocks.
+const cursor = source.split('\n').findIndex((l) => l.startsWith('POST {{base.url}}/hello')) + 1;
+const code = await highlightHtml(source.trimEnd(), 'http', cursor);
+
+type Tone = 'cmd' | 'dim' | 'sum';
+const run: [text: string, tone?: Tone][] = [
+  ['resterm mock requests.http &', 'cmd'],
+  ['Mock server listening on http://127.0.0.1:8080 (2 routes, 2 scenarios)', 'dim'],
+  ['resterm run --env dev --all requests.http', 'cmd'],
+  ['Running 2 target(s) from requests.http with env dev'],
+  ['PASS POST Hello [200 OK in 12.5625ms]'],
+  ['  Source Target: {{base.url}}/hello', 'dim'],
+  ['  Effective Target: http://127.0.0.1:8080/hello', 'dim'],
+  ['PASS FOR-EACH POST CreateUsers [3 passed, 0 failed, 0 skipped in 2.807625ms]'],
+  ['  1. PASS POST CreateUsers (1/3) [201 Created in 958.5µs]'],
+  ['  2. PASS POST CreateUsers (2/3) [201 Created in 789.708µs]'],
+  ['  3. PASS POST CreateUsers (3/3) [201 Created in 928.375µs]'],
+  ['Summary: total=2 passed=2 failed=0 skipped=0', 'sum'],
+];
+
+const lines = run.map(([text, tone]) => {
+  if (tone === 'cmd')
+    return [
+      { cls: 'prompt', text: '$ ' },
+      { cls: 'cmd', text },
+    ];
+  const [before, after] = text.split(/(?<=^\s*(?:\d+\. )?)PASS/);
+  if (after === undefined) return [{ cls: tone, text }];
+  return [{ text: before }, { cls: 'pass', text: 'PASS' }, { text: after }];
+});
+---
+
+<div class="demo">
+  <div class="pane pane-editor editor">
+    <span class="pane-title">requests.http</span>
+    <div class="code" set:html={code} />
+  </div>
+  <div class="pane pane-response term">
+    <span class="pane-title">Terminal</span>
+    <pre>{lines.map((parts) => <span class="ln">{parts.map((p) => <span class={p.cls}>{p.text}</span>)}</span>)}</pre>
+  </div>
+</div>
+
+<style>
+  .demo {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: stretch;
+  }
+
+  .editor,
+  .term {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.8rem;
+    line-height: 1.65;
+  }
+
+  .code,
+  .term pre {
+    flex: 1;
+    overflow-x: auto;
+    padding-block: 1.2rem 1rem;
+  }
+
+  .code :global(pre) {
+    background: transparent !important;
+  }
+
+  .code :global(code) {
+    counter-reset: line;
+    display: block;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .code :global(.line) {
+    display: inline-block;
+    width: 100%;
+    padding-right: 1rem;
+  }
+
+  .code :global(.line)::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 3ch;
+    margin: 0 1.5ch 0 1ch;
+    text-align: right;
+    color: var(--fg-dim);
+  }
+
+  .code :global(.cursor) {
+    background: var(--bg-hover);
+  }
+
+  .code :global(.cursor)::before {
+    color: var(--fg-strong);
+  }
+
+  .term pre {
+    padding-inline: 1.25rem;
+    color: var(--fg);
+  }
+
+  .prompt {
+    color: var(--response);
+    user-select: none;
+  }
+
+  .cmd {
+    color: var(--fg-strong);
+  }
+
+  .dim {
+    color: var(--fg-dim);
+  }
+
+  .pass {
+    color: var(--ok);
+    font-weight: 600;
+  }
+
+  .sum {
+    color: var(--fg-strong);
+  }
+
+  .ln {
+    display: block;
+  }
+
+  @media (max-width: 960px) {
+    .demo {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

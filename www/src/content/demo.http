@@ -1,0 +1,35 @@
+### Mock: say hello
+# @mock method=POST path=/hello
+# @match json={"kind":"greeting"}
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"message":"hello from the mock","name":{{json.body.name}}}
+
+### Mock: create a member
+# @mock method=POST path=/users
+# @match headers={"Authorization":{"prefix":"Bearer "}} json={"role":"member"}
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{"id":{{json.body.id}},"name":{{json.body.name}}}
+
+### Say hello
+# @name Hello
+# @assert response.statusCode == 200
+# @assert response.json("name") == "Resterm"
+POST {{base.url}}/hello
+Content-Type: application/json
+
+{"kind":"greeting","name":"Resterm"}
+
+### Create users from a list of names
+# @name CreateUsers
+# @for-each ["ada","linus","grace"] as name
+# @auth bearer {{auth.token}}
+# @assert response.statusCode == 201
+# @assert response.json("name") == name
+POST {{base.url}}/users
+Content-Type: application/json
+
+{"id":"user-{{= name }}","name":"{{= name }}","role":"member"}
