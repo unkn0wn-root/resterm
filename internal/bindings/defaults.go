@@ -2,6 +2,11 @@ package bindings
 
 import "fmt"
 
+const (
+	ActionNextDiagnostic     ActionID = "next_diagnostic"
+	ActionPreviousDiagnostic ActionID = "previous_diagnostic"
+)
+
 var (
 	// Action identifiers used across runtime bindings and UI help rendering.
 	ActionCycleFocusNext          ActionID = "cycle_focus_next"
@@ -82,6 +87,8 @@ var definitions = []definition{
 	def(ActionTogglePaneFollowLatest, false, "ctrl+shift+v"),
 	def(ActionToggleHelp, false, "?"),
 	softDef(ActionShowContextHelp, "shift+k"),
+	softDef(ActionNextDiagnostic, "] d"),
+	softDef(ActionPreviousDiagnostic, "[ d"),
 	def(ActionShowRequestDetails, false, "g ,"),
 	softDef(ActionShowStatusMessage, "g ."),
 	def(ActionOpenPathModal, false, "ctrl+o"),

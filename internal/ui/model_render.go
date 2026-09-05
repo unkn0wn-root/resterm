@@ -703,6 +703,9 @@ func (m Model) renderEditorPane(rc renderContext) string {
 	if active && m.editorInsertMode {
 		content = m.renderCompletionPopup(content)
 	}
+	if active && !m.editorInsertMode {
+		content = m.renderDiagnosticPopup(content)
+	}
 	contentWidth := max(lipgloss.Width(content), 1)
 	content = padHorizontal(content, paneHorizontalPadding)
 	innerWidth := contentWidth + (paneHorizontalPadding * 2)

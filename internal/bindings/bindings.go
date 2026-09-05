@@ -121,13 +121,17 @@ func (m *Map) MatchSingle(key string) (Binding, bool) {
 	return ref.binding(), true
 }
 
-// HasChordPrefix reports whether the given key can start a chord sequence.
-func (m *Map) HasChordPrefix(key string) bool {
+// HasChordPrefix reports whether key starts a chord the caller accepts.
+func (m *Map) HasChordPrefix(key string, accepts func(ActionID) bool) bool {
 	if m == nil {
 		return false
 	}
-	_, ok := m.chordPrefixes[key]
-	return ok
+	for _, ref := range m.chords[key] {
+		if accepts(ref.action) {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveChord resolves a chord prefix + next key into a binding.

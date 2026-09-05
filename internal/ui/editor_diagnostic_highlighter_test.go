@@ -5,6 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -93,6 +94,21 @@ func TestDiagnosticEmptyAndEOFRangesUseLineNumbers(t *testing.T) {
 	}
 	if len(s.at(cursorPosition{Line: 1})) != 2 {
 		t.Fatal("empty-line findings inaccessible")
+	}
+}
+
+func TestDiagnosticThemeChangeRetainsSnapshot(t *testing.T) {
+	m := newDiagnosticModel(t, "# @nmae typo")
+	snapshot := m.currentDiagnostics()
+	ticket := m.diagnostics.ticket
+	m.theme.EditorDiagnosticWarning = lipgloss.NewStyle().Foreground(lipgloss.Color("#112233")).Underline(true)
+	m.updateEditorStyler(m.currentFile)
+	styler := m.editor.styler
+	if styler.snapshot != snapshot || m.diagnostics.ticket != ticket {
+		t.Fatal("theme rebuild discarded/reparsed diagnostics")
+	}
+	if got := styler.StylesForLine(m.editor.LineRunes(0), 0)[2].GetForeground(); got != lipgloss.Color("#112233") {
+		t.Fatalf("color=%v", got)
 	}
 }
 

@@ -346,6 +346,20 @@ func (m *Model) statusBarLeftSections(
 func (m *Model) statusBarWarningSection(
 	palette theme.StatusBarPalette,
 ) (statusBarSection, bool) {
+	if snapshot := m.currentDiagnostics(); snapshot != nil {
+		var labels []string
+		if snapshot.errors > 0 {
+			labels = append(labels, fmt.Sprintf("ERR %d", snapshot.errors))
+		}
+		if snapshot.warnings > 0 {
+			labels = append(labels, fmt.Sprintf("WARN %d", snapshot.warnings))
+		}
+		style := palette.Warn
+		if snapshot.errors > 0 {
+			style = palette.Error
+		}
+		return statusBarSection{text: strings.Join(labels, " · "), style: style}, len(labels) > 0
+	}
 	if !m.docMatchesEditor() {
 		return statusBarSection{}, false
 	}

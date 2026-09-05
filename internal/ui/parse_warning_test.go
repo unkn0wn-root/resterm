@@ -183,8 +183,8 @@ func TestShowStatusMessageOpensDocumentWarnings(t *testing.T) {
 		t.Fatalf("modal level = %v, want warning", updated.statusModalLevel)
 	}
 	for _, want := range []string{
-		"warn.http:2: @if is not valid in the current context and was ignored",
-		"warn.http:3: @nmae is not a known Resterm directive and was ignored",
+		"WARNING warn.http:2:3: @if is not valid in the current context and was ignored",
+		"WARNING warn.http:3:3: @nmae is not a known Resterm directive and was ignored",
 	} {
 		if !strings.Contains(updated.statusModalMessage, want) {
 			t.Fatalf("modal message = %q, want %q", updated.statusModalMessage, want)

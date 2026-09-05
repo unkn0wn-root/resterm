@@ -19,6 +19,10 @@ func (m *Model) openStatusModal(level statusLevel, message string) {
 }
 
 func (m *Model) openStatusMessageModal() {
+	if snapshot := m.currentDiagnostics(); snapshot != nil && len(snapshot.report.Items) > 0 {
+		m.openDiagnosticList(snapshot)
+		return
+	}
 	if m.docMatchesEditor() && len(m.doc.Warnings) > 0 {
 		message := strings.Join(parser.WarningTexts(m.doc), "\n")
 		m.openStatusModal(statusWarn, message)

@@ -17,7 +17,7 @@ import (
 )
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{textarea.Blink}
+	cmds := []tea.Cmd{textarea.Blink, func() tea.Msg { return diagnosticsInitMsg{} }}
 	if cmd := m.scheduleLatAnim(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -40,6 +40,12 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	diagnosticsCmd := next.syncDiagnostics()
+	return next, batchCommands(cmd, diagnosticsCmd)
+}
+
+func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.modalKeepsUnderlay(msg) {
 		m.invalidateModalRender()
 	}
@@ -48,6 +54,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	mouseHandled := false
 
 	switch typed := msg.(type) {
+	case diagnosticsTickMsg:
+		cmds = append(cmds, m.handleDiagnosticsTick(typed))
+	case diagnosticsResultMsg:
+		cmds = append(cmds, m.handleDiagnosticsResult(typed))
 	case tea.WindowSizeMsg:
 		m.frameWidth = typed.Width
 		m.frameHeight = typed.Height
@@ -1005,6 +1015,19 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 			return nil, false
 		}
 		return m.showContextHelp(), true
+	case bindings.ActionNextDiagnostic, bindings.ActionPreviousDiagnostic:
+		if !m.diagnosticShortcutAvailable(binding.Action) {
+			return nil, false
+		}
+		action := diagnosticNext
+		if binding.Action == bindings.ActionPreviousDiagnostic {
+			action = diagnosticPrevious
+		}
+		cmd := m.requestDiagnostics(action)
+		if !m.mouseModalActive() {
+			m.suppressEditorKey = true
+		}
+		return cmd, true
 	case bindings.ActionShowRequestDetails:
 		m.openRequestDetails()
 		return nil, true
@@ -1195,6 +1218,10 @@ func (m *Model) modalCapturesGlobalKeys() bool {
 }
 
 func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
+	m.diagnostics.intent = diagnosticIntent{}
+	if cmd, handled := m.handleDiagnosticPopupKey(msg); handled {
+		return cmd
+	}
 	keyStr := msg.String()
 	shortcutKey := canonicalShortcutKey(msg)
 	var prefixCmd tea.Cmd
@@ -1827,7 +1854,7 @@ func (m *Model) canStartChord(msg tea.KeyMsg, key string) bool {
 	if m.websocketConsoleCapturesInput() {
 		return false
 	}
-	if !m.bindingsMap.HasChordPrefix(key) {
+	if !m.bindingsMap.HasChordPrefix(key, m.diagnosticShortcutAvailable) {
 		return false
 	}
 	if m.editor.awaitingFindTarget() {

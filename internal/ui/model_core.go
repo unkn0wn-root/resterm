@@ -210,6 +210,7 @@ type Model struct {
 	pendingCrossFile         pendingCrossFileNavigation
 	docCache                 map[string]navDocCache
 	editor                   requestEditor
+	diagnostics              diagnosticState
 	responsePanes            [2]responsePaneState
 	responseSplit            bool
 	responseSplitRatio       float64
@@ -713,6 +714,7 @@ func New(cfg Config) Model {
 		compareSnapshots:   make(map[string]*responseSnapshot),
 	}
 	model.applyLayoutSettingsFromConfig(cfg.Settings.Layout)
+	model.diagnostics.disabled = !cfg.Settings.Editor.DiagnosticsEnabled()
 	_ = model.setInsertMode(false, false)
 
 	model.doc = initialDoc

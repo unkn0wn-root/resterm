@@ -65,10 +65,14 @@ func (m *Model) editorCommandHints() []commandHint {
 		}
 	}
 	// plain Enter sends from normal mode, see shouldSendEditorRequest
+	helpLabel := "Docs"
+	if len(m.currentDiagnostics().at(m.editor.caretPosition())) > 0 {
+		helpLabel = "Details"
+	}
 	return []commandHint{
 		{key: "i", label: "Insert"},
 		{key: "Enter", label: "Send"},
-		m.commandActionHint(bindings.ActionShowContextHelp, "Docs"),
+		m.commandActionHint(bindings.ActionShowContextHelp, helpLabel),
 		{key: "/", label: "Search"},
 		caretKey(m.commandActionHint(bindings.ActionSaveFile, "Save")),
 	}

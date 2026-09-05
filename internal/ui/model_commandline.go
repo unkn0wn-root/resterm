@@ -21,6 +21,7 @@ const (
 	exCommandNoHighlight
 	exCommandMock
 	exCommandDocs
+	exCommandDiagnostics
 )
 
 type exCommand struct {
@@ -133,6 +134,8 @@ func (m *Model) executeExCommand(input string) tea.Cmd {
 		return m.executeMockCommand(cmd.args)
 	case exCommandDocs:
 		return m.openDocsQuery(cmd.args)
+	case exCommandDiagnostics:
+		return m.executeDiagnosticsCommand(cmd.args)
 	default:
 		return statusCmd(statusWarn, "Unknown command: "+cmd.name+" (try :help)")
 	}

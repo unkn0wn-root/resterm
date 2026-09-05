@@ -6,11 +6,18 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/helpdoc"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 )
 
 func (m *Model) showContextHelp() tea.Cmd {
+	if m.diagnosticsActive() {
+		return m.requestDiagnostics(diagnosticHelp)
+	}
+	return m.showContextDocumentation()
+}
+
+func (m *Model) showContextDocumentation() tea.Cmd {
 	topic, ok := m.contextHelpTopic()
 	if !ok {
 		return statusCmd(
@@ -24,43 +31,20 @@ func (m *Model) showContextHelp() tea.Cmd {
 
 func (m *Model) contextHelpTopic() (helpdoc.Topic, bool) {
 	pos := m.editor.caretPosition()
-	line := m.editor.LineRunes(pos.Line)
-	if name, ok := contextDirective(string(line)); ok {
-		return helpdoc.Directive(name)
+	syntax := m.editor.sourceLine(pos.Line)
+	if syntax.Directive.Known() {
+		return helpdoc.Directive(syntax.Directive)
 	}
+	switch syntax.Kind {
+	case parser.SourceLineLiteral, parser.SourceLineDirective, parser.SourceLineDirectiveValue:
+		// An unknown directive must not resolve to an unrelated keyword topic.
+		return helpdoc.Topic{}, false
+	}
+	line := m.editor.LineRunes(pos.Line)
 	if cursorInTemplate(line, pos.Column) {
 		return helpdoc.Lookup("variables")
 	}
 	return helpdoc.Lookup(contextWord(line, pos.Column))
-}
-
-func contextDirective(line string) (directive.Name, bool) {
-	text := strings.TrimSpace(line)
-	switch {
-	case strings.HasPrefix(text, "//"), strings.HasPrefix(text, "--"):
-		text = strings.TrimSpace(text[2:])
-	case strings.HasPrefix(text, "#"):
-		text = strings.TrimSpace(text[1:])
-	case strings.HasPrefix(text, "/*"):
-		text = strings.TrimSpace(strings.TrimPrefix(text, "/*"))
-		if idx := strings.Index(text, "*/"); idx >= 0 {
-			text = strings.TrimSpace(text[:idx])
-		}
-	case strings.HasPrefix(text, "*"):
-		text = strings.TrimSpace(strings.TrimPrefix(text, "*"))
-	default:
-		return "", false
-	}
-
-	call, ok := directive.Parse(text)
-	if !ok {
-		return "", false
-	}
-	spec, ok := directive.Lookup(call.Spelling)
-	if !ok {
-		return "", false
-	}
-	return spec.Name, true
 }
 
 func cursorInTemplate(line []rune, col int) bool {

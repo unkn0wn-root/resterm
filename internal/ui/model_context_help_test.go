@@ -12,12 +12,13 @@ func TestContextHelpResolvesDirectiveCommentStyles(t *testing.T) {
 		name  string
 		line  string
 		topic string
+		row   int
 	}{
 		{name: "hash", line: "# @auth bearer token", topic: "authentication"},
 		{name: "slash", line: "// @grpc inventory.Service/Get", topic: "grpc"},
 		{name: "dash", line: "-- @trace dns<=10ms", topic: "tracing"},
 		{name: "inline block", line: "/* @mock status=200 */", topic: "mocks"},
-		{name: "block continuation", line: " * @workflow checkout", topic: "workflows"},
+		{name: "block continuation", line: "/*\n * @workflow checkout\n */", topic: "workflows", row: 1},
 		{name: "directive disambiguation", line: "# @variables", topic: "graphql"},
 	}
 
@@ -25,7 +26,7 @@ func TestContextHelpResolvesDirectiveCommentStyles(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			model := New(Config{})
 			model.editor.SetValue(tt.line)
-			model.editor.moveCursorTo(0, 0)
+			model.editor.moveCursorTo(tt.row, 0)
 			topic, ok := model.contextHelpTopic()
 			if !ok || topic.ID != tt.topic {
 				t.Fatalf("expected topic %q, got %+v (ok=%v)", tt.topic, topic, ok)
@@ -64,6 +65,8 @@ func TestContextHelpNoMatchReturnsGuidance(t *testing.T) {
 	model.editor.SetValue("unrecognized")
 	model.editor.moveCursorTo(0, 3)
 
+	_ = model.syncDiagnostics()
+	completeDiagnosticParse(t, &model)
 	status, ok := statusMsgFromCmd(model.showContextHelp())
 	if !ok || status.level != statusWarn {
 		t.Fatalf("expected warning status, got %+v (ok=%v)", status, ok)
@@ -80,6 +83,8 @@ func TestContextHelpBindingOpensTopicOnlyInEditorNormalMode(t *testing.T) {
 	model.editor.SetValue("# @auth bearer token")
 	model.editor.moveCursorTo(0, 3)
 	_ = model.setInsertMode(false, false)
+	_ = model.syncDiagnostics()
+	completeDiagnosticParse(t, &model)
 
 	model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
 

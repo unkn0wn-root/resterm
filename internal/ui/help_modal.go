@@ -171,8 +171,14 @@ func (m Model) helpSections() []helpSection {
 	if key := m.helpBindingLabel(bindings.ActionShowContextHelp); key != "" {
 		editorEntries = append([]helpEntry{{
 			key:         key,
-			description: "Open help for the directive or keyword under the cursor",
+			description: "Show diagnostics on this line, or contextual documentation",
 		}}, editorEntries...)
+	}
+	if key := m.helpBindingLabel(bindings.ActionNextDiagnostic); key != "" {
+		editorEntries = append(editorEntries, helpEntry{key: key, description: "Next diagnostic in the editor"})
+	}
+	if key := m.helpBindingLabel(bindings.ActionPreviousDiagnostic); key != "" {
+		editorEntries = append(editorEntries, helpEntry{key: key, description: "Previous diagnostic in the editor"})
 	}
 
 	var statusMessageEntries []helpEntry
