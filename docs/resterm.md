@@ -199,39 +199,61 @@ The bottom command bar adapts to the focused pane, editor mode, and response tab
 
 ### Editor completions (IntelliSense)
 
-While the editor is in insert mode, Resterm suggests completions based on where the
-caret sits. Everything is computed locally from the open file and the active
-environment - there are no network calls while you type.
+In insert mode, Resterm suggests completions at the caret using the open file and
+active environment. It makes no network calls while you type.
 
 | Context | What completes |
 | --- | --- |
 | Start of a request line | HTTP methods plus `WS` / `WSS` / `GRPC` |
 | Start of a request URL | Schemes: `http://`, `https://`, `ws://`, `wss://` |
-| Line-leading `@` (with or without a comment marker) | Metadata directives and their options (e.g. `@auth bearer`, `@k8s target=`) |
+| `@` at the start of a line, with or without a comment marker | Directives, option keys, and values such as booleans, OAuth grants, HTTP/TLS modes, and workflow failure modes |
 | Header section (after the request line, before the blank line) | Header names, then values for well-known headers such as `Content-Type` |
 | Inside `{{ ... }}` | Variables in scope (file/global/request, `@const`, current-environment keys) and dynamic builtins (`$uuid`, `$timestamp`, ...) |
-| `@compare` arguments | Environment names |
+| `@compare` arguments | Environment names or profiles from the selected group; baseline suggestions use the targets already chosen |
 | `use=` on `@apply` / `@ssh` / `@k8s` | Matching `@patch` / `@ssh` / `@k8s` profile names |
+| `using=` / `run=` on workflow steps and branches | Named requests from the current document |
+| File paths | Files and directories for `@use`, descriptors, GraphQL/JSON inputs, TLS/SSH/Kubernetes options, request bodies, and script or body includes |
 
-Popup keys: `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) navigate, `Right` or `?` opens the
-details preview (`Ctrl+L` toggles it), `Left` / `Esc` closes the preview, `Enter` or
-`Tab` accepts, and `Esc` dismisses the popup. Styling is controlled by the
-`editor_hint_*` theme keys.
+Press `Ctrl+N` to show all completions valid at the caret. If there are none, it does
+nothing. In editor insert mode this key always controls completion, regardless of
+the New Request binding. Outside editor insert mode, the configured New Request
+shortcut applies.
 
-When a directive completion starts with bare `@`, accepting it adds the canonical
-`# ` comment marker automatically. For example, completing `@na` produces `# @name `.
-The marker is added only on acceptance, so in-place variables such as `@name = value`
-remain unchanged when you keep typing.
+In the popup, `Up` / `Down` or `Ctrl+P` / `Ctrl+N` selects an item. `Right` or `?`
+opens the details preview, `Ctrl+L` toggles it, and `Left` or `Esc` closes it.
+`Enter` or `Tab` accepts an item. `Esc` dismisses the popup when the preview is
+closed. Use the `editor_hint_*` theme keys to style the popup.
+
+After you accept a completion, the popup shows what can follow it. For example,
+`@auth` opens auth modes, `oauth2` opens its options, and `grant=` opens grant values.
+Headers open value suggestions, and directories open their contents. Options that
+can appear only once disappear after use, along with their aliases, such as `base=`
+and `baseline=`. You can repeat `@apply use=`, but profiles already selected are
+omitted.
+
+File suggestions use the request file's directory, or the workspace for temporary
+documents. They are filtered by file type where needed: `.rts` for `@use`, GraphQL
+for `@query`, JSON for `@variables`, and script files for script includes. Directory
+listings are cached while browsing. In directives that split arguments on spaces,
+paths with spaces are quoted. File references that use the rest of the line stay
+unquoted. Only SSH and Kubernetes path options expand `~` to the home directory.
+
+Accepting a directive typed without a comment marker adds `# ` automatically. For
+example, completing `@na` produces `# @name `. The marker is added only when you
+accept a suggestion, so you can still type variables such as `@name = value`.
 
 Many suggestions insert an example value, such as `@setting timeout=5s` or `@mock
 latency=random(100ms,500ms)`. Accepting one leaves the example selected, so the next
-keystroke replaces it. To keep the example instead, press `Tab`. The caret moves to the
-end of the insert, past the closing parenthesis when the example is a call. `Left` and
-`Right` also keep the example, putting the caret at its start or its end.
+keystroke replaces it. Press `Tab` to keep the example and move past the inserted
+text, including any closing parenthesis. `Left` and `Right` also keep the example
+and move to the start or end of the selected text.
 
-Completion is deliberately offline: it does not introspect a live gRPC server
-(reflection/descriptors) or a GraphQL schema to complete service, method, or field
-names.
+Dynamic helpers with call examples insert the call and select only its arguments.
+Variable completion adds any missing closing braces, so completing `{{ho`, `{{ho}`,
+and `{{ho}}` with `host` produces `{{host}}` in each case.
+
+Completion does not use gRPC reflection, descriptors, or GraphQL schemas to suggest
+service, method, or field names.
 
 ### Custom bindings
 
