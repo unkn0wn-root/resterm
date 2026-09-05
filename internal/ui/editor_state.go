@@ -108,6 +108,7 @@ type requestEditor struct {
 	placeholderExit   int
 	engine            intellisense.Engine
 	scope             intellisense.Scope
+	paths             editorPathCompletion
 }
 
 type sourceStyler interface {
@@ -132,105 +133,6 @@ type editorSearch struct {
 	matches []searchMatch
 	index   int
 	active  bool
-}
-
-type completionState struct {
-	active        bool
-	anchorOffset  int
-	selection     int
-	preview       bool
-	popupLabelW   int
-	popupSummaryW int
-	filtered      []intellisense.Item
-	ctx           intellisense.Context
-}
-
-func (s *completionState) deactivate() {
-	s.active = false
-	s.filtered = nil
-	s.selection = 0
-	s.preview = false
-	s.popupLabelW = 0
-	s.popupSummaryW = 0
-	s.anchorOffset = 0
-	s.ctx = intellisense.Context{}
-}
-
-func (s *completionState) update(
-	anchor int,
-	filtered []intellisense.Item,
-	ctx intellisense.Context,
-) {
-	if len(filtered) == 0 {
-		s.deactivate()
-		return
-	}
-	reset := !s.active || s.anchorOffset != anchor
-	if reset || s.selection >= len(filtered) {
-		s.selection = 0
-	}
-	s.active = true
-	s.anchorOffset = anchor
-	s.filtered = filtered
-	s.ctx = ctx
-	labelW, summaryW := completionPopupPreference(filtered)
-	if reset {
-		s.popupLabelW = labelW
-		s.popupSummaryW = summaryW
-		return
-	}
-	if labelW > s.popupLabelW {
-		s.popupLabelW = labelW
-	}
-	if summaryW > s.popupSummaryW {
-		s.popupSummaryW = summaryW
-	}
-}
-
-func (s *completionState) move(delta int) {
-	if !s.active || len(s.filtered) == 0 {
-		return
-	}
-	count := len(s.filtered)
-	idx := (s.selection + delta) % count
-	if idx < 0 {
-		idx += count
-	}
-	s.selection = idx
-}
-
-func (s *completionState) setPreview(open bool) {
-	if !s.active || len(s.filtered) == 0 {
-		s.preview = false
-		return
-	}
-	s.preview = open
-}
-
-func (s *completionState) togglePreview() {
-	s.setPreview(!s.preview)
-}
-
-func (s completionState) display(limit int) (items []intellisense.Item, selected int, ok bool) {
-	if !s.active || len(s.filtered) == 0 || limit <= 0 {
-		return nil, 0, false
-	}
-	start, end := popupWindow(s.selection, limit, len(s.filtered))
-	return s.filtered[start:end], s.selection - start, true
-}
-
-func completionPopupPreference(items []intellisense.Item) (int, int) {
-	labelW := 0
-	summaryW := 0
-	for _, item := range items {
-		if w := visibleWidth(item.Label); w > labelW {
-			labelW = w
-		}
-		if w := visibleWidth(item.Summary); w > summaryW {
-			summaryW = w
-		}
-	}
-	return labelW, summaryW
 }
 
 func newRequestEditor() requestEditor {
@@ -265,6 +167,11 @@ func (e *requestEditor) SetValue(value string) {
 		return
 	}
 
+	e.closeCompletions()
+	e.storeValue(value)
+}
+
+func (e *requestEditor) storeValue(value string) {
 	e.Model.SetValue(value)
 	// Classify the normalized text stored by the textarea.
 	e.noteContentChanged(e.Value())
@@ -553,160 +460,6 @@ func (e requestEditor) selectionSummaryRange() (
 	return start, end
 }
 
-func (e *requestEditor) SetCompletionEnabled(enabled bool) {
-	e.completionEnabled = enabled
-	if !enabled {
-		e.completion.deactivate()
-	}
-}
-
-// SetCompletionScope updates the document-derived data used by context-aware
-// completions (variables, environments, profiles). It is refreshed on document
-// or environment changes, not per keystroke.
-func (e *requestEditor) SetCompletionScope(scope intellisense.Scope) {
-	e.scope = scope
-}
-
-func (e requestEditor) hasActiveCompletion() bool {
-	return e.completion.active && len(e.completion.filtered) > 0
-}
-
-func (e *requestEditor) handleCompletionKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
-	if !e.hasActiveCompletion() {
-		return false, nil
-	}
-	switch msg.String() {
-	case "down", "ctrl+n":
-		e.completion.move(1)
-		return true, nil
-	case "up", "ctrl+p", "shift+tab":
-		e.completion.move(-1)
-		return true, nil
-	case "right":
-		e.completion.setPreview(true)
-		return true, nil
-	case "left":
-		if e.completion.preview {
-			e.completion.setPreview(false)
-			return true, nil
-		}
-		return false, nil
-	case "ctrl+l", "?", "shift+/":
-		e.completion.togglePreview()
-		return true, nil
-	case "esc":
-		if e.completion.preview {
-			e.completion.setPreview(false)
-			return true, nil
-		}
-		return false, nil
-	case "tab", "enter", "ctrl+m":
-		cmd := e.applyCompletion()
-		return true, cmd
-	default:
-		return false, nil
-	}
-}
-
-func (e *requestEditor) dismissCompletion() bool {
-	if !e.completion.active {
-		return false
-	}
-	if e.completion.preview {
-		e.completion.setPreview(false)
-		return true
-	}
-	e.completion.deactivate()
-	return true
-}
-
-func (e *requestEditor) updateCompletions(msg tea.KeyMsg) {
-	switch msg.String() {
-	case " ", "enter", "ctrl+m":
-		e.completion.deactivate()
-	case "backspace", "ctrl+h", "delete":
-		if e.completion.active {
-			e.refreshCompletions()
-		}
-	default:
-		e.refreshCompletions()
-	}
-}
-
-func (e *requestEditor) refreshCompletions() {
-	if !e.completionEnabled {
-		e.completion.deactivate()
-		return
-	}
-	line := e.Line()
-	cur := e.LineRunes(line)
-	info := e.LineInfo()
-	col := min(max(info.StartColumn+info.ColumnOffset, 0), len(cur))
-
-	ctx, ok := intellisense.Analyze(e, line, col)
-	if !ok {
-		e.completion.deactivate()
-		return
-	}
-	if col < len(cur) && intellisense.IsTokenRune(cur[col]) {
-		// Caret sits before more token characters; keep the current popup.
-		return
-	}
-	filtered := e.engine.Suggest(ctx, e.scope)
-	if len(filtered) == 0 {
-		e.completion.deactivate()
-		return
-	}
-	anchor := e.offsetForPosition(line, ctx.Start)
-	e.completion.update(anchor, filtered, ctx)
-}
-
-func (e *requestEditor) applyCompletion() tea.Cmd {
-	if !e.hasActiveCompletion() {
-		return nil
-	}
-	selected := e.completion.filtered[e.completion.selection]
-	start := e.completion.anchorOffset
-	caret := e.caretPosition()
-	if start < 0 || caret.Offset < start {
-		e.completion.deactivate()
-		return nil
-	}
-	runes := []rune(e.Value())
-	after := runes[min(caret.Offset, len(runes)):]
-
-	addSpace := selected.AppendsSpace(e.completion.ctx.Kind) &&
-		(len(after) == 0 || !unicode.IsSpace(after[0]))
-	e.pushUndoSnapshot()
-
-	updated := append([]rune{}, runes[:start]...)
-	updated = append(updated, []rune(selected.InsertText())...)
-	if addSpace {
-		// The separator goes in now, so the caret can exit past it and be ready
-		// for the next token.
-		updated = append(updated, ' ')
-	}
-	exit := len(updated)
-	updated = append(updated, after...)
-
-	prevView := e.ViewStart()
-	e.SetValue(string(updated))
-	e.SetViewStart(prevView)
-
-	caretOffset := exit
-	if from, to, ok := selected.PlaceholderRange(); ok {
-		e.startPlaceholder(start+from, start+to, exit)
-		caretOffset = start + from
-	} else {
-		e.clearSelection()
-	}
-	line, col := e.positionForOffset(caretOffset)
-	e.moveCursorTo(line, col)
-	e.applySelectionHighlight()
-	e.completion.deactivate()
-	return nil
-}
-
 func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	beforeValue := e.Value()
 	beforeRevision := e.revision
@@ -752,7 +505,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			e.clearSelection()
 			handled = true
 		}
-		e.completion.deactivate()
+		e.closeCompletions()
 	case "ctrl+c":
 		if text := e.selectedText(); text != "" {
 			cmds = append(cmds, (&e).copyToClipboard(text, ""))
@@ -932,7 +685,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	}
 
 	after := e.caretPosition()
-	e.updateCompletions(keyMsg)
+	if completionCmd := e.updateCompletions(keyMsg); completionCmd != nil {
+		cmds = append(cmds, completionCmd)
+	}
 	if transformed.String() != keyMsg.String() && !e.hasSelection() {
 		e.clearSelection()
 	}
@@ -1415,7 +1170,7 @@ func (e requestEditor) ApplyInsertAction(
 	}
 
 	editorPtr.pendingMotion = ""
-	editorPtr.completion.deactivate()
+	editorPtr.closeCompletions()
 	editorPtr.applySelectionHighlight()
 
 	var refreshCmd tea.Cmd

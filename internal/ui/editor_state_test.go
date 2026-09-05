@@ -2099,6 +2099,9 @@ func TestRequestEditorCompletionsHeaderNameInHeaderSection(t *testing.T) {
 	if got := editor.Value(); got != "GET https://example.com\nContent-Type: " {
 		t.Fatalf("expected header name with colon and space, got %q", got)
 	}
+	if !editor.hasActiveCompletion() || !collectHintLabels(editor.completion.filtered)["application/json"] {
+		t.Fatalf("expected chained header values, got %+v", editor.completion)
+	}
 }
 
 func TestRequestEditorCompletionsHeaderValue(t *testing.T) {
