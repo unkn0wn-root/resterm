@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.6.0](https://github.com/unkn0wn-root/resterm/compare/v1.5.6...v1.6.0) (2026-09-06)
+
+
+### Bug Fixes
+
+* **intellisense:** preserve expressions and helper args during completion ([a35b82a](https://github.com/unkn0wn-root/resterm/commit/a35b82a27d9bfa4dc3ecd9e9d31e59060dbeda02))
+* **intellisense:** refresh completion ranges after edits and advance past separators ([b713ba0](https://github.com/unkn0wn-root/resterm/commit/b713ba08454e4994881bb1c53efb60b8acbe185c))
+
 ### [1.5.6](https://github.com/unkn0wn-root/resterm/compare/v1.5.5...v1.5.6) (2026-09-04)
 
 ### [1.5.5](https://github.com/unkn0wn-root/resterm/compare/v1.5.4...v1.5.5) (2026-09-03)
