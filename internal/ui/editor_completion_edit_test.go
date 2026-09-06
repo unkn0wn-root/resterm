@@ -155,3 +155,25 @@ func TestRequestEditorBrowsesDirectoryInsidePathList(t *testing.T) {
 		t.Fatalf("text after completion = %q, want %q", got, want)
 	}
 }
+
+func TestRequestEditorCompletionFollowsEditsInsideToken(t *testing.T) {
+	editor := newTestEditor("GET https://{{host}}")
+	editor.moveCursorTo(0, len([]rune("GET https://{{host")))
+	editor.SetCompletionScope(intellisense.Scope{Variables: []intellisense.VarRef{{Name: "host"}}})
+	editor.SetCompletionEnabled(true)
+	editor, _ = editor.NextCompletion()
+	for _, key := range []tea.KeyMsg{{Type: tea.KeyLeft}, {Type: tea.KeyBackspace}} {
+		editor, _ = editor.Update(key)
+	}
+	if got := editor.Value(); got != "GET https://{{hot}}" {
+		t.Fatalf("edited value = %q", got)
+	}
+	if !editor.hasActiveCompletion() {
+		t.Fatal("editing inside the token closed completion")
+	}
+	selectEditorCompletion(t, &editor, "host")
+	editor.applyCompletion()
+	if got := editor.Value(); got != "GET https://{{host}}" {
+		t.Fatalf("completion after editing inside the token = %q", got)
+	}
+}

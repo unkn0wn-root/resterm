@@ -286,3 +286,33 @@ func TestRequestEditorCompletesOneProfileListSegment(t *testing.T) {
 		})
 	}
 }
+
+func TestRequestEditorChainsPastExistingSeparator(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"# @auth oauth2 grant=pass|word ", "# @auth oauth2 grant=password "},
+		{"# @auth oauth2 grant=pass|word\nGET https://example.test", "# @auth oauth2 grant=password \nGET https://example.test"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			before, after, _ := strings.Cut(tc.input, "|")
+			editor := newTestEditor(before + after)
+			editor.moveCursorTo(0, len([]rune(before)))
+			editor.SetCompletionEnabled(true)
+			editor.openCompletions()
+			selectEditorCompletion(t, &editor, "password")
+			editor.applyCompletion()
+			if got := editor.Value(); got != tc.want {
+				t.Fatalf("value = %q, want %q", got, tc.want)
+			}
+			if got, want := editor.caretPosition().Offset, len([]rune("# @auth oauth2 grant=password ")); got != want {
+				t.Fatalf("caret = %d, want %d after the separator", got, want)
+			}
+			labels := editorCompletionLabels(editor)
+			if slices.Contains(labels, "password") || slices.Contains(labels, "grant=") {
+				t.Fatalf("grant stage was offered again: %v", labels)
+			}
+			if !slices.Contains(labels, "client_id=") {
+				t.Fatalf("expected the remaining OAuth options, got %v", labels)
+			}
+		})
+	}
+}

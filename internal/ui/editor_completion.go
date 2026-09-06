@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"unicode"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
@@ -187,8 +187,8 @@ func (e *requestEditor) refreshCompletions() tea.Cmd {
 		e.closeCompletions()
 		return nil
 	}
-	if e.caretInsideToken() {
-		// Keep the current popup while editing inside a token.
+	// Typing inside a token does not open the popup, but an open popup follows the edit.
+	if !e.completion.active && e.caretInsideToken() {
 		return nil
 	}
 	return e.showCompletions(ctx, line)
@@ -269,17 +269,17 @@ func (e *requestEditor) applyCompletion() tea.Cmd {
 		e.closeCompletions()
 		return nil
 	}
+	text := []rune(selected.InsertText())
+	if selected.AppendsSpace(e.completion.ctx.Kind) {
+		if end < len(runes) && runes[end] == ' ' {
+			end++
+		}
+		text = append(text, ' ')
+	}
 	after := runes[end:]
-
-	addSpace := selected.AppendsSpace(e.completion.ctx.Kind) &&
-		(len(after) == 0 || !unicode.IsSpace(after[0]))
 	e.pushUndoSnapshot()
 
-	updated := append([]rune{}, runes[:start]...)
-	updated = append(updated, []rune(selected.InsertText())...)
-	if addSpace {
-		updated = append(updated, ' ')
-	}
+	updated := slices.Concat(runes[:start], text)
 	exit := len(updated)
 	updated = append(updated, after...)
 
