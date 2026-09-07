@@ -19,10 +19,10 @@ func TestDiagnosticStylerCopiesSyntaxCacheAndClearsAfterEdit(t *testing.T) {
 	styler := newEditorDiagnosticStyler(base, th)
 	styler.SetSource(source)
 	before := base.StylesForLine(line, 0)
-	styler.snapshot = newDiagnosticSnapshot(
+	styler.display = newDiagnosticSnapshot(
 		diagnosticKey{},
 		parser.Diagnostics(parser.Parse("test.http", []byte(source))),
-	)
+	).display
 	styles := styler.StylesForLine(line, 0)
 	start := utf8.RuneCountInString(source[:strings.Index(source, "max-event")])
 	for i := range line {
@@ -38,7 +38,7 @@ func TestDiagnosticStylerCopiesSyntaxCacheAndClearsAfterEdit(t *testing.T) {
 		}
 	}
 	styler.SetSource("# @sse max-events=5")
-	if styler.snapshot != nil {
+	if styler.display != nil {
 		t.Fatal("source change retained old decorations")
 	}
 }
@@ -55,7 +55,7 @@ func TestDiagnosticOverlapsPreferErrorsAndGroupRelatedRanges(t *testing.T) {
 	s := newDiagnosticSnapshot(diagnosticKey{}, rep)
 	th := theme.DefaultTheme()
 	styler := newEditorDiagnosticStyler(newMetadataRuneStyler(th.EditorMetadata), th)
-	styler.snapshot = s
+	styler.display = s.display
 	styles := styler.StylesForLine([]rune(source), 0)
 	if styles[2].GetForeground() != th.EditorDiagnosticError.GetForeground() ||
 		styles[6].GetForeground() != th.EditorDiagnosticWarning.GetForeground() {
@@ -82,7 +82,7 @@ func TestDiagnosticEmptyAndEOFRangesUseLineNumbers(t *testing.T) {
 		newMetadataRuneStyler(theme.DefaultTheme().EditorMetadata),
 		theme.DefaultTheme(),
 	)
-	styler.snapshot = s
+	styler.display = s.display
 	if _, ok := styler.LineNumberStyle(0); ok {
 		t.Fatal("unaffected line marked")
 	}
@@ -104,7 +104,7 @@ func TestDiagnosticThemeChangeRetainsSnapshot(t *testing.T) {
 	m.theme.EditorDiagnosticWarning = lipgloss.NewStyle().Foreground(lipgloss.Color("#112233")).Underline(true)
 	m.updateEditorStyler(m.currentFile)
 	styler := m.editor.styler
-	if styler.snapshot != snapshot || m.diagnostics.ticket != ticket {
+	if styler.display != snapshot.display || m.diagnostics.ticket != ticket {
 		t.Fatal("theme rebuild discarded/reparsed diagnostics")
 	}
 	if got := styler.StylesForLine(m.editor.LineRunes(0), 0)[2].GetForeground(); got != lipgloss.Color("#112233") {
@@ -118,10 +118,10 @@ func BenchmarkDiagnosticViewportStyles(b *testing.B) {
 	base := newMetadataRuneStyler(th.EditorMetadata)
 	styler := newEditorDiagnosticStyler(base, th)
 	styler.SetSource(source)
-	styler.snapshot = newDiagnosticSnapshot(
+	styler.display = newDiagnosticSnapshot(
 		diagnosticKey{},
 		parser.Diagnostics(parser.Parse("large.http", []byte(source))),
-	)
+	).display
 	line := []rune("# @sse max-event=5")
 	b.ReportAllocs()
 	for b.Loop() {

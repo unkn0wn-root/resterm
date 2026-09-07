@@ -159,8 +159,8 @@ func (e *requestEditor) setStyler(base textarea.RuneStyler, th theme.Theme) {
 	e.SetRuneStyler(e.styler)
 }
 
-func (e *requestEditor) setDiagnostics(s *diagnosticSnapshot) {
-	e.styler.snapshot = s
+func (e *requestEditor) setDiagnosticDisplay(display *diagnosticDisplay) {
+	e.styler.display = display
 }
 
 func (e requestEditor) sourceLine(line int) parser.SourceLine {

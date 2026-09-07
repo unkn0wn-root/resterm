@@ -109,7 +109,8 @@ func TestDiagnosticsCoalesceChangesWhileBusy(t *testing.T) {
 				t.Fatal("stale result was installed or latest job was lost")
 			}
 			updateDiagnosticsModel(t, &m, cmd())
-			if s := m.currentDiagnostics(); s == nil || string(s.report.Source) != m.editor.Value() || s.report.Path != m.currentFile {
+			if s := m.currentDiagnostics(); s == nil || string(s.report.Source) != m.editor.Value() ||
+				s.report.Path != m.currentFile {
 				t.Fatal("replacement snapshot does not match the current buffer")
 			}
 		})
@@ -160,7 +161,7 @@ func TestDiagnosticsRefreshAfterEditorMutations(t *testing.T) {
 	updateDiagnosticsModel(t, &m, keyMsgFor("A"))
 	for _, r := range "@moc" {
 		updateDiagnosticsModel(t, &m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		if !m.editorInsertMode || m.diagnostics.running != 0 || m.diagnostics.snapshot != nil ||
+		if !m.editorInsertMode || m.diagnostics.running != 0 || m.diagnostics.current != nil ||
 			m.diagnostics.phase == diagnosticIdle || !m.dirty {
 			t.Fatal("typing published or started diagnostics")
 		}
@@ -197,7 +198,7 @@ func TestDiagnosticsRefreshAfterEditorMutations(t *testing.T) {
 		}
 	}
 	deliver(cmd)
-	if s := m.currentDiagnostics(); s == nil || s.warnings != 2 {
+	if s := m.currentDiagnostics(); s == nil || s.display.warnings != 2 {
 		t.Fatal("missing completed directive warning")
 	}
 	if m.editor.Value() != "# @moc\n# @nmae typo" {
@@ -368,5 +369,123 @@ func TestDiagnosticsStatusDoesNotReplaceRunProgress(t *testing.T) {
 	}
 	if m.statusMessage.text != "Sending GET /x" {
 		t.Fatal("diagnostics replaced progress")
+	}
+}
+
+func TestDiagnosticsUndoRedoRetainsDisplayWhileRefreshing(t *testing.T) {
+	source := "GET http://x\n# @mock method=GET path=/x"
+	m := newDiagnosticModel(t, source)
+	doc := m.doc
+	if s := m.currentDiagnostics(); s == nil || s.display.errors != 1 ||
+		!strings.Contains(s.report.Items[0].Message, "must start a new block") {
+		t.Fatal("expected the mock block error")
+	}
+	m.editor.pushUndoSnapshot()
+	m.editor.SetValue(source + "x")
+	m.markDirty()
+	_ = m.syncDiagnostics()
+	completeDiagnosticParse(t, &m)
+
+	for _, key := range []tea.KeyMsg{keyMsgFor("u"), {Type: tea.KeyCtrlR}, keyMsgFor("u")} {
+		updateDiagnosticsModel(t, &m, key)
+		if m.currentDiagnostics() != nil || m.diagnostics.phase != diagnosticPending {
+			t.Fatal("undo/redo must still invalidate current diagnostics and debounce")
+		}
+		section, ok := m.statusBarWarningSection(statusBarPalette(m.theme.StatusBarPalette))
+		if !ok || section.text != "ERR 1" {
+			t.Fatalf("pending status = %+v, want ERR 1", section)
+		}
+		styles := m.editor.styler.StylesForLine(m.editor.LineRunes(1), 1)
+		if styles[2].GetForeground() != m.theme.EditorDiagnosticError.GetForeground() || !styles[2].GetUnderline() {
+			t.Fatal("unchanged @mock lost its error decoration during refresh")
+		}
+		m.editor.moveCursorTo(1, 2)
+		if m.openDiagnosticPopup() {
+			t.Fatal("pending display opened a stale popup")
+		}
+		before := m.editor.caretPosition()
+		m.performDiagnosticAction(diagnosticNext)
+		if m.editor.caretPosition() != before {
+			t.Fatal("pending display allowed stale navigation")
+		}
+		completeDiagnosticParse(t, &m)
+	}
+
+	m.editor.SetValue("GET http://x")
+	_ = m.syncDiagnostics()
+	completeDiagnosticParse(t, &m)
+	if _, ok := m.statusBarWarningSection(statusBarPalette(m.theme.StatusBarPalette)); ok {
+		t.Fatal("fresh clean result retained the error count")
+	}
+	if display := m.editor.styler.display; display == nil || len(display.lines) != 0 || len(display.marks) != 0 {
+		t.Fatal("fresh clean result retained error decorations")
+	}
+	if m.doc != doc || !m.dirty {
+		t.Fatal("diagnostic refresh changed execution document or dirty state")
+	}
+}
+
+func TestDiagnosticsRetainedDisplayLifecycle(t *testing.T) {
+	for _, action := range []string{"insert edit", "switch request", "switch non-request", "disable", "theme"} {
+		t.Run(action, func(t *testing.T) {
+			m := newDiagnosticModel(t, "GET http://x\n# @mock path=/x")
+			m.editor.SetValue(m.editor.Value() + "x")
+			_ = m.syncDiagnostics()
+			job := m.handleDiagnosticsTick(diagnosticsTickMsg{ticket: m.diagnostics.ticket})
+			if job == nil || m.visibleDiagnosticDisplay() == nil {
+				t.Fatal("missing pending display or parse")
+			}
+			switch action {
+			case "insert edit":
+				updateDiagnosticsModel(t, &m, keyMsgFor("i"))
+				m.editor.SetValue(m.editor.Value() + "y")
+			case "switch request":
+				m.currentFile = "other.http"
+			case "switch non-request":
+				m.currentFile = "other.rts"
+			case "disable":
+				m.diagnostics.disabled = true
+			case "theme":
+				display, ticket := m.visibleDiagnosticDisplay(), m.diagnostics.ticket
+				m.updateEditorStyler(m.currentFile)
+				if m.editor.styler.display != display || m.diagnostics.ticket != ticket {
+					t.Fatal("theme rebuild discarded pending display or restarted diagnostics")
+				}
+				if m.currentDiagnostics() != nil {
+					t.Fatal("theme rebuild made stale diagnostics current")
+				}
+				return
+			}
+			if action != "insert edit" && m.visibleDiagnosticDisplay() != nil {
+				t.Fatal("display leaked across file or enabled-state change before synchronization")
+			}
+			_ = m.syncDiagnostics()
+			updateDiagnosticsModel(t, &m, job())
+			if m.visibleDiagnosticDisplay() != nil || m.editor.styler.display != nil || m.currentDiagnostics() != nil {
+				t.Fatal("obsolete completion restored a cleared display")
+			}
+		})
+	}
+}
+
+func TestDiagnosticsStaleCompletionPreservesPendingDisplay(t *testing.T) {
+	m := newDiagnosticModel(t, "GET http://x\n# @mock path=/x")
+	m.editor.SetValue("# @nmae typo\nGET http://x")
+	_ = m.syncDiagnostics()
+	job := m.handleDiagnosticsTick(diagnosticsTickMsg{ticket: m.diagnostics.ticket})
+	if job == nil {
+		t.Fatal("missing parse command")
+	}
+	m.editor.SetValue("GET http://y")
+	_ = m.syncDiagnostics()
+	display := m.visibleDiagnosticDisplay()
+	updateDiagnosticsModel(t, &m, job())
+	if m.visibleDiagnosticDisplay() != display || display == nil || display.errors != 1 || m.currentDiagnostics() != nil {
+		t.Fatal("stale warning result replaced the retained error display")
+	}
+	completeDiagnosticParse(t, &m)
+	current, display := m.currentDiagnostics(), m.visibleDiagnosticDisplay()
+	if current == nil || display == nil || display != current.display || display.errors != 0 {
+		t.Fatal("fresh clean result did not replace both snapshots")
 	}
 }

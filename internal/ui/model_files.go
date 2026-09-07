@@ -321,7 +321,7 @@ func (m *Model) markClean() {
 
 func (m *Model) updateEditorStyler(path string) {
 	m.editor.setStyler(selectEditorRuneStyler(path, m.theme.EditorMetadata), m.theme)
-	m.editor.setDiagnostics(m.currentDiagnostics())
+	m.editor.setDiagnosticDisplay(m.visibleDiagnosticDisplay())
 }
 
 func parseEditableDocument(path string, data []byte) *restfile.Document {

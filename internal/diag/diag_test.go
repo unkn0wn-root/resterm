@@ -478,7 +478,10 @@ func TestParseSummaryRespectsSeverity(t *testing.T) {
 	} {
 		var rep diag.Report
 		for _, severity := range severities {
-			rep.Items = append(rep.Items, diag.Diagnostic{Class: diag.ClassParse, Severity: severity, Message: "problem"})
+			rep.Items = append(
+				rep.Items,
+				diag.Diagnostic{Class: diag.ClassParse, Severity: severity, Message: "problem"},
+			)
 		}
 		if got := rep.Summary(); strings.Contains(got, "parse error") {
 			t.Fatalf("misleading summary %q", got)

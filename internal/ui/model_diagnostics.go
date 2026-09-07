@@ -54,7 +54,8 @@ type diagnosticState struct {
 	phase     diagnosticPhase
 	ticket    uint64
 	running   uint64
-	snapshot  *diagnosticSnapshot
+	current   *diagnosticSnapshot
+	visible   *diagnosticDisplay
 	intent    diagnosticIntent
 	popup     diagnosticPopup
 }
@@ -82,16 +83,26 @@ func (m *Model) editorIdle() bool {
 	return !m.editorInsertMode && !m.mouseModalActive()
 }
 
-func (m *Model) diagnosticsCurrent() bool {
+func (m *Model) diagnosticParseAllowed() bool {
 	return m.diagnosticsActive() && !m.editorInsertMode && m.diagnostics.key == m.diagnosticKey()
 }
 
 func (m *Model) currentDiagnostics() *diagnosticSnapshot {
-	s := m.diagnostics.snapshot
+	s := m.diagnostics.current
 	if !m.diagnosticsActive() || s == nil || s.key != m.diagnosticKey() {
 		return nil
 	}
 	return s
+}
+
+// visibleDiagnosticDisplay is render-only and may contain counts and decorations
+// from an older parse. Interactive actions must use currentDiagnostics.
+func (m *Model) visibleDiagnosticDisplay() *diagnosticDisplay {
+	display := m.diagnostics.visible
+	if !m.diagnosticsActive() || display == nil || display.path != m.currentFile {
+		return nil
+	}
+	return display
 }
 
 func (m *Model) diagnosticIntentCurrent(intent diagnosticIntent) bool {
@@ -113,16 +124,7 @@ func (m *Model) syncDiagnostics() tea.Cmd {
 	}
 	switch {
 	case s.key != key || s.active != active:
-		s.key, s.active = key, active
-		s.ticket++
-		s.snapshot = nil
-		s.popup = diagnosticPopup{}
-		s.intent = diagnosticIntent{}
-		s.phase = diagnosticIdle
-		if active {
-			s.phase = diagnosticPending
-		}
-		m.editor.setDiagnostics(nil)
+		m.beginDiagnosticRefresh(key, active)
 	case !leftInsert || s.phase == diagnosticIdle:
 		return nil
 	}
@@ -131,9 +133,8 @@ func (m *Model) syncDiagnostics() tea.Cmd {
 	}
 	// Textarea normalization can change the bytes without changing the document revision.
 	if m.docMatchesEditor() && string(m.doc.Raw) == m.editor.Value() {
-		s.snapshot = newDiagnosticSnapshot(key, parser.Diagnostics(m.doc))
+		m.publishDiagnostics(newDiagnosticSnapshot(key, parser.Diagnostics(m.doc)))
 		s.phase = diagnosticIdle
-		m.editor.setDiagnostics(s.snapshot)
 		return nil
 	}
 	if leftInsert {
@@ -146,7 +147,7 @@ func (m *Model) syncDiagnostics() tea.Cmd {
 
 func (m *Model) handleDiagnosticsTick(msg diagnosticsTickMsg) tea.Cmd {
 	s := &m.diagnostics
-	if msg.ticket != s.ticket || s.phase == diagnosticIdle || !m.diagnosticsCurrent() {
+	if msg.ticket != s.ticket || s.phase == diagnosticIdle || !m.diagnosticParseAllowed() {
 		return nil
 	}
 	s.phase = diagnosticDue
@@ -155,7 +156,7 @@ func (m *Model) handleDiagnosticsTick(msg diagnosticsTickMsg) tea.Cmd {
 
 func (m *Model) startDiagnosticParse() tea.Cmd {
 	s := &m.diagnostics
-	if s.running != 0 || s.phase != diagnosticDue || !m.diagnosticsCurrent() {
+	if s.running != 0 || s.phase != diagnosticDue || !m.diagnosticParseAllowed() {
 		return nil
 	}
 	ticket, key, source := s.ticket, s.key, m.editor.Value()
@@ -181,8 +182,7 @@ func (m *Model) handleDiagnosticsResult(msg diagnosticsResultMsg) tea.Cmd {
 		s.phase = diagnosticPending
 		return nil
 	}
-	s.snapshot = msg.snapshot
-	m.editor.setDiagnostics(s.snapshot)
+	m.publishDiagnostics(msg.snapshot)
 	intent := s.intent
 	s.intent = diagnosticIntent{}
 	var actionCmd tea.Cmd
@@ -190,6 +190,32 @@ func (m *Model) handleDiagnosticsResult(msg diagnosticsResultMsg) tea.Cmd {
 		actionCmd = m.performDiagnosticAction(intent.action)
 	}
 	return batchCommands(actionCmd, m.startDiagnosticParse())
+}
+
+func (m *Model) beginDiagnosticRefresh(key diagnosticKey, active bool) {
+	s := &m.diagnostics
+	keepVisible := active && s.active && s.key.path == key.path && !m.editorInsertMode
+	if keepVisible && s.visible != nil {
+		s.visible = s.visible.afterEdit(&m.editor)
+	} else if !keepVisible {
+		s.visible = nil
+	}
+	s.key, s.active = key, active
+	s.ticket++
+	s.current = nil
+	s.popup = diagnosticPopup{}
+	s.intent = diagnosticIntent{}
+	s.phase = diagnosticIdle
+	if active {
+		s.phase = diagnosticPending
+	}
+	m.editor.setDiagnosticDisplay(s.visible)
+}
+
+func (m *Model) publishDiagnostics(snapshot *diagnosticSnapshot) {
+	m.diagnostics.current = snapshot
+	m.diagnostics.visible = snapshot.display
+	m.editor.setDiagnosticDisplay(snapshot.display)
 }
 
 func (m *Model) requestDiagnostics(action diagnosticAction) tea.Cmd {
@@ -247,7 +273,7 @@ func (m *Model) performDiagnosticAction(action diagnosticAction) tea.Cmd {
 
 func (m *Model) openDiagnosticList(s *diagnosticSnapshot) {
 	level := statusWarn
-	if s.errors > 0 {
+	if s.display.errors > 0 {
 		level = statusError
 	}
 	var lines []string

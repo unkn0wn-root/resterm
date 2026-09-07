@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
@@ -14,44 +13,39 @@ type diagnosticKey struct {
 	path     string
 }
 
-type diagnosticRange struct {
-	start, end int // zero-based rune columns, end exclusive
-	item       int
-	severity   diag.Severity
-}
-
-// Snapshots are immutable after delivery. Ranges paint errors last; marks
-// records the worst severity for empty locations such as blank lines or EOF.
+// Snapshots are immutable after delivery and are the only diagnostic data used
+// for actions.
 type diagnosticSnapshot struct {
 	key       diagnosticKey
 	report    diag.Report
-	lines     map[int][]diagnosticRange
-	marks     map[int]diag.Severity
+	display   *diagnosticDisplay
 	positions []cursorPosition
-	errors    int
-	warnings  int
 }
 
 func newDiagnosticSnapshot(key diagnosticKey, rep diag.Report) *diagnosticSnapshot {
 	s := &diagnosticSnapshot{
 		key:    key,
 		report: rep,
-		lines:  make(map[int][]diagnosticRange),
-		marks:  make(map[int]diag.Severity),
+		display: &diagnosticDisplay{
+			path:        key.path,
+			sourceLines: strings.Split(string(rep.Source), "\n"),
+			lines:       make(map[int][]diagnosticRange),
+			marks:       make(map[int]diag.Severity),
+		},
 	}
-	lines := strings.Split(string(rep.Source), "\n")
+
 	for i, item := range rep.Items {
 		if item.Severity == diag.SeverityError {
-			s.errors++
+			s.display.errors++
 		} else {
-			s.warnings++
+			s.display.warnings++
 		}
-		s.positions = append(s.positions, s.addSpan(lines, item.Span, i, item.Severity))
+		s.positions = append(s.positions, s.display.addSpan(item.Span, i, item.Severity))
 		for _, label := range item.Labels {
-			s.addSpan(lines, label.Span, i, item.Severity)
+			s.display.addSpan(label.Span, i, item.Severity)
 		}
 	}
-	for _, ranges := range s.lines {
+	for _, ranges := range s.display.lines {
 		slices.SortStableFunc(ranges, func(a, b diagnosticRange) int {
 			return cmp.Compare(severityRank(b.severity), severityRank(a.severity))
 		})
@@ -74,45 +68,6 @@ func compareDiagnosticPositions(a, b cursorPosition) int {
 	return cmp.Or(cmp.Compare(a.Line, b.Line), cmp.Compare(a.Column, b.Column))
 }
 
-func (s *diagnosticSnapshot) addSpan(
-	lines []string,
-	span diag.Span,
-	item int,
-	severity diag.Severity,
-) cursorPosition {
-	first := clamp(span.Start.Line-1, 0, len(lines)-1)
-	last := clamp(max(span.Start.Line, span.End.Line)-1, first, len(lines)-1)
-	pos := cursorPosition{Line: first}
-	for line := first; line <= last; line++ {
-		raw := strings.TrimSuffix(lines[line], "\r")
-		start, end := 0, len(raw)
-		if line == first {
-			start = clamp(span.Start.Col-1, 0, len(raw))
-		}
-		if line == last {
-			end = clamp(span.End.Col-1, start, len(raw))
-		}
-		// A location beyond EOF is represented by the last line number.
-		if span.Start.Line > len(lines) {
-			start, end = len(raw), len(raw)
-		}
-		if line > first && start == end {
-			continue
-		}
-		from, to := utf8.RuneCountInString(raw[:start]), utf8.RuneCountInString(raw[:end])
-		if line == first {
-			pos.Column = from
-		}
-		if from == to {
-			if prev, ok := s.marks[line]; !ok || severityRank(severity) < severityRank(prev) {
-				s.marks[line] = severity
-			}
-		}
-		s.lines[line] = append(s.lines[line], diagnosticRange{start: from, end: to, item: item, severity: severity})
-	}
-	return pos
-}
-
 // at lists the items on the caret's line. Items under the caret come first,
 // then errors before warnings.
 func (s *diagnosticSnapshot) at(pos cursorPosition) []int {
@@ -121,7 +76,7 @@ func (s *diagnosticSnapshot) at(pos cursorPosition) []int {
 	}
 	var items []int
 	touching := make(map[int]bool)
-	for _, r := range s.lines[pos.Line] {
+	for _, r := range s.display.lines[pos.Line] {
 		if !slices.Contains(items, r.item) {
 			items = append(items, r.item)
 		}

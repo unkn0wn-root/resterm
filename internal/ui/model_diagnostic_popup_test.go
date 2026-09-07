@@ -67,8 +67,7 @@ func TestDiagnosticPopupFitsViewportAndScrolls(t *testing.T) {
 				Severity: diag.SeverityWarning, Message: strings.Repeat("long diagnostic 漢字 explanation ", 40),
 				Span: diag.Span{Start: diag.Pos{Line: row + 1, Col: 1}, End: diag.Pos{Line: row + 1, Col: 5}},
 			}}}
-			m.diagnostics.snapshot = newDiagnosticSnapshot(m.diagnosticKey(), rep)
-			m.editor.setDiagnostics(m.diagnostics.snapshot)
+			m.publishDiagnostics(newDiagnosticSnapshot(m.diagnosticKey(), rep))
 			if !m.openDiagnosticPopup() {
 				t.Fatal("no popup")
 			}

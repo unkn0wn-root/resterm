@@ -346,16 +346,16 @@ func (m *Model) statusBarLeftSections(
 func (m *Model) statusBarWarningSection(
 	palette theme.StatusBarPalette,
 ) (statusBarSection, bool) {
-	if snapshot := m.currentDiagnostics(); snapshot != nil {
+	if display := m.visibleDiagnosticDisplay(); display != nil {
 		var labels []string
-		if snapshot.errors > 0 {
-			labels = append(labels, fmt.Sprintf("ERR %d", snapshot.errors))
+		if display.errors > 0 {
+			labels = append(labels, fmt.Sprintf("ERR %d", display.errors))
 		}
-		if snapshot.warnings > 0 {
-			labels = append(labels, fmt.Sprintf("WARN %d", snapshot.warnings))
+		if display.warnings > 0 {
+			labels = append(labels, fmt.Sprintf("WARN %d", display.warnings))
 		}
 		style := palette.Warn
-		if snapshot.errors > 0 {
+		if display.errors > 0 {
 			style = palette.Error
 		}
 		return statusBarSection{text: strings.Join(labels, " · "), style: style}, len(labels) > 0
