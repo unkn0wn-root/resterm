@@ -60,6 +60,53 @@ func TestDiagnosticSourceSpans(t *testing.T) {
 	}
 }
 
+func TestUnfinishedWorkflowDiagnosticLocations(t *testing.T) {
+	for _, directive := range []struct {
+		name, source, message string
+	}{
+		{"when", "# @when true", "@when must be followed by @step"},
+		{"for-each", "# @for-each [1] as item", "@for-each must be followed by @step"},
+		{"switch", "# @switch true", "@switch requires at least one @case or @default"},
+		{"continued when", "# @when (\n# true\n# )", "@when must be followed by @step"},
+	} {
+		for _, ending := range []struct {
+			name, source string
+		}{
+			{"EOF", ""},
+			{"trailing lines", "\n\n# trailing comment\n\n"},
+			{"separator", "\n\n# trailing comment\n### next\nGET http://x"},
+			{"request", "\n\n# trailing comment\nGET http://x"},
+			{"workflow", "\n\n# trailing comment\n# @workflow next\n# @step s run=A"},
+		} {
+			t.Run(directive.name+"/"+ending.name, func(t *testing.T) {
+				source := "# @workflow w\n" + directive.source + ending.source
+				doc := Parse("workflow.http", []byte(source))
+				if len(doc.Errors) != 1 || doc.Errors[0].Message != directive.message {
+					t.Fatalf("errors = %+v, want one error %q", doc.Errors, directive.message)
+				}
+				if got := doc.Errors[0].Line; got != 2 {
+					t.Errorf("error line = %d, want 2", got)
+				}
+				rep := Diagnostics(doc)
+				if len(rep.Items) != 1 {
+					t.Fatalf("diagnostics = %+v, want one", rep.Items)
+				}
+				item := rep.Items[0]
+				if item.Severity != diag.SeverityError || item.Span.Start.Line != 2 || item.Span.Start.Col != 1 {
+					t.Fatalf("diagnostic = %+v, want error at 2:1", item)
+				}
+				firstLine, _, _ := strings.Cut(directive.source, "\n")
+				if got := sourceSpanText(t, source, item.Span); got != firstLine {
+					t.Errorf("marked %q, want %q", got, firstLine)
+				}
+				if err := Check(doc); err == nil {
+					t.Fatal("unfinished workflow must still fail Check")
+				}
+			})
+		}
+	}
+}
+
 func sourceSpanText(t *testing.T, source string, span diag.Span) string {
 	t.Helper()
 	lines := strings.Split(source, "\n")

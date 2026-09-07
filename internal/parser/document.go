@@ -276,10 +276,21 @@ func (b *documentBuilder) flushWorkflow(line int) {
 		return
 	}
 	if err := b.workflow.flushFlow(line); err != nil {
-		b.addError(line, err.Error())
+		errLine := line
+		if b.workflow.sw != nil {
+			errLine = b.workflow.sw.line
+		}
+		b.addError(errLine, err.Error())
 	}
 	if err := b.workflow.requireNoPending(); err != nil {
-		b.addError(line, err.Error())
+		errLine := line
+		switch {
+		case b.workflow.pendWhen != nil:
+			errLine = b.workflow.pendWhen.Line
+		case b.workflow.pendEach != nil:
+			errLine = b.workflow.pendEach.Line
+		}
+		b.addError(errLine, err.Error())
 	}
 	scene := b.workflow.build(line)
 	if len(scene.Steps) > 0 {
