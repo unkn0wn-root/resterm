@@ -30,6 +30,23 @@ func updateDiagnosticsModel(t *testing.T, m *Model, msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+// deliverDiagnosticAction runs cmd and feeds the diagnostics messages it
+// produces back into the model until a deferred action has run.
+func deliverDiagnosticAction(t *testing.T, m *Model, cmd tea.Cmd) {
+	t.Helper()
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, child := range msg {
+			deliverDiagnosticAction(t, m, child)
+		}
+	case diagnosticsResultMsg, diagnosticsTickMsg:
+		deliverDiagnosticAction(t, m, updateDiagnosticsModel(t, m, msg))
+	}
+}
+
 func completeDiagnosticParse(t *testing.T, m *Model) {
 	t.Helper()
 	cmd := m.handleDiagnosticsTick(diagnosticsTickMsg{ticket: m.diagnostics.ticket})
@@ -480,7 +497,8 @@ func TestDiagnosticsStaleCompletionPreservesPendingDisplay(t *testing.T) {
 	_ = m.syncDiagnostics()
 	display := m.visibleDiagnosticDisplay()
 	updateDiagnosticsModel(t, &m, job())
-	if m.visibleDiagnosticDisplay() != display || display == nil || display.errors != 1 || m.currentDiagnostics() != nil {
+	if m.visibleDiagnosticDisplay() != display || display == nil || display.errors != 1 ||
+		m.currentDiagnostics() != nil {
 		t.Fatal("stale warning result replaced the retained error display")
 	}
 	completeDiagnosticParse(t, &m)
