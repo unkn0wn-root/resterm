@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/capture"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -26,8 +27,8 @@ func (o *openDirective) writeOpen(text string) int {
 	return o.state.feedOpen(text)
 }
 
-func (o *openDirective) add(col int, text string) int {
-	padding := max(col-1, 0)
+func (o *openDirective) add(no int, c commentText) int {
+	padding := max(c.argCol()-1, 0)
 	if padding == 0 {
 		switch o.d.Name.Continuation() {
 		case directive.ContinueExpr, directive.ContinueCapture:
@@ -39,7 +40,11 @@ func (o *openDirective) add(col int, text string) int {
 	if padding > 0 {
 		o.write(strings.Repeat(" ", padding))
 	}
-	return o.writeOpen(text)
+	o.d.argParts = append(o.d.argParts, argumentPart{
+		start: o.args.Len(), end: o.args.Len() + len(c.text),
+		pos: diag.Pos{Line: no, Col: c.col()},
+	})
+	return o.writeOpen(c.text)
 }
 
 func (o *openDirective) collect() string {
@@ -100,28 +105,34 @@ func (r *directiveReader) abandon() *openDirective {
 	return o
 }
 
-func (r *directiveReader) read(no, col int, text string) directiveReadResult {
-	call, parsed := directive.Parse(text)
+func (r *directiveReader) read(no int, c commentText) directiveReadResult {
+	call, parsed := directive.Parse(c.text)
 	if r.open != nil {
 		// A known directive ends the unfinished directive.
 		if !parsed || !call.Name.Known() {
-			return r.grow(no, col, text)
+			return r.grow(no, c)
 		}
 		cut := r.abandon()
-		return r.readNew(no, col, call, cut)
+		return r.readNew(no, c, call, cut)
 	}
 	if !parsed {
-		if text == "@" {
+		if c.text == "@" {
 			return directiveReadResult{kind: directiveReadMark}
 		}
 		return directiveReadResult{}
 	}
-	return r.readNew(no, col, call, nil)
+	return r.readNew(no, c, call, nil)
 }
 
-func (r *directiveReader) readNew(no, col int, call directive.Call, cut *openDirective) directiveReadResult {
+func (r *directiveReader) readNew(no int, c commentText, call directive.Call, cut *openDirective) directiveReadResult {
 	d := parsedDirective{Call: call, lines: restfile.LineRange{Start: no, End: no}}
-	if col > 0 {
+	name := strings.TrimRightFunc(c.text[:call.ArgOffset], directive.IsArgSep)
+	d.nameSpan = diag.Span{
+		Start: diag.Pos{Line: no, Col: c.col()},
+		End:   diag.Pos{Line: no, Col: c.col() + len(name)},
+	}
+	d.argParts = []argumentPart{{end: len(call.Args), pos: diag.Pos{Line: no, Col: c.col() + call.ArgOffset}}}
+	if col := c.argCol(); col > 0 {
 		d.argCol = col + call.ArgOffset
 	}
 	if closer := openCloser(d.Name, d.Args); closer != "" {
@@ -143,10 +154,10 @@ func (r *directiveReader) readNew(no, col int, call directive.Call, cut *openDir
 	}
 }
 
-func (r *directiveReader) grow(no, col int, text string) directiveReadResult {
+func (r *directiveReader) grow(no int, c commentText) directiveReadResult {
 	o := r.open
 	o.d.lines.End = no
-	valueLen := o.add(col, text)
+	valueLen := o.add(no, c)
 	res := directiveReadResult{
 		kind:           directiveReadContinued,
 		owner:          o.d.Name,
@@ -177,8 +188,8 @@ func (r *directiveReader) close(ln line, inBlock bool) *openDirective {
 	return r.abandon()
 }
 
-func (b *documentBuilder) readDirective(no, col int, text string) (parsedDirective, bool) {
-	result := b.reader.read(no, col, text)
+func (b *documentBuilder) readDirective(no int, c commentText) (parsedDirective, bool) {
+	result := b.reader.read(no, c)
 	if result.cut != nil {
 		b.failOpenDirective(result.cut)
 	}
@@ -261,9 +272,7 @@ func (b *documentBuilder) flushOpenLines() {
 func (b *documentBuilder) failOpenDirective(o *openDirective) {
 	b.openLines = nil
 	err := &directive.UnclosedError{Directive: o.d.Spelling, Closer: o.closer}
-	if b.mock != nil {
-		b.addMockError(o.d.lines.Start, err.Error())
-		return
-	}
-	b.addError(o.d.lines.Start, err.Error())
+	item := o.d.diagnostic(err.Error(), err)
+	item.Mock = b.mock != nil
+	b.pushError(item)
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -107,8 +108,8 @@ func TestExplainReportCarriesParseWarnings(t *testing.T) {
 
 	doc := &restfile.Document{
 		Path: "warn.http",
-		Warnings: []restfile.ParseError{
-			{Line: 3, Message: `unknown @sse option "max-event"`},
+		Warnings: []restfile.ParseDiagnostic{
+			{Span: diag.Span{Start: diag.Pos{Line: 3}}, Message: `unknown @sse option "max-event"`},
 		},
 	}
 	req := &restfile.Request{Method: http.MethodGet, URL: "http://example.test"}
@@ -138,8 +139,8 @@ func TestExplainReportCarriesParseWarnings(t *testing.T) {
 func TestExplainReportCarriesParseWarningsOnEarlyFailure(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "warn.http",
-		Warnings: []restfile.ParseError{
-			{Line: 3, Message: `unknown @sse option "max-event"`},
+		Warnings: []restfile.ParseDiagnostic{
+			{Span: diag.Span{Start: diag.Pos{Line: 3}}, Message: `unknown @sse option "max-event"`},
 		},
 	}
 	req := &restfile.Request{

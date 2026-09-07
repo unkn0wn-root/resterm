@@ -15,7 +15,7 @@ func (b *documentBuilder) handleSSHDirective(d parsedDirective) directiveOutcome
 	}
 
 	res, err := sshbuilder.ParseDirective(d.Args)
-	b.report(d.lines.Start, err)
+	b.report(d, err)
 	if fatalErr(err) {
 		return directiveRejected
 	}
@@ -24,15 +24,13 @@ func (b *documentBuilder) handleSSHDirective(d parsedDirective) directiveOutcome
 	case directive.ScopeRequest:
 		b.ensureRequest(d.lines.Start)
 		if b.request.k8s != nil {
-			b.addError(d.lines.Start, "@ssh cannot be combined with @k8s on the same request")
-			return directiveRejected
+			return b.reject(d, "@ssh cannot be combined with @k8s on the same request")
 		}
 		if b.request.ssh != nil {
-			b.addError(d.lines.Start, "@ssh already defined for this request")
-			return directiveRejected
+			return b.reject(d, "@ssh already defined for this request")
 		}
 		if res.PersistIgnored {
-			b.addWarning(d.lines.Start, "@ssh request scope ignores persist")
+			b.warn(d, "@ssh request scope ignores persist")
 		}
 		b.request.ssh = res.Spec
 	case directive.ScopeGlobal, directive.ScopeFile:
@@ -48,7 +46,7 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 	}
 
 	res, err := k8sbuilder.ParseDirective(d.Args)
-	b.report(d.lines.Start, err)
+	b.report(d, err)
 	if fatalErr(err) {
 		var dirErr *k8sbuilder.DirectiveError
 		if errors.As(err, &dirErr) {
@@ -61,15 +59,13 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 	case directive.ScopeRequest:
 		b.ensureRequest(d.lines.Start)
 		if b.request.ssh != nil {
-			b.addError(d.lines.Start, "@k8s cannot be combined with @ssh on the same request")
-			return directiveRejected
+			return b.reject(d, "@k8s cannot be combined with @ssh on the same request")
 		}
 		if b.request.k8s != nil {
-			b.addError(d.lines.Start, "@k8s already defined for this request")
-			return directiveRejected
+			return b.reject(d, "@k8s already defined for this request")
 		}
 		if res.PersistIgnored {
-			b.addWarning(d.lines.Start, "@k8s request scope ignores persist")
+			b.warn(d, "@k8s request scope ignores persist")
 		}
 		b.request.k8s = res.Spec
 	case directive.ScopeGlobal, directive.ScopeFile:

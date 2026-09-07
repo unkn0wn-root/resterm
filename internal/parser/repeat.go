@@ -35,7 +35,7 @@ type retryDraft struct {
 
 func (b *documentBuilder) setPoll(d parsedDirective) directiveOutcome {
 	spec, err := parsePollSpec(d.Args, d.lines.Start)
-	b.report(d.lines.Start, err)
+	b.report(d, err)
 	if spec == nil || fatalErr(err) {
 		return directiveRejected
 	}
@@ -46,7 +46,7 @@ func (b *documentBuilder) setPoll(d parsedDirective) directiveOutcome {
 
 func (b *documentBuilder) setRetry(d parsedDirective) directiveOutcome {
 	spec, err := parseRetrySpec(d.Args, d.lines.Start)
-	b.report(d.lines.Start, err)
+	b.report(d, err)
 	if spec == nil || fatalErr(err) {
 		return directiveRejected
 	}
@@ -67,7 +67,7 @@ func (b *documentBuilder) setRetryWhen(d parsedDirective) directiveOutcome {
 
 func (b *documentBuilder) setRetryBackoff(d parsedDirective) directiveOutcome {
 	spec, err := parseRetryBackoff(d.Args)
-	b.report(d.lines.Start, err)
+	b.report(d, err)
 	if spec == nil || fatalErr(err) {
 		return directiveRejected
 	}

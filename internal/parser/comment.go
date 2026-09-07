@@ -1,7 +1,7 @@
 package parser
 
-func (b *documentBuilder) handleComment(no, baseCol int, text string) {
-	d, ok := b.readDirective(no, baseCol, text)
+func (b *documentBuilder) handleComment(no int, c commentText) {
+	d, ok := b.readDirective(no, c)
 	if !ok {
 		return
 	}
@@ -19,7 +19,7 @@ func (b *documentBuilder) handleBlockComment(ln line) bool {
 
 	c, closed := ln.blockComment(opening)
 	if c.text != "" {
-		b.handleComment(ln.no, 0, c.text)
+		b.handleComment(ln.no, c)
 	}
 	b.appendLine(ln.raw)
 	b.inBlock = !closed
@@ -31,7 +31,7 @@ func (b *documentBuilder) handleCommentLine(ln line) bool {
 	if !ok {
 		return false
 	}
-	b.handleComment(ln.no, c.col(), c.text)
+	b.handleComment(ln.no, c)
 	b.appendLine(ln.raw)
 	return true
 }

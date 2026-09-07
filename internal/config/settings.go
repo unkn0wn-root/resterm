@@ -18,8 +18,17 @@ const (
 )
 
 type Settings struct {
-	DefaultTheme string         `json:"default_theme" toml:"default_theme"`
-	Layout       LayoutSettings `json:"layout"        toml:"layout"`
+	DefaultTheme string         `json:"default_theme"   toml:"default_theme"`
+	Layout       LayoutSettings `json:"layout"          toml:"layout"`
+	Editor       EditorSettings `json:"editor,omitzero" toml:"editor,omitempty"`
+}
+
+type EditorSettings struct {
+	Diagnostics *bool `json:"diagnostics,omitempty" toml:"diagnostics,omitempty"`
+}
+
+func (s EditorSettings) DiagnosticsEnabled() bool {
+	return s.Diagnostics == nil || *s.Diagnostics
 }
 
 type SettingsFormat string

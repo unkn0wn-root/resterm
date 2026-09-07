@@ -141,7 +141,8 @@ Once the files are in place, run `resterm` in the same directory. Press `g Shift
 | --- | --- |
 | Send active request | `Ctrl+Enter` / `Cmd+Enter` / `Alt+Enter` / `Ctrl+J` / `Ctrl+M` |
 | Toggle help overlay | `?` |
-| Open help for the directive, template, or keyword under the editor cursor | `K` (editor normal mode) |
+| Show diagnostics on the current line, or contextual help | `K` (editor normal mode) |
+| Next / previous editor diagnostic | `] d` / `[ d` (editor normal mode) |
 | Toggle editor insert mode | `i` / `Esc` |
 | Cycle focus (navigator -> editor -> response) | `Tab` / `Shift+Tab` |
 | Focus navigator / editor / response panes | `g+r` / `g+i` / `g+p` |
@@ -287,8 +288,9 @@ show_context_help = ["shift+k"]
 | `toggle_response_split_horizontal` | Toggle response inline vs horizontal split. | `ctrl+u` |
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
 | `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
-| `show_context_help` | Open embedded help for the directive, template, or keyword under the editor cursor. | `shift+k` (soft default) |
-| `show_status_message` | Show current document warnings, or the current status message when there are none. | `g .` (soft default) |
+| `show_context_help` | Show diagnostics on the editor's current line, or open contextual documentation when there are none. | `shift+k` (soft default) |
+| `next_diagnostic` / `previous_diagnostic` | Move between editor diagnostics, wrapping at document boundaries. | `] d`, `[ d` (soft defaults) |
+| `show_status_message` | Show current editor diagnostics, or the current status message when there are none. | `g .` (soft default) |
 | `open_path_modal` | Open the filesystem picker for a supported file or workspace. | `ctrl+o` |
 | `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
 | `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
@@ -318,7 +320,7 @@ show_context_help = ["shift+k"]
 | `toggle_sidebar_collapse` / `toggle_editor_collapse` / `toggle_response_collapse` | Collapse/expand panes. | `g 1`, `g 2`, `g 3` | ✗ |
 | `toggle_zoom` / `clear_zoom` | Zoom current region / clear zoom. | `g z`, `g shift+z` | ✗ |
 
-`send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. The `show_context_help` and `show_status_message` shortcuts are soft defaults: an explicit binding for another action may claim `shift+k` or `g .`, and the corresponding default is then omitted. Explicit bindings, including bindings configured for those two actions, still follow the conflict rules above.
+`send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. The `show_context_help`, `show_status_message`, `next_diagnostic`, and `previous_diagnostic` shortcuts are soft defaults: an explicit binding for another action may claim their keys, and the corresponding default is then omitted. Explicit bindings still follow the conflict rules above.
 
 ### Response panes
 
@@ -875,8 +877,8 @@ Troubleshooting:
 - A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. Resterm keeps the first valid declaration and reports later duplicates. An invalid declaration does not count, so a valid one may follow it. A GraphQL directive ignored while GraphQL is off does not count either, but it does produce a warning.
 - Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. For GraphQL, the reset also clears `@operation`, `@variables`, and `@query`, so they may be declared again after `@graphql off`. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
 - Files can be saved with parse errors. The status line shows the number of errors, for example `Saved requests.http (1 parse error)`. Requests cannot run until those errors are fixed.
-- In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. Press `g .` to open the complete warning list; the same text also appears in the Explain pane for each run.
-- The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
+- In the TUI, live editor diagnostics underline offending text and show `ERR <n>` / `WARN <n>` counts beside the status message. Press `K` in editor normal mode for details on the current line, or `g .` / `:diagnostics` for the complete list. When editor diagnostics are disabled, the existing `WARN line <n>` segment reports warnings from the last matching parse. Parse warnings also appear in the Explain pane for each run.
+- When editor diagnostics are disabled, editing hides the `WARN line <n>` segment until the document is parsed again on save, explicit reload, or request execution.
 - `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
 
 ### Multiline directives
@@ -2462,6 +2464,27 @@ resterm collection export --workspace ./api --out ./shared/api-bundle
 - Theme directory: `<config-dir>/themes/` (override with `RESTERM_THEMES_DIR`). Drop `.toml` or `.json` files here to make them available in the selector.
 - Runtime globals and file captures are scoped per complete environment selection and document; they are released when you clear globals or switch environments.
 
+### Editor diagnostics
+
+Diagnostics are enabled by default for `.http`, `.rest`, and unnamed request buffers. They show the parser's existing warnings and errors, such as unknown directives, mistyped option keys, missing values, and conflicting options. Diagnostics refresh when you leave insert mode, without saving the buffer or changing the active request. They do not refresh while you type, even if you pause. Existing markings stay until an edit invalidates their source ranges, then clear until you return to normal mode. Changes made in normal mode, such as undo or deletion, use a short debounce.
+
+`K` (Shift+K) in normal mode opens a popup beside the cursor with diagnostics on that line. Findings under the cursor appear first; errors take priority over warnings. `Enter` opens related documentation when available, `PgUp` / `PgDown` scroll long messages, and `Esc` or cursor movement closes the popup. On a line without diagnostics, `K` opens contextual help as before. In insert mode, `K` types normally.
+
+Use `] d` / `[ d` or `:diagnostics next` / `:diagnostics prev` to visit diagnostic locations. Navigation wraps at the ends of the buffer. `:diagnostics` opens the full list. Empty-line and EOF findings use a line-number marker when there is no text to underline.
+
+`:diagnostics off` and `:diagnostics on` change the setting for this session. To disable diagnostics at startup, put this in `<config-dir>/settings.toml`:
+
+```toml
+[editor]
+diagnostics = false
+```
+
+For `settings.json`, use `{"editor":{"diagnostics":false}}`. Omitting the setting enables diagnostics. Session overrides do not change the stored preference.
+
+This feature reports request-file parsing findings. It does not evaluate scripts, resolve runtime variables, or perform network checks, and it does not add script-language diagnostics to `.rts` files. Existing execution validation and headless warning behavior remain unchanged.
+
+Themes can customize `[styles.editor_diagnostic_warning]` and `[styles.editor_diagnostic_error]` using the usual style fields, including `foreground` and `underline`. Defaults use ordinary terminal underlines and distinct warning/error colors; no terminal-specific undercurl support is required.
+
 ---
 
 ## Theming
@@ -2584,7 +2607,7 @@ The following interfaces remain compatible across all v1 releases:
 RestermScript builtins and reserved words have a narrower compatibility policy. They may be removed during v1, but only through the following deprecation process:
 
 - A builtin scheduled for removal is deprecated in one minor release and removed no earlier than the following minor release.
-- A deprecated builtin continues to work. The parser reports each use as `WARN line <n>` in the status bar and shows the full warning in the Explain pane.
+- A deprecated builtin continues to work. The parser reports each use as an editor warning and shows the full warning in the Explain pane.
 - The release notes identify every removal and its replacement.
 
 ### Outside the compatibility promise

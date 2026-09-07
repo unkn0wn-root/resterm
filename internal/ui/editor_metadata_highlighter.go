@@ -118,6 +118,10 @@ func (s *metadataRuneStyler) SetSource(source string) {
 	clear(s.cache)
 }
 
+func (s *metadataRuneStyler) sourceLine(line int) parser.SourceLine {
+	return s.syntax.Line(line)
+}
+
 func (s *metadataRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Style {
 	if len(line) == 0 {
 		delete(s.cache, idx)

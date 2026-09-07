@@ -56,6 +56,11 @@ type RuneStyler interface {
 	StylesForLine(line []rune, lineIndex int) []lipgloss.Style
 }
 
+// A decorated line number keeps the gutter width and the row mapping unchanged.
+type LineNumberStyler interface {
+	LineNumberStyle(lineIndex int) (lipgloss.Style, bool)
+}
+
 // HighlightRange marks an inclusive-exclusive rune range for rendered emphasis.
 type HighlightRange struct {
 	Start  int
@@ -1532,8 +1537,6 @@ func (m Model) View() string {
 	if m.Value() == "" && m.row == 0 && m.col == 0 && m.Placeholder != "" {
 		return m.placeholderView()
 	}
-	m.Cursor.TextStyle = m.style.computedCursorLine()
-
 	selectionActive := m.selectionActive && m.selectionEnd > m.selectionStart
 	selStart := m.selectionStart
 	selEnd := m.selectionEnd
@@ -1561,6 +1564,7 @@ func (m Model) View() string {
 		visibleEnd = viewTop + viewHeight + viewPad
 	}
 
+	numberStyler, _ := m.runeStyler.(LineNumberStyler)
 	displayLine := 0
 	for l, line := range m.value {
 		currentRow := displayLine
@@ -1603,13 +1607,16 @@ func (m Model) View() string {
 
 		var ln string
 		if m.ShowLineNumbers {
+			numberStyle := m.style.computedLineNumber()
 			if m.row == l {
-				ln = style.Render(
-					m.style.computedCursorLineNumber().Render(m.formatLineNumber(l + 1)),
-				)
-			} else {
-				ln = style.Render(m.style.computedLineNumber().Render(m.formatLineNumber(l + 1)))
+				numberStyle = m.style.computedCursorLineNumber()
 			}
+			if numberStyler != nil {
+				if decoration, ok := numberStyler.LineNumberStyle(l); ok {
+					numberStyle = decoration.Inherit(numberStyle)
+				}
+			}
+			ln = style.Render(numberStyle.Render(m.formatLineNumber(l + 1)))
 			s.WriteString(ln)
 			lnw := lipgloss.Width(ln)
 			if lnw > widestLineNumber {
@@ -1645,14 +1652,12 @@ func (m Model) View() string {
 					s.WriteString(style.Render(string(visibleRunes[:beforeEnd])))
 				}
 				if cursorRel < len(visibleRunes) {
-					m.Cursor.SetChar(string(visibleRunes[cursorRel]))
-					s.WriteString(style.Render(m.Cursor.View()))
+					s.WriteString(m.renderCursor(string(visibleRunes[cursorRel]), style))
 					if cursorRel+1 < len(visibleRunes) {
 						s.WriteString(style.Render(string(visibleRunes[cursorRel+1:])))
 					}
 				} else {
-					m.Cursor.SetChar(" ")
-					s.WriteString(style.Render(m.Cursor.View()))
+					s.WriteString(m.renderCursor(" ", style))
 				}
 			} else {
 				s.WriteString(style.Render(string(visibleRunes)))
@@ -1677,7 +1682,6 @@ func (m Model) View() string {
 			if cursorVisible {
 				writeSegments(&s, segments, 0, min(cursorRel, len(segments)))
 				if cursorRel < len(visibleRunes) {
-					m.Cursor.SetChar(string(visibleRunes[cursorRel]))
 					cursorStyle := style
 					cursorIndex := segmentStart + cursorRel
 					if lineStyles != nil && cursorIndex >= 0 && cursorIndex < len(lineStyles) {
@@ -1692,12 +1696,10 @@ func (m Model) View() string {
 						selStart,
 						selEnd,
 					)
-					m.Cursor.TextStyle = cursorStyle
-					s.WriteString(cursorStyle.Render(m.Cursor.View()))
+					s.WriteString(m.renderCursor(string(visibleRunes[cursorRel]), cursorStyle))
 					writeSegments(&s, segments, cursorRel+1, len(segments))
 				} else {
-					m.Cursor.SetChar(" ")
-					s.WriteString(style.Render(m.Cursor.View()))
+					s.WriteString(m.renderCursor(" ", style))
 				}
 			} else {
 				writeSegments(&s, segments, 0, len(segments))
@@ -1802,6 +1804,16 @@ func (m *Model) renderOverlayLines(
 		displayLine++
 	}
 	return displayLine, widestLineNumber
+}
+
+// Compose styles before rendering: an underline applied around Cursor.View's
+// ANSI output would split its escape sequences into individually styled runes.
+func (m Model) renderCursor(char string, style lipgloss.Style) string {
+	cur := m.Cursor
+	cur.SetChar(char)
+	cur.TextStyle = style
+	cur.Style = cur.Style.Inherit(style)
+	return cur.View()
 }
 
 func writeSegments(builder *strings.Builder, segments []string, start, end int) {
@@ -1999,11 +2011,8 @@ func (m Model) placeholderView() string {
 		// first line
 		case i == 0:
 			// first character of first line as cursor with character
-			m.Cursor.TextStyle = m.style.computedPlaceholder()
-
 			ch, rest, _, _ := uniseg.FirstGraphemeClusterInString(plines[0], 0)
-			m.Cursor.SetChar(ch)
-			s.WriteString(lineStyle.Render(m.Cursor.View()))
+			s.WriteString(m.renderCursor(ch, style.Inherit(lineStyle)))
 
 			// the rest of the first line
 			s.WriteString(lineStyle.Render(style.Render(rest)))

@@ -496,9 +496,9 @@ func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
 	for _, want := range []string{
 		"error[parse]: @rts supports only pre-request mode",
 		"@rts supports only pre-request mode",
-		"--> sample.http:1:1",
+		"--> sample.http:1:3",
 		"   1 | # @rts pre",
-		"     | ^",
+		"     |   ^",
 		"note: Fix the request file parse error before running.",
 	} {
 		if !strings.Contains(plain, want) {

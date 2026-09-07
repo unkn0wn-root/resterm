@@ -15,9 +15,24 @@ func TestRequestEditorCompletionPreservesExistingText(t *testing.T) {
 	cases := []struct {
 		name, input, label, want string
 	}{
-		{"header delimiter", "GET https://example.test\nCont|ent-Type: application/json", "Content-Type", "GET https://example.test\nContent-Type: application/json"},
-		{"header without delimiter", "GET https://example.test\nCont|ent-Type", "Content-Type", "GET https://example.test\nContent-Type: "},
-		{"header spacing", "GET https://example.test\nCont|ent-Type:    application/json", "Content-Type", "GET https://example.test\nContent-Type:    application/json"},
+		{
+			"header delimiter",
+			"GET https://example.test\nCont|ent-Type: application/json",
+			"Content-Type",
+			"GET https://example.test\nContent-Type: application/json",
+		},
+		{
+			"header without delimiter",
+			"GET https://example.test\nCont|ent-Type",
+			"Content-Type",
+			"GET https://example.test\nContent-Type: ",
+		},
+		{
+			"header spacing",
+			"GET https://example.test\nCont|ent-Type:    application/json",
+			"Content-Type",
+			"GET https://example.test\nContent-Type:    application/json",
+		},
 		{"URL suffix", "GET htt|ps://example.test/v1", "https://", "GET https://example.test/v1"},
 		{"partial scheme delimiter", "GET ht|tp:/example.test/v1", "https://", "GET https://example.test/v1"},
 		{"different scheme", "GET h|ttps://example.test/v1?q=ø#part", "http://", "GET http://example.test/v1?q=ø#part"},
@@ -32,9 +47,24 @@ func TestRequestEditorCompletionPreservesExistingText(t *testing.T) {
 		{"unfinished expression token", "GET {{= ho|", "host", "GET {{= host"},
 		{"partial expression delimiter", "GET {{= ho| }", "host", "GET {{= host }"},
 		{"helper argument", "GET {{ $randomInt(ho|, 100) }}", "host", "GET {{ $randomInt(host, 100) }}"},
-		{"existing helper arguments", "GET https://{{ $randomI|nt(10, 20) }}", "$randomInt", "GET https://{{ $randomInt(10, 20) }}"},
-		{"spaced helper arguments", "GET https://{{ $randomI|nt (10, 20) }}", "$randomInt", "GET https://{{ $randomInt (10, 20) }}"},
-		{"unfinished helper arguments", "GET https://{{ $randomI|nt(10, ", "$randomInt", "GET https://{{ $randomInt(10, "},
+		{
+			"existing helper arguments",
+			"GET https://{{ $randomI|nt(10, 20) }}",
+			"$randomInt",
+			"GET https://{{ $randomInt(10, 20) }}",
+		},
+		{
+			"spaced helper arguments",
+			"GET https://{{ $randomI|nt (10, 20) }}",
+			"$randomInt",
+			"GET https://{{ $randomInt (10, 20) }}",
+		},
+		{
+			"unfinished helper arguments",
+			"GET https://{{ $randomI|nt(10, ",
+			"$randomInt",
+			"GET https://{{ $randomInt(10, ",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

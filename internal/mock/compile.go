@@ -249,10 +249,11 @@ func sortDocs(docs []*restfile.Document) []*restfile.Document {
 
 func docError(doc *restfile.Document) error {
 	for _, e := range doc.Errors {
-		if !e.Mock && !inMocks(doc.Mocks, e.Line) {
+		line := e.Span.Start.Line
+		if !e.Mock && !inMocks(doc.Mocks, line) {
 			continue
 		}
-		return fmt.Errorf("%s: %s", loc{doc.Path, e.Line}, e.Message)
+		return fmt.Errorf("%s: %s", loc{doc.Path, line}, e.Message)
 	}
 	return nil
 }

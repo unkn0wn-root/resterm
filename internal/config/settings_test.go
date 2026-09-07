@@ -83,3 +83,36 @@ func TestLoadSettingsJSON(t *testing.T) {
 		t.Fatalf("expected handle path %q, got %q", path, handle.Path)
 	}
 }
+
+func TestEditorDiagnosticsSettings(t *testing.T) {
+	for _, tt := range []struct {
+		format SettingsFormat
+		source string
+		want   bool
+	}{
+		{SettingsFormatJSON, `{}`, true},
+		{SettingsFormatJSON, `{"editor":{"diagnostics":false}}`, false},
+		{SettingsFormatJSON, `{"editor":{"diagnostics":true}}`, true},
+		{SettingsFormatTOML, "", true},
+		{SettingsFormatTOML, "[editor]\ndiagnostics = false", false},
+		{SettingsFormatTOML, "[editor]\ndiagnostics = true", true},
+	} {
+		settings, err := decodeSettings([]byte(tt.source), tt.format)
+		if err != nil || settings.Editor.DiagnosticsEnabled() != tt.want {
+			t.Fatalf("decode %q: %+v %v", tt.source, settings, err)
+		}
+		settings.DefaultTheme = "oceanic"
+		path := filepath.Join(t.TempDir(), "settings."+string(tt.format))
+		if err := SaveSettings(settings, SettingsHandle{Path: path, Format: tt.format}); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := decodeSettings(data, tt.format)
+		if err != nil || got.Editor.DiagnosticsEnabled() != tt.want || got.DefaultTheme != "oceanic" {
+			t.Fatalf("round trip: %+v %v", got, err)
+		}
+	}
+}

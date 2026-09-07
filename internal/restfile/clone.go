@@ -156,10 +156,18 @@ func (doc *Document) Clone() *Document {
 	dst.Requests = cloneRequests(doc.Requests)
 	dst.Mocks = cloneMocks(doc.Mocks)
 	dst.Workflows = cloneWorkflows(doc.Workflows)
-	dst.Errors = slices.Clone(doc.Errors)
-	dst.Warnings = slices.Clone(doc.Warnings)
+	dst.Errors = cloneParseDiagnostics(doc.Errors)
+	dst.Warnings = cloneParseDiagnostics(doc.Warnings)
 	dst.Raw = bytes.Clone(doc.Raw)
 	return &dst
+}
+
+func cloneParseDiagnostics(src []ParseDiagnostic) []ParseDiagnostic {
+	dst := slices.Clone(src)
+	for i := range dst {
+		dst[i].Labels = slices.Clone(src[i].Labels)
+	}
+	return dst
 }
 
 func cloneApplySpecs(src []ApplySpec) []ApplySpec {

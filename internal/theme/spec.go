@@ -76,6 +76,8 @@ type StylesSpec struct {
 	EditorHintItem                *StyleSpec `json:"editor_hint_item"                 toml:"editor_hint_item"`
 	EditorHintSelected            *StyleSpec `json:"editor_hint_selected"             toml:"editor_hint_selected"`
 	EditorHintAnnotation          *StyleSpec `json:"editor_hint_annotation"           toml:"editor_hint_annotation"`
+	EditorDiagnosticWarning       *StyleSpec `json:"editor_diagnostic_warning"        toml:"editor_diagnostic_warning"`
+	EditorDiagnosticError         *StyleSpec `json:"editor_diagnostic_error"          toml:"editor_diagnostic_error"`
 	ListItemTitle                 *StyleSpec `json:"list_item_title"                  toml:"list_item_title"`
 	ListItemDescription           *StyleSpec `json:"list_item_description"            toml:"list_item_description"`
 	ListItemSelectedTitle         *StyleSpec `json:"list_item_selected_title"         toml:"list_item_selected_title"`
@@ -451,6 +453,20 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		return Theme{}, err
 	}
 	if err := apply("pane_divider", &cloned.PaneDivider, spec.Styles.PaneDivider); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"editor_diagnostic_warning",
+		&cloned.EditorDiagnosticWarning,
+		spec.Styles.EditorDiagnosticWarning,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"editor_diagnostic_error",
+		&cloned.EditorDiagnosticError,
+		spec.Styles.EditorDiagnosticError,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply(

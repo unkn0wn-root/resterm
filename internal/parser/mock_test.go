@@ -493,8 +493,8 @@ ok`
 	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, `missing a closing "}"`) {
 		t.Fatalf("errors = %+v", doc.Errors)
 	}
-	if doc.Errors[0].Line != 2 {
-		t.Fatalf("error line = %d, want the line the matcher opened on", doc.Errors[0].Line)
+	if doc.Errors[0].Span.Start.Line != 2 {
+		t.Fatalf("error line = %d, want the line the matcher opened on", doc.Errors[0].Span.Start.Line)
 	}
 	if len(doc.Mocks) != 1 || len(doc.Mocks[0].Match.Headers) != 0 {
 		t.Fatalf("mock = %+v", doc.Mocks)
@@ -763,7 +763,7 @@ done
 	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, "dangling delimiter") {
 		t.Fatalf("errors = %+v, want one dangling delimiter error", doc.Errors)
 	}
-	if got := doc.Errors[0].Line; got != 9 {
+	if got := doc.Errors[0].Span.Start.Line; got != 9 {
 		t.Fatalf("error line = %d, want 9 (the trailing delimiter)", got)
 	}
 	if got := len(doc.Mocks[0].Responses); got != 2 {
@@ -933,7 +933,7 @@ HTTP/1.1 200 OK
 	if len(doc.Errors) != 1 {
 		t.Fatalf("errors = %+v, want 1", doc.Errors)
 	}
-	if doc.Errors[0].Line != 2 || !doc.Errors[0].Mock {
+	if doc.Errors[0].Span.Start.Line != 2 || !doc.Errors[0].Mock {
 		t.Fatalf("error = %+v, want a mock error on line 2", doc.Errors[0])
 	}
 	if !strings.Contains(doc.Errors[0].Message, `@match is missing a closing "}"`) {

@@ -210,6 +210,7 @@ type Model struct {
 	pendingCrossFile         pendingCrossFileNavigation
 	docCache                 map[string]navDocCache
 	editor                   requestEditor
+	diagnostics              diagnosticState
 	responsePanes            [2]responsePaneState
 	responseSplit            bool
 	responseSplitRatio       float64
@@ -359,6 +360,7 @@ type Model struct {
 	mouseDrag              mouseDragState
 	operator               operatorState
 	suppressListKey        bool
+	suppressResponseKey    bool
 	ready                  bool
 	dirty                  bool
 	sending                bool
@@ -492,7 +494,7 @@ func New(cfg Config) Model {
 	}
 
 	editor := newRequestEditor()
-	editor.SetRuneStyler(selectEditorRuneStyler(cfg.FilePath, th.EditorMetadata))
+	editor.setStyler(selectEditorRuneStyler(cfg.FilePath, th.EditorMetadata), th)
 	editor.Placeholder = "Write API requests here..."
 	editor.SetValue(cfg.InitialContent)
 	editor.moveToBufferTop()
@@ -713,6 +715,7 @@ func New(cfg Config) Model {
 		compareSnapshots:   make(map[string]*responseSnapshot),
 	}
 	model.applyLayoutSettingsFromConfig(cfg.Settings.Layout)
+	model.diagnostics.disabled = !cfg.Settings.Editor.DiagnosticsEnabled()
 	_ = model.setInsertMode(false, false)
 
 	model.doc = initialDoc

@@ -49,7 +49,7 @@ func TestDefaultMapContainsExpectedBindings(t *testing.T) {
 		t.Fatalf("expected g e -> ActionOpenFileInEditor, got %+v (ok=%v)", binding, ok)
 	}
 
-	if !m.HasChordPrefix("g") {
+	if !m.HasChordPrefix("g", acceptAll) {
 		t.Fatalf("expected HasChordPrefix('g') to be true")
 	}
 
@@ -191,7 +191,7 @@ show_globals = ["shift+k g"]
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if !m.HasChordPrefix("shift+k") {
+	if !m.HasChordPrefix("shift+k", acceptAll) {
 		t.Fatal("expected shift+k to remain a chord prefix")
 	}
 	if _, ok := m.MatchSingle("shift+k"); ok {
@@ -199,5 +199,41 @@ show_globals = ["shift+k g"]
 	}
 	if got := m.Bindings(ActionShowContextHelp); len(got) != 0 {
 		t.Fatalf("expected soft contextual help binding to be omitted, got %+v", got)
+	}
+}
+
+func acceptAll(ActionID) bool { return true }
+
+func TestDiagnosticDefaultsYieldToConfiguredKeys(t *testing.T) {
+	for _, seq := range [][]string{{"]"}, {"]", "d"}} {
+		m, err := buildMap(map[ActionID][][]string{ActionToggleHelp: {seq}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(m.Bindings(ActionNextDiagnostic)) != 0 {
+			t.Fatal("soft default didn't yield")
+		}
+		if len(m.Bindings(ActionPreviousDiagnostic)) != 1 {
+			t.Fatal("unrelated default disappeared")
+		}
+	}
+}
+
+func TestDiagnosticPrefixEligibilityWithSharedUserChord(t *testing.T) {
+	m, err := buildMap(map[ActionID][][]string{ActionToggleHelp: {{"]", "h"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepts := func(action ActionID) bool {
+		return action != ActionNextDiagnostic && action != ActionPreviousDiagnostic
+	}
+	if !m.HasChordPrefix("]", accepts) {
+		t.Fatal("user chord lost")
+	}
+	if m.HasChordPrefix("[", accepts) {
+		t.Fatal("ineligible diagnostic consumed prefix")
+	}
+	if got, ok := m.ResolveChord("]", "d"); !ok || got.Action != ActionNextDiagnostic {
+		t.Fatal("shared default lost")
 	}
 }

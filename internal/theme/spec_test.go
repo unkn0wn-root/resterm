@@ -10,6 +10,31 @@ func strPtr(value string) *string {
 	return &value
 }
 
+func TestApplySpecEditorDiagnosticStyles(t *testing.T) {
+	base := DefaultTheme()
+	updated, err := ApplySpec(base, ThemeSpec{Styles: StylesSpec{
+		EditorDiagnosticWarning: &StyleSpec{Foreground: strPtr("#123456")},
+		EditorDiagnosticError:   &StyleSpec{Foreground: strPtr("#654321")},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		got, original lipgloss.Style
+		color         lipgloss.Color
+	}{
+		{updated.EditorDiagnosticWarning, base.EditorDiagnosticWarning, "#123456"},
+		{updated.EditorDiagnosticError, base.EditorDiagnosticError, "#654321"},
+	} {
+		if tc.got.GetForeground() != tc.color || !tc.got.GetUnderline() {
+			t.Fatal("override lost diagnostic color or default underline")
+		}
+		if tc.original.GetForeground() == tc.color || !tc.original.GetUnderline() {
+			t.Fatal("override mutated the base theme")
+		}
+	}
+}
+
 func TestDefaultThemeEditorHintBoxUsesEditorFocusColor(t *testing.T) {
 	th := DefaultTheme()
 	if got := th.EditorHintBox.GetBorderLeftForeground(); got != th.PaneBorderFocusEditor {

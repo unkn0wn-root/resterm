@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/unkn0wn-root/resterm/internal/parser"
 )
 
@@ -18,12 +20,29 @@ func (m *Model) openStatusModal(level statusLevel, message string) {
 	m.resetStatusModalScroll()
 }
 
+func (m *Model) showStatusMessage() tea.Cmd {
+	if m.diagnosticsActive() && !m.editorInsertMode {
+		return m.requestDiagnostics(diagnosticStatusMessage)
+	}
+	m.openStatusMessageModal()
+	return nil
+}
+
 func (m *Model) openStatusMessageModal() {
+	// Insert mode cannot start a parse; use only findings already current.
+	if snapshot := m.currentDiagnostics(); snapshot != nil && len(snapshot.report.Items) > 0 {
+		m.openDiagnosticList(snapshot)
+		return
+	}
 	if m.docMatchesEditor() && len(m.doc.Warnings) > 0 {
 		message := strings.Join(parser.WarningTexts(m.doc), "\n")
 		m.openStatusModal(statusWarn, message)
 		return
 	}
+	m.openCurrentStatusModal()
+}
+
+func (m *Model) openCurrentStatusModal() {
 	text, level := m.statusBarMessage()
 	m.openStatusModal(level, text)
 }

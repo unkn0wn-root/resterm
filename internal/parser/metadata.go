@@ -46,12 +46,12 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 	case directive.Settings:
 		settings, err := applySettingsTokens(b.request.settings, rest, directive.Settings)
 		b.request.settings = settings
-		b.report(d.lines.Start, err)
+		b.report(d, err)
 		return directiveApplied
 	case directive.Setting:
 		settings, err := putSetting(b.request.settings, rest)
 		b.request.settings = settings
-		b.report(d.lines.Start, err)
+		b.report(d, err)
 		return directiveApplied
 	case directive.Timeout:
 		if b.request.settings == nil {
@@ -68,13 +68,13 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 			return directiveApplied
 		}
 		if err := b.setScript(rest, ""); err != nil {
-			b.report(d.lines.Start, err)
+			b.report(d, err)
 			return directiveRejected
 		}
 		return directiveApplied
 	case directive.RTS:
 		if err := b.setRTSScript(rest); err != nil {
-			return b.reject(d, err.Error())
+			return b.rejectError(d, err)
 		}
 		return directiveApplied
 	case directive.Apply:
@@ -97,7 +97,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 		return b.setForEach(d)
 	case directive.Profile:
 		spec, err := parseProfileSpec(rest)
-		b.report(d.lines.Start, err)
+		b.report(d, err)
 		if spec == nil {
 			return directiveRejected
 		}
@@ -105,7 +105,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 		return directiveApplied
 	case directive.Trace:
 		spec, err := parseTraceSpec(rest)
-		b.report(d.lines.Start, err)
+		b.report(d, err)
 		if spec == nil {
 			return directiveRejected
 		}
@@ -143,7 +143,7 @@ func (b *documentBuilder) addRequestVar(no int, rest string) {
 func (b *documentBuilder) addApply(d parsedDirective) directiveOutcome {
 	spec, err := parseApplySpec(d.Args, d.lines.Start)
 	if err != nil {
-		return b.reject(d, err.Error())
+		return b.rejectError(d, err)
 	}
 	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
@@ -151,7 +151,7 @@ func (b *documentBuilder) addApply(d parsedDirective) directiveOutcome {
 }
 
 func (b *documentBuilder) addCapture(d parsedDirective) directiveOutcome {
-	spec, ok := b.parseCaptureDirective(d.Args, d.lines.Start)
+	spec, ok := b.parseCaptureDirective(d)
 	if !ok {
 		return directiveRejected
 	}
@@ -172,7 +172,7 @@ func (b *documentBuilder) addAssert(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setWhen(d parsedDirective) directiveOutcome {
 	spec, err := parseConditionSpec(d.Args, d.lines.Start, d.Spelling == directive.SkipIf)
 	if err != nil {
-		return b.reject(d, err.Error())
+		return b.rejectError(d, err)
 	}
 	d.setExprCol(&spec.Col, spec.Expression)
 	b.request.metadata.When = spec
@@ -182,7 +182,7 @@ func (b *documentBuilder) setWhen(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setForEach(d parsedDirective) directiveOutcome {
 	spec, err := parseForEachSpec(d.Args, d.lines.Start)
 	if err != nil {
-		return b.reject(d, err.Error())
+		return b.rejectError(d, err)
 	}
 	b.request.metadata.ForEach = spec
 	return directiveApplied
@@ -191,7 +191,7 @@ func (b *documentBuilder) setForEach(d parsedDirective) directiveOutcome {
 func (b *documentBuilder) setCompare(d parsedDirective) directiveOutcome {
 	spec, err := parseCompareDirective(d.Args)
 	if err != nil {
-		return b.reject(d, err.Error())
+		return b.rejectError(d, err)
 	}
 	b.request.metadata.Compare = spec
 	return directiveApplied
@@ -262,19 +262,16 @@ func applySettingsTokens(
 	return dst, err
 }
 
-func (b *documentBuilder) parseCaptureDirective(
-	rest string,
-	line int,
-) (restfile.CaptureSpec, bool) {
-	scopeToken, name, expression := cutCapture(rest)
+func (b *documentBuilder) parseCaptureDirective(d parsedDirective) (restfile.CaptureSpec, bool) {
+	scopeToken, name, expression := cutCapture(d.Args)
 	if scopeToken == "" {
-		b.addWarning(line, "@capture missing scope (use request, file, or global)")
+		b.warn(d, "@capture missing scope (use request, file, or global)")
 		return restfile.CaptureSpec{}, false
 	}
 	scope, secret, ok := directive.ParseSecretScope(scopeToken)
 	if !ok {
-		b.addWarning(
-			line,
+		b.warn(
+			d,
 			fmt.Sprintf(
 				"@capture scope %q is invalid (use request, file, global, with optional -secret)",
 				scopeToken,
@@ -283,11 +280,11 @@ func (b *documentBuilder) parseCaptureDirective(
 		return restfile.CaptureSpec{}, false
 	}
 	if name == "" {
-		b.addWarning(line, "@capture missing '<name> <expression>'")
+		b.warn(d, "@capture missing '<name> <expression>'")
 		return restfile.CaptureSpec{}, false
 	}
 	if expression == "" {
-		b.addWarning(line, "@capture missing expression after capture name")
+		b.warn(d, "@capture missing expression after capture name")
 		return restfile.CaptureSpec{}, false
 	}
 	mode := restfile.CaptureExprModeRTS
@@ -300,7 +297,7 @@ func (b *documentBuilder) parseCaptureDirective(
 		Expression: expression,
 		Mode:       mode,
 		Secret:     secret,
-		Line:       line,
+		Line:       d.lines.Start,
 	}, true
 }
 

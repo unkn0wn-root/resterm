@@ -93,6 +93,8 @@ type Theme struct {
 	ModalOption                   lipgloss.Color
 	GitColors                     GitColors
 	EditorMetadata                EditorMetadataPalette
+	EditorDiagnosticWarning       lipgloss.Style
+	EditorDiagnosticError         lipgloss.Style
 	EditorHintBox                 lipgloss.Style
 	EditorHintItem                lipgloss.Style
 	EditorHintSelected            lipgloss.Style
@@ -328,6 +330,8 @@ func DefaultTheme() Theme {
 			Foreground(lipgloss.Color("#1A1020")).
 			Background(lipgloss.Color("#FFD46A")).
 			Bold(true),
+		EditorDiagnosticWarning:     lipgloss.NewStyle().Foreground(lipgloss.Color("#E5B567")).Underline(true),
+		EditorDiagnosticError:       lipgloss.NewStyle().Foreground(lipgloss.Color("#F07178")).Underline(true),
 		EditorHintAnnotation:        lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
 		ListItemTitle:               lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
 		ListItemDescription:         lipgloss.NewStyle().Foreground(lipgloss.Color("#7d7b87")),

@@ -346,6 +346,21 @@ func (m *Model) statusBarLeftSections(
 func (m *Model) statusBarWarningSection(
 	palette theme.StatusBarPalette,
 ) (statusBarSection, bool) {
+	if o := m.visibleDiagnostics(); o != nil {
+		errs, warns := o.Counts()
+		var labels []string
+		if errs > 0 {
+			labels = append(labels, fmt.Sprintf("ERR %d", errs))
+		}
+		if warns > 0 {
+			labels = append(labels, fmt.Sprintf("WARN %d", warns))
+		}
+		style := palette.Warn
+		if errs > 0 {
+			style = palette.Error
+		}
+		return statusBarSection{text: strings.Join(labels, " · "), style: style}, len(labels) > 0
+	}
 	if !m.docMatchesEditor() {
 		return statusBarSection{}, false
 	}
@@ -362,7 +377,7 @@ func parseWarningLabel(doc *restfile.Document) string {
 	if doc == nil || len(doc.Warnings) == 0 {
 		return ""
 	}
-	label := fmt.Sprintf("WARN line %d", doc.Warnings[0].Line)
+	label := fmt.Sprintf("WARN line %d", doc.Warnings[0].Span.Start.Line)
 	if rest := len(doc.Warnings) - 1; rest > 0 {
 		label += fmt.Sprintf(" +%d", rest)
 	}

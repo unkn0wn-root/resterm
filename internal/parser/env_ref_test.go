@@ -63,9 +63,9 @@ GET http://example.test
 	}
 	for _, e := range doc.Errors {
 		if !strings.Contains(e.Message, "env: reference is missing a variable name") {
-			t.Fatalf("error %d: %q, want the malformed reference named", e.Line, e.Message)
+			t.Fatalf("error %d: %q, want the malformed reference named", e.Span.Start.Line, e.Message)
 		}
-		if e.Line == 0 {
+		if e.Span.Start.Line == 0 {
 			t.Fatalf("error %q has no line", e.Message)
 		}
 	}

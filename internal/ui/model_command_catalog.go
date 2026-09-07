@@ -67,6 +67,10 @@ var exCommands = exCatalog{
 		},
 		{kind: exCommandNoHighlight, name: "nohlsearch", aliases: []string{"noh"}, summary: "Clear search highlights"},
 		{
+			kind: exCommandDiagnostics, name: "diagnostics", usage: "diagnostics [on|off|next|prev]",
+			summary: "Show, navigate, or toggle editor diagnostics", hasArgs: true, noBang: true,
+		},
+		{
 			kind: exCommandMock, name: "mock",
 			usage: "mock [command]", summary: "Control the workspace mock server", hasArgs: true, noBang: true,
 		},
@@ -193,6 +197,14 @@ func (c exCatalog) Suggestions(input string) []prompt.Item {
 		return topicSuggestions(body, def.name, rest)
 	case exCommandMock:
 		return c.mockSuggestions(body, rest)
+	case exCommandDiagnostics:
+		var items []prompt.Item
+		for _, action := range [...]string{"on", "off", "next", "prev"} {
+			if strings.HasPrefix(action, rest) {
+				items = append(items, body.item("diagnostics "+action, "", "diagnostics "+action))
+			}
+		}
+		return items
 	default:
 		return nil
 	}

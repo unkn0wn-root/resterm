@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	graphqlbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/graphql"
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
@@ -68,36 +69,54 @@ func (s *fileScope) apply(doc *restfile.Document) {
 	doc.Patches = append(doc.Patches, s.patches...)
 }
 
-func (b *documentBuilder) addError(line int, message string) {
-	msg := strings.TrimSpace(message)
-	if msg == "" {
-		return
+func (b *documentBuilder) addError(line int, msg string) {
+	b.pushError(lineDiagnostic(line, msg))
+}
+
+func (b *documentBuilder) addWarning(line int, msg string) {
+	b.pushWarning(lineDiagnostic(line, msg))
+}
+
+func (b *documentBuilder) pushError(item restfile.ParseDiagnostic) {
+	b.doc.Errors = pushDiagnostic(b.doc.Errors, item)
+}
+
+func (b *documentBuilder) pushWarning(item restfile.ParseDiagnostic) {
+	b.doc.Warnings = pushDiagnostic(b.doc.Warnings, item)
+}
+
+func pushDiagnostic(items []restfile.ParseDiagnostic, item restfile.ParseDiagnostic) []restfile.ParseDiagnostic {
+	item.Message = strings.TrimSpace(item.Message)
+	if item.Message == "" {
+		return items
 	}
-	b.doc.Errors = append(b.doc.Errors, restfile.ParseError{
-		Line:    line,
-		Message: msg,
-	})
+	return append(items, item)
+}
+
+func lineDiagnostic(line int, msg string) restfile.ParseDiagnostic {
+	return restfile.ParseDiagnostic{Message: msg, Span: diag.Span{Start: diag.Pos{Line: line}}}
 }
 
 // Joined errors are reported separately so the editor can show every problem on
 // the line. Unknown options are warnings because the rest of the directive may
 // still be valid.
-func (b *documentBuilder) report(line int, err error) {
+func (b *documentBuilder) report(d parsedDirective, err error) {
 	if err == nil {
 		return
 	}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		for _, item := range joined.Unwrap() {
-			b.report(line, item)
+			b.report(d, item)
 		}
 		return
 	}
+	item := d.diagnostic(err.Error(), err)
 	var unknown *directive.UnknownOptionsError
 	if errors.As(err, &unknown) {
-		b.addWarning(line, err.Error())
+		b.pushWarning(item)
 		return
 	}
-	b.addError(line, err.Error())
+	b.pushError(item)
 }
 
 // True if err is more than unknown option warnings. When it is false the
@@ -111,17 +130,6 @@ func fatalErr(err error) bool {
 	}
 	var unknown *directive.UnknownOptionsError
 	return !errors.As(err, &unknown)
-}
-
-func (b *documentBuilder) addWarning(line int, message string) {
-	msg := strings.TrimSpace(message)
-	if msg == "" {
-		return
-	}
-	b.doc.Warnings = append(b.doc.Warnings, restfile.ParseError{
-		Line:    line,
-		Message: msg,
-	})
 }
 
 func (b *documentBuilder) processLine(no int, raw, term string) {
@@ -262,11 +270,11 @@ func (b *documentBuilder) flushWorkflow(line int) {
 	if b.workflow == nil {
 		return
 	}
-	if err := b.workflow.flushFlow(line); err != nil {
-		b.addError(line, err.Error())
+	if at, err := b.workflow.flushFlow(line); err != nil {
+		b.addError(at, err.Error())
 	}
-	if err := b.workflow.requireNoPending(); err != nil {
-		b.addError(line, err.Error())
+	if at, err := b.workflow.requireNoPending(); err != nil {
+		b.addError(at, err.Error())
 	}
 	scene := b.workflow.build(line)
 	if len(scene.Steps) > 0 {
@@ -286,18 +294,19 @@ func (b *documentBuilder) finish() {
 	b.file.apply(b.doc)
 }
 
-func (b *documentBuilder) startWorkflow(line int, rest string) error {
-	nameToken, remainder := directive.CutToken(rest)
+func (b *documentBuilder) startWorkflow(d parsedDirective) error {
+	nameToken, remainder := directive.CutToken(d.Args)
 	if nameToken == "" || strings.Contains(nameToken, "=") {
 		return errors.New("@workflow name missing")
 	}
+	line := d.lines.Start
 	if b.inRequest {
 		b.flushRequest(line - 1)
 	}
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
 	opts, err := directive.ParseOptions(directive.Workflow, remainder)
-	b.report(line, errors.Join(err, sb.applyOptions(opts)))
+	b.report(d, errors.Join(err, sb.applyOptions(opts)))
 	sb.touch(line)
 	b.workflow = sb
 	return nil

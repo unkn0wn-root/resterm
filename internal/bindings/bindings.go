@@ -40,10 +40,9 @@ type Binding struct {
 
 // Map stores runtime shortcut bindings and lookup helpers.
 type Map struct {
-	single        map[string]bindingRef
-	chords        map[string]map[string]bindingRef
-	chordPrefixes map[string]struct{}
-	actions       map[ActionID]*actionEntry
+	single  map[string]bindingRef
+	chords  map[string]map[string]bindingRef
+	actions map[ActionID]*actionEntry
 }
 
 type bindingRef struct {
@@ -121,13 +120,17 @@ func (m *Map) MatchSingle(key string) (Binding, bool) {
 	return ref.binding(), true
 }
 
-// HasChordPrefix reports whether the given key can start a chord sequence.
-func (m *Map) HasChordPrefix(key string) bool {
+// HasChordPrefix reports whether key starts a chord the caller accepts.
+func (m *Map) HasChordPrefix(key string, accepts func(ActionID) bool) bool {
 	if m == nil {
 		return false
 	}
-	_, ok := m.chordPrefixes[key]
-	return ok
+	for _, ref := range m.chords[key] {
+		if accepts(ref.action) {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveChord resolves a chord prefix + next key into a binding.
@@ -326,12 +329,7 @@ func buildMap(overrides map[ActionID][][]string) (*Map, error) {
 		}
 	}
 
-	return &Map{
-		single:        single,
-		chords:        chords,
-		chordPrefixes: chordPrefixes,
-		actions:       actions,
-	}, nil
+	return &Map{single: single, chords: chords, actions: actions}, nil
 }
 
 // A soft default steps aside when the user claimed one of its keys for another

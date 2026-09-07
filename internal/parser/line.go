@@ -30,10 +30,19 @@ type commentText struct {
 	text  string
 	start int
 	end   int
+	block bool
 }
 
 func (c commentText) col() int {
 	return c.start + 1
+}
+
+// Expression columns are only tracked in line comments.
+func (c commentText) argCol() int {
+	if c.block {
+		return 0
+	}
+	return c.col()
 }
 
 func (ln line) span(text string, off int) commentText {
@@ -102,7 +111,9 @@ func (ln line) blockComment(opening bool) (c commentText, closed bool) {
 		off += len(text) - len(rest)
 		text = rest
 	}
-	return ln.span(str.TrimRight(text), off), closed
+	c = ln.span(str.TrimRight(text), off)
+	c.block = true
+	return c, closed
 }
 
 func (ln line) isScriptBlockStart() bool {

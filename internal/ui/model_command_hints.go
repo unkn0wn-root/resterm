@@ -65,10 +65,15 @@ func (m *Model) editorCommandHints() []commandHint {
 		}
 	}
 	// plain Enter sends from normal mode, see shouldSendEditorRequest
+	helpLabel := "Docs"
+	// Keep the hint aligned with retained highlights while a fresh parse is pending.
+	if o := m.visibleDiagnostics(); o != nil && len(o.Ranges(m.editor.Line())) > 0 {
+		helpLabel = "Details"
+	}
 	return []commandHint{
 		{key: "i", label: "Insert"},
 		{key: "Enter", label: "Send"},
-		m.commandActionHint(bindings.ActionShowContextHelp, "Docs"),
+		m.commandActionHint(bindings.ActionShowContextHelp, helpLabel),
 		{key: "/", label: "Search"},
 		caretKey(m.commandActionHint(bindings.ActionSaveFile, "Save")),
 	}

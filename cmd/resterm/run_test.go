@@ -272,7 +272,7 @@ func TestParseRunDocReturnsParseError(t *testing.T) {
 	rendered := diag.Render(err)
 	for _, want := range []string{
 		"error[parse]",
-		"--> broken.http:1:1",
+		"--> broken.http:1:3",
 		"   1 | # @k8s namespace=default",
 		"note: Fix the request file parse error before running.",
 	} {
