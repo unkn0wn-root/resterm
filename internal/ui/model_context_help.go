@@ -36,10 +36,11 @@ func (m *Model) contextHelpTopic() (helpdoc.Topic, bool) {
 		return helpdoc.Directive(syntax.Directive)
 	}
 	switch syntax.Kind {
-	case parser.SourceLineLiteral, parser.SourceLineDirective, parser.SourceLineDirectiveValue:
+	case parser.SourceLineDirective, parser.SourceLineDirectiveValue:
 		// An unknown directive must not resolve to an unrelated keyword topic.
 		return helpdoc.Topic{}, false
 	}
+	// Literal bodies and scripts can still contain templates or help keywords.
 	line := m.editor.LineRunes(pos.Line)
 	if cursorInTemplate(line, pos.Column) {
 		return helpdoc.Lookup("variables")
@@ -70,6 +71,10 @@ func contextWord(line []rune, col int) string {
 	start := col
 	for start > 0 && isHelpWordRune(line[start-1]) {
 		start--
+	}
+	// Directive names require source context, not ordinary word lookup.
+	if start > 0 && line[start-1] == '@' {
+		return ""
 	}
 	end := col + 1
 	for end < len(line) && isHelpWordRune(line[end]) {

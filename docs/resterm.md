@@ -878,7 +878,7 @@ Troubleshooting:
 - Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. For GraphQL, the reset also clears `@operation`, `@variables`, and `@query`, so they may be declared again after `@graphql off`. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
 - Files can be saved with parse errors. The status line shows the number of errors, for example `Saved requests.http (1 parse error)`. Requests cannot run until those errors are fixed.
 - In the TUI, live editor diagnostics underline offending text and show `ERR <n>` / `WARN <n>` counts beside the status message. Press `K` in editor normal mode for details on the current line, or `g .` / `:diagnostics` for the complete list. When editor diagnostics are disabled, the existing `WARN line <n>` segment reports warnings from the last matching parse. Parse warnings also appear in the Explain pane for each run.
-- The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
+- When editor diagnostics are disabled, editing hides the `WARN line <n>` segment until the document is parsed again on save, explicit reload, or request execution.
 - `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
 
 ### Multiline directives
