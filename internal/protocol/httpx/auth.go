@@ -59,7 +59,7 @@ func ResolveAuth(
 		if value == "" || resolver == nil {
 			return vars.Expansion{Value: value}, nil
 		}
-		out, err := resolver.ExpandTemplatesResult(value)
+		out, err := resolver.ExpandTemplatesResultAt(value, auth.Pos())
 		if err != nil {
 			op := fmt.Sprintf("expand %s auth %s", kind, param)
 			if at := auth.Origin(); at != "" {

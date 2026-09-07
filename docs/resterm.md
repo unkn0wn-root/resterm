@@ -2466,7 +2466,7 @@ resterm collection export --workspace ./api --out ./shared/api-bundle
 
 ### Editor diagnostics
 
-Diagnostics are enabled by default for `.http`, `.rest`, and unnamed request buffers. They show the parser's existing warnings and errors, such as unknown directives, mistyped option keys, missing values, and conflicting options. Diagnostics refresh when you leave insert mode, without saving the buffer or changing the active request. They do not refresh while you type, even if you pause. Existing markings stay until an edit invalidates their source ranges, then clear until you return to normal mode. Changes made in normal mode, such as undo or deletion, use a short debounce.
+Diagnostics are enabled by default for `.http`, `.rest`, and unnamed request buffers. They show the parser's existing warnings and errors, such as unknown directives, mistyped option keys, missing values, conflicting options, and placeholders such as `{{token}` that never close. Diagnostics refresh when you leave insert mode, without saving the buffer or changing the active request. They do not refresh while you type, even if you pause. Existing markings stay until an edit invalidates their source ranges, then clear until you return to normal mode. Changes made in normal mode, such as undo or deletion, use a short debounce.
 
 `K` (Shift+K) in normal mode opens a popup beside the cursor with diagnostics on that line. Findings under the cursor appear first; errors take priority over warnings. `Enter` opens related documentation when available, `PgUp` / `PgDown` scroll long messages, and `Esc` or cursor movement closes the popup. On a line without diagnostics, `K` opens contextual help as before. In insert mode, `K` types normally.
 
@@ -2645,7 +2645,8 @@ Open one in Resterm, switch to the appropriate environment (`resterm.env.json`),
 ## Troubleshooting & Tips
 
 - Use `Ctrl+P` to force a reparse if the navigator seems out of sync with editor changes.
-- If a template fails to expand (undefined variable), Resterm blocks the send and reports the missing variable. This covers URLs, query parameters, headers, auth values, expanded bodies, gRPC targets and messages, and WebSocket steps. Explain previews keep the placeholder intact and list the unresolved names.
+- If a template fails to expand (undefined variable), Resterm blocks the send and reports the missing variable. This covers URLs, query parameters, headers, auth values, expanded bodies, gRPC targets and messages, and WebSocket steps. Errors in the URL, headers, and inline or file bodies name the variable and point at the placeholder with its file, line, and column, and the TUI quotes the line. Explain previews keep the placeholder intact and list the unresolved names.
+- A placeholder that never closes, such as `{{token}`, is sent as literal text. The editor diagnostics warn about it before you send.
 - Combine `@capture request ...` with test scripts to assert on response headers without cluttering file/global scopes.
 - Inline curl import works best with single commands. Complex shell pipelines may need manual cleanup.
 - `Ctrl+Shift+V` pins the focused response pane, which is useful for comparing the last good response with the current attempt.

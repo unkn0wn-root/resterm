@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -130,7 +131,7 @@ func TestResolveRequestTargetRFCReferences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveRequestTarget(tt.target, tt.base, nil, tt.scheme)
+			got, err := resolveRequestTarget(tt.target, tt.base, nil, tt.scheme, diag.Pos{})
 			if err != nil {
 				t.Fatalf("resolveRequestTarget() error = %v", err)
 			}
@@ -147,7 +148,7 @@ func TestResolveRequestTargetExpandsTargetAndBase(t *testing.T) {
 		"resource": "users/42",
 	}))
 
-	got, err := resolveRequestTarget("{{resource}}", "{{api}}", resolver, schemeHTTP)
+	got, err := resolveRequestTarget("{{resource}}", "{{api}}", resolver, schemeHTTP, diag.Pos{})
 	if err != nil {
 		t.Fatalf("resolveRequestTarget() error = %v", err)
 	}
@@ -196,7 +197,7 @@ func TestResolveRequestTargetExpandsBeforeFillingInScheme(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"host": tt.host}))
-			got, err := resolveRequestTarget(tt.target, tt.base, resolver, schemeHTTP)
+			got, err := resolveRequestTarget(tt.target, tt.base, resolver, schemeHTTP, diag.Pos{})
 			if err != nil {
 				t.Fatalf("resolveRequestTarget() error = %v", err)
 			}
@@ -210,7 +211,7 @@ func TestResolveRequestTargetExpandsBeforeFillingInScheme(t *testing.T) {
 func TestResolveRequestTargetBareHostVariableNeedsBaseURL(t *testing.T) {
 	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"host": "example.com"}))
 
-	_, err := resolveRequestTarget("{{host}}/users", "", resolver, schemeHTTP)
+	_, err := resolveRequestTarget("{{host}}/users", "", resolver, schemeHTTP, diag.Pos{})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -240,7 +241,7 @@ func TestResolveRequestTargetPreservesAbsoluteURLs(t *testing.T) {
 				t.Fatalf("url.Parse(%q) error = %v", raw, err)
 			}
 
-			resolved, err := resolveRequestTarget(raw, "", nil, schemeHTTP)
+			resolved, err := resolveRequestTarget(raw, "", nil, schemeHTTP, diag.Pos{})
 			if err != nil {
 				t.Fatalf("resolveRequestTarget() error = %v", err)
 			}
@@ -288,7 +289,7 @@ func TestResolveRequestTargetValidatesBaseWhenNeeded(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := resolveRequestTarget("users", tt.base, nil, schemeHTTP)
+			_, err := resolveRequestTarget("users", tt.base, nil, schemeHTTP, diag.Pos{})
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -397,6 +398,7 @@ func TestResolveRequestTargetReportsExpansionAndProtocolErrors(t *testing.T) {
 				tt.base,
 				tt.resolver,
 				tt.scheme,
+				diag.Pos{},
 			)
 			if err == nil {
 				t.Fatal("expected an error")

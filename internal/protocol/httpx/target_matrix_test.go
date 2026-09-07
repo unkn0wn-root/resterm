@@ -4,6 +4,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 // Generate combinations to check that a schemeless target never introduces
@@ -77,7 +79,7 @@ func TestResolveRequestTargetHostileTargets(t *testing.T) {
 func resolveChecked(t *testing.T, raw string) *url.URL {
 	t.Helper()
 
-	got, err := resolveRequestTarget(raw, "", nil, schemeHTTP)
+	got, err := resolveRequestTarget(raw, "", nil, schemeHTTP, diag.Pos{})
 	if err != nil {
 		return nil
 	}

@@ -33,8 +33,9 @@ func resolveRequestTarget(
 	rawTarget, rawBase string,
 	resolver *vars.Resolver,
 	scheme requestScheme,
+	pos diag.Pos,
 ) (string, error) {
-	target, err := expandURL(rawTarget, resolver, "url")
+	target, err := expandURL(rawTarget, resolver, "url", pos)
 	if err != nil {
 		return "", err
 	}
@@ -188,7 +189,7 @@ func (s requestScheme) apply(u *url.URL) error {
 // The base is read only once a target actually needs it, so an unset, unresolved
 // or invalid base-url never fails a request that already carries a full URL.
 func resolveBaseURL(raw string, resolver *vars.Resolver) (*url.URL, error) {
-	expanded, err := expandURL(raw, resolver, "base-url")
+	expanded, err := expandURL(raw, resolver, "base-url", diag.Pos{})
 	if err != nil {
 		return nil, err
 	}
@@ -217,11 +218,11 @@ func resolveBaseURL(raw string, resolver *vars.Resolver) (*url.URL, error) {
 	return base, nil
 }
 
-func expandURL(raw string, resolver *vars.Resolver, label string) (string, error) {
+func expandURL(raw string, resolver *vars.Resolver, label string, pos diag.Pos) (string, error) {
 	if resolver == nil {
 		return raw, nil
 	}
-	expanded, err := resolver.ExpandTemplates(raw)
+	expanded, err := resolver.ExpandTemplatesAt(raw, pos)
 	if err != nil {
 		return "", wrapTargetError(err, "expand "+label)
 	}

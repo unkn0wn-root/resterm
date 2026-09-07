@@ -92,6 +92,7 @@ func (r *requestBuilder) build() *restfile.Request {
 
 	vars := append([]restfile.Variable(nil), r.variables...)
 
+	urlLine, urlCol := r.http.URLPos()
 	req := &restfile.Request{
 		Metadata:  r.metadata,
 		Method:    r.http.Method(),
@@ -106,6 +107,9 @@ func (r *requestBuilder) build() *restfile.Request {
 		},
 		SourcePath:   r.sourcePath,
 		OriginalText: strings.Join(r.originalLines, "\n"),
+		URLLine:      urlLine,
+		URLCol:       urlCol,
+		HeaderLines:  r.http.HeaderLines(),
 	}
 
 	appliedBody := false

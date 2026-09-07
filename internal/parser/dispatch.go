@@ -84,6 +84,9 @@ func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 		b.warn(d, ignoredDirectiveWarning(d.Call))
 		return out
 	}
+	if out == directiveApplied {
+		b.warnUnclosedArgs(d)
+	}
 	if out == directiveApplied && d.Name.ValueRequired() && !directive.HasValue(d.Args) {
 		return b.reject(d, d.Spelling.Tag()+" value missing")
 	}

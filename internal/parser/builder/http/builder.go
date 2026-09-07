@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/http/version"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -122,9 +123,13 @@ type bodyLine struct {
 type Builder struct {
 	method       string
 	url          string
+	urlLine      int
+	urlCol       int
 	headers      stdhttp.Header
+	headerLines  []restfile.HeaderLine
 	headerDone   bool
 	bodyLines    []bodyLine
+	bodyLine     int
 	bodyFromFile string
 	mimeType     string
 }
@@ -154,6 +159,14 @@ func (b *Builder) URL() string {
 	return b.url
 }
 
+func (b *Builder) SetURLPos(line, col int) {
+	b.urlLine, b.urlCol = line, col
+}
+
+func (b *Builder) URLPos() (line, col int) {
+	return b.urlLine, b.urlCol
+}
+
 func (b *Builder) Headers() stdhttp.Header {
 	if b.headers == nil {
 		b.headers = make(stdhttp.Header)
@@ -165,12 +178,17 @@ func (b *Builder) HeaderMap() stdhttp.Header {
 	return b.headers
 }
 
-func (b *Builder) AddHeader(name, value string) {
+func (b *Builder) AddHeader(name, value string, line, col int) {
 	headers := b.Headers()
 	headers.Add(name, value)
+	b.headerLines = append(b.headerLines, restfile.HeaderLine{Name: name, Value: value, Line: line, Col: col})
 	if strings.EqualFold(name, "Content-Type") {
 		b.mimeType = value
 	}
+}
+
+func (b *Builder) HeaderLines() []restfile.HeaderLine {
+	return b.headerLines
 }
 
 func (b *Builder) HeaderDone() bool {
@@ -181,8 +199,15 @@ func (b *Builder) MarkHeadersDone() {
 	b.headerDone = true
 }
 
-func (b *Builder) AppendBodyLine(text, term string) {
+func (b *Builder) AppendBodyLine(line int, text, term string) {
+	if len(b.bodyLines) == 0 {
+		b.bodyLine = line
+	}
 	b.bodyLines = append(b.bodyLines, bodyLine{text: text, term: term})
+}
+
+func (b *Builder) BodyLine() int {
+	return b.bodyLine
 }
 
 func (b *Builder) SetBodyFromFile(path string) {

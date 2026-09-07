@@ -130,7 +130,7 @@ func (e *Engine) rtsPosForLineCol(doc *restfile.Document, req *restfile.Request,
 	return ps
 }
 
-func (e *Engine) rtsErr(err error, doc *restfile.Document) error {
+func (e *Engine) withSource(err error, doc *restfile.Document) error {
 	if err == nil || !e.cfg.SourceDiagnostics {
 		return err
 	}
@@ -146,8 +146,8 @@ func canAttachSource(rep diag.Report, doc *restfile.Document) bool {
 	if doc == nil || len(doc.Raw) == 0 || len(rep.Items) == 0 {
 		return false
 	}
-	p := rep.Items[0].Span.Start.Path
-	return p == "" || p == doc.Path
+	start := rep.Items[0].Span.Start
+	return start.Line > 0 && (start.Path == "" || start.Path == doc.Path)
 }
 
 func (e *Engine) rtsBase(doc *restfile.Document, base string) string {

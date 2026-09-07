@@ -8,7 +8,28 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
+
+func (b *documentBuilder) warnUnclosed(text string, start diag.Pos) {
+	for _, u := range vars.UnclosedPlaceholders(text, start) {
+		b.pushWarning(restfile.ParseDiagnostic{Message: unclosedMessage(u), Span: u.Span})
+	}
+}
+
+func (b *documentBuilder) warnUnclosedArgs(d parsedDirective) {
+	for _, u := range vars.UnclosedPlaceholders(d.Args, diag.Pos{}) {
+		item := restfile.ParseDiagnostic{Message: unclosedMessage(u), Span: d.nameSpan}
+		if span, ok := d.argumentSpan(u.Off, u.Off+len(u.Text)); ok {
+			item.Span = span
+		}
+		b.pushWarning(item)
+	}
+}
+
+func unclosedMessage(u vars.Unclosed) string {
+	return "placeholder " + u.Text + " is not closed with }}"
+}
 
 func Diagnostics(doc *restfile.Document) diag.Report {
 	rep := diag.Report{Path: doc.Path, Source: doc.Raw}
