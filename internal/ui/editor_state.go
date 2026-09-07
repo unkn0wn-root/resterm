@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -159,8 +160,8 @@ func (e *requestEditor) setStyler(base textarea.RuneStyler, th theme.Theme) {
 	e.SetRuneStyler(e.styler)
 }
 
-func (e *requestEditor) setDiagnosticDisplay(display *diagnosticDisplay) {
-	e.styler.display = display
+func (e *requestEditor) setDiagnosticOverlay(o *diag.Overlay) {
+	e.styler.overlay = o
 }
 
 func (e requestEditor) sourceLine(line int) parser.SourceLine {

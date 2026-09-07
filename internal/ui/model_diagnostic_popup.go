@@ -35,7 +35,8 @@ func (m *Model) openDiagnosticPopup() bool {
 	if s == nil {
 		return false
 	}
-	items := s.at(m.editor.caretPosition())
+	caret := m.editor.caretPosition()
+	items := s.overlay.At(diag.Cell{Line: caret.Line, Col: caret.Column})
 	if len(items) == 0 {
 		return false
 	}
@@ -53,20 +54,8 @@ func (m *Model) openDiagnosticPopup() bool {
 }
 
 func (m *Model) diagnosticPopupSnapshot() *diagnosticSnapshot {
-	popup := m.diagnostics.popup
-	if !popup.open {
-		return nil
-	}
-	if m.focus != focusEditor {
-		return nil
-	}
-	if !m.editorIdle() {
-		return nil
-	}
-	if m.effectiveRegionCollapsed(paneRegionEditor) {
-		return nil
-	}
-	if popup.diagnosticContext != m.diagnosticContext() {
+	p := m.diagnostics.popup
+	if !p.open || !m.diagnosticContextCurrent(p.diagnosticContext) || m.effectiveRegionCollapsed(paneRegionEditor) {
 		return nil
 	}
 	return m.currentDiagnostics()
@@ -123,10 +112,7 @@ func (m *Model) handleDiagnosticPopupKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		*p = diagnosticPopup{}
 		return nil, false
 	}
-	// Modal returns skip clearing this flag, which would swallow the next editor key.
-	if !m.mouseModalActive() {
-		m.suppressEditorKey = true
-	}
+	m.suppressFocusedComponentKey()
 	return nil, true
 }
 

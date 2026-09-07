@@ -18,7 +18,7 @@ type sourceStyler interface {
 // Decorated lines are copied to preserve the base styler's cache.
 type editorDiagnosticStyler struct {
 	base             textarea.RuneStyler
-	display          *diagnosticDisplay
+	overlay          *diag.Overlay
 	warning, failure lipgloss.Style
 }
 
@@ -31,7 +31,7 @@ func newEditorDiagnosticStyler(base textarea.RuneStyler, th theme.Theme) *editor
 }
 
 func (s *editorDiagnosticStyler) SetSource(source string) {
-	s.display = nil
+	s.overlay = nil
 	if base, ok := s.base.(sourceStyler); ok {
 		base.SetSource(source)
 	}
@@ -46,12 +46,12 @@ func (s *editorDiagnosticStyler) sourceLine(line int) parser.SourceLine {
 
 func (s *editorDiagnosticStyler) StylesForLine(line []rune, index int) []lipgloss.Style {
 	styles := s.base.StylesForLine(line, index)
-	if s.display == nil {
+	if s.overlay == nil {
 		return styles
 	}
 	copied := false
-	for _, r := range s.display.lines[index] {
-		start, end := min(r.start, len(line)), min(r.end, len(line))
+	for _, r := range s.overlay.Ranges(index) {
+		start, end := min(r.Start, len(line)), min(r.End, len(line))
 		if start >= end {
 			continue
 		}
@@ -63,7 +63,7 @@ func (s *editorDiagnosticStyler) StylesForLine(line []rune, index int) []lipglos
 			}
 			copied = true
 		}
-		decoration := s.style(r.severity)
+		decoration := s.style(r.Severity)
 		for i := start; i < end; i++ {
 			styles[i] = decoration.Inherit(styles[i])
 		}
@@ -79,10 +79,10 @@ func (s *editorDiagnosticStyler) style(severity diag.Severity) lipgloss.Style {
 }
 
 func (s *editorDiagnosticStyler) LineNumberStyle(line int) (lipgloss.Style, bool) {
-	if s.display == nil {
+	if s.overlay == nil {
 		return lipgloss.Style{}, false
 	}
-	severity, ok := s.display.marks[line]
+	severity, ok := s.overlay.Mark(line)
 	if !ok {
 		return lipgloss.Style{}, false
 	}

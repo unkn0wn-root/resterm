@@ -56,8 +56,7 @@ type RuneStyler interface {
 	StylesForLine(line []rune, lineIndex int) []lipgloss.Style
 }
 
-// LineNumberStyler optionally decorates a source line's number. It does not
-// change the gutter's width or the mapping between source and visible rows.
+// A decorated line number keeps the gutter width and the row mapping unchanged.
 type LineNumberStyler interface {
 	LineNumberStyle(lineIndex int) (lipgloss.Style, bool)
 }

@@ -40,10 +40,9 @@ type Binding struct {
 
 // Map stores runtime shortcut bindings and lookup helpers.
 type Map struct {
-	single        map[string]bindingRef
-	chords        map[string]map[string]bindingRef
-	chordPrefixes map[string]struct{}
-	actions       map[ActionID]*actionEntry
+	single  map[string]bindingRef
+	chords  map[string]map[string]bindingRef
+	actions map[ActionID]*actionEntry
 }
 
 type bindingRef struct {
@@ -330,12 +329,7 @@ func buildMap(overrides map[ActionID][][]string) (*Map, error) {
 		}
 	}
 
-	return &Map{
-		single:        single,
-		chords:        chords,
-		chordPrefixes: chordPrefixes,
-		actions:       actions,
-	}, nil
+	return &Map{single: single, chords: chords, actions: actions}, nil
 }
 
 // A soft default steps aside when the user claimed one of its keys for another

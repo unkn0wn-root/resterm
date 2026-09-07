@@ -954,7 +954,12 @@ func (m *Model) handleShortcutKey(key string, msg tea.KeyMsg) (tea.Cmd, bool) {
 	return cmd, true
 }
 
+// Modal paths return before the flags are consumed, so a flag set while a
+// modal is open would swallow a later key instead.
 func (m *Model) suppressFocusedComponentKey() {
+	if m.mouseModalActive() {
+		return
+	}
 	switch m.focus {
 	case focusFile, focusRequests, focusWorkflows:
 		m.suppressListKey = true
@@ -1029,7 +1034,7 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		}
 		return m.showContextHelp(), true
 	case bindings.ActionNextDiagnostic, bindings.ActionPreviousDiagnostic:
-		if !m.diagnosticShortcutAvailable(binding.Action) {
+		if !m.shortcutAvailable(binding.Action) {
 			return nil, false
 		}
 		action := diagnosticNext
@@ -1037,19 +1042,15 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 			action = diagnosticPrevious
 		}
 		cmd := m.requestDiagnostics(action)
-		if !m.mouseModalActive() {
-			m.suppressEditorKey = true
-		}
+		m.suppressFocusedComponentKey()
 		return cmd, true
 	case bindings.ActionShowRequestDetails:
 		m.openRequestDetails()
 		return nil, true
 	case bindings.ActionShowStatusMessage:
+		// The modal may wait for diagnostics, so the chord key must not reach the pane.
 		cmd := m.showStatusMessage()
-		if !m.mouseModalActive() {
-			// A refresh leaves the focused component active until diagnostics return.
-			m.suppressFocusedComponentKey()
-		}
+		m.suppressFocusedComponentKey()
 		return cmd, true
 	case bindings.ActionOpenPathModal:
 		return m.openOpenModal(), true
@@ -1871,7 +1872,7 @@ func (m *Model) canStartChord(msg tea.KeyMsg, key string) bool {
 	if m.websocketConsoleCapturesInput() {
 		return false
 	}
-	if !m.bindingsMap.HasChordPrefix(key, m.diagnosticShortcutAvailable) {
+	if !m.bindingsMap.HasChordPrefix(key, m.shortcutAvailable) {
 		return false
 	}
 	if m.editor.awaitingFindTarget() {

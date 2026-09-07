@@ -215,7 +215,11 @@ func TestDiagnosticsRefreshAfterEditorMutations(t *testing.T) {
 		}
 	}
 	deliver(cmd)
-	if s := m.currentDiagnostics(); s == nil || s.display.warnings != 2 {
+	s := m.currentDiagnostics()
+	if s == nil {
+		t.Fatal("InsertLeave did not install diagnostics")
+	}
+	if _, warns := s.overlay.Counts(); warns != 2 {
 		t.Fatal("missing completed directive warning")
 	}
 	if m.editor.Value() != "# @moc\n# @nmae typo" {
@@ -367,7 +371,7 @@ func TestDiagnosticNavigationAndShortcutEligibility(t *testing.T) {
 	if m.canStartChord(keyMsgFor("["), "[") {
 		t.Fatal("prefix consumed while typing")
 	}
-	if m.diagnosticShortcutAvailable(bindings.ActionNextDiagnostic) {
+	if m.shortcutAvailable(bindings.ActionNextDiagnostic) {
 		t.Fatal("action enabled while typing")
 	}
 }
@@ -393,9 +397,12 @@ func TestDiagnosticsUndoRedoRetainsDisplayWhileRefreshing(t *testing.T) {
 	source := "GET http://x\n# @mock method=GET path=/x"
 	m := newDiagnosticModel(t, source)
 	doc := m.doc
-	if s := m.currentDiagnostics(); s == nil || s.display.errors != 1 ||
-		!strings.Contains(s.report.Items[0].Message, "must start a new block") {
+	s := m.currentDiagnostics()
+	if s == nil || !strings.Contains(s.report.Items[0].Message, "must start a new block") {
 		t.Fatal("expected the mock block error")
+	}
+	if errs, _ := s.overlay.Counts(); errs != 1 {
+		t.Fatal("expected one error")
 	}
 	m.editor.pushUndoSnapshot()
 	m.editor.SetValue(source + "x")
@@ -434,8 +441,12 @@ func TestDiagnosticsUndoRedoRetainsDisplayWhileRefreshing(t *testing.T) {
 	if _, ok := m.statusBarWarningSection(statusBarPalette(m.theme.StatusBarPalette)); ok {
 		t.Fatal("fresh clean result retained the error count")
 	}
-	if display := m.editor.styler.display; display == nil || len(display.lines) != 0 || len(display.marks) != 0 {
+	o := m.editor.styler.overlay
+	if o == nil || len(o.Ranges(0))+len(o.Ranges(1)) != 0 {
 		t.Fatal("fresh clean result retained error decorations")
+	}
+	if _, marked := o.Mark(1); marked {
+		t.Fatal("fresh clean result retained the gutter mark")
 	}
 	if m.doc != doc || !m.dirty {
 		t.Fatal("diagnostic refresh changed execution document or dirty state")
@@ -449,7 +460,7 @@ func TestDiagnosticsRetainedDisplayLifecycle(t *testing.T) {
 			m.editor.SetValue(m.editor.Value() + "x")
 			_ = m.syncDiagnostics()
 			job := m.handleDiagnosticsTick(diagnosticsTickMsg{ticket: m.diagnostics.ticket})
-			if job == nil || m.visibleDiagnosticDisplay() == nil {
+			if job == nil || m.visibleDiagnostics() == nil {
 				t.Fatal("missing pending display or parse")
 			}
 			switch action {
@@ -463,9 +474,9 @@ func TestDiagnosticsRetainedDisplayLifecycle(t *testing.T) {
 			case "disable":
 				m.diagnostics.disabled = true
 			case "theme":
-				display, ticket := m.visibleDiagnosticDisplay(), m.diagnostics.ticket
+				display, ticket := m.visibleDiagnostics(), m.diagnostics.ticket
 				m.updateEditorStyler(m.currentFile)
-				if m.editor.styler.display != display || m.diagnostics.ticket != ticket {
+				if m.editor.styler.overlay != display || m.diagnostics.ticket != ticket {
 					t.Fatal("theme rebuild discarded pending display or restarted diagnostics")
 				}
 				if m.currentDiagnostics() != nil {
@@ -473,12 +484,12 @@ func TestDiagnosticsRetainedDisplayLifecycle(t *testing.T) {
 				}
 				return
 			}
-			if action != "insert edit" && m.visibleDiagnosticDisplay() != nil {
+			if action != "insert edit" && m.visibleDiagnostics() != nil {
 				t.Fatal("display leaked across file or enabled-state change before synchronization")
 			}
 			_ = m.syncDiagnostics()
 			updateDiagnosticsModel(t, &m, job())
-			if m.visibleDiagnosticDisplay() != nil || m.editor.styler.display != nil || m.currentDiagnostics() != nil {
+			if m.visibleDiagnostics() != nil || m.editor.styler.overlay != nil || m.currentDiagnostics() != nil {
 				t.Fatal("obsolete completion restored a cleared display")
 			}
 		})
@@ -495,15 +506,20 @@ func TestDiagnosticsStaleCompletionPreservesPendingDisplay(t *testing.T) {
 	}
 	m.editor.SetValue("GET http://y")
 	_ = m.syncDiagnostics()
-	display := m.visibleDiagnosticDisplay()
+	display := m.visibleDiagnostics()
 	updateDiagnosticsModel(t, &m, job())
-	if m.visibleDiagnosticDisplay() != display || display == nil || display.errors != 1 ||
-		m.currentDiagnostics() != nil {
+	if m.visibleDiagnostics() != display || display == nil || m.currentDiagnostics() != nil {
 		t.Fatal("stale warning result replaced the retained error display")
 	}
+	if errs, _ := display.Counts(); errs != 1 {
+		t.Fatal("retained display lost its error count")
+	}
 	completeDiagnosticParse(t, &m)
-	current, display := m.currentDiagnostics(), m.visibleDiagnosticDisplay()
-	if current == nil || display == nil || display != current.display || display.errors != 0 {
+	current, display := m.currentDiagnostics(), m.visibleDiagnostics()
+	if current == nil || display == nil || display != current.overlay {
 		t.Fatal("fresh clean result did not replace both snapshots")
+	}
+	if errs, _ := display.Counts(); errs != 0 {
+		t.Fatal("fresh clean result kept the error count")
 	}
 }

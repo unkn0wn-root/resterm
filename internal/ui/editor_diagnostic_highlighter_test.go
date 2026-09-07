@@ -19,10 +19,10 @@ func TestDiagnosticStylerCopiesSyntaxCacheAndClearsAfterEdit(t *testing.T) {
 	styler := newEditorDiagnosticStyler(base, th)
 	styler.SetSource(source)
 	before := base.StylesForLine(line, 0)
-	styler.display = newDiagnosticSnapshot(
+	styler.overlay = newDiagnosticSnapshot(
 		diagnosticKey{},
 		parser.Diagnostics(parser.Parse("test.http", []byte(source))),
-	).display
+	).overlay
 	styles := styler.StylesForLine(line, 0)
 	start := utf8.RuneCountInString(source[:strings.Index(source, "max-event")])
 	for i := range line {
@@ -38,12 +38,12 @@ func TestDiagnosticStylerCopiesSyntaxCacheAndClearsAfterEdit(t *testing.T) {
 		}
 	}
 	styler.SetSource("# @sse max-events=5")
-	if styler.display != nil {
+	if styler.overlay != nil {
 		t.Fatal("source change retained old decorations")
 	}
 }
 
-func TestDiagnosticOverlapsPreferErrorsAndGroupRelatedRanges(t *testing.T) {
+func TestDiagnosticOverlapsPreferErrors(t *testing.T) {
 	source := "abcdefgh"
 	span := func(a, b int) diag.Span {
 		return diag.Span{Start: diag.Pos{Line: 1, Col: a}, End: diag.Pos{Line: 1, Col: b}}
@@ -55,17 +55,11 @@ func TestDiagnosticOverlapsPreferErrorsAndGroupRelatedRanges(t *testing.T) {
 	s := newDiagnosticSnapshot(diagnosticKey{}, rep)
 	th := theme.DefaultTheme()
 	styler := newEditorDiagnosticStyler(newMetadataRuneStyler(th.EditorMetadata), th)
-	styler.display = s.display
+	styler.overlay = s.overlay
 	styles := styler.StylesForLine([]rune(source), 0)
 	if styles[2].GetForeground() != th.EditorDiagnosticError.GetForeground() ||
 		styles[6].GetForeground() != th.EditorDiagnosticWarning.GetForeground() {
 		t.Fatal("overlap precedence wrong")
-	}
-	if items := s.at(cursorPosition{Line: 0, Column: 2}); len(items) != 2 || items[0] != 1 {
-		t.Fatalf("items=%v", items)
-	}
-	if items := s.at(cursorPosition{Line: 0, Column: 7}); len(items) != 2 || items[0] != 0 {
-		t.Fatalf("cursor priority=%v", items)
 	}
 }
 
@@ -82,18 +76,12 @@ func TestDiagnosticEmptyAndEOFRangesUseLineNumbers(t *testing.T) {
 		newMetadataRuneStyler(theme.DefaultTheme().EditorMetadata),
 		theme.DefaultTheme(),
 	)
-	styler.display = s.display
+	styler.overlay = s.overlay
 	if _, ok := styler.LineNumberStyle(0); ok {
 		t.Fatal("unaffected line marked")
 	}
 	if style, ok := styler.LineNumberStyle(1); !ok || style.GetForeground() != styler.failure.GetForeground() {
 		t.Fatal("empty/EOF location not marked")
-	}
-	if len(s.positions) != 1 || s.positions[0].Line != 1 {
-		t.Fatalf("positions=%+v", s.positions)
-	}
-	if len(s.at(cursorPosition{Line: 1})) != 2 {
-		t.Fatal("empty-line findings inaccessible")
 	}
 }
 
@@ -104,7 +92,7 @@ func TestDiagnosticThemeChangeRetainsSnapshot(t *testing.T) {
 	m.theme.EditorDiagnosticWarning = lipgloss.NewStyle().Foreground(lipgloss.Color("#112233")).Underline(true)
 	m.updateEditorStyler(m.currentFile)
 	styler := m.editor.styler
-	if styler.display != snapshot.display || m.diagnostics.ticket != ticket {
+	if styler.overlay != snapshot.overlay || m.diagnostics.ticket != ticket {
 		t.Fatal("theme rebuild discarded/reparsed diagnostics")
 	}
 	if got := styler.StylesForLine(m.editor.LineRunes(0), 0)[2].GetForeground(); got != lipgloss.Color("#112233") {
@@ -118,10 +106,10 @@ func BenchmarkDiagnosticViewportStyles(b *testing.B) {
 	base := newMetadataRuneStyler(th.EditorMetadata)
 	styler := newEditorDiagnosticStyler(base, th)
 	styler.SetSource(source)
-	styler.display = newDiagnosticSnapshot(
+	styler.overlay = newDiagnosticSnapshot(
 		diagnosticKey{},
 		parser.Diagnostics(parser.Parse("large.http", []byte(source))),
-	).display
+	).overlay
 	line := []rune("# @sse max-event=5")
 	b.ReportAllocs()
 	for b.Loop() {

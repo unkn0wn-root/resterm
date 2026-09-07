@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 )
@@ -26,16 +27,20 @@ const (
 
 type diagnosticPhase uint8
 
+// idle: the snapshot is current or its parse is running. pending: waiting for
+// the debounce or for insert mode to end. due: parse as soon as the slot is free.
 const (
-	// diagnosticIdle means the snapshot is current or a parse for this key is running.
 	diagnosticIdle diagnosticPhase = iota
-	// diagnosticPending waits for the debounce or for the editor to leave insert mode.
 	diagnosticPending
-	// diagnosticDue parses as soon as the single parse slot is free.
 	diagnosticDue
 )
 
-// Context changes invalidate popups and deferred actions.
+type diagnosticKey struct {
+	revision uint64
+	path     string
+}
+
+// Any change here closes the popup and cancels a deferred action.
 type diagnosticContext struct {
 	key   diagnosticKey
 	caret cursorPosition
@@ -47,6 +52,18 @@ type diagnosticIntent struct {
 	diagnosticContext
 }
 
+// Snapshots are immutable once delivered and are the only data actions use.
+type diagnosticSnapshot struct {
+	key     diagnosticKey
+	report  diag.Report
+	overlay *diag.Overlay
+}
+
+func newDiagnosticSnapshot(key diagnosticKey, rep diag.Report) *diagnosticSnapshot {
+	return &diagnosticSnapshot{key: key, report: rep, overlay: diag.NewOverlay(rep)}
+}
+
+// visible is render-only and may outlive current while a newer parse is pending.
 type diagnosticState struct {
 	disabled  bool
 	key       diagnosticKey
@@ -56,13 +73,15 @@ type diagnosticState struct {
 	ticket    uint64
 	running   uint64
 	current   *diagnosticSnapshot
-	visible   *diagnosticDisplay
+	visible   *diag.Overlay
 	intent    diagnosticIntent
 	popup     diagnosticPopup
 }
 
 type diagnosticsInitMsg struct{}
+
 type diagnosticsTickMsg struct{ ticket uint64 }
+
 type diagnosticsResultMsg struct {
 	ticket   uint64
 	snapshot *diagnosticSnapshot
@@ -74,6 +93,10 @@ func (m *Model) diagnosticKey() diagnosticKey {
 
 func (m *Model) diagnosticContext() diagnosticContext {
 	return diagnosticContext{key: m.diagnosticKey(), caret: m.editor.caretPosition(), focus: m.focus}
+}
+
+func (m *Model) diagnosticContextCurrent(ctx diagnosticContext) bool {
+	return m.editorIdle() && ctx == m.diagnosticContext()
 }
 
 func (m *Model) diagnosticsActive() bool {
@@ -96,18 +119,14 @@ func (m *Model) currentDiagnostics() *diagnosticSnapshot {
 	return s
 }
 
-// visibleDiagnosticDisplay is render-only and may contain counts and decorations
-// from an older parse. Interactive actions must use currentDiagnostics.
-func (m *Model) visibleDiagnosticDisplay() *diagnosticDisplay {
-	display := m.diagnostics.visible
-	if !m.diagnosticsActive() || display == nil || display.path != m.currentFile {
+// visibleDiagnostics may carry counts and decorations from an older parse.
+// Interactive actions must use currentDiagnostics.
+func (m *Model) visibleDiagnostics() *diag.Overlay {
+	o := m.diagnostics.visible
+	if !m.diagnosticsActive() || o == nil || m.diagnostics.key.path != m.currentFile {
 		return nil
 	}
-	return display
-}
-
-func (m *Model) diagnosticIntentCurrent(intent diagnosticIntent) bool {
-	return m.editorIdle() && intent.diagnosticContext == m.diagnosticContext()
+	return o
 }
 
 // syncDiagnostics runs after every Update, including modal paths and
@@ -117,13 +136,12 @@ func (m *Model) syncDiagnostics() tea.Cmd {
 	key, active := m.diagnosticKey(), m.diagnosticsActive()
 	leftInsert := s.inserting && !m.editorInsertMode
 	s.inserting = m.editorInsertMode
-	if s.intent.action != diagnosticNone && !m.diagnosticIntentCurrent(s.intent) {
+	if s.intent.action != diagnosticNone && !m.diagnosticContextCurrent(s.intent.diagnosticContext) {
 		s.intent = diagnosticIntent{}
 	}
-	switch {
-	case s.key != key || s.active != active:
+	if s.key != key || s.active != active {
 		m.beginDiagnosticRefresh(key, active)
-	case !leftInsert || s.phase == diagnosticIdle:
+	} else if !leftInsert || s.phase == diagnosticIdle {
 		return nil
 	}
 	if !active || m.editorInsertMode {
@@ -184,7 +202,7 @@ func (m *Model) handleDiagnosticsResult(msg diagnosticsResultMsg) tea.Cmd {
 	intent := s.intent
 	s.intent = diagnosticIntent{}
 	var actionCmd tea.Cmd
-	if intent.action != diagnosticNone && m.diagnosticIntentCurrent(intent) {
+	if intent.action != diagnosticNone && m.diagnosticContextCurrent(intent.diagnosticContext) {
 		actionCmd = m.performDiagnosticAction(intent.action)
 	}
 	return batchCommands(actionCmd, m.startDiagnosticParse())
@@ -192,11 +210,11 @@ func (m *Model) handleDiagnosticsResult(msg diagnosticsResultMsg) tea.Cmd {
 
 func (m *Model) beginDiagnosticRefresh(key diagnosticKey, active bool) {
 	s := &m.diagnostics
-	keepVisible := active && s.active && s.key.path == key.path && !m.editorInsertMode
-	if keepVisible && s.visible != nil {
-		s.visible = s.visible.afterEdit(&m.editor)
-	} else if !keepVisible {
+	keep := active && s.active && s.key.path == key.path && !m.editorInsertMode
+	if !keep {
 		s.visible = nil
+	} else if s.visible != nil {
+		s.visible = s.visible.Retain(&m.editor)
 	}
 	s.key, s.active = key, active
 	s.ticket++
@@ -207,13 +225,13 @@ func (m *Model) beginDiagnosticRefresh(key diagnosticKey, active bool) {
 	if active {
 		s.phase = diagnosticPending
 	}
-	m.editor.setDiagnosticDisplay(s.visible)
+	m.editor.setDiagnosticOverlay(s.visible)
 }
 
 func (m *Model) publishDiagnostics(snapshot *diagnosticSnapshot) {
 	m.diagnostics.current = snapshot
-	m.diagnostics.visible = snapshot.display
-	m.editor.setDiagnosticDisplay(snapshot.display)
+	m.diagnostics.visible = snapshot.overlay
+	m.editor.setDiagnosticOverlay(snapshot.overlay)
 }
 
 func (m *Model) requestDiagnostics(action diagnosticAction) tea.Cmd {
@@ -262,13 +280,14 @@ func (m *Model) performDiagnosticAction(action diagnosticAction) tea.Cmd {
 		}
 		m.openCurrentStatusModal()
 	case diagnosticNext, diagnosticPrevious:
-		pos, ok := s.next(m.editor.caretPosition(), action == diagnosticPrevious)
+		caret := m.editor.caretPosition()
+		at, ok := s.overlay.Next(diag.Cell{Line: caret.Line, Col: caret.Column}, action == diagnosticPrevious)
 		if !ok {
 			return statusCmdQuiet(statusInfo, "No editor diagnostics")
 		}
 		focusCmd := m.setFocus(focusEditor)
 		m.editor.ClearSelection()
-		m.editor.moveCursorTo(pos.Line, pos.Column)
+		m.editor.moveCursorTo(at.Line, at.Col)
 		m.openDiagnosticPopup()
 		return focusCmd
 	}
@@ -277,7 +296,7 @@ func (m *Model) performDiagnosticAction(action diagnosticAction) tea.Cmd {
 
 func (m *Model) openDiagnosticList(s *diagnosticSnapshot) {
 	level := statusWarn
-	if s.display.errors > 0 {
+	if errs, _ := s.overlay.Counts(); errs > 0 {
 		level = statusError
 	}
 	var lines []string
@@ -308,7 +327,8 @@ func (m *Model) executeDiagnosticsCommand(args []string) tea.Cmd {
 	}
 }
 
-func (m *Model) diagnosticShortcutAvailable(action bindings.ActionID) bool {
+// shortcutAvailable gates bindings that only make sense in editor normal mode.
+func (m *Model) shortcutAvailable(action bindings.ActionID) bool {
 	switch action {
 	case bindings.ActionNextDiagnostic, bindings.ActionPreviousDiagnostic:
 		return m.focus == focusEditor && !m.editorInsertMode && m.diagnosticsActive()
