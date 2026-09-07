@@ -17,6 +17,7 @@ func (req *Request) Clone() *Request {
 	dst.Headers = req.Headers.Clone()
 	dst.Settings = maps.Clone(req.Settings)
 	dst.Variables = slices.Clone(req.Variables)
+	dst.HeaderLines = slices.Clone(req.HeaderLines)
 	dst.Metadata = req.Metadata.Clone()
 	dst.Body = cloneBodySource(req.Body)
 	dst.GRPC = cloneGRPCRequest(req.GRPC)

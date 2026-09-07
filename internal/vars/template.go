@@ -4,6 +4,9 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"unicode"
+
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
@@ -13,12 +16,14 @@ var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 // traversal implementation behind ExpandTemplates, Render and
 // ReplaceTemplateVars, so all of them agree on what counts as a placeholder.
 type Template struct {
+	src  string
 	segs []tplSeg
 }
 
 type tplSeg struct {
 	text string // literal text, or the raw {{...}} match when ph is set
 	name string // trimmed placeholder name, blank for literals and {{ }}
+	off  int    // byte offset in src
 	ph   bool
 }
 
@@ -32,26 +37,45 @@ func CompileTemplate(input string) Template {
 		if input == "" {
 			return Template{}
 		}
-		return Template{segs: []tplSeg{{text: input}}}
+		return Template{src: input, segs: []tplSeg{{text: input}}}
 	}
 
 	segs := make([]tplSeg, 0, 2*len(ms)+1)
 	last := 0
 	for _, m := range ms {
 		if m[0] > last {
-			segs = append(segs, tplSeg{text: input[last:m[0]]})
+			segs = append(segs, tplSeg{text: input[last:m[0]], off: last})
 		}
 		segs = append(segs, tplSeg{
 			text: input[m[0]:m[1]],
 			name: strings.TrimSpace(input[m[2]:m[3]]),
+			off:  m[0],
 			ph:   true,
 		})
 		last = m[1]
 	}
 	if last < len(input) {
-		segs = append(segs, tplSeg{text: input[last:]})
+		segs = append(segs, tplSeg{text: input[last:], off: last})
 	}
-	return Template{segs: segs}
+	return Template{src: input, segs: segs}
+}
+
+type PlaceholderError struct {
+	Match string
+	Span  diag.Span
+	Err   error
+}
+
+func (e *PlaceholderError) Error() string { return e.Err.Error() }
+func (e *PlaceholderError) Unwrap() error { return e.Err }
+
+// The caller sets the error class.
+func (e *PlaceholderError) Diagnostic() diag.Report {
+	return diag.Report{Items: []diag.Diagnostic{{
+		Severity: diag.SeverityError,
+		Message:  e.Err.Error(),
+		Span:     e.Span,
+	}}}
 }
 
 // Render expands the template the same way ExpandTemplates does. An
@@ -59,22 +83,22 @@ func CompileTemplate(input string) Template {
 // the first structural error (cycle, depth, expression) if any occurred,
 // otherwise the first undefined variable.
 func (t Template) Render(r *Resolver) (string, error) {
-	return t.render(r, r.exprPos, true, true, nil)
+	return t.render(r, r.exprPos, diag.Pos{}, true, true, nil)
 }
 
 func (t Template) render(
 	r *Resolver,
-	pos ExprPos,
+	pos, start diag.Pos,
 	allowDynamic, allowExpr bool,
 	st *expandState,
 ) (string, error) {
-	result, err := t.renderResult(r, pos, allowDynamic, allowExpr, st)
+	result, err := t.renderResult(r, pos, start, allowDynamic, allowExpr, st)
 	return result.Value, err
 }
 
 func (t Template) renderResult(
 	r *Resolver,
-	pos ExprPos,
+	pos, start diag.Pos,
 	allowDynamic, allowExpr bool,
 	st *expandState,
 ) (Expansion, error) {
@@ -86,31 +110,60 @@ func (t Template) renderResult(
 	// declared value can never mask a cycle or broken expression next to it.
 	lenientRoot := st == nil && r.lenient
 	var firstErr error
+	var failed tplSeg
 	var undef bool
-	out := t.replace(func(match, name string) string {
-		if name == "" {
-			return match
+	out := t.replace(func(seg tplSeg) string {
+		if seg.name == "" {
+			return seg.text
 		}
-		value, err := r.resolveName(name, pos, allowDynamic, allowExpr, st)
+		value, err := r.resolveName(seg.name, pos, allowDynamic, allowExpr, st)
 		if err != nil {
 			undefined := errors.Is(err, ErrUndefinedVariable)
 			if undefined {
 				undef = true
 			}
 			if lenientRoot && undefined {
-				return match
+				return seg.text
 			}
-			firstErr = PreferStructural(firstErr, err)
-			return match
+			if replaces(err, firstErr) {
+				firstErr, failed = err, seg
+			}
+			return seg.text
 		}
 		return value
 	})
+	// Nested values come from other declarations, so report the placeholder
+	// in this template.
+	if firstErr != nil && st == nil {
+		firstErr = &PlaceholderError{Match: failed.text, Span: t.span(failed, start), Err: firstErr}
+	}
 	return Expansion{Value: out, HasUndefinedVariables: undef}, firstErr
+}
+
+func (t Template) span(seg tplSeg, start diag.Pos) diag.Span {
+	switch {
+	case start.Line <= 0:
+		return diag.Span{}
+	case start.Col <= 0:
+		return diag.Span{Start: start}
+	}
+	from := advance(start, t.src[:seg.off])
+	return diag.Span{Start: from, End: advance(from, seg.text)}
+}
+
+func advance(pos diag.Pos, text string) diag.Pos {
+	if i := strings.LastIndexByte(text, '\n'); i >= 0 {
+		pos.Line += strings.Count(text, "\n")
+		pos.Col = len(text) - i
+		return pos
+	}
+	pos.Col += len(text)
+	return pos
 }
 
 // replace rebuilds the input and passes every placeholder through fn, even a
 // blank {{ }}.
-func (t Template) replace(fn func(match, name string) string) string {
+func (t Template) replace(fn func(seg tplSeg) string) string {
 	if len(t.segs) == 0 {
 		return ""
 	}
@@ -120,10 +173,57 @@ func (t Template) replace(fn func(match, name string) string) string {
 	var b strings.Builder
 	for _, s := range t.segs {
 		if s.ph {
-			b.WriteString(fn(s.text, s.name))
+			b.WriteString(fn(s))
 		} else {
 			b.WriteString(s.text)
 		}
 	}
 	return b.String()
+}
+
+type Unclosed struct {
+	Text string
+	Off  int // byte offset in the input
+	Span diag.Span
+}
+
+func UnclosedPlaceholders(input string, start diag.Pos) []Unclosed {
+	if !HasPlaceholder(input) {
+		return nil
+	}
+	closed := templateVarPattern.FindAllStringIndex(input, -1)
+	var out []Unclosed
+	for off, c := 0, 0; ; {
+		i := strings.Index(input[off:], "{{")
+		if i < 0 {
+			return out
+		}
+		i += off
+		for c < len(closed) && closed[c][1] <= i {
+			c++
+		}
+		if c < len(closed) && closed[c][0] <= i {
+			off = closed[c][1]
+			continue
+		}
+		end := i + 2 + nameLen(input[i+2:])
+		if end < len(input) && input[end] == '}' {
+			end++
+		}
+		from := advance(start, input[:i])
+		out = append(out, Unclosed{
+			Text: input[i:end],
+			Off:  i,
+			Span: diag.Span{Start: from, End: advance(from, input[i:end])},
+		})
+		off = end
+	}
+}
+
+func nameLen(s string) int {
+	i := strings.IndexFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == '{' || r == '}' })
+	if i < 0 {
+		return len(s)
+	}
+	return i
 }

@@ -97,6 +97,14 @@ type BodySource struct {
 	MimeType string
 	GraphQL  *GraphQLBody
 	Options  BodyOptions
+	Line     int
+}
+
+type HeaderLine struct {
+	Name  string
+	Value string
+	Line  int
+	Col   int
 }
 
 // Scenarios that share a method and path merge into one route when compiled.
@@ -434,6 +442,9 @@ type Request struct {
 	LineRange    LineRange
 	SourcePath   string
 	OriginalText string
+	URLLine      int
+	URLCol       int
+	HeaderLines  []HeaderLine
 	GRPC         *GRPCRequest
 	SSE          *SSERequest
 	WebSocket    *WebSocketRequest
@@ -446,6 +457,39 @@ func (req *Request) Origin() string {
 		return ""
 	}
 	return origin(req.SourcePath, req.LineRange.Start)
+}
+
+func (req *Request) URLPos() diag.Pos {
+	if req.URLLine <= 0 {
+		return diag.Pos{}
+	}
+	return diag.Pos{Path: req.SourcePath, Line: req.URLLine, Col: req.URLCol}
+}
+
+func (req *Request) BodyPos() diag.Pos {
+	if req.Body.Line <= 0 {
+		return diag.Pos{}
+	}
+	return diag.Pos{Path: req.SourcePath, Line: req.Body.Line, Col: 1}
+}
+
+// Match by name and value because scripts can change or reorder headers.
+func (req *Request) HeaderPos(name, value string) diag.Pos {
+	for _, h := range req.HeaderLines {
+		if h.Value == value && strings.EqualFold(h.Name, name) {
+			return diag.Pos{Path: req.SourcePath, Line: h.Line, Col: h.Col}
+		}
+	}
+	return diag.Pos{}
+}
+
+func (req *Request) SetURL(url string) {
+	req.URL = url
+	req.URLLine, req.URLCol = 0, 0
+}
+
+func (req *Request) SetBodyText(text string) {
+	req.Body = BodySource{Text: text, MimeType: req.Body.MimeType, Options: req.Body.Options}
 }
 
 // RepeatUnsupported returns the protocol name when @poll or @retry cannot be used.

@@ -99,10 +99,24 @@ func (s *chainState) entries(err error, depth int) []ChainEntry {
 
 	if wrapped, ok := err.(errUnwrapper); ok {
 		if child := wrapped.Unwrap(); child != nil {
-			return s.entries(child, depth+1)
+			return s.wrapperChain(err, child, depth)
 		}
 	}
 	return leafChain(err, s)
+}
+
+func (s *chainState) wrapperChain(err, child error, depth int) []ChainEntry {
+	msg, cause := err.Error(), child.Error()
+	if msg == cause {
+		return s.entries(child, depth+1)
+	}
+	if op, ok := strings.CutSuffix(msg, ": "+cause); ok && cause != "" {
+		return s.typedWrapper(ChainOperation, classify(err), op, child, depth)
+	}
+	if s.shouldSkip(msg) {
+		return nil
+	}
+	return []ChainEntry{{Class: classify(err), Kind: ChainCause, Message: msg}}
 }
 
 func (s *chainState) typedWrapper(
