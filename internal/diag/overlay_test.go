@@ -272,6 +272,12 @@ func (r reference) retain(source []string, edited string) reference {
 	return next
 }
 
+// runeLines is a LineSource without the read log, which would grow across iterations.
+type runeLines [][]rune
+
+func (l *runeLines) LineCount() int            { return len(*l) }
+func (l *runeLines) LineRunes(line int) []rune { return (*l)[line] }
+
 func BenchmarkOverlayRetain(b *testing.B) {
 	for _, tt := range []struct {
 		name           string
@@ -301,10 +307,10 @@ func BenchmarkOverlayRetain(b *testing.B) {
 			}
 			source := strings.Join(lines, "\n")
 			overlay := diag.NewOverlay(diag.Report{Source: []byte(source), Items: items})
-			edited := newLineSource(source + "x")
+			edited := runeLines(newLineSource(source + "x").lines)
 			b.ReportAllocs()
 			for b.Loop() {
-				overlay.Retain(edited)
+				overlay.Retain(&edited)
 			}
 		})
 	}

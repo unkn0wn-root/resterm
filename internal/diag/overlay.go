@@ -172,33 +172,42 @@ func (o *Overlay) Retain(src LineSource) *Overlay {
 		if n := len(edited); n > 0 && edited[n-1] == '\r' {
 			edited = edited[:n-1]
 		}
-		same, whole := commonPrefix(strings.TrimSuffix(o.source[line], "\r"), edited)
+		// Empty ranges have no text to anchor them and need the whole line.
+		// Others only need the text up to their end.
+		limit := 0
 		for _, r := range ranges {
-			// Empty ranges have no text to anchor them and need the whole line.
-			if r.Start == r.End && !whole || r.End > same {
+			if r.Start == r.End {
+				limit = len(edited)
+				break
+			}
+			limit = min(max(limit, r.End), len(edited))
+		}
+		same, identical := matchingPrefix(strings.TrimSuffix(o.source[line], "\r"), edited, limit)
+		for _, r := range ranges {
+			if r.Start == r.End && !identical || r.End > same {
 				continue
 			}
 			next.lines[line] = append(next.lines[line], r)
 		}
-		if severity, ok := o.marks[line]; ok && whole {
+		if severity, ok := o.marks[line]; ok && identical {
 			next.marks[line] = severity
 		}
 	}
 	return next
 }
 
-// Number of leading runes both lines share, and whether they are identical.
-func commonPrefix(before string, after []rune) (int, bool) {
-	n := 0
-	for _, r := range after {
+// Number of leading runes of after[:limit] that match before, and whether the
+// two lines are identical, which is only known when limit covers after.
+func matchingPrefix(before string, after []rune, limit int) (n int, identical bool) {
+	for n < limit {
 		expected, size := utf8.DecodeRuneInString(before)
-		if size == 0 || r != expected {
+		if size == 0 || after[n] != expected {
 			return n, false
 		}
 		before = before[size:]
 		n++
 	}
-	return n, before == ""
+	return n, limit == len(after) && before == ""
 }
 
 func rank(severity Severity) int {
