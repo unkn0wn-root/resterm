@@ -10,30 +10,31 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-// Diagnostics returns editor annotations. Check and WarningTexts still report
-// the opening line of continued directives.
 func Diagnostics(doc *restfile.Document) diag.Report {
-	rep := diag.Report{Path: doc.Path, Source: slices.Clone(doc.Raw)}
+	rep := diag.Report{Path: doc.Path, Source: doc.Raw}
 	lines := strings.Split(string(doc.Raw), "\n")
-	add := func(items []restfile.ParseDiagnostic, severity diag.Severity) {
-		for _, item := range items {
-			span := item.Span
-			if span.Start.Line == 0 {
-				span = lineSpan(lines, item.Line)
-			}
-			labels := slices.Clone(item.Labels)
-			for i := range labels {
-				labels[i].Span = withPath(labels[i].Span, doc.Path)
-			}
-			rep.Items = append(rep.Items, diag.Diagnostic{
-				Class: diag.ClassParse, Component: diag.ComponentParser, Severity: severity,
-				Message: item.Message, Span: withPath(span, doc.Path), Labels: labels,
-			})
-		}
+	for _, item := range doc.Errors {
+		rep.Items = append(rep.Items, reportItem(item, diag.SeverityError, doc.Path, lines))
 	}
-	add(doc.Errors, diag.SeverityError)
-	add(doc.Warnings, diag.SeverityWarning)
+	for _, item := range doc.Warnings {
+		rep.Items = append(rep.Items, reportItem(item, diag.SeverityWarning, doc.Path, lines))
+	}
 	return rep
+}
+
+func reportItem(item restfile.ParseDiagnostic, severity diag.Severity, path string, lines []string) diag.Diagnostic {
+	span := item.Span
+	if span.Start.Col == 0 {
+		span = lineSpan(lines, span.Start.Line)
+	}
+	labels := slices.Clone(item.Labels)
+	for i := range labels {
+		labels[i].Span = withPath(labels[i].Span, path)
+	}
+	return diag.Diagnostic{
+		Class: diag.ClassParse, Component: diag.ComponentParser, Severity: severity,
+		Message: item.Message, Span: withPath(span, path), Labels: labels,
+	}
 }
 
 func withPath(span diag.Span, path string) diag.Span {
@@ -55,8 +56,7 @@ func lineSpan(lines []string, line int) diag.Span {
 	return span
 }
 
-// argumentPart maps argument bytes back to a physical source line. Separators
-// and padding between continued lines have no source.
+// Maps argument bytes to their source line. Padding between continued lines has no source.
 type argumentPart struct {
 	start, end int
 	pos        diag.Pos
@@ -76,7 +76,7 @@ func (d parsedDirective) argumentSpan(start, end int) (diag.Span, bool) {
 }
 
 func (d parsedDirective) diagnostic(msg string, cause error) restfile.ParseDiagnostic {
-	item := restfile.ParseDiagnostic{Line: d.lines.Start, Message: msg}
+	item := restfile.ParseDiagnostic{Message: msg}
 	item.Span, item.Labels = d.spans(cause)
 	return item
 }

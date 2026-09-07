@@ -56,7 +56,7 @@ GET https://example.com
 		t.Fatalf("warnings = %v, want %d", doc.Warnings, len(want))
 	}
 	for i, expected := range want {
-		if got := doc.Warnings[i]; got.Line != expected.line || got.Message != expected.message {
+		if got := doc.Warnings[i]; got.Span.Start.Line != expected.line || got.Message != expected.message {
 			t.Errorf("warning %d = %+v, want line %d message %q", i, got, expected.line, expected.message)
 		}
 	}
@@ -74,7 +74,7 @@ func TestUnknownDirectiveRejectsWithoutEndingWorkflow(t *testing.T) {
 	if len(doc.Errors) != 1 {
 		t.Fatalf("errors = %v, want one", doc.Errors)
 	}
-	if got, want := doc.Errors[0].Line, 3; got != want {
+	if got, want := doc.Errors[0].Span.Start.Line, 3; got != want {
 		t.Fatalf("error line = %d, want %d", got, want)
 	}
 	if got, want := doc.Errors[0].Message, "@stpe is not a known Resterm directive in a workflow"; got != want {

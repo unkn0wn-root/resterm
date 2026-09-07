@@ -17,11 +17,15 @@ import (
 )
 
 func (b *documentBuilder) addMockError(line int, msg string) {
-	b.pushMockError(b.diagnostic(line, msg, nil))
+	b.pushMockError(lineDiagnostic(line, msg))
 }
 
-func (b *documentBuilder) reportMock(line int, err error) {
-	b.pushMockError(b.diagnostic(line, err.Error(), err))
+func (b *documentBuilder) failMock(d parsedDirective, msg string) {
+	b.pushMockError(d.diagnostic(msg, nil))
+}
+
+func (b *documentBuilder) reportMock(d parsedDirective, err error) {
+	b.pushMockError(d.diagnostic(err.Error(), err))
 }
 
 func (b *documentBuilder) pushMockError(item restfile.ParseDiagnostic) {
@@ -30,15 +34,10 @@ func (b *documentBuilder) pushMockError(item restfile.ParseDiagnostic) {
 }
 
 // One error per key, so a typo next to a usable option still names what broke.
-func (b *documentBuilder) checkMockOptions(
-	line int,
-	name directive.Name,
-	vals directive.Options,
-	known ...string,
-) {
+func (b *documentBuilder) checkMockOptions(d parsedDirective, vals directive.Options, known ...string) {
 	for _, key := range vals.Keys() {
 		if !slices.Contains(known, key) {
-			b.reportMock(line, directive.UnknownOption(name, key))
+			b.reportMock(d, directive.UnknownOption(d.Name, key))
 		}
 	}
 }
@@ -69,33 +68,34 @@ func (b *documentBuilder) handleMockDirective(d parsedDirective) directiveOutcom
 	switch d.Name {
 	case directive.Mock:
 		if b.inRequest {
-			b.addMockError(d.lines.Start, "@mock must start a new block after a ### separator")
+			b.failMock(d, "@mock must start a new block after a ### separator")
 			return directiveRejected
 		}
 		if b.workflow != nil {
-			b.addMockError(d.lines.Start, "@mock cannot be declared inside a workflow")
+			b.failMock(d, "@mock cannot be declared inside a workflow")
 			return directiveRejected
 		}
-		b.startMock(d.lines.Start, d.Args)
+		b.startMock(d)
 		return directiveApplied
 	case directive.Match, directive.Expect:
-		b.addMockError(d.lines.Start, d.Name.Tag()+" must follow an @mock directive")
+		b.failMock(d, d.Name.Tag()+" must follow an @mock directive")
 		return directiveRejected
 	default:
 		return directiveIgnored
 	}
 }
 
-func (b *documentBuilder) startMock(line int, raw string) {
-	vals, err := directive.ParseOptions(directive.Mock, raw)
+func (b *documentBuilder) startMock(d parsedDirective) {
+	vals, err := directive.ParseOptions(directive.Mock, d.Args)
 	if err != nil {
-		b.reportMock(line, err)
+		b.reportMock(d, err)
 	}
 	b.checkMockOptions(
-		line, directive.Mock, vals,
+		d, vals,
 		"method", "path", "name", "sequence", "sequence-key", "default", "latency", "interpolate",
 	)
 
+	line := d.lines.Start
 	m := &mockBuilder{
 		startLine: line,
 		endLine:   line,
@@ -111,69 +111,69 @@ func (b *documentBuilder) startMock(line int, raw string) {
 		},
 	}
 	b.pendingTitle = ""
-	b.checkMockRoute(line, m)
+	b.checkMockRoute(d, m)
 	if vals.Has("sequence") && m.sequence == "" {
-		b.addMockError(line, "@mock sequence name cannot be empty")
+		b.failMock(d, "@mock sequence name cannot be empty")
 	}
 	if raw, ok := vals.Lookup("sequence-key"); ok {
 		if m.sequence == "" {
-			b.addMockError(line, "@mock sequence-key requires sequence")
+			b.failMock(d, "@mock sequence-key requires sequence")
 		} else if key, err := parseMockSequenceKey(raw, m.path); err != nil {
-			b.addMockError(line, "@mock sequence-key "+err.Error())
+			b.failMock(d, "@mock sequence-key "+err.Error())
 		} else {
 			m.sequenceKey = key
 		}
 	}
 
-	if v, ok := b.mockBool(line, vals, "default"); ok {
+	if v, ok := b.mockBool(d, vals, "default"); ok {
 		m.isDefault = v
 	}
 	if raw, ok := vals.Lookup("latency"); ok {
 		spec, err := delay.Parse(raw)
 		if err != nil {
-			b.addMockError(line, "@mock latency "+err.Error())
+			b.failMock(d, "@mock latency "+err.Error())
 		} else {
 			m.latency = spec
 		}
 	}
-	if v, ok := b.mockBool(line, vals, "interpolate"); ok {
+	if v, ok := b.mockBool(d, vals, "interpolate"); ok {
 		m.disableInterpolation = !v
 	}
 	b.mock = m
 }
 
-func (b *documentBuilder) mockBool(line int, vals directive.Options, key string) (bool, bool) {
+func (b *documentBuilder) mockBool(d parsedDirective, vals directive.Options, key string) (bool, bool) {
 	raw, ok := vals.Lookup(key)
 	if !ok {
 		return false, false
 	}
 	v, ok := directive.ParseBool(raw)
 	if !ok {
-		b.addMockError(line, fmt.Sprintf("@mock %s must be true or false", key))
+		b.failMock(d, fmt.Sprintf("@mock %s must be true or false", key))
 		return false, false
 	}
 	return v, true
 }
 
-func (b *documentBuilder) checkMockRoute(line int, m *mockBuilder) {
+func (b *documentBuilder) checkMockRoute(d parsedDirective, m *mockBuilder) {
 	if m.method == "" {
-		b.addMockError(line, "@mock method is required")
+		b.failMock(d, "@mock method is required")
 	} else if !httpguts.ValidHeaderFieldName(m.method) {
-		b.addMockError(line, fmt.Sprintf("invalid @mock method %q", m.method))
+		b.failMock(d, fmt.Sprintf("invalid @mock method %q", m.method))
 	}
 	if m.path == "" {
-		b.addMockError(line, "@mock path is required")
+		b.failMock(d, "@mock path is required")
 	} else if err := restfile.ValidateMockPath(m.path); err != nil {
-		b.reportMock(line, err)
+		b.reportMock(d, err)
 	}
 	if m.name != "" && !restfile.ValidMockName(m.name) {
-		b.addMockError(line, "@mock name may contain only letters, digits, '.', '_' and '-'")
+		b.failMock(d, "@mock name may contain only letters, digits, '.', '_' and '-'")
 	}
 	if m.sequence != "" && !restfile.ValidMockName(m.sequence) {
-		b.addMockError(line, "@mock sequence may contain only letters, digits, '.', '_' and '-'")
+		b.failMock(d, "@mock sequence may contain only letters, digits, '.', '_' and '-'")
 	}
 	if m.name != "" && m.sequence != "" {
-		b.addMockError(line, "@mock name and sequence cannot be combined")
+		b.failMock(d, "@mock name and sequence cannot be combined")
 	}
 }
 
@@ -232,16 +232,13 @@ func (m *mockBuilder) parsePreamble(b *documentBuilder, ln line) {
 func (m *mockBuilder) declare(b *documentBuilder, d parsedDirective) {
 	switch {
 	case d.Name == directive.Match && len(m.responses) == 0:
-		m.addMatch(b, d.lines.Start, d.Args)
+		m.addMatch(b, d)
 	case d.Name == directive.Expect && len(m.responses) == 0:
-		m.addExpectation(b, d.lines.Start, d.Args)
+		m.addExpectation(b, d)
 	case d.Name == directive.Match || d.Name == directive.Expect:
-		b.addMockError(d.lines.Start, d.Name.Tag()+" must be declared before the first sequence response")
+		b.failMock(d, d.Name.Tag()+" must be declared before the first sequence response")
 	default:
-		b.addMockError(
-			d.lines.Start,
-			fmt.Sprintf("directive %s is not valid before a mock response", d.Spelling.Tag()),
-		)
+		b.failMock(d, fmt.Sprintf("directive %s is not valid before a mock response", d.Spelling.Tag()))
 	}
 }
 
@@ -264,32 +261,32 @@ func (m *mockBuilder) addHeader(b *documentBuilder, ln int, line string) {
 	m.headers.Add(name, value)
 }
 
-func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
-	vals, err := directive.ParseOptions(directive.Match, raw)
+func (m *mockBuilder) addMatch(b *documentBuilder, d parsedDirective) {
+	vals, err := directive.ParseOptions(directive.Match, d.Args)
 	if err != nil {
-		b.reportMock(line, err)
+		b.reportMock(d, err)
 	}
-	b.checkMockOptions(line, directive.Match, vals, "query", "headers", "json", "json-rules")
+	b.checkMockOptions(d, vals, "query", "headers", "json", "json-rules")
 
 	if raw, ok := vals.Lookup("query"); ok {
-		addMatchers(b, line, "query", raw, m.match.Query, canonQueryMatcher)
+		addMatchers(b, d, "query", raw, m.match.Query, canonQueryMatcher)
 	}
 	if raw, ok := vals.Lookup("headers"); ok {
-		addMatchers(b, line, "headers", raw, m.match.Headers, canonHeaderMatcher)
+		addMatchers(b, d, "headers", raw, m.match.Headers, canonHeaderMatcher)
 	}
 	if raw, ok := vals.Lookup("json"); ok {
 		compact, err := compactJSON(raw)
-		b.setMockJSON(line, "json", &m.match.JSON, compact, jsonValueError(raw, err))
+		b.setMockJSON(d, "json", &m.match.JSON, compact, jsonValueError(raw, err))
 	}
 	if raw, ok := vals.Lookup("json-rules"); ok {
 		compact, err := compactJSONObject(raw)
-		b.setMockJSON(line, "json-rules", &m.match.JSONRules, compact, err)
+		b.setMockJSON(d, "json-rules", &m.match.JSONRules, compact, err)
 	}
 }
 
-func (b *documentBuilder) setMockJSON(line int, opt string, dst *[]byte, compact []byte, err error) {
+func (b *documentBuilder) setMockJSON(d parsedDirective, opt string, dst *[]byte, compact []byte, err error) {
 	if err != nil {
-		b.addMockError(line, "invalid @match "+opt+": "+err.Error())
+		b.failMock(d, "invalid @match "+opt+": "+err.Error())
 		return
 	}
 	if len(*dst) == 0 {
@@ -298,34 +295,34 @@ func (b *documentBuilder) setMockJSON(line int, opt string, dst *[]byte, compact
 	}
 	merged, err := mergeMockJSON(*dst, compact)
 	if err != nil {
-		b.addMockError(line, "@match "+opt+" "+err.Error())
+		b.failMock(d, "@match "+opt+" "+err.Error())
 		return
 	}
 	*dst = merged
 }
 
-func (m *mockBuilder) addExpectation(b *documentBuilder, line int, raw string) {
-	vals, err := directive.ParseOptions(directive.Expect, raw)
+func (m *mockBuilder) addExpectation(b *documentBuilder, d parsedDirective) {
+	vals, err := directive.ParseOptions(directive.Expect, d.Args)
 	if err != nil {
-		b.reportMock(line, err)
+		b.reportMock(d, err)
 	}
-	b.checkMockOptions(line, directive.Expect, vals, "calls")
+	b.checkMockOptions(d, vals, "calls")
 
 	if m.expectation != nil {
-		b.addMockError(line, "@expect is already defined for this mock")
+		b.failMock(d, "@expect is already defined for this mock")
 		return
 	}
 	calls := vals.Get("calls")
 	if calls == "" {
-		b.addMockError(line, "@expect calls is required")
+		b.failMock(d, "@expect calls is required")
 		return
 	}
 	n, err := strconv.ParseUint(calls, 10, 64)
 	if err != nil {
-		b.addMockError(line, "@expect calls must be a non-negative integer")
+		b.failMock(d, "@expect calls must be a non-negative integer")
 		return
 	}
-	m.expectation = &restfile.MockExpectation{Calls: n, Line: line}
+	m.expectation = &restfile.MockExpectation{Calls: n, Line: d.lines.Start}
 }
 
 // Rules are decoded independently so one bad matcher does not discard the valid
@@ -333,7 +330,7 @@ func (m *mockBuilder) addExpectation(b *documentBuilder, line int, raw string) {
 // instead of exposing map iteration order.
 func addMatchers[T restfile.MockQueryRule | restfile.MockHeaderRule](
 	b *documentBuilder,
-	line int,
+	d parsedDirective,
 	opt string,
 	raw string,
 	dst map[string]T,
@@ -341,27 +338,27 @@ func addMatchers[T restfile.MockQueryRule | restfile.MockHeaderRule](
 ) {
 	fields, err := parseJSONObject(raw)
 	if err != nil {
-		b.addMockError(line, fmt.Sprintf("invalid @match %s: %s", opt, err))
+		b.failMock(d, fmt.Sprintf("invalid @match %s: %s", opt, err))
 		return
 	}
 	for _, key := range util.SortedKeys(fields) {
 		name := strings.TrimSpace(key)
 		if name == "" {
-			b.addMockError(line, fmt.Sprintf("@match %s name cannot be empty", opt))
+			b.failMock(d, fmt.Sprintf("@match %s name cannot be empty", opt))
 			continue
 		}
 		name, err := canon(name)
 		if err != nil {
-			b.reportMock(line, err)
+			b.reportMock(d, err)
 			continue
 		}
 		if _, exists := dst[name]; exists {
-			b.addMockError(line, fmt.Sprintf("@match %s %q is repeated", opt, name))
+			b.failMock(d, fmt.Sprintf("@match %s %q is repeated", opt, name))
 			continue
 		}
 		var rule T
 		if err := json.Unmarshal(fields[key], &rule); err != nil {
-			b.addMockError(line, fmt.Sprintf("invalid @match %s: matcher for %q: %s", opt, key, err))
+			b.failMock(d, fmt.Sprintf("invalid @match %s: matcher for %q: %s", opt, key, err))
 			continue
 		}
 		dst[name] = rule

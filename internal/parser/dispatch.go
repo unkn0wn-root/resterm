@@ -76,17 +76,16 @@ func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 				d.Spelling.Tag()+" is not a known Resterm directive in a workflow",
 			)
 		}
-		b.addWarning(d.lines.Start, ignoredDirectiveWarning(d.Call))
+		b.warn(d, ignoredDirectiveWarning(d.Call))
 		return directiveIgnored
 	}
 	out := b.claimDirective(d)
 	if out == directiveIgnored {
-		b.addWarning(d.lines.Start, ignoredDirectiveWarning(d.Call))
+		b.warn(d, ignoredDirectiveWarning(d.Call))
 		return out
 	}
 	if out == directiveApplied && d.Name.ValueRequired() && !directive.HasValue(d.Args) {
-		b.addError(d.lines.Start, d.Spelling.Tag()+" value missing")
-		return directiveRejected
+		return b.reject(d, d.Spelling.Tag()+" value missing")
 	}
 	return out
 }
@@ -108,7 +107,6 @@ func (b *documentBuilder) claimDirective(d parsedDirective) directiveOutcome {
 	return directiveIgnored
 }
 
-// Errors point at the line the directive opened on, not the one that closed it.
 func (b *documentBuilder) reject(d parsedDirective, msg string) directiveOutcome {
 	b.pushError(d.diagnostic(msg, nil))
 	return directiveRejected
@@ -119,11 +117,15 @@ func (b *documentBuilder) rejectError(d parsedDirective, err error) directiveOut
 	return directiveRejected
 }
 
+func (b *documentBuilder) warn(d parsedDirective, msg string) {
+	b.pushWarning(d.diagnostic(msg, nil))
+}
+
 func (b *documentBuilder) redeclared(d parsedDirective) bool {
 	if !b.inRequest || !b.request.declared[d.Name] {
 		return false
 	}
-	b.addError(d.lines.Start, d.Name.Tag()+" directive already defined for this request")
+	b.reject(d, d.Name.Tag()+" directive already defined for this request")
 	return true
 }
 
@@ -141,7 +143,7 @@ func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOut
 		return b.applyRequestDirective(d)
 	}
 
-	probe := &documentBuilder{doc: &restfile.Document{Path: b.doc.Path}, current: b.current}
+	probe := &documentBuilder{doc: &restfile.Document{Path: b.doc.Path}}
 	probe.ensureRequest(d.lines.Start)
 	out := probe.applyRequestDirective(d)
 	if out == directiveIgnored {
@@ -158,7 +160,7 @@ func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOut
 
 func (b *documentBuilder) applyRequestDirective(d parsedDirective) directiveOutcome {
 	if handled, err := b.request.protoDirective(d.Name, d.Args); handled {
-		b.report(d.lines.Start, err)
+		b.report(d, err)
 		if fatalErr(err) {
 			return directiveRejected
 		}
@@ -176,7 +178,7 @@ func (b *documentBuilder) applyRequestDirective(d parsedDirective) directiveOutc
 func (b *documentBuilder) handleWorkflowStart(d parsedDirective) directiveOutcome {
 	switch d.Name {
 	case directive.Workflow:
-		if err := b.startWorkflow(d.lines.Start, d.Args); err != nil {
+		if err := b.startWorkflow(d); err != nil {
 			return b.rejectError(d, err)
 		}
 		return directiveApplied
@@ -306,6 +308,6 @@ func (b *documentBuilder) handleFileSettingsDirective(d parsedDirective) directi
 		return directiveIgnored
 	}
 	b.file.settings = settings
-	b.report(d.lines.Start, err)
+	b.report(d, err)
 	return directiveApplied
 }

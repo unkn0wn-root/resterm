@@ -133,11 +133,10 @@ func isWorkflowDirective(name directive.Name) bool {
 }
 
 func (b *workflowBuilder) flushOpen(name directive.Name, line int) error {
-	if b.sw != nil && name != directive.Case && name != directive.Default {
-		return b.flushFlow(line)
-	}
-	if b.ifb != nil && name != directive.Elif && name != directive.Else {
-		return b.flushFlow(line)
+	if b.sw != nil && name != directive.Case && name != directive.Default ||
+		b.ifb != nil && name != directive.Elif && name != directive.Else {
+		_, err := b.flushFlow(line)
+		return err
 	}
 	return nil
 }
@@ -174,7 +173,7 @@ func (b *workflowBuilder) handleWorkflowCondition(
 ) (bool, error) {
 	switch call.Name {
 	case directive.When:
-		if err := b.requireNoPending(); err != nil {
+		if _, err := b.requireNoPending(); err != nil {
 			return true, err
 		}
 		spec, err := parseConditionSpec(
@@ -192,7 +191,7 @@ func (b *workflowBuilder) handleWorkflowCondition(
 		b.touch(line)
 		return true, nil
 	case directive.ForEach:
-		if err := b.requireNoPending(); err != nil {
+		if _, err := b.requireNoPending(); err != nil {
 			return true, err
 		}
 		spec, err := parseForEachSpec(call.Args, line)
@@ -217,10 +216,10 @@ func (b *workflowBuilder) handleWorkflowSwitch(
 ) (bool, error) {
 	switch name {
 	case directive.Switch:
-		if err := b.requireNoPending(); err != nil {
+		if _, err := b.requireNoPending(); err != nil {
 			return true, err
 		}
-		if err := b.flushFlow(line); err != nil {
+		if _, err := b.flushFlow(line); err != nil {
 			return true, err
 		}
 		expr := str.Trim(rest)
@@ -260,10 +259,10 @@ func (b *workflowBuilder) handleWorkflowIf(
 ) (bool, error) {
 	switch name {
 	case directive.If:
-		if err := b.requireNoPending(); err != nil {
+		if _, err := b.requireNoPending(); err != nil {
 			return true, err
 		}
-		if err := b.flushFlow(line); err != nil {
+		if _, err := b.flushFlow(line); err != nil {
 			return true, err
 		}
 		cond, run, fail, err := parseExprRun(directive.If, rest, "@if expression missing")
@@ -313,20 +312,21 @@ func (b *workflowBuilder) handleWorkflowIf(
 	}
 }
 
-func (b *workflowBuilder) requireNoPending() error {
+// Both report the line of the directive left unfinished.
+func (b *workflowBuilder) requireNoPending() (int, error) {
 	if b.pendWhen != nil {
-		return errors.New("@when must be followed by @step")
+		return b.pendWhen.Line, errors.New("@when must be followed by @step")
 	}
 	if b.pendEach != nil {
-		return errors.New("@for-each must be followed by @step")
+		return b.pendEach.Line, errors.New("@for-each must be followed by @step")
 	}
-	return nil
+	return 0, nil
 }
 
-func (b *workflowBuilder) flushFlow(line int) error {
+func (b *workflowBuilder) flushFlow(line int) (int, error) {
 	if b.sw != nil {
 		if len(b.sw.cases) == 0 && b.sw.def == nil {
-			return errors.New("@switch requires at least one @case or @default")
+			return b.sw.line, errors.New("@switch requires at least one @case or @default")
 		}
 		step := restfile.WorkflowStep{
 			Kind: restfile.WorkflowStepKindSwitch,
@@ -360,7 +360,7 @@ func (b *workflowBuilder) flushFlow(line int) error {
 		b.ifb = nil
 		b.touch(line)
 	}
-	return nil
+	return 0, nil
 }
 
 func (sw *workflowSwitchBuilder) addCase(rest string, line int) error {
@@ -435,7 +435,7 @@ func parseWorkflowRunOptions(name directive.Name, opts directive.Options) (run, 
 }
 
 func (b *workflowBuilder) addStep(line int, rest string) error {
-	if err := b.flushFlow(line); err != nil {
+	if _, err := b.flushFlow(line); err != nil {
 		return err
 	}
 	name, opts, err := parseStepSpec(rest)

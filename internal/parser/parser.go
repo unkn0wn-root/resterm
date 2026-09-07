@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/eol"
@@ -57,11 +58,12 @@ func WarningTexts(doc *restfile.Document) []string {
 	}
 	out := make([]string, 0, len(doc.Warnings))
 	for _, warn := range doc.Warnings {
+		line := warn.Span.Start.Line
 		if doc.Path == "" {
-			out = append(out, fmt.Sprintf("line %d: %s", warn.Line, warn.Message))
+			out = append(out, fmt.Sprintf("line %d: %s", line, warn.Message))
 			continue
 		}
-		out = append(out, fmt.Sprintf("%s:%d: %s", doc.Path, warn.Line, warn.Message))
+		out = append(out, fmt.Sprintf("%s:%d: %s", doc.Path, line, warn.Message))
 	}
 	return out
 }
@@ -71,34 +73,13 @@ func Check(doc *restfile.Document) error {
 		return nil
 	}
 
-	items := make([]diag.Diagnostic, 0, len(doc.Errors))
-	for _, e := range doc.Errors {
-		msg := e.Message
-		if msg == "" {
-			msg = "invalid request file"
-		}
-		items = append(items, diag.Diagnostic{
-			Class:    diag.ClassParse,
-			Severity: diag.SeverityError,
-			Message:  msg,
-			Span: diag.Span{
-				Start: diag.Pos{
-					Path: doc.Path,
-					Line: e.Line,
-					Col:  e.Column,
-				},
-			},
-			Notes: []diag.Note{{
-				Kind:    diag.NoteInfo,
-				Message: parseNote(len(doc.Errors)),
-			}},
-		})
+	rep := Diagnostics(doc)
+	rep.Items = slices.DeleteFunc(rep.Items, func(d diag.Diagnostic) bool { return d.Severity != diag.SeverityError })
+	note := diag.Note{Kind: diag.NoteInfo, Message: parseNote(len(rep.Items))}
+	for i := range rep.Items {
+		rep.Items[i].Notes = []diag.Note{note}
 	}
-	return diag.FromReport(diag.Report{
-		Path:   doc.Path,
-		Source: doc.Raw,
-		Items:  items,
-	}, nil)
+	return diag.FromReport(rep, nil)
 }
 
 func parseNote(n int) string {

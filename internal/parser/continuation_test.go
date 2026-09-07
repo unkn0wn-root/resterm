@@ -164,7 +164,7 @@ GET https://example.com/
 	if len(doc.Errors) != 1 {
 		t.Fatalf("errors = %+v, want 1", doc.Errors)
 	}
-	if doc.Errors[0].Line != 1 || !strings.Contains(doc.Errors[0].Message, `missing a closing ")"`) {
+	if doc.Errors[0].Span.Start.Line != 1 || !strings.Contains(doc.Errors[0].Message, `missing a closing ")"`) {
 		t.Fatalf("error = %+v", doc.Errors[0])
 	}
 	if len(doc.Requests) != 1 {
@@ -211,8 +211,8 @@ func TestParseContinuationStopsAtLineKinds(t *testing.T) {
 			if len(doc.Errors) != 1 {
 				t.Fatalf("errors = %+v, want 1", doc.Errors)
 			}
-			if doc.Errors[0].Line != 1 {
-				t.Fatalf("error line = %d, want the line that opened it", doc.Errors[0].Line)
+			if doc.Errors[0].Span.Start.Line != 1 {
+				t.Fatalf("error line = %d, want the line that opened it", doc.Errors[0].Span.Start.Line)
 			}
 			if !strings.Contains(doc.Errors[0].Message, `@assert is missing a closing ")"`) {
 				t.Fatalf("error = %q", doc.Errors[0].Message)
@@ -750,7 +750,7 @@ func TestParseWorkflowRangeCoversARejectedSpanningDirective(t *testing.T) {
 #   ["dev", "stage"], env
 # )
 `))
-	if len(doc.Errors) != 1 || doc.Errors[0].Line != 3 {
+	if len(doc.Errors) != 1 || doc.Errors[0].Span.Start.Line != 3 {
 		t.Fatalf("errors = %+v, want one on line 3", doc.Errors)
 	}
 	if len(doc.Workflows) != 1 {

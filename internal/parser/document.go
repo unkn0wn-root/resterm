@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	graphqlbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/graphql"
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
@@ -28,8 +29,6 @@ type documentBuilder struct {
 	inBlock              bool
 	inScriptBlock        bool
 	scriptBlockStartLine int
-	// current anchors errors within the directive being applied; cleared on the next line.
-	current *parsedDirective
 }
 
 // fileScope accumulates declarations made at file level, outside any request,
@@ -71,11 +70,11 @@ func (s *fileScope) apply(doc *restfile.Document) {
 }
 
 func (b *documentBuilder) addError(line int, msg string) {
-	b.pushError(b.diagnostic(line, msg, nil))
+	b.pushError(lineDiagnostic(line, msg))
 }
 
 func (b *documentBuilder) addWarning(line int, msg string) {
-	b.pushWarning(b.diagnostic(line, msg, nil))
+	b.pushWarning(lineDiagnostic(line, msg))
 }
 
 func (b *documentBuilder) pushError(item restfile.ParseDiagnostic) {
@@ -94,27 +93,24 @@ func pushDiagnostic(items []restfile.ParseDiagnostic, item restfile.ParseDiagnos
 	return append(items, item)
 }
 
-func (b *documentBuilder) diagnostic(line int, msg string, cause error) restfile.ParseDiagnostic {
-	if d := b.current; d != nil && d.lines.Start == line {
-		return d.diagnostic(msg, cause)
-	}
-	return restfile.ParseDiagnostic{Line: line, Message: msg}
+func lineDiagnostic(line int, msg string) restfile.ParseDiagnostic {
+	return restfile.ParseDiagnostic{Message: msg, Span: diag.Span{Start: diag.Pos{Line: line}}}
 }
 
 // Joined errors are reported separately so the editor can show every problem on
 // the line. Unknown options are warnings because the rest of the directive may
 // still be valid.
-func (b *documentBuilder) report(line int, err error) {
+func (b *documentBuilder) report(d parsedDirective, err error) {
 	if err == nil {
 		return
 	}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		for _, item := range joined.Unwrap() {
-			b.report(line, item)
+			b.report(d, item)
 		}
 		return
 	}
-	item := b.diagnostic(line, err.Error(), err)
+	item := d.diagnostic(err.Error(), err)
 	var unknown *directive.UnknownOptionsError
 	if errors.As(err, &unknown) {
 		b.pushWarning(item)
@@ -137,7 +133,6 @@ func fatalErr(err error) bool {
 }
 
 func (b *documentBuilder) processLine(no int, raw, term string) {
-	b.current = nil
 	ln := makeLine(no, raw, term)
 	b.closeOpenDirective(ln)
 
@@ -275,22 +270,11 @@ func (b *documentBuilder) flushWorkflow(line int) {
 	if b.workflow == nil {
 		return
 	}
-	if err := b.workflow.flushFlow(line); err != nil {
-		errLine := line
-		if b.workflow.sw != nil {
-			errLine = b.workflow.sw.line
-		}
-		b.addError(errLine, err.Error())
+	if at, err := b.workflow.flushFlow(line); err != nil {
+		b.addError(at, err.Error())
 	}
-	if err := b.workflow.requireNoPending(); err != nil {
-		errLine := line
-		switch {
-		case b.workflow.pendWhen != nil:
-			errLine = b.workflow.pendWhen.Line
-		case b.workflow.pendEach != nil:
-			errLine = b.workflow.pendEach.Line
-		}
-		b.addError(errLine, err.Error())
+	if at, err := b.workflow.requireNoPending(); err != nil {
+		b.addError(at, err.Error())
 	}
 	scene := b.workflow.build(line)
 	if len(scene.Steps) > 0 {
@@ -300,7 +284,6 @@ func (b *documentBuilder) flushWorkflow(line int) {
 }
 
 func (b *documentBuilder) finish() {
-	b.current = nil
 	if cut := b.reader.abandon(); cut != nil {
 		b.failOpenDirective(cut)
 	}
@@ -311,18 +294,19 @@ func (b *documentBuilder) finish() {
 	b.file.apply(b.doc)
 }
 
-func (b *documentBuilder) startWorkflow(line int, rest string) error {
-	nameToken, remainder := directive.CutToken(rest)
+func (b *documentBuilder) startWorkflow(d parsedDirective) error {
+	nameToken, remainder := directive.CutToken(d.Args)
 	if nameToken == "" || strings.Contains(nameToken, "=") {
 		return errors.New("@workflow name missing")
 	}
+	line := d.lines.Start
 	if b.inRequest {
 		b.flushRequest(line - 1)
 	}
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
 	opts, err := directive.ParseOptions(directive.Workflow, remainder)
-	b.report(line, errors.Join(err, sb.applyOptions(opts)))
+	b.report(d, errors.Join(err, sb.applyOptions(opts)))
 	sb.touch(line)
 	b.workflow = sb
 	return nil

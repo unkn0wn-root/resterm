@@ -238,7 +238,7 @@ func TestParseMethodLineRejectsUnsupportedHTTPVersion(t *testing.T) {
 			if len(doc.Errors) != 1 {
 				t.Fatalf("expected 1 parse error, got %#v", doc.Errors)
 			}
-			if err := doc.Errors[0]; err.Line != 1 || !strings.Contains(err.Message, token) {
+			if err := doc.Errors[0]; err.Span.Start.Line != 1 || !strings.Contains(err.Message, token) {
 				t.Fatalf("unexpected error: %#v", err)
 			}
 		})
@@ -285,7 +285,7 @@ func TestParseWebSocketURLLineRejectsUnsupportedHTTPVersion(t *testing.T) {
 			if len(doc.Errors) != 1 {
 				t.Fatalf("expected 1 parse error, got %#v", doc.Errors)
 			}
-			if err := doc.Errors[0]; err.Line != 2 || !strings.Contains(err.Message, token) {
+			if err := doc.Errors[0]; err.Span.Start.Line != 2 || !strings.Contains(err.Message, token) {
 				t.Fatalf("unexpected error: %#v", err)
 			}
 		})
@@ -3188,8 +3188,8 @@ func TestParseScannerError(t *testing.T) {
 	if !strings.Contains(doc.Errors[0].Message, "line exceeds") {
 		t.Fatalf("unexpected error message: %q", doc.Errors[0].Message)
 	}
-	if doc.Errors[0].Line != 1 {
-		t.Fatalf("expected error at line 1, got %d", doc.Errors[0].Line)
+	if doc.Errors[0].Span.Start.Line != 1 {
+		t.Fatalf("expected error at line 1, got %d", doc.Errors[0].Span.Start.Line)
 	}
 }
 
@@ -3803,7 +3803,7 @@ GET https://example.com/events
 		t.Fatalf("expected separate errors for both invalid options, got %v", doc.Errors)
 	}
 	for _, parseErr := range doc.Errors {
-		if parseErr.Line != 1 {
+		if parseErr.Span.Start.Line != 1 {
 			t.Fatalf("expected error on directive line 1, got %+v", parseErr)
 		}
 	}
@@ -4891,8 +4891,8 @@ func TestHeaderNameThatIsNotAFieldNameIsReported(t *testing.T) {
 		if doc.Errors[i].Message != msg {
 			t.Errorf("errors[%d] = %q, want %q", i, doc.Errors[i].Message, msg)
 		}
-		if doc.Errors[i].Line != i+2 && doc.Errors[i].Line != 4 {
-			t.Errorf("errors[%d].Line = %d, want the header's line", i, doc.Errors[i].Line)
+		if doc.Errors[i].Span.Start.Line != i+2 && doc.Errors[i].Span.Start.Line != 4 {
+			t.Errorf("errors[%d].Line = %d, want the header's line", i, doc.Errors[i].Span.Start.Line)
 		}
 	}
 

@@ -84,7 +84,7 @@ func TestUnfinishedWorkflowDiagnosticLocations(t *testing.T) {
 				if len(doc.Errors) != 1 || doc.Errors[0].Message != directive.message {
 					t.Fatalf("errors = %+v, want one error %q", doc.Errors, directive.message)
 				}
-				if got := doc.Errors[0].Line; got != 2 {
+				if got := doc.Errors[0].Span.Start.Line; got != 2 {
 					t.Errorf("error line = %d, want 2", got)
 				}
 				rep := Diagnostics(doc)
@@ -120,23 +120,23 @@ func sourceSpanText(t *testing.T, source string, span diag.Span) string {
 	return line[span.Start.Col-1 : span.End.Col-1]
 }
 
-func TestDiagnosticsPreserveLegacyLocationsAndOwnData(t *testing.T) {
+// Check, WarningTexts, and the editor all read the same span.
+func TestDiagnosticsShareLocationsWithCheck(t *testing.T) {
 	source := "# @mock method=GET path=/x\n# @match query={\n# \"one\":\"two\"} typo=x typo=y\nHTTP/1.1 200 OK"
 	doc := Parse("test.http", []byte(source))
 	rep := Diagnostics(doc)
 	if len(doc.Errors) != 2 || len(rep.Items[0].Labels) != 1 {
 		t.Fatalf("findings = %+v", rep.Items)
 	}
-	if doc.Errors[0].Line != 2 || rep.Items[0].Span.Start.Line != 3 {
-		t.Fatalf("legacy=%+v report=%+v", doc.Errors, rep.Items)
+	if doc.Errors[0].Span.Start.Line != 3 || rep.Items[0].Span.Start.Line != 3 {
+		t.Fatalf("errors=%+v report=%+v", doc.Errors, rep.Items)
 	}
-	rep.Source[0] = '!'
 	rep.Items[0].Labels[0].Span.Start.Line = 999
-	if string(doc.Raw) != source || doc.Errors[0].Labels[0].Span.Start.Line == 999 {
-		t.Fatal("report mutated document")
+	if doc.Errors[0].Labels[0].Span.Start.Line == 999 {
+		t.Fatal("report shares labels with the document")
 	}
-	if err := Check(doc); err == nil || !strings.Contains(err.Error(), "line 2") {
-		t.Fatalf("legacy Check location changed: %v", err)
+	if err := Check(doc); err == nil || !strings.Contains(err.Error(), "line 3") {
+		t.Fatalf("Check location = %v, want line 3", err)
 	}
 	warning := Parse("test.http", []byte("# @sse max-event=5\nGET http://x"))
 	want := slices.Clone(WarningTexts(warning))

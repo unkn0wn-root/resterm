@@ -376,7 +376,7 @@ func parseWarningLabel(doc *restfile.Document) string {
 	if doc == nil || len(doc.Warnings) == 0 {
 		return ""
 	}
-	label := fmt.Sprintf("WARN line %d", doc.Warnings[0].Line)
+	label := fmt.Sprintf("WARN line %d", doc.Warnings[0].Span.Start.Line)
 	if rest := len(doc.Warnings) - 1; rest > 0 {
 		label += fmt.Sprintf(" +%d", rest)
 	}

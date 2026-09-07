@@ -193,11 +193,7 @@ func (b *documentBuilder) readDirective(no int, c commentText) (parsedDirective,
 	if result.cut != nil {
 		b.failOpenDirective(result.cut)
 	}
-	d, ok := result.completed()
-	if ok {
-		b.current = &d
-	}
-	return d, ok
+	return result.completed()
 }
 
 func openCloser(name directive.Name, args string) string {

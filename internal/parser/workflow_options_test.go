@@ -253,7 +253,7 @@ func TestParseWorkflowRejectsInvalidFailureModes(t *testing.T) {
 			if len(doc.Errors) != 1 {
 				t.Fatalf("errors = %v, want one", doc.Errors)
 			}
-			if got := doc.Errors[0].Line; got != tt.line {
+			if got := doc.Errors[0].Span.Start.Line; got != tt.line {
 				t.Fatalf("error line = %d, want %d", got, tt.line)
 			}
 			want := tt.tag + " on-failure must be stop or continue"

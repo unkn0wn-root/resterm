@@ -665,14 +665,12 @@ type WorkflowForEach struct {
 	Line int
 }
 
+// Span and Labels use one-based lines and UTF-8 byte columns with exclusive
+// ends. A span without columns covers its whole line.
 type ParseDiagnostic struct {
-	Line    int
-	Column  int
 	Message string
-	// Span and Labels use one-based lines and UTF-8 byte columns with exclusive
-	// ends. Line keeps the location that Check and WarningTexts report.
-	Span   diag.Span
-	Labels []diag.Label
+	Span    diag.Span
+	Labels  []diag.Label
 	// Mock marks @mock/@match errors so the mock compiler can reject a
 	// document without matching on message text.
 	Mock bool
