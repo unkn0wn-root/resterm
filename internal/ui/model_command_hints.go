@@ -66,7 +66,8 @@ func (m *Model) editorCommandHints() []commandHint {
 	}
 	// plain Enter sends from normal mode, see shouldSendEditorRequest
 	helpLabel := "Docs"
-	if len(m.currentDiagnostics().at(m.editor.caretPosition())) > 0 {
+	// Keep the hint aligned with retained highlights while a fresh parse is pending.
+	if display := m.visibleDiagnosticDisplay(); display != nil && len(display.lines[m.editor.Line()]) > 0 {
 		helpLabel = "Details"
 	}
 	return []commandHint{
