@@ -21,6 +21,7 @@ const (
 	diagnosticNext
 	diagnosticPrevious
 	diagnosticList
+	diagnosticStatusMessage
 )
 
 type diagnosticPhase uint8
@@ -116,9 +117,6 @@ func (m *Model) syncDiagnostics() tea.Cmd {
 	key, active := m.diagnosticKey(), m.diagnosticsActive()
 	leftInsert := s.inserting && !m.editorInsertMode
 	s.inserting = m.editorInsertMode
-	if s.popup.open && (!m.editorIdle() || s.popup.diagnosticContext != m.diagnosticContext()) {
-		s.popup = diagnosticPopup{}
-	}
 	if s.intent.action != diagnosticNone && !m.diagnosticIntentCurrent(s.intent) {
 		s.intent = diagnosticIntent{}
 	}
@@ -257,6 +255,12 @@ func (m *Model) performDiagnosticAction(action diagnosticAction) tea.Cmd {
 			return statusCmdQuiet(statusInfo, "No editor diagnostics")
 		}
 		m.openDiagnosticList(s)
+	case diagnosticStatusMessage:
+		if len(s.report.Items) > 0 {
+			m.openDiagnosticList(s)
+			return nil
+		}
+		m.openCurrentStatusModal()
 	case diagnosticNext, diagnosticPrevious:
 		pos, ok := s.next(m.editor.caretPosition(), action == diagnosticPrevious)
 		if !ok {

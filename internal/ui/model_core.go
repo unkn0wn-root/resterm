@@ -360,6 +360,7 @@ type Model struct {
 	mouseDrag              mouseDragState
 	operator               operatorState
 	suppressListKey        bool
+	suppressResponseKey    bool
 	ready                  bool
 	dirty                  bool
 	sending                bool

@@ -42,6 +42,7 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
 	diagnosticsCmd := m.syncDiagnostics()
+	m.reconcileDiagnosticPopup()
 	return m, batchCommands(cmd, diagnosticsCmd)
 }
 
@@ -469,7 +470,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		(!mouseHandled && m.focus == focusResponse && m.focusedPane() != nil && m.focusedPane().activeTab == responseTabHistory) {
 		skipHist := false
 		if _, ok := msg.(tea.KeyMsg); ok {
-			if m.historyFilterActive || m.historyBlockKey {
+			if m.historyFilterActive || m.historyBlockKey || m.suppressResponseKey {
 				skipHist = true
 			}
 		}
@@ -497,7 +498,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 				cmds = append(cmds, paneCmd)
 			}
 		}
-	} else if !mouseHandled && m.focus == focusResponse {
+	} else if !mouseHandled && m.focus == focusResponse && !m.suppressResponseKey {
 		pane := m.focusedPane()
 		if pane != nil && pane.activeTab != responseTabHistory {
 			skipViewport := false
@@ -525,6 +526,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 	if _, ok := msg.(tea.KeyMsg); ok {
 		m.historyBlockKey = false
+		m.suppressResponseKey = false
 	}
 	return tea.Batch(cmds...)
 }
@@ -952,6 +954,17 @@ func (m *Model) handleShortcutKey(key string, msg tea.KeyMsg) (tea.Cmd, bool) {
 	return cmd, true
 }
 
+func (m *Model) suppressFocusedComponentKey() {
+	switch m.focus {
+	case focusFile, focusRequests, focusWorkflows:
+		m.suppressListKey = true
+	case focusEditor:
+		m.suppressEditorKey = true
+	case focusResponse:
+		m.suppressResponseKey = true
+	}
+}
+
 func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch binding.Action {
 	case bindings.ActionCycleFocusNext:
@@ -1032,8 +1045,12 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		m.openRequestDetails()
 		return nil, true
 	case bindings.ActionShowStatusMessage:
-		m.openStatusMessageModal()
-		return nil, true
+		cmd := m.showStatusMessage()
+		if !m.mouseModalActive() {
+			// A refresh leaves the focused component active until diagnostics return.
+			m.suppressFocusedComponentKey()
+		}
+		return cmd, true
 	case bindings.ActionOpenPathModal:
 		return m.openOpenModal(), true
 	case bindings.ActionReloadWorkspace:

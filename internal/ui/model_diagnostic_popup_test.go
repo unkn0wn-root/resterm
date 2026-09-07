@@ -56,6 +56,34 @@ func TestDiagnosticPopupConsumesEnterWithoutTopic(t *testing.T) {
 	}
 }
 
+func TestDiagnosticPopupResizeFallsBackToList(t *testing.T) {
+	m := newDiagnosticModel(t, "# @sse max-event=5\nGET http://x")
+	updateDiagnosticsModel(t, &m, keyMsgFor("K"))
+	if !m.diagnostics.popup.open {
+		t.Fatal("popup did not open")
+	}
+	updateDiagnosticsModel(t, &m, tea.WindowSizeMsg{Width: 80, Height: 10})
+	if m.diagnostics.popup.open {
+		t.Fatal("resize left the inline popup open")
+	}
+	if !m.showStatusModal || !strings.Contains(m.statusModalMessage, "max-event") {
+		t.Fatal("resize did not move the diagnostic to the status modal")
+	}
+	updateDiagnosticsModel(t, &m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.showHelp || m.sending {
+		t.Fatal("Enter reached hidden popup documentation or sent a request")
+	}
+	updateDiagnosticsModel(t, &m, tea.WindowSizeMsg{Width: 160, Height: 40})
+	if m.diagnostics.popup.open {
+		t.Fatal("enlarging the viewport resurrected the popup")
+	}
+	updateDiagnosticsModel(t, &m, tea.KeyMsg{Type: tea.KeyEsc})
+	updateDiagnosticsModel(t, &m, keyMsgFor("j"))
+	if m.editor.Line() != 1 {
+		t.Fatal("closing the fallback swallowed the next editor key")
+	}
+}
+
 func TestDiagnosticPopupFitsViewportAndScrolls(t *testing.T) {
 	for _, width := range []int{24, 80} {
 		for _, row := range []int{0, 7} {

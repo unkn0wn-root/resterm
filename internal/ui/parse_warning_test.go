@@ -205,13 +205,17 @@ func TestShowStatusMessageIgnoresStaleDocumentWarnings(t *testing.T) {
 	model.editor.SetValue("### r\nGET http://x\n")
 	model.markDirty()
 
-	updated := applyModelUpdate(t, &model, keyMsgFor("g"))
-	updated = applyModelUpdate(t, updated, keyMsgFor("."))
+	updateDiagnosticsModel(t, &model, keyMsgFor("g"))
+	cmd := updateDiagnosticsModel(t, &model, keyMsgFor("."))
+	if model.showStatusModal {
+		t.Fatal("status details must wait for current diagnostics")
+	}
+	deliverDiagnosticAction(t, &model, cmd)
 
-	if !updated.showStatusModal {
+	if !model.showStatusModal {
 		t.Fatal("expected g . to open the current status message")
 	}
-	if got := updated.statusModalMessage; got != "Editing request" {
+	if got := model.statusModalMessage; got != "Editing request" {
 		t.Fatalf("modal message = %q, want the current status without stale warnings", got)
 	}
 }

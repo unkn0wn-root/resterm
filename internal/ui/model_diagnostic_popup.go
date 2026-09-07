@@ -32,6 +32,9 @@ type diagnosticPopupLayout struct {
 
 func (m *Model) openDiagnosticPopup() bool {
 	s := m.currentDiagnostics()
+	if s == nil {
+		return false
+	}
 	items := s.at(m.editor.caretPosition())
 	if len(items) == 0 {
 		return false
@@ -39,12 +42,56 @@ func (m *Model) openDiagnosticPopup() bool {
 	topic, ok := m.contextHelpTopic()
 	m.editor.closeCompletions()
 	m.diagnostics.popup = diagnosticPopup{
-		open: true, diagnosticContext: m.diagnosticContext(), items: items, topic: topic, hasTopic: ok,
+		open:              true,
+		diagnosticContext: m.diagnosticContext(),
+		items:             items,
+		topic:             topic,
+		hasTopic:          ok,
 	}
-	if _, ok := m.diagnosticPopupLayout(m.editor.ViewWidth(), m.editor.Height()); !ok {
-		m.openDiagnosticList(s)
-	}
+	m.reconcileDiagnosticPopup()
 	return true
+}
+
+func (m *Model) diagnosticPopupSnapshot() *diagnosticSnapshot {
+	popup := m.diagnostics.popup
+	if !popup.open {
+		return nil
+	}
+	if m.focus != focusEditor {
+		return nil
+	}
+	if !m.editorIdle() {
+		return nil
+	}
+	if m.effectiveRegionCollapsed(paneRegionEditor) {
+		return nil
+	}
+	if popup.diagnosticContext != m.diagnosticContext() {
+		return nil
+	}
+	return m.currentDiagnostics()
+}
+
+// reconcileDiagnosticPopup closes an invalid popup. If the editor is too
+// small, it moves the diagnostic contents to the status modal.
+func (m *Model) reconcileDiagnosticPopup() {
+	p := &m.diagnostics.popup
+	if !p.open {
+		return
+	}
+
+	snapshot := m.diagnosticPopupSnapshot()
+	if snapshot == nil {
+		*p = diagnosticPopup{}
+		return
+	}
+
+	layout, ok := m.diagnosticPopupLayout(m.editor.ViewWidth(), m.editor.Height())
+	if !ok {
+		m.openDiagnosticList(snapshot)
+		return
+	}
+	p.scroll = clamp(p.scroll, 0, layout.limit)
 }
 
 func (m *Model) handleDiagnosticPopupKey(msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -52,7 +99,7 @@ func (m *Model) handleDiagnosticPopupKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if !p.open {
 		return nil, false
 	}
-	if m.currentDiagnostics() == nil || !m.editorIdle() || p.diagnosticContext != m.diagnosticContext() {
+	if m.diagnosticPopupSnapshot() == nil {
 		*p = diagnosticPopup{}
 		return nil, false
 	}
@@ -153,11 +200,11 @@ func (m *Model) renderDiagnosticPopup(content string) string {
 	if !m.diagnostics.popup.open || m.currentDiagnostics() == nil {
 		return content
 	}
-	w, h := lipgloss.Width(content), lipgloss.Height(content)
-	layout, ok := m.diagnosticPopupLayout(w, h)
+	contentWidth, contentHeight := lipgloss.Width(content), lipgloss.Height(content)
+	layout, ok := m.diagnosticPopupLayout(contentWidth, contentHeight)
 	if !ok {
 		return content
 	}
 	box := layout.box
-	return overlayHintPopup(content, box.lines, box.x, box.y, w, h)
+	return overlayHintPopup(content, box.lines, box.x, box.y, contentWidth, contentHeight)
 }
