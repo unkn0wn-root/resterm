@@ -299,7 +299,7 @@ func (m Model) helpSections() []helpSection {
 							bindings.ActionToggleResponseSplitVert,
 							bindings.ActionToggleResponseSplitHorz,
 						},
-						"Ctrl+V / Ctrl+U",
+						"Alt+V / Alt+H",
 					),
 					"Split response vertically / horizontally",
 				},

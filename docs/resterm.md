@@ -173,7 +173,7 @@ Once the files are in place, run `resterm` in the same directory. Press `g Shift
 | New scratch buffer | `Ctrl+T` |
 | Reparse current document | `Ctrl+P` (also `Ctrl+Alt+P`) |
 | Refresh workspace files | `Ctrl+Shift+O` |
-| Split response vertically / horizontally | `Ctrl+V` / `Ctrl+U` |
+| Split response vertically / horizontally | `Alt+V` / `Alt+H` |
 | Pin or unpin response pane | `Ctrl+Shift+V` |
 | Choose target pane for next response | `Ctrl+F` or `Ctrl+B`, then arrow keys or `h` / `l` |
 | Show globals summary / clear globals and cookies | `Ctrl+G` / `Ctrl+Shift+G` (or `g Shift+G`) |
@@ -284,8 +284,8 @@ show_context_help = ["shift+k"]
 | `clear_globals` | Clear global variables and cookies. | `ctrl+shift+g`, `g shift+g` |
 | `save_file` | Save the current `.http` / `.rest` file. | `ctrl+s` |
 | `save_layout` | Prompt to persist current layout (splits, widths) to settings. | `g shift+l` |
-| `toggle_response_split_vertical` | Toggle response inline vs vertical split. | `ctrl+v` |
-| `toggle_response_split_horizontal` | Toggle response inline vs horizontal split. | `ctrl+u` |
+| `toggle_response_split_vertical` | Toggle response inline vs vertical split. | `alt+v` |
+| `toggle_response_split_horizontal` | Toggle response inline vs horizontal split. | `alt+h` |
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
 | `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
 | `show_context_help` | Show diagnostics on the editor's current line, or open contextual documentation when there are none. | `shift+k` (soft default) |
@@ -335,7 +335,7 @@ show_context_help = ["shift+k"]
 
 When a request opens a stream, the Stream tab becomes available. Use `g+w` to enter WebSocket command mode, then press `i` to toggle the console, `p` to send ping, `c` to close the socket, or `l` to clear the live buffer. If the console is actively focused for typing, press `Esc` first so text entry is not interrupted. Inside the console, use `F2` to switch payload modes (text, JSON, base64, file), `Ctrl+S` or `Ctrl+Enter` to send frames, and the arrow keys to replay recent payloads.
 
-Use `Ctrl+V` or `Ctrl+U` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
+Use `Alt+V` or `Alt+H` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
 
 While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire Pretty, Raw, or Headers tab directly to your clipboard, matching the rendered text (no mouse selection required).
 

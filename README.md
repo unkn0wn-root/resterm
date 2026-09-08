@@ -180,7 +180,7 @@ The [CLI documentation](docs/cli.md) covers selectors, output formats and more e
   - `Ctrl+O`: open the file/workspace popup. Type to filter, scroll with `Up` / `Down`, and use `Tab` to descend into directories.
   - `:`: open the command line. Use `Up` / `Down` to select suggestions, `Tab` to complete one, or `Enter` to accept and run a selection. Path arguments such as `:mock start --source` and `:edit` browse the filesystem in the same popup.
 - Responses
-  - `Ctrl+V` / `Ctrl+U`: split the response pane for side-by-side comparison.
+  - `Alt+V` / `Alt+H`: split the response pane for side-by-side comparison.
   - `Ctrl+Shift+C` or `g y` (response focused): copy the whole Pretty, Raw or Headers tab.
   - `g x`: show the Explain preview for the active request without sending it.
   - `g e`: open the current file in your external editor.
