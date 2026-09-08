@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 type HeaderField struct {
@@ -30,8 +32,8 @@ func HeaderFields(headers http.Header) []HeaderField {
 	for _, name := range slices.Sorted(maps.Keys(headers)) {
 		values := slices.Sorted(slices.Values(headers[name]))
 		out = append(out, HeaderField{
-			Name:  DisplayRow(name),
-			Value: DisplayRow(strings.Join(values, ", ")),
+			Name:  termtext.Row(name),
+			Value: termtext.Row(strings.Join(values, ", ")),
 		})
 	}
 	return out

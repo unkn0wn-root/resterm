@@ -80,7 +80,7 @@ func TestPrettifyQuotesInputEscapesBeforeHighlighting(t *testing.T) {
 		t.Fatalf("input controls reached the terminal: %q", view)
 	}
 	plain := ansi.Strip(view)
-	if view == plain || !strings.Contains(plain, `\x1b[2J`) || !strings.Contains(plain, `\u00ad`) {
+	if view == plain || !strings.Contains(plain, `\u001b[2J`) || !strings.Contains(plain, `\u00ad`) {
 		t.Fatalf("expected syntax colors and visible escaped input: %q", view)
 	}
 }

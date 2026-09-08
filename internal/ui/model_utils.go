@@ -17,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/internal/wrap"
 )
@@ -67,7 +68,6 @@ func (r responseRenderer) formatTestSummary(
 	builder.WriteString(r.stats.Heading.Render("Tests:") + "\n")
 	if scriptErr != nil {
 		for _, l := range diag.Lines(diag.ReportOf(scriptErr)) {
-			l.Text = bodyfmt.DisplayRow(l.Text)
 			builder.WriteString("  " + r.errStyles.line(l) + "\n")
 		}
 	}
@@ -83,11 +83,11 @@ func (r responseRenderer) formatTestSummary(
 		line.WriteString(statusStyle.Render(statusLabel))
 		if strings.TrimSpace(result.Name) != "" {
 			line.WriteString(" ")
-			line.WriteString(r.stats.Value.Render(bodyfmt.DisplayRow(result.Name)))
+			line.WriteString(r.stats.Value.Render(termtext.Row(result.Name)))
 		}
 		if strings.TrimSpace(result.Message) != "" {
 			line.WriteString(" - ")
-			line.WriteString(r.stats.Message.Render(bodyfmt.DisplayBody(result.Message)))
+			line.WriteString(r.stats.Message.Render(termtext.Block(result.Message)))
 		}
 		if result.Elapsed > 0 {
 			dur := result.Elapsed.Truncate(time.Millisecond)

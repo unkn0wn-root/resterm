@@ -10,8 +10,8 @@ func TestOneLineFoldsWhitespaceThenEscapes(t *testing.T) {
 	}{
 		{name: "line break folds to a space", value: "first\n  second", want: "first second"},
 		{name: "CRLF folds to one space", value: "first\r\n  second", want: "first second"},
-		{name: "escape is quoted", value: "a\x1b[2Jb", want: `a\x1b[2Jb`},
-		{name: "both", value: "first\n\x1b[2Jsecond", want: `first \x1b[2Jsecond`},
+		{name: "escape is quoted", value: "a\x1b[2Jb", want: `a\u001b[2Jb`},
+		{name: "both", value: "first\n\x1b[2Jsecond", want: `first \u001b[2Jsecond`},
 	}
 
 	for _, tt := range tests {
@@ -32,8 +32,8 @@ func TestDisplayLinesKeepsBreaks(t *testing.T) {
 		{name: "breaks survive", value: "first\nsecond", want: "first\nsecond"},
 		{name: "CRLF is one break", value: "first\r\nsecond", want: "first\nsecond"},
 		{name: "lone CR is escaped", value: "first\rsecond", want: `first\rsecond`},
-		{name: "escape is quoted", value: "first\n\x1b[2Jsecond", want: "first\n" + `\x1b[2Jsecond`},
-		{name: "single line", value: "a\x1b[2Jb", want: `a\x1b[2Jb`},
+		{name: "escape is quoted", value: "first\n\x1b[2Jsecond", want: "first\n" + `\u001b[2Jsecond`},
+		{name: "single line", value: "a\x1b[2Jb", want: `a\u001b[2Jb`},
 	}
 
 	for _, tt := range tests {

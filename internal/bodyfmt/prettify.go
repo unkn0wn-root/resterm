@@ -11,6 +11,7 @@ import (
 	"github.com/alecthomas/chroma/quick"
 
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 const defaultSyntaxStyle = "monokai"
@@ -73,7 +74,7 @@ func (s syntax) lexer() string {
 // body, and before highlighting so generated ANSI escapes remain intact.
 func Prettify(ctx context.Context, body []byte, contentType string, opt PrettyOptions) string {
 	out, lang := reindent(ctx, body, contentType)
-	out = DisplayBody(out)
+	out = termtext.Block(out)
 
 	lexer := lang.lexer()
 	if !opt.Color.Enabled || lexer == "" || done(ctx) {
@@ -121,7 +122,7 @@ func FormatRaw(body []byte, contentType string) string {
 	if !ok {
 		out = string(body)
 	}
-	return TrimBody(DisplayBody(out))
+	return TrimBody(termtext.Block(out))
 }
 
 func indent(body []byte, contentType string) (string, bool) {

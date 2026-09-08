@@ -13,11 +13,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"nhooyr.io/websocket"
 
-	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 const (
@@ -771,7 +771,7 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 			parts = append(parts, th.StreamSummary.Render(summary))
 			return strings.Join(filterEmpty(parts), " ")
 		}
-		name := bodyfmt.DisplayRow(evt.SSE.Name)
+		name := termtext.Row(evt.SSE.Name)
 		if name == "" {
 			name = "message"
 		}
@@ -938,7 +938,7 @@ func grpcMetaVal(md map[string]string, key string) string {
 	if md == nil {
 		return ""
 	}
-	return bodyfmt.DisplayRow(strings.TrimSpace(md[key]))
+	return termtext.Row(strings.TrimSpace(md[key]))
 }
 
 func grpcLabel(md map[string]string) string {
@@ -1005,7 +1005,7 @@ func formatJSONForStream(raw []byte) (string, bool) {
 		return "", false
 	}
 	formatted := strings.TrimRight(buf.String(), "\n")
-	return bodyfmt.DisplayBody(formatted), true
+	return termtext.Block(formatted), true
 }
 
 func indentMultiline(value string, indent string) string {
@@ -1028,7 +1028,7 @@ func truncatePreview(value string) string {
 	if clean == "" {
 		return ""
 	}
-	clean = bodyfmt.DisplayRow(strings.Join(strings.Fields(clean), " "))
+	clean = termtext.Row(strings.Join(strings.Fields(clean), " "))
 	runes := []rune(clean)
 	if len(runes) <= limit {
 		return clean

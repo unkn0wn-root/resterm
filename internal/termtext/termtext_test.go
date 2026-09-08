@@ -1,4 +1,4 @@
-package bodyfmt
+package termtext
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-func TestDisplayRow(t *testing.T) {
+func TestRow(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string
@@ -43,9 +43,9 @@ func TestDisplayRow(t *testing.T) {
 			value: "a\\\"\r\n\tb/\U0001f468\u200d\U0001f469",
 			want:  `a\"\r\n\tb/` + "\U0001f468\u200d\U0001f469",
 		},
-		{name: "terminal escape", value: "a\x1b[2Jb", want: `a\x1b[2Jb`},
+		{name: "terminal escape", value: "a\x1b[2Jb", want: `a\u001b[2Jb`},
 		{name: "C1 control", value: "a\u009bJb", want: `a\u009bJb`},
-		{name: "delete", value: "a\x7fb", want: `a\x7fb`},
+		{name: "delete", value: "a\x7fb", want: `a\u007fb`},
 		{name: "line separator", value: "a\u2028b", want: `a\u2028b`},
 		{name: "paragraph separator", value: "a\u2029b", want: `a\u2029b`},
 		{name: "bidi override", value: "a\u202eb", want: `a\u202eb`},
@@ -59,21 +59,21 @@ func TestDisplayRow(t *testing.T) {
 		{name: "byte order mark", value: "a\ufeffb", want: `a\ufeffb`},
 		{name: "mongolian vowel separator", value: "a\u180eb", want: `a\u180eb`},
 		{name: "interlinear annotation", value: "a\ufff9b", want: `a\ufff9b`},
-		{name: "language tag", value: "a\U000E0001b", want: `a\U000e0001b`},
+		{name: "language tag", value: "a\U000E0001b", want: `a\udb40\udc01b`},
 		{name: "invalid UTF-8", value: string([]byte{'a', 0xff, 'b'}), want: `a\xffb`},
 		{name: "invalid UTF-8 after a prepended sign", value: "\u0600\xff", want: `\u0600\xff`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := DisplayRow(tt.value); got != tt.want {
-				t.Fatalf("DisplayRow(%q) = %q, want %q", tt.value, got, tt.want)
+			if got := Row(tt.value); got != tt.want {
+				t.Fatalf("Row(%q) = %q, want %q", tt.value, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestDisplayBodyNormalizesLineBreaksAndTabs(t *testing.T) {
+func TestBlockNormalizesLineBreaksAndTabs(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string
@@ -84,8 +84,8 @@ func TestDisplayBodyNormalizesLineBreaksAndTabs(t *testing.T) {
 		{name: "tab", value: "name\tvalue", want: "name    value"},
 		{name: "carriage return", value: "first\rsecond", want: `first\rsecond`},
 		{name: "backspace", value: "ab\bc", want: `ab\bc`},
-		{name: "vertical tab", value: "a\vb", want: `a\vb`},
-		{name: "nul", value: "a\x00b", want: `a\x00b`},
+		{name: "vertical tab", value: "a\vb", want: `a\u000bb`},
+		{name: "nul", value: "a\x00b", want: `a\u0000b`},
 		{
 			name:  "utf-8 read as latin-1 leaves a soft hyphen",
 			value: "tecnolog\u00c3\u00ada",
@@ -100,14 +100,14 @@ func TestDisplayBodyNormalizesLineBreaksAndTabs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := DisplayBody(tt.value); got != tt.want {
-				t.Fatalf("DisplayBody(%q) = %q, want %q", tt.value, got, tt.want)
+			if got := Block(tt.value); got != tt.want {
+				t.Fatalf("Block(%q) = %q, want %q", tt.value, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestDisplayKeepsAttachedRunes(t *testing.T) {
+func TestKeepsAttachedRunes(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string
@@ -122,17 +122,17 @@ func TestDisplayKeepsAttachedRunes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := DisplayRow(tt.value); got != tt.value {
-				t.Errorf("DisplayRow quoted an attached rune: %q", got)
+			if got := Row(tt.value); got != tt.value {
+				t.Errorf("Row quoted an attached rune: %q", got)
 			}
-			if got := DisplayBody(tt.value); got != tt.value {
-				t.Errorf("DisplayBody quoted an attached rune: %q", got)
+			if got := Block(tt.value); got != tt.value {
+				t.Errorf("Block quoted an attached rune: %q", got)
 			}
 		})
 	}
 }
 
-func FuzzDisplayText(f *testing.F) {
+func FuzzEscape(f *testing.F) {
 	for _, seed := range []string{
 		"ordinary text", "\u00ad", "\r\n", "\u0600\xff", "\x1b[2J", "👩‍💻", "a\tb",
 	} {
@@ -140,9 +140,9 @@ func FuzzDisplayText(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, input string) {
 		for _, body := range []bool{false, true} {
-			format := DisplayRow
+			format := Row
 			if body {
-				format = DisplayBody
+				format = Block
 			}
 			out := format(input)
 			if !utf8.ValidString(out) {

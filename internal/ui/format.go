@@ -6,6 +6,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 func prettifyBody(body []byte, contentType string) string {
@@ -18,19 +19,19 @@ func prettifyBody(body []byte, contentType string) string {
 }
 
 func oneLine(value string) string {
-	return bodyfmt.DisplayRow(strings.Join(strings.Fields(value), " "))
+	return termtext.Row(strings.Join(strings.Fields(value), " "))
 }
 
 // displayLines escapes terminal controls but preserves line breaks.
 func displayLines(value string) string {
 	value = strings.ReplaceAll(value, "\r\n", "\n")
 	if !strings.Contains(value, "\n") {
-		return bodyfmt.DisplayRow(value)
+		return termtext.Row(value)
 	}
 
 	lines := strings.Split(value, "\n")
 	for i, line := range lines {
-		lines[i] = bodyfmt.DisplayRow(line)
+		lines[i] = termtext.Row(line)
 	}
 	return strings.Join(lines, "\n")
 }

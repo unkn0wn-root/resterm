@@ -20,6 +20,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 const (
@@ -572,9 +573,9 @@ func (r responseRenderer) renderGRPCStatusLine(
 	}
 	method := strings.TrimPrefix(strings.TrimSpace(fullMethod), "/")
 	return r.stats.Label.Render("gRPC") + " " +
-		r.stats.Value.Render(bodyfmt.DisplayRow(method)) +
+		r.stats.Value.Render(termtext.Row(method)) +
 		r.stats.SubLabel.Render(" - ") +
-		statusStyle.Render(bodyfmt.DisplayRow(resp.StatusText()))
+		statusStyle.Render(termtext.Row(resp.StatusText()))
 }
 
 // The plain views share the styled line so the two never drift apart. Only the
@@ -587,7 +588,7 @@ func (r responseRenderer) grpcStatusBlock(resp *grpcx.Response, fullMethod strin
 	sections := make([]string, 0, len(resp.StatusDetails)+1)
 	sections = append(sections, r.grpcStatusLine(resp, fullMethod))
 	for _, detail := range resp.StatusDetails {
-		sections = append(sections, bodyfmt.DisplayBody(detail))
+		sections = append(sections, termtext.Block(detail))
 	}
 	return joinSections(sections...)
 }

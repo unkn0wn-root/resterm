@@ -11,9 +11,9 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -226,7 +226,7 @@ func statusBarSegmentStyle(
 // Replace line breaks and tabs before measuring the one-line status bar.
 func statusBarOneLine(text string) string {
 	if !strings.ContainsAny(text, "\r\n\t") {
-		return bodyfmt.DisplayRow(text)
+		return termtext.Row(text)
 	}
 
 	var folded strings.Builder
@@ -243,7 +243,7 @@ func statusBarOneLine(text string) string {
 		}
 		folded.WriteString(part)
 	}
-	return bodyfmt.DisplayRow(folded.String())
+	return termtext.Row(folded.String())
 }
 
 func (m *Model) statusBarMessage() (string, statusLevel) {

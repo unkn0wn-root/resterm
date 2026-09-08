@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 const headerGap = 3
@@ -86,10 +86,10 @@ func headerCellVariants(values []string, limit int) (text []string, lossy int) {
 
 	// Escape before measuring so control characters cannot add header rows.
 	for _, value := range values {
-		value = bodyfmt.DisplayRow(value)
+		value = termtext.Row(value)
 		add(value, truncateToWidth(value, limit))
 	}
-	last := bodyfmt.DisplayRow(values[len(values)-1])
+	last := termtext.Row(values[len(values)-1])
 	add(last, truncateToWidth(last, min(limit, headerValueTight)))
 
 	if lossy < 0 {
