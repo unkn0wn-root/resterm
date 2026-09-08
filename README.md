@@ -14,9 +14,6 @@
 
 Resterm stores API requests in plain `.http` and `.rest` files that you can diff, review and track in version control. Edit and send requests in the terminal, or run them from scripts and CI. Request files support workflows, assertions, mock servers, tracing and profiling. No accounts, cloud sync or telemetry.
 
-> [!NOTE]
-> Resterm is now v1! See the [v1.0.0 release notes](https://github.com/unkn0wn-root/resterm/releases/tag/v1.0.0) for new features and breaking changes.
-
 Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Request files](#request-files), [Installation](#installation), [Documentation](#documentation).
 
 ## Screenshot tour
