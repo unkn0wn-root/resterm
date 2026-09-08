@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.7.0](https://github.com/unkn0wn-root/resterm/compare/v1.6.0...v1.7.0) (2026-09-08)
+
+
+### Features
+
+* bind alt+v/h to split response instead of ctrl ([6c4a67e](https://github.com/unkn0wn-root/resterm/commit/6c4a67ea4bb9cd43427e98580dc4cdfe6cfd7a97))
+
+
+### Bug Fixes
+
+* preserve Unicode edit and redacted diagnostic positions ([236653a](https://github.com/unkn0wn-root/resterm/commit/236653aaf60c797f2ed568069c35f337fe0a85b5))
+
 ## [1.6.0](https://github.com/unkn0wn-root/resterm/compare/v1.5.6...v1.6.0) (2026-09-06)
 
 
