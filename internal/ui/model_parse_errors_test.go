@@ -68,7 +68,7 @@ func TestStyleLinesKeepsTheCaretUnderTheExcerpt(t *testing.T) {
 	}))
 
 	var excerpt, caret string
-	for _, styledLine := range strings.Split(styled, "\n") {
+	for styledLine := range strings.SplitSeq(styled, "\n") {
 		plain := ansi.Strip(styledLine)
 		switch {
 		case strings.Contains(plain, "{{missing}}"):
