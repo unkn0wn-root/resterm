@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/rivo/uniseg"
+
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 type LineKind string
@@ -49,6 +51,10 @@ func Lines(rep Report) []Line {
 		}
 		out = append(out, itemLines(rep, it)...)
 	}
+	// Escape all report text before rendering. Row leaves existing escapes unchanged.
+	for i := range out {
+		out[i].Text = termtext.Row(out[i].Text)
+	}
 	return out
 }
 
@@ -72,7 +78,10 @@ func itemLines(rep Report, it Diagnostic) []Line {
 		ls = append(
 			ls,
 			Line{Kind: LineBar, Text: bar},
-			Line{Kind: LineSrc, Text: fmt.Sprintf("%*d | %s", width, it.Span.Start.Line, src)},
+			Line{
+				Kind: LineSrc,
+				Text: fmt.Sprintf("%*d | %s", width, it.Span.Start.Line, termtext.Block(src)),
+			},
 			Line{
 				Kind: LineMark,
 				Text: fmt.Sprintf(
@@ -197,17 +206,11 @@ func sourceFor(it Diagnostic, src []byte) []byte {
 	return src
 }
 
-// col counts bytes; padding counts display cells. Preserve tabs so the shared
-// gutter puts the excerpt and caret at the same tab stops.
+// col is a 1-based byte column. Measure the escaped prefix in display cells
+// to keep the caret aligned with the excerpt.
 func caretPad(src string, col int) string {
-	var pad strings.Builder
-	for i, seg := range strings.Split(src[:min(max(col-1, 0), len(src))], "\t") {
-		if i > 0 {
-			pad.WriteByte('\t')
-		}
-		pad.WriteString(strings.Repeat(" ", uniseg.StringWidth(seg)))
-	}
-	return pad.String()
+	before := termtext.Block(src[:min(max(col-1, 0), len(src))])
+	return strings.Repeat(" ", uniseg.StringWidth(before))
 }
 
 // Keep carriage returns so byte offsets still match src until rendering.

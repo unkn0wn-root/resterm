@@ -530,3 +530,57 @@ func TestParseSummaryRespectsSeverity(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderCaretFollowsEscapedExcerpt(t *testing.T) {
+	for _, src := range []string{
+		"const soft\u00ad = 1;",
+		"const bell \x07 x = 1;",
+		"\tconst tabbed = 1;",
+		"const plain = 1;",
+	} {
+		col := strings.Index(src, "= 1;") + 1
+		rep := diag.Report{
+			Path:   "sample.js",
+			Source: []byte(src + "\n"),
+			Items: []diag.Diagnostic{{
+				Class:    diag.ClassScript,
+				Severity: diag.SeverityError,
+				Message:  "bad assignment",
+				Span: diag.Span{
+					Start: diag.Pos{Line: 1, Col: col},
+					End:   diag.Pos{Line: 1, Col: col},
+				},
+			}},
+		}
+		for _, l := range diag.Lines(rep) {
+			if l.Kind == diag.LineSrc && strings.Contains(l.Text, `\t`) {
+				t.Errorf("excerpt shows a tab escape instead of indentation: %q", l.Text)
+			}
+		}
+		assertCaretUnder(t, rep, "= 1;")
+	}
+}
+
+func TestRenderEscapesUntrustedText(t *testing.T) {
+	rep := diag.Report{
+		Path:   "sample.js",
+		Source: []byte("const a = 1;\n"),
+		Items: []diag.Diagnostic{{
+			Class:    diag.ClassScript,
+			Severity: diag.SeverityError,
+			Message:  "cursor \x1b[2J moved",
+			Span: diag.Span{
+				Start: diag.Pos{Line: 1, Col: 7},
+				End:   diag.Pos{Line: 1, Col: 7},
+				Label: "here soft\u00ad",
+			},
+			Notes:  []diag.Note{{Kind: diag.NoteHelp, Message: "note \x1b[2J here"}},
+			Frames: []diag.StackFrame{{Name: "fn soft\u00ad"}},
+		}},
+	}
+	for _, l := range diag.Lines(rep) {
+		if strings.ContainsAny(l.Text, "\x1b\u00ad") {
+			t.Errorf("%v line kept a terminal control: %q", l.Kind, l.Text)
+		}
+	}
+}

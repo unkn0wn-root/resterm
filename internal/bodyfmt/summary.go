@@ -3,6 +3,8 @@ package bodyfmt
 import (
 	"fmt"
 	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 type SummaryKind int
@@ -36,12 +38,12 @@ func (p Payload) BinarySummary() []SummaryLine {
 		Value: fmt.Sprintf("Binary body (%s)", FormatByteSize(int64(p.bytes()))),
 	}}
 	if mime := strings.TrimSpace(p.Meta.MIME); mime != "" {
-		lines = append(lines, SummaryLine{Kind: SummaryField, Label: "MIME", Value: mime})
+		lines = append(lines, SummaryLine{Kind: SummaryField, Label: "MIME", Value: termtext.Row(mime)})
 	}
 	if warn := strings.TrimSpace(p.Meta.DecodeErr); warn != "" {
 		lines = append(
 			lines,
-			SummaryLine{Kind: SummaryWarn, Label: "Decode warning", Value: warn},
+			SummaryLine{Kind: SummaryWarn, Label: "Decode warning", Value: termtext.Row(warn)},
 		)
 	}
 	if hex := p.Meta.PreviewHex; hex != "" {
@@ -81,7 +83,7 @@ func (p Payload) RawSummaryText() string {
 	size := FormatByteSize(int64(p.bytes()))
 	title := fmt.Sprintf("Binary body (%s)", size)
 	if mime := strings.TrimSpace(p.Meta.MIME); mime != "" {
-		title = fmt.Sprintf("Binary body (%s, %s)", size, mime)
+		title = fmt.Sprintf("Binary body (%s, %s)", size, termtext.Row(mime))
 	}
 	return title + "\n<raw dump deferred>\nUse the raw view action to load hex/base64."
 }
