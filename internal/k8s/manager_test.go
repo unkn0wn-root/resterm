@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -1288,8 +1289,40 @@ func TestResolveForwardTargetServiceNamedPortAmbiguousAcrossContainers(t *testin
 	}
 }
 
+// fakeAPI serves clusterAPI from a fake clientset. The generated clientsets are
+// fine in tests, where binary size does not matter.
+type fakeAPI struct{ cs *fake.Clientset }
+
+func (f fakeAPI) getPod(ctx context.Context, ns, name string) (*corev1.Pod, error) {
+	return f.cs.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
+}
+
+func (f fakeAPI) listPods(ctx context.Context, ns, selector string) ([]corev1.Pod, error) {
+	list, err := f.cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+}
+
+func (f fakeAPI) getService(ctx context.Context, ns, name string) (*corev1.Service, error) {
+	return f.cs.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
+}
+
+func (f fakeAPI) getDeployment(ctx context.Context, ns, name string) (*appsv1.Deployment, error) {
+	return f.cs.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+}
+
+func (f fakeAPI) getStatefulSet(ctx context.Context, ns, name string) (*appsv1.StatefulSet, error) {
+	return f.cs.AppsV1().StatefulSets(ns).Get(ctx, name, metav1.GetOptions{})
+}
+
+func (f fakeAPI) portForwardURL(ns, pod string) *url.URL {
+	return &url.URL{Path: "/api/v1/namespaces/" + ns + "/pods/" + pod + "/portforward"}
+}
+
 func testClusterResolver(cs *fake.Clientset, namespace string) clusterResolver {
-	return newClusterResolver(clusterClients{apps: cs.AppsV1(), core: cs.CoreV1()}, namespace)
+	return newClusterResolver(fakeAPI{cs: cs}, namespace)
 }
 
 func testResolveForwardTarget(

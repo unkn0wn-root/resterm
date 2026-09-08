@@ -13,8 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
-	appsv1client "k8s.io/client-go/kubernetes/typed/apps/v1"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
 type forwardTarget struct {
@@ -28,17 +26,12 @@ type selectedTarget struct {
 }
 
 type clusterResolver struct {
-	apps      appsv1client.AppsV1Interface
-	core      corev1client.CoreV1Interface
+	api       clusterAPI
 	namespace string
 }
 
-func newClusterResolver(clients clusterClients, namespace string) clusterResolver {
-	return clusterResolver{
-		apps:      clients.apps,
-		core:      clients.core,
-		namespace: namespace,
-	}
+func newClusterResolver(api clusterAPI, namespace string) clusterResolver {
+	return clusterResolver{api: api, namespace: namespace}
 }
 
 func (r clusterResolver) resolveForwardTarget(
@@ -62,7 +55,7 @@ func (r clusterResolver) waitTargetPod(
 	target TargetRef,
 	podWait time.Duration,
 ) (selectedTarget, error) {
-	if r.core == nil {
+	if r.api == nil {
 		return selectedTarget{}, errors.New("k8s: client unavailable")
 	}
 	if strings.TrimSpace(r.namespace) == "" {
@@ -152,7 +145,7 @@ func (r clusterResolver) selectTargetPod(
 ) (selectedTarget, error) {
 	switch kind {
 	case TargetPod:
-		pod, err := r.core.Pods(r.namespace).Get(ctx, name, metav1.GetOptions{})
+		pod, err := r.api.getPod(ctx, r.namespace, name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return selectedTarget{}, nil
@@ -162,7 +155,7 @@ func (r clusterResolver) selectTargetPod(
 		return selectedTarget{pod: pod}, nil
 
 	case TargetService:
-		svc, err := r.core.Services(r.namespace).Get(ctx, name, metav1.GetOptions{})
+		svc, err := r.api.getService(ctx, r.namespace, name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return selectedTarget{}, nil
@@ -181,7 +174,7 @@ func (r clusterResolver) selectTargetPod(
 			name,
 			"deployment",
 			func(ctx context.Context, name string) (*metav1.LabelSelector, string, error) {
-				deploy, err := r.apps.Deployments(r.namespace).Get(ctx, name, metav1.GetOptions{})
+				deploy, err := r.api.getDeployment(ctx, r.namespace, name)
 				if err != nil {
 					return nil, "", err
 				}
@@ -195,7 +188,7 @@ func (r clusterResolver) selectTargetPod(
 			name,
 			"statefulset",
 			func(ctx context.Context, name string) (*metav1.LabelSelector, string, error) {
-				sts, err := r.apps.StatefulSets(r.namespace).Get(ctx, name, metav1.GetOptions{})
+				sts, err := r.api.getStatefulSet(ctx, r.namespace, name)
 				if err != nil {
 					return nil, "", err
 				}
@@ -214,10 +207,6 @@ func (r clusterResolver) resolveWorkload(
 	kind string,
 	getSelector func(context.Context, string) (*metav1.LabelSelector, string, error),
 ) (selectedTarget, error) {
-	if r.apps == nil {
-		return selectedTarget{}, errors.New("k8s: client unavailable")
-	}
-
 	selector, objectName, err := getSelector(ctx, name)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -286,14 +275,14 @@ func (r clusterResolver) podsForLabelSelector(
 }
 
 func (r clusterResolver) listPods(ctx context.Context, selector string) ([]corev1.Pod, error) {
-	pods, err := r.core.Pods(r.namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	pods, err := r.api.listPods(ctx, r.namespace, selector)
 	if err != nil {
 		return nil, err
 	}
-	if pods == nil || len(pods.Items) == 0 {
+	if len(pods) == 0 {
 		return nil, nil
 	}
-	return pods.Items, nil
+	return pods, nil
 }
 
 func pickPod(pods []corev1.Pod) *corev1.Pod {

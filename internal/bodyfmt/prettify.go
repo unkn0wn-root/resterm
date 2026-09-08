@@ -8,7 +8,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/alecthomas/chroma/quick"
+	"github.com/alecthomas/chroma"
+	"github.com/alecthomas/chroma/formatters"
+	"github.com/alecthomas/chroma/lexers/h"
+	"github.com/alecthomas/chroma/lexers/j"
+	"github.com/alecthomas/chroma/lexers/x"
+	"github.com/alecthomas/chroma/lexers/y"
+	"github.com/alecthomas/chroma/styles"
 
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/termtext"
@@ -64,20 +70,21 @@ func detect(contentType string) syntax {
 	}
 }
 
-func (s syntax) lexer() string {
+// Direct lexer imports avoid linking every language into the binary.
+func (s syntax) lexer() chroma.Lexer {
 	switch s {
 	case syntaxJSON:
-		return "json"
+		return j.JSON
 	case syntaxXML:
-		return "xml"
+		return x.XML
 	case syntaxHTML:
-		return "html"
+		return h.HTML
 	case syntaxYAML:
-		return "yaml"
+		return y.YAML
 	case syntaxJS:
-		return "javascript"
+		return j.Javascript
 	default:
-		return ""
+		return nil
 	}
 }
 
@@ -91,7 +98,7 @@ func Prettify(ctx context.Context, body []byte, contentType string, opt PrettyOp
 	}
 
 	lexer := lang.lexer()
-	if !opt.Color.Enabled || lexer == "" || done(ctx) {
+	if !opt.Color.Enabled || lexer == nil || done(ctx) {
 		return out
 	}
 	if highlighted, ok := highlight(out, lexer, opt.Color, opt.Style); ok {
@@ -184,7 +191,7 @@ func indentXML(body []byte) (string, bool) {
 	return buf.String(), true
 }
 
-func highlight(content, lexer string, color termcolor.Config, style string) (string, bool) {
+func highlight(content string, lexer chroma.Lexer, color termcolor.Config, style string) (string, bool) {
 	formatter := color.Formatter()
 	if formatter == "" {
 		return "", false
@@ -193,8 +200,12 @@ func highlight(content, lexer string, color termcolor.Config, style string) (str
 		style = defaultSyntaxStyle
 	}
 
+	it, err := chroma.Coalesce(lexer).Tokenise(nil, content)
+	if err != nil {
+		return "", false
+	}
 	var buf bytes.Buffer
-	if err := quick.Highlight(&buf, content, lexer, formatter, style); err != nil {
+	if err := formatters.Get(formatter).Format(&buf, styles.Get(style), it); err != nil {
 		return "", false
 	}
 	return buf.String(), true
