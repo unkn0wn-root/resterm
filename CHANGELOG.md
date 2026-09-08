@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.7.1](https://github.com/unkn0wn-root/resterm/compare/v1.7.0...v1.7.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* escape invisible runes in the editor pane ([#415](https://github.com/unkn0wn-root/resterm/issues/415)) ([609e314](https://github.com/unkn0wn-root/resterm/commit/609e3147dcc67d8f0148c22f69bb004efd70ba4a))
+* keep secrets redacted and --body output unchanged ([#417](https://github.com/unkn0wn-root/resterm/issues/417)) ([ad07508](https://github.com/unkn0wn-root/resterm/commit/ad07508366cf8b35add43f364ea933efd1309310))
+* preserve Unicode edit and redacted diagnostic positions ([#414](https://github.com/unkn0wn-root/resterm/issues/414)) ([0c4270a](https://github.com/unkn0wn-root/resterm/commit/0c4270a4ee6632be9efb0e3b883b241972cfa373))
+
 ## [1.7.0](https://github.com/unkn0wn-root/resterm/compare/v1.6.0...v1.7.0) (2026-09-08)
 
 
