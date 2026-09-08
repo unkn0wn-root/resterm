@@ -90,9 +90,13 @@ type Diagnostic struct {
 	Span      Span
 	Labels    []Label
 	Source    []byte
-	Notes     []Note
-	Chain     []ChainEntry
-	Frames    []StackFrame
+	// SourceLine and SourceCol locate the excerpt after redaction; Span keeps
+	// the file position. Zero falls back to the corresponding Span.Start field.
+	SourceLine int
+	SourceCol  int
+	Notes      []Note
+	Chain      []ChainEntry
+	Frames     []StackFrame
 }
 
 // Report is the structured diagnostic form used by renderers.

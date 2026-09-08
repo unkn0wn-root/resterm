@@ -5,6 +5,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rivo/uniseg"
 
@@ -353,5 +354,73 @@ func editorKey(msg tea.KeyMsg) func(requestEditor) requestEditor {
 	return func(e requestEditor) requestEditor {
 		e.Model, _ = e.Model.Update(msg)
 		return e
+	}
+}
+
+func TestAfterCursorEditsFollowWholeCharacter(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{"combining accent", "ae\u0301z"},
+		{"keycap digit", "a0\ufe0f\u20e3z"},
+		{"variation selector", "a⚙\ufe0fz"},
+		{"zwj sequence", "a\U0001F469\u200d\U0001F4BBz"},
+		{"regional indicators", "a\U0001F1F3\U0001F1F4z"},
+		{"skin tone modifier", "a\U0001F44D\U0001F3FDz"},
+		{"plain", "abz"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runes := []rune(tc.content)
+			_, end := textarea.GraphemeRange(runes, 1)
+			want := string(runes[:end]) + "Q" + string(runes[end:])
+
+			appended := editorAfter(t, tc.content, func(e requestEditor) requestEditor {
+				e, _ = e.ApplyInsertAction(editorInsertAfterCursor)
+				e.Model, _ = e.Model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Q")})
+				return e
+			})
+			if appended != want {
+				t.Errorf("a then Q left %q, want %q", appended, want)
+			}
+
+			paste := func(e requestEditor) requestEditor {
+				e.registerText = "Q"
+				e, _ = e.PasteClipboard(true)
+				return e
+			}
+			if err := clipboard.WriteAll("Q"); err == nil {
+				if pasted := editorAfter(t, tc.content, paste); pasted != want {
+					t.Errorf("p from the clipboard left %q, want %q", pasted, want)
+				}
+			}
+
+			t.Setenv("PATH", t.TempDir())
+			if pasted := editorAfter(t, tc.content, paste); pasted != want {
+				t.Errorf("p from the register left %q, want %q", pasted, want)
+			}
+		})
+	}
+}
+
+// Paste finds its insert point from the line start. A grapheme never spans a
+// line break, so that has to agree with a scan of the whole document at every
+// offset, including the line breaks themselves.
+func TestCharEndFromLineStartMatchesTheDocument(t *testing.T) {
+	for _, content := range []string{
+		"ae\u0301z qq\na\U0001F469\u200d\U0001F4BBz\n\nGET /a\u0301/b HTTP/1.1\n",
+		"\n\n\na\U0001F1F3\U0001F1F4z\n",
+		"{\n\t\"名前\": \"0\ufe0f\u20e3\"\n}",
+	} {
+		runes := []rune(content)
+		editor := newTestEditor(content)
+		for at := range len(runes) + 1 {
+			_, col := editor.positionForOffset(at)
+			start := at - col
+			if got := start + charEnd(runes[start:], col); got != charEnd(runes, at) {
+				t.Errorf("%q at %d: line start gives %d, document gives %d",
+					content, at, got, charEnd(runes, at))
+			}
+		}
 	}
 }

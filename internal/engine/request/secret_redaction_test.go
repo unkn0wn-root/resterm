@@ -4,13 +4,17 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/rivo/uniseg"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -284,4 +288,62 @@ func TestEnvironmentRefValueStaysRedactable(t *testing.T) {
 		t.Fatalf("mapped secret did not reach the wire: %v", st.wire)
 	}
 	assertSecretStaysRedactable(t, res)
+}
+
+func TestSecretExcerptKeepsTheFailingLine(t *testing.T) {
+	for _, eol := range []string{"\n", "\r\n"} {
+		t.Run(strconv.Quote(eol), func(t *testing.T) {
+			t.Setenv("RESTERM_REDACTION_KEY", "key-line-1"+eol+"key-line-2")
+			t.Setenv("RESTERM_REDACTION_TOKEN", leakedSecret)
+			env := envWith(t, "dev", map[string]string{
+				"key":   "env:RESTERM_REDACTION_KEY",
+				"token": "env:RESTERM_REDACTION_TOKEN",
+			})
+			source := "POST http://example.test" + eol + eol +
+				"key-line-1" + eol + "key-line-2 " + leakedSecret + " {{missing}}" + eol
+			doc := parser.Parse("secrets.http", []byte(source))
+
+			eng := New(engine.Config{SourceDiagnostics: true}, nil)
+			res, err := eng.ExecuteWith(doc, doc.Requests[0], env, ExecOptions{})
+			if err != nil {
+				t.Fatalf("ExecuteWith() error = %v", err)
+			}
+			if res.Err == nil {
+				t.Fatal("expected the undefined variable to fail the request")
+			}
+
+			at := strings.Index(source, "{{missing}}")
+			want := diag.Pos{
+				Path: "secrets.http",
+				Line: strings.Count(source[:at], "\n") + 1,
+				Col:  at - strings.LastIndex(source[:at], "\n"),
+			}
+			rep := diag.ReportOf(res.Err)
+			if got := rep.Items[0].Span.Start; got != want {
+				t.Errorf("span at %+v, want %+v", got, want)
+			}
+
+			rendered := diag.RenderReport(rep)
+			if strings.Contains(rendered, leakedSecret) {
+				t.Fatalf("diagnostic kept the secret:\n%s", rendered)
+			}
+			var excerpt, caret string
+			for _, line := range diag.Lines(rep) {
+				switch line.Kind {
+				case diag.LineSrc:
+					excerpt = line.Text
+				case diag.LineMark:
+					caret = line.Text
+				}
+			}
+			before, _, ok := strings.Cut(excerpt, "{{missing}}")
+			if !ok {
+				t.Fatalf("excerpt does not show the placeholder:\n%s", rendered)
+			}
+			pad, _, _ := strings.Cut(caret, "^")
+			if uniseg.StringWidth(pad) != uniseg.StringWidth(before) {
+				t.Errorf("caret is not under the placeholder:\n%s", rendered)
+			}
+		})
+	}
 }

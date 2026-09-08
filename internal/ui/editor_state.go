@@ -879,7 +879,7 @@ func (e requestEditor) charwiseSpan(
 	}
 	if startOffset < endOffset {
 		if spec.includeFinalForward {
-			endOffset = nextCharOffset(runes, endOffset)
+			endOffset = charEnd(runes, endOffset)
 		}
 		// Delete uses Vim-like word motion that also consumes trailing spaces.
 		if includeSpaceAfterWord && (spec.command == "w" || spec.command == "W") {
@@ -1154,14 +1154,7 @@ func (e requestEditor) ApplyInsertAction(
 	case editorInsertAfterCursor:
 		editorPtr.clearSelection()
 		cursor := editorPtr.caretPosition()
-		lineLen := editorPtr.LineLength(cursor.Line)
-		targetCol := cursor.Column
-		if targetCol < lineLen {
-			targetCol++
-		} else {
-			targetCol = lineLen
-		}
-		editorPtr.moveCursorTo(cursor.Line, targetCol)
+		editorPtr.moveCursorTo(cursor.Line, charEnd(editorPtr.LineRunes(cursor.Line), cursor.Column))
 	case editorInsertAtLineStartNonBlank:
 		editorPtr.clearSelection()
 		editorPtr.moveToLineStartNonBlank()
@@ -1472,11 +1465,11 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 				insertPos = e.offsetForPosition(cursor.Line+1, 0)
 			}
 		} else {
-			if index < len(runes) {
-				insertPos = index + 1
-			} else {
-				insertPos = len(runes)
-			}
+			// A grapheme never spans a line break, so the line start is a
+			// boundary and scanning from there finds the same character as
+			// scanning the document.
+			start := index - cursor.Column
+			insertPos = start + charEnd(runes[start:], cursor.Column)
 		}
 	} else if linewise {
 		insertPos = e.offsetForPosition(cursor.Line, 0)
@@ -1967,18 +1960,6 @@ func (e *requestEditor) removeSelection() (string, bool) {
 	return removed, true
 }
 
-// nextCharOffset returns the rune offset after the grapheme at offset.
-func nextCharOffset(runes []rune, offset int) int {
-	if offset < 0 {
-		return 0
-	}
-	if offset >= len(runes) {
-		return len(runes)
-	}
-	_, end := textarea.GraphemeRange(runes, offset)
-	return end
-}
-
 func (e *requestEditor) deleteRange(startOffset, endOffset int) (string, bool) {
 	runes := []rune(e.Value())
 	if startOffset < 0 {
@@ -2106,6 +2087,11 @@ func wordClasses(runes []rune, big bool) []int8 {
 func charStart(runes []rune, idx int) int {
 	start, _ := textarea.GraphemeRange(runes, idx)
 	return start
+}
+
+func charEnd(runes []rune, idx int) int {
+	_, end := textarea.GraphemeRange(runes, idx)
+	return end
 }
 
 // segEnd returns the exclusive end of the class run containing idx.
