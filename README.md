@@ -87,7 +87,7 @@ Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Requ
 - **HTTP, GraphQL, gRPC, WebSocket and SSE** support.
 - **Automation in request files:** conditions (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
 - **RestermScript**, a small expression language built for Resterm, with JavaScript hooks when you want them.
-- **Vim-style controls** with shortcut hints, searchable offline help, `K` help under the cursor, `/` search and commands like `:w`, `:q`, `:help` and `:docs`.
+- **Vim-style controls** with shortcut hints, searchable offline help, `Shift+k` help under the cursor, `/` search and commands like `:w`, `:q`, `:help` and `:docs`.
 - **Auth and tunneling:** OAuth 2.0 (client credentials, password, authorization code with PKCE), auth through existing CLIs, SSH tunnels and Kubernetes port-forwards.
 - **CLI runner:** `resterm run` for scripted runs and CI, with JSON and JUnit output.
 - **Mock servers** declared next to the requests they mimic, with matching rules, sequences, call verification and hot reload.
@@ -156,40 +156,46 @@ The generated project talks to a local mock server. Start it in another terminal
 resterm mock requests.http
 ```
 
-In the TUI, press `g Shift+M` instead to start the same mock server from the workspace.
+In the TUI, press `g Shift+m` in normal mode to start the workspace mock server. Repeat to stop it.
 
 The [CLI documentation](docs/cli.md) covers selectors, output formats and more examples.
 
 ## Keyboard cheat sheet
 
+These are the default bindings. `+` means hold keys together (`Alt+v`). A space means press them in sequence (`g v`: press `g`, release it, then press `v`). Letters are lowercase, and `Shift` is written explicitly when required (`g Shift+z`). Symbols such as `?` and `:` mean type that character using your keyboard layout.
+
+In the editor, `i` enters insert mode and `Esc` returns to normal mode. If completion is open, the first `Esc` dismisses it. Use normal mode for `g` sequences, `Alt+v` / `Alt+h`, `?`, `Shift+k`, `:` and pane switching. Insert mode preserves character input, including text produced with Alt, and uses `Tab` for completion or indentation. `Ctrl+Enter` still sends requests in insert mode.
+
 - Pane focus and layout
   - `Tab` / `Shift+Tab`: move between sidebar, editor and response.
-  - `g+r`, `g+i`, `g+p`: jump to requests, editor or response.
-  - `g+h` / `g+l`: resize horizontally. Changes sidebar width when the sidebar is focused, the editor/response split otherwise.
-  - `g+j` / `g+k`: resize editor/response height when stacked, collapse or expand branches in the navigator.
-  - `g+v` / `g+s`: toggle the response pane between inline and stacked layout.
-  - `g+1`, `g+2`, `g+3`: minimize or restore sidebar, editor, response.
-  - `g+z` / `g+Z`: zoom the focused pane, clear zoom.
+  - `g r`, `g i`, `g p`: jump to requests, editor normal mode or response.
+  - `g h` / `g l`: shrink or grow the sidebar when it is focused. Otherwise, move the editor/response divider left or right in the side-by-side layout.
+  - `g j` / `g k`: move the editor/response divider down or up when stacked, or collapse and expand branches when the navigator is focused.
+  - `g v` / `g s`: place the response beside or below the editor.
+  - `g 1`, `g 2`, `g 3`: minimize or restore sidebar, editor or response.
+  - `g z`: toggle zoom for the focused editor or response pane. `g Shift+z`: clear zoom.
 - Environments and globals
-  - `Ctrl+E`: switch environments.
-  - `Ctrl+G`: inspect captured globals.
+  - `Ctrl+e`: switch environments.
+  - `Ctrl+g`: inspect captured globals.
 - Help and commands
   - `?`: open the searchable offline help index.
-  - `K` (editor normal mode): open help for the directive, template or keyword under the cursor.
+  - `Shift+k` (editor normal mode): open help for the directive, template or keyword under the cursor.
   - `:help <topic>` / `:man <topic>`: open an embedded topic; `:docs <topic>` opens the version-matched full manual.
-  - `Ctrl+O`: open the file/workspace popup. Type to filter, scroll with `Up` / `Down`, and use `Tab` to descend into directories.
+  - `Ctrl+o`: open the file/workspace popup. Type to filter, scroll with `Up` / `Down`, and use `Tab` to descend into directories.
   - `:`: open the command line. Use `Up` / `Down` to select suggestions, `Tab` to complete one, or `Enter` to accept and run a selection. Path arguments such as `:mock start --source` and `:edit` browse the filesystem in the same popup.
-- Responses
-  - `Alt+V` / `Alt+H`: split the response pane for side-by-side comparison.
-  - `Ctrl+Shift+C` or `g y` (response focused): copy the whole Pretty, Raw or Headers tab.
+  - `g e`: open the current file, or the file selected in the navigator, in your external editor.
+- Requests and responses
+  - `Ctrl+Enter`: send the active request, including from editor insert mode.
+  - `Alt+v` / `Alt+h`: split responses side by side or stack them for comparison. Repeat the same shortcut to close the split.
+  - `Ctrl+Shift+c` or `g y` (response focused): copy the whole Pretty, Raw or Headers tab.
   - `g x`: show the Explain preview for the active request without sending it.
-  - `g e`: open the current file in your external editor.
 
 > [!TIP]
 > If you only remember three shortcuts:
+>
 > - `Ctrl+Enter` sends the request
 > - `Tab` / `Shift+Tab` switches panes
-> - `g+p` jumps to the response
+> - `g p` jumps to the response
 
 ## Installation
 
@@ -439,7 +445,7 @@ Each polling cycle receives its own retry budget. Example: [`_examples/polling-r
 GET {{services.api.base}}/status
 ```
 
-Press `g+c` to run it in the TUI, or supply `--compare` on the command line. Example: [`_examples/compare.http`](_examples/compare.http). See the [compare documentation](./docs/resterm.md#compare-runs).
+Press `g c` in normal mode to run it in the TUI, or supply `--compare` on the command line. Example: [`_examples/compare.http`](_examples/compare.http). See the [compare documentation](./docs/resterm.md#compare-runs).
 
 ### Tracing and timeline
 

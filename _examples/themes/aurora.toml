@@ -25,7 +25,8 @@ foreground = "#38bdf8"
 foreground = "#fbbf24"
 
 [styles.header_brand]
-foreground = "#38bdf8"
+foreground = "#000000"
+background = "#38bdf8"
 bold = true
 
 [styles.header_separator]

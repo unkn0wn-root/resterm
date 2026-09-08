@@ -32,7 +32,8 @@ bold = true
 foreground = "#b45309"
 
 [styles.header_brand]
-foreground = "#1d4ed8"
+foreground = "#ffffff"
+background = "#1d4ed8"
 bold = true
 
 [styles.browser_border]

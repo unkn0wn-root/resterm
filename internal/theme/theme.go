@@ -217,9 +217,13 @@ func DefaultTheme() Theme {
 			Foreground(lipgloss.Color("#E0DEF4")).
 			Background(lipgloss.Color("#433C59")).
 			Padding(0, 1),
-		Error:       lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")),
-		Success:     lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
-		HeaderBrand: lipgloss.NewStyle().Foreground(lipgloss.Color("#FBC859")).Bold(true),
+		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")),
+		Success: lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
+		HeaderBrand: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#000000")).
+			Background(lipgloss.Color("#8FBC8F")).
+			Bold(true).
+			Padding(0, 1),
 		HeaderIcon:  lipgloss.NewStyle().Foreground(lipgloss.Color("#9683D8")),
 		HeaderLabel: lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
 		HeaderHelp:  lipgloss.NewStyle().Foreground(lipgloss.Color("#7DD3FC")).Bold(true),

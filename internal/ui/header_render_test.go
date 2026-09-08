@@ -63,7 +63,7 @@ func TestHeaderRendersLayout(t *testing.T) {
 		t.Fatalf("header rows = %d, want 2:\n%s", len(lines), view)
 	}
 	for _, want := range []string{
-		headerBrandName,
+		"  " + headerBrandName + " ",
 		iconHeaderEnv + " " + labelHeaderEnv + " default",
 		iconHeaderWorkspace + " " + labelHeaderWorkspace + " acme-api",
 		iconHeaderRequests + " " + labelHeaderRequests,
@@ -83,7 +83,7 @@ func TestHeaderRendersLayout(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		headerBrandName + headerGroupSep + iconHeaderEnv,
+		headerBrandName + " " + headerGroupSep + iconHeaderEnv,
 		iconHeaderEnv + " " + labelHeaderEnv + " default  " + iconHeaderWorkspace + " " +
 			labelHeaderWorkspace,
 		iconHeaderRequests + " " + labelHeaderRequests + " 0 " + iconHeaderActive + " GET create-user",
@@ -350,8 +350,14 @@ func TestHeaderKeepsThemeBackground(t *testing.T) {
 
 	line := strings.SplitN(model.renderHeader(), "\n", 2)[0]
 	backgrounds := renderedCellBackgrounds(line)
-	want := renderedCellBackgrounds(lipgloss.NewStyle().Background(background).Render("x"))[0]
+	headerBackground := renderedCellBackgrounds(lipgloss.NewStyle().Background(background).Render("x"))[0]
+	brandBackgrounds := renderedCellBackgrounds(model.theme.HeaderBrand.Render(headerBrandName))
+	brandStart := model.theme.Header.GetPaddingLeft()
 	for index, got := range backgrounds {
+		want := headerBackground
+		if offset := index - brandStart; offset >= 0 && offset < len(brandBackgrounds) {
+			want = brandBackgrounds[offset]
+		}
 		if !slices.Equal(got, want) {
 			t.Fatalf("header cell %d has background %v, want %v", index, got, want)
 		}
