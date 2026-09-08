@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
@@ -313,5 +315,121 @@ func BenchmarkOverlayRetain(b *testing.B) {
 				overlay.Retain(&edited)
 			}
 		})
+	}
+}
+
+// A quadratic build took seconds here and froze the editor.
+func TestNewOverlayScalesWithFindings(t *testing.T) {
+	const width = 256 * 1024
+	rep := diag.Report{Path: "t.http", Source: []byte(strings.Repeat("{", width))}
+	for col := 1; col < width; col += 2 {
+		rep.Items = append(rep.Items, diag.Diagnostic{
+			Severity: diag.SeverityWarning,
+			Message:  "placeholder {{ is not closed with }}",
+			Span: diag.Span{
+				Start: diag.Pos{Path: "t.http", Line: 1, Col: col},
+				End:   diag.Pos{Path: "t.http", Line: 1, Col: col + 2},
+			},
+		})
+	}
+
+	start := time.Now()
+	o := diag.NewOverlay(rep)
+
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("building the overlay took %s, want well under a second", elapsed)
+	}
+	if got := len(o.Ranges(0)); got != len(rep.Items) {
+		t.Fatalf("ranges = %d, want %d", got, len(rep.Items))
+	}
+	if first := o.Ranges(0)[0]; first.Start != 0 || first.End != 2 {
+		t.Fatalf("first range = %+v, want runes 0 to 2", first)
+	}
+}
+
+func TestNewOverlayCountsRunesOnMultiByteLines(t *testing.T) {
+	const line = "h\u00e9llo w\u00f6rld ok"
+	cols := []int{1, 2, len("h\u00e9llo ") + 1, len("h\u00e9llo w\u00f6rld ") + 1, 2}
+	rep := diag.Report{Path: "t.http", Source: []byte(line)}
+	for _, col := range cols {
+		rep.Items = append(rep.Items, diag.Diagnostic{
+			Severity: diag.SeverityWarning,
+			Span: diag.Span{
+				Start: diag.Pos{Path: "t.http", Line: 1, Col: col},
+				End:   diag.Pos{Path: "t.http", Line: 1, Col: col},
+			},
+		})
+	}
+
+	got := diag.NewOverlay(rep).Ranges(0)
+
+	for i, want := range []int{0, 1, 6, 12, 1} {
+		if got[i].Start != want {
+			t.Fatalf("range %d starts at rune %d, want %d (%+v)", i, got[i].Start, want, got)
+		}
+	}
+}
+
+const messyLine = "ab\u00e9c\u20acd\U0001F600e\u0301f\xffg\xe2\x82h" +
+	"ij\u00e9klmnop\u20acqrstuv\U0001F600wxyz0123456789" +
+	"ABC\u00e9DEFGHIJ\u20acKLMNOPQ\U0001F600RSTUVWXYZ!?"
+
+func TestNewOverlayConvertsColumnsInAnyOrder(t *testing.T) {
+	// A stride coprime with the length visits every offset out of order.
+	const stride = 37
+	offsets := make([]int, 0, len(messyLine)+1)
+	for i := range len(messyLine) + 1 {
+		offsets = append(offsets, (i*stride)%(len(messyLine)+1))
+	}
+
+	rep := diag.Report{Path: "t.http", Source: []byte(messyLine)}
+	for _, off := range offsets {
+		rep.Items = append(rep.Items, diag.Diagnostic{
+			Severity: diag.SeverityWarning,
+			Span: diag.Span{
+				Start: diag.Pos{Path: "t.http", Line: 1, Col: off + 1},
+				End:   diag.Pos{Path: "t.http", Line: 1, Col: len(messyLine) + 1},
+			},
+		})
+	}
+
+	got := diag.NewOverlay(rep).Ranges(0)
+
+	wantEnd := utf8.RuneCountInString(messyLine)
+	for i, off := range offsets {
+		want := utf8.RuneCountInString(messyLine[:off])
+		if got[i].Start != want || got[i].End != wantEnd {
+			t.Fatalf("byte %d converted to %+v, want runes %d to %d", off, got[i], want, wantEnd)
+		}
+	}
+}
+
+func TestNewOverlayScalesWithUnorderedFindingsOnAMultiByteLine(t *testing.T) {
+	const width = 256 * 1024
+	line := "\u00e9" + strings.Repeat("x", width)
+	rep := diag.Report{Path: "t.http", Source: []byte(line)}
+	for col := len(line) - 8; col > 2; col -= 8 {
+		rep.Items = append(rep.Items, diag.Diagnostic{
+			Severity: diag.SeverityWarning,
+			Message:  "placeholder {{ is not closed with }}",
+			Span: diag.Span{
+				Start: diag.Pos{Path: "t.http", Line: 1, Col: col},
+				End:   diag.Pos{Path: "t.http", Line: 1, Col: col + 2},
+			},
+		})
+	}
+
+	start := time.Now()
+	o := diag.NewOverlay(rep)
+
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("building the overlay took %s, want well under a second", elapsed)
+	}
+	if got := len(o.Ranges(0)); got != len(rep.Items) {
+		t.Fatalf("ranges = %d, want %d", got, len(rep.Items))
+	}
+	want := utf8.RuneCountInString(line[:len(line)-9])
+	if first := o.Ranges(0)[0]; first.Start != want || first.End != want+2 {
+		t.Fatalf("first range = %+v, want runes %d to %d", first, want, want+2)
 	}
 }

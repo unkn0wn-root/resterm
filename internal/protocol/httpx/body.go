@@ -40,10 +40,9 @@ func (c *Client) prepareBody(
 			start := diag.Pos{Path: path, Line: 1, Col: 1}
 			expanded, err := resolver.ExpandTemplatesAt(string(data), start)
 			if err != nil {
-				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err,
-					"expand body file templates",
-					diag.WithSource(path, data),
-				)
+				// No source: renderers quote the failing line, and a body
+				// may hold credentials beside the placeholder.
+				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err, "expand body file templates")
 			}
 
 			return c.textBodyPlan(expanded, lookup, req)

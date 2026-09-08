@@ -5,9 +5,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -31,6 +33,7 @@ func TestDiagnosticSourceSpans(t *testing.T) {
 		{"mock", "# @mock method=GET path=/x typo=true\nHTTP/1.1 200 OK\n", "typo", 1, diag.SeverityError},
 		{"unknown options", "# @ssh host=h userr=a otherr=b\nGET http://x", "userr otherr", 1, diag.SeverityWarning},
 		{"alias conflict", "# @sse idle=1s idle-timeout=2s\nGET http://x", "idle idle-timeout", 1, diag.SeverityError},
+		{"alias conflict reversed", "# @sse idle-timeout=2s idle=1s\nGET http://x", "idle-timeout idle", 1, diag.SeverityError},
 		{"repeated option", "# @sse idle=1s idle=2s\nGET http://x", "idle idle", 1, diag.SeverityError},
 		{"workflow aliases", "# @workflow w\n# @step s run=A using=B", "run using", 2, diag.SeverityError},
 	} {
@@ -270,5 +273,49 @@ func TestUnclosedPlaceholderWarnings(t *testing.T) {
 				t.Fatalf("warnings = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestManyBadOptionsScale(t *testing.T) {
+	var src strings.Builder
+	src.WriteString("# @sse")
+	for i := range 20000 {
+		fmt.Fprintf(&src, " nope%d=1", i)
+	}
+	src.WriteString("\nGET http://x\n")
+
+	start := time.Now()
+	rep := Diagnostics(Parse("test.http", []byte(src.String())))
+
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("parsing took %s, want well under two seconds", elapsed)
+	}
+	if len(rep.Items) != 20000 {
+		t.Fatalf("findings = %d, want one per option", len(rep.Items))
+	}
+	if col := rep.Items[0].Span.Start.Col; col != len("# @sse ")+1 {
+		t.Fatalf("first finding at column %d, want the first option", col)
+	}
+}
+
+func TestArgFieldsFollowContinuedArguments(t *testing.T) {
+	d := newParsedDirective(
+		directive.Call{Name: directive.SSE, Args: "aa=1"},
+		restfile.LineRange{Start: 1, End: 1},
+	)
+	d.nameSpan = diag.Span{Start: diag.Pos{Line: 1, Col: 3}, End: diag.Pos{Line: 1, Col: 7}}
+	d.argParts = []argumentPart{{end: len(d.Args), pos: diag.Pos{Line: 1, Col: 8}}}
+
+	first, _ := d.locate(directive.UnknownOption(directive.SSE, "aa"))
+	if first.Start.Line != 1 || first.Start.Col != 8 {
+		t.Fatalf("first span = %+v, want 1:8", first)
+	}
+
+	d.Args = "aa=1\n  bb=2"
+	d.argParts = append(d.argParts, argumentPart{start: 7, end: 11, pos: diag.Pos{Line: 2, Col: 3}})
+
+	second, _ := d.locate(directive.UnknownOption(directive.SSE, "bb"))
+	if second.Start.Line != 2 || second.Start.Col != 3 {
+		t.Fatalf("second span = %+v, want 2:3", second)
 	}
 }

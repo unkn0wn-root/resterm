@@ -42,15 +42,16 @@ func NewOverlay(rep Report) *Overlay {
 		lines:  make(map[int][]Range),
 		marks:  make(map[int]Severity),
 	}
+	cols := make(map[int]*runeCols)
 	for i, item := range rep.Items {
 		if item.Severity == SeverityError {
 			o.errors++
 		} else {
 			o.warnings++
 		}
-		o.positions = append(o.positions, o.add(item.Span, i, item.Severity))
+		o.positions = append(o.positions, o.add(cols, item.Span, i, item.Severity))
 		for _, label := range item.Labels {
-			o.add(label.Span, i, item.Severity)
+			o.add(cols, label.Span, i, item.Severity)
 		}
 	}
 	for _, ranges := range o.lines {
@@ -64,8 +65,9 @@ func NewOverlay(rep Report) *Overlay {
 }
 
 // A span past the last line marks that line. A span that continues onto later
-// lines is drawn to the end of its first line only.
-func (o *Overlay) add(span Span, item int, severity Severity) Cell {
+// lines is drawn to the end of its first line only. cols is reused across
+// findings that share a line.
+func (o *Overlay) add(cols map[int]*runeCols, span Span, item int, severity Severity) Cell {
 	line := min(max(span.Start.Line-1, 0), len(o.source)-1)
 	raw := strings.TrimSuffix(o.source[line], "\r")
 	start, end := len(raw), len(raw)
@@ -75,7 +77,12 @@ func (o *Overlay) add(span Span, item int, severity Severity) Cell {
 			end = min(max(span.End.Col-1, start), len(raw))
 		}
 	}
-	from, to := utf8.RuneCountInString(raw[:start]), utf8.RuneCountInString(raw[:end])
+	c, ok := cols[line]
+	if !ok {
+		c = newRuneCols(raw)
+		cols[line] = c
+	}
+	from, to := c.at(start), c.at(end)
 	if from == to {
 		if prev, ok := o.marks[line]; !ok || rank(severity) < rank(prev) {
 			o.marks[line] = severity
@@ -208,6 +215,53 @@ func matchingPrefix(before string, after []rune, limit int) (n int, identical bo
 		n++
 	}
 	return n, limit == len(after) && before == ""
+}
+
+const colStride = 64
+
+// runeCols indexes rune boundaries to avoid rescanning a line for unordered
+// diagnostic offsets.
+type runeCols struct {
+	line  string
+	ascii bool
+	marks []runeMark
+}
+
+type runeMark struct {
+	off, col int32
+}
+
+func newRuneCols(line string) *runeCols {
+	c := &runeCols{line: line, ascii: len(line) == utf8.RuneCountInString(line)}
+	if c.ascii {
+		return c
+	}
+	c.marks = make([]runeMark, 0, len(line)/colStride+1)
+	col, next := 0, 0
+	for off := range line {
+		if off >= next {
+			c.marks = append(c.marks, runeMark{off: int32(off), col: int32(col)})
+			next = off + colStride
+		}
+		col++
+	}
+	return c
+}
+
+func (c *runeCols) at(off int) int {
+	if c.ascii {
+		return off
+	}
+	// Resume at a rune boundary so invalid UTF-8 and offsets inside a rune
+	// count the same as a scan from the line start.
+	i, exact := slices.BinarySearchFunc(c.marks, int32(off), func(m runeMark, off int32) int {
+		return cmp.Compare(m.off, off)
+	})
+	if !exact {
+		i--
+	}
+	m := c.marks[i]
+	return int(m.col) + utf8.RuneCountInString(c.line[m.off:off])
 }
 
 func rank(severity Severity) int {
