@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"unicode"
 
@@ -422,5 +423,33 @@ func TestCharEndFromLineStartMatchesTheDocument(t *testing.T) {
 					content, at, got, charEnd(runes, at))
 			}
 		}
+	}
+}
+
+func TestEditorPositionsIgnoreEscapedRunes(t *testing.T) {
+	const doc = "GET https://example.com/pro\u00adducts\n"
+	editor := newTestEditor(doc)
+
+	line := editor.LineRunes(0)
+	hyphen := slices.Index(line, '\u00ad')
+	if hyphen < 0 {
+		t.Fatal("fixture lost its soft hyphen")
+	}
+
+	const escapeWidth = 6
+	if got := editor.ColumnForVisibleCell(0, hyphen); got != hyphen {
+		t.Errorf("cell %d maps to rune %d, want %d", hyphen, got, hyphen)
+	}
+	if got := editor.ColumnForVisibleCell(0, hyphen+escapeWidth); got != hyphen+1 {
+		t.Errorf("cell after the escape maps to rune %d, want %d", got, hyphen+1)
+	}
+
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, hyphen+1)
+	if got := editor.caretPosition().Column; got != hyphen+1 {
+		t.Errorf("caret column %d, want %d", got, hyphen+1)
+	}
+	if editor.Value() != doc {
+		t.Error("rendering the escape changed the buffer")
 	}
 }

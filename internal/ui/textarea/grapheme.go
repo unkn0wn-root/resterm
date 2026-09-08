@@ -2,11 +2,14 @@ package textarea
 
 import (
 	"iter"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
+
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 // printableASCII avoids allocating a new string for each ASCII character.
@@ -59,7 +62,13 @@ func Clusters(line []rune) iter.Seq[Cluster] {
 			for start := i; g.Next(); {
 				text := g.Str()
 				end := start + utf8.RuneCountInString(text)
-				if !yield(Cluster{Start: start, End: end, Width: g.Width(), Text: text}) {
+				width := g.Width()
+				// Invisible runes measure zero cells here but can take a cell in
+				// the terminal. Draw an escape and keep Start and End on the runes.
+				if esc, ok := termtext.EscapeCluster(text, width); ok {
+					text, width = esc, uniseg.StringWidth(esc)
+				}
+				if !yield(Cluster{Start: start, End: end, Width: width, Text: text}) {
 					return
 				}
 				start = end
@@ -67,6 +76,17 @@ func Clusters(line []rune) iter.Seq[Cluster] {
 			i = hi
 		}
 	}
+}
+
+// clusterText builds the text Clusters would draw, for render paths that write
+// a whole run at once.
+func clusterText(line []rune) string {
+	var b strings.Builder
+	b.Grow(len(line))
+	for c := range Clusters(line) {
+		b.WriteString(c.Text)
+	}
+	return b.String()
 }
 
 // GraphemeRange returns the rune range [start, end) of the grapheme at col.

@@ -215,8 +215,15 @@ func TestClustersMatchSegmenter(t *testing.T) {
 			t.Fatalf("%q: got %d clusters, want %d", text, len(got), len(want))
 		}
 		for i, c := range got {
-			if c != want[i] {
+			if c.Start != want[i].Start || c.End != want[i].End {
 				t.Fatalf("%q cluster %d: got %+v, want %+v", text, i, c, want[i])
+			}
+			if c.Width != uniseg.StringWidth(c.Text) {
+				t.Fatalf("%q cluster %d: width %d, but %q draws %d",
+					text, i, c.Width, c.Text, uniseg.StringWidth(c.Text))
+			}
+			if c.Text != want[i].Text && c.Width == 0 {
+				t.Fatalf("%q cluster %d: escaped to %q but still charges nothing", text, i, c.Text)
 			}
 		}
 	}
@@ -310,5 +317,101 @@ func BenchmarkViewNormalDoc(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = m.View()
+	}
+}
+
+func TestClustersEscapeInvisibleRunes(t *testing.T) {
+	tests := []struct {
+		name  string
+		line  string
+		text  string
+		width int
+	}{
+		{"soft hyphen", "a\u00adb", `\u00ad`, 6},
+		{"zero width space", "a\u200bb", `\u200b`, 6},
+		{"byte order mark", "a\ufeffb", `\ufeff`, 6},
+		{"bidi override", "a\u202eb", `\u202e`, 6},
+		{"language tag", "a\U000E0001b", `\udb40\udc01`, 12},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			line := []rune(tt.line)
+			var got []Cluster
+			for c := range Clusters(line) {
+				got = append(got, c)
+			}
+			if len(got) != 3 {
+				t.Fatalf("got %d clusters, want 3: %+v", len(got), got)
+			}
+			mid := got[1]
+			if mid.Text != tt.text || mid.Width != tt.width {
+				t.Errorf("middle cluster = %q/%d, want %q/%d",
+					mid.Text, mid.Width, tt.text, tt.width)
+			}
+			if mid.Start != 1 || mid.End != 2 {
+				t.Errorf("middle cluster spans runes [%d,%d), want [1,2)", mid.Start, mid.End)
+			}
+			if got := visualWidth(line); got != 2+tt.width {
+				t.Errorf("line width %d, want %d", got, 2+tt.width)
+			}
+			if col := columnForWidth(line, 1+tt.width); col != 2 {
+				t.Errorf("cell %d resolves to rune %d, want 2", 1+tt.width, col)
+			}
+		})
+	}
+}
+
+func TestClustersKeepAttachedRunesWhole(t *testing.T) {
+	for _, text := range []string{
+		"\U0001f469\u200d\U0001f4bb",
+		"\u2699\ufe0f",
+		"cafe\u0301",
+	} {
+		var b strings.Builder
+		for c := range Clusters([]rune(text)) {
+			b.WriteString(c.Text)
+		}
+		if b.String() != text {
+			t.Errorf("Clusters rewrote an attached rune: %q -> %q", text, b.String())
+		}
+	}
+}
+
+func TestUnstyledViewEscapesInvisibleRunes(t *testing.T) {
+	profile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(profile) })
+
+	for _, r := range []rune{'\u00ad', '\u200b', '\ufeff', '\u202e'} {
+		content := "abc" + string(r) + "def"
+		m := newTextArea()
+		m.Prompt = ""
+		m.ShowLineNumbers = false
+		m.SetHeight(2)
+		m.SetWidth(40)
+		m.SetValue(content)
+		if m.RuneStyler() != nil {
+			t.Fatal("expected no styler, so the unstyled path renders")
+		}
+		for col := 0; col <= len(m.value[0]); col++ {
+			m.SetCursor(col)
+			view := m.View()
+			if strings.ContainsRune(view, r) {
+				t.Fatalf("U+%04X reached the terminal at col %d", r, col)
+			}
+			for i, line := range strings.Split(view, "\n") {
+				if line == "" {
+					continue
+				}
+				if got := ansi.StringWidth(ansi.Strip(line)); got != m.Width() {
+					t.Fatalf("U+%04X col %d line %d: width %d, want %d",
+						r, col, i, got, m.Width())
+				}
+			}
+		}
+		if m.Value() != content {
+			t.Fatalf("U+%04X: rendering changed the buffer", r)
+		}
 	}
 }
