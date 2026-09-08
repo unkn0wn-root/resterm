@@ -82,9 +82,7 @@ func (o *Overlay) add(cols map[int]*runeCols, span Span, item int, severity Seve
 		c = newRuneCols(raw)
 		cols[line] = c
 	}
-	// The span is short, so measure it from start, not from the line head again.
-	from := c.at(start)
-	to := from + utf8.RuneCountInString(raw[start:end])
+	from, to := c.at(start), c.at(end)
 	if from == to {
 		if prev, ok := o.marks[line]; !ok || rank(severity) < rank(prev) {
 			o.marks[line] = severity
@@ -219,30 +217,51 @@ func matchingPrefix(before string, after []rune, limit int) (n int, identical bo
 	return n, limit == len(after) && before == ""
 }
 
-// runeCols converts byte offsets on one line to rune columns. An ASCII line
-// needs no work. Otherwise it counts on from the offset it last converted, so
-// offsets asked for in order cost one walk over the line in total.
+const colStride = 64
+
+// runeCols indexes rune boundaries to avoid rescanning a line for unordered
+// diagnostic offsets.
 type runeCols struct {
 	line  string
 	ascii bool
-	off   int
-	col   int
+	marks []runeMark
+}
+
+type runeMark struct {
+	off, col int32
 }
 
 func newRuneCols(line string) *runeCols {
-	return &runeCols{line: line, ascii: len(line) == utf8.RuneCountInString(line)}
+	c := &runeCols{line: line, ascii: len(line) == utf8.RuneCountInString(line)}
+	if c.ascii {
+		return c
+	}
+	c.marks = make([]runeMark, 0, len(line)/colStride+1)
+	col, next := 0, 0
+	for off := range line {
+		if off >= next {
+			c.marks = append(c.marks, runeMark{off: int32(off), col: int32(col)})
+			next = off + colStride
+		}
+		col++
+	}
+	return c
 }
 
 func (c *runeCols) at(off int) int {
 	if c.ascii {
 		return off
 	}
-	if off < c.off {
-		c.off, c.col = 0, 0
+	// Resume at a rune boundary so invalid UTF-8 and offsets inside a rune
+	// count the same as a scan from the line start.
+	i, exact := slices.BinarySearchFunc(c.marks, int32(off), func(m runeMark, off int32) int {
+		return cmp.Compare(m.off, off)
+	})
+	if !exact {
+		i--
 	}
-	c.col += utf8.RuneCountInString(c.line[c.off:off])
-	c.off = off
-	return c.col
+	m := c.marks[i]
+	return int(m.col) + utf8.RuneCountInString(c.line[m.off:off])
 }
 
 func rank(severity Severity) int {

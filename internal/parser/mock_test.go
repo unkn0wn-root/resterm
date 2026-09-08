@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -948,5 +949,27 @@ HTTP/1.1 200 OK
 	}
 	if m.Expectation == nil || m.Expectation.Calls != 1 {
 		t.Fatalf("expectation = %+v, want the @expect below it", m.Expectation)
+	}
+}
+
+func TestMockUnknownOptionsScale(t *testing.T) {
+	var src strings.Builder
+	src.WriteString("# @mock method=GET path=/x")
+	for i := range 20000 {
+		fmt.Fprintf(&src, " nope%d=1", i)
+	}
+	src.WriteString("\nHTTP/1.1 200 OK\n")
+
+	start := time.Now()
+	rep := Diagnostics(Parse("m.http", []byte(src.String())))
+
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("parsing took %s, want well under a second", elapsed)
+	}
+	if len(rep.Items) != 20000 {
+		t.Fatalf("findings = %d, want one per option", len(rep.Items))
+	}
+	if col := rep.Items[0].Span.Start.Col; col != len("# @mock method=GET path=/x ")+1 {
+		t.Fatalf("first finding at column %d, want the first unknown option", col)
 	}
 }

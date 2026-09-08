@@ -63,9 +63,11 @@ func unclosedMessage(u vars.Unclosed) string {
 func Diagnostics(doc *restfile.Document) diag.Report {
 	rep := diag.Report{Path: doc.Path, Source: doc.Raw}
 	lines := strings.Split(string(doc.Raw), "\n")
+
 	for _, item := range doc.Errors {
 		rep.Items = append(rep.Items, reportItem(item, diag.SeverityError, doc.Path, lines))
 	}
+
 	for _, item := range doc.Warnings {
 		rep.Items = append(rep.Items, reportItem(item, diag.SeverityWarning, doc.Path, lines))
 	}
@@ -77,10 +79,12 @@ func reportItem(item restfile.ParseDiagnostic, severity diag.Severity, path stri
 	if span.Start.Col == 0 {
 		span = lineSpan(lines, span.Start.Line)
 	}
+
 	labels := slices.Clone(item.Labels)
 	for i := range labels {
 		labels[i].Span = withPath(labels[i].Span, path)
 	}
+
 	return diag.Diagnostic{
 		Class: diag.ClassParse, Component: diag.ComponentParser, Severity: severity,
 		Message: item.Message, Span: withPath(span, path), Labels: labels,
@@ -95,9 +99,11 @@ func withPath(span diag.Span, path string) diag.Span {
 func lineSpan(lines []string, line int) diag.Span {
 	span := diag.Span{Start: diag.Pos{Line: line, Col: 1}}
 	span.End = span.Start
+
 	if line <= 0 || line > len(lines) {
 		return span
 	}
+
 	raw := strings.TrimSuffix(lines[line-1], "\r")
 	start := len(raw) - len(strings.TrimLeftFunc(raw, unicode.IsSpace))
 	end := len(strings.TrimRightFunc(raw, unicode.IsSpace))
@@ -127,39 +133,70 @@ func (d parsedDirective) argumentSpan(start, end int) (diag.Span, bool) {
 
 func (d parsedDirective) diagnostic(msg string, cause error) restfile.ParseDiagnostic {
 	item := restfile.ParseDiagnostic{Message: msg}
-	item.Span, item.Labels = d.spans(cause)
+	item.Span, item.Labels = d.locate(cause)
 	return item
 }
 
-// Fall back to the directive name unless every option key maps to source text;
-// custom grammars may report normalized names that do not appear in the source.
-func (d parsedDirective) spans(cause error) (diag.Span, []diag.Label) {
-	keys := directive.OptionKeys(cause)
-	if len(keys) == 0 {
-		return d.nameSpan, nil
+// argFields caches option spans across diagnostics and rebuilds when
+// continuation lines change the arguments.
+type argFields struct {
+	args  string
+	parts int
+	spans []diag.Span
+	byKey map[string][]int
+}
+
+func (f *argFields) load(d parsedDirective) {
+	if f.byKey != nil && f.args == d.Args && f.parts == len(d.argParts) {
+		return
 	}
-	var spans []diag.Span
-	found := make(map[string]bool, len(keys))
+	f.args, f.parts = d.Args, len(d.argParts)
+	f.spans, f.byKey = nil, make(map[string][]int)
 	for _, field := range directive.FieldSpans(d.Args) {
 		end := field.Eq
 		if end < 0 {
 			end = field.End // ParseOptions also accepts bare switches.
 		}
-		key := strings.ToLower(d.Args[field.Start:end])
-		if !slices.Contains(keys, key) {
+
+		span, ok := d.argumentSpan(field.Start, end)
+		if !ok {
 			continue
 		}
-		if span, ok := d.argumentSpan(field.Start, end); ok {
-			spans = append(spans, span)
-			found[key] = true
-		}
+
+		key := strings.ToLower(d.Args[field.Start:end])
+		f.byKey[key] = append(f.byKey[key], len(f.spans))
+		f.spans = append(f.spans, span)
 	}
-	if len(found) != len(keys) {
+}
+
+// Fall back to the directive name unless every option key maps to source text;
+// custom grammars may report normalized names that do not appear in the source.
+func (d parsedDirective) locate(cause error) (diag.Span, []diag.Label) {
+	keys := directive.OptionKeys(cause)
+	if len(keys) == 0 {
 		return d.nameSpan, nil
 	}
-	var labels []diag.Label
-	for _, span := range spans[1:] {
-		labels = append(labels, diag.Label{Span: span})
+
+	f := d.fields
+	if f == nil {
+		f = &argFields{}
 	}
-	return spans[0], labels
+
+	f.load(d)
+	var at []int
+	for _, key := range keys {
+		found := f.byKey[key]
+		if len(found) == 0 {
+			return d.nameSpan, nil
+		}
+		at = append(at, found...)
+	}
+
+	// Use the first option in source order as the primary span.
+	slices.Sort(at)
+	var labels []diag.Label
+	for _, i := range at[1:] {
+		labels = append(labels, diag.Label{Span: f.spans[i]})
+	}
+	return f.spans[at[0]], labels
 }

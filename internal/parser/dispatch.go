@@ -23,6 +23,11 @@ type parsedDirective struct {
 	argCol   int
 	nameSpan diag.Span
 	argParts []argumentPart
+	fields   *argFields // Shared across parsedDirective copies.
+}
+
+func newParsedDirective(call directive.Call, lines restfile.LineRange) parsedDirective {
+	return parsedDirective{Call: call, lines: lines, fields: &argFields{}}
 }
 
 // Only the opening line carries a column. An expression starting on a

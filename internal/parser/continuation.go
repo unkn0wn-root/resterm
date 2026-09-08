@@ -125,7 +125,7 @@ func (r *directiveReader) read(no int, c commentText) directiveReadResult {
 }
 
 func (r *directiveReader) readNew(no int, c commentText, call directive.Call, cut *openDirective) directiveReadResult {
-	d := parsedDirective{Call: call, lines: restfile.LineRange{Start: no, End: no}}
+	d := newParsedDirective(call, restfile.LineRange{Start: no, End: no})
 	name := strings.TrimRightFunc(c.text[:call.ArgOffset], directive.IsArgSep)
 	d.nameSpan = diag.Span{
 		Start: diag.Pos{Line: no, Col: c.col()},

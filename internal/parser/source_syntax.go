@@ -401,10 +401,7 @@ func probeEffect(call directive.Call, inWorkflow bool) directiveEffect {
 	if inWorkflow {
 		probe.workflow = newWorkflowBuilder(1, "probe")
 	}
-	probe.routeDirective(parsedDirective{
-		Call:  call,
-		lines: restfile.LineRange{Start: 1, End: 1},
-	})
+	probe.routeDirective(newParsedDirective(call, restfile.LineRange{Start: 1, End: 1}))
 
 	effect := directiveEffect{
 		opensRequest:   probe.inRequest,
