@@ -1465,7 +1465,11 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 				insertPos = e.offsetForPosition(cursor.Line+1, 0)
 			}
 		} else {
-			insertPos = charEnd(runes, index)
+			// A grapheme never spans a line break, so the line start is a
+			// boundary and scanning from there finds the same character as
+			// scanning the document.
+			start := index - cursor.Column
+			insertPos = start + charEnd(runes[start:], cursor.Column)
 		}
 	} else if linewise {
 		insertPos = e.offsetForPosition(cursor.Line, 0)

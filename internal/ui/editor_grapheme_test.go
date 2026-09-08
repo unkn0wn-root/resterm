@@ -402,3 +402,25 @@ func TestAfterCursorEditsFollowWholeCharacter(t *testing.T) {
 		})
 	}
 }
+
+// Paste finds its insert point from the line start. A grapheme never spans a
+// line break, so that has to agree with a scan of the whole document at every
+// offset, including the line breaks themselves.
+func TestCharEndFromLineStartMatchesTheDocument(t *testing.T) {
+	for _, content := range []string{
+		"ae\u0301z qq\na\U0001F469\u200d\U0001F4BBz\n\nGET /a\u0301/b HTTP/1.1\n",
+		"\n\n\na\U0001F1F3\U0001F1F4z\n",
+		"{\n\t\"名前\": \"0\ufe0f\u20e3\"\n}",
+	} {
+		runes := []rune(content)
+		editor := newTestEditor(content)
+		for at := range len(runes) + 1 {
+			_, col := editor.positionForOffset(at)
+			start := at - col
+			if got := start + charEnd(runes[start:], col); got != charEnd(runes, at) {
+				t.Errorf("%q at %d: line start gives %d, document gives %d",
+					content, at, got, charEnd(runes, at))
+			}
+		}
+	}
+}
