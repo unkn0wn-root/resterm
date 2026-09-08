@@ -25,7 +25,7 @@ func TestExCatalogSuggestions(t *testing.T) {
 		{name: "mock command", input: "mock rest", label: "restart [host:port] [flags]", insert: "mock restart "},
 		{
 			name: "mock arguments", input: "mock start --rec",
-			label: "start [host:port] [--source files] [--recursive] [--all]", insert: "mock start --rec",
+			label: "start [host:port] [--source|-s files] [--recursive|-r] [--all]", insert: "mock start --rec",
 		},
 		{
 			name: "mock arguments after completion", input: "mock reset ",

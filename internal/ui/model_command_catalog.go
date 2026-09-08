@@ -82,12 +82,12 @@ var exCommands = exCatalog{
 	mock: []mockCommandDef{
 		{name: "status", summary: "Show server address and counters"},
 		{
-			name: "start", args: "[host:port] [--source files] [--recursive] [--all]",
+			name: "start", args: "[host:port] [--source|-s files] [--recursive|-r] [--all]",
 			hint: "[host:port] [flags]", summary: "Start the mock server", maxArgs: anyArgs,
 		},
 		{name: "stop", summary: "Stop the mock server"},
 		{
-			name: "restart", args: "[host:port] [--source files] [--recursive] [--all]",
+			name: "restart", args: "[host:port] [--source|-s files] [--recursive|-r] [--all]",
 			hint: "[host:port] [flags]", summary: "Restart with another address or scope", maxArgs: anyArgs,
 		},
 		{name: "logs", summary: "Open the request log"},
