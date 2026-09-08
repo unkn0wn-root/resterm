@@ -60,7 +60,6 @@ func (b *documentBuilder) handleMultipartBodyLine(ln line) bool {
 		return false
 	}
 	b.request.http.AppendBodyLine(ln.no, ln.raw, ln.eol)
-	b.warnUnclosed(ln.raw, diag.Pos{Line: ln.no, Col: 1})
 	b.appendLine(ln.raw)
 	return true
 }
@@ -161,7 +160,6 @@ func (b *documentBuilder) handleBodyLine(ln line) {
 		return
 	}
 	b.request.http.AppendBodyLine(ln.no, ln.raw, ln.eol)
-	b.warnUnclosed(ln.raw, diag.Pos{Line: ln.no, Col: 1})
 }
 
 func (b *documentBuilder) locateURL(ln line, col int) {

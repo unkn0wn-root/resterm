@@ -255,6 +255,7 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.finalizeRetry()
 
 	req := b.request.build()
+	b.warnUnclosedBody(req)
 	b.lintRequestCaptures(req)
 	b.lintRequestPolicies(req)
 	if req.Method != "" && req.URL != "" {

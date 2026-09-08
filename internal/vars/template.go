@@ -234,17 +234,23 @@ type Unclosed struct {
 	Span diag.Span
 }
 
-// This runs on every parsed line. Scanning without the regex avoids
-// allocations when all placeholders are closed.
+// UnclosedPlaceholders reports unfinished placeholders relative to start.
 func UnclosedPlaceholders(input string, start diag.Pos) []Unclosed {
+	return UnclosedPlaceholdersLocated(input, at(start))
+}
+
+// UnclosedPlaceholdersLocated reports unfinished placeholders using locate
+// to map their positions back to the source.
+func UnclosedPlaceholdersLocated(input string, locate Locator) []Unclosed {
 	var out []Unclosed
+	sc := newUnclosedScan(input)
 	for off := 0; ; {
 		i := strings.Index(input[off:], "{{")
 		if i < 0 {
 			return out
 		}
 		i += off
-		if end, ok := placeholderEnd(input, i); ok {
+		if end, ok := sc.closes(i); ok {
 			off = end
 			continue
 		}
@@ -252,29 +258,71 @@ func UnclosedPlaceholders(input string, start diag.Pos) []Unclosed {
 		if end < len(input) && input[end] == '}' {
 			end++
 		}
-		out = append(out, Unclosed{Text: input[i:end], Off: i, Span: spanIn(input, start, i, end)})
+		out = append(out, Unclosed{Text: input[i:end], Off: i, Span: sc.span(locate, i, end)})
 		off = end
 	}
 }
 
-// Keep this consistent with templateVarPattern: {{}} is invalid, but {{ }} is valid.
-func placeholderEnd(input string, i int) (int, bool) {
-	j := strings.IndexByte(input[i+2:], '}')
-	if j < 1 {
-		return 0, false
-	}
-	j += i + 2
-	if j+1 < len(input) && input[j+1] == '}' {
-		return j + 2, true
-	}
-	return 0, false
+// Scan offsets must only move forward to avoid rescanning long inputs.
+type unclosedScan struct {
+	input   string
+	brace   int // next '}', or len(input) if none remain
+	line    int
+	col     int
+	lineOff int // byte offset for line and col
 }
 
-func spanIn(input string, start diag.Pos, i, end int) diag.Span {
-	line, col := textPos(input[:i])
-	from := posAt(start, line, col)
-	line, col = textPos(input[:end])
-	return diag.Span{Start: from, End: posAt(start, line, col)}
+func newUnclosedScan(input string) unclosedScan {
+	return unclosedScan{input: input, brace: braceFrom(input, 0), line: 1, col: 1}
+}
+
+// Keep this consistent with templateVarPattern: {{}} is invalid, but {{ }} is valid.
+func (s *unclosedScan) closes(i int) (int, bool) {
+	j := s.nextBrace(i + 2)
+	if j < i+3 || j+1 >= len(s.input) || s.input[j+1] != '}' {
+		return 0, false
+	}
+	return j + 2, true
+}
+
+func (s *unclosedScan) nextBrace(from int) int {
+	if s.brace < from {
+		s.brace = braceFrom(s.input, from)
+	}
+	return s.brace
+}
+
+func braceFrom(input string, off int) int {
+	i := strings.IndexByte(input[off:], '}')
+	if i < 0 {
+		return len(input)
+	}
+	return off + i
+}
+
+func (s *unclosedScan) span(locate Locator, i, end int) diag.Span {
+	start := locate(s.lineCol(i))
+	if start.Line <= 0 {
+		return diag.Span{}
+	}
+	last := locate(s.lineCol(end))
+	if last.Line <= 0 {
+		last = start
+	}
+	return diag.Span{Start: start, End: last}
+}
+
+// lineCol returns the line and byte column at off, both starting at 1.
+func (s *unclosedScan) lineCol(off int) (line, col int) {
+	seg := s.input[s.lineOff:off]
+	if i := strings.LastIndexByte(seg, '\n'); i >= 0 {
+		s.line += strings.Count(seg, "\n")
+		s.col = len(seg) - i
+	} else {
+		s.col += len(seg)
+	}
+	s.lineOff = off
+	return s.line, s.col
 }
 
 func nameLen(s string) int {

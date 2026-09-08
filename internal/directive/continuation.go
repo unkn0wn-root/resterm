@@ -26,6 +26,14 @@ func (n Name) Continuation() Continuation {
 	return spec.Continues
 }
 
+func (n Name) ScriptArgs() bool {
+	switch n.Continuation() {
+	case ContinueExpr, ContinueCapture:
+		return true
+	}
+	return false
+}
+
 // UnclosedError reports a directive argument with a missing delimiter.
 type UnclosedError struct {
 	Directive Name

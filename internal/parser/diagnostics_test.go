@@ -1,12 +1,14 @@
 package parser
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestDiagnosticSourceSpans(t *testing.T) {
@@ -166,5 +168,107 @@ func BenchmarkDiagnostics(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		Diagnostics(Parse("large.http", source))
+	}
+}
+
+func TestUnclosedPlaceholderWarnings(t *testing.T) {
+	for _, tt := range []struct {
+		name, source string
+		want         []string // "line:marked text" for each warning
+	}{
+		{
+			name:   "request line",
+			source: "GET http://x/{{id}",
+			want:   []string{"1:{{id}"},
+		},
+		{
+			name:   "header value",
+			source: "GET http://x\nAuthorization: Bearer {{tok}",
+			want:   []string{"2:{{tok}"},
+		},
+		{
+			name:   "variable value",
+			source: "@a = {{b}\nGET http://x",
+			want:   []string{"1:{{b}"},
+		},
+		{
+			name:   "directive argument",
+			source: "GET http://x\n# @auth bearer {{tok}",
+			want:   []string{"2:{{tok}"},
+		},
+		{
+			name:   "body line, comments dropped from the body",
+			source: "POST http://x\n\n{\n# note\n  \"a\": \"{{tok}\"\n}",
+			want:   []string{"5:{{tok}"},
+		},
+		{
+			name:   "two on one body line",
+			source: "POST http://x\n\n{\"a\":\"{{x}\",\"b\":\"{{y}\"}",
+			want:   []string{"3:{{x}", "3:{{y}"},
+		},
+		{
+			name:   "multipart part",
+			source: "POST http://x\nContent-Type: multipart/form-data; boundary=b\n\n--b\nx: {{y}\n--b--",
+			want:   []string{"5:{{y}"},
+		},
+		{
+			name:   "placeholder spanning body lines",
+			source: "@tok = 1\n\nPOST http://x\n\n{\n  \"a\": \"{{\ntok\n}}\"\n}",
+		},
+		{
+			name:   "opening never closed anywhere in the body",
+			source: "POST http://x\n\n{\n  \"a\": \"{{\ntok\n\"\n}",
+			want:   []string{"4:{{"},
+		},
+		{
+			name:   "braces quoted in a script argument",
+			source: "GET http://x\n# @assert contains(\"{{\", \"{\")",
+		},
+		{
+			// Balance the braces so the parser accepts the complete directive.
+			name:   "script argument outside its strings",
+			source: "GET http://x\n# @assert contains(\"{{\", \"{\") && {{tok} == 1 }",
+			want:   []string{"2:{{tok}"},
+		},
+		{
+			name:   "quoted value of a plain argument",
+			source: "GET http://x\n# @auth bearer \"{{tok}\"",
+			want:   []string{"2:{{tok}"},
+		},
+		{
+			name:   "braces in a script comment",
+			source: "GET http://x\n# @assert true # {{bad}",
+		},
+		{
+			name:   "braces quoted in an RTS capture",
+			source: "GET http://x\n# @capture request x = json(\"{{\")",
+		},
+		{
+			name:   "quoted braces in a template capture",
+			source: "GET http://x\n# @capture request x {{response.status}} \"{{bad}\"",
+			want:   []string{"2:{{bad}"},
+		},
+		{
+			name:   "gRPC message",
+			source: "# @grpc pkg.Svc/M\nGRPC localhost:50051\n\n{\n  \"a\": \"{{tok}\"\n}",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("test.http", []byte(tt.source))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("errors = %+v", doc.Errors)
+			}
+			var got []string
+			for _, item := range doc.Warnings {
+				marked := sourceSpanText(t, tt.source, item.Span)
+				if want := unclosedMessage(vars.Unclosed{Text: marked}); item.Message != want {
+					t.Fatalf("warning %q does not name what it marks, want %q", item.Message, want)
+				}
+				got = append(got, fmt.Sprintf("%d:%s", item.Span.Start.Line, marked))
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("warnings = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

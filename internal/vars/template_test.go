@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
@@ -235,5 +236,54 @@ func referenceUnclosed(input string) []Unclosed {
 		}
 		out = append(out, Unclosed{Text: input[i:end], Off: i})
 		off = end
+	}
+}
+
+// The old scanner took seconds here; the limit leaves room for slower machines.
+func TestUnclosedPlaceholdersScanLinearly(t *testing.T) {
+	input := strings.Repeat("{", 256*1024)
+
+	start := time.Now()
+	got := UnclosedPlaceholders(input, diag.Pos{Line: 1, Col: 1})
+
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("scan took %s, want well under a second", elapsed)
+	}
+	if want := len(input) / 2; len(got) != want {
+		t.Fatalf("found %d openings, want %d", len(got), want)
+	}
+}
+
+func TestUnclosedPlaceholdersLocated(t *testing.T) {
+	lines := []int{4, 9}
+	locate := func(line, col int) diag.Pos {
+		if line < 1 || line > len(lines) {
+			return diag.Pos{}
+		}
+		return diag.Pos{Path: "b.http", Line: lines[line-1], Col: col}
+	}
+
+	got := UnclosedPlaceholdersLocated("{{ok}} x\n  {{tok} y", locate)
+
+	want := diag.Span{
+		Start: diag.Pos{Path: "b.http", Line: 9, Col: 3},
+		End:   diag.Pos{Path: "b.http", Line: 9, Col: 9},
+	}
+	if len(got) != 1 || got[0].Text != "{{tok}" || got[0].Span != want {
+		t.Fatalf("findings = %+v, want one {{tok} at %+v", got, want)
+	}
+}
+
+func TestUnclosedPlaceholdersSpanLines(t *testing.T) {
+	input := "{\n  \"a\": \"{{\ntok\n}}\"\n}"
+
+	if got := UnclosedPlaceholders(input, diag.Pos{Line: 1, Col: 1}); len(got) != 0 {
+		t.Fatalf("findings = %+v, want none", got)
+	}
+	if got, err := NewResolver(
+		NewMapProvider("test", map[string]string{"tok": "1"}),
+	).ExpandTemplates(input); err != nil ||
+		!strings.Contains(got, `"1"`) {
+		t.Fatalf("expanded = %q, err = %v", got, err)
 	}
 }

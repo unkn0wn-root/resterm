@@ -8,6 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -17,14 +18,42 @@ func (b *documentBuilder) warnUnclosed(text string, start diag.Pos) {
 	}
 }
 
+// Scan the full body because placeholders can span lines.
+// Skip warnings for bodies whose builders do not record source lines.
+func (b *documentBuilder) warnUnclosedBody(req *restfile.Request) {
+	for _, u := range vars.UnclosedPlaceholdersLocated(req.Body.Text, req.LocateBody) {
+		if u.Span.Start.Line <= 0 {
+			continue
+		}
+		b.pushWarning(restfile.ParseDiagnostic{Message: unclosedMessage(u), Span: u.Span})
+	}
+}
+
 func (b *documentBuilder) warnUnclosedArgs(d parsedDirective) {
-	for _, u := range vars.UnclosedPlaceholders(d.Args, diag.Pos{}) {
+	for _, u := range d.unclosedPlaceholders() {
 		item := restfile.ParseDiagnostic{Message: unclosedMessage(u), Span: d.nameSpan}
 		if span, ok := d.argumentSpan(u.Off, u.Off+len(u.Text)); ok {
 			item.Span = span
 		}
 		b.pushWarning(item)
 	}
+}
+
+func (d parsedDirective) unclosedPlaceholders() []vars.Unclosed {
+	args := d.Args
+	if d.scriptArgs() {
+		args = rts.MaskText(args)
+	}
+	return vars.UnclosedPlaceholders(args, diag.Pos{})
+}
+
+// Template captures expand placeholders even inside quotes.
+func (d parsedDirective) scriptArgs() bool {
+	if d.Name == directive.Capture {
+		_, _, expr := cutCapture(d.Args)
+		return captureMode(expr) == restfile.CaptureExprModeRTS
+	}
+	return d.Name.ScriptArgs()
 }
 
 func unclosedMessage(u vars.Unclosed) string {
