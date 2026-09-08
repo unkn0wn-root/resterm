@@ -1669,18 +1669,18 @@ func (m Model) View() string {
 		if !needsStyler {
 			if cursorVisible {
 				if cursorRel > 0 {
-					s.WriteString(style.Render(string(visibleRunes[:cursorRel])))
+					s.WriteString(style.Render(clusterText(visibleRunes[:cursorRel])))
 				}
 				if cursorRel < len(visibleRunes) {
-					s.WriteString(m.renderCursor(string(visibleRunes[cursorRel:cursorEnd]), style))
+					s.WriteString(m.renderCursor(clusterText(visibleRunes[cursorRel:cursorEnd]), style))
 					if cursorEnd < len(visibleRunes) {
-						s.WriteString(style.Render(string(visibleRunes[cursorEnd:])))
+						s.WriteString(style.Render(clusterText(visibleRunes[cursorEnd:])))
 					}
 				} else {
 					s.WriteString(m.renderCursor(" ", style))
 				}
 			} else {
-				s.WriteString(style.Render(string(visibleRunes)))
+				s.WriteString(style.Render(clusterText(visibleRunes)))
 			}
 			lineConsumed += len(visibleRunes)
 			globalOffset += len(visibleRunes)
@@ -1717,7 +1717,7 @@ func (m Model) View() string {
 						selStart,
 						selEnd,
 					)
-					s.WriteString(m.renderCursor(string(visibleRunes[cursorRel:cursorEnd]), cursorStyle))
+					s.WriteString(m.renderCursor(clusterText(visibleRunes[cursorRel:cursorEnd]), cursorStyle))
 					writeSegments(&s, segments, cursorEnd, len(segments))
 				} else {
 					s.WriteString(m.renderCursor(" ", style))

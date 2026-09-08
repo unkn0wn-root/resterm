@@ -29,10 +29,7 @@ func Row(s string) string {
 			cells   int
 		)
 		cluster, s, cells, state = uniseg.FirstGraphemeClusterInString(s, state)
-		r, _ := utf8.DecodeRuneInString(cluster)
-		// Preserve format characters attached to a visible glyph. Escaping them
-		// separately would break emoji sequences and text shaping.
-		if (cells == 0 && unprintable(r)) || !utf8.ValidString(cluster) {
+		if needsEscape(cluster, cells) {
 			escape(&b, cluster)
 			continue
 		}
@@ -49,6 +46,24 @@ func Block(s string) string {
 		rows[i] = Row(strings.ReplaceAll(row, "\t", strings.Repeat(" ", tabWidth)))
 	}
 	return strings.Join(rows, "\n")
+}
+
+// EscapeCluster returns the display form of one grapheme cluster and reports
+// whether it changed. cells is the width the segmenter measured for it.
+func EscapeCluster(cluster string, cells int) (string, bool) {
+	if !needsEscape(cluster, cells) {
+		return cluster, false
+	}
+	var b strings.Builder
+	escape(&b, cluster)
+	return b.String(), true
+}
+
+// needsEscape skips clusters wider than zero cells. A visible glyph carries
+// them, so escaping their format characters would break emoji and shaping.
+func needsEscape(cluster string, cells int) bool {
+	r, _ := utf8.DecodeRuneInString(cluster)
+	return (cells == 0 && unprintable(r)) || !utf8.ValidString(cluster)
 }
 
 // unprintable reports whether r can affect terminal layout beyond its cell width.
