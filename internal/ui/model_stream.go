@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"nhooyr.io/websocket"
 
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -770,7 +771,7 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 			parts = append(parts, th.StreamSummary.Render(summary))
 			return strings.Join(filterEmpty(parts), " ")
 		}
-		name := evt.SSE.Name
+		name := bodyfmt.DisplayRow(evt.SSE.Name)
 		if name == "" {
 			name = "message"
 		}
@@ -937,7 +938,7 @@ func grpcMetaVal(md map[string]string, key string) string {
 	if md == nil {
 		return ""
 	}
-	return strings.TrimSpace(md[key])
+	return bodyfmt.DisplayRow(strings.TrimSpace(md[key]))
 }
 
 func grpcLabel(md map[string]string) string {
@@ -1004,7 +1005,7 @@ func formatJSONForStream(raw []byte) (string, bool) {
 		return "", false
 	}
 	formatted := strings.TrimRight(buf.String(), "\n")
-	return formatted, true
+	return bodyfmt.DisplayBody(formatted), true
 }
 
 func indentMultiline(value string, indent string) string {
@@ -1027,7 +1028,7 @@ func truncatePreview(value string) string {
 	if clean == "" {
 		return ""
 	}
-	clean = strings.Join(strings.Fields(clean), " ")
+	clean = bodyfmt.DisplayRow(strings.Join(strings.Fields(clean), " "))
 	runes := []rune(clean)
 	if len(runes) <= limit {
 		return clean

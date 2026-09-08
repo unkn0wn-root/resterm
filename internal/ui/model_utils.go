@@ -67,6 +67,7 @@ func (r responseRenderer) formatTestSummary(
 	builder.WriteString(r.stats.Heading.Render("Tests:") + "\n")
 	if scriptErr != nil {
 		for _, l := range diag.Lines(diag.ReportOf(scriptErr)) {
+			l.Text = bodyfmt.DisplayRow(l.Text)
 			builder.WriteString("  " + r.errStyles.line(l) + "\n")
 		}
 	}
@@ -82,11 +83,11 @@ func (r responseRenderer) formatTestSummary(
 		line.WriteString(statusStyle.Render(statusLabel))
 		if strings.TrimSpace(result.Name) != "" {
 			line.WriteString(" ")
-			line.WriteString(r.stats.Value.Render(result.Name))
+			line.WriteString(r.stats.Value.Render(bodyfmt.DisplayRow(result.Name)))
 		}
 		if strings.TrimSpace(result.Message) != "" {
 			line.WriteString(" - ")
-			line.WriteString(r.stats.Message.Render(result.Message))
+			line.WriteString(r.stats.Message.Render(bodyfmt.DisplayBody(result.Message)))
 		}
 		if result.Elapsed > 0 {
 			dur := result.Elapsed.Truncate(time.Millisecond)

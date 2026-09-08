@@ -68,36 +68,12 @@ func (s syntax) lexer() string {
 	}
 }
 
-// Prettify re-indents the body for its content type and syntax highlights it.
-// Every step degrades to the text it started from, so a malformed body still
-// comes back readable.
+// Prettify re-indents and syntax highlights the body, preserving readable text
+// if either step fails. Escape after reindentation so parsers see the original
+// body, and before highlighting so generated ANSI escapes remain intact.
 func Prettify(ctx context.Context, body []byte, contentType string, opt PrettyOptions) string {
-	out := string(body)
-	if done(ctx) {
-		return out
-	}
-
-	lang := detect(contentType)
-	switch lang {
-	case syntaxJSON:
-		// JSON renders as JS object literal syntax when it parses, which reads
-		// better than quoted keys and matches the script editor.
-		if formatted, ok := RenderJSONAsJS(ctx, body); ok {
-			out = formatted
-			lang = syntaxJS
-			break
-		}
-		if done(ctx) {
-			return out
-		}
-		if indented, ok := indentJSON(body); ok {
-			out = indented
-		}
-	case syntaxXML:
-		if indented, ok := indentXML(body); ok {
-			out = indented
-		}
-	}
+	out, lang := reindent(ctx, body, contentType)
+	out = DisplayBody(out)
 
 	lexer := lang.lexer()
 	if !opt.Color.Enabled || lexer == "" || done(ctx) {
@@ -109,12 +85,43 @@ func Prettify(ctx context.Context, body []byte, contentType string, opt PrettyOp
 	return out
 }
 
+// reindent returns the output syntax for highlighting, which may differ from
+// the input content type.
+func reindent(ctx context.Context, body []byte, contentType string) (string, syntax) {
+	out := string(body)
+	if done(ctx) {
+		return out, syntaxPlain
+	}
+
+	lang := detect(contentType)
+	switch lang {
+	case syntaxJSON:
+		// JSON renders as JS object literal syntax when it parses, which reads
+		// better than quoted keys and matches the script editor.
+		if formatted, ok := RenderJSONAsJS(ctx, body); ok {
+			return formatted, syntaxJS
+		}
+		if done(ctx) {
+			return out, lang
+		}
+		if indented, ok := indentJSON(body); ok {
+			out = indented
+		}
+	case syntaxXML:
+		if indented, ok := indentXML(body); ok {
+			out = indented
+		}
+	}
+	return out, lang
+}
+
 // FormatRaw re-indents the body without colouring it.
 func FormatRaw(body []byte, contentType string) string {
-	if indented, ok := indent(body, contentType); ok {
-		return TrimBody(indented)
+	out, ok := indent(body, contentType)
+	if !ok {
+		out = string(body)
 	}
-	return TrimBody(string(body))
+	return TrimBody(DisplayBody(out))
 }
 
 func indent(body []byte, contentType string) (string, bool) {

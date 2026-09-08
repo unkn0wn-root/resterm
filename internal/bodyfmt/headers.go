@@ -29,7 +29,10 @@ func HeaderFields(headers http.Header) []HeaderField {
 	out := make([]HeaderField, 0, len(headers))
 	for _, name := range slices.Sorted(maps.Keys(headers)) {
 		values := slices.Sorted(slices.Values(headers[name]))
-		out = append(out, HeaderField{Name: name, Value: strings.Join(values, ", ")})
+		out = append(out, HeaderField{
+			Name:  DisplayRow(name),
+			Value: DisplayRow(strings.Join(values, ", ")),
+		})
 	}
 	return out
 }

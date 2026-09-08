@@ -572,9 +572,9 @@ func (r responseRenderer) renderGRPCStatusLine(
 	}
 	method := strings.TrimPrefix(strings.TrimSpace(fullMethod), "/")
 	return r.stats.Label.Render("gRPC") + " " +
-		r.stats.Value.Render(method) +
+		r.stats.Value.Render(bodyfmt.DisplayRow(method)) +
 		r.stats.SubLabel.Render(" - ") +
-		statusStyle.Render(resp.StatusText())
+		statusStyle.Render(bodyfmt.DisplayRow(resp.StatusText()))
 }
 
 // The plain views share the styled line so the two never drift apart. Only the
@@ -584,9 +584,12 @@ func (r responseRenderer) grpcStatusLine(resp *grpcx.Response, fullMethod string
 }
 
 func (r responseRenderer) grpcStatusBlock(resp *grpcx.Response, fullMethod string) string {
-	return joinSections(
-		append([]string{r.grpcStatusLine(resp, fullMethod)}, resp.StatusDetails...)...,
-	)
+	sections := make([]string, 0, len(resp.StatusDetails)+1)
+	sections = append(sections, r.grpcStatusLine(resp, fullMethod))
+	for _, detail := range resp.StatusDetails {
+		sections = append(sections, bodyfmt.DisplayBody(detail))
+	}
+	return joinSections(sections...)
 }
 
 func (r responseRenderer) renderGRPCStatusBlock(

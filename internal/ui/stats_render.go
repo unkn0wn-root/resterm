@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 )
 
 type statsReportKind int
@@ -686,11 +687,11 @@ func colorizeWorkflowStats(report string) string {
 }
 
 func renderLabelValue(label, value string, labelStyle, valueStyle lipgloss.Style) string {
-	rendered := labelStyle.Render(label + ":")
+	rendered := labelStyle.Render(bodyfmt.DisplayRow(label) + ":")
 	if strings.TrimSpace(value) == "" {
 		return rendered
 	}
-	return rendered + " " + valueStyle.Render(value)
+	return rendered + " " + valueStyle.Render(bodyfmt.DisplayRow(value))
 }
 
 func splitLabelValue(line string) (string, string, bool) {
