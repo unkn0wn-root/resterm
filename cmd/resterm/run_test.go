@@ -1257,3 +1257,37 @@ func stubRunErrorReport(err error) *runner.Report {
 		Failed:  1,
 	}
 }
+
+func TestRunCmdBodyKeepsResponseBytes(t *testing.T) {
+	const body = "name\tvalue\nrow\tsoft\u00adcell"
+	dir := t.TempDir()
+	file := filepath.Join(dir, "one.http")
+	src := strings.Join([]string{
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	var out bytes.Buffer
+	cmd := newRunCmd()
+	cmd.out = &out
+	cmd.newClient = stubRunClient
+	cmd.runFn = func(_ context.Context, opts runner.Options) (*runner.Report, error) {
+		rep := stubRunReport(true)
+		rep.Results[0].Response.Headers = http.Header{"Content-Type": {"text/tab-separated-values"}}
+		rep.Results[0].Response.Body = []byte(body)
+		return rep, nil
+	}
+	if err := cmd.parse([]string{"--body", file}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if err := cmd.run(); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := out.String(); got != body+"\n" {
+		t.Fatalf("--body changed the response: %q, want %q", got, body+"\n")
+	}
+}

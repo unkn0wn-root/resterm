@@ -19,6 +19,7 @@ type BuildInput struct {
 	ViewContentType string
 	Color           termcolor.Config
 	Style           string
+	Form            TextForm
 }
 
 type BodyViews struct {
@@ -46,7 +47,7 @@ func Build(ctx context.Context, in BuildInput) BodyViews {
 
 	text := ""
 	if src.readable() {
-		text = FormatRaw(src.body, src.ct)
+		text = FormatRaw(src.body, src.ct, in.Form)
 	}
 
 	pretty := ""
@@ -146,7 +147,7 @@ func (in BuildInput) viewType() string {
 }
 
 func (in BuildInput) pretty() PrettyOptions {
-	return PrettyOptions{Color: in.Color, Style: in.Style}
+	return PrettyOptions{Color: in.Color, Style: in.Style, Form: in.Form}
 }
 
 func orPlaceholder(body string) string {

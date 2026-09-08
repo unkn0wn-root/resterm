@@ -1,8 +1,6 @@
 package request
 
 import (
-	"strings"
-
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -41,27 +39,23 @@ func (e *redactedError) Error() string           { return e.text }
 func (e *redactedError) Unwrap() error           { return e.err }
 func (e *redactedError) Diagnostic() diag.Report { return e.rep }
 
+// The mask reports whether it replaced anything, so the decision to redact and
+// the redaction itself read the same fields. Testing rendered text instead would
+// miss a secret that display escaping has rewritten.
 func redactErr(err error, secs []string) error {
 	if err == nil {
 		return nil
 	}
-	text := err.Error()
-	if !containsSecret(text, secs) && !containsSecret(diag.Render(err), secs) {
+	found := false
+	mask := func(s string) string {
+		out := redactSecretText(s, secs)
+		found = found || out != s
+		return out
+	}
+	text := mask(err.Error())
+	rep := diag.ReportOf(err).Redact(mask)
+	if !found {
 		return err
 	}
-	mask := func(s string) string { return redactSecretText(s, secs) }
-	return &redactedError{
-		err:  err,
-		text: mask(text),
-		rep:  diag.ReportOf(err).Redact(mask),
-	}
-}
-
-func containsSecret(s string, secs []string) bool {
-	for _, sec := range secs {
-		if sec != "" && strings.Contains(s, sec) {
-			return true
-		}
-	}
-	return false
+	return &redactedError{err: err, text: text, rep: rep}
 }

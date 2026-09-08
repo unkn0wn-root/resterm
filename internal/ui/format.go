@@ -14,7 +14,7 @@ func prettifyBody(body []byte, contentType string) string {
 		context.Background(),
 		body,
 		contentType,
-		bodyfmt.PrettyOptions{Color: termcolor.TrueColor()},
+		bodyfmt.PrettyOptions{Color: termcolor.TrueColor(), Form: bodyfmt.Display},
 	)
 }
 

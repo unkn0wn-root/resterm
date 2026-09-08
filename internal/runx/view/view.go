@@ -101,7 +101,7 @@ func RenderBody(rep *runner.Report, opt BodyOptions) (string, error) {
 	if res.Kind != runner.ResultKindRequest {
 		return "", errors.New("runview: body output requires exactly one request result")
 	}
-	return requestBodyText(*res, mode, opt.Color, opt.Theme), nil
+	return requestBodyText(*res, mode, opt.Color, opt.Theme, bodyfmt.Original), nil
 }
 
 func CanRenderRequest(rep *runner.Report) bool {
@@ -288,7 +288,7 @@ func requestBody(
 	if mode == ModeRaw {
 		heading = "Raw Body:"
 	}
-	body := requestBodyText(res, mode, color, def)
+	body := requestBodyText(res, mode, color, def, bodyfmt.Display)
 	if body == "" {
 		body = "<empty>"
 	}
@@ -300,11 +300,13 @@ func requestBodyText(
 	mode Mode,
 	color termcolor.Config,
 	def *theme.Definition,
+	form bodyfmt.TextForm,
 ) string {
 	input := resolveBodyInput(res)
 	if bodyInputEmpty(input) {
 		return ""
 	}
+	input.Form = form
 	if mode == ModePretty {
 		input.Color = color
 		input.Style = theme.SyntaxHighlightStyle(theme.OrDefault(def))
