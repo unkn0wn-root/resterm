@@ -97,8 +97,8 @@ type BodySource struct {
 	MimeType string
 	GraphQL  *GraphQLBody
 	Options  BodyOptions
-	// Lines holds the source line of each line of Text. Comment lines are
-	// dropped, so body lines need not be adjacent.
+	// Lines maps each line of Text to its original file line.
+	// Gaps come from removed comments.
 	Lines []int
 }
 
@@ -468,7 +468,6 @@ func (req *Request) URLPos() diag.Pos {
 	return diag.Pos{Path: req.SourcePath, Line: req.URLLine, Col: req.URLCol}
 }
 
-// LocateBody maps a line and column of the inline body text to the source.
 func (req *Request) LocateBody(line, col int) diag.Pos {
 	if line < 1 || line > len(req.Body.Lines) {
 		return diag.Pos{}

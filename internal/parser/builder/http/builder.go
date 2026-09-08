@@ -203,7 +203,6 @@ func (b *Builder) AppendBodyLine(no int, text, term string) {
 	b.bodyLines = append(b.bodyLines, bodyLine{no: no, text: text, term: term})
 }
 
-// BodyLines lists the source line of each body line.
 func (b *Builder) BodyLines() []int {
 	if len(b.bodyLines) == 0 {
 		return nil

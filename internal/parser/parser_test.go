@@ -4905,8 +4905,6 @@ func TestHeaderNameThatIsNotAFieldNameIsReported(t *testing.T) {
 	}
 }
 
-// Comment lines are dropped from the body, so the body's lines are not
-// adjacent in the file. Each retained line keeps its own source line.
 func TestParseBodyLinesSkipComments(t *testing.T) {
 	src := "POST https://example.com\n\n{\n# note\n  \"token\": \"{{auth.token}}\"\n}\n"
 	doc := Parse("requests.http", []byte(src))

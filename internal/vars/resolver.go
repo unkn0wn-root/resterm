@@ -358,8 +358,8 @@ func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) 
 	return CompileTemplate(input).render(r, pos, at(pos), true, true, nil)
 }
 
-// ExpandTemplatesLocated is ExpandTemplatesAt for input whose lines are not
-// adjacent in the source file, such as a body with its comments removed.
+// ExpandTemplatesLocated uses locate to find source positions when lines
+// have been removed from input, such as comments in a request body.
 func (r *Resolver) ExpandTemplatesLocated(input string, locate Locator) (string, error) {
 	return CompileTemplate(input).render(r, r.exprPos, locate, true, true, nil)
 }

@@ -11,8 +11,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
-// A failing expression keeps its script report and points at the expression
-// inside the body, past the comment line the parser drops.
 func TestExecuteReportsExpressionErrorAtItsPlaceholder(t *testing.T) {
 	client := httpx.NewClientWithOptions(
 		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {

@@ -92,8 +92,6 @@ func placeholderErr(t *testing.T, err error) *PlaceholderError {
 	return pe
 }
 
-// An expression failure already carries a report. Wrapping it in a
-// placeholder must keep that report's class, position, and stack.
 func TestPlaceholderErrorKeepsExpressionReport(t *testing.T) {
 	inner := &reportErr{msg: "x is not defined", rep: diag.Report{Items: []diag.Diagnostic{{
 		Class:    diag.ClassScript,
@@ -191,8 +189,6 @@ func TestExpandTemplatesAtWithoutColumnLocatesLine(t *testing.T) {
 	}
 }
 
-// The hand scan must agree with templateVarPattern on what opens a
-// placeholder, so the reference rebuilds the finding from the pattern.
 func TestUnclosedPlaceholdersMatchesPattern(t *testing.T) {
 	inputs := []string{
 		"{{ok}} {{auth.token} and {{host} {{ name } {{{x}}} {{",
