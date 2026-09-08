@@ -3,6 +3,7 @@ package bodyfmt
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/xml"
 	"net/http"
 	"strings"
 	"testing"
@@ -29,7 +30,11 @@ func TestBuildQuotesUnprintableRunes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			views := build(BuildInput{Body: []byte(tt.body), ContentType: tt.contentType})
+			views := build(BuildInput{
+				Body:        []byte(tt.body),
+				ContentType: tt.contentType,
+				Form:        Display,
+			})
 			for name, view := range map[string]string{
 				"pretty":   views.Pretty,
 				"raw":      views.Raw,
@@ -60,7 +65,7 @@ func TestHeaderFieldsQuoteUnprintableRunes(t *testing.T) {
 func TestDisplayFormattingPreservesOriginalBytes(t *testing.T) {
 	body := []byte("soft\u00ad\tvalue\r\n")
 	original := bytes.Clone(body)
-	views := build(BuildInput{Body: body, ContentType: "text/plain"})
+	views := build(BuildInput{Body: body, ContentType: "text/plain", Form: Display})
 	if views.RawText != "soft\\u00ad    value" {
 		t.Fatalf("unexpected display text: %q", views.RawText)
 	}
@@ -75,7 +80,7 @@ func TestDisplayFormattingPreservesOriginalBytes(t *testing.T) {
 
 func TestPrettifyQuotesInputEscapesBeforeHighlighting(t *testing.T) {
 	body := []byte("// soft\u00ad \x1b[2J\nconst n = 42;")
-	view := Prettify(t.Context(), body, "text/javascript", PrettyOptions{Color: termcolor.TrueColor()})
+	view := Prettify(t.Context(), body, "text/javascript", PrettyOptions{Color: termcolor.TrueColor(), Form: Display})
 	if strings.Contains(view, "\x1b[2J") || strings.ContainsRune(view, '\u00ad') {
 		t.Fatalf("input controls reached the terminal: %q", view)
 	}
@@ -93,5 +98,46 @@ func TestBinarySummaryQuotesMetadata(t *testing.T) {
 		if strings.ContainsRune(view, '\u00ad') || strings.ContainsRune(view, '\x1b') {
 			t.Fatalf("unescaped metadata in binary summary: %q", view)
 		}
+	}
+}
+
+func TestBuildPreservesBytesForDataConsumers(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		want        string
+	}{
+		{"tsv", "text/tab-separated-values", "name\tvalue\nrow\tcell", "\t"},
+		{"crlf", "text/plain", "line one\r\nline two", "\r\n"},
+		{"soft hyphen", "text/plain", "soft\u00adhyphen", "\u00ad"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			views := build(BuildInput{Body: []byte(tt.body), ContentType: tt.contentType})
+			if !strings.Contains(views.Raw, tt.want) {
+				t.Errorf("Raw = %q, want it to keep %q", views.Raw, tt.want)
+			}
+			if !strings.Contains(views.RawText, tt.want) {
+				t.Errorf("RawText = %q, want it to keep %q", views.RawText, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildKeepsXMLTextValue(t *testing.T) {
+	const want = "soft\u00adhyphen"
+	views := build(BuildInput{
+		Body:        []byte("<r><v>" + want + "</v></r>"),
+		ContentType: "application/xml",
+	})
+	var out struct {
+		V string `xml:"v"`
+	}
+	if err := xml.Unmarshal([]byte(views.Raw), &out); err != nil {
+		t.Fatalf("raw body no longer parses as XML: %v", err)
+	}
+	if out.V != want {
+		t.Errorf("XML text = %q, want %q", out.V, want)
 	}
 }

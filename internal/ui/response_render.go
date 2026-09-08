@@ -607,6 +607,7 @@ func (r responseRenderer) renderGRPCStatusBlock(
 			bodyfmt.PrettyOptions{
 				Color: termcolor.TrueColor(),
 				Style: r.syntaxStyle,
+				Form:  bodyfmt.Display,
 			},
 		))
 	}
@@ -665,7 +666,7 @@ func grpcRequestHeaderMap(req *restfile.Request) http.Header {
 }
 
 func formatRawBody(body []byte, contentType string) string {
-	return bodyfmt.FormatRaw(body, contentType)
+	return bodyfmt.FormatRaw(body, contentType, bodyfmt.Display)
 }
 
 type bodyViews struct {
@@ -695,6 +696,7 @@ func (r responseRenderer) buildBodyViewsCtx(
 		ViewContentType: viewContentType,
 		Color:           termcolor.TrueColor(),
 		Style:           r.syntaxStyle,
+		Form:            bodyfmt.Display,
 	})
 	if meta != nil {
 		*meta = out.Meta

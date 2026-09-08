@@ -322,3 +322,44 @@ func testHTTPPrettyReport() *runner.Report {
 	rep.Results[0].SetUnresolvedTemplateVars([]string{"reporting.token"})
 	return rep
 }
+
+func TestRenderBodyKeepsDataWhileRenderEscapes(t *testing.T) {
+	const body = "name\tvalue\nrow\tsoft\u00adcell"
+	rep := &runner.Report{
+		Results: []runner.Result{{
+			Kind:   runner.ResultKindRequest,
+			Name:   "rows",
+			Method: "GET",
+			Target: "https://example.com/rows",
+			Response: &httpx.Response{
+				Status:       "200 OK",
+				StatusCode:   200,
+				Headers:      http.Header{"Content-Type": {"text/tab-separated-values"}},
+				Body:         []byte(body),
+				Duration:     time.Millisecond,
+				EffectiveURL: "https://example.com/rows",
+				ReqMethod:    "GET",
+			},
+			Passed: true,
+		}},
+	}
+
+	out, err := RenderBody(rep, BodyOptions{Mode: ModeRaw})
+	if err != nil {
+		t.Fatalf("RenderBody(...): %v", err)
+	}
+	if out != body {
+		t.Errorf("--body changed the response: %q, want %q", out, body)
+	}
+
+	view, err := Render(rep, Options{Mode: ModeRaw})
+	if err != nil {
+		t.Fatalf("Render(...): %v", err)
+	}
+	if strings.ContainsRune(view, '\u00ad') {
+		t.Error("human output kept an invisible rune")
+	}
+	if !strings.Contains(view, `\u00ad`) {
+		t.Error("human output dropped the escape")
+	}
+}

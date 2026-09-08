@@ -16,9 +16,21 @@ import (
 
 const defaultSyntaxStyle = "monokai"
 
+// TextForm selects between the bytes the response carried and a form that is
+// safe to draw in a terminal. Escaping rewrites tabs and invisible characters,
+// so it must not reach callers that treat the body as data, such as the CLI
+// --body flag. The zero value keeps the original bytes.
+type TextForm int
+
+const (
+	Original TextForm = iota
+	Display
+)
+
 type PrettyOptions struct {
 	Color termcolor.Config
 	Style string
+	Form  TextForm
 }
 
 // syntax is what we make of a Content-Type: it drives both reindentation and
@@ -74,7 +86,9 @@ func (s syntax) lexer() string {
 // body, and before highlighting so generated ANSI escapes remain intact.
 func Prettify(ctx context.Context, body []byte, contentType string, opt PrettyOptions) string {
 	out, lang := reindent(ctx, body, contentType)
-	out = termtext.Block(out)
+	if opt.Form == Display {
+		out = termtext.Block(out)
+	}
 
 	lexer := lang.lexer()
 	if !opt.Color.Enabled || lexer == "" || done(ctx) {
@@ -117,12 +131,15 @@ func reindent(ctx context.Context, body []byte, contentType string) (string, syn
 }
 
 // FormatRaw re-indents the body without colouring it.
-func FormatRaw(body []byte, contentType string) string {
+func FormatRaw(body []byte, contentType string, form TextForm) string {
 	out, ok := indent(body, contentType)
 	if !ok {
 		out = string(body)
 	}
-	return TrimBody(termtext.Block(out))
+	if form == Display {
+		out = termtext.Block(out)
+	}
+	return TrimBody(out)
 }
 
 func indent(body []byte, contentType string) (string, bool) {

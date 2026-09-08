@@ -347,3 +347,54 @@ func TestSecretExcerptKeepsTheFailingLine(t *testing.T) {
 		})
 	}
 }
+
+type sourceDiagError struct {
+	msg string
+	rep diag.Report
+}
+
+func (e *sourceDiagError) Error() string           { return e.msg }
+func (e *sourceDiagError) Diagnostic() diag.Report { return e.rep }
+
+func sourceOnlySecretErr(secret string) error {
+	return &sourceDiagError{
+		msg: "undefined variable: missing",
+		rep: diag.Report{
+			Path:   "secret.http",
+			Source: []byte("GET http://example.test\n\n" + secret + " trailing\n"),
+			Items: []diag.Diagnostic{{
+				Class:    diag.ClassScript,
+				Severity: diag.SeverityError,
+				Message:  "undefined variable: missing",
+				Span: diag.Span{
+					Start: diag.Pos{Line: 3, Col: 1},
+					End:   diag.Pos{Line: 3, Col: 1},
+				},
+			}},
+		},
+	}
+}
+
+func TestRedactSourceOnlySecretSurvivesDisplayEscaping(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		secret string
+	}{
+		{"plain", leakedSecret},
+		{"tab", leakedSecret + "\tmore"},
+		{"soft hyphen", leakedSecret + "\u00admore"},
+		{"zero width space", leakedSecret + "\u200bmore"},
+		{"byte order mark", leakedSecret + "\ufeffmore"},
+		{"language tag", leakedSecret + "\U000e0001more"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := redactErr(sourceOnlySecretErr(tc.secret), []string{tc.secret})
+			if got := diag.Render(out); strings.Contains(got, leakedSecret) {
+				t.Errorf("rendered diagnostic discloses the secret:\n%s", got)
+			}
+			if src := diag.ReportOf(out).Source; strings.Contains(string(src), leakedSecret) {
+				t.Errorf("report source retains the secret: %q", src)
+			}
+		})
+	}
+}

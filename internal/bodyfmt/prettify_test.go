@@ -26,7 +26,7 @@ func TestDetectSyntax(t *testing.T) {
 }
 
 func TestFormatRawIndentsJSON(t *testing.T) {
-	got := FormatRaw([]byte(`{"a":1}`), "application/json")
+	got := FormatRaw([]byte(`{"a":1}`), "application/json", Original)
 	want := "{\n  \"a\": 1\n}"
 	if got != want {
 		t.Fatalf("FormatRaw()=%q, want %q", got, want)
@@ -35,7 +35,7 @@ func TestFormatRawIndentsJSON(t *testing.T) {
 
 func TestFormatRawLeavesUnknownTypesAlone(t *testing.T) {
 	body := "line one\nline two\n"
-	if got := FormatRaw([]byte(body), "text/plain"); got != "line one\nline two" {
+	if got := FormatRaw([]byte(body), "text/plain", Original); got != "line one\nline two" {
 		t.Fatalf("FormatRaw()=%q, want trailing newline trimmed only", got)
 	}
 }
