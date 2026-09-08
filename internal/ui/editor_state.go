@@ -436,11 +436,12 @@ func (e requestEditor) inclusiveVisualEndOffset(endOffset int) int {
 		return 0
 	}
 	line, col := e.positionForOffset(endOffset)
-	lineLen := e.LineLength(line)
-	if lineLen == 0 || col >= lineLen {
+	row := e.LineRunes(line)
+	if col >= len(row) {
 		return endOffset
 	}
-	return endOffset + 1
+	_, end := textarea.GraphemeRange(row, col)
+	return endOffset + end - col
 }
 
 func (e requestEditor) selectionSummaryRange() (
@@ -878,7 +879,7 @@ func (e requestEditor) charwiseSpan(
 	}
 	if startOffset < endOffset {
 		if spec.includeFinalForward {
-			endOffset = nextRuneOffset(runes, endOffset)
+			endOffset = nextCharOffset(runes, endOffset)
 		}
 		// Delete uses Vim-like word motion that also consumes trailing spaces.
 		if includeSpaceAfterWord && (spec.command == "w" || spec.command == "W") {
@@ -896,6 +897,11 @@ func (e requestEditor) charwiseSpan(
 
 	startOffset = e.clampOffset(startOffset)
 	endOffset = e.clampOffset(endOffset)
+
+	// Snap each endpoint to its grapheme's start to match cursor rendering.
+	startOffset = charStart(runes, startOffset)
+	endOffset = charStart(runes, endOffset)
+
 	if startOffset >= endOffset {
 		return motionSpan{}, false
 	}
@@ -1235,15 +1241,16 @@ func (e *requestEditor) substituteCharForInsert() tea.Cmd {
 	runes := []rune(e.Value())
 	prevView := e.ViewStart()
 	e.pushUndoSnapshot()
-	removed := runes[cursor.Offset]
-	runes = append(runes[:cursor.Offset], runes[cursor.Offset+1:]...)
+	_, end := textarea.GraphemeRange(runes, cursor.Offset)
+	removed := string(runes[cursor.Offset:end])
+	runes = append(runes[:cursor.Offset], runes[end:]...)
 
 	e.SetValue(string(runes))
 	e.SetViewStart(prevView)
 	e.clearSelection()
 	e.moveCursorTo(cursor.Line, cursor.Column)
 
-	status := e.writeClipboardWithFallback(string([]rune{removed}), "Changed character")
+	status := e.writeClipboardWithFallback(removed, "Changed character")
 	return toEditorEventCmd(editorEvent{status: &status})
 }
 
@@ -1410,8 +1417,9 @@ func (e requestEditor) DeleteCharAtCursor() (requestEditor, tea.Cmd) {
 
 	prevView := e.ViewStart()
 	e.pushUndoSnapshot()
-	removed := runes[cursor.Offset]
-	runes = append(runes[:cursor.Offset], runes[cursor.Offset+1:]...)
+	_, end := textarea.GraphemeRange(runes, cursor.Offset)
+	deletedChar := string(runes[cursor.Offset:end])
+	runes = append(runes[:cursor.Offset], runes[end:]...)
 
 	e.SetValue(string(runes))
 	e.SetViewStart(prevView)
@@ -1420,7 +1428,6 @@ func (e requestEditor) DeleteCharAtCursor() (requestEditor, tea.Cmd) {
 	editorPtr := &e
 	editorPtr.moveCursorTo(cursor.Line, cursor.Column)
 	e.applySelectionHighlight()
-	deletedChar := string([]rune{removed})
 	status := (&e).writeClipboardWithFallback(deletedChar, "Deleted character")
 	return e, toEditorEventCmd(editorEvent{status: &status})
 }
@@ -1599,37 +1606,39 @@ func (e requestEditor) executeFindMotion(
 
 	index := -1
 	if forward {
-		start := max(cursor.Column+1, 0)
+		start := cursor.Column
+		if start < len(row) {
+			_, start = textarea.GraphemeRange(row, start)
+		}
 		for i := start; i < len(row); i++ {
 			if row[i] == target {
-				index = i
+				index, _ = textarea.GraphemeRange(row, i)
 				break
 			}
 		}
-		if index >= 0 && till {
-			index--
+		if till && index >= 0 {
+			// t stops on the grapheme before the target.
+			if index == 0 {
+				index = -1
+			} else {
+				index, _ = textarea.GraphemeRange(row, index-1)
+			}
 		}
 	} else {
-		start := cursor.Column - 1
-		if start >= len(row) {
-			start = len(row) - 1
-		}
+		start := min(cursor.Column, len(row)) - 1
 		for i := start; i >= 0; i-- {
 			if row[i] == target {
-				index = i
+				index, _ = textarea.GraphemeRange(row, i)
 				break
 			}
 		}
 		if index >= 0 && till {
-			index++
+			_, index = textarea.GraphemeRange(row, index)
 		}
 	}
 	if index < 0 {
 		msg := fmt.Sprintf("%q not found", string(target))
 		return e, statusCmd(statusWarn, msg)
-	}
-	if index < 0 {
-		index = 0
 	}
 	if index > len(row) {
 		index = len(row)
@@ -1876,10 +1885,11 @@ func (e requestEditor) PrevSearchMatch() (requestEditor, tea.Cmd) {
 	return e, status
 }
 
+// caretPosition returns the start of the displayed grapheme in rune coordinates.
 func (e requestEditor) caretPosition() cursorPosition {
 	line := e.Line()
 	info := e.LineInfo()
-	column := info.StartColumn + info.ColumnOffset
+	column := charStart(e.LineRunes(line), info.StartColumn+info.ColumnOffset)
 	offset := e.offsetForPosition(line, column)
 	return cursorPosition{Line: line, Column: column, Offset: offset}
 }
@@ -1957,14 +1967,16 @@ func (e *requestEditor) removeSelection() (string, bool) {
 	return removed, true
 }
 
-func nextRuneOffset(runes []rune, offset int) int {
+// nextCharOffset returns the rune offset after the grapheme at offset.
+func nextCharOffset(runes []rune, offset int) int {
 	if offset < 0 {
 		return 0
 	}
 	if offset >= len(runes) {
 		return len(runes)
 	}
-	return offset + 1
+	_, end := textarea.GraphemeRange(runes, offset)
+	return end
 }
 
 func (e *requestEditor) deleteRange(startOffset, endOffset int) (string, bool) {
@@ -2062,144 +2074,128 @@ func isWordRune(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
-func wordClass(r rune, big bool) int {
+const (
+	classSpace int8 = iota
+	classWord
+	classPunct
+)
+
+func wordClass(r rune, big bool) int8 {
 	if unicode.IsSpace(r) {
-		return 0
+		return classSpace
 	}
 	if big || isWordRune(r) {
-		return 1
+		return classWord
 	}
-	return 2
+	return classPunct
 }
 
-func segEnd(runes []rune, idx int, big bool) int {
-	cls := wordClass(runes[idx], big)
-	for idx+1 < len(runes) && wordClass(runes[idx+1], big) == cls {
+// wordClasses assigns every rune the class of its grapheme's first rune.
+// This keeps word motions from separating combining marks from their base.
+func wordClasses(runes []rune, big bool) []int8 {
+	classes := make([]int8, len(runes))
+	for c := range textarea.Clusters(runes) {
+		cls := wordClass(runes[c.Start], big)
+		for i := c.Start; i < c.End; i++ {
+			classes[i] = cls
+		}
+	}
+	return classes
+}
+
+func charStart(runes []rune, idx int) int {
+	start, _ := textarea.GraphemeRange(runes, idx)
+	return start
+}
+
+// segEnd returns the exclusive end of the class run containing idx.
+func segEnd(classes []int8, idx int) int {
+	cls := classes[idx]
+	for idx < len(classes) && classes[idx] == cls {
 		idx++
 	}
 	return idx
 }
 
-func segStart(runes []rune, idx int, big bool) int {
-	cls := wordClass(runes[idx], big)
-	for idx-1 >= 0 && wordClass(runes[idx-1], big) == cls {
+func segStart(classes []int8, idx int) int {
+	cls := classes[idx]
+	for idx > 0 && classes[idx-1] == cls {
 		idx--
+	}
+	return idx
+}
+
+func skipClassSpace(classes []int8, idx, step int) int {
+	for idx >= 0 && idx < len(classes) && classes[idx] == classSpace {
+		idx += step
 	}
 	return idx
 }
 
 func (e *requestEditor) moveToWordEnd(big bool) {
-	value := e.Value()
-	runes := []rune(value)
+	runes := []rune(e.Value())
 	if len(runes) == 0 {
 		return
 	}
-	pos := e.caretPosition()
-	idx := max(pos.Offset, 0)
-	if idx >= len(runes) {
-		idx = len(runes) - 1
-	}
+	classes := wordClasses(runes, big)
+	idx := min(max(e.caretPosition().Offset, 0), len(runes)-1)
 
-	if unicode.IsSpace(runes[idx]) {
-		for idx < len(runes) && unicode.IsSpace(runes[idx]) {
-			idx++
-		}
-		if idx >= len(runes) {
+	if classes[idx] != classSpace {
+		if last := charStart(runes, segEnd(classes, idx)-1); last > idx {
+			e.moveToOffset(runes, last)
 			return
 		}
-		idx = segEnd(runes, idx, big)
-		line, col := e.positionForOffset(idx)
-		e.moveCursorTo(line, col)
-		return
+		idx = segEnd(classes, idx)
 	}
 
-	cls := wordClass(runes[idx], big)
-	if idx+1 < len(runes) && wordClass(runes[idx+1], big) == cls {
-		idx = segEnd(runes, idx, big)
-		line, col := e.positionForOffset(idx)
-		e.moveCursorTo(line, col)
-		return
-	}
-
-	idx++
-	for idx < len(runes) && unicode.IsSpace(runes[idx]) {
-		idx++
-	}
+	idx = skipClassSpace(classes, idx, 1)
 	if idx >= len(runes) {
 		return
 	}
-	idx = segEnd(runes, idx, big)
-	line, col := e.positionForOffset(idx)
-	e.moveCursorTo(line, col)
+	e.moveToOffset(runes, charStart(runes, segEnd(classes, idx)-1))
 }
 
 func (e *requestEditor) moveToWordNext(big bool) {
-	value := e.Value()
-	runes := []rune(value)
+	runes := []rune(e.Value())
 	if len(runes) == 0 {
 		return
 	}
-	pos := e.caretPosition()
-	idx := max(pos.Offset, 0)
+	idx := max(e.caretPosition().Offset, 0)
 	if idx >= len(runes) {
 		return
 	}
-	if unicode.IsSpace(runes[idx]) {
-		for idx < len(runes) && unicode.IsSpace(runes[idx]) {
-			idx++
-		}
-	} else {
-		idx = segEnd(runes, idx, big) + 1
-		for idx < len(runes) && unicode.IsSpace(runes[idx]) {
-			idx++
-		}
+	classes := wordClasses(runes, big)
+	if classes[idx] != classSpace {
+		idx = segEnd(classes, idx)
 	}
-	line, col := e.positionForOffset(idx)
-	e.moveCursorTo(line, col)
+	e.moveToOffset(runes, skipClassSpace(classes, idx, 1))
 }
 
 func (e *requestEditor) moveToWordStart(big bool) {
-	value := e.Value()
-	runes := []rune(value)
+	runes := []rune(e.Value())
 	if len(runes) == 0 {
 		return
 	}
-	pos := e.caretPosition()
-	idx := max(pos.Offset, 0)
-	if idx >= len(runes) {
-		idx = len(runes) - 1
-	}
+	classes := wordClasses(runes, big)
+	idx := min(max(e.caretPosition().Offset, 0), len(runes)-1)
 
-	if unicode.IsSpace(runes[idx]) {
-		for idx >= 0 && unicode.IsSpace(runes[idx]) {
-			idx--
-		}
-		if idx < 0 {
+	if classes[idx] != classSpace {
+		if start := segStart(classes, idx); start < idx {
+			e.moveToOffset(runes, start)
 			return
 		}
-		idx = segStart(runes, idx, big)
-		line, col := e.positionForOffset(idx)
-		e.moveCursorTo(line, col)
-		return
-	}
-
-	cls := wordClass(runes[idx], big)
-	if idx-1 >= 0 && wordClass(runes[idx-1], big) == cls {
-		idx = segStart(runes, idx, big)
-		line, col := e.positionForOffset(idx)
-		e.moveCursorTo(line, col)
-		return
-	}
-
-	idx--
-	for idx >= 0 && unicode.IsSpace(runes[idx]) {
 		idx--
 	}
+
+	idx = skipClassSpace(classes, idx, -1)
 	if idx < 0 {
 		return
 	}
-	idx = segStart(runes, idx, big)
-	line, col := e.positionForOffset(idx)
+	e.moveToOffset(runes, segStart(classes, idx))
+}
+
+func (e *requestEditor) moveToOffset(runes []rune, idx int) {
+	line, col := e.positionForOffset(min(idx, len(runes)))
 	e.moveCursorTo(line, col)
 }
 
