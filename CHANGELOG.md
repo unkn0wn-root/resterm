@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.7.2](https://github.com/unkn0wn-root/resterm/compare/v1.7.1...v1.7.2) (2026-09-08)
+
 ### [1.7.1](https://github.com/unkn0wn-root/resterm/compare/v1.7.0...v1.7.1) (2026-09-08)
 
 
