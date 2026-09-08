@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rivo/uniseg"
+
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
@@ -42,6 +44,46 @@ func TestRenderReportWithSourceSpan(t *testing.T) {
 			t.Fatalf("Render() missing %q in %q", want, got)
 		}
 	}
+}
+
+func assertCaretUnder(t *testing.T, rep diag.Report, want string) {
+	t.Helper()
+
+	var src, mark string
+	for _, line := range diag.Lines(rep) {
+		switch line.Kind {
+		case diag.LineSrc:
+			src = line.Text
+		case diag.LineMark:
+			mark = line.Text
+		}
+	}
+	before, _, ok := strings.Cut(src, want)
+	if !ok {
+		t.Fatalf("excerpt %q does not contain %q", src, want)
+	}
+	pad, _, _ := strings.Cut(mark, "^")
+	if uniseg.StringWidth(pad) != uniseg.StringWidth(before) ||
+		strings.Count(pad, "\t") != strings.Count(before, "\t") {
+		t.Errorf("caret is not under %q:\n%s\n%s", want, src, mark)
+	}
+}
+
+func TestRenderCaretFollowsWideCharactersAndTabs(t *testing.T) {
+	const line = "\t\"名前\": \"{{missing}}\""
+	assertCaretUnder(t, diag.Report{
+		Path:   "sample.http",
+		Source: []byte("{\n" + line + "\n}\n"),
+		Items: []diag.Diagnostic{{
+			Class:    diag.ClassParse,
+			Severity: diag.SeverityError,
+			Message:  "undefined variable: missing",
+			Span: diag.Span{Start: diag.Pos{
+				Line: 2,
+				Col:  strings.Index(line, "{{missing}}") + 1,
+			}},
+		}},
+	}, "{{missing}}")
 }
 
 func TestFromReportPreparesDefaultsAndCopiesData(t *testing.T) {

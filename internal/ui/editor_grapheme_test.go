@@ -5,6 +5,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rivo/uniseg"
 
@@ -353,5 +354,51 @@ func editorKey(msg tea.KeyMsg) func(requestEditor) requestEditor {
 	return func(e requestEditor) requestEditor {
 		e.Model, _ = e.Model.Update(msg)
 		return e
+	}
+}
+
+func TestAfterCursorEditsFollowWholeCharacter(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{"combining accent", "ae\u0301z"},
+		{"keycap digit", "a0\ufe0f\u20e3z"},
+		{"variation selector", "a⚙\ufe0fz"},
+		{"zwj sequence", "a\U0001F469\u200d\U0001F4BBz"},
+		{"regional indicators", "a\U0001F1F3\U0001F1F4z"},
+		{"skin tone modifier", "a\U0001F44D\U0001F3FDz"},
+		{"plain", "abz"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runes := []rune(tc.content)
+			_, end := textarea.GraphemeRange(runes, 1)
+			want := string(runes[:end]) + "Q" + string(runes[end:])
+
+			appended := editorAfter(t, tc.content, func(e requestEditor) requestEditor {
+				e, _ = e.ApplyInsertAction(editorInsertAfterCursor)
+				e.Model, _ = e.Model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Q")})
+				return e
+			})
+			if appended != want {
+				t.Errorf("a then Q left %q, want %q", appended, want)
+			}
+
+			paste := func(e requestEditor) requestEditor {
+				e.registerText = "Q"
+				e, _ = e.PasteClipboard(true)
+				return e
+			}
+			if err := clipboard.WriteAll("Q"); err == nil {
+				if pasted := editorAfter(t, tc.content, paste); pasted != want {
+					t.Errorf("p from the clipboard left %q, want %q", pasted, want)
+				}
+			}
+
+			t.Setenv("PATH", t.TempDir())
+			if pasted := editorAfter(t, tc.content, paste); pasted != want {
+				t.Errorf("p from the register left %q, want %q", pasted, want)
+			}
+		})
 	}
 }

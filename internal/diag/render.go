@@ -1,10 +1,12 @@
 package diag
 
 import (
-	"bytes"
+	"cmp"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/rivo/uniseg"
 )
 
 type LineKind string
@@ -63,13 +65,10 @@ func itemLines(rep Report, it Diagnostic) []Line {
 	if loc := it.Span.Start.String(); loc != "" {
 		ls = append(ls, Line{Kind: LineLoc, Text: "--> " + loc})
 	}
-	if src, ok := lineText(sourceFor(rep, it), it.Span.Start.Line); ok {
+	at := excerptPos(it)
+	if src, ok := lineText(sourceFor(it, rep.Source), at.Line); ok {
 		width := max(len(strconv.Itoa(it.Span.Start.Line)), 4)
 		bar := strings.Repeat(" ", width) + " |"
-		col := it.Span.Start.Col
-		if col <= 0 {
-			col = 1
-		}
 		ls = append(
 			ls,
 			Line{Kind: LineBar, Text: bar},
@@ -80,7 +79,7 @@ func itemLines(rep Report, it Diagnostic) []Line {
 					"%*s | %s^%s",
 					width,
 					"",
-					strings.Repeat(" ", col-1),
+					caretPad(src, at.Col),
 					label(it.Span.Label),
 				),
 			},
@@ -184,26 +183,51 @@ func text(ls []Line) string {
 	return strings.TrimRight(strings.Join(out, "\n"), "\n")
 }
 
-func sourceFor(rep Report, it Diagnostic) []byte {
+func excerptPos(d Diagnostic) Pos {
+	return Pos{
+		Line: cmp.Or(d.SourceLine, d.Span.Start.Line),
+		Col:  cmp.Or(d.SourceCol, d.Span.Start.Col),
+	}
+}
+
+func sourceFor(it Diagnostic, src []byte) []byte {
 	if len(it.Source) > 0 {
 		return it.Source
 	}
-	return rep.Source
+	return src
+}
+
+// col counts bytes; padding counts display cells. Preserve tabs so the shared
+// gutter puts the excerpt and caret at the same tab stops.
+func caretPad(src string, col int) string {
+	var pad strings.Builder
+	for i, seg := range strings.Split(src[:min(max(col-1, 0), len(src))], "\t") {
+		if i > 0 {
+			pad.WriteByte('\t')
+		}
+		pad.WriteString(strings.Repeat(" ", uniseg.StringWidth(seg)))
+	}
+	return pad.String()
+}
+
+// Keep carriage returns so byte offsets still match src until rendering.
+func sourceLines(src []byte) []string {
+	lines := strings.Split(string(src), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
 
 func lineText(src []byte, line int) (string, bool) {
 	if line <= 0 || len(src) == 0 {
 		return "", false
 	}
-	data := bytes.ReplaceAll(src, []byte("\r\n"), []byte("\n"))
-	lines := strings.Split(string(data), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
+	lines := sourceLines(src)
 	if line > len(lines) {
 		return "", false
 	}
-	return lines[line-1], true
+	return strings.TrimSuffix(lines[line-1], "\r"), true
 }
 
 func label(s string) string {
