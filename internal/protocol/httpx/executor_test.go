@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
@@ -1228,4 +1229,30 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
+}
+
+// Body credentials are not registered secrets, so masking cannot catch them.
+func TestPrepareBodyFileTemplateErrorKeepsBodyOut(t *testing.T) {
+	body := `{"password":"hunter2","token":"{{missing.token}}"}`
+	client := NewClient(mapFS{"payload.json": []byte(body)})
+	req := &restfile.Request{Method: "POST", URL: "https://example.com"}
+	req.Body.FilePath = "payload.json"
+	req.Body.Options.ExpandTemplates = true
+
+	_, err := client.prepareBody(req, vars.NewResolver(), Options{})
+
+	if err == nil {
+		t.Fatal("expected an undefined variable error")
+	}
+	rep := diag.ReportOf(err)
+	if len(rep.Source) != 0 {
+		t.Fatalf("report carries the body: %q", rep.Source)
+	}
+	rendered := diag.RenderReport(rep)
+	if strings.Contains(rendered, "hunter2") || strings.Contains(rendered, body) {
+		t.Fatalf("rendered diagnostic quotes the body:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "payload.json:1:32") {
+		t.Fatalf("rendered diagnostic lost the position:\n%s", rendered)
+	}
 }
