@@ -13,18 +13,10 @@ import (
 	"unicode"
 
 	"k8s.io/apimachinery/pkg/util/httpstream"
-	appsv1client "k8s.io/client-go/kubernetes/typed/apps/v1"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	spdytransport "k8s.io/client-go/transport/spdy"
-	"k8s.io/client-go/util/flowcontrol"
 )
-
-type clusterClients struct {
-	apps appsv1client.AppsV1Interface
-	core corev1client.CoreV1Interface
-}
 
 func startSession(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 	ensureRuntimeDiagInstalled()
@@ -34,26 +26,18 @@ func startSession(ctx context.Context, cfg execConfig, load loadSettings) (*sess
 		return nil, err
 	}
 
-	clients, err := newClusterClients(restCfg)
+	api, err := newRESTAPI(restCfg)
 	if err != nil {
 		return nil, fmt.Errorf("k8s: build client: %w", err)
 	}
 
-	resolver := newClusterResolver(clients, cfg.Namespace)
+	resolver := newClusterResolver(api, cfg.Namespace)
 	target, err := resolver.resolveForwardTarget(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	u := clients.core.
-		RESTClient().
-		Post().
-		Resource("pods").
-		Namespace(cfg.Namespace).
-		Name(target.pod).
-		SubResource("portforward").
-		URL()
-	dialer, err := buildDialer(u, restCfg)
+	dialer, err := buildDialer(api.portForwardURL(cfg.Namespace, target.pod), restCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -106,43 +90,6 @@ func startSession(ctx context.Context, cfg execConfig, load loadSettings) (*sess
 	)
 	ses.setDiag(newDiagCollector(int(ports[0].Local), target.port, diagCap))
 	return ses, nil
-}
-
-func newClusterClients(cfg *rest.Config) (clusterClients, error) {
-	if cfg == nil {
-		return clusterClients{}, errors.New("missing rest config")
-	}
-
-	shallowCopy := *cfg
-	if shallowCopy.UserAgent == "" {
-		shallowCopy.UserAgent = rest.DefaultKubernetesUserAgent()
-	}
-
-	httpClient, err := rest.HTTPClientFor(&shallowCopy)
-	if err != nil {
-		return clusterClients{}, err
-	}
-	if shallowCopy.RateLimiter == nil && shallowCopy.QPS > 0 {
-		if shallowCopy.Burst <= 0 {
-			return clusterClients{}, fmt.Errorf(
-				"burst is required to be greater than 0 when RateLimiter is not set and QPS is set to greater than 0",
-			)
-		}
-		shallowCopy.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(
-			shallowCopy.QPS,
-			shallowCopy.Burst,
-		)
-	}
-
-	appsClient, err := appsv1client.NewForConfigAndClient(&shallowCopy, httpClient)
-	if err != nil {
-		return clusterClients{}, err
-	}
-	coreClient, err := corev1client.NewForConfigAndClient(&shallowCopy, httpClient)
-	if err != nil {
-		return clusterClients{}, err
-	}
-	return clusterClients{apps: appsClient, core: coreClient}, nil
 }
 
 func buildDialer(u *url.URL, cfg *rest.Config) (httpstream.Dialer, error) {
