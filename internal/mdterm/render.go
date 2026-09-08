@@ -15,7 +15,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/mattn/go-runewidth"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/wrap"
@@ -128,7 +128,7 @@ func (r *renderer) heading(lvl int, txt string) {
 		if lvl == 2 {
 			u = "-"
 		}
-		w := runewidth.StringWidth(s)
+		w := ansi.StringWidth(s)
 		if r.w > 0 && w > r.w {
 			w = r.w
 		}
@@ -151,7 +151,7 @@ func (r *renderer) item(ind int, m marker) {
 	pad := strings.Repeat(" ", 2*lvl)
 	// hanging indent: continuations align after the marker, wide ("12. ")
 	// or narrow ("• ") alike
-	col := 2*lvl + runewidth.StringWidth(g) + 1
+	col := 2*lvl + ansi.StringWidth(g) + 1
 	r.col = col
 	r.wrapTo(renderInline(m.text, 0, r.st), col, pad+g+" ", strings.Repeat(" ", col))
 }

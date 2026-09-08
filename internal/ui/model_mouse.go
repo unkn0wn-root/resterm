@@ -11,6 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -442,12 +443,14 @@ func (m *Model) editorMouseSelectionPositions(
 	return anchor, m.editorMouseRightBoundary(pos)
 }
 
+// editorMouseRightBoundary returns the exclusive selection endpoint after the
+// grapheme under the pointer.
 func (m *Model) editorMouseRightBoundary(pos cursorPosition) cursorPosition {
-	lineLen := m.editor.LineLength(pos.Line)
-	if pos.Column >= lineLen {
+	line := m.editor.LineRunes(pos.Line)
+	if pos.Column >= len(line) {
 		return pos
 	}
-	col := pos.Column + 1
+	_, col := textarea.GraphemeRange(line, pos.Column)
 	return cursorPosition{
 		Line:   pos.Line,
 		Column: col,

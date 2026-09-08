@@ -9,7 +9,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
 
-var ansi = termcolor.Config{Enabled: true, Profile: termenv.ANSI}
+var ansiCfg = termcolor.Config{Enabled: true, Profile: termenv.ANSI}
 
 func TestInlinePlain(t *testing.T) {
 	st := newStyler(termcolor.Config{})
@@ -52,7 +52,7 @@ func TestInlinePlain(t *testing.T) {
 }
 
 func TestInlineColor(t *testing.T) {
-	st := newStyler(ansi)
+	st := newStyler(ansiCfg)
 	if got, want := renderInline("**b**", 0, st), "\x1b[1mb\x1b[0m"; got != want {
 		t.Fatalf("bold = %q, want %q", got, want)
 	}
