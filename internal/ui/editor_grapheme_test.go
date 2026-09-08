@@ -12,13 +12,13 @@ import (
 )
 
 var graphemeDocs = []string{
-	"ae\u0301z qq",               // decomposed e-acute inside a word
-	"0️⃣x qq",                    // keycap digit
-	"a⚙️z qq",                    // variation selector
-	"a\U0001F469‍\U0001F4BBz qq", // zero width joiner sequence
-	"\U0001F1F3\U0001F1F4 ab",    // regional indicator pair
-	"a\U0001F44D\U0001F3FDz qq",  // skin tone modifier
-	"GET /a\u0301/b HTTP/1.1",    // a mark in the middle of a path
+	"ae\u0301z qq",                    // decomposed e-acute inside a word
+	"0️⃣x qq",                         // keycap digit
+	"a⚙️z qq",                         // variation selector
+	"a\U0001F469\u200d\U0001F4BBz qq", // zero width joiner sequence
+	"\U0001F1F3\U0001F1F4 ab",         // regional indicator pair
+	"a\U0001F44D\U0001F3FDz qq",       // skin tone modifier
+	"GET /a\u0301/b HTTP/1.1",         // a mark in the middle of a path
 }
 
 func caretStops(t *testing.T, content string, move func(*requestEditor)) []int {
@@ -90,7 +90,7 @@ func TestMouseSelectionCoversWholeCharacter(t *testing.T) {
 		want    string
 	}{
 		{"a⚙️z", 1, "⚙️"},
-		{"a\U0001F469‍\U0001F4BBz", 1, "\U0001F469‍\U0001F4BB"},
+		{"a\U0001F469\u200d\U0001F4BBz", 1, "\U0001F469\u200d\U0001F4BB"},
 		{"ae\u0301z", 1, "e\u0301"},
 		{"a\U0001F1F3\U0001F1F4z", 1, "\U0001F1F3\U0001F1F4"},
 		{"abc", 1, "b"},

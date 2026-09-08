@@ -30,6 +30,11 @@ func printable(r rune) bool {
 	return r >= ' ' && r < 0x7f
 }
 
+// asciiBreak reports whether a grapheme starts at i.
+func asciiBreak(line []rune, i int) bool {
+	return printable(line[i-1]) && printable(line[i])
+}
+
 // Clusters yields the graphemes in line.
 //
 // Adjacent printable ASCII runes always have a boundary between them,
@@ -37,7 +42,7 @@ func printable(r rune) bool {
 func Clusters(line []rune) iter.Seq[Cluster] {
 	return func(yield func(Cluster) bool) {
 		for i := 0; i < len(line); {
-			if printable(line[i]) && (i+1 == len(line) || printable(line[i+1])) {
+			if printable(line[i]) && (i+1 == len(line) || asciiBreak(line, i+1)) {
 				at := line[i] - ' '
 				if !yield(Cluster{Start: i, End: i + 1, Width: 1, Text: printableASCII[at : at+1]}) {
 					return
@@ -47,7 +52,7 @@ func Clusters(line []rune) iter.Seq[Cluster] {
 			}
 
 			hi := i + 1
-			for hi < len(line) && !(printable(line[hi-1]) && printable(line[hi])) {
+			for hi < len(line) && !asciiBreak(line, hi) {
 				hi++
 			}
 			g := uniseg.NewGraphemes(string(line[i:hi]))
