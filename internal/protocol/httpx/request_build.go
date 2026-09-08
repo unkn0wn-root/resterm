@@ -79,7 +79,7 @@ func (c *Client) prepareRequest(
 		resolver,
 		opts,
 		reader,
-		plan.effectiveURL(req.URL),
+		plan.url,
 	)
 	if err != nil {
 		return preparedHTTPRequest{options: effective, optionsSet: true}, err
@@ -131,11 +131,16 @@ func (c *Client) buildHTTPRequest(
 		)
 	}
 
+	urlPos := req.URLPos()
+	if urlOverride != "" {
+		urlPos = diag.Pos{}
+	}
 	target, err := resolveRequestTarget(
 		cmp.Or(urlOverride, req.URL),
 		opts.BaseURL,
 		resolver,
 		requestSchemeOf(req),
+		urlPos,
 	)
 	if err != nil {
 		return nil, opts, err
@@ -159,7 +164,7 @@ func (c *Client) buildHTTPRequest(
 			for _, value := range values {
 				finalValue := value
 				if resolver != nil {
-					expanded, expandErr := resolver.ExpandTemplates(value)
+					expanded, expandErr := resolver.ExpandTemplatesAt(value, req.HeaderPos(name, value))
 					if expandErr != nil {
 						op := "expand header " + name
 						if at := req.Origin(); at != "" {

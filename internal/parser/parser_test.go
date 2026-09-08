@@ -4904,3 +4904,22 @@ func TestHeaderNameThatIsNotAFieldNameIsReported(t *testing.T) {
 		t.Error("the reported header was dropped, want the request to match the file")
 	}
 }
+
+func TestParseBodyLinesSkipComments(t *testing.T) {
+	src := "POST https://example.com\n\n{\n# note\n  \"token\": \"{{auth.token}}\"\n}\n"
+	doc := Parse("requests.http", []byte(src))
+	req := doc.Requests[0]
+
+	if want := "{\n  \"token\": \"{{auth.token}}\"\n}"; req.Body.Text != want {
+		t.Fatalf("body = %q, want %q", req.Body.Text, want)
+	}
+	if want := []int{3, 5, 6}; !reflect.DeepEqual(req.Body.Lines, want) {
+		t.Fatalf("body lines = %v, want %v", req.Body.Lines, want)
+	}
+	if pos := req.LocateBody(2, 13); pos.Path != "requests.http" || pos.Line != 5 || pos.Col != 13 {
+		t.Fatalf("LocateBody(2, 13) = %+v, want requests.http:5:13", pos)
+	}
+	if pos := req.LocateBody(4, 1); pos.Line != 0 {
+		t.Fatalf("LocateBody past the body = %+v, want zero", pos)
+	}
+}

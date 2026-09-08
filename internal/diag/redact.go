@@ -1,14 +1,15 @@
 package diag
 
-// Redact masks diagnostic text without changing the original report or its
-// source excerpt. Spans refer to the caller's source and would become invalid
-// if that text were rewritten.
+// Redact masks diagnostic text and source excerpts in a copy of the report.
+// Source lines may contain secrets outside the failing span.
 func (r Report) Redact(mask func(string) string) Report {
 	if mask == nil {
 		return r
 	}
+	r.Source = redactSource(r.Source, mask)
 	r.Items = redactEach(r.Items, func(d Diagnostic) Diagnostic {
 		d.Message = mask(d.Message)
+		d.Source = redactSource(d.Source, mask)
 		d.Span = redactSpan(d.Span, mask)
 		d.Labels = redactEach(d.Labels, func(l Label) Label {
 			l.Message = mask(l.Message)
@@ -36,6 +37,13 @@ func redactChain(src []ChainEntry, mask func(string) string) []ChainEntry {
 		e.Children = redactChain(e.Children, mask)
 		return e
 	})
+}
+
+func redactSource(src []byte, mask func(string) string) []byte {
+	if len(src) == 0 {
+		return src
+	}
+	return []byte(mask(string(src)))
 }
 
 func redactSpan(s Span, mask func(string) string) Span {

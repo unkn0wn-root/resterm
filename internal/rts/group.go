@@ -1,37 +1,5 @@
 package rts
 
-import "bytes"
-
-// Mask replaces strings, comments, and nested groups with spaces while keeping
-// byte offsets intact. Top-level tokens remain so callers can find separators.
-func Mask(src string) string {
-	out := bytes.Repeat([]byte{' '}, len(src))
-	lx := NewLexer("", []byte(src))
-	depth := 0
-	for {
-		tok := lx.Next()
-		if tok.K == EOF {
-			return string(out)
-		}
-		var keep bool
-		switch tok.K {
-		case LPAREN, LBRACK, LBRACE:
-			keep = depth == 0
-			depth++
-		case RPAREN, RBRACK, RBRACE:
-			depth = max(depth-1, 0)
-			keep = depth == 0
-		case STRING, ILLEGAL, AUTO_SEMI:
-			continue
-		default:
-			keep = depth == 0
-		}
-		if keep {
-			copy(out[lx.start:lx.i], src[lx.start:lx.i])
-		}
-	}
-}
-
 // OpenGroup returns the delimiter for the innermost unclosed group in src.
 // Groups inside strings and comments are ignored.
 // A mismatched closer does not close a group.

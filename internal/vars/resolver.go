@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/vars/dynamic"
 )
 
@@ -37,11 +38,7 @@ func providerValue(p Provider, name string) (Value, bool) {
 	return Value{Text: text}, ok
 }
 
-type ExprPos struct {
-	Path string
-	Line int
-	Col  int
-}
+type ExprPos = diag.Pos
 
 type ExprEval func(expr string, pos ExprPos) (string, error)
 
@@ -214,7 +211,7 @@ func (r *Resolver) expandValue(
 
 	st.names[key] = true
 	st.stack = append(st.stack, name)
-	out, err := CompileTemplate(raw).render(r, pos, allowDynamic, allowExpr, st)
+	out, err := CompileTemplate(raw).render(r, pos, nil, allowDynamic, allowExpr, st)
 	st.stack = st.stack[:len(st.stack)-1]
 	delete(st.names, key)
 
@@ -346,21 +343,33 @@ func providerLabel(p Provider) string {
 }
 
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
-	return CompileTemplate(input).render(r, r.exprPos, true, true, nil)
+	return CompileTemplate(input).render(r, r.exprPos, nil, true, true, nil)
 }
 
 // ExpandTemplatesResult expands input and reports whether resolution encountered
 // any undefined variables, including when a lenient resolver suppresses the error.
 func (r *Resolver) ExpandTemplatesResult(input string) (Expansion, error) {
-	return CompileTemplate(input).renderResult(r, r.exprPos, true, true, nil)
+	return CompileTemplate(input).renderResult(r, r.exprPos, nil, true, true, nil)
 }
 
+// ExpandTemplatesAt uses pos as the start of input in the source file.
+// Without a column, errors point to the whole line.
 func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) {
-	return CompileTemplate(input).render(r, pos, true, true, nil)
+	return CompileTemplate(input).render(r, pos, at(pos), true, true, nil)
+}
+
+// ExpandTemplatesLocated uses locate to find source positions when lines
+// have been removed from input, such as comments in a request body.
+func (r *Resolver) ExpandTemplatesLocated(input string, locate Locator) (string, error) {
+	return CompileTemplate(input).render(r, r.exprPos, locate, true, true, nil)
+}
+
+func (r *Resolver) ExpandTemplatesResultAt(input string, pos ExprPos) (Expansion, error) {
+	return CompileTemplate(input).renderResult(r, pos, at(pos), true, true, nil)
 }
 
 func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
-	return CompileTemplate(input).render(r, r.exprPos, false, false, nil)
+	return CompileTemplate(input).render(r, r.exprPos, nil, false, false, nil)
 }
 
 func (r *Resolver) SetTrace(tr *Trace) {
@@ -385,10 +394,14 @@ var ErrUndefinedVariable = errors.New("undefined variable")
 // never mask a cycle or broken expression seen later. Callers that classify
 // on ErrUndefinedVariable depend on this order.
 func PreferStructural(firstErr, err error) error {
-	if firstErr == nil || (!errors.Is(err, ErrUndefinedVariable) && errors.Is(firstErr, ErrUndefinedVariable)) {
+	if replaces(err, firstErr) {
 		return err
 	}
 	return firstErr
+}
+
+func replaces(err, firstErr error) bool {
+	return firstErr == nil || (!errors.Is(err, ErrUndefinedVariable) && errors.Is(firstErr, ErrUndefinedVariable))
 }
 
 // resolveName resolves one placeholder name. A non-nil error means the
@@ -551,5 +564,5 @@ func ReplaceTemplateVars(input string, fn func(match, name string) string) strin
 	if fn == nil {
 		return input
 	}
-	return CompileTemplate(input).replace(fn)
+	return CompileTemplate(input).replace(func(seg tplSeg, _ int) string { return fn(seg.text, seg.name) })
 }

@@ -5,6 +5,7 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
@@ -106,4 +107,11 @@ func cloneAuthParams(src map[string]string) map[string]string {
 	dst := make(map[string]string, len(src))
 	maps.Copy(dst, src)
 	return dst
+}
+
+func (a *AuthSpec) Pos() diag.Pos {
+	if a.Line <= 0 {
+		return diag.Pos{}
+	}
+	return diag.Pos{Path: a.SourcePath, Line: a.Line}
 }

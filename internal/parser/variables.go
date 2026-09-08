@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -35,6 +36,7 @@ func (b *documentBuilder) handleVariableLine(ln line) bool {
 		}
 	}
 	b.addScopedVariable(name, value, ln.no, scope, secret)
+	b.warnUnclosed(value, diag.Pos{Line: ln.no, Col: ln.indent + len(ln.text) - len(value) + 1})
 	b.appendLine(ln.raw)
 	return true
 }

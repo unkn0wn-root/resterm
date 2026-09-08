@@ -4,6 +4,9 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"unicode"
+
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
@@ -13,6 +16,7 @@ var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 // traversal implementation behind ExpandTemplates, Render and
 // ReplaceTemplateVars, so all of them agree on what counts as a placeholder.
 type Template struct {
+	src  string
 	segs []tplSeg
 }
 
@@ -32,7 +36,7 @@ func CompileTemplate(input string) Template {
 		if input == "" {
 			return Template{}
 		}
-		return Template{segs: []tplSeg{{text: input}}}
+		return Template{src: input, segs: []tplSeg{{text: input}}}
 	}
 
 	segs := make([]tplSeg, 0, 2*len(ms)+1)
@@ -51,7 +55,47 @@ func CompileTemplate(input string) Template {
 	if last < len(input) {
 		segs = append(segs, tplSeg{text: input[last:]})
 	}
-	return Template{segs: segs}
+	return Template{src: input, segs: segs}
+}
+
+// Locator maps template positions to source positions. Lines and byte columns
+// start at 1. Return a zero position when the source location is unknown.
+type Locator func(line, col int) diag.Pos
+
+func at(pos diag.Pos) Locator {
+	return func(line, col int) diag.Pos { return posAt(pos, line, col) }
+}
+
+func posAt(pos diag.Pos, line, col int) diag.Pos {
+	switch {
+	case pos.Line <= 0:
+		return diag.Pos{}
+	case pos.Col <= 0:
+		return diag.Pos{Path: pos.Path, Line: pos.Line + line - 1}
+	case line == 1:
+		return diag.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col + col - 1}
+	default:
+		return diag.Pos{Path: pos.Path, Line: pos.Line + line - 1, Col: col}
+	}
+}
+
+type PlaceholderError struct {
+	Match string
+	Span  diag.Span
+	Err   error
+}
+
+func (e *PlaceholderError) Error() string { return e.Err.Error() }
+func (e *PlaceholderError) Unwrap() error { return e.Err }
+
+// Keep the original error's class, location, and stack.
+// Use the placeholder's location only if the error has none.
+func (e *PlaceholderError) Diagnostic() diag.Report {
+	rep := diag.ReportOf(e.Err)
+	if it := &rep.Items[0]; it.Span.Start.Line <= 0 && e.Span.Start.Line > 0 {
+		it.Span = e.Span
+	}
+	return rep
 }
 
 // Render expands the template the same way ExpandTemplates does. An
@@ -59,22 +103,24 @@ func CompileTemplate(input string) Template {
 // the first structural error (cycle, depth, expression) if any occurred,
 // otherwise the first undefined variable.
 func (t Template) Render(r *Resolver) (string, error) {
-	return t.render(r, r.exprPos, true, true, nil)
+	return t.render(r, r.exprPos, nil, true, true, nil)
 }
 
 func (t Template) render(
 	r *Resolver,
-	pos ExprPos,
+	pos diag.Pos,
+	locate Locator,
 	allowDynamic, allowExpr bool,
 	st *expandState,
 ) (string, error) {
-	result, err := t.renderResult(r, pos, allowDynamic, allowExpr, st)
+	result, err := t.renderResult(r, pos, locate, allowDynamic, allowExpr, st)
 	return result.Value, err
 }
 
 func (t Template) renderResult(
 	r *Resolver,
-	pos ExprPos,
+	pos diag.Pos,
+	locate Locator,
 	allowDynamic, allowExpr bool,
 	st *expandState,
 ) (Expansion, error) {
@@ -86,31 +132,83 @@ func (t Template) renderResult(
 	// declared value can never mask a cycle or broken expression next to it.
 	lenientRoot := st == nil && r.lenient
 	var firstErr error
+	var failed tplSeg
+	var failedOff int
 	var undef bool
-	out := t.replace(func(match, name string) string {
-		if name == "" {
-			return match
+	out := t.replace(func(seg tplSeg, off int) string {
+		if seg.name == "" {
+			return seg.text
 		}
-		value, err := r.resolveName(name, pos, allowDynamic, allowExpr, st)
+		at := pos
+		if locate != nil && seg.name[0] == '=' {
+			at = t.exprPos(seg, off, pos, locate)
+		}
+		value, err := r.resolveName(seg.name, at, allowDynamic, allowExpr, st)
 		if err != nil {
 			undefined := errors.Is(err, ErrUndefinedVariable)
 			if undefined {
 				undef = true
 			}
 			if lenientRoot && undefined {
-				return match
+				return seg.text
 			}
-			firstErr = PreferStructural(firstErr, err)
-			return match
+			if replaces(err, firstErr) {
+				firstErr, failed, failedOff = err, seg, off
+			}
+			return seg.text
 		}
 		return value
 	})
+	// Nested values come from other declarations, so report the placeholder
+	// in this template.
+	if firstErr != nil && st == nil {
+		firstErr = &PlaceholderError{Match: failed.text, Span: t.span(failed, failedOff, locate), Err: firstErr}
+	}
 	return Expansion{Value: out, HasUndefinedVariables: undef}, firstErr
 }
 
-// replace rebuilds the input and passes every placeholder through fn, even a
-// blank {{ }}.
-func (t Template) replace(fn func(match, name string) string) string {
+func (t Template) span(seg tplSeg, off int, locate Locator) diag.Span {
+	if locate == nil {
+		return diag.Span{}
+	}
+	start := locate(textPos(t.src[:off]))
+	if start.Line <= 0 {
+		return diag.Span{}
+	}
+	end := locate(textPos(t.src[:off+len(seg.text)]))
+	if end.Line <= 0 {
+		end = start
+	}
+	return diag.Span{Start: start, End: end}
+}
+
+func (t Template) exprPos(seg tplSeg, off int, pos diag.Pos, locate Locator) diag.Pos {
+	p := locate(textPos(t.src[:off+exprOffset(seg.text)]))
+	if p.Line <= 0 || p.Col <= 0 {
+		return pos
+	}
+	return p
+}
+
+// Skip the same leading whitespace as resolveName so error positions match.
+func exprOffset(match string) int {
+	inner := match[2 : len(match)-2]
+	name := strings.TrimLeftFunc(inner, unicode.IsSpace)
+	rest := name[1:]
+	expr := strings.TrimLeftFunc(rest, unicode.IsSpace)
+	return 2 + len(inner) - len(name) + 1 + len(rest) - len(expr)
+}
+
+// textPos returns the position after text, counting lines and byte columns from 1.
+func textPos(text string) (line, col int) {
+	if i := strings.LastIndexByte(text, '\n'); i >= 0 {
+		return 1 + strings.Count(text, "\n"), len(text) - i
+	}
+	return 1, len(text) + 1
+}
+
+// fn receives every placeholder, including blank {{ }}, and its byte offset.
+func (t Template) replace(fn func(seg tplSeg, off int) string) string {
 	if len(t.segs) == 0 {
 		return ""
 	}
@@ -118,12 +216,119 @@ func (t Template) replace(fn func(match, name string) string) string {
 		return t.segs[0].text
 	}
 	var b strings.Builder
+	off := 0
 	for _, s := range t.segs {
 		if s.ph {
-			b.WriteString(fn(s.text, s.name))
+			b.WriteString(fn(s, off))
 		} else {
 			b.WriteString(s.text)
 		}
+		off += len(s.text)
 	}
 	return b.String()
+}
+
+type Unclosed struct {
+	Text string
+	Off  int // byte offset in the input
+	Span diag.Span
+}
+
+// UnclosedPlaceholders reports unfinished placeholders relative to start.
+func UnclosedPlaceholders(input string, start diag.Pos) []Unclosed {
+	return UnclosedPlaceholdersLocated(input, at(start))
+}
+
+// UnclosedPlaceholdersLocated reports unfinished placeholders using locate
+// to map their positions back to the source.
+func UnclosedPlaceholdersLocated(input string, locate Locator) []Unclosed {
+	var out []Unclosed
+	sc := newUnclosedScan(input)
+	for off := 0; ; {
+		i := strings.Index(input[off:], "{{")
+		if i < 0 {
+			return out
+		}
+		i += off
+		if end, ok := sc.closes(i); ok {
+			off = end
+			continue
+		}
+		end := i + 2 + nameLen(input[i+2:])
+		if end < len(input) && input[end] == '}' {
+			end++
+		}
+		out = append(out, Unclosed{Text: input[i:end], Off: i, Span: sc.span(locate, i, end)})
+		off = end
+	}
+}
+
+// Scan offsets must only move forward to avoid rescanning long inputs.
+type unclosedScan struct {
+	input   string
+	brace   int // next '}', or len(input) if none remain
+	line    int
+	col     int
+	lineOff int // byte offset for line and col
+}
+
+func newUnclosedScan(input string) unclosedScan {
+	return unclosedScan{input: input, brace: braceFrom(input, 0), line: 1, col: 1}
+}
+
+// Keep this consistent with templateVarPattern: {{}} is invalid, but {{ }} is valid.
+func (s *unclosedScan) closes(i int) (int, bool) {
+	j := s.nextBrace(i + 2)
+	if j < i+3 || j+1 >= len(s.input) || s.input[j+1] != '}' {
+		return 0, false
+	}
+	return j + 2, true
+}
+
+func (s *unclosedScan) nextBrace(from int) int {
+	if s.brace < from {
+		s.brace = braceFrom(s.input, from)
+	}
+	return s.brace
+}
+
+func braceFrom(input string, off int) int {
+	i := strings.IndexByte(input[off:], '}')
+	if i < 0 {
+		return len(input)
+	}
+	return off + i
+}
+
+func (s *unclosedScan) span(locate Locator, i, end int) diag.Span {
+	start := locate(s.lineCol(i))
+	if start.Line <= 0 {
+		return diag.Span{}
+	}
+	last := locate(s.lineCol(end))
+	if last.Line <= 0 {
+		last = start
+	}
+	return diag.Span{Start: start, End: last}
+}
+
+// lineCol returns the line and byte column at off, both starting at 1.
+func (s *unclosedScan) lineCol(off int) (line, col int) {
+	seg := s.input[s.lineOff:off]
+	if i := strings.LastIndexByte(seg, '\n'); i >= 0 {
+		s.line += strings.Count(seg, "\n")
+		s.col = len(seg) - i
+	} else {
+		s.col += len(seg)
+	}
+	s.lineOff = off
+	return s.line, s.col
+}
+
+func nameLen(s string) int {
+	i := strings.IndexFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == '{' || r == '}' })
+	if i < 0 {
+		return len(s)
+	}
+	return i
 }

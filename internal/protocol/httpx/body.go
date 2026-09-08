@@ -18,13 +18,6 @@ type bodyPlan struct {
 	url string
 }
 
-func (p bodyPlan) effectiveURL(defaultURL string) string {
-	if p.url != "" {
-		return p.url
-	}
-	return defaultURL
-}
-
 func (c *Client) prepareBody(
 	req *restfile.Request,
 	resolver *vars.Resolver,
@@ -38,17 +31,18 @@ func (c *Client) prepareBody(
 
 	switch {
 	case req.Body.FilePath != "":
-		data, _, err := c.readFile(lookup, req.Body.FilePath, "body file")
+		data, path, err := c.readFile(lookup, req.Body.FilePath, "body file")
 		if err != nil {
 			return bodyPlan{}, err
 		}
 
 		if resolver != nil && req.Body.Options.ExpandTemplates {
-			text := string(data)
-			expanded, err := resolver.ExpandTemplates(text)
+			start := diag.Pos{Path: path, Line: 1, Col: 1}
+			expanded, err := resolver.ExpandTemplatesAt(string(data), start)
 			if err != nil {
-				return bodyPlan{}, diag.WrapAsf(diag.ClassProtocol, err,
+				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err,
 					"expand body file templates",
+					diag.WithSource(path, data),
 				)
 			}
 
@@ -59,7 +53,7 @@ func (c *Client) prepareBody(
 		expanded := req.Body.Text
 		if resolver != nil {
 			var err error
-			expanded, err = resolver.ExpandTemplates(req.Body.Text)
+			expanded, err = resolver.ExpandTemplatesLocated(req.Body.Text, req.LocateBody)
 			if err != nil {
 				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err, "expand body template")
 			}

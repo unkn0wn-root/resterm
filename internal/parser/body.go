@@ -3,7 +3,9 @@ package parser
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
@@ -36,7 +38,7 @@ func (b *documentBuilder) handleBlankLine(ln line) bool {
 		return true
 	}
 
-	b.request.http.AppendBodyLine("", ln.eol)
+	b.request.http.AppendBodyLine(ln.no, "", ln.eol)
 	b.appendLine(ln.raw)
 	return true
 }
@@ -57,7 +59,7 @@ func (b *documentBuilder) handleMultipartBodyLine(ln line) bool {
 		!b.request.multipart.bodyLine(ln.text) {
 		return false
 	}
-	b.request.http.AppendBodyLine(ln.raw, ln.eol)
+	b.request.http.AppendBodyLine(ln.no, ln.raw, ln.eol)
 	b.appendLine(ln.raw)
 	return true
 }
@@ -72,12 +74,14 @@ func (b *documentBuilder) handleMethodLine(ln line) bool {
 		}
 
 		b.request.http.SetMethodAndURL(strings.ToUpper(fields[0]), target)
+		b.locateURL(ln, urlCol(ln.raw, true))
 		b.request.grpc.SetTarget(target)
 		b.appendLine(ln.raw)
 		return true
 	}
 
 	ml, ok, err := httpbuilder.ParseMethodLine(ln.raw)
+	hasMethod := ok
 	if !ok && err == nil {
 		ml, ok, err = httpbuilder.ParseWebSocketURLLine(ln.raw)
 	}
@@ -90,6 +94,7 @@ func (b *documentBuilder) handleMethodLine(ln line) bool {
 		b.ensureRequest(ln.no)
 
 		b.request.http.SetMethodAndURL(ml.Method, ml.URL)
+		b.locateURL(ln, urlCol(ln.raw, hasMethod))
 		b.request.settings = version.SetIfMissing(b.request.settings, ml.Version)
 		b.appendLine(ln.raw)
 		return true
@@ -105,11 +110,13 @@ func (b *documentBuilder) handleHeaderLine(ln line) bool {
 	if before, after, ok := strings.Cut(ln.raw, ":"); ok {
 		headerName := strings.TrimSpace(before)
 		headerValue := strings.TrimSpace(after)
+		valueCol := len(ln.raw) - len(str.TrimLeft(after)) + 1
 		// A valid header must win before a GraphQL or gRPC raw-block collector.
 		// Both protocols accept arbitrary body lines, so offering the line to
 		// them first used to swallow valid gRPC headers as protobuf JSON.
 		if header.Valid(headerName) {
-			b.request.http.AddHeader(headerName, headerValue)
+			b.request.http.AddHeader(headerName, headerValue, ln.no, valueCol)
+			b.warnUnclosed(headerValue, diag.Pos{Line: ln.no, Col: valueCol})
 			b.appendLine(ln.raw)
 			return true
 		}
@@ -127,7 +134,7 @@ func (b *documentBuilder) handleHeaderLine(ln line) bool {
 		// the request stays what the file says.
 		b.addError(ln.no, fmt.Sprintf("header name %q is not an HTTP field name", headerName))
 		if headerName != "" {
-			b.request.http.AddHeader(headerName, headerValue)
+			b.request.http.AddHeader(headerName, headerValue, ln.no, valueCol)
 		}
 	} else if b.request.protoBodyLine(ln.raw) {
 		// A feature collecting a raw block takes non-header lines before the
@@ -152,7 +159,26 @@ func (b *documentBuilder) handleBodyLine(ln line) {
 		b.request.http.SetBodyFromFile(file)
 		return
 	}
-	b.request.http.AppendBodyLine(ln.raw, ln.eol)
+	b.request.http.AppendBodyLine(ln.no, ln.raw, ln.eol)
+}
+
+func (b *documentBuilder) locateURL(ln line, col int) {
+	b.request.http.SetURLPos(ln.no, col)
+	if col > 0 {
+		b.warnUnclosed(ln.raw[col-1:], diag.Pos{Line: ln.no, Col: col})
+	}
+}
+
+func urlCol(raw string, afterMethod bool) int {
+	rest := str.TrimLeft(raw)
+	if afterMethod {
+		i := strings.IndexFunc(rest, unicode.IsSpace)
+		if i < 0 {
+			return 0
+		}
+		rest = str.TrimLeft(rest[i:])
+	}
+	return len(raw) - len(rest) + 1
 }
 
 func parseHTTPBodyFile(line string, forceInline bool) (string, bool) {
@@ -260,4 +286,5 @@ func (r *requestBuilder) applyHTTPBody(req *restfile.Request) {
 	if mime := r.http.MimeType(); mime != "" {
 		req.Body.MimeType = mime
 	}
+	req.Body.Lines = r.http.BodyLines()
 }

@@ -115,6 +115,26 @@ func TestNameContinuation(t *testing.T) {
 	}
 }
 
+func TestNameScriptArgs(t *testing.T) {
+	tests := map[Name]bool{
+		Assert:       true,
+		When:         true,
+		Capture:      true,
+		Patch:        true,
+		Match:        false,
+		Auth:         false,
+		RequestName:  false,
+		Name("void"): false,
+	}
+	for name, want := range tests {
+		t.Run(name.String(), func(t *testing.T) {
+			if got := name.ScriptArgs(); got != want {
+				t.Fatalf("%s script args = %v, want %v", name.Tag(), got, want)
+			}
+		})
+	}
+}
+
 func TestSpecsContinueOnlyWithStructuredArguments(t *testing.T) {
 	for _, spec := range Specs() {
 		if spec.Continues == ContinueNone {

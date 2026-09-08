@@ -287,18 +287,21 @@ func (b *documentBuilder) parseCaptureDirective(d parsedDirective) (restfile.Cap
 		b.warn(d, "@capture missing expression after capture name")
 		return restfile.CaptureSpec{}, false
 	}
-	mode := restfile.CaptureExprModeRTS
-	if capture.HasUnquotedTemplateMarker(expression) {
-		mode = restfile.CaptureExprModeTemplate
-	}
 	return restfile.CaptureSpec{
 		Scope:      scope,
 		Name:       name,
 		Expression: expression,
-		Mode:       mode,
+		Mode:       captureMode(expression),
 		Secret:     secret,
 		Line:       d.lines.Start,
 	}, true
+}
+
+func captureMode(expr string) restfile.CaptureExprMode {
+	if capture.HasUnquotedTemplateMarker(expr) {
+		return restfile.CaptureExprModeTemplate
+	}
+	return restfile.CaptureExprModeRTS
 }
 
 func cutCapture(rest string) (scope, name, expr string) {

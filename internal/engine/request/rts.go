@@ -354,7 +354,7 @@ func (e *Engine) evalRTSValue(
 	pos rts.Pos,
 ) (rts.Value, error) {
 	v, err := e.re.Eval(ctx, rt, expr, pos)
-	return v, e.rtsErr(err, doc)
+	return v, e.withSource(err, doc)
 }
 
 func (e *Engine) evalRTSAssert(
@@ -365,7 +365,7 @@ func (e *Engine) evalRTSAssert(
 	pos rts.Pos,
 ) (rts.Value, error) {
 	v, err := e.re.EvalAssertion(ctx, rt, expr, pos)
-	return v, e.rtsErr(err, doc)
+	return v, e.withSource(err, doc)
 }
 
 func (e *Engine) evalRTSString(
@@ -376,7 +376,7 @@ func (e *Engine) evalRTSString(
 	pos rts.Pos,
 ) (string, error) {
 	s, err := e.re.EvalStr(ctx, rt, expr, pos)
-	return s, e.rtsErr(err, doc)
+	return s, e.withSource(err, doc)
 }
 
 func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
@@ -1053,7 +1053,7 @@ func applyPatchMethod(req *restfile.Request, val *string) {
 
 func applyPatchURL(req *restfile.Request, val *string) {
 	if val != nil && req != nil {
-		req.URL = strings.TrimSpace(*val)
+		req.SetURL(strings.TrimSpace(*val))
 	}
 }
 
@@ -1069,7 +1069,7 @@ func applyPatchQuery(req *restfile.Request, q map[string]*string) error {
 	if err != nil {
 		return fmt.Errorf("invalid url after @apply: %w", err)
 	}
-	req.URL = out
+	req.SetURL(out)
 	return nil
 }
 
@@ -1095,9 +1095,7 @@ func applyPatchBody(req *restfile.Request, val *string) {
 	if req == nil || val == nil {
 		return
 	}
-	req.Body.FilePath = ""
-	req.Body.Text = *val
-	req.Body.GraphQL = nil
+	req.SetBodyText(*val)
 }
 
 func applyPatchAuth(req *restfile.Request, auth *restfile.AuthSpec, set bool) {

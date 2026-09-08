@@ -187,6 +187,7 @@ func (e *Engine) ExecuteWith(
 	res := xexec.RunRequest(flow{ctx: x})
 	end := time.Now()
 	res.Timing = requestTiming(start, end, res)
+	res.Err = e.withSource(res.Err, doc)
 	res = e.redactResult(res, doc, env)
 	if opt.Record {
 		e.record(doc, req, runResult{

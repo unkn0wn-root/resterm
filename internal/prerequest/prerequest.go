@@ -75,7 +75,7 @@ func Apply(req *restfile.Request, out Output) error {
 		req.Method = *out.Method
 	}
 	if out.URL != nil {
-		req.URL = *out.URL
+		req.SetURL(*out.URL)
 	}
 	if len(out.Query) > 0 {
 		if err := applyQuery(req, out.Query); err != nil {
@@ -84,9 +84,7 @@ func Apply(req *restfile.Request, out Output) error {
 	}
 	applyHeaders(req, out.Headers, out.HeaderDels)
 	if out.Body != nil {
-		req.Body.FilePath = ""
-		req.Body.Text = *out.Body
-		req.Body.GraphQL = nil
+		req.SetBodyText(*out.Body)
 	}
 	SetRequestVars(req, out.Variables)
 	return nil

@@ -136,7 +136,7 @@ func prepareGRPCRequest(
 	}
 
 	if res != nil {
-		target, err := res.ExpandTemplates(grpcReq.Target)
+		target, err := res.ExpandTemplatesAt(grpcReq.Target, req.URLPos())
 		if err != nil {
 			return diag.WrapAs(diag.ClassProtocol, err, "expand grpc target")
 		}
@@ -182,7 +182,7 @@ func prepareGRPCRequest(
 		}
 		for k, vs := range req.Headers {
 			for i, v := range vs {
-				out, err := res.ExpandTemplates(v)
+				out, err := res.ExpandTemplatesAt(v, req.HeaderPos(k, v))
 				if err != nil {
 					return diag.WrapAsf(diag.ClassProtocol, err, "expand header %s", k)
 				}
@@ -195,7 +195,7 @@ func prepareGRPCRequest(
 	if grpcReq.Target == "" {
 		return diag.New(diag.ClassProtocol, "grpc target not specified")
 	}
-	req.URL = grpcReq.Target
+	req.SetURL(grpcReq.Target)
 	return nil
 }
 

@@ -179,3 +179,14 @@ func TestDocumentCloneIsIndependent(t *testing.T) {
 		t.Fatal("mutating clone changed source document")
 	}
 }
+
+func TestRequestCloneCopiesBodyLines(t *testing.T) {
+	req := &Request{Body: BodySource{Text: "{}", Lines: []int{3}}}
+
+	dst := req.Clone()
+	dst.Body.Lines[0] = 9
+
+	if req.Body.Lines[0] != 3 {
+		t.Fatalf("clone shares body lines: %v", req.Body.Lines)
+	}
+}
