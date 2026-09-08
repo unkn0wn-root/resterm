@@ -211,7 +211,7 @@ func (r *Resolver) expandValue(
 
 	st.names[key] = true
 	st.stack = append(st.stack, name)
-	out, err := CompileTemplate(raw).render(r, pos, diag.Pos{}, allowDynamic, allowExpr, st)
+	out, err := CompileTemplate(raw).render(r, pos, nil, allowDynamic, allowExpr, st)
 	st.stack = st.stack[:len(st.stack)-1]
 	delete(st.names, key)
 
@@ -343,27 +343,33 @@ func providerLabel(p Provider) string {
 }
 
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
-	return CompileTemplate(input).render(r, r.exprPos, diag.Pos{}, true, true, nil)
+	return CompileTemplate(input).render(r, r.exprPos, nil, true, true, nil)
 }
 
 // ExpandTemplatesResult expands input and reports whether resolution encountered
 // any undefined variables, including when a lenient resolver suppresses the error.
 func (r *Resolver) ExpandTemplatesResult(input string) (Expansion, error) {
-	return CompileTemplate(input).renderResult(r, r.exprPos, diag.Pos{}, true, true, nil)
+	return CompileTemplate(input).renderResult(r, r.exprPos, nil, true, true, nil)
 }
 
 // ExpandTemplatesAt uses pos as the start of input in the source file.
 // Without a column, errors point to the whole line.
 func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) {
-	return CompileTemplate(input).render(r, pos, pos, true, true, nil)
+	return CompileTemplate(input).render(r, pos, at(pos), true, true, nil)
+}
+
+// ExpandTemplatesLocated is ExpandTemplatesAt for input whose lines are not
+// adjacent in the source file, such as a body with its comments removed.
+func (r *Resolver) ExpandTemplatesLocated(input string, locate Locator) (string, error) {
+	return CompileTemplate(input).render(r, r.exprPos, locate, true, true, nil)
 }
 
 func (r *Resolver) ExpandTemplatesResultAt(input string, pos ExprPos) (Expansion, error) {
-	return CompileTemplate(input).renderResult(r, pos, pos, true, true, nil)
+	return CompileTemplate(input).renderResult(r, pos, at(pos), true, true, nil)
 }
 
 func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
-	return CompileTemplate(input).render(r, r.exprPos, diag.Pos{}, false, false, nil)
+	return CompileTemplate(input).render(r, r.exprPos, nil, false, false, nil)
 }
 
 func (r *Resolver) SetTrace(tr *Trace) {
@@ -558,5 +564,5 @@ func ReplaceTemplateVars(input string, fn func(match, name string) string) strin
 	if fn == nil {
 		return input
 	}
-	return CompileTemplate(input).replace(func(seg tplSeg) string { return fn(seg.text, seg.name) })
+	return CompileTemplate(input).replace(func(seg tplSeg, _ int) string { return fn(seg.text, seg.name) })
 }

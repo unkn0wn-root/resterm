@@ -116,6 +116,7 @@ func hasScheme(url string, schemes []string) bool {
 }
 
 type bodyLine struct {
+	no   int
 	text string
 	term string
 }
@@ -129,7 +130,6 @@ type Builder struct {
 	headerLines  []restfile.HeaderLine
 	headerDone   bool
 	bodyLines    []bodyLine
-	bodyLine     int
 	bodyFromFile string
 	mimeType     string
 }
@@ -199,15 +199,20 @@ func (b *Builder) MarkHeadersDone() {
 	b.headerDone = true
 }
 
-func (b *Builder) AppendBodyLine(line int, text, term string) {
-	if len(b.bodyLines) == 0 {
-		b.bodyLine = line
-	}
-	b.bodyLines = append(b.bodyLines, bodyLine{text: text, term: term})
+func (b *Builder) AppendBodyLine(no int, text, term string) {
+	b.bodyLines = append(b.bodyLines, bodyLine{no: no, text: text, term: term})
 }
 
-func (b *Builder) BodyLine() int {
-	return b.bodyLine
+// BodyLines lists the source line of each body line.
+func (b *Builder) BodyLines() []int {
+	if len(b.bodyLines) == 0 {
+		return nil
+	}
+	lines := make([]int, len(b.bodyLines))
+	for i, ln := range b.bodyLines {
+		lines[i] = ln.no
+	}
+	return lines
 }
 
 func (b *Builder) SetBodyFromFile(path string) {

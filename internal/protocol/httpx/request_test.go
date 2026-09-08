@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -567,5 +568,29 @@ func TestApplyAuthenticationLenientAPIKeyPlacement(t *testing.T) {
 				t.Fatalf("api key with unknown placement must not touch the query, got %q", got)
 			}
 		})
+	}
+}
+
+func TestBuildHTTPRequestLocatesBodyVariableAfterComment(t *testing.T) {
+	req := &restfile.Request{
+		Method:     "POST",
+		URL:        "https://example.com",
+		SourcePath: "requests.http",
+		Body: restfile.BodySource{
+			Text:  "{\n  \"token\": \"{{auth.token}}\"\n}",
+			Lines: []int{3, 5, 6},
+		},
+	}
+
+	_, _, _, err := NewClient(nil).BuildHTTPRequest(context.Background(), req, vars.NewResolver(), Options{})
+	if err == nil {
+		t.Fatal("expected an expansion error")
+	}
+	got := diag.Render(err)
+	want := "error[protocol]: undefined variable: auth.token\n" +
+		"--> requests.http:5:13\n" +
+		"expand body template"
+	if got != want {
+		t.Fatalf("Render() = %q, want %q", got, want)
 	}
 }

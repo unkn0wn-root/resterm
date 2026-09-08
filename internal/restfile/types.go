@@ -97,7 +97,9 @@ type BodySource struct {
 	MimeType string
 	GraphQL  *GraphQLBody
 	Options  BodyOptions
-	Line     int
+	// Lines holds the source line of each line of Text. Comment lines are
+	// dropped, so body lines need not be adjacent.
+	Lines []int
 }
 
 type HeaderLine struct {
@@ -466,11 +468,12 @@ func (req *Request) URLPos() diag.Pos {
 	return diag.Pos{Path: req.SourcePath, Line: req.URLLine, Col: req.URLCol}
 }
 
-func (req *Request) BodyPos() diag.Pos {
-	if req.Body.Line <= 0 {
+// LocateBody maps a line and column of the inline body text to the source.
+func (req *Request) LocateBody(line, col int) diag.Pos {
+	if line < 1 || line > len(req.Body.Lines) {
 		return diag.Pos{}
 	}
-	return diag.Pos{Path: req.SourcePath, Line: req.Body.Line, Col: 1}
+	return diag.Pos{Path: req.SourcePath, Line: req.Body.Lines[line-1], Col: col}
 }
 
 // Match by name and value because scripts can change or reorder headers.

@@ -53,7 +53,7 @@ func (c *Client) prepareBody(
 		expanded := req.Body.Text
 		if resolver != nil {
 			var err error
-			expanded, err = resolver.ExpandTemplatesAt(req.Body.Text, req.BodyPos())
+			expanded, err = resolver.ExpandTemplatesLocated(req.Body.Text, req.LocateBody)
 			if err != nil {
 				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err, "expand body template")
 			}

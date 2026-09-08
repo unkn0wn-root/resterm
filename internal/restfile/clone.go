@@ -181,6 +181,7 @@ func cloneApplySpecs(src []ApplySpec) []ApplySpec {
 
 func cloneBodySource(src BodySource) BodySource {
 	src.GraphQL = clonePtr(src.GraphQL)
+	src.Lines = slices.Clone(src.Lines)
 	return src
 }
 

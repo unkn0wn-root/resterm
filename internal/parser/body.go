@@ -288,5 +288,5 @@ func (r *requestBuilder) applyHTTPBody(req *restfile.Request) {
 	if mime := r.http.MimeType(); mime != "" {
 		req.Body.MimeType = mime
 	}
-	req.Body.Line = r.http.BodyLine()
+	req.Body.Lines = r.http.BodyLines()
 }
