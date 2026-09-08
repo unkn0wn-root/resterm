@@ -44,7 +44,7 @@ var wsArgs = []argument{
 	word("send-file", "Send file contents").takes(pathValue(PathAny, pathLoad)),
 	word("ping", "Send a ping frame"),
 	word("pong", "Send a pong frame"),
-	word("wait", "Wait for a duration or incoming message"),
+	word("wait", "Wait for a duration (e.g. 500ms)").withExample("500ms"),
 	word("close", "Close the connection with code and reason"),
 }
 
