@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -511,11 +511,7 @@ func centerContent(content string, width, height int) string {
 }
 
 func visibleWidth(s string) int {
-	if s == "" {
-		return 0
-	}
-	clean := ansiSequenceRegex.ReplaceAllString(s, "")
-	return runewidth.StringWidth(clean)
+	return ansi.StringWidth(s)
 }
 
 func currentCursorLine(ed requestEditor) int {

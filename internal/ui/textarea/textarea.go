@@ -20,7 +20,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	rw "github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 
 	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
@@ -517,6 +516,7 @@ func (m *Model) insertRunesFromUserInput(runes []rune) {
 
 	// Save the remainder of the original line at the current
 	// cursor position.
+	m.col = m.editColumn()
 	tail := make([]rune, len(m.value[m.row][m.col:]))
 	copy(tail, m.value[m.row][m.col:])
 
@@ -811,10 +811,18 @@ func (m *Model) san() runeutil.Sanitizer {
 	return m.rsan
 }
 
+// editColumn returns the start of the grapheme under the cursor so edits
+// use the same boundary as rendering.
+func (m *Model) editColumn() int {
+	line := m.value[m.row]
+	col, _ := GraphemeRange(line, clamp(m.col, 0, len(line)))
+	return col
+}
+
 // deleteBeforeCursor deletes all text before the cursor. Returns whether or
 // not the cursor blink should be reset.
 func (m *Model) deleteBeforeCursor() {
-	m.value[m.row] = m.value[m.row][m.col:]
+	m.value[m.row] = m.value[m.row][m.editColumn():]
 	m.SetCursor(0)
 }
 
@@ -822,25 +830,31 @@ func (m *Model) deleteBeforeCursor() {
 // the cursor blink should be reset. If input is masked delete everything after
 // the cursor so as not to reveal word breaks in the masked input.
 func (m *Model) deleteAfterCursor() {
-	m.value[m.row] = m.value[m.row][:m.col]
+	m.value[m.row] = m.value[m.row][:m.editColumn()]
 	m.SetCursor(len(m.value[m.row]))
 }
 
-// transposeLeft exchanges the runes at the cursor and immediately
-// before. No-op if the cursor is at the beginning of the line.  If
-// the cursor is not at the end of the line yet, moves the cursor to
-// the right.
+// transposeLeft swaps the grapheme under the cursor with the previous one
+// and moves the cursor past both. At the end of a line, it swaps the last two.
 func (m *Model) transposeLeft() {
-	if m.col == 0 || len(m.value[m.row]) < 2 {
+	m.col = m.editColumn()
+	line := m.value[m.row]
+	if m.col == 0 || len(line) < 2 {
 		return
 	}
-	if m.col >= len(m.value[m.row]) {
-		m.SetCursor(m.col - 1)
+	if m.col >= len(line) {
+		start, _ := GraphemeRange(line, m.col-1)
+		m.SetCursor(start)
 	}
-	m.value[m.row][m.col-1], m.value[m.row][m.col] = m.value[m.row][m.col], m.value[m.row][m.col-1]
-	if m.col < len(m.value[m.row]) {
-		m.SetCursor(m.col + 1)
+	if m.col == 0 || m.col >= len(line) {
+		return
 	}
+	left, _ := GraphemeRange(line, m.col-1)
+	_, right := GraphemeRange(line, m.col)
+	swapped := make([]rune, 0, right-left)
+	swapped = append(append(swapped, line[m.col:right]...), line[left:m.col]...)
+	copy(line[left:right], swapped)
+	m.SetCursor(right)
 }
 
 // deleteWordLeft deletes the word left to the cursor. Returns whether or not
@@ -853,6 +867,7 @@ func (m *Model) deleteWordLeft() {
 	// Linter note: it's critical that we acquire the initial cursor position
 	// here prior to altering it via SetCursor() below. As such, moving this
 	// call into the corresponding if clause does not apply here.
+	m.SetCursor(m.editColumn())
 	oldCol := m.col
 
 	m.SetCursor(m.col - 1)
@@ -915,8 +930,10 @@ func (m *Model) deleteWordRight() {
 
 // characterRight moves the cursor one character to the right.
 func (m *Model) characterRight() {
-	if m.col < len(m.value[m.row]) {
-		m.SetCursor(m.col + 1)
+	line := m.value[m.row]
+	if m.col < len(line) {
+		_, end := GraphemeRange(line, m.col)
+		m.SetCursor(end)
 	} else {
 		if m.row < len(m.value)-1 {
 			m.row++
@@ -937,7 +954,8 @@ func (m *Model) characterLeft(insideLine bool) {
 		}
 	}
 	if m.col > 0 {
-		m.SetCursor(m.col - 1)
+		start, _ := GraphemeRange(m.value[m.row], m.col-1)
+		m.SetCursor(start)
 	}
 }
 
@@ -1272,7 +1290,8 @@ func (m *Model) repositionHorizontal() {
 	cursorLeft := visualWidthUntil(line, m.col)
 	cursorWidth := 1
 	if m.col < len(line) {
-		cursorWidth = safeRuneWidth(line[m.col])
+		start, end := GraphemeRange(line, m.col)
+		cursorWidth = max(visualWidth(line[start:end]), 1)
 	}
 
 	leftBoundary := m.horizOffset + mm
@@ -1434,20 +1453,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			m.deleteBeforeCursor()
 		case key.Matches(msg, m.KeyMap.DeleteCharacterBackward):
-			m.col = clamp(m.col, 0, len(m.value[m.row]))
+			m.col = m.editColumn()
 			if m.col <= 0 {
 				m.mergeLineAbove(m.row)
 				break
 			}
-			if len(m.value[m.row]) > 0 {
-				m.value[m.row] = append(m.value[m.row][:max(0, m.col-1)], m.value[m.row][m.col:]...)
-				if m.col > 0 {
-					m.SetCursor(m.col - 1)
-				}
-			}
+			start, _ := GraphemeRange(m.value[m.row], m.col-1)
+			m.value[m.row] = append(m.value[m.row][:start], m.value[m.row][m.col:]...)
+			m.SetCursor(start)
 		case key.Matches(msg, m.KeyMap.DeleteCharacterForward):
-			if len(m.value[m.row]) > 0 && m.col < len(m.value[m.row]) {
-				m.value[m.row] = append(m.value[m.row][:m.col], m.value[m.row][m.col+1:]...)
+			if start, end := GraphemeRange(m.value[m.row], m.col); start < len(m.value[m.row]) {
+				m.value[m.row] = append(m.value[m.row][:start], m.value[m.row][end:]...)
+				m.SetCursor(start)
 			}
 			if m.col >= len(m.value[m.row]) {
 				m.mergeLineBelow(m.row)
@@ -1470,7 +1487,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.MaxHeight > 0 && len(m.value) >= m.MaxHeight {
 				return m, nil
 			}
-			m.col = clamp(m.col, 0, len(m.value[m.row]))
+			m.col = m.editColumn()
 			m.splitLine(m.row, m.col)
 		case key.Matches(msg, m.KeyMap.LineEnd):
 			m.CursorEnd()
@@ -1644,17 +1661,20 @@ func (m Model) View() string {
 
 		cursorRel := m.col - startIdx
 		cursorVisible := m.row == l && cursorRel >= 0 && cursorRel <= len(visibleRunes)
+		cursorEnd := cursorRel
+		if cursorVisible {
+			cursorRel, cursorEnd = GraphemeRange(visibleRunes, cursorRel)
+		}
 
 		if !needsStyler {
 			if cursorVisible {
-				beforeEnd := min(cursorRel, len(visibleRunes))
-				if beforeEnd > 0 {
-					s.WriteString(style.Render(string(visibleRunes[:beforeEnd])))
+				if cursorRel > 0 {
+					s.WriteString(style.Render(string(visibleRunes[:cursorRel])))
 				}
 				if cursorRel < len(visibleRunes) {
-					s.WriteString(m.renderCursor(string(visibleRunes[cursorRel]), style))
-					if cursorRel+1 < len(visibleRunes) {
-						s.WriteString(style.Render(string(visibleRunes[cursorRel+1:])))
+					s.WriteString(m.renderCursor(string(visibleRunes[cursorRel:cursorEnd]), style))
+					if cursorEnd < len(visibleRunes) {
+						s.WriteString(style.Render(string(visibleRunes[cursorEnd:])))
 					}
 				} else {
 					s.WriteString(m.renderCursor(" ", style))
@@ -1680,7 +1700,7 @@ func (m Model) View() string {
 			)
 
 			if cursorVisible {
-				writeSegments(&s, segments, 0, min(cursorRel, len(segments)))
+				writeSegments(&s, segments, 0, cursorRel)
 				if cursorRel < len(visibleRunes) {
 					cursorStyle := style
 					cursorIndex := segmentStart + cursorRel
@@ -1689,15 +1709,16 @@ func (m Model) View() string {
 						cursorStyle = lineStyles[cursorIndex].Inherit(cursorStyle)
 					}
 					cursorOffset := lineStartOffset + startIdx + cursorRel
-					cursorStyle = m.highlightedStyleForOffset(
+					cursorStyle = m.highlightedStyleForRange(
 						cursorOffset,
+						cursorOffset+cursorEnd-cursorRel,
 						cursorStyle,
 						selectionActive,
 						selStart,
 						selEnd,
 					)
-					s.WriteString(m.renderCursor(string(visibleRunes[cursorRel]), cursorStyle))
-					writeSegments(&s, segments, cursorRel+1, len(segments))
+					s.WriteString(m.renderCursor(string(visibleRunes[cursorRel:cursorEnd]), cursorStyle))
+					writeSegments(&s, segments, cursorEnd, len(segments))
 				} else {
 					s.WriteString(m.renderCursor(" ", style))
 				}
@@ -1806,14 +1827,11 @@ func (m *Model) renderOverlayLines(
 	return displayLine, widestLineNumber
 }
 
-// Compose styles before rendering: an underline applied around Cursor.View's
-// ANSI output would split its escape sequences into individually styled runes.
 func (m Model) renderCursor(char string, style lipgloss.Style) string {
-	cur := m.Cursor
-	cur.SetChar(char)
-	cur.TextStyle = style
-	cur.Style = cur.Style.Inherit(style)
-	return cur.View()
+	if !m.Cursor.Blink {
+		style = m.Cursor.Style.Inherit(style).Reverse(true)
+	}
+	return renderGrapheme(style.Inline(true), char)
 }
 
 func writeSegments(builder *strings.Builder, segments []string, start, end int) {
@@ -1843,7 +1861,8 @@ func (m Model) renderStyledSegments(
 	highlightIndex *int,
 ) []string {
 	segments := make([]string, len(wrappedLine))
-	for i, r := range wrappedLine {
+	for c := range Clusters(wrappedLine) {
+		n := c.End - c.Start
 		isActual := *lineConsumed < lineLen
 		runeStyle := baseStyle
 		if isActual && lineStyles != nil {
@@ -1857,39 +1876,41 @@ func (m Model) renderStyledSegments(
 
 		renderStyle := runeStyle
 		if isActual {
-			if style, ok := m.highlightStyleAtOffset(*globalOffset, highlightIndex); ok {
+			if style, ok := m.highlightStyleForRange(*globalOffset, *globalOffset+n, highlightIndex); ok {
 				renderStyle = style.Inherit(renderStyle)
 			}
 		}
-		if selectionActive && isActual && *globalOffset >= selectionStart &&
-			*globalOffset < selectionEnd {
+		if selectionActive && isActual && rangesOverlap(*globalOffset, *globalOffset+n,
+			selectionStart, selectionEnd) {
 			renderStyle = m.selectionStyle.Inherit(runeStyle)
 		}
 
-		segments[i] = renderStyle.Render(string(r))
+		// Store each grapheme at its first rune index and leave other entries empty.
+		// This preserves rune columns; callers must slice at grapheme boundaries.
+		segments[c.Start] = renderGrapheme(renderStyle, c.Text)
 		if isActual {
-			*lineConsumed++
-			*globalOffset++
+			*lineConsumed += n
+			*globalOffset += n
 		}
 	}
 	return segments
 }
 
-func (m Model) highlightStyleAtOffset(offset int, idx *int) (lipgloss.Style, bool) {
-	for *idx < len(m.highlightRanges) && m.highlightRanges[*idx].End <= offset {
+func (m Model) highlightStyleForRange(start, end int, idx *int) (lipgloss.Style, bool) {
+	for *idx < len(m.highlightRanges) && m.highlightRanges[*idx].End <= start {
 		*idx++
 	}
-	return m.highlightStyleAtOffsetFrom(offset, *idx)
+	return m.highlightStyleForRangeFrom(start, end, *idx)
 }
 
-func (m Model) highlightStyleAtOffsetFrom(offset, start int) (lipgloss.Style, bool) {
+func (m Model) highlightStyleForRangeFrom(start, end, index int) (lipgloss.Style, bool) {
 	highlighted := false
-	for i := start; i < len(m.highlightRanges); i++ {
+	for i := index; i < len(m.highlightRanges); i++ {
 		r := m.highlightRanges[i]
-		if r.Start > offset {
+		if r.Start >= end {
 			break
 		}
-		if r.End <= offset {
+		if r.End <= start {
 			continue
 		}
 		if r.Active {
@@ -1914,17 +1935,17 @@ func (m Model) highlightIntersects(start, end int, idx *int) bool {
 	return rangesOverlap(r.Start, r.End, start, end)
 }
 
-func (m Model) highlightedStyleForOffset(
-	offset int,
+func (m Model) highlightedStyleForRange(
+	start, end int,
 	base lipgloss.Style,
 	selectionActive bool,
 	selectionStart int,
 	selectionEnd int,
 ) lipgloss.Style {
-	if style, ok := m.highlightStyleAtOffsetFrom(offset, 0); ok {
+	if style, ok := m.highlightStyleForRangeFrom(start, end, 0); ok {
 		base = style.Inherit(base)
 	}
-	if selectionActive && offset >= selectionStart && offset < selectionEnd {
+	if selectionActive && rangesOverlap(start, end, selectionStart, selectionEnd) {
 		base = m.selectionStyle.Inherit(base)
 	}
 	return base
@@ -2131,77 +2152,6 @@ func Paste() tea.Msg {
 		return pasteErrMsg{err}
 	}
 	return pasteMsg(str)
-}
-
-func visualWidth(runes []rune) int {
-	width := 0
-	for _, r := range runes {
-		width += rw.RuneWidth(r)
-	}
-	return width
-}
-
-func safeRuneWidth(r rune) int {
-	if w := rw.RuneWidth(r); w > 0 {
-		return w
-	}
-	return 1
-}
-
-func visualWidthUntil(runes []rune, col int) int {
-	if col <= 0 {
-		return 0
-	}
-	if col > len(runes) {
-		col = len(runes)
-	}
-	return visualWidth(runes[:col])
-}
-
-func columnForWidth(runes []rune, target int) int {
-	if target <= 0 {
-		return 0
-	}
-	width := 0
-	for i, r := range runes {
-		width += rw.RuneWidth(r)
-		if width > target {
-			return i
-		}
-	}
-	return len(runes)
-}
-
-func sliceVisibleRunes(line []rune, start, width int) ([]rune, int) {
-	if start < 0 {
-		start = 0
-	}
-	if start > len(line) {
-		start = len(line)
-	}
-	if width <= 0 {
-		return line[start:start], 0
-	}
-	consumed := 0
-	end := start
-	for end < len(line) {
-		w := rw.RuneWidth(line[end])
-		if consumed+w > width && end > start {
-			break
-		}
-		consumed += w
-		end++
-		if consumed >= width {
-			break
-		}
-	}
-	return line[start:end], consumed
-}
-
-func visibleSegment(line []rune, offset, width int) (int, []rune, int) {
-	start := columnForWidth(line, offset)
-	segment, consumed := sliceVisibleRunes(line, start, width)
-	return start, segment, consumed
 }
 
 func clamp(v, low, high int) int {

@@ -148,7 +148,7 @@ func TestRenderReleaseNotes(t *testing.T) {
 }
 
 func TestRenderColor(t *testing.T) {
-	got := Render("## Section\n- item", Options{Color: ansi})
+	got := Render("## Section\n- item", Options{Color: ansiCfg})
 	if !strings.Contains(got, "\x1b[36;1mSection\x1b[0m") {
 		t.Fatalf("h2 not accent+bold: %q", got)
 	}
@@ -167,7 +167,7 @@ func TestRenderHTTPFenceHighlights(t *testing.T) {
 		"\n" +
 		"### next request\n" +
 		"```"
-	got := Render(in, Options{Color: ansi})
+	got := Render(in, Options{Color: ansiCfg})
 
 	for name, want := range map[string]string{
 		"faint gutter":     " \x1b[2m│\x1b[0m",
@@ -184,14 +184,14 @@ func TestRenderHTTPFenceHighlights(t *testing.T) {
 }
 
 func TestRenderFenceColorLeavesOtherLanguagesPlain(t *testing.T) {
-	got := Render("```go\nfunc main() {}\n```", Options{Color: ansi})
+	got := Render("```go\nfunc main() {}\n```", Options{Color: ansiCfg})
 	if !strings.Contains(got, "\x1b[2m│\x1b[0m func main() {}") {
 		t.Fatalf("expected gutter with unstyled go code, got %q", got)
 	}
 }
 
 func TestRenderWrappedStyleDoesNotBleed(t *testing.T) {
-	got := Render("**aaaa bbbb cccc**", Options{Width: 6, Color: ansi})
+	got := Render("**aaaa bbbb cccc**", Options{Width: 6, Color: ansiCfg})
 	for ln := range strings.SplitSeq(got, "\n") {
 		if strings.Contains(ln, "\x1b[") && !strings.HasSuffix(ln, "\x1b[0m") {
 			t.Fatalf("open SGR state at line break: %q in %q", ln, got)

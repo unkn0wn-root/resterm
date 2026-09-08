@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 )
 
@@ -17,9 +16,9 @@ const (
 	// Multi-rune clusters written as escapes so the joiners are visible in
 	// source. Each renders as one glyph and must never be split.
 	family = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466" // ZWJ sequence, 2 cells
-	heart  = "\u2764\ufe0f"                                               // emoji presentation selector
+	heart  = "\u2764\ufe0f"                                               // emoji presentation selector, 2 cells
 	thumb  = "\U0001F44D\U0001F3FD"                                       // skin tone modifier
-	flagPL = "\U0001F1F5\U0001F1F1"                                       // regional indicator pair
+	flagPL = "\U0001F1F5\U0001F1F1"                                       // regional indicator pair, 2 cells
 	acute  = "e\u0301"                                                    // decomposed e-acute, 1 cell
 	zwsp   = "\u200b"                                                     // zero-width space
 )
@@ -62,9 +61,21 @@ func widestCluster(s string) int {
 	widest := 0
 	g := uniseg.NewGraphemes(stripANSI(s))
 	for g.Next() {
-		widest = max(widest, runewidth.StringWidth(g.Str()))
+		widest = max(widest, g.Width())
 	}
 	return widest
+}
+
+func cells(s string) int {
+	total := 0
+	sc := newScan([]byte(s))
+	for {
+		u, ok := sc.next()
+		if !ok {
+			return total
+		}
+		total += u.w
+	}
 }
 
 func TestMappingCoversEveryRow(t *testing.T) {
@@ -145,8 +156,8 @@ func TestGraphemeClustersStayWhole(t *testing.T) {
 	}{
 		{"combining accent", acute + "x", 2},
 		{"family emoji", family + "x", 3},
-		{"variation selector", heart + "x", 2},
-		{"flag", flagPL, 1},
+		{"variation selector", heart + "x", 3},
+		{"flag", flagPL, 2},
 		{"skin tone", thumb + "x", 3},
 	}
 
@@ -157,7 +168,7 @@ func TestGraphemeClustersStayWhole(t *testing.T) {
 		}
 		if len(segs) != 1 {
 			t.Errorf("%s: width %d fits %d cells but split into %d rows: %q",
-				tc.name, runewidth.StringWidth(tc.in), tc.w, len(segs), segs)
+				tc.name, cells(tc.in), tc.w, len(segs), segs)
 		}
 		if segs[0] != tc.in {
 			t.Errorf("%s: content changed to %q", tc.name, segs[0])
@@ -201,7 +212,7 @@ func TestANSIBetweenUnicodeRunsKeepsClustersWhole(t *testing.T) {
 		{"before family", acute + rd + family + "x", 4},
 		{"inside run", family + rd + family, 4},
 		{"between accents", acute + rd + acute, 2},
-		{"before flag", "a" + rd + flagPL, 2},
+		{"before flag", "a" + rd + flagPL, 3},
 		{"before skin tone", "a" + rd + thumb, 3},
 		{"reset between", family + rs + rd + family, 4},
 		{"ascii then cluster", "ab" + rd + family, 4},
@@ -212,7 +223,7 @@ func TestANSIBetweenUnicodeRunsKeepsClustersWhole(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: wrap failed", tc.name)
 		}
-		if w := runewidth.StringWidth(stripANSI(tc.in)); w > tc.w {
+		if w := cells(stripANSI(tc.in)); w > tc.w {
 			t.Fatalf("%s: test input is %d cells, wider than the %d it is given", tc.name, w, tc.w)
 		}
 		if len(segs) != 1 {
@@ -253,7 +264,7 @@ func TestWideRuneNeverOverflowsRow(t *testing.T) {
 			t.Fatalf("%q: wrap failed", tc.in)
 		}
 		for _, s := range segs {
-			if w := runewidth.StringWidth(s); w > tc.w {
+			if w := cells(s); w > tc.w {
 				t.Fatalf("%q at width %d: row %q is %d cells, segs=%q", tc.in, tc.w, s, w, segs)
 			}
 		}
@@ -308,7 +319,7 @@ func TestPrefixNeverPushesWideGraphemesPastWidth(t *testing.T) {
 		}
 		widest := widestCluster(tc.in)
 		for _, s := range segs {
-			w := runewidth.StringWidth(stripANSI(s))
+			w := cells(stripANSI(s))
 			// An over-wide cluster may sit alone on a row, but nothing may be
 			// indented beside it.
 			if w > tc.w && w > widest {
@@ -342,7 +353,7 @@ func TestPrefixModesKeepRowsWithinWidth(t *testing.T) {
 			t.Fatalf("%s: wrap failed", tc.name)
 		}
 		for i, r := range rows(res.S) {
-			if w := runewidth.StringWidth(stripANSI(r)); w > tc.w {
+			if w := cells(stripANSI(r)); w > tc.w {
 				t.Fatalf("%s: row %d %q is %d cells, limit %d", tc.name, i, r, w, tc.w)
 			}
 		}
@@ -661,7 +672,7 @@ func TestPlainRowsStayWithinWidth(t *testing.T) {
 			}
 			lim := max(w, widest)
 			for i, r := range rows(res.S) {
-				if got := runewidth.StringWidth(stripANSI(r)); got > lim {
+				if got := cells(stripANSI(r)); got > lim {
 					t.Fatalf("%q at width %d: row %d %q is %d cells, limit %d",
 						in, w, i, r, got, lim)
 				}
