@@ -42,15 +42,16 @@ func NewOverlay(rep Report) *Overlay {
 		lines:  make(map[int][]Range),
 		marks:  make(map[int]Severity),
 	}
+	cols := make(map[int]*runeCols)
 	for i, item := range rep.Items {
 		if item.Severity == SeverityError {
 			o.errors++
 		} else {
 			o.warnings++
 		}
-		o.positions = append(o.positions, o.add(item.Span, i, item.Severity))
+		o.positions = append(o.positions, o.add(cols, item.Span, i, item.Severity))
 		for _, label := range item.Labels {
-			o.add(label.Span, i, item.Severity)
+			o.add(cols, label.Span, i, item.Severity)
 		}
 	}
 	for _, ranges := range o.lines {
@@ -64,8 +65,9 @@ func NewOverlay(rep Report) *Overlay {
 }
 
 // A span past the last line marks that line. A span that continues onto later
-// lines is drawn to the end of its first line only.
-func (o *Overlay) add(span Span, item int, severity Severity) Cell {
+// lines is drawn to the end of its first line only. cols is reused across
+// findings that share a line.
+func (o *Overlay) add(cols map[int]*runeCols, span Span, item int, severity Severity) Cell {
 	line := min(max(span.Start.Line-1, 0), len(o.source)-1)
 	raw := strings.TrimSuffix(o.source[line], "\r")
 	start, end := len(raw), len(raw)
@@ -75,7 +77,14 @@ func (o *Overlay) add(span Span, item int, severity Severity) Cell {
 			end = min(max(span.End.Col-1, start), len(raw))
 		}
 	}
-	from, to := utf8.RuneCountInString(raw[:start]), utf8.RuneCountInString(raw[:end])
+	c, ok := cols[line]
+	if !ok {
+		c = newRuneCols(raw)
+		cols[line] = c
+	}
+	// The span is short, so measure it from start, not from the line head again.
+	from := c.at(start)
+	to := from + utf8.RuneCountInString(raw[start:end])
 	if from == to {
 		if prev, ok := o.marks[line]; !ok || rank(severity) < rank(prev) {
 			o.marks[line] = severity
@@ -208,6 +217,32 @@ func matchingPrefix(before string, after []rune, limit int) (n int, identical bo
 		n++
 	}
 	return n, limit == len(after) && before == ""
+}
+
+// runeCols converts byte offsets on one line to rune columns. An ASCII line
+// needs no work. Otherwise it counts on from the offset it last converted, so
+// offsets asked for in order cost one walk over the line in total.
+type runeCols struct {
+	line  string
+	ascii bool
+	off   int
+	col   int
+}
+
+func newRuneCols(line string) *runeCols {
+	return &runeCols{line: line, ascii: len(line) == utf8.RuneCountInString(line)}
+}
+
+func (c *runeCols) at(off int) int {
+	if c.ascii {
+		return off
+	}
+	if off < c.off {
+		c.off, c.col = 0, 0
+	}
+	c.col += utf8.RuneCountInString(c.line[c.off:off])
+	c.off = off
+	return c.col
 }
 
 func rank(severity Severity) int {

@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
@@ -313,5 +314,58 @@ func BenchmarkOverlayRetain(b *testing.B) {
 				overlay.Retain(&edited)
 			}
 		})
+	}
+}
+
+// A quadratic build took seconds here and froze the editor.
+func TestNewOverlayScalesWithFindings(t *testing.T) {
+	const width = 256 * 1024
+	rep := diag.Report{Path: "t.http", Source: []byte(strings.Repeat("{", width))}
+	for col := 1; col < width; col += 2 {
+		rep.Items = append(rep.Items, diag.Diagnostic{
+			Severity: diag.SeverityWarning,
+			Message:  "placeholder {{ is not closed with }}",
+			Span: diag.Span{
+				Start: diag.Pos{Path: "t.http", Line: 1, Col: col},
+				End:   diag.Pos{Path: "t.http", Line: 1, Col: col + 2},
+			},
+		})
+	}
+
+	start := time.Now()
+	o := diag.NewOverlay(rep)
+
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("building the overlay took %s, want well under a second", elapsed)
+	}
+	if got := len(o.Ranges(0)); got != len(rep.Items) {
+		t.Fatalf("ranges = %d, want %d", got, len(rep.Items))
+	}
+	if first := o.Ranges(0)[0]; first.Start != 0 || first.End != 2 {
+		t.Fatalf("first range = %+v, want runes 0 to 2", first)
+	}
+}
+
+// The last column comes before the others, so the conversion starts over.
+func TestNewOverlayCountsRunesOnMultiByteLines(t *testing.T) {
+	const line = "h\u00e9llo w\u00f6rld ok"
+	cols := []int{1, 2, len("h\u00e9llo ") + 1, len("h\u00e9llo w\u00f6rld ") + 1, 2}
+	rep := diag.Report{Path: "t.http", Source: []byte(line)}
+	for _, col := range cols {
+		rep.Items = append(rep.Items, diag.Diagnostic{
+			Severity: diag.SeverityWarning,
+			Span: diag.Span{
+				Start: diag.Pos{Path: "t.http", Line: 1, Col: col},
+				End:   diag.Pos{Path: "t.http", Line: 1, Col: col},
+			},
+		})
+	}
+
+	got := diag.NewOverlay(rep).Ranges(0)
+
+	for i, want := range []int{0, 1, 6, 12, 1} {
+		if got[i].Start != want {
+			t.Fatalf("range %d starts at rune %d, want %d (%+v)", i, got[i].Start, want, got)
+		}
 	}
 }
