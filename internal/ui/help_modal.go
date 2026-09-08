@@ -386,7 +386,7 @@ func (m Model) helpSections() []helpSection {
 					"Capture the focused HTTP response as a mock",
 				},
 				{":mock logs", "Open mock request log (c clears the log)"},
-				{":mock start --source [path]", "Start with request files selected from the path popup"},
+				{":mock start --source|-s <file>", "Select request files; repeat or separate with commas"},
 				{":mock reset [sequence]", "Reset all or one named response sequence"},
 				{":mock verify", "Verify active # @expect call counts"},
 				{":mock status", "Show address, routes, scenarios, and calls"},

@@ -27,13 +27,14 @@ const anyArgs = -1
 
 // args spells every flag out for the usage line. hint is the shorter form the
 // picker shows. Only commands whose full grammar would crowd the summary out of
-// the row need both.
+// the row need both. argHints explains individual options after the command.
 type mockCommandDef struct {
-	name    string
-	args    string
-	hint    string
-	summary string
-	maxArgs int
+	name     string
+	args     string
+	hint     string
+	argHints []prompt.Item
+	summary  string
+	maxArgs  int
 }
 
 func (d mockCommandDef) acceptsArgs() bool { return d.maxArgs != 0 }
@@ -43,6 +44,15 @@ func (d mockCommandDef) tooManyArgs(n int) bool { return d.maxArgs != anyArgs &&
 type exCatalog struct {
 	defs []exCommandDef
 	mock []mockCommandDef
+}
+
+const mockStartUsage = "[[--addr|-a] <host:port>] [(--source|-s <file[,file]>)... | [--recursive|-r] [--all]]"
+
+var mockStartHints = []prompt.Item{
+	{Label: "--addr|-a <host:port>", Summary: "Alternative to positional address"},
+	{Label: "--source|-s <file[,file]>", Summary: "Repeat or use commas; no -r/--all"},
+	{Label: "--recursive|-r", Summary: "Include subdirectories; no --source"},
+	{Label: "--all", Summary: "Whole workspace; no --source"},
 }
 
 var exCommands = exCatalog{
@@ -82,12 +92,12 @@ var exCommands = exCatalog{
 	mock: []mockCommandDef{
 		{name: "status", summary: "Show server address and counters"},
 		{
-			name: "start", args: "[host:port] [--source files] [--recursive] [--all]",
+			name: "start", args: mockStartUsage, argHints: mockStartHints,
 			hint: "[host:port] [flags]", summary: "Start the mock server", maxArgs: anyArgs,
 		},
 		{name: "stop", summary: "Stop the mock server"},
 		{
-			name: "restart", args: "[host:port] [--source files] [--recursive] [--all]",
+			name: "restart", args: mockStartUsage, argHints: mockStartHints,
 			hint: "[host:port] [flags]", summary: "Restart with another address or scope", maxArgs: anyArgs,
 		},
 		{name: "logs", summary: "Open the request log"},
@@ -115,7 +125,7 @@ func (d exCommandDef) label() string {
 }
 
 // label goes in the picker, where it shares the row with the summary. usage is
-// the full grammar, for the usage line and the argument hint.
+// the full grammar, also used as the argument hint when there are no argHints.
 func (d mockCommandDef) label() string { return joinArgs(d.name, cmp.Or(d.hint, d.args)) }
 
 func (d mockCommandDef) usage() string { return joinArgs(d.name, d.args) }
@@ -199,9 +209,15 @@ func (c exCatalog) Suggestions(input string) []prompt.Item {
 		return c.mockSuggestions(body, rest)
 	case exCommandDiagnostics:
 		var items []prompt.Item
-		for _, action := range [...]string{"on", "off", "next", "prev"} {
-			if strings.HasPrefix(action, rest) {
-				items = append(items, body.item("diagnostics "+action, "", "diagnostics "+action))
+		for _, action := range [...]struct{ name, summary string }{
+			{name: "on", summary: "Enable diagnostics for this session"},
+			{name: "off", summary: "Disable diagnostics for this session"},
+			{name: "next", summary: "Jump to the next diagnostic"},
+			{name: "prev", summary: "Jump to the previous diagnostic"},
+		} {
+			if strings.HasPrefix(action.name, rest) {
+				label := "diagnostics " + action.name
+				items = append(items, body.item(label, action.summary, label))
 			}
 		}
 		return items
@@ -255,8 +271,8 @@ func topicSuggestions(body lineBody, command, filter string) []prompt.Item {
 
 // mockSuggestions lists the subcommands until one is named. After that the list
 // has nothing left to offer, so it gives way to the grammar of the named
-// subcommand. That hint inserts the line unchanged, so completing it leaves
-// what was typed alone.
+// subcommand and its option hints. Each hint inserts the line unchanged, so
+// completing it leaves what was typed alone.
 func (c exCatalog) mockSuggestions(body lineBody, rest string) []prompt.Item {
 	head, _, typing := cutSpace(rest)
 	name := strings.ToLower(head)
@@ -265,7 +281,14 @@ func (c exCatalog) mockSuggestions(body lineBody, rest string) []prompt.Item {
 		if !ok || !def.acceptsArgs() {
 			return nil
 		}
-		return []prompt.Item{body.item(def.usage(), "", body.text)}
+		if len(def.argHints) == 0 {
+			return []prompt.Item{body.item(def.usage(), "", body.text)}
+		}
+		items := []prompt.Item{body.item(def.label(), "", body.text)}
+		for _, hint := range def.argHints {
+			items = append(items, body.item(hint.Label, hint.Summary, body.text))
+		}
+		return items
 	}
 
 	out := make([]prompt.Item, 0, len(c.mock))

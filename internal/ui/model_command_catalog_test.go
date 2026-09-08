@@ -13,10 +13,11 @@ import (
 
 func TestExCatalogSuggestions(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  string
-		label  string
-		insert string
+		name        string
+		input       string
+		label       string
+		extraLabels []string
+		insert      string
 	}{
 		{name: "command alias", input: "ma", label: "help [topic] (:h, :man)", insert: "help "},
 		{name: "help topic", input: "help web", label: "streaming", insert: "help streaming"},
@@ -25,7 +26,8 @@ func TestExCatalogSuggestions(t *testing.T) {
 		{name: "mock command", input: "mock rest", label: "restart [host:port] [flags]", insert: "mock restart "},
 		{
 			name: "mock arguments", input: "mock start --rec",
-			label: "start [host:port] [--source files] [--recursive] [--all]", insert: "mock start --rec",
+			label: "start [host:port] [flags]", insert: "mock start --rec",
+			extraLabels: []string{"--addr|-a <host:port>", "--source|-s <file[,file]>", "--recursive|-r", "--all"},
 		},
 		{
 			name: "mock arguments after completion", input: "mock reset ",
@@ -36,15 +38,18 @@ func TestExCatalogSuggestions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			items := exCommands.Suggestions(tt.input)
-			if len(items) != 1 {
-				t.Fatalf("expected one suggestion, got %+v", items)
+			labels := append([]string{tt.label}, tt.extraLabels...)
+			if len(items) != len(labels) {
+				t.Fatalf("expected %d suggestions, got %+v", len(labels), items)
 			}
-			insert, _, err := items[0].Edit.Apply(tt.input)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if items[0].Label != tt.label || insert != tt.insert {
-				t.Fatalf("unexpected suggestion: %+v", items[0])
+			for i, item := range items {
+				insert, _, err := item.Edit.Apply(tt.input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if item.Label != labels[i] || insert != tt.insert {
+					t.Fatalf("unexpected suggestion: %+v", item)
+				}
 			}
 		})
 	}
@@ -81,23 +86,40 @@ func TestExCommandLabelsShowAliases(t *testing.T) {
 
 // A long label used to take the whole row and leave the summary one character.
 func TestCommandSuggestionPopupKeepsBothColumnsReadable(t *testing.T) {
-	for _, width := range []int{80, 120} {
-		model := New(Config{})
-		model.width = width
-		model.commandLine.menu.Reset(exCommands.Suggestions("mock "))
-		content := strings.Repeat(strings.Repeat(" ", width)+"\n", 13) + strings.Repeat(" ", width)
+	for _, tt := range []struct {
+		input string
+		want  []string
+	}{
+		{
+			input: "mock ",
+			want: []string{
+				"status", "Show server address and counters",
+				"start", "Start the mock server",
+				"capture", "Capture the focused response as a mock",
+			},
+		},
+		{
+			input: "mock restart ",
+			want: []string{
+				"restart [host:port] [flags]",
+				"--addr|-a <host:port>", "Alternative to positional address",
+				"--source|-s <file[,file]>", "Repeat or use commas; no -r/--all",
+				"--recursive|-r", "Include subdirectories; no --source",
+				"--all", "Whole workspace; no --source",
+			},
+		},
+	} {
+		for _, width := range []int{80, 120} {
+			model := New(Config{})
+			model.width = width
+			model.commandLine.menu.Reset(exCommands.Suggestions(tt.input))
+			content := strings.Repeat(strings.Repeat(" ", width)+"\n", 13) + strings.Repeat(" ", width)
 
-		plain := ansi.Strip(model.renderCommandSuggestionPopup(content, 1))
-		for _, want := range []string{
-			"status",
-			"Show server address and counters",
-			"start",
-			"Start the mock server",
-			"capture",
-			"Capture the focused response as a mock",
-		} {
-			if !strings.Contains(plain, want) {
-				t.Fatalf("width %d popup is missing %q:\n%s", width, want, plain)
+			plain := ansi.Strip(model.renderCommandSuggestionPopup(content, 1))
+			for _, want := range tt.want {
+				if !strings.Contains(plain, want) {
+					t.Fatalf("width %d popup is missing %q:\n%s", width, want, plain)
+				}
 			}
 		}
 	}
@@ -113,19 +135,26 @@ func TestMockArgumentHintOnlyWhereArgumentsExist(t *testing.T) {
 	}
 }
 
-// The hint is the whole command, not a value to insert, so completing it must
-// leave what the user typed alone.
+// Each argument hint must leave what the user typed alone.
 func TestMockArgumentHintCompletesToItself(t *testing.T) {
-	model := New(Config{})
-	model.openCommandLine()
-	model.commandLineJustOpened = false
-	model.commandLine.input.SetValue("mock start 127.0.0.1:9000 --rec")
-	model.commandLine.refresh(model.commandSource())
+	for _, command := range []string{"start", "restart"} {
+		model := New(Config{})
+		model.openCommandLine()
+		model.commandLineJustOpened = false
+		input := "mock " + command + " 127.0.0.1:9000 --rec"
+		model.commandLine.input.SetValue(input)
+		model.commandLine.refresh(model.commandSource())
 
-	model.handleCommandLineKey(tea.KeyMsg{Type: tea.KeyTab})
+		for selection := -1; selection < len(model.commandLine.menu.Items()); selection++ {
+			for range selection + 1 {
+				model.commandLine.menu.Move(1)
+			}
+			model.handleCommandLineKey(tea.KeyMsg{Type: tea.KeyTab})
 
-	if got := model.commandLine.value(); got != "mock start 127.0.0.1:9000 --rec" {
-		t.Fatalf("argument hint rewrote the command line to %q", got)
+			if got := model.commandLine.value(); got != input {
+				t.Fatalf("argument hint rewrote the command line to %q", got)
+			}
+		}
 	}
 }
 
