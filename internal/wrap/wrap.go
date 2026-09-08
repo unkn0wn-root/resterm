@@ -7,7 +7,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 )
 
@@ -554,29 +553,21 @@ func (s *scan) next() (unit, bool) {
 	if c := s.b[s.i]; c > 0x1f && c < 0x7f && (s.i+1 == len(s.b) || s.b[s.i+1] < 0x80) {
 		return unit{b: s.skip(1), w: 1, r: rune(c)}, true
 	}
-	cl, _, _, st := uniseg.FirstGraphemeCluster(s.b[s.i:], s.st)
+	cl, _, w, st := uniseg.FirstGraphemeCluster(s.b[s.i:], s.st)
 	s.st = st
 	r, _ := utf8.DecodeRune(cl)
 	s.i += len(cl)
-	return unit{b: cl, w: clusterW(cl), r: r}, true
+	return unit{b: cl, w: clusterW(cl, w), r: r}, true
 }
 
-// clusterW measures one grapheme cluster the way runewidth.StringWidth does, as
-// the width of its first non-zero-width rune. Combining marks, variation selectors
-// and zero-width joiners cost nothing, so an accented letter or an emoji sequence
-// takes a single slot. Control bytes measure zero under runewidth while the ASCII
-// path spends a cell on them, so they are charged one cell here and the two paths
-// stay in agreement.
-func clusterW(b []byte) int {
-	for i := 0; i < len(b); {
-		r, sz := utf8.DecodeRune(b[i:])
-		if w := runewidth.RuneWidth(r); w > 0 {
-			return w
-		}
-		if unicode.IsControl(r) {
-			return 1
-		}
-		i += sz
+// clusterW uses uniseg's cell width, but counts control characters as one cell
+// to match the ASCII fast path.
+func clusterW(b []byte, w int) int {
+	if w > 0 {
+		return w
+	}
+	if r, _ := utf8.DecodeRune(b); unicode.IsControl(r) {
+		return 1
 	}
 	return 0
 }
