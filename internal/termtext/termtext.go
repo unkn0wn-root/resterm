@@ -3,6 +3,7 @@ package termtext
 import (
 	"strings"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/rivo/uniseg"
@@ -91,9 +92,9 @@ func escapeRune(b *strings.Builder, r rune) {
 	}
 	// JSON escapes code points above U+FFFF as UTF-16 surrogate pairs.
 	if r > 0xffff {
-		r -= 0x10000
-		escapeUnit(b, 0xd800+(r>>10))
-		escapeUnit(b, 0xdc00+(r&0x3ff))
+		hi, lo := utf16.EncodeRune(r)
+		escapeUnit(b, hi)
+		escapeUnit(b, lo)
 		return
 	}
 	escapeUnit(b, r)
