@@ -1,0 +1,11 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - golines
+  settings:
+    gofmt:
+      simplify: true
+    golines:
+      max-len: 120
