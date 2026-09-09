@@ -52,6 +52,9 @@ func main() {
 }
 
 func run(a []string) error {
+	if ok, err := handleRecordSubcommand(a); ok {
+		return err
+	}
 	if ok, err := handleMockSubcommand(a); ok {
 		return err
 	}
@@ -417,6 +420,9 @@ func printMainUsage(w io.Writer, fs *cli.FlagSet) {
 		return
 	}
 	if _, err := fmt.Fprintln(w, "  mock        Serve mock responses from request files"); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, "  record      Forward traffic and record requests or mocks"); err != nil {
 		return
 	}
 	if _, err := fmt.Fprintln(w, "  init        Bootstrap a new workspace"); err != nil {
