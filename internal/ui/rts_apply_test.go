@@ -27,11 +27,13 @@ func TestRunRTSApplyPatch(t *testing.T) {
 		},
 		LineRange: restfile.LineRange{Start: 1, End: 4},
 		Metadata: restfile.RequestMetadata{
-			Applies: []restfile.ApplySpec{{
-				Expression: `{method: "post", url: "https://example.com/new?seed=1", headers: {"X-Test": "1", "X-Old": null, "X-List": ["a", "b"]}, query: {"q": "a", "keep": null}, body: {a: 1}, auth: {type: "oauth2", cache_key: "myapi"}, settings: {timeout: "3s", followredirects: false}, vars: {"token": "abc"}}`,
-				Line:       1,
-				Col:        1,
-			}},
+			Applies: []restfile.ApplySpec{
+				{
+					Expression: `{method: "post", url: "https://example.com/new?seed=1", headers: {"X-Test": "1", "X-Old": null, "X-List": ["a", "b"]}, query: {"q": "a", "keep": null}, body: {a: 1}, auth: {type: "oauth2", cache_key: "myapi"}, settings: {timeout: "3s", followredirects: false}, vars: {"token": "abc"}}`,
+					Line:       1,
+					Col:        1,
+				},
+			},
 		},
 	}
 	vars := map[string]string{"existing": "1"}

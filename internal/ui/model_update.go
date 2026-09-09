@@ -501,7 +501,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	} else if !mouseHandled && m.focus == focusResponse && !m.suppressResponseKey {
 		pane := m.focusedPane()
 		if pane != nil && pane.activeTab != responseTabHistory {
-			skipViewport := false
+			// Workflow keys navigate steps or scroll their detail, not the outer frame.
+			skipViewport := workflowStatsFromPane(pane) != nil
 			if keyMsg, ok := msg.(tea.KeyMsg); ok {
 				switch keyMsg.String() {
 				case "j", "k", "down", "up", "pgdown", "pgup":
@@ -516,6 +517,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 					cmds = append(cmds, paneCmd)
 				}
 				if pane.viewport.YOffset != prevOffset {
+					pane.syncStreamTail(pane.viewport.AtBottom())
+					pane.setCurrPosition()
 					if m.followRespCursorOnScroll(pane, prevOffset, pane.viewport.YOffset) {
 						cmds = append(cmds, m.syncResponsePane(m.responsePaneFocus))
 					}
@@ -1341,9 +1344,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if cmd, handled := m.handleStreamKey(msg); handled {
+		m.suppressFocusedComponentKey()
 		return combine(cmd)
 	}
 	if cmd, handled := m.handleWebSocketConsoleKey(msg); handled {
+		m.suppressFocusedComponentKey()
 		return combine(cmd)
 	}
 
@@ -1755,6 +1760,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 		case " ", "space":
 			if pane != nil && pane.activeTab == responseTabHeaders {
+				m.suppressFocusedComponentKey()
 				return combine(m.cycleHeaderSubview())
 			}
 		}

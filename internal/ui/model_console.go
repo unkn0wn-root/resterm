@@ -395,6 +395,10 @@ func (m *Model) ensureWebSocketConsole(
 }
 
 func (m *Model) handleWebSocketConsoleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if m.focus != focusResponse {
+		return nil, false
+	}
+
 	key := msg.String()
 	sessionID := m.activeStreamID()
 
