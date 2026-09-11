@@ -5,14 +5,14 @@
 </h1>
 
 <p align="center">
-  <em>A terminal API client for REST, GraphQL, gRPC, WebSocket and SSE.</em>
+  <em>An API-as-code workbench for the terminal.</em>
 </p>
 
 <p align="center">
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm stores API requests in plain `.http` and `.rest` files that you can diff, review and track in version control. Edit and send requests in the terminal, or run them from scripts and CI. Request files support workflows, assertions, mock servers, tracing and profiling. No accounts, cloud sync or telemetry.
+Resterm is your API as code, stored in plain-text `.http` and `.rest` files that you can diff, review and track in version control. Edit and send requests in the terminal, or run them from scripts and CI. Request files support workflows, assertions, mock servers, tracing and profiling. No accounts, cloud sync or telemetry.
 
 Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Request files](#request-files), [Installation](#installation), [Documentation](#documentation).
 
