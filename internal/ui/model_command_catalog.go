@@ -25,10 +25,8 @@ type exCommandDef struct {
 // anyArgs is the maxArgs of a subcommand that parses its own flags.
 const anyArgs = -1
 
-// args spells every flag out for the usage line. hint is the shorter form the
-// picker shows. Only commands whose full grammar would crowd the summary out of
-// the row need both. argHints explains individual options after the command.
-type mockCommandDef struct {
+// args holds full usage text. hint shortens it for the picker.
+type subCommandDef struct {
 	name     string
 	args     string
 	hint     string
@@ -37,13 +35,13 @@ type mockCommandDef struct {
 	maxArgs  int
 }
 
-func (d mockCommandDef) acceptsArgs() bool { return d.maxArgs != 0 }
+func (d subCommandDef) acceptsArgs() bool { return d.maxArgs != 0 }
 
-func (d mockCommandDef) tooManyArgs(n int) bool { return d.maxArgs != anyArgs && n > d.maxArgs }
+func (d subCommandDef) tooManyArgs(n int) bool { return d.maxArgs != anyArgs && n > d.maxArgs }
 
 type exCatalog struct {
 	defs []exCommandDef
-	mock []mockCommandDef
+	mock []subCommandDef
 }
 
 const mockStartUsage = "[[--addr|-a] <host:port>] [(--source|-s <file[,file]>)... | [--recursive|-r] [--all]]"
@@ -89,7 +87,7 @@ var exCommands = exCatalog{
 			usage: "docs [topic]", summary: "Open version-matched web documentation", hasArgs: true, noBang: true,
 		},
 	},
-	mock: []mockCommandDef{
+	mock: []subCommandDef{
 		{name: "status", summary: "Show server address and counters"},
 		{
 			name: "start", args: mockStartUsage, argHints: mockStartHints,
@@ -126,9 +124,9 @@ func (d exCommandDef) label() string {
 
 // label goes in the picker, where it shares the row with the summary. usage is
 // the full grammar, also used as the argument hint when there are no argHints.
-func (d mockCommandDef) label() string { return joinArgs(d.name, cmp.Or(d.hint, d.args)) }
+func (d subCommandDef) label() string { return joinArgs(d.name, cmp.Or(d.hint, d.args)) }
 
-func (d mockCommandDef) usage() string { return joinArgs(d.name, d.args) }
+func (d subCommandDef) usage() string { return joinArgs(d.name, d.args) }
 
 func joinArgs(name, args string) string {
 	if args == "" {
@@ -206,7 +204,7 @@ func (c exCatalog) Suggestions(input string) []prompt.Item {
 	case exCommandHelp, exCommandDocs:
 		return topicSuggestions(body, def.name, rest)
 	case exCommandMock:
-		return c.mockSuggestions(body, rest)
+		return subSuggestions(body, "mock", c.mock, rest)
 	case exCommandDiagnostics:
 		var items []prompt.Item
 		for _, action := range [...]struct{ name, summary string }{
@@ -227,18 +225,20 @@ func (c exCatalog) Suggestions(input string) []prompt.Item {
 }
 
 // Mock expects a lowercase subcommand name.
-func (c exCatalog) Mock(name string) (mockCommandDef, bool) {
-	for _, def := range c.mock {
+func (c exCatalog) Mock(name string) (subCommandDef, bool) { return lookupSub(c.mock, name) }
+
+func lookupSub(defs []subCommandDef, name string) (subCommandDef, bool) {
+	for _, def := range defs {
 		if def.name == name {
 			return def, true
 		}
 	}
-	return mockCommandDef{}, false
+	return subCommandDef{}, false
 }
 
-func (c exCatalog) mockNames() []string {
-	names := make([]string, len(c.mock))
-	for i, def := range c.mock {
+func subNames(defs []subCommandDef) []string {
+	names := make([]string, len(defs))
+	for i, def := range defs {
 		names[i] = def.name
 	}
 	return names
@@ -269,15 +269,12 @@ func topicSuggestions(body lineBody, command, filter string) []prompt.Item {
 	return out
 }
 
-// mockSuggestions lists the subcommands until one is named. After that the list
-// has nothing left to offer, so it gives way to the grammar of the named
-// subcommand and its option hints. Each hint inserts the line unchanged, so
-// completing it leaves what was typed alone.
-func (c exCatalog) mockSuggestions(body lineBody, rest string) []prompt.Item {
+// Option hints leave the input unchanged when selected.
+func subSuggestions(body lineBody, command string, defs []subCommandDef, rest string) []prompt.Item {
 	head, _, typing := cutSpace(rest)
 	name := strings.ToLower(head)
 	if typing {
-		def, ok := c.Mock(name)
+		def, ok := lookupSub(defs, name)
 		if !ok || !def.acceptsArgs() {
 			return nil
 		}
@@ -291,12 +288,12 @@ func (c exCatalog) mockSuggestions(body lineBody, rest string) []prompt.Item {
 		return items
 	}
 
-	out := make([]prompt.Item, 0, len(c.mock))
-	for _, def := range c.mock {
+	out := make([]prompt.Item, 0, len(defs))
+	for _, def := range defs {
 		if name != "" && !strings.Contains(def.name, name) {
 			continue
 		}
-		insert := "mock " + def.name
+		insert := command + " " + def.name
 		if def.acceptsArgs() {
 			insert += " "
 		}

@@ -109,7 +109,7 @@ func (m *Model) executeMockCommand(args []string) tea.Cmd {
 	if !ok {
 		return statusCmd(
 			statusWarn,
-			"Unknown :mock command (use "+strings.Join(exCommands.mockNames(), ", ")+")",
+			"Unknown :mock command (use "+strings.Join(subNames(exCommands.mock), ", ")+")",
 		)
 	}
 	if def.tooManyArgs(len(args)) {
@@ -143,11 +143,11 @@ func (m *Model) executeMockCommand(args []string) tea.Cmd {
 	return nil
 }
 
-func (m *Model) mockCommandUsage(def mockCommandDef) tea.Cmd {
+func (m *Model) mockCommandUsage(def subCommandDef) tea.Cmd {
 	return statusCmd(statusWarn, "Usage: :mock "+def.usage())
 }
 
-func (m *Model) mockArgsError(def mockCommandDef, err error) tea.Cmd {
+func (m *Model) mockArgsError(def subCommandDef, err error) tea.Cmd {
 	if errors.Is(err, errMockArgsUsage) {
 		return m.mockCommandUsage(def)
 	}
@@ -161,7 +161,7 @@ func (m *Model) toggleMockServer() tea.Cmd {
 	return m.startMockServer(mockStartSpec{})
 }
 
-func (m *Model) mockStartFromArgs(def mockCommandDef, args []string) tea.Cmd {
+func (m *Model) mockStartFromArgs(def subCommandDef, args []string) tea.Cmd {
 	parsed, err := parseMockStartArgs(args)
 	if err != nil {
 		return m.mockArgsError(def, err)
@@ -182,7 +182,7 @@ func (m *Model) mockStartFromArgs(def mockCommandDef, args []string) tea.Cmd {
 	return m.startMockServer(spec)
 }
 
-func (m *Model) mockRestartFromArgs(def mockCommandDef, args []string) tea.Cmd {
+func (m *Model) mockRestartFromArgs(def subCommandDef, args []string) tea.Cmd {
 	parsed, err := parseMockStartArgs(args)
 	if err != nil {
 		return m.mockArgsError(def, err)
