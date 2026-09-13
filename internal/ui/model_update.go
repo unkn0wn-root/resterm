@@ -55,6 +55,12 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	mouseHandled := false
 
 	switch typed := msg.(type) {
+	case recordTickMsg:
+		cmds = append(cmds, m.handleRecordTick(typed))
+	case recordClosedMsg:
+		cmds = append(cmds, m.handleRecordClosed(typed))
+	case recordExportMsg:
+		cmds = append(cmds, m.handleRecordExport(typed))
 	case diagnosticsTickMsg:
 		cmds = append(cmds, m.handleDiagnosticsTick(typed))
 	case diagnosticsResultMsg:
@@ -242,7 +248,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 	if m.showStatusModal {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			cmd := modalKey(keyMsg.String(), m.closeStatusModal, m.statusModalViewport)
+			cmd := m.modalKey(keyMsg.String(), m.closeStatusModal, m.statusModalViewport)
 			return batchCommands(append(cmds, cmd)...)
 		}
 		return batchCommands(cmds...)
@@ -250,15 +256,22 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 	if m.showMockVerification {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			cmd := modalKey(keyMsg.String(), m.closeMockVerification, m.mockVerificationViewport)
+			cmd := m.modalKey(keyMsg.String(), m.closeMockVerification, m.mockVerificationViewport)
 			return batchCommands(append(cmds, cmd)...)
 		}
 		return batchCommands(cmds...)
 	}
-
 	if m.showMockLogs {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			return batchCommands(append(cmds, m.handleMockLogsKey(keyMsg))...)
+		}
+		return batchCommands(cmds...)
+	}
+
+	if m.record.showList {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			cmd := m.modalKey(keyMsg.String(), m.closeRecordList, m.record.viewport)
+			return batchCommands(append(cmds, cmd)...)
 		}
 		return batchCommands(cmds...)
 	}
@@ -273,7 +286,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 				m.closeFileChangeModal()
 				return batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
-				return tea.Quit
+				return m.quitApp(m.closeFileChangeModal)
 			}
 		}
 		return batchCommands(cmds...)
@@ -281,7 +294,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 	if m.showHistoryPreview {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			cmd := modalKey(keyMsg.String(), m.closeHistoryPreview, m.historyPreviewViewport)
+			cmd := m.modalKey(keyMsg.String(), m.closeHistoryPreview, m.historyPreviewViewport)
 			return batchCommands(append(cmds, cmd)...)
 		}
 		return batchCommands(cmds...)
@@ -289,7 +302,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 	if m.showRequestDetails {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			cmd := modalKey(keyMsg.String(), m.closeRequestDetails, m.requestDetailViewport)
+			cmd := m.modalKey(keyMsg.String(), m.closeRequestDetails, m.requestDetailViewport)
 			return batchCommands(append(cmds, cmd)...)
 		}
 		return batchCommands(cmds...)
@@ -322,7 +335,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 				m.closeNewFileModal()
 				return batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
-				return tea.Quit
+				return m.quitApp(m.closeNewFileModal)
 			case "enter":
 				cmd := m.submitNewFile()
 				return batchCommands(append(cmds, cmd)...)
@@ -351,7 +364,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 				m.closeLayoutSaveModal()
 				return batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
-				return tea.Quit
+				return m.quitApp(m.closeLayoutSaveModal)
 			}
 		}
 		return batchCommands(cmds...)
@@ -371,7 +384,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 				m.closeSearchPrompt()
 				return batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
-				return tea.Quit
+				return m.quitApp(m.closeSearchPrompt)
 			case "ctrl+r":
 				m.toggleSearchMode()
 				cmd := m.applyLiveSearchPrompt()
@@ -414,7 +427,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 				m.showThemeSelector = false
 				return batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
-				return tea.Quit
+				return m.quitApp(func() { m.showThemeSelector = false })
 			case "enter":
 				cmd := m.applyThemeSelection()
 				return batchCommands(append(cmds, cmd)...)
@@ -1077,7 +1090,7 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionSelectTimelineTab:
 		return m.selectTimelineTab(), true
 	case bindings.ActionQuitApp:
-		return tea.Quit, true
+		return m.quitApp(nil), true
 	case bindings.ActionCancelRun:
 		return m.cancelActiveRuns(), true
 	case bindings.ActionSidebarWidthDecrease:
@@ -1221,6 +1234,7 @@ func (m *Model) modalKeepsUnderlay(msg tea.Msg) bool {
 func (m *Model) modalCapturesGlobalKeys() bool {
 	switch {
 	case m.showStatusModal,
+		m.record.showList,
 		m.showOpenModal,
 		m.showNewFileModal,
 		m.showResponseSaveModal,
@@ -1264,7 +1278,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		m.resetChordState()
 		switch keyStr {
 		case "ctrl+q", "ctrl+d":
-			return combine(tea.Quit)
+			return combine(m.quitApp(nil))
 		default:
 			return combine(nil)
 		}

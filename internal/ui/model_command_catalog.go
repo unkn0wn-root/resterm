@@ -40,8 +40,9 @@ func (d subCommandDef) acceptsArgs() bool { return d.maxArgs != 0 }
 func (d subCommandDef) tooManyArgs(n int) bool { return d.maxArgs != anyArgs && n > d.maxArgs }
 
 type exCatalog struct {
-	defs []exCommandDef
-	mock []subCommandDef
+	defs   []exCommandDef
+	mock   []subCommandDef
+	record []subCommandDef
 }
 
 const mockStartUsage = "[[--addr|-a] <host:port>] [(--source|-s <file[,file]>)... | [--recursive|-r] [--all]]"
@@ -51,6 +52,15 @@ var mockStartHints = []prompt.Item{
 	{Label: "--source|-s <file[,file]>", Summary: "Repeat or use commas; no -r/--all"},
 	{Label: "--recursive|-r", Summary: "Include subdirectories; no --source"},
 	{Label: "--all", Summary: "Whole workspace; no --source"},
+}
+
+const recordStartUsage = "--upstream <origin> [--listen <host:port>] [limit and redaction flags]"
+
+var recordStartHints = []prompt.Item{
+	{Label: "--upstream <origin>", Summary: "HTTP(S) server to forward to (required)"},
+	{Label: "--listen <host:port>", Summary: "Local listen address"},
+	{Label: "--max-entries|--max-bytes|--body-limit", Summary: "Capture limits"},
+	{Label: "--redact-header|--redact-field", Summary: "Additional secret names (repeatable)"},
 }
 
 var exCommands = exCatalog{
@@ -83,6 +93,10 @@ var exCommands = exCatalog{
 			usage: "mock [command]", summary: "Control the workspace mock server", hasArgs: true, noBang: true,
 		},
 		{
+			kind: exCommandRecord, name: "record",
+			usage: "record [command]", summary: "Record traffic as requests or mocks", hasArgs: true, noBang: true,
+		},
+		{
 			kind: exCommandDocs, name: "docs",
 			usage: "docs [topic]", summary: "Open version-matched web documentation", hasArgs: true, noBang: true,
 		},
@@ -103,6 +117,18 @@ var exCommands = exCatalog{
 		{name: "reset", args: "[sequence]", summary: "Reset all or one response sequence", maxArgs: 1},
 		{name: "verify", summary: "Check active @expect declarations"},
 		{name: "capture", summary: "Capture the focused response as a mock"},
+	},
+	record: []subCommandDef{
+		{name: "status", summary: "Show recorder state and counters"},
+		{
+			name: "start", args: recordStartUsage, argHints: recordStartHints,
+			hint: "--upstream <origin> [flags]", summary: "Start the recording proxy", maxArgs: anyArgs,
+		},
+		{name: "list", summary: "Open the recorded traffic list"},
+		{name: "stop", summary: "Stop the recording proxy"},
+		{name: "clear", summary: "Discard the stopped session and its captures"},
+		{name: "as-request", args: "[id|all]", summary: "Insert recordings as requests", maxArgs: 1},
+		{name: "as-mock", args: "[id|all]", summary: "Insert recordings as mock scenarios", maxArgs: 1},
 	},
 }
 
@@ -205,6 +231,8 @@ func (c exCatalog) Suggestions(input string) []prompt.Item {
 		return topicSuggestions(body, def.name, rest)
 	case exCommandMock:
 		return subSuggestions(body, "mock", c.mock, rest)
+	case exCommandRecord:
+		return subSuggestions(body, "record", c.record, rest)
 	case exCommandDiagnostics:
 		var items []prompt.Item
 		for _, action := range [...]struct{ name, summary string }{
@@ -224,8 +252,10 @@ func (c exCatalog) Suggestions(input string) []prompt.Item {
 	}
 }
 
-// Mock expects a lowercase subcommand name.
+// Mock and Record expect a lowercase subcommand name.
 func (c exCatalog) Mock(name string) (subCommandDef, bool) { return lookupSub(c.mock, name) }
+
+func (c exCatalog) Record(name string) (subCommandDef, bool) { return lookupSub(c.record, name) }
 
 func lookupSub(defs []subCommandDef, name string) (subCommandDef, bool) {
 	for _, def := range defs {

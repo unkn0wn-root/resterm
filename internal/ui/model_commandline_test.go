@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -37,6 +38,8 @@ func TestParseExCommand(t *testing.T) {
 		{name: "mock", input: "mock", kind: exCommandMock},
 		{name: "mock args", input: "mock start 127.0.0.1:9090", kind: exCommandMock},
 		{name: "mock bang", input: "mock!", kind: exCommandUnknown},
+		{name: "record", input: "record as-request 1", kind: exCommandRecord},
+		{name: "record bang", input: "record!", kind: exCommandUnknown},
 		{name: "docs", input: "docs", kind: exCommandDocs},
 		{name: "docs topic", input: "docs grpc", kind: exCommandDocs},
 		{name: "docs bang", input: "docs!", kind: exCommandUnknown},
@@ -317,8 +320,12 @@ func messageHasQuit(msg tea.Msg) bool {
 	case tea.QuitMsg:
 		return true
 	case tea.BatchMsg:
-		if slices.ContainsFunc(typed, commandHasQuit) {
-			return true
+		return slices.ContainsFunc(typed, commandHasQuit)
+	default:
+		// Bubble Tea's sequence message is an unexported slice of commands.
+		v, cmds := reflect.ValueOf(msg), reflect.TypeFor[[]tea.Cmd]()
+		if v.CanConvert(cmds) {
+			return slices.ContainsFunc(v.Convert(cmds).Interface().([]tea.Cmd), commandHasQuit)
 		}
 	}
 	return false

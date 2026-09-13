@@ -55,7 +55,7 @@ func (m *Model) handleResponseSaveKey(msg tea.KeyMsg) tea.Cmd {
 		m.closeResponseSaveModal()
 		return nil
 	case "ctrl+q", "ctrl+d":
-		return tea.Quit
+		return m.quitApp(m.closeResponseSaveModal)
 	case "enter":
 		cmd, more, err := m.responseSavePrompt.accept(src)
 		if err != nil {

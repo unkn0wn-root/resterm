@@ -200,6 +200,7 @@ type Model struct {
 	fileWatchChan chan tea.Msg
 	runMsgChan    chan tea.Msg
 	mock          mockServerState
+	record        recordState
 
 	fileList                 list.Model
 	requestList              list.Model
@@ -374,7 +375,7 @@ type Model struct {
 	newFileExtIndex        int
 	newFileError           string
 	newFileFromSave        bool
-	saveAsFollowUp         tea.Cmd
+	saveAsFollowUp         func(*Model) tea.Cmd
 	openPathPrompt         completionPrompt
 	openPathError          string
 	responseSavePrompt     completionPrompt

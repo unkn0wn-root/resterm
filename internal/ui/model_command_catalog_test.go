@@ -23,6 +23,7 @@ func TestExCatalogSuggestions(t *testing.T) {
 		{name: "help topic", input: "help web", label: "streaming", insert: "help streaming"},
 		{name: "man topic", input: "man grpc", label: "grpc", insert: "help grpc"},
 		{name: "docs topic", input: "docs auth", label: "authentication", insert: "docs authentication"},
+		{name: "record command", input: "record as-r", label: "as-request [id|all]", insert: "record as-request "},
 		{name: "mock command", input: "mock rest", label: "restart [host:port] [flags]", insert: "mock restart "},
 		{
 			name: "mock arguments", input: "mock start --rec",

@@ -20,6 +20,7 @@ const (
 	exCommandHelp
 	exCommandNoHighlight
 	exCommandMock
+	exCommandRecord
 	exCommandDocs
 	exCommandDiagnostics
 )
@@ -76,7 +77,7 @@ func (m *Model) handleCommandLineKey(msg tea.KeyMsg) tea.Cmd {
 		m.closeCommandLine()
 		return nil
 	case "ctrl+q", "ctrl+d":
-		return tea.Quit
+		return m.quitApp(m.closeCommandLine)
 	case "enter":
 		cmd, more, err := m.commandLine.accept(src)
 		if err != nil {
@@ -116,7 +117,7 @@ func (m *Model) executeExCommand(input string) tea.Cmd {
 		if m.dirty {
 			return m.writeQuitFromEx()
 		}
-		return tea.Quit
+		return m.quitFromEx(false)
 	case exCommandEdit:
 		switch len(cmd.args) {
 		case 0:
@@ -132,6 +133,8 @@ func (m *Model) executeExCommand(input string) tea.Cmd {
 		return m.clearSearchHighlightsFromEx()
 	case exCommandMock:
 		return m.executeMockCommand(cmd.args)
+	case exCommandRecord:
+		return m.executeRecordCommand(cmd.args)
 	case exCommandDocs:
 		return m.openDocsQuery(cmd.args)
 	case exCommandDiagnostics:
@@ -141,25 +144,58 @@ func (m *Model) executeExCommand(input string) tea.Cmd {
 	}
 }
 
-func (m *Model) quitFromEx(force bool) tea.Cmd {
-	if !force && m.dirty {
-		return statusCmd(statusWarn, "No write since last change (add ! to quit)")
+const recordQuitWarning = "Recorder is active or has unsaved captures. " +
+	"Stop recording, export and save captures, or use :q! to discard them"
+
+// Ctrl+Q still discards unsaved edits, but must warn about unsaved captures.
+// Dismiss the modal so the status warning is visible.
+func (m *Model) quitApp(dismiss func()) tea.Cmd {
+	if !m.hasUnexportedRecordings() {
+		return tea.Quit
 	}
-	return tea.Quit
+	if dismiss != nil {
+		dismiss()
+	}
+	return statusCmd(statusWarn, recordQuitWarning)
 }
 
+func (m *Model) quitFromEx(force bool) tea.Cmd {
+	switch {
+	case force:
+		return tea.Quit
+	case m.hasUnexportedRecordings():
+		return statusCmd(statusWarn, recordQuitWarning)
+	case m.dirty:
+		return statusCmd(statusWarn, "No write since last change (add ! to quit)")
+	default:
+		return tea.Quit
+	}
+}
+
+// Save before checking for unsaved captures, since saving updates their status.
 func (m *Model) writeQuitFromEx() tea.Cmd {
 	outcome, cmd := m.saveFileWithOutcome()
 	switch outcome {
 	case saveFileOutcomeSaved:
+		if m.hasUnexportedRecordings() {
+			return tea.Sequence(cmd, statusCmd(statusWarn, recordQuitWarning))
+		}
 		return batchCommands(cmd, tea.Quit)
 	case saveFileOutcomePending:
 		// Must be set after saveFileWithOutcome: opening the save-as modal resets saveAsFollowUp.
-		m.saveAsFollowUp = tea.Quit
+		m.saveAsFollowUp = (*Model).quitAfterWrite
 		return cmd
 	default:
 		return cmd
 	}
+}
+
+// Save As writes the file after the guard ran, so check the captures again.
+func (m *Model) quitAfterWrite() tea.Cmd {
+	if m.hasUnexportedRecordings() {
+		return statusCmd(statusWarn, recordQuitWarning)
+	}
+	return tea.Quit
 }
 
 func (m *Model) clearSearchHighlightsFromEx() tea.Cmd {

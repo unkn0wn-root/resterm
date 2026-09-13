@@ -102,7 +102,7 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 	if m.helpTopic != nil {
 		switch keyStr {
 		case "ctrl+q", "ctrl+d":
-			return tea.Quit
+			return m.quitApp(m.closeHelp)
 		case "esc", "?", "shift+/":
 			m.closeHelp()
 		case "o":
@@ -115,7 +115,7 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 	if m.helpFilter.Focused() {
 		switch keyStr {
 		case "ctrl+q", "ctrl+d":
-			return tea.Quit
+			return m.quitApp(m.closeHelp)
 		case "esc":
 			if strings.TrimSpace(m.helpFilter.Value()) != "" {
 				m.clearHelpFilter()
@@ -136,7 +136,7 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 	}
 	switch keyStr {
 	case "ctrl+q", "ctrl+d":
-		return tea.Quit
+		return m.quitApp(m.closeHelp)
 	case "esc":
 		if strings.TrimSpace(m.helpFilter.Value()) != "" {
 			m.clearHelpFilter()
