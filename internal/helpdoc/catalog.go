@@ -250,6 +250,12 @@ func topicDefs() []topicDef {
 			doc:     manual("Mock Servers"),
 		},
 		{
+			id: "recording", title: "Recording Traffic",
+			summary: "Record HTTP traffic as requests or mocks",
+			aliases: []string{"record", "recorder"},
+			doc:     manual("Recording Traffic"),
+		},
+		{
 			id: "workflows", title: "Workflows",
 			summary: "Chain named requests with conditions, branches, and loops",
 			aliases: []string{"workflow"},

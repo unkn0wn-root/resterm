@@ -5,6 +5,7 @@ Resterm can execute request files, serve mocks, import collections, and inspect 
 ```text
 resterm run requests.http
 resterm mock requests.http
+resterm record --upstream https://service.example.com --out captured.http
 resterm history stats
 ```
 

@@ -83,6 +83,7 @@ Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Requ
 
 - **HTTP, GraphQL, gRPC, WebSocket and SSE** support.
 - **Automation in request files:** conditions (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
+- **Record HTTP traffic:** `resterm record --upstream https://service.example.com --out captured.http` saves traffic as requests or mocks. See [Recording Traffic](./docs/resterm.md#recording-traffic) for usage and redaction limits.
 - **RestermScript**, a small expression language built for Resterm, with JavaScript hooks when you want them.
 - **Vim-style controls** with shortcut hints, searchable offline help, `Shift+k` help under the cursor, `/` search and commands like `:w`, `:q`, `:help` and `:docs`.
 - **Auth and tunneling:** OAuth 2.0 (client credentials, password, authorization code with PKCE), auth through existing CLIs, SSH tunnels and Kubernetes port-forwards.
