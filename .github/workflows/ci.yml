@@ -21,6 +21,10 @@ jobs:
         run: go test ./...
       - name: Run mock race tests
         run: go test -race ./internal/mock
+      - name: Run recorder race tests
+        run: |
+          go test -race ./internal/recorder
+          go test -race ./internal/cli ./cmd/resterm ./internal/ui -run 'Record|Recording|ModalPrecedence'
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:

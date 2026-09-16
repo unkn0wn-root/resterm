@@ -1,0 +1,22 @@
+# Local recorder walkthrough:
+# 1. resterm mock _examples/recording.http --addr 127.0.0.1:9001
+# 2. resterm record --upstream http://127.0.0.1:9001 --out captured.http --mode both
+# 3. resterm run _examples/recording.http
+# 4. Stop the recorder with Ctrl+C and inspect captured.http and its fixtures.
+# 5. resterm mock verify --url http://127.0.0.1:9001 _examples/recording.http
+
+# @var file recorderUrl http://127.0.0.1:9000
+
+### Request through the recorder
+# @name recorded-user
+# @assert response.statusCode == 200
+GET {{recorderUrl}}/users/42
+Accept: application/json
+
+### Local upstream response
+# @mock method=GET path=/users/42 name=user
+# @expect calls=1
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"id":42,"name":"Ada"}

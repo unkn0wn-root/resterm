@@ -75,7 +75,7 @@ func (m *Model) stageEnvironmentSelection() tea.Cmd {
 func (m *Model) handleEnvSelectorKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch key := msg.String(); {
 	case key == "ctrl+q" || key == "ctrl+d":
-		return tea.Quit, true
+		return m.quitApp(m.closeEnvironmentSelector), true
 	case key == "esc":
 		// Esc backs out one layer at a time: the list clears the search, and
 		// only an Esc with no search left closes the picker.

@@ -41,7 +41,7 @@ func (m *Model) handleOpenModalKey(msg tea.KeyMsg) tea.Cmd {
 		m.closeOpenModal()
 		return nil
 	case "ctrl+q", "ctrl+d":
-		return tea.Quit
+		return m.quitApp(m.closeOpenModal)
 	case "enter":
 		cmd, more, err := m.openPathPrompt.accept(src)
 		if err != nil {

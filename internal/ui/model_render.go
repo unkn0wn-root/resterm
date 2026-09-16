@@ -54,6 +54,9 @@ func (m Model) View() string {
 	if m.showMockLogs {
 		return m.renderWithinAppFrame(m.renderMockLogsModal())
 	}
+	if m.record.showList {
+		return m.renderWithinAppFrame(m.renderRecordList())
+	}
 
 	if m.showFileChangeModal {
 		return m.renderWithinAppFrame(m.renderFileChangeModal())

@@ -91,7 +91,7 @@ func mockLogLine(e mock.Event) string {
 
 func (m *Model) handleMockLogsKey(msg tea.KeyMsg) tea.Cmd {
 	if key := msg.String(); key != "c" {
-		return modalKey(key, m.closeMockLogs, m.mockLogsViewport)
+		return m.modalKey(key, m.closeMockLogs, m.mockLogsViewport)
 	}
 	if server := m.activeMockServer(); server != nil {
 		server.ClearLogs()

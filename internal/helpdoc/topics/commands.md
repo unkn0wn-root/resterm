@@ -13,6 +13,9 @@ Press `:` outside editor insert mode to open the Vim-style command line. Type to
 :docs authentication
 :edit examples/basic.http
 :mock start --source examples/mock.http
+:record start --upstream https://service.example.com
+:record as-request export captured traffic into the editor
+:record as-mock 1  export one captured response as a mock
 :diagnostics       show all editor warnings and errors
 :diagnostics next  jump to the next diagnostic
 :diagnostics prev  jump to the previous diagnostic

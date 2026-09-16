@@ -113,6 +113,7 @@ func (m *Model) saveFileWithOutcome() (saveFileOutcome, tea.Cmd) {
 	}
 	m.watchFile(m.currentFile, content)
 	m.refreshCurrentDocument(content)
+	m.settleRecordExports(m.currentFile, m.doc)
 	status := savedStatus(m.currentFile, m.doc).then(m.reloadEnvFile(m.currentFile))
 	return saveFileOutcomeSaved, batchCommands(m.refreshGitStatusCmd(), statusMsgCmd(status))
 }

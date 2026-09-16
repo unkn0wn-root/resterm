@@ -125,7 +125,7 @@ func (m *Model) submitNewFile() tea.Cmd {
 	}
 	m.setStatusMessage(status)
 	if followUp != nil {
-		return batchCommands(focusCmd, cmd, followUp)
+		return batchCommands(focusCmd, cmd, followUp(m))
 	}
 	return batchCommands(focusCmd, cmd)
 }

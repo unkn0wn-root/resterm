@@ -6,12 +6,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func modalKey(key string, close func(), vp *viewport.Model) tea.Cmd {
+// Route modal quits through the recorder's unsaved-capture guard.
+func (m *Model) modalKey(key string, close func(), vp *viewport.Model) tea.Cmd {
 	switch key {
 	case "esc", "enter":
 		close()
 	case "ctrl+q", "ctrl+d":
-		return tea.Quit
+		return m.quitApp(close)
 	default:
 		scrollViewportKey(vp, key)
 	}

@@ -25,10 +25,8 @@ type exCommandDef struct {
 // anyArgs is the maxArgs of a subcommand that parses its own flags.
 const anyArgs = -1
 
-// args spells every flag out for the usage line. hint is the shorter form the
-// picker shows. Only commands whose full grammar would crowd the summary out of
-// the row need both. argHints explains individual options after the command.
-type mockCommandDef struct {
+// args holds full usage text. hint shortens it for the picker.
+type subCommandDef struct {
 	name     string
 	args     string
 	hint     string
@@ -37,13 +35,14 @@ type mockCommandDef struct {
 	maxArgs  int
 }
 
-func (d mockCommandDef) acceptsArgs() bool { return d.maxArgs != 0 }
+func (d subCommandDef) acceptsArgs() bool { return d.maxArgs != 0 }
 
-func (d mockCommandDef) tooManyArgs(n int) bool { return d.maxArgs != anyArgs && n > d.maxArgs }
+func (d subCommandDef) tooManyArgs(n int) bool { return d.maxArgs != anyArgs && n > d.maxArgs }
 
 type exCatalog struct {
-	defs []exCommandDef
-	mock []mockCommandDef
+	defs   []exCommandDef
+	mock   []subCommandDef
+	record []subCommandDef
 }
 
 const mockStartUsage = "[[--addr|-a] <host:port>] [(--source|-s <file[,file]>)... | [--recursive|-r] [--all]]"
@@ -53,6 +52,15 @@ var mockStartHints = []prompt.Item{
 	{Label: "--source|-s <file[,file]>", Summary: "Repeat or use commas; no -r/--all"},
 	{Label: "--recursive|-r", Summary: "Include subdirectories; no --source"},
 	{Label: "--all", Summary: "Whole workspace; no --source"},
+}
+
+const recordStartUsage = "--upstream <origin> [--listen <host:port>] [limit and redaction flags]"
+
+var recordStartHints = []prompt.Item{
+	{Label: "--upstream <origin>", Summary: "HTTP(S) server to forward to (required)"},
+	{Label: "--listen <host:port>", Summary: "Local listen address"},
+	{Label: "--max-entries|--max-bytes|--body-limit", Summary: "Capture limits"},
+	{Label: "--redact-header|--redact-field", Summary: "Additional secret names (repeatable)"},
 }
 
 var exCommands = exCatalog{
@@ -85,11 +93,15 @@ var exCommands = exCatalog{
 			usage: "mock [command]", summary: "Control the workspace mock server", hasArgs: true, noBang: true,
 		},
 		{
+			kind: exCommandRecord, name: "record",
+			usage: "record [command]", summary: "Record traffic as requests or mocks", hasArgs: true, noBang: true,
+		},
+		{
 			kind: exCommandDocs, name: "docs",
 			usage: "docs [topic]", summary: "Open version-matched web documentation", hasArgs: true, noBang: true,
 		},
 	},
-	mock: []mockCommandDef{
+	mock: []subCommandDef{
 		{name: "status", summary: "Show server address and counters"},
 		{
 			name: "start", args: mockStartUsage, argHints: mockStartHints,
@@ -105,6 +117,18 @@ var exCommands = exCatalog{
 		{name: "reset", args: "[sequence]", summary: "Reset all or one response sequence", maxArgs: 1},
 		{name: "verify", summary: "Check active @expect declarations"},
 		{name: "capture", summary: "Capture the focused response as a mock"},
+	},
+	record: []subCommandDef{
+		{name: "status", summary: "Show recorder state and counters"},
+		{
+			name: "start", args: recordStartUsage, argHints: recordStartHints,
+			hint: "--upstream <origin> [flags]", summary: "Start the recording proxy", maxArgs: anyArgs,
+		},
+		{name: "list", summary: "Open the recorded traffic list"},
+		{name: "stop", summary: "Stop the recording proxy"},
+		{name: "clear", summary: "Discard the stopped session and its captures"},
+		{name: "as-request", args: "[id|all]", summary: "Insert recordings as requests", maxArgs: 1},
+		{name: "as-mock", args: "[id|all]", summary: "Insert recordings as mock scenarios", maxArgs: 1},
 	},
 }
 
@@ -126,9 +150,9 @@ func (d exCommandDef) label() string {
 
 // label goes in the picker, where it shares the row with the summary. usage is
 // the full grammar, also used as the argument hint when there are no argHints.
-func (d mockCommandDef) label() string { return joinArgs(d.name, cmp.Or(d.hint, d.args)) }
+func (d subCommandDef) label() string { return joinArgs(d.name, cmp.Or(d.hint, d.args)) }
 
-func (d mockCommandDef) usage() string { return joinArgs(d.name, d.args) }
+func (d subCommandDef) usage() string { return joinArgs(d.name, d.args) }
 
 func joinArgs(name, args string) string {
 	if args == "" {
@@ -206,7 +230,9 @@ func (c exCatalog) Suggestions(input string) []prompt.Item {
 	case exCommandHelp, exCommandDocs:
 		return topicSuggestions(body, def.name, rest)
 	case exCommandMock:
-		return c.mockSuggestions(body, rest)
+		return subSuggestions(body, "mock", c.mock, rest)
+	case exCommandRecord:
+		return subSuggestions(body, "record", c.record, rest)
 	case exCommandDiagnostics:
 		var items []prompt.Item
 		for _, action := range [...]struct{ name, summary string }{
@@ -226,19 +252,23 @@ func (c exCatalog) Suggestions(input string) []prompt.Item {
 	}
 }
 
-// Mock expects a lowercase subcommand name.
-func (c exCatalog) Mock(name string) (mockCommandDef, bool) {
-	for _, def := range c.mock {
+// Mock and Record expect a lowercase subcommand name.
+func (c exCatalog) Mock(name string) (subCommandDef, bool) { return lookupSub(c.mock, name) }
+
+func (c exCatalog) Record(name string) (subCommandDef, bool) { return lookupSub(c.record, name) }
+
+func lookupSub(defs []subCommandDef, name string) (subCommandDef, bool) {
+	for _, def := range defs {
 		if def.name == name {
 			return def, true
 		}
 	}
-	return mockCommandDef{}, false
+	return subCommandDef{}, false
 }
 
-func (c exCatalog) mockNames() []string {
-	names := make([]string, len(c.mock))
-	for i, def := range c.mock {
+func subNames(defs []subCommandDef) []string {
+	names := make([]string, len(defs))
+	for i, def := range defs {
 		names[i] = def.name
 	}
 	return names
@@ -269,15 +299,12 @@ func topicSuggestions(body lineBody, command, filter string) []prompt.Item {
 	return out
 }
 
-// mockSuggestions lists the subcommands until one is named. After that the list
-// has nothing left to offer, so it gives way to the grammar of the named
-// subcommand and its option hints. Each hint inserts the line unchanged, so
-// completing it leaves what was typed alone.
-func (c exCatalog) mockSuggestions(body lineBody, rest string) []prompt.Item {
+// Option hints leave the input unchanged when selected.
+func subSuggestions(body lineBody, command string, defs []subCommandDef, rest string) []prompt.Item {
 	head, _, typing := cutSpace(rest)
 	name := strings.ToLower(head)
 	if typing {
-		def, ok := c.Mock(name)
+		def, ok := lookupSub(defs, name)
 		if !ok || !def.acceptsArgs() {
 			return nil
 		}
@@ -291,12 +318,12 @@ func (c exCatalog) mockSuggestions(body lineBody, rest string) []prompt.Item {
 		return items
 	}
 
-	out := make([]prompt.Item, 0, len(c.mock))
-	for _, def := range c.mock {
+	out := make([]prompt.Item, 0, len(defs))
+	for _, def := range defs {
 		if name != "" && !strings.Contains(def.name, name) {
 			continue
 		}
-		insert := "mock " + def.name
+		insert := command + " " + def.name
 		if def.acceptsArgs() {
 			insert += " "
 		}

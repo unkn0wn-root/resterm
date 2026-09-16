@@ -1,10 +1,11 @@
 # Resterm CLI
 
-Resterm has three command-line entry points:
+Resterm has four command-line entry points:
 
 - `resterm` opens the interactive TUI and also exposes import, update, history, and collection tooling.
 - `resterm run` executes the same `.http` / `.rest` files headlessly without opening the TUI.
 - `resterm mock` serves mock responses declared in those files.
+- `resterm record` forwards HTTP traffic and saves it as requests or mocks.
 
 Use this guide for command-line behavior. For request syntax, directives, workflows, auth, and UI behavior, see [`resterm.md`](./resterm.md). For RestermScript, see [`restermscript.md`](./restermscript.md).
 
@@ -15,6 +16,7 @@ Use this guide for command-line behavior. For request syntax, directives, workfl
 | `resterm [file]` | Open the TUI in the current workspace or a specific request file. |
 | `resterm run [flags] <file\|->` | Execute request files, workflows, compare runs, or profile runs without the TUI. |
 | `resterm mock [flags] [file\|dir]` | Serve and optionally hot-reload `# @mock` response blocks. |
+| `resterm record --upstream <origin> --out <file> [flags]` | Record application traffic as requests, mocks, or both. |
 | `resterm mock reset [flags] [sequence]` | Reset all sequence cursors or every cursor with one name. |
 | `resterm mock clear [flags]` | Clear the standalone mock journal and access logs. |
 | `resterm mock verify [flags] [file\|dir]` | Verify exact `# @expect` call counts against a running mock server. |
@@ -24,6 +26,27 @@ Use this guide for command-line behavior. For request syntax, directives, workfl
 | `resterm --from-curl ...` | Convert curl commands into `.http` files. |
 | `resterm --from-openapi ...` | Generate `.http` collections from OpenAPI documents. |
 | `resterm --check-update`, `resterm --update`, `resterm --version` | Inspect or update the installed binary. |
+
+## `resterm record`
+
+```sh
+resterm record --listen 127.0.0.1:9000 --upstream https://service.example.com --out captured.http --mode both
+```
+
+Point your application's API base URL at `http://127.0.0.1:9000`. `--upstream` and `--out` are required. `--mode` accepts `requests` (default), `mocks`, or `both`.
+
+Recordings are written as requests finish. The output file must be new and its parent directory must exist. Some bodies are saved in separate files beside it. Ctrl+C allows active requests up to 3 seconds to finish. See [Recording Traffic](./resterm.md#recording-traffic) for redaction limits, replay, and supported traffic.
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--listen` | `127.0.0.1:9000` | Local HTTP listener. |
+| `--max-entries` | `1000` | Maximum recordings kept in memory. |
+| `--max-bytes` | `64MiB` | Separate limits for stored recordings and total capture buffers. |
+| `--body-limit` | `4MiB` | Maximum request or response body size, including after decoding. |
+| `--capture-concurrency` | `32` | Maximum simultaneous captures. Extra requests still forward. |
+| `--redact-header`, `--redact-field` | built-in rules | Additional header or field names to redact. Both flags can be repeated. |
+
+Exit status is 0 on success, 1 if any requested capture or export was skipped or recording failed, and 2 for invalid arguments. HTTP error responses can be recorded and do not cause a nonzero exit status on their own.
 
 ## Argument Order
 
