@@ -41,6 +41,8 @@ type Config struct {
 	CaptureConcurrency int
 	RedactHeaders      []string
 	RedactFields       []string
+	Skip               []string
+	Only               []string
 }
 
 func DefaultConfig() Config {
@@ -71,6 +73,9 @@ func (c Config) Resolve() (Config, error) {
 		return c, fmt.Errorf("invalid listen address: %w", err)
 	}
 	if err := checkRedactionNames(c.RedactHeaders, c.RedactFields); err != nil {
+		return c, err
+	}
+	if _, err := newFilter(c); err != nil {
 		return c, err
 	}
 	return c, nil

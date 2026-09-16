@@ -4,8 +4,11 @@ import (
 	"cmp"
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -96,4 +99,28 @@ func readTestOutput(t *testing.T, out *Output) *restfile.Document {
 		t.Fatal(err)
 	}
 	return doc
+}
+
+func TestFilteredRequestsForwardWithoutRecording(t *testing.T) {
+	var hits atomic.Int32
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer up.Close()
+
+	s := startTest(t, up.URL, func(c *Config) { c.Skip = []string{"GET /health"} })
+	for _, path := range []string{"/health", "/users"} {
+		r, err := http.Get("http://" + s.Addr() + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = r.Body.Close()
+	}
+	entries := entriesAfter(t, s, 1)
+	stats := s.Stats()
+	if hits.Load() != 2 || stats.Received != 2 || stats.Filtered != 1 || stats.Excluded != 0 ||
+		!strings.HasSuffix(entries[0].URL, "/users") {
+		t.Fatalf("hits %d, stats %+v, entries %+v", hits.Load(), stats, entries)
+	}
 }

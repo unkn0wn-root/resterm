@@ -47,7 +47,7 @@ func TestRecordCLI(t *testing.T) {
 	var errOut bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		done <- runRecord(ctx, []string{"--listen", "127.0.0.1:0", "--upstream", up.URL, "--out", path, "--mode", "both"}, out, &errOut)
+		done <- runRecord(ctx, []string{"--listen", "127.0.0.1:0", "--upstream", up.URL, "--out", path, "--mode", "both", "--skip", "GET /health"}, out, &errOut)
 	}()
 	var addr string
 	select {
@@ -57,12 +57,14 @@ func TestRecordCLI(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("startup timeout")
 	}
-	r, err := http.Get(addr + "/users")
-	if err != nil {
-		t.Fatal(err)
+	for _, path := range []string{"/health", "/users"} {
+		r, err := http.Get(addr + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
 	}
-	_, _ = io.Copy(io.Discard, r.Body)
-	_ = r.Body.Close()
 	cancel()
 	select {
 	case err := <-done:
@@ -83,6 +85,9 @@ func TestRecordCLI(t *testing.T) {
 	if errOut.Len() != 0 {
 		t.Fatalf("unexpected exclusions: %s", errOut.String())
 	}
+	if !strings.Contains(out.String(), "Filtered 1.") {
+		t.Fatalf("missing filtered count: %s", out.String())
+	}
 }
 
 func TestRecordUsageErrorsAndHelp(t *testing.T) {
@@ -92,6 +97,7 @@ func TestRecordUsageErrorsAndHelp(t *testing.T) {
 		{"--upstream", "https://example.com", "--out", "capture.http", "--body-limit", "0"},
 		{"--upstream", "https://example.com", "--out", "capture.http", "--mode", "invalid"},
 		{"--upstream", "https://example.com", "--out", "capture.http", "--max-entries", "0"},
+		{"--upstream", "https://example.com", "--out", "capture.http", "--skip", "health"},
 	} {
 		var output bytes.Buffer
 		err := runRecord(t.Context(), args, &output, &output)

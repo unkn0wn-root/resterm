@@ -188,9 +188,13 @@ func (s *recordSink) flush() error {
 
 func (s *recordSink) report(out io.Writer) error {
 	stats := s.session.Stats()
+	filtered := ""
+	if stats.Filtered > 0 {
+		filtered = fmt.Sprintf(" Filtered %d.", stats.Filtered)
+	}
 	_, writeErr := fmt.Fprintf(out,
-		"Recorded %d exchanges. Skipped %d captures and %d exports. Output: %s\n",
-		stats.Entries, stats.Excluded, s.excluded, s.path)
+		"Recorded %d exchanges.%s Skipped %d captures and %d exports. Output: %s\n",
+		stats.Entries, filtered, stats.Excluded, s.excluded, s.path)
 	if err := errors.Join(s.session.Err(), writeErr); err != nil {
 		return err
 	}

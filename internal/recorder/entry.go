@@ -126,6 +126,7 @@ type Stats struct {
 	Received       uint64
 	Entries        int
 	Excluded       uint64
+	Filtered       uint64
 	RetainedBytes  int64
 	ActiveCaptures int
 	Limit          Limit

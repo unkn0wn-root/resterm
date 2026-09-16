@@ -18,6 +18,7 @@ type store struct {
 	entries  []Entry
 	received uint64
 	excluded uint64
+	filtered uint64
 	retained int64
 	buffered int64
 	active   int
@@ -54,6 +55,7 @@ func (s *store) stats() Stats {
 		Received:       s.received,
 		Entries:        len(s.entries),
 		Excluded:       s.excluded,
+		Filtered:       s.filtered,
 		RetainedBytes:  s.retained,
 		ActiveCaptures: s.active,
 		Limit:          s.limit,
@@ -131,6 +133,14 @@ func (s *store) admits(r *http.Request) bool {
 }
 
 func (s *store) reach(limit Limit) { s.limit = cmp.Or(s.limit, limit) }
+
+func (s *store) pass() {
+	s.mu.Lock()
+	s.received++
+	s.filtered++
+	s.mu.Unlock()
+	s.signal()
+}
 
 func (s *store) refuse() {
 	s.mu.Lock()

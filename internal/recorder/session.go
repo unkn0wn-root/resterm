@@ -19,6 +19,7 @@ import (
 type Session struct {
 	cfg    Config
 	policy policy
+	filter filter
 	store  *store
 
 	addr      string
@@ -44,6 +45,10 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 		return nil, err
 	}
 
+	f, err := newFilter(cfg)
+	if err != nil {
+		return nil, err
+	}
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return nil, fmt.Errorf("recorder listen: %w", err)
@@ -57,6 +62,7 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 	s := &Session{
 		cfg:       cfg,
 		policy:    newPolicy(cfg),
+		filter:    f,
 		store:     newStore(cfg),
 		addr:      ln.Addr().String(),
 		transport: newTransport(),
