@@ -12,7 +12,7 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is your API as code, stored in plain-text `.http` and `.rest` files that you can diff, review and track in version control. Edit and send requests in the terminal, or run them from scripts and CI. Request files support workflows, assertions, mock servers, tracing and profiling. No accounts, cloud sync or telemetry.
+Resterm is a terminal API client that stores your requests in plain-text `.http` and `.rest` files you can diff, review and track in version control. Edit and send requests in the terminal, or run them from scripts and CI. Request files support workflows, assertions, mock servers, tracing and profiling. No accounts, cloud sync or telemetry.
 
 Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Request files](#request-files), [Installation](#installation), [Documentation](#documentation).
 
