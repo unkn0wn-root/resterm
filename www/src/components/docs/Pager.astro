@@ -1,0 +1,73 @@
+---
+import type { PageLink } from '../../lib/docs';
+
+interface Props {
+  prev?: PageLink;
+  next?: PageLink;
+}
+
+const { prev, next } = Astro.props;
+---
+
+<nav class="pager" aria-label="Previous and next page">
+  {prev ? (
+    <a class="link prev" href={prev.href} rel="prev">
+      <span class="dir">
+        <kbd>[</kbd> previous
+      </span>
+      <span class="title">◂ {prev.title}</span>
+    </a>
+  ) : (
+    <span />
+  )}
+  {next && (
+    <a class="link next" href={next.href} rel="next">
+      <span class="dir">
+        next <kbd>]</kbd>
+      </span>
+      <span class="title">{next.title} ▸</span>
+    </a>
+  )}
+</nav>
+
+<style>
+  .pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .link {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    text-decoration: none;
+    font-size: 0.875rem;
+  }
+
+  .link:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+  }
+
+  .next {
+    text-align: right;
+  }
+
+  .dir {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+  }
+
+  .title {
+    color: var(--fg-strong);
+  }
+
+  @media (max-width: 560px) {
+    .pager {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

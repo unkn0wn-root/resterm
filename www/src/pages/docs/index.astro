@@ -1,0 +1,190 @@
+---
+import Docs from '../../layouts/Docs.astro';
+import { getDocs } from '../../lib/docs';
+
+const { groups, pages } = await getDocs();
+const start = [
+  { href: '/docs/install/', label: 'Install' },
+  { href: '/docs/quick-start/', label: 'Quick start' },
+  { href: '/docs/request-files/', label: 'Request files' },
+  { href: '/docs/cli/run/', label: 'resterm run' },
+];
+---
+
+<Docs
+  title="Documentation"
+  description="Everything about Resterm: request files, directives, protocols, automation, RestermScript and the CLI."
+  groups={groups}
+  href="/docs/"
+  status={{ file: 'docs/', focus: 'Index' }}
+  next={pages[0].href}
+>
+  <div class="index">
+    <header class="head">
+      <h1>
+        <span class="hmark" aria-hidden="true">
+          #
+        </span>
+        Documentation
+      </h1>
+      <p class="lead">
+        The reference for request files, directives, protocols, automation, RestermScript and the CLI. Every page is
+        built from the <code>docs/</code> directory in the repository.
+      </p>
+      <button class="search" type="button" data-search-open>
+        <span class="key">/</span> Search {pages.length} pages
+      </button>
+      <p class="start">
+        <span class="label-pixel">Start here</span>
+        {start.map((s) => (
+          <a href={s.href}>{s.label}</a>
+        ))}
+      </p>
+    </header>
+
+    <div class="groups">
+      {groups.map((g) => (
+        <section class="group pane">
+          <h2 class="pane-title">{g.title}</h2>
+          <ul>
+            {g.pages.map((p) => (
+              <li>
+                <a href={p.href}>
+                  <span class="title">{p.title}</span>
+                  <span class="summary">{p.summary}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  </div>
+</Docs>
+
+<style>
+  .head {
+    max-width: 44rem;
+    margin-bottom: 2.5rem;
+  }
+
+  h1 {
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    line-height: 1.2;
+    font-weight: 600;
+    color: var(--fg-strong);
+  }
+
+  .hmark {
+    margin-right: 1ch;
+    color: var(--fg-dim);
+    font-weight: 400;
+  }
+
+  .lead {
+    margin-top: 0.75rem;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    color: var(--fg-muted);
+  }
+
+  .lead code {
+    font-size: 0.9em;
+    color: var(--syn-value);
+  }
+
+  .search {
+    display: flex;
+    gap: 1ch;
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--bg-pane);
+    color: var(--fg-dim);
+    text-align: left;
+  }
+
+  .search:hover {
+    border-color: var(--editor);
+  }
+
+  .key {
+    color: var(--key);
+    font-weight: 600;
+  }
+
+  .start {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 2ch;
+    margin-top: 1.1rem;
+    font-size: 0.875rem;
+  }
+
+  .start a {
+    color: var(--accent-text);
+  }
+
+  /* Columns instead of a grid, so each pane keeps the height of its own list.
+     The top padding leaves room for the first titles, which sit on the border. */
+  .groups {
+    columns: 22rem;
+    column-gap: 1.5rem;
+    padding-top: 0.6rem;
+  }
+
+  .group {
+    break-inside: avoid;
+    margin-bottom: 2rem;
+    padding: 1.1rem 0.5rem 0.6rem;
+  }
+
+  .group .pane-title {
+    left: 1.25ch;
+    right: auto;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--fg-muted);
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  li a {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.45rem 0.75rem;
+    text-decoration: none;
+    border-radius: var(--radius);
+  }
+
+  li a:hover {
+    background: var(--bg-hover);
+  }
+
+  .title {
+    color: var(--fg-strong);
+    font-size: 0.9rem;
+  }
+
+  li a:hover .title {
+    color: var(--focus);
+  }
+
+  :root[data-theme='light'] li a:hover .title {
+    color: var(--accent-text);
+  }
+
+  .summary {
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+    line-height: 1.45;
+  }
+</style>

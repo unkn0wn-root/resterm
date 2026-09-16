@@ -1,0 +1,92 @@
+---
+import type { Page } from '../../lib/docs';
+
+type Props = Pick<Page, 'toc' | 'source'>;
+
+const { toc, source } = Astro.props;
+---
+
+<aside class="outline pane" aria-label="On this page">
+  <span class="pane-title">Outline</span>
+  <div class="scroll">
+    {toc.length > 0 && (
+      <ol>
+        {toc.map((t) => (
+          <li class={`d${t.depth}`}>
+            <a href={`#${t.id}`} data-outline={t.id}>
+              {t.text}
+            </a>
+          </li>
+        ))}
+      </ol>
+    )}
+    <p class="source">
+      <a href={source.url}>
+        {source.path}:{source.line}
+      </a>
+    </p>
+  </div>
+</aside>
+
+<style>
+  .outline {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  .scroll {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding: 1rem 0.75rem;
+  }
+
+  ol {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .d3 {
+    padding-left: 2ch;
+  }
+
+  a {
+    display: block;
+    color: var(--fg-muted);
+    text-decoration: none;
+    border-left: 1px solid transparent;
+    padding-left: 1ch;
+  }
+
+  a:hover {
+    color: var(--fg-strong);
+  }
+
+  a[aria-current='true'] {
+    color: var(--fg-strong);
+    border-left-color: var(--focus);
+  }
+
+  .source {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.75rem;
+  }
+
+  .source a {
+    padding-left: 0;
+    color: var(--fg-dim);
+    overflow-wrap: anywhere;
+  }
+
+  .source a::before {
+    content: '⇄ ';
+    color: var(--icon);
+  }
+</style>

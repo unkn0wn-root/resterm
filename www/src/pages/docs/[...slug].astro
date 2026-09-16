@@ -1,0 +1,144 @@
+---
+import type { GetStaticPaths, InferGetStaticPropsType } from 'astro';
+import Outline from '../../components/docs/Outline.astro';
+import Pager from '../../components/docs/Pager.astro';
+import Docs from '../../layouts/Docs.astro';
+import { getDocs } from '../../lib/docs';
+
+export const getStaticPaths = (async () => {
+  const { pages } = await getDocs();
+  return pages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
+}) satisfies GetStaticPaths;
+
+type Props = InferGetStaticPropsType<typeof getStaticPaths>;
+
+const { page } = Astro.props;
+const { groups } = await getDocs();
+const file = page.source.path.replace(/^docs\//, '');
+---
+
+<Docs
+  title={page.title}
+  description={page.description}
+  groups={groups}
+  href={page.href}
+  status={{ file, focus: page.title, source: page.source }}
+  prev={page.prev?.href}
+  next={page.next?.href}
+>
+  <article class="article pane">
+    <a class="pane-title file" href={page.source.url} title="View the source on GitHub">
+      {file}
+    </a>
+    <header class="head">
+      <p class="crumbs">
+        <a href="/docs/">docs</a> <span aria-hidden="true">/</span> {page.group}
+      </p>
+      <h1 id={page.anchor}>
+        <span class="hmark" aria-hidden="true">
+          #
+        </span>
+        {page.title}
+      </h1>
+      <p class="summary">{page.description}</p>
+    </header>
+    <div class="prose" set:html={page.html} />
+    <footer class="foot">
+      <Pager prev={page.prev} next={page.next} />
+      <p class="edit">
+        Something wrong or missing? This page is built from <a href={page.source.url}>{page.source.path}</a>. Edits
+        there show up here.
+      </p>
+    </footer>
+  </article>
+  <Outline slot="aside" toc={page.toc} source={page.source} />
+</Docs>
+
+<style>
+  .article {
+    padding: 2rem clamp(1rem, 4vw, 3rem) 2.5rem;
+  }
+
+  .article > * {
+    max-width: var(--content-w);
+    margin-inline: auto;
+  }
+
+  .file {
+    color: var(--editor);
+    text-decoration: none;
+  }
+
+  .file:hover {
+    color: var(--fg-strong);
+  }
+
+  .crumbs {
+    font-size: 0.8125rem;
+    color: var(--fg-dim);
+  }
+
+  .crumbs a {
+    color: var(--fg-muted);
+    text-decoration: none;
+  }
+
+  .crumbs a:hover {
+    color: var(--fg-strong);
+  }
+
+  h1 {
+    margin-top: 0.5rem;
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    line-height: 1.2;
+    font-weight: 600;
+    color: var(--fg-strong);
+    letter-spacing: -0.01em;
+  }
+
+  .hmark {
+    margin-right: 1ch;
+    color: var(--fg-dim);
+    font-weight: 400;
+  }
+
+  .summary {
+    margin-top: 0.75rem;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    color: var(--fg-muted);
+  }
+
+  .head {
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px dashed var(--line-strong);
+  }
+
+  .foot {
+    margin-top: 3.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px dashed var(--line-strong);
+  }
+
+  .edit {
+    margin-top: 1.25rem;
+    font-size: 0.8125rem;
+    color: var(--fg-dim);
+  }
+
+  .edit a {
+    color: var(--fg-muted);
+  }
+
+  @media (max-width: 900px) {
+    .article {
+      border: 0;
+      background: none;
+      padding: 1rem 0 2rem;
+    }
+    .file {
+      display: none;
+    }
+  }
+</style>

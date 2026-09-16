@@ -1,0 +1,127 @@
+---
+import type { ComponentProps } from 'astro/types';
+import '../styles/prose.css';
+import DocsNav from '../components/docs/DocsNav.astro';
+import Base from './Base.astro';
+import type { NavGroup } from '../lib/docs';
+
+interface Props {
+  title: string;
+  description: string;
+  groups: NavGroup[];
+  href: string;
+  status: ComponentProps<typeof Base>['status'];
+  prev?: string;
+  next?: string;
+}
+
+const { title, description, groups, href, status, prev, next } = Astro.props;
+const current = href.startsWith('/docs/rts/') ? 'rts' : href.startsWith('/docs/cli/') ? 'cli' : 'docs';
+
+const hints: [string, string][] = [
+  ['/', 'Search'],
+  ['[', 'Prev'],
+  [']', 'Next'],
+  ['j/k', 'Scroll'],
+  ['g d', 'Docs'],
+  ['g h', 'Home'],
+  ['t', 'Theme'],
+  ['?', 'Help'],
+];
+---
+
+<Base {title} {description} {current} {hints} {status} {prev} {next} menu>
+  <div class:list={['docs', { wide: !Astro.slots.has('aside') }]}>
+    <div class="side">
+      <DocsNav groups={groups} current={href} />
+    </div>
+    <div class="main">
+      <slot />
+    </div>
+    {Astro.slots.has('aside') && (
+      <div class="aside">
+        <slot name="aside" />
+      </div>
+    )}
+  </div>
+</Base>
+
+<script>
+  import '../scripts/docs';
+</script>
+
+<style>
+  .docs {
+    --stick: calc(var(--header-h) + 1rem);
+    --end: 2rem;
+    display: grid;
+    grid-template-columns: 17rem minmax(0, 1fr) 14rem;
+    gap: 1.5rem;
+    max-width: 88rem;
+    margin: 0 auto;
+    padding: 1.25rem var(--gutter) var(--end);
+    align-items: start;
+  }
+
+  .docs.wide {
+    grid-template-columns: 17rem minmax(0, 1fr);
+  }
+
+  /* A stuck column has to end above the status bar and the bottom padding.
+     If it were taller, the end of the page would push it up during the last
+     bit of scrolling. The pane inside shrinks to fit and scrolls its list. */
+  .side,
+  .aside {
+    position: sticky;
+    top: var(--stick);
+    max-height: calc(100dvh - var(--stick) - var(--status-h) - var(--end));
+    display: flex;
+    flex-direction: column;
+    padding-top: 0.5rem;
+  }
+
+  .main {
+    min-width: 0;
+    padding-top: 0.5rem;
+  }
+
+  @media (max-width: 1200px) {
+    .docs {
+      grid-template-columns: 16rem minmax(0, 1fr);
+    }
+    .aside {
+      display: none;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .docs,
+    .docs.wide {
+      grid-template-columns: minmax(0, 1fr);
+      padding-top: 0.75rem;
+    }
+
+    .side {
+      position: fixed;
+      z-index: 30;
+      top: var(--header-h);
+      bottom: 0;
+      left: 0;
+      width: min(20rem, 86vw);
+      max-height: none;
+      padding: 1.5rem 0.75rem;
+      background: var(--bg);
+      border-right: 1px solid var(--line-strong);
+      translate: -100% 0;
+      visibility: hidden;
+      transition:
+        translate 0.2s ease,
+        visibility 0.2s;
+    }
+
+    :global([data-nav-open]) .side {
+      translate: 0 0;
+      visibility: visible;
+    }
+  }
+</style>
