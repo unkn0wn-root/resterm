@@ -83,7 +83,7 @@ Quick links: [Screenshots](#screenshot-tour), [Quick Start](#quick-start), [Requ
 
 - **HTTP, GraphQL, gRPC, WebSocket and SSE** support.
 - **Automation in request files:** conditions (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
-- **Record HTTP traffic:** `resterm record --upstream https://service.example.com --out captured.http` saves traffic as requests or mocks. See [Recording Traffic](./docs/resterm.md#recording-traffic) for usage and redaction limits.
+- **Record HTTP traffic** and export it to Resterm `.http` files as requests or mock responses.
 - **RestermScript**, a small expression language built for Resterm, with JavaScript hooks when you want them.
 - **Vim-style controls** with shortcut hints, searchable offline help, `Shift+k` help under the cursor, `/` search and commands like `:w`, `:q`, `:help` and `:docs`.
 - **Auth and tunneling:** OAuth 2.0 (client credentials, password, authorization code with PKCE), auth through existing CLIs, SSH tunnels and Kubernetes port-forwards.
@@ -319,6 +319,22 @@ resterm mock --recursive --addr 127.0.0.1:9090 ./requests
 ```
 
 More in the [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock) and the [working example](_examples/mocks.http).
+
+## Recording Traffic
+
+You can record your API traffic or other HTTP traffic and save it as requests or mock responses in a Resterm `.http` file.
+
+```bash
+resterm record --upstream https://api.example.com --out captured.http --mode both
+```
+
+Point your application's API base URL at `http://127.0.0.1:9000`, use the application, then stop recording with `Ctrl+C`. The output file must be new. Use `--mode requests` or `--mode mocks` to save only one kind.
+
+In the TUI, use `:record start --upstream <origin>`, `:record list` and `:record stop`. Insert captures with `:record as-request` or `:record as-mock`, then save the request file.
+
+Saved copies redact known credential headers and fields. Free text and values under unrecognized names are left unchanged.
+
+More in the [Recording Traffic reference](docs/resterm.md#recording-traffic), the [`resterm record` CLI guide](docs/cli.md#resterm-record) and the [working example](_examples/recording.http).
 
 ## Headless
 
