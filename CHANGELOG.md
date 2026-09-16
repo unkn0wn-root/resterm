@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.8.0](https://github.com/unkn0wn-root/resterm/compare/v1.7.2...v1.8.0) (2026-09-16)
+
+
+### Features
+
+* **cli:** add record command ([dc513b8](https://github.com/unkn0wn-root/resterm/commit/dc513b8a0bba37b7f2909ed8e33e451da1801930))
+* **recorder:** add capture types and redaction ([11cde86](https://github.com/unkn0wn-root/resterm/commit/11cde8685f57ac2a67304ab428b8269f35fbf8d7))
+* **recorder:** export captures as requests and mocks ([f26bf4c](https://github.com/unkn0wn-root/resterm/commit/f26bf4cf402c73e670dbdfcb4b21c0f5f4994409))
+* **recorder:** forward and capture HTTP traffic ([8cecffd](https://github.com/unkn0wn-root/resterm/commit/8cecffd7fccee8c8bd9899c658b4b96decdadf1f))
+* **ui:** add recorder controls and exports ([f014cf2](https://github.com/unkn0wn-root/resterm/commit/f014cf295994532391efaaaac4335d92b4b0845e))
+
+
+### Bug Fixes
+
+* **ui:** keep consumed keys out of the response viewport ([4dbe6c1](https://github.com/unkn0wn-root/resterm/commit/4dbe6c194ea690feceaa3255663359ee59240e03))
+
 ### [1.7.2](https://github.com/unkn0wn-root/resterm/compare/v1.7.1...v1.7.2) (2026-09-08)
 
 ### [1.7.1](https://github.com/unkn0wn-root/resterm/compare/v1.7.0...v1.7.1) (2026-09-08)
