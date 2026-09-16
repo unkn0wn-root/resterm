@@ -100,8 +100,8 @@ func (w mockWriter) writeMatch(m restfile.MockMatch) error {
 	return nil
 }
 
-// A json match may be any JSON value, including a bare string, so it is quoted
-// where the bracketed matcher objects are not.
+// A json match may be any JSON value, including a bare string, so scalars carry
+// a quote that the bracketed matcher objects do not need.
 func matchFields(m restfile.MockMatch) ([]string, error) {
 	fields, err := appendMatchers(nil, "query", m.Query)
 	if err != nil {
@@ -132,12 +132,25 @@ func appendMatchers[M ~map[string]V, V any](fields []string, key string, matcher
 	return append(fields, key+"="+string(data)), nil
 }
 
+// Objects and arrays reach the option lexer's group scanner, which copies them
+// through unchanged, so they need no quoting. Scalars need a delimiter, and
+// single quotes leave the JSON's own quotes alone unless the value carries one.
+// A value that does not compact may hold raw whitespace, so it stays escaped.
 func quoteMockJSON(raw []byte) string {
 	var compact bytes.Buffer
-	if err := json.Compact(&compact, raw); err == nil {
-		raw = compact.Bytes()
+	if json.Compact(&compact, raw) != nil {
+		return strconv.Quote(string(raw))
 	}
-	return strconv.Quote(string(raw))
+
+	val := compact.String()
+	switch {
+	case strings.HasPrefix(val, "{"), strings.HasPrefix(val, "["):
+		return val
+	case !strings.ContainsAny(val, `'\`):
+		return "'" + val + "'"
+	default:
+		return strconv.Quote(val)
+	}
 }
 
 func (w mockWriter) writeResponses(responses []restfile.MockResponse) error {

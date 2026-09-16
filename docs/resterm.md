@@ -1166,7 +1166,7 @@ To match a body containing a JSON string, quote the JSON value inside the option
 # @match json='"paid"'
 ```
 
-The single quotes delimit the option value. The double quotes are part of the JSON string. For example, `json=100` matches the number `100`, while `json='"100"'` matches the string `"100"`. Other JSON values need no extra quotes. When Resterm writes this matcher, it uses the equivalent form `json="\"paid\""`.
+The single quotes delimit the option value. The double quotes are part of the JSON string. For example, `json=100` matches the number `100`, while `json='"100"'` matches the string `"100"`. Other JSON values need no extra quotes. Resterm writes this matcher in the same form.
 
 The structure of `json-rules` follows the request body:
 

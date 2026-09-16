@@ -137,31 +137,38 @@ ok
 	}
 }
 
-func TestRenderMockScalarJSONMatchRoundTrip(t *testing.T) {
-	for name, want := range map[string]string{
-		"string":            `"paid"`,
-		"string with space": `"paid in full"`,
-		"quoted string":     `"say \"hi\""`,
-		"number":            `100`,
-		"boolean":           `true`,
-		"null":              `null`,
-		"array":             `[1,2]`,
+func TestRenderMockJSONMatchRoundTrip(t *testing.T) {
+	for name, tc := range map[string]struct{ want, field string }{
+		"object":                 {`{"item":"widget","qty":2}`, `json={"item":"widget","qty":2}`},
+		"object with quotes":     {`{"msg":"say \"hi\""}`, `json={"msg":"say \"hi\""}`},
+		"object with space":      {`{"note":"paid in full"}`, `json={"note":"paid in full"}`},
+		"array":                  {`[1,2]`, `json=[1,2]`},
+		"string":                 {`"paid"`, `json='"paid"'`},
+		"string with space":      {`"paid in full"`, `json='"paid in full"'`},
+		"number":                 {`100`, `json='100'`},
+		"boolean":                {`true`, `json='true'`},
+		"null":                   {`null`, `json='null'`},
+		"quoted string":          {`"say \"hi\""`, `json="\"say \\\"hi\\\"\""`},
+		"string with apostrophe": {`"it's"`, `json="\"it's\""`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			doc := &restfile.Document{Mocks: []*restfile.Mock{{
 				Method:    http.MethodPost,
 				Path:      "/payments",
-				Match:     restfile.MockMatch{JSON: []byte(want)},
+				Match:     restfile.MockMatch{JSON: []byte(tc.want)},
 				Responses: []restfile.MockResponse{{Status: http.StatusOK}},
 			}}}
 
 			rendered := mustRender(t, doc)
+			if !strings.Contains(rendered, tc.field) {
+				t.Fatalf("rendered match = %s, want %s", rendered, tc.field)
+			}
 			parsed := parser.Parse("generated.http", []byte(rendered))
 			if len(parsed.Errors) != 0 || len(parsed.Mocks) != 1 {
 				t.Fatalf("round-trip errors=%+v mocks=%d\n%s", parsed.Errors, len(parsed.Mocks), rendered)
 			}
-			if got := string(parsed.Mocks[0].Match.JSON); got != want {
-				t.Fatalf("round-trip json = %s, want %s\n%s", got, want, rendered)
+			if got := string(parsed.Mocks[0].Match.JSON); got != tc.want {
+				t.Fatalf("round-trip json = %s, want %s\n%s", got, tc.want, rendered)
 			}
 		})
 	}
