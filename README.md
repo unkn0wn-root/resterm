@@ -67,10 +67,11 @@ Quick links: [Screenshots](#screenshots), [Install](#install), [Quick start](#qu
 
 - **HTTP, GraphQL, gRPC, WebSocket and SSE** support.
 - **Automation in request files:** conditions (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
+- **Tunnels in the request file:** `@ssh` and `@k8s` route a request through an SSH bastion or a Kubernetes port-forward that Resterm opens and closes for you, with profiles per file or workspace.
 - **Record HTTP traffic** and export it to Resterm `.http` files as requests or mock responses.
 - **RestermScript**, a small expression language built for Resterm, with JavaScript hooks when you want them.
 - **Vim-like controls** with shortcut hints, searchable offline help, `Shift+k` help under the cursor, `/` search and commands like `:w`, `:q`, `:help` and `:docs`.
-- **Auth and tunneling:** OAuth 2.0 (client credentials, password, authorization code with PKCE), auth through existing CLIs, SSH tunnels and Kubernetes port-forwards.
+- **Auth:** OAuth 2.0 (client credentials, password, authorization code with PKCE) and `@auth command` to reuse tokens from CLIs you already have installed, like `gh auth token`.
 - **CLI runner:** `resterm run` for scripted runs and CI, with JSON and JUnit output.
 - **Mock servers** declared next to the requests they mimic, with matching rules, sequences, call verification and hot reload.
 - **Timeline tracing, profiling and compare runs** across environments.
