@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -283,5 +284,67 @@ func TestNullRequestBodyStaysAMatcher(t *testing.T) {
 		if w.Code != want {
 			t.Fatalf("body %s: status %d, want %d", body, w.Code, want)
 		}
+	}
+}
+
+func TestExportAssertsUpstreamStatus(t *testing.T) {
+	ok := textEntry(1, "/ok", "x")
+	redirect := textEntry(2, "/moved", "x")
+	redirect.Status = 302
+	failed := textEntry(3, "/down", "x")
+	failed.Status = 0
+	failed.Response = Message{Issue: issueNoResponse}
+
+	out := newTestOutput(t)
+	p := buildExport(t, []Entry{ok, redirect, failed}, ExportOptions{Mode: Requests, Path: out.path})
+	if err := out.Append(t.Context(), p); err != nil {
+		t.Fatal(err)
+	}
+	doc := readTestOutput(t, out)
+	if len(doc.Requests) != 3 {
+		t.Fatalf("requests: %+v", doc.Requests)
+	}
+	asserts := doc.Requests[0].Metadata.Asserts
+	if len(asserts) != 1 || asserts[0].Expression != "response.statusCode == 200" {
+		t.Fatalf("status assert: %+v", asserts)
+	}
+	for _, r := range doc.Requests[1:] {
+		if len(r.Metadata.Asserts) != 0 {
+			t.Fatalf("%s should not assert its status: %+v", r.Metadata.Name, r.Metadata.Asserts)
+		}
+	}
+}
+
+func TestExportNamesFromMethodAndPath(t *testing.T) {
+	long := textEntry(3, "/"+strings.Repeat("segment/", 12)+"end", "x")
+	entries := []Entry{textEntry(1, "/users/42", "x"), textEntry(2, "/users/42", "x"), long}
+	existing := parser.Parse(
+		"rec.http",
+		[]byte("### POST-USERS-42\n# @name POST-USERS-42\nGET http://example.invalid/\n"),
+	)
+
+	out := newTestOutput(t)
+	p := buildExport(t, entries, ExportOptions{Mode: Both, Path: out.path, Existing: existing})
+	if err := out.Append(t.Context(), p); err != nil {
+		t.Fatal(err)
+	}
+	doc := readTestOutput(t, out)
+	if len(doc.Requests) != 3 || len(doc.Mocks) != 3 {
+		t.Fatalf("export counts: %+v", doc)
+	}
+
+	names := []string{doc.Requests[0].Metadata.Name, doc.Requests[1].Metadata.Name, doc.Mocks[0].Name}
+	if want := []string{"post-users-42-2", "post-users-42-3", "post-users-42-mock"}; !slices.Equal(names, want) {
+		t.Fatalf("names %q, want %q", names, want)
+	}
+	if doc.Mocks[0].Title != doc.Mocks[0].Name {
+		t.Fatalf("mock title %q, name %q", doc.Mocks[0].Title, doc.Mocks[0].Name)
+	}
+	if name := doc.Requests[2].Metadata.Name; len(name) > restfile.MaxMockNameLen ||
+		!strings.HasPrefix(name, "post-segment-") {
+		t.Fatalf("long name %q", name)
+	}
+	if desc := doc.Requests[0].Metadata.Description; !strings.HasPrefix(desc, "Record 1, 200 in ") {
+		t.Fatalf("description %q", desc)
 	}
 }

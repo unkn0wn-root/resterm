@@ -95,10 +95,16 @@ func sameRequest(got, want *restfile.Request) error {
 	case got.Method != want.Method,
 		got.URL != want.URL,
 		got.Metadata.Name != want.Metadata.Name,
+		got.Metadata.Description != want.Metadata.Description,
+		!slices.EqualFunc(got.Metadata.Asserts, want.Metadata.Asserts, sameAssert),
 		!maps.EqualFunc(got.Headers, want.Headers, slices.Equal):
 		return errBlock
 	}
 	return nil
+}
+
+func sameAssert(a, b restfile.AssertSpec) bool {
+	return a.Expression == b.Expression && a.Message == b.Message
 }
 
 func sameMock(got, want *restfile.Mock) error {
