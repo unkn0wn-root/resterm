@@ -12,6 +12,12 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
+<p align="center">
+  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of Resterm with timeline" width="720" />
+  <br>
+  <sub>Trace and timeline view</sub>
+</p>
+
 Resterm is an API client that stores requests in plain `.http` and `.rest` files that can live side by side in your repo like the rest of your code. You can use the terminal UI, or run the same files in CI with `resterm run`.
 
 Quick links: [Screenshots](#screenshots), [Install](#install), [Quick start](#quick-start), [Request files](#request-files), [Documentation](#documentation).
@@ -27,14 +33,6 @@ Quick links: [Screenshots](#screenshots), [Install](#install), [Quick start](#qu
 
 <p align="center">
   <img src="_media/resterm_workflow.png" alt="Screenshot of Resterm with Workflow" width="720" />
-</p>
-
-<p align="center">
-  <strong>Trace and Timeline</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of Resterm with timeline" width="720" />
 </p>
 
 <p align="center">
