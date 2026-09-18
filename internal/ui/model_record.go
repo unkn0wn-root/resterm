@@ -217,6 +217,9 @@ func (m *Model) recordStatus() string {
 		"Recorder %s. %d recorded, %d excluded, %d active",
 		state, stats.Entries, stats.Excluded, stats.ActiveCaptures,
 	)
+	if stats.Filtered > 0 {
+		text += fmt.Sprintf(", %d filtered", stats.Filtered)
+	}
 	if stats.Limit != "" {
 		text += ". " + string(stats.Limit) + ", forwarding continues"
 	}
@@ -252,9 +255,9 @@ func (m *Model) settleRecordExports(path string, doc *restfile.Document) {
 	})
 }
 
-func declaresAll(declared map[string]struct{}, names []string) bool {
+func declaresAll(declared restfile.Names, names []string) bool {
 	for _, name := range names {
-		if _, ok := declared[name]; !ok {
+		if !declared.Has(name) {
 			return false
 		}
 	}

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
@@ -18,7 +20,7 @@ const maxMatchBytes = 64 << 10
 
 var directivePrefixes = []string{"#", "//", "@", "<", ">"}
 
-func entryRequest(e Entry, base, upstream string, names map[string]struct{}) (*restfile.Request, Issue) {
+func entryRequest(e Entry, base, upstream string, names restfile.Names) (*restfile.Request, Issue) {
 	if e.Method != strings.ToUpper(e.Method) {
 		return nil, issueRequestMethodCase
 	}
@@ -42,15 +44,29 @@ func entryRequest(e Entry, base, upstream string, names map[string]struct{}) (*r
 	if err != nil || u.Scheme+"://"+u.Host != upstream || u.Opaque != "" {
 		return nil, issueRequestURL
 	}
+	meta := restfile.RequestMetadata{Name: recordName(e.Method, u.Path, names, ""), Description: describe(e)}
+	// resterm run follows redirects, so a 3xx assertion would fail on replay.
+	if e.Status != 0 && e.Status/100 != 3 {
+		meta.Asserts = []restfile.AssertSpec{{Expression: fmt.Sprintf("response.statusCode == %d", e.Status)}}
+	}
 	return &restfile.Request{
 		Method:   e.Method,
 		URL:      "{{" + base + "}}" + u.RequestURI(),
 		Headers:  e.Request.Headers.Clone(),
-		Metadata: restfile.RequestMetadata{Name: recordName(e.ID, names, "")},
+		Metadata: meta,
 	}, ""
 }
 
-func entryMock(e Entry, names map[string]struct{}) (*restfile.Mock, Issue) {
+func describe(e Entry) string {
+	status := strconv.Itoa(e.Status)
+	if e.Status == 0 {
+		status = "no response"
+	}
+	return fmt.Sprintf("Record %d, %s in %s at %s",
+		e.ID, status, e.Duration.Round(time.Millisecond), e.Started.Local().Format(time.DateTime))
+}
+
+func entryMock(e Entry, names restfile.Names) (*restfile.Mock, Issue) {
 	if e.Method != strings.ToUpper(e.Method) {
 		return nil, issueMockMethodCase
 	}
@@ -77,7 +93,7 @@ func entryMock(e Entry, names map[string]struct{}) (*restfile.Mock, Issue) {
 		return nil, issue
 	}
 
-	name := recordName(e.ID, names, "-mock")
+	name := recordName(e.Method, u.Path, names, "-mock")
 	m := &restfile.Mock{
 		Name: name, Title: name, Method: e.Method, Path: path, DisableInterpolation: true,
 		Responses: []restfile.MockResponse{{Status: e.Status, Headers: e.Response.Headers.Clone()}},
@@ -96,8 +112,9 @@ func entryMock(e Entry, names map[string]struct{}) (*restfile.Mock, Issue) {
 	return m, ""
 }
 
-func recordName(id uint64, names map[string]struct{}, suffix string) string {
-	return restfile.UniqueMockName(fmt.Sprintf("record-%06d%s", id, suffix), names)
+func recordName(method, path string, names restfile.Names, suffix string) string {
+	base := restfile.TruncateMockName(restfile.MockNameSlug(method + " " + path))
+	return restfile.UniqueMockName(base+suffix, names)
 }
 
 func mockQuery(raw string) (map[string]restfile.MockQueryRule, Issue) {

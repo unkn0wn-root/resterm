@@ -57,6 +57,12 @@ func (f *RecordFlags) Bind(fs *FlagSet) {
 		"Additional secret query, form, or JSON field (repeatable)",
 		"redact-field",
 	)
+	fs.StringListVarAliases(
+		&f.Config.Skip,
+		"Forward without recording requests matching [METHOD ]path (repeatable)",
+		"skip",
+	)
+	fs.StringListVarAliases(&f.Config.Only, "Record only requests matching [METHOD ]path (repeatable)", "only")
 }
 
 func (f RecordFlags) Resolve() (recorder.Config, error) {

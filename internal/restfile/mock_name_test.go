@@ -42,7 +42,7 @@ func FuzzMockNameSlugStaysValid(f *testing.F) {
 }
 
 func TestUniqueMockNameStaysValidAndUnique(t *testing.T) {
-	used := make(map[string]struct{})
+	used := Names{}
 	seen := make(map[string]bool)
 	for _, label := range slugSeeds {
 		name := UniqueMockName(MockNameSlug(label), used)
@@ -53,5 +53,27 @@ func TestUniqueMockNameStaysValidAndUnique(t *testing.T) {
 			t.Errorf("UniqueMockName for %q reused %q", label, name)
 		}
 		seen[name] = true
+	}
+}
+
+func TestUniqueMockNameIgnoresCase(t *testing.T) {
+	used := Names{}
+	used.Add("GET-USERS")
+	if got := UniqueMockName("get-users", used); got != "get-users-2" {
+		t.Fatalf("UniqueMockName = %q, want get-users-2", got)
+	}
+	if !used.Has("Get-Users-2") {
+		t.Fatal("generated name was not recorded")
+	}
+}
+
+func TestTruncateMockName(t *testing.T) {
+	long := strings.Repeat("ab-", MaxMockNameLen/3) + "cd"
+	got := TruncateMockName(long)
+	if len(got) > MaxMockNameLen || !ValidMockName(got) || strings.HasSuffix(got, "-") {
+		t.Fatalf("TruncateMockName(%q) = %q", long, got)
+	}
+	if got := TruncateMockName("short"); got != "short" {
+		t.Fatalf("short name changed to %q", got)
 	}
 }

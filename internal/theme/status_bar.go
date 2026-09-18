@@ -23,6 +23,7 @@ type StatusBarPalette struct {
 	Mode       StatusBarSegmentStyle
 	Editor     StatusBarSegmentStyle
 	Mock       StatusBarSegmentStyle
+	Record     StatusBarSegmentStyle
 	Zoom       StatusBarSegmentStyle
 	Minimized  StatusBarSegmentStyle
 	Version    StatusBarSegmentStyle
@@ -43,6 +44,7 @@ func DefaultStatusBarPalette() StatusBarPalette {
 		Focus:      StatusBarSegmentStyle{Foreground: "#F4F4F5", Background: "#52525B"},
 		Mode:       StatusBarSegmentStyle{Foreground: "#F8FAFC", Background: "#64748B"},
 		Mock:       StatusBarSegmentStyle{Foreground: "#F0FDFA", Background: "#134E4A"},
+		Record:     StatusBarSegmentStyle{Foreground: "#FDF4FF", Background: "#701A75"},
 		Zoom:       StatusBarSegmentStyle{Foreground: "#ECFEFF", Background: "#0891B2"},
 		Minimized:  StatusBarSegmentStyle{Foreground: "#F0FDF4", Background: "#166534"},
 		Version:    StatusBarSegmentStyle{Foreground: "#F8FAFC", Background: "#374151"},

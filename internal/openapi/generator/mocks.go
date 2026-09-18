@@ -33,7 +33,7 @@ func (b *Builder) buildMocks(op model.Operation) []*restfile.Mock {
 	}
 
 	var candidates []mockCandidate
-	used := make(map[string]struct{})
+	used := restfile.Names{}
 	for _, resp := range sortedMockResponses(op.Responses) {
 		status, ok := concreteStatus(resp.StatusCode)
 		if !ok {
@@ -94,7 +94,7 @@ func (b *Builder) mockCandidatesForResponse(
 	op model.Operation,
 	resp model.Response,
 	status int,
-	used map[string]struct{},
+	used restfile.Names,
 ) []mockCandidate {
 	hdrs := b.mockResponseHeaders(op, resp)
 	mts := sortedMockMediaTypes(resp.MediaTypes)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/recorder"
 )
@@ -199,5 +200,20 @@ func TestRecordQuitGuardsDrainingCapture(t *testing.T) {
 	}
 	if commandHasQuit(m.executeExCommand("q")) {
 		t.Fatal("quit discarded a capture that shutdown will publish")
+	}
+}
+
+func TestStatusBarShowsRecorderSession(t *testing.T) {
+	m := newMockTestModel(t, "")
+	m.width = 120
+	recordTestTraffic(t, m)
+
+	want := statusBarRecordIcon + " stopped 1"
+	if bar := ansi.Strip(m.renderStatusBar()); !strings.Contains(bar, want) {
+		t.Fatalf("status bar is missing %q: %q", want, bar)
+	}
+	_ = m.executeExCommand("record clear")
+	if bar := ansi.Strip(m.renderStatusBar()); strings.Contains(bar, statusBarRecordIcon) {
+		t.Fatalf("cleared session still shown: %q", bar)
 	}
 }

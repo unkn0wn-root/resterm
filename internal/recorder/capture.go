@@ -158,6 +158,11 @@ func (s *Session) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "recorder: tunnels and protocol upgrades are unsupported", http.StatusNotImplemented)
 		return
 	}
+	if !s.filter.captures(r) {
+		s.store.pass()
+		s.proxy.ServeHTTP(w, r)
+		return
+	}
 	if !s.store.admit(r) {
 		s.proxy.ServeHTTP(w, r)
 		return

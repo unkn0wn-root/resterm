@@ -179,6 +179,7 @@ type StatusBarSpec struct {
 	Mode       *StatusBarSegmentSpec `json:"mode"        toml:"mode"`
 	Editor     *StatusBarSegmentSpec `json:"editor"      toml:"editor"`
 	Mock       *StatusBarSegmentSpec `json:"mock"        toml:"mock"`
+	Record     *StatusBarSegmentSpec `json:"record"      toml:"record"`
 	Zoom       *StatusBarSegmentSpec `json:"zoom"        toml:"zoom"`
 	Minimized  *StatusBarSegmentSpec `json:"minimized"   toml:"minimized"`
 	Version    *StatusBarSegmentSpec `json:"version"     toml:"version"`
@@ -1115,6 +1116,7 @@ func applyStatusBarPalette(dst *StatusBarPalette, spec StatusBarSpec) error {
 		{"mode", spec.Mode, &dst.Mode},
 		{"editor", spec.Editor, &dst.Editor},
 		{"mock", spec.Mock, &dst.Mock},
+		{"record", spec.Record, &dst.Record},
 		{"zoom", spec.Zoom, &dst.Zoom},
 		{"minimized", spec.Minimized, &dst.Minimized},
 		{"version", spec.Version, &dst.Version},

@@ -116,7 +116,7 @@ type builder struct {
 	opts  ExportOptions
 	base  string
 	dir   string
-	names map[string]struct{}
+	names restfile.Names
 	keys  map[string]uint64
 
 	blocks []string
@@ -266,17 +266,17 @@ func fixtureDir() (string, error) {
 	return "resterm-record-" + hex.EncodeToString(nonce[:]), nil
 }
 
-func DeclaredNames(doc *restfile.Document) map[string]struct{} {
-	used := make(map[string]struct{})
+func DeclaredNames(doc *restfile.Document) restfile.Names {
+	used := restfile.Names{}
 	if doc == nil {
 		return used
 	}
 	for _, r := range doc.Requests {
-		used[r.Metadata.Name] = struct{}{}
+		used.Add(r.Metadata.Name)
 	}
 	for _, m := range doc.Mocks {
-		used[m.Name] = struct{}{}
-		used[m.Sequence] = struct{}{}
+		used.Add(m.Name)
+		used.Add(m.Sequence)
 	}
 	return used
 }

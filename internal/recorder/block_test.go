@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestExportPreservesBodies(t *testing.T) {
@@ -66,5 +67,29 @@ func TestAppendTextKeepsTheDocumentsLastBody(t *testing.T) {
 				t.Fatalf("append changed request body: %s", text)
 			}
 		}
+	}
+}
+
+func TestSameRequestComparesAssertsByExpression(t *testing.T) {
+	want := &restfile.Request{
+		Method: "GET", URL: "/", Metadata: restfile.RequestMetadata{
+			Description: "d",
+			Asserts:     []restfile.AssertSpec{{Expression: "response.statusCode == 200", Line: 3}},
+		},
+	}
+	got := *want
+	got.Metadata.Asserts = []restfile.AssertSpec{{Expression: "response.statusCode == 200", Line: 9}}
+	if err := sameRequest(&got, want); err != nil {
+		t.Fatalf("assert positions should not matter: %v", err)
+	}
+
+	got.Metadata.Asserts = []restfile.AssertSpec{{Expression: "response.statusCode == 201"}}
+	if sameRequest(&got, want) == nil {
+		t.Fatal("changed assertion accepted")
+	}
+	got = *want
+	got.Metadata.Description = "changed"
+	if sameRequest(&got, want) == nil {
+		t.Fatal("changed description accepted")
 	}
 }

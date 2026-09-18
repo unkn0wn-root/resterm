@@ -35,13 +35,14 @@ func (p RequestPattern) Clone() RequestPattern {
 // have to travel together.
 type compiledPattern struct {
 	pattern RequestPattern
-	path    *pathMatcher
+	path    *PathMatcher
 	query   queryRules
 	headers headerRules
 	json    jsonPredicate
 }
 
-type pathMatcher struct {
+// PathMatcher matches request paths against a mock route.
+type PathMatcher struct {
 	mux *http.ServeMux
 }
 
@@ -60,7 +61,7 @@ func compileRequestPattern(p RequestPattern) (*compiledPattern, error) {
 
 	var err error
 	if cp.pattern.Path != "" {
-		if cp.path, err = newPathMatcher(cp.pattern.Path); err != nil {
+		if cp.path, err = NewPathMatcher(cp.pattern.Path); err != nil {
 			return nil, err
 		}
 	}
@@ -78,17 +79,17 @@ func compileRequestPattern(p RequestPattern) (*compiledPattern, error) {
 	return cp, nil
 }
 
-func newPathMatcher(path string) (*pathMatcher, error) {
+func NewPathMatcher(path string) (*PathMatcher, error) {
 	pattern, _, err := restfile.CompileMockPath(path)
 	if err != nil {
 		return nil, err
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc(pattern, func(http.ResponseWriter, *http.Request) {})
-	return &pathMatcher{mux: mux}, nil
+	return &PathMatcher{mux: mux}, nil
 }
 
-func (m *pathMatcher) matches(path, rawPath string) bool {
+func (m *PathMatcher) Matches(path, rawPath string) bool {
 	if m == nil || m.mux == nil {
 		return true
 	}
@@ -108,7 +109,7 @@ func (p *compiledPattern) matches(entry requestRecord) (bool, error) {
 	if p.pattern.Method != "" && entry.method != p.pattern.Method {
 		return false, nil
 	}
-	if p.path != nil && !p.path.matches(entry.path, entry.rawPath) {
+	if p.path != nil && !p.path.Matches(entry.path, entry.rawPath) {
 		return false, nil
 	}
 	if !p.query.matches(queryLookup(entry.query)) {

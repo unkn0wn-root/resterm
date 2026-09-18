@@ -54,13 +54,14 @@ var mockStartHints = []prompt.Item{
 	{Label: "--all", Summary: "Whole workspace; no --source"},
 }
 
-const recordStartUsage = "--upstream <origin> [--listen <host:port>] [limit and redaction flags]"
+const recordStartUsage = "--upstream <origin> [--listen <host:port>] [limit, redaction, and filter flags]"
 
 var recordStartHints = []prompt.Item{
 	{Label: "--upstream <origin>", Summary: "HTTP(S) server to forward to (required)"},
 	{Label: "--listen <host:port>", Summary: "Local listen address"},
 	{Label: "--max-entries|--max-bytes|--body-limit", Summary: "Capture limits"},
 	{Label: "--redact-header|--redact-field", Summary: "Additional secret names (repeatable)"},
+	{Label: "--skip|--only <[METHOD ]path>", Summary: "Capture filters in mock path syntax (repeatable)"},
 }
 
 var exCommands = exCatalog{
