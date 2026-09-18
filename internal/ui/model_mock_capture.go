@@ -333,16 +333,13 @@ func nextCapturedMockName(route []*restfile.Mock, label string, status int) stri
 	if base == "" {
 		base = fmt.Sprintf("response-%d", status)
 	}
-	if len(base) > 56 {
-		base = strings.Trim(base[:56], "-._")
-	}
 
-	used := make(map[string]struct{}, len(route))
+	used := make(restfile.Names, len(route))
 	for _, spec := range route {
-		used[spec.Name] = struct{}{}
-		used[spec.Sequence] = struct{}{}
+		used.Add(spec.Name)
+		used.Add(spec.Sequence)
 	}
-	return restfile.UniqueMockName(base, used)
+	return restfile.UniqueMockName(restfile.TruncateMockName(base), used)
 }
 
 func capturedMockIsDefault(route []*restfile.Mock) bool {

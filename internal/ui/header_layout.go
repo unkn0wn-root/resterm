@@ -21,6 +21,7 @@ const (
 	headerPriorityWorkspace
 	headerPriorityBrand
 	headerPriorityMock
+	headerPriorityRecord
 	headerPriorityTests
 	headerPriorityActive
 	headerPriorityEnv

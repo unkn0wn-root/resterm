@@ -1170,6 +1170,7 @@ func TestStatusBarContextText(t *testing.T) {
 		{statusBarSeg{key: "Mode", val: "VISUAL LINE"}, statusBarVisualIcon + " VISUAL LINE"},
 		{statusBarSeg{key: "EditorPos", val: "Ln 3/3 Col 6"}, "Ln 3/3 Col 6"},
 		{statusBarSeg{key: "Zoom", val: "Response"}, "Response"},
+		{statusBarSeg{key: "Record", val: "127.0.0.1:9000 3"}, statusBarRecordIcon + " 127.0.0.1:9000 3"},
 		{statusBarSeg{key: "Unknown", val: "fallback"}, "Unknown: fallback"},
 	}
 

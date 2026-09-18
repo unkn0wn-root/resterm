@@ -121,6 +121,9 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			Mock: &StatusBarSegmentSpec{
 				Background: strPtr("#070707"),
 			},
+			Record: &StatusBarSegmentSpec{
+				Background: strPtr("#080808"),
+			},
 			Minimized: &StatusBarSegmentSpec{
 				Foreground: strPtr("#F0FDF4"),
 				Background: strPtr("#166534"),
@@ -217,6 +220,9 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if got := updated.StatusBarPalette.Mock.Background; got != "#070707" {
 		t.Fatalf("status bar mock background = %q", got)
+	}
+	if got := updated.StatusBarPalette.Record.Background; got != "#080808" {
+		t.Fatalf("status bar record background = %q", got)
 	}
 	if got := updated.StatusBarPalette.Host.Background; got != "#030303" {
 		t.Errorf("expected status bar host background override, got %q", got)

@@ -30,6 +30,7 @@ const (
 	statusBarVisualIcon    = "◫"
 	statusBarGitIcon       = "⎇"
 	statusBarMockIcon      = "◉"
+	statusBarRecordIcon    = "●"
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
@@ -43,8 +44,9 @@ var (
 )
 
 type statusBarSeg struct {
-	key statusBarSegmentKind
-	val string
+	key  statusBarSegmentKind
+	val  string
+	warn bool
 }
 
 type statusBarSegmentKind string
@@ -56,6 +58,7 @@ const (
 	statusBarSegmentEditorPos statusBarSegmentKind = "EditorPos"
 	statusBarSegmentZoom      statusBarSegmentKind = "Zoom"
 	statusBarSegmentMock      statusBarSegmentKind = "Mock"
+	statusBarSegmentRecord    statusBarSegmentKind = "Record"
 )
 
 type statusBarSection struct {
@@ -202,6 +205,7 @@ func statusBarPalette(palette theme.StatusBarPalette) theme.StatusBarPalette {
 	palette.Focus = statusBarSegmentStyle(palette.Focus, defaults.Focus)
 	palette.Mode = statusBarSegmentStyle(palette.Mode, defaults.Mode)
 	palette.Mock = statusBarSegmentStyle(palette.Mock, defaults.Mock)
+	palette.Record = statusBarSegmentStyle(palette.Record, defaults.Record)
 	palette.Zoom = statusBarSegmentStyle(palette.Zoom, defaults.Zoom)
 	palette.Minimized = statusBarSegmentStyle(palette.Minimized, defaults.Minimized)
 	palette.Version = statusBarSegmentStyle(palette.Version, defaults.Version)
@@ -263,7 +267,7 @@ func (m *Model) statusBarMessage() (string, statusLevel) {
 }
 
 func (m Model) statusBarSegments() []statusBarSeg {
-	segs := make([]statusBarSeg, 0, 6)
+	segs := make([]statusBarSeg, 0, 7)
 	if m.currentFile != "" {
 		segs = append(segs, statusBarSeg{
 			key: statusBarSegmentFile,
@@ -287,10 +291,24 @@ func (m Model) statusBarSegments() []statusBarSeg {
 	if server := m.activeMockServer(); server != nil {
 		stats := server.Stats()
 		value := fmt.Sprintf("%s R%d C%d", stats.Addr, stats.Routes, stats.Calls)
-		if m.mock.reloadErr != "" {
+		warn := m.mock.reloadErr != ""
+		if warn {
 			value += " !"
 		}
-		segs = append(segs, statusBarSeg{key: statusBarSegmentMock, val: value})
+		segs = append(segs, statusBarSeg{key: statusBarSegmentMock, val: value, warn: warn})
+	}
+	if s := m.record.session; s != nil {
+		stats := s.Stats()
+		state := s.Addr()
+		if !stats.Running {
+			state = "stopped"
+		}
+		value := fmt.Sprintf("%s %d", state, stats.Entries)
+		warn := stats.Limit != ""
+		if warn {
+			value += " !"
+		}
+		segs = append(segs, statusBarSeg{key: statusBarSegmentRecord, val: value, warn: warn})
 	}
 	return segs
 }
@@ -543,6 +561,8 @@ func statusBarContextText(seg statusBarSeg) string {
 		return statusBarModeText(val)
 	case statusBarSegmentMock:
 		return statusBarMockIcon + " " + val
+	case statusBarSegmentRecord:
+		return statusBarRecordIcon + " " + val
 	case "", statusBarSegmentZoom, statusBarSegmentEditorPos:
 		return val
 	default:
@@ -589,7 +609,7 @@ func (m *Model) statusBarContextSection(
 	if seg.key == statusBarSegmentEditorPos {
 		return m.statusBarEditorPosSection(text, palette), true
 	}
-	if seg.key == statusBarSegmentMock && m.mock.reloadErr != "" {
+	if seg.warn {
 		return statusBarSection{text: text, style: palette.Warn}, true
 	}
 	return statusBarSection{
@@ -680,6 +700,8 @@ func statusBarContextStyle(
 		return palette.Mode
 	case statusBarSegmentMock:
 		return palette.Mock
+	case statusBarSegmentRecord:
+		return palette.Record
 	case statusBarSegmentZoom:
 		return palette.Zoom
 	default:

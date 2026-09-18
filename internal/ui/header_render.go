@@ -26,10 +26,12 @@ const (
 	iconHeaderRequests   = "⇄"
 	iconHeaderActive     = "›"
 	iconHeaderMock       = statusBarMockIcon
+	iconHeaderRecord     = statusBarRecordIcon
 	labelHeaderEnv       = "env"
 	labelHeaderRequests  = "req"
 	labelHeaderWorkspace = "workspace"
 	labelHeaderMock      = "mock"
+	labelHeaderRecord    = "rec"
 	headerLabelNone      = ""
 )
 
@@ -168,6 +170,9 @@ func (m *Model) renderHeader() string {
 	if m.activeMockServer() != nil {
 		cells = append(cells, m.headerMockCell(styles))
 	}
+	if m.record.session != nil {
+		cells = append(cells, m.headerRecordCell(styles))
+	}
 	cells = append(cells, m.headerRequestsCell(styles))
 	if request := m.headerRequestTitle(); request != "" {
 		cells = append(cells, m.headerActiveCell(styles, request))
@@ -248,6 +253,17 @@ func (m *Model) headerMockCell(styles headerStyles) headerCell {
 		values:   headerMockVariants(m.mockSources()),
 		style:    styles.value,
 		priority: headerPriorityMock,
+	}
+}
+
+func (m *Model) headerRecordCell(styles headerStyles) headerCell {
+	_, host, _ := strings.Cut(m.record.session.Upstream(), "://")
+	return headerCell{
+		icon:     iconHeaderRecord,
+		labels:   []string{labelHeaderRecord, headerLabelNone},
+		values:   []string{host},
+		style:    styles.value,
+		priority: headerPriorityRecord,
 	}
 }
 

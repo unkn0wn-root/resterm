@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,6 +16,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/mock"
+	"github.com/unkn0wn-root/resterm/internal/recorder"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -382,5 +386,31 @@ func TestHeaderFitsSupportedWidths(t *testing.T) {
 				fmt.Sprintf("active request %q status %q", activeRequest, status.label),
 			)
 		}
+	}
+}
+
+func TestHeaderShowsRecorderWhileSessionExists(t *testing.T) {
+	up := httptest.NewServer(http.NotFoundHandler())
+	defer up.Close()
+	s, err := recorder.Start(t.Context(), recorder.Config{Listen: "127.0.0.1:0", Upstream: up.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close(context.Background()) }()
+
+	model := headerTestModel(t, 160)
+	want := iconHeaderRecord + " " + labelHeaderRecord + " " + strings.TrimPrefix(up.URL, "http://")
+	if view := ansi.Strip(model.renderHeader()); strings.Contains(view, want) {
+		t.Fatalf("idle header contains recorder %q:\n%s", want, view)
+	}
+
+	model.record.session = s
+	if view := ansi.Strip(model.renderHeader()); !strings.Contains(view, want) {
+		t.Fatalf("recording header is missing %q:\n%s", want, view)
+	}
+
+	model.record.session = nil
+	if view := ansi.Strip(model.renderHeader()); strings.Contains(view, want) {
+		t.Fatalf("cleared header kept recorder %q:\n%s", want, view)
 	}
 }

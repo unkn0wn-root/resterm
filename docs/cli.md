@@ -45,6 +45,7 @@ Recordings are written as requests finish. The output file must be new and its p
 | `--body-limit` | `4MiB` | Maximum request or response body size, including after decoding. |
 | `--capture-concurrency` | `32` | Maximum simultaneous captures. Extra requests still forward. |
 | `--redact-header`, `--redact-field` | built-in rules | Additional header or field names to redact. Both flags can be repeated. |
+| `--skip`, `--only` | none | Forward without recording, or record only, requests matching `[METHOD ]path`. Paths use mock route syntax (`/health`, `/users/{id}`, `/assets/{path...}`). Both flags can be repeated. `--skip` wins. Filtered requests are not counted as skipped captures. |
 
 Exit status is 0 on success, 1 if any requested capture or export was skipped or recording failed, and 2 for invalid arguments. HTTP error responses can be recorded and do not cause a nonzero exit status on their own.
 
