@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"testing"
@@ -245,9 +246,32 @@ func TestRunProfileCancelDuringDelayEmitsRunDone(t *testing.T) {
 	}
 }
 
+func TestRunProfileReportsErrorInRunDone(t *testing.T) {
+	req := &restfile.Request{Method: "GET", URL: "https://example.com/profile"}
+	pl, err := PrepareProfile(nil, req, RunMeta{ID: "pro-4", Env: testEnvironment("dev")})
+	if err != nil {
+		t.Fatalf("PrepareProfile: %v", err)
+	}
+	want := errors.New("executor gone")
+	var done RunDone
+	sink := SinkFunc(func(_ context.Context, e Evt) error {
+		if v, ok := e.(RunDone); ok {
+			done = v
+		}
+		return nil
+	})
+	if err := RunProfile(context.Background(), &proDep{err: want}, sink, pl); !errors.Is(err, want) {
+		t.Fatalf("RunProfile() error = %v, want %v", err, want)
+	}
+	if !errors.Is(done.Err, want) {
+		t.Fatalf("RunDone.Err = %v, want %v", done.Err, want)
+	}
+}
+
 type proDep struct {
 	fakeDep
 	res  []engine.RequestResult
+	err  error
 	call []bool
 }
 
@@ -258,6 +282,9 @@ func (d *proDep) ExecuteWith(
 	opt request.ExecOptions,
 ) (engine.RequestResult, error) {
 	d.call = append(d.call, opt.Record)
+	if d.err != nil {
+		return engine.RequestResult{}, d.err
+	}
 	if len(d.res) == 0 {
 		return engine.RequestResult{}, nil
 	}

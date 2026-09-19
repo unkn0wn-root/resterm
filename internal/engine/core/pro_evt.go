@@ -14,7 +14,7 @@ func (r *proRun) emitRunStart() error {
 func (r *proRun) emitRunDone(err error) error {
 	return Emit(r.ectx, r.sink, RunDone{
 		Meta:     NewMeta(r.pl.Run, time.Now()),
-		Success:  r.done && !r.skip && !r.fail && !r.canceled && r.ok == r.pl.Spec.Count,
+		Success:  r.done && !r.skip && !r.canceled && r.ok == r.pl.Spec.Count,
 		Skipped:  r.seen && r.skip,
 		Canceled: r.canceled,
 		Err:      err,
