@@ -32,4 +32,11 @@ type op struct {
 	Abs    string // absolute target
 	Mode   fs.FileMode
 	Data   string
+	Prev   *prior // file being replaced, nil when creating
+}
+
+// prior is kept so a failed commit can put the original file back.
+type prior struct {
+	Data string
+	Mode fs.FileMode
 }

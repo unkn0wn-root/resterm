@@ -2,6 +2,7 @@ package initcmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -276,5 +278,159 @@ func TestGitignoreAppendPreservesMode(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %v, want %v", info.Mode().Perm(), 0o600)
+	}
+}
+
+var errBoom = errors.New("boom")
+
+// flakyFS fails the listed CreateTemp or Rename calls, counted from one.
+type flakyFS struct {
+	FS
+	failTemp   int
+	failRename []int
+	temps      int
+	renames    int
+}
+
+func (f *flakyFS) CreateTemp(d, pat string) (TempFile, error) {
+	f.temps++
+	if f.temps == f.failTemp {
+		return nil, errBoom
+	}
+	return f.FS.CreateTemp(d, pat)
+}
+
+func (f *flakyFS) Rename(a, b string) error {
+	f.renames++
+	if slices.Contains(f.failRename, f.renames) {
+		return errBoom
+	}
+	return f.FS.Rename(a, b)
+}
+
+func runWith(t *testing.T, fsys FS, o Opt) error {
+	t.Helper()
+	c := &Command{fs: fsys, templates: BuiltinTemplates{}, out: io.Discard}
+	o.Out = io.Discard
+	return c.Run(o)
+}
+
+func dirNames(t *testing.T, dir string) []string {
+	t.Helper()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	names := make([]string, 0, len(ents))
+	for _, e := range ents {
+		names = append(names, e.Name())
+	}
+	return names
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
+}
+
+func TestRunStageFailureKeepsOldFiles(t *testing.T) {
+	dir := t.TempDir()
+	req := filepath.Join(dir, "requests.http")
+	env := filepath.Join(dir, "resterm.env.json")
+	for _, p := range []string{req, env} {
+		if err := os.WriteFile(p, []byte("old"), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+
+	fsys := &flakyFS{FS: OSFS{}, failTemp: 2}
+	err := runWith(t, fsys, Opt{Dir: dir, Template: "minimal", Force: true})
+	if !errors.Is(err, errBoom) || !strings.Contains(err.Error(), "resterm.env.json") {
+		t.Fatalf("err = %v, want write error for resterm.env.json", err)
+	}
+	if got := readFile(t, req); got != "old" {
+		t.Fatalf("requests.http = %q, want old content", got)
+	}
+	if got := readFile(t, env); got != "old" {
+		t.Fatalf("resterm.env.json = %q, want old content", got)
+	}
+	if names := dirNames(t, dir); !slices.Equal(names, []string{"requests.http", "resterm.env.json"}) {
+		t.Fatalf("dir = %v, want only the original files", names)
+	}
+}
+
+func TestRunCommitFailureRemovesCreated(t *testing.T) {
+	dir := t.TempDir()
+	fsys := &flakyFS{FS: OSFS{}, failRename: []int{2}}
+	err := runWith(t, fsys, Opt{Dir: dir, Template: "minimal"})
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("err = %v, want rename error", err)
+	}
+	if names := dirNames(t, dir); len(names) != 0 {
+		t.Fatalf("dir = %v, want empty", names)
+	}
+}
+
+func TestRunCommitFailureRestoresOld(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file mode checks are not reliable on windows")
+	}
+	dir := t.TempDir()
+	req := filepath.Join(dir, "requests.http")
+	if err := os.WriteFile(req, []byte("old"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	fsys := &flakyFS{FS: OSFS{}, failRename: []int{2}}
+	err := runWith(t, fsys, Opt{Dir: dir, Template: "minimal", Force: true})
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("err = %v, want rename error", err)
+	}
+	if got := readFile(t, req); got != "old" {
+		t.Fatalf("requests.http = %q, want old content", got)
+	}
+	info, err := os.Stat(req)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v, want %v", info.Mode().Perm(), 0o600)
+	}
+	if names := dirNames(t, dir); !slices.Equal(names, []string{"requests.http"}) {
+		t.Fatalf("dir = %v, want only requests.http", names)
+	}
+}
+
+func TestRunGitignoreFailureWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	fsys := &flakyFS{FS: OSFS{}, failTemp: 3}
+	err := runWith(t, fsys, Opt{Dir: dir, Template: "minimal"})
+	if !errors.Is(err, errBoom) || !strings.Contains(err.Error(), gitignoreFile) {
+		t.Fatalf("err = %v, want write error for .gitignore", err)
+	}
+	if names := dirNames(t, dir); len(names) != 0 {
+		t.Fatalf("dir = %v, want empty", names)
+	}
+}
+
+func TestRunRollbackFailureLeavesNoTemps(t *testing.T) {
+	dir := t.TempDir()
+	req := filepath.Join(dir, "requests.http")
+	if err := os.WriteFile(req, []byte("old"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// The second rename fails the commit and the third fails the restore.
+	fsys := &flakyFS{FS: OSFS{}, failRename: []int{2, 3}}
+	err := runWith(t, fsys, Opt{Dir: dir, Template: "minimal", Force: true})
+	if !errors.Is(err, errBoom) || !strings.Contains(err.Error(), "restore requests.http") {
+		t.Fatalf("err = %v, want restore error for requests.http", err)
+	}
+	if names := dirNames(t, dir); !slices.Equal(names, []string{"requests.http"}) {
+		t.Fatalf("dir = %v, want only requests.http", names)
 	}
 }

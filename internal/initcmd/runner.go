@@ -3,9 +3,7 @@ package initcmd
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"path/filepath"
 )
 
 type runner struct {
@@ -22,13 +20,7 @@ func (r *runner) run() error {
 	if err != nil {
 		return err
 	}
-	if err := r.apply(ops); err != nil {
-		return err
-	}
-	if r.t.AddGitignore && !r.o.NoGitignore {
-		return r.writeGitignore()
-	}
-	return nil
+	return r.apply(ops)
 }
 
 func (r *runner) ensureDir() error {
@@ -50,51 +42,6 @@ func (r *runner) ensureDir() error {
 		return fmt.Errorf("init: create %s: %w", d, err)
 	}
 	return nil
-}
-
-func (r *runner) writeAtomic(p string, m fs.FileMode, data string, force bool) (err error) {
-	d := filepath.Dir(p)
-	f, err := r.fs.CreateTemp(d, ".resterm-*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	defer func() {
-		_ = f.Close()
-		if err != nil {
-			_ = r.fs.Remove(tmp)
-		}
-	}()
-	if err = f.Chmod(m); err != nil {
-		return err
-	}
-	if _, err = io.WriteString(f, data); err != nil {
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	if !force {
-		if _, err = r.fs.Stat(p); err == nil {
-			return fs.ErrExist
-		}
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
-	if err = r.fs.Rename(tmp, p); err == nil {
-		return nil
-	}
-	if !force || !errors.Is(err, fs.ErrExist) {
-		return err
-	}
-	if err = r.fs.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	return r.fs.Rename(tmp, p)
 }
 
 func (r *runner) report(act, path string) error {

@@ -15,6 +15,7 @@ const (
 	fileRTSHelpers = "rts/helpers.rts"
 	gitignoreFile  = ".gitignore"
 	gitignoreEntry = fileEnv
+	tmpPattern     = ".resterm-*"
 )
 
 const (
