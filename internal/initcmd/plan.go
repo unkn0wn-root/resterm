@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"path/filepath"
 	"strings"
 )
 
@@ -31,18 +30,22 @@ func (r *runner) plan() ([]op, error) {
 			return nil, fmt.Errorf("init: stat %s: %w", rel, err)
 		}
 
-		act := ActionCreate
-		if err == nil {
-			act = ActionOverwrite
-		}
-
-		ops = append(ops, op{
-			Action: act,
+		o := op{
+			Action: ActionCreate,
 			Path:   rel,
 			Abs:    abs,
 			Mode:   f.Mode,
 			Data:   f.Data,
-		})
+		}
+		if err == nil {
+			data, err := r.fs.ReadFile(abs)
+			if err != nil {
+				return nil, fmt.Errorf("init: read %s: %w", rel, err)
+			}
+			o.Action = ActionOverwrite
+			o.Prev = &prior{Data: string(data), Mode: info.Mode().Perm()}
+		}
+		ops = append(ops, o)
 	}
 
 	if len(conflicts) > 0 {
@@ -52,29 +55,13 @@ func (r *runner) plan() ([]op, error) {
 		)
 	}
 
-	return ops, nil
-}
-
-func (r *runner) apply(ops []op) error {
-	for _, op := range ops {
-		if r.o.DryRun {
-			if err := r.report(string(op.Action), op.Path); err != nil {
-				return err
-			}
-			continue
+	if r.t.AddGitignore && !r.o.NoGitignore {
+		o, err := r.planGitignore()
+		if err != nil {
+			return nil, err
 		}
-
-		if err := r.fs.MkdirAll(filepath.Dir(op.Abs), dirPerm); err != nil {
-			return fmt.Errorf("init: create dir for %s: %w", op.Path, err)
-		}
-
-		if err := r.writeAtomic(op.Abs, op.Mode, op.Data, r.o.Force); err != nil {
-			return fmt.Errorf("init: write %s: %w", op.Path, err)
-		}
-
-		if err := r.report(string(op.Action), op.Path); err != nil {
-			return err
-		}
+		ops = append(ops, o)
 	}
-	return nil
+
+	return ops, nil
 }

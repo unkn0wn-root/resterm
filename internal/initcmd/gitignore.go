@@ -8,52 +8,33 @@ import (
 	"strings"
 )
 
-func (r *runner) writeGitignore() error {
-	act, err := r.ensureGitignore(gitignoreEntry)
+func (r *runner) planGitignore() (op, error) {
+	abs := filepath.Join(r.o.Dir, gitignoreFile)
+	o := op{Path: gitignoreFile, Abs: abs, Mode: filePerm}
+
+	data, err := r.fs.ReadFile(abs)
+	if errors.Is(err, fs.ErrNotExist) {
+		o.Action = ActionCreate
+		o.Data = gitignoreEntry + "\n"
+		return o, nil
+	}
 	if err != nil {
-		return err
+		return op{}, fmt.Errorf("init: read .gitignore: %w", err)
 	}
-	return r.report(string(act), gitignoreFile)
-}
-
-func (r *runner) ensureGitignore(entry string) (Action, error) {
-	p := filepath.Join(r.o.Dir, gitignoreFile)
-	data, err := r.fs.ReadFile(p)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("init: read .gitignore: %w", err)
+	if hasGitignoreEntry(string(data), gitignoreEntry) {
+		o.Action = ActionSkip
+		return o, nil
 	}
 
-	mode := filePerm
-	if err == nil {
-		info, statErr := r.fs.Stat(p)
-		if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
-			return "", fmt.Errorf("init: stat .gitignore: %w", statErr)
-		}
-		if statErr == nil {
-			mode = info.Mode().Perm()
-		}
-
-		if hasGitignoreEntry(string(data), entry) {
-			return ActionSkip, nil
-		}
-		if r.o.DryRun {
-			return ActionAppend, nil
-		}
-
-		updated := appendGitignoreEntry(string(data), entry)
-		if err := r.writeAtomic(p, mode, updated, true); err != nil {
-			return "", fmt.Errorf("init: update .gitignore: %w", err)
-		}
-		return ActionAppend, nil
+	info, err := r.fs.Stat(abs)
+	if err != nil {
+		return op{}, fmt.Errorf("init: stat .gitignore: %w", err)
 	}
-
-	if r.o.DryRun {
-		return ActionCreate, nil
-	}
-	if err = r.writeAtomic(p, mode, entry+"\n", true); err != nil {
-		return "", fmt.Errorf("init: create .gitignore: %w", err)
-	}
-	return ActionCreate, nil
+	o.Action = ActionAppend
+	o.Mode = info.Mode().Perm()
+	o.Data = appendGitignoreEntry(string(data), gitignoreEntry)
+	o.Prev = &prior{Data: string(data), Mode: o.Mode}
+	return o, nil
 }
 
 func appendGitignoreEntry(data, entry string) string {
