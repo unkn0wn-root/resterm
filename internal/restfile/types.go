@@ -369,10 +369,13 @@ type ExponentialBackoffSpec struct {
 	JitterPercent float64
 }
 
+const DefaultProfileCount = 10
+
 type ProfileSpec struct {
 	Count  int
 	Warmup int
 	Delay  time.Duration
+	Line   int
 }
 
 type TraceSpec struct {

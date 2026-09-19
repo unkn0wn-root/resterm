@@ -119,6 +119,20 @@ func (b *documentBuilder) report(d parsedDirective, err error) {
 	b.pushError(item)
 }
 
+// reportStrict treats unknown options as errors because they can change what runs.
+func (b *documentBuilder) reportStrict(d parsedDirective, err error) {
+	if err == nil {
+		return
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, item := range joined.Unwrap() {
+			b.reportStrict(d, item)
+		}
+		return
+	}
+	b.pushError(d.diagnostic(err.Error(), err))
+}
+
 // True if err is more than unknown option warnings. When it is false the
 // caller can still use what it parsed.
 func fatalErr(err error) bool {
@@ -258,6 +272,7 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.warnUnclosedBody(req)
 	b.lintRequestCaptures(req)
 	b.lintRequestPolicies(req)
+	b.lintProfile(req)
 	if req.Method != "" && req.URL != "" {
 		b.doc.Requests = append(b.doc.Requests, req)
 	}

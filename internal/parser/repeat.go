@@ -285,3 +285,11 @@ func positiveDuration(field, raw string) (time.Duration, error) {
 	}
 	return value, nil
 }
+
+func nonNegativeDuration(field, raw string) (time.Duration, error) {
+	value, ok := duration.Parse(strings.TrimSpace(raw))
+	if !ok || value < 0 {
+		return 0, fmt.Errorf("%s must be a non-negative duration, got %q", field, strings.TrimSpace(raw))
+	}
+	return value, nil
+}

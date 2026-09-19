@@ -3,7 +3,6 @@ package parser
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -377,56 +376,6 @@ func parseAuthSpec(fields []string) (*restfile.AuthSpec, error) {
 		return nil, nil
 	}
 	return &restfile.AuthSpec{Type: authType, Params: params}, nil
-}
-
-func parseProfileSpec(rest string) (*restfile.ProfileSpec, error) {
-	rest = strings.TrimSpace(rest)
-	spec := &restfile.ProfileSpec{}
-
-	if rest == "" {
-		spec.Count = 10
-		return spec, nil
-	}
-
-	fields := directive.Fields(rest)
-	params, err := directive.OptionFields(directive.Profile, fields)
-	if err != nil {
-		return nil, err
-	}
-
-	if spec.Count == 0 {
-		if raw, ok := params.Lookup("count"); ok {
-			if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && n > 0 {
-				spec.Count = n
-			}
-		}
-	}
-
-	if spec.Count == 0 && len(fields) == 1 && !strings.Contains(fields[0], "=") {
-		if n, err := strconv.Atoi(fields[0]); err == nil && n > 0 {
-			spec.Count = n
-		}
-	}
-
-	if raw, ok := params.Lookup("warmup"); ok {
-		if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && n >= 0 {
-			spec.Warmup = n
-		}
-	}
-
-	if raw, ok := params.Lookup("delay"); ok {
-		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
-			spec.Delay = dur
-		}
-	}
-
-	if spec.Count <= 0 {
-		spec.Count = 10
-	}
-	if spec.Warmup < 0 {
-		spec.Warmup = 0
-	}
-	return spec, nil
 }
 
 // Trace budgets use "<=" syntax, so duplicate checks use normalized target
