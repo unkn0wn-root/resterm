@@ -235,6 +235,10 @@ Press `?` for general Resterm help and `Shift+k` for help on whatever is under t
 
 Inside the TUI, `:help <topic>` opens the embedded manual and `:docs <topic>` opens the web copy for the installed release.
 
+## Sponsor
+
+Resterm is and always will be free and open source. If it saves you time, you can [sponsor its continued development](https://github.com/sponsors/unkn0wn-root).
+
 ## License
 
 [Apache License 2.0](./LICENSE).
