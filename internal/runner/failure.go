@@ -30,10 +30,8 @@ func resultFailure(res Result) runfail.Failure {
 	case traceFailed(res.Trace):
 		return runfail.TraceBudget(traceBreachMessage(res.Trace))
 	}
-	if res.Profile != nil && len(res.Profile.Failures) > 0 {
-		if f := res.Profile.Failures[0].Failure; f.Code != "" {
-			return f
-		}
+	if f, ok := res.Profile.measuredFailure(); ok && f.Failure.Code != "" {
+		return f.Failure
 	}
 	if f := firstStepFailure(res.Steps); f.Code != "" {
 		return f

@@ -394,3 +394,34 @@ func TestReachedStreamLimitIsNotAFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestReportModelIgnoresWarmupProfileFailures(t *testing.T) {
+	warm := ProfileFailure{Iteration: 1, Warmup: true, Failure: runfail.Assertion("HTTP 503", "profile")}
+	measured := ProfileFailure{Iteration: 2, Failure: runfail.Assertion("HTTP 500", "profile")}
+	tests := []struct {
+		name     string
+		failures []ProfileFailure
+		passed   bool
+		wantExit int
+	}{
+		{name: "warmup only", failures: []ProfileFailure{warm}, passed: true, wantExit: runfail.ExitPass},
+		{name: "measured", failures: []ProfileFailure{warm, measured}, wantExit: runfail.ExitFailure},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			res := Result{Kind: ResultKindProfile, Name: "prof", Passed: test.passed}
+			res.Profile = &ProfileInfo{Failures: test.failures}
+			res.Failure = resultFailure(res)
+			if got := resultFailed(res); got == test.passed {
+				t.Fatalf("resultFailed() = %t, want %t", got, !test.passed)
+			}
+			got := ReportModel(&Report{Results: []Result{res}})
+			if code := got.ExitCode(runfail.ExitDetailed); code != test.wantExit {
+				t.Fatalf("ExitCode() = %d, want %d", code, test.wantExit)
+			}
+			if !test.passed && got.Results[0].Failure.Message != "HTTP 500" {
+				t.Fatalf("result failure = %+v, want the measured one", got.Results[0].Failure)
+			}
+		})
+	}
+}

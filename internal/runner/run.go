@@ -128,6 +128,18 @@ type ProfileInfo struct {
 	Failures []ProfileFailure
 }
 
+// Warmup failures are reported but never fail the run.
+func (p *ProfileInfo) measuredFailure() (ProfileFailure, bool) {
+	if p == nil {
+		return ProfileFailure{}, false
+	}
+	i := slices.IndexFunc(p.Failures, func(f ProfileFailure) bool { return !f.Warmup })
+	if i < 0 {
+		return ProfileFailure{}, false
+	}
+	return p.Failures[i], true
+}
+
 type ProfileFailure struct {
 	Iteration  int
 	Warmup     bool
@@ -233,7 +245,7 @@ func resultFailed(item Result) bool {
 	if slices.ContainsFunc(item.Steps, stepFailed) {
 		return true
 	}
-	if item.Profile != nil && len(item.Profile.Failures) > 0 {
+	if _, ok := item.Profile.measuredFailure(); ok {
 		return true
 	}
 	return !item.Passed
@@ -479,6 +491,7 @@ func cloneProfileResults(results *history.ProfileResults) *history.ProfileResult
 	if len(results.Histogram) > 0 {
 		out.Histogram = append([]history.ProfileHistogramBin(nil), results.Histogram...)
 	}
+	out.Failures = slices.Clone(results.Failures)
 	return &out
 }
 

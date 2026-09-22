@@ -2145,3 +2145,32 @@ func TestRunAppliesFileLevelSSELineLimit(t *testing.T) {
 		t.Fatalf("Failure.Message = %q, want the limit the setting named", res.Failure.Message)
 	}
 }
+
+func TestRunInvalidProfileSendsNothing(t *testing.T) {
+	for _, directive := range []string{"# @profile count=0", "# @profile cnt=5", "# @profile 5 warmup=1"} {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "profile.http")
+		src := "### Profile\n" + directive + "\nGET https://example.com/profile\n"
+		if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		count := 0
+		client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+			return &http.Client{
+				Transport: transportFunc(func(*http.Request) (*http.Response, error) {
+					count++
+					return nil, io.ErrUnexpectedEOF
+				}),
+			}, nil
+		})
+		_, err := RunContext(context.Background(), Options{
+			Version:       "test",
+			FilePath:      file,
+			WorkspaceRoot: dir,
+			Client:        client,
+		})
+		if err == nil || count != 0 {
+			t.Fatalf("%s: err = %v, requests = %d, want a parse error and no requests", directive, err, count)
+		}
+	}
+}

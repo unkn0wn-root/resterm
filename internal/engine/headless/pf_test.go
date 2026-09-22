@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
@@ -96,5 +98,64 @@ func TestExecuteProfilePreservesWarmupStatsAndFailures(t *testing.T) {
 	if failure := out.Failures[0].Failure; failure.Code != runfail.CodeAssertion ||
 		failure.Source != "profile" || failure.ExitCode != runfail.ExitFailure {
 		t.Fatalf("unexpected profile failure classification: %+v", failure)
+	}
+}
+
+func TestExecuteProfileWarmupFailurePassesAndRecordsHistory(t *testing.T) {
+	var hit atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hit.Add(1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer srv.Close()
+
+	cl := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return srv.Client(), nil
+	})
+	store := &memHistory{}
+	rt := rtrun.New(rtrun.Config{Client: cl, History: store})
+	defer func() { _ = rt.Close() }()
+	cfg := engine.Config{Client: cl, History: store}
+	eng := newWithDeps(request.New(cfg, rt), rt, cfg)
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    srv.URL + "/profile",
+		Metadata: restfile.RequestMetadata{
+			NoLog:   true,
+			Profile: &restfile.ProfileSpec{Count: 2, Warmup: 1},
+		},
+	}
+	doc := &restfile.Document{Path: "test.http", Requests: []*restfile.Request{req}}
+	out, err := eng.ExecuteProfile(doc, req, testSelection(""))
+	if err != nil {
+		t.Fatalf("ExecuteProfile: %v", err)
+	}
+	if !out.Success || out.Results.FailedRuns != 0 || out.Results.WarmupFailedRuns != 1 {
+		t.Fatalf("result = %+v, results = %+v", out, out.Results)
+	}
+	if len(out.Failures) != 1 || !out.Failures[0].Warmup {
+		t.Fatalf("failures = %+v, want one warmup failure", out.Failures)
+	}
+	if len(store.entries) != 1 {
+		t.Fatalf("history entries = %d, want 1 with @no-log", len(store.entries))
+	}
+	ent := store.entries[0]
+	if ent.Status != "PASS 2/2" || !reflect.DeepEqual(ent.ProfileResults, out.Results) {
+		t.Fatalf("history = %q %+v, want the returned results", ent.Status, ent.ProfileResults)
+	}
+}
+
+func TestExecuteRequestRejectsProfiledGRPC(t *testing.T) {
+	rt := rtrun.New(rtrun.Config{})
+	defer func() { _ = rt.Close() }()
+	eng := newWithDeps(request.New(engine.Config{}, rt), rt, engine.Config{})
+	req := &restfile.Request{
+		GRPC:     &restfile.GRPCRequest{},
+		Metadata: restfile.RequestMetadata{Profile: &restfile.ProfileSpec{}},
+	}
+	if _, err := eng.ExecuteRequest(&restfile.Document{}, req, testSelection("")); err == nil {
+		t.Fatal("ExecuteRequest() error = nil, want gRPC profile rejection")
 	}
 }

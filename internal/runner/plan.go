@@ -176,7 +176,7 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 	rep.Results = make([]Result, 0, len(tg.requests))
 	for i, req := range tg.requests {
 		runReq := req
-		if opt.Profile && req.Metadata.Profile == nil {
+		if opt.Profile && req.Metadata.Profile == nil && req.GRPC == nil {
 			// The plan reuses its parsed document, so keep this default on the current run.
 			r := *req
 			r.Metadata.Profile = &restfile.ProfileSpec{}
