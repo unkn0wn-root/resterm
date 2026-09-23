@@ -617,7 +617,7 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 				)
 			}
 		}
-		if strings.TrimSpace(snapshot.stats) != "" {
+		if snapshot.hasStats() {
 			pane.wrapCache[responseTabStats] = cachedWrap{}
 		}
 		if snapshot.timeline != nil {
@@ -2013,6 +2013,9 @@ func (m *Model) loadHistoryDocument(doc *restfile.Document, requestText string) 
 }
 
 func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) tea.Cmd {
+	if entry.ProfileResults != nil {
+		return m.presentHistoryProfile(entry)
+	}
 	if entry.Trace == nil {
 		return nil
 	}
@@ -2048,6 +2051,18 @@ func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) 
 	}
 
 	m.applyHistorySnapshot(snap)
+	return m.syncResponsePanes()
+}
+
+func (m *Model) presentHistoryProfile(entry history.Entry) tea.Cmd {
+	snap := newTextSnapshot(historyEntrySummary(entry), entry.Environment)
+	snap.profile = profileHistoryView(entry)
+	m.applyHistorySnapshot(snap)
+	for _, id := range m.visiblePaneIDs() {
+		if pane := m.pane(id); pane.activeTab != responseTabHistory {
+			pane.setActiveTab(responseTabStats)
+		}
+	}
 	return m.syncResponsePanes()
 }
 
@@ -2114,6 +2129,11 @@ func historyEntrySummary(entry history.Entry) string {
 	if !entry.ExecutedAt.IsZero() {
 		lines = append(lines, "Recorded: "+entry.ExecutedAt.Format(time.RFC3339))
 	}
-	lines = append(lines, "Timeline: open the Timeline tab for phase details.")
+	switch {
+	case entry.ProfileResults != nil:
+		lines = append(lines, "Profile: open the Profile tab for latency and failures.")
+	case entry.Trace != nil:
+		lines = append(lines, "Timeline: open the Timeline tab for phase details.")
+	}
 	return strings.Join(lines, "\n")
 }

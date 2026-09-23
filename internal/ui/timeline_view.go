@@ -15,11 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 )
 
-const (
-	barRowWidth    = 34
-	barGlyphFilled = "█"
-	barGlyphEmpty  = "░"
-)
+const barRowWidth = 34
 
 type timelineStatus int
 
@@ -468,15 +464,11 @@ func renderTimelineBar(
 	if total > 0 {
 		ratio = float64(duration) / float64(total)
 	}
-	filled := min(max(int(math.Round(ratio*float64(width))), 0), width)
-	empty := width - filled
-	filledGlyph := strings.Repeat(barGlyphFilled, filled)
+	style := styles.barOK
 	if warn {
-		filledGlyph = styles.barWarn.Render(filledGlyph)
-	} else {
-		filledGlyph = styles.barOK.Render(filledGlyph)
+		style = styles.barWarn
 	}
-	return filledGlyph + strings.Repeat(barGlyphEmpty, empty)
+	return renderMeter(int(math.Round(ratio*float64(width))), width, style)
 }
 
 func renderTimelineStatus(status timelineStatus, styles timelineStyles) string {

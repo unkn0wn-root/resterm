@@ -12,7 +12,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/unkn0wn-root/resterm/internal/analysis"
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -59,7 +58,7 @@ type responseSnapshot struct {
 	statsColored    string
 	statsColorize   bool
 	statsKind       statsReportKind
-	profileStats    *analysis.LatencyStats
+	profile         *profileStatsView
 	workflowStats   *workflowStatsView
 	ready           bool
 	timeline        *nettrace.Timeline
@@ -74,6 +73,10 @@ type responseSnapshot struct {
 	responseHeaders http.Header
 	effectiveURL    string
 	source          responseRenderSource
+}
+
+func (s *responseSnapshot) hasStats() bool {
+	return s != nil && (s.profile != nil || strings.TrimSpace(s.stats) != "")
 }
 
 type headersViewMode int
@@ -954,6 +957,11 @@ func (m *Model) paneContentBase(
 	if snapshot == nil {
 		return "", tab
 	}
+	// The profile dashboard does not depend on the final response, so it shows
+	// while that response is still formatting.
+	if tab == responseTabStats && snapshot.profile != nil {
+		return snapshot.profile.render(w, m.themeRuntime.statsPalette(m.theme), m.theme), tab
+	}
 	if !snapshot.ready && (tab != responseTabExplain || !pane.hasExplainReport()) {
 		return m.responseLoadingMessage(), tab
 	}
@@ -983,11 +991,7 @@ func (m *Model) paneContentBase(
 		content := snapshot.stats
 		if snapshot.statsColorize {
 			if snapshot.statsColored == "" {
-				snapshot.statsColored = colorizeStatsReport(
-					snapshot.stats,
-					snapshot.statsKind,
-					snapshot.profileStats,
-				)
+				snapshot.statsColored = colorizeWorkflowStats(snapshot.stats)
 			}
 			if strings.TrimSpace(snapshot.statsColored) != "" {
 				content = snapshot.statsColored

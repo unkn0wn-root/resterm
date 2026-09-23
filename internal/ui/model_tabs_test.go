@@ -58,7 +58,7 @@ func TestAvailableResponseTabsIncludesExplainWhenSnapshotHasReport(t *testing.T)
 
 func TestResponseTabLabelForProfileStats(t *testing.T) {
 	label := responseTabLabelForSnapshot(responseTabStats, &responseSnapshot{
-		statsKind: statsReportKindProfile,
+		profile: &profileStatsView{},
 	})
 	if label != "Profile" {
 		t.Fatalf("expected profile stats label, got %q", label)

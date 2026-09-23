@@ -643,7 +643,7 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 
 	var cmd tea.Cmd
 	if m.responseLatest != nil && m.responseLatest.workflowStats != nil {
-		m.invalidateWorkflowStatsCaches(m.responseLatest)
+		m.invalidateStatsCaches(m.responseLatest)
 		cmd = m.activateWorkflowStatsView(m.responseLatest)
 	}
 	return cmd

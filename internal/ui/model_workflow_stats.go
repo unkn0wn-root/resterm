@@ -33,7 +33,7 @@ func (m *Model) jumpWorkflowStatsSelection(delta int) tea.Cmd {
 	if !view.move(delta) {
 		return nil
 	}
-	m.invalidateWorkflowStatsCaches(snapshot)
+	m.invalidateStatsCaches(snapshot)
 	return m.syncResponsePanes()
 }
 
@@ -45,7 +45,7 @@ func (m *Model) jumpWorkflowStatsEdge(top bool) tea.Cmd {
 	if !view.selectEdge(top) {
 		return nil
 	}
-	m.invalidateWorkflowStatsCaches(snapshot)
+	m.invalidateStatsCaches(snapshot)
 	return m.syncResponsePanes()
 }
 
@@ -61,7 +61,7 @@ func (m *Model) scrollWorkflowStatsDetail(delta int) tea.Cmd {
 	if !view.scrollDetail(pane.viewport.Width, pane.viewport.Height, delta) {
 		return nil
 	}
-	m.invalidateWorkflowStatsCaches(snapshot)
+	m.invalidateStatsCaches(snapshot)
 	return m.syncResponsePanes()
 }
 
@@ -77,7 +77,7 @@ func (m *Model) scrollWorkflowStatsDetailEdge(top bool) tea.Cmd {
 	if !view.scrollDetailEdge(pane.viewport.Width, pane.viewport.Height, top) {
 		return nil
 	}
-	m.invalidateWorkflowStatsCaches(snapshot)
+	m.invalidateStatsCaches(snapshot)
 	return m.syncResponsePanes()
 }
 
@@ -89,7 +89,7 @@ func (m *Model) toggleWorkflowStatsExpansion() tea.Cmd {
 	if !view.toggle() {
 		return nil
 	}
-	m.invalidateWorkflowStatsCaches(snapshot)
+	m.invalidateStatsCaches(snapshot)
 	return m.syncResponsePanes()
 }
 
@@ -101,22 +101,8 @@ func (m *Model) blurWorkflowStatsDetail() tea.Cmd {
 	if !view.blurDetail() {
 		return nil
 	}
-	m.invalidateWorkflowStatsCaches(snapshot)
+	m.invalidateStatsCaches(snapshot)
 	return m.syncResponsePanes()
-}
-
-func (m *Model) invalidateWorkflowStatsCaches(snapshot *responseSnapshot) {
-	if snapshot == nil {
-		return
-	}
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil || pane.snapshot != snapshot {
-			continue
-		}
-		pane.wrapCache[responseTabStats] = cachedWrap{}
-		pane.search.markStale()
-	}
 }
 
 func (m *Model) activateWorkflowStatsView(snapshot *responseSnapshot) tea.Cmd {

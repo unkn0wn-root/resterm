@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
@@ -151,7 +152,7 @@ func renderHistoryTitleLine(
 		content = base.Render(marker) + base.Render(parts.line)
 	} else {
 		entry := item.entry
-		codeStyle := historyStatusStyle(base, entry.StatusCode, entry.Status)
+		codeStyle := historyStatusStyle(base, entry)
 		content = base.Render(marker+parts.prefix) +
 			codeStyle.Render(parts.code) +
 			base.Render(parts.suffix)
@@ -188,7 +189,8 @@ func renderHistoryMethodLine(
 	return methodStyle.Render(method) + base.Render(rest)
 }
 
-func historyStatusStyle(base lipgloss.Style, code int, status string) lipgloss.Style {
+func historyStatusStyle(base lipgloss.Style, entry history.Entry) lipgloss.Style {
+	code := entry.StatusCode
 	switch {
 	case code >= 400:
 		return base.Foreground(statsWarnStyle.GetForeground())
@@ -196,8 +198,27 @@ func historyStatusStyle(base lipgloss.Style, code int, status string) lipgloss.S
 		return base.Foreground(statsCautionStyle.GetForeground())
 	case code > 0:
 		return base.Foreground(statsSuccessStyle.GetForeground())
-	case strings.EqualFold(strings.TrimSpace(status), "ok"):
+	case strings.EqualFold(strings.TrimSpace(entry.Status), "ok"):
 		return base.Foreground(statsSuccessStyle.GetForeground())
+	case entry.ProfileResults != nil:
+		return profileHistoryStyle(base, entry.ProfileResults.Status)
+	default:
+		return base
+	}
+}
+
+func profileHistoryStyle(base lipgloss.Style, name string) lipgloss.Style {
+	st, ok := core.ParseProfileStatus(name)
+	if !ok {
+		return base
+	}
+	switch st {
+	case core.ProfilePass:
+		return base.Foreground(statsSuccessStyle.GetForeground())
+	case core.ProfileFail, core.ProfileError:
+		return base.Foreground(statsWarnStyle.GetForeground())
+	case core.ProfileCanceled, core.ProfileSkipped:
+		return base.Foreground(statsCautionStyle.GetForeground())
 	default:
 		return base
 	}
