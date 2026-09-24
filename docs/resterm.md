@@ -1468,9 +1468,11 @@ How results are counted:
 - A failed warmup run appears as a warning. It does not fail the profile or change the CLI exit code.
 - The wall rate includes delays between requests. The active rate uses only the time spent inside requests.
 
-The response pane's **Profile** tab opens when profiling starts and updates after each request. Percentiles and the histogram appear when the run ends, even if you cancel it. If you switch tabs during the run, you stay on the tab you chose. The Pretty, Raw, and Headers tabs show the last response.
+The response pane's **Profile** tab opens when profiling starts. Percentiles, the histogram, status codes, and failures update after each request. If you switch tabs during the run, you stay on the tab you chose. The Pretty, Raw, and Headers tabs show the last response.
 
-Every profile run is saved to history, even with `@no-log`. Profile history does not store response bodies. Press `Enter` on an entry to reopen the Profile tab, or `p` to inspect the stored JSON. Entries from older versions show counts and latency, but not failure details.
+The tab compares the run with the previous finished run of the same request in the same environment with the same delay. The row under the headline numbers shows the change, and the line below it shows when that run happened. Slower latency and a lower success rate or wall rate are shown as warnings. Changes under 5% are not colored.
+
+Every profile run is saved to history, even with `@no-log`. Profile history does not store response bodies. Press `Enter` on an entry to reopen the Profile tab, or `p` to inspect the stored JSON. Entries from older versions show counts and latency, but not failure details or status codes.
 
 ### Polling and retries
 

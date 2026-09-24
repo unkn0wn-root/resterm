@@ -15,4 +15,8 @@ An unknown option or invalid value stops the request with a parse error. Profili
 
 Latency statistics include only successful measured runs. A measured failure fails the profile. A warmup failure appears as a warning.
 
-The Profile tab opens when the run starts and updates after each request. Percentiles and the histogram appear when the run ends. Press `Enter` on a profile entry in History to open it again. Only profile requests that are safe to repeat.
+The Profile tab opens when the run starts. Percentiles, the histogram, status codes, and failures update after each request.
+
+The tab also shows the change from the previous finished run of the same request with the same environment and delay. Changes under 5% are not colored.
+
+Press `Enter` on a profile entry in History to open it again. Only profile requests that are safe to repeat.
