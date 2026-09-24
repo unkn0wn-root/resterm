@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -98,6 +99,7 @@ func TestRecordUsageErrorsAndHelp(t *testing.T) {
 		{"--upstream", "https://example.com", "--out", "capture.http", "--mode", "invalid"},
 		{"--upstream", "https://example.com", "--out", "capture.http", "--max-entries", "0"},
 		{"--upstream", "https://example.com", "--out", "capture.http", "--skip", "health"},
+		{"--upstream", "https://example.com", "--out", "capture.txt"},
 	} {
 		var output bytes.Buffer
 		err := runRecord(t.Context(), args, &output, &output)
@@ -114,5 +116,23 @@ func TestRecordUsageErrorsAndHelp(t *testing.T) {
 	}
 	if help.Len() == 0 {
 		t.Fatal("help is empty")
+	}
+}
+
+func TestRecordFailedStartLeavesNoOutput(t *testing.T) {
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = busy.Close() })
+	out := filepath.Join(t.TempDir(), "capture.http")
+	args := []string{"--listen", busy.Addr().String(), "--upstream", "https://example.com", "--out", out}
+
+	var output bytes.Buffer
+	if err := runRecord(t.Context(), args, &output, &output); err == nil {
+		t.Fatal("record started on a busy address")
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Fatalf("failed start left the output behind: %v", err)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
+	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/recorder"
 )
@@ -73,16 +74,14 @@ func parseRecordArgs(args []string, errOut io.Writer) (*recordArgs, error) {
 			Code: 2,
 		}
 	}
+	if !files.IsRequest(path) {
+		return nil, cli.ExitErr{Err: errors.New("record output must be a .http or .rest file"), Code: 2}
+	}
 	return &recordArgs{cfg: cfg, path: path, mode: parsed}, nil
 }
 
 func serveRecording(ctx context.Context, a recordArgs, out, errOut io.Writer) (result error) {
-	output, err := recorder.CreateOutput(a.path)
-	if err != nil {
-		return err
-	}
-	defer func() { result = errors.Join(result, output.Close()) }()
-
+	// Start first so a failed start leaves no empty output that blocks a retry.
 	s, err := recorder.Start(ctx, a.cfg)
 	if err != nil {
 		return err
@@ -92,6 +91,12 @@ func serveRecording(ctx context.Context, a recordArgs, out, errOut io.Writer) (r
 		defer cancel()
 		result = errors.Join(result, s.Close(closeCtx))
 	}()
+
+	output, err := recorder.CreateOutput(a.path)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, output.Close()) }()
 
 	if !mock.IsLoopbackAddr(s.Addr()) {
 		_, _ = fmt.Fprintf(errOut, "Recorder is exposed on %s\n", s.Addr())
