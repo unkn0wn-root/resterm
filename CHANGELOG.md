@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.9.0](https://github.com/unkn0wn-root/resterm/compare/v1.8.2...v1.9.0) (2026-09-24)
+
+
+### Bug Fixes
+
+* **init:** stage all files before writing and roll back on failure ([9cd4343](https://github.com/unkn0wn-root/resterm/commit/9cd4343e4c13dac37b2f5eb2fead603b0a50d155))
+* **profile:** leave small-sample percentile deltas uncolored ([43f861f](https://github.com/unkn0wn-root/resterm/commit/43f861ff01c5541b970c855802c01d26b75f62b6))
+* **request:** read sent values in asserts, captures, and response predicates ([c0a7576](https://github.com/unkn0wn-root/resterm/commit/c0a75760f17a3293320162413e3df99a81723fcd))
+* **ui:** tone down profile latency bars ([e359f80](https://github.com/unkn0wn-root/resterm/commit/e359f80c974657deb25c7213df93f2a821ad8a61))
+
 ### [1.8.2](https://github.com/unkn0wn-root/resterm/compare/v1.8.1...v1.8.2) (2026-09-18)
 
 ### [1.8.1](https://github.com/unkn0wn-root/resterm/compare/v1.8.0...v1.8.1) (2026-09-16)
