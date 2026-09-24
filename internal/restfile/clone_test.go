@@ -11,6 +11,7 @@ func TestRequestCloneIsIndependent(t *testing.T) {
 		Headers:   http.Header{"X-Test": {"one"}},
 		Settings:  map[string]string{"timeout": "1s"},
 		Variables: []Variable{{Name: "id", Value: "one"}},
+		RunVars:   []RunVar{{Name: "suffix", Value: "one"}},
 		Metadata: RequestMetadata{
 			Tags:    []string{"smoke"},
 			Auth:    &AuthSpec{Params: map[string]string{"token": "one"}},
@@ -36,6 +37,7 @@ func TestRequestCloneIsIndependent(t *testing.T) {
 	got.Headers["X-Test"][0] = "two"
 	got.Settings["timeout"] = "2s"
 	got.Variables[0].Value = "two"
+	got.RunVars[0].Value = "two"
 	got.Metadata.Tags[0] = "fast"
 	got.Metadata.Auth.Params["token"] = "two"
 	got.Metadata.Scripts[0].Lines[0].Line = 2
@@ -53,6 +55,7 @@ func TestRequestCloneIsIndependent(t *testing.T) {
 	if req.Headers.Get("X-Test") != "one" ||
 		req.Settings["timeout"] != "1s" ||
 		req.Variables[0].Value != "one" ||
+		req.RunVars[0].Value != "one" ||
 		req.Metadata.Tags[0] != "smoke" ||
 		req.Metadata.Auth.Params["token"] != "one" ||
 		req.Metadata.Scripts[0].Lines[0].Line != 1 ||
@@ -75,6 +78,7 @@ func TestWorkflowCloneIsIndependent(t *testing.T) {
 	wf := Workflow{
 		Tags:    []string{"smoke"},
 		Options: map[string]string{"mode": "one"},
+		RunVars: []RunVar{{Name: "suffix", Value: "one"}},
 		Steps: []WorkflowStep{{
 			Expect:  WorkflowExpect{StatusCode: &code, Extra: map[string]string{"x": "one"}},
 			Vars:    map[string]string{"id": "one"},
@@ -95,6 +99,7 @@ func TestWorkflowCloneIsIndependent(t *testing.T) {
 	got := wf.Clone()
 	got.Tags[0] = "fast"
 	got.Options["mode"] = "two"
+	got.RunVars[0].Value = "two"
 	got.Steps[0].Expect.Extra["x"] = "two"
 	*got.Steps[0].Expect.StatusCode = 201
 	got.Steps[0].Vars["id"] = "two"
@@ -109,6 +114,7 @@ func TestWorkflowCloneIsIndependent(t *testing.T) {
 	step := wf.Steps[0]
 	if wf.Tags[0] != "smoke" ||
 		wf.Options["mode"] != "one" ||
+		wf.RunVars[0].Value != "one" ||
 		step.Expect.Extra["x"] != "one" ||
 		*step.Expect.StatusCode != 200 ||
 		step.Vars["id"] != "one" ||

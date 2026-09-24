@@ -181,6 +181,7 @@ func renderRequest(w directiveWriter, req *restfile.Request) error {
 	}
 	renderSettings(w, req.Settings)
 	renderRequestVariables(w, req.Variables)
+	writeEach(w, req.RunVars, runVarArg)
 	writeOne(w, req.Metadata.When, conditionArg)
 	writeOne(w, req.Metadata.ForEach, forEachArg)
 	writeEach(w, req.Metadata.Applies, applyArg)

@@ -32,6 +32,7 @@ const (
 	Global              Name = "global"
 	GlobalSecret        Name = "global-secret"
 	Const               Name = "const"
+	Run                 Name = "run"
 	Use                 Name = "use"
 	Script              Name = "script"
 	RTS                 Name = "rts"
@@ -75,6 +76,11 @@ const (
 	SSE                 Name = "sse"
 	WebSocket           Name = "websocket"
 	WS                  Name = "ws"
+)
+
+const (
+	RunVarWord = "var"
+	RunVarTag  = "@" + string(Run) + " " + RunVarWord
 )
 
 func (n Name) String() string {

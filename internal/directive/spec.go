@@ -128,6 +128,14 @@ var specs = []Spec{
 	{Name: Global, Summary: "Define or override a global variable", Args: ArgText, Repeat: Many, Topic: "variables"},
 	{Name: GlobalSecret, Summary: "Define a secret global variable", Args: ArgText, Repeat: Many, Topic: "variables"},
 	{Name: Const, Summary: "Define a reusable constant", Args: ArgText, Repeat: Many, Topic: "variables"},
+	{
+		Name:          Run,
+		Summary:       "Set a variable once per run (var)",
+		Args:          ArgText,
+		Repeat:        Many,
+		ValueRequired: true,
+		Topic:         "variables",
+	},
 	{Name: Use, Summary: "Import a RestermScript module", Args: ArgText, Repeat: Many, Topic: "rts"},
 	{
 		Name:    Script,

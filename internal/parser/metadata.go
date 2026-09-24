@@ -62,6 +62,8 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 	case directive.Var:
 		b.addRequestVar(d.lines.Start, rest)
 		return directiveApplied
+	case directive.Run:
+		return b.addRun(d)
 	case directive.Script:
 		if rest == "" {
 			b.request.discardScript = false

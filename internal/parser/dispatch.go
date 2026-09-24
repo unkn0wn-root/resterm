@@ -207,7 +207,7 @@ func (b *documentBuilder) handleWorkflowDirective(d parsedDirective) directiveOu
 	if b.workflow == nil || b.inRequest {
 		return directiveIgnored
 	}
-	handled, err := b.workflow.handleDirective(d.Call, d.lines.Start)
+	handled, err := b.workflow.handleDirective(d)
 	if !handled {
 		return directiveIgnored
 	}
