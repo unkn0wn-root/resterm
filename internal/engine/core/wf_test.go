@@ -237,13 +237,16 @@ type fakeDep struct {
 	each         map[string][]rts.Value
 	execErr      error
 	execCanceled bool
+	runVarEvals  int
+	sent         []request.ExecOptions
+	evalVars     []map[string]string
 }
 
 func (d *fakeDep) CollectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	overlay map[string]string,
+	sc request.RunScope,
 ) map[string]string {
 	out := make(map[string]string)
 	if doc != nil {
@@ -251,8 +254,32 @@ func (d *fakeDep) CollectVariables(
 			out[v.Name] = v.Value
 		}
 	}
-	maps.Copy(out, overlay)
+	maps.Copy(out, sc.Overlay.Map())
+	maps.Copy(out, sc.RunVars.Map())
 	return out
+}
+
+// Number evaluations so tests can spot a value that was evaluated again.
+func (d *fakeDep) EvalRunVars(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env vars.Environment,
+	sc request.RunScope,
+	decls []restfile.RunVar,
+) (vars.NameMap[string], error) {
+	out := sc.RunVars.Clone()
+	if len(decls) == 0 {
+		return out, nil
+	}
+	d.runVarEvals++
+	for _, v := range decls {
+		if v.Value == "fail" {
+			return vars.NameMap[string]{}, errors.New("@run var " + v.Name + " failed")
+		}
+		out.Set(v.Name, v.Value+"-"+strconv.Itoa(d.runVarEvals))
+	}
+	return out, nil
 }
 
 func (d *fakeDep) ExecuteWith(
@@ -262,6 +289,7 @@ func (d *fakeDep) ExecuteWith(
 	opt request.ExecOptions,
 ) (engine.RequestResult, error) {
 	d.rec = append(d.rec, opt.Record)
+	d.sent = append(d.sent, opt)
 	if d.execErr != nil {
 		return engine.RequestResult{}, d.execErr
 	}
@@ -327,6 +355,7 @@ func (d *fakeDep) EvalForEachItems(
 }
 
 func (d *fakeDep) EvalValue(ctx context.Context, in request.EvalInput) (rts.Value, error) {
+	d.evalVars = append(d.evalVars, in.Vars)
 	switch strings.TrimSpace(in.Expr) {
 	case "true":
 		return rts.Bool(true), nil

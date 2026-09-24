@@ -49,7 +49,7 @@ type captureRun struct {
 	store   vars.Globals
 	secrets *vars.Secrets
 	locals  rts.Locals
-	run     runVars
+	run     execVars
 }
 
 type captureExpr struct {

@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func absentKey(t *testing.T, label string) string {
@@ -183,7 +184,7 @@ GET http://example.test
 X-Template: {{token}}
 `)
 		sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{
-			Extra: map[string]string{"token": literal},
+			Run: &RunScope{Overlay: vars.CollectNames(map[string]string{"token": literal})},
 		})
 		if got := sent.wire.Header.Get("X-Template"); got != literal {
 			t.Fatalf("workflow value = %q, want the text unchanged", got)
@@ -209,7 +210,7 @@ GET http://example.test
 				t.Fatal("captured value kept the declaration flag")
 			}
 		}
-		vv := eng.CollectVariables(doc, req, envWith(t, "dev", nil), nil)
+		vv := eng.CollectVariables(doc, req, envWith(t, "dev", nil), RunScope{})
 		if vv["token"] != literal {
 			t.Fatalf("captured token = %q, want the response text unchanged", vv["token"])
 		}

@@ -165,7 +165,7 @@ func (e *Engine) buildResolver(
 	base string,
 	globs vars.Globals,
 	locals rts.Locals,
-	run runVars,
+	run execVars,
 ) *vars.Resolver {
 	plan := e.buildVariablePlan(varSources{
 		doc:     doc,
@@ -237,7 +237,7 @@ func (e *Engine) collectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.ResolvedEnv,
-	run runVars,
+	run execVars,
 ) map[string]string {
 	return e.collectVariablesWithGlobals(
 		doc,
@@ -255,7 +255,7 @@ func (e *Engine) collectVariablesWithGlobals(
 	env vars.ResolvedEnv,
 	globs vars.Globals,
 	sec secrecy,
-	run runVars,
+	run execVars,
 ) map[string]string {
 	return e.buildVariablePlan(varSources{
 		doc:     doc,

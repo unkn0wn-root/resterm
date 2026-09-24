@@ -14,6 +14,7 @@ import (
 const explainClip = 512
 
 const (
+	explainStageRunVars          = xplain.StageRunVars
 	explainStageApply            = xplain.StageApply
 	explainStageCondition        = xplain.StageCondition
 	explainStageRoute            = xplain.StageRoute
@@ -34,6 +35,8 @@ const (
 )
 
 const (
+	explainSummaryRunVarsEvaluated            = xplain.SummaryRunVarsEvaluated
+	explainSummaryRunVarsFailed               = xplain.SummaryRunVarsFailed
 	explainSummaryApplyComplete               = xplain.SummaryApplyComplete
 	explainSummaryApplyFailed                 = xplain.SummaryApplyFailed
 	explainSummaryConditionPassed             = xplain.SummaryConditionPassed
@@ -69,6 +72,7 @@ func explainKey(s string) string {
 }
 
 var explainStageDisplayNames = map[string]string{
+	explainKey(explainStageRunVars):          "Run Variables",
 	explainKey(explainStageApply):            "Apply",
 	explainKey(explainStageCondition):        "Condition",
 	explainKey(explainStageRoute):            "Route",
@@ -83,6 +87,10 @@ var explainStageDisplayNames = map[string]string{
 }
 
 var explainStageSummaryDisplay = map[string]map[string]string{
+	explainKey(explainStageRunVars): {
+		explainKey(explainSummaryRunVarsEvaluated): "Evaluated run variables",
+		explainKey(explainSummaryRunVarsFailed):    "Failed to evaluate run variables",
+	},
 	explainKey(explainStageApply): {
 		explainKey(explainSummaryApplyComplete): "Applied request mutations",
 		explainKey(explainSummaryApplyFailed):   "Failed to apply request mutations",

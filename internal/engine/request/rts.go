@@ -382,7 +382,7 @@ func (e *Engine) evalRTSString(
 func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
 	vv := in.Vars
 	if vv == nil {
-		vv = e.collectVariables(in.Doc, in.Req, in.Env, runVars{})
+		vv = e.collectVariables(in.Doc, in.Req, in.Env, execVars{})
 	}
 	rt, err := e.buildRT(rtIn{
 		doc:     in.Doc,
@@ -409,14 +409,9 @@ func (e *Engine) CollectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env vars.Environment,
-	overlay map[string]string,
+	sc RunScope,
 ) map[string]string {
-	return e.collectVariables(
-		doc,
-		req,
-		ResolveEnvironment(env, doc, req),
-		runVars{overlay: vars.CollectNames(overlay)},
-	)
+	return e.collectVariables(doc, req, ResolveEnvironment(env, doc, req), execVars{RunScope: sc})
 }
 
 func (e *Engine) EvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
@@ -548,7 +543,7 @@ func (e *Engine) runAsserts(
 	}
 	vv := sc.vars
 	if vv == nil {
-		vv = e.collectVariables(doc, req, env, runVars{})
+		vv = e.collectVariables(doc, req, env, execVars{})
 	}
 	rt, err := e.buildRT(rtIn{
 		doc:     doc,

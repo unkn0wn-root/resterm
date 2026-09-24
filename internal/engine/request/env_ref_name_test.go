@@ -7,6 +7,7 @@ import (
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 const namedRefTarget = "RESTERM_NAMED_TARGET"
@@ -63,7 +64,7 @@ GET http://example.test
 X-Token: {{token}}
 `)
 		sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{
-			Extra: map[string]string{"picked": "RESTERM_NAMED_HIJACK"},
+			Run: &RunScope{Overlay: vars.CollectNames(map[string]string{"picked": "RESTERM_NAMED_HIJACK"})},
 		})
 		if got := sent.wire.Header.Get("X-Token"); got != "declared-value" {
 			t.Fatalf("X-Token = %q, want the declared name to stand", got)
@@ -84,7 +85,7 @@ GET http://example.test
 		if _, err := eng.ExecuteWith(doc, req, envWith(t, "dev", nil), ExecOptions{}); err != nil {
 			t.Fatalf("ExecuteWith() error = %v", err)
 		}
-		vv := eng.CollectVariables(doc, req, envWith(t, "dev", nil), nil)
+		vv := eng.CollectVariables(doc, req, envWith(t, "dev", nil), RunScope{})
 		if vv["token"] != "declared-value" {
 			t.Fatalf("token = %q, want the declared name to stand", vv["token"])
 		}
@@ -242,7 +243,7 @@ GET http://example.test
 		"picked":   "{{indirect}}",
 		"indirect": "RESTERM_ENV_LAYER_TARGET",
 		"token":    "env:{{picked}}",
-	}), nil)
+	}), RunScope{})
 
 	if got := vv["picked"]; got != "{{indirect}}" {
 		t.Fatalf("picked = %q, want the environment value left literal", got)

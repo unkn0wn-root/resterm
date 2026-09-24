@@ -33,6 +33,7 @@ type RequestResult struct {
 type RequestFlow interface {
 	PendingCancel() *RequestResult
 	Finish()
+	EvaluateRunVars() *RequestResult
 	EvaluateCondition() *RequestResult
 	RunPreRequest() *RequestResult
 	PrepareRequest() *RequestResult
@@ -53,6 +54,9 @@ func RunRequest(flow RequestFlow) RequestResult {
 	}
 	defer flow.Finish()
 
+	if res := flow.EvaluateRunVars(); res != nil {
+		return *res
+	}
 	if res := flow.EvaluateCondition(); res != nil {
 		return *res
 	}
