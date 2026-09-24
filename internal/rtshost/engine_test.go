@@ -2,6 +2,7 @@ package rtshost
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,6 +113,46 @@ func TestEnvironmentMetadataGroupsAndRequire(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "profile missing") {
 		t.Fatalf("custom require error = %v, want profile missing", err)
+	}
+}
+
+func TestScopeResolveSuppliesVarsValues(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+	scope, err := NewScope(ScopeInput{}, map[string]string{"id": "{{$uuid}}", "token": "abc", "boom": "{{x}}"})
+	if err != nil {
+		t.Fatalf("NewScope: %v", err)
+	}
+	scope.Resolve = func(name string) (string, bool, error) {
+		switch name {
+		case "id":
+			return "resolved", true, nil
+		case "boom":
+			return "", false, errors.New("boom failed")
+		}
+		return "", false, nil
+	}
+	rt.Scope = scope
+
+	tests := map[string]string{
+		`vars.get("id")`:     "resolved",
+		`vars.id`:            "resolved",
+		`vars["id"]`:         "resolved",
+		`vars.require("id")`: "resolved",
+		`vars.get("token")`:  "abc",
+	}
+	for src, want := range tests {
+		v := evalHost(t, eng, rt, src)
+		if v.K != rts.VStr || v.S != want {
+			t.Errorf("%s = %+v, want %q", src, v, want)
+		}
+	}
+	if v := evalHost(t, eng, rt, `vars.has("id")`); v.K != rts.VBool || !v.B {
+		t.Errorf(`vars.has("id") = %+v, want true`, v)
+	}
+	if _, err := eng.Eval(t.Context(), rt, `vars.get("boom")`, testPos); err == nil ||
+		!strings.Contains(err.Error(), "boom failed") {
+		t.Fatalf(`vars.get("boom") error = %v, want the resolve error`, err)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 type mapObj struct {
 	name    string
 	vals    vars.NameMap[string]
+	resolve func(name string) (string, bool, error)
 	members map[string]rts.Value
 }
 
@@ -29,13 +30,23 @@ func newMapObj(name string, vals vars.NameView[string]) *mapObj {
 
 func (o *mapObj) TypeName() string { return o.name }
 
+func (o *mapObj) value(name string) (string, bool, error) {
+	if o.resolve != nil {
+		if v, ok, err := o.resolve(name); ok || err != nil {
+			return v, ok, err
+		}
+	}
+	v, ok := o.vals.Get(name)
+	return v, ok, nil
+}
+
 func (o *mapObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value, bool, error) {
 	if v, ok := o.members[name]; ok {
 		return v, true, nil
 	}
-	v, ok := o.vals.Get(name)
-	if !ok {
-		return rts.Null(), false, nil
+	v, ok, err := o.value(name)
+	if err != nil || !ok {
+		return rts.Null(), ok, err
 	}
 	out, err := native.StringValue(ctx, pos, v)
 	return out, true, err
@@ -48,9 +59,9 @@ func (o *mapObj) Index(ctx *rts.Ctx, pos rts.Pos, key rts.Value) (rts.Value, err
 	if err != nil {
 		return rts.Null(), err
 	}
-	v, ok := o.vals.Get(name)
-	if !ok {
-		return rts.Null(), nil
+	v, ok, err := o.value(name)
+	if err != nil || !ok {
+		return rts.Null(), err
 	}
 	return native.StringValue(ctx, pos, v)
 }
@@ -59,9 +70,9 @@ func (o *mapObj) getDef() native.Def {
 	sig := o.name + ".get(name)"
 	return native.Fn1(o.name+".get", sig, nameArg,
 		func(call native.Call, name string) (rts.Value, error) {
-			v, ok := o.vals.Get(name)
-			if !ok {
-				return rts.Null(), nil
+			v, ok, err := o.value(name)
+			if err != nil || !ok {
+				return rts.Null(), err
 			}
 			return native.StringValue(call.Ctx, call.Pos, v)
 		},
@@ -81,7 +92,11 @@ func (o *mapObj) requireDef() native.Def {
 	sig := o.name + ".require(name[, message])"
 	return native.Fn1Optional(o.name+".require", sig, nameArg, native.String,
 		func(call native.Call, name string, msg native.Optional[string]) (rts.Value, error) {
-			if v, ok := o.vals.Get(name); ok && strings.TrimSpace(v) != "" {
+			v, ok, err := o.value(name)
+			if err != nil {
+				return rts.Null(), err
+			}
+			if ok && strings.TrimSpace(v) != "" {
 				return native.StringValue(call.Ctx, call.Pos, v)
 			}
 			text := ""
@@ -150,6 +165,7 @@ func (o *envMetaObj) Index(ctx *rts.Ctx, pos rts.Pos, key rts.Value) (rts.Value,
 
 func newVarsObj(scope Scope, varsMut VarsMutator, globalMut GlobalMutator) *mapObj {
 	o := newMapObj("vars", scope.Vars)
+	o.resolve = scope.Resolve
 	o.members["set"] = varsSetDef(o, varsMut).Value()
 	o.members["global"] = rts.Obj(newGlobalObj(scope.Globals, globalMut))
 	return o
