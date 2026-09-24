@@ -296,7 +296,7 @@ func TestExpandTemplatesExpr(t *testing.T) {
 	t.Parallel()
 
 	resolver := NewResolver()
-	resolver.SetExprEval(func(expr string, pos ExprPos) (string, error) {
+	resolver.SetExprEval(func(expr string, pos ExprPos, _ Lookup) (string, error) {
 		if expr != "1+1" {
 			t.Fatalf("unexpected expr %q", expr)
 		}
@@ -394,7 +394,7 @@ func TestExpandTemplatesStaticExpr(t *testing.T) {
 
 	resolver := NewResolver()
 	called := false
-	resolver.SetExprEval(func(expr string, pos ExprPos) (string, error) {
+	resolver.SetExprEval(func(expr string, pos ExprPos, _ Lookup) (string, error) {
 		called = true
 		return "ok", nil
 	})
@@ -550,10 +550,10 @@ func TestLenientResolverReportsExpressionErrors(t *testing.T) {
 
 func TestWithExprEvalLeavesTheOriginalAlone(t *testing.T) {
 	base := NewResolver()
-	base.SetExprEval(func(expr string, _ ExprPos) (string, error) {
+	base.SetExprEval(func(expr string, _ ExprPos, _ Lookup) (string, error) {
 		return "base:" + expr, nil
 	})
-	derived := base.WithExprEval(func(expr string, _ ExprPos) (string, error) {
+	derived := base.WithExprEval(func(expr string, _ ExprPos, _ Lookup) (string, error) {
 		return "derived:" + expr, nil
 	})
 
@@ -573,13 +573,42 @@ func TestWithExprEvalKeepsPinnedValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expand: %v", err)
 	}
-	derived := base.WithExprEval(func(string, ExprPos) (string, error) { return "", nil })
+	derived := base.WithExprEval(func(string, ExprPos, Lookup) (string, error) { return "", nil })
 	second, err := derived.ExpandTemplates("{{id}}")
 	if err != nil {
 		t.Fatalf("expand derived: %v", err)
 	}
 	if first != second {
 		t.Fatalf("derived resolver re-rolled the value: %q then %q", first, second)
+	}
+}
+
+func lookupExpr(expr string, _ ExprPos, look Lookup) (string, error) {
+	v, _, err := look(expr)
+	return v, err
+}
+
+func TestExprLookupSharesThePlaceholderValue(t *testing.T) {
+	r := NewResolver(NewTemplateProvider("request", map[string]string{"id": "{{$uuid}}"}))
+	r.SetExprEval(lookupExpr)
+
+	out, err := r.ExpandTemplates("{{= id }}|{{id}}")
+	if err != nil {
+		t.Fatalf("expand: %v", err)
+	}
+	parts := strings.Split(out, "|")
+	if !uuidPattern.MatchString(parts[0]) || parts[1] != parts[0] {
+		t.Fatalf("got %q, want one id for the expression and the placeholder", out)
+	}
+}
+
+func TestExprLookupReportsCycle(t *testing.T) {
+	r := NewResolver(NewTemplateProvider("request", map[string]string{"a": "{{= a }}-x"}))
+	r.SetExprEval(lookupExpr)
+
+	_, err := r.ExpandTemplates("{{a}}")
+	if err == nil || !strings.Contains(err.Error(), "variable cycle: a -> a") {
+		t.Fatalf("error = %v, want the cycle", err)
 	}
 }
 

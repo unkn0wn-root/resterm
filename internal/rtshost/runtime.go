@@ -23,6 +23,9 @@ type Scope struct {
 	Meta    EnvMeta
 	Vars    vars.NameView[string]
 	Globals vars.NameView[string]
+	// Resolve, when set, supplies a value for a name in Vars. ok false keeps
+	// the text in Vars.
+	Resolve func(name string) (string, bool, error)
 }
 
 // PreparedScope stores validated environment data that can be reused while

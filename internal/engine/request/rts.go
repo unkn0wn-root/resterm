@@ -175,6 +175,7 @@ type rtIn struct {
 	env     vars.ResolvedEnv
 	base    string
 	vars    map[string]string
+	resolve func(name string) (string, bool, error)
 	globals vars.Globals
 	site    string
 	resp    *rtshost.Response
@@ -229,6 +230,7 @@ func (e *Engine) buildRTWithScope(in rtIn, prep rtshost.PreparedScope) (rtshost.
 	if err != nil {
 		return rtshost.Runtime{}, err
 	}
+	scope.Resolve = in.resolve
 	req, err := e.rtsReq(in.req)
 	if err != nil {
 		return rtshost.Runtime{}, err
@@ -270,6 +272,7 @@ type ExprInput struct {
 	Stream   *rtshost.Stream
 	Locals   rts.Locals
 	globals  vars.Globals
+	pending  vars.NameMap[struct{}]
 }
 
 // EvalInput is one expression evaluation. Expr is the source to evaluate, Site
@@ -317,17 +320,18 @@ func (e *Engine) ExprEvalWithOptions(
 	prepare := sync.OnceValues(func() (rtshost.PreparedScope, error) {
 		return prepareScope(in.Env, in.globals, secrets)
 	})
-	return func(expr string, pos vars.ExprPos) (string, error) {
+	return func(expr string, pos vars.ExprPos, look vars.Lookup) (string, error) {
 		prep, err := prepare()
 		if err != nil {
 			return "", err
 		}
 		rt, err := e.buildRTWithScope(rtIn{
-			doc:  in.Doc,
-			req:  in.Req,
-			base: in.Base,
-			vars: vv,
-			site: "{{= " + expr + " }}",
+			doc:     in.Doc,
+			req:     in.Req,
+			base:    in.Base,
+			vars:    vv,
+			resolve: pendingLookup(in.pending, look),
+			site:    "{{= " + expr + " }}",
 			// res binds response. resp remains the previous response used by last.
 			res:    in.Response,
 			st:     in.Stream,
@@ -343,6 +347,18 @@ func (e *Engine) ExprEvalWithOptions(
 			expr,
 			rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col},
 		)
+	}
+}
+
+func pendingLookup(pending vars.NameMap[struct{}], look vars.Lookup) func(string) (string, bool, error) {
+	if pending.Len() == 0 {
+		return nil
+	}
+	return func(name string) (string, bool, error) {
+		if !pending.Has(name) {
+			return "", false, nil
+		}
+		return look(name)
 	}
 }
 
