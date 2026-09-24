@@ -164,6 +164,7 @@ func (m *Model) showProfileResponse(st *profileState) tea.Cmd {
 	// The live placeholder is not a response. Restore the previous response
 	// before the normal handler moves the latest response into responsePrevious.
 	m.responseLatest = st.prev
+	m.testResults, m.scriptError = msg.tests, msg.scriptErr
 	var cmd tea.Cmd
 	if msg.err != nil {
 		cmd = m.consumeRequestError(msg)

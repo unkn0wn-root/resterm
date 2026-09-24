@@ -1459,7 +1459,7 @@ Options:
 - `warmup` - the number of runs to make before measuring. It must be zero or more. Warmup runs are not included in the statistics.
 - `delay` - the time to wait between runs. It must be zero or more, for example `250ms`.
 
-If an option is unknown, missing a value, or invalid, the request is not sent and a parse error is shown. Profiling does not support gRPC requests.
+If an option is unknown, missing a value, or invalid, a parse error is shown and no request in the file runs until it is fixed. Profiling does not support gRPC requests, so `@profile` on a gRPC request is also a parse error.
 
 How results are counted:
 

@@ -15,6 +15,7 @@ import (
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 type profileRun struct {
@@ -229,6 +230,21 @@ func TestProfileRunFinishKeepsUserTab(t *testing.T) {
 		if m.responseLatest.profile.snap.Progress.Status != core.ProfilePass {
 			t.Fatalf("status = %s, want pass", m.responseLatest.profile.snap.Progress.Status)
 		}
+	}
+}
+
+func TestProfileRunKeepsLastTestResults(t *testing.T) {
+	m := newOrchTestModel(t, Config{})
+	r := startTestProfile(t, &m, restfile.ProfileSpec{Count: 1}, restfile.RequestMetadata{})
+	r.start(0)
+	r.done(0, engine.RequestResult{
+		Response: testHTTPResp("https://example.com/profile", 200, `{"ok":true}`, 10*time.Millisecond),
+		Tests:    []scripts.TestResult{{Name: "ok", Passed: true}, {Name: "slow", Passed: false}},
+	})
+	r.finish(core.RunDone{})
+
+	if got, _, ok := m.headerTestStatus(); !ok || got != "1 fail" {
+		t.Fatalf("headerTestStatus() = %q, %t, want the last run's tests", got, ok)
 	}
 }
 
