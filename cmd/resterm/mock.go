@@ -146,12 +146,9 @@ func runMockServe(args []string) error {
 	)
 	fs.Usage = func() { printMockUsage(os.Stderr, fs) }
 
-	if len(args) == 1 {
-		switch strings.ToLower(args[0]) {
-		case "help", "-h", "--help":
-			printMockUsage(os.Stdout, fs)
-			return nil
-		}
+	if len(args) == 1 && cli.IsHelpArg(args[0]) {
+		printMockUsage(os.Stdout, fs)
+		return nil
 	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, cli.ErrHelp) {

@@ -29,13 +29,14 @@ func runCollection(args []string) error {
 	if len(args) == 0 {
 		return errors.New(collectionUsageText())
 	}
-	op := str.Trim(strings.ToLower(args[0]))
-	switch op {
-	case "-h", "--help", "help":
+	if cli.IsHelpArg(args[0]) {
 		if err := writeln(os.Stdout, collectionUsageText()); err != nil {
 			return fmt.Errorf("collection: write output: %w", err)
 		}
 		return nil
+	}
+	op := str.Trim(strings.ToLower(args[0]))
+	switch op {
 	case "export":
 		return runCollectionExport(args[1:])
 	case "import":

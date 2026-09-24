@@ -38,14 +38,9 @@ func handleRunSubcommand(args []string) (bool, error) {
 }
 
 func runRun(args []string) error {
-	if len(args) > 0 {
-		op := strings.ToLower(args[0])
-		switch op {
-		case "-h", "--help", "help":
-			cmd := newRunCmd()
-			printRunUsage(os.Stdout, cmd.fs)
-			return nil
-		}
+	if len(args) > 0 && cli.IsHelpArg(args[0]) {
+		printRunUsage(os.Stdout, newRunCmd().fs)
+		return nil
 	}
 
 	cmd := newRunCmd()

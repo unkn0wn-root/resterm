@@ -84,6 +84,18 @@ func TestRunRunHelpFlagShowsUsage(t *testing.T) {
 	}
 }
 
+func TestRunRunShortHeadersFlagIsNotHelp(t *testing.T) {
+	stdout, _, err := captureRunIO(t, func() error {
+		return runRun([]string{"-H"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "request file path is required") {
+		t.Fatalf("runRun(-H) error = %v, want the missing file error", err)
+	}
+	if strings.Contains(stdout, "Usage:") {
+		t.Fatalf("runRun(-H) printed usage: %q", stdout)
+	}
+}
+
 func TestRunRunFlagErrorsHaveCommandPrefix(t *testing.T) {
 	err := runRun([]string{"--bad"})
 	if err == nil {

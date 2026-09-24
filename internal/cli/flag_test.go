@@ -149,6 +149,23 @@ func TestFlagSetReportsErrorsAfterPositionalArgs(t *testing.T) {
 	}
 }
 
+func TestIsHelpArg(t *testing.T) {
+	for arg, want := range map[string]bool{
+		"-h":     true,
+		"--help": true,
+		"help":   true,
+		"HELP":   true,
+		"-H":     false,
+		"--HELP": false,
+		"helper": false,
+		"":       false,
+	} {
+		if got := IsHelpArg(arg); got != want {
+			t.Errorf("IsHelpArg(%q) = %t, want %t", arg, got, want)
+		}
+	}
+}
+
 func TestUnexpectedArgs(t *testing.T) {
 	fs := NewSubcommandFlagSet("resterm", "history export", io.Discard)
 	var out string
