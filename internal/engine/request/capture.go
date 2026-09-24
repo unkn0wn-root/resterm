@@ -174,7 +174,8 @@ func (e *Engine) refreshCaptureScope(
 	})
 	plan.overlay(sourceRequestCapture, capturedValues(work.requestVars))
 	plan.overlay(sourceRuntimeFile, capturedValues(work.fileVars))
-	sc.vars = plan.values()
+	var pending vars.NameMap[struct{}]
+	sc.vars, pending = plan.scriptValues()
 	sc.globals = effectiveGlobalValues(in.doc, runtime, in.env.Refs())
 
 	ei := ExprInput{
@@ -187,6 +188,7 @@ func (e *Engine) refreshCaptureScope(
 		Stream:   sc.rs,
 		Locals:   sc.locals,
 		globals:  sc.globals,
+		pending:  pending,
 	}
 	if in.res == nil {
 		return e.planResolver(sc.ctx, plan, ei, ExprEvalOptions{})

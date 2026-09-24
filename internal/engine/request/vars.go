@@ -226,7 +226,7 @@ func (e *Engine) planResolver(
 	in ExprInput,
 	opt ExprEvalOptions,
 ) *vars.Resolver {
-	in.Vars = plan.values()
+	in.Vars, in.pending = plan.scriptValues()
 	res := vars.NewResolver(plan.providers()...)
 	res.SetExprEval(e.ExprEvalWithOptions(ctx, in, opt))
 	res.SetExprPos(e.rtsPos(in.Doc, in.Req))

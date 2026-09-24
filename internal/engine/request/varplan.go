@@ -67,6 +67,7 @@ type variableLayer struct {
 // host bindings use separate lexical scoping and are not included.
 type variablePlan struct {
 	layers []variableLayer
+	sec    secrecy
 }
 
 type execVars struct {
@@ -93,7 +94,7 @@ func (e *Engine) buildVariablePlan(src varSources) variablePlan {
 	}
 	refs := env.Refs()
 
-	plan := variablePlan{layers: make([]variableLayer, 0, len(sourceTable))}
+	plan := variablePlan{layers: make([]variableLayer, 0, len(sourceTable)), sec: src.sec}
 	plan.add(sourceConst, entries(sourceConst, src, refs))
 	plan.addLiteral(sourceScript, src.run.scripts)
 	plan.addLiteral(sourceWorkflow, src.run.Overlay)
@@ -160,11 +161,24 @@ func layerProvider(t sourceTraits, vals vars.NameMap[vars.Value]) vars.Provider 
 // Dynamic helpers and expressions are evaluated later, after pre-request
 // scripts have run.
 func (p variablePlan) values() map[string]string {
+	out, _ := p.scriptValues()
+	return out
+}
+
+// pending holds the names left unexpanded, so an expression can resolve them
+// when it reads them. Names a hidden layer declares stay out, since resolving
+// them by name would read the constant. A plan without secrets has none, since
+// it could not resolve a name that uses one.
+func (p variablePlan) scriptValues() (map[string]string, vars.NameMap[struct{}]) {
 	var seen vars.NameMap[vars.Value]
+	var hidden, pending vars.NameMap[struct{}]
 	var res *vars.Resolver
 	for _, l := range p.layers {
 		t := l.source.traits()
 		if t.hidden {
+			for name := range l.vals.All() {
+				hidden.Set(name, struct{}{})
+			}
 			continue
 		}
 		for name, val := range l.vals.All() {
@@ -178,6 +192,8 @@ func (p variablePlan) values() map[string]string {
 				// Leave values that need runtime data or the expression evaluator unchanged.
 				if expanded, err := res.ExpandTemplatesStatic(val.Text); err == nil {
 					val.Text = expanded
+				} else if p.sec == keepSecrets && !hidden.Has(name) {
+					pending.Set(name, struct{}{})
 				}
 			}
 			seen.Set(name, val)
@@ -191,7 +207,7 @@ func (p variablePlan) values() map[string]string {
 		}
 		out[name] = val.Text
 	}
-	return out
+	return out, pending
 }
 
 // Only declarations may choose the OS variable in a templated env: reference.
