@@ -89,15 +89,16 @@ func (b *workflowBuilder) applyOptions(opts directive.Options) error {
 	return err
 }
 
-func (b *workflowBuilder) handleDirective(
-	call directive.Call,
-	line int,
-) (bool, error) {
+func (b *workflowBuilder) handleDirective(d parsedDirective) (bool, error) {
+	call, line := d.Call, d.lines.Start
 	if !isWorkflowDirective(call.Name) {
 		return false, nil
 	}
 	if err := b.flushOpen(call.Name, line); err != nil {
 		return true, err
+	}
+	if call.Name == directive.Run {
+		return true, b.addRun(d)
 	}
 	if handled, err := b.handleWorkflowMeta(call.Name, call.Args, line); handled {
 		return true, err
@@ -118,6 +119,7 @@ func isWorkflowDirective(name directive.Name) bool {
 	switch name {
 	case directive.Description,
 		directive.Tag,
+		directive.Run,
 		directive.When,
 		directive.ForEach,
 		directive.Switch,

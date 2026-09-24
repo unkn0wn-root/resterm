@@ -26,6 +26,7 @@ func RenderWorkflow(wf restfile.Workflow, fallback string) string {
 	b.WriteString("\n")
 	renderDescription(w.directiveWriter, wf.Description)
 	renderTags(w.directiveWriter, wf.Tags)
+	writeEach(w.directiveWriter, wf.RunVars, runVarArg)
 
 	for _, step := range wf.Steps {
 		w.writeStep(step)

@@ -36,6 +36,11 @@ func (f flowStub) Finish() {
 	}
 }
 
+func (f flowStub) EvaluateRunVars() *RequestResult {
+	f.mark("run-vars")
+	return nil
+}
+
 func (f flowStub) EvaluateCondition() *RequestResult {
 	f.mark("condition")
 	return f.cond
@@ -97,7 +102,7 @@ func TestRunRequestPreviewShortCircuitsExecution(t *testing.T) {
 	if finished != 1 {
 		t.Fatalf("expected finish to run once, got %d", finished)
 	}
-	want := []string{"pending", "condition", "pre", "prepare", "preview", "finish"}
+	want := []string{"pending", "run-vars", "condition", "pre", "prepare", "preview", "finish"}
 	if len(order) != len(want) {
 		t.Fatalf("unexpected call order: got %v want %v", order, want)
 	}
@@ -122,6 +127,7 @@ func TestRunRequestSelectsGRPCBeforeHTTP(t *testing.T) {
 	}
 	want := []string{
 		"pending",
+		"run-vars",
 		"condition",
 		"pre",
 		"prepare",
@@ -154,6 +160,7 @@ func TestRunRequestRoutesInteractiveWebSocketBeforeHTTP(t *testing.T) {
 	}
 	want := []string{
 		"pending",
+		"run-vars",
 		"condition",
 		"pre",
 		"prepare",

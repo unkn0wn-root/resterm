@@ -67,7 +67,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		"",
 		vars.Globals{},
 		rts.Locals{},
-		runVars{},
+		execVars{},
 	)
 	var captures captureResult
 	if err := eng.applyCaptures(captureRun{
@@ -124,7 +124,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	if req.Variables[0].Name != "recentStatus" || req.Variables[0].Value != "200 OK" {
 		t.Fatalf("unexpected request variable %+v", req.Variables[0])
 	}
-	varsWithReq := eng.collectVariables(doc, req, testEnv("dev").Resolve(), runVars{})
+	varsWithReq := eng.collectVariables(doc, req, testEnv("dev").Resolve(), execVars{})
 	if varsWithReq["recentStatus"] != "200 OK" {
 		t.Fatalf(
 			"expected request capture to be available in collected vars, got %q",
@@ -146,7 +146,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 	// simulate a fresh parse of the document (no baked-in variables)
 	freshDoc := &restfile.Document{Path: "./sample.http"}
-	vars := eng.collectVariables(freshDoc, nil, testEnv("dev").Resolve(), runVars{})
+	vars := eng.collectVariables(freshDoc, nil, testEnv("dev").Resolve(), execVars{})
 	if vars["lastTrace"] != "abc" {
 		t.Fatalf("expected file capture to be applied via runtime store, got %q", vars["lastTrace"])
 	}
@@ -893,7 +893,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 		"",
 		vars.Globals{},
 		rts.Locals{},
-		runVars{},
+		execVars{},
 	)
 	var captures captureResult
 	if err := eng.applyCaptures(captureRun{
@@ -909,7 +909,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	}
 	eng.applyGlobalMutations(captures.globals, testEnv("dev").Resolve())
 
-	vars := eng.collectVariables(doc, req, testEnv("dev").Resolve(), runVars{})
+	vars := eng.collectVariables(doc, req, testEnv("dev").Resolve(), execVars{})
 	if vars["streamKind"] != "websocket" {
 		t.Fatalf("expected stream kind capture, got %q", vars["streamKind"])
 	}

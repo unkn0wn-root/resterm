@@ -3,6 +3,7 @@ package explain
 import "github.com/unkn0wn-root/resterm/internal/directive"
 
 const (
+	StageRunVars          = directive.RunVarTag
 	StageApply            = "@" + string(directive.Apply)
 	StageCondition        = "condition"
 	StageRoute            = "route"
@@ -23,6 +24,8 @@ const (
 )
 
 const (
+	SummaryRunVarsEvaluated            = "run variables evaluated"
+	SummaryRunVarsFailed               = "run variable evaluation failed"
 	SummaryApplyComplete               = "apply complete"
 	SummaryApplyFailed                 = "apply failed"
 	SummaryConditionPassed             = "condition passed"

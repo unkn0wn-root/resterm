@@ -17,11 +17,13 @@ func TestBuildCompletionScope(t *testing.T) {
 			{
 				Metadata:  restfile.RequestMetadata{Name: "Create User"},
 				Variables: []restfile.Variable{{Name: "reqId"}},
+				RunVars:   []restfile.RunVar{{Name: "userId"}},
 			},
 			{Metadata: restfile.RequestMetadata{Name: "create user"}},
 			{Metadata: restfile.RequestMetadata{Name: " Health "}},
 		},
 		Constants: []restfile.Constant{{Name: "apiVersion"}},
+		Workflows: []restfile.Workflow{{RunVars: []restfile.RunVar{{Name: "suffix"}}}},
 		Patches:   []restfile.PatchProfile{{Name: "jsonApi"}},
 		SSH:       []restfile.SSHProfile{{Name: "edge"}},
 		K8s:       []restfile.K8sProfile{{Name: "cluster"}},
@@ -60,6 +62,11 @@ func TestBuildCompletionScope(t *testing.T) {
 	for _, name := range []string{"reqId", "apiVersion"} {
 		if _, ok := byName[name]; !ok {
 			t.Fatalf("expected variable %q in scope", name)
+		}
+	}
+	for _, name := range []string{"suffix", "userId"} {
+		if got := byName[name]; got.Origin != "run" {
+			t.Fatalf("%s origin = %q, want run", name, got.Origin)
 		}
 	}
 

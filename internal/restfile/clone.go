@@ -17,6 +17,7 @@ func (req *Request) Clone() *Request {
 	dst.Headers = req.Headers.Clone()
 	dst.Settings = maps.Clone(req.Settings)
 	dst.Variables = slices.Clone(req.Variables)
+	dst.RunVars = slices.Clone(req.RunVars)
 	dst.HeaderLines = slices.Clone(req.HeaderLines)
 	dst.Metadata = req.Metadata.Clone()
 	dst.Body = cloneBodySource(req.Body)
@@ -93,6 +94,7 @@ func (spec *CompareSpec) Clone() *CompareSpec {
 func (wf Workflow) Clone() Workflow {
 	wf.Tags = slices.Clone(wf.Tags)
 	wf.Options = maps.Clone(wf.Options)
+	wf.RunVars = slices.Clone(wf.RunVars)
 	wf.Steps = cloneWorkflowSteps(wf.Steps)
 	return wf
 }

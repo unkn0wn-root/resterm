@@ -31,6 +31,13 @@ func (v *Variable) SetRuntimeValue(value string) {
 	v.Authored = false
 }
 
+type RunVar struct {
+	Name  string
+	Value string
+	Line  int
+	Col   int
+}
+
 type Constant struct {
 	Name     string
 	Value    string
@@ -443,6 +450,7 @@ type Request struct {
 	Headers      http.Header
 	Body         BodySource
 	Variables    []Variable
+	RunVars      []RunVar
 	Settings     map[string]string
 	LineRange    LineRange
 	SourcePath   string
@@ -595,6 +603,7 @@ type Workflow struct {
 	Tags             []string
 	DefaultOnFailure WorkflowFailureMode
 	Options          map[string]string
+	RunVars          []RunVar
 	Steps            []WorkflowStep
 	LineRange        LineRange
 }

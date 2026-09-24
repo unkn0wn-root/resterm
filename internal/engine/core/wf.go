@@ -48,17 +48,19 @@ const (
 )
 
 type wfRun struct {
-	dep      Dep
-	sink     Sink
-	pl       *WorkflowPlan
-	idx      int
-	seq      int
-	vars     vars.NameMap[string]
-	done     bool
-	seen     bool
-	skip     bool
-	fail     bool
-	canceled bool
+	dep        Dep
+	sink       Sink
+	pl         *WorkflowPlan
+	idx        int
+	seq        int
+	vars       vars.NameMap[string]
+	wfRunVars  runVarSet
+	reqRunVars map[*restfile.Request]runVarSet
+	done       bool
+	seen       bool
+	skip       bool
+	fail       bool
+	canceled   bool
 }
 
 const (
@@ -152,11 +154,12 @@ func RunPlan(ctx context.Context, dep Dep, sink Sink, pl *WorkflowPlan) error {
 	}
 
 	r := &wfRun{
-		dep:  dep,
-		sink: sink,
-		pl:   pl,
-		vars: vars.CollectNames(pl.Vars),
-		skip: true,
+		dep:        dep,
+		sink:       sink,
+		pl:         pl,
+		vars:       vars.CollectNames(pl.Vars),
+		reqRunVars: make(map[*restfile.Request]runVarSet),
+		skip:       true,
 	}
 	if err := r.emitRunStart(ctx); err != nil {
 		return err
@@ -169,6 +172,7 @@ func RunPlan(ctx context.Context, dep Dep, sink Sink, pl *WorkflowPlan) error {
 }
 
 func (r *wfRun) run(ctx context.Context) error {
+	r.evalWorkflowRunVars(ctx)
 	for r.idx < len(r.pl.Steps) {
 		if ctx.Err() != nil {
 			r.canceled = true
@@ -219,7 +223,10 @@ func (r *wfRun) runReqStep(
 		})
 	}
 
-	xv, vv := r.stepScope(step, req, nil)
+	sc, vv, err := r.stepScope(ctx, step, req)
+	if err != nil {
+		return r.failStep(ctx, step, req, branch, err)
+	}
 
 	if step.When != nil {
 		ok, reason, err := r.dep.EvalCondition(
@@ -233,14 +240,7 @@ func (r *wfRun) runReqStep(
 			rts.Locals{},
 		)
 		if err != nil {
-			if ctx.Err() != nil {
-				r.canceled = true
-				r.idx++
-				return true, nil
-			}
-			return r.manualFinish(ctx, step, req, branch, engine.RequestResult{
-				Err: diag.WrapAs(diag.ClassScript, err, wfTagWhen),
-			})
+			return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagWhen))
 		}
 		if !ok {
 			return r.manualFinish(ctx, step, req, branch, engine.RequestResult{Skipped: true, SkipReason: reason})
@@ -249,17 +249,10 @@ func (r *wfRun) runReqStep(
 
 	spec, err := workflowForEach(step, req)
 	if err != nil {
-		if ctx.Err() != nil {
-			r.canceled = true
-			r.idx++
-			return true, nil
-		}
-		return r.manualFinish(ctx, step, req, branch, engine.RequestResult{
-			Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach),
-		})
+		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagForEach))
 	}
 	if spec == nil {
-		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, rts.Locals{})
+		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, sc, rts.Locals{})
 		if err != nil {
 			return false, err
 		}
@@ -316,16 +309,17 @@ func (r *wfRun) runReqStep(
 			continue
 		}
 
-		loopVars := xv.Clone()
+		loop := sc
+		loop.Overlay = sc.Overlay.Clone()
 		if wfKey != "" {
 			r.vars.Set(wfKey, itemStr)
-			loopVars.Set(wfKey, itemStr)
+			loop.Overlay.Set(wfKey, itemStr)
 		}
 		if reqKey != "" {
-			loopVars.Set(reqKey, itemStr)
+			loop.Overlay.Set(reqKey, itemStr)
 		}
 		loc := rts.Local(spec.Var, item)
-		vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, loopVars.Map())
+		vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, loop)
 
 		if step.When != nil {
 			ok, reason, err := r.dep.EvalCondition(
@@ -388,7 +382,7 @@ func (r *wfRun) runReqStep(
 			branch,
 			i+1,
 			len(items),
-			loopVars,
+			loop,
 			loc,
 		)
 		if err != nil {
@@ -415,14 +409,13 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 		})
 	}
 
-	xv, vv := r.stepScope(step, nil, nil)
+	sc, vv, err := r.stepScope(ctx, step, nil)
+	if err != nil {
+		return r.failStep(ctx, step, nil, "", err)
+	}
 	br, err := r.selectIfBranch(ctx, step, vv)
 	if err != nil {
-		if ctx.Err() != nil {
-			r.canceled = true
-			return true, nil
-		}
-		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: err})
+		return r.failStep(ctx, step, nil, "", err)
 	}
 	if br == nil {
 		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Skipped: true, SkipReason: wfSkipIfNoBranch})
@@ -439,12 +432,7 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 			Err: fmt.Errorf("request %s not found", branch),
 		})
 	}
-
-	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, rts.Locals{})
-	if err != nil {
-		return false, err
-	}
-	return r.finishStep(step, out, true), nil
+	return r.runBranch(ctx, step, req, branch, sc)
 }
 
 func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool, error) {
@@ -458,14 +446,13 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 		})
 	}
 
-	xv, vv := r.stepScope(step, nil, nil)
+	sc, vv, err := r.stepScope(ctx, step, nil)
+	if err != nil {
+		return r.failStep(ctx, step, nil, "", err)
+	}
 	sel, err := r.selectSwitchCase(ctx, step, vv)
 	if err != nil {
-		if ctx.Err() != nil {
-			r.canceled = true
-			return true, nil
-		}
-		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: err})
+		return r.failStep(ctx, step, nil, "", err)
 	}
 	if sel == nil {
 		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Skipped: true, SkipReason: wfSkipSwitchNoCase})
@@ -482,8 +469,23 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 			Err: fmt.Errorf("request %s not found", branch),
 		})
 	}
+	return r.runBranch(ctx, step, req, branch, sc)
+}
 
-	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, rts.Locals{})
+// Evaluate request run variables only after a branch is selected.
+func (r *wfRun) runBranch(
+	ctx context.Context,
+	step restfile.WorkflowStep,
+	req *restfile.Request,
+	branch string,
+	sc request.RunScope,
+) (bool, error) {
+	run, err := r.runVarsFor(ctx, req, sc.Overlay)
+	if err != nil {
+		return r.failStep(ctx, step, req, branch, err)
+	}
+	sc.RunVars = run
+	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, sc, rts.Locals{})
 	if err != nil {
 		return false, err
 	}
@@ -498,7 +500,7 @@ func (r *wfRun) execReq(
 	branch string,
 	iter int,
 	total int,
-	extra vars.NameMap[string],
+	sc request.RunScope,
 	locals rts.Locals,
 ) (engine.RequestResult, error) {
 	clone := request.CloneRequest(req)
@@ -510,7 +512,7 @@ func (r *wfRun) execReq(
 		clone,
 		r.pl.Run.Env,
 		request.ExecOptions{
-			Extra:  extra.Map(),
+			Run:    &sc,
 			Locals: locals,
 			Record: r.pl.Run.Mode == ModeForEach,
 			Ctx:    ctx,
@@ -526,14 +528,18 @@ func (r *wfRun) execReq(
 }
 
 func (r *wfRun) stepScope(
+	ctx context.Context,
 	step restfile.WorkflowStep,
 	req *restfile.Request,
-	extra map[string]string,
-) (vars.NameMap[string], map[string]string) {
+) (request.RunScope, map[string]string, error) {
 	applyVars(&r.vars, step.Vars)
-	xv := stepExtras(r.vars, step.Vars, extra)
-	vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, xv.Map())
-	return xv, vv
+	sc := request.RunScope{Overlay: stepExtras(r.vars, step.Vars)}
+	run, err := r.runVarsFor(ctx, req, sc.Overlay)
+	if err != nil {
+		return sc, nil, err
+	}
+	sc.RunVars = run
+	return sc, r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, sc), nil
 }
 
 func (r *wfRun) emitManualStep(
@@ -573,6 +579,21 @@ func (r *wfRun) manualFinish(
 	return r.finishStep(step, out, true), nil
 }
 
+func (r *wfRun) failStep(
+	ctx context.Context,
+	step restfile.WorkflowStep,
+	req *restfile.Request,
+	branch string,
+	err error,
+) (bool, error) {
+	if ctx.Err() != nil {
+		r.canceled = true
+		r.idx++
+		return true, nil
+	}
+	return r.manualFinish(ctx, step, req, branch, engine.RequestResult{Err: err})
+}
+
 func (r *wfRun) executeStepRequest(
 	ctx context.Context,
 	step restfile.WorkflowStep,
@@ -580,13 +601,13 @@ func (r *wfRun) executeStepRequest(
 	branch string,
 	iter int,
 	total int,
-	extra vars.NameMap[string],
+	sc request.RunScope,
 	locals rts.Locals,
 ) (stepOutcome, error) {
 	if err := r.emitStepStart(ctx, r.idx, step, req, branch, iter, total); err != nil {
 		return stepFailed, err
 	}
-	res, err := r.execReq(ctx, r.idx, step, req, branch, iter, total, extra, locals)
+	res, err := r.execReq(ctx, r.idx, step, req, branch, iter, total, sc, locals)
 	if err != nil {
 		return stepFailed, err
 	}
@@ -996,15 +1017,9 @@ func applyVars(dst *vars.NameMap[string], vals map[string]string) {
 	}
 }
 
-// stepExtras applies vals, then extra, so later layers take precedence.
-func stepExtras(
-	base vars.NameMap[string],
-	vals map[string]string,
-	extra map[string]string,
-) vars.NameMap[string] {
+func stepExtras(base vars.NameMap[string], vals map[string]string) vars.NameMap[string] {
 	out := base.Clone()
 	out.SetMap(vals)
-	out.SetMap(extra)
 	return out
 }
 

@@ -11,14 +11,20 @@ import (
 )
 
 type Dep interface {
-	// overlay contains workflow step and @for-each bindings. Its values rank
-	// below script values and above request variables.
 	CollectVariables(
 		doc *restfile.Document,
 		req *restfile.Request,
 		env vars.Environment,
-		overlay map[string]string,
+		sc request.RunScope,
 	) map[string]string
+	EvalRunVars(
+		ctx context.Context,
+		doc *restfile.Document,
+		req *restfile.Request,
+		env vars.Environment,
+		sc request.RunScope,
+		decls []restfile.RunVar,
+	) (vars.NameMap[string], error)
 	ExecuteWith(
 		doc *restfile.Document,
 		req *restfile.Request,

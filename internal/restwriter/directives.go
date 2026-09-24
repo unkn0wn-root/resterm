@@ -116,6 +116,11 @@ func stepForEachArg(f restfile.WorkflowForEach) (directive.Name, string) {
 	return forEachArg(restfile.ForEachSpec{Expression: f.Expr, Var: f.Var})
 }
 
+// Always write = so values starting with = or : survive a round trip.
+func runVarArg(v restfile.RunVar) (directive.Name, string) {
+	return directive.Run, fmt.Sprintf("%s %s = %s", directive.RunVarWord, v.Name, v.Value)
+}
+
 func captureArg(c restfile.CaptureSpec) (directive.Name, string) {
 	return directive.Capture, fmt.Sprintf("%s %s %s", scopeToken(c.Scope, c.Secret), c.Name, c.Expression)
 }

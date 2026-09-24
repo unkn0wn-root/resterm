@@ -58,7 +58,7 @@ type Warning string
 const WarningSSHHostKeyVerificationDisabled Warning = "@ssh strict_hostkey=false (insecure)"
 
 type ExecOptions struct {
-	Extra      map[string]string
+	Run        *RunScope
 	Locals     rts.Locals
 	Record     bool
 	Ctx        context.Context
@@ -266,12 +266,13 @@ type execCtx struct {
 	sendCtx context.Context
 	cancel  context.CancelFunc
 
-	baseVars  map[string]string
-	storeG    vars.Globals
-	hasRTSPre bool
-	hasJSPre  bool
-	run       runVars
-	locals    rts.Locals
+	baseVars   map[string]string
+	storeG     vars.Globals
+	hasRTSPre  bool
+	hasJSPre   bool
+	run        execVars
+	standalone bool
+	locals     rts.Locals
 
 	res     *vars.Resolver
 	mset    map[string]string
@@ -305,8 +306,11 @@ func newExec(
 		baseCtx = context.Background()
 	}
 	ctx, cancel := context.WithCancel(baseCtx)
-	overlay := vars.CollectNames(opt.Extra)
-	base := e.collectVariables(doc, req, env, runVars{overlay: overlay})
+	var run execVars
+	if opt.Run != nil {
+		run.RunScope = *opt.Run
+	}
+	base := e.collectVariables(doc, req, env, run)
 	hasRTS, hasJS := detectPreRequestScripts(req)
 	secrets := &vars.Secrets{}
 	secrets.Add(env.Secrets()...)
@@ -318,27 +322,28 @@ func newExec(
 		)
 	}
 	return &execCtx{
-		eng:       e,
-		doc:       doc,
-		req:       req,
-		env:       env,
-		mod:       opt.Mode,
-		opts:      opts,
-		sendCtx:   ctx,
-		cancel:    cancel,
-		baseVars:  base,
-		storeG:    e.collectStoredGlobalValues(env),
-		hasRTSPre: hasRTS,
-		hasJSPre:  hasJS,
-		run:       runVars{overlay: overlay},
-		locals:    opt.Locals,
-		secrets:   secrets,
-		exp:       exp,
-		onWarning: opt.OnWarning,
-		onRepeat:  opt.OnRepeat,
-		onSSE:     opt.AttachSSE,
-		onWS:      opt.AttachWS,
-		onGRPC:    opt.AttachGRPC,
+		eng:        e,
+		doc:        doc,
+		req:        req,
+		env:        env,
+		mod:        opt.Mode,
+		opts:       opts,
+		sendCtx:    ctx,
+		cancel:     cancel,
+		baseVars:   base,
+		storeG:     e.collectStoredGlobalValues(env),
+		hasRTSPre:  hasRTS,
+		hasJSPre:   hasJS,
+		run:        run,
+		standalone: opt.Run == nil,
+		locals:     opt.Locals,
+		secrets:    secrets,
+		exp:        exp,
+		onWarning:  opt.OnWarning,
+		onRepeat:   opt.OnRepeat,
+		onSSE:      opt.AttachSSE,
+		onWS:       opt.AttachWS,
+		onGRPC:     opt.AttachGRPC,
 	}
 }
 
@@ -499,6 +504,32 @@ func (f flow) Finish() {
 	if f.ctx != nil && f.ctx.cancel != nil {
 		f.ctx.cancel()
 	}
+}
+
+func (f flow) EvaluateRunVars() *xexec.RequestResult {
+	if f.ctx == nil {
+		return nil
+	}
+	x := f.ctx
+	if !x.standalone || len(x.req.RunVars) == 0 {
+		return nil
+	}
+	vals, err := x.eng.evalRunVars(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.run.RunScope, x.req.RunVars)
+	if err != nil {
+		x.exp.stage(
+			xplain.StageRunVars,
+			xplain.StageError,
+			xplain.SummaryRunVarsFailed,
+			nil,
+			nil,
+			err.Error(),
+		)
+		return x.fail(err, "Run variable evaluation failed")
+	}
+	x.run.RunVars = vals
+	x.baseVars = x.eng.collectVariables(x.doc, x.req, x.env, x.run)
+	x.exp.stage(xplain.StageRunVars, xplain.StageOK, xplain.SummaryRunVarsEvaluated, nil, nil)
+	return nil
 }
 
 func (f flow) EvaluateCondition() *xexec.RequestResult {
@@ -1211,9 +1242,9 @@ func (x *execCtx) httpRunner() xexec.Runner {
 				req *restfile.Request,
 				scriptVars vars.NameMap[string],
 			) map[string]string {
-				return x.eng.collectVariables(doc, req, x.env, runVars{
-					scripts: scriptVars,
-					overlay: x.run.overlay,
+				return x.eng.collectVariables(doc, req, x.env, execVars{
+					RunScope: x.run.RunScope,
+					scripts:  scriptVars,
 				})
 			},
 			CollectGlobalValues: func(doc *restfile.Document) vars.Globals {

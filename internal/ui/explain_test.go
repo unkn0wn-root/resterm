@@ -452,6 +452,27 @@ func TestRenderExplainReportNormalizesStageLabelsForUsers(t *testing.T) {
 	}
 }
 
+func TestRenderExplainReportNamesRunVarStage(t *testing.T) {
+	t.Parallel()
+
+	rep := &xplain.Report{
+		Stages: []xplain.Stage{
+			{Name: xplain.StageRunVars, Status: xplain.StageOK, Summary: xplain.SummaryRunVarsEvaluated},
+			{Name: xplain.StageRunVars, Status: xplain.StageError, Summary: xplain.SummaryRunVarsFailed},
+		},
+	}
+
+	out := renderExplainReport(rep)
+	for _, want := range []string{
+		"Run Variables [ok]: Evaluated run variables",
+		"Run Variables [error]: Failed to evaluate run variables",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in %q", want, out)
+		}
+	}
+}
+
 func TestRenderExplainStyledWrapsCleanlyInNarrowWidth(t *testing.T) {
 	t.Parallel()
 

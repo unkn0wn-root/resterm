@@ -5,7 +5,9 @@
 # @workflow sample-order on-failure=continue environment=demo vars.workflow.name="Sample Order" vars.workflow.item_id="workflow-42"
 # @description Demonstrates multi-step workflows with expectations and variable overrides.
 # @description Run inside resterm to see per-step status updates and history aggregation.
+# @description Share one order reference across steps and make a new one on the next run.
 # @tag demo workflow
+# @run var order_ref = {{$fake.word}}-{{$randomInt(1000, 9999)}}
 # @step Authenticate using=AcquireToken expect.statuscode=200
 # @step FetchHeaders using=FetchHeaders expect.status="200 OK" expect.statuscode=200 vars.request.trace_header="workflow-trace"
 # @step CreateResource using=CreateResource vars.request.item_value="workflow created" expect.statuscode=200
@@ -32,6 +34,7 @@ Content-Type: application/json
 # @auth bearer {{auth.token}}
 GET {{base_url}}/headers
 X-Trace-ID: {{vars.request.trace_header}}
+X-Order-Ref: {{order_ref}}
 
 ### Create resource using workflow variables
 # @name CreateResource
@@ -43,6 +46,7 @@ Content-Type: application/json
 
 {
   "id": "{{vars.workflow.item_id}}",
+  "reference": "{{order_ref}}",
   "value": "{{vars.request.item_value}}",
   "workflow": "{{vars.workflow.name}}"
 }

@@ -166,7 +166,7 @@ func TestProvidersExpandDeclaredVariableTemplates(t *testing.T) {
 		env:     testEnv("dev").Resolve(),
 		globals: globs,
 		sec:     keepSecrets,
-		run:     runVars{scripts: vars.CollectNames(map[string]string{"name": "resterm"})},
+		run:     execVars{scripts: vars.CollectNames(map[string]string{"name": "resterm"})},
 	})
 	res := vars.NewResolver(plan.providers()...)
 

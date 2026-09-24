@@ -15,6 +15,7 @@ const (
 	sourceConst
 	sourceScript
 	sourceWorkflow
+	sourceRun
 	sourceRequestCapture
 	sourceRequest
 	sourceRuntimeGlobal
@@ -39,6 +40,7 @@ var sourceTable = [...]sourceTraits{
 	sourceConst:          {label: "const", template: true, hidden: true, allowsEnvRef: true},
 	sourceScript:         {label: "script"},
 	sourceWorkflow:       {label: "workflow"},
+	sourceRun:            {label: "run"},
 	sourceRequestCapture: {label: "request"},
 	sourceRequest:        {label: "request", template: true, allowsEnvRef: true},
 	sourceRuntimeGlobal:  {label: "global"},
@@ -67,10 +69,9 @@ type variablePlan struct {
 	layers []variableLayer
 }
 
-type runVars struct {
+type execVars struct {
+	RunScope
 	scripts vars.NameMap[string]
-	// overlay contains workflow step and @for-each bindings.
-	overlay vars.NameMap[string]
 }
 
 type varSources struct {
@@ -79,7 +80,7 @@ type varSources struct {
 	env     vars.ResolvedEnv
 	globals vars.Globals
 	sec     secrecy
-	run     runVars
+	run     execVars
 }
 
 // Variable plans keep template and script lookups at the same precedence. Each
@@ -95,7 +96,8 @@ func (e *Engine) buildVariablePlan(src varSources) variablePlan {
 	plan := variablePlan{layers: make([]variableLayer, 0, len(sourceTable))}
 	plan.add(sourceConst, entries(sourceConst, src, refs))
 	plan.addLiteral(sourceScript, src.run.scripts)
-	plan.addLiteral(sourceWorkflow, src.run.overlay)
+	plan.addLiteral(sourceWorkflow, src.run.Overlay)
+	plan.addLiteral(sourceRun, src.run.RunVars)
 	plan.add(sourceRequestCapture, nil)
 	plan.add(sourceRequest, entries(sourceRequest, src, refs))
 	plan.add(sourceRuntimeGlobal, literalEntries(globalValues(src.globals)))

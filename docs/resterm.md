@@ -638,16 +638,17 @@ When expanding `{{variable}}` templates, Resterm looks in:
 1. *File constants* (`@const`).
 2. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
 3. Workflow step variables and the `@for-each` value bound for the current iteration.
-4. *Request-scope* variables (`@var request`, `@capture request`).
-5. *Runtime globals* stored via captures or scripts (per environment).
-6. *Document globals* (`@global`, `@var global`).
-7. *File scope* declarations and `@capture file` values.
-8. Selected environment JSON.
-9. OS environment variables (case-sensitive with an uppercase fallback).
+4. Values declared with `@run var` for the current run. See [Run variables](#run-variables).
+5. *Request-scope* variables (`@var request`, `@capture request`).
+6. *Runtime globals* stored via captures or scripts (per environment).
+7. *Document globals* (`@global`, `@var global`).
+8. *File scope* declarations and `@capture file` values.
+9. Selected environment JSON.
+10. OS environment variables (case-sensitive with an uppercase fallback).
 
 Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and unmapped OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them.
 
-Any declaration above, or a selected environment value, may use `env:NAME`. The value is exposed under the declared name. A missing reference stays undefined and continues to shadow lower sources, including the OS fallback in step 9. See [Values from OS environment variables](#values-from-os-environment-variables).
+Declarations other than `@run var`, and values in the selected environment, may use `env:NAME`. The value is exposed under the declared name. A missing reference stays undefined and continues to shadow lower sources, including the OS fallback in step 10. See [Values from OS environment variables](#values-from-os-environment-variables).
 
 Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers and `{{= ... }}` expressions are left unchanged because they are evaluated later, when the request runs. Captured values and values written by scripts are treated as data and are not expanded.
 
@@ -677,7 +678,7 @@ Helper names are case-insensitive and need no declaration.
 | `{{$fake.city}}`, `{{$fake.country}}`, `{{$fake.phone}}` | Random address details |
 | `{{$fake.word}}`, `{{$fake.sentence}}` | Random filler text |
 
-Every reference is resolved on its own, so two `{{$uuid}}` in one body give two values. Declare the helper as a variable when a request needs the same value twice: `# @request trace.id {{$uuid}}`.
+Every reference is resolved on its own, so two `{{$uuid}}` references in one body give two values. To reuse a value within one request, declare it with `# @request trace.id {{$uuid}}`. To share it across a workflow, use `# @run var`. See [Run variables](#run-variables).
 
 Generated addresses and hostnames stay under the reserved `example.com`, `example.net`, and `example.org` domains, and phone numbers come from a range reserved for fiction, so no helper output points at a real host, mailbox, or line.
 
@@ -1378,6 +1379,7 @@ Accept: application/json
 | Global | `# @global api.token value` / `# @global-secret api.token value` / `# @var global api.token value` | Visible to every request and every file (per environment). |
 | File | `# @file upload.root https://storage.example.com` / `# @file-secret upload.root ...` / `# @var file upload.root ...` | Visible to all requests in the same document only. |
 | Request | `# @request trace.id {{$uuid}}` / `# @request-secret trace.id ...` / `# @var request trace.id ...` | Visible only to the current request (useful for tests). |
+| Run | `# @run var order.ref = {{$uuid}}` | One value shared across a workflow or for-each run. See [Run variables](#run-variables). |
 
 Values are taken verbatim which means that quotes are not special, so `# @file greeting "hello world"` stores the quotes as part of the value. If you need spaces, just write them directly: `# @file greeting hello world`.
 
@@ -1546,15 +1548,45 @@ Key directives and tokens:
 - `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments. The alias is the first word, so quote it when it holds spaces or an equals sign (`@step "Create Account" using=CreateUser`). `name=` sets it instead when the step starts with an option.
 - `vars.request.*` keys add step-scoped values that are available as `{{vars.request.<name>}}` during that request. They do not rewrite existing `@var` declarations automatically, so reference the namespaced token (or copy it in a pre-request script) when you want the override.
 - `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, letting later requests reuse or mutate shared context (e.g. `vars.workflow.userId`).
+- `@run var <name> = <value>` gives the steps one shared value. See [Run variables](#run-variables).
 - Unknown tokens on `@workflow` or `@step` are preserved in `Options`, allowing custom scripts or future features to consume them without changing the file format.
 - An unknown directive between `@workflow` and the next request is a parse error. Directives attached to requests remain request-scoped, even when the workflow runs those requests. Resterm continues parsing valid workflow steps to report other problems, but it will not run the file until the error is fixed.
 - `expect.status` supports quoted or escaped values, so you can write `expect.status="201 Created"` alongside `expect.statuscode=201`.
 - `expect.status` / `expect.statuscode` require non-empty values, and `expect.statuscode` must be numeric.
 
-> **Tip:** Workflow assignments are expanded once when the request executes. If you need helpers such as `{{$uuid}}`, place them directly in the request/template or compute them via a pre-request script before assigning the value.
+> **Tip:** Workflow assignments are expanded when a request runs. Use `@run var` when every step needs the same value from a helper such as `{{$uuid}}`.
 > **Tip:** Options are parsed like CLI flags; wrap values in quotes or escape spaces (`\ `) to keep text together (e.g. `expect.status="201 Created"`).
 
 Every workflow run is persisted alongside regular requests in History; the newest entry is highlighted automatically so you can open the generated `@workflow` definition and results from the History pane immediately after the run.
+
+### Run variables
+
+Use `@run var` in a workflow block to share one value across its steps. Put it on a request to reuse a value each time that request runs within the workflow.
+
+```http
+# @workflow create-order
+# @run var suffix = {{$fake.word}}-{{$randomInt(1000, 9999)}}
+# @step Create using=CreateOrder
+# @step Fetch using=GetOrder
+
+### CreateOrder
+# @name CreateOrder
+POST https://example.com/orders
+Content-Type: application/json
+
+{"reference": "order-{{suffix}}"}
+
+### GetOrder
+# @name GetOrder
+GET https://example.com/orders/order-{{suffix}}
+```
+
+- Workflow values are set before the first step. A request's values are set the first time that request runs. Later steps and loop iterations reuse them. A request value takes priority over a workflow value with the same name.
+- Each new run gets new values. A request sent on its own gets new values each time, while a request with `@for-each` shares its values across iterations. `@profile` and `@compare` set new values for each execution.
+- Declarations are set from top to bottom. A value can use helpers, other variables, and the `@run var` declarations above it, but not the ones below it. A request value can build on the workflow value it replaces, for example `# @run var suffix = {{suffix}}-retry`.
+- Templates, conditions, loops, and scripts can read the values with `{{suffix}}` or `vars.get("suffix")`. Once set, their contents are plain text and are not expanded again.
+- If a declaration fails, Resterm does not send the affected request. The error points to the declaration, and `on-failure` decides whether later steps run. A failed workflow declaration affects every step that runs.
+- Names ignore case and cannot be repeated in the same workflow or request. Run values are public, so `env:` references are rejected. Put the `env:` reference in `@file` or `@request`, then use that variable.
 
 ## Streaming (SSE & WebSocket)
 

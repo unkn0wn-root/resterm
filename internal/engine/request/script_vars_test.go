@@ -160,7 +160,7 @@ func TestJSPreRequestSeesRTSValueOverWorkflowValue(t *testing.T) {
 	}
 
 	sent := sendRequest(t, nil, req, testEnv(""), ExecOptions{
-		Extra: map[string]string{"token": "workflow"},
+		Run: &RunScope{Overlay: vars.CollectNames(map[string]string{"token": "workflow"})},
 	})
 	if got := sent.wire.Header.Get("X-Seen"); got != "rts" {
 		t.Fatalf("X-Seen = %q, want %q", got, "rts")

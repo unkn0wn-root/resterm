@@ -18,6 +18,7 @@ type requestBuilder struct {
 	sourcePath        string
 	metadata          restfile.RequestMetadata
 	variables         []restfile.Variable
+	runVars           []restfile.RunVar
 	originalLines     []string
 	currentScriptKind scriptKind
 	currentScriptLang scriptLang
@@ -100,6 +101,7 @@ func (r *requestBuilder) build() *restfile.Request {
 		Headers:   r.http.HeaderMap(),
 		Body:      restfile.BodySource{},
 		Variables: vars,
+		RunVars:   r.runVars,
 		Settings:  map[string]string{},
 		LineRange: restfile.LineRange{
 			Start: r.startLine,

@@ -17,6 +17,7 @@ const (
 	srcConst varSource = iota
 	srcScript
 	srcWorkflow
+	srcRun
 	srcRequest
 	srcRuntimeGlobal
 	srcDocGlobal
@@ -29,6 +30,7 @@ var varSourceOrder = []varSource{
 	srcConst,
 	srcScript,
 	srcWorkflow,
+	srcRun,
 	srcRequest,
 	srcRuntimeGlobal,
 	srcDocGlobal,
@@ -45,6 +47,8 @@ func (s varSource) String() string {
 		return "script"
 	case srcWorkflow:
 		return "workflow"
+	case srcRun:
+		return "run"
 	case srcRequest:
 		return "request"
 	case srcRuntimeGlobal:
@@ -76,7 +80,7 @@ type planFixture struct {
 	req   *restfile.Request
 	env   vars.Environment
 	globs vars.Globals
-	run   runVars
+	run   execVars
 }
 
 func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
@@ -90,6 +94,7 @@ func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
 	envValues := make(map[string]string)
 	scriptVars := make(map[string]string)
 	loopVars := make(map[string]string)
+	runVals := make(map[string]string)
 	var runtimeFiles []varDecl
 
 	for _, d := range decls {
@@ -100,6 +105,8 @@ func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
 			scriptVars[d.name] = d.value
 		case srcWorkflow:
 			loopVars[d.name] = d.value
+		case srcRun:
+			runVals[d.name] = d.value
 		case srcRequest:
 			f.req.Variables = append(f.req.Variables, restfile.Variable{Name: d.name, Value: d.value})
 		case srcRuntimeGlobal:
@@ -133,9 +140,9 @@ func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
 		f.eng.rt.Files().Set(f.env.Scope(), f.doc.Path, d.name, d.value, false)
 	}
 
-	f.run = runVars{
-		scripts: vars.CollectNames(scriptVars),
-		overlay: vars.CollectNames(loopVars),
+	f.run = execVars{
+		RunScope: RunScope{Overlay: vars.CollectNames(loopVars), RunVars: vars.CollectNames(runVals)},
+		scripts:  vars.CollectNames(scriptVars),
 	}
 	return f
 }

@@ -50,9 +50,17 @@ func buildCompletionScope(
 		for _, v := range doc.Variables {
 			add(v.Name, "file", v.Secret)
 		}
+		for _, wf := range doc.Workflows {
+			for _, v := range wf.RunVars {
+				add(v.Name, "run", false)
+			}
+		}
 		for _, req := range doc.Requests {
 			for _, v := range req.Variables {
 				add(v.Name, "request", v.Secret)
+			}
+			for _, v := range req.RunVars {
+				add(v.Name, "run", false)
 			}
 			scope.RequestNames = appendRequestName(scope.RequestNames, req.Metadata.Name)
 		}
