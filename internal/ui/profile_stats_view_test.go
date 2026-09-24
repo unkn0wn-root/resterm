@@ -301,15 +301,23 @@ func TestProfileStatsViewProgressFollowsStatus(t *testing.T) {
 	}
 }
 
-func TestProfileStatsViewWideUsesColumns(t *testing.T) {
+func TestProfileStatsViewStacksSectionsWhenWide(t *testing.T) {
 	v := &profileStatsView{title: "GET getStatus", snap: profileTestSnapshots()["pass"]}
-	for _, line := range strings.Split(ansi.Strip(v.render(120, defaultStatsPalette(), theme.DefaultTheme())), "\n") {
-		if strings.Contains(line, "LATENCY") {
-			if !strings.Contains(line, "FAILURES") {
-				t.Fatalf("wide layout put sections on separate rows: %q", line)
+	lines := strings.Split(ansi.Strip(v.render(100, defaultStatsPalette(), theme.DefaultTheme())), "\n")
+	latency, failures := -1, -1
+	for i, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "LATENCY"):
+			latency = i
+		case strings.HasPrefix(line, "FAILURES"):
+			failures = i
+		case strings.HasPrefix(line, "min "):
+			if !strings.Contains(line, "active") {
+				t.Fatalf("summary wrapped at full width: %q", line)
 			}
-			return
 		}
 	}
-	t.Fatal("no LATENCY heading")
+	if latency < 0 || failures <= latency || strings.Contains(lines[latency], "FAILURES") {
+		t.Fatalf("FAILURES should follow LATENCY on its own row:\n%s", strings.Join(lines, "\n"))
+	}
 }

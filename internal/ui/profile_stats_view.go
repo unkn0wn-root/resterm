@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	profileWideWidth    = 96
 	profileCompactWidth = 56
 	profileMaxFailures  = 20
 	profileColumnGap    = "   "
@@ -38,15 +37,9 @@ func (v *profileStatsView) render(width int, pal statsPalette, th theme.Theme) s
 	lines = append(lines, "")
 	lines = append(lines, v.kpis(width, pal)...)
 	lines = append(lines, "")
-	if width >= profileWideWidth {
-		lw := (width - len(profileColumnGap)) * 3 / 5
-		rw := width - lw - len(profileColumnGap)
-		lines = append(lines, joinProfileColumns(v.latency(lw, pal, th), v.failures(rw, pal), lw)...)
-	} else {
-		lines = append(lines, v.latency(width, pal, th)...)
-		lines = append(lines, "")
-		lines = append(lines, v.failures(width, pal)...)
-	}
+	lines = append(lines, v.latency(width, pal, th)...)
+	lines = append(lines, "")
+	lines = append(lines, v.failures(width, pal)...)
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, width, "…")
 	}
@@ -303,23 +296,4 @@ func profileStatusStyle(st core.ProfileStatus, pal statsPalette, th theme.Theme)
 	default:
 		return lipgloss.NewStyle().Foreground(th.HeaderValue.GetForeground())
 	}
-}
-
-func joinProfileColumns(left, right []string, lw int) []string {
-	out := make([]string, max(len(left), len(right)))
-	for i := range out {
-		var l, r string
-		if i < len(left) {
-			l = ansi.Truncate(left[i], lw, "…")
-		}
-		if i < len(right) {
-			r = right[i]
-		}
-		if r == "" {
-			out[i] = l
-			continue
-		}
-		out[i] = padStyled(l, lw) + profileColumnGap + r
-	}
-	return out
 }
