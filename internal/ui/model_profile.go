@@ -54,7 +54,12 @@ func (m *Model) startProfileRun(
 
 	title, short := m.statusRunTitles(doc, req)
 	acc := core.NewProfileAccumulator(pl)
-	view := &profileStatsView{title: title, env: env.Label(), snap: acc.Snapshot()}
+	view := &profileStatsView{
+		title: title,
+		env:   env.Label(),
+		snap:  acc.Snapshot(),
+		base:  m.profileBaseline(pl.Key(), time.Now()),
+	}
 	live := newTextSnapshot(fmt.Sprintf("Profiling %s. Results are in the Profile tab.", title), env.Label())
 	live.profile = view
 	st := &profileState{
@@ -99,7 +104,7 @@ func (m *Model) handleProfileRunEvt(evt core.Evt) tea.Cmd {
 		msg.latGen = st.latGen
 		m.recordHeaderTelemetry(msg)
 		st.last = msg
-		st.view.snap.Progress = st.acc.Progress()
+		st.view.snap = st.acc.Snapshot()
 		m.invalidateStatsCaches(st.live)
 		m.showProfileProgress(st)
 		return m.syncResponsePanes()
@@ -229,8 +234,27 @@ func (m *Model) cancelProfileRun() {
 	}
 }
 
-func profileHistoryView(ent history.Entry) *profileStatsView {
-	snap := core.ProfileSnapshotFromHistory(ent)
-	title := strings.TrimSpace(strings.ToUpper(ent.Method) + " " + ent.RequestName)
-	return &profileStatsView{title: title, env: ent.Environment, snap: snap}
+func (m *Model) profileHistoryView(ent history.Entry) *profileStatsView {
+	return &profileStatsView{
+		title: strings.TrimSpace(strings.ToUpper(ent.Method) + " " + ent.RequestName),
+		env:   ent.Environment,
+		snap:  core.ProfileSnapshotFromHistory(ent),
+		base:  m.profileBaseline(core.ProfileKeyOf(ent), ent.ExecutedAt),
+	}
+}
+
+func (m *Model) profileBaseline(k core.ProfileKey, before time.Time) *core.ProfileSnapshot {
+	hs := m.historyStore()
+	if hs == nil {
+		return nil
+	}
+	entries, err := hs.ByRequest(k.Request)
+	if err != nil {
+		return nil
+	}
+	base, ok := core.ProfileBaseline(entries, k, before)
+	if !ok {
+		return nil
+	}
+	return &base
 }

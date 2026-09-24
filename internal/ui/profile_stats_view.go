@@ -1,10 +1,13 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -17,6 +20,7 @@ import (
 const (
 	profileCompactWidth = 56
 	profileMaxFailures  = 20
+	profileFailureLines = 3
 	profileColumnGap    = "   "
 	profileSep          = " · "
 )
@@ -25,21 +29,26 @@ type profileStatsView struct {
 	title string
 	env   string
 	snap  core.ProfileSnapshot
-}
-
-type profileKPI struct {
-	label string
-	value string
+	base  *core.ProfileSnapshot
 }
 
 func (v *profileStatsView) render(width int, pal statsPalette, th theme.Theme) string {
-	lines := v.header(width, pal, th)
-	lines = append(lines, "")
-	lines = append(lines, v.kpis(width, pal)...)
-	lines = append(lines, "")
-	lines = append(lines, v.latency(width, pal, th)...)
-	lines = append(lines, "")
-	lines = append(lines, v.failures(width, pal)...)
+	var lines []string
+	for _, sec := range [][]string{
+		v.header(width, pal, th),
+		v.kpis(width, pal),
+		v.latency(width, pal, th),
+		v.responses(width, pal),
+		v.failures(width, pal),
+	} {
+		if len(sec) == 0 {
+			continue
+		}
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, sec...)
+	}
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, width, "…")
 	}
@@ -104,45 +113,68 @@ func (v *profileStatsView) progressBar(width int, pal statsPalette, th theme.The
 }
 
 func (v *profileStatsView) kpis(width int, pal statsPalette) []string {
-	items := v.kpiItems()
-	if width < profileCompactWidth {
-		lines := make([]string, len(items))
-		for i, it := range items {
-			lines[i] = pal.Label.Render(fmt.Sprintf("%-9s", it.label)) + pal.Value.Render(it.value)
-		}
+	cells := v.kpiCells()
+	lines := kpiGrid(cells, pal, width)
+	if lines == nil {
+		lines = kpiList(cells, pal)
+	}
+	if v.base == nil {
 		return lines
 	}
-	var head, vals strings.Builder
-	for i, it := range items {
-		label, value := it.label, it.value
-		if i < len(items)-1 {
-			w := max(len(label), ansi.StringWidth(value)) + len(profileColumnGap)
-			label, value = padStyled(label, w), padStyled(value, w)
-		}
-		head.WriteString(pal.Heading.Render(label))
-		vals.WriteString(pal.Value.Render(value))
+	parts := []string{
+		"vs run at " + historyTimestampLabel(v.base.Ended, time.Now()),
+		fmt.Sprintf("%d measured", v.base.Progress.Measured),
 	}
-	return []string{head.String(), vals.String()}
+	for _, l := range fitProfileParts(parts, profileSep, width) {
+		lines = append(lines, pal.SubLabel.Render(l))
+	}
+	return lines
 }
 
-func (v *profileStatsView) kpiItems() []profileKPI {
-	p := v.snap.Progress
-	st := v.snap.Stats
-	success := "-"
-	if p.Measured > 0 {
-		success = fmt.Sprintf("%d%%", p.Passed*100/p.Measured)
+func kpiGrid(cells []kpiCell, pal statsPalette, width int) []string {
+	widths := make([]int, len(cells))
+	total := len(profileColumnGap) * (len(cells) - 1)
+	for i, c := range cells {
+		widths[i] = max(len(c.label), ansi.StringWidth(c.value), ansi.StringWidth(c.delta))
+		total += widths[i]
 	}
-	rate := "-"
-	if r := v.snap.WallRate(); r > 0 {
-		rate = strconv.FormatFloat(r, 'f', 1, 64) + "/s wall"
+	if total > width {
+		return nil
 	}
-	return []profileKPI{
-		{"SUCCESS", success},
-		{"P50", formatDurationShort(st.Percentiles[50])},
-		{"P95", formatDurationShort(st.Percentiles[95])},
-		{"P99", formatDurationShort(st.Percentiles[99])},
-		{"RATE", rate},
+	var head, vals, deltas strings.Builder
+	for i, c := range cells {
+		w := widths[i] + len(profileColumnGap)
+		if i == len(cells)-1 {
+			w = 0
+		}
+		head.WriteString(pal.Heading.Render(padStyled(c.label, w)))
+		vals.WriteString(pal.Value.Render(padStyled(c.value, w)))
+		deltas.WriteString(c.trend.style(pal).Render(padStyled(c.delta, w)))
 	}
+	lines := []string{head.String(), vals.String()}
+	if slices.ContainsFunc(cells, func(c kpiCell) bool { return c.delta != "" }) {
+		lines = append(lines, deltas.String())
+	}
+	return lines
+}
+
+func kpiList(cells []kpiCell, pal statsPalette) []string {
+	vw := 0
+	for _, c := range cells {
+		if c.delta != "" {
+			vw = max(vw, ansi.StringWidth(c.value))
+		}
+	}
+	lines := make([]string, len(cells))
+	for i, c := range cells {
+		label := pal.Label.Render(fmt.Sprintf("%-9s", c.label))
+		if c.delta == "" {
+			lines[i] = label + pal.Value.Render(c.value)
+			continue
+		}
+		lines[i] = label + pal.Value.Render(padStyled(c.value, vw)) + "  " + c.trend.style(pal).Render(c.delta)
+	}
+	return lines
 }
 
 func (v *profileStatsView) latency(width int, pal statsPalette, th theme.Theme) []string {
@@ -155,7 +187,7 @@ func (v *profileStatsView) latency(width int, pal statsPalette, th theme.Theme) 
 	if st.Count == 0 {
 		msg := "No successful measured requests."
 		if v.snap.Progress.Status == core.ProfileRunning {
-			msg = "Percentiles and the distribution appear when the run ends."
+			msg = "No successful measured requests yet."
 		}
 		return append(lines, pal.Message.Render(msg))
 	}
@@ -210,6 +242,37 @@ func (v *profileStatsView) latency(width int, pal statsPalette, th theme.Theme) 
 	return append(lines, fitProfileParts(parts, pal.SubLabel.Render(profileSep), width)...)
 }
 
+func (v *profileStatsView) responses(width int, pal statsPalette) []string {
+	codes := v.snap.StatusCodes
+	if len(codes) == 0 {
+		return nil
+	}
+	order := slices.SortedFunc(maps.Keys(codes), func(a, b int) int {
+		return cmp.Or(cmp.Compare(codes[b], codes[a]), cmp.Compare(a, b))
+	})
+	parts := make([]string, len(order))
+	for i, code := range order {
+		name := strconv.Itoa(code)
+		if code == 0 {
+			name = "no response"
+		}
+		parts[i] = statusCodeStyle(code, pal).Render(name) + pal.Value.Render(" ×"+strconv.Itoa(codes[code]))
+	}
+	lines := []string{pal.Heading.Render("RESPONSES") + pal.SubLabel.Render(" measured requests")}
+	return append(lines, fitProfileParts(parts, pal.SubLabel.Render(profileSep), width)...)
+}
+
+func statusCodeStyle(code int, pal statsPalette) lipgloss.Style {
+	switch {
+	case code == 0 || code >= 400:
+		return pal.Warn
+	case code >= 300:
+		return pal.Caution
+	default:
+		return pal.Success
+	}
+}
+
 func (v *profileStatsView) failures(width int, pal statsPalette) []string {
 	p := v.snap.Progress
 	head, fails, warm := pal.Heading, pal.Value, pal.Value
@@ -238,12 +301,28 @@ func (v *profileStatsView) failures(width int, pal statsPalette) []string {
 		if f.Duration > 0 {
 			detail += profileSep + formatDurationShort(f.Duration)
 		}
-		room := max(width-ansi.StringWidth(label)-2, 1)
-		lines = append(lines, style.Render(label+": ")+pal.Value.Render(ansi.Truncate(detail, room, "…")))
+		indent := ansi.StringWidth(label) + 2
+		for i, l := range wrapProfileText(detail, max(width-indent, 1), profileFailureLines) {
+			lead := strings.Repeat(" ", indent)
+			if i == 0 {
+				lead = style.Render(label + ": ")
+			}
+			lines = append(lines, lead+pal.Value.Render(l))
+		}
 	}
 	if n := len(v.snap.Failures) - len(shown); n > 0 {
 		lines = append(lines, pal.Message.Render(fmt.Sprintf("%d more not shown", n)))
 	}
+	return lines
+}
+
+func wrapProfileText(s string, width, limit int) []string {
+	lines := strings.Split(ansi.Wrap(s, width, ""), "\n")
+	if len(lines) <= limit {
+		return lines
+	}
+	lines = lines[:limit]
+	lines[limit-1] = ansi.Truncate(lines[limit-1], width-1, "") + "…"
 	return lines
 }
 

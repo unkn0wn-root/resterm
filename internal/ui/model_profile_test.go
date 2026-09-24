@@ -119,6 +119,21 @@ func TestProfileRunShowsLiveProgress(t *testing.T) {
 	if !strings.Contains(content, "RUNNING") || !strings.Contains(content, "0/2") {
 		t.Fatalf("live dashboard = %q", content)
 	}
+
+	r.ok(1)
+	r.start(2)
+	r.done(2, engine.RequestResult{
+		Response: testHTTPResp("https://example.com/profile", 500, `{}`, 10*time.Millisecond),
+	})
+	if m.profileRun == nil {
+		t.Fatal("profile run ended before RunDone")
+	}
+	content, _ = m.paneContentBase(responsePanePrimary, responseTabStats, 100)
+	for _, want := range []string{"2/2", "10ms", "200 ×1 · 500 ×1", "Run 3: HTTP 500"} {
+		if !strings.Contains(ansi.Strip(content), want) {
+			t.Fatalf("live dashboard is missing %q:\n%s", want, ansi.Strip(content))
+		}
+	}
 }
 
 func TestProfileRunCancelFinalizesOnRunDone(t *testing.T) {
@@ -303,6 +318,40 @@ func TestProfileHistoryReopensDashboard(t *testing.T) {
 	for _, want := range []string{"FAIL", "Run 2: HTTP 500"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("dashboard missing %q:\n%s", want, content)
+		}
+	}
+}
+
+func TestProfileRunComparesWithPreviousRun(t *testing.T) {
+	store := histdb.New(filepath.Join(t.TempDir(), "history.db"))
+	m := New(Config{History: store})
+	m.ready, m.width, m.height = true, 120, 40
+	if cmd := m.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+	for _, d := range []time.Duration{10 * time.Millisecond, 20 * time.Millisecond} {
+		r := startTestProfile(t, &m, restfile.ProfileSpec{Count: 1}, restfile.RequestMetadata{})
+		r.start(0)
+		r.done(0, engine.RequestResult{Response: testHTTPResp("https://example.com/profile", 200, `{}`, d)})
+		r.finish(core.RunDone{Success: true})
+	}
+	content, _ := m.paneContentBase(responsePanePrimary, responseTabStats, 100)
+	if plain := ansi.Strip(content); !strings.Contains(plain, "vs run at") || !strings.Contains(plain, "+10ms") {
+		t.Fatalf("second run has no comparison:\n%s", plain)
+	}
+
+	entries, err := store.Entries()
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("entries = %d, err = %v, want two profile runs", len(entries), err)
+	}
+	for _, ent := range entries {
+		if cmd := m.presentHistoryEntry(ent, nil); cmd != nil {
+			collectMsgs(cmd)
+		}
+		content, _ := m.paneContentBase(responsePanePrimary, responseTabStats, 100)
+		later := ent.ProfileResults.Latency.Max == 20*time.Millisecond
+		if got := strings.Contains(ansi.Strip(content), "+10ms"); got != later {
+			t.Fatalf("entry %s comparison = %t, want %t:\n%s", ent.ID, got, later, ansi.Strip(content))
 		}
 	}
 }

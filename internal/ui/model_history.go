@@ -2056,7 +2056,7 @@ func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) 
 
 func (m *Model) presentHistoryProfile(entry history.Entry) tea.Cmd {
 	snap := newTextSnapshot(historyEntrySummary(entry), entry.Environment)
-	snap.profile = profileHistoryView(entry)
+	snap.profile = m.profileHistoryView(entry)
 	m.applyHistorySnapshot(snap)
 	for _, id := range m.visiblePaneIDs() {
 		if pane := m.pane(id); pane.activeTab != responseTabHistory {

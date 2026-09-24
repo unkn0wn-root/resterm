@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,16 +23,29 @@ func profileTestSnapshots() map[string]core.ProfileSnapshot {
 	stats := analysis.ComputeLatencyStats(samples, analysis.DefaultProfilePercentiles(), 10)
 	longReason := "HTTP 503 Service Unavailable " + strings.Repeat("upstream timeout ", 20)
 	return map[string]core.ProfileSnapshot{
+		"starting": {
+			Progress: core.ProfileProgress{Status: core.ProfileRunning, Total: 12, Warmup: 2, Count: 10},
+		},
 		"running": {
 			Progress: core.ProfileProgress{
 				Status:     core.ProfileRunning,
 				Total:      12,
-				Done:       3,
+				Done:       4,
 				Warmup:     2,
 				WarmupDone: 2,
 				Count:      10,
-				Measured:   1,
+				Measured:   2,
 				Passed:     1,
+				Failed:     1,
+			},
+			Stats: analysis.ComputeLatencyStats(
+				[]time.Duration{120 * ms},
+				analysis.DefaultProfilePercentiles(),
+				10,
+			),
+			StatusCodes: map[int]int{200: 1, 503: 1},
+			Failures: []engine.ProfileFailure{
+				{Iteration: 4, Reason: "HTTP 503 Service Unavailable", StatusCode: 503},
 			},
 		},
 		"pass": {
@@ -39,10 +53,11 @@ func profileTestSnapshots() map[string]core.ProfileSnapshot {
 				Status: core.ProfilePass, Total: 9, Done: 9, Warmup: 2, WarmupDone: 2, WarmupFailed: 1,
 				Count: 7, Measured: 7, Passed: 7, Elapsed: 5120 * ms,
 			},
-			Window:   3700 * ms,
-			Active:   3500 * ms,
-			Stats:    stats,
-			Failures: []engine.ProfileFailure{{Iteration: 1, Warmup: true, Reason: "HTTP 503", Duration: 20 * ms}},
+			Window:      3700 * ms,
+			Active:      3500 * ms,
+			Stats:       stats,
+			StatusCodes: map[int]int{200: 7},
+			Failures:    []engine.ProfileFailure{{Iteration: 1, Warmup: true, Reason: "HTTP 503", Duration: 20 * ms}},
 		},
 		"fail": {
 			Progress: core.ProfileProgress{
@@ -54,7 +69,12 @@ func profileTestSnapshots() map[string]core.ProfileSnapshot {
 				Passed:   1,
 				Failed:   2,
 			},
-			Stats: analysis.ComputeLatencyStats([]time.Duration{100 * ms}, analysis.DefaultProfilePercentiles(), 10),
+			Stats: analysis.ComputeLatencyStats(
+				[]time.Duration{100 * ms},
+				analysis.DefaultProfilePercentiles(),
+				10,
+			),
+			StatusCodes: map[int]int{0: 1, 200: 1, 503: 1},
 			Failures: []engine.ProfileFailure{
 				{Iteration: 2, Reason: longReason, StatusCode: 503, Duration: 90 * ms},
 				{Iteration: 3, Reason: "Test failed: 状态检查 - 期望 200"},
@@ -116,6 +136,15 @@ func profileTestSnapshots() map[string]core.ProfileSnapshot {
 	}
 }
 
+func profileTestBase() *core.ProfileSnapshot {
+	samples := slices.Repeat([]time.Duration{400 * time.Millisecond}, 7)
+	return &core.ProfileSnapshot{
+		Progress: core.ProfileProgress{Status: core.ProfilePass, Count: 7, Measured: 7, Passed: 7},
+		Ended:    time.Date(2026, 9, 20, 14, 2, 0, 0, time.Local),
+		Stats:    analysis.ComputeLatencyStats(samples, analysis.DefaultProfilePercentiles(), 10),
+	}
+}
+
 func profileTestPalettes() map[string]statsPalette {
 	custom := defaultStatsPalette()
 	custom.Neutral = lipgloss.NewStyle().Foreground(lipgloss.Color("#123456"))
@@ -131,8 +160,12 @@ func TestProfileStatsViewFitsWidth(t *testing.T) {
 	titles := []string{"GET getStatus", "POST 注文を作成する 🚀 " + strings.Repeat("very long name ", 10)}
 	for name, snap := range profileTestSnapshots() {
 		for pname, pal := range profileTestPalettes() {
-			for _, title := range titles {
-				v := &profileStatsView{title: title, env: "dev", snap: snap}
+			for _, view := range []profileStatsView{
+				{title: titles[0], env: "dev", snap: snap},
+				{title: titles[1], env: "dev", snap: snap},
+				{title: titles[0], env: "dev", snap: snap, base: profileTestBase()},
+			} {
+				v := &view
 				for _, width := range []int{40, 80, 120} {
 					out := v.render(width, pal, theme.DefaultTheme())
 					for i, line := range strings.Split(out, "\n") {
@@ -167,10 +200,15 @@ func TestProfileStatsViewSections(t *testing.T) {
 		skip  []string
 	}{
 		{
+			snap:  "starting",
+			width: 80,
+			want:  []string{"Warmup", "0/2", "No successful measured requests yet."},
+			skip:  []string{"stddev", "RESPONSES"},
+		},
+		{
 			snap:  "running",
 			width: 80,
-			want:  []string{"Measured", "1/10", "appear when the run ends"},
-			skip:  []string{"stddev"},
+			want:  []string{"Measured", "2/10", "120ms", "stddev", "200 ×1 · 503 ×1", "Run 4: HTTP 503"},
 		},
 		{
 			snap:  "pass",
@@ -178,7 +216,10 @@ func TestProfileStatsViewSections(t *testing.T) {
 			want: []string{
 				"SUCCESS",
 				"100%",
+				"P90",
 				"1.9/s wall",
+				"RESPONSES measured requests",
+				"200 ×7",
 				"433ms-",
 				"Warmup 1: HTTP 503",
 				"Warmup warnings 1",
@@ -186,12 +227,16 @@ func TestProfileStatsViewSections(t *testing.T) {
 			},
 		},
 		{snap: "pass", width: 40, want: []string{"SUCCESS  100%", "P95"}},
-		{snap: "fail", width: 80, want: []string{"Run 2: HTTP 503", "Run 3: Test failed", "Failures 2"}},
+		{
+			snap:  "fail",
+			width: 80,
+			want:  []string{"Run 2: HTTP 503", "Run 3: Test failed", "Failures 2", "no response ×1 · 200 ×1 · 503 ×1"},
+		},
 		{snap: "equal", width: 80, want: []string{"50ms  ███", "100%"}},
 		{snap: "canceled", width: 80, want: []string{"Profiling canceled after 4/10 runs"}},
 		{snap: "skipped", width: 80, want: []string{"Profiling skipped: condition was false"}},
 		{snap: "error", width: 80, want: []string{"executor gone"}},
-		{snap: "legacy", width: 80, want: []string{"unavailable for this older entry"}},
+		{snap: "legacy", width: 80, want: []string{"unavailable for this older entry"}, skip: []string{"RESPONSES"}},
 	}
 	for _, test := range tests {
 		v := &profileStatsView{title: "GET getStatus", env: "dev", snap: snaps[test.snap]}
@@ -213,7 +258,7 @@ func TestProfileStatsViewMarksPercentiles(t *testing.T) {
 	v := &profileStatsView{title: "GET getStatus", snap: profileTestSnapshots()["pass"]}
 	out := ansi.Strip(v.render(80, defaultStatsPalette(), theme.DefaultTheme()))
 	want := map[string]string{"433ms-": "p50", "707ms-": "p95 p99"}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		for row, mark := range want {
 			if strings.HasPrefix(line, row) {
 				if !strings.HasSuffix(line, "  "+mark) {
@@ -226,7 +271,7 @@ func TestProfileStatsViewMarksPercentiles(t *testing.T) {
 	if len(want) > 0 {
 		t.Fatalf("rows not found: %v\n%s", want, out)
 	}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if strings.HasPrefix(line, "478ms-") && strings.Contains(line, " p") {
 			t.Fatalf("unmarked row got a mark: %q", line)
 		}
@@ -285,7 +330,7 @@ func TestProfileStatsViewProgressFollowsStatus(t *testing.T) {
 	for name, style := range tests {
 		v := &profileStatsView{title: "GET getStatus", snap: profileTestSnapshots()[name]}
 		found := false
-		for _, line := range strings.Split(v.render(80, pal, th), "\n") {
+		for line := range strings.SplitSeq(v.render(80, pal, th), "\n") {
 			if !strings.HasPrefix(ansi.Strip(line), "Measured  ") {
 				continue
 			}
@@ -319,5 +364,41 @@ func TestProfileStatsViewStacksSectionsWhenWide(t *testing.T) {
 	}
 	if latency < 0 || failures <= latency || strings.Contains(lines[latency], "FAILURES") {
 		t.Fatalf("FAILURES should follow LATENCY on its own row:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+func TestProfileStatsViewComparesWithBase(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	pal := defaultStatsPalette()
+	v := &profileStatsView{title: "GET getStatus", snap: profileTestSnapshots()["pass"], base: profileTestBase()}
+	out := v.render(120, pal, theme.DefaultTheme())
+	plain := ansi.Strip(out)
+	for _, want := range []string{"=         +52ms", "+353ms", "vs run at", "7 measured"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("comparison is missing %q:\n%s", want, plain)
+		}
+	}
+	sgr, _, _ := strings.Cut(pal.Warn.Render("x"), "x")
+	if !strings.Contains(out, sgr+"+52ms") {
+		t.Fatalf("slower p50 is not styled as worse:\n%q", out)
+	}
+}
+
+func TestProfileStatsViewWrapsFailureReasons(t *testing.T) {
+	v := &profileStatsView{title: "GET getStatus", snap: profileTestSnapshots()["fail"]}
+	lines := strings.Split(ansi.Strip(v.render(60, defaultStatsPalette(), theme.DefaultTheme())), "\n")
+	i := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "Run 2: HTTP 503") })
+	if i < 0 || i+3 >= len(lines) {
+		t.Fatalf("Run 2 not found:\n%s", strings.Join(lines, "\n"))
+	}
+	indent := strings.Repeat(" ", len("Run 2: "))
+	if !strings.HasPrefix(lines[i+1], indent+"upstream") || !strings.HasPrefix(lines[i+2], indent) {
+		t.Fatalf("reason does not wrap under the label:\n%s", strings.Join(lines[i:i+4], "\n"))
+	}
+	if !strings.HasSuffix(lines[i+2], "…") || !strings.HasPrefix(lines[i+3], "Run 3: ") {
+		t.Fatalf("reason is not capped at %d lines:\n%s", profileFailureLines, strings.Join(lines[i:i+4], "\n"))
 	}
 }
