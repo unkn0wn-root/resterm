@@ -30,18 +30,21 @@ const (
 )
 
 type profileKPI struct {
-	label string
-	unit  profileUnit
-	read  func(core.ProfileSnapshot) (float64, bool)
+	label   string
+	unit    profileUnit
+	read    func(core.ProfileSnapshot) (float64, bool)
+	samples int
 }
 
+// A nearest-rank pN is the max of a run until it has 100/(100-N) samples.
+// Below that in either run the delta is shown without color.
 var profileKPIs = []profileKPI{
-	{"SUCCESS", unitPercent, readSuccess},
-	{"P50", unitLatency, readPercentile(50)},
-	{"P90", unitLatency, readPercentile(90)},
-	{"P95", unitLatency, readPercentile(95)},
-	{"P99", unitLatency, readPercentile(99)},
-	{"RATE", unitRate, readRate},
+	{"SUCCESS", unitPercent, readSuccess, 0},
+	{"P50", unitLatency, readPercentile(50), 2},
+	{"P90", unitLatency, readPercentile(90), 10},
+	{"P95", unitLatency, readPercentile(95), 20},
+	{"P99", unitLatency, readPercentile(99), 100},
+	{"RATE", unitRate, readRate, 0},
 }
 
 type kpiCell struct {
@@ -62,6 +65,9 @@ func (v *profileStatsView) kpiCells() []kpiCell {
 		if v.base != nil {
 			if base, found := k.read(*v.base); ok && found {
 				c.delta, c.trend = k.unit.formatDelta(cur-base), k.unit.trend(cur, base)
+				if min(v.snap.Stats.Count, v.base.Stats.Count) < k.samples {
+					c.trend = trendFlat
+				}
 			}
 		}
 		cells[i] = c

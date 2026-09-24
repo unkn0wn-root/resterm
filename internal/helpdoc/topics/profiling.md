@@ -17,6 +17,6 @@ Latency statistics include only successful measured runs. A measured failure fai
 
 The Profile tab opens when the run starts. Percentiles, the histogram, status codes, and failures update after each request.
 
-The tab also shows the change from the previous finished run of the same request with the same environment and delay. Changes under 5% are not colored.
+The tab also shows the change from the previous finished run of the same request with the same environment and delay. Changes under 5% are not colored. A percentile change is not colored until both runs have enough successful requests for it to differ from the slowest one, 20 for P95 and 100 for P99.
 
 Press `Enter` on a profile entry in History to open it again. Only profile requests that are safe to repeat.

@@ -1470,7 +1470,7 @@ How results are counted:
 
 The response pane's **Profile** tab opens when profiling starts. Percentiles, the histogram, status codes, and failures update after each request. If you switch tabs during the run, you stay on the tab you chose. The Pretty, Raw, and Headers tabs show the last response.
 
-The tab compares the run with the previous finished run of the same request in the same environment with the same delay. The row under the headline numbers shows the change, and the line below it shows when that run happened. Slower latency and a lower success rate or wall rate are shown as warnings. Changes under 5% are not colored.
+The tab compares the run with the previous finished run of the same request in the same environment with the same delay. The row under the headline numbers shows the change, and the line below it shows when that run happened. Slower latency and a lower success rate or wall rate are shown as warnings. Changes under 5% are not colored. A percentile change is not colored until both runs have enough successful requests for it to differ from the slowest one, 20 for P95 and 100 for P99.
 
 Every profile run is saved to history, even with `@no-log`. Profile history does not store response bodies. Press `Enter` on an entry to reopen the Profile tab, or `p` to inspect the stored JSON. Entries from older versions show counts and latency, but not failure details or status codes.
 
