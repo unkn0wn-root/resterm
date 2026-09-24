@@ -357,7 +357,7 @@ show_context_help = ["shift+k"]
 - **Raw**: exact payload text.
 - **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
 - **Headers**: response and request header subviews with a visible in-pane switcher. Press `Enter` or `Space` while focused on the Headers tab to switch between the response headers and the sent request headers (cookies included).
-- **Profile** / **Workflow**: latency summaries and histograms from `@profile` runs plus step-by-step workflow breakdowns. The tab label follows the current run type. Workflow results render as a stable summary plus step list and selected-step detail view. Use `j` / `k` or arrow keys to move between steps, `Enter` to focus the selected step detail, `j` / `k` or `PageUp` / `PageDown` to scroll that detail, and `Esc` or `Enter` to return to the step list.
+- **Profile** / **Workflow**: live results for profile and workflow runs. Profile results show progress, latency statistics, a histogram, and failures. On narrow panes, the sections stack vertically. Workflow results show a summary, a step list, and details for the selected step. The tab label follows the current run type. Use `j` / `k` or arrow keys to move between steps, `Enter` to focus the selected step detail, `j` / `k` or `PageUp` / `PageDown` to scroll that detail, and `Esc` or `Enter` to return to the step list.
 - **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.
 - **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
@@ -1445,7 +1445,7 @@ Do not mix unquoted template markers and RTS call syntax in the same capture exp
 
 ### Profiling requests
 
-Add `# @profile` to any request to run it repeatedly and collect latency statistics without leaving the terminal. Profile runs are recorded in history with aggregated results; hit `p` on the entry to inspect the stored JSON.
+Add `# @profile` to a request to run it repeatedly and measure its latency. Requests run one at a time.
 
 ```
 ### Benchmark health check
@@ -1453,13 +1453,24 @@ Add `# @profile` to any request to run it repeatedly and collect latency statist
 GET https://httpbin.org/status/200
 ```
 
-Flags:
+Options:
 
-- `count` - number of measured runs (defaults to 10).
-- `warmup` - optional warmup runs that are executed but excluded from stats.
-- `delay` - optional delay between runs (e.g. `250ms`).
+- `count` - the number of measured runs. It must be positive and defaults to 10. Use `# @profile 50` as a short form when no other option is set.
+- `warmup` - the number of runs to make before measuring. It must be zero or more. Warmup runs are not included in the statistics.
+- `delay` - the time to wait between runs. It must be zero or more, for example `250ms`.
 
-When profiling completes the response pane's **Profile** tab shows percentiles, histograms, success/failure counts, and any errors that occurred.
+If an option is unknown, missing a value, or invalid, the request is not sent and a parse error is shown. Profiling does not support gRPC requests.
+
+How results are counted:
+
+- Latency statistics include only successful measured runs.
+- A measured run fails on a transport error, an HTTP status of 400 or higher, a script error, or a failed test. Any measured failure also fails the profile.
+- A failed warmup run appears as a warning. It does not fail the profile or change the CLI exit code.
+- The wall rate includes delays between requests. The active rate uses only the time spent inside requests.
+
+The response pane's **Profile** tab opens when profiling starts and updates after each request. Percentiles and the histogram appear when the run ends, even if you cancel it. If you switch tabs during the run, you stay on the tab you chose. The Pretty, Raw, and Headers tabs show the last response.
+
+Every profile run is saved to history, even with `@no-log`. Profile history does not store response bodies. Press `Enter` on an entry to reopen the Profile tab, or `p` to inspect the stored JSON. Entries from older versions show counts and latency, but not failure details.
 
 ### Polling and retries
 
