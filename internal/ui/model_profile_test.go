@@ -137,6 +137,24 @@ func TestProfileRunShowsLiveProgress(t *testing.T) {
 	}
 }
 
+func TestProfileRunDashboardIsNotCoveredBySendingOverlay(t *testing.T) {
+	m := newOrchTestModel(t, Config{})
+	r := startTestProfile(t, &m, restfile.ProfileSpec{Count: 3, Warmup: 1}, restfile.RequestMetadata{})
+	r.ok(0)
+	r.ok(1)
+	r.start(2)
+
+	view := ansi.Strip(m.renderResponseColumn(responsePanePrimary, true, 100))
+	if strings.Contains(view, responseSendingBase) {
+		t.Fatalf("sending overlay covers the live dashboard:\n%s", view)
+	}
+	for _, want := range []string{"RUNNING", "1/3"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("live dashboard is missing %q:\n%s", want, view)
+		}
+	}
+}
+
 func TestProfileRunCancelFinalizesOnRunDone(t *testing.T) {
 	tests := []struct {
 		name string

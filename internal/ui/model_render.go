@@ -1379,6 +1379,9 @@ func (m Model) spinnerView(
 }
 
 func (m *Model) sendingView(pane *responsePaneState, width, height int) string {
+	if m.profileRun != nil && pane != nil && pane.activeTab == responseTabStats {
+		return ""
+	}
 	base := m.sendingOverlayBase
 	if base == "" {
 		base = responseSendingBase
