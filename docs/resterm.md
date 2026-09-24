@@ -650,7 +650,7 @@ Templates, RestermScript expressions, the RestermScript `vars` object, and the J
 
 Declarations other than `@run var`, and values in the selected environment, may use `env:NAME`. The value is exposed under the declared name. A missing reference stays undefined and continues to shadow lower sources, including the OS fallback in step 10. See [Values from OS environment variables](#values-from-os-environment-variables).
 
-Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers and `{{= ... }}` expressions are left unchanged because they are evaluated later, when the request runs. Inside a `{{= ... }}` in a template, `vars` returns the same value as `{{name}}`, with helpers already evaluated. Captured values and values written by scripts are treated as data and are not expanded.
+Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers and `{{= ... }}` expressions are left unchanged because they are evaluated later, when the request runs. Inside a `{{= ... }}` in a template, `vars` returns the same value as `{{name}}`, with helpers already evaluated. `@capture`, `@assert`, `@poll until=`, and `@retry-when` read the value the request sent. Captured values and values written by scripts are treated as data and are not expanded.
 
 Variable names are case-insensitive and ignore surrounding whitespace. A file variable named `token`, for example, takes precedence over an environment variable named `TOKEN`. When the same source defines a name more than once, the last declaration or script write wins. Global deletes also ignore case.
 

@@ -326,19 +326,19 @@ func TestPublicResolveExpands(t *testing.T) {
 		"b": "value",
 	}))
 
-	got, ok := r.Resolve("a")
-	if !ok || got != "value" {
-		t.Fatalf("Resolve(a) = %q, %v", got, ok)
+	got, ok, err := r.Resolve("a")
+	if err != nil || !ok || got != "value" {
+		t.Fatalf("Resolve(a) = %q, %v, %v", got, ok, err)
 	}
 }
 
-func TestPublicResolveCycleReportsUnresolved(t *testing.T) {
+func TestPublicResolveReportsCycle(t *testing.T) {
 	r := NewResolver(NewTemplateProvider("request", map[string]string{
 		"a": "{{a}}",
 	}))
 
-	if got, ok := r.Resolve("a"); ok {
-		t.Fatalf("expected cycle to resolve as missing, got %q", got)
+	if got, ok, err := r.Resolve("a"); ok || err == nil || !strings.Contains(err.Error(), "variable cycle") {
+		t.Fatalf("Resolve(a) = %q, %v, %v, want the cycle", got, ok, err)
 	}
 }
 

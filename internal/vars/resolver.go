@@ -132,12 +132,8 @@ func (r *Resolver) WithProviders(providers ...Provider) *Resolver {
 	return &cp
 }
 
-func (r *Resolver) Resolve(name string) (string, bool) {
-	value, ok, err := r.resolve(name, r.exprPos, true, true, nil)
-	if err != nil {
-		return "", false
-	}
-	return value, ok
+func (r *Resolver) Resolve(name string) (string, bool, error) {
+	return r.resolve(name, r.exprPos, true, true, nil)
 }
 
 // A missing result still wins provider lookup, preventing fallthrough.

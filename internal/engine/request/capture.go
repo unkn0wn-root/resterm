@@ -190,11 +190,14 @@ func (e *Engine) refreshCaptureScope(
 		globals:  sc.globals,
 		pending:  pending,
 	}
+	var res *vars.Resolver
 	if in.res == nil {
-		return e.planResolver(sc.ctx, plan, ei, ExprEvalOptions{})
+		res = e.planResolver(sc.ctx, plan, ei, ExprEvalOptions{})
+	} else {
+		res = in.res.WithProviders(plan.providers()...).WithExprEval(e.ExprEval(sc.ctx, ei))
 	}
-	res := in.res.WithProviders(plan.providers()...)
-	return res.WithExprEval(e.ExprEval(sc.ctx, ei))
+	sc.resolve = pendingLookup(pending, res.Resolve)
+	return res
 }
 
 func capturedValues(src vars.NameMap[restfile.Variable]) vars.NameMap[string] {
@@ -261,6 +264,7 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		env:     in.env,
 		base:    in.base,
 		vars:    in.vars,
+		resolve: in.resolve,
 		globals: in.globals,
 		locals:  in.locals,
 		site:    directive.Capture.Tag() + " " + str.FoldLines(in.ex),

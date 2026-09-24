@@ -93,8 +93,8 @@ func TestResolveStopsAtFirstDirectMatchWithoutTrace(t *testing.T) {
 	second := newCountingProvider("file", map[string]string{"token": "file-token"})
 	resolver := NewResolver(first, second)
 
-	out, ok := resolver.Resolve("token")
-	if !ok {
+	out, ok, err := resolver.Resolve("token")
+	if err != nil || !ok {
 		t.Fatal("expected token to resolve")
 	}
 	if out != "env-token" {
@@ -112,8 +112,8 @@ func TestResolveStopsAtFirstPrefixedMatchWithoutTrace(t *testing.T) {
 	second := newCountingProvider("env", map[string]string{"token": "file-token"})
 	resolver := NewResolver(first, second)
 
-	out, ok := resolver.Resolve("env.token")
-	if !ok {
+	out, ok, err := resolver.Resolve("env.token")
+	if err != nil || !ok {
 		t.Fatal("expected namespaced token to resolve")
 	}
 	if out != "env-token" {

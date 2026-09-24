@@ -34,10 +34,10 @@ func ExpandValue(raw string, resolver *vars.Resolver) (string, error) {
 			return v, nil
 		}
 		if resolver != nil {
-			if v, ok := resolver.Resolve(key); ok {
+			if v, ok, _ := resolver.Resolve(key); ok {
 				return v, nil
 			}
-			if v, ok := resolver.Resolve(strings.ToUpper(key)); ok {
+			if v, ok, _ := resolver.Resolve(strings.ToUpper(key)); ok {
 				return v, nil
 			}
 		}

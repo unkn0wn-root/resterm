@@ -428,6 +428,23 @@ func (x *execCtx) captureVariables() map[string]string {
 	return x.eng.collectVariables(x.doc, x.req, x.env, x.run)
 }
 
+// Asserts and response predicates read a declared helper through the request's
+// resolver, so they see the value the request sent, as captures do.
+func (x *execCtx) sentScope(vv map[string]string) evalScope {
+	plan := x.eng.buildVariablePlan(varSources{
+		doc:     x.doc,
+		req:     x.req,
+		env:     x.env,
+		globals: x.storeG,
+		sec:     keepSecrets,
+		run:     x.run,
+	})
+	_, pending := plan.scriptValues()
+	sc := x.evalScope(vv)
+	sc.resolve = pendingLookup(pending, x.res.WithProviders(plan.providers()...).Resolve)
+	return sc
+}
+
 // Before applying global changes, preserve any secret they replace or delete.
 // The value may already appear in run output and must remain redacted after it
 // leaves the current global view.
@@ -1142,7 +1159,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	}
 
 	x.applyRuntimeGlobals(caps.globals)
-	testScope := x.evalScope(x.captureVariables())
+	testScope := x.sentScope(x.captureVariables())
 	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
 	defer cancelAsserts()
 	rr, assertErr := rtsGRPC(resp)
@@ -1261,7 +1278,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					in.Req,
 					x.env,
 					in.BaseDir,
-					x.evalScope(in.Vars),
+					x.sentScope(in.Vars),
 					in.Locals,
 					rr,
 					rtsTrace(in.HTTP),
@@ -1275,7 +1292,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					in.Req,
 					x.env,
 					in.BaseDir,
-					x.evalScope(in.Vars),
+					x.sentScope(in.Vars),
 					in.Locals,
 					in.HTTP,
 					in.Predicate,

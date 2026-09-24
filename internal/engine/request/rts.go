@@ -150,6 +150,7 @@ func rtsStream(info *scripts.StreamInfo) *rtshost.Stream {
 
 type evalScope struct {
 	vars    map[string]string
+	resolve func(name string) (string, bool, error)
 	globals vars.Globals
 }
 
@@ -567,6 +568,7 @@ func (e *Engine) runAsserts(
 		env:     env,
 		base:    base,
 		vars:    vv,
+		resolve: sc.resolve,
 		globals: sc.globals,
 		resp:    resp,
 		res:     resp,
@@ -625,6 +627,7 @@ func (e *Engine) evaluateResponsePredicate(
 		env:     env,
 		base:    base,
 		vars:    sc.vars,
+		resolve: sc.resolve,
 		globals: sc.globals,
 		res:     current,
 		tr:      rtsTrace(resp),
