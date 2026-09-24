@@ -102,7 +102,7 @@ func TestPlaceholderErrorKeepsExpressionReport(t *testing.T) {
 		Frames:   []diag.StackFrame{{Name: "helper", Pos: diag.Pos{Path: "lib.rts", Line: 3, Col: 5}}},
 	}}}}
 	r := NewResolver()
-	r.SetExprEval(func(string, ExprPos) (string, error) { return "", inner })
+	r.SetExprEval(func(string, ExprPos, Lookup) (string, error) { return "", inner })
 
 	_, err := r.ExpandTemplatesAt("{{= helper() }}", diag.Pos{Path: "requests.http", Line: 6, Col: 1})
 	err = diag.WrapAs(diag.ClassProtocol, err, "expand body template")
@@ -123,7 +123,7 @@ func TestPlaceholderErrorFillsMissingPosition(t *testing.T) {
 		Class: diag.ClassScript, Severity: diag.SeverityError, Message: "boom",
 	}}}}
 	r := NewResolver()
-	r.SetExprEval(func(string, ExprPos) (string, error) { return "", inner })
+	r.SetExprEval(func(string, ExprPos, Lookup) (string, error) { return "", inner })
 
 	_, err := r.ExpandTemplatesAt("id={{= fail() }}", diag.Pos{Path: "requests.http", Line: 6, Col: 1})
 
@@ -137,7 +137,7 @@ func TestPlaceholderErrorFillsMissingPosition(t *testing.T) {
 func TestExpressionEvaluatesAtItsPlaceholder(t *testing.T) {
 	var got []ExprPos
 	r := NewResolver()
-	r.SetExprEval(func(_ string, pos ExprPos) (string, error) {
+	r.SetExprEval(func(_ string, pos ExprPos, _ Lookup) (string, error) {
 		got = append(got, pos)
 		return "1", nil
 	})

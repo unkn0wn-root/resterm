@@ -40,7 +40,11 @@ func providerValue(p Provider, name string) (Value, bool) {
 
 type ExprPos = diag.Pos
 
-type ExprEval func(expr string, pos ExprPos) (string, error)
+// Lookup resolves a name inside the running expansion, so an expression reads
+// the same value as a {{name}} placeholder and a self reference is a cycle.
+type Lookup func(name string) (string, bool, error)
+
+type ExprEval func(expr string, pos ExprPos, look Lookup) (string, error)
 
 // Expansion is the result of rendering one template input. Lenient rendering
 // preserves undefined placeholders in Value and reports their presence here.
@@ -423,7 +427,9 @@ func (r *Resolver) resolveName(
 		if r.expr == nil {
 			return "", fmt.Errorf("expressions not enabled")
 		}
-		return r.expr(expr, pos)
+		return r.expr(expr, pos, func(n string) (string, bool, error) {
+			return r.resolve(n, pos, allowDynamic, allowExpr, st)
+		})
 	}
 	if allowDynamic && strings.HasPrefix(name, "$") {
 		value, ok, err := r.resolve(name, pos, allowDynamic, allowExpr, st)

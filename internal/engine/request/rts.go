@@ -317,7 +317,7 @@ func (e *Engine) ExprEvalWithOptions(
 	prepare := sync.OnceValues(func() (rtshost.PreparedScope, error) {
 		return prepareScope(in.Env, in.globals, secrets)
 	})
-	return func(expr string, pos vars.ExprPos) (string, error) {
+	return func(expr string, pos vars.ExprPos, _ vars.Lookup) (string, error) {
 		prep, err := prepare()
 		if err != nil {
 			return "", err
