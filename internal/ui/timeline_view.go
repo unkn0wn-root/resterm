@@ -468,7 +468,7 @@ func renderTimelineBar(
 	if warn {
 		style = styles.barWarn
 	}
-	return renderMeter(int(math.Round(ratio*float64(width))), width, style)
+	return renderMeter(int(math.Round(ratio*float64(width))), width, style, lipgloss.NewStyle())
 }
 
 func renderTimelineStatus(status timelineStatus, styles timelineStyles) string {

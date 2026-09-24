@@ -11,7 +11,8 @@ const (
 	barGlyphEmpty  = "░"
 )
 
-func renderMeter(filled, width int, style lipgloss.Style) string {
+func renderMeter(filled, width int, bar, track lipgloss.Style) string {
 	filled = min(max(filled, 0), width)
-	return style.Render(strings.Repeat(barGlyphFilled, filled)) + strings.Repeat(barGlyphEmpty, width-filled)
+	return bar.Render(strings.Repeat(barGlyphFilled, filled)) +
+		track.Render(strings.Repeat(barGlyphEmpty, width-filled))
 }

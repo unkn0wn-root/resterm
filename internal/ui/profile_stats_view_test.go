@@ -286,18 +286,23 @@ func TestProfileStatsViewColorsBarsByLatency(t *testing.T) {
 	th := theme.DefaultTheme()
 	ms := time.Millisecond
 	snap := core.ProfileSnapshot{
-		Progress: core.ProfileProgress{Status: core.ProfilePass, Count: 3, Measured: 3, Passed: 3},
-		Stats:    analysis.ComputeLatencyStats([]time.Duration{100 * ms, 700 * ms, 1500 * ms}, nil, 3),
+		Progress: core.ProfileProgress{Status: core.ProfilePass, Count: 4, Measured: 4, Passed: 4},
+		Stats:    analysis.ComputeLatencyStats([]time.Duration{100 * ms, 100 * ms, 700 * ms, 1500 * ms}, nil, 3),
 	}
+	pal := defaultStatsPalette()
 	v := &profileStatsView{title: "GET slow", snap: snap}
-	lines := strings.Split(v.render(80, defaultStatsPalette(), th), "\n")
+	lines := strings.Split(v.render(80, pal, th), "\n")
 	want := map[string]time.Duration{"100ms-": 100 * ms, "566ms-": 700 * ms, "1.033s-": 1500 * ms}
+	track, _, _ := strings.Cut(pal.SubLabel.Render(barGlyphEmpty), barGlyphEmpty)
 	for _, line := range lines {
 		for row, d := range want {
 			if strings.HasPrefix(ansi.Strip(line), row) {
-				sgr, _, _ := strings.Cut(latFg(th, d).Render("█"), "█")
+				sgr, _, _ := strings.Cut(latFg(pal, th, d).Render("█"), "█")
 				if !strings.Contains(line, sgr+"█") {
 					t.Fatalf("row %q bar is not styled like %s latency: %q", row, d, line)
+				}
+				if d > 100*ms && !strings.Contains(line, track+barGlyphEmpty) {
+					t.Fatalf("row %q track is not faint: %q", row, line)
 				}
 				delete(want, row)
 			}
@@ -306,7 +311,11 @@ func TestProfileStatsViewColorsBarsByLatency(t *testing.T) {
 	if len(want) > 0 {
 		t.Fatalf("rows not found: %v", want)
 	}
-	ok, warn, slow := latFg(th, 100*ms).Render("x"), latFg(th, 700*ms).Render("x"), latFg(th, 1500*ms).Render("x")
+	if fg := latFg(pal, th, 100*ms).GetForeground(); fg != pal.Duration.GetForeground() {
+		t.Fatalf("fast bar color = %v, want the duration color %v", fg, pal.Duration.GetForeground())
+	}
+	ok, warn, slow := latFg(pal, th, 100*ms).Render("x"), latFg(pal, th, 700*ms).Render("x"),
+		latFg(pal, th, 1500*ms).Render("x")
 	if ok == warn || warn == slow {
 		t.Fatalf("latency colors are not distinct: %q %q %q", ok, warn, slow)
 	}

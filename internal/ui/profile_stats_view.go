@@ -108,8 +108,8 @@ func (v *profileStatsView) progressBar(width int, pal statsPalette, th theme.The
 	if total > 0 {
 		fill = min(done*size/total, size)
 	}
-	return pal.Label.Render(label) + "  " + renderMeter(fill, size, profileStatusStyle(p.Status, pal, th)) + "  " +
-		pal.Value.Render(count)
+	meter := renderMeter(fill, size, profileStatusStyle(p.Status, pal, th), pal.SubLabel)
+	return pal.Label.Render(label) + "  " + meter + "  " + pal.Value.Render(count)
 }
 
 func (v *profileStatsView) kpis(width int, pal statsPalette) []string {
@@ -218,7 +218,7 @@ func (v *profileStatsView) latency(width int, pal statsPalette, th theme.Theme) 
 			fill = (b.Count*size + maxCount - 1) / maxCount
 		}
 		line := pal.Label.Render(padStyled(ranges[i], rw)) + "  " +
-			renderMeter(fill, size, latFg(th, b.From+(b.To-b.From)/2)) + "  " +
+			renderMeter(fill, size, latFg(pal, th, b.From+(b.To-b.From)/2), pal.SubLabel) + "  " +
 			pal.Value.Render(fmt.Sprintf("%*d", cw, b.Count)) + "  " +
 			pal.SubLabel.Render(fmt.Sprintf("%3d%%", b.Count*100/st.Count))
 		if marks[i] != "" {
