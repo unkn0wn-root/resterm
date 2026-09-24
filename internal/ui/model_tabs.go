@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -83,7 +81,7 @@ func (m *Model) availableResponseTabsFor(id responsePaneID) []responseTab {
 	if m.streamIDForPane(id) != "" {
 		tabs = append(tabs, responseTabStream)
 	}
-	if snap != nil && strings.TrimSpace(snap.stats) != "" {
+	if snap.hasStats() {
 		tabs = append(tabs, responseTabStats)
 	}
 	if snapshotHasTrace(snap) {
@@ -141,10 +139,14 @@ func responseTabLabelForSnapshot(tab responseTab, snapshot *responseSnapshot) st
 }
 
 func snapshotStatsKind(snapshot *responseSnapshot) statsReportKind {
-	if snapshot == nil {
+	switch {
+	case snapshot == nil:
 		return statsReportKindNone
+	case snapshot.profile != nil:
+		return statsReportKindProfile
+	default:
+		return snapshot.statsKind
 	}
-	return snapshot.statsKind
 }
 
 func (m *Model) diffAvailable() bool {

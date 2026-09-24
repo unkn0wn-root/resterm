@@ -4768,8 +4768,8 @@ func wantAuth(kind restfile.AuthKind) func(*restfile.Request) error {
 }
 
 func TestParseIgnoredOptionKeepsTheDirectiveSlot(t *testing.T) {
-	doc := Parse("keep.http", []byte("GET https://example.com\n# @profile unsupported=1\n# @profile count=2\n"))
-	if !hasParseMessage(doc.Errors, "@profile directive already defined for this request") {
+	doc := Parse("keep.http", []byte("GET https://example.com\n# @retry count=1 unsupported=1\n# @retry count=2\n"))
+	if !hasParseMessage(doc.Errors, "@retry directive already defined for this request") {
 		t.Fatalf("errors = %v", doc.Errors)
 	}
 }

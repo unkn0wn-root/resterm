@@ -96,13 +96,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 	case directive.ForEach:
 		return b.setForEach(d)
 	case directive.Profile:
-		spec, err := parseProfileSpec(rest)
-		b.report(d, err)
-		if spec == nil {
-			return directiveRejected
-		}
-		b.request.metadata.Profile = spec
-		return directiveApplied
+		return b.setProfile(d)
 	case directive.Trace:
 		spec, err := parseTraceSpec(rest)
 		b.report(d, err)

@@ -61,3 +61,7 @@ func latStyle(th theme.Theme, d time.Duration) lipgloss.Style {
 		return st.Foreground(foregroundColor(th.Error, latErrFg))
 	}
 }
+
+func latFg(th theme.Theme, d time.Duration) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(latStyle(th, d).GetForeground())
+}

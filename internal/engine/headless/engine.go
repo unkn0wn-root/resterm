@@ -138,7 +138,7 @@ func (e *Engine) ExecuteRequestContext(
 			Skipped:     out.Skipped,
 			Compare:     out,
 		}, nil
-	case req.Metadata.Profile != nil && req.GRPC == nil:
+	case req.Metadata.Profile != nil:
 		out, err := e.executeProfile(runCtx(ctx), doc, req, env)
 		if err != nil {
 			return engine.RequestResult{}, err

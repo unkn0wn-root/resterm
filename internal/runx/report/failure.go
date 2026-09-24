@@ -47,6 +47,9 @@ func (rep Report) Failures() []runfail.Failure {
 		}
 		if res.Profile != nil {
 			for _, failure := range res.Profile.Failures {
+				if failure.Warmup {
+					continue
+				}
 				if got := toRunFailure(failure.Failure); got.Code != "" {
 					out = append(out, got)
 				}

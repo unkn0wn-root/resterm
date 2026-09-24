@@ -67,3 +67,17 @@ func (m *Model) activateProfileStatsTab(snapshot *responseSnapshot) tea.Cmd {
 	}
 	return m.syncResponsePanes()
 }
+
+func (m *Model) invalidateStatsCaches(snapshot *responseSnapshot) {
+	if snapshot == nil {
+		return
+	}
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil || pane.snapshot != snapshot {
+			continue
+		}
+		pane.wrapCache[responseTabStats] = cachedWrap{}
+		pane.search.markStale()
+	}
+}

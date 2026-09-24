@@ -1,10 +1,10 @@
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
@@ -28,7 +28,6 @@ type proRun struct {
 	done     bool
 	seen     bool
 	skip     bool
-	fail     bool
 	canceled bool
 	ok       int
 }
@@ -44,11 +43,8 @@ func PrepareProfile(
 	if req.GRPC != nil {
 		return nil, fmt.Errorf("profiling is not supported for gRPC requests")
 	}
-	spec := normProfileSpec(req)
+	spec := profileSpec(req)
 	total := spec.Count + spec.Warmup
-	if total <= 0 {
-		total = spec.Count
-	}
 	run = normRun(run, ModeProfile, engine.ReqTitle(req))
 	return &ProfilePlan{
 		Run:     run,
@@ -86,20 +82,13 @@ func RunProfile(ctx context.Context, dep Dep, sink Sink, pl *ProfilePlan) error 
 	return err
 }
 
-func normProfileSpec(req *restfile.Request) restfile.ProfileSpec {
-	spec := restfile.ProfileSpec{}
-	if req != nil && req.Metadata.Profile != nil {
+// A zero count means the default, so callers can enable profiling with an empty spec.
+func profileSpec(req *restfile.Request) restfile.ProfileSpec {
+	var spec restfile.ProfileSpec
+	if req.Metadata.Profile != nil {
 		spec = *req.Metadata.Profile
 	}
-	if spec.Count <= 0 {
-		spec.Count = 10
-	}
-	if spec.Warmup < 0 {
-		spec.Warmup = 0
-	}
-	if spec.Delay < 0 {
-		spec.Delay = 0
-	}
+	spec.Count = cmp.Or(spec.Count, restfile.DefaultProfileCount)
 	return spec
 }
 
@@ -135,10 +124,7 @@ func (r *proRun) run(ctx context.Context) error {
 			r.skip = true
 			break
 		}
-		ok, _ := proOutcome(out)
-		if !ok {
-			r.fail = true
-		} else if !it.Warmup {
+		if _, failed := iterFailure(it, out); !failed && !it.Warmup {
 			r.ok++
 		}
 		if r.pl.Spec.Delay > 0 && i+1 < r.pl.Total {
@@ -179,36 +165,4 @@ func (r *proRun) iter(i int) IterMeta {
 	}
 	meta.RunIndex = i - r.pl.Spec.Warmup + 1
 	return meta
-}
-
-func proOutcome(out engine.RequestResult) (bool, string) {
-	if out.Skipped {
-		reason := strings.TrimSpace(out.SkipReason)
-		if reason == "" {
-			reason = "request skipped"
-		}
-		return false, reason
-	}
-	if out.Err != nil {
-		return false, out.Err.Error()
-	}
-	if out.Response != nil && out.Response.StatusCode >= 400 {
-		return false, fmt.Sprintf("HTTP %s", out.Response.Status)
-	}
-	if out.ScriptErr != nil {
-		return false, out.ScriptErr.Error()
-	}
-	for _, t := range out.Tests {
-		if t.Passed {
-			continue
-		}
-		if strings.TrimSpace(t.Message) != "" {
-			return false, fmt.Sprintf("Test failed: %s - %s", t.Name, t.Message)
-		}
-		return false, fmt.Sprintf("Test failed: %s", t.Name)
-	}
-	if out.Response == nil {
-		return false, "no response"
-	}
-	return true, ""
 }

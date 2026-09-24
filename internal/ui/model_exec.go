@@ -93,9 +93,7 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 	m.stopStatusPulse()
 
 	var cmds []tea.Cmd
-	if cmd := m.cancelProfileRun(status); cmd != nil {
-		cmds = append(cmds, cmd)
-	}
+	m.cancelProfileRun()
 	if cmd := m.cancelWorkflowRun(status); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -117,21 +115,6 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 	}
 
 	return batchCmds(cmds)
-}
-
-func (m *Model) cancelProfileRun(reason string) tea.Cmd {
-	state := m.profileRun
-	if state == nil {
-		return nil
-	}
-	state.canceled = true
-	if strings.TrimSpace(state.cancelReason) == "" {
-		state.cancelReason = reason
-	}
-	if state.current == nil {
-		return m.finalizeProfileRun(responseMsg{}, state)
-	}
-	return nil
 }
 
 func (m *Model) cancelWorkflowRun(reason string) tea.Cmd {
@@ -303,13 +286,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	}
 
 	if st.req.Metadata.Profile != nil {
-		if st.req.GRPC != nil {
-			m.setStatusMessage(
-				statusMsg{text: "Profiling does not support gRPC", level: statusWarn},
-			)
-		} else {
-			return st.wrap(m.startProfileRun(st.doc, st.req, st.opts))
-		}
+		return st.wrap(m.startProfileRun(st.doc, st.req, st.opts))
 	}
 
 	// A bare WebSocket request stays on the unrecorded pipeline. The stream

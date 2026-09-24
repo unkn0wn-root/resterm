@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
@@ -48,5 +50,40 @@ func TestCompareSummaryMarksGroupedBaseline(t *testing.T) {
 	}
 	if strings.Contains(got, "api=dev, auth=ci*:200 OK") {
 		t.Fatalf("non-baseline row is marked: %q", got)
+	}
+}
+
+func TestHistoryStatusStyleUsesProfileStatus(t *testing.T) {
+	base := lipgloss.NewStyle()
+	tests := []struct {
+		name  string
+		entry history.Entry
+		want  lipgloss.TerminalColor
+	}{
+		{
+			name:  "pass",
+			entry: history.Entry{Status: "PASS 2/2", ProfileResults: &history.ProfileResults{Status: "pass"}},
+			want:  statsSuccessStyle.GetForeground(),
+		},
+		{
+			name:  "fail",
+			entry: history.Entry{Status: "FAIL 1/2", ProfileResults: &history.ProfileResults{Status: "fail"}},
+			want:  statsWarnStyle.GetForeground(),
+		},
+		{
+			name:  "canceled",
+			entry: history.Entry{Status: "CANCELED 1/2", ProfileResults: &history.ProfileResults{Status: "canceled"}},
+			want:  statsCautionStyle.GetForeground(),
+		},
+		{
+			name:  "older entry",
+			entry: history.Entry{Status: "profile completed", ProfileResults: &history.ProfileResults{}},
+			want:  base.GetForeground(),
+		},
+	}
+	for _, test := range tests {
+		if got := historyStatusStyle(base, test.entry).GetForeground(); got != test.want {
+			t.Fatalf("%s: color = %v, want %v", test.name, got, test.want)
+		}
 	}
 }

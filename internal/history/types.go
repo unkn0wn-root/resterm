@@ -64,14 +64,40 @@ type CompareResult struct {
 	Error                string               `json:"error,omitempty"`
 }
 
+// ProfileResults stores a profile summary. FailedRuns excludes warmup failures.
+// Records written before Status was added leave the newer fields empty.
 type ProfileResults struct {
-	TotalRuns      int                   `json:"totalRuns"`
-	WarmupRuns     int                   `json:"warmupRuns"`
-	SuccessfulRuns int                   `json:"successfulRuns"`
-	FailedRuns     int                   `json:"failedRuns"`
-	Latency        *ProfileLatency       `json:"latency,omitempty"`
-	Percentiles    []ProfilePercentile   `json:"percentiles,omitempty"`
-	Histogram      []ProfileHistogramBin `json:"histogram,omitempty"`
+	TotalRuns        int                   `json:"totalRuns"`
+	WarmupRuns       int                   `json:"warmupRuns"`
+	SuccessfulRuns   int                   `json:"successfulRuns"`
+	FailedRuns       int                   `json:"failedRuns"`
+	Latency          *ProfileLatency       `json:"latency,omitempty"`
+	Percentiles      []ProfilePercentile   `json:"percentiles,omitempty"`
+	Histogram        []ProfileHistogramBin `json:"histogram,omitempty"`
+	Status           string                `json:"status,omitempty"`
+	Count            int                   `json:"count,omitempty"`
+	Delay            time.Duration         `json:"delay,omitempty"`
+	Window           time.Duration         `json:"window,omitempty"`
+	Active           time.Duration         `json:"active,omitempty"`
+	WarmupFailedRuns int                   `json:"warmupFailedRuns,omitempty"`
+	Error            string                `json:"error,omitempty"`
+	Failures         []ProfileFailure      `json:"failures,omitempty"`
+	StatusCodes      []ProfileStatusCode   `json:"statusCodes,omitempty"`
+}
+
+// ProfileStatusCode counts measured runs by HTTP status. Code 0 means no response.
+type ProfileStatusCode struct {
+	Code  int `json:"code"`
+	Count int `json:"count"`
+}
+
+// ProfileFailure stores a failure with a redacted reason.
+type ProfileFailure struct {
+	Iteration  int           `json:"iteration"`
+	Warmup     bool          `json:"warmup,omitempty"`
+	Reason     string        `json:"reason"`
+	StatusCode int           `json:"statusCode,omitempty"`
+	Duration   time.Duration `json:"duration,omitempty"`
 }
 
 type ProfileLatency struct {
