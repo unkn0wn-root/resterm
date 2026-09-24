@@ -21,6 +21,9 @@ func addExecutionArgs(c argumentCatalog) {
 	}}, directive.RetryBackoff)
 	c.add(args{named: scriptArgs}, directive.Script)
 	c.add(args{named: []argument{word("pre-request", "Run RestermScript before the request")}}, directive.RTS)
+	c.add(args{named: []argument{
+		word(directive.RunVarWord, "Set a variable once per run").withExample("name = {{$uuid}}"),
+	}}, directive.Run)
 	c.add(args{
 		value: directiveValue(filePath("module", "RestermScript module", PathRTS, pathWord)),
 		named: []argument{word("as", "Bind the module to an alias")},

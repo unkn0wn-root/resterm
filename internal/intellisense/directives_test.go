@@ -137,6 +137,9 @@ func TestDirectiveArgsFilterByPrefix(t *testing.T) {
 	if !contains(rts, "pre-request") || contains(rts, "test") {
 		t.Fatalf("rts args = %v", rts)
 	}
+	if run := argOptions("run", ""); len(run) != 1 || run[0].InsertText() != "var name = {{$uuid}}" {
+		t.Fatalf("run args = %+v, want the var subcommand", run)
+	}
 
 	mock := argOptions("mock", "")
 	for _, label := range []string{"sequence=", "sequence-key=", "interpolate="} {
