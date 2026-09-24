@@ -492,6 +492,7 @@ func cloneProfileResults(results *history.ProfileResults) *history.ProfileResult
 		out.Histogram = append([]history.ProfileHistogramBin(nil), results.Histogram...)
 	}
 	out.Failures = slices.Clone(results.Failures)
+	out.StatusCodes = slices.Clone(results.StatusCodes)
 	return &out
 }
 

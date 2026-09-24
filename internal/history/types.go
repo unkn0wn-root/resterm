@@ -82,6 +82,13 @@ type ProfileResults struct {
 	WarmupFailedRuns int                   `json:"warmupFailedRuns,omitempty"`
 	Error            string                `json:"error,omitempty"`
 	Failures         []ProfileFailure      `json:"failures,omitempty"`
+	StatusCodes      []ProfileStatusCode   `json:"statusCodes,omitempty"`
+}
+
+// ProfileStatusCode counts measured runs by HTTP status. Code 0 means no response.
+type ProfileStatusCode struct {
+	Code  int `json:"code"`
+	Count int `json:"count"`
 }
 
 // ProfileFailure stores a failure with a redacted reason.

@@ -74,6 +74,7 @@ func (s ProfileSnapshot) historyResults(redact func(string) string) *history.Pro
 		Window:           s.Window,
 		Active:           s.Active,
 		WarmupFailedRuns: p.WarmupFailed,
+		StatusCodes:      historyStatusCodes(s.StatusCodes),
 	}
 	if s.Err != nil {
 		out.Error = redact(s.Err.Error())
@@ -108,10 +109,18 @@ func ProfileSnapshotFromHistory(ent history.Entry) ProfileSnapshot {
 			Failed:       r.FailedRuns,
 			Elapsed:      ent.Duration,
 		},
-		Delay:  r.Delay,
-		Window: r.Window,
-		Active: r.Active,
-		Stats:  statsFromHistory(r),
+		Delay:   r.Delay,
+		Started: ent.ExecutedAt.Add(-ent.Duration),
+		Ended:   ent.ExecutedAt,
+		Window:  r.Window,
+		Active:  r.Active,
+		Stats:   statsFromHistory(r),
+	}
+	if len(r.StatusCodes) > 0 {
+		s.StatusCodes = make(map[int]int, len(r.StatusCodes))
+		for _, c := range r.StatusCodes {
+			s.StatusCodes[c.Code] = c.Count
+		}
 	}
 	if r.Error != "" {
 		s.Err = errors.New(r.Error)
@@ -139,6 +148,58 @@ func ProfileSnapshotFromHistory(ent history.Entry) ProfileSnapshot {
 	return s
 }
 
+// ProfileKey identifies runs that can be compared: the same request,
+// environment and delay.
+type ProfileKey struct {
+	Request string
+	Method  string
+	URL     string
+	Env     string
+	Delay   time.Duration
+}
+
+func (pl *ProfilePlan) Key() ProfileKey {
+	return ProfileKey{
+		Request: engine.ReqID(pl.Request),
+		Method:  pl.Request.Method,
+		URL:     pl.Request.URL,
+		Env:     pl.Run.Env.Label(),
+		Delay:   pl.Spec.Delay,
+	}
+}
+
+// ProfileKeyOf returns the key of a stored profile run. ent.ProfileResults must be set.
+func ProfileKeyOf(ent history.Entry) ProfileKey {
+	return ProfileKey{
+		Request: ent.RequestName,
+		Method:  ent.Method,
+		URL:     ent.URL,
+		Env:     ent.Environment,
+		Delay:   ent.ProfileResults.Delay,
+	}
+}
+
+// ProfileBaseline returns the newest finished run for k with latency data
+// that was recorded before the given time.
+func ProfileBaseline(entries []history.Entry, k ProfileKey, before time.Time) (ProfileSnapshot, bool) {
+	var base ProfileSnapshot
+	found := false
+	for _, ent := range entries {
+		if ent.ProfileResults == nil || !ent.ExecutedAt.Before(before) || ProfileKeyOf(ent) != k {
+			continue
+		}
+		s := ProfileSnapshotFromHistory(ent)
+		if s.finished() && s.Stats.Count > 0 && (!found || s.Ended.After(base.Ended)) {
+			base, found = s, true
+		}
+	}
+	return base, found
+}
+
+func (s ProfileSnapshot) finished() bool {
+	return s.Progress.Status == ProfilePass || s.Progress.Status == ProfileFail
+}
+
 func historyLatency(st analysis.LatencyStats) *history.ProfileLatency {
 	if st.Count == 0 {
 		return nil
@@ -157,6 +218,14 @@ func historyPercentiles(src map[int]time.Duration) []history.ProfilePercentile {
 	var out []history.ProfilePercentile
 	for _, p := range slices.Sorted(maps.Keys(src)) {
 		out = append(out, history.ProfilePercentile{Percentile: p, Value: src[p]})
+	}
+	return out
+}
+
+func historyStatusCodes(src map[int]int) []history.ProfileStatusCode {
+	var out []history.ProfileStatusCode
+	for _, code := range slices.Sorted(maps.Keys(src)) {
+		out = append(out, history.ProfileStatusCode{Code: code, Count: src[code]})
 	}
 	return out
 }

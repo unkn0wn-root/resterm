@@ -69,11 +69,12 @@ type ProfileSnapshot struct {
 	Window time.Duration
 	// Active is the total time spent inside measured requests.
 	Active time.Duration
-	// Stats includes successful measured requests and is set when the run ends.
-	Stats      analysis.LatencyStats
-	Failures   []engine.ProfileFailure
-	SkipReason string
-	Err        error
+	Stats  analysis.LatencyStats
+	// StatusCodes counts measured requests by HTTP status. Code 0 means no response.
+	StatusCodes map[int]int
+	Failures    []engine.ProfileFailure
+	SkipReason  string
+	Err         error
 	// Legacy identifies history records saved before failure details were kept.
 	Legacy bool
 }
@@ -125,6 +126,7 @@ type ProfileAccumulator struct {
 	to       time.Time
 	active   time.Duration
 	ok       []time.Duration
+	codes    map[int]int
 	fails    []engine.ProfileFailure
 	canceled bool
 	skipped  bool
@@ -142,6 +144,7 @@ func NewProfileAccumulator(pl *ProfilePlan) *ProfileAccumulator {
 		},
 		delay: pl.Spec.Delay,
 		ok:    make([]time.Duration, 0, pl.Spec.Count),
+		codes: make(map[int]int),
 	}
 }
 
@@ -174,16 +177,20 @@ func (a *ProfileAccumulator) Progress() ProfileProgress {
 }
 
 func (a *ProfileAccumulator) Snapshot() ProfileSnapshot {
+	if a.stats.Count != len(a.ok) {
+		a.stats = analysis.ComputeLatencyStats(a.ok, analysis.DefaultProfilePercentiles(), profileBins)
+	}
 	s := ProfileSnapshot{
-		Progress:   a.prog,
-		Delay:      a.delay,
-		Started:    a.started,
-		Ended:      a.ended,
-		Active:     a.active,
-		Stats:      a.stats,
-		Failures:   slices.Clone(a.fails),
-		SkipReason: a.skipMsg,
-		Err:        a.err,
+		Progress:    a.prog,
+		Delay:       a.delay,
+		Started:     a.started,
+		Ended:       a.ended,
+		Active:      a.active,
+		Stats:       a.stats,
+		StatusCodes: maps.Clone(a.codes),
+		Failures:    slices.Clone(a.fails),
+		SkipReason:  a.skipMsg,
+		Err:         a.err,
 	}
 	s.Stats.Percentiles = maps.Clone(a.stats.Percentiles)
 	s.Stats.Histogram = slices.Clone(a.stats.Histogram)
@@ -219,11 +226,12 @@ func (a *ProfileAccumulator) addIter(e ProIterDone) {
 		return
 	}
 
-	dur := time.Duration(0)
-	if res.Response != nil {
-		dur = res.Response.Duration
+	code, dur := 0, time.Duration(0)
+	if r := res.Response; r != nil {
+		code, dur = r.StatusCode, r.Duration
 	}
 	a.prog.Measured++
+	a.codes[code]++
 	a.to = e.Meta.At
 	a.active += dur
 	if failed {
@@ -240,7 +248,6 @@ func (a *ProfileAccumulator) finish(e RunDone) {
 	a.err = e.Err
 	a.canceled = a.canceled || e.Canceled
 	a.prog.Status = a.status()
-	a.stats = analysis.ComputeLatencyStats(a.ok, analysis.DefaultProfilePercentiles(), profileBins)
 }
 
 func (a *ProfileAccumulator) status() ProfileStatus {

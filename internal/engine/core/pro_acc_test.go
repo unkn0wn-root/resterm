@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"testing"
 	"time"
@@ -185,6 +186,13 @@ func TestProfileAccumulator(t *testing.T) {
 			if got.Done != got.WarmupDone+got.Measured || got.Measured != got.Passed+got.Failed {
 				t.Fatalf("counts do not add up: %+v", got)
 			}
+			codes := 0
+			for _, n := range snap.StatusCodes {
+				codes += n
+			}
+			if codes != got.Measured {
+				t.Fatalf("status codes = %v, want %d measured", snap.StatusCodes, got.Measured)
+			}
 			if n := len(snap.Failures); n != got.Failed+got.WarmupFailed {
 				t.Fatalf("failures = %d, want %d", n, got.Failed+got.WarmupFailed)
 			}
@@ -231,7 +239,27 @@ func TestProfileAccumulatorStats(t *testing.T) {
 	}
 }
 
-func TestProfileAccumulatorRunningHasNoStats(t *testing.T) {
+func TestProfileAccumulatorStatusCodes(t *testing.T) {
+	iters := []engine.RequestResult{
+		proHTTP500(),
+		proOK(10 * time.Millisecond),
+		proHTTP500(),
+		{Err: errors.New("dial tcp: connection refused")},
+		proOK(20 * time.Millisecond),
+	}
+	acc := feedProfile(t, restfile.ProfileSpec{Count: 4, Warmup: 1}, iters, false, RunDone{})
+	snap := acc.Snapshot()
+	want := map[int]int{0: 1, http.StatusOK: 2, http.StatusInternalServerError: 1}
+	if !maps.Equal(snap.StatusCodes, want) {
+		t.Fatalf("status codes = %v, want %v", snap.StatusCodes, want)
+	}
+	snap.StatusCodes[http.StatusOK] = 0
+	if acc.Snapshot().StatusCodes[http.StatusOK] != 2 {
+		t.Fatal("Snapshot shares status codes with the accumulator")
+	}
+}
+
+func TestProfileAccumulatorRunningHasStats(t *testing.T) {
 	req := &restfile.Request{Method: "GET", URL: "https://example.com"}
 	pl, err := PrepareProfile(nil, req, RunMeta{})
 	if err != nil {
@@ -241,8 +269,11 @@ func TestProfileAccumulatorRunningHasNoStats(t *testing.T) {
 	acc.Apply(RunStart{Meta: EvtMeta{At: proT0}})
 	acc.Apply(ProIterDone{Meta: EvtMeta{At: proT0.Add(time.Second)}, Result: proOK(time.Second)})
 	snap := acc.Snapshot()
-	if snap.Progress.Status != ProfileRunning || snap.Stats.Count != 0 || snap.Progress.Passed != 1 {
+	if snap.Progress.Status != ProfileRunning || snap.Progress.Passed != 1 {
 		t.Fatalf("running snapshot = %+v", snap)
+	}
+	if snap.Stats.Count != 1 || snap.Stats.Percentiles[50] != time.Second {
+		t.Fatalf("running stats = %+v, want one sample", snap.Stats)
 	}
 	if snap.Progress.Count != restfile.DefaultProfileCount || snap.Progress.Elapsed != time.Second {
 		t.Fatalf("running progress = %+v", snap.Progress)

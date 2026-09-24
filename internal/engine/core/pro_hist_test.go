@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"reflect"
 	"strings"
 	"testing"
@@ -62,6 +63,12 @@ func TestProfileHistoryRoundTrip(t *testing.T) {
 	if got.Legacy || got.Window != snap.Window || got.Active != snap.Active {
 		t.Fatalf("snapshot = %+v", got)
 	}
+	if !got.Ended.Equal(ent.ExecutedAt) {
+		t.Fatalf("ended = %s, want %s", got.Ended, ent.ExecutedAt)
+	}
+	if !maps.Equal(got.StatusCodes, snap.StatusCodes) || len(rec.StatusCodes) != 2 {
+		t.Fatalf("status codes = %v, stored %v, want %v", got.StatusCodes, rec.StatusCodes, snap.StatusCodes)
+	}
 	if !reflect.DeepEqual(got.Stats, snap.Stats) {
 		t.Fatalf("stats = %+v, want %+v", got.Stats, snap.Stats)
 	}
@@ -111,6 +118,68 @@ func TestProfileHistoryStatus(t *testing.T) {
 	for _, test := range tests {
 		if got := (ProfileSnapshot{Progress: test.prog}).historyStatus(); got != test.want {
 			t.Fatalf("historyStatus() = %q, want %q", got, test.want)
+		}
+	}
+}
+
+func TestProfileBaseline(t *testing.T) {
+	key := ProfileKey{Request: "prof", Method: "GET", URL: "https://example.com", Env: "dev", Delay: time.Second}
+	entry := func(at time.Time, mod func(*history.Entry)) history.Entry {
+		ent := history.Entry{
+			ID:          at.Format(time.RFC3339),
+			ExecutedAt:  at,
+			RequestName: key.Request,
+			Method:      key.Method,
+			URL:         key.URL,
+			Environment: key.Env,
+			ProfileResults: &history.ProfileResults{
+				Status:         "pass",
+				Delay:          key.Delay,
+				SuccessfulRuns: 1,
+				Latency:        &history.ProfileLatency{Count: 1, Median: time.Millisecond},
+			},
+		}
+		if mod != nil {
+			mod(&ent)
+		}
+		return ent
+	}
+	before := proT0.Add(time.Hour)
+	tests := []struct {
+		name string
+		mod  func(*history.Entry)
+		skip bool
+	}{
+		{name: "match"},
+		{name: "other key", mod: func(e *history.Entry) { e.Environment = "prod" }, skip: true},
+		{name: "canceled", mod: func(e *history.Entry) { e.ProfileResults.Status = "canceled" }, skip: true},
+		{name: "not a profile", mod: func(e *history.Entry) { e.ProfileResults = nil }, skip: true},
+		{name: "recorded later", mod: func(e *history.Entry) { e.ExecutedAt = before }, skip: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, ok := ProfileBaseline([]history.Entry{entry(proT0, test.mod)}, key, before)
+			if ok == test.skip {
+				t.Fatalf("ProfileBaseline() found = %t, want %t", ok, !test.skip)
+			}
+		})
+	}
+
+	entries := []history.Entry{
+		entry(proT0, nil),
+		entry(proT0.Add(2*time.Minute), nil),
+		entry(proT0.Add(time.Minute), nil),
+	}
+	for _, test := range []struct {
+		before time.Time
+		want   time.Time
+	}{
+		{before: before, want: proT0.Add(2 * time.Minute)},
+		{before: proT0.Add(90 * time.Second), want: proT0.Add(time.Minute)},
+	} {
+		got, ok := ProfileBaseline(entries, key, test.before)
+		if !ok || !got.Ended.Equal(test.want) {
+			t.Fatalf("ProfileBaseline(before %s) = %s, %t, want %s", test.before, got.Ended, ok, test.want)
 		}
 	}
 }
