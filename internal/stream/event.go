@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 type Kind int
@@ -71,8 +71,8 @@ type WSMetadata struct {
 	Reason string
 }
 
-var seqCounter uint64
+var seqCounter atomic.Uint64
 
 func nextSequence() uint64 {
-	return atomic.AddUint64(&seqCounter, 1)
+	return seqCounter.Add(1)
 }

@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -118,7 +117,7 @@ func (b *Builder) Generate(
 		for name := range b.globals {
 			names = append(names, name)
 		}
-		sort.Strings(names)
+		slices.Sort(names)
 		for _, name := range names {
 			doc.Globals = append(doc.Globals, b.globals[name])
 		}
@@ -992,8 +991,8 @@ func buildQueryString(params []paramBinding) string {
 	if len(params) == 0 {
 		return ""
 	}
-	sort.Slice(params, func(i, j int) bool {
-		return params[i].Param.Name < params[j].Param.Name
+	slices.SortFunc(params, func(a, b paramBinding) int {
+		return strings.Compare(a.Param.Name, b.Param.Name)
 	})
 	var segments []string
 	for _, binding := range params {

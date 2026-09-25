@@ -8,8 +8,8 @@ import (
 )
 
 type TraceSummary struct {
-	Started   time.Time     `json:"started,omitempty"`
-	Completed time.Time     `json:"completed,omitempty"`
+	Started   time.Time     `json:"started,omitzero"`
+	Completed time.Time     `json:"completed,omitzero"`
 	Duration  time.Duration `json:"duration"`
 	Error     string        `json:"error,omitempty"`
 	Phases    []TracePhase  `json:"phases,omitempty"`
@@ -22,7 +22,7 @@ type TracePhase struct {
 	Kind     string         `json:"kind"`
 	Duration time.Duration  `json:"duration"`
 	Error    string         `json:"error,omitempty"`
-	Meta     TracePhaseMeta `json:"meta,omitempty"`
+	Meta     TracePhaseMeta `json:"meta,omitzero"`
 }
 
 type TracePhaseMeta struct {
@@ -66,8 +66,8 @@ type TraceCert struct {
 	Subject   string    `json:"subject,omitempty"`
 	Issuer    string    `json:"issuer,omitempty"`
 	SANs      []string  `json:"sans,omitempty"`
-	NotBefore time.Time `json:"notBefore,omitempty"`
-	NotAfter  time.Time `json:"notAfter,omitempty"`
+	NotBefore time.Time `json:"notBefore,omitzero"`
+	NotAfter  time.Time `json:"notAfter,omitzero"`
 	Serial    string    `json:"serial,omitempty"`
 }
 

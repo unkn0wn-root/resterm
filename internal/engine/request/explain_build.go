@@ -1,10 +1,11 @@
 package request
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -569,13 +570,10 @@ func mergedKeySet[M ~map[string]V, V any](a, b M) []string {
 	for _, name := range keys {
 		names = append(names, name)
 	}
-	sort.Slice(names, func(i, j int) bool {
-		left := normalizedExplainKey(names[i])
-		right := normalizedExplainKey(names[j])
-		if left == right {
-			return names[i] < names[j]
-		}
-		return left < right
+	slices.SortFunc(names, func(a, b string) int {
+		left := normalizedExplainKey(a)
+		right := normalizedExplainKey(b)
+		return cmp.Or(strings.Compare(left, right), strings.Compare(a, b))
 	})
 	return names
 }
@@ -683,7 +681,7 @@ func explainHeaders(h http.Header) []xplain.Header {
 	for name := range h {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	out := make([]xplain.Header, 0, len(names))
 	for _, name := range names {
 		for _, val := range h.Values(name) {
@@ -701,7 +699,7 @@ func explainSettings(settings map[string]string) []xplain.Pair {
 	for key := range settings {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	out := make([]xplain.Pair, 0, len(keys))
 	for _, key := range keys {
 		out = append(out, xplain.Pair{Key: key, Value: settings[key]})

@@ -1,10 +1,11 @@
 package generator
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -63,29 +64,29 @@ func (b *Builder) buildMocks(op model.Operation) []*restfile.Mock {
 
 func sortedMockResponses(responses []model.Response) []model.Response {
 	responses = append([]model.Response(nil), responses...)
-	sort.SliceStable(responses, func(i, j int) bool {
-		l, lok := concreteStatus(responses[i].StatusCode)
-		r, rok := concreteStatus(responses[j].StatusCode)
+	slices.SortStableFunc(responses, func(a, b model.Response) int {
+		l, lok := concreteStatus(a.StatusCode)
+		r, rok := concreteStatus(b.StatusCode)
 		if lok != rok {
-			return lok
+			if lok {
+				return -1
+			}
+			return 1
 		}
 		if lok && l != r {
-			return l < r
+			return cmp.Compare(l, r)
 		}
-		return responses[i].StatusCode < responses[j].StatusCode
+		return strings.Compare(a.StatusCode, b.StatusCode)
 	})
 	return responses
 }
 
 func sortedMockMediaTypes(mts []model.MediaType) []model.MediaType {
 	mts = append([]model.MediaType(nil), mts...)
-	sort.SliceStable(mts, func(i, j int) bool {
-		lr := mockMediaRank(mts[i].ContentType)
-		rr := mockMediaRank(mts[j].ContentType)
-		if lr != rr {
-			return lr < rr
-		}
-		return mts[i].ContentType < mts[j].ContentType
+	slices.SortStableFunc(mts, func(a, b model.MediaType) int {
+		lr := mockMediaRank(a.ContentType)
+		rr := mockMediaRank(b.ContentType)
+		return cmp.Or(cmp.Compare(lr, rr), strings.Compare(a.ContentType, b.ContentType))
 	})
 	return mts
 }

@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/unkn0wn-root/resterm/internal/http/version"
-	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 )
 
@@ -52,7 +51,11 @@ func ApplyHTTPTransport(
 	if v == version.V11 {
 		return nil
 	}
-	return http2.ConfigureTransport(transport)
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetHTTP2(true)
+	transport.Protocols = protocols
+	return nil
 }
 
 func GRPCDialOption(dialer DialContextFunc) grpc.DialOption {

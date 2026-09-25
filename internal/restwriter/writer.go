@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -181,12 +181,12 @@ func renderRequest(w directiveWriter, req *restfile.Request) error {
 	}
 	renderSettings(w, req.Settings)
 	renderRequestVariables(w, req.Variables)
-	writeEach(w, req.RunVars, runVarArg)
-	writeOne(w, req.Metadata.When, conditionArg)
-	writeOne(w, req.Metadata.ForEach, forEachArg)
-	writeEach(w, req.Metadata.Applies, applyArg)
-	writeEach(w, req.Metadata.Captures, captureArg)
-	writeEach(w, req.Metadata.Asserts, assertArg)
+	w.writeEach(req.RunVars, runVarArg)
+	w.writeOne(req.Metadata.When, conditionArg)
+	w.writeOne(req.Metadata.ForEach, forEachArg)
+	w.writeEach(req.Metadata.Applies, applyArg)
+	w.writeEach(req.Metadata.Captures, captureArg)
+	w.writeEach(req.Metadata.Asserts, assertArg)
 	renderBodyOptions(w, req)
 
 	w.b.WriteString(reqLine(req))
@@ -400,7 +400,7 @@ func formatOrderedParams(params map[string]string, ordered []string) []string {
 		extra = append(extra, formatAuthParam(lower, val))
 	}
 	if len(extra) > 0 {
-		sort.Strings(extra)
+		slices.Sort(extra)
 		parts = append(parts, extra...)
 	}
 	return parts
@@ -458,6 +458,6 @@ func sortedKeys[M ~map[string]V, V any](m M) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }

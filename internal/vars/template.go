@@ -201,8 +201,8 @@ func exprOffset(match string) int {
 
 // textPos returns the position after text, counting lines and byte columns from 1.
 func textPos(text string) (line, col int) {
-	if i := strings.LastIndexByte(text, '\n'); i >= 0 {
-		return 1 + strings.Count(text, "\n"), len(text) - i
+	if _, after, ok := strings.CutLast(text, "\n"); ok {
+		return 1 + strings.Count(text, "\n"), len(after) + 1
 	}
 	return 1, len(text) + 1
 }
@@ -315,9 +315,9 @@ func (s *unclosedScan) span(locate Locator, i, end int) diag.Span {
 // lineCol returns the line and byte column at off, both starting at 1.
 func (s *unclosedScan) lineCol(off int) (line, col int) {
 	seg := s.input[s.lineOff:off]
-	if i := strings.LastIndexByte(seg, '\n'); i >= 0 {
+	if _, after, ok := strings.CutLast(seg, "\n"); ok {
 		s.line += strings.Count(seg, "\n")
-		s.col = len(seg) - i
+		s.col = len(after) + 1
 	} else {
 		s.col += len(seg)
 	}

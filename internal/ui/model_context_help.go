@@ -50,11 +50,7 @@ func (m *Model) contextHelpTopic() (helpdoc.Topic, bool) {
 
 func cursorInTemplate(line []rune, col int) bool {
 	col = clamp(col, 0, len(line))
-	left := strings.LastIndex(string(line[:col]), "{{")
-	if left < 0 {
-		return false
-	}
-	return strings.Contains(string(line[col:]), "}}")
+	return strings.Contains(string(line[:col]), "{{") && strings.Contains(string(line[col:]), "}}")
 }
 
 func contextWord(line []rune, col int) string {

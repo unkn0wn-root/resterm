@@ -111,8 +111,7 @@ func (b *documentBuilder) report(d parsedDirective, err error) {
 		return
 	}
 	item := d.diagnostic(err.Error(), err)
-	var unknown *directive.UnknownOptionsError
-	if errors.As(err, &unknown) {
+	if _, ok := errors.AsType[*directive.UnknownOptionsError](err); ok {
 		b.pushWarning(item)
 		return
 	}
@@ -142,8 +141,8 @@ func fatalErr(err error) bool {
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		return slices.ContainsFunc(joined.Unwrap(), fatalErr)
 	}
-	var unknown *directive.UnknownOptionsError
-	return !errors.As(err, &unknown)
+	_, ok := errors.AsType[*directive.UnknownOptionsError](err)
+	return !ok
 }
 
 func (b *documentBuilder) processLine(no int, raw, term string) {

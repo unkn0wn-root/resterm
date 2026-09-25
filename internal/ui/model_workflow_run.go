@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -709,8 +710,8 @@ func (state *workflowState) summaryFor(title string) string {
 	}
 
 	lastFailure := -1
-	for idx := len(state.results) - 1; idx >= 0; idx-- {
-		if !state.results[idx].Skipped && !state.results[idx].Success {
+	for idx, v := range slices.Backward(state.results) {
+		if !v.Skipped && !v.Success {
 			lastFailure = idx
 			break
 		}

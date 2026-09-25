@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/curl"
@@ -114,6 +114,6 @@ func uniqSorted(in []string) []string {
 			out = append(out, t)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return util.DedupeSortedStrings(out)
 }

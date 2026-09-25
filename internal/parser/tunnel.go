@@ -48,8 +48,7 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 	res, err := k8sbuilder.ParseDirective(d.Args)
 	b.report(d, err)
 	if fatalErr(err) {
-		var dirErr *k8sbuilder.DirectiveError
-		if errors.As(err, &dirErr) {
+		if dirErr, ok := errors.AsType[*k8sbuilder.DirectiveError](err); ok {
 			b.addInvalidK8sProfile(d.lines.Start, dirErr.Profile, err.Error())
 		}
 		return directiveRejected

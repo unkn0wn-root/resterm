@@ -42,8 +42,7 @@ func classify(err error) Class {
 		return ClassTimeout
 	}
 
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 		return ClassTimeout
 	}
 	if st, ok := status.FromError(err); ok {
@@ -52,8 +51,7 @@ func classify(err error) Class {
 		}
 	}
 
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
 		if class := classify(urlErr.Err); class != ClassUnknown {
 			return class
 		}
@@ -64,13 +62,11 @@ func classify(err error) Class {
 		return ClassTLS
 	}
 
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
+	if _, ok := errors.AsType[*net.DNSError](err); ok {
 		return ClassNetwork
 	}
 
-	var opErr *net.OpError
-	if errors.As(err, &opErr) {
+	if _, ok := errors.AsType[*net.OpError](err); ok {
 		return ClassNetwork
 	}
 
@@ -82,8 +78,7 @@ func classify(err error) Class {
 		return ClassFilesystem
 	}
 
-	var pathErr *fs.PathError
-	if errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*fs.PathError](err); ok {
 		return ClassFilesystem
 	}
 
@@ -160,24 +155,20 @@ func grpcStatusClass(code codes.Code) Class {
 }
 
 func isTLSError(err error) bool {
-	var unknownAuthority x509.UnknownAuthorityError
-	if errors.As(err, &unknownAuthority) {
+	if _, ok := errors.AsType[x509.UnknownAuthorityError](err); ok {
 		return true
 	}
-	var hostname x509.HostnameError
-	if errors.As(err, &hostname) {
+	if _, ok := errors.AsType[x509.HostnameError](err); ok {
 		return true
 	}
-	var invalid x509.CertificateInvalidError
-	if errors.As(err, &invalid) {
+	if _, ok := errors.AsType[x509.CertificateInvalidError](err); ok {
 		return true
 	}
-	var roots x509.SystemRootsError
-	if errors.As(err, &roots) {
+	if _, ok := errors.AsType[x509.SystemRootsError](err); ok {
 		return true
 	}
-	var recordHeader tls.RecordHeaderError
-	return errors.As(err, &recordHeader)
+	_, ok := errors.AsType[tls.RecordHeaderError](err)
+	return ok
 }
 
 func isTransportFailure(class Class) bool {

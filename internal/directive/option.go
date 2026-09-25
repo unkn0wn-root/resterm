@@ -342,19 +342,16 @@ func OptionKeys(err error) []string {
 		}
 		return keys
 	}
-	var unknown *UnknownOptionsError
-	var repeated *RepeatedOptionsError
-	var conflict *AliasConflictError
-	switch {
-	case errors.As(err, &unknown):
+	if unknown, ok := errors.AsType[*UnknownOptionsError](err); ok {
 		return unknown.Keys
-	case errors.As(err, &repeated):
-		return repeated.Keys
-	case errors.As(err, &conflict):
-		return conflict.Keys
-	default:
-		return nil
 	}
+	if repeated, ok := errors.AsType[*RepeatedOptionsError](err); ok {
+		return repeated.Keys
+	}
+	if conflict, ok := errors.AsType[*AliasConflictError](err); ok {
+		return conflict.Keys
+	}
+	return nil
 }
 
 func (o Options) Conflicts(name Name) error {
@@ -452,7 +449,7 @@ func scanFields(input string, escapes bool) iter.Seq[Field] {
 			if eq >= 0 {
 				eq += tok.start
 			}
-			if !yield(Field{FieldSpan: FieldSpan{Start: tok.start, End: tok.end, Eq: eq}, Value: tok.val}) {
+			if !yield(Field{Start: tok.start, End: tok.end, Eq: eq, Value: tok.val}) {
 				return
 			}
 		}

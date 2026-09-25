@@ -118,32 +118,32 @@ func testSvcDescriptorSet() *descriptorpb.FileDescriptorSet {
 	return &descriptorpb.FileDescriptorSet{
 		File: []*descriptorpb.FileDescriptorProto{
 			{
-				Name:    proto.String("svc.proto"),
-				Package: proto.String("pkg"),
-				Syntax:  proto.String("proto3"),
+				Name:    new("svc.proto"),
+				Package: new("pkg"),
+				Syntax:  new("proto3"),
 				MessageType: []*descriptorpb.DescriptorProto{
-					{Name: proto.String("Msg")},
+					{Name: new("Msg")},
 				},
 				Service: []*descriptorpb.ServiceDescriptorProto{
 					{
-						Name: proto.String("Svc"),
+						Name: new("Svc"),
 						Method: []*descriptorpb.MethodDescriptorProto{
 							{
-								Name:       proto.String("Call"),
-								InputType:  proto.String(".pkg.Msg"),
-								OutputType: proto.String(".pkg.Msg"),
+								Name:       new("Call"),
+								InputType:  new(".pkg.Msg"),
+								OutputType: new(".pkg.Msg"),
 							},
 							{
-								Name:            proto.String("ServerStream"),
-								InputType:       proto.String(".pkg.Msg"),
-								OutputType:      proto.String(".pkg.Msg"),
-								ServerStreaming: proto.Bool(true),
+								Name:            new("ServerStream"),
+								InputType:       new(".pkg.Msg"),
+								OutputType:      new(".pkg.Msg"),
+								ServerStreaming: new(true),
 							},
 							{
-								Name:            proto.String("ClientStream"),
-								InputType:       proto.String(".pkg.Msg"),
-								OutputType:      proto.String(".pkg.Msg"),
-								ClientStreaming: proto.Bool(true),
+								Name:            new("ClientStream"),
+								InputType:       new(".pkg.Msg"),
+								OutputType:      new(".pkg.Msg"),
+								ClientStreaming: new(true),
 							},
 						},
 					},

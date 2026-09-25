@@ -128,15 +128,15 @@ func readRemoteBody(r io.Reader, subject string) ([]byte, error) {
 // baseDirURL strips the file name (and query/fragment) off u. libopenapi resolves
 // relative $refs against BaseURL, so it has to point at the directory, not the spec.
 func baseDirURL(u *url.URL) *url.URL {
-	c := *u
+	c := u.Clone()
 	c.RawQuery = ""
 	c.Fragment = ""
-	if i := strings.LastIndex(c.Path, "/"); i >= 0 {
-		c.Path = c.Path[:i+1]
+	if dir, _, ok := strings.CutLast(c.Path, "/"); ok {
+		c.Path = dir + "/"
 	} else {
 		c.Path = "/"
 	}
-	return &c
+	return c
 }
 
 // resolveRelativeServers makes relative server URLs absolute against base, so a

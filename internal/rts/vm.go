@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 )
 
 type loopAction int
@@ -375,7 +375,7 @@ func (vm *VM) execRange(up *Env, exp map[string]Value, s *ForStmt) error {
 		for k := range src.M {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, k := range keys {
 			if err := vm.tick(s.Pos()); err != nil {
 				return err

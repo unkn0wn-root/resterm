@@ -40,6 +40,6 @@ func (e UsageError) Unwrap() error {
 
 // IsUsageError reports whether err contains a UsageError.
 func IsUsageError(err error) bool {
-	var target UsageError
-	return errors.As(err, &target)
+	_, ok := errors.AsType[UsageError](err)
+	return ok
 }

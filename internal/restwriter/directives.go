@@ -45,13 +45,13 @@ func (w directiveWriter) line(name directive.Name, arg string) {
 // of them re-check fields the parser already rejected empty or untrimmed.
 type argOf[T any] func(T) (directive.Name, string)
 
-func writeEach[T any](w directiveWriter, specs []T, arg argOf[T]) {
+func (w directiveWriter) writeEach[T any](specs []T, arg argOf[T]) {
 	for _, spec := range specs {
 		w.line(arg(spec))
 	}
 }
 
-func writeOne[T any](w directiveWriter, spec *T, arg argOf[T]) {
+func (w directiveWriter) writeOne[T any](spec *T, arg argOf[T]) {
 	if spec != nil {
 		w.line(arg(*spec))
 	}

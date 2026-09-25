@@ -3,6 +3,7 @@ package authcmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -111,7 +112,7 @@ func decodeJSON(out []byte) (any, error) {
 	var extra any
 	if err := dec.Decode(&extra); err == nil {
 		return nil, diag.New(diag.ClassAuth, "command stdout contains multiple JSON values")
-	} else if err != io.EOF {
+	} else if !errors.Is(err, io.EOF) {
 		return nil, diag.WrapAs(diag.ClassAuth, err, "decode command stdout as json")
 	}
 	return doc, nil

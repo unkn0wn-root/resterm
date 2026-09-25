@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"

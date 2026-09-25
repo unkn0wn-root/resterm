@@ -3,6 +3,7 @@ package recorder
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -68,7 +69,7 @@ func (b *bodyTap) Read(p []byte) (int, error) {
 	}
 	b.n += int64(n)
 	switch {
-	case err == io.EOF:
+	case errors.Is(err, io.EOF):
 		b.eof = true
 	case err != nil:
 		b.issue = issueBodyRead

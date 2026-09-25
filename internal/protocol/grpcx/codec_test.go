@@ -59,17 +59,17 @@ func testAnyDescriptorSet() *descriptorpb.FileDescriptorSet {
 		File: []*descriptorpb.FileDescriptorProto{
 			protoreflectFile(anypb.File_google_protobuf_any_proto),
 			{
-				Name:       proto.String("any_test.proto"),
-				Package:    proto.String("pkg"),
-				Syntax:     proto.String("proto3"),
+				Name:       new("any_test.proto"),
+				Package:    new("pkg"),
+				Syntax:     new("proto3"),
 				Dependency: []string{"google/protobuf/any.proto"},
 				MessageType: []*descriptorpb.DescriptorProto{
 					{
-						Name: proto.String("Inner"),
+						Name: new("Inner"),
 						Field: []*descriptorpb.FieldDescriptorProto{
 							{
-								Name:     proto.String("name"),
-								JsonName: proto.String("name"),
+								Name:     new("name"),
+								JsonName: new("name"),
 								Number:   proto.Int32(1),
 								Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 								Type:     descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
@@ -77,15 +77,15 @@ func testAnyDescriptorSet() *descriptorpb.FileDescriptorSet {
 						},
 					},
 					{
-						Name: proto.String("Wrap"),
+						Name: new("Wrap"),
 						Field: []*descriptorpb.FieldDescriptorProto{
 							{
-								Name:     proto.String("item"),
-								JsonName: proto.String("item"),
+								Name:     new("item"),
+								JsonName: new("item"),
 								Number:   proto.Int32(1),
 								Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 								Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
-								TypeName: proto.String(".google.protobuf.Any"),
+								TypeName: new(".google.protobuf.Any"),
 							},
 						},
 					},

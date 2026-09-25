@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,7 +41,7 @@ func (m *Model) buildGlobalSummary() string {
 				summaryEntry{name: name, value: value.Value, secret: value.Secret},
 			)
 		}
-		sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
+		slices.SortFunc(entries, func(a, b summaryEntry) int { return strings.Compare(a.name, b.name) })
 		parts := make([]string, 0, len(entries))
 		for _, entry := range entries {
 			parts = append(
@@ -65,7 +65,7 @@ func (m *Model) buildGlobalSummary() string {
 			)
 		}
 		if len(entries) > 0 {
-			sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
+			slices.SortFunc(entries, func(a, b summaryEntry) int { return strings.Compare(a.name, b.name) })
 			parts := make([]string, 0, len(entries))
 			for _, entry := range entries {
 				parts = append(

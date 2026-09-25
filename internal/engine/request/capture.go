@@ -437,14 +437,12 @@ func cutFoldPrefix(s, pfx string) (string, bool) {
 }
 
 type captureContext struct {
-	response  *scripts.Response
-	body      string
-	headers   http.Header
-	stream    *scripts.StreamInfo
-	strict    bool
-	jsonOnce  sync.Once
-	jsonValue any
-	jsonErr   error
+	response *scripts.Response
+	body     string
+	headers  http.Header
+	stream   *scripts.StreamInfo
+	strict   bool
+	jsonLoad func() (any, error)
 }
 
 func newCaptureContext(
@@ -460,13 +458,26 @@ func newCaptureContext(
 	if resp != nil {
 		hdr = resp.Header.Clone()
 	}
-	return &captureContext{
+	c := &captureContext{
 		response: resp,
 		body:     body,
 		headers:  hdr,
 		stream:   stream,
 		strict:   strict,
 	}
+	c.jsonLoad = sync.OnceValues(c.parseJSON)
+	return c
+}
+
+func (c *captureContext) parseJSON() (any, error) {
+	if strings.TrimSpace(c.body) == "" {
+		return nil, fmt.Errorf("response body empty")
+	}
+	var data any
+	if err := json.Unmarshal([]byte(c.body), &data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func (c *captureContext) evaluate(ex string, res *vars.Resolver) (string, error) {
@@ -601,21 +612,10 @@ func (c *captureContext) lookupStream(path string) (string, error) {
 }
 
 func (c *captureContext) lookupJSON(path string) (string, error) {
-	c.jsonOnce.Do(func() {
-		if strings.TrimSpace(c.body) == "" {
-			c.jsonErr = fmt.Errorf("response body empty")
-			return
-		}
-		var data any
-		if err := json.Unmarshal([]byte(c.body), &data); err != nil {
-			c.jsonErr = err
-			return
-		}
-		c.jsonValue = data
-	})
-	if c.jsonErr != nil {
+	data, jsonErr := c.jsonLoad()
+	if jsonErr != nil {
 		if c.strict {
-			return "", fmt.Errorf("json unavailable: %w", c.jsonErr)
+			return "", fmt.Errorf("json unavailable: %w", jsonErr)
 		}
 		return "", nil
 	}
@@ -630,7 +630,7 @@ func (c *captureContext) lookupJSON(path string) (string, error) {
 	if err != nil {
 		return c.jsonPathFail(full, captureJSONPrefix, err.Error())
 	}
-	cur := c.jsonValue
+	cur := data
 	seen := captureJSONPrefix
 	for _, seg := range segs {
 		seen = jsonPathAppend(seen, seg)

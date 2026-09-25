@@ -77,11 +77,11 @@ func LoadSettings() (Settings, SettingsHandle, error) {
 	}
 
 	return Settings{
-			Layout: DefaultLayoutSettings(),
-		}, SettingsHandle{
-			Path:   candidates[0].Path,
-			Format: SettingsFormatTOML,
-		}, nil
+		Layout: DefaultLayoutSettings(),
+	}, SettingsHandle{
+		Path:   candidates[0].Path,
+		Format: SettingsFormatTOML,
+	}, nil
 }
 
 func decodeSettings(data []byte, format SettingsFormat) (Settings, error) {

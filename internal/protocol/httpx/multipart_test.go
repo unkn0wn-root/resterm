@@ -3,6 +3,7 @@ package httpx_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -58,7 +59,7 @@ func (r *recordedRequest) form(t *testing.T) (map[string]string, map[string][]by
 	files := map[string][]byte{}
 	for {
 		part, err := mr.NextPart()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return values, files
 		}
 		if err != nil {
@@ -242,7 +243,7 @@ func TestExecuteMultipartMixedUsesCRLFFraming(t *testing.T) {
 	if string(data) != `{"id": 1}` {
 		t.Errorf("part body = %q", data)
 	}
-	if _, err := mr.NextPart(); err != io.EOF {
+	if _, err := mr.NextPart(); !errors.Is(err, io.EOF) {
 		t.Errorf("expected single part, got err %v", err)
 	}
 }

@@ -2,7 +2,7 @@ package runner
 
 import (
 	"bytes"
-	"sort"
+	"slices"
 
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -40,6 +40,6 @@ func (r *Result) SetUnresolvedTemplateVars(items []string) {
 		seen[item] = struct{}{}
 		out = append(out, item)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	r.unresolvedTemplateVars = out
 }

@@ -1,10 +1,11 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"net/textproto"
-	"sort"
+	"slices"
 	"strings"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
@@ -715,13 +716,10 @@ func mergedKeySet[M ~map[string]V, V any](a, b M) []string {
 	for _, name := range keys {
 		names = append(names, name)
 	}
-	sort.Slice(names, func(i, j int) bool {
-		left := normalizedExplainKey(names[i])
-		right := normalizedExplainKey(names[j])
-		if left == right {
-			return names[i] < names[j]
-		}
-		return left < right
+	slices.SortFunc(names, func(a, b string) int {
+		left := normalizedExplainKey(a)
+		right := normalizedExplainKey(b)
+		return cmp.Or(strings.Compare(left, right), strings.Compare(a, b))
 	})
 	return names
 }

@@ -78,11 +78,11 @@ func (it Item) PlaceholderRange() (start, end int, ok bool) {
 		return 0, 0, false
 	}
 	text := it.InsertText()
-	at := strings.LastIndex(text, it.Placeholder)
-	if at < 0 {
+	before, _, ok := strings.CutLast(text, it.Placeholder)
+	if !ok {
 		return 0, 0, false
 	}
-	start = utf8.RuneCountInString(text[:at])
+	start = utf8.RuneCountInString(before)
 	return start, start + utf8.RuneCountInString(it.Placeholder), true
 }
 

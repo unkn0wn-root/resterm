@@ -31,8 +31,7 @@ func guardVM(ctx context.Context, vm *goja.Runtime, budget time.Duration) func()
 }
 
 func stopReason(ctx context.Context, err error) error {
-	var interrupted *goja.InterruptedError
-	if errors.As(err, &interrupted) {
+	if interrupted, ok := errors.AsType[*goja.InterruptedError](err); ok {
 		if reason, ok := interrupted.Value().(error); ok {
 			return reason
 		}

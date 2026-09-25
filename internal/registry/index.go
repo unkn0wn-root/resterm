@@ -3,7 +3,7 @@ package registry
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -65,7 +65,7 @@ func (s *set[T]) load(src map[string][]T) {
 		s.by[p] = ds
 		s.ks = append(s.ks, p)
 	}
-	sort.Strings(s.ks)
+	slices.Sort(s.ks)
 }
 
 func (s *set[T]) sync(p string, xs []T) {
@@ -86,7 +86,7 @@ func (s *set[T]) sync(p string, xs []T) {
 
 	if _, ok := s.by[p]; !ok {
 		s.ks = append(s.ks, p)
-		sort.Strings(s.ks)
+		slices.Sort(s.ks)
 	}
 	s.by[p] = ds
 }
@@ -107,7 +107,7 @@ func (s *set[T]) reindex() {
 	for p := range s.by {
 		s.ks = append(s.ks, p)
 	}
-	sort.Strings(s.ks)
+	slices.Sort(s.ks)
 }
 
 func (s *set[T]) layers(p string, xs []T) ([]T, []T) {
@@ -412,9 +412,9 @@ func findNamed[T any](xs []T, key string, nm func(T) string) (T, bool) {
 }
 
 func findDefault[T any](xs []T, nm func(T) string) (T, bool) {
-	for i := len(xs) - 1; i >= 0; i-- {
-		if nameKey(nm(xs[i])) == "" {
-			return xs[i], true
+	for _, x := range slices.Backward(xs) {
+		if nameKey(nm(x)) == "" {
+			return x, true
 		}
 	}
 	var z T

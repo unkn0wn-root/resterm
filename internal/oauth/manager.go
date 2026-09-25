@@ -7,7 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -216,7 +216,7 @@ func (m *Manager) Snapshot() []SnapshotEntry {
 			Token:  cloneToken(entry.token),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	slices.SortFunc(out, func(a, b SnapshotEntry) int { return strings.Compare(a.Key, b.Key) })
 	return out
 }
 
@@ -448,7 +448,7 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 		for k := range cfg.Extra {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, k := range keys {
 			parts = append(parts, k, cfg.Extra[k])
 		}

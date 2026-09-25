@@ -229,8 +229,8 @@ func clipNotes(notes string) string {
 		return notes
 	}
 	cut := notes[:changelogMaxNotes]
-	if i := strings.LastIndexByte(cut, '\n'); i > 0 {
-		cut = cut[:i]
+	if before, _, ok := strings.CutLast(cut, "\n"); ok && before != "" {
+		cut = before
 	}
 	return cut + "\n\n[changelog truncated]"
 }

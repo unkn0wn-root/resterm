@@ -37,11 +37,11 @@ func (d parsedDirective) exprCol(expr string) int {
 	if d.argCol <= 0 || expr == "" {
 		return 0
 	}
-	off := strings.LastIndex(d.Args, expr)
-	if off < 0 || strings.Contains(d.Args[:off], "\n") {
+	before, _, ok := strings.CutLast(d.Args, expr)
+	if !ok || strings.Contains(before, "\n") {
 		return 0
 	}
-	return d.argCol + off
+	return d.argCol + len(before)
 }
 
 func (d parsedDirective) setExprCol(col *int, expr string) {

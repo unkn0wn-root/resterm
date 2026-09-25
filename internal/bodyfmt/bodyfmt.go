@@ -109,9 +109,9 @@ func (in BuildInput) source() source {
 	}
 
 	return source{
-		Payload: Payload{Meta: meta, Size: len(in.Body)},
-		body:    body,
-		ct:      ct,
+		Meta: meta, Size: len(in.Body),
+		body: body,
+		ct:   ct,
 	}
 }
 

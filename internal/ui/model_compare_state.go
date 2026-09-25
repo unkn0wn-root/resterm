@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -228,8 +228,8 @@ func headersEqual(a, b http.Header) bool {
 		}
 		x := append([]string(nil), vals...)
 		y := append([]string(nil), other...)
-		sort.Strings(x)
-		sort.Strings(y)
+		slices.Sort(x)
+		slices.Sort(y)
 		if len(x) != len(y) {
 			return false
 		}

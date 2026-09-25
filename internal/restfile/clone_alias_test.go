@@ -59,9 +59,9 @@ func fillValue(v reflect.Value, depth int) {
 		m.SetMapIndex(key, val)
 		v.Set(m)
 	case reflect.Struct:
-		for i := range v.NumField() {
-			if v.Field(i).CanSet() {
-				fillValue(v.Field(i), depth+1)
+		for _, field := range v.Fields() {
+			if field.CanSet() {
+				fillValue(field, depth+1)
 			}
 		}
 	case reflect.String:

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
 )
 
 const (
@@ -169,11 +169,7 @@ func gen(fn func() string) func(call) (string, error) {
 }
 
 func evalUUID(call) (string, error) {
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return "", fmt.Errorf("$uuid: %w", err)
-	}
-	return id.String(), nil
+	return uuid.New().String(), nil
 }
 
 func evalTimestamp(c call) (string, error) {

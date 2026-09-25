@@ -141,8 +141,8 @@ func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
 	}
 
 	f.run = execVars{
-		RunScope: RunScope{Overlay: vars.CollectNames(loopVars), RunVars: vars.CollectNames(runVals)},
-		scripts:  vars.CollectNames(scriptVars),
+		Overlay: vars.CollectNames(loopVars), RunVars: vars.CollectNames(runVals),
+		scripts: vars.CollectNames(scriptVars),
 	}
 	return f
 }

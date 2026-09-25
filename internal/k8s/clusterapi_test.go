@@ -8,7 +8,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/cbor"
 	"k8s.io/apimachinery/pkg/runtime/serializer/protobuf"
@@ -27,7 +26,7 @@ func TestRESTAPIReadsWithCBORPreferences(t *testing.T) {
 	}{
 		{
 			name: "pod",
-			body: &corev1.Pod{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"}},
+			body: &corev1.Pod{APIVersion: "v1", Kind: "Pod"},
 			read: func(ctx context.Context, api *restAPI) error {
 				_, err := api.getPod(ctx, "prod", "web")
 				return err
@@ -35,7 +34,7 @@ func TestRESTAPIReadsWithCBORPreferences(t *testing.T) {
 		},
 		{
 			name: "pods",
-			body: &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}},
+			body: &corev1.PodList{APIVersion: "v1", Kind: "PodList"},
 			read: func(ctx context.Context, api *restAPI) error {
 				_, err := api.listPods(ctx, "prod", "app=web")
 				return err
@@ -43,7 +42,7 @@ func TestRESTAPIReadsWithCBORPreferences(t *testing.T) {
 		},
 		{
 			name: "service",
-			body: &corev1.Service{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Service"}},
+			body: &corev1.Service{APIVersion: "v1", Kind: "Service"},
 			read: func(ctx context.Context, api *restAPI) error {
 				_, err := api.getService(ctx, "prod", "web")
 				return err
@@ -52,7 +51,7 @@ func TestRESTAPIReadsWithCBORPreferences(t *testing.T) {
 		{
 			name: "deployment",
 			body: &appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
+				APIVersion: "apps/v1", Kind: "Deployment",
 			},
 			read: func(ctx context.Context, api *restAPI) error {
 				_, err := api.getDeployment(ctx, "prod", "web")
@@ -62,7 +61,7 @@ func TestRESTAPIReadsWithCBORPreferences(t *testing.T) {
 		{
 			name: "statefulset",
 			body: &appsv1.StatefulSet{
-				TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSet"},
+				APIVersion: "apps/v1", Kind: "StatefulSet",
 			},
 			read: func(ctx context.Context, api *restAPI) error {
 				_, err := api.getStatefulSet(ctx, "prod", "web")

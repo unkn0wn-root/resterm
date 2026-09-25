@@ -18,6 +18,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/coder/websocket"
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -34,7 +35,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
-	"nhooyr.io/websocket"
 )
 
 func runCmd(cmd tea.Cmd, _ bool) tea.Cmd { return cmd }
@@ -448,9 +448,9 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 }
 
 func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
-	var calls int32
+	var calls atomic.Int32
 	fakeClient := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			t.Fatalf("request should not be sent after parse error")
 			return nil, nil
@@ -479,7 +479,7 @@ func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	if got := atomic.LoadInt32(&calls); got != 0 {
+	if got := calls.Load(); got != 0 {
 		t.Fatalf("expected no HTTP client creation, got %d", got)
 	}
 	if model.statusMessage.text != "Request failed ✗" ||
@@ -932,7 +932,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse form: %v", err)
 			}
-			lastForm = copyValues(values)
+			lastForm = values.Clone()
 			lastAuth = req.Headers.Get("Authorization")
 			return &httpx.Response{
 				Status:     "200 OK",
@@ -1030,16 +1030,6 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 	if req.Headers.Get("Authorization") != "Bearer manual" {
 		t.Fatalf("expected header to remain unchanged")
 	}
-}
-
-func copyValues(src url.Values) url.Values {
-	dst := make(url.Values, len(src))
-	for k, v := range src {
-		cloned := make([]string, len(v))
-		copy(cloned, v)
-		dst[k] = cloned
-	}
-	return dst
 }
 
 func testEnsureCommandAuth(

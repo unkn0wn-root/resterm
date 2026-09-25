@@ -67,8 +67,7 @@ func TestParseRequestLineRejectsUnsupportedVersion(t *testing.T) {
 		"http://example.com HTTP/3",
 	} {
 		_, ok, err := ParseRequestLine(line)
-		var unsupported *version.UnsupportedError
-		if !errors.As(err, &unsupported) {
+		if _, ok := errors.AsType[*version.UnsupportedError](err); !ok {
 			t.Fatalf("ParseRequestLine(%q) error = %v, want *version.UnsupportedError", line, err)
 		}
 		if ok {

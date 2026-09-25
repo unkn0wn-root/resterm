@@ -1,7 +1,7 @@
 package initcmd
 
 import (
-	"sort"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -71,7 +71,7 @@ func newTplCache() tplCache {
 			width = w
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return tplCache{list: list, by: by, names: names, width: width}
 }
 

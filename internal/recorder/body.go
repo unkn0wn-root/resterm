@@ -133,7 +133,7 @@ func parseJSON(data []byte) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := d.Token(); err != io.EOF {
+	if _, err := d.Token(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("trailing JSON")
 	}
 	return v, nil

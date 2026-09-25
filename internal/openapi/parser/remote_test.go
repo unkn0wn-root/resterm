@@ -172,13 +172,13 @@ func TestLoaderParseFromURLEmptyBody(t *testing.T) {
 
 func TestLoaderParseFromURLResolvesRemoteRef(t *testing.T) {
 	t.Parallel()
-	var schemaHits int32
+	var schemaHits atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(rootRefSpec))
 	})
 	mux.HandleFunc("/schemas/widget.yaml", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&schemaHits, 1)
+		schemaHits.Add(1)
 		_, _ = w.Write([]byte(widgetSchema))
 	})
 	srv := httptest.NewServer(mux)
@@ -193,7 +193,7 @@ func TestLoaderParseFromURLResolvesRemoteRef(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if atomic.LoadInt32(&schemaHits) == 0 {
+	if schemaHits.Load() == 0 {
 		t.Fatal("expected remote $ref document to be fetched")
 	}
 	if len(spec.Operations) != 1 {

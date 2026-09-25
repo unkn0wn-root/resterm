@@ -1,8 +1,9 @@
 package request
 
 import (
+	"cmp"
 	"net/textproto"
-	"sort"
+	"slices"
 	"strings"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
@@ -123,7 +124,7 @@ func (e *Engine) explainSecrets(
 	for v := range vals {
 		out = append(out, v)
 	}
-	sort.Slice(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
+	slices.SortFunc(out, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
 	return out
 }
 

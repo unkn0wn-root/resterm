@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"

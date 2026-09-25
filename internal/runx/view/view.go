@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -389,7 +389,7 @@ func streamSummaryText(info *runner.StreamInfo) string {
 		for key := range info.Summary {
 			keys = append(keys, key)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, key := range keys {
 			lines = append(lines, fmt.Sprintf("%s: %v", key, info.Summary[key]))
 		}

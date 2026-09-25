@@ -1,10 +1,11 @@
 package urltpl
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -258,8 +259,8 @@ func (s *templateState) restore(input string) string {
 		keys = append(keys, key)
 	}
 
-	sort.Slice(keys, func(i, j int) bool {
-		return len(keys[i]) > len(keys[j])
+	slices.SortFunc(keys, func(a, b string) int {
+		return cmp.Compare(len(b), len(a))
 	})
 
 	out := input

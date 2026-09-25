@@ -256,8 +256,7 @@ ok`)
 		t.Fatalf("metadata Count() = %d, %v, want 1", n, err)
 	}
 	_, err = s.Count(context.Background(), RequestPattern{JSON: []byte(`{"kind":"ok"}`)})
-	var incomplete *IncompleteError
-	if !errors.As(err, &incomplete) {
+	if _, ok := errors.AsType[*IncompleteError](err); !ok {
 		t.Fatalf("JSON Count() error = %v, want IncompleteError", err)
 	}
 }

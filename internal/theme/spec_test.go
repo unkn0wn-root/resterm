@@ -6,15 +6,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func strPtr(value string) *string {
-	return &value
-}
-
 func TestApplySpecEditorDiagnosticStyles(t *testing.T) {
 	base := DefaultTheme()
 	updated, err := ApplySpec(base, ThemeSpec{Styles: StylesSpec{
-		EditorDiagnosticWarning: &StyleSpec{Foreground: strPtr("#123456")},
-		EditorDiagnosticError:   &StyleSpec{Foreground: strPtr("#654321")},
+		EditorDiagnosticWarning: &StyleSpec{Foreground: new("#123456")},
+		EditorDiagnosticError:   &StyleSpec{Foreground: new("#654321")},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +41,7 @@ func TestDefaultThemeEditorHintBoxUsesEditorFocusColor(t *testing.T) {
 func TestApplySpecCommandSegmentBackgroundNone(t *testing.T) {
 	base := DefaultTheme()
 	spec := ThemeSpec{
-		CommandSegments: []CommandSegmentSpec{{Background: strPtr("none")}},
+		CommandSegments: []CommandSegmentSpec{{Background: new("none")}},
 	}
 
 	updated, err := ApplySpec(base, spec)
@@ -71,7 +67,7 @@ func TestDefaultThemeSeparatesHeaderAndCommandLabels(t *testing.T) {
 
 func TestApplySpecCommandSegmentBackgroundEmptyErrors(t *testing.T) {
 	spec := ThemeSpec{
-		CommandSegments: []CommandSegmentSpec{{Background: strPtr("")}},
+		CommandSegments: []CommandSegmentSpec{{Background: new("")}},
 	}
 
 	if _, err := ApplySpec(DefaultTheme(), spec); err == nil {
@@ -83,76 +79,76 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	base := DefaultTheme()
 	spec := ThemeSpec{
 		Colors: ColorsSpec{
-			PaneBorderFocusEditor:   strPtr("#654321"),
-			PaneBorderFocusResponse: strPtr("#fedcba"),
-			PaneActiveForeground:    strPtr("#123456"),
-			ModalBackdrop:           strPtr("#202020"),
-			ModalInputBackground:    strPtr("#181818"),
-			ModalOption:             strPtr("#778899"),
-			GitModified:             strPtr("#445500"),
-			GitBranch:               strPtr("#445566"),
+			PaneBorderFocusEditor:   new("#654321"),
+			PaneBorderFocusResponse: new("#fedcba"),
+			PaneActiveForeground:    new("#123456"),
+			ModalBackdrop:           new("#202020"),
+			ModalInputBackground:    new("#181818"),
+			ModalOption:             new("#778899"),
+			GitModified:             new("#445500"),
+			GitBranch:               new("#445566"),
 		},
 		CommandSegments: []CommandSegmentSpec{{
-			Background: strPtr("#222222"),
-			Key:        strPtr("#abcdef"),
-			Text:       strPtr("#fedcba"),
+			Background: new("#222222"),
+			Key:        new("#abcdef"),
+			Text:       new("#fedcba"),
 		}},
 		StatusBar: &StatusBarSpec{
-			Base: strPtr("#010101"),
+			Base: new("#010101"),
 			Info: &StatusBarSegmentSpec{
-				Foreground: strPtr("#fafafa"),
-				Background: strPtr("#020202"),
+				Foreground: new("#fafafa"),
+				Background: new("#020202"),
 			},
 			TestsPass: &StatusBarSegmentSpec{
-				Foreground: strPtr("#f0fdff"),
-				Background: strPtr("#040404"),
+				Foreground: new("#f0fdff"),
+				Background: new("#040404"),
 			},
 			TestsFail: &StatusBarSegmentSpec{
-				Foreground: strPtr("#fff1f2"),
-				Background: strPtr("#050505"),
+				Foreground: new("#fff1f2"),
+				Background: new("#050505"),
 			},
 			TestsError: &StatusBarSegmentSpec{
-				Foreground: strPtr("#faf5ff"),
-				Background: strPtr("#060606"),
+				Foreground: new("#faf5ff"),
+				Background: new("#060606"),
 			},
 			Host: &StatusBarSegmentSpec{
-				Background: strPtr("#030303"),
+				Background: new("#030303"),
 			},
 			Mock: &StatusBarSegmentSpec{
-				Background: strPtr("#070707"),
+				Background: new("#070707"),
 			},
 			Record: &StatusBarSegmentSpec{
-				Background: strPtr("#080808"),
+				Background: new("#080808"),
 			},
 			Minimized: &StatusBarSegmentSpec{
-				Foreground: strPtr("#F0FDF4"),
-				Background: strPtr("#166534"),
+				Foreground: new("#F0FDF4"),
+				Background: new("#166534"),
 			},
 		},
 		EditorMetadata: &EditorMetadataSpec{
-			CommentMarker: strPtr("#222222"),
+			CommentMarker: new("#222222"),
 			DirectiveColors: map[string]string{
 				"custom": "#333333",
 			},
 		},
 		Styles: StylesSpec{
-			ListItemTitle:       &StyleSpec{Foreground: strPtr("#222233")},
-			ListItemDescription: &StyleSpec{Foreground: strPtr("#9999aa")},
+			ListItemTitle:       &StyleSpec{Foreground: new("#222233")},
+			ListItemDescription: &StyleSpec{Foreground: new("#9999aa")},
 			CLIRunPickerSelected: &StyleSpec{
-				Foreground: strPtr("#111827"),
-				Background: strPtr("#facc15"),
+				Foreground: new("#111827"),
+				Background: new("#facc15"),
 			},
-			CLIRunPickerCursorSelected: &StyleSpec{Foreground: strPtr("#22c55e")},
-			ResponseContentRaw:         &StyleSpec{Foreground: strPtr("#abcdef")},
-			ResponseSelection:          &StyleSpec{Background: strPtr("#101010")},
-			ResponseCursor:             &StyleSpec{Foreground: strPtr("#010203")},
-			ExplainLabel:               &StyleSpec{Foreground: strPtr("#bada55")},
-			ExplainBadgeError:          &StyleSpec{Background: strPtr("#220000")},
-			ExplainWarning:             &StyleSpec{Foreground: strPtr("#ffaa00")},
-			PaneTitleEditor:            &StyleSpec{Foreground: strPtr("#445566")},
-			PaneTitleResponse:          &StyleSpec{Foreground: strPtr("#665544")},
-			StreamContent:              &StyleSpec{Foreground: strPtr("#123123")},
-			HeaderIcon:                 &StyleSpec{Foreground: strPtr("#2563eb")},
+			CLIRunPickerCursorSelected: &StyleSpec{Foreground: new("#22c55e")},
+			ResponseContentRaw:         &StyleSpec{Foreground: new("#abcdef")},
+			ResponseSelection:          &StyleSpec{Background: new("#101010")},
+			ResponseCursor:             &StyleSpec{Foreground: new("#010203")},
+			ExplainLabel:               &StyleSpec{Foreground: new("#bada55")},
+			ExplainBadgeError:          &StyleSpec{Background: new("#220000")},
+			ExplainWarning:             &StyleSpec{Foreground: new("#ffaa00")},
+			PaneTitleEditor:            &StyleSpec{Foreground: new("#445566")},
+			PaneTitleResponse:          &StyleSpec{Foreground: new("#665544")},
+			StreamContent:              &StyleSpec{Foreground: new("#123123")},
+			HeaderIcon:                 &StyleSpec{Foreground: new("#2563eb")},
 		},
 	}
 
@@ -299,7 +295,7 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 
 func TestApplySpecAcceptsLegacyHeaderSegments(t *testing.T) {
 	if _, err := ApplySpec(DefaultTheme(), ThemeSpec{
-		HeaderSegments: []HeaderSegmentSpec{{Background: strPtr("#111111")}},
+		HeaderSegments: []HeaderSegmentSpec{{Background: new("#111111")}},
 	}); err != nil {
 		t.Fatalf("ApplySpec returned error: %v", err)
 	}
@@ -308,7 +304,7 @@ func TestApplySpecAcceptsLegacyHeaderSegments(t *testing.T) {
 func TestApplySpecRejectsEmptyStatusBarColor(t *testing.T) {
 	_, err := ApplySpec(DefaultTheme(), ThemeSpec{
 		StatusBar: &StatusBarSpec{
-			Info: &StatusBarSegmentSpec{Background: strPtr("")},
+			Info: &StatusBarSegmentSpec{Background: new("")},
 		},
 	})
 	if err == nil {
@@ -331,7 +327,7 @@ func TestApplySpecDirectiveDefaultOverridesExistingEntries(t *testing.T) {
 
 	spec := ThemeSpec{
 		EditorMetadata: &EditorMetadataSpec{
-			DirectiveDefault: strPtr("#123456"),
+			DirectiveDefault: new("#123456"),
 			DirectiveColors: map[string]string{
 				"tag": "#abcdef",
 			},
@@ -367,11 +363,11 @@ func TestApplySpecRTSKeywordOverrides(t *testing.T) {
 	base := DefaultTheme()
 	spec := ThemeSpec{
 		EditorMetadata: &EditorMetadataSpec{
-			RTSKeywordDefault: strPtr("#101010"),
-			RTSKeywordDecl:    strPtr("#111111"),
-			RTSKeywordControl: strPtr("#222222"),
-			RTSKeywordLiteral: strPtr("#333333"),
-			RTSKeywordLogical: strPtr("#444444"),
+			RTSKeywordDefault: new("#101010"),
+			RTSKeywordDecl:    new("#111111"),
+			RTSKeywordControl: new("#222222"),
+			RTSKeywordLiteral: new("#333333"),
+			RTSKeywordLogical: new("#444444"),
 		},
 	}
 
@@ -403,7 +399,7 @@ func TestApplySpecRTSKeywordOverrides(t *testing.T) {
 func TestApplySpecRTSFunctionOverride(t *testing.T) {
 	base := DefaultTheme()
 	spec := ThemeSpec{
-		EditorMetadata: &EditorMetadataSpec{RTSFunction: strPtr("#555555")},
+		EditorMetadata: &EditorMetadataSpec{RTSFunction: new("#555555")},
 	}
 
 	updated, err := ApplySpec(base, spec)

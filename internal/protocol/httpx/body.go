@@ -3,6 +3,7 @@ package httpx
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/url"
 	"strings"
@@ -306,7 +307,7 @@ func decodeGraphQLVariables(raw string) (map[string]any, error) {
 		return nil, diag.WrapAs(diag.ClassProtocol, err, "parse graphql variables")
 	}
 
-	if err := decoder.Decode(new(any)); err != io.EOF {
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		if err == nil {
 			return nil, diag.Newf(
 				diag.ClassProtocol,

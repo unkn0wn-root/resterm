@@ -86,9 +86,9 @@ func TestReflectionFetchesMissingDependencies(t *testing.T) {
 	svc := testSvcDescriptorSet().File[0]
 	svc.Dependency = []string{"dep.proto"}
 	dep := &descriptorpb.FileDescriptorProto{
-		Name:    proto.String("dep.proto"),
-		Package: proto.String("dep"),
-		Syntax:  proto.String("proto3"),
+		Name:    new("dep.proto"),
+		Package: new("dep"),
+		Syntax:  new("proto3"),
 	}
 
 	srv := &partialReflectServer{

@@ -101,8 +101,7 @@ func TestEngineDiagnosesCoreErrors(t *testing.T) {
 			if err == nil {
 				t.Fatal("evaluation succeeded, want parse error")
 			}
-			var parseErr *rts.ParseError
-			if !errors.As(err, &parseErr) {
+			if _, ok := errors.AsType[*rts.ParseError](err); !ok {
 				t.Fatalf("errors.As(error, *rts.ParseError) failed for %T", err)
 			}
 			report := diag.ReportOf(err)

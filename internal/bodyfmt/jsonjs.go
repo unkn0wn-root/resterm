@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -38,7 +39,7 @@ func RenderJSONAsJS(ctx context.Context, body []byte) (string, bool) {
 		return "", false
 	}
 	// Trailing content means this was never a single JSON value.
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return "", false
 	}
 

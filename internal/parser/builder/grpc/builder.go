@@ -194,10 +194,10 @@ func parseMethod(spec string) (pkg string, service string, method string) {
 		return "", "", ""
 	}
 
-	lastDot := strings.LastIndex(serviceFQN, ".")
-	if lastDot >= 0 {
-		pkg = serviceFQN[:lastDot]
-		service = serviceFQN[lastDot+1:]
+	before, after, ok := strings.CutLast(serviceFQN, ".")
+	if ok {
+		pkg = before
+		service = after
 	} else {
 		service = serviceFQN
 	}

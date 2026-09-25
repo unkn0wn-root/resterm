@@ -2,7 +2,7 @@ package curl
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -66,6 +66,6 @@ func (c *WarningCollector) List() []string {
 	for msg := range c.seen {
 		out = append(out, msg)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

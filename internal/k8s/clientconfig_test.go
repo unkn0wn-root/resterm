@@ -204,18 +204,18 @@ func TestRESTAPIRequestPathsAndDecoding(t *testing.T) {
 		got = r.URL.Path
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/pods/web"):
-			writeJSON(t, w, 200, corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web"}})
+			writeJSON(t, w, 200, corev1.Pod{Name: "web"})
 		case strings.HasSuffix(r.URL.Path, "/pods"):
 			got += "?" + r.URL.Query().Get("labelSelector")
 			writeJSON(t, w, 200, corev1.PodList{
-				Items: []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "web-1"}}},
+				Items: []corev1.Pod{{Name: "web-1"}},
 			})
 		case strings.HasSuffix(r.URL.Path, "/services/api"):
-			writeJSON(t, w, 200, corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "api"}})
+			writeJSON(t, w, 200, corev1.Service{Name: "api"})
 		case strings.HasSuffix(r.URL.Path, "/deployments/dep"):
-			writeJSON(t, w, 200, appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "dep"}})
+			writeJSON(t, w, 200, appsv1.Deployment{Name: "dep"})
 		case strings.HasSuffix(r.URL.Path, "/statefulsets/sts"):
-			writeJSON(t, w, 200, appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "sts"}})
+			writeJSON(t, w, 200, appsv1.StatefulSet{Name: "sts"})
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
@@ -265,11 +265,11 @@ func TestRESTAPIRequestPathsAndDecoding(t *testing.T) {
 func TestRESTAPINotFoundStaysRecognisable(t *testing.T) {
 	api := newTestRESTAPI(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, 404, metav1.Status{
-			TypeMeta: metav1.TypeMeta{Kind: "Status", APIVersion: "v1"},
-			Status:   metav1.StatusFailure,
-			Reason:   metav1.StatusReasonNotFound,
-			Code:     404,
-			Message:  `pods "gone" not found`,
+			Kind: "Status", APIVersion: "v1",
+			Status:  metav1.StatusFailure,
+			Reason:  metav1.StatusReasonNotFound,
+			Code:    404,
+			Message: `pods "gone" not found`,
 		})
 	}))
 

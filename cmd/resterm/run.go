@@ -92,8 +92,8 @@ func (e runUsageError) Unwrap() error {
 }
 
 func isRunUsageError(err error) bool {
-	var target runUsageError
-	return errors.As(err, &target)
+	_, ok := errors.AsType[runUsageError](err)
+	return ok
 }
 
 type runCmd struct {

@@ -2,7 +2,7 @@ package ui
 
 import (
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -47,9 +47,7 @@ func (m *Model) historyEntriesForFileScope() ([]history.Entry, error) {
 	if len(out) < 2 {
 		return out, nil
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return historyEntryNewerFirst(out[i], out[j])
-	})
+	slices.SortStableFunc(out, historyEntryNewerFirst)
 	return out, nil
 }
 

@@ -112,9 +112,9 @@ func TestCommentLinesRestoresContinuationMarkers(t *testing.T) {
 func TestWriteOneSkipsAbsentDeclarations(t *testing.T) {
 	var b strings.Builder
 	w := directiveWriter{b: &b}
-	writeOne(w, (*restfile.ConditionSpec)(nil), conditionArg)
-	writeOne(w, (*restfile.ForEachSpec)(nil), forEachArg)
-	writeEach(w, []restfile.CaptureSpec(nil), captureArg)
+	w.writeOne((*restfile.ConditionSpec)(nil), conditionArg)
+	w.writeOne((*restfile.ForEachSpec)(nil), forEachArg)
+	w.writeEach([]restfile.CaptureSpec(nil), captureArg)
 
 	if b.Len() != 0 {
 		t.Fatalf("rendered %q, want nothing", b.String())

@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -547,8 +547,8 @@ func helpTextMatchesAll(text string, tokens []string) bool {
 }
 
 func sortedHelpEntries(entries []helpEntry) []helpEntry {
-	sort.Slice(entries, func(i, j int) bool {
-		return strings.ToLower(entries[i].key) < strings.ToLower(entries[j].key)
+	slices.SortFunc(entries, func(a, b helpEntry) int {
+		return strings.Compare(strings.ToLower(a.key), strings.ToLower(b.key))
 	})
 	return entries
 }

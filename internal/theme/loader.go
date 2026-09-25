@@ -2,13 +2,14 @@ package theme
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -205,13 +206,10 @@ func assembleCatalog(defs []Definition) Catalog {
 	}
 	custom := make([]Definition, len(defs)-1)
 	copy(custom, defs[1:])
-	sort.SliceStable(custom, func(i, j int) bool {
-		left := strings.ToLower(custom[i].DisplayName)
-		right := strings.ToLower(custom[j].DisplayName)
-		if left == right {
-			return custom[i].Key < custom[j].Key
-		}
-		return left < right
+	slices.SortStableFunc(custom, func(a, b Definition) int {
+		left := strings.ToLower(a.DisplayName)
+		right := strings.ToLower(b.DisplayName)
+		return cmp.Or(strings.Compare(left, right), strings.Compare(a.Key, b.Key))
 	})
 	for _, def := range custom {
 		catalog.add(def)
