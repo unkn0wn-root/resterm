@@ -1,6 +1,7 @@
 package authcmd
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,19 @@ func TestParse(t *testing.T) {
 				}
 				if cfg.Timeout != 3*time.Second {
 					t.Fatalf("expected timeout 3s, got %s", cfg.Timeout)
+				}
+			},
+		},
+		{
+			name: "cmd splits into argv",
+			params: map[string]string{
+				"cmd": `gcloud auth print-access-token --project "{{ gcp.project }}"`,
+			},
+			check: func(t *testing.T, cfg Config) {
+				t.Helper()
+				want := []string{"gcloud", "auth", "print-access-token", "--project", "{{ gcp.project }}"}
+				if !slices.Equal(cfg.Argv, want) {
+					t.Fatalf("expected argv %q, got %q", want, cfg.Argv)
 				}
 			},
 		},
@@ -143,7 +157,7 @@ func TestParseErrors(t *testing.T) {
 	}{
 		{
 			name: "missing argv",
-			want: "@auth command requires argv",
+			want: "@auth command requires cmd or argv",
 		},
 		{
 			name: "invalid argv json",

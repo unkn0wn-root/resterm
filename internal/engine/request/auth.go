@@ -22,6 +22,7 @@ import (
 
 const (
 	authParamArgv = "argv"
+	authParamCmd  = "cmd"
 
 	errCommandAuthNotInitialized = "command auth support is not initialised"
 	errOAuthNotInitialized       = "oauth support is not initialised"
@@ -540,7 +541,8 @@ func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]
 		if value == "" {
 			continue
 		}
-		if key != authParamArgv {
+		// Split cmd before expansion so a value with spaces stays in one argument.
+		if key != authParamArgv && key != authParamCmd {
 			var err error
 			value, err = expandAuthParam(res, auth, key, value)
 			if err != nil {

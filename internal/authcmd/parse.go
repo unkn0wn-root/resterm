@@ -24,10 +24,8 @@ func Parse(params map[string]string, dir string) (Config, error) {
 	cfg := Config{Dir: dir}
 
 	var err error
-	if trim(params["argv"]) != "" {
-		if cfg.Argv, err = parseArgv(params["argv"]); err != nil {
-			return cfg, err
-		}
+	if cfg.Argv, err = parseCommand(params); err != nil {
+		return cfg, err
 	}
 	cfg.Format = Format(params["format"])
 	cfg.Header = params["header"]
@@ -66,12 +64,21 @@ func parsedConfig(cfg Config) (Config, error) {
 	return Finalize(cfg)
 }
 
-func parseArgv(raw string) ([]string, error) {
-	src := trim(raw)
-	if src == "" {
-		return nil, diag.New(diag.ClassAuth, "@auth command requires argv")
+func parseCommand(params map[string]string) ([]string, error) {
+	cmd, argv := trim(params["cmd"]), trim(params["argv"])
+	switch {
+	case cmd != "" && argv != "":
+		return nil, diag.New(diag.ClassAuth, "@auth command accepts cmd or argv, not both")
+	case cmd != "":
+		return splitCommand(cmd)
+	case argv != "":
+		return parseArgv(argv)
+	default:
+		return nil, nil
 	}
+}
 
+func parseArgv(src string) ([]string, error) {
 	var argv []string
 	if err := json.Unmarshal([]byte(src), &argv); err != nil {
 		return nil, diag.WrapAs(diag.ClassAuth, err, "decode command argv")
@@ -159,10 +166,10 @@ func missingArgvError(cfg Config) error {
 	if cfg.hasCacheKey() {
 		return diag.Newf(
 			diag.ClassAuth,
-			"@auth command requires argv (include it once per cache_key to seed the cache)",
+			"@auth command requires cmd or argv (include it once per cache_key to seed the cache)",
 		)
 	}
-	return diag.New(diag.ClassAuth, "@auth command requires argv")
+	return diag.New(diag.ClassAuth, "@auth command requires cmd or argv")
 }
 
 func isShell(cmd string) bool {

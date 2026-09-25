@@ -341,7 +341,7 @@ func TestManagerResolveUnseededCacheOnlyFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if got := err.Error(); !containsAll(got, "requires argv", "seed the cache") {
+	if got := err.Error(); !containsAll(got, "requires cmd or argv", "seed the cache") {
 		t.Fatalf("unexpected error %q", got)
 	}
 }

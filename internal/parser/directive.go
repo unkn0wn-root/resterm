@@ -379,7 +379,7 @@ func parseAuthSpec(fields []string) (*restfile.AuthSpec, error) {
 			return nil, err
 		}
 		opts.CopyTo(params)
-		if params["argv"] == "" && params["cache_key"] == "" {
+		if params["cmd"] == "" && params["argv"] == "" && params["cache_key"] == "" {
 			return nil, nil
 		}
 	default:
