@@ -105,6 +105,34 @@ func TestBuilderGenerate(t *testing.T) {
 	}
 }
 
+func TestBuilderGenerateUsesPreferredServer(t *testing.T) {
+	t.Parallel()
+
+	spec, err := parser.NewLoader().Parse(
+		context.Background(),
+		filepath.Join("..", "testdata", "deviceinventory.yaml"),
+		openapi.ParseOptions{},
+	)
+	if err != nil {
+		t.Fatalf("parse spec: %v", err)
+	}
+	doc, err := NewBuilder().Generate(context.Background(), spec, openapi.GeneratorOptions{PreferredServerIndex: 1})
+	if err != nil {
+		t.Fatalf("generate document: %v", err)
+	}
+
+	if len(doc.Variables) == 0 || doc.Variables[0].Value != "https://staging.example.com/v2" {
+		t.Fatalf("base variable = %#v, want the second server", doc.Variables)
+	}
+	for _, req := range doc.Requests {
+		for _, v := range req.Variables {
+			if v.Name == openapi.DefaultBaseURLVariable {
+				t.Errorf("%s overrides the base URL with %q", req.Metadata.Name, v.Value)
+			}
+		}
+	}
+}
+
 func TestBuilderGenerateQueryParameterStyles(t *testing.T) {
 	t.Parallel()
 

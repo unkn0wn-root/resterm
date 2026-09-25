@@ -232,7 +232,7 @@ func normalizeOperation(
 		Description: raw.Description,
 		Tags:        slices.Clone(raw.Tags),
 		Deprecated:  boolVal(raw.Deprecated),
-		Servers:     convertServers(selectServers(doc.Servers, pathServers, raw.Servers)),
+		Servers:     convertServers(selectServers(pathServers, raw.Servers)),
 	}
 
 	op.Parameters = mergeParameters(baseParams, raw.Parameters, sm)
@@ -261,17 +261,13 @@ func convertServers(servers []*h3.Server) []model.Server {
 	return out
 }
 
-func selectServers(docServers, pathServers, opServers []*h3.Server) []*h3.Server {
+// selectServers returns only real overrides. Document servers stay on
+// Spec.Servers so the generator can honor the preferred server index.
+func selectServers(pathServers, opServers []*h3.Server) []*h3.Server {
 	if len(opServers) > 0 {
 		return opServers
 	}
-	if len(pathServers) > 0 {
-		return pathServers
-	}
-	if len(docServers) > 0 {
-		return docServers
-	}
-	return nil
+	return pathServers
 }
 
 func resolveServerURL(server *h3.Server) string {

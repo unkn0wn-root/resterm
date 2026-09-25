@@ -174,6 +174,53 @@ func TestLoaderParse(t *testing.T) {
 	}
 }
 
+func TestLoaderParseKeepsOnlyServerOverrides(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "servers.yaml")
+	src := `openapi: 3.0.3
+info: {title: servers, version: "1"}
+servers:
+  - url: https://doc.example.com
+paths:
+  /plain:
+    get:
+      responses: {"200": {description: ok}}
+  /path:
+    servers:
+      - url: https://path.example.com
+    get:
+      responses: {"200": {description: ok}}
+    post:
+      servers:
+        - url: https://op.example.com
+      responses: {"200": {description: ok}}
+`
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec, err := NewLoader().Parse(context.Background(), path, openapi.ParseOptions{})
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	want := map[string]string{
+		"GET /plain": "",
+		"GET /path":  "https://path.example.com",
+		"POST /path": "https://op.example.com",
+	}
+	for _, op := range spec.Operations {
+		key := string(op.Method) + " " + op.Path
+		got := ""
+		if len(op.Servers) > 0 {
+			got = op.Servers[0].URL
+		}
+		if got != want[key] {
+			t.Errorf("%s server = %q, want %q", key, got, want[key])
+		}
+	}
+}
+
 func TestLoaderParseRejectsOperationWithoutResponses(t *testing.T) {
 	t.Parallel()
 
