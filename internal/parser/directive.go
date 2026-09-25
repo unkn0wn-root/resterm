@@ -284,6 +284,10 @@ func parseAuthDirective(rest string) (authDirective, error) {
 			return dir, fmt.Errorf("@auth %s scope requires an auth spec", scope.String())
 		}
 	}
+	// Fields alone accepts an unclosed quote in cmd="gh auth token.
+	if closer := directive.FieldsOpen(rest); closer != 0 {
+		return dir, &directive.UnclosedError{Directive: directive.Auth, Closer: string(closer)}
+	}
 
 	if strings.EqualFold(fields[0], restfile.AuthDisableWord) {
 		if dir.Scope != directive.ScopeRequest {
@@ -308,6 +312,19 @@ func parseAuthDirective(rest string) (authDirective, error) {
 	}
 	dir.Spec = spec
 	return dir, nil
+}
+
+// Reject bare words so an unquoted cmd=gh auth token cannot silently run gh.
+func authOptionFields(fields []string) (directive.Options, error) {
+	for _, f := range fields {
+		if !strings.Contains(f, "=") {
+			return directive.Options{}, fmt.Errorf(
+				"@auth expects key=value options, got %q; quote a value that has spaces",
+				f,
+			)
+		}
+	}
+	return directive.OptionFields(directive.Auth, fields)
 }
 
 // Fields arrive decoded. Rejoining them loses the boundary around a quoted
@@ -339,7 +356,7 @@ func parseAuthSpec(fields []string) (*restfile.AuthSpec, error) {
 		if len(fields) < 2 {
 			return nil, nil
 		}
-		opts, err := directive.OptionFields(directive.Auth, fields[1:])
+		opts, err := authOptionFields(fields[1:])
 		if err != nil {
 			return nil, err
 		}
@@ -357,7 +374,7 @@ func parseAuthSpec(fields []string) (*restfile.AuthSpec, error) {
 		if len(fields) < 2 {
 			return nil, nil
 		}
-		opts, err := directive.OptionFields(directive.Auth, fields[1:])
+		opts, err := authOptionFields(fields[1:])
 		if err != nil {
 			return nil, err
 		}

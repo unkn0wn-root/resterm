@@ -109,6 +109,14 @@ func (l *lexer) next() (token, bool) {
 	return token{val: l.tok.String(), start: l.start, end: len(l.src)}, true
 }
 
+func (l *lexer) open() rune {
+	var closer rune
+	for _, ok := l.next(); ok; _, ok = l.next() {
+		closer = l.field.closer()
+	}
+	return closer
+}
+
 func (l *lexer) reset() {
 	l.tok.Reset()
 	l.begun = false

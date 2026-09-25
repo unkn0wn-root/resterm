@@ -678,3 +678,26 @@ func testOptions(vals map[string]string) Options {
 	}
 	return opts
 }
+
+func TestFieldsOpen(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  rune
+	}{
+		{name: "closed", input: `command cmd="gh auth token"`},
+		{name: "open double quote", input: `command cmd="gh auth token`, want: '"'},
+		{name: "open single quote", input: `command cmd='gh auth token`, want: '\''},
+		{name: "open array", input: `command argv=["gh","auth"`, want: ']'},
+		{name: "backslash before the quote", input: `bearer x cmd="C:\tools\"`},
+		{name: "template", input: `bearer {{token}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := FieldsOpen(tt.input); got != tt.want {
+				t.Fatalf("FieldsOpen(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

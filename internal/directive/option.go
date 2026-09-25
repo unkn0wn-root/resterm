@@ -54,14 +54,13 @@ func ParseOptions(name Name, input string) (Options, error) {
 }
 
 // OptionsOpen returns the missing delimiter in the last option value, or zero.
-// Each token resets the lexer, so only what is unmatched after the last one counts.
 func OptionsOpen(input string) rune {
-	lex := &lexer{src: input, escapes: true}
-	var closer rune
-	for _, ok := lex.next(); ok; _, ok = lex.next() {
-		closer = lex.field.closer()
-	}
-	return closer
+	return (&lexer{src: input, escapes: true}).open()
+}
+
+// FieldsOpen reports an unclosed value using Fields' quote rules.
+func FieldsOpen(input string) rune {
+	return (&lexer{src: input}).open()
 }
 
 // OptionFields is for callers that already separated the input. It only keeps

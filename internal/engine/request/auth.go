@@ -70,6 +70,17 @@ func (e *Engine) ResolveInheritedAuth(doc *restfile.Document, req *restfile.Requ
 	}
 }
 
+func (e *Engine) resolveAuth(doc *restfile.Document, req *restfile.Request) error {
+	auth := requestAuth(req)
+	if auth == nil {
+		return nil
+	}
+	if auth.Rejected != "" {
+		return diag.New(diag.ClassAuth, withOrigin(auth.Rejected, auth))
+	}
+	return nil
+}
+
 func CommandAuthSecrets(res authcmd.Result) []string {
 	tok := strings.TrimSpace(res.Token)
 	val := strings.TrimSpace(res.Value)
@@ -550,10 +561,7 @@ func expandCommandAuthArgv(argv []string, auth *restfile.AuthSpec, res *vars.Res
 	for i, arg := range argv {
 		value, err := res.ExpandTemplates(arg)
 		if err != nil {
-			op := fmt.Sprintf("expand command auth argv[%d]", i)
-			if at := auth.Origin(); at != "" {
-				op += " (" + at + ")"
-			}
+			op := withOrigin(fmt.Sprintf("expand command auth argv[%d]", i), auth)
 			firstErr = vars.PreferStructural(firstErr, diag.WrapAs(diag.ClassAuth, err, op))
 			continue
 		}
@@ -571,13 +579,17 @@ func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, key, raw strin
 	}
 	value, err := res.ExpandTemplates(raw)
 	if err != nil {
-		op := fmt.Sprintf("expand %s auth %s", auth.Kind(), key)
-		if at := auth.Origin(); at != "" {
-			op += " (" + at + ")"
-		}
+		op := withOrigin(fmt.Sprintf("expand %s auth %s", auth.Kind(), key), auth)
 		return "", diag.WrapAs(diag.ClassAuth, err, op)
 	}
 	return strings.TrimSpace(value), nil
+}
+
+func withOrigin(msg string, auth *restfile.AuthSpec) string {
+	if at := auth.Origin(); at != "" {
+		return msg + " (" + at + ")"
+	}
+	return msg
 }
 
 func oauthExtraParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]string, error) {

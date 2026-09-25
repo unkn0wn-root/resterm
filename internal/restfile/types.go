@@ -48,6 +48,8 @@ type Constant struct {
 type AuthSpec struct {
 	Type   AuthKind
 	Params map[string]string
+	// Rejected holds the parse error so invalid auth blocks the request.
+	Rejected string
 	// SourcePath and Line track where this auth was defined so errors can point
 	// at the definition, and relative command auth execution stays anchored to
 	// the auth definition, not the consuming request.
