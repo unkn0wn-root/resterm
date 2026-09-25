@@ -189,7 +189,7 @@ func (m *Model) showProfileSummary(st *profileState, body string) {
 func (m *Model) panesShowingTab(snap *responseSnapshot, tab responseTab) []responsePaneID {
 	var ids []responsePaneID
 	for _, id := range m.visiblePaneIDs() {
-		if pane := m.pane(id); pane != nil && pane.snapshot == snap && pane.activeTab == tab {
+		if m.pane(id).shows(snap, tab) {
 			ids = append(ids, id)
 		}
 	}

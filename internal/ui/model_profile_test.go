@@ -153,6 +153,17 @@ func TestProfileRunDashboardIsNotCoveredBySendingOverlay(t *testing.T) {
 			t.Fatalf("live dashboard is missing %q:\n%s", want, view)
 		}
 	}
+
+	pane := m.pane(responsePanePrimary)
+	pane.setActiveTab(responseTabPretty)
+	if got := ansi.Strip(m.sendingView(pane, 100, 20)); !strings.Contains(got, responseSendingBase) {
+		t.Fatalf("Pretty tab lost the sending overlay: %q", got)
+	}
+	pane.setActiveTab(responseTabStats)
+	pane.snapshot = &responseSnapshot{stats: "previous stats"}
+	if got := ansi.Strip(m.sendingView(pane, 100, 20)); !strings.Contains(got, responseSendingBase) {
+		t.Fatalf("non-live Stats tab lost the sending overlay: %q", got)
+	}
 }
 
 func TestProfileRunCancelFinalizesOnRunDone(t *testing.T) {

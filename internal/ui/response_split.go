@@ -144,6 +144,10 @@ func (pane *responsePaneState) hasExplainReport() bool {
 		pane.snapshot.explain.report != nil
 }
 
+func (pane *responsePaneState) shows(snap *responseSnapshot, tab responseTab) bool {
+	return pane != nil && pane.snapshot == snap && pane.activeTab == tab
+}
+
 func (pane *responsePaneState) searchContentReady(tab responseTab) bool {
 	if pane == nil || pane.snapshot == nil {
 		return false
