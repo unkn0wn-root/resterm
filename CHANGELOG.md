@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.9.1](https://github.com/unkn0wn-root/resterm/compare/v1.9.0...v1.9.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **ui:** keep the sending overlay on panes not showing the live profile. ([1c398cf](https://github.com/unkn0wn-root/resterm/commit/1c398cfeded01fc8ae3189c1e39619ecfbc4d4e7))
+* **ui:** show the live Profile tab during a profile run ([1bf4880](https://github.com/unkn0wn-root/resterm/commit/1bf4880dc68198cc8384121c4735d90d6453b77a))
+
 ## [1.9.0](https://github.com/unkn0wn-root/resterm/compare/v1.8.2...v1.9.0) (2026-09-24)
 
 
