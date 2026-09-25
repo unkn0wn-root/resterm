@@ -532,6 +532,106 @@ func TestCacheKeySeparatesExtraKeyFromValue(t *testing.T) {
 	}
 }
 
+func TestCacheKeyTreatsUnsetClientAuthAsBasic(t *testing.T) {
+	mgr := NewManager(nil)
+	cfg := Config{TokenURL: "https://auth.local/token", ClientID: "public"}
+	basic := cfg
+	basic.ClientAuth = ClientAuthBasic
+
+	if mgr.cacheKey("dev", cfg.Resolved()) != mgr.cacheKey("dev", basic.Resolved()) {
+		t.Fatal("unset client_auth changed the cache key of an existing token")
+	}
+}
+
+// Auth dicts from @apply never had the parser default, so 1.10 keyed their
+// tokens with an empty client_auth. A restored seed must stay usable.
+func TestManagerFindsTokensKeyedWithEmptyClientAuth(t *testing.T) {
+	cfg := Config{
+		TokenURL:  "https://auth.local/token",
+		AuthURL:   "https://auth.local/authorize",
+		ClientID:  "app",
+		GrantType: GrantAuthorizationCode,
+	}
+	var key string
+	for _, part := range []string{"dev", cfg.TokenURL, cfg.AuthURL, "", "app", "", "", "", GrantAuthorizationCode, "", "", "", ""} {
+		key += cachePart(part)
+	}
+	tok := Token{AccessToken: "seed", RefreshToken: "r", Expiry: time.Now().Add(time.Hour)}
+	mgr := NewManager(nil)
+	mgr.Restore([]SnapshotEntry{{
+		Key:    key,
+		Env:    "dev",
+		Config: cfg,
+		Token:  tok,
+	}})
+
+	got, ok := mgr.CachedToken("dev", cfg)
+	if !ok || got.AccessToken != "seed" {
+		t.Fatalf("CachedToken = %q, %v, want the restored seed", got.AccessToken, ok)
+	}
+	if !mgr.CanHeadless("dev", cfg) {
+		t.Fatal("restored seed cannot run headlessly")
+	}
+}
+
+func TestManagerRefreshUsesTheFetchClientAuth(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		secret string
+		header bool
+	}{
+		{name: "confidential", secret: "secret", header: true},
+		{name: "public", header: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr := NewManager(nil)
+			auth := map[string]string{}
+			form := map[string]url.Values{}
+			mgr.SetRequestFunc(
+				func(_ context.Context, req *restfile.Request, _ httpx.Options) (*httpx.Response, error) {
+					values, err := url.ParseQuery(req.Body.Text)
+					if err != nil {
+						t.Fatalf("parse form: %v", err)
+					}
+					grant := values.Get("grant_type")
+					auth[grant] = req.Headers.Get("Authorization")
+					form[grant] = values
+					return &httpx.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Body: []byte(
+							`{"access_token":"t","token_type":"Bearer","expires_in":1,"refresh_token":"r"}`,
+						),
+						Headers: http.Header{},
+					}, nil
+				},
+			)
+			cfg := Config{
+				TokenURL:     "https://auth.local/token",
+				ClientID:     "client",
+				ClientSecret: tc.secret,
+				GrantType:    GrantPassword,
+				Username:     "user",
+				Password:     "pass",
+			}
+			for range 2 {
+				if _, err := mgr.Token(context.Background(), "dev", cfg, httpx.Options{}); err != nil {
+					t.Fatalf("token: %v", err)
+				}
+			}
+
+			for _, grant := range []string{GrantPassword, "refresh_token"} {
+				if got := auth[grant] != ""; got != tc.header {
+					t.Errorf("%s Authorization = %q, want header %t", grant, auth[grant], tc.header)
+				}
+				if got := form[grant].Get("client_id") != ""; got == tc.header {
+					t.Errorf("%s form client_id = %q, want body %t", grant, form[grant].Get("client_id"), !tc.header)
+				}
+			}
+		})
+	}
+}
+
 // ClearIf works off the environment recorded when the token was stored, so a
 // selective reset can drop one workspace's tokens without touching another's.
 func TestManagerClearIfDropsMatchingEnvironments(t *testing.T) {
