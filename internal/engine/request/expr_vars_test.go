@@ -128,19 +128,61 @@ GET http://example.test
 	}
 }
 
+// Templates see the @const. vars skips it and reads the request value.
 func TestExprVarsKeepConstantsOut(t *testing.T) {
-	doc, req := parseDoc(t, `# @const id fixed
+	const decl = `# @const id fixed
 ### one
 # @name one
 # @request id {{$randomInt(7, 7)}}
-GET http://example.test
+`
+
+	t.Run("template", func(t *testing.T) {
+		doc, req := parseDoc(t, decl+`GET http://example.test
 X-Get: {{= vars.get("id") }}
 `)
+		sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
+		if got := sent.wire.Header.Get("X-Get"); got != "7" {
+			t.Fatalf("X-Get = %q, want 7", got)
+		}
+	})
 
-	sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
-	if got := sent.wire.Header.Get("X-Get"); got == "fixed" {
-		t.Fatal("vars exposed the @const value")
-	}
+	t.Run("capture", func(t *testing.T) {
+		doc, req := parseDoc(t, decl+`# @capture request tpl {{= vars.get("id") }}
+# @capture request expr vars.get("id")
+GET http://example.test
+`)
+		sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
+		for _, name := range []string{"tpl", "expr"} {
+			if got := executedVar(t, sent.executed, name); got != "7" {
+				t.Fatalf("%s = %q, want 7", name, got)
+			}
+		}
+	})
+
+	t.Run("assert", func(t *testing.T) {
+		doc, req := parseDoc(t, decl+`# @assert vars.get("id") == "7"
+GET http://example.test
+`)
+		eng, _ := newStubEngine(t)
+		res, err := eng.ExecuteWith(doc, req, envWith(t, "dev", nil), ExecOptions{})
+		if err != nil {
+			t.Fatalf("ExecuteWith() error = %v", err)
+		}
+		if len(res.Tests) != 1 || !res.Tests[0].Passed {
+			t.Fatalf("asserts = %+v, want vars.get to read 7", res.Tests)
+		}
+	})
+
+	t.Run("qualified constant", func(t *testing.T) {
+		doc, req := parseDoc(t, `# @const request.id leaked
+`+decl+`GET http://example.test
+X-Get: {{= vars.get("id") }}
+`)
+		sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
+		if got := sent.wire.Header.Get("X-Get"); got != "7" {
+			t.Fatalf("X-Get = %q, want 7", got)
+		}
+	})
 }
 
 func TestAssertVarsReadTheSentValue(t *testing.T) {

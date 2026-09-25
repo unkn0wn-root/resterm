@@ -151,10 +151,16 @@ func (p variablePlan) providers() []vars.Provider {
 }
 
 func layerProvider(t sourceTraits, vals vars.NameMap[vars.Value]) vars.Provider {
+	var p vars.Provider
 	if t.template {
-		return vars.NewValueMapTemplateProvider(t.label, vals)
+		p = vars.NewValueMapTemplateProvider(t.label, vals)
+	} else {
+		p = vars.NewValueMapProvider(t.label, vals)
 	}
-	return vars.NewValueMapProvider(t.label, vals)
+	if t.hidden {
+		return vars.TemplateOnly(p)
+	}
+	return p
 }
 
 // Scripts should see ordinary nested references resolved just as templates do.
@@ -166,19 +172,15 @@ func (p variablePlan) values() map[string]string {
 }
 
 // pending holds the names left unexpanded, so an expression can resolve them
-// when it reads them. Names a hidden layer declares stay out, since resolving
-// them by name would read the constant. A plan without secrets has none, since
-// it could not resolve a name that uses one.
+// when it reads them. A plan without secrets has none, since it could not
+// resolve a name that uses one.
 func (p variablePlan) scriptValues() (map[string]string, vars.NameMap[struct{}]) {
 	var seen vars.NameMap[vars.Value]
-	var hidden, pending vars.NameMap[struct{}]
+	var pending vars.NameMap[struct{}]
 	var res *vars.Resolver
 	for _, l := range p.layers {
 		t := l.source.traits()
 		if t.hidden {
-			for name := range l.vals.All() {
-				hidden.Set(name, struct{}{})
-			}
 			continue
 		}
 		for name, val := range l.vals.All() {
@@ -192,7 +194,7 @@ func (p variablePlan) scriptValues() (map[string]string, vars.NameMap[struct{}])
 				// Leave values that need runtime data or the expression evaluator unchanged.
 				if expanded, err := res.ExpandTemplatesStatic(val.Text); err == nil {
 					val.Text = expanded
-				} else if p.sec == keepSecrets && !hidden.Has(name) {
+				} else if p.sec == keepSecrets {
 					pending.Set(name, struct{}{})
 				}
 			}

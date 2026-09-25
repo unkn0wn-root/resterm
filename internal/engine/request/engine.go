@@ -441,7 +441,7 @@ func (x *execCtx) sentScope(vv map[string]string) evalScope {
 	})
 	_, pending := plan.scriptValues()
 	sc := x.evalScope(vv)
-	sc.resolve = pendingLookup(pending, x.res.WithProviders(plan.providers()...).Resolve)
+	sc.resolve = pendingLookup(pending, x.res.WithProviders(plan.providers()...).ResolveExpr)
 	return sc
 }
 

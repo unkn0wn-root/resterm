@@ -42,6 +42,7 @@ type ExprPos = diag.Pos
 
 // Lookup resolves a name inside the running expansion, so an expression reads
 // the same value as a {{name}} placeholder and a self reference is a cycle.
+// It skips template-only providers.
 type Lookup func(name string) (string, bool, error)
 
 type ExprEval func(expr string, pos ExprPos, look Lookup) (string, error)
@@ -133,12 +134,18 @@ func (r *Resolver) WithProviders(providers ...Provider) *Resolver {
 }
 
 func (r *Resolver) Resolve(name string) (string, bool, error) {
-	return r.resolve(name, r.exprPos, true, true, nil)
+	return r.resolve(name, templateReach, r.exprPos, true, true, nil)
+}
+
+// ResolveExpr is Resolve for expressions. It skips template-only providers.
+func (r *Resolver) ResolveExpr(name string) (string, bool, error) {
+	return r.resolve(name, exprReach, r.exprPos, true, true, nil)
 }
 
 // A missing result still wins provider lookup, preventing fallthrough.
 func (r *Resolver) resolve(
 	name string,
+	from reach,
 	pos ExprPos,
 	allowDynamic, allowExpr bool,
 	st *expandState,
@@ -148,7 +155,7 @@ func (r *Resolver) resolve(
 		return "", false, nil
 	}
 
-	hit, ok := r.lookupValue(name)
+	hit, ok := r.lookupValue(name, from)
 	if !ok {
 		return "", false, nil
 	}
@@ -274,16 +281,25 @@ func (h lookupHit) key() variableKey {
 	return variableKey{provider: h.idx, name: NameKey(h.subject)}
 }
 
+// reach says which providers a lookup may search. Placeholders inside the
+// value it finds can still use any provider.
+type reach uint8
+
+const (
+	templateReach reach = iota
+	exprReach
+)
+
 // lookupValue first tries direct lookup across all providers.
 // If that fails and the name has a dot, tries to match a provider prefix -
 // so "production.api_key" looks for a provider labeled "production" then asks for "api_key".
-func (r *Resolver) lookupValue(name string) (lookupHit, bool) {
-	hit, ok := r.lookup(func(p Provider) (Value, string, bool) {
+func (r *Resolver) lookupValue(name string, from reach) (lookupHit, bool) {
+	hit, ok := r.lookup(from, func(p Provider) (Value, string, bool) {
 		value, found := providerValue(p, name)
 		return value, name, found
 	})
 	if !ok && strings.Contains(name, ".") {
-		hit, ok = r.lookup(func(p Provider) (Value, string, bool) {
+		hit, ok = r.lookup(from, func(p Provider) (Value, string, bool) {
 			return lookupPrefixed(p, name)
 		})
 	}
@@ -293,10 +309,13 @@ func (r *Resolver) lookupValue(name string) (lookupHit, bool) {
 // lookup returns the first value find yields across providers. Without tracing
 // it stops at the first hit. With tracing it keeps scanning and collects every
 // matching provider label so shadowed sources can be reported.
-func (r *Resolver) lookup(find func(Provider) (Value, string, bool)) (lookupHit, bool) {
+func (r *Resolver) lookup(from reach, find func(Provider) (Value, string, bool)) (lookupHit, bool) {
 	var hit lookupHit
 	matched := false
 	for idx, p := range r.providers {
+		if _, ok := p.(templateOnlyProvider); ok && from == exprReach {
+			continue
+		}
 		value, subject, ok := find(p)
 		if !ok {
 			continue
@@ -424,11 +443,11 @@ func (r *Resolver) resolveName(
 			return "", fmt.Errorf("expressions not enabled")
 		}
 		return r.expr(expr, pos, func(n string) (string, bool, error) {
-			return r.resolve(n, pos, allowDynamic, allowExpr, st)
+			return r.resolve(n, exprReach, pos, allowDynamic, allowExpr, st)
 		})
 	}
 	if allowDynamic && strings.HasPrefix(name, "$") {
-		value, ok, err := r.resolve(name, pos, allowDynamic, allowExpr, st)
+		value, ok, err := r.resolve(name, templateReach, pos, allowDynamic, allowExpr, st)
 		if err != nil {
 			return "", err
 		}
@@ -452,7 +471,7 @@ func (r *Resolver) resolveName(
 			return "", err
 		}
 	}
-	value, ok, err := r.resolve(name, pos, allowDynamic, allowExpr, st)
+	value, ok, err := r.resolve(name, templateReach, pos, allowDynamic, allowExpr, st)
 	if err != nil {
 		return "", err
 	}
@@ -539,6 +558,21 @@ func (p *MapProvider) templateValues() bool {
 func expandableProvider(p Provider) bool {
 	tp, ok := p.(templateValueProvider)
 	return ok && tp.templateValues()
+}
+
+type templateOnlyProvider struct{ Provider }
+
+// TemplateOnly hides p from expressions. {{name}} placeholders still see it.
+func TemplateOnly(p Provider) Provider {
+	return templateOnlyProvider{p}
+}
+
+func (p templateOnlyProvider) ResolveValue(name string) (Value, bool) {
+	return providerValue(p.Provider, name)
+}
+
+func (p templateOnlyProvider) templateValues() bool {
+	return expandableProvider(p.Provider)
 }
 
 func (p *MapProvider) Resolve(name string) (string, bool) {

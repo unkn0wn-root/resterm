@@ -362,3 +362,53 @@ func TestNestedExpansionTraceIncludesInner(t *testing.T) {
 		t.Fatalf("expected trace to include both outer and inner variables, got %v", names)
 	}
 }
+
+func TestTemplateOnlyHiddenFromExpressions(t *testing.T) {
+	r := NewResolver(
+		TemplateOnly(NewTemplateProvider("const", map[string]string{"id": "fixed", "base": "http://c"})),
+		NewTemplateProvider("request", map[string]string{"id": "{{base}}/{{$uuid}}"}),
+	)
+	r.SetExprEval(func(expr string, _ ExprPos, look Lookup) (string, error) {
+		v, ok, err := look(expr)
+		if !ok && err == nil {
+			return "absent", nil
+		}
+		return v, err
+	})
+
+	out, err := r.ExpandTemplates("{{id}} {{request.id}} {{= id }} {{= base }} {{= const.id }}")
+	if err != nil {
+		t.Fatalf("expand err: %v", err)
+	}
+	parts := strings.Fields(out)
+	if parts[0] != "fixed" {
+		t.Fatalf("{{id}} = %q, want the constant", parts[0])
+	}
+	if !strings.HasPrefix(parts[1], "http://c/") {
+		t.Fatalf("{{request.id}} = %q, want {{base}} to read the constant", parts[1])
+	}
+	if parts[2] != parts[1] {
+		t.Fatalf("{{= id }} = %q, want the request value %q", parts[2], parts[1])
+	}
+	if parts[3] != "absent" || parts[4] != "absent" {
+		t.Fatalf("expressions read %q and %q, want the constant hidden", parts[3], parts[4])
+	}
+	if got, ok, err := r.ResolveExpr("id"); err != nil || !ok || got != parts[1] {
+		t.Fatalf("ResolveExpr(id) = %q, %v, %v, want the request value %q", got, ok, err, parts[1])
+	}
+}
+
+func TestTemplateOnlySelfReadIsACycle(t *testing.T) {
+	r := NewResolver(
+		TemplateOnly(NewTemplateProvider("const", map[string]string{"a": "fixed"})),
+		NewTemplateProvider("request", map[string]string{"a": "{{= a }}-x"}),
+	)
+	r.SetExprEval(func(expr string, _ ExprPos, look Lookup) (string, error) {
+		v, _, err := look(expr)
+		return v, err
+	})
+
+	if got, ok, err := r.ResolveExpr("a"); ok || err == nil || !strings.Contains(err.Error(), "variable cycle") {
+		t.Fatalf("ResolveExpr(a) = %q, %v, %v, want the cycle", got, ok, err)
+	}
+}
