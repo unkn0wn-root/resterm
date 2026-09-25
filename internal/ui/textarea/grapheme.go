@@ -42,6 +42,7 @@ func asciiBreak(line []rune, i int) bool {
 //
 // Adjacent printable ASCII runes always have a boundary between them,
 // so they can bypass uniseg and safely delimit the chunks passed to it.
+// Widths come from ansi so they match the ruler Lip Gloss lays out with.
 func Clusters(line []rune) iter.Seq[Cluster] {
 	return func(yield func(Cluster) bool) {
 		for i := 0; i < len(line); {
@@ -62,11 +63,11 @@ func Clusters(line []rune) iter.Seq[Cluster] {
 			for start := i; g.Next(); {
 				text := g.Str()
 				end := start + utf8.RuneCountInString(text)
-				width := g.Width()
+				width := ansi.StringWidth(text)
 				// Invisible runes measure zero cells here but can take a cell in
 				// the terminal. Draw an escape and keep Start and End on the runes.
 				if esc, ok := termtext.EscapeCluster(text, width); ok {
-					text, width = esc, uniseg.StringWidth(esc)
+					text, width = esc, ansi.StringWidth(esc)
 				}
 				if !yield(Cluster{Start: start, End: end, Width: width, Text: text}) {
 					return
@@ -178,10 +179,10 @@ func renderGrapheme(style lipgloss.Style, text string) string {
 
 	decoration := ansi.NewStyle()
 	if style.GetUnderline() {
-		decoration = decoration.Underline()
+		decoration = decoration.Underline(true)
 	}
 	if style.GetStrikethrough() {
-		decoration = decoration.Strikethrough()
+		decoration = decoration.Strikethrough(true)
 	}
 	plain := style.UnsetUnderline().UnsetUnderlineSpaces().UnsetStrikethrough().UnsetStrikethroughSpaces()
 	if len(decoration) == 0 {

@@ -2,6 +2,7 @@ package grpcx
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"slices"
@@ -39,7 +40,7 @@ func (s *testSvc) StreamingInputCall(
 	var count int32
 	for {
 		_, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return stream.SendAndClose(&testgrpc.StreamingInputCallResponse{
 				AggregatedPayloadSize: count,
 			})
@@ -56,7 +57,7 @@ func (s *testSvc) FullDuplexCall(
 ) error {
 	for {
 		_, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {

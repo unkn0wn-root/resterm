@@ -593,7 +593,7 @@ func (m Model) Value() string {
 func (m *Model) Length() int {
 	var l int
 	for _, row := range m.value {
-		l += uniseg.StringWidth(string(row))
+		l += ansi.StringWidth(string(row))
 	}
 	// We add len(m.value) to include the newline characters.
 	return l + len(m.value) - 1
@@ -1357,7 +1357,7 @@ func (m *Model) SetWidth(w int) {
 	// Update prompt width only if there is no prompt function as SetPromptFunc
 	// updates the prompt width when it is called.
 	if m.promptFunc == nil {
-		m.promptWidth = uniseg.StringWidth(m.Prompt)
+		m.promptWidth = ansi.StringWidth(m.Prompt)
 	}
 
 	// Add base style borders and padding to reserved outer width.
@@ -1732,6 +1732,11 @@ func (m Model) View() string {
 			globalOffset += remaining
 		}
 
+		// A cursor past the last rune draws its own cell, so keep the line
+		// exactly m.width wide instead of relying on the viewport to trim it.
+		if cursorVisible && cursorRel >= len(visibleRunes) {
+			renderedWidth++
+		}
 		pad := strings.Repeat(" ", max(0, m.width-renderedWidth))
 		if selectionActive && newlineSelected && pad != "" {
 			newlineStyle := m.selectionStyle.Inherit(style)
@@ -1976,7 +1981,7 @@ func (m Model) getPromptString(displayLine int) (prompt string) {
 		return prompt
 	}
 	prompt = m.promptFunc(displayLine)
-	pl := uniseg.StringWidth(prompt)
+	pl := ansi.StringWidth(prompt)
 	if pl < m.promptWidth {
 		prompt = fmt.Sprintf("%*s%s", m.promptWidth-pl, "", prompt)
 	}
@@ -2046,7 +2051,7 @@ func (m Model) placeholderView() string {
 						style.Render(
 							plines[i] + strings.Repeat(
 								" ",
-								max(0, m.width-uniseg.StringWidth(plines[i])),
+								max(0, m.width-ansi.StringWidth(plines[i])),
 							),
 						),
 					),

@@ -100,8 +100,7 @@ func isDir(err error) bool {
 	if errors.Is(err, syscall.EISDIR) {
 		return true
 	}
-	var pe *fs.PathError
-	if errors.As(err, &pe) && errors.Is(pe.Err, syscall.EISDIR) {
+	if pe, ok := errors.AsType[*fs.PathError](err); ok && errors.Is(pe.Err, syscall.EISDIR) {
 		return true
 	}
 	return false

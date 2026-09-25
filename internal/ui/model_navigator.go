@@ -1,10 +1,11 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -665,13 +666,9 @@ func sortNavNodes(nodes []*navigator.Node[any]) {
 	if len(nodes) == 0 {
 		return
 	}
-	sort.Slice(nodes, func(i, j int) bool {
-		a := nodes[i]
-		b := nodes[j]
-		wa := navKindRank(a)
-		wb := navKindRank(b)
-		if wa != wb {
-			return wa < wb
+	slices.SortFunc(nodes, func(a, b *navigator.Node[any]) int {
+		if c := cmp.Compare(navKindRank(a), navKindRank(b)); c != 0 {
+			return c
 		}
 		at := ""
 		bt := ""
@@ -683,11 +680,18 @@ func sortNavNodes(nodes []*navigator.Node[any]) {
 		}
 		if at == bt {
 			if a == nil || b == nil {
-				return a != nil
+				switch {
+				case a == b:
+					return 0
+				case a != nil:
+					return -1
+				default:
+					return 1
+				}
 			}
-			return a.ID < b.ID
+			return strings.Compare(a.ID, b.ID)
 		}
-		return at < bt
+		return strings.Compare(at, bt)
 	})
 	for _, n := range nodes {
 		if n != nil && n.Kind == navigator.KindDir {

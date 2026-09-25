@@ -530,6 +530,7 @@ func TestDialRetry(t *testing.T) {
 }
 
 func TestDefaultKeyFallbackSkipsMissing(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	s := loadDefaultKey("")
 	if s != nil {
 		t.Fatalf("expected nil signer when no default key exists in sandbox")

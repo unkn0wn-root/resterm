@@ -6,7 +6,6 @@ import (
 	"io"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -595,7 +594,7 @@ func explainMissingTemplateVars(rep *xplain.Report) []string {
 		seen[name] = struct{}{}
 		out = append(out, name)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

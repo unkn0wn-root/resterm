@@ -2,7 +2,7 @@ package stdlib
 
 import (
 	"maps"
-	"sort"
+	"slices"
 
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
@@ -323,7 +323,7 @@ func sortedDictKeys(ctx *rts.Ctx, pos rts.Pos, m map[string]rts.Value) ([]string
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys, nil
 }
 

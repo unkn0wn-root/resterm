@@ -16,7 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/apimachinery/pkg/util/httpstream" //nolint:staticcheck // client-go v0.37 still uses these types
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -1161,7 +1161,7 @@ func TestWaitTargetPodHonorsContextCancel(t *testing.T) {
 func TestResolveForwardTargetServiceNamedPort(t *testing.T) {
 	cs := fake.NewClientset(
 		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+			Name: "api", Namespace: "default",
 			Spec: corev1.ServiceSpec{
 				Selector: map[string]string{"app": "api"},
 				Ports: []corev1.ServicePort{
@@ -1196,7 +1196,7 @@ func TestResolveForwardTargetServiceNamedPort(t *testing.T) {
 func TestResolveForwardTargetDeploymentPicksReadyPod(t *testing.T) {
 	cs := fake.NewClientset(
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+			Name: "api", Namespace: "default",
 			Spec: appsv1.DeploymentSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
 			},
@@ -1226,7 +1226,7 @@ func TestResolveForwardTargetDeploymentPicksReadyPod(t *testing.T) {
 func TestResolveForwardTargetStatefulSetDeterministicPod(t *testing.T) {
 	cs := fake.NewClientset(
 		&appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "default"},
+			Name: "db", Namespace: "default",
 			Spec: appsv1.StatefulSetSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "db"}},
 			},
@@ -1263,7 +1263,7 @@ func TestResolveForwardTargetServiceNamedPortAmbiguousAcrossContainers(t *testin
 
 	cs := fake.NewClientset(
 		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+			Name: "api", Namespace: "default",
 			Spec: corev1.ServiceSpec{
 				Selector: map[string]string{"app": "api"},
 				Ports: []corev1.ServicePort{
@@ -1491,7 +1491,7 @@ func testPod(
 		conds[0].Status = corev1.ConditionTrue
 	}
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: labels},
+		Name: name, Namespace: "default", Labels: labels,
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
@@ -1511,7 +1511,7 @@ func testPod(
 
 func testPodPending(name string, labels map[string]string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: labels},
+		Name: name, Namespace: "default", Labels: labels,
 		Status: corev1.PodStatus{
 			Phase: corev1.PodPending,
 		},

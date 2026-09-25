@@ -3,6 +3,7 @@ package vars
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -265,7 +266,7 @@ func (o *object) UnmarshalJSON(data []byte) error {
 		}
 		*o = append(*o, field{name: name, raw: raw})
 	}
-	if _, err := dec.Token(); err != nil && err != io.EOF {
+	if _, err := dec.Token(); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
 	return nil

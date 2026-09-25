@@ -98,8 +98,7 @@ func requestPatternFromValue(value rts.Value) (RequestPattern, error) {
 // patternDecodeReason strips the Go type noise json decode errors carry, which
 // script authors cannot act on.
 func patternDecodeReason(err error) string {
-	var typeErr *json.UnmarshalTypeError
-	if errors.As(err, &typeErr) {
+	if typeErr, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
 		field := typeErr.Field
 		if field == "" {
 			field = "pattern"

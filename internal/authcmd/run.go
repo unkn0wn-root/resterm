@@ -172,8 +172,7 @@ func mapRunError(runCtx context.Context, cfg commandConfig, err error, stderr st
 		)
 	}
 
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		return diag.Newf(
 			diag.ClassAuth,
 			"command %q exited with status %d%s",

@@ -20,13 +20,13 @@ func RenderWorkflow(wf restfile.Workflow, fallback string) string {
 	}
 
 	var b strings.Builder
-	w := workflowWriter{directiveWriter: directiveWriter{b: &b}, fail: wf.DefaultOnFailure}
+	w := workflowWriter{b: &b, fail: wf.DefaultOnFailure}
 	w.head(directive.Workflow, name)
 	w.writeWorkflowOptions(wf)
 	b.WriteString("\n")
 	renderDescription(w.directiveWriter, wf.Description)
 	renderTags(w.directiveWriter, wf.Tags)
-	writeEach(w.directiveWriter, wf.RunVars, runVarArg)
+	w.writeEach(wf.RunVars, runVarArg)
 
 	for _, step := range wf.Steps {
 		w.writeStep(step)
@@ -51,8 +51,8 @@ func (w workflowWriter) writeStep(step restfile.WorkflowStep) {
 }
 
 func (w workflowWriter) writeRequest(step restfile.WorkflowStep) {
-	writeOne(w.directiveWriter, step.When, conditionArg)
-	writeOne(w.directiveWriter, step.ForEach, stepForEachArg)
+	w.writeOne(step.When, conditionArg)
+	w.writeOne(step.ForEach, stepForEachArg)
 
 	w.head(directive.Step, directive.Quote(strings.TrimSpace(step.Name)))
 	w.option("using", step.Using)

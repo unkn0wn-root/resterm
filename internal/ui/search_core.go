@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"unicode/utf8"
 )
 
@@ -41,8 +42,8 @@ func lastMatchIndex(matches []searchMatch, offset int) (int, bool) {
 	if len(matches) == 0 {
 		return -1, false
 	}
-	for i := len(matches) - 1; i >= 0; i-- {
-		match := matches[i]
+	for i, match := range slices.Backward(matches) {
+
 		if offset > match.start {
 			return i, false
 		}

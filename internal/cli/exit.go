@@ -8,6 +8,7 @@ type ExitErr struct {
 }
 
 type exitCoder interface {
+	error
 	ExitCode() int
 }
 
@@ -48,8 +49,7 @@ func ExitCode(err error) int {
 	if err == nil {
 		return 0
 	}
-	var ex exitCoder
-	if errors.As(err, &ex) {
+	if ex, ok := errors.AsType[exitCoder](err); ok {
 		return ex.ExitCode()
 	}
 	return 1

@@ -1,9 +1,10 @@
 package js
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -62,12 +63,8 @@ func (n *object) write(buf *strings.Builder, indent int) {
 	if len(props) > 1 {
 		sorted := make([]prop, len(props))
 		copy(sorted, props)
-		sort.SliceStable(sorted, func(i, j int) bool {
-			pi, pj := sorted[i], sorted[j]
-			if pi.key.name == pj.key.name {
-				return pi.key.kind < pj.key.kind
-			}
-			return pi.key.name < pj.key.name
+		slices.SortStableFunc(sorted, func(a, b prop) int {
+			return cmp.Or(strings.Compare(a.key.name, b.key.name), cmp.Compare(a.key.kind, b.key.kind))
 		})
 		props = sorted
 	}

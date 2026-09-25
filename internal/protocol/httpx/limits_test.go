@@ -2,11 +2,10 @@ package httpx
 
 import (
 	"compress/gzip"
-	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"math"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -166,31 +165,38 @@ func TestSSEFallbackBodyStopsAtTheLimit(t *testing.T) {
 	tooLarge(t, err)
 }
 
-// countingConn records how much the client pulls off the socket. Counting what
-// the server managed to write instead would measure kernel socket buffers,
-// which hold megabytes on some machines and almost nothing on others.
-type countingConn struct {
-	net.Conn
+// countingBody records how much the reader pulls from the response body.
+// Counting what the server managed to write instead would measure kernel
+// socket buffers, and counting socket reads would include the bytes the
+// transport drains after an early close to reuse the connection.
+type countingBody struct {
+	io.ReadCloser
 	read *atomic.Int64
 }
 
-func (c *countingConn) Read(p []byte) (int, error) {
-	n, err := c.Conn.Read(p)
-	c.read.Add(int64(n))
+func (b *countingBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	b.read.Add(int64(n))
 	return n, err
 }
 
-func countingDialClient(read *atomic.Int64) *Client {
+type countingTransport struct {
+	base http.RoundTripper
+	read *atomic.Int64
+}
+
+func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.base.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	resp.Body = &countingBody{ReadCloser: resp.Body, read: t.read}
+	return resp, nil
+}
+
+func countingBodyClient(read *atomic.Int64) *Client {
 	return NewClientWithOptions(WithHTTPFactory(func(Options) (*http.Client, error) {
-		return &http.Client{Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				conn, err := (&net.Dialer{}).DialContext(ctx, network, addr)
-				if err != nil {
-					return nil, err
-				}
-				return &countingConn{Conn: conn, read: read}, nil
-			},
-		}}, nil
+		return &http.Client{Transport: &countingTransport{base: &http.Transport{}, read: read}}, nil
 	}))
 }
 
@@ -221,11 +227,10 @@ func TestSSEStopsOnAnUnterminatedLine(t *testing.T) {
 			TotalTimeout: 30 * time.Second,
 		}},
 	}
-	if _, err := countingDialClient(&read).ExecuteSSE(t.Context(), req, nil, Options{}); err != nil {
+	if _, err := countingBodyClient(&read).ExecuteSSE(t.Context(), req, nil, Options{}); err != nil {
 		t.Fatalf("ExecuteSSE: %v", err)
 	}
-	// The reader stops within one buffered fill of the limit. The transport has
-	// a buffer of its own, so allow for both plus the response headers.
+	// The reader stops within one buffered fill of the limit.
 	if n := read.Load(); n > 64<<10 {
 		t.Fatalf("the reader consumed %d bytes of one line against a 1KiB stream limit", n)
 	}

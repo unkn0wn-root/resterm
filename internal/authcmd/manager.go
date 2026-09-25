@@ -47,8 +47,8 @@ type SnapshotEntry struct {
 	Config    Config    `json:"config"`
 	Token     string    `json:"token"`
 	Type      string    `json:"type,omitempty"`
-	Expiry    time.Time `json:"expiry,omitempty"`
-	FetchedAt time.Time `json:"fetchedAt,omitempty"`
+	Expiry    time.Time `json:"expiry,omitzero"`
+	FetchedAt time.Time `json:"fetchedAt,omitzero"`
 }
 
 type Manager struct {

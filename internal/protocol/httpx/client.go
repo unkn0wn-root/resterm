@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
@@ -17,7 +18,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"github.com/unkn0wn-root/resterm/internal/vars"
-	"nhooyr.io/websocket"
 )
 
 type Options struct {

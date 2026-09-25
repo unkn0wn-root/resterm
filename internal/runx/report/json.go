@@ -1,9 +1,10 @@
 package runfmt
 
 import (
+	"cmp"
 	"encoding/json"
 	"io"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -446,7 +447,7 @@ func (prof *Profile) json() *jsonProfile {
 	}
 	if len(prof.Percentiles) > 0 {
 		items := append([]Percentile(nil), prof.Percentiles...)
-		sort.Slice(items, func(i, j int) bool { return items[i].Percentile < items[j].Percentile })
+		slices.SortFunc(items, func(a, b Percentile) int { return cmp.Compare(a.Percentile, b.Percentile) })
 		out.Percentiles = make([]jsonPercentile, 0, len(items))
 		for _, item := range items {
 			out.Percentiles = append(out.Percentiles, item.json())

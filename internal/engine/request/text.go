@@ -3,7 +3,7 @@ package request
 import (
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,7 +52,7 @@ func (w *requestTextWriter) writeHeaders(headers http.Header) {
 	for name := range headers {
 		headerNames = append(headerNames, name)
 	}
-	sort.Strings(headerNames)
+	slices.Sort(headerNames)
 
 	for _, name := range headerNames {
 		for _, value := range headers[name] {

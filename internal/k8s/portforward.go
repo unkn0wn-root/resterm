@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode"
 
-	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/apimachinery/pkg/util/httpstream" //nolint:staticcheck // client-go v0.37 still uses these types
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	spdytransport "k8s.io/client-go/transport/spdy"

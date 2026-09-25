@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -167,8 +167,7 @@ func (rt *wsRuntime) readLoop() {
 	for {
 		msgType, data, err := rt.conn.Read(ctx)
 		if err != nil {
-			var ce websocket.CloseError
-			if errors.As(err, &ce) {
+			if ce, ok := errors.AsType[websocket.CloseError](err); ok {
 				// Read completes the close handshake before returning a close error.
 				// Do not let shutdown try to close the connection again.
 				rt.closeStarted.Store(true)

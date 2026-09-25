@@ -1,9 +1,10 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -238,8 +239,8 @@ func combinePhases(phases []nettrace.Phase) []nettrace.Phase {
 		}
 		aggregated[phase.Kind] = entry
 	}
-	sort.SliceStable(order, func(i, j int) bool {
-		return phaseOrder(order[i]) < phaseOrder(order[j])
+	slices.SortStableFunc(order, func(a, b nettrace.PhaseKind) int {
+		return cmp.Compare(phaseOrder(a), phaseOrder(b))
 	})
 	result := make([]nettrace.Phase, 0, len(aggregated))
 	for _, kind := range order {

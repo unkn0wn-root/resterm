@@ -1,8 +1,9 @@
 package stdlib
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -112,9 +113,9 @@ func listSort(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	out = append(out, items...)
 	switch kind {
 	case rts.VNum:
-		sort.Slice(out, func(i, j int) bool { return out[i].N < out[j].N })
+		slices.SortFunc(out, func(a, b rts.Value) int { return cmp.Compare(a.N, b.N) })
 	case rts.VStr:
-		sort.Slice(out, func(i, j int) bool { return out[i].S < out[j].S })
+		slices.SortFunc(out, func(a, b rts.Value) int { return cmp.Compare(a.S, b.S) })
 	default:
 		return rts.Null(), rts.Errf(ctx, pos, "%s expects numbers or strings", sigListSort)
 	}

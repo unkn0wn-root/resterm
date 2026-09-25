@@ -1767,11 +1767,8 @@ func renderPromptInput(input textinput.Model, width int) string {
 	width = max(width, 4)
 	input.Width = 0
 	if input.Value() == "" {
-		// With a zero width, textinput renders only the first placeholder rune.
-		// Set just enough width for the placeholder without padding the gap to the next segment.
-		if placeholderWidth := lipgloss.Width(input.Placeholder); placeholderWidth > 1 {
-			input.Width = placeholderWidth - 1
-		}
+		// With a zero width, textinput renders the whole placeholder without trailing padding.
+		input.Width = 0
 	} else {
 		input.Width = max(width-lipgloss.Width(input.Prompt), 1)
 		value := input.Value()

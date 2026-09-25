@@ -176,7 +176,7 @@ func decodeJSON(data []byte) (any, error) {
 		return nil, err
 	}
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		if err == nil {
 			return nil, errors.New("multiple JSON values")
 		}

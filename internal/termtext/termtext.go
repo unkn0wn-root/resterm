@@ -61,9 +61,10 @@ func EscapeCluster(cluster string, cells int) (string, bool) {
 
 // needsEscape skips clusters wider than zero cells. A visible glyph carries
 // them, so escaping their format characters would break emoji and shaping.
+// Zero-cell clusters have no glyph of their own, and truncation still charges
+// them a cell, so they are always drawn as escapes to keep widths exact.
 func needsEscape(cluster string, cells int) bool {
-	r, _ := utf8.DecodeRuneInString(cluster)
-	return (cells == 0 && unprintable(r)) || !utf8.ValidString(cluster)
+	return cells == 0 || !utf8.ValidString(cluster)
 }
 
 // unprintable reports whether r can affect terminal layout beyond its cell width.

@@ -94,8 +94,7 @@ func (s *Server) controlCount(w http.ResponseWriter, r *http.Request) {
 	count, err := s.Count(r.Context(), pattern)
 	if err != nil {
 		status := http.StatusBadRequest
-		var incomplete *IncompleteError
-		if errors.As(err, &incomplete) {
+		if _, ok := errors.AsType[*IncompleteError](err); ok {
 			status = http.StatusConflict
 		}
 		writeProblem(w, status, err.Error())

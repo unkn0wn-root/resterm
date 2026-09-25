@@ -1,8 +1,9 @@
 package nettrace
 
 import (
+	"cmp"
 	"maps"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -67,13 +68,8 @@ func normalizePhases(phases []Phase) []Phase {
 
 	sorted := make([]Phase, len(phases))
 	copy(sorted, phases)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		si := sorted[i]
-		sj := sorted[j]
-		if si.Start.Equal(sj.Start) {
-			return si.End.Before(sj.End)
-		}
-		return si.Start.Before(sj.Start)
+	slices.SortStableFunc(sorted, func(a, b Phase) int {
+		return cmp.Or(a.Start.Compare(b.Start), a.End.Compare(b.End))
 	})
 	return sorted
 }

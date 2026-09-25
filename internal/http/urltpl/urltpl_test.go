@@ -6,13 +6,9 @@ import (
 	"testing"
 )
 
-func strPtr(s string) *string {
-	return &s
-}
-
 func TestPatchQueryTemplateKeepsTemplateSeparators(t *testing.T) {
 	raw := "{{base}}/path?q={{a&b}}&keep=1"
-	patch := map[string]*string{"x": strPtr("1")}
+	patch := map[string]*string{"x": new("1")}
 
 	got, err := PatchQuery(raw, patch)
 	if err != nil {
@@ -32,8 +28,8 @@ func TestPatchQueryTemplateKeepsTemplateSeparators(t *testing.T) {
 func TestPatchQueryTemplateMatchesNetURLOrder(t *testing.T) {
 	raw := "{{base}}/path?b=2&a=1"
 	patch := map[string]*string{
-		"a": strPtr("x"),
-		"c": strPtr("3"),
+		"a": new("x"),
+		"c": new("3"),
 	}
 
 	got, err := PatchQuery(raw, patch)
@@ -62,7 +58,7 @@ func TestPatchQueryTemplateEncodedKeyMatch(t *testing.T) {
 
 func TestPatchQueryTemplateQuestionMarkInTemplate(t *testing.T) {
 	raw := "{{base?x=1}}/path?keep=1#frag"
-	patch := map[string]*string{"q": strPtr("1")}
+	patch := map[string]*string{"q": new("1")}
 
 	got, err := PatchQuery(raw, patch)
 	if err != nil {
@@ -114,7 +110,7 @@ func TestParseTargetQueryProtectsTemplateSeparators(t *testing.T) {
 
 func TestPatchQueryTemplateValueInPatch(t *testing.T) {
 	raw := "https://example.com/path?keep=1"
-	patch := map[string]*string{"q": strPtr("{{token}}")}
+	patch := map[string]*string{"q": new("{{token}}")}
 
 	got, err := PatchQuery(raw, patch)
 	if err != nil {
@@ -130,7 +126,7 @@ func TestPatchQueryTemplateValueInPatch(t *testing.T) {
 
 func TestPatchQueryTemplateEncodesNonTemplateValues(t *testing.T) {
 	raw := "{{base}}/path?keep=1"
-	patch := map[string]*string{"q": strPtr("hello world {{token}}")}
+	patch := map[string]*string{"q": new("hello world {{token}}")}
 
 	got, err := PatchQuery(raw, patch)
 	if err != nil {
@@ -143,7 +139,7 @@ func TestPatchQueryTemplateEncodesNonTemplateValues(t *testing.T) {
 
 func TestPatchQueryUnbalancedTemplateUsesNetURLParsing(t *testing.T) {
 	raw := "https://example.com/path?q={{a&b"
-	patch := map[string]*string{"x": strPtr("1")}
+	patch := map[string]*string{"x": new("1")}
 
 	got, err := PatchQuery(raw, patch)
 	if err != nil {
@@ -162,7 +158,7 @@ func TestPatchQueryUnbalancedTemplateUsesNetURLParsing(t *testing.T) {
 
 func TestPatchQueryTemplatePreservesEmptyKey(t *testing.T) {
 	raw := "{{base}}/path?=1&keep=1"
-	patch := map[string]*string{"x": strPtr("1")}
+	patch := map[string]*string{"x": new("1")}
 
 	got, err := PatchQuery(raw, patch)
 	if err != nil {

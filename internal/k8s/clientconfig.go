@@ -213,7 +213,7 @@ func policyFor(st loadSettings) clientcmdapi.PluginPolicy {
 		out.PolicyType = clientcmdapi.PluginPolicyAllowlist
 		out.Allowlist = make([]clientcmdapi.AllowlistEntry, 0, len(st.allowlist))
 		for _, name := range st.allowlist {
-			out.Allowlist = append(out.Allowlist, clientcmdapi.AllowlistEntry{Name: name})
+			out.Allowlist = append(out.Allowlist, clientcmdapi.AllowlistEntry{Command: name})
 		}
 	}
 	return out

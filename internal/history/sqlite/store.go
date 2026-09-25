@@ -494,13 +494,11 @@ func isCorruptErr(err error) bool {
 		return false
 	}
 
-	var integErr *integrityCheckError
-	if errors.As(err, &integErr) {
+	if _, ok := errors.AsType[*integrityCheckError](err); ok {
 		return true
 	}
 
-	var se *sqlitedrv.Error
-	if errors.As(err, &se) {
+	if se, ok := errors.AsType[*sqlitedrv.Error](err); ok {
 		code := se.Code()
 		if code == sqlite3.SQLITE_IOERR_CORRUPTFS {
 			return true

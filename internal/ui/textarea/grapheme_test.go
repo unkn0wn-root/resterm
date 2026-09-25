@@ -218,9 +218,9 @@ func TestClustersMatchSegmenter(t *testing.T) {
 			if c.Start != want[i].Start || c.End != want[i].End {
 				t.Fatalf("%q cluster %d: got %+v, want %+v", text, i, c, want[i])
 			}
-			if c.Width != uniseg.StringWidth(c.Text) {
+			if c.Width != ansi.StringWidth(c.Text) {
 				t.Fatalf("%q cluster %d: width %d, but %q draws %d",
-					text, i, c.Width, c.Text, uniseg.StringWidth(c.Text))
+					text, i, c.Width, c.Text, ansi.StringWidth(c.Text))
 			}
 			if c.Text != want[i].Text && c.Width == 0 {
 				t.Fatalf("%q cluster %d: escaped to %q but still charges nothing", text, i, c.Text)
@@ -265,10 +265,11 @@ func TestViewWidthHoldsAcrossUnicode(t *testing.T) {
 					if line == "" {
 						continue
 					}
-					styled, visible := ansi.StringWidth(line), ansi.StringWidth(ansi.Strip(line))
-					if styled != visible || visible != m.Width() {
-						t.Fatalf("w=%d row=%d col=%d line=%d: styled %d, visible %d, want %d\n%q",
-							m.Width(), row, col, i, styled, visible, m.Width(), line)
+					// Measure the styled line the way Lip Gloss does. Stripping first can
+					// merge a prepend mark with the padding after a style reset.
+					if styled := ansi.StringWidth(line); styled != m.Width() {
+						t.Fatalf("w=%d row=%d col=%d line=%d: styled %d, want %d\n%q",
+							m.Width(), row, col, i, styled, m.Width(), line)
 					}
 				}
 			}

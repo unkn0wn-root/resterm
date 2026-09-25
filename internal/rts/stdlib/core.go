@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/google/uuid"
+	"uuid"
+
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
@@ -142,9 +143,5 @@ func coreUUID(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 }
 
 func randUUID() (string, error) {
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return "", err
-	}
-	return id.String(), nil
+	return uuid.New().String(), nil
 }

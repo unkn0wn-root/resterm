@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
 
 	hbase "github.com/pb33f/libopenapi/datamodel/high/base"
@@ -122,7 +121,7 @@ func collectOperations(
 	for path := range doc.Paths.PathItems.KeysFromOldest() {
 		paths = append(paths, path)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 
 	var ops []model.Operation
 	for _, path := range paths {
@@ -205,7 +204,7 @@ func collectExtraPathOps(item *h3.PathItem) []opEnt {
 		names = append(names, name)
 		extra[name] = h3.NewOperation(ref.Value)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	out := make([]opEnt, 0, len(names))
 	for _, name := range names {
@@ -287,7 +286,7 @@ func resolveServerURL(server *h3.Server) string {
 	for key := range server.Variables.KeysFromOldest() {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	for _, key := range keys {
 		v := server.Variables.GetOrZero(key)
 		if v == nil {
@@ -328,7 +327,7 @@ func mergeParameters(baseParams, opParams []*h3.Parameter, sm *schMap) []model.P
 	for key := range merged {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	out := make([]model.Parameter, 0, len(keys))
 	for _, key := range keys {
@@ -564,7 +563,7 @@ func convertResponses(responses *h3.Responses, sm *schMap) []model.Response {
 	if len(codes) == 0 {
 		return nil
 	}
-	sort.Strings(codes)
+	slices.Sort(codes)
 
 	out := make([]model.Response, 0, len(codes))
 	for _, code := range codes {
@@ -751,7 +750,7 @@ func mapKeys[V any](m *orderedmap.Map[string, V]) []string {
 	for key := range m.KeysFromOldest() {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }
 

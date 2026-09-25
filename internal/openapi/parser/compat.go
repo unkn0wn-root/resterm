@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/pb33f/libopenapi"
@@ -242,7 +242,7 @@ func (fx *hdrFix) warns() []string {
 	for p := range fx.cnt {
 		ps = append(ps, p)
 	}
-	sort.Strings(ps)
+	slices.Sort(ps)
 
 	ws := make([]string, 0, len(ps))
 	for _, p := range ps {

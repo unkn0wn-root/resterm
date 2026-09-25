@@ -78,8 +78,8 @@ func (state *workflowState) explainFailure(entries []workflowStatsEntry) string 
 	if state != nil && state.canceled {
 		return strings.TrimSpace(state.cancelReason)
 	}
-	for i := len(entries) - 1; i >= 0; i-- {
-		result := entries[i].result
+	for _, entrie := range slices.Backward(entries) {
+		result := entrie.result
 		if result.Canceled {
 			if msg := strings.TrimSpace(result.Message); msg != "" {
 				return msg

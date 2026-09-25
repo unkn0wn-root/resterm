@@ -90,12 +90,10 @@ func TestSessionLifetimeDetachRacesParentCancel(t *testing.T) {
 		lt := newSessionLifetime(parent)
 
 		var wg sync.WaitGroup
-		wg.Add(1)
 		var won bool
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			won = lt.detach()
-		}()
+		})
 		stop()
 		wg.Wait()
 

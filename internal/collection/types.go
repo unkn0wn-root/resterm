@@ -47,7 +47,7 @@ type Manifest struct {
 	Schema    string    `json:"schema"`
 	Version   int       `json:"version"`
 	Name      string    `json:"name,omitempty"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitzero"`
 	Files     []File    `json:"files"`
 }
 

@@ -129,7 +129,7 @@ func missingRouteSlash(pat, path string) bool {
 	if _, p, ok := strings.Cut(pat, " "); ok {
 		pat = p
 	}
-	prefix := pat[:strings.LastIndexByte(pat, '{')]
+	prefix, _, _ := strings.CutLast(pat, "{")
 	return strings.Count(path, "/") == strings.Count(strings.TrimSuffix(prefix, "/"), "/")
 }
 

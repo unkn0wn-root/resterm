@@ -3,7 +3,6 @@ package analysis
 import (
 	"math"
 	"slices"
-	"sort"
 	"time"
 )
 
@@ -97,7 +96,7 @@ func computeStdDev(values []time.Duration, mean time.Duration) time.Duration {
 func computePercentiles(values []time.Duration, percentiles []int) map[int]time.Duration {
 	result := make(map[int]time.Duration, len(percentiles))
 	sortedPerc := append([]int(nil), percentiles...)
-	sort.Ints(sortedPerc)
+	slices.Sort(sortedPerc)
 	count := len(values)
 	for _, p := range sortedPerc {
 		if p <= 0 {

@@ -352,7 +352,7 @@ func TestHeaderKeepsThemeBackground(t *testing.T) {
 	model.headerTransport = headerTransportStatus{label: "404", level: statusWarn}
 	model.latencySeries.add(750 * time.Millisecond)
 
-	line := strings.SplitN(model.renderHeader(), "\n", 2)[0]
+	line, _, _ := strings.Cut(model.renderHeader(), "\n")
 	backgrounds := renderedCellBackgrounds(line)
 	headerBackground := renderedCellBackgrounds(lipgloss.NewStyle().Background(background).Render("x"))[0]
 	brandBackgrounds := renderedCellBackgrounds(model.theme.HeaderBrand.Render(headerBrandName))

@@ -30,14 +30,12 @@ func TestValid(t *testing.T) {
 
 func TestNormalizeRejectsInvalidAndEquivalentNames(t *testing.T) {
 	_, err := Normalize(map[string][]string{"X Bad": {"a"}})
-	var nameErr *NameError
-	if !errors.As(err, &nameErr) {
+	if _, ok := errors.AsType[*NameError](err); !ok {
 		t.Fatalf("expected NameError, got %v", err)
 	}
 
 	_, err = Normalize(map[string][]string{"X-Test": {"a"}, "x-test": {"b"}})
-	var collision *CollisionError
-	if !errors.As(err, &collision) {
+	if _, ok := errors.AsType[*CollisionError](err); !ok {
 		t.Fatalf("expected CollisionError, got %v", err)
 	}
 }

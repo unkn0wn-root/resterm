@@ -31,6 +31,6 @@ func (e UsageError) Unwrap() error {
 }
 
 func IsUsageError(err error) bool {
-	var target UsageError
-	return errors.As(err, &target)
+	_, ok := errors.AsType[UsageError](err)
+	return ok
 }

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/k8s"
@@ -283,7 +282,7 @@ func certSANs(cert *x509.Certificate) []string {
 	if len(out) <= 1 {
 		return out
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

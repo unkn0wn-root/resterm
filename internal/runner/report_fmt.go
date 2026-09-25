@@ -1,10 +1,9 @@
 package runner
 
 import (
-	"slices"
-
+	"cmp"
 	"io"
-	"sort"
+	"slices"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -309,7 +308,9 @@ func formatPercentiles(src []history.ProfilePercentile) []runfmt.Percentile {
 		return nil
 	}
 	items := append([]history.ProfilePercentile(nil), src...)
-	sort.Slice(items, func(i, j int) bool { return items[i].Percentile < items[j].Percentile })
+	slices.SortFunc(items, func(a, b history.ProfilePercentile) int {
+		return cmp.Compare(a.Percentile, b.Percentile)
+	})
 	out := make([]runfmt.Percentile, 0, len(items))
 	for _, item := range items {
 		out = append(out, runfmt.Percentile{

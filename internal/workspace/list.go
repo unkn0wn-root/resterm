@@ -1,9 +1,10 @@
 package workspace
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
@@ -238,11 +239,8 @@ func (l *lister) sorted() []files.Entry {
 	for _, e := range l.entries {
 		out = append(out, e)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Name == out[j].Name {
-			return out[i].Path < out[j].Path
-		}
-		return out[i].Name < out[j].Name
+	slices.SortFunc(out, func(a, b files.Entry) int {
+		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Path, b.Path))
 	})
 	return out
 }

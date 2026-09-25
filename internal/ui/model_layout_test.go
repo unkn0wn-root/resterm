@@ -481,7 +481,6 @@ func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t := t
 		t.Run(tc.name, func(t *testing.T) {
 			model := New(cfg)
 			model.ready = true
