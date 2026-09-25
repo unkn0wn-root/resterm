@@ -196,7 +196,7 @@ func (e *Engine) refreshCaptureScope(
 	} else {
 		res = in.res.WithProviders(plan.providers()...).WithExprEval(e.ExprEval(sc.ctx, ei))
 	}
-	sc.resolve = pendingLookup(pending, res.Resolve)
+	sc.resolve = pendingLookup(pending, res.ResolveExpr)
 	return res
 }
 

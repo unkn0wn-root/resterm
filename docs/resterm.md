@@ -646,7 +646,7 @@ When expanding `{{variable}}` templates, Resterm looks in:
 9. Selected environment JSON.
 10. OS environment variables (case-sensitive with an uppercase fallback).
 
-Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and unmapped OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them.
+Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and unmapped OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them. If a `@const` and another source use the same name, `vars` skips the constant and returns the value from the next source in the list.
 
 Declarations other than `@run var`, and values in the selected environment, may use `env:NAME`. The value is exposed under the declared name. A missing reference stays undefined and continues to shadow lower sources, including the OS fallback in step 10. See [Values from OS environment variables](#values-from-os-environment-variables).
 
