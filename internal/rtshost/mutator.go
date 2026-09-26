@@ -51,6 +51,7 @@ func (m *Mutator) SetURL(value string) {
 	val := strings.TrimSpace(value)
 	m.out.URL = &val
 	m.req.URL = val
+	m.req.Written.URL = true
 	// Drop the parsed query so the request view re-reads it from the new URL.
 	m.req.Query = nil
 }
@@ -58,17 +59,20 @@ func (m *Mutator) SetURL(value string) {
 func (m *Mutator) SetHeader(name header.Name, value string) {
 	m.out.SetHeader(name.Key(), value)
 	m.reqHeaders()[name.Key()] = []string{value}
+	m.req.Written.SetHeader(name.Key(), value)
 }
 
 func (m *Mutator) AddHeader(name header.Name, value string) {
 	m.out.AddHeader(name.Key(), value)
 	h := m.reqHeaders()
 	h[name.Key()] = append(h[name.Key()], value)
+	m.req.Written.AddHeader(name.Key(), value)
 }
 
 func (m *Mutator) DelHeader(name header.Name) {
 	m.out.DelHeader(name.Key())
 	delete(m.req.Headers, name.Key())
+	m.req.Written.Headers.Del(name.Key())
 }
 
 func (m *Mutator) SetQuery(name, value string) {
@@ -129,6 +133,9 @@ func (m *Mutator) setReqQuery(name, value string) {
 		return
 	}
 	m.req.URL = url
+	// The patched URL encodes the value, so the view can read the query from
+	// it and still expand the authored parameters.
+	m.req.Query = nil
 }
 
 func (m *Mutator) reqHeaders() header.Values {

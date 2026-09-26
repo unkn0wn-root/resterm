@@ -59,8 +59,8 @@ vars.global.delete("old")`,
 	if got := out.Headers.Get("X-Secret"); got != "top" {
 		t.Fatalf("expected X-Secret header to use secret global, got %q", got)
 	}
-	if got := out.Query["user"]; got != "alice" {
-		t.Fatalf("expected query user=alice, got %q", got)
+	if got := out.Query["user"]; got == nil || *got != "alice" {
+		t.Fatalf("expected query user=alice, got %v", out.Query)
 	}
 	if out.Body == nil || *out.Body != "payload" {
 		t.Fatalf("expected body payload, got %#v", out.Body)

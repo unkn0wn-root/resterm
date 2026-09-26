@@ -2,6 +2,7 @@ package restfile
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,6 +60,8 @@ type AuthSpec struct {
 	// working directory to the definition's directory.
 	SourcePath string
 	Line       int
+	// Written marks params a patch set while the request ran. They are data.
+	Written bool
 }
 
 type AuthProfile struct {
@@ -469,6 +472,54 @@ type Request struct {
 	WebSocket    *WebSocketRequest
 	SSH          *SSHSpec
 	K8s          *K8sSpec
+	Written      Written
+}
+
+// Written lists the parts a script or patch set while the request ran. They
+// are data, so they are sent as written instead of being expanded.
+type Written struct {
+	URL     bool
+	Body    bool
+	Headers http.Header
+}
+
+func (w Written) Header(name, value string) bool {
+	return slices.Contains(w.Headers.Values(name), value)
+}
+
+func (w Written) Clone() Written {
+	w.Headers = w.Headers.Clone()
+	return w
+}
+
+func (w *Written) AddHeader(name, value string) {
+	if w.Headers == nil {
+		w.Headers = make(http.Header)
+	}
+	w.Headers.Add(name, value)
+}
+
+// SetHeader makes value the only written value of name.
+func (w *Written) SetHeader(name, value string) {
+	w.Headers.Del(name)
+	w.AddHeader(name, value)
+}
+
+// SetWrittenHeader replaces name with values made while the request ran.
+func (req *Request) SetWrittenHeader(name string, values ...string) {
+	req.DelHeader(name)
+	if req.Headers == nil {
+		req.Headers = make(http.Header)
+	}
+	for _, v := range values {
+		req.Headers.Add(name, v)
+		req.Written.AddHeader(name, v)
+	}
+}
+
+func (req *Request) DelHeader(name string) {
+	req.Headers.Del(name)
+	req.Written.Headers.Del(name)
 }
 
 func (req *Request) Origin() string {

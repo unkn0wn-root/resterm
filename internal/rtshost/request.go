@@ -46,7 +46,11 @@ var requestFns = map[string]rts.Value{
 			if len(vals) == 0 {
 				return rts.Str(""), nil
 			}
-			return native.StringValue(call.Ctx, call.Pos, vals[0])
+			v, err := req.header(name.Key(), vals[0])
+			if err != nil {
+				return rts.Null(), call.Errorf("request.header: %v", err)
+			}
+			return native.StringValue(call.Ctx, call.Pos, v)
 		},
 	).Value(),
 	"setMethod": mut1("request.setMethod", "request.setMethod(method)",
@@ -110,10 +114,18 @@ func (*requestObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value, bo
 		if req == nil {
 			return rts.Str(""), true, nil
 		}
-		v, err := native.StringValue(ctx, pos, req.URL)
+		url, err := req.url()
+		if err != nil {
+			return rts.Null(), true, rts.Errf(ctx, pos, "request url: %v", err)
+		}
+		v, err := native.StringValue(ctx, pos, url)
 		return v, true, err
 	case "headers":
-		v, err := native.StringValuesDict(ctx, pos, headerValues(req))
+		hs, err := headerValues(req)
+		if err != nil {
+			return rts.Null(), true, rts.Errf(ctx, pos, "request headers: %v", err)
+		}
+		v, err := native.StringValuesDict(ctx, pos, hs)
 		return v, true, err
 	case "query":
 		vals, err := queryValues(req)
@@ -150,13 +162,50 @@ func requestMutator(call native.Call) (RequestMutator, error) {
 	return state.rt.Mutator, nil
 }
 
-func headerValues(req *Request) map[string][]string {
-	if req == nil {
-		return nil
+func (r *Request) expand(text string) (string, error) {
+	if r.Expand == nil {
+		return text, nil
 	}
-	return req.Headers
+	return r.Expand(text)
 }
 
+func (r *Request) url() (string, error) {
+	if r.Written.URL {
+		return r.URL, nil
+	}
+	return r.expand(r.URL)
+}
+
+func (r *Request) header(key, value string) (string, error) {
+	if r.Written.Header(key, value) {
+		return value, nil
+	}
+	return r.expand(value)
+}
+
+func headerValues(req *Request) (map[string][]string, error) {
+	if req == nil {
+		return nil, nil
+	}
+	if req.Expand == nil {
+		return req.Headers, nil
+	}
+	out := make(map[string][]string, len(req.Headers))
+	for key, vals := range req.Headers {
+		vs := make([]string, len(vals))
+		for i, v := range vals {
+			var err error
+			if vs[i], err = req.header(key, v); err != nil {
+				return nil, err
+			}
+		}
+		out[key] = vs
+	}
+	return out, nil
+}
+
+// A Query set by the mutator holds values for a URL it could not patch, so
+// it is shown as written.
 func queryValues(req *Request) (query.Values, error) {
 	if req == nil {
 		return query.Values{}, nil
@@ -164,7 +213,11 @@ func queryValues(req *Request) (query.Values, error) {
 	if req.Query != nil {
 		return req.Query, nil
 	}
-	return targetQuery(req.URL)
+	url, err := req.url()
+	if err != nil {
+		return nil, err
+	}
+	return targetQuery(url)
 }
 
 func targetQuery(raw string) (query.Values, error) {

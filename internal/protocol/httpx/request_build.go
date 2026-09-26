@@ -131,17 +131,15 @@ func (c *Client) buildHTTPRequest(
 		)
 	}
 
-	urlPos := req.URLPos()
-	if urlOverride != "" {
-		urlPos = diag.Pos{}
+	scheme := requestSchemeOf(req)
+	var target string
+	var err error
+	if urlOverride != "" || req.Written.URL {
+		// The GraphQL GET URL is expanded already and a written URL is data.
+		target, err = resolveTarget(cmp.Or(urlOverride, req.URL), opts.BaseURL, resolver, scheme)
+	} else {
+		target, err = resolveRequestTarget(req.URL, opts.BaseURL, resolver, scheme, req.URLPos())
 	}
-	target, err := resolveRequestTarget(
-		cmp.Or(urlOverride, req.URL),
-		opts.BaseURL,
-		resolver,
-		requestSchemeOf(req),
-		urlPos,
-	)
 	if err != nil {
 		return nil, opts, err
 	}
@@ -163,7 +161,7 @@ func (c *Client) buildHTTPRequest(
 		for name, values := range req.Headers {
 			for _, value := range values {
 				finalValue := value
-				if resolver != nil {
+				if resolver != nil && !req.Written.Header(name, value) {
 					expanded, expandErr := resolver.ExpandTemplatesAt(value, req.HeaderPos(name, value))
 					if expandErr != nil {
 						op := "expand header " + name

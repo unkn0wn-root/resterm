@@ -45,7 +45,7 @@ func TestRunPreRequestScripts(t *testing.T) {
 	if out.Headers.Get("X-Test") != "1" {
 		t.Fatalf("expected header to be set")
 	}
-	if out.Query["user"] != "alice" {
+	if got := out.Query["user"]; got == nil || *got != "alice" {
 		t.Fatalf("expected query param to be set")
 	}
 	if token, _ := out.Variables.Get("token"); token != "abc" {

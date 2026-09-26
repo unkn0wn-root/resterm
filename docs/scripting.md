@@ -65,6 +65,18 @@ Objects:
 
 The `set*` helpers do not return a value, but their changes still apply to the outgoing request. `removeHeader` can also remove headers declared in the request itself.
 
+`getURL()` and `getHeader()` return values from the request file with variable references expanded, the same way `vars.get` returns them. Values set by the same script with `vars.set` are included. Dynamic helpers and `{{= ... }}` expressions stay unexpanded. If a reference is undefined, the call throws an error.
+
+Values passed to the `set*` helpers are data. They are sent as written. Templates in them are not expanded, and `@ path` lines in a body are not read. Only dynamic helpers such as `{{$uuid}}` are rendered. Build values from variables instead of writing template text:
+
+```http
+# @script pre-request
+> request.setHeader("Authorization", "Bearer " + vars.get("token"));
+> request.setURL(request.getURL() + "?debug=1");
+```
+
+A `{{= ... }}` expression read through `vars.get` or a getter and written back is sent as text. Compute the value in the script instead.
+
 All `@script pre-request` blocks for a request share the same state. Each block sees changes made by earlier blocks through `vars.get`, `vars.global.get`, `getURL`, `getMethod`, and `getHeader`. RTS pre-request blocks run before JavaScript blocks, so their changes are visible too. Query parameters are different because they are merged into the URL after the scripts finish. So `getURL` does not show changes made by `setQueryParam`.
 
 ## Test scripts (`@script test`)

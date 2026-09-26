@@ -421,7 +421,36 @@ func (x *execCtx) currentGlobals() vars.Globals {
 }
 
 func (x *execCtx) evalScope(vv map[string]string) evalScope {
-	return newEvalScope(vv, x.currentGlobals())
+	sc := newEvalScope(vv, x.currentGlobals())
+	sc.expand = x.scriptExpand
+	return sc
+}
+
+// scriptExpand renders an authored request value as a script reads it. Each
+// {{name}} reads as vars.get does, including the writes in set. Helpers and
+// expressions stay as written, as they do in vars.get.
+func (x *execCtx) scriptExpand(text string, set vars.NameMap[string]) (string, error) {
+	if !vars.HasPlaceholder(text) {
+		return text, nil
+	}
+	run := x.run
+	if set.Len() > 0 {
+		run.scripts = run.scripts.Clone()
+		run.scripts.Merge(set)
+	}
+	plan := x.eng.buildVariablePlan(varSources{
+		doc:     x.doc,
+		req:     x.req,
+		env:     x.env,
+		globals: x.storeG,
+		sec:     keepSecrets,
+		run:     run,
+	})
+	res := vars.NewResolver(plan.providers()...)
+	if x.preview() {
+		res = res.Lenient()
+	}
+	return res.ExpandTemplatesDeferred(text)
 }
 
 func (x *execCtx) captureVariables() map[string]string {
@@ -699,6 +728,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		BaseDir:   x.opts.BaseDir,
 		Context:   x.sendCtx,
 		Secrets:   x.secrets,
+		Expand:    x.scriptExpand,
 	})
 	if err != nil {
 		x.exp.stage(

@@ -68,7 +68,7 @@ func (r *Runner) RunPreRequest(
 
 	result := prerequest.Output{
 		Headers: make(http.Header),
-		Query:   make(map[string]string),
+		Query:   make(map[string]*string),
 	}
 	// Keep one API for the whole batch so each block sees earlier changes.
 	api := newPreRequestAPI(&result, input)
@@ -318,14 +318,18 @@ type preRequestAPI struct {
 	variables map[string]string
 	globals   vars.Globals
 	secrets   *vars.Secrets
+	expand    func(string) (string, error)
 }
 
 // Scripts read from a copy that is updated after each mutation. Query parameters
 // are excluded because they are merged into the URL after the scripts finish.
+// written marks values set at run time. Getters expand the others, which are
+// authored templates.
 type requestView struct {
 	method  string
 	url     string
 	headers http.Header
+	written restfile.Written
 }
 
 func newPreRequestAPI(output *prerequest.Output, input prerequest.Input) *preRequestAPI {
@@ -335,48 +339,70 @@ func newPreRequestAPI(output *prerequest.Output, input prerequest.Input) *preReq
 		variables: jsVarsView(input.Variables),
 		globals:   input.Globals.Clone(),
 		secrets:   input.Secrets,
+		expand:    input.Expand.Bind(&output.Variables),
 	}
 }
 
 func newRequestView(req *restfile.Request) requestView {
+	v := requestView{headers: make(http.Header)}
 	if req == nil {
-		return requestView{headers: make(http.Header)}
+		return v
 	}
-	headers := req.Headers.Clone()
-	if headers == nil {
-		headers = make(http.Header)
+	v.method, v.url, v.written = req.Method, req.URL, req.Written.Clone()
+	maps.Copy(v.headers, req.Headers.Clone())
+	return v
+}
+
+func (api *preRequestAPI) render(fn, text string) (string, error) {
+	if api.expand == nil {
+		return text, nil
 	}
-	return requestView{method: req.Method, url: req.URL, headers: headers}
+	out, err := api.expand(text)
+	if err != nil {
+		return "", fmt.Errorf("request.%s: %w", fn, err)
+	}
+	return out, nil
 }
 
 func (api *preRequestAPI) requestAPI() map[string]any {
 	return map[string]any{
-		"getURL": func() string {
-			return api.request.url
+		"getURL": func() (string, error) {
+			if api.request.written.URL {
+				return api.request.url, nil
+			}
+			return api.render("getURL", api.request.url)
 		},
 		"getMethod": func() string {
 			return api.request.method
 		},
-		"getHeader": func(name string) string {
-			return api.request.headers.Get(name)
+		"getHeader": func(name string) (string, error) {
+			v := api.request.headers.Get(name)
+			if api.request.written.Header(name, v) {
+				return v, nil
+			}
+			return api.render("getHeader", v)
 		},
 		"setHeader": func(name, value string) {
 			api.output.SetHeader(name, value)
 			api.request.headers.Set(name, value)
+			api.request.written.SetHeader(name, value)
 		},
 		"addHeader": func(name, value string) {
 			api.output.AddHeader(name, value)
 			api.request.headers.Add(name, value)
+			api.request.written.AddHeader(name, value)
 		},
 		"removeHeader": func(name string) {
 			api.output.DelHeader(name)
 			api.request.headers.Del(name)
+			api.request.written.Headers.Del(name)
 		},
 		"setQueryParam": api.output.SetQuery,
 		"setURL": func(url string) {
 			val := strings.TrimSpace(url)
 			api.output.URL = &val
 			api.request.url = val
+			api.request.written.URL = true
 		},
 		"setMethod": func(method string) {
 			val := util.UpperTrim(method)

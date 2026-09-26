@@ -1036,7 +1036,7 @@ func AuthSecretValues(auth *restfile.AuthSpec, res *vars.Resolver) []string {
 		if val == "" {
 			return ""
 		}
-		if res == nil {
+		if res == nil || auth.Written {
 			return val
 		}
 		out, err := res.ExpandTemplates(val)
@@ -1136,7 +1136,7 @@ func (e *Engine) prepareExplainAuthPreview(
 				},
 			}, nil
 		}
-		ensureReqHeaders(req).Set(out.Header, out.Value)
+		req.SetWrittenHeader(out.Header, out.Value)
 		return explainAuthPreviewResult{
 			status:       xplain.StageOK,
 			summary:      xplain.SummaryAuthPrepared,
@@ -1182,7 +1182,7 @@ func (e *Engine) prepareExplainAuthPreview(
 			}, nil
 		}
 		val := oauthHeaderValue(hdr, tok)
-		ensureReqHeaders(req).Set(hdr, val)
+		req.SetWrittenHeader(hdr, val)
 		return explainAuthPreviewResult{
 			status:  xplain.StageOK,
 			summary: xplain.SummaryAuthPrepared,

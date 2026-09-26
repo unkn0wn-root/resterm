@@ -200,16 +200,6 @@ func grpcMetadataPresent(req *restfile.Request, name string) bool {
 	return false
 }
 
-func ensureReqHeaders(req *restfile.Request) http.Header {
-	if req == nil {
-		return nil
-	}
-	if req.Headers == nil {
-		req.Headers = make(http.Header)
-	}
-	return req.Headers
-}
-
 // applyGRPCAuth resolves auth into request headers before the gRPC client runs.
 // Keeping this in the engine lets InjectedAuthSecrets register the values for
 // redaction.
@@ -241,12 +231,12 @@ func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
 	return nil
 }
 
+// Auth values are resolved already, so they are written as data.
 func setRequestHeaderIfMissing(req *restfile.Request, name, value string) bool {
-	headers := ensureReqHeaders(req)
-	if headers == nil || requestHeaderPresent(req, name) {
+	if requestHeaderPresent(req, name) {
 		return false
 	}
-	headers.Set(name, value)
+	req.SetWrittenHeader(name, value)
 	return true
 }
 
@@ -573,7 +563,7 @@ func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]
 }
 
 func expandCommandAuthArgv(argv []string, auth *restfile.AuthSpec, res *vars.Resolver) error {
-	if res == nil {
+	if res == nil || auth.Written {
 		return nil
 	}
 	var firstErr error
@@ -593,7 +583,7 @@ func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, key, raw strin
 	if strings.TrimSpace(raw) == "" {
 		return "", nil
 	}
-	if res == nil {
+	if res == nil || auth.Written {
 		return strings.TrimSpace(raw), nil
 	}
 	value, err := res.ExpandTemplates(raw)
