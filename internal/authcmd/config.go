@@ -1,7 +1,6 @@
 package authcmd
 
 import (
-	"slices"
 	"strings"
 	"time"
 )
@@ -42,9 +41,26 @@ type cacheSeed struct {
 	ttl     time.Duration
 }
 
+// Profile identifies a named auth definition and the file that contains it.
+type Profile struct {
+	Path string
+	Name string
+}
+
+func (p Profile) named() bool {
+	return p.Name != ""
+}
+
+// Source is where a command auth is defined. The command runs in Dir.
+type Source struct {
+	Dir     string
+	Profile Profile
+}
+
 type Config struct {
 	Argv          []string
 	Dir           string
+	Profile       Profile
 	Format        Format
 	Header        string
 	Scheme        string
@@ -134,6 +150,10 @@ func (cfg Config) hasCacheKey() bool {
 	return cfg.CacheKey != ""
 }
 
+func (cfg Config) cached() bool {
+	return cfg.hasCacheKey() || cfg.Profile.named()
+}
+
 func (cfg Config) timeoutFor(base time.Duration) time.Duration {
 	if cfg.Timeout > 0 && (base <= 0 || cfg.Timeout < base) {
 		return cfg.Timeout
@@ -175,27 +195,27 @@ func (seed cacheSeed) apply(cfg Config) Config {
 	return cfg
 }
 
+var seedFields = []struct {
+	name  string
+	value func(cacheSeed) string
+}{
+	{"argv", func(s cacheSeed) string { return joinCacheParts(s.command.Argv...) }},
+	{"dir", func(s cacheSeed) string { return s.command.Dir }},
+	{"format", func(s cacheSeed) string { return string(effectiveFormatValue(s.extract.Format)) }},
+	{"token_path", func(s cacheSeed) string { return s.extract.TokenPath }},
+	{"type_path", func(s cacheSeed) string { return s.extract.TypePath }},
+	{"expiry_path", func(s cacheSeed) string { return s.extract.ExpiryPath }},
+	{"expires_in_path", func(s cacheSeed) string { return s.extract.ExpiresInPath }},
+	{"ttl", func(s cacheSeed) string { return s.ttl.String() }},
+}
+
 func (seed cacheSeed) diff(other cacheSeed) (string, bool) {
-	switch {
-	case !slices.Equal(seed.command.Argv, other.command.Argv):
-		return "argv", false
-	case seed.command.Dir != other.command.Dir:
-		return "dir", false
-	case effectiveFormatValue(seed.extract.Format) != effectiveFormatValue(other.extract.Format):
-		return "format", false
-	case seed.extract.TokenPath != other.extract.TokenPath:
-		return "token_path", false
-	case seed.extract.TypePath != other.extract.TypePath:
-		return "type_path", false
-	case seed.extract.ExpiryPath != other.extract.ExpiryPath:
-		return "expiry_path", false
-	case seed.extract.ExpiresInPath != other.extract.ExpiresInPath:
-		return "expires_in_path", false
-	case seed.ttl != other.ttl:
-		return "ttl", false
-	default:
-		return "", true
+	for _, f := range seedFields {
+		if f.value(seed) != f.value(other) {
+			return f.name, false
+		}
 	}
+	return "", true
 }
 
 func (cfg commandConfig) inheritedFrom(base commandConfig) commandConfig {

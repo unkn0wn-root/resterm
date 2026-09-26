@@ -210,7 +210,36 @@ func TestParseErrors(t *testing.T) {
 				"argv": `["gh","auth","token"]`,
 				"ttl":  "5m",
 			},
-			want: "ttl requires cache_key",
+			want: "ttl requires cache_key or a named definition",
+		},
+		{
+			name: "cmd and argv together",
+			params: map[string]string{
+				"cmd":  "gh auth token",
+				"argv": `["gh","auth","token"]`,
+			},
+			want: "accepts cmd or argv, not both",
+		},
+		{
+			name: "cmd with unterminated quote",
+			params: map[string]string{
+				"cmd": `gh auth "token`,
+			},
+			want: `cmd has an unterminated " quote`,
+		},
+		{
+			name: "cmd with empty program",
+			params: map[string]string{
+				"cmd": `'' auth`,
+			},
+			want: "argv[0] must not be empty",
+		},
+		{
+			name: "cmd rejects shell",
+			params: map[string]string{
+				"cmd": `sh -c "gh auth token"`,
+			},
+			want: "does not allow shell front-end",
 		},
 		{
 			name: "invalid ttl",

@@ -260,9 +260,10 @@ func (m *Manager) prepareConfig(env string, cfg Config) (string, Config, error) 
 
 	cfg = cfg.normalize()
 	entryKey := cacheEntryKey(env, cfg)
-	if entryKey == "" {
+	// Only cache_key entries inherit missing settings from an earlier request.
+	if !cfg.hasCacheKey() {
 		cfg, err = Finalize(cfg)
-		return "", cfg, err
+		return entryKey, cfg, err
 	}
 
 	ent, ok := m.lookupCacheRecord(entryKey)

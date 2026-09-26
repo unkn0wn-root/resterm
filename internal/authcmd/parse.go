@@ -145,8 +145,8 @@ func validateParsed(cfg Config) error {
 	if cfg.Timeout < 0 {
 		return diag.New(diag.ClassAuth, "timeout must not be negative")
 	}
-	if cfg.TTL > 0 && !cfg.hasCacheKey() {
-		return diag.New(diag.ClassAuth, "ttl requires cache_key")
+	if cfg.TTL > 0 && !cfg.cached() {
+		return diag.New(diag.ClassAuth, "ttl requires cache_key or a named definition")
 	}
 	return nil
 }
