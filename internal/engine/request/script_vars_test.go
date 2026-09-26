@@ -194,8 +194,8 @@ func TestScriptsReadNestedAuthoredValuesExpanded(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "nested.http",
 		Variables: []restfile.Variable{
-			{Name: "nested.base", Value: "inner"},
-			{Name: "nested.derived", Value: "{{nested.base}}"},
+			{Name: "nested.base", Value: "inner", Authored: true},
+			{Name: "nested.derived", Value: "{{nested.base}}", Authored: true},
 		},
 	}
 	req := &restfile.Request{

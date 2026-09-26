@@ -128,6 +128,42 @@ GET http://example.test
 	}
 }
 
+func TestPreRequestScriptsReadReferencesExpandedAndHelpersDeferred(t *testing.T) {
+	doc, req := parseDoc(t, `# @file base.part alpha
+### one
+# @name one
+# @request combined {{base.part}}-{{$randomInt(7, 7)}}
+GET http://example.test
+`)
+	req.Metadata.Scripts = append(req.Metadata.Scripts,
+		rtsPre(`request.setHeader("X-RTS", str(vars.get("combined") == "alpha-{{$randomInt(7, 7)}}"))`),
+		jsPre(`request.setHeader("X-JS", String(vars.get("combined") === "alpha-{{$randomInt(7, 7)}}"));`),
+	)
+
+	sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
+	for _, name := range []string{"X-RTS", "X-JS"} {
+		if got := sent.wire.Header.Get(name); got != "true" {
+			t.Fatalf("%s = %q, want the script to read the reference expanded and the helper deferred", name, got)
+		}
+	}
+}
+
+func TestCaptureOfMixedValueMatchesTheSentValue(t *testing.T) {
+	doc, req := parseDoc(t, `# @file base.part alpha
+### one
+# @name one
+# @request combined {{base.part}}-{{$uuid}}
+# @capture request echo = vars.get("combined")
+GET http://example.test
+X-Combined: {{combined}}
+`)
+
+	sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
+	if got, want := executedVar(t, sent.executed, "echo"), sent.wire.Header.Get("X-Combined"); got != want {
+		t.Fatalf("echo = %q, want the sent value %q", got, want)
+	}
+}
+
 // Templates see the @const. vars skips it and reads the request value.
 func TestExprVarsKeepConstantsOut(t *testing.T) {
 	const decl = `# @const id fixed

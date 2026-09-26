@@ -191,10 +191,13 @@ func (p variablePlan) scriptValues() (map[string]string, vars.NameMap[struct{}])
 				if res == nil {
 					res = vars.NewResolver(p.providers()...)
 				}
-				// Leave values that need runtime data or the expression evaluator unchanged.
-				if expanded, err := res.ExpandTemplatesStatic(val.Text); err == nil {
+				expanded, err := res.ExpandTemplatesDeferred(val.Text)
+				if err == nil {
 					val.Text = expanded
-				} else if p.sec == keepSecrets {
+				}
+				// Helpers and expressions run with the request, so an expression
+				// that reads this name must get the value that was sent.
+				if p.sec == keepSecrets && (err != nil || vars.HasPlaceholder(expanded)) {
 					pending.Set(name, struct{}{})
 				}
 			}
@@ -311,7 +314,7 @@ func entries(source variableSource, src varSources, refs *vars.EnvRefs) []variab
 
 func declaredValue(refs *vars.EnvRefs, authored bool, text string) vars.Value {
 	if !authored {
-		return vars.Value{Text: text}
+		return vars.Value{Text: text, Final: true}
 	}
 	return refs.ResolveDeclared(text)
 }

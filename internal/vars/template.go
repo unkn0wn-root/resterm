@@ -30,6 +30,11 @@ func HasPlaceholder(input string) bool {
 	return strings.Contains(input, "{{")
 }
 
+// Placeholders returns the start and end offsets of each placeholder in input.
+func Placeholders(input string) [][]int {
+	return templateVarPattern.FindAllStringIndex(input, -1)
+}
+
 func CompileTemplate(input string) Template {
 	ms := templateVarPattern.FindAllStringSubmatchIndex(input, -1)
 	if len(ms) == 0 {
@@ -103,17 +108,17 @@ func (e *PlaceholderError) Diagnostic() diag.Report {
 // the first structural error (cycle, depth, expression) if any occurred,
 // otherwise the first undefined variable.
 func (t Template) Render(r *Resolver) (string, error) {
-	return t.render(r, r.exprPos, nil, true, true, nil)
+	return t.render(r, r.exprPos, nil, expandAll, nil)
 }
 
 func (t Template) render(
 	r *Resolver,
 	pos diag.Pos,
 	locate Locator,
-	allowDynamic, allowExpr bool,
+	mode expandMode,
 	st *expandState,
 ) (string, error) {
-	result, err := t.renderResult(r, pos, locate, allowDynamic, allowExpr, st)
+	result, err := t.renderResult(r, pos, locate, mode, st)
 	return result.Value, err
 }
 
@@ -121,7 +126,7 @@ func (t Template) renderResult(
 	r *Resolver,
 	pos diag.Pos,
 	locate Locator,
-	allowDynamic, allowExpr bool,
+	mode expandMode,
 	st *expandState,
 ) (Expansion, error) {
 	// A lenient root render (st == nil) suppresses only undefined variables,
@@ -143,7 +148,10 @@ func (t Template) renderResult(
 		if locate != nil && seg.name[0] == '=' {
 			at = t.exprPos(seg, off, pos, locate)
 		}
-		value, err := r.resolveName(seg.name, at, allowDynamic, allowExpr, st)
+		value, err := r.resolveName(seg.name, at, mode, st)
+		if errors.Is(err, errDeferred) {
+			return seg.text
+		}
 		if err != nil {
 			undefined := errors.Is(err, ErrUndefinedVariable)
 			if undefined {
