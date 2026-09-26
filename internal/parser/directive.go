@@ -94,7 +94,7 @@ func parseApplyUses(raw string) ([]string, error) {
 			return nil, fmt.Errorf("@apply token %q must be use=<name>", p)
 		}
 		n := strings.TrimSpace(directive.TrimQuotes(v))
-		if !validPatchName(n) {
+		if !validProfileName(n) {
 			return nil, fmt.Errorf("@apply use name %q is invalid", n)
 		}
 		us = append(us, n)
@@ -116,7 +116,7 @@ func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
 	if !ok {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch scope must be file or global")
 	}
-	if !validPatchName(n) {
+	if !validProfileName(n) {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch name %q is invalid", n)
 	}
 	if ex == "" {
@@ -146,7 +146,7 @@ func parsePatchScope(tok string) (directive.Scope, bool) {
 	return scope, true
 }
 
-func validPatchName(n string) bool {
+func validProfileName(n string) bool {
 	n = strings.TrimSpace(n)
 	if n == "" {
 		return false
@@ -300,9 +300,32 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, nil
 	}
 
+	if namesProfiles(fields[0]) {
+		if dir.Scope != directive.ScopeRequest {
+			return dir, fmt.Errorf("@auth %s scope does not support use=", dir.Scope.String())
+		}
+		spec, err := parseAuthUse(fields)
+		dir.Spec = spec
+		return dir, err
+	}
+
+	dir.Name, fields = cutAuthName(fields)
+	if dir.Name != "" {
+		if dir.Scope == directive.ScopeRequest {
+			return dir, fmt.Errorf("@auth %s scope does not support a profile name", dir.Scope.String())
+		}
+		if !validProfileName(dir.Name) {
+			return dir, fmt.Errorf("@auth profile name %q is invalid", dir.Name)
+		}
+	}
+
 	spec, err := parseAuthSpec(fields)
 	if err != nil {
 		return dir, err
+	}
+	// A named definition needs its own command; it cannot rely on a prior cache entry.
+	if dir.Name != "" && spec != nil && spec.Params["cmd"] == "" && spec.Params["argv"] == "" {
+		return dir, fmt.Errorf("@auth command %s requires cmd or argv", dir.Name)
 	}
 	if spec == nil {
 		if explicitScope {
@@ -312,6 +335,15 @@ func parseAuthDirective(rest string) (authDirective, error) {
 	}
 	dir.Spec = spec
 	return dir, nil
+}
+
+func cutAuthName(fields []string) (string, []string) {
+	if len(fields) < 2 ||
+		restfile.AuthKind(fields[0]).Canonical() != restfile.AuthCommand ||
+		strings.Contains(fields[1], "=") {
+		return "", fields
+	}
+	return fields[1], append([]string{fields[0]}, fields[2:]...)
 }
 
 // Reject bare words so an unquoted cmd=gh auth token cannot silently run gh.
@@ -325,6 +357,34 @@ func authOptionFields(fields []string) (directive.Options, error) {
 		}
 	}
 	return directive.OptionFields(directive.Auth, fields)
+}
+
+func parseAuthUse(fields []string) (*restfile.AuthSpec, error) {
+	opts, err := authOptionFields(fields)
+	if err != nil {
+		return nil, err
+	}
+	name := opts.Pop("use")
+	switch {
+	case name == "":
+		return nil, errors.New("@auth use= requires a profile name")
+	case !validProfileName(name):
+		return nil, fmt.Errorf("@auth use name %q is invalid", name)
+	}
+	params := make(map[string]string)
+	for _, key := range restfile.AuthUseParams {
+		if val := opts.Pop(key); val != "" {
+			params[key] = val
+		}
+	}
+	if opts.Len() > 0 {
+		return nil, fmt.Errorf(
+			"@auth use= accepts only %s; set %s on the definition",
+			strings.Join(restfile.AuthUseParams, ", "),
+			strings.Join(opts.Keys(), ", "),
+		)
+	}
+	return &restfile.AuthSpec{Use: name, Params: params}, nil
 }
 
 // Fields arrive decoded. Rejoining them loses the boundary around a quoted

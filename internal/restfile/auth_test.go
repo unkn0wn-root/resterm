@@ -1,6 +1,9 @@
 package restfile
 
-import "testing"
+import (
+	"maps"
+	"testing"
+)
 
 func TestOriginFormats(t *testing.T) {
 	cases := []struct {
@@ -24,5 +27,38 @@ func TestOriginFormats(t *testing.T) {
 		if tc.got != tc.want {
 			t.Fatalf("%s: got %q, want %q", tc.name, tc.got, tc.want)
 		}
+	}
+}
+
+func TestAuthSpecResolveLaysOverridesOnProfile(t *testing.T) {
+	prof := AuthProfile{
+		Name: "gh",
+		Spec: AuthSpec{
+			Type:       AuthCommand,
+			Params:     map[string]string{"cmd": "gh auth token", "header": "X-Token", "ttl": "5m"},
+			SourcePath: "/ws/defs.http",
+			Line:       2,
+		},
+	}
+	ref := &AuthSpec{
+		Use:        "GH",
+		Params:     map[string]string{"header": "Authorization"},
+		SourcePath: "/ws/api.http",
+		Line:       9,
+	}
+
+	got := ref.Resolve(prof)
+	want := map[string]string{"cmd": "gh auth token", "header": "Authorization", "ttl": "5m"}
+	if !maps.Equal(got.Params, want) {
+		t.Fatalf("params = %v, want %v", got.Params, want)
+	}
+	if got.Kind() != AuthCommand || got.Use != "" || got.Profile != "gh" {
+		t.Fatalf("expected a resolved command spec for profile gh, got %+v", got)
+	}
+	if got.Origin() != "/ws/defs.http:2" {
+		t.Fatalf("expected the definition's origin, got %q", got.Origin())
+	}
+	if prof.Spec.Params["header"] != "X-Token" {
+		t.Fatalf("resolve must not change the profile, got %v", prof.Spec.Params)
 	}
 }

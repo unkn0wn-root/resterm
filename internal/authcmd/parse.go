@@ -20,8 +20,8 @@ var shellNames = map[string]struct{}{
 	"zsh":        {},
 }
 
-func Parse(params map[string]string, dir string) (Config, error) {
-	cfg := Config{Dir: dir}
+func Parse(params map[string]string, src Source) (Config, error) {
+	cfg := Config{Dir: src.Dir, Profile: src.Profile}
 
 	var err error
 	if cfg.Argv, err = parseCommand(params); err != nil {

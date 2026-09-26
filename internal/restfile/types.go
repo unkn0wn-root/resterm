@@ -48,11 +48,15 @@ type Constant struct {
 type AuthSpec struct {
 	Type   AuthKind
 	Params map[string]string
+	// Use names the definition this request refers to. Params holds only
+	// overrides until the definition is resolved.
+	Use string
+	// Profile names the definition used to resolve this request's auth.
+	Profile string
 	// Rejected holds the parse error so invalid auth blocks the request.
 	Rejected string
-	// SourcePath and Line track where this auth was defined so errors can point
-	// at the definition, and relative command auth execution stays anchored to
-	// the auth definition, not the consuming request.
+	// SourcePath and Line locate errors. SourcePath also sets the command's
+	// working directory to the definition's directory.
 	SourcePath string
 	Line       int
 }

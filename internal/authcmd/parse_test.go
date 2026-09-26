@@ -135,7 +135,7 @@ func TestParse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			cfg, err := Parse(tt.params, "/tmp/project")
+			cfg, err := Parse(tt.params, Source{Dir: "/tmp/project"})
 			if err != nil {
 				t.Fatalf("Parse() error = %v", err)
 			}
@@ -277,7 +277,7 @@ func TestParseErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := Parse(tt.params, "")
+			_, err := Parse(tt.params, Source{})
 			if tt.want == "" {
 				if err != nil {
 					t.Fatalf("Parse() unexpected error = %v", err)
@@ -291,5 +291,21 @@ func TestParseErrors(t *testing.T) {
 				t.Fatalf("Parse() error = %q, want substring %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseNamedDefinitionAllowsTTL(t *testing.T) {
+	t.Parallel()
+
+	src := Source{Dir: "/tmp/project", Profile: Profile{Path: "/tmp/project/auth.http", Name: "gcloud"}}
+	cfg, err := Parse(map[string]string{"cmd": "gcloud auth print-access-token", "ttl": "50m"}, src)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if cfg.TTL != 50*time.Minute {
+		t.Fatalf("expected ttl 50m, got %s", cfg.TTL)
+	}
+	if cfg.Profile != src.Profile {
+		t.Fatalf("expected profile %+v, got %+v", src.Profile, cfg.Profile)
 	}
 }

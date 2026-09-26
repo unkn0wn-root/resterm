@@ -71,10 +71,20 @@ func (e *Engine) ResolveInheritedAuth(doc *restfile.Document, req *restfile.Requ
 	}
 }
 
+// resolveAuth resolves named auth and rejects invalid auth after patches and
+// scripts have had a chance to replace it.
 func (e *Engine) resolveAuth(doc *restfile.Document, req *restfile.Request) error {
 	auth := requestAuth(req)
 	if auth == nil {
 		return nil
+	}
+	if auth.Use != "" {
+		pf, ok := e.registryIndex().AuthNamed(doc, auth.Use)
+		if !ok {
+			return diag.New(diag.ClassAuth, withOrigin(fmt.Sprintf("@auth use=%q not found", auth.Use), auth))
+		}
+		auth = auth.Resolve(*pf)
+		req.Metadata.Auth = auth
 	}
 	if auth.Rejected != "" {
 		return diag.New(diag.ClassAuth, withOrigin(auth.Rejected, auth))
@@ -326,7 +336,7 @@ func (e *Engine) commandAuthHeader(
 	if err != nil {
 		return "", false
 	}
-	cfg, err := authcmd.Parse(pm, e.cmdDir(doc, auth))
+	cfg, err := authcmd.Parse(pm, e.cmdSource(doc, auth))
 	if err != nil {
 		return "", false
 	}
@@ -433,8 +443,7 @@ func (e *Engine) BuildCommandAuthConfig(
 		return cfg, perr
 	}
 
-	dir := e.cmdDir(doc, auth)
-	out, err := authcmd.Parse(pm, dir)
+	out, err := authcmd.Parse(pm, e.cmdSource(doc, auth))
 	if err != nil {
 		if perr != nil {
 			return cfg, perr
@@ -465,6 +474,14 @@ func (e *Engine) cmdScope(
 		}
 	}
 	return authcmd.Scope(env.Scope(), ws)
+}
+
+func (e *Engine) cmdSource(doc *restfile.Document, auth *restfile.AuthSpec) authcmd.Source {
+	src := authcmd.Source{Dir: e.cmdDir(doc, auth)}
+	if auth.Profile != "" {
+		src.Profile = authcmd.Profile{Path: e.srcPath(doc, auth), Name: auth.Profile}
+	}
+	return src
 }
 
 func (e *Engine) cmdDir(doc *restfile.Document, auth *restfile.AuthSpec) string {
