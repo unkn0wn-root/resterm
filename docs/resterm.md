@@ -1697,7 +1697,8 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
 | Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
 | API key | `# @auth apikey header X-API-Key {{key}}` | `placement` can be `header` or `query`. Defaults to `X-API-Key` header if name omitted. |
 | Custom header | `# @auth Authorization CustomValue` | Arbitrary header/value pair. |
-| Command | `# @auth command argv=["gh","auth","token"]` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
+| Command | `# @auth command cmd="gh auth token"` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
+| Named command | `# @auth use=gh` | Uses a command auth defined once with `@auth file` or `@auth global` and a name. |
 | OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Built-in token acquisition and caching (client_credentials/password/authorization_code + PKCE). |
 
 Scopes:
@@ -1706,7 +1707,9 @@ Scopes:
 - `@auth request ...` is an explicit request-scoped form.
 - `@auth file ...` defines inherited auth for later requests in the same document.
 - `@auth global ...` defines workspace-global inherited auth; file-scoped auth wins when both exist.
+- `@auth file command <name> ...` and `@auth global command <name> ...` define a named command auth. A named definition needs `cmd` or `argv` and is not inherited. Requests pick it with `@auth use=<name>`.
 - `@auth none` disables inherited auth for the current request.
+- An `@auth` line with an error is not skipped. A request that would take its auth from that line, directly, through inheritance, or through `use=`, fails instead of going out with other auth or none.
 
 #### OAuth 2.0 parameters
 
@@ -1760,7 +1763,8 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 
 | Parameter | Required | Default | Description |
 | --- | --- | --- | --- |
-| `argv` | Yes for the first use of a `cache_key` | - | JSON array of command arguments. Bare JSON works, for example `argv=["gh","auth","token"]`. Outer single quotes are also accepted and are useful when you want to preserve whitespace exactly, for example `argv='["gh", "auth", "token"]'`. Once a `cache_key` has been seeded, follow-up directives may omit `argv` and reuse the stored command config. |
+| `cmd` | One of `cmd` or `argv` | - | Command line, split into arguments like a shell would split it, but no shell runs. See [Command lines](#command-lines). |
+| `argv` | One of `cmd` or `argv` | - | JSON array of command arguments. Bare JSON works, for example `argv=["gh","auth","token"]`. Outer single quotes are also accepted and are useful when you want to preserve whitespace exactly, for example `argv='["gh", "auth", "token"]'`. |
 | `format` | No | `text` | Parse `stdout` as `text` or `json`. |
 | `header` | No | `Authorization` | Target header name. |
 | `scheme` | No | auto | Explicit prefix for the final header value. When omitted, `Authorization` defaults to `Bearer`, while custom headers get the raw token. |
@@ -1768,15 +1772,32 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 | `type_path` | No | - | Optional token type for `Authorization` headers when `scheme` is omitted. |
 | `expiry_path` | No | - | Optional absolute expiry value (RFC3339, RFC3339Nano, Unix seconds, or Unix milliseconds). |
 | `expires_in_path` | No | - | Optional relative lifetime in seconds. |
-| `cache_key` | No | - | Enables in-memory cache reuse per environment and names a reusable command-auth slot. Seed it once with the full command/extraction config, then reuse it with `cache_key` only on later requests. Reusing the same `cache_key` with different command/extraction settings is rejected. |
-| `ttl` | No | - | Cache fallback TTL when the command output has no expiry fields. Requires `cache_key`. |
+| `ttl` | No | - | How long a cached token stays valid when the command output has no expiry fields. Needs a named definition or `cache_key`. |
+| `cache_key` | No | - | Names a command-auth slot shared by every directive that uses the same key. Seed it once with the full command, then reuse it with `cache_key` only. Named definitions are simpler for new files. |
 | `timeout` | No | request timeout | Per-command timeout, bounded by the request timeout. |
+
+`@auth use=<name>` accepts only `header`, `scheme`, and `timeout`. Everything else belongs to the definition.
+
+#### Command lines
+
+`cmd` splits its value into arguments and runs the first one directly. Nothing goes through a shell, so pipes, redirects, globbing, `$VAR`, and `$(...)` are passed to the command as plain text.
+
+- Spaces and tabs separate arguments.
+- Single quotes keep everything inside them as written.
+- Double quotes group words and accept `\"` and `\\`.
+- Outside quotes, a backslash escapes a space, a quote, or another backslash. Any other backslash stays, so `C:\tools\gh.exe` works unquoted.
+- A `{{...}}` template stays in one argument even when it contains spaces. Templates expand after the split, so a value with spaces never becomes two arguments.
+
+Wrap `cmd` in the quote kind the command line does not use: `cmd="gcloud auth print-access-token --account 'me@example.com'"` or `cmd='mycli --name "Ada Lovelace"'`. Without quotes, `cmd=gh auth token` is an error rather than a run of `gh` alone, and so is a quote left open.
 
 #### Command auth behavior
 
-- Resterm runs `@auth command` without a shell. Pipes, redirects, globbing, and shell interpolation are intentionally not supported.
+- Resterm runs `@auth command` without a shell. Shell front ends such as `sh`, `bash`, `zsh`, `cmd`, and `pwsh` are rejected.
+- The command runs from the directory of the file that defines it, so a global definition behaves the same from every request file.
+- A named definition caches its token for the session, per environment and workspace. `ttl`, `expiry_path`, or `expires_in_path` make it expire sooner. Editing the definition runs the command again. `resterm run --persist-auth` keeps the cache between runs.
+- An unnamed definition without `cache_key` runs the command for every request.
 - With `cache_key`, the first full directive seeds a reusable command-auth config for that environment. Later directives can use only `cache_key`; empty fields inherit from the seeded config.
-- Reusing the same `cache_key` with different acquisition settings (`argv`, `format`, JSON paths, `ttl`, and related source fields) fails fast. `header`, `scheme`, and `timeout` can still vary per request.
+- Reusing the same `cache_key` with different acquisition settings (`cmd` or `argv`, `format`, JSON paths, `ttl`, and related source fields) fails fast. `header`, `scheme`, and `timeout` can still vary per request.
 - Explain preview never executes commands. It only injects a header when a valid cached result already exists.
 - Text mode accepts exactly one non-empty line from `stdout`. Multi-line output fails with an error and should be switched to `format=json`.
 - Successful command output is treated as secret. Resterm redacts the raw token and the final injected header value in explain/history views.
@@ -1784,33 +1805,52 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 Examples:
 
 ```http
-### GitHub CLI token
 # Requires `gh auth login` to be done outside Resterm first.
-# @auth command argv=["gh","auth","token"] cache_key=github-cli
+# @auth global command gh cmd="gh auth token"
+
+### GitHub user
+# @auth use=gh
 GET https://api.github.com/user
 Accept: application/vnd.github+json
 X-GitHub-Api-Version: 2022-11-28
 ```
 
 ```http
-### Reuse a seeded command-auth slot
-# After the first request seeds github-cli, later requests can reference only the cache key.
-# @auth command cache_key=github-cli
-GET https://api.github.com/user/repos
-Accept: application/vnd.github+json
-X-GitHub-Api-Version: 2022-11-28
+### Short-lived access token
+# gcloud access tokens last one hour, so refresh a little earlier.
+# @auth file command gcloud cmd="gcloud auth print-access-token" ttl=50m
+
+### Projects
+# @auth use=gcloud
+GET https://cloudresourcemanager.googleapis.com/v1/projects
 ```
 
 ```http
 ### JSON command output
-# @auth command argv=["mycli","auth","print","--json"] format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
+# @auth command cmd="mycli auth print --json" format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
 GET https://example.com/projects
 ```
 
 ```http
-### Custom header with TTL fallback
-# @auth command argv=["aws","--profile","{{aws.profile}}","ecr","get-login-password"] header=X-Registry-Token cache_key=ecr ttl=10m
-GET https://example.com/registry
+### Amazon ECR registry API
+# The registry API takes the get-authorization-token value as Basic auth. It is valid for 12 hours.
+# @auth file command ecr cmd="aws ecr get-authorization-token --region {{aws.region}} --output text --query authorizationData[].authorizationToken" scheme=Basic ttl=11h
+
+### Image tags
+# @auth use=ecr
+GET https://{{aws.account}}.dkr.ecr.{{aws.region}}.amazonaws.com/v2/{{repo}}/tags/list
+```
+
+`aws ecr get-login-password` prints the decoded registry password for `docker login --username AWS`. It is not a header value, so use `get-authorization-token` for HTTP requests.
+
+```http
+### Seed and reuse a cache_key slot
+# @auth command cmd="gh auth token" cache_key=github-cli
+GET https://api.github.com/user
+
+### Later requests can name the key only
+# @auth command cache_key=github-cli
+GET https://api.github.com/user/repos
 ```
 
 ### Scripting (`@script`)
@@ -2184,12 +2224,20 @@ When `header` is set to something other than `Authorization`, Resterm injects ju
 
 ### Command-backed auth
 
-Use `@auth command` when your existing CLI already knows how reterive or print tokens.
-
-To apply command auth to every request in a file, define it once with file scope:
+If the token is already in an environment variable, you do not need a command. Read it once per file:
 
 ```http
-# @auth file command argv=["gh","auth","token"] cache_key=github-cli
+# @file token env:GH_TOKEN
+# @auth file bearer {{token}}
+
+### User
+GET https://api.github.com/user
+```
+
+Use `@auth command` when a CLI you already have can print the token, for example `gh auth token`. To apply it to every request in a file, define it with file scope:
+
+```http
+# @auth file command cmd="gh auth token"
 
 ### User
 GET https://api.github.com/user
@@ -2202,36 +2250,55 @@ GET https://api.github.com/user/repos
 GET https://api.github.com/rate_limit
 ```
 
-```http
-### Seed a reusable command-auth slot
-# @auth command argv=["gh","auth","token"] cache_key=github-cli
-GET https://api.github.com/user
-Accept: application/vnd.github+json
-```
+This runs the command for every request. To run it once and reuse the token, give the definition a name and pick it per request with `use=`. A global definition works from every file in the workspace:
 
 ```http
-### Reuse it later with cache_key only
-# @auth command cache_key=github-cli
-GET https://api.github.com/user/repos
-Accept: application/vnd.github+json
+# @auth global command gh cmd="gh auth token"
+
+### User
+# @auth use=gh
+GET https://api.github.com/user
+
+### Same token in a custom header
+# @auth use=gh header=X-GitHub-Token
+GET https://api.github.com/rate_limit
+```
+
+Any request can run first. The token stays cached for the session in each environment, and `ttl` refreshes tokens that expire:
+
+```http
+# @auth file command gcloud cmd="gcloud auth print-access-token" ttl=50m
 ```
 
 Structured output works too:
 
 ```http
 ### Internal CLI with JSON output
-# @auth command argv=["mycli","auth","print","--json"] format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
+# @auth command cmd="mycli auth print --json" format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
 GET https://api.example.com/projects
+```
+
+Older files share a token through `cache_key`. The first request seeds the slot and later requests name only the key. This still works, but the first request has to run before the others:
+
+```http
+### Seed a reusable command-auth slot
+# @auth command argv=["gh","auth","token"] cache_key=github-cli
+GET https://api.github.com/user
+
+### Reuse it later with cache_key only
+# @auth command cache_key=github-cli
+GET https://api.github.com/user/repos
 ```
 
 Key points:
 
 - Commands run during auth preparation, before the request is sent.
-- The command inherits Resterm's environment and runs with the request file's directory as its working directory.
+- The command inherits Resterm's environment and runs from the directory of the file that defines it.
 - Interactive login flows are not supported. Authenticate the CLI outside Resterm first, then use the non-interactive token-printing command.
 - Custom headers are supported with `header=...`; `Authorization` defaults to `Bearer <token>`.
-- Add `cache_key` when you want preview support and in-memory reuse across requests in the same environment.
-- `cache_key` now behaves like OAuth: it names a reusable slot. Seed it once, then reuse it. If the cache has not been seeded yet, Resterm errors with `@auth command requires argv (include it once per cache_key to seed the cache)`.
+- Explain preview shows the header only once a token is cached, so name the definition or add `cache_key` to preview it.
+- A `use=` name that no file or global definition has fails the request with the line that named it.
+- If a `cache_key` slot has not been seeded yet, Resterm errors with `@auth command requires cmd or argv (include it once per cache_key to seed the cache)`.
 
 ---
 
@@ -2705,7 +2772,7 @@ Explore `_examples/` for ready-to-run:
 - `grpc.http` - gRPC reflection and descriptor usage.
 - `k8s.http` - Kubernetes profile scopes, non-pod targets, named ports, and gRPC over `@k8s`.
 - `auth_scopes.http` - default auth inheritance across global/file/request scopes plus `@auth none`.
-- `auth_command.http` - command-backed auth with file-scoped defaults, `gh auth token`, patch-based reuse, JSON output parsing, and custom header examples.
+- `auth_command.http` - command-backed auth with file-scoped defaults, named definitions with `use=`, `gh auth token`, patch-based reuse, JSON output parsing, and custom header examples.
 - `oauth2.http` - manual capture vs using the `@auth oauth2` directive.
 - `transport.http` - timeout, proxy, and `@no-log` samples.
 - `compare.http` - demonstrates `@compare` directives and CLI-triggered multi-environment sweeps.

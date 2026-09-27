@@ -199,3 +199,40 @@ func TestIndexPatchNamedIsDeterministicAcrossFiles(t *testing.T) {
 		t.Fatalf("unexpected patch expression %q", got)
 	}
 }
+
+func TestIndexAuthNamed(t *testing.T) {
+	t.Parallel()
+
+	defs := parser.Parse("/tmp/defs.http", []byte(`# @auth global command gh cmd="gh auth token --hostname global"
+# @auth file command private cmd="private-token"
+# @auth global command other cmd="other-token"
+`))
+	use := parser.Parse("/tmp/use.http", []byte(`# @auth file command GH cmd="gh auth token --hostname file"
+# @auth file command cmd="default-token"
+`))
+	ix := New()
+	ix.Sync(defs)
+
+	for _, idx := range []*Index{ix, nil} {
+		pf, ok := idx.AuthNamed(use, "gh")
+		if !ok || pf.Spec.Params["cmd"] != "gh auth token --hostname file" {
+			t.Fatalf("expected the current file's profile to win, got %+v", pf)
+		}
+		if pf.Spec.SourcePath != "/tmp/use.http" {
+			t.Fatalf("expected the definition's path, got %q", pf.Spec.SourcePath)
+		}
+		if _, ok := idx.AuthNamed(use, ""); ok {
+			t.Fatal("an empty name must not match the unnamed default")
+		}
+	}
+
+	if pf, ok := ix.AuthNamed(use, "OTHER"); !ok || pf.Spec.SourcePath != "/tmp/defs.http" {
+		t.Fatalf("expected a case-insensitive global from another file, got %+v", pf)
+	}
+	if _, ok := ix.AuthNamed(use, "private"); ok {
+		t.Fatal("a file-scoped profile must stay private to its file")
+	}
+	if pf, ok := ix.DefaultAuth(use); !ok || pf.Spec.Params["cmd"] != "default-token" {
+		t.Fatalf("expected the unnamed profile as the default, got %+v", pf)
+	}
+}

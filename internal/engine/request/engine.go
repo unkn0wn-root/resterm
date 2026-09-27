@@ -800,6 +800,10 @@ func (x *execCtx) resolveRoute() *xrunResult {
 }
 
 func (x *execCtx) prepareAuth() *xrunResult {
+	if err := x.eng.resolveAuth(x.doc, x.req); err != nil {
+		x.exp.stage(xplain.StageAuth, xplain.StageError, xplain.SummaryAuthInjectionFailed, nil, nil, err.Error())
+		return x.fail(err, "Auth preparation failed")
+	}
 	if x.req.Metadata.Auth == nil {
 		return nil
 	}

@@ -95,10 +95,13 @@ func TestRenderAmbiguousInlineBodyAddsDirective(t *testing.T) {
 	}
 }
 
-func TestFormatAuthParamPrefersSingleQuotesForJSONLikeValues(t *testing.T) {
-	got := formatAuthParam("argv", `["tool","arg with space"]`)
-	if got != `argv='["tool","arg with space"]'` {
-		t.Fatalf("unexpected formatted auth param %q", got)
+func TestFormatAuthParam(t *testing.T) {
+	if got, err := formatAuthParam("scope", "read write"); err != nil || got != "scope='read write'" {
+		t.Fatalf("formatAuthParam() = %q, %v", got, err)
+	}
+	_, err := formatAuthParam("scope", `say "hi" it's`)
+	if err == nil || !strings.Contains(err.Error(), "writer: @auth scope") {
+		t.Fatalf("error = %v, want one naming the @auth option", err)
 	}
 }
 

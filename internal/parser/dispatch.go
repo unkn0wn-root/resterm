@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -241,17 +242,24 @@ func (b *documentBuilder) handleAuthDirective(d parsedDirective) directiveOutcom
 	}
 
 	dir, err := parseAuthDirective(d.Args)
+	if err == nil && dir.Scope != directive.ScopeRequest && b.inRequest {
+		err = errors.New("@auth " + dir.Scope.String() + " scope must be declared outside a request")
+	}
 	if err != nil {
+		dir.Spec = &restfile.AuthSpec{Rejected: err.Error()}
+		dir.Disable = false
+		b.setAuth(d, dir)
 		return b.rejectError(d, err)
 	}
+	b.setAuth(d, dir)
+	return directiveApplied
+}
 
+func (b *documentBuilder) setAuth(d parsedDirective, dir authDirective) {
 	switch dir.Scope {
 	case directive.ScopeFile, directive.ScopeGlobal:
-		if b.inRequest {
-			return b.reject(d, "@auth "+dir.Scope.String()+" scope must be declared outside a request")
-		}
 		if dir.Disable || dir.Spec == nil {
-			return directiveApplied
+			return
 		}
 		spec := *dir.Spec.Clone()
 		spec.SourcePath = b.doc.Path
@@ -268,7 +276,7 @@ func (b *documentBuilder) handleAuthDirective(d parsedDirective) directiveOutcom
 		if dir.Disable {
 			b.request.metadata.Auth = nil
 			b.request.metadata.AuthDisabled = true
-			return directiveApplied
+			return
 		}
 		if dir.Spec != nil {
 			spec := dir.Spec.Clone()
@@ -278,8 +286,6 @@ func (b *documentBuilder) handleAuthDirective(d parsedDirective) directiveOutcom
 			b.request.metadata.AuthDisabled = false
 		}
 	}
-
-	return directiveApplied
 }
 
 func (b *documentBuilder) handlePatchDirective(d parsedDirective) directiveOutcome {

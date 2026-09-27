@@ -1,6 +1,7 @@
 package authcmd
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -67,6 +68,19 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
+			name: "cmd splits into argv",
+			params: map[string]string{
+				"cmd": `gcloud auth print-access-token --project "{{ gcp.project }}"`,
+			},
+			check: func(t *testing.T, cfg Config) {
+				t.Helper()
+				want := []string{"gcloud", "auth", "print-access-token", "--project", "{{ gcp.project }}"}
+				if !slices.Equal(cfg.Argv, want) {
+					t.Fatalf("expected argv %q, got %q", want, cfg.Argv)
+				}
+			},
+		},
+		{
 			name: "cache only reuse",
 			params: map[string]string{
 				"cache_key": "github",
@@ -121,7 +135,7 @@ func TestParse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			cfg, err := Parse(tt.params, "/tmp/project")
+			cfg, err := Parse(tt.params, Source{Dir: "/tmp/project"})
 			if err != nil {
 				t.Fatalf("Parse() error = %v", err)
 			}
@@ -143,7 +157,7 @@ func TestParseErrors(t *testing.T) {
 	}{
 		{
 			name: "missing argv",
-			want: "@auth command requires argv",
+			want: "@auth command requires cmd or argv",
 		},
 		{
 			name: "invalid argv json",
@@ -196,7 +210,36 @@ func TestParseErrors(t *testing.T) {
 				"argv": `["gh","auth","token"]`,
 				"ttl":  "5m",
 			},
-			want: "ttl requires cache_key",
+			want: "ttl requires cache_key or a named definition",
+		},
+		{
+			name: "cmd and argv together",
+			params: map[string]string{
+				"cmd":  "gh auth token",
+				"argv": `["gh","auth","token"]`,
+			},
+			want: "accepts cmd or argv, not both",
+		},
+		{
+			name: "cmd with unterminated quote",
+			params: map[string]string{
+				"cmd": `gh auth "token`,
+			},
+			want: `cmd has an unterminated " quote`,
+		},
+		{
+			name: "cmd with empty program",
+			params: map[string]string{
+				"cmd": `'' auth`,
+			},
+			want: "argv[0] must not be empty",
+		},
+		{
+			name: "cmd rejects shell",
+			params: map[string]string{
+				"cmd": `sh -c "gh auth token"`,
+			},
+			want: "does not allow shell front-end",
 		},
 		{
 			name: "invalid ttl",
@@ -234,7 +277,7 @@ func TestParseErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := Parse(tt.params, "")
+			_, err := Parse(tt.params, Source{})
 			if tt.want == "" {
 				if err != nil {
 					t.Fatalf("Parse() unexpected error = %v", err)
@@ -248,5 +291,21 @@ func TestParseErrors(t *testing.T) {
 				t.Fatalf("Parse() error = %q, want substring %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseNamedDefinitionAllowsTTL(t *testing.T) {
+	t.Parallel()
+
+	src := Source{Dir: "/tmp/project", Profile: Profile{Path: "/tmp/project/auth.http", Name: "gcloud"}}
+	cfg, err := Parse(map[string]string{"cmd": "gcloud auth print-access-token", "ttl": "50m"}, src)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if cfg.TTL != 50*time.Minute {
+		t.Fatalf("expected ttl 50m, got %s", cfg.TTL)
+	}
+	if cfg.Profile != src.Profile {
+		t.Fatalf("expected profile %+v, got %+v", src.Profile, cfg.Profile)
 	}
 }

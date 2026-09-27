@@ -1781,7 +1781,7 @@ func TestRequestEditorCompletionsSuggestAuthSubcommands(t *testing.T) {
 	if editor.Revision() == beforeRevision {
 		t.Fatal("expected accepting auth hint to change editor revision")
 	}
-	if got := editor.Value(); !strings.HasPrefix(got, "# @auth command argv=") {
+	if got := editor.Value(); !strings.HasPrefix(got, `# @auth command cmd="gh auth token"`) {
 		t.Fatalf("expected editor content to include auth command skeleton, got %q", got)
 	}
 	if editor.completion.active {

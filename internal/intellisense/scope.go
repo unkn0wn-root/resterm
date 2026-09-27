@@ -15,6 +15,7 @@ type VarRef struct {
 }
 
 type ProfileSet struct {
+	Auth  []string
 	Patch []string
 	SSH   []string
 	K8s   []string

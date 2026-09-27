@@ -152,3 +152,38 @@ func TestFieldsEscaped(t *testing.T) {
 		})
 	}
 }
+
+func TestFieldOption(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+		want  string
+	}{
+		{name: "bare", key: "header", value: "X-Token", want: "header=X-Token"},
+		{name: "template", key: "token", value: "{{token}}", want: "token={{token}}"},
+		{name: "spaces", key: "scope", value: "read write", want: "scope='read write'"},
+		{name: "spaces and a single quote", key: "cmd", value: "mycli --name 'a b'", want: `cmd="mycli --name 'a b'"`},
+		{name: "spaced json", key: "argv", value: `["tool","a b"]`, want: `argv='["tool","a b"]'`},
+		{name: "json with both quote kinds", key: "argv", value: `["tool","it's b"]`, want: `argv=["tool","it's b"]`},
+		{name: "leading quote", key: "scheme", value: `"quoted"`, want: `scheme='"quoted"'`},
+		{name: "open call", key: "client_secret", value: "Pa(ss", want: "client_secret='Pa(ss'"},
+		{name: "open bracket", key: "password", value: "[abc", want: "password='[abc'"},
+		{name: "spaces and both quote kinds", key: "scope", value: `say "hi" it's`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := FieldOption(tt.key, tt.value)
+			if got != tt.want || ok != (tt.want != "") {
+				t.Fatalf("FieldOption(%q, %q) = %q, %v, want %q", tt.key, tt.value, got, ok, tt.want)
+			}
+			if !ok {
+				return
+			}
+			if fields := Fields(got); len(fields) != 1 || fields[0] != tt.key+"="+tt.value {
+				t.Fatalf("Fields(%q) = %q, want the value back", got, fields)
+			}
+		})
+	}
+}

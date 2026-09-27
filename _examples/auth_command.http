@@ -1,5 +1,8 @@
 ### File Command Auth Default
-# @auth file command argv=["gh","auth","token"] cache_key=github-cli-file
+# @auth file command cmd="gh auth token" cache_key=github-cli-file
+
+### Named Command Auth
+# @auth file command gh cmd="gh auth token"
 
 ### Reusable Command Auth Profile
 # @patch file githubCliAuth {auth: {type: "command", argv: '["gh","auth","token"]', cache_key: "github-cli"}}
@@ -11,6 +14,23 @@
 GET https://api.github.com/user
 Accept: application/vnd.github+json
 X-GitHub-Api-Version: 2022-11-28
+
+### GitHub CLI Token Via Named Auth
+# @name GitHubCLITokenNamed
+# @tag auth command
+# @description Runs the gh definition above once per environment and reuses its token.
+# @auth use=gh
+GET https://api.github.com/user
+Accept: application/vnd.github+json
+X-GitHub-Api-Version: 2022-11-28
+
+### Named Auth In A Custom Header
+# @name GitHubCLITokenNamedHeader
+# @tag auth command
+# @description Sends the same cached gh token as a raw value in a custom header.
+# @auth use=gh header=X-GitHub-Token
+GET https://api.github.com/rate_limit
+Accept: application/json
 
 ### GitHub CLI Token Via @apply
 # @name GitHubCLITokenPatched

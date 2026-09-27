@@ -18,6 +18,20 @@ type docSet[T any] struct {
 	gs []T
 }
 
+func (ds docSet[T]) named(key string, nm func(T) string) (T, bool) {
+	if v, ok := findNamed(ds.fs, key, nm); ok {
+		return v, true
+	}
+	return findNamed(ds.gs, key, nm)
+}
+
+func (ds docSet[T]) deflt(nm func(T) string) (T, bool) {
+	if v, ok := findDefault(ds.fs, nm); ok {
+		return v, true
+	}
+	return findDefault(ds.gs, nm)
+}
+
 type set[T any] struct {
 	mu sync.RWMutex
 	by map[string]docSet[T]
@@ -128,16 +142,7 @@ func (s *set[T]) layers(p string, xs []T) ([]T, []T) {
 
 func (s *set[T]) named(p string, xs []T, n string) (T, bool) {
 	key := nameKey(n)
-	if key == "" {
-		var z T
-		return z, false
-	}
-
-	cur := s.split(xs)
-	if v, ok := findNamed(cur.fs, key, s.nm); ok {
-		return v, true
-	}
-	if v, ok := findNamed(cur.gs, key, s.nm); ok {
+	if v, ok := s.split(xs).named(key, s.nm); ok {
 		return v, true
 	}
 
@@ -157,11 +162,7 @@ func (s *set[T]) named(p string, xs []T, n string) (T, bool) {
 }
 
 func (s *set[T]) deflt(p string, xs []T) (T, bool) {
-	cur := s.split(xs)
-	if v, ok := findDefault(cur.fs, s.nm); ok {
-		return v, true
-	}
-	if v, ok := findDefault(cur.gs, s.nm); ok {
+	if v, ok := s.split(xs).deflt(s.nm); ok {
 		return v, true
 	}
 
@@ -198,7 +199,7 @@ func New() *Index {
 		),
 		auth: newSet(
 			func(v restfile.AuthProfile) directive.Scope { return v.Scope },
-			func(v restfile.AuthProfile) string { return v.Name },
+			authName,
 		),
 		k8s: newSet(
 			func(v restfile.K8sProfile) directive.Scope { return v.Scope },
@@ -206,7 +207,7 @@ func New() *Index {
 		),
 		patch: newSet(
 			func(v restfile.PatchProfile) directive.Scope { return v.Scope },
-			func(v restfile.PatchProfile) string { return v.Name },
+			patchName,
 		),
 	}
 }
@@ -338,26 +339,15 @@ func (ix *Index) Patch(doc *restfile.Document) ([]restfile.PatchProfile, []restf
 }
 
 func (ix *Index) PatchNamed(doc *restfile.Document, name string) (*restfile.PatchProfile, bool) {
+	var (
+		v  restfile.PatchProfile
+		ok bool
+	)
 	if ix == nil {
-		ds := ixSplitPatch(doc)
-		if v, ok := findNamed(
-			ds.fs,
-			nameKey(name),
-			func(v restfile.PatchProfile) string { return v.Name },
-		); ok {
-			return &v, true
-		}
-		if v, ok := findNamed(
-			ds.gs,
-			nameKey(name),
-			func(v restfile.PatchProfile) string { return v.Name },
-		); ok {
-			return &v, true
-		}
-		return nil, false
+		v, ok = ixSplitPatch(doc).named(nameKey(name), patchName)
+	} else {
+		v, ok = ix.patch.named(docPath(doc), docPatch(doc), name)
 	}
-
-	v, ok := ix.patch.named(docPath(doc), docPatch(doc), name)
 	if !ok {
 		return nil, false
 	}
@@ -365,20 +355,34 @@ func (ix *Index) PatchNamed(doc *restfile.Document, name string) (*restfile.Patc
 }
 
 func (ix *Index) DefaultAuth(doc *restfile.Document) (*restfile.AuthProfile, bool) {
+	var (
+		v  restfile.AuthProfile
+		ok bool
+	)
 	if ix == nil {
-		ds := ixSplitAuth(doc)
-		if v, ok := findDefault(ds.fs, func(v restfile.AuthProfile) string { return v.Name }); ok {
-			cp := cloneAuth(v)
-			return &cp, true
-		}
-		if v, ok := findDefault(ds.gs, func(v restfile.AuthProfile) string { return v.Name }); ok {
-			cp := cloneAuth(v)
-			return &cp, true
-		}
+		v, ok = ixSplitAuth(doc).deflt(authName)
+	} else {
+		v, ok = ix.auth.deflt(docPath(doc), docAuth(doc))
+	}
+	if !ok {
 		return nil, false
 	}
+	cp := cloneAuth(v)
+	return &cp, true
+}
 
-	v, ok := ix.auth.deflt(docPath(doc), docAuth(doc))
+// AuthNamed finds a named auth definition. It checks the document's file
+// scope, then its globals, then other files' globals.
+func (ix *Index) AuthNamed(doc *restfile.Document, name string) (*restfile.AuthProfile, bool) {
+	var (
+		v  restfile.AuthProfile
+		ok bool
+	)
+	if ix == nil {
+		v, ok = ixSplitAuth(doc).named(nameKey(name), authName)
+	} else {
+		v, ok = ix.auth.named(docPath(doc), docAuth(doc), name)
+	}
 	if !ok {
 		return nil, false
 	}
@@ -402,6 +406,10 @@ func cloneSlice[T any](xs []T) []T {
 }
 
 func findNamed[T any](xs []T, key string, nm func(T) string) (T, bool) {
+	if key == "" {
+		var z T
+		return z, false
+	}
 	for _, x := range xs {
 		if nameKey(nm(x)) == key {
 			return x, true
@@ -420,6 +428,10 @@ func findDefault[T any](xs []T, nm func(T) string) (T, bool) {
 	var z T
 	return z, false
 }
+
+func authName(v restfile.AuthProfile) string { return v.Name }
+
+func patchName(v restfile.PatchProfile) string { return v.Name }
 
 func nameKey(v string) string {
 	return strings.ToLower(strings.TrimSpace(v))

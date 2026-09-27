@@ -22,6 +22,7 @@ import (
 
 const (
 	authParamArgv = "argv"
+	authParamCmd  = "cmd"
 
 	errCommandAuthNotInitialized = "command auth support is not initialised"
 	errOAuthNotInitialized       = "oauth support is not initialised"
@@ -68,6 +69,27 @@ func (e *Engine) ResolveInheritedAuth(doc *restfile.Document, req *restfile.Requ
 	if pf, ok := e.registryIndex().DefaultAuth(doc); ok {
 		req.Metadata.Auth = pf.Spec.Clone()
 	}
+}
+
+// resolveAuth resolves named auth and rejects invalid auth after patches and
+// scripts have had a chance to replace it.
+func (e *Engine) resolveAuth(doc *restfile.Document, req *restfile.Request) error {
+	auth := requestAuth(req)
+	if auth == nil {
+		return nil
+	}
+	if auth.Use != "" {
+		pf, ok := e.registryIndex().AuthNamed(doc, auth.Use)
+		if !ok {
+			return diag.New(diag.ClassAuth, withOrigin(fmt.Sprintf("@auth use=%q not found", auth.Use), auth))
+		}
+		auth = auth.Resolve(*pf)
+		req.Metadata.Auth = auth
+	}
+	if auth.Rejected != "" {
+		return diag.New(diag.ClassAuth, withOrigin(auth.Rejected, auth))
+	}
+	return nil
 }
 
 func CommandAuthSecrets(res authcmd.Result) []string {
@@ -314,7 +336,7 @@ func (e *Engine) commandAuthHeader(
 	if err != nil {
 		return "", false
 	}
-	cfg, err := authcmd.Parse(pm, e.cmdDir(doc, auth))
+	cfg, err := authcmd.Parse(pm, e.cmdSource(doc, auth))
 	if err != nil {
 		return "", false
 	}
@@ -421,8 +443,7 @@ func (e *Engine) BuildCommandAuthConfig(
 		return cfg, perr
 	}
 
-	dir := e.cmdDir(doc, auth)
-	out, err := authcmd.Parse(pm, dir)
+	out, err := authcmd.Parse(pm, e.cmdSource(doc, auth))
 	if err != nil {
 		if perr != nil {
 			return cfg, perr
@@ -453,6 +474,14 @@ func (e *Engine) cmdScope(
 		}
 	}
 	return authcmd.Scope(env.Scope(), ws)
+}
+
+func (e *Engine) cmdSource(doc *restfile.Document, auth *restfile.AuthSpec) authcmd.Source {
+	src := authcmd.Source{Dir: e.cmdDir(doc, auth)}
+	if auth.Profile != "" {
+		src.Profile = authcmd.Profile{Path: e.srcPath(doc, auth), Name: auth.Profile}
+	}
+	return src
 }
 
 func (e *Engine) cmdDir(doc *restfile.Document, auth *restfile.AuthSpec) string {
@@ -529,7 +558,8 @@ func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]
 		if value == "" {
 			continue
 		}
-		if key != authParamArgv {
+		// Split cmd before expansion so a value with spaces stays in one argument.
+		if key != authParamArgv && key != authParamCmd {
 			var err error
 			value, err = expandAuthParam(res, auth, key, value)
 			if err != nil {
@@ -550,10 +580,7 @@ func expandCommandAuthArgv(argv []string, auth *restfile.AuthSpec, res *vars.Res
 	for i, arg := range argv {
 		value, err := res.ExpandTemplates(arg)
 		if err != nil {
-			op := fmt.Sprintf("expand command auth argv[%d]", i)
-			if at := auth.Origin(); at != "" {
-				op += " (" + at + ")"
-			}
+			op := withOrigin(fmt.Sprintf("expand command auth argv[%d]", i), auth)
 			firstErr = vars.PreferStructural(firstErr, diag.WrapAs(diag.ClassAuth, err, op))
 			continue
 		}
@@ -571,13 +598,17 @@ func expandAuthParam(res *vars.Resolver, auth *restfile.AuthSpec, key, raw strin
 	}
 	value, err := res.ExpandTemplates(raw)
 	if err != nil {
-		op := fmt.Sprintf("expand %s auth %s", auth.Kind(), key)
-		if at := auth.Origin(); at != "" {
-			op += " (" + at + ")"
-		}
+		op := withOrigin(fmt.Sprintf("expand %s auth %s", auth.Kind(), key), auth)
 		return "", diag.WrapAs(diag.ClassAuth, err, op)
 	}
 	return strings.TrimSpace(value), nil
+}
+
+func withOrigin(msg string, auth *restfile.AuthSpec) string {
+	if at := auth.Origin(); at != "" {
+		return msg + " (" + at + ")"
+	}
+	return msg
 }
 
 func oauthExtraParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]string, error) {

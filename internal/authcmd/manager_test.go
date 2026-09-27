@@ -341,7 +341,7 @@ func TestManagerResolveUnseededCacheOnlyFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if got := err.Error(); !containsAll(got, "requires argv", "seed the cache") {
+	if got := err.Error(); !containsAll(got, "requires cmd or argv", "seed the cache") {
 		t.Fatalf("unexpected error %q", got)
 	}
 }
@@ -499,4 +499,141 @@ func containsAll(s string, parts ...string) bool {
 		}
 	}
 	return true
+}
+
+func TestManagerResolveCachesNamedDefinition(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	mgr := NewManager()
+	mgr.now = func() time.Time { return time.Unix(100, 0) }
+	mgr.SetExecFunc(func(context.Context, Config) ([]byte, error) {
+		return fmt.Appendf(nil, "token-%d", calls.Add(1)), nil
+	})
+
+	named := Config{Argv: []string{"gh"}, Profile: Profile{Path: "/ws/auth.http", Name: "gh"}}
+	for _, env := range []string{"dev", "dev", "prod", "prod"} {
+		if _, err := mgr.Resolve(context.Background(), env, named); err != nil {
+			t.Fatalf("Resolve(%s) error = %v", env, err)
+		}
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("expected one run per environment, got %d", got)
+	}
+
+	unnamed := Config{Argv: []string{"gh"}}
+	for range 2 {
+		if _, err := mgr.Resolve(context.Background(), "dev", unnamed); err != nil {
+			t.Fatalf("Resolve(unnamed) error = %v", err)
+		}
+	}
+	if got := calls.Load(); got != 4 {
+		t.Fatalf("expected an unnamed definition to run every time, got %d runs", got)
+	}
+}
+
+func TestManagerResolveNamedDefinitionTTL(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	now := time.Unix(100, 0)
+	mgr := NewManager()
+	mgr.now = func() time.Time { return now }
+	mgr.SetExecFunc(func(context.Context, Config) ([]byte, error) {
+		return fmt.Appendf(nil, "token-%d", calls.Add(1)), nil
+	})
+
+	cfg := Config{
+		Argv:    []string{"gcloud", "auth", "print-access-token"},
+		Profile: Profile{Path: "/ws/auth.http", Name: "gcloud"},
+		TTL:     time.Minute,
+	}
+	first, err := mgr.Resolve(context.Background(), "dev", cfg)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	now = now.Add(30 * time.Second)
+	if res, _ := mgr.Resolve(context.Background(), "dev", cfg); res.Token != first.Token {
+		t.Fatalf("expected cache hit before ttl, got %q", res.Token)
+	}
+	now = now.Add(time.Minute)
+	if res, _ := mgr.Resolve(context.Background(), "dev", cfg); res.Token == first.Token {
+		t.Fatalf("expected refetch after ttl, got %q again", res.Token)
+	}
+}
+
+func TestManagerResolveEditedNamedDefinitionRefetches(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	mgr := NewManager()
+	mgr.SetExecFunc(func(context.Context, Config) ([]byte, error) {
+		return fmt.Appendf(nil, "token-%d", calls.Add(1)), nil
+	})
+
+	prof := Profile{Path: "/ws/auth.http", Name: "gh"}
+	before := Config{Argv: []string{"gh", "auth", "token"}, Profile: prof}
+	after := Config{Argv: []string{"gh", "auth", "token", "--hostname", "ghe.example.com"}, Profile: prof}
+	for _, cfg := range []Config{before, after, before} {
+		if _, err := mgr.Resolve(context.Background(), "dev", cfg); err != nil {
+			t.Fatalf("Resolve(%q) error = %v", cfg.Argv, err)
+		}
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("expected one run per command, got %d", got)
+	}
+}
+
+func TestManagerResolveNamedDefinitionRendersPerRequest(t *testing.T) {
+	t.Parallel()
+
+	mgr := NewManager()
+	mgr.SetExecFunc(func(context.Context, Config) ([]byte, error) {
+		return []byte("abc"), nil
+	})
+
+	prof := Profile{Path: "/ws/auth.http", Name: "gh"}
+	custom := Config{Argv: []string{"gh"}, Profile: prof, Header: "X-Token"}
+	if _, err := mgr.Resolve(context.Background(), "dev", custom); err != nil {
+		t.Fatalf("Resolve(custom) error = %v", err)
+	}
+	res, err := mgr.Resolve(context.Background(), "dev", Config{Argv: []string{"gh"}, Profile: prof})
+	if err != nil {
+		t.Fatalf("Resolve(default) error = %v", err)
+	}
+	if res.Header != "Authorization" || res.Value != "Bearer abc" {
+		t.Fatalf("expected default header from the request, got %q: %q", res.Header, res.Value)
+	}
+}
+
+func TestCacheEntryKey(t *testing.T) {
+	t.Parallel()
+
+	// Cache keys are saved, so the cache_key format must stay the same.
+	if got := cacheEntryKey(" Dev ", Config{CacheKey: "github"}); got != "3:dev|6:github|" {
+		t.Fatalf("cache_key entry = %q", got)
+	}
+	if got := cacheEntryKey("dev", Config{Argv: []string{"gh"}}); got != "" {
+		t.Fatalf("expected no entry without cache_key or name, got %q", got)
+	}
+
+	base := Config{Argv: []string{"gh"}, Profile: Profile{Path: "/ws/a.http", Name: "gh"}}
+	keys := map[string]string{"base": cacheEntryKey("dev", base)}
+	upper := base
+	upper.Profile.Name = "GH"
+	if cacheEntryKey("dev", upper) != keys["base"] {
+		t.Fatal("expected names to ignore case")
+	}
+	other := base
+	other.Profile.Path = "/ws/b.http"
+	keys["other file"] = cacheEntryKey("dev", other)
+	keys["other env"] = cacheEntryKey("prod", base)
+	keys["cache_key"] = cacheEntryKey("dev", Config{CacheKey: keys["base"]})
+	seen := make(map[string]string, len(keys))
+	for name, key := range keys {
+		if prev, ok := seen[key]; ok {
+			t.Fatalf("%s and %s share key %q", prev, name, key)
+		}
+		seen[key] = name
+	}
 }

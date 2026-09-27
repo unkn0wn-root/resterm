@@ -26,6 +26,9 @@ var authAliases = map[AuthKind]AuthKind{"api-key": AuthAPIKey}
 
 const AuthDisableWord = "none"
 
+// AuthUseParams lists the settings a use= line can override.
+var AuthUseParams = []string{"header", "scheme", "timeout"}
+
 // AuthHeader is absent because it has no keyword of its own. It is what the
 // first word falls back to, which is why a header may be named "header".
 var authKeywords = map[AuthKind]struct{}{
@@ -78,6 +81,17 @@ func (a *AuthSpec) Clone() *AuthSpec {
 	cp := *a
 	cp.Params = cloneAuthParams(a.Params)
 	return &cp
+}
+
+// Resolve copies the named definition and applies this reference's overrides.
+// The copy keeps the definition's source path for command execution.
+func (a *AuthSpec) Resolve(p AuthProfile) *AuthSpec {
+	out := p.Spec
+	out.Profile = p.Name
+	out.Params = make(map[string]string, len(p.Spec.Params)+len(a.Params))
+	maps.Copy(out.Params, p.Spec.Params)
+	maps.Copy(out.Params, a.Params)
+	return &out
 }
 
 func (a *AuthSpec) Origin() string {

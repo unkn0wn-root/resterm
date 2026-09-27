@@ -101,7 +101,7 @@ func TestDirectiveSpacingComesFromSpecs(t *testing.T) {
 
 func TestDirectiveArgsFilterByPrefix(t *testing.T) {
 	auth := argOptions("auth", "")
-	for _, label := range []string{"basic", "bearer", "apikey", "oauth2", "command", "token_url=", "argv=", "cache_key="} {
+	for _, label := range []string{"basic", "bearer", "apikey", "oauth2", "command", "use=", "token_url=", "cmd=", "argv=", "cache_key="} {
 		if !contains(auth, label) {
 			t.Fatalf("missing auth arg %q", label)
 		}
@@ -267,10 +267,16 @@ func TestCompareArgsIncludeGroupsAndProfiles(t *testing.T) {
 func TestUseValueOffersProfileNames(t *testing.T) {
 	sc := Scope{
 		Profiles: ProfileSet{
+			Auth:  []string{"gh"},
 			Patch: []string{"jsonApi"},
 			SSH:   []string{"edge"},
 			K8s:   []string{"cluster"},
 		},
+	}
+
+	auth := suggest("# @auth use=", sc)
+	if !contains(auth, "gh") {
+		t.Fatalf("auth use= missing command auth profile: %v", auth)
 	}
 
 	apply := suggest("# @apply use=", sc)

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -85,9 +86,12 @@ func Render(doc *restfile.Document, opts Options) (string, error) {
 	if err := renderPatches(w, doc.Patches); err != nil {
 		return "", err
 	}
+	if err := renderAuthProfiles(w, doc.Auth); err != nil {
+		return "", err
+	}
 
 	// Without this the preamble reads as part of the block below it.
-	if len(doc.Variables)+len(doc.Globals)+len(doc.Settings)+len(doc.Patches) > 0 {
+	if len(doc.Variables)+len(doc.Globals)+len(doc.Settings)+len(doc.Patches)+len(doc.Auth) > 0 {
 		b.WriteString("\n")
 	}
 
@@ -270,11 +274,41 @@ func renderAuth(w directiveWriter, auth *restfile.AuthSpec) error {
 	return nil
 }
 
+func renderAuthProfiles(w directiveWriter, profs []restfile.AuthProfile) error {
+	for _, p := range profs {
+		if p.Scope != directive.ScopeFile && p.Scope != directive.ScopeGlobal {
+			return fmt.Errorf("writer: @auth profile %q scope must be file or global", p.Name)
+		}
+		args, err := authArgs(p.Spec)
+		if err != nil {
+			return err
+		}
+		if p.Name != "" {
+			if p.Spec.Kind() != restfile.AuthCommand {
+				return fmt.Errorf("writer: @auth %s cannot be named %q", p.Spec.Kind(), p.Name)
+			}
+			args = slices.Insert(args, 1, p.Name)
+		}
+		w.line(directive.Auth, p.Scope.String()+" "+strings.Join(args, " "))
+	}
+	return nil
+}
+
 // Every form names itself first and then its parameters in the order @auth
 // reads them back. A form with no case here fails the render rather than being
 // dropped, because dropping it would send the request unauthenticated.
 func authArgs(auth restfile.AuthSpec) ([]string, error) {
 	p := auth.Params
+	if auth.Rejected != "" {
+		return nil, fmt.Errorf("writer: @auth line was rejected: %s", auth.Rejected)
+	}
+	if auth.Use != "" {
+		params, err := formatOrderedParams(p, restfile.AuthUseParams)
+		if err != nil {
+			return nil, err
+		}
+		return append([]string{"use=" + auth.Use}, params...), nil
+	}
 	switch kind := auth.Kind(); kind {
 	case restfile.AuthBasic:
 		return []string{"basic", strings.TrimSpace(p["username"]), strings.TrimSpace(p["password"])}, nil
@@ -304,9 +338,9 @@ func authArgs(auth restfile.AuthSpec) ([]string, error) {
 		}
 		return []string{name, value}, nil
 	case restfile.AuthOAuth2:
-		return authFormArgs(kind, formatOAuthParams(p))
+		return authFormArgs(kind, p, oauthParamOrder)
 	case restfile.AuthCommand:
-		return authFormArgs(kind, formatCommandParams(p))
+		return authFormArgs(kind, p, commandParamOrder)
 	default:
 		return nil, fmt.Errorf("writer: @auth type %q cannot be written", auth.Type)
 	}
@@ -314,11 +348,15 @@ func authArgs(auth restfile.AuthSpec) ([]string, error) {
 
 // A form that resolved to no parameters at all would be written as a bare name
 // the parser rejects.
-func authFormArgs(kind restfile.AuthKind, params []string) ([]string, error) {
-	if len(params) == 0 {
+func authFormArgs(kind restfile.AuthKind, params map[string]string, order []string) ([]string, error) {
+	parts, err := formatOrderedParams(params, order)
+	if err != nil {
+		return nil, err
+	}
+	if len(parts) == 0 {
 		return nil, fmt.Errorf("writer: @auth %s has no parameters", kind)
 	}
-	return append([]string{kind.String()}, params...), nil
+	return append([]string{kind.String()}, parts...), nil
 }
 
 func renderSettings(w directiveWriter, set map[string]string) {
@@ -349,6 +387,7 @@ var oauthParamOrder = []string{
 }
 
 var commandParamOrder = []string{
+	"cmd",
 	"argv",
 	"format",
 	"header",
@@ -362,17 +401,9 @@ var commandParamOrder = []string{
 	"timeout",
 }
 
-func formatOAuthParams(params map[string]string) []string {
-	return formatOrderedParams(params, oauthParamOrder)
-}
-
-func formatCommandParams(params map[string]string) []string {
-	return formatOrderedParams(params, commandParamOrder)
-}
-
-func formatOrderedParams(params map[string]string, ordered []string) []string {
+func formatOrderedParams(params map[string]string, ordered []string) ([]string, error) {
 	if len(params) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	seen := make(map[string]struct{}, len(ordered))
@@ -383,7 +414,11 @@ func formatOrderedParams(params map[string]string, ordered []string) []string {
 		if val == "" {
 			continue
 		}
-		parts = append(parts, formatAuthParam(key, val))
+		part, err := formatAuthParam(key, val)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, part)
 		seen[key] = struct{}{}
 	}
 
@@ -397,25 +432,24 @@ func formatOrderedParams(params map[string]string, ordered []string) []string {
 		if val == "" {
 			continue
 		}
-		extra = append(extra, formatAuthParam(lower, val))
+		part, err := formatAuthParam(lower, val)
+		if err != nil {
+			return nil, err
+		}
+		extra = append(extra, part)
 	}
 	if len(extra) > 0 {
 		sort.Strings(extra)
 		parts = append(parts, extra...)
 	}
-	return parts
+	return parts, nil
 }
 
-func formatAuthParam(key, val string) string {
-	if strings.ContainsAny(val, " \t") {
-		switch {
-		case !strings.Contains(val, "'"):
-			val = "'" + val + "'"
-		case !strings.Contains(val, "\""):
-			val = `"` + val + `"`
-		}
+func formatAuthParam(key, val string) (string, error) {
+	if opt, ok := directive.FieldOption(key, val); ok {
+		return opt, nil
 	}
-	return fmt.Sprintf("%s=%s", key, val)
+	return "", fmt.Errorf("writer: @auth %s value cannot be written so it reads back the same", key)
 }
 
 func renderRequestVariables(w directiveWriter, vars []restfile.Variable) {
