@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -58,6 +59,18 @@ func TestRenderRoundTripsEveryAuthForm(t *testing.T) {
 			source: `# @auth command argv=["gh","auth","token"] cache_key=gh`,
 			want:   restfile.AuthCommand,
 			params: map[string]string{"argv": `["gh","auth","token"]`, "cache_key": "gh"},
+		},
+		{
+			name:   "command cmd with inner single quotes",
+			source: `# @auth command cmd="aws ecr get-authorization-token --query 'a[0].b'" scheme=Basic`,
+			want:   restfile.AuthCommand,
+			params: map[string]string{"cmd": "aws ecr get-authorization-token --query 'a[0].b'", "scheme": "Basic"},
+		},
+		{
+			name:   "command cmd with inner double quotes",
+			source: `# @auth command cmd='mycli --name "a b"'`,
+			want:   restfile.AuthCommand,
+			params: map[string]string{"cmd": `mycli --name "a b"`},
 		},
 		{
 			name:   "oauth2",
@@ -136,6 +149,10 @@ func TestRenderRejectsAuthItCannotWrite(t *testing.T) {
 		{
 			name: "oauth2 with no parameters",
 			auth: restfile.AuthSpec{Type: restfile.AuthOAuth2, Params: map[string]string{"nope": ""}},
+		},
+		{
+			name: "command value with spaces and both quote kinds",
+			auth: restfile.AuthSpec{Type: restfile.AuthCommand, Params: map[string]string{"cmd": `a 'b' "c"`}},
 		},
 	}
 
@@ -216,4 +233,58 @@ func headerAuthDoc(name, value string) *restfile.Document {
 			Params: map[string]string{"header": name, "value": value},
 		}},
 	}}}
+}
+
+func TestRenderRoundTripsAuthProfiles(t *testing.T) {
+	src := `# @auth global command gh cmd='gh auth token'
+# @auth file command cmd="gcloud auth print-access-token" ttl=50m cache_key=gcloud
+# @auth file bearer {{token}}
+
+### r
+# @name r
+# @auth use=gh header=X-Token timeout=5s
+GET https://example.com/
+`
+	doc := parser.Parse("r.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("source did not parse: %v", doc.Errors)
+	}
+
+	out := mustRender(t, doc)
+	want := []string{
+		`# @auth global command gh cmd='gh auth token'`,
+		`# @auth file command cmd='gcloud auth print-access-token' cache_key=gcloud ttl=50m`,
+		`# @auth file bearer {{token}}`,
+		`# @auth use=gh header=X-Token timeout=5s`,
+	}
+	for _, line := range want {
+		if !strings.Contains(out, line+"\n") {
+			t.Fatalf("render is missing %q:\n%s", line, out)
+		}
+	}
+
+	back := parser.Parse("r.http", []byte(out))
+	if len(back.Errors) != 0 {
+		t.Fatalf("rendered document did not parse: %v\n%s", back.Errors, out)
+	}
+	if len(back.Auth) != 3 || back.Auth[0].Name != "gh" || back.Auth[1].Name != "" {
+		t.Fatalf("profiles did not survive: %+v", back.Auth)
+	}
+	if ref := back.Requests[0].Metadata.Auth; ref == nil || ref.Use != "gh" || ref.Params["header"] != "X-Token" {
+		t.Fatalf("use= did not survive: %+v", ref)
+	}
+	if again := mustRender(t, back); again != out {
+		t.Fatalf("render is not idempotent:\nfirst:\n%s\nsecond:\n%s", out, again)
+	}
+}
+
+func TestRenderRejectsNamedAuthThatIsNotCommand(t *testing.T) {
+	doc := &restfile.Document{Auth: []restfile.AuthProfile{{
+		Scope: directive.ScopeFile,
+		Name:  "tok",
+		Spec:  restfile.AuthSpec{Type: restfile.AuthBearer, Params: map[string]string{"token": "x"}},
+	}}}
+	if out, err := Render(doc, Options{}); err == nil {
+		t.Fatalf("Render wrote a name the parser would read as a token:\n%s", out)
+	}
 }

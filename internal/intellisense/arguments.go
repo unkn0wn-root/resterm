@@ -3,6 +3,8 @@ package intellisense
 import (
 	"slices"
 	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
 type argForm uint8
@@ -180,9 +182,9 @@ func (a argument) withExample(text string) argument {
 	return a
 }
 
-// withOption selects only the option value, as in "@auth command argv=[...]".
+// Keep quotes outside the selection so replacing the value preserves them.
 func (a argument) withOption(option string) argument {
-	a.examples = []argExample{{text: option, placeholder: optionValue(option)}}
+	a.examples = []argExample{{text: option, placeholder: directive.TrimQuotes(optionValue(option))}}
 	return a
 }
 

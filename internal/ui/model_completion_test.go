@@ -24,6 +24,7 @@ func TestBuildCompletionScope(t *testing.T) {
 		},
 		Constants: []restfile.Constant{{Name: "apiVersion"}},
 		Workflows: []restfile.Workflow{{RunVars: []restfile.RunVar{{Name: "suffix"}}}},
+		Auth:      []restfile.AuthProfile{{Name: "gh"}, {}},
 		Patches:   []restfile.PatchProfile{{Name: "jsonApi"}},
 		SSH:       []restfile.SSHProfile{{Name: "edge"}},
 		K8s:       []restfile.K8sProfile{{Name: "cluster"}},
@@ -80,6 +81,7 @@ func TestBuildCompletionScope(t *testing.T) {
 	}
 
 	wantProfiles := intellisense.ProfileSet{
+		Auth:  []string{"gh"},
 		Patch: []string{"jsonApi"},
 		SSH:   []string{"edge"},
 		K8s:   []string{"cluster"},

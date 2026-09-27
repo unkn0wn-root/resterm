@@ -68,6 +68,7 @@ func buildCompletionScope(
 			add(c.Name, "const", false)
 		}
 		scope.Profiles = intellisense.ProfileSet{
+			Auth:  profileNames(doc.Auth, func(p restfile.AuthProfile) string { return p.Name }),
 			Patch: profileNames(doc.Patches, func(p restfile.PatchProfile) string { return p.Name }),
 			SSH:   profileNames(doc.SSH, func(p restfile.SSHProfile) string { return p.Name }),
 			K8s:   profileNames(doc.K8s, func(p restfile.K8sProfile) string { return p.Name }),
@@ -107,9 +108,11 @@ func completionEnvironments(cat vars.Catalog) ([]string, map[string][]string) {
 }
 
 func profileNames[T any](profiles []T, name func(T) string) []string {
-	out := make([]string, len(profiles))
-	for i, p := range profiles {
-		out[i] = name(p)
+	out := make([]string, 0, len(profiles))
+	for _, p := range profiles {
+		if n := name(p); n != "" {
+			out = append(out, n)
+		}
 	}
 	return out
 }

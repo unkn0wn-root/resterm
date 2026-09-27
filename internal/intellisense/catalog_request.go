@@ -41,9 +41,12 @@ var authArgs = []argument{
 	word("apikey", "API key auth in header or query").withExample("header X-API-Key {{key}}"),
 	word("oauth2", "Built-in OAuth 2.0 token acquisition and caching").chains(),
 	word("command", "Run a CLI command and inject its token output").
-		withOption(`argv=["gh","auth","token"]`),
+		withOption(`cmd="gh auth token"`),
 	word("header", "API key placement in headers"),
 	word("query", "API key placement in query string"),
+	optValue("use", "Reference a named command auth", namesValue(func(_ Context, sc Scope) ([]string, string) {
+		return sc.Profiles.Auth, "auth profile"
+	})),
 	opt("token_url", "OAuth2 token endpoint URL", "https://auth.example.com/oauth/token"),
 	opt("auth_url", "OAuth2 authorization endpoint URL", "https://auth.example.com/authorize"),
 	opt("client_id", "OAuth2 client ID", "{{clientId}}"),
@@ -72,6 +75,7 @@ var authArgs = []argument{
 	),
 	opt("state", "OAuth2 state value", "{{oauth.state}}"),
 	opt("header", "Override injected header name", "Authorization"),
+	opt("cmd", "Command line, split into arguments without a shell", `"gh auth token"`),
 	opt("argv", "Command argv as JSON array", `["gh","auth","token"]`),
 	choice("format", "Command output format", string(authcmd.FormatText), string(authcmd.FormatJSON)),
 	opt("scheme", "Command auth header scheme", "Bearer"),

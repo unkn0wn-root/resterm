@@ -95,10 +95,20 @@ func TestRenderAmbiguousInlineBodyAddsDirective(t *testing.T) {
 	}
 }
 
-func TestFormatAuthParamPrefersSingleQuotesForJSONLikeValues(t *testing.T) {
-	got := formatAuthParam("argv", `["tool","arg with space"]`)
-	if got != `argv='["tool","arg with space"]'` {
-		t.Fatalf("unexpected formatted auth param %q", got)
+func TestFormatAuthParam(t *testing.T) {
+	tests := []struct {
+		key, val, want string
+	}{
+		{"argv", `["tool","arg with space"]`, `argv='["tool","arg with space"]'`},
+		{"cmd", `mycli --name 'a b'`, `cmd="mycli --name 'a b'"`},
+		{"scheme", `"quoted"`, `scheme='"quoted"'`},
+		{"header", "X-Token", "header=X-Token"},
+	}
+	for _, tt := range tests {
+		got, err := formatAuthParam(tt.key, tt.val)
+		if err != nil || got != tt.want {
+			t.Fatalf("formatAuthParam(%q, %q) = %q, %v, want %q", tt.key, tt.val, got, err, tt.want)
+		}
 	}
 }
 
