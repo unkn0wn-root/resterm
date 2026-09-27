@@ -256,6 +256,10 @@ func toWorkflowStep(res wfStepRes) engine.WorkflowStep {
 	if summary == "" {
 		summary = strings.TrimSpace(res.status)
 	}
+	var reason string
+	if res.skip {
+		reason = res.msg
+	}
 	return engine.WorkflowStep{
 		Name:       res.name,
 		Method:     res.method,
@@ -272,6 +276,7 @@ func toWorkflowStep(res wfStepRes) engine.WorkflowStep {
 		Tests:      slices.Clone(res.tests),
 		ScriptErr:  res.sErr,
 		Skipped:    res.skip,
+		SkipReason: reason,
 		Canceled:   res.cancel,
 		Success:    res.ok,
 		Duration:   res.dur,

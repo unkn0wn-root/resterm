@@ -421,7 +421,7 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Skipped: true, SkipReason: wfSkipIfNoBranch})
 	}
 	if msg := strings.TrimSpace(br.Fail); msg != "" {
-		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: fmt.Errorf("%s", msg)})
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: diag.New(diag.ClassAssertion, msg)})
 	}
 	branch, req := r.resolveBranchRequest(br.Run)
 	if branch == "" {
@@ -458,7 +458,7 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Skipped: true, SkipReason: wfSkipSwitchNoCase})
 	}
 	if msg := strings.TrimSpace(sel.Fail); msg != "" {
-		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: fmt.Errorf("%s", msg)})
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: diag.New(diag.ClassAssertion, msg)})
 	}
 	branch, req := r.resolveBranchRequest(sel.Run)
 	if branch == "" {

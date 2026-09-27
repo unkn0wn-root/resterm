@@ -232,6 +232,8 @@ func diagFailureCode(class diag.Class) (Code, bool) {
 		return CodeRoute, true
 	case diag.ClassScript:
 		return CodeScript, true
+	case diag.ClassAssertion:
+		return CodeAssertion, true
 	case diag.ClassFilesystem, diag.ClassHistory:
 		return CodeFilesystem, true
 	case diag.ClassConfig, diag.ClassParse, diag.ClassUI, diag.ClassInternal:

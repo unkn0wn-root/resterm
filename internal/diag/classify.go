@@ -129,6 +129,8 @@ func classRank(class Class) int {
 		return 40
 	case ClassScript:
 		return 50
+	case ClassAssertion:
+		return 55
 	case ClassFilesystem:
 		return 60
 	case ClassProtocol:

@@ -474,6 +474,7 @@ func TestClassKnownMembership(t *testing.T) {
 		diag.ClassRoute,
 		diag.ClassFilesystem,
 		diag.ClassScript,
+		diag.ClassAssertion,
 		diag.ClassHistory,
 		diag.ClassUI,
 		diag.ClassInternal,

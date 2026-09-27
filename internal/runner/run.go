@@ -231,24 +231,7 @@ func (r *Report) WriteText(w io.Writer) error {
 }
 
 func resultFailed(item Result) bool {
-	if item.Failure.Code != "" {
-		return true
-	}
-	if item.Canceled || item.Err != nil || item.ScriptErr != nil || traceFailed(item.Trace) {
-		return true
-	}
-	for _, test := range item.Tests {
-		if !test.Passed {
-			return true
-		}
-	}
-	if slices.ContainsFunc(item.Steps, stepFailed) {
-		return true
-	}
-	if _, ok := item.Profile.measuredFailure(); ok {
-		return true
-	}
-	return !item.Passed
+	return resultFailure(item).Code != ""
 }
 
 func resultDuration(item Result) time.Duration {
@@ -566,6 +549,7 @@ func workflowStepResult(step engine.WorkflowStep) StepResult {
 		ScriptErr:            step.ScriptErr,
 		Passed:               step.Success,
 		Skipped:              step.Skipped,
+		SkipReason:           str.Trim(step.SkipReason),
 		Canceled:             step.Canceled,
 		Stream:               streamResult(step.Stream),
 		Trace:                traceResult(step.Response),
@@ -681,32 +665,9 @@ func cloneTests(src []scripts.TestResult) []scripts.TestResult {
 }
 
 func stepFailed(step StepResult) bool {
-	if step.Failure.Code != "" {
-		return true
-	}
-	if step.Canceled || step.Err != nil || step.ScriptErr != nil ||
-		streamFailed(step.Stream) || traceFailed(step.Trace) {
-		return true
-	}
-	for _, test := range step.Tests {
-		if !test.Passed {
-			return true
-		}
-	}
-	return !step.Passed
+	return stepFailure(step).Code != ""
 }
 
 func stepsPassed(steps []StepResult) bool {
-	if len(steps) == 0 {
-		return false
-	}
-	for _, step := range steps {
-		if step.Skipped {
-			continue
-		}
-		if stepFailed(step) {
-			return false
-		}
-	}
-	return true
+	return len(steps) > 0 && !slices.ContainsFunc(steps, stepFailed)
 }
