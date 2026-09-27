@@ -177,3 +177,26 @@ GET https://example.com/a
 		t.Fatalf("request auth = %+v, want its rejected line", own)
 	}
 }
+
+func TestParseAuthKeepsOpenGroupValues(t *testing.T) {
+	for key, val := range map[string]string{"password": "[abc", "client_secret": "Pa(ss"} {
+		src := "### r\n# @auth oauth2 token_url=https://id.example.com " + key + "=" + val + "\nGET https://example.com\n"
+		doc := Parse("/ws/api.http", []byte(src))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("%s: expected no errors, got %v", key, doc.Errors)
+		}
+		if got := doc.Requests[0].Metadata.Auth.Params[key]; got != val {
+			t.Fatalf("%s = %q, want %q", key, got, val)
+		}
+	}
+}
+
+func TestParseUnclosedNamedDefinitionKeepsItsName(t *testing.T) {
+	doc := Parse("/ws/defs.http", []byte("# @auth global command gh cmd=\"unterminated\n"))
+	if len(doc.Errors) != 1 || len(doc.Auth) != 1 {
+		t.Fatalf("errors = %v, profiles = %+v", doc.Errors, doc.Auth)
+	}
+	if p := doc.Auth[0]; p.Name != "gh" || p.Spec.Rejected == "" {
+		t.Fatalf("profile = %+v, want gh kept as rejected", p)
+	}
+}

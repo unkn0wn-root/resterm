@@ -13,6 +13,32 @@ func Fields(input string) []string {
 	return (&lexer{src: input}).collect()
 }
 
+// FieldOption returns key=value in a form Fields reads back unchanged.
+// Values with spaces try quotes first to keep existing output.
+func FieldOption(key, value string) (string, bool) {
+	forms := []string{value, "'" + value + "'", `"` + value + `"`}
+	if strings.ContainsAny(value, " \t") {
+		forms = []string{forms[1], forms[2], forms[0]}
+	}
+	want := key + "=" + value
+	for _, form := range forms {
+		if opt := key + "=" + form; readsBack(opt, want) {
+			return opt, true
+		}
+	}
+	return "", false
+}
+
+func readsBack(opt, want string) bool {
+	lex := &lexer{src: opt}
+	tok, ok := lex.next()
+	if !ok || tok.val != want || lex.field.closer() != 0 {
+		return false
+	}
+	_, more := lex.next()
+	return !more
+}
+
 // Here a backslash makes the next character literal. Inside quotes it only
 // escapes a quote or another backslash, which is what lets a quoted Windows
 // path keep its separators. A trailing backslash stays as it is.

@@ -96,19 +96,12 @@ func TestRenderAmbiguousInlineBodyAddsDirective(t *testing.T) {
 }
 
 func TestFormatAuthParam(t *testing.T) {
-	tests := []struct {
-		key, val, want string
-	}{
-		{"argv", `["tool","arg with space"]`, `argv='["tool","arg with space"]'`},
-		{"cmd", `mycli --name 'a b'`, `cmd="mycli --name 'a b'"`},
-		{"scheme", `"quoted"`, `scheme='"quoted"'`},
-		{"header", "X-Token", "header=X-Token"},
+	if got, err := formatAuthParam("scope", "read write"); err != nil || got != "scope='read write'" {
+		t.Fatalf("formatAuthParam() = %q, %v", got, err)
 	}
-	for _, tt := range tests {
-		got, err := formatAuthParam(tt.key, tt.val)
-		if err != nil || got != tt.want {
-			t.Fatalf("formatAuthParam(%q, %q) = %q, %v, want %q", tt.key, tt.val, got, err, tt.want)
-		}
+	_, err := formatAuthParam("scope", `say "hi" it's`)
+	if err == nil || !strings.Contains(err.Error(), "writer: @auth scope") {
+		t.Fatalf("error = %v, want one naming the @auth option", err)
 	}
 }
 

@@ -445,20 +445,11 @@ func formatOrderedParams(params map[string]string, ordered []string) ([]string, 
 	return parts, nil
 }
 
-// A value with spaces needs a quote character it does not contain. Quote a
-// leading quote too, or parsing will drop it.
 func formatAuthParam(key, val string) (string, error) {
-	if !strings.ContainsAny(val, " \t") && !strings.HasPrefix(val, "'") && !strings.HasPrefix(val, `"`) {
-		return key + "=" + val, nil
+	if opt, ok := directive.FieldOption(key, val); ok {
+		return opt, nil
 	}
-	switch {
-	case !strings.Contains(val, "'"):
-		return key + "='" + val + "'", nil
-	case !strings.Contains(val, `"`):
-		return key + `="` + val + `"`, nil
-	default:
-		return "", fmt.Errorf("writer: @auth %s value has spaces and both quote kinds, so it cannot be quoted", key)
-	}
+	return "", fmt.Errorf("writer: @auth %s value cannot be written so it reads back the same", key)
 }
 
 func renderRequestVariables(w directiveWriter, vars []restfile.Variable) {

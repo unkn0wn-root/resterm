@@ -330,6 +330,24 @@ func TestRejectedGlobalAuthBlocksInheritance(t *testing.T) {
 	}
 }
 
+func TestRejectedNamedDefinitionBlocksOnlyItsUsers(t *testing.T) {
+	rig := newNamedAuthRig(t, map[string]string{
+		"defs.http": "# @auth global command gh cmd=\"unterminated\n",
+		"api.http":  "### Unrelated\nGET https://example.test/plain\n\n### Uses gh\n# @auth use=gh\nGET https://example.test/gh\n",
+	})
+	doc := rig.doc(t, "api.http")
+	if res := rig.run(t, doc, 0, "dev", ExecModeSend); res.Err != nil {
+		t.Fatalf("unrelated request: %v", res.Err)
+	}
+	if got := rig.header(t, "Authorization"); got != "" {
+		t.Fatalf("unrelated request sent %q", got)
+	}
+	res := rig.run(t, doc, 1, "dev", ExecModeSend)
+	if res.Err == nil || !strings.Contains(res.Err.Error(), `@auth is missing a closing "\""`) {
+		t.Fatalf("use=gh error = %v, want the rejected definition", res.Err)
+	}
+}
+
 func authStageHas(res engine.RequestResult, status xplain.StageStatus, summary string) bool {
 	if res.Explain == nil {
 		return false

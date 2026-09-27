@@ -73,6 +73,18 @@ func TestRenderRoundTripsEveryAuthForm(t *testing.T) {
 			params: map[string]string{"cmd": `mycli --name "a b"`},
 		},
 		{
+			name:   "command argv with spaces and both quote kinds",
+			source: `# @auth command argv=["tool","it's working"] cache_key=x`,
+			want:   restfile.AuthCommand,
+			params: map[string]string{"argv": `["tool","it's working"]`, "cache_key": "x"},
+		},
+		{
+			name:   "oauth2 secret with an open paren before another option",
+			source: "# @auth oauth2 token_url=https://id.example.com client_secret='Pa(ss' client_id=demo",
+			want:   restfile.AuthOAuth2,
+			params: map[string]string{"client_secret": "Pa(ss", "client_id": "demo"},
+		},
+		{
 			name:   "oauth2",
 			source: "# @auth oauth2 token_url=https://id.example.com/token client_id=demo",
 			want:   restfile.AuthOAuth2,

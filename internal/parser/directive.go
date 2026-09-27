@@ -284,8 +284,10 @@ func parseAuthDirective(rest string) (authDirective, error) {
 			return dir, fmt.Errorf("@auth %s scope requires an auth spec", scope.String())
 		}
 	}
-	// Fields alone accepts an unclosed quote in cmd="gh auth token.
-	if closer := directive.FieldsOpen(rest); closer != 0 {
+	// Cut the name first so a rejected line cannot become a default.
+	dir.Name, fields = cutAuthName(fields)
+	// Only quotes count. An open bracket keeps the rest of the line, as in Pa(ss.
+	if closer := directive.FieldsOpen(rest); closer == '"' || closer == '\'' {
 		return dir, &directive.UnclosedError{Directive: directive.Auth, Closer: string(closer)}
 	}
 
@@ -309,7 +311,6 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, err
 	}
 
-	dir.Name, fields = cutAuthName(fields)
 	if dir.Name != "" {
 		if dir.Scope == directive.ScopeRequest {
 			return dir, fmt.Errorf("@auth %s scope does not support a profile name", dir.Scope.String())
