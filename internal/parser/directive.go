@@ -3,6 +3,7 @@ package parser
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -270,13 +271,13 @@ var errAuthSpec = errors.New("@auth requires a valid auth spec")
 
 func parseAuthDirective(rest string) (authDirective, error) {
 	dir := authDirective{Scope: directive.ScopeRequest}
-	fields := directive.Fields(rest)
+	fields := slices.Collect(directive.ScanFields(rest))
 	if len(fields) == 0 {
 		return dir, errAuthSpec
 	}
 
 	explicitScope := false
-	if scope, ok := directive.ParseScope(fields[0]); ok {
+	if scope, ok := directive.ParseScope(fields[0].Value); ok {
 		dir.Scope = scope
 		explicitScope = true
 		fields = fields[1:]
@@ -291,7 +292,7 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, &directive.UnclosedError{Directive: directive.Auth, Closer: string(closer)}
 	}
 
-	if strings.EqualFold(fields[0], restfile.AuthDisableWord) {
+	if strings.EqualFold(fields[0].Value, restfile.AuthDisableWord) {
 		if dir.Scope != directive.ScopeRequest {
 			return dir, fmt.Errorf("@auth %s scope does not support none", dir.Scope.String())
 		}
@@ -302,7 +303,7 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, nil
 	}
 
-	if namesProfiles(fields[0]) {
+	if namesProfiles(fields[0].Value) || (strings.EqualFold(fields[0].Value, "use") && spacedKey(fields, 0)) {
 		if dir.Scope != directive.ScopeRequest {
 			return dir, fmt.Errorf("@auth %s scope does not support use=", dir.Scope.String())
 		}
@@ -338,29 +339,45 @@ func parseAuthDirective(rest string) (authDirective, error) {
 	return dir, nil
 }
 
-func cutAuthName(fields []string) (string, []string) {
-	if len(fields) < 2 ||
-		restfile.AuthKind(fields[0]).Canonical() != restfile.AuthCommand ||
-		strings.Contains(fields[1], "=") {
+func cutAuthName(fields []directive.Field) (string, []directive.Field) {
+	if len(fields) < 2 || restfile.AuthKind(fields[0].Value).Canonical() != restfile.AuthCommand {
 		return "", fields
 	}
-	return fields[1], append([]string{fields[0]}, fields[2:]...)
+	// A command option written with spaces, as in cmd = x, is not a name. Any
+	// other word stays the name, so a broken named definition only fails the
+	// requests that use it.
+	word := strings.ToLower(fields[1].Value)
+	option := strings.Contains(word, "=") ||
+		slices.Contains(restfile.AuthCommandParams, word) && spacedKey(fields, 1)
+	if option {
+		return "", fields
+	}
+	return fields[1].Value, append([]directive.Field{fields[0]}, fields[2:]...)
+}
+
+func spacedKey(fields []directive.Field, i int) bool {
+	return i+1 < len(fields) && strings.HasPrefix(fields[i+1].Value, "=")
 }
 
 // Reject bare words so an unquoted cmd=gh auth token cannot silently run gh.
-func authOptionFields(fields []string) (directive.Options, error) {
+// Report spacing errors first for options such as cmd = x.
+func authOptionFields(fields []directive.Field) (directive.Options, error) {
+	opts, err := directive.OptionFields(directive.Auth, fields)
+	if err != nil {
+		return directive.Options{}, err
+	}
 	for _, f := range fields {
-		if !strings.Contains(f, "=") {
+		if !strings.Contains(f.Value, "=") {
 			return directive.Options{}, fmt.Errorf(
-				"@auth expects key=value options, got %q; quote a value that has spaces",
-				f,
+				"@auth expects key=value options but got %q. Quote a value that has spaces",
+				f.Value,
 			)
 		}
 	}
-	return directive.OptionFields(directive.Auth, fields)
+	return opts, nil
 }
 
-func parseAuthUse(fields []string) (*restfile.AuthSpec, error) {
+func parseAuthUse(fields []directive.Field) (*restfile.AuthSpec, error) {
 	opts, err := authOptionFields(fields)
 	if err != nil {
 		return nil, err
@@ -391,27 +408,27 @@ func parseAuthUse(fields []string) (*restfile.AuthSpec, error) {
 // Fields arrive decoded. Rejoining them loses the boundary around a quoted
 // option value, so scope="read write" would read back as scope=read plus an
 // unrelated bare word.
-func parseAuthSpec(fields []string) (*restfile.AuthSpec, error) {
+func parseAuthSpec(fields []directive.Field) (*restfile.AuthSpec, error) {
 	if len(fields) == 0 {
 		return nil, nil
 	}
-	authType := restfile.AuthKind(fields[0]).Canonical()
+	authType := restfile.AuthKind(fields[0].Value).Canonical()
 	params := make(map[string]string)
 	switch authType {
 	case restfile.AuthBasic:
 		if len(fields) >= 3 {
-			params["username"] = fields[1]
-			params["password"] = strings.Join(fields[2:], " ")
+			params["username"] = fields[1].Value
+			params["password"] = joinValues(fields[2:])
 		}
 	case restfile.AuthBearer:
 		if len(fields) >= 2 {
-			params["token"] = strings.Join(fields[1:], " ")
+			params["token"] = joinValues(fields[1:])
 		}
 	case restfile.AuthAPIKey:
 		if len(fields) >= 4 {
-			params["placement"] = strings.ToLower(fields[1])
-			params["name"] = fields[2]
-			params["value"] = strings.Join(fields[3:], " ")
+			params["placement"] = strings.ToLower(fields[1].Value)
+			params["name"] = fields[2].Value
+			params["value"] = joinValues(fields[3:])
 		}
 	case restfile.AuthOAuth2:
 		if len(fields) < 2 {
@@ -445,8 +462,8 @@ func parseAuthSpec(fields []string) (*restfile.AuthSpec, error) {
 		}
 	default:
 		if len(fields) >= 2 {
-			params["header"] = fields[0]
-			params["value"] = strings.Join(fields[1:], " ")
+			params["header"] = fields[0].Value
+			params["value"] = joinValues(fields[1:])
 			authType = restfile.AuthHeader
 		}
 	}
@@ -454,6 +471,14 @@ func parseAuthSpec(fields []string) (*restfile.AuthSpec, error) {
 		return nil, nil
 	}
 	return &restfile.AuthSpec{Type: authType, Params: params}, nil
+}
+
+func joinValues(fields []directive.Field) string {
+	vals := make([]string, len(fields))
+	for i, f := range fields {
+		vals[i] = f.Value
+	}
+	return strings.Join(vals, " ")
 }
 
 // Trace budgets use "<=" syntax, so duplicate checks use normalized target
@@ -558,7 +583,7 @@ func setTracePhaseBudget(spec *restfile.TraceSpec, name string, dur time.Duratio
 var compareBaselineKeys = []string{"base", "baseline", "primary", "ref"}
 
 func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
-	fields := directive.Fields(rest)
+	fields := slices.Collect(directive.ScanFields(rest))
 	opts, err := directive.OptionFields(directive.Compare, fields)
 	if err != nil {
 		return nil, err
@@ -610,11 +635,11 @@ func compareOption(opts directive.Options, keys ...string) (string, error) {
 	return value, nil
 }
 
-func compareEnvironments(fields []string) ([]string, error) {
+func compareEnvironments(fields []directive.Field) ([]string, error) {
 	envs := make([]string, 0, len(fields))
 	seen := make(map[string]struct{}, len(fields))
 	for _, field := range fields {
-		env := strings.TrimSpace(field)
+		env := strings.TrimSpace(field.Value)
 		if env == "" || strings.Contains(env, "=") {
 			continue
 		}

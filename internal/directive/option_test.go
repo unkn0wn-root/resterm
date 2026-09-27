@@ -3,6 +3,7 @@ package directive
 import (
 	"errors"
 	"maps"
+	"slices"
 	"testing"
 )
 
@@ -27,7 +28,12 @@ func TestParseOptions(t *testing.T) {
 		{name: "bare key is true", input: "persist", want: map[string]string{"persist": "true"}},
 		{name: "key is lowercased", input: "Persist=NO", want: map[string]string{"persist": "NO"}},
 		{name: "empty value is kept", input: "key=", want: map[string]string{"key": ""}},
-		{name: "value without key is dropped", input: "=orphan", want: map[string]string{}},
+		{
+			name:    "value without key is reported",
+			input:   "=orphan",
+			want:    map[string]string{},
+			wantErr: `@mock option "=orphan" has spaces around =. Write it as key=value`,
+		},
 		{
 			name:    "a repeat is reported",
 			input:   "a=1 a=2",
@@ -113,7 +119,7 @@ func TestParseOptions(t *testing.T) {
 func TestOptionFields(t *testing.T) {
 	t.Parallel()
 
-	got, err := OptionFields(Auth, []string{"a=1", "bare", "", "=orphan", " B = 2 "})
+	got, err := OptionFields(Auth, slices.Collect(ScanFields(`a=1 bare "" " B = 2 "`)))
 	want := map[string]string{"a": "1", "b": "2"}
 	if !maps.Equal(got.vals, want) {
 		t.Fatalf("OptionFields() = %#v, want %#v", got, want)
@@ -122,7 +128,7 @@ func TestOptionFields(t *testing.T) {
 		t.Fatalf("OptionFields() err = %v, want nil", err)
 	}
 
-	got, err = OptionFields(Auth, []string{"a=1", "bare", "bare", "a=2"})
+	got, err = OptionFields(Auth, slices.Collect(ScanFields("a=1 bare bare a=2")))
 	if want := (map[string]string{"a": "2"}); !maps.Equal(got.vals, want) {
 		t.Fatalf("OptionFields() = %#v, want %#v", got, want)
 	}
@@ -699,5 +705,111 @@ func TestFieldsOpen(t *testing.T) {
 				t.Fatalf("FieldsOpen(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSpacedOptions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		input  string
+		bare   bool
+		want   map[string]string
+		spaced []string
+	}{
+		{"none", "timeout=5s flag", true, map[string]string{"timeout": "5s", "flag": "true"}, nil},
+		{
+			"spaces both sides",
+			"insecure = false timeout=5s",
+			true,
+			map[string]string{"timeout": "5s"},
+			[]string{"insecure"},
+		},
+		{"space before", "insecure =false", true, map[string]string{}, []string{"insecure"}},
+		{"space after", "insecure= false", true, map[string]string{}, []string{"insecure"}},
+		{"case kept", "Agent = false", true, map[string]string{}, []string{"Agent"}},
+		{"no value", "insecure =", true, map[string]string{}, []string{"insecure"}},
+		{"empty value last", "insecure=", true, map[string]string{"insecure": ""}, nil},
+		{
+			"empty value then option",
+			"insecure= timeout=5s",
+			true,
+			map[string]string{"insecure": "", "timeout": "5s"},
+			nil,
+		},
+		{"no key", "timeout=5s =X", true, map[string]string{"timeout": "5s"}, []string{"=X"}},
+		{"lone = takes a value", "timeout=5s = 1s", true, map[string]string{"timeout": "5s"}, []string{"="}},
+		{
+			"lone = before an option",
+			"persist = timeout=5s",
+			true,
+			map[string]string{"timeout": "5s"},
+			[]string{"persist"},
+		},
+		{"no key before an option", "a=1 = b=2", true, map[string]string{"a": "1", "b": "2"}, []string{"="}},
+		{"chained", "a = b = c", true, map[string]string{}, []string{"a", "="}},
+		{"fields", "cmd= gh auth", false, map[string]string{}, []string{"cmd"}},
+		{"fields bare word", "cmd=gh auth", false, map[string]string{"cmd": "gh"}, nil},
+		{"empty field then no key", `"" =x`, false, map[string]string{}, []string{"=x"}},
+		{"quoted value after space", `k= "a=b"`, true, map[string]string{}, []string{"k"}},
+		{"quoted empty value", `k="" flag`, true, map[string]string{"k": "", "flag": "true"}, nil},
+		{"quoted value with =", `k="a=b" flag`, true, map[string]string{"k": "a=b", "flag": "true"}, nil},
+		{"fields value with a space", `cmd= "echo a=b"`, false, map[string]string{}, []string{"cmd"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, err := OptionFields(SSE, slices.Collect(ScanFields(tt.input)))
+			if tt.bare {
+				opts, err = ParseOptions(SSE, tt.input)
+			}
+			if !maps.Equal(opts.vals, tt.want) {
+				t.Fatalf("vals = %v, want %v", opts.vals, tt.want)
+			}
+			var spaced *SpacedOptionsError
+			switch {
+			case tt.spaced == nil && err != nil:
+				t.Fatalf("err = %v", err)
+			case tt.spaced != nil && (!errors.As(err, &spaced) || !slices.Equal(spaced.Keys, tt.spaced)):
+				t.Fatalf("err = %v, want spaced %q", err, tt.spaced)
+			}
+		})
+	}
+}
+
+func TestSpacedOptionsError(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParseOptions(Settings, "http-insecure = false")
+	if want := `@settings option "http-insecure" has spaces around =. Write it as key=value`; err == nil ||
+		err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+	_, err = ParseOptions(SSH, "agent =x =y")
+	if want := `@ssh options "agent", "=y" have spaces around =. Write them as key=value`; err == nil ||
+		err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+	var ue *UnknownOptionsError
+	if errors.As(err, &ue) {
+		t.Fatal("a spaced option must not read as an unknown option, which parsers only warn about")
+	}
+	if got := OptionKeys(err); !slices.Equal(got, []string{"agent", "=y"}) {
+		t.Fatalf("OptionKeys() = %v", got)
+	}
+}
+
+func TestApplyOptionsSkipsSpacedOptions(t *testing.T) {
+	t.Parallel()
+
+	var seen []string
+	err := ApplyOptions(SSE, "timeout=5s idle = 1s", nil, func(key, _ string) error {
+		seen = append(seen, key)
+		return nil
+	})
+	var spaced *SpacedOptionsError
+	if !slices.Equal(seen, []string{"timeout"}) || !errors.As(err, &spaced) {
+		t.Fatalf("applied %v, err = %v, want timeout applied and idle reported", seen, err)
 	}
 }

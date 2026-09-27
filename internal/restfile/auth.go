@@ -26,6 +26,24 @@ var authAliases = map[AuthKind]AuthKind{"api-key": AuthAPIKey}
 
 const AuthDisableWord = "none"
 
+// AuthCommandParams lists every command option, in the order it is written.
+// Any other key is rejected, since an unquoted cmd=mycli --role=admin would
+// otherwise run mycli without --role=admin.
+var AuthCommandParams = []string{
+	"cmd",
+	"argv",
+	"format",
+	"header",
+	"scheme",
+	"token_path",
+	"type_path",
+	"expiry_path",
+	"expires_in_path",
+	"cache_key",
+	"ttl",
+	"timeout",
+}
+
 // AuthUseParams lists the settings a use= line can override.
 var AuthUseParams = []string{"header", "scheme", "timeout"}
 

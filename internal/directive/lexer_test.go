@@ -91,7 +91,7 @@ func TestFields(t *testing.T) {
 	}
 }
 
-func TestFieldsEscaped(t *testing.T) {
+func TestScanFieldsEscapes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -146,8 +146,12 @@ func TestFieldsEscaped(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := fieldsEscaped(tt.input); !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("fieldsEscaped(%q) = %#v, want %#v", tt.input, got, tt.want)
+			var got []string
+			for f := range scanFields(tt.input, true) {
+				got = append(got, f.Value)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("scanFields(%q) = %#v, want %#v", tt.input, got, tt.want)
 			}
 		})
 	}

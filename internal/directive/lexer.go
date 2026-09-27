@@ -39,16 +39,12 @@ func readsBack(opt, want string) bool {
 	return !more
 }
 
-// Here a backslash makes the next character literal. Inside quotes it only
-// escapes a quote or another backslash, which is what lets a quoted Windows
-// path keep its separators. A trailing backslash stays as it is.
-func fieldsEscaped(input string) []string {
-	return (&lexer{src: input, escapes: true}).collect()
-}
-
 type lexer struct {
-	src     string
-	pos     int
+	src string
+	pos int
+	// With escapes a backslash makes the next character literal. Inside quotes
+	// it only escapes a quote or another backslash, which is what lets a quoted
+	// Windows path keep its separators. A trailing backslash stays as it is.
 	escapes bool
 
 	tok   strings.Builder
