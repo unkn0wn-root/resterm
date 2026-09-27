@@ -1274,6 +1274,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					req:     in.Req,
 					res:     in.Resolver,
 					resp:    in.Response,
+					tr:      rtsTrace(in.HTTP),
 					stream:  in.Stream,
 					out:     &caps,
 					env:     x.env,

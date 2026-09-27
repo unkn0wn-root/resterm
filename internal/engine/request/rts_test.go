@@ -534,3 +534,42 @@ func TestBadHeaderNameFailsBeforeDispatch(t *testing.T) {
 		t.Fatal("invalid request reached the transport")
 	}
 }
+
+func TestTraceObjectBelongsToTheCurrentResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	doc := parser.Parse("trace.http", []byte(`### traced
+# @name traced
+# @trace total<=10s
+# @capture request budgets = trace.hasBudgets()
+GET `+srv.URL+`/traced
+
+### plain
+# @name plain
+# @assert not trace.enabled()
+# @capture request enabled = trace.enabled()
+GET `+srv.URL+`/plain
+`))
+	eng := New(engcfg.Config{}, nil)
+	env := testEnv("")
+
+	for i, want := range []map[string]string{{"budgets": "true"}, {"enabled": "false"}} {
+		res, err := eng.Execute(doc, doc.Requests[i], env)
+		if err != nil || res.Err != nil {
+			t.Fatalf("request %d: err=%v result err=%v", i, err, res.Err)
+		}
+		for _, test := range res.Tests {
+			if !test.Passed {
+				t.Fatalf("request %d assert failed: %s %s", i, test.Name, test.Message)
+			}
+		}
+		for name, value := range want {
+			if got := executedVar(t, res.Executed, name); got != value {
+				t.Fatalf("request %d capture %s = %q, want %q", i, name, got, value)
+			}
+		}
+	}
+}

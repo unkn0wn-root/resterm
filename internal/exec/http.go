@@ -39,6 +39,7 @@ type CaptureInput struct {
 	Req      *restfile.Request
 	Resolver *vars.Resolver
 	Response *scripts.Response
+	HTTP     *httpx.Response
 	Stream   *scripts.StreamInfo
 	Vars     map[string]string
 	Locals   rts.Locals
@@ -250,6 +251,7 @@ func (r Runner) finalizeHTTP(
 			Req:      in.Req,
 			Resolver: in.Resolver,
 			Response: respForScripts,
+			HTTP:     resp,
 			Stream:   streamInfo,
 			Vars:     r.collectVars(in.Doc, in.Req, in.ScriptVars),
 			Locals:   in.Locals,

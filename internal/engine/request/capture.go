@@ -43,6 +43,7 @@ type captureRun struct {
 	req     *restfile.Request
 	res     *vars.Resolver
 	resp    *scripts.Response
+	tr      *rtshost.Trace
 	stream  *scripts.StreamInfo
 	out     *captureResult
 	env     vars.ResolvedEnv
@@ -67,6 +68,7 @@ type captureScope struct {
 	evalScope
 	locals rts.Locals
 	rr     *rtshost.Response
+	tr     *rtshost.Trace
 	rs     *rtshost.Stream
 }
 
@@ -124,6 +126,7 @@ func (e *Engine) applyCaptures(in captureRun) error {
 		env:    in.env,
 		locals: in.locals,
 		rr:     rr,
+		tr:     in.tr,
 		rs:     rtsStream(in.stream),
 	}
 	work := &captureResult{}
@@ -270,6 +273,7 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		site:    directive.Capture.Tag() + " " + str.FoldLines(in.ex),
 		resp:    in.rr,
 		res:     in.rr,
+		tr:      in.tr,
 		st:      in.rs,
 		secrets: rtshost.IncludeSecrets,
 	})

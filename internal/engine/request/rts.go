@@ -224,9 +224,10 @@ func (e *Engine) buildRTWithScope(in rtIn, prep rtshost.PreparedScope) (rtshost.
 		}
 	}
 	// Keep in.res nil before the request runs. Falling back to resp would make
-	// response refer to last.
+	// response refer to last. Before a response, trace is the last traced
+	// response. After one, it is that response's trace, or nil when it was not traced.
 	tr := in.tr
-	if tr == nil {
+	if tr == nil && in.res == nil {
 		tr = e.rtsLastTrace()
 	}
 	scope, err := prep.BindVars(in.vars)
