@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
 
@@ -69,11 +71,13 @@ func TestHeadersSwitchUsesMarkerAndIgnoresTabStyles(t *testing.T) {
 	model.theme.TabActive = model.theme.TabActive.
 		Padding(0, 4).
 		Width(8).
-		Background(lipgloss.Color("9"))
+		Background(lipgloss.Color("9")).
+		Border(lipgloss.NormalBorder())
 	model.theme.TabInactive = model.theme.TabInactive.
 		Padding(0, 3).
 		Width(7).
-		Background(lipgloss.Color("8"))
+		Background(lipgloss.Color("8")).
+		Border(lipgloss.NormalBorder())
 	pane := model.pane(responsePanePrimary)
 	pane.headersView = headersViewResponse
 
@@ -90,7 +94,7 @@ func TestHeadersSwitchUsesMarkerAndIgnoresTabStyles(t *testing.T) {
 	if strings.Contains(view, "\n") {
 		t.Fatalf("expected one-line header switch, got %q", view)
 	}
-	if view != "Response │● Request" {
+	if view != "Response │ ● Request" {
 		t.Fatalf("expected request marker switch, got %q", view)
 	}
 }
@@ -237,4 +241,79 @@ func TestHeadersDisplayIndentsWrappedValues(t *testing.T) {
 		return
 	}
 	t.Fatalf("expected wrapped X-Trace row in %q", pane.viewport.View())
+}
+
+func TestHeadersDisplaySummarizesResponseOnOneLine(t *testing.T) {
+	resp := &httpx.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Duration:     142*time.Millisecond + 600*time.Microsecond,
+		EffectiveURL: "https://api.example.com/v1/users/42",
+		Body:         []byte(`{"id":42}`),
+		Headers:      http.Header{"X-A": {"1"}},
+	}
+	snap := &responseSnapshot{
+		ready:  true,
+		source: newHTTPResponseRenderSource(resp, nil, nil),
+	}
+	model := newModelWithResponseTab(responseTabHeaders, snap)
+	pane := model.pane(responsePanePrimary)
+
+	if cmd := model.syncResponsePane(responsePanePrimary); cmd != nil {
+		_ = cmd()
+	}
+
+	lines := strings.Split(stripANSIEscape(pane.viewport.View()), "\n")
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], " ")
+	}
+	// Rounded like the Pretty tab.
+	if lines[2] != "200 OK · time 143ms · size 9 B" || lines[3] != "" || !strings.HasPrefix(lines[4], "1 HEADER ") {
+		t.Fatalf("expected one summary line before the headers, got %q", lines)
+	}
+}
+
+func TestHeadersSwitchCountsInactiveSide(t *testing.T) {
+	resp := &httpx.Response{
+		Status:     "200 OK",
+		StatusCode: 200,
+		Headers: http.Header{
+			"Set-Cookie": {"a=1", "b=2"},
+			"X-A":        {"1"},
+		},
+		RequestHeaders: http.Header{"Accept": {"*/*"}},
+	}
+	snap := &responseSnapshot{
+		ready:  true,
+		source: newHTTPResponseRenderSource(resp, nil, nil),
+	}
+	model := newModelWithResponseTab(responseTabHeaders, snap)
+	pane := model.pane(responsePanePrimary)
+
+	if got := stripANSIEscape(model.renderHeaderSubviewSwitch(pane)); got != "● Response │ Request 1" {
+		t.Fatalf("expected request count only, got %q", got)
+	}
+	pane.headersView = headersViewRequest
+	if got := stripANSIEscape(model.renderHeaderSubviewSwitch(pane)); got != "Response 3 │ ● Request" {
+		t.Fatalf("expected response count only, got %q", got)
+	}
+}
+
+func TestHeadersSwitchCountsGRPCRowsAsShown(t *testing.T) {
+	resp := &grpcx.Response{
+		Headers:     map[string][]string{"x-a": {"1"}},
+		Trailers:    map[string][]string{"x-t": {"2"}},
+		ContentType: "application/json",
+	}
+	snap := &responseSnapshot{
+		ready:  true,
+		source: newGRPCResponseRenderSource(resp, "/svc/Call", nil),
+	}
+	model := newModelWithResponseTab(responseTabHeaders, snap)
+	pane := model.pane(responsePanePrimary)
+	pane.headersView = headersViewRequest
+
+	if got := stripANSIEscape(model.renderHeaderSubviewSwitch(pane)); got != "Response 2 │ ● Request" {
+		t.Fatalf("expected headers and trailers counted, got %q", got)
+	}
 }

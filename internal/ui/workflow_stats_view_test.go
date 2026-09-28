@@ -225,7 +225,7 @@ func TestWorkflowStatsDetailFocusLetsJScrollDetail(t *testing.T) {
 	}
 }
 
-func TestWorkflowStatsSpaceDoesNotToggleDetailFocus(t *testing.T) {
+func TestWorkflowStatsSpaceTogglesDetailFocus(t *testing.T) {
 	model := New(Config{})
 	model.focus = focusResponse
 	model.responsePaneFocus = responsePanePrimary
@@ -248,8 +248,14 @@ func TestWorkflowStatsSpaceDoesNotToggleDetailFocus(t *testing.T) {
 	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeySpace}); cmd != nil {
 		_ = cmd()
 	}
+	if !view.detailFocus {
+		t.Fatal("expected space to focus selected step detail")
+	}
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}}); cmd != nil {
+		_ = cmd()
+	}
 	if view.detailFocus {
-		t.Fatal("expected space to leave workflow detail focus unchanged")
+		t.Fatal("expected space to return focus to step list")
 	}
 }
 

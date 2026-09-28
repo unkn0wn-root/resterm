@@ -143,34 +143,12 @@ func (r responseRenderer) buildRespSummary(
 		lines = append(lines, renderLabelValue("URL", trimmedURL, r.stats.Label, r.stats.Value))
 	}
 
-	if resp.Headers != nil {
-		if streamType := strings.TrimSpace(
-			resp.Headers.Get(httpx.StreamHeaderType),
-		); streamType != "" {
-			lines = append(
-				lines,
-				renderLabelValue("Stream", streamType, r.stats.Label, r.stats.Value),
-			)
-		}
-
-		if summary := strings.TrimSpace(
-			resp.Headers.Get(httpx.StreamHeaderSummary),
-		); summary != "" {
-			lines = append(
-				lines,
-				renderLabelValue("Stream summary", summary, r.stats.Label, r.stats.Message),
-			)
-		}
-	}
+	lines = append(lines, r.streamSummaryLines(resp)...)
 
 	if resp.Duration > 0 {
-		dur := resp.Duration.Round(time.Millisecond)
-		if dur <= 0 {
-			dur = resp.Duration
-		}
 		lines = append(
 			lines,
-			renderLabelValue("Duration", dur.String(), r.stats.Label, r.stats.Duration),
+			renderLabelValue("Duration", respDuration(resp.Duration), r.stats.Label, r.stats.Duration),
 		)
 	}
 
@@ -179,6 +157,25 @@ func (r responseRenderer) buildRespSummary(
 		summary = joinSections(summary, testSummary)
 	}
 	return summary
+}
+
+// Rounding would show a duration under half a millisecond as 0s.
+func respDuration(d time.Duration) string {
+	if rounded := d.Round(time.Millisecond); rounded > 0 {
+		return rounded.String()
+	}
+	return d.String()
+}
+
+func (r responseRenderer) streamSummaryLines(resp *httpx.Response) []string {
+	var lines []string
+	if streamType := resp.Headers.Get(httpx.StreamHeaderType); streamType != "" {
+		lines = append(lines, renderLabelValue("Stream", streamType, r.stats.Label, r.stats.Value))
+	}
+	if summary := resp.Headers.Get(httpx.StreamHeaderSummary); summary != "" {
+		lines = append(lines, renderLabelValue("Stream summary", summary, r.stats.Label, r.stats.Message))
+	}
+	return lines
 }
 
 func (r responseRenderer) renderStatusLine(status string, code int) string {
@@ -213,6 +210,13 @@ func contentLength(resp *httpx.Response) contentLen {
 	return contentLen{n: n, has: true, numeric: true}
 }
 
+func (c contentLen) pretty() string {
+	if c.numeric {
+		return formatByteSize(c.n)
+	}
+	return c.raw
+}
+
 func (r responseRenderer) renderContentLengthLine(resp *httpx.Response) string {
 	cl := contentLength(resp)
 	if !cl.has {
@@ -232,13 +236,7 @@ func (r responseRenderer) renderContentLengthLinePretty(resp *httpx.Response) st
 	if !cl.has {
 		return ""
 	}
-
-	value := cl.raw
-	if cl.numeric {
-		value = formatByteSize(cl.n)
-	}
-
-	return renderLabelValue("Content-Length", value, r.stats.Label, r.stats.Value)
+	return renderLabelValue("Content-Length", cl.pretty(), r.stats.Label, r.stats.Value)
 }
 
 func formatByteQuantity(n int64) string {

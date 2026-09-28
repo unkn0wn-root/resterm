@@ -321,7 +321,7 @@ func (m Model) helpSections() []helpSection {
 					),
 					"Response/History tab: top / bottom; Workflow list: first / last step",
 				},
-				{"Enter / Esc", "Workflow tab: focus detail / return to step list"},
+				{"Enter / Space / Esc", "Workflow tab: toggle step detail / return to step list"},
 				{"j / k / PgUp / PgDn", "Workflow tab: step navigation or focused detail scroll"},
 				{"Enter / Space", "Headers tab: switch response / request"},
 				{

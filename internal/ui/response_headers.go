@@ -2,6 +2,7 @@ package ui
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,17 +22,11 @@ func (m *Model) renderHeaderSubviewSwitch(pane *responsePaneState) string {
 	if pane == nil {
 		return ""
 	}
-	reqActive := pane.headersView == headersViewRequest
-	sep := " " + m.theme.PaneDivider.Render("│")
-	if !reqActive {
-		sep += " "
-	}
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		m.renderHeaderSwitchItem(headerResponseLabel, pane.headersView == headersViewResponse),
-		sep,
-		m.renderHeaderSwitchItem(headerRequestLabel, reqActive),
-	)
+	sep := " " + m.theme.PaneDivider.Render("│") + " "
+	return strings.Join([]string{
+		m.renderHeaderSwitchItem(pane, headersViewResponse),
+		m.renderHeaderSwitchItem(pane, headersViewRequest),
+	}, sep)
 }
 
 func (m *Model) renderHeaderSubviewHead(pane *responsePaneState, width int) string {
@@ -46,8 +41,21 @@ func (m *Model) renderHeaderSubviewHead(pane *responsePaneState, width int) stri
 	return sw + "\n" + rule
 }
 
-func (m *Model) renderHeaderSwitchItem(label string, active bool) string {
-	return headerSwitchStyle(m.theme, active).Render(headerSwitchText(label, active))
+// Only the inactive side shows a count. The active side has it in its rule.
+func (m *Model) renderHeaderSwitchItem(pane *responsePaneState, view headersViewMode) string {
+	label := headerResponseLabel
+	if view == headersViewRequest {
+		label = headerRequestLabel
+	}
+	active := pane.headersView == view
+	item := headerSwitchStyle(m.theme, active).Render(headerSwitchText(label, active))
+	if active {
+		return item
+	}
+	if n, ok := headerRows(pane.snapshot, view); ok {
+		item += " " + m.themeRuntime.subtleTextStyle(m.theme).Render(strconv.Itoa(n))
+	}
+	return item
 }
 
 func headerSwitchText(label string, active bool) string {
@@ -57,30 +65,17 @@ func headerSwitchText(label string, active bool) string {
 	return label
 }
 
+// Take only the text color from the tab styles, not their padding or borders.
 func headerSwitchStyle(th theme.Theme, active bool) lipgloss.Style {
-	st := th.TabInactive
 	if active {
-		st = th.TabActive
+		return lipgloss.NewStyle().Foreground(th.TabActive.GetForeground()).Bold(true)
 	}
-	st = st.
-		UnsetBackground().
-		UnsetWidth().
-		UnsetMaxWidth().
-		UnsetMargins().
-		Padding(0, 0)
-	if active {
-		return st.Bold(true).Faint(false)
-	}
-	return st.Bold(false).Faint(true)
+	return lipgloss.NewStyle().Foreground(th.TabInactive.GetForeground()).Faint(true)
 }
 
 func (m *Model) cycleHeaderSubview() tea.Cmd {
 	m.ensurePaneFocusValid()
-	paneID := m.responsePaneFocus
-	if !m.responseSplit {
-		paneID = responsePanePrimary
-	}
-	pane := m.pane(paneID)
+	pane := m.focusedPane()
 	if !headerSubviewAvailable(pane) {
 		return nil
 	}
@@ -97,7 +92,7 @@ func (m *Model) cycleHeaderSubview() tea.Cmd {
 	pane.setCurrPosition()
 
 	return batchCommands(
-		m.syncResponsePane(paneID),
+		m.syncResponsePane(m.responsePaneFocus),
 		func() tea.Msg { return statusMsg{text: note, level: statusInfo} },
 	)
 }
@@ -106,11 +101,7 @@ func (m *Model) activateHeaderSubviewFromBinding() tea.Cmd {
 	focusCmd := m.setFocus(focusResponse)
 	m.ensurePaneFocusValid()
 
-	paneID := m.responsePaneFocus
-	if !m.responseSplit {
-		paneID = responsePanePrimary
-	}
-	pane := m.pane(paneID)
+	pane := m.focusedPane()
 	if pane == nil {
 		return batchCommands(
 			focusCmd,
@@ -183,6 +174,24 @@ func headerMap(s *responseSnapshot, view headersViewMode) http.Header {
 	default:
 		return nil
 	}
+}
+
+// headerMap adds a Content-Type to gRPC metadata that the panels do not show,
+// so gRPC counts the metadata it received.
+func headerRows(s *responseSnapshot, view headersViewMode) (int, bool) {
+	if s != nil && view == headersViewResponse && s.source.hasGRPC() {
+		return valueCount(s.source.grpc.Headers) + valueCount(s.source.grpc.Trailers), true
+	}
+	h := headerMap(s, view)
+	return valueCount(h), h != nil
+}
+
+func valueCount(h map[string][]string) int {
+	n := 0
+	for _, vals := range h {
+		n += len(vals)
+	}
+	return n
 }
 
 func (m *Model) headerContent(pane *responsePaneState, width int) string {

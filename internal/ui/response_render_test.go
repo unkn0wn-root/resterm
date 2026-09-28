@@ -334,6 +334,27 @@ func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPRequestHeadersViewSummarizesOnOneLine(t *testing.T) {
+	resp := &httpx.Response{
+		ReqMethod:    "POST",
+		EffectiveURL: "https://api.example.com/items",
+		ReqLen:       120,
+	}
+	r := defaultResponseRenderer()
+	first := func() string {
+		line, _, _ := strings.Cut(stripANSIEscape(r.renderHTTPReqHdrs(resp, defaultResponseViewportWidth)), "\n")
+		return line
+	}
+
+	if got, want := first(), "POST https://api.example.com/items · size 120 B"; got != want {
+		t.Fatalf("request line = %q, want %q", got, want)
+	}
+	resp.ReqLen = -1
+	if got, want := first(), "POST https://api.example.com/items"; got != want {
+		t.Fatalf("request line with unknown size = %q, want %q", got, want)
+	}
+}
+
 func TestGRPCRequestHeaderMapEncodesBinaryMetadata(t *testing.T) {
 	raw := string([]byte{0x00, 0x01, 0xff})
 	req := &restfile.Request{

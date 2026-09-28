@@ -1773,9 +1773,16 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				}
 			}
 		case " ", "space":
-			if pane != nil && pane.activeTab == responseTabHeaders {
-				m.suppressFocusedComponentKey()
-				return combine(m.cycleHeaderSubview())
+			if pane != nil {
+				switch pane.activeTab {
+				case responseTabHeaders:
+					m.suppressFocusedComponentKey()
+					return combine(m.cycleHeaderSubview())
+				case responseTabStats:
+					if workflowStatsFromPane(pane) != nil {
+						return combine(m.toggleWorkflowStatsExpansion())
+					}
+				}
 			}
 		}
 		if pane != nil && pane.activeTab == responseTabHistory {
