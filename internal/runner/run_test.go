@@ -359,6 +359,59 @@ func TestRunWorkflowSkippedStepDoesNotFail(t *testing.T) {
 	}
 }
 
+func TestRunCancelSkipsRemainingRequests(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "cancel.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+		"### Two",
+		"# @name two",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var calls int
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				cancel()
+				return nil, req.Context().Err()
+			}),
+		}, nil
+	})
+
+	rep, err := RunContext(ctx, Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        Select{All: true},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 1 || rep.Failed != 1 || rep.Skipped != 1 {
+		t.Fatalf("calls=%d report=%+v, want one canceled and one skipped request", calls, rep)
+	}
+	if rep.StopReason != stopReasonCanceled {
+		t.Fatalf("stop reason = %q, want %q", rep.StopReason, stopReasonCanceled)
+	}
+	if got := rep.Results[0].Failure.Code; got != runfail.CodeCanceled {
+		t.Fatalf("first result failure = %q, want canceled", got)
+	}
+	if !strings.Contains(rep.Results[1].SkipReason, "cancel") {
+		t.Fatalf("skip reason = %q, want the cancel reason", rep.Results[1].SkipReason)
+	}
+}
+
 func TestRunWorkflowFailBranchIsAnAssertion(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "workflow-fail.http")

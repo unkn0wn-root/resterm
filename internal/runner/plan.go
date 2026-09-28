@@ -196,13 +196,19 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		default:
 			rep.add(requestRunResult(runReq, res, envName))
 		}
-		if opt.FailFast && resultFailed(rep.Results[len(rep.Results)-1]) {
-			rep.StopReason = stopReasonFailFast
-			for _, skipped := range tg.requests[i+1:] {
-				rep.add(skippedRequestResult(skipped, env, "skipped after --fail-fast"))
-			}
-			break
+		var reason string
+		switch {
+		case ctx.Err() != nil:
+			rep.StopReason, reason = stopReasonCanceled, "skipped after cancel"
+		case opt.FailFast && resultFailed(rep.Results[len(rep.Results)-1]):
+			rep.StopReason, reason = stopReasonFailFast, "skipped after --fail-fast"
+		default:
+			continue
 		}
+		for _, skipped := range tg.requests[i+1:] {
+			rep.add(skippedRequestResult(skipped, env, reason))
+		}
+		break
 	}
 	return finishRun(rep, exec, pl.state, opt)
 }

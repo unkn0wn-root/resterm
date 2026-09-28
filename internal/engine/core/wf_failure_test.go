@@ -173,6 +173,43 @@ func TestRunPlanCancellationStopsUnderContinue(t *testing.T) {
 	}
 }
 
+func TestRunPlanReportsCanceledRunContext(t *testing.T) {
+	pl, err := PrepareWorkflow(failureDoc(), restfile.Workflow{
+		Name: "demo",
+		Steps: []restfile.WorkflowStep{
+			{Kind: restfile.WorkflowStepKindRequest, Name: "First", Using: "first"},
+			nextStep(),
+		},
+	}, RunMeta{ID: "wf-1", Env: testEnvironment("dev")})
+	if err != nil {
+		t.Fatalf("PrepareWorkflow: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var done []string
+	canceled := false
+	sink := SinkFunc(func(_ context.Context, e Evt) error {
+		switch v := e.(type) {
+		case WfStepDone:
+			done = append(done, v.Step.Name)
+		case RunDone:
+			canceled = v.Canceled
+		}
+		return nil
+	})
+
+	if err := RunPlan(ctx, &fakeDep{execCanceled: true, onExec: cancel}, sink, pl); err != nil {
+		t.Fatalf("RunPlan: %v", err)
+	}
+	if len(done) != 1 || done[0] != "First" {
+		t.Fatalf("finished steps = %v, want the canceled first step", done)
+	}
+	if !canceled {
+		t.Fatal("run was not reported as canceled")
+	}
+}
+
 // Steps built outside the parser carry no failure mode of their own, so the
 // workflow default has to be filled in before the run starts.
 func TestPrepareWorkflowInheritsDefaultOnFailure(t *testing.T) {

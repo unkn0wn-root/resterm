@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"golang.org/x/term"
 
@@ -223,7 +225,9 @@ func (c *runCmd) run() error {
 		}()
 	}
 
-	rep, err := c.execRun(context.Background(), src, cfg, client)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	rep, err := c.execRun(ctx, src, cfg, client)
 	if err != nil {
 		if runner.IsUsageError(err) {
 			return runExit(err, runExitCodeUsage)

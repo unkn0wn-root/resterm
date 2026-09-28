@@ -54,7 +54,10 @@ type Options struct {
 	Select          Select
 }
 
-const stopReasonFailFast = "fail_fast"
+const (
+	stopReasonFailFast = "fail_fast"
+	stopReasonCanceled = "canceled"
+)
 
 type Report struct {
 	SchemaVersion        string
