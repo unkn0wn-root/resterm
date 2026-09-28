@@ -25,6 +25,10 @@ func (ds docSet[T]) named(key string, nm func(T) string) (T, bool) {
 	return findNamed(ds.gs, key, nm)
 }
 
+func (ds docSet[T]) names(nm func(T) string) []string {
+	return uniqueNames(nm, ds.fs, ds.gs)
+}
+
 func (ds docSet[T]) deflt(nm func(T) string) (T, bool) {
 	if v, ok := findDefault(ds.fs, nm); ok {
 		return v, true
@@ -161,6 +165,12 @@ func (s *set[T]) named(p string, xs []T, n string) (T, bool) {
 	return z, false
 }
 
+// names lists what named can find, in the order named looks.
+func (s *set[T]) names(p string, xs []T) []string {
+	fs, gs := s.layers(p, xs)
+	return uniqueNames(s.nm, fs, gs)
+}
+
 func (s *set[T]) deflt(p string, xs []T) (T, bool) {
 	if v, ok := s.split(xs).deflt(s.nm); ok {
 		return v, true
@@ -195,7 +205,7 @@ func New() *Index {
 	return &Index{
 		ssh: newSet(
 			func(v restfile.SSHProfile) directive.Scope { return v.Scope },
-			func(v restfile.SSHProfile) string { return v.Name },
+			sshName,
 		),
 		auth: newSet(
 			func(v restfile.AuthProfile) directive.Scope { return v.Scope },
@@ -203,7 +213,7 @@ func New() *Index {
 		),
 		k8s: newSet(
 			func(v restfile.K8sProfile) directive.Scope { return v.Scope },
-			func(v restfile.K8sProfile) string { return v.Name },
+			k8sName,
 		),
 		patch: newSet(
 			func(v restfile.PatchProfile) directive.Scope { return v.Scope },
@@ -338,6 +348,36 @@ func (ix *Index) Patch(doc *restfile.Document) ([]restfile.PatchProfile, []restf
 	return ix.patch.layers(docPath(doc), docPatch(doc))
 }
 
+// AuthNames lists the names use= can pick from doc. They come in lookup order,
+// so each one is the definition use= resolves.
+func (ix *Index) AuthNames(doc *restfile.Document) []string {
+	if ix == nil {
+		return ixSplitAuth(doc).names(authName)
+	}
+	return ix.auth.names(docPath(doc), docAuth(doc))
+}
+
+func (ix *Index) PatchNames(doc *restfile.Document) []string {
+	if ix == nil {
+		return ixSplitPatch(doc).names(patchName)
+	}
+	return ix.patch.names(docPath(doc), docPatch(doc))
+}
+
+func (ix *Index) SSHNames(doc *restfile.Document) []string {
+	if ix == nil {
+		return ixSplitSSH(doc).names(sshName)
+	}
+	return ix.ssh.names(docPath(doc), docSSH(doc))
+}
+
+func (ix *Index) K8sNames(doc *restfile.Document) []string {
+	if ix == nil {
+		return ixSplitK8s(doc).names(k8sName)
+	}
+	return ix.k8s.names(docPath(doc), docK8s(doc))
+}
+
 func (ix *Index) PatchNamed(doc *restfile.Document, name string) (*restfile.PatchProfile, bool) {
 	var (
 		v  restfile.PatchProfile
@@ -419,6 +459,24 @@ func findNamed[T any](xs []T, key string, nm func(T) string) (T, bool) {
 	return z, false
 }
 
+// uniqueNames keeps the first of names that differ only in case, since that is
+// the one a lookup finds. Unnamed entries are left out.
+func uniqueNames[T any](nm func(T) string, groups ...[]T) []string {
+	var out []string
+	seen := make(map[string]struct{})
+	for _, xs := range groups {
+		for _, x := range xs {
+			key := nameKey(nm(x))
+			if _, dup := seen[key]; key == "" || dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, nm(x))
+		}
+	}
+	return out
+}
+
 func findDefault[T any](xs []T, nm func(T) string) (T, bool) {
 	for i := len(xs) - 1; i >= 0; i-- {
 		if nameKey(nm(xs[i])) == "" {
@@ -432,6 +490,10 @@ func findDefault[T any](xs []T, nm func(T) string) (T, bool) {
 func authName(v restfile.AuthProfile) string { return v.Name }
 
 func patchName(v restfile.PatchProfile) string { return v.Name }
+
+func sshName(v restfile.SSHProfile) string { return v.Name }
+
+func k8sName(v restfile.K8sProfile) string { return v.Name }
 
 func nameKey(v string) string {
 	return strings.ToLower(strings.TrimSpace(v))

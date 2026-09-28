@@ -4,7 +4,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
+	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -24,10 +27,13 @@ func TestBuildCompletionScope(t *testing.T) {
 		},
 		Constants: []restfile.Constant{{Name: "apiVersion"}},
 		Workflows: []restfile.Workflow{{RunVars: []restfile.RunVar{{Name: "suffix"}}}},
-		Auth:      []restfile.AuthProfile{{Name: "gh"}, {}},
-		Patches:   []restfile.PatchProfile{{Name: "jsonApi"}},
-		SSH:       []restfile.SSHProfile{{Name: "edge"}},
-		K8s:       []restfile.K8sProfile{{Name: "cluster"}},
+		Auth: []restfile.AuthProfile{
+			{Scope: directive.ScopeGlobal, Name: "gh"},
+			{Scope: directive.ScopeFile},
+		},
+		Patches: []restfile.PatchProfile{{Scope: directive.ScopeFile, Name: "jsonApi"}},
+		SSH:     []restfile.SSHProfile{{Scope: directive.ScopeGlobal, Name: "edge"}},
+		K8s:     []restfile.K8sProfile{{Scope: directive.ScopeFile, Name: "cluster"}},
 	}
 	set := vars.EnvironmentSet{
 		vars.SharedEnvKey: {"shared": "1"},
@@ -43,7 +49,7 @@ func TestBuildCompletionScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("selection: %v", err)
 	}
-	scope := buildCompletionScope(doc, cat, sel)
+	scope := buildCompletionScope(doc, nil, cat, sel)
 
 	byName := make(map[string]intellisense.VarRef, len(scope.Variables))
 	for _, v := range scope.Variables {
@@ -94,8 +100,20 @@ func TestBuildCompletionScope(t *testing.T) {
 	}
 }
 
+// use= resolves globals from every file, so completion offers them too.
+func TestBuildCompletionScopeOffersWorkspaceProfiles(t *testing.T) {
+	ix := registry.New()
+	ix.Sync(parser.Parse("/ws/auth/defs.http", []byte("# @auth global command name=gh cmd=\"gh auth token\"\n")))
+	doc := parser.Parse("/ws/api.http", []byte("### r\n# @auth use=gh\nGET https://example.com\n"))
+
+	scope := buildCompletionScope(doc, ix, vars.Catalog{}, vars.Selection{})
+	if want := []string{"gh"}; !reflect.DeepEqual(scope.Profiles.Auth, want) {
+		t.Fatalf("auth profiles = %v, want %v", scope.Profiles.Auth, want)
+	}
+}
+
 func TestBuildCompletionScopeNilDocument(t *testing.T) {
-	scope := buildCompletionScope(nil, vars.Catalog{}, vars.Selection{})
+	scope := buildCompletionScope(nil, nil, vars.Catalog{}, vars.Selection{})
 	if len(scope.Variables) != 0 || len(scope.Environments) != 0 {
 		t.Fatalf("expected empty scope for nil document, got %+v", scope)
 	}
@@ -121,7 +139,7 @@ func TestBuildCompletionScopeGroupedEnvironments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("catalog: %v", err)
 	}
-	scope := buildCompletionScope(nil, cat, cat.DefaultSelection())
+	scope := buildCompletionScope(nil, nil, cat, cat.DefaultSelection())
 	if len(scope.Environments) != 0 {
 		t.Fatalf("flat environments = %#v, want none", scope.Environments)
 	}
