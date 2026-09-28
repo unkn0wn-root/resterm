@@ -147,6 +147,12 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 	}
 	envName := env.Label()
 
+	for _, req := range tg.requests {
+		if err := exec.CheckCompare(req, opt.Selection); err != nil {
+			return nil, UsageError{err: fmt.Errorf("%s: %w", requestName(req), err)}
+		}
+	}
+
 	if err := loadRunnerState(exec, pl.state, opt); err != nil {
 		return nil, fmt.Errorf("load runner state: %w", err)
 	}

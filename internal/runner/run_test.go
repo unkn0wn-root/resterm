@@ -456,6 +456,81 @@ func TestRunWorkflowFailBranchIsAnAssertion(t *testing.T) {
 	}
 }
 
+func TestRunRejectsUnknownCompareEnvironmentBeforeSending(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "compare.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+		"### Two",
+		"# @name two",
+		"# @compare dev nope",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "prod": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+
+	var calls int
+	_, err = RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        countingClient(&calls),
+		Catalog:       cat,
+		Selection:     cat.DefaultSelection(),
+		Select:        Select{All: true},
+	})
+	if !IsUsageError(err) || !strings.Contains(err.Error(), `"nope"`) {
+		t.Fatalf("Run error = %v, want a usage error naming the environment", err)
+	}
+	if calls != 0 {
+		t.Fatalf("sent %d requests before rejecting the compare", calls)
+	}
+}
+
+func TestRunCompareOverrideIgnoresFileCompare(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "compare.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"# @compare dev nope",
+		"GET https://example.com/one",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "prod": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+
+	var calls int
+	_, err = RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        countingClient(&calls),
+		Catalog:       cat,
+		Selection:     cat.DefaultSelection(),
+		Select:        Select{All: true},
+		Compare:       engine.CompareConfig{Targets: []string{"dev", "prod"}},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("sent %d requests, want one per --compare target", calls)
+	}
+}
+
 func countingClient(calls *int) *httpx.Client {
 	return newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
