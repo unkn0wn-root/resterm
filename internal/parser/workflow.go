@@ -391,9 +391,6 @@ func parseExprRun(name directive.Name, rest, miss string) (expr, run, fail strin
 		return "", "", "", errors.New(miss)
 	}
 	run, fail, err = parseWorkflowRunOptions(name, tail)
-	if fatalErr(err) {
-		return "", "", "", err
-	}
 	return expr, run, fail, err
 }
 
@@ -411,7 +408,8 @@ func cutBranch(rest string) (expr, opts string) {
 
 // A spaced option keeps the branch in place, so the workflow keeps its shape.
 // Run or fail is reported missing only when the options parsed cleanly, since
-// the spaced option may be the one that looks missing.
+// the spaced option may be the one that looks missing. The workflow plan rejects
+// a branch left with neither.
 func parseWorkflowRunOptions(name directive.Name, raw string) (run, fail string, err error) {
 	opts, err := directive.ParseOptions(name, raw)
 	run, _ = opts.First("run", "using")

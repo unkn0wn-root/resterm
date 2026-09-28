@@ -778,6 +778,29 @@ func TestSpacedOptions(t *testing.T) {
 	}
 }
 
+func TestSpacedKey(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]bool{
+		"k = v":    true,
+		"k =v":     true,
+		`k " =v"`:  true,
+		"k=v":      false,
+		"k= v":     false,
+		"k v":      false,
+		"k":        false,
+		"= v":      false,
+		`" " = v`:  false,
+		`"a=b" =v`: false,
+	}
+	for input, want := range tests {
+		fields := slices.Collect(ScanFields(input))
+		if got := SpacedKey(fields, 0); got != want {
+			t.Fatalf("SpacedKey(%q, 0) = %t, want %t", input, got, want)
+		}
+	}
+}
+
 func TestSpacedOptionsError(t *testing.T) {
 	t.Parallel()
 

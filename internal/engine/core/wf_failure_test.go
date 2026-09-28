@@ -188,3 +188,47 @@ func TestPrepareWorkflowInheritsDefaultOnFailure(t *testing.T) {
 		t.Fatalf("step on-failure = %q, want %q", got, restfile.WorkflowOnFailureContinue)
 	}
 }
+
+// The parser keeps a branch whose run= or fail= was written with spaces, so the
+// workflow keeps its shape. Such a branch has neither, and running it would
+// skip the step instead of failing it.
+func TestPrepareWorkflowRejectsBranchWithoutRunOrFail(t *testing.T) {
+	ok := restfile.WorkflowIfBranch{Cond: "true", Run: "first"}
+	steps := map[string]restfile.WorkflowStep{
+		"if": {
+			Kind: restfile.WorkflowStepKindIf,
+			If:   &restfile.WorkflowIf{Then: restfile.WorkflowIfBranch{Cond: "true"}},
+		},
+		"elif": {
+			Kind: restfile.WorkflowStepKindIf,
+			If:   &restfile.WorkflowIf{Then: ok, Elifs: []restfile.WorkflowIfBranch{{Cond: "true"}}},
+		},
+		"else": {
+			Kind: restfile.WorkflowStepKindIf,
+			If:   &restfile.WorkflowIf{Then: ok, Else: &restfile.WorkflowIfBranch{}},
+		},
+		"case": {
+			Kind:   restfile.WorkflowStepKindSwitch,
+			Switch: &restfile.WorkflowSwitch{Expr: "a", Cases: []restfile.WorkflowSwitchCase{{Expr: "a"}}},
+		},
+		"default": {
+			Kind: restfile.WorkflowStepKindSwitch,
+			Switch: &restfile.WorkflowSwitch{
+				Expr:    "a",
+				Cases:   []restfile.WorkflowSwitchCase{{Expr: "a", Fail: "stop"}},
+				Default: &restfile.WorkflowSwitchCase{Fail: " "},
+			},
+		},
+	}
+	for name, step := range steps {
+		t.Run(name, func(t *testing.T) {
+			_, err := PrepareWorkflow(failureDoc(), restfile.Workflow{
+				Name:  "demo",
+				Steps: []restfile.WorkflowStep{step},
+			}, RunMeta{ID: "wf-1", Env: testEnvironment("dev")})
+			if err == nil || !strings.Contains(err.Error(), "missing run or fail") {
+				t.Fatalf("PrepareWorkflow error = %v, want a missing run or fail error", err)
+			}
+		})
+	}
+}

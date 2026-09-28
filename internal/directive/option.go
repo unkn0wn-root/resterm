@@ -91,7 +91,7 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 		// stored, since the key alone would read as true. A lone = or an empty
 		// k= takes the next field as its value.
 		switch {
-		case !ok && strings.TrimSpace(key) != "" && noKey(next): // k = v, k =v
+		case SpacedKey(fields, i): // k = v, k =v
 			spaced = append(spaced, f.Value)
 			i++
 			if next == "=" && valueNext(fields, i) {
@@ -121,6 +121,14 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 
 func noKey(field string) bool {
 	return strings.HasPrefix(strings.TrimSpace(field), "=")
+}
+
+// SpacedKey reports whether field i is a key whose = was split off by a space,
+// as in k = v or k =v.
+func SpacedKey(fields []Field, i int) bool {
+	key := fields[i].Value
+	return !strings.Contains(key, "=") && strings.TrimSpace(key) != "" &&
+		i+1 < len(fields) && noKey(fields[i+1].Value)
 }
 
 // The field after i can be a value only if it is not an option of its own. Only

@@ -304,7 +304,7 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, nil
 	}
 
-	if namesProfiles(fields[0].Value) || (strings.EqualFold(fields[0].Value, "use") && spacedKey(fields, 0)) {
+	if namesProfiles(fields[0].Value) || (strings.EqualFold(fields[0].Value, "use") && directive.SpacedKey(fields, 0)) {
 		if dir.Scope != directive.ScopeRequest {
 			return dir, fmt.Errorf("@auth %s scope does not support use=", dir.Scope.String())
 		}
@@ -349,15 +349,11 @@ func cutAuthName(fields []directive.Field) (string, []directive.Field) {
 	// requests that use it.
 	word := strings.ToLower(fields[1].Value)
 	option := strings.Contains(word, "=") ||
-		slices.Contains(restfile.AuthCommandParams, word) && spacedKey(fields, 1)
+		slices.Contains(restfile.AuthCommandParams, word) && directive.SpacedKey(fields, 1)
 	if option {
 		return "", fields
 	}
 	return fields[1].Value, append([]directive.Field{fields[0]}, fields[2:]...)
-}
-
-func spacedKey(fields []directive.Field, i int) bool {
-	return i+1 < len(fields) && strings.HasPrefix(fields[i+1].Value, "=")
 }
 
 // Reject bare words so an unquoted cmd=gh auth token cannot silently run gh.
