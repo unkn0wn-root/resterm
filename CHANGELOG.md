@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.10.1](https://github.com/unkn0wn-root/resterm/compare/v1.10.0...v1.10.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **auth:** fail closed on rejected named definitions ([4c29f18](https://github.com/unkn0wn-root/resterm/commit/4c29f18859ce50421c521ab5d16c504b8fcee9b2))
+
 ## [1.10.0](https://github.com/unkn0wn-root/resterm/compare/v1.9.1...v1.10.0) (2026-09-28)
 
 ### [1.9.1](https://github.com/unkn0wn-root/resterm/compare/v1.9.0...v1.9.1) (2026-09-25)
