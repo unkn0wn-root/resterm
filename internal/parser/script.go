@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -175,19 +176,19 @@ func (b *documentBuilder) setRTSScript(rest string) error {
 var scriptLangKeys = []string{"lang", "language"}
 
 func parseScriptSpec(rest string) (scriptKind, scriptLang, error) {
-	fields := directive.Fields(rest)
+	fields := slices.Collect(directive.ScanFields(rest))
 	kind := scriptKind("")
 	lang := scriptLang("")
 	for _, field := range fields {
-		if strings.Contains(field, "=") {
+		if strings.Contains(field.Value, "=") {
 			continue
 		}
 		if kind == "" {
-			kind = scriptKind(field)
+			kind = scriptKind(field.Value)
 			continue
 		}
 		if lang == "" {
-			if v, ok := scriptLangToken(field); ok {
+			if v, ok := scriptLangToken(field.Value); ok {
 				lang = v
 			}
 		}
@@ -201,22 +202,22 @@ func parseScriptSpec(rest string) (scriptKind, scriptLang, error) {
 }
 
 func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
-	fields := directive.Fields(rest)
+	fields := slices.Collect(directive.ScanFields(rest))
 	var kind scriptKind
 	kindSet := false
 
 	for _, field := range fields {
-		if strings.Contains(field, "=") {
+		if strings.Contains(field.Value, "=") {
 			continue
 		}
-		if lang, ok := scriptLangToken(field); ok {
+		if lang, ok := scriptLangToken(field.Value); ok {
 			if lang != scriptLangRTS {
 				return "", "", errRTSLangUnsupported
 			}
 			continue
 		}
 
-		next, err := parseRTSScriptKind(field)
+		next, err := parseRTSScriptKind(field.Value)
 		if err != nil {
 			return "", "", err
 		}
@@ -248,7 +249,7 @@ func parseRTSScriptKind(field string) (scriptKind, error) {
 	}
 }
 
-func validateRTSScriptLangOptions(fields []string) error {
+func validateRTSScriptLangOptions(fields []directive.Field) error {
 	params, err := directive.OptionFields(directive.RTS, fields)
 	if err != nil {
 		return err

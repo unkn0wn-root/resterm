@@ -50,7 +50,7 @@ func (o Options) CopyTo(dst map[string]string) {
 // Quotes and bracketed values may contain spaces.
 // Repeated options are reported as errors.
 func ParseOptions(name Name, input string) (Options, error) {
-	return parseOptions(name, fieldsEscaped(input))
+	return parseOptions(name, slices.Collect(scanFields(input, true)))
 }
 
 // OptionsOpen returns the missing delimiter in the last option value, or zero.
@@ -63,30 +63,78 @@ func FieldsOpen(input string) rune {
 	return (&lexer{src: input}).open()
 }
 
-// OptionFields is for callers that already separated the input. It only keeps
-// key=value pairs, unlike ParseOptions where a bare key means true.
-func OptionFields(name Name, fields []string) (Options, error) {
+// OptionFields is for callers that already separated the input with
+// ScanFields. It only keeps key=value pairs, unlike ParseOptions where a bare
+// key means true.
+func OptionFields(name Name, fields []Field) (Options, error) {
 	return collectOptions(name, fields, false)
 }
 
-func parseOptions(name Name, toks []string) (Options, error) {
-	return collectOptions(name, toks, true)
+func parseOptions(name Name, fields []Field) (Options, error) {
+	return collectOptions(name, fields, true)
 }
 
-func collectOptions(name Name, toks []string, bareIsTrue bool) (Options, error) {
-	opts := newOptions(len(toks))
-	var rep repeats
-	for _, tok := range toks {
-		key, val, ok := strings.Cut(tok, "=")
-		if !ok {
-			if !bareIsTrue {
-				continue
-			}
-			val = "true"
+func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error) {
+	opts := newOptions(len(fields))
+	var (
+		rep    repeats
+		spaced []string
+	)
+	for i := 0; i < len(fields); i++ {
+		f := fields[i]
+		key, val, ok := strings.Cut(f.Value, "=")
+		var next string
+		if i+1 < len(fields) {
+			next = fields[i+1].Value
 		}
-		rep.add(opts.put(key, val))
+		// Spaces around = split one option into several fields. None of them is
+		// stored, since the key alone would read as true. A lone = or an empty
+		// k= takes the next field as its value.
+		switch {
+		case SpacedKey(fields, i): // k = v, k =v
+			spaced = append(spaced, f.Value)
+			i++
+			if next == "=" && valueNext(fields, i) {
+				i++
+			}
+		case noKey(f.Value): // =x, or = v with no key before it
+			spaced = append(spaced, f.Value)
+			if f.Value == "=" && valueNext(fields, i) {
+				i++
+			}
+		// k= v. Only the source tells k= from k="", so this reads the span.
+		case f.Eq >= 0 && f.Eq == f.End-1 && valueNext(fields, i):
+			spaced = append(spaced, key)
+			i++
+		case ok:
+			rep.add(opts.put(key, val))
+		case bareIsTrue:
+			rep.add(opts.put(key, "true"))
+		}
 	}
-	return opts, rep.err(name)
+	err := rep.err(name)
+	if len(spaced) > 0 {
+		err = errors.Join(err, &SpacedOptionsError{Directive: name, Keys: spaced})
+	}
+	return opts, err
+}
+
+func noKey(field string) bool {
+	return strings.HasPrefix(strings.TrimSpace(field), "=")
+}
+
+// SpacedKey reports whether field i is a key whose = was split off by a space,
+// as in k = v or k =v.
+func SpacedKey(fields []Field, i int) bool {
+	key := fields[i].Value
+	return !strings.Contains(key, "=") && strings.TrimSpace(key) != "" &&
+		i+1 < len(fields) && noKey(fields[i+1].Value)
+}
+
+// The field after i can be a value only if it is not an option of its own. Only
+// the source tells a=b from "a=b", so this reads the span.
+func valueNext(fields []Field, i int) bool {
+	return i+1 < len(fields) && fields[i+1].Eq < 0
 }
 
 // Every option is visited even after one fails, so a line with two mistakes
@@ -269,6 +317,28 @@ func (e *UnknownOptionsError) Error() string {
 	return fmt.Sprintf("unknown %s options %s", e.Directive.Tag(), quoteKeys(e.Keys))
 }
 
+// SpacedOptionsError reports options written with spaces around =. Keys holds
+// each key as written, or the whole field when it has no key, such as =x.
+type SpacedOptionsError struct {
+	Directive Name
+	Keys      []string
+}
+
+func (e *SpacedOptionsError) Error() string {
+	if len(e.Keys) == 1 {
+		return fmt.Sprintf(
+			"%s option %s has spaces around =. Write it as key=value",
+			e.Directive.Tag(),
+			quoteKeys(e.Keys),
+		)
+	}
+	return fmt.Sprintf(
+		"%s options %s have spaces around =. Write them as key=value",
+		e.Directive.Tag(),
+		quoteKeys(e.Keys),
+	)
+}
+
 func UnknownOption(name Name, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
@@ -307,9 +377,6 @@ func RepeatedOption(name Name, keys ...string) error {
 
 // Whatever is left after the caller popped every key it knows about.
 func (o Options) Unknown(name Name) error {
-	if len(o.vals) == 0 {
-		return nil
-	}
 	return UnknownOption(name, o.Keys()...)
 }
 
@@ -344,9 +411,12 @@ func OptionKeys(err error) []string {
 	var unknown *UnknownOptionsError
 	var repeated *RepeatedOptionsError
 	var conflict *AliasConflictError
+	var spaced *SpacedOptionsError
 	switch {
 	case errors.As(err, &unknown):
 		return unknown.Keys
+	case errors.As(err, &spaced):
+		return spaced.Keys
 	case errors.As(err, &repeated):
 		return repeated.Keys
 	case errors.As(err, &conflict):
@@ -376,19 +446,19 @@ type ProfileHeader struct {
 }
 
 func ParseProfileHeader(name Name, rest string) (ProfileHeader, bool, error) {
-	fields := fieldsEscaped(rest)
+	fields := slices.Collect(scanFields(rest, true))
 	if len(fields) == 0 {
 		return ProfileHeader{}, false, nil
 	}
 
 	i := 0
 	head := ProfileHeader{Scope: ScopeRequest}
-	if scope, ok := ParseScope(fields[i]); ok {
+	if scope, ok := ParseScope(fields[i].Value); ok {
 		head.Scope = scope
 		i++
 	}
-	if i < len(fields) && !strings.Contains(fields[i], "=") {
-		head.Name = strings.TrimSpace(fields[i])
+	if i < len(fields) && !strings.Contains(fields[i].Value, "=") {
+		head.Name = strings.TrimSpace(fields[i].Value)
 		i++
 	}
 	opts, err := parseOptions(name, fields[i:])

@@ -880,16 +880,16 @@ func prepareWorkflow(
 					i+1,
 				)
 			}
-			if err := validateRun(wf.Name, i+1, reqs, step.If.Then.Run); err != nil {
+			if err := validateBranch(wf.Name, i+1, reqs, step.If.Then.Run, step.If.Then.Fail); err != nil {
 				return nil, nil, err
 			}
 			for _, br := range step.If.Elifs {
-				if err := validateRun(wf.Name, i+1, reqs, br.Run); err != nil {
+				if err := validateBranch(wf.Name, i+1, reqs, br.Run, br.Fail); err != nil {
 					return nil, nil, err
 				}
 			}
 			if step.If.Else != nil {
-				if err := validateRun(wf.Name, i+1, reqs, step.If.Else.Run); err != nil {
+				if err := validateBranch(wf.Name, i+1, reqs, step.If.Else.Run, step.If.Else.Fail); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -903,12 +903,18 @@ func prepareWorkflow(
 				)
 			}
 			for _, br := range step.Switch.Cases {
-				if err := validateRun(wf.Name, i+1, reqs, br.Run); err != nil {
+				if err := validateBranch(wf.Name, i+1, reqs, br.Run, br.Fail); err != nil {
 					return nil, nil, err
 				}
 			}
 			if step.Switch.Default != nil {
-				if err := validateRun(wf.Name, i+1, reqs, step.Switch.Default.Run); err != nil {
+				if err := validateBranch(
+					wf.Name,
+					i+1,
+					reqs,
+					step.Switch.Default.Run,
+					step.Switch.Default.Fail,
+				); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -925,11 +931,14 @@ func prepareWorkflow(
 	return out, reqs, nil
 }
 
-func validateRun(name string, i int, reqs map[string]*restfile.Request, run string) error {
-	if strings.TrimSpace(run) == "" {
-		return nil
-	}
-	if reqs[strings.ToLower(strings.TrimSpace(run))] != nil {
+// The parser keeps a branch whose run= or fail= was written with spaces. With
+// neither set, running it would skip the step instead of failing it.
+func validateBranch(name string, i int, reqs map[string]*restfile.Request, run, fail string) error {
+	key := strings.ToLower(strings.TrimSpace(run))
+	switch {
+	case key == "" && strings.TrimSpace(fail) == "":
+		return fmt.Errorf("workflow %s: step %d branch missing run or fail", name, i)
+	case key == "", reqs[key] != nil:
 		return nil
 	}
 	return fmt.Errorf("workflow %s: step %d request %s not found", name, i, run)

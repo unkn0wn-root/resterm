@@ -1923,7 +1923,7 @@ GET https://example.com
 }
 
 func TestParseOAuth2AuthSpec(t *testing.T) {
-	spec, _ := parseAuthSpec(directive.Fields(
+	spec, _ := parseAuthSpec(authFields(
 		`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`,
 	))
 	if spec == nil {
@@ -1951,7 +1951,7 @@ func TestParseOAuth2AuthSpec(t *testing.T) {
 }
 
 func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
-	spec, _ := parseAuthSpec(directive.Fields(`oauth2 cache_key=github`))
+	spec, _ := parseAuthSpec(authFields(`oauth2 cache_key=github`))
 	if spec == nil {
 		t.Fatalf("expected oauth2 spec for cache-only directive")
 	}
@@ -1973,7 +1973,7 @@ func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
 }
 
 func TestParseCommandAuthSpec(t *testing.T) {
-	spec, _ := parseAuthSpec(directive.Fields(
+	spec, _ := parseAuthSpec(authFields(
 		`command argv='["gh","auth","token"]' header=Authorization cache_key=github timeout=5s`,
 	))
 	if spec == nil {
@@ -1996,7 +1996,7 @@ func TestParseCommandAuthSpec(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
-	spec, _ := parseAuthSpec(directive.Fields(
+	spec, _ := parseAuthSpec(authFields(
 		`command argv=["gh", "auth", "token"] header=Authorization cache_key=github timeout=5s`,
 	))
 	if spec == nil {
@@ -2019,7 +2019,7 @@ func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecCacheOnly(t *testing.T) {
-	spec, _ := parseAuthSpec(directive.Fields(`command cache_key=github header=X-Token`))
+	spec, _ := parseAuthSpec(authFields(`command cache_key=github header=X-Token`))
 	if spec == nil {
 		t.Fatalf("expected command auth spec")
 	}

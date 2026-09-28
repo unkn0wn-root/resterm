@@ -302,6 +302,9 @@ func authArgs(auth restfile.AuthSpec) ([]string, error) {
 	if auth.Rejected != "" {
 		return nil, fmt.Errorf("writer: @auth line was rejected: %s", auth.Rejected)
 	}
+	if bad := auth.UnknownParams(); len(bad) > 0 {
+		return nil, fmt.Errorf("writer: @auth cannot write unknown option %s", strings.Join(bad, ", "))
+	}
 	if auth.Use != "" {
 		params, err := formatOrderedParams(p, restfile.AuthUseParams)
 		if err != nil {
@@ -340,7 +343,7 @@ func authArgs(auth restfile.AuthSpec) ([]string, error) {
 	case restfile.AuthOAuth2:
 		return authFormArgs(kind, p, oauthParamOrder)
 	case restfile.AuthCommand:
-		return authFormArgs(kind, p, commandParamOrder)
+		return authFormArgs(kind, p, restfile.AuthCommandParams)
 	default:
 		return nil, fmt.Errorf("writer: @auth type %q cannot be written", auth.Type)
 	}
@@ -384,21 +387,6 @@ var oauthParamOrder = []string{
 	"code_verifier",
 	"code_challenge_method",
 	"state",
-}
-
-var commandParamOrder = []string{
-	"cmd",
-	"argv",
-	"format",
-	"header",
-	"scheme",
-	"token_path",
-	"type_path",
-	"expiry_path",
-	"expires_in_path",
-	"cache_key",
-	"ttl",
-	"timeout",
 }
 
 func formatOrderedParams(params map[string]string, ordered []string) ([]string, error) {

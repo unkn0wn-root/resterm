@@ -133,8 +133,8 @@ func (b *documentBuilder) reportStrict(d parsedDirective, err error) {
 	b.pushError(d.diagnostic(err.Error(), err))
 }
 
-// True if err is more than unknown option warnings. When it is false the
-// caller can still use what it parsed.
+// True if err should reject the directive. Unknown options and options written
+// with spaces do not, so the caller keeps what it parsed.
 func fatalErr(err error) bool {
 	if err == nil {
 		return false
@@ -143,7 +143,8 @@ func fatalErr(err error) bool {
 		return slices.ContainsFunc(joined.Unwrap(), fatalErr)
 	}
 	var unknown *directive.UnknownOptionsError
-	return !errors.As(err, &unknown)
+	var spaced *directive.SpacedOptionsError
+	return !errors.As(err, &unknown) && !errors.As(err, &spaced)
 }
 
 func (b *documentBuilder) processLine(no int, raw, term string) {

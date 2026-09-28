@@ -61,7 +61,7 @@ func extractText(out []byte) (string, error) {
 	default:
 		return "", diag.Newf(
 			diag.ClassAuth,
-			"command stdout returned multiple values; use format=json",
+			"command stdout returned multiple values. Use format=json",
 		)
 	}
 }

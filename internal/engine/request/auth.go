@@ -29,7 +29,7 @@ const (
 	errMissingCommandAuthSpec    = "missing command auth spec"
 	errMissingOAuthSpec          = "missing oauth spec"
 	errOAuthTokenURLRequired     = "@auth oauth2 requires token_url (include it once per cache_key to seed the cache)"
-	errOAuthHeadlessSeedRequired = "headless oauth authorization_code requires a cached or refreshable token; seed it outside CI or use a non-interactive grant"
+	errOAuthHeadlessSeedRequired = "headless oauth authorization_code requires a cached or refreshable token. Seed it outside CI or use a non-interactive grant"
 
 	minOAuthAuthorizationCodeTimeout = 2 * time.Minute
 )

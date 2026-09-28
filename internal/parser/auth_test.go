@@ -2,6 +2,7 @@ package parser
 
 import (
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -9,13 +10,17 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
+func authFields(src string) []directive.Field {
+	return slices.Collect(directive.ScanFields(src))
+}
+
 func TestParseNamedCommandAuth(t *testing.T) {
 	src := `# @auth global command gh cmd="gh auth token"
 # @auth file command GCloud cmd='gcloud auth print-access-token' ttl=50m
 # @auth file command argv=["mycli","token"]
 
 ### Uses a profile
-# @auth use=gh header=X-Token timeout=5s
+# @auth use=gh header=X-Token timeout=5s scheme=
 GET https://example.com
 `
 	doc := Parse("/ws/api.http", []byte(src))
@@ -78,22 +83,77 @@ func TestParseAuthProfileErrors(t *testing.T) {
 		{
 			name: "use with a definition option",
 			src:  "### r\n# @auth use=gh ttl=5m cache_key=gh\nGET https://example.com\n",
-			want: "@auth use= accepts only header, scheme, timeout; set cache_key, ttl on the definition",
+			want: "@auth use= accepts only header, scheme, timeout. Set cache_key, ttl on the definition",
 		},
 		{
 			name: "use with a bare word",
 			src:  "### r\n# @auth use=gh extra\nGET https://example.com\n",
-			want: `@auth expects key=value options, got "extra"`,
+			want: `@auth expects key=value options but got "extra"`,
 		},
 		{
 			name: "cmd with spaces and no quotes",
 			src:  "### r\n# @auth command cmd=printf token\nGET https://example.com\n",
-			want: `@auth expects key=value options, got "token"; quote a value that has spaces`,
+			want: `@auth expects key=value options but got "token". Quote a value that has spaces`,
+		},
+		{
+			name: "cmd followed by a field with no key",
+			src:  "### r\n# @auth command cmd=whoami =ignored\nGET https://example.com\n",
+			want: `@auth option "=ignored" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "oauth2 field with no key",
+			src:  "### r\n# @auth oauth2 token_url=https://id.example.com =ignored\nGET https://example.com\n",
+			want: `@auth option "=ignored" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "cmd written with spaces around =",
+			src:  "### r\n# @auth command cmd = \"gh auth token\"\nGET https://example.com\n",
+			want: `@auth option "cmd" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "cmd written with a space after =",
+			src:  "### r\n# @auth command cmd= gh\nGET https://example.com\n",
+			want: `@auth option "cmd" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "oauth2 option written with spaces around =",
+			src:  "### r\n# @auth oauth2 token_url = https://id.example.com client_id=a\nGET https://example.com\n",
+			want: `@auth option "token_url" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "use written with spaces around =",
+			src:  "### r\n# @auth use = gh\nGET https://example.com\n",
+			want: `@auth option "use" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "use written with a space before =",
+			src:  "### r\n# @auth use =gh\nGET https://example.com\n",
+			want: `@auth option "use" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "named definition written with spaces around =",
+			src:  "# @auth global command gh cmd = \"gh auth token\"\n",
+			want: `@auth option "cmd" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "cmd with an unquoted key=value argument",
+			src:  "### r\n# @auth command cmd=mycli --role=admin\nGET https://example.com\n",
+			want: "@auth command does not accept --role. Quote a cmd value that has spaces",
+		},
+		{
+			name: "command with an unknown option",
+			src:  "### r\n# @auth command argv=[\"mycli\"] toekn_path=token\nGET https://example.com\n",
+			want: "@auth command does not accept toekn_path",
+		},
+		{
+			name: "named definition with an unquoted key=value argument",
+			src:  "# @auth global command gh cmd=gh --hostname=ghe.example.com\n",
+			want: "@auth command does not accept --hostname",
 		},
 		{
 			name: "oauth2 value with spaces and no quotes",
 			src:  "### r\n# @auth oauth2 token_url=https://id.example.com scope=read write\nGET https://example.com\n",
-			want: `@auth expects key=value options, got "write"`,
+			want: `@auth expects key=value options but got "write"`,
 		},
 		{
 			name: "unclosed double quote",
@@ -133,12 +193,26 @@ func TestParseAuthProfileErrors(t *testing.T) {
 }
 
 func TestParseCommandAuthSpecCmd(t *testing.T) {
-	spec, err := parseAuthSpec(directive.Fields(`command cmd="aws ecr get-authorization-token --query 'a[0].b'"`))
+	spec, err := parseAuthSpec(authFields(`command cmd="aws ecr get-authorization-token --query 'a[0].b'"`))
 	if err != nil || spec == nil {
 		t.Fatalf("parseAuthSpec() = %+v, %v", spec, err)
 	}
 	if got := spec.Params["cmd"]; got != "aws ecr get-authorization-token --query 'a[0].b'" {
 		t.Fatalf("cmd = %q", got)
+	}
+}
+
+func TestParseCommandAuthAcceptsEveryOption(t *testing.T) {
+	src := "command"
+	for _, key := range restfile.AuthCommandParams {
+		src += " " + key + "=v"
+	}
+	spec, err := parseAuthSpec(authFields(src))
+	if err != nil || spec == nil {
+		t.Fatalf("parseAuthSpec() = %+v, %v", spec, err)
+	}
+	if len(spec.Params) != len(restfile.AuthCommandParams) {
+		t.Fatalf("params = %v, want every command option", spec.Params)
 	}
 }
 
@@ -173,7 +247,7 @@ GET https://example.com/a
 		t.Fatalf("global profile = %+v, want an unnamed rejected default", global)
 	}
 	own := doc.Requests[0].Metadata.Auth
-	if own == nil || own.Line != 6 || !strings.Contains(own.Rejected, "set ttl on the definition") {
+	if own == nil || own.Line != 6 || !strings.Contains(own.Rejected, "Set ttl on the definition") {
 		t.Fatalf("request auth = %+v, want its rejected line", own)
 	}
 }
@@ -198,5 +272,43 @@ func TestParseUnclosedNamedDefinitionKeepsItsName(t *testing.T) {
 	}
 	if p := doc.Auth[0]; p.Name != "gh" || p.Spec.Rejected == "" {
 		t.Fatalf("profile = %+v, want gh kept as rejected", p)
+	}
+}
+
+func TestParseAuthPositionalValueMayStartWithEquals(t *testing.T) {
+	src := "### b\n# @auth basic admin =secret\nGET https://example.com/b\n\n" +
+		"### t\n# @auth bearer =token\nGET https://example.com/t\n\n" +
+		"### h\n# @auth use gh\nGET https://example.com/h\n"
+	doc := Parse("/ws/api.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v", doc.Errors)
+	}
+	want := []map[string]string{
+		{"username": "admin", "password": "=secret"},
+		{"token": "=token"},
+		{"header": "use", "value": "gh"},
+	}
+	for i, w := range want {
+		if got := doc.Requests[i].Metadata.Auth.Params; !maps.Equal(got, w) {
+			t.Fatalf("request %d params = %v, want %v", i, got, w)
+		}
+	}
+}
+
+func TestParseSpacedAuthKeepsItsPlace(t *testing.T) {
+	for line, name := range map[string]string{
+		`# @auth global command gh cmd = "gh auth token"`: "gh",
+		"# @auth global command gh =x":                    "gh",
+		`# @auth file command cmd = "gh auth token"`:      "",
+		"# @auth global command format =x":                "",
+	} {
+		doc := Parse("/ws/defs.http", []byte(line+"\n"))
+		if len(doc.Auth) != 1 || doc.Auth[0].Name != name || doc.Auth[0].Spec.Rejected == "" {
+			t.Fatalf("%s: profiles = %+v, want %q kept as rejected", line, doc.Auth, name)
+		}
+	}
+	doc := Parse("/ws/api.http", []byte("### r\n# @auth use = gh\nGET https://example.com\n"))
+	if a := doc.Requests[0].Metadata.Auth; a == nil || a.Rejected == "" || a.Kind() == restfile.AuthHeader {
+		t.Fatalf("auth = %+v, want the line rejected, not read as a header named use", a)
 	}
 }

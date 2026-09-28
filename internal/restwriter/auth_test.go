@@ -166,6 +166,17 @@ func TestRenderRejectsAuthItCannotWrite(t *testing.T) {
 			name: "command value with spaces and both quote kinds",
 			auth: restfile.AuthSpec{Type: restfile.AuthCommand, Params: map[string]string{"cmd": `a 'b' "c"`}},
 		},
+		{
+			name: "command option the parser rejects",
+			auth: restfile.AuthSpec{
+				Type:   restfile.AuthCommand,
+				Params: map[string]string{"cmd": "mycli", "role": "admin"},
+			},
+		},
+		{
+			name: "use= option that belongs on the definition",
+			auth: restfile.AuthSpec{Use: "gh", Params: map[string]string{"ttl": "5m"}},
+		},
 	}
 
 	for _, tt := range tests {

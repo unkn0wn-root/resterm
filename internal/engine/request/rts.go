@@ -981,11 +981,15 @@ func (e *Engine) parseApplyAuth(
 	if len(pm) == 0 {
 		pm = nil
 	}
-	return &restfile.AuthSpec{
+	spec := &restfile.AuthSpec{
 		Type:       restfile.AuthKind(typ),
 		Params:     pm,
 		SourcePath: pos.Path,
-	}, nil
+	}
+	if bad := spec.UnknownParams(); len(bad) > 0 {
+		return nil, applyErr("auth", fmt.Sprintf("%s does not accept %s", spec.Kind(), strings.Join(bad, ", ")))
+	}
+	return spec, nil
 }
 
 func (e *Engine) parseApplySettings(

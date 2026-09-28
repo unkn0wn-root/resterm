@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -18,15 +19,12 @@ type Directive struct {
 	PersistIgnored bool
 }
 
-func ParseDirective(rest string) (Directive, error) {
-	res := Directive{}
-	head, ok, err := directive.ParseProfileHeader(directive.SSH, rest)
+func ParseDirective(rest string) (res Directive, err error) {
+	head, ok, headErr := directive.ParseProfileHeader(directive.SSH, rest)
 	if !ok {
 		return res, fmt.Errorf("@ssh requires options")
 	}
-	if err != nil {
-		return res, err
-	}
+	defer func() { err = errors.Join(headErr, err) }()
 	scope, opts := head.Scope, head.Options
 	name := head.Name
 	if name == "" {

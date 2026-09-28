@@ -36,6 +36,20 @@ func TestDiagnosticSourceSpans(t *testing.T) {
 		{"alias conflict reversed", "# @sse idle-timeout=2s idle=1s\nGET http://x", "idle-timeout idle", 1, diag.SeverityError},
 		{"repeated option", "# @sse idle=1s idle=2s\nGET http://x", "idle idle", 1, diag.SeverityError},
 		{"workflow aliases", "# @workflow w\n# @step s run=A using=B", "run using", 2, diag.SeverityError},
+		{"field with no key", "# @sse duration=2m =X\nGET http://x", "=X", 1, diag.SeverityError},
+		{"spaced setting", "# @settings http-insecure = false\n\n### r\nGET http://x", "http-insecure", 1, diag.SeverityError},
+		{"space after =", "# @ssh host=h Agent= false\nGET http://x", "Agent", 1, diag.SeverityError},
+		{"spaced mock option", "# @mock method=GET path=/x =x\nHTTP/1.1 200 OK\n", "=x", 1, diag.SeverityError},
+		{"spaced workflow option", "# @workflow w region = eu\n# @step a using=A", "region", 1, diag.SeverityError},
+		{"spaced auth option", "# @auth command cmd = x\nGET http://x", "cmd", 1, diag.SeverityError},
+		{"spaced step option", "# @workflow w\n# @step a using=A vars.request.name = Ada", "vars.request.name", 2, diag.SeverityError},
+		{
+			"spaced branch option",
+			"# @workflow w\n# @step a using=A\n# @if last.status == 200 run=A\n# @else fail = nope",
+			"fail",
+			4,
+			diag.SeverityError,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := Parse("test.http", []byte(tt.source))

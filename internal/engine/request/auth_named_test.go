@@ -285,7 +285,7 @@ GET https://example.test/none
 		req  int
 		want string
 	}{
-		{"own line", api, 0, "set ttl on the definition (" + filepath.Join(rig.ws, "api.http") + ":4)"},
+		{"own line", api, 0, "Set ttl on the definition (" + filepath.Join(rig.ws, "api.http") + ":4)"},
 		{"named definition", api, 1, "@auth command gh requires cmd or argv (" + defs + ":1)"},
 		{"inherited file line", broken, 0, `got "write"`},
 	}
@@ -331,20 +331,97 @@ func TestRejectedGlobalAuthBlocksInheritance(t *testing.T) {
 }
 
 func TestRejectedNamedDefinitionBlocksOnlyItsUsers(t *testing.T) {
+	for def, want := range map[string]string{
+		"# @auth global command gh cmd=\"unterminated\n": `@auth is missing a closing "\""`,
+		"# @auth global command gh =x\n":                 `@auth option "=x" has spaces around =`,
+	} {
+		rig := newNamedAuthRig(t, map[string]string{
+			"defs.http": def,
+			"api.http":  "### Unrelated\nGET https://example.test/plain\n\n### Uses gh\n# @auth use=gh\nGET https://example.test/gh\n",
+		})
+		doc := rig.doc(t, "api.http")
+		if res := rig.run(t, doc, 0, "dev", ExecModeSend); res.Err != nil {
+			t.Fatalf("%q: unrelated request: %v", def, res.Err)
+		}
+		if got := rig.header(t, "Authorization"); got != "" {
+			t.Fatalf("%q: unrelated request sent %q", def, got)
+		}
+		res := rig.run(t, doc, 1, "dev", ExecModeSend)
+		if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
+			t.Fatalf("%q: use=gh error = %v, want the rejected definition", def, res.Err)
+		}
+	}
+}
+
+func TestMisplacedGlobalAuthBlocksInheritance(t *testing.T) {
 	rig := newNamedAuthRig(t, map[string]string{
-		"defs.http": "# @auth global command gh cmd=\"unterminated\n",
-		"api.http":  "### Unrelated\nGET https://example.test/plain\n\n### Uses gh\n# @auth use=gh\nGET https://example.test/gh\n",
+		"defs.http":  "### Setup\n# @name setup\n# @auth global bearer defs-token\nGET https://example.test/setup\n",
+		"plain.http": "### Inherits\nGET https://example.test/plain\n",
+		"own.http":   "# @auth file bearer own-token\n\n### Own\nGET https://example.test/own\n",
+	})
+	if parser.Check(rig.parse(t, "defs.http")) == nil {
+		t.Fatal("expected the misplaced line to be a parse error")
+	}
+	res := rig.run(t, rig.doc(t, "plain.http"), 0, "dev", ExecModeSend)
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "@auth global scope must be declared outside a request") {
+		t.Fatalf("error = %v, want the misplaced global line", res.Err)
+	}
+	if rig.sent != nil {
+		t.Fatal("request was sent")
+	}
+	if res := rig.run(t, rig.doc(t, "own.http"), 0, "dev", ExecModeSend); res.Err != nil {
+		t.Fatalf("own auth: %v", res.Err)
+	}
+	if got := rig.header(t, "Authorization"); got != "Bearer own-token" {
+		t.Fatalf("own auth header = %q", got)
+	}
+}
+
+func TestCommandAuthWithUnknownOptionNeverRuns(t *testing.T) {
+	rig := newNamedAuthRig(t, map[string]string{
+		"defs.http": "# @auth global command gh cmd=gh --hostname=ghe.example.test\n",
+		"api.http":  "### Own line\n# @auth command cmd=mycli --role=admin\nGET https://example.test/own\n\n### Named\n# @auth use=gh\nGET https://example.test/named\n",
+	})
+	doc := rig.parse(t, "api.http")
+	for i, want := range []string{"does not accept --role", "does not accept --hostname"} {
+		res := rig.run(t, doc, i, "dev", ExecModeSend)
+		if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
+			t.Fatalf("request %d: error = %v, want %q", i, res.Err, want)
+		}
+		if rig.sent != nil {
+			t.Fatalf("request %d was sent", i)
+		}
+	}
+	if n := rig.calls.Load(); n != 0 {
+		t.Fatalf("command ran %d times", n)
+	}
+}
+
+func TestApplyCommandAuthWithUnknownOptionNeverRuns(t *testing.T) {
+	rig := newNamedAuthRig(t, map[string]string{
+		"api.http": `# @patch file role {auth: {type: "command", cmd: "mycli", role: "admin"}}
+
+### Apply
+# @apply {auth: {type: "command", cmd: "mycli", role: "admin"}}
+GET https://example.test/apply
+
+### Patch profile
+# @apply use=role
+GET https://example.test/patch
+`,
 	})
 	doc := rig.doc(t, "api.http")
-	if res := rig.run(t, doc, 0, "dev", ExecModeSend); res.Err != nil {
-		t.Fatalf("unrelated request: %v", res.Err)
+	for i := range doc.Requests {
+		res := rig.run(t, doc, i, "dev", ExecModeSend)
+		if res.Err == nil || !strings.Contains(res.Err.Error(), "does not accept role") {
+			t.Fatalf("request %d: error = %v, want the unknown option", i, res.Err)
+		}
+		if rig.sent != nil {
+			t.Fatalf("request %d was sent", i)
+		}
 	}
-	if got := rig.header(t, "Authorization"); got != "" {
-		t.Fatalf("unrelated request sent %q", got)
-	}
-	res := rig.run(t, doc, 1, "dev", ExecModeSend)
-	if res.Err == nil || !strings.Contains(res.Err.Error(), `@auth is missing a closing "\""`) {
-		t.Fatalf("use=gh error = %v, want the rejected definition", res.Err)
+	if n := rig.calls.Load(); n != 0 {
+		t.Fatalf("command ran %d times", n)
 	}
 }
 

@@ -2,6 +2,7 @@ package restfile
 
 import (
 	"maps"
+	"slices"
 	"testing"
 )
 
@@ -60,5 +61,28 @@ func TestAuthSpecResolveLaysOverridesOnProfile(t *testing.T) {
 	}
 	if prof.Spec.Params["header"] != "X-Token" {
 		t.Fatalf("resolve must not change the profile, got %v", prof.Spec.Params)
+	}
+}
+
+func TestAuthSpecUnknownParams(t *testing.T) {
+	cases := []struct {
+		name string
+		spec AuthSpec
+		want []string
+	}{
+		{
+			"command",
+			AuthSpec{Type: AuthCommand, Params: map[string]string{"cmd": "mycli", "--role": "admin", "role": ""}},
+			[]string{"--role", "role"},
+		},
+		{"keys match exactly", AuthSpec{Type: "Command", Params: map[string]string{"Cmd": "mycli"}}, []string{"Cmd"}},
+		{"use", AuthSpec{Use: "gh", Params: map[string]string{"header": "X-Token", "ttl": "5m"}}, []string{"ttl"}},
+		{"oauth2 sends extras", AuthSpec{Type: AuthOAuth2, Params: map[string]string{"prompt": "none"}}, nil},
+		{"bearer", AuthSpec{Type: AuthBearer, Params: map[string]string{"token": "t"}}, nil},
+	}
+	for _, tc := range cases {
+		if got := tc.spec.UnknownParams(); !slices.Equal(got, tc.want) {
+			t.Fatalf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

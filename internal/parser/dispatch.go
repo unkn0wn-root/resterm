@@ -122,7 +122,7 @@ func (b *documentBuilder) reject(d parsedDirective, msg string) directiveOutcome
 }
 
 func (b *documentBuilder) rejectError(d parsedDirective, err error) directiveOutcome {
-	b.pushError(d.diagnostic(err.Error(), err))
+	b.reportStrict(d, err)
 	return directiveRejected
 }
 

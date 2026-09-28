@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -38,15 +39,12 @@ func (e *DirectiveError) Unwrap() error {
 	return e.err
 }
 
-func ParseDirective(rest string) (Directive, error) {
-	res := Directive{}
-	head, ok, err := directive.ParseProfileHeader(directive.K8s, rest)
+func ParseDirective(rest string) (res Directive, err error) {
+	head, ok, headErr := directive.ParseProfileHeader(directive.K8s, rest)
 	if !ok {
 		return res, fmt.Errorf("@k8s requires options")
 	}
-	if err != nil {
-		return res, err
-	}
+	defer func() { err = errors.Join(headErr, err) }()
 	scope, opts := head.Scope, head.Options
 	name := head.Name
 	if name == "" {

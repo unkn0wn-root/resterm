@@ -346,7 +346,7 @@ func (b *documentBuilder) lintRequestCaptures(req *restfile.Request) {
 			b.addWarning(
 				c.Line,
 				fmt.Sprintf(
-					"@capture %q mixes template markers with RTS call syntax; use pure RTS or {{= ... }}",
+					"@capture %q mixes template markers with RTS call syntax. Use pure RTS or {{= ... }}",
 					c.Name,
 				),
 			)

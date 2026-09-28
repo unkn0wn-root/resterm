@@ -3,6 +3,7 @@ package restfile
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -25,6 +26,24 @@ const (
 var authAliases = map[AuthKind]AuthKind{"api-key": AuthAPIKey}
 
 const AuthDisableWord = "none"
+
+// AuthCommandParams lists every command option, in the order it is written.
+// Any other key is rejected, since an unquoted cmd=mycli --role=admin would
+// otherwise run mycli without --role=admin.
+var AuthCommandParams = []string{
+	"cmd",
+	"argv",
+	"format",
+	"header",
+	"scheme",
+	"token_path",
+	"type_path",
+	"expiry_path",
+	"expires_in_path",
+	"cache_key",
+	"ttl",
+	"timeout",
+}
 
 // AuthUseParams lists the settings a use= line can override.
 var AuthUseParams = []string{"header", "scheme", "timeout"}
@@ -92,6 +111,23 @@ func (a *AuthSpec) Resolve(p AuthProfile) *AuthSpec {
 	maps.Copy(out.Params, p.Spec.Params)
 	maps.Copy(out.Params, a.Params)
 	return &out
+}
+
+// UnknownParams returns the keys this auth does not accept, sorted. Only
+// command and use= limit their keys. OAuth2 sends extra keys to the token
+// endpoint, and the other forms take positional values.
+func (a *AuthSpec) UnknownParams() []string {
+	var known []string
+	switch {
+	case a.Use != "":
+		known = AuthUseParams
+	case a.Kind() == AuthCommand:
+		known = AuthCommandParams
+	default:
+		return nil
+	}
+	keys := slices.Sorted(maps.Keys(a.Params))
+	return slices.DeleteFunc(keys, func(k string) bool { return slices.Contains(known, k) })
 }
 
 func (a *AuthSpec) Origin() string {

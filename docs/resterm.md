@@ -901,6 +901,7 @@ Troubleshooting:
 - To write a comment that starts like a directive, add another comment marker, for example `## @if ...`.
 - A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](#splitting-a-long-matcher).
+- Write options as `key=value` with no spaces around `=`. In most directives a key on its own is a switch set to `true`, so `persist = false` would otherwise turn `persist` on. `key = value`, `key =value`, `key= value`, and a field with no key such as `=value` are errors, and none of them sets the key. An empty value such as `strict_hostkey=` is still allowed at the end of the line or before another `key=value` option. A global or file `@ssh` or `@k8s` profile written this way is not available to requests. An `@ssh` profile is reported as not found, and a `@k8s` profile reports the error to every request that uses it.
 - Alternate spellings count as the same option. For example, you cannot use both `known_hosts` and `known-hosts` on one `@ssh` directive. Empty values are ignored for regular options, but not for switches. `strict_hostkey=` enables the switch, so it conflicts with `strict-hostkey=false`.
 - `@compare` requires non-empty values for its baseline and group options. This is stricter than general alias conflict handling: `# @ssh host=h known-hosts=a known_hosts=` is valid, but `# @compare dev stage base=dev baseline=` reports an empty baseline.
 - Directives that require a value report `value missing` when left empty. This applies to `@name`, `@operation`, `@grpc-descriptor`, `@grpc-authority`, and `@grpc-metadata`. Some directives deliberately accept an empty value. `@graphql` enables GraphQL, `@query` and `@variables` read the lines below them, and `@grpc-reflection` defaults to on.
@@ -1776,7 +1777,7 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 | `cache_key` | No | - | Names a command-auth slot shared by every directive that uses the same key. Seed it once with the full command, then reuse it with `cache_key` only. Named definitions are simpler for new files. |
 | `timeout` | No | request timeout | Per-command timeout, bounded by the request timeout. |
 
-`@auth use=<name>` accepts only `header`, `scheme`, and `timeout`. Everything else belongs to the definition.
+`@auth command` accepts only the options in this table, and any other option is an error. The same rule applies to `{auth: {type: "command", ...}}` in `@apply` and `@patch`. `@auth use=<name>` accepts only `header`, `scheme`, and `timeout`. Everything else belongs to the definition.
 
 #### Command lines
 
@@ -1788,7 +1789,7 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 - Outside quotes, a backslash escapes a space, a quote, or another backslash. Any other backslash stays, so `C:\tools\gh.exe` works unquoted.
 - A `{{...}}` template stays in one argument even when it contains spaces. Templates expand after the split, so a value with spaces never becomes two arguments.
 
-Wrap `cmd` in the quote kind the command line does not use: `cmd="gcloud auth print-access-token --account 'me@example.com'"` or `cmd='mycli --name "Ada Lovelace"'`. Without quotes, `cmd=gh auth token` is an error rather than a run of `gh` alone, and so is a quote left open.
+Wrap `cmd` in the quote kind the command line does not use: `cmd="gcloud auth print-access-token --account 'me@example.com'"` or `cmd='mycli --name "Ada Lovelace"'`. Without quotes, `cmd=gh auth token` is an error rather than a run of `gh` alone. So is `cmd=mycli --role=admin`, where `--role=admin` would read as an unknown option, and so is a quote left open.
 
 #### Command auth behavior
 
