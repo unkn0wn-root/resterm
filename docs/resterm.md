@@ -357,7 +357,7 @@ show_context_help = ["shift+k"]
 - **Raw**: exact payload text.
 - **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
 - **Headers**: response and request header subviews with a visible in-pane switcher. Press `Enter` or `Space` while focused on the Headers tab to switch between the response headers and the sent request headers (cookies included).
-- **Profile** / **Workflow**: live results for profile and workflow runs. Profile results show progress, latency statistics, a histogram, and failures. On narrow panes, the sections stack vertically. Workflow results show a summary, a step list, and details for the selected step. The tab label follows the current run type. Use `j` / `k` or arrow keys to move between steps, `Enter` to focus the selected step detail, `j` / `k` or `PageUp` / `PageDown` to scroll that detail, and `Esc` or `Enter` to return to the step list.
+- **Profile** / **Workflow**: live results for profile and workflow runs. Profile results show progress, latency statistics, a histogram, and failures. On narrow panes, the sections stack vertically. Workflow results show a summary, a step list, and details for the selected step. The tab label follows the current run type. Use `j` / `k` or arrow keys to move between steps, `Enter` or `Space` to focus the selected step detail, `j` / `k` or `PageUp` / `PageDown` to scroll that detail, and `Esc`, `Enter`, or `Space` to return to the step list.
 - **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.
 - **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
@@ -1540,7 +1540,7 @@ POST https://example.com/users
 GET https://example.com/users/{{vars.workflow.userId}}
 ```
 
-Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Workflow** tab shows a workflow summary, stable step list, and selected-step response detail. Resterm selects the first failed or canceled step by default, or the first step when everything passes. Press `Enter` on a selected step to focus its response detail and scroll long responses without changing the selected step. A consolidated entry is written to history so you can review results later.
+Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Workflow** tab shows a workflow summary, stable step list, and selected-step response detail. Resterm selects the first failed or canceled step by default, or the first step when everything passes. Press `Enter` or `Space` on a selected step to focus its response detail and scroll long responses without changing the selected step. A consolidated entry is written to history so you can review results later.
 
 Key directives and tokens:
 
