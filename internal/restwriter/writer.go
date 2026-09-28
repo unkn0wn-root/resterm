@@ -287,7 +287,7 @@ func renderAuthProfiles(w directiveWriter, profs []restfile.AuthProfile) error {
 			if p.Spec.Kind() != restfile.AuthCommand {
 				return fmt.Errorf("writer: @auth %s cannot be named %q", p.Spec.Kind(), p.Name)
 			}
-			args = slices.Insert(args, 1, p.Name)
+			args = slices.Insert(args, 1, "name="+p.Name)
 		}
 		w.line(directive.Auth, p.Scope.String()+" "+strings.Join(args, " "))
 	}

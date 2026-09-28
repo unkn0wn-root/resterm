@@ -62,6 +62,9 @@ type argument struct {
 
 	repeat bool
 	chain  bool // accepting the word opens suggestions for the next argument
+	// next, when set, replaces the directive's arguments for the rest of the
+	// line, so a line can branch the way its grammar does.
+	next *args
 
 	examples []argExample
 }
@@ -196,6 +199,12 @@ func (a argument) call(usage string) argument {
 
 func (a argument) chains() argument {
 	a.chain = true
+	return a
+}
+
+// then sets the arguments allowed after this one. With none, nothing follows.
+func (a argument) then(named ...argument) argument {
+	a.next = &args{named: named}
 	return a
 }
 

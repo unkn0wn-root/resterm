@@ -84,6 +84,20 @@ func (a args) read(fields []field) scan {
 	return out
 }
 
+// follow returns the arguments in effect at the caret and the fields they read.
+// An argument with next takes over once the caret has left it and its value.
+func (a args) follow(fields []field, caret int) (args, []field) {
+	for i, s := range a.read(fields).slots {
+		if fields[i].end >= caret {
+			break
+		}
+		if s.arg != nil && s.arg.next != nil && (s.value || !s.arg.takesValue()) {
+			return s.arg.next.follow(fields[i+1:], caret)
+		}
+	}
+	return a, fields
+}
+
 // loadValue finds a path that uses the rest of the line and its starting rune offset.
 func (a args) loadValue(fields []field, text []rune) (*argument, int, bool) {
 	if a.value != nil && a.value.loadsLine() {

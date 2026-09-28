@@ -340,3 +340,27 @@ func TestPathContextPreservesBackslashes(t *testing.T) {
 		t.Fatalf("path context = %+v", ctx)
 	}
 }
+
+// A word, an option, or a word with its value can hand the rest of the line to
+// the arguments that follow it, but only once the caret has left it.
+func TestFollowHandsTheLineToNextArguments(t *testing.T) {
+	leaf := opt("leaf", "", "x")
+	table := args{named: []argument{
+		word("go", "").then(leaf),
+		opt("pick", "", "x").then(leaf),
+		word("key", "").takes(value{kind: valueText}).then(leaf),
+	}}
+	for text, want := range map[string]string{
+		"go":      "go",
+		"go ":     "leaf",
+		"pick=1":  "go",
+		"pick=1 ": "leaf",
+		"key ":    "go",
+		"key v ":  "leaf",
+	} {
+		line := []rune(text)
+		if got, _ := table.follow(scanFields(line), len(line)); got.named[0].key != want {
+			t.Errorf("%q: table starts with %q, want %q", text, got.named[0].key, want)
+		}
+	}
+}

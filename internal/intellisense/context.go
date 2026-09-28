@@ -52,6 +52,7 @@ type Context struct {
 	Path  PathContext
 
 	name      directive.Name
+	table     args      // the directive's arguments in effect at the caret
 	header    string    // lowercased header name for KindHeaderValue
 	arg       *argument // argument whose value is being completed
 	completed completed

@@ -286,11 +286,15 @@ func parseAuthDirective(rest string) (authDirective, error) {
 			return dir, fmt.Errorf("@auth %s scope requires an auth spec", scope.String())
 		}
 	}
-	// Cut the name first so a rejected line cannot become a default.
-	dir.Name, fields = cutAuthName(fields)
+	// Read the name first so a rejected line cannot become a default.
+	name, nameErr := authName(dir.Scope, fields)
+	dir.Name = name
 	// Only quotes count. An open bracket keeps the rest of the line, as in Pa(ss.
 	if closer := directive.FieldsOpen(rest); closer == '"' || closer == '\'' {
 		return dir, &directive.UnclosedError{Directive: directive.Auth, Closer: string(closer)}
+	}
+	if nameErr != nil {
+		return dir, nameErr
 	}
 
 	if strings.EqualFold(fields[0].Value, restfile.AuthDisableWord) {
@@ -313,15 +317,6 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, err
 	}
 
-	if dir.Name != "" {
-		if dir.Scope == directive.ScopeRequest {
-			return dir, fmt.Errorf("@auth %s scope does not support a profile name", dir.Scope.String())
-		}
-		if !validProfileName(dir.Name) {
-			return dir, fmt.Errorf("@auth profile name %q is invalid", dir.Name)
-		}
-	}
-
 	spec, err := parseAuthSpec(fields)
 	if err != nil {
 		return dir, err
@@ -340,20 +335,37 @@ func parseAuthDirective(rest string) (authDirective, error) {
 	return dir, nil
 }
 
-func cutAuthName(fields []directive.Field) (string, []directive.Field) {
+// authName reads name= from a command line. The name comes back even with an
+// error, so a broken named definition only fails the requests that use it.
+// Option errors are left for parseAuthSpec to report.
+func authName(scope directive.Scope, fields []directive.Field) (string, error) {
 	if len(fields) < 2 || restfile.AuthKind(fields[0].Value).Canonical() != restfile.AuthCommand {
-		return "", fields
+		return "", nil
 	}
-	// A command option written with spaces, as in cmd = x, is not a name. Any
-	// other word stays the name, so a broken named definition only fails the
-	// requests that use it.
-	word := strings.ToLower(fields[1].Value)
-	option := strings.Contains(word, "=") ||
-		slices.Contains(restfile.AuthCommandParams, word) && directive.SpacedKey(fields, 1)
-	if option {
-		return "", fields
+	opts, _ := directive.OptionFields(directive.Auth, fields[1:])
+	name, ok := opts.Lookup("name")
+	if !ok {
+		// Before 1.10 this word was ignored and the line was a default. Rejecting
+		// it keeps an old default from quietly becoming a named definition.
+		w := fields[1].Value
+		if scope != directive.ScopeRequest && validProfileName(w) && !directive.SpacedKey(fields, 1) {
+			return "", fmt.Errorf(
+				"@auth expects key=value options but got %q. Write name=%s to name a definition",
+				w,
+				w,
+			)
+		}
+		return "", nil
 	}
-	return fields[1].Value, append([]directive.Field{fields[0]}, fields[2:]...)
+	switch {
+	case scope == directive.ScopeRequest:
+		return name, fmt.Errorf("@auth %s scope does not support name=", scope.String())
+	case name == "":
+		return name, errors.New("@auth name= requires a profile name")
+	case !validProfileName(name):
+		return name, fmt.Errorf("@auth profile name %q is invalid", name)
+	}
+	return name, nil
 }
 
 // Reject bare words so an unquoted cmd=gh auth token cannot silently run gh.
@@ -452,6 +464,8 @@ func parseAuthSpec(fields []directive.Field) (*restfile.AuthSpec, error) {
 		if err != nil {
 			return nil, err
 		}
+		// authName reads the name. It names the definition and is not a command option.
+		opts.Pop("name")
 		opts.CopyTo(params)
 		if params["cmd"] == "" && params["argv"] == "" && params["cache_key"] == "" {
 			return nil, nil

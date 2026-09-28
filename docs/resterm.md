@@ -1708,7 +1708,7 @@ Scopes:
 - `@auth request ...` is an explicit request-scoped form.
 - `@auth file ...` defines inherited auth for later requests in the same document.
 - `@auth global ...` defines workspace-global inherited auth; file-scoped auth wins when both exist.
-- `@auth file command <name> ...` and `@auth global command <name> ...` define a named command auth. A named definition needs `cmd` or `argv` and is not inherited. Requests pick it with `@auth use=<name>`.
+- `@auth file command name=<name> ...` and `@auth global command name=<name> ...` define a named command auth. A named definition needs `cmd` or `argv` and is not inherited. Requests pick it with `@auth use=<name>`.
 - `@auth none` disables inherited auth for the current request.
 - An `@auth` line with an error is not skipped. A request that would take its auth from that line, directly, through inheritance, or through `use=`, fails instead of going out with other auth or none.
 
@@ -1764,6 +1764,7 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 
 | Parameter | Required | Default | Description |
 | --- | --- | --- | --- |
+| `name` | No | - | Names a `file` or `global` definition so requests can pick it with `use=`. A named definition is not inherited. A request line cannot take a name. |
 | `cmd` | One of `cmd` or `argv` | - | Command line, split into arguments like a shell would split it, but no shell runs. See [Command lines](#command-lines). |
 | `argv` | One of `cmd` or `argv` | - | JSON array of command arguments. Bare JSON works, for example `argv=["gh","auth","token"]`. Outer single quotes are also accepted and are useful when you want to preserve whitespace exactly, for example `argv='["gh", "auth", "token"]'`. |
 | `format` | No | `text` | Parse `stdout` as `text` or `json`. |
@@ -1807,7 +1808,7 @@ Examples:
 
 ```http
 # Requires `gh auth login` to be done outside Resterm first.
-# @auth global command gh cmd="gh auth token"
+# @auth global command name=gh cmd="gh auth token"
 
 ### GitHub user
 # @auth use=gh
@@ -1819,7 +1820,7 @@ X-GitHub-Api-Version: 2022-11-28
 ```http
 ### Short-lived access token
 # gcloud access tokens last one hour, so refresh a little earlier.
-# @auth file command gcloud cmd="gcloud auth print-access-token" ttl=50m
+# @auth file command name=gcloud cmd="gcloud auth print-access-token" ttl=50m
 
 ### Projects
 # @auth use=gcloud
@@ -1835,7 +1836,7 @@ GET https://example.com/projects
 ```http
 ### Amazon ECR registry API
 # The registry API takes the get-authorization-token value as Basic auth. It is valid for 12 hours.
-# @auth file command ecr cmd="aws ecr get-authorization-token --region {{aws.region}} --output text --query authorizationData[].authorizationToken" scheme=Basic ttl=11h
+# @auth file command name=ecr cmd="aws ecr get-authorization-token --region {{aws.region}} --output text --query authorizationData[].authorizationToken" scheme=Basic ttl=11h
 
 ### Image tags
 # @auth use=ecr
@@ -2254,7 +2255,7 @@ GET https://api.github.com/rate_limit
 This runs the command for every request. To run it once and reuse the token, give the definition a name and pick it per request with `use=`. A global definition works from every file in the workspace:
 
 ```http
-# @auth global command gh cmd="gh auth token"
+# @auth global command name=gh cmd="gh auth token"
 
 ### User
 # @auth use=gh
@@ -2268,7 +2269,7 @@ GET https://api.github.com/rate_limit
 Any request can run first. The token stays cached for the session in each environment, and `ttl` refreshes tokens that expire:
 
 ```http
-# @auth file command gcloud cmd="gcloud auth print-access-token" ttl=50m
+# @auth file command name=gcloud cmd="gcloud auth print-access-token" ttl=50m
 ```
 
 Structured output works too:

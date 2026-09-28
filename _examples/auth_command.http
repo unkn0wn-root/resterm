@@ -2,7 +2,7 @@
 # @auth file command cmd="gh auth token" cache_key=github-cli-file
 
 ### Named Command Auth
-# @auth file command gh cmd="gh auth token"
+# @auth file command name=gh cmd="gh auth token"
 
 ### Reusable Command Auth Profile
 # @patch file githubCliAuth {auth: {type: "command", argv: '["gh","auth","token"]', cache_key: "github-cli"}}

@@ -15,8 +15,8 @@ func authFields(src string) []directive.Field {
 }
 
 func TestParseNamedCommandAuth(t *testing.T) {
-	src := `# @auth global command gh cmd="gh auth token"
-# @auth file command GCloud cmd='gcloud auth print-access-token' ttl=50m
+	src := `# @auth global command name=gh cmd="gh auth token"
+# @auth file command name=GCloud cmd='gcloud auth print-access-token' ttl=50m
 # @auth file command argv=["mycli","token"]
 
 ### Uses a profile
@@ -61,6 +61,33 @@ GET https://example.com
 	}
 	if ref.Origin() != "/ws/api.http:6" {
 		t.Fatalf("reference origin = %q, want the request line", ref.Origin())
+	}
+}
+
+// Before 1.10 a bare word after command was ignored and the line was the
+// default. Reading it as a name would send inheriting requests without auth.
+func TestParseBareWordDefinitionStaysLoud(t *testing.T) {
+	src := "# @auth global command gh argv=[\"gh\",\"auth\",\"token\"]\n\n### r\nGET https://example.com\n"
+	doc := Parse("/ws/api.http", []byte(src))
+	want := `@auth expects key=value options but got "gh". Write name=gh to name a definition`
+	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, want) {
+		t.Fatalf("errors = %+v, want one containing %q", doc.Errors, want)
+	}
+	if len(doc.Auth) != 1 || doc.Auth[0].Name != "" || doc.Auth[0].Spec.Rejected == "" {
+		t.Fatalf("profiles = %+v, want an unnamed rejected default", doc.Auth)
+	}
+}
+
+func TestParseAuthNameReadsLikeOtherOptions(t *testing.T) {
+	for _, line := range []string{
+		`# @auth file command name=" gh" cmd=x`,
+		`# @auth file command "name=gh" cmd=x`,
+		`# @auth file command NAME=gh cmd=x`,
+	} {
+		doc := Parse("/ws/api.http", []byte(line+"\n"))
+		if len(doc.Errors) != 0 || len(doc.Auth) != 1 || doc.Auth[0].Name != "gh" {
+			t.Fatalf("%s: errors = %v, profiles = %+v, want gh", line, doc.Errors, doc.Auth)
+		}
 	}
 }
 
@@ -132,7 +159,7 @@ func TestParseAuthProfileErrors(t *testing.T) {
 		},
 		{
 			name: "named definition written with spaces around =",
-			src:  "# @auth global command gh cmd = \"gh auth token\"\n",
+			src:  "# @auth global command name=gh cmd = \"gh auth token\"\n",
 			want: `@auth option "cmd" has spaces around =. Write it as key=value`,
 		},
 		{
@@ -147,7 +174,7 @@ func TestParseAuthProfileErrors(t *testing.T) {
 		},
 		{
 			name: "named definition with an unquoted key=value argument",
-			src:  "# @auth global command gh cmd=gh --hostname=ghe.example.com\n",
+			src:  "# @auth global command name=gh cmd=gh --hostname=ghe.example.com\n",
 			want: "@auth command does not accept --hostname",
 		},
 		{
@@ -167,17 +194,47 @@ func TestParseAuthProfileErrors(t *testing.T) {
 		},
 		{
 			name: "named definition without a command",
-			src:  "# @auth file command gh cache_key=gh\n",
+			src:  "# @auth file command name=gh cache_key=gh\n",
 			want: "@auth command gh requires cmd or argv",
 		},
 		{
 			name: "name on a request",
+			src:  "### r\n# @auth command name=gh cmd=\"gh auth token\"\nGET https://example.com\n",
+			want: "@auth request scope does not support name=",
+		},
+		{
+			name: "bare word on a request",
 			src:  "### r\n# @auth command gh cmd=\"gh auth token\"\nGET https://example.com\n",
-			want: "@auth request scope does not support a profile name",
+			want: `@auth expects key=value options but got "gh". Quote a value that has spaces`,
+		},
+		{
+			name: "bare word on a file definition",
+			src:  "# @auth file command gh cmd=\"gh auth token\"\n",
+			want: `@auth expects key=value options but got "gh". Write name=gh to name a definition`,
+		},
+		{
+			name: "bare word that cannot be a name",
+			src:  "# @auth file command g!h cmd=\"gh auth token\"\n",
+			want: `@auth expects key=value options but got "g!h". Quote a value that has spaces`,
+		},
+		{
+			name: "name written with a space after =",
+			src:  "# @auth file command name= gh cmd=\"gh auth token\"\n",
+			want: `@auth option "name" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "empty name",
+			src:  "# @auth file command name= cmd=\"gh auth token\"\n",
+			want: "@auth name= requires a profile name",
+		},
+		{
+			name: "repeated name",
+			src:  "# @auth file command name=gh cmd=\"gh auth token\" name=other\n",
+			want: `@auth option "name" is repeated`,
 		},
 		{
 			name: "invalid name",
-			src:  "# @auth file command g!h cmd=\"gh auth token\"\n",
+			src:  "# @auth file command name=g!h cmd=\"gh auth token\"\n",
 			want: `@auth profile name "g!h" is invalid`,
 		},
 	}
@@ -202,6 +259,7 @@ func TestParseCommandAuthSpecCmd(t *testing.T) {
 	}
 }
 
+// This also fails if name becomes a command option, since name= names the definition.
 func TestParseCommandAuthAcceptsEveryOption(t *testing.T) {
 	src := "command"
 	for _, key := range restfile.AuthCommandParams {
@@ -226,7 +284,7 @@ func TestParseCacheKeyOnlyCommandStaysValid(t *testing.T) {
 
 func TestParseRejectedAuthKeepsItsPlace(t *testing.T) {
 	src := `# @auth file bearer file-token
-# @auth file command gh cache_key=gh
+# @auth file command name=gh cache_key=gh
 # @auth global oauth2 token_url=https://id.example.com scope=read write
 
 ### Own line rejected
@@ -266,7 +324,7 @@ func TestParseAuthKeepsOpenGroupValues(t *testing.T) {
 }
 
 func TestParseUnclosedNamedDefinitionKeepsItsName(t *testing.T) {
-	doc := Parse("/ws/defs.http", []byte("# @auth global command gh cmd=\"unterminated\n"))
+	doc := Parse("/ws/defs.http", []byte("# @auth global command name=gh cmd=\"unterminated\n"))
 	if len(doc.Errors) != 1 || len(doc.Auth) != 1 {
 		t.Fatalf("errors = %v, profiles = %+v", doc.Errors, doc.Auth)
 	}
@@ -297,10 +355,12 @@ func TestParseAuthPositionalValueMayStartWithEquals(t *testing.T) {
 
 func TestParseSpacedAuthKeepsItsPlace(t *testing.T) {
 	for line, name := range map[string]string{
-		`# @auth global command gh cmd = "gh auth token"`: "gh",
-		"# @auth global command gh =x":                    "gh",
-		`# @auth file command cmd = "gh auth token"`:      "",
-		"# @auth global command format =x":                "",
+		`# @auth global command name=gh cmd = "gh auth token"`: "gh",
+		"# @auth global command name=gh =x":                    "gh",
+		"# @auth global command gh =x":                         "",
+		"# @auth global command name =gh":                      "",
+		`# @auth file command cmd = "gh auth token"`:           "",
+		"# @auth global command format =x":                     "",
 	} {
 		doc := Parse("/ws/defs.http", []byte(line+"\n"))
 		if len(doc.Auth) != 1 || doc.Auth[0].Name != name || doc.Auth[0].Spec.Rejected == "" {

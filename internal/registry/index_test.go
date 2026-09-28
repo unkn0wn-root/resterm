@@ -3,6 +3,7 @@ package registry
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -200,14 +201,58 @@ func TestIndexPatchNamedIsDeterministicAcrossFiles(t *testing.T) {
 	}
 }
 
+// Names come in lookup order, so each one is the profile use= resolves.
+func TestIndexNamesFollowLookupOrder(t *testing.T) {
+	t.Parallel()
+
+	defs := parser.Parse("/tmp/names/defs.http", []byte(`# @auth global command name=gh cmd=a
+# @auth file command name=private cmd=b
+# @auth global command name=Shared cmd=c
+# @patch global jsonApi {headers: {"X-From": "defs"}}
+# @patch file hidden {headers: {"X-From": "defs"}}
+# @ssh global bastion host=jump.example.com user=ops
+# @k8s global cluster namespace=default service=api port=http
+`))
+	saved := parser.Parse("/tmp/names/use.http", []byte("# @auth global command name=stale cmd=x\n"))
+	use := parser.Parse("/tmp/names/use.http", []byte(`# @auth file command name=shared cmd=d
+# @auth file command cmd=default
+`))
+	ix := New()
+	ix.Sync(defs)
+	ix.Sync(saved)
+
+	if got, want := ix.AuthNames(use), []string{"shared", "gh"}; !slices.Equal(got, want) {
+		t.Fatalf("auth names = %v, want %v", got, want)
+	}
+	for _, n := range ix.AuthNames(use) {
+		if _, ok := ix.AuthNamed(use, n); !ok {
+			t.Fatalf("listed auth name %q does not resolve", n)
+		}
+	}
+	if got, want := ix.PatchNames(use), []string{"jsonApi"}; !slices.Equal(got, want) {
+		t.Fatalf("patch names = %v, want %v", got, want)
+	}
+	if got, want := ix.SSHNames(use), []string{"bastion"}; !slices.Equal(got, want) {
+		t.Fatalf("ssh names = %v, want %v", got, want)
+	}
+	if got, want := ix.K8sNames(use), []string{"cluster"}; !slices.Equal(got, want) {
+		t.Fatalf("k8s names = %v, want %v", got, want)
+	}
+
+	var none *Index
+	if got, want := none.AuthNames(use), []string{"shared"}; !slices.Equal(got, want) {
+		t.Fatalf("names without an index = %v, want %v", got, want)
+	}
+}
+
 func TestIndexAuthNamed(t *testing.T) {
 	t.Parallel()
 
-	defs := parser.Parse("/tmp/defs.http", []byte(`# @auth global command gh cmd="gh auth token --hostname global"
-# @auth file command private cmd="private-token"
-# @auth global command other cmd="other-token"
+	defs := parser.Parse("/tmp/defs.http", []byte(`# @auth global command name=gh cmd="gh auth token --hostname global"
+# @auth file command name=private cmd="private-token"
+# @auth global command name=other cmd="other-token"
 `))
-	use := parser.Parse("/tmp/use.http", []byte(`# @auth file command GH cmd="gh auth token --hostname file"
+	use := parser.Parse("/tmp/use.http", []byte(`# @auth file command name=GH cmd="gh auth token --hostname file"
 # @auth file command cmd="default-token"
 `))
 	ix := New()

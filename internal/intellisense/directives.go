@@ -57,7 +57,7 @@ func directiveNameItems(ctx Context) []Item {
 }
 
 func argumentItems(ctx Context, sc Scope) []Item {
-	table := argsFor(ctx.name)
+	table := ctx.table
 	if table.empty() {
 		return nil
 	}
@@ -95,7 +95,7 @@ func valueItems(arg *argument, ctx Context, sc Scope) []Item {
 		items = labeledItems(arg.value.names(ctx, sc))
 	}
 
-	single := argsFor(ctx.name).single
+	single := ctx.table.single
 	out := make([]Item, 0, len(items))
 	for _, item := range filter(items, ctx.Query) {
 		if ctx.completed.holds(arg.key, item.Label) {

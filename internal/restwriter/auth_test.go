@@ -258,8 +258,22 @@ func headerAuthDoc(name, value string) *restfile.Document {
 	}}}
 }
 
+func TestRenderRoundTripsQuotedAuthName(t *testing.T) {
+	doc := parser.Parse("r.http", []byte(`# @auth global command name=" gh" cmd=x`+"\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("source did not parse: %v", doc.Errors)
+	}
+	out := mustRender(t, doc)
+	if back := parser.Parse("r.http", []byte(out)); len(back.Errors) != 0 {
+		t.Fatalf("rendered document did not parse: %v\n%s", back.Errors, out)
+	}
+	if !strings.Contains(out, "# @auth global command name=gh cmd=x\n") {
+		t.Fatalf("render = %q, want the trimmed name", out)
+	}
+}
+
 func TestRenderRoundTripsAuthProfiles(t *testing.T) {
-	src := `# @auth global command gh cmd='gh auth token'
+	src := `# @auth global command name=gh cmd='gh auth token'
 # @auth file command cmd="gcloud auth print-access-token" ttl=50m cache_key=gcloud
 # @auth file bearer {{token}}
 
@@ -275,7 +289,7 @@ GET https://example.com/
 
 	out := mustRender(t, doc)
 	want := []string{
-		`# @auth global command gh cmd='gh auth token'`,
+		`# @auth global command name=gh cmd='gh auth token'`,
 		`# @auth file command cmd='gcloud auth print-access-token' cache_key=gcloud ttl=50m`,
 		`# @auth file bearer {{token}}`,
 		`# @auth use=gh header=X-Token timeout=5s`,

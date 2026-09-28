@@ -1789,6 +1789,35 @@ func TestRequestEditorCompletionsSuggestAuthSubcommands(t *testing.T) {
 	}
 }
 
+func TestRequestEditorCompletionsOfferNameForAuthDefinitions(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetCompletionEnabled(true)
+
+	for _, r := range "@auth file c" {
+		var cmd tea.Cmd
+		editor, cmd = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		if cmd != nil {
+			cmd()
+		}
+	}
+	if !editor.completion.active || editor.completion.filtered[editor.completion.selection].Label != "command" {
+		t.Fatalf("expected command to be offered, got %v", editor.completion.filtered)
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "# @auth file command " {
+		t.Fatalf("expected a definition to wait for its options, got %q", got)
+	}
+	if !editor.completion.active {
+		t.Fatal("expected command options to open after accepting command")
+	}
+	if got := editor.completion.filtered[0].Label; got != "name=" {
+		t.Fatalf("expected name= first, got %v", editor.completion.filtered)
+	}
+}
+
 func TestRequestEditorCompletionsTracePlaceholder(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor

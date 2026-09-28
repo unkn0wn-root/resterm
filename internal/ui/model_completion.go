@@ -7,12 +7,13 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
+	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (m *Model) refreshCompletionScope() {
-	scope := buildCompletionScope(m.doc, m.ws.cat, m.ws.sel)
+	scope := buildCompletionScope(m.doc, m.registryIndex(), m.ws.cat, m.ws.sel)
 	m.editor.SetCompletionScope(scope)
 	root := m.ws.root
 	if m.currentFile != "" {
@@ -21,8 +22,11 @@ func (m *Model) refreshCompletionScope() {
 	m.editor.SetCompletionRoot(root)
 }
 
+// Profile names come from the registry, so use= offers what it resolves,
+// including globals defined in other files.
 func buildCompletionScope(
 	doc *restfile.Document,
+	ix *registry.Index,
 	cat vars.Catalog,
 	sel vars.Selection,
 ) intellisense.Scope {
@@ -67,12 +71,12 @@ func buildCompletionScope(
 		for _, c := range doc.Constants {
 			add(c.Name, "const", false)
 		}
-		scope.Profiles = intellisense.ProfileSet{
-			Auth:  profileNames(doc.Auth, func(p restfile.AuthProfile) string { return p.Name }),
-			Patch: profileNames(doc.Patches, func(p restfile.PatchProfile) string { return p.Name }),
-			SSH:   profileNames(doc.SSH, func(p restfile.SSHProfile) string { return p.Name }),
-			K8s:   profileNames(doc.K8s, func(p restfile.K8sProfile) string { return p.Name }),
-		}
+	}
+	scope.Profiles = intellisense.ProfileSet{
+		Auth:  ix.AuthNames(doc),
+		Patch: ix.PatchNames(doc),
+		SSH:   ix.SSHNames(doc),
+		K8s:   ix.K8sNames(doc),
 	}
 
 	// Environment keys fill in only where a declared variable did not.
@@ -105,16 +109,6 @@ func completionEnvironments(cat vars.Catalog) ([]string, map[string][]string) {
 		groups[group.Name] = group.ProfileNames()
 	}
 	return nil, groups
-}
-
-func profileNames[T any](profiles []T, name func(T) string) []string {
-	out := make([]string, 0, len(profiles))
-	for _, p := range profiles {
-		if n := name(p); n != "" {
-			out = append(out, n)
-		}
-	}
-	return out
 }
 
 func sortedKeys(m map[string]string) []string {
