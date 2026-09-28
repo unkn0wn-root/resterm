@@ -320,6 +320,8 @@ func TestRejectedGlobalAuthBlocksInheritance(t *testing.T) {
 		"# @auth global bearer 'unclosed\n": `@auth is missing a closing "'"`,
 		// A default written before 1.10, when the bare word was ignored.
 		"# @auth global command gh argv=[\"gh\",\"auth\",\"token\"]\n": "Write name=gh to name a definition",
+		// A rejected line keeps its name, but it may still have been meant as the default.
+		"# @auth global command gh name=other argv=[\"gh\",\"auth\",\"token\"]\n": `@auth expects key=value options but got "gh"`,
 	} {
 		rig := newNamedAuthRig(t, map[string]string{
 			"defs.http":  def,
@@ -336,25 +338,34 @@ func TestRejectedGlobalAuthBlocksInheritance(t *testing.T) {
 	}
 }
 
-func TestRejectedNamedDefinitionBlocksOnlyItsUsers(t *testing.T) {
+// A rejected named definition fails its users and every request that could have
+// inherited it. A request with its own auth is not affected.
+func TestRejectedNamedDefinitionFailsClosed(t *testing.T) {
 	for def, want := range map[string]string{
 		"# @auth global command name=gh cmd=\"unterminated\n": `@auth is missing a closing "\""`,
 		"# @auth global command name=gh =x\n":                 `@auth option "=x" has spaces around =`,
 	} {
 		rig := newNamedAuthRig(t, map[string]string{
 			"defs.http": def,
-			"api.http":  "### Unrelated\nGET https://example.test/plain\n\n### Uses gh\n# @auth use=gh\nGET https://example.test/gh\n",
+			"api.http": "### Inherits\nGET https://example.test/plain\n\n" +
+				"### Uses gh\n# @auth use=gh\nGET https://example.test/gh\n\n" +
+				"### Own\n# @auth bearer own-token\nGET https://example.test/own\n",
 		})
 		doc := rig.doc(t, "api.http")
-		if res := rig.run(t, doc, 0, "dev", ExecModeSend); res.Err != nil {
-			t.Fatalf("%q: unrelated request: %v", def, res.Err)
+		for i, name := range []string{"inheriting", "use=gh"} {
+			res := rig.run(t, doc, i, "dev", ExecModeSend)
+			if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
+				t.Fatalf("%q: %s error = %v, want the rejected definition", def, name, res.Err)
+			}
+			if rig.sent != nil {
+				t.Fatalf("%q: %s request was sent", def, name)
+			}
 		}
-		if got := rig.header(t, "Authorization"); got != "" {
-			t.Fatalf("%q: unrelated request sent %q", def, got)
+		if res := rig.run(t, doc, 2, "dev", ExecModeSend); res.Err != nil {
+			t.Fatalf("%q: own auth: %v", def, res.Err)
 		}
-		res := rig.run(t, doc, 1, "dev", ExecModeSend)
-		if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
-			t.Fatalf("%q: use=gh error = %v, want the rejected definition", def, res.Err)
+		if got := rig.header(t, "Authorization"); got != "Bearer own-token" {
+			t.Fatalf("%q: own auth header = %q", def, got)
 		}
 	}
 }

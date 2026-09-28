@@ -29,11 +29,11 @@ func (ds docSet[T]) names(nm func(T) string) []string {
 	return uniqueNames(nm, ds.fs, ds.gs)
 }
 
-func (ds docSet[T]) deflt(nm func(T) string) (T, bool) {
-	if v, ok := findDefault(ds.fs, nm); ok {
+func (ds docSet[T]) deflt(df func(T) bool) (T, bool) {
+	if v, ok := findDefault(ds.fs, df); ok {
 		return v, true
 	}
-	return findDefault(ds.gs, nm)
+	return findDefault(ds.gs, df)
 }
 
 type set[T any] struct {
@@ -171,8 +171,8 @@ func (s *set[T]) names(p string, xs []T) []string {
 	return uniqueNames(s.nm, fs, gs)
 }
 
-func (s *set[T]) deflt(p string, xs []T) (T, bool) {
-	if v, ok := s.split(xs).deflt(s.nm); ok {
+func (s *set[T]) deflt(p string, xs []T, df func(T) bool) (T, bool) {
+	if v, ok := s.split(xs).deflt(df); ok {
 		return v, true
 	}
 
@@ -182,7 +182,7 @@ func (s *set[T]) deflt(p string, xs []T) (T, bool) {
 		if k == p {
 			continue
 		}
-		if v, ok := findDefault(s.by[k].gs, s.nm); ok {
+		if v, ok := findDefault(s.by[k].gs, df); ok {
 			return v, true
 		}
 	}
@@ -400,9 +400,9 @@ func (ix *Index) DefaultAuth(doc *restfile.Document) (*restfile.AuthProfile, boo
 		ok bool
 	)
 	if ix == nil {
-		v, ok = ixSplitAuth(doc).deflt(authName)
+		v, ok = ixSplitAuth(doc).deflt(authDefault)
 	} else {
-		v, ok = ix.auth.deflt(docPath(doc), docAuth(doc))
+		v, ok = ix.auth.deflt(docPath(doc), docAuth(doc), authDefault)
 	}
 	if !ok {
 		return nil, false
@@ -477,9 +477,9 @@ func uniqueNames[T any](nm func(T) string, groups ...[]T) []string {
 	return out
 }
 
-func findDefault[T any](xs []T, nm func(T) string) (T, bool) {
+func findDefault[T any](xs []T, df func(T) bool) (T, bool) {
 	for i := len(xs) - 1; i >= 0; i-- {
-		if nameKey(nm(xs[i])) == "" {
+		if df(xs[i]) {
 			return xs[i], true
 		}
 	}
@@ -488,6 +488,13 @@ func findDefault[T any](xs []T, nm func(T) string) (T, bool) {
 }
 
 func authName(v restfile.AuthProfile) string { return v.Name }
+
+// A rejected line counts as a default even with a name, since the name can be
+// part of what is broken. A request that could have inherited it fails instead
+// of going out without auth.
+func authDefault(v restfile.AuthProfile) bool {
+	return nameKey(v.Name) == "" || v.Spec.Rejected != ""
+}
 
 func patchName(v restfile.PatchProfile) string { return v.Name }
 

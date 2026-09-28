@@ -201,6 +201,33 @@ func TestIndexPatchNamedIsDeterministicAcrossFiles(t *testing.T) {
 	}
 }
 
+// A rejected line counts as a default where a default would have applied, and
+// nowhere else.
+func TestIndexDefaultAuthCountsRejectedDefinitions(t *testing.T) {
+	t.Parallel()
+
+	ix := New()
+	ix.Sync(parser.Parse("/tmp/fail/defs.http", []byte("# @auth global command gh name=other cmd=x\n")))
+
+	plain := parser.Parse("/tmp/fail/plain.http", []byte("GET https://example.com\n"))
+	if pf, ok := ix.DefaultAuth(plain); !ok || pf.Name != "other" || pf.Spec.Rejected == "" {
+		t.Fatalf("default = %+v, want the rejected global", pf)
+	}
+
+	own := parser.Parse("/tmp/fail/own.http", []byte("# @auth file bearer own\n"))
+	if pf, ok := ix.DefaultAuth(own); !ok || pf.Spec.Params["token"] != "own" {
+		t.Fatalf("default = %+v, want the file default over a global", pf)
+	}
+
+	later := parser.Parse(
+		"/tmp/fail/later.http",
+		[]byte("# @auth file command gh name=x cmd=y\n# @auth file bearer later\n"),
+	)
+	if pf, ok := ix.DefaultAuth(later); !ok || pf.Spec.Params["token"] != "later" {
+		t.Fatalf("default = %+v, want the later line in the same file", pf)
+	}
+}
+
 // Names come in lookup order, so each one is the profile use= resolves.
 func TestIndexNamesFollowLookupOrder(t *testing.T) {
 	t.Parallel()
