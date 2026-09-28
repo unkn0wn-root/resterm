@@ -3,6 +3,7 @@ package parser
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -390,19 +391,18 @@ func parseAuthUse(fields []directive.Field) (*restfile.AuthSpec, error) {
 		return nil, fmt.Errorf("@auth use name %q is invalid", name)
 	}
 	params := make(map[string]string)
-	for _, key := range restfile.AuthUseParams {
-		if val := opts.Pop(key); val != "" {
-			params[key] = val
-		}
-	}
-	if opts.Len() > 0 {
+	opts.CopyTo(params)
+	spec := &restfile.AuthSpec{Use: name, Params: params}
+	if bad := spec.UnknownParams(); len(bad) > 0 {
 		return nil, fmt.Errorf(
-			"@auth use= accepts only %s; set %s on the definition",
+			"@auth use= accepts only %s. Set %s on the definition",
 			strings.Join(restfile.AuthUseParams, ", "),
-			strings.Join(opts.Keys(), ", "),
+			strings.Join(bad, ", "),
 		)
 	}
-	return &restfile.AuthSpec{Use: name, Params: params}, nil
+	// An empty override would clear the definition's value.
+	maps.DeleteFunc(spec.Params, func(_, v string) bool { return v == "" })
+	return spec, nil
 }
 
 // Fields arrive decoded. Rejoining them loses the boundary around a quoted
@@ -470,7 +470,15 @@ func parseAuthSpec(fields []directive.Field) (*restfile.AuthSpec, error) {
 	if len(params) == 0 {
 		return nil, nil
 	}
-	return &restfile.AuthSpec{Type: authType, Params: params}, nil
+	spec := &restfile.AuthSpec{Type: authType, Params: params}
+	if bad := spec.UnknownParams(); len(bad) > 0 {
+		msg := fmt.Sprintf("@auth %s does not accept %s", authType, strings.Join(bad, ", "))
+		if params["cmd"] != "" {
+			msg += ". Quote a cmd value that has spaces"
+		}
+		return nil, errors.New(msg)
+	}
+	return spec, nil
 }
 
 func joinValues(fields []directive.Field) string {

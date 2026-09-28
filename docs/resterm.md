@@ -1777,7 +1777,7 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 | `cache_key` | No | - | Names a command-auth slot shared by every directive that uses the same key. Seed it once with the full command, then reuse it with `cache_key` only. Named definitions are simpler for new files. |
 | `timeout` | No | request timeout | Per-command timeout, bounded by the request timeout. |
 
-`@auth use=<name>` accepts only `header`, `scheme`, and `timeout`. Everything else belongs to the definition.
+`@auth command` accepts only the options in this table, and any other option is an error. The same rule applies to `{auth: {type: "command", ...}}` in `@apply` and `@patch`. `@auth use=<name>` accepts only `header`, `scheme`, and `timeout`. Everything else belongs to the definition.
 
 #### Command lines
 
@@ -1789,7 +1789,7 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 - Outside quotes, a backslash escapes a space, a quote, or another backslash. Any other backslash stays, so `C:\tools\gh.exe` works unquoted.
 - A `{{...}}` template stays in one argument even when it contains spaces. Templates expand after the split, so a value with spaces never becomes two arguments.
 
-Wrap `cmd` in the quote kind the command line does not use: `cmd="gcloud auth print-access-token --account 'me@example.com'"` or `cmd='mycli --name "Ada Lovelace"'`. Without quotes, `cmd=gh auth token` is an error rather than a run of `gh` alone, and so is a quote left open.
+Wrap `cmd` in the quote kind the command line does not use: `cmd="gcloud auth print-access-token --account 'me@example.com'"` or `cmd='mycli --name "Ada Lovelace"'`. Without quotes, `cmd=gh auth token` is an error rather than a run of `gh` alone. So is `cmd=mycli --role=admin`, where `--role=admin` would read as an unknown option, and so is a quote left open.
 
 #### Command auth behavior
 

@@ -3,6 +3,7 @@ package restfile
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -110,6 +111,23 @@ func (a *AuthSpec) Resolve(p AuthProfile) *AuthSpec {
 	maps.Copy(out.Params, p.Spec.Params)
 	maps.Copy(out.Params, a.Params)
 	return &out
+}
+
+// UnknownParams returns the keys this auth does not accept, sorted. Only
+// command and use= limit their keys. OAuth2 sends extra keys to the token
+// endpoint, and the other forms take positional values.
+func (a *AuthSpec) UnknownParams() []string {
+	var known []string
+	switch {
+	case a.Use != "":
+		known = AuthUseParams
+	case a.Kind() == AuthCommand:
+		known = AuthCommandParams
+	default:
+		return nil
+	}
+	keys := slices.Sorted(maps.Keys(a.Params))
+	return slices.DeleteFunc(keys, func(k string) bool { return slices.Contains(known, k) })
 }
 
 func (a *AuthSpec) Origin() string {

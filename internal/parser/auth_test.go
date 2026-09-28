@@ -83,7 +83,7 @@ func TestParseAuthProfileErrors(t *testing.T) {
 		{
 			name: "use with a definition option",
 			src:  "### r\n# @auth use=gh ttl=5m cache_key=gh\nGET https://example.com\n",
-			want: "@auth use= accepts only header, scheme, timeout; set cache_key, ttl on the definition",
+			want: "@auth use= accepts only header, scheme, timeout. Set cache_key, ttl on the definition",
 		},
 		{
 			name: "use with a bare word",
@@ -134,6 +134,21 @@ func TestParseAuthProfileErrors(t *testing.T) {
 			name: "named definition written with spaces around =",
 			src:  "# @auth global command gh cmd = \"gh auth token\"\n",
 			want: `@auth option "cmd" has spaces around =. Write it as key=value`,
+		},
+		{
+			name: "cmd with an unquoted key=value argument",
+			src:  "### r\n# @auth command cmd=mycli --role=admin\nGET https://example.com\n",
+			want: "@auth command does not accept --role. Quote a cmd value that has spaces",
+		},
+		{
+			name: "command with an unknown option",
+			src:  "### r\n# @auth command argv=[\"mycli\"] toekn_path=token\nGET https://example.com\n",
+			want: "@auth command does not accept toekn_path",
+		},
+		{
+			name: "named definition with an unquoted key=value argument",
+			src:  "# @auth global command gh cmd=gh --hostname=ghe.example.com\n",
+			want: "@auth command does not accept --hostname",
 		},
 		{
 			name: "oauth2 value with spaces and no quotes",
@@ -232,7 +247,7 @@ GET https://example.com/a
 		t.Fatalf("global profile = %+v, want an unnamed rejected default", global)
 	}
 	own := doc.Requests[0].Metadata.Auth
-	if own == nil || own.Line != 6 || !strings.Contains(own.Rejected, "set ttl on the definition") {
+	if own == nil || own.Line != 6 || !strings.Contains(own.Rejected, "Set ttl on the definition") {
 		t.Fatalf("request auth = %+v, want its rejected line", own)
 	}
 }
