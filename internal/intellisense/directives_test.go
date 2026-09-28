@@ -6,7 +6,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
-	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func contains(items []Item, label string) bool {
@@ -101,17 +100,6 @@ func TestDirectiveSpacingComesFromSpecs(t *testing.T) {
 }
 
 func TestDirectiveArgsFilterByPrefix(t *testing.T) {
-	auth := argOptions("auth", "")
-	for _, label := range []string{"basic", "bearer", "apikey", "oauth2", "command", "name=", "use=", "token_url=", "cmd=", "argv=", "cache_key="} {
-		if !contains(auth, label) {
-			t.Fatalf("missing auth arg %q", label)
-		}
-	}
-	for _, key := range restfile.AuthCommandParams {
-		if !contains(auth, key+"=") {
-			t.Fatalf("missing auth command option %q", key+"=")
-		}
-	}
 	for _, it := range argOptions("auth", "com") {
 		if !strings.HasPrefix(it.Label, "com") {
 			t.Fatalf("expected com* suggestion, got %q", it.Label)

@@ -67,16 +67,16 @@ func analyzeDirectiveArea(area []rune, caret int) (Context, bool) {
 
 func analyzeArguments(name directive.Name, text []rune, caret int) Context {
 	caret = clamp(caret, 0, len(text))
-	table := argsFor(name)
+	table, fields := argsFor(name).follow(scanFields(text), caret)
 	ctx := Context{
 		Kind:      KindDirectiveArg,
 		name:      name,
+		table:     table,
 		Start:     caret,
 		End:       caret,
 		completed: completed{},
 	}
 
-	fields := scanFields(text)
 	if arg, start, ok := table.loadValue(fields, text); ok && caret >= start {
 		ctx.Start, ctx.End = start, len(text)
 		ctx.Query = string(text[start:caret])

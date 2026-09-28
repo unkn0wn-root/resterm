@@ -1,6 +1,8 @@
 package intellisense
 
 import (
+	"slices"
+
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	httpversion "github.com/unkn0wn-root/resterm/internal/http/version"
@@ -31,23 +33,66 @@ func addRequestArgs(c argumentCatalog) {
 	c.add(args{value: directiveValue(flag("enabled", "Toggle GraphQL")), single: true}, directive.GraphQL)
 }
 
-var authArgs = []argument{
-	word("request", "Make the auth directive explicitly request-scoped").withExample("bearer {{token}}"),
-	word("file", "Define auth inherited by later requests in this file").withExample("bearer {{token}}"),
-	word("global", "Define auth inherited across the workspace").withExample("bearer {{token}}"),
-	word("none", "Disable inherited auth for the current request"),
-	word("basic", "Basic auth with username and password").withExample("user pass"),
-	word("bearer", "Bearer token auth").withExample("{{token}}"),
-	word("apikey", "API key auth in header or query").withExample("header X-API-Key {{key}}"),
-	word("oauth2", "Built-in OAuth 2.0 token acquisition and caching").chains(),
-	word("command", "Run a CLI command and inject its token output").
-		withOption(`cmd="gh auth token"`),
-	word("header", "API key placement in headers"),
-	word("query", "API key placement in query string"),
-	opt("name", "Name a file or global command auth for use=", "gh"),
-	optValue("use", "Reference a named command auth", namesValue(func(_ Context, sc Scope) ([]string, string) {
-		return sc.Profiles.Auth, "auth profile"
-	})),
+// An @auth line has an optional scope, then a kind and its options, use= and
+// its overrides, or none. Each word hands the rest of the line to what may
+// follow it, so only what the parser accepts there is offered.
+var authArgs = slices.Concat(authScopeArgs, authRequestArgs)
+
+var authScopeArgs = []argument{
+	word("request", "Make the auth directive explicitly request-scoped").
+		withExample("bearer {{token}}").
+		then(authRequestArgs...),
+	word("file", "Define auth inherited by later requests in this file").
+		withExample("bearer {{token}}").
+		then(authDefinitionArgs...),
+	word("global", "Define auth inherited across the workspace").
+		withExample("bearer {{token}}").
+		then(authDefinitionArgs...),
+}
+
+var authRequestArgs = slices.Concat(
+	[]argument{word("none", "Disable inherited auth for the current request").then()},
+	authKinds(word("command", "Run a CLI command and inject its token output").
+		withOption(`cmd="gh auth token"`).
+		then(commandAuthArgs...)),
+	[]argument{
+		optValue("use", "Reference a named command auth", namesValue(func(_ Context, sc Scope) ([]string, string) {
+			return sc.Profiles.Auth, "auth profile"
+		})).then(authUseArgs...),
+	},
+)
+
+// A definition is usually named first, so command waits for name= instead of
+// inserting a command line.
+var authDefinitionArgs = authKinds(
+	word("command", "Run a CLI command. Add name= to pick it with use=").
+		chains().
+		then(slices.Concat([]argument{opt("name", "Name this definition for use=", "gh")}, commandAuthArgs)...),
+)
+
+func authKinds(command argument) []argument {
+	return []argument{
+		word("basic", "Basic auth with username and password").withExample("user pass").then(),
+		word("bearer", "Bearer token auth").withExample("{{token}}").then(),
+		word("apikey", "API key auth in header or query").
+			withExample("header X-API-Key {{key}}").
+			then(
+				word("header", "API key placement in headers").then(),
+				word("query", "API key placement in query string").then(),
+			),
+		word("oauth2", "Built-in OAuth 2.0 token acquisition and caching").chains().then(oauthAuthArgs...),
+		command,
+	}
+}
+
+var (
+	authHeaderArg   = opt("header", "Override injected header name", "Authorization")
+	authSchemeArg   = opt("scheme", "Command auth header scheme", "Bearer")
+	authTimeoutArg  = opt("timeout", "Command auth timeout", "5s")
+	authCacheKeyArg = opt("cache_key", "Reuse cached auth state across requests", "myapi")
+)
+
+var oauthAuthArgs = []argument{
 	opt("token_url", "OAuth2 token endpoint URL", "https://auth.example.com/oauth/token"),
 	opt("auth_url", "OAuth2 authorization endpoint URL", "https://auth.example.com/authorize"),
 	opt("client_id", "OAuth2 client ID", "{{clientId}}"),
@@ -65,7 +110,7 @@ var authArgs = []argument{
 	choice("client_auth", "OAuth2 client credential transport", oauth.ClientAuthBasic, oauth.ClientAuthBody),
 	opt("username", "Password grant username", "{{user.email}}"),
 	opt("password", "Password grant password", "{{user.password}}"),
-	opt("cache_key", "Reuse cached auth state across requests", "myapi"),
+	authCacheKeyArg,
 	opt("redirect_uri", "OAuth2 redirect URI", "http://127.0.0.1:8484/callback"),
 	opt("code_verifier", "PKCE code verifier", "{{pkce.verifier}}"),
 	choice(
@@ -75,18 +120,27 @@ var authArgs = []argument{
 		oauth.CodeChallengePlain,
 	),
 	opt("state", "OAuth2 state value", "{{oauth.state}}"),
-	opt("header", "Override injected header name", "Authorization"),
+	authHeaderArg,
+}
+
+// commandAuthArgs follows restfile.AuthCommandParams.
+var commandAuthArgs = []argument{
 	opt("cmd", "Command line, split into arguments without a shell", `"gh auth token"`),
 	opt("argv", "Command argv as JSON array", `["gh","auth","token"]`),
 	choice("format", "Command output format", string(authcmd.FormatText), string(authcmd.FormatJSON)),
-	opt("scheme", "Command auth header scheme", "Bearer"),
+	authHeaderArg,
+	authSchemeArg,
 	opt("token_path", "JSON path to token value", "access_token"),
 	opt("type_path", "JSON path to token type", "token_type"),
 	opt("expiry_path", "JSON path to absolute expiry", "expires_at"),
 	opt("expires_in_path", "JSON path to relative expiry seconds", "expires_in"),
+	authCacheKeyArg,
 	opt("ttl", "Fallback command auth cache TTL", "10m"),
-	opt("timeout", "Command auth timeout", "5s"),
+	authTimeoutArg,
 }
+
+// authUseArgs follows restfile.AuthUseParams, the settings use= can override.
+var authUseArgs = []argument{authHeaderArg, authSchemeArg, authTimeoutArg}
 
 var patchArgs = []argument{
 	word("file", "Define a file-scoped reusable patch profile"),
