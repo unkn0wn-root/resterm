@@ -203,11 +203,11 @@ func TestIndexPatchNamedIsDeterministicAcrossFiles(t *testing.T) {
 func TestIndexAuthNamed(t *testing.T) {
 	t.Parallel()
 
-	defs := parser.Parse("/tmp/defs.http", []byte(`# @auth global command gh cmd="gh auth token --hostname global"
-# @auth file command private cmd="private-token"
-# @auth global command other cmd="other-token"
+	defs := parser.Parse("/tmp/defs.http", []byte(`# @auth global command name=gh cmd="gh auth token --hostname global"
+# @auth file command name=private cmd="private-token"
+# @auth global command name=other cmd="other-token"
 `))
-	use := parser.Parse("/tmp/use.http", []byte(`# @auth file command GH cmd="gh auth token --hostname file"
+	use := parser.Parse("/tmp/use.http", []byte(`# @auth file command name=GH cmd="gh auth token --hostname file"
 # @auth file command cmd="default-token"
 `))
 	ix := New()

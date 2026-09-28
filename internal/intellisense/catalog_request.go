@@ -44,6 +44,7 @@ var authArgs = []argument{
 		withOption(`cmd="gh auth token"`),
 	word("header", "API key placement in headers"),
 	word("query", "API key placement in query string"),
+	opt("name", "Name a file or global command auth for use=", "gh"),
 	optValue("use", "Reference a named command auth", namesValue(func(_ Context, sc Scope) ([]string, string) {
 		return sc.Profiles.Auth, "auth profile"
 	})),

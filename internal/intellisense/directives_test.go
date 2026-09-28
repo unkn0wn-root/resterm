@@ -102,7 +102,7 @@ func TestDirectiveSpacingComesFromSpecs(t *testing.T) {
 
 func TestDirectiveArgsFilterByPrefix(t *testing.T) {
 	auth := argOptions("auth", "")
-	for _, label := range []string{"basic", "bearer", "apikey", "oauth2", "command", "use=", "token_url=", "cmd=", "argv=", "cache_key="} {
+	for _, label := range []string{"basic", "bearer", "apikey", "oauth2", "command", "name=", "use=", "token_url=", "cmd=", "argv=", "cache_key="} {
 		if !contains(auth, label) {
 			t.Fatalf("missing auth arg %q", label)
 		}

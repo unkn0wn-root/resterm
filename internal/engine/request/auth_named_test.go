@@ -111,7 +111,7 @@ func (r *namedAuthRig) header(t *testing.T, name string) string {
 
 func TestNamedCommandAuthResolvesFromWorkspace(t *testing.T) {
 	rig := newNamedAuthRig(t, map[string]string{
-		"auth/defs.http": `# @auth global command gh cmd="gh auth token"` + "\n",
+		"auth/defs.http": `# @auth global command name=gh cmd="gh auth token"` + "\n",
 		"api.http": `### User
 # @auth use=gh
 GET https://example.test/user
@@ -153,9 +153,9 @@ GET https://example.test/repos
 
 func TestNamedCommandAuthPrefersFileScopeAndAppliesOverrides(t *testing.T) {
 	rig := newNamedAuthRig(t, map[string]string{
-		"defs.http": `# @auth global command gh cmd="gh-global token"` + "\n",
+		"defs.http": `# @auth global command name=gh cmd="gh-global token"` + "\n",
 		"api.http": `# @file who Ada Lovelace
-# @auth file command gh cmd="gh-file token --user {{ who }}"
+# @auth file command name=gh cmd="gh-file token --user {{ who }}"
 
 ### User
 # @auth use=GH header=X-Token scheme=Token
@@ -201,7 +201,7 @@ GET https://example.test/user
 
 func TestNamedCommandAuthPreviewUsesCacheOnly(t *testing.T) {
 	rig := newNamedAuthRig(t, map[string]string{
-		"api.http": `# @auth file command gh cmd="gh auth token"
+		"api.http": `# @auth file command name=gh cmd="gh auth token"
 
 ### User
 # @auth use=gh
@@ -248,7 +248,7 @@ GET https://example.test/user
 
 func TestRejectedAuthLineIsNotSent(t *testing.T) {
 	rig := newNamedAuthRig(t, map[string]string{
-		"defs.http": `# @auth global command gh cache_key=gh
+		"defs.http": `# @auth global command name=gh cache_key=gh
 # @auth global bearer global-token
 `,
 		"api.http": `# @auth file bearer file-token
@@ -316,24 +316,30 @@ GET https://example.test/none
 }
 
 func TestRejectedGlobalAuthBlocksInheritance(t *testing.T) {
-	rig := newNamedAuthRig(t, map[string]string{
-		"defs.http":  "# @auth global bearer 'unclosed\n",
-		"plain.http": "### Inherits\nGET https://example.test/plain\n",
-	})
-	doc := rig.doc(t, "plain.http")
-	res := rig.run(t, doc, 0, "dev", ExecModeSend)
-	if res.Err == nil || !strings.Contains(res.Err.Error(), `@auth is missing a closing "'"`) {
-		t.Fatalf("error = %v, want the rejected global line", res.Err)
-	}
-	if rig.sent != nil {
-		t.Fatal("request was sent")
+	for def, want := range map[string]string{
+		"# @auth global bearer 'unclosed\n": `@auth is missing a closing "'"`,
+		// A default written before 1.10, when the bare word was ignored.
+		"# @auth global command gh argv=[\"gh\",\"auth\",\"token\"]\n": "Write name=gh to name a definition",
+	} {
+		rig := newNamedAuthRig(t, map[string]string{
+			"defs.http":  def,
+			"plain.http": "### Inherits\nGET https://example.test/plain\n",
+		})
+		doc := rig.doc(t, "plain.http")
+		res := rig.run(t, doc, 0, "dev", ExecModeSend)
+		if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
+			t.Fatalf("%q: error = %v, want the rejected global line", def, res.Err)
+		}
+		if rig.sent != nil {
+			t.Fatalf("%q: request was sent", def)
+		}
 	}
 }
 
 func TestRejectedNamedDefinitionBlocksOnlyItsUsers(t *testing.T) {
 	for def, want := range map[string]string{
-		"# @auth global command gh cmd=\"unterminated\n": `@auth is missing a closing "\""`,
-		"# @auth global command gh =x\n":                 `@auth option "=x" has spaces around =`,
+		"# @auth global command name=gh cmd=\"unterminated\n": `@auth is missing a closing "\""`,
+		"# @auth global command name=gh =x\n":                 `@auth option "=x" has spaces around =`,
 	} {
 		rig := newNamedAuthRig(t, map[string]string{
 			"defs.http": def,
@@ -379,7 +385,7 @@ func TestMisplacedGlobalAuthBlocksInheritance(t *testing.T) {
 
 func TestCommandAuthWithUnknownOptionNeverRuns(t *testing.T) {
 	rig := newNamedAuthRig(t, map[string]string{
-		"defs.http": "# @auth global command gh cmd=gh --hostname=ghe.example.test\n",
+		"defs.http": "# @auth global command name=gh cmd=gh --hostname=ghe.example.test\n",
 		"api.http":  "### Own line\n# @auth command cmd=mycli --role=admin\nGET https://example.test/own\n\n### Named\n# @auth use=gh\nGET https://example.test/named\n",
 	})
 	doc := rig.parse(t, "api.http")
