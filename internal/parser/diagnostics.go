@@ -185,7 +185,7 @@ func (d parsedDirective) locate(cause error) (diag.Span, []diag.Label) {
 	f.load(d)
 	var at []int
 	for _, key := range keys {
-		found := f.byKey[key]
+		found := f.byKey[strings.ToLower(key)]
 		if len(found) == 0 {
 			return d.nameSpan, nil
 		}

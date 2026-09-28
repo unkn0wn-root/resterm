@@ -243,7 +243,7 @@ func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
 	if ex.mode == restfile.CaptureExprModeTemplate {
 		if capture.MixedTemplateRTSCall(ex.raw) {
 			return "", ex, fmt.Errorf(
-				"mixed capture syntax is not supported; use pure RTS or {{= ... }}",
+				"mixed capture syntax is not supported. Use pure RTS or {{= ... }}",
 			)
 		}
 		if in.lc == nil {
