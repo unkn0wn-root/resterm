@@ -6,14 +6,15 @@ import (
 	"testing"
 )
 
-func TestHeaderFieldsSortsNamesAndValues(t *testing.T) {
+func TestHeaderFieldsSortsNamesAndKeepsValueOrder(t *testing.T) {
 	headers := http.Header{
 		"X-B": {"2", "1"},
 		"X-A": {"z"},
 	}
 	want := []HeaderField{
 		{Name: "X-A", Value: "z"},
-		{Name: "X-B", Value: "1, 2"},
+		{Name: "X-B", Value: "2"},
+		{Name: "X-B", Value: "1"},
 	}
 	if got := HeaderFields(headers); !reflect.DeepEqual(got, want) {
 		t.Fatalf("HeaderFields()=%v, want %v", got, want)
@@ -23,13 +24,13 @@ func TestHeaderFieldsSortsNamesAndValues(t *testing.T) {
 	}
 }
 
-func TestFormatHeadersSortsNamesAndValues(t *testing.T) {
+func TestFormatHeadersWritesEachValueOnItsOwnLine(t *testing.T) {
 	headers := http.Header{
-		"X-B": {"2", "1"},
-		"X-A": {"z"},
+		"Set-Cookie": {"b=2; Expires=Wed, 21 Oct 2026 07:28:00 GMT", "a=1"},
+		"X-A":        {"z"},
 	}
 	got := FormatHeaders(headers)
-	want := "X-A: z\nX-B: 1, 2"
+	want := "Set-Cookie: b=2; Expires=Wed, 21 Oct 2026 07:28:00 GMT\nSet-Cookie: a=1\nX-A: z"
 	if got != want {
 		t.Fatalf("FormatHeaders()=%q, want %q", got, want)
 	}

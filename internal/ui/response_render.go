@@ -249,13 +249,35 @@ func (r responseRenderer) renderHTTPRespHdrs(
 		return noResponseMessage
 	}
 	return r.renderHdrDoc(
-		r.buildRespSum(resp, tests, scriptErr),
+		r.buildRespHdrSum(resp, tests, scriptErr),
 		[]hdrPanel{{
 			fields: bodyfmt.HeaderFields(resp.Headers),
 			empty:  "No response headers captured",
 		}},
 		width,
 	)
+}
+
+func (r responseRenderer) buildRespHdrSum(
+	resp *httpx.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+) string {
+	sub := r.stats.SubLabel
+	var parts []string
+	if status := strings.TrimSpace(resp.Status); status != "" {
+		parts = append(parts, r.selectStatusStyle(resp.StatusCode).Render(status))
+	}
+	if resp.Duration > 0 {
+		parts = append(parts, sub.Render("time")+" "+r.stats.Duration.Render(respDuration(resp.Duration)))
+	}
+	if cl := contentLength(resp); cl.has {
+		parts = append(parts, sub.Render("size")+" "+r.stats.Value.Render(cl.pretty()))
+	}
+
+	lines := []string{strings.Join(parts, sub.Render(" · "))}
+	lines = append(lines, r.streamSummaryLines(resp)...)
+	return joinSections(strings.Join(lines, "\n"), r.formatTestSummary(tests, scriptErr))
 }
 
 func (r responseRenderer) renderHTTPReqHdrs(resp *httpx.Response, width int) string {
@@ -273,14 +295,17 @@ func (r responseRenderer) renderHTTPReqHdrs(resp *httpx.Response, width int) str
 		url = strings.TrimSpace(resp.Request.URL)
 	}
 
-	reqLine := strings.TrimSpace(method + " " + url)
-	sum := ""
-	if reqLine != "" {
-		sum = renderLabelValue("Request", reqLine, r.stats.Label, r.stats.Value)
+	sub := r.stats.SubLabel
+	var parts []string
+	if line := strings.TrimSpace(method + " " + url); line != "" {
+		parts = append(parts, r.stats.Value.Render(line))
+	}
+	if resp.ReqLen > 0 {
+		parts = append(parts, sub.Render("size")+" "+r.stats.Value.Render(formatByteSize(resp.ReqLen)))
 	}
 
 	return r.renderHdrDoc(
-		sum,
+		strings.Join(parts, sub.Render(" · ")),
 		[]hdrPanel{{
 			fields: bodyfmt.HeaderFields(buildRequestHeaderMap(resp)),
 			empty:  "No request headers captured",

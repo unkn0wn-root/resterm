@@ -21,8 +21,8 @@ func (f HeaderField) String() string {
 	return f.Name + ": " + f.Value
 }
 
-// HeaderFields flattens headers into one field per name, sorted by name and by
-// value so repeated renders of the same response stay stable.
+// HeaderFields returns one field per value, sorted by name. Values keep the
+// order they arrived in and are never joined, since Set-Cookie values cannot be.
 func HeaderFields(headers http.Header) []HeaderField {
 	if len(headers) == 0 {
 		return nil
@@ -30,11 +30,9 @@ func HeaderFields(headers http.Header) []HeaderField {
 
 	out := make([]HeaderField, 0, len(headers))
 	for _, name := range slices.Sorted(maps.Keys(headers)) {
-		values := slices.Sorted(slices.Values(headers[name]))
-		out = append(out, HeaderField{
-			Name:  termtext.Row(name),
-			Value: termtext.Row(strings.Join(values, ", ")),
-		})
+		for _, val := range headers[name] {
+			out = append(out, HeaderField{Name: termtext.Row(name), Value: termtext.Row(val)})
+		}
 	}
 	return out
 }
