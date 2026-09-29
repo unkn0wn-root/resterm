@@ -178,6 +178,18 @@ func isTLSError(err error) bool {
 	if errors.As(err, &roots) {
 		return true
 	}
+	// Some platform verifiers, such as the macOS one, return a plain error
+	// inside this wrapper instead of an x509 error type.
+	var verify *tls.CertificateVerificationError
+	if errors.As(err, &verify) {
+		return true
+	}
+	// crypto/tls reports an alert sent by the peer, such as "certificate
+	// required", as an OpError with this Op.
+	var op *net.OpError
+	if errors.As(err, &op) && op.Op == "remote error" {
+		return true
+	}
 	var recordHeader tls.RecordHeaderError
 	return errors.As(err, &recordHeader)
 }
