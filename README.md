@@ -6,6 +6,8 @@
 
 <p align="center">
   <em>An API-as-code workbench for the terminal.</em>
+  <br>
+  <a href="https://resterm.app">resterm.app</a> · <a href="https://resterm.app/docs/">Documentation</a>
 </p>
 
 <p align="center">
@@ -163,7 +165,7 @@ Content-Type: application/json
 {"name":"{{= name }}"}
 ```
 
-Placing `@setting` before the first request apply to the whole file. `###` starts a new request, and directives can repeat, limit or check the request below them. More in [`_examples/`](_examples/) and the [directive reference](docs/resterm.md#request-file-anatomy).
+Placing `@setting` before the first request apply to the whole file. `###` starts a new request, and directives can repeat, limit or check the request below them. More in [`_examples/`](_examples/) and the [directive reference](https://resterm.app/docs/request-files/).
 
 ## Mock servers
 
@@ -193,7 +195,7 @@ resterm mock ./requests.http
 resterm mock --recursive --addr 127.0.0.1:9090 ./requests
 ```
 
-Matching on query, headers and body, response sequences for polling tests, call verification and hot reload are covered in the [mock server reference](docs/resterm.md#mock-servers). Working example: [`_examples/mocks.http`](_examples/mocks.http).
+Matching on query, headers and body, response sequences for polling tests, call verification and hot reload are covered in the [mock server reference](https://resterm.app/docs/mock-servers/). Working example: [`_examples/mocks.http`](_examples/mocks.http).
 
 ## Recording traffic
 
@@ -205,22 +207,22 @@ resterm record --upstream https://api.example.com --out captured.http --mode bot
 
 Point your application's API base URL at `http://127.0.0.1:9000`, then stop recording with `Ctrl+C`. The TUI does the same thing with `:record start --upstream <origin>`, plus `:record as-request` and `:record as-mock` to insert captures into the open file.
 
-More in the [recording reference](docs/resterm.md#recording-traffic).
+More in the [recording reference](https://resterm.app/docs/recording/).
 
 ## More
 
 | Area | Docs |
 | --- | --- |
-| **Automation** | [workflows](docs/resterm.md#workflows), [polling and retries](docs/resterm.md#polling-and-retries), [compare runs](docs/resterm.md#compare-runs), [timeline and tracing](docs/resterm.md#timeline--tracing), [profiling](docs/resterm.md#profiling-requests) |
-| **Transports** | [gRPC](docs/resterm.md#grpc), [GraphQL](docs/resterm.md#graphql), [WebSocket and SSE](docs/resterm.md#streaming-sse--websocket) |
-| **Auth and connectivity** | [OAuth 2.0](docs/resterm.md#oauth-20-directive), [auth from your own CLI](docs/resterm.md#command-backed-auth), [SSH tunnels](docs/resterm.md#ssh-tunnels), [Kubernetes port-forwards](docs/resterm.md#kubernetes-port-forwards) |
-| **Scripting** | [RestermScript](docs/restermscript.md), [JavaScript hooks](docs/resterm.md#scripting-api), [headless Go API](./headless), [resterm-runner](https://github.com/unkn0wn-root/resterm-runner) |
-| **In and out** | [curl import](docs/resterm.md#inline-requests), [OpenAPI import](docs/cli.md#import-examples), [collection sharing](docs/resterm.md#collection-sharing), [response history and diffing](docs/resterm.md#response-history--diffing) |
-| **Setup** | [environments and variables](docs/resterm.md#variables-and-environments), [configuration](docs/resterm.md#configuration), [themes](docs/resterm.md#theming), [key bindings](docs/resterm.md#custom-bindings) |
+| **Automation** | [workflows](https://resterm.app/docs/workflows/), [polling and retries](https://resterm.app/docs/polling-and-retries/), [compare runs](https://resterm.app/docs/compare-runs/), [timeline and tracing](https://resterm.app/docs/ui-tour/#timeline--tracing), [profiling](https://resterm.app/docs/profiling/) |
+| **Transports** | [gRPC](https://resterm.app/docs/grpc/), [GraphQL](https://resterm.app/docs/graphql/), [WebSocket and SSE](https://resterm.app/docs/streaming/) |
+| **Auth and connectivity** | [OAuth 2.0](https://resterm.app/docs/authentication/#oauth-20-directive), [auth from your own CLI](https://resterm.app/docs/authentication/#command-backed-auth), [SSH tunnels](https://resterm.app/docs/ssh-tunnels/), [Kubernetes port-forwards](https://resterm.app/docs/kubernetes/) |
+| **Scripting** | [RestermScript](https://resterm.app/docs/rts/), [JavaScript hooks](https://resterm.app/docs/scripting/), [headless Go API](./headless), [resterm-runner](https://github.com/unkn0wn-root/resterm-runner) |
+| **In and out** | [curl import](https://resterm.app/docs/workspaces/#inline-requests), [OpenAPI import](https://resterm.app/docs/cli/import/), [collection sharing](https://resterm.app/docs/collections/), [response history and diffing](https://resterm.app/docs/history/) |
+| **Setup** | [environments and variables](https://resterm.app/docs/variables/), [configuration](https://resterm.app/docs/configuration/), [themes](https://resterm.app/docs/theming/), [key bindings](https://resterm.app/docs/ui-tour/#custom-bindings) |
 
 ## Keys
 
-Press `?` for general Resterm help and `Shift+k` for help on whatever is under the cursor. The full table is in the [UI tour](docs/resterm.md#ui-tour). For quick start, you only need:
+Press `?` for general Resterm help and `Shift+k` for help on whatever is under the cursor. The full table is in the [UI tour](https://resterm.app/docs/ui-tour/). For quick start, you only need:
 
 - `Ctrl+Enter` sends the request
 - `Tab` / `Shift+Tab` switches panes
@@ -228,10 +230,12 @@ Press `?` for general Resterm help and `Shift+k` for help on whatever is under t
 
 ## Documentation
 
-- [`docs/resterm.md`](./docs/resterm.md) covers request syntax, directives, scripting and transports.
-- [`docs/cli.md`](./docs/cli.md) covers `resterm run`, importers, collections and history.
-- [`docs/restermscript.md`](./docs/restermscript.md) is the RestermScript reference.
-- [Compatibility](./docs/resterm.md#compatibility) lists what stays stable through v1.
+The documentation lives at [resterm.app/docs](https://resterm.app/docs/). The site is built from the [`docs/`](./docs) directory in this repo, so the Markdown files there have the same content.
+
+- [Request files, directives, scripting and transports](https://resterm.app/docs/), from [`docs/resterm.md`](./docs/resterm.md).
+- [CLI](https://resterm.app/docs/cli/) with `resterm run`, importers, collections and history, from [`docs/cli.md`](./docs/cli.md).
+- [RestermScript reference](https://resterm.app/docs/rts/), from [`docs/restermscript.md`](./docs/restermscript.md).
+- [Compatibility](https://resterm.app/docs/compatibility/) lists what stays stable through v1.
 
 Inside the TUI, `:help <topic>` opens the embedded manual and `:docs <topic>` opens the web copy for the installed release.
 
