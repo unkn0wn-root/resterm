@@ -113,7 +113,10 @@ func shouldUsePlaintext(gr *restfile.GRPCRequest, opt Options) bool {
 	if v, ok := gr.Plaintext.Get(); ok {
 		return v
 	}
-	return opt.DefaultPlaintext.Or(!hasTLS(opt))
+	if hasTLS(opt) {
+		return false
+	}
+	return opt.DefaultPlaintext.Or(true)
 }
 
 func hasTLS(opt Options) bool {
