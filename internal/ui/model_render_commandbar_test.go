@@ -558,3 +558,17 @@ func assertSearchGuideHidden(t *testing.T, out string) {
 		}
 	}
 }
+
+func TestResponseCommandHintsOfferOpen(t *testing.T) {
+	snap := &responseSnapshot{body: []byte("%PDF-1.7"), contentType: "application/pdf", ready: true}
+	for _, tab := range []responseTab{responseTabPretty, responseTabRaw} {
+		model := newModelWithResponseTab(tab, snap)
+		want := commandHint{
+			key:   model.helpActionKey(bindings.ActionOpenResponseExternally, ""),
+			label: "Open",
+		}
+		if !slices.Contains(model.contextCommandHints(), want) {
+			t.Fatalf("tab %v hints = %+v, want %+v", tab, model.contextCommandHints(), want)
+		}
+	}
+}
