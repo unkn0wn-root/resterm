@@ -185,7 +185,7 @@ func sanitizeFilename(name string) string {
 	return avoidDevice(strings.Trim(clean, "."))
 }
 
-// Windows 10 and older open a device for these names, even with an extension.
+// Windows treats these names as devices, even with an extension.
 func avoidDevice(name string) string {
 	base := name
 	if i := strings.IndexAny(base, ".:"); i >= 0 {
@@ -197,6 +197,10 @@ func avoidDevice(name string) string {
 	return name
 }
 
+// COM/LPT device names use one digit (including 0), and Windows also treats
+// superscript ¹, ², ³ as digits in these names.
+// https://learn.microsoft.com/en-us/windows/win32/devnotes/rtlisdosdevicename_u
+// https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
 var windowsDevices = func() map[string]bool {
 	names := map[string]bool{"CON": true, "PRN": true, "AUX": true, "NUL": true, "CONIN$": true, "CONOUT$": true}
 	for _, n := range []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "¹", "²", "³"} {
