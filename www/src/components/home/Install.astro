@@ -1,0 +1,191 @@
+---
+import { site } from '../../site';
+
+// Commands match the README install section.
+const raw = 'https://raw.githubusercontent.com/unkn0wn-root/resterm/main';
+const methods = [
+  { id: 'brew', label: 'Homebrew', note: 'macOS and Linux', command: 'brew install resterm' },
+  { id: 'script', label: 'Script', note: 'macOS and Linux', command: `curl -fsSL ${raw}/install.sh | bash` },
+  { id: 'windows', label: 'Windows', note: 'PowerShell', command: `iwr -useb ${raw}/install.ps1 | iex` },
+  {
+    id: 'go',
+    label: 'Go',
+    note: 'Go 1.25 or newer',
+    command: 'go install github.com/unkn0wn-root/resterm/cmd/resterm@latest',
+  },
+];
+
+const start = ['mkdir my-api && cd my-api', 'resterm init', 'resterm'];
+---
+
+<div class="install">
+  <div class="pane get" data-tabs>
+    <span class="pane-title">Install</span>
+    <div class="tabs" role="tablist" aria-label="Install method">
+      {methods.map((m, i) => (
+        <button
+          type="button"
+          role="tab"
+          id={`install-tab-${m.id}`}
+          aria-controls={`install-${m.id}`}
+          aria-selected={i === 0 ? 'true' : 'false'}
+          tabindex={i === 0 ? 0 : -1}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+    {methods.map((m, i) => (
+      <div
+        class="panel"
+        id={`install-${m.id}`}
+        role="tabpanel"
+        aria-labelledby={`install-tab-${m.id}`}
+        hidden={i !== 0}
+      >
+        <div class="cmd">
+          <code>
+            <span class="prompt" aria-hidden="true">
+              ${' '}
+            </span>
+            {m.command}
+          </code>
+          <button type="button" class="copy" data-copy={m.command}>
+            copy
+          </button>
+        </div>
+        <p class="note">{m.note}</p>
+      </div>
+    ))}
+    <p class="more">
+      Release binaries for macOS, Linux and Windows are on the <a href={`${site.repo}/releases`}>releases page</a>.
+      Installed without Homebrew? <code>resterm --update</code> updates in place.
+    </p>
+  </div>
+
+  <div class="pane start">
+    <span class="pane-title">Quick start</span>
+    <pre>{start.map((line) => <span class="ln"><span class="prompt">$ </span>{line}</span>)}</pre>
+    <p class="note">
+      <code>resterm init</code> writes a small project with local mocks. Press <kbd>g</kbd> <kbd>Shift+M</kbd> to start
+      the mock server, then <kbd>Ctrl+Enter</kbd> to send the request under the cursor.
+    </p>
+  </div>
+</div>
+
+<style>
+  .install {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  .get,
+  .start {
+    padding: 1.2rem 1.25rem 1rem;
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1ch;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+  }
+
+  [role='tab'] {
+    padding: 0.1rem 1ch;
+    border: 0;
+    background: none;
+    color: var(--fg-muted);
+  }
+
+  [role='tab']:hover {
+    color: var(--fg-strong);
+  }
+
+  [role='tab'][aria-selected='true'] {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  .cmd {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--line-strong);
+    background: var(--code-bg);
+  }
+
+  .cmd code {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    color: var(--fg-strong);
+    scrollbar-width: none;
+  }
+
+  .prompt {
+    color: var(--response);
+    user-select: none;
+  }
+
+  .copy {
+    flex: none;
+    border: 0;
+    background: none;
+    color: var(--fg-dim);
+    font-size: 0.8125rem;
+  }
+
+  .copy:hover {
+    color: var(--key);
+  }
+
+  .note,
+  .more {
+    margin-top: 0.75rem;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    color: var(--fg-muted);
+  }
+
+  .more {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--line);
+  }
+
+  .more a {
+    color: var(--accent-text);
+  }
+
+  .note code,
+  .more code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: var(--syn-value);
+  }
+
+  .start pre {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--line-strong);
+    background: var(--code-bg);
+    font-size: 0.875rem;
+    color: var(--fg-strong);
+    overflow-x: auto;
+  }
+
+  .ln {
+    display: block;
+  }
+
+  @media (max-width: 960px) {
+    .install {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

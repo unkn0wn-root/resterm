@@ -1,0 +1,141 @@
+---
+import type { NavGroup } from '../../lib/docs';
+
+interface Props {
+  groups: NavGroup[];
+  current?: string;
+}
+
+const { groups, current } = Astro.props;
+---
+
+<nav class="nav pane" id="docs-nav" aria-label="Docs pages">
+  <span class="pane-title">Docs</span>
+  <div class="scroll">
+    <a class="index" href="/docs/" aria-current={current === '/docs/' ? 'page' : undefined}>
+      <span class="icon" aria-hidden="true">
+        ▣
+      </span>
+      index
+    </a>
+    {groups.map((g) => (
+      <details open>
+        <summary>
+          {g.title} <span class="count">({g.pages.length})</span>
+        </summary>
+        <ul>
+          {g.pages.map((p) => (
+            <li>
+              <a href={p.href} aria-current={p.href === current ? 'page' : undefined}>
+                {p.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </details>
+    ))}
+  </div>
+</nav>
+
+<style>
+  .nav {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  .scroll {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding: 1rem 0.5rem 1rem 0.75rem;
+  }
+
+  .index {
+    display: flex;
+    gap: 1ch;
+    padding: 0.1rem 0.75ch;
+    margin-bottom: 0.6rem;
+    color: var(--fg-muted);
+    text-decoration: none;
+  }
+
+  .icon {
+    color: var(--icon);
+  }
+
+  details + details {
+    margin-top: 0.4rem;
+  }
+
+  summary {
+    display: flex;
+    gap: 0.6ch;
+    padding: 0.1rem 0.75ch;
+    color: var(--fg-muted);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  summary::before {
+    content: '▸';
+    color: var(--fg-dim);
+  }
+
+  details[open] > summary::before {
+    content: '▾';
+  }
+
+  summary:hover {
+    color: var(--fg-strong);
+  }
+
+  .count {
+    color: var(--fg-dim);
+  }
+
+  ul {
+    list-style: none;
+    margin: 0.15rem 0 0;
+    padding: 0;
+  }
+
+  li a {
+    display: flex;
+    gap: 1ch;
+    padding: 0.1rem 0.75ch 0.1rem 2.5ch;
+    color: var(--fg);
+    text-decoration: none;
+  }
+
+  a:hover {
+    background: var(--bg-hover);
+    color: var(--fg-strong);
+  }
+
+  a[aria-current='page'] {
+    background: var(--bg-sel);
+    color: var(--fg-strong);
+  }
+
+  li a[aria-current='page'] {
+    padding-left: 1ch;
+  }
+
+  li a[aria-current='page']::before {
+    content: '›';
+    width: 0.5ch;
+    color: var(--focus);
+  }
+
+  :root[data-theme='light'] a[aria-current='page']::before {
+    color: var(--fg-strong);
+  }
+</style>

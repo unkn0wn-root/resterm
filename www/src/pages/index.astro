@@ -1,0 +1,329 @@
+---
+import Features from '../components/home/Features.astro';
+import Install from '../components/home/Install.astro';
+import RunDemo from '../components/home/RunDemo.astro';
+import Screens from '../components/home/Screens.astro';
+import Wordmark from '../components/Wordmark.astro';
+import Base from '../layouts/Base.astro';
+import { site } from '../site';
+
+const hints: [string, string][] = [
+  ['/', 'Search'],
+  ['g d', 'Docs'],
+  ['j/k', 'Scroll'],
+  ['t', 'Theme'],
+  ['?', 'Help'],
+];
+---
+
+<Base current="home" {hints} status={{ file: 'index.http', focus: 'Home' }}>
+  <section class="hero">
+    <Wordmark animate class="mark" />
+    <h1>An API-as-code workbench for the terminal.</h1>
+    <p class="lead">
+      Resterm is an API client that keeps requests in plain <code>.http</code> files next to your code. Send them from a
+      keyboard-driven TUI, or run the same files in CI with <code>resterm run</code>.
+    </p>
+    <div class="cta">
+      <div class="brew">
+        <code>
+          <span class="prompt" aria-hidden="true">
+            ${' '}
+          </span>
+          brew install resterm
+        </code>
+        <button type="button" data-copy="brew install resterm">
+          copy
+        </button>
+      </div>
+      <a class="button primary" href="/docs/quick-start/">
+        Quick start ▸
+      </a>
+      <a class="button" href="/docs/">
+        Read the docs
+      </a>
+    </div>
+    <p class="facts">
+      <span>HTTP</span>
+      <span>GraphQL</span>
+      <span>gRPC</span>
+      <span>WebSocket</span>
+      <span>SSE</span>
+      <span class="gap">macOS, Linux, Windows</span>
+      <span>{site.license}</span>
+    </p>
+  </section>
+
+  <section class="band">
+    <Screens />
+  </section>
+
+  <section class="band">
+    <header class="sec">
+      <h2>
+        <span class="sep" aria-hidden="true">
+          ###
+        </span>
+        Requests are plain text
+      </h2>
+      <p>
+        A request file is a normal text file you can review in a pull request. Mocks, workflows and environments are
+        plain text too. Use the TUI while you work, and run the same files from the CLI or in CI with{' '}
+        <code>resterm run</code>.
+      </p>
+    </header>
+    <RunDemo />
+  </section>
+
+  <section class="band">
+    <header class="sec">
+      <h2>
+        <span class="sep" aria-hidden="true">
+          ###
+        </span>
+        What it does
+      </h2>
+      <p>Every entry opens the part of the docs that covers it.</p>
+    </header>
+    <Features />
+  </section>
+
+  <section class="band" id="install">
+    <header class="sec">
+      <h2>
+        <span class="sep" aria-hidden="true">
+          ###
+        </span>
+        Install
+      </h2>
+      <p>One binary. No runtime to install, no account to create.</p>
+    </header>
+    <Install />
+  </section>
+
+  <section class="band last">
+    <div class="pane pane-response closing">
+      <span class="pane-title">Response</span>
+      <p class="status">
+        <span class="ok">HTTP/1.1 200 OK</span>
+      </p>
+      <p class="hdr">Content-Type: text/plain</p>
+      <p class="body">
+        No telemetry. No account. Your requests stay in files you own.
+        <br />
+        Resterm is free and open source under the Apache 2.0 license.
+      </p>
+      <p class="links">
+        <a href={site.repo}>◇ GitHub</a>
+        <a href={`${site.repo}/releases`}>⇄ Releases</a>
+        <a href={site.sponsor}>♥ Sponsor</a>
+        <a href="/docs/">▣ Docs</a>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero,
+  .band {
+    width: min(76rem, 100%);
+    margin: 0 auto;
+    padding-inline: var(--gutter);
+  }
+
+  .hero {
+    padding-top: clamp(2.5rem, 7vw, 5rem);
+    padding-bottom: clamp(2.5rem, 6vw, 4rem);
+    text-align: center;
+  }
+
+  .hero :global(.mark) {
+    width: min(34rem, 92%);
+    margin: 0 auto;
+  }
+
+  h1 {
+    max-width: 26ch;
+    margin: clamp(1.75rem, 4vw, 2.75rem) auto 0;
+    font-size: clamp(1.7rem, 4.2vw, 2.9rem);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--fg-strong);
+    text-wrap: balance;
+  }
+
+  .lead {
+    max-width: 38rem;
+    margin: 1.25rem auto 0;
+    font-family: var(--font-sans);
+    font-size: clamp(1rem, 1.6vw, 1.15rem);
+    line-height: 1.65;
+    color: var(--fg-muted);
+    text-wrap: pretty;
+  }
+
+  .lead code,
+  .sec code {
+    font-size: 0.9em;
+    color: var(--syn-value);
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+
+  .brew {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0 0.5rem 0 1rem;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-pane);
+    font-size: 0.9rem;
+  }
+
+  .brew code {
+    color: var(--fg-strong);
+  }
+
+  .prompt {
+    color: var(--response);
+    user-select: none;
+  }
+
+  .brew button {
+    padding: 0.4rem 0.5rem;
+    border: 0;
+    background: none;
+    color: var(--fg-dim);
+    font-size: 0.8125rem;
+  }
+
+  .brew button:hover {
+    color: var(--key);
+  }
+
+  .button {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.65rem 1.1rem;
+    border: 1px solid var(--line-strong);
+    color: var(--fg-strong);
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
+
+  .button:hover {
+    border-color: var(--fg-muted);
+    background: var(--bg-hover);
+  }
+
+  .button.primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  .button.primary:hover {
+    background: color-mix(in srgb, var(--accent) 85%, white);
+  }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.25rem 2ch;
+    margin-top: 1.75rem;
+    font-size: 0.8125rem;
+    color: var(--fg-dim);
+  }
+
+  .facts .gap {
+    margin-left: 2ch;
+  }
+
+  .band {
+    padding-bottom: clamp(3.5rem, 8vw, 6rem);
+  }
+
+  .sec {
+    max-width: 44rem;
+    margin-bottom: 2rem;
+  }
+
+  .sec h2 {
+    font-size: clamp(1.25rem, 2.4vw, 1.6rem);
+    font-weight: 600;
+    color: var(--fg-strong);
+  }
+
+  .sep {
+    margin-right: 1ch;
+    color: var(--syn-separator);
+    font-weight: 400;
+  }
+
+  .sec p {
+    margin-top: 0.6rem;
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    color: var(--fg-muted);
+    line-height: 1.65;
+    text-wrap: pretty;
+  }
+
+  .closing {
+    padding: 1.5rem clamp(1rem, 3vw, 2rem);
+    font-size: 0.9rem;
+  }
+
+  .ok {
+    color: var(--ok);
+    font-weight: 600;
+  }
+
+  .hdr {
+    color: var(--fg-dim);
+  }
+
+  .body {
+    margin-top: 1.25rem;
+    color: var(--fg-strong);
+    line-height: 1.8;
+  }
+
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 3ch;
+    margin-top: 1.5rem;
+  }
+
+  .links a {
+    color: var(--fg-muted);
+    text-decoration: none;
+  }
+
+  .links a:hover {
+    color: var(--fg-strong);
+  }
+
+  @media (max-width: 560px) {
+    .brew {
+      width: 100%;
+      justify-content: space-between;
+    }
+    .button {
+      flex: 1;
+      justify-content: center;
+    }
+    .facts .gap {
+      margin-left: 0;
+    }
+  }
+</style>

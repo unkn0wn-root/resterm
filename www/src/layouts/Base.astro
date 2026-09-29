@@ -1,0 +1,91 @@
+---
+import type { ComponentProps } from 'astro/types';
+import '../styles/base.css';
+import Header from '../components/Header.astro';
+import HintBar from '../components/HintBar.astro';
+import KeysDialog from '../components/KeysDialog.astro';
+import SearchDialog from '../components/SearchDialog.astro';
+import StatusBar from '../components/StatusBar.astro';
+import { site } from '../site';
+
+interface Props {
+  title?: string;
+  description?: string;
+  current?: string;
+  menu?: boolean;
+  hints: [string, string][];
+  status: ComponentProps<typeof StatusBar>;
+  prev?: string;
+  next?: string;
+}
+
+const { title, description = site.description, current, menu, hints, status, prev, next } = Astro.props;
+const fullTitle = title ? `${title} · ${site.name}` : `${site.name}: ${site.tagline}`;
+const canonical = Astro.site && new URL(Astro.url.pathname, Astro.site).href;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {canonical && <link rel="canonical" href={canonical} />}
+    {prev && <link rel="prev" href={prev} />}
+    {next && <link rel="next" href={next} />}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    {Astro.site && <meta property="og:image" content={new URL('/og.png', Astro.site).href} />}
+    <meta name="twitter:card" content={Astro.site ? 'summary_large_image' : 'summary'} />
+    <script is:inline>
+      (() => {
+        let theme;
+        try {
+          theme = localStorage.getItem('theme');
+        } catch {}
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#content">
+      Skip to content
+    </a>
+    <Header current={current} menu={menu} />
+    <HintBar hints={hints} />
+    <main id="content">
+      <slot />
+    </main>
+    <StatusBar {...status} />
+    <SearchDialog />
+    <KeysDialog />
+    <script>
+      import '../scripts/app';
+    </script>
+  </body>
+</html>
+
+<style>
+  .skip {
+    position: absolute;
+    left: 1rem;
+    top: -3rem;
+    z-index: 50;
+    padding: 0.4rem 0.8rem;
+    background: var(--focus);
+    color: var(--focus-fg);
+  }
+
+  .skip:focus {
+    top: 0.5rem;
+  }
+</style>

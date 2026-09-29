@@ -1,0 +1,217 @@
+---
+import { site } from '../site';
+import { version } from '../lib/version';
+
+interface Props {
+  current?: string;
+  menu?: boolean;
+}
+
+const { current, menu } = Astro.props;
+
+const links = [
+  { id: 'docs', icon: '▣', label: 'docs', href: '/docs/' },
+  { id: 'rts', icon: 'λ', label: 'restermscript', href: '/docs/rts/' },
+  { id: 'cli', icon: '⇄', label: 'cli', href: '/docs/cli/' },
+  { id: 'install', icon: '⬢', label: 'install', href: '/docs/install/' },
+];
+---
+
+<header class="header">
+  <div class="header-row">
+    <a class="brand" href="/" aria-label="Resterm home">
+      &gt;_ RESTERM
+    </a>
+    <span class="sep" aria-hidden="true">
+      │
+    </span>
+    <nav class="links" aria-label="Main">
+      {links.map((l) => (
+        <a class="cell" href={l.href} aria-current={l.id === current ? 'page' : undefined}>
+          <span class="icon" aria-hidden="true">
+            {l.icon}
+          </span>
+          {l.label}
+        </a>
+      ))}
+      <a class="cell" href={site.repo}>
+        <span class="icon" aria-hidden="true">
+          ◇
+        </span>
+        github
+      </a>
+    </nav>
+
+    <div class="right">
+      <button class="find" type="button" data-search-open>
+        <span class="find-key">/</span>
+        <span class="find-text">search docs</span>
+        <kbd class="find-hint">Ctrl K</kbd>
+      </button>
+      <a class="cell version" href={`${site.repo}/releases`} title="Latest release">
+        v{version}
+      </a>
+      <span class="sep" aria-hidden="true">
+        │
+      </span>
+      <button class="cell" type="button" data-theme-toggle aria-label="Toggle color theme">
+        <span class="icon" aria-hidden="true">
+          ◐
+        </span>
+        <span class="theme-name">theme</span>
+      </button>
+      <button class="cell help" type="button" data-keys-open>
+        <span aria-hidden="true">?</span> Help
+      </button>
+      {menu && (
+        <button class="cell menu" type="button" data-nav-toggle aria-controls="docs-nav" aria-expanded="false">
+          <span class="icon" aria-hidden="true">
+            ☰
+          </span>
+          pages
+        </button>
+      )}
+    </div>
+  </div>
+</header>
+
+<style>
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .header-row {
+    display: flex;
+    align-items: center;
+    gap: 1ch;
+    height: var(--header-h);
+    padding: 0 var(--gutter);
+    font-size: 0.875rem;
+  }
+
+  .brand {
+    flex: none;
+    padding: 0.1rem 0.8ch;
+    background: var(--brand-bg);
+    color: var(--brand-fg);
+    font-weight: 600;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+  }
+
+  .sep {
+    color: var(--fg-dim);
+  }
+
+  .links,
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 0.5ch;
+  }
+
+  .right {
+    margin-left: auto;
+  }
+
+  .cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6ch;
+    padding: 0.2rem 0.6ch;
+    border: 0;
+    background: none;
+    color: var(--fg-muted);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .cell:hover,
+  .cell[aria-current='page'] {
+    color: var(--fg-strong);
+  }
+
+  .cell[aria-current='page'] {
+    background: var(--bg-sel);
+  }
+
+  .icon {
+    color: var(--icon);
+  }
+
+  .version {
+    color: var(--ok);
+  }
+
+  .help {
+    color: var(--help);
+    font-weight: 600;
+  }
+
+  .find {
+    display: flex;
+    align-items: center;
+    gap: 1ch;
+    min-width: 17rem;
+    padding: 0.25rem 1ch;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--bg-pane);
+    color: var(--fg-dim);
+    text-align: left;
+  }
+
+  .find:hover {
+    border-color: var(--accent);
+  }
+
+  .find-key {
+    color: var(--key);
+    font-weight: 600;
+  }
+
+  .find-text {
+    flex: 1;
+  }
+
+  .find-hint {
+    color: var(--fg-dim);
+    font-weight: 400;
+  }
+
+  @media (max-width: 1100px) {
+    .links .cell:nth-child(n + 3),
+    .version,
+    .right > .sep {
+      display: none;
+    }
+    .find {
+      min-width: 12rem;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .header-row > .sep,
+    .links .cell:nth-child(n + 2),
+    .theme-name,
+    .find-text,
+    .find-hint,
+    .help {
+      display: none;
+    }
+    .find {
+      min-width: 0;
+    }
+  }
+
+  @media (min-width: 901px) {
+    .menu {
+      display: none;
+    }
+  }
+</style>

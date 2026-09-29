@@ -1,0 +1,227 @@
+.prose {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--fg);
+  overflow-wrap: break-word;
+}
+
+.prose > * + * {
+  margin-top: 1rem;
+}
+
+.prose h2,
+.prose h3,
+.prose h4 {
+  font-family: var(--font-mono);
+  color: var(--fg-strong);
+  line-height: 1.35;
+  scroll-margin-top: calc(var(--header-h) + 1rem);
+}
+
+.prose h2 {
+  margin-top: 3rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.prose h3 {
+  margin-top: 2.2rem;
+  font-size: 1.08rem;
+  font-weight: 600;
+}
+
+.prose h4 {
+  margin-top: 1.8rem;
+  font-size: 0.98rem;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.prose > h2:first-child,
+.prose > h3:first-child {
+  margin-top: 0;
+}
+
+.prose .hmark {
+  margin-right: 1ch;
+  color: var(--fg-dim);
+  font-weight: 400;
+  text-decoration: none;
+}
+
+.prose h2:hover .hmark,
+.prose h3:hover .hmark,
+.prose h4:hover .hmark {
+  color: var(--accent-text);
+}
+
+.prose a:not(.hmark) {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+.prose a:not(.hmark):hover {
+  color: var(--fg-strong);
+  text-decoration-color: currentColor;
+}
+
+.prose strong {
+  color: var(--fg-strong);
+  font-weight: 600;
+}
+
+.prose :not(pre) > code {
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--syn-value);
+  font-size: 0.86em;
+  overflow-wrap: anywhere;
+}
+
+.prose a code {
+  color: inherit;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4rem;
+}
+
+.prose ul {
+  list-style: square;
+}
+
+.prose li + li,
+.prose li > ul,
+.prose li > ol {
+  margin-top: 0.4rem;
+}
+
+.prose li::marker {
+  color: var(--fg-dim);
+}
+
+.prose ol li::marker {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.prose blockquote {
+  margin: 1.5rem 0 0;
+  padding: 0.75rem 1rem;
+  border-left: 2px solid var(--accent);
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.prose blockquote > * + * {
+  margin-top: 0.6rem;
+}
+
+.prose hr {
+  margin: 2.5rem 0;
+  border: 0;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.prose .table-wrap {
+  margin-top: 1.25rem;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.prose th {
+  background: var(--bg-raised);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.prose th,
+.prose td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.prose tr:last-child td {
+  border-bottom: 0;
+}
+
+.prose td:first-child code {
+  white-space: nowrap;
+}
+
+.prose .code {
+  position: relative;
+  margin-top: 1.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+}
+
+.code-bar {
+  position: absolute;
+  inset: 0 0.75rem auto;
+  display: flex;
+  justify-content: space-between;
+  translate: 0 -55%;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.code-lang,
+.code-copy {
+  padding: 0 0.75ch;
+  background: var(--bg);
+  pointer-events: auto;
+}
+
+.code-lang {
+  color: var(--editor);
+}
+
+.code-copy {
+  border: 0;
+  color: var(--fg-dim);
+}
+
+.code-copy:hover {
+  color: var(--key);
+}
+
+.prose pre {
+  padding: 1.1rem 1rem 0.9rem;
+  overflow-x: auto;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.prose pre code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+}
+
+.pane .code-lang,
+.pane .code-copy {
+  background: var(--bg-pane);
+}

@@ -1,0 +1,85 @@
+---
+import Base from '../layouts/Base.astro';
+
+const hints: [string, string][] = [
+  ['/', 'Search'],
+  ['g d', 'Docs'],
+  ['g h', 'Home'],
+  ['?', 'Help'],
+];
+---
+
+<Base title="Not found" {hints} status={{ file: '404.http', focus: 'Response' }}>
+  <section class="wrap">
+    <div class="pane pane-response res">
+      <span class="pane-title">Response</span>
+      <p>
+        <span class="code">HTTP/1.1 404 Not Found</span>
+      </p>
+      <p class="hdr">Content-Type: text/plain</p>
+      <p class="body">
+        There is no page at this address. The docs moved to shorter pages, so an old link may point here.
+      </p>
+      <p class="actions">
+        <button type="button" data-search-open>
+          <kbd>/</kbd> Search the docs
+        </button>
+        <a href="/docs/">
+          <kbd>g d</kbd> Docs index
+        </a>
+        <a href="/">
+          <kbd>g h</kbd> Home
+        </a>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .wrap {
+    width: min(44rem, 100%);
+    margin: 0 auto;
+    padding: clamp(3rem, 12vh, 8rem) var(--gutter);
+  }
+
+  .res {
+    padding: 1.5rem 1.5rem 1.25rem;
+  }
+
+  .code {
+    color: var(--err);
+    font-weight: 600;
+  }
+
+  .hdr {
+    color: var(--fg-dim);
+  }
+
+  .body {
+    margin-top: 1.25rem;
+    font-family: var(--font-sans);
+    color: var(--fg-strong);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 3ch;
+    margin-top: 1.5rem;
+    font-size: 0.875rem;
+  }
+
+  .actions a,
+  .actions button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--fg-muted);
+    text-decoration: none;
+  }
+
+  .actions a:hover,
+  .actions button:hover {
+    color: var(--fg-strong);
+  }
+</style>

@@ -1,0 +1,263 @@
+---
+---
+
+<dialog class="search pane pane-accent" id="search" aria-label="Search the docs">
+  <span class="pane-title">Search</span>
+  <form class="bar" method="dialog">
+    <label class="prompt" for="search-input">
+      /
+    </label>
+    <input
+      id="search-input"
+      type="search"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="Search the docs, for example @capture or oauth"
+      aria-controls="search-results"
+    />
+    <button class="close" value="close" aria-label="Close search">
+      <kbd>Esc</kbd>
+    </button>
+  </form>
+  <div class="body">
+    <ul class="results" id="search-results" role="listbox" aria-label="Results"></ul>
+    <aside class="detail" id="search-detail" aria-live="polite"></aside>
+  </div>
+  <p class="foot">
+    <span>
+      <kbd>↑</kbd>
+      <kbd>↓</kbd> move
+    </span>
+    <span>
+      <kbd>Enter</kbd> open
+    </span>
+    <span>
+      <kbd>Esc</kbd> close
+    </span>
+  </p>
+</dialog>
+
+<style>
+  .search {
+    --pane-border: var(--editor);
+    --pane-title: var(--editor);
+    width: min(56rem, calc(100vw - 2rem));
+    max-height: min(34rem, calc(100vh - 6rem));
+    margin: 12vh auto auto;
+    padding: 0;
+    overflow: visible;
+    color: var(--fg);
+    background: var(--bg-pane);
+  }
+
+  .search[open] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .search::backdrop {
+    background: rgb(0 0 0 / 0.55);
+  }
+
+  .search .pane-title {
+    background: var(--bg-pane);
+    left: 1.25ch;
+    right: auto;
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 1ch;
+    padding: 0.9rem 1rem 0.7rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .prompt {
+    color: var(--key);
+    font-weight: 600;
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: none;
+    color: var(--fg-strong);
+    font: inherit;
+    font-size: 1rem;
+    caret-color: var(--focus);
+  }
+
+  input::placeholder {
+    color: var(--fg-dim);
+  }
+
+  input::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  .close {
+    border: 0;
+    background: none;
+    padding: 0;
+  }
+
+  .close kbd {
+    color: var(--fg-dim);
+  }
+
+  .body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-height: 0;
+    flex: 1;
+  }
+
+  .results {
+    list-style: none;
+    margin: 0;
+    padding: 0.4rem 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+  }
+
+  .detail {
+    padding: 0.8rem 1rem;
+    overflow-y: auto;
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+  }
+
+  .foot {
+    display: flex;
+    gap: 2.5ch;
+    padding: 0.45rem 1rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+  }
+
+  .foot kbd {
+    color: var(--fg-muted);
+    margin-right: 0.4ch;
+  }
+
+  @media (max-width: 760px) {
+    .search {
+      margin-top: 1rem;
+      max-height: calc(100vh - 2rem);
+    }
+    .body {
+      grid-template-columns: 1fr;
+    }
+    .detail,
+    .foot {
+      display: none;
+    }
+    .results {
+      border-right: 0;
+    }
+  }
+</style>
+
+<style is:global>
+  #search-results li {
+    display: grid;
+    grid-template-columns: 1ch minmax(0, 1fr);
+    gap: 0 1ch;
+    padding: 0.3rem 1rem 0.3rem 0.6rem;
+    cursor: pointer;
+  }
+
+  #search-results li::before {
+    content: '';
+    color: var(--focus-fg);
+  }
+
+  #search-results li[aria-selected='true'] {
+    background: var(--focus);
+    color: var(--focus-fg);
+  }
+
+  #search-results li[aria-selected='true']::before {
+    content: '›';
+  }
+
+  #search-results .r-head {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #search-results .r-page {
+    grid-column: 2;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #search-results li[aria-selected='true'] .r-page {
+    color: inherit;
+    opacity: 0.75;
+  }
+
+  #search-results .r-empty {
+    display: block;
+    padding: 0.6rem 1rem;
+    color: var(--fg-dim);
+    cursor: default;
+  }
+
+  #search-detail .d-path {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+  }
+
+  #search-detail .d-head {
+    margin: 0.25rem 0 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    color: var(--focus);
+  }
+
+  #search-detail .d-text {
+    color: var(--fg-muted);
+    line-height: 1.6;
+  }
+
+  #search-detail mark {
+    background: none;
+    color: var(--fg-strong);
+    text-decoration: underline;
+    text-decoration-color: var(--focus);
+    text-underline-offset: 3px;
+  }
+
+  #search-detail .chip {
+    margin: 0.4rem 0.5rem 0 0;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: none;
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+
+  #search-detail .chip:hover {
+    border-color: var(--focus);
+    color: var(--fg-strong);
+  }
+
+  #search-detail .d-open {
+    margin-top: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+  }
+</style>

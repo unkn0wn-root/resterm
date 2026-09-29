@@ -1,0 +1,158 @@
+---
+import { docHref } from '../../site';
+
+const features = [
+  {
+    badge: 'HTTP',
+    tone: 'get',
+    name: 'request-files',
+    text: 'Plain .http and .rest files. Directives in # @ comments add names, captures, asserts and settings.',
+    href: docHref('request-files'),
+  },
+  {
+    badge: 'GRPC',
+    tone: 'grpc',
+    name: 'protocols',
+    text: 'HTTP, GraphQL, gRPC, WebSocket and SSE, all from the same editor.',
+    href: docHref('grpc'),
+  },
+  {
+    badge: 'WF',
+    tone: 'post',
+    name: 'workflows',
+    text: 'Chain requests into steps. Capture values, assert on responses, branch with @if and loop with @for-each.',
+    href: docHref('workflows'),
+  },
+  {
+    badge: 'MOCK',
+    tone: 'put',
+    name: 'mock-servers',
+    text: 'Mock responses live next to the requests they stand in for, with matching rules and sequences.',
+    href: docHref('mock-servers'),
+  },
+  {
+    badge: 'REC',
+    tone: 'delete',
+    name: 'recording',
+    text: 'Point your app at the Resterm proxy and save its traffic as requests, mocks or both.',
+    href: docHref('recording'),
+  },
+  {
+    badge: 'AUTH',
+    tone: 'patch',
+    name: 'authentication',
+    text: 'OAuth 2.0 with PKCE, or reuse tokens from CLIs you already have, like gh auth token.',
+    href: docHref('authentication'),
+  },
+  {
+    badge: 'SSH',
+    tone: 'ws',
+    name: 'tunnels',
+    text: '@ssh and @k8s send a request through a bastion or a port-forward that Resterm opens and closes.',
+    href: docHref('ssh-tunnels'),
+  },
+  {
+    badge: 'TRACE',
+    tone: 'options',
+    name: 'tracing',
+    text: 'Timeline tracing, profiling and compare runs across environments.',
+    href: docHref('ui-tour', 'timeline--tracing'),
+  },
+  {
+    badge: 'RTS',
+    tone: 'rts',
+    name: 'restermscript',
+    text: 'A small expression language made for requests. JavaScript hooks when you want them.',
+    href: docHref('rts'),
+  },
+  {
+    badge: 'RUN',
+    tone: 'get',
+    name: 'resterm-run',
+    text: 'Run the same files headless in CI, with JSON and JUnit output.',
+    href: docHref('cli/run'),
+  },
+];
+---
+
+<div class="nav pane">
+  <span class="pane-title">features.http ({features.length})</span>
+  <ul>
+    {features.map((f) => (
+      <li>
+        <a href={f.href}>
+          <span class={`method method-${f.tone}`}>{f.badge}</span>
+          <span class="name">{f.name}</span>
+          <span class="text">{f.text}</span>
+        </a>
+      </li>
+    ))}
+  </ul>
+</div>
+
+<style>
+  .nav {
+    padding: 1rem 0.5rem 0.75rem;
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  a {
+    display: grid;
+    grid-template-columns: 1ch 6ch 15ch minmax(0, 1fr);
+    gap: 1.5ch;
+    align-items: baseline;
+    padding: 0.4rem 1ch;
+    color: var(--fg);
+    text-decoration: none;
+    font-size: 0.875rem;
+  }
+
+  a::before {
+    content: '';
+    color: var(--focus);
+  }
+
+  a:hover,
+  a:focus-visible {
+    background: var(--bg-sel);
+    outline: none;
+  }
+
+  a:hover::before,
+  a:focus-visible::before {
+    content: '›';
+  }
+
+  :root[data-theme='light'] a:hover::before {
+    color: var(--fg-strong);
+  }
+
+  .name {
+    color: var(--fg-strong);
+  }
+
+  .text {
+    font-family: var(--font-sans);
+    color: var(--fg-muted);
+    line-height: 1.5;
+  }
+
+  a:hover .text {
+    color: var(--fg);
+  }
+
+  @media (max-width: 720px) {
+    a {
+      grid-template-columns: 1ch 6ch minmax(0, 1fr);
+      row-gap: 0.15rem;
+    }
+    .text {
+      grid-column: 3;
+    }
+  }
+</style>

@@ -1,0 +1,164 @@
+/*
+ * Colors come from resterm itself: the default theme in internal/theme/theme.go
+ * for dark, and _examples/themes/daybreak.toml for light.
+ */
+
+:root {
+  --font-sans: 'IBM Plex Sans Variable', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-pixel: 'Silkscreen', var(--font-mono);
+
+  --header-h: 2.75rem;
+  --status-h: 1.75rem;
+  --content-w: 46rem;
+  --gutter: clamp(1rem, 3vw, 1.5rem);
+  --radius: 2px;
+}
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #07070b;
+  --bg-pane: #0b0a11;
+  --bg-raised: #12101b;
+  --bg-hover: #1a1726;
+  --bg-sel: #2a2140;
+  --line: #262236;
+  --line-strong: #403b59;
+
+  --fg: #dcd7ff;
+  --fg-strong: #f5f2ff;
+  --fg-muted: #a6a1bb;
+  --fg-dim: #6e6a86;
+
+  --accent: #7d56f4;
+  --accent-fg: #fdfbff;
+  --accent-text: #b9a5ff;
+  --editor: #56a9dd;
+  --response: #33c481;
+  --focus: #ffd46a;
+  --focus-fg: #1a1020;
+  --key: #ff8b39;
+  --help: #7dd3fc;
+  --ok: #6ef17e;
+  --err: #ff6e6e;
+  --icon: #9683d8;
+
+  --brand-bg: #8fbc8f;
+  --brand-fg: #000;
+
+  --m-get: #34d399;
+  --m-post: #60a5fa;
+  --m-put: #f59e0b;
+  --m-patch: #14b8a6;
+  --m-delete: #f87171;
+  --m-grpc: #22d3ee;
+  --m-ws: #fb923c;
+  --m-options: #c084fc;
+  --m-rts: #b9a5ff;
+
+  --sb-info: #2563eb;
+  --sb-file: #404040;
+  --sb-focus: #52525b;
+  --sb-mode: #64748b;
+  --sb-version: #374151;
+  --sb-host: #27272a;
+  --sb-fg: #f8fafc;
+
+  --code-bg: #0a0910;
+  --syn-fg: #dcd7ff;
+  --syn-comment: #8b86a8;
+  --syn-separator: #626166;
+  --syn-directive: #56a9dd;
+  --syn-request: #ff6e6e;
+  --syn-value: #e6e1ff;
+  --syn-key: #9ec1de;
+  --syn-option: #ffebc5;
+  --syn-control: #d48ad0;
+  --syn-literal: #6ef17e;
+  --syn-logical: #ff8b39;
+  --syn-function: #b9a5ff;
+  /* monokai, the response body style */
+  --syn-string: #e6db74;
+  --syn-number: #ae81ff;
+  --syn-prop: #a6e22e;
+  --syn-keyword: #f92672;
+  --syn-variable: #fd971f;
+  --syn-punct: #f92672;
+
+  --shade: rgb(125 86 244 / 0.28);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #faf7ee;
+  --bg-pane: #fffdf7;
+  --bg-raised: #f3eee0;
+  --bg-hover: #efe9d8;
+  --bg-sel: #fde68a;
+  --line: #e4dccb;
+  --line-strong: #cbd5e1;
+
+  --fg: #1f2933;
+  --fg-strong: #0f172a;
+  --fg-muted: #475569;
+  --fg-dim: #64748b;
+
+  --accent: #2563eb;
+  --accent-fg: #f8fafc;
+  --accent-text: #1d4ed8;
+  --editor: #1d4ed8;
+  --response: #0f766e;
+  --focus: #b45309;
+  --focus-fg: #0f172a;
+  --key: #b45309;
+  --help: #1d4ed8;
+  --ok: #15803d;
+  --err: #dc2626;
+  --icon: #2563eb;
+
+  --brand-bg: #1d4ed8;
+  --brand-fg: #fff;
+
+  --m-get: #059669;
+  --m-post: #2563eb;
+  --m-put: #d97706;
+  --m-patch: #0d9488;
+  --m-delete: #dc2626;
+  --m-grpc: #0891b2;
+  --m-ws: #ea580c;
+  --m-options: #9333ea;
+  --m-rts: #7c3aed;
+
+  --sb-info: #2563eb;
+  --sb-file: #334155;
+  --sb-focus: #475569;
+  --sb-mode: #64748b;
+  --sb-version: #1e293b;
+  --sb-host: #020617;
+  --sb-fg: #f8fafc;
+
+  --code-bg: #fffdf7;
+  --syn-fg: #0f172a;
+  --syn-comment: #94a3b8;
+  --syn-separator: #1d4ed8;
+  --syn-directive: #1e3a8a;
+  --syn-request: #991b1b;
+  --syn-value: #0f766e;
+  --syn-key: #9a3412;
+  --syn-option: #7c2d12;
+  --syn-control: #9a3412;
+  --syn-literal: #15803d;
+  --syn-logical: #b91c1c;
+  --syn-function: #1e3a8a;
+  --syn-string: #0f766e;
+  --syn-number: #7c3aed;
+  --syn-prop: #1e3a8a;
+  --syn-keyword: #b91c1c;
+  --syn-variable: #9a3412;
+  --syn-punct: #64748b;
+
+  --shade: rgb(37 99 235 / 0.22);
+}

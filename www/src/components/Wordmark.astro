@@ -1,0 +1,143 @@
+---
+import { wordmark } from '../lib/wordmark';
+
+interface Props {
+  animate?: boolean;
+  class?: string;
+}
+
+const { animate = false, class: className } = Astro.props;
+const { width, height, pixels, shade } = wordmark();
+
+const top = -3;
+const bottom = height + 1;
+const gap = 0.08;
+---
+
+<svg
+  class:list={['wordmark', className, { animate }]}
+  viewBox={`-0.5 ${top - 0.5} ${width + 1} ${bottom - top + 3}`}
+  role="img"
+  aria-label="Resterm"
+>
+  <defs>
+    <pattern id="wm-shade" width="0.5" height="0.5" patternUnits="userSpaceOnUse">
+      <rect width="0.25" height="0.25" />
+      <rect x="0.25" y="0.25" width="0.25" height="0.25" />
+    </pattern>
+  </defs>
+
+  <g class="req">
+    <rect x="18" y={top + 0.95} width="3" height="0.1" />
+    <text x="22" y={top + 1.55} class="method">
+      GET
+    </text>
+    <polygon points={`26.1,${top + 0.45} 26.9,${top + 1} 26.1,${top + 1.55}`} />
+  </g>
+
+  <g class="shade">
+    {shade.map((p) => (
+      <rect x={p.x} y={p.y} width="1" height="2" />
+    ))}
+  </g>
+
+  <g class="pixels">
+    {pixels.map((p) => (
+      <rect
+        x={p.x + gap / 2}
+        y={p.y + gap / 2}
+        width={1 - gap}
+        height={1 - gap}
+        style={animate ? `--c:${p.x}` : undefined}
+      />
+    ))}
+  </g>
+
+  <g class="res">
+    <polygon points={`8.9,${bottom + 0.45} 8.1,${bottom + 1} 8.9,${bottom + 1.55}`} />
+    <text x="10" y={bottom + 1.55} class="code">
+      200
+    </text>
+    <rect x="14" y={bottom + 0.95} width="3" height="0.1" />
+  </g>
+</svg>
+
+<style>
+  .wordmark {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .pixels {
+    fill: var(--fg-strong);
+  }
+
+  .shade {
+    fill: url(#wm-shade);
+  }
+
+  #wm-shade rect {
+    fill: var(--shade);
+  }
+
+  .req,
+  .res {
+    fill: var(--fg-dim);
+  }
+
+  text {
+    font-family: var(--font-mono);
+    font-size: 1.5px;
+    font-weight: 600;
+  }
+
+  .method {
+    fill: var(--m-get);
+  }
+
+  .code {
+    fill: var(--ok);
+  }
+
+  .animate .req {
+    animation: slide-in 0.5s ease-out both;
+    --from: -2px;
+  }
+
+  .animate .pixels rect {
+    animation: pixel-on 0.28s steps(2, end) both;
+    animation-delay: calc(0.45s + var(--c) * 28ms);
+  }
+
+  .animate .shade {
+    animation: fade-in 0.6s ease-out 0.4s both;
+  }
+
+  .animate .res {
+    animation: slide-in 0.5s ease-out 1.35s both;
+    --from: 2px;
+  }
+
+  @keyframes pixel-on {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(var(--from));
+    }
+  }
+</style>

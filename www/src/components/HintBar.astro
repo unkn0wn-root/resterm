@@ -1,0 +1,37 @@
+---
+interface Props {
+  hints: [key: string, action: string][];
+}
+
+const { hints } = Astro.props;
+---
+
+<div class="hints" aria-hidden="true">
+  {hints.map(([key, action]) => (
+    <span class="hint">
+      <kbd>{key}</kbd> {action}
+    </span>
+  ))}
+</div>
+
+<style>
+  .hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 2.5ch;
+    padding: 0.5rem var(--gutter) 0;
+    font-size: 0.8125rem;
+    color: var(--fg-muted);
+  }
+
+  .hint kbd {
+    color: var(--fg-strong);
+    font-weight: 600;
+  }
+
+  @media (max-width: 760px) {
+    .hints {
+      display: none;
+    }
+  }
+</style>

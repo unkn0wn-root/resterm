@@ -1,0 +1,99 @@
+---
+import { Image } from 'astro:assets';
+import base from '../../../../_media/resterm_base.png';
+import explain from '../../../../_media/resterm_explain.png';
+import profiler from '../../../../_media/resterm_profiler.png';
+import script from '../../../../_media/resterm_script.png';
+import timeline from '../../../../_media/resterm_trace_timeline.png';
+import workflow from '../../../../_media/resterm_workflow.png';
+
+const shots = [
+  { id: 'editor', label: 'Editor', src: base, alt: 'Resterm editor with directive completions open' },
+  { id: 'workflow', label: 'Workflow', src: workflow, alt: 'A four step workflow run with every step passing' },
+  {
+    id: 'timeline',
+    label: 'Timeline',
+    src: timeline,
+    alt: 'Trace timeline with DNS, connect, TLS and transfer phases',
+  },
+  { id: 'profiler', label: 'Profiler', src: profiler, alt: 'Profiler with latency percentiles and a histogram' },
+  { id: 'explain', label: 'Explain', src: explain, alt: 'Explain tab showing how a request was built' },
+  { id: 'script', label: 'RestermScript', src: script, alt: 'A RestermScript module open in the editor' },
+];
+---
+
+<div class="screens pane" data-tabs>
+  <span class="pane-title">Screens</span>
+  <div class="tabs" role="tablist" aria-label="Screenshots">
+    {shots.map((s, i) => (
+      <button
+        type="button"
+        role="tab"
+        id={`shot-tab-${s.id}`}
+        aria-controls={`shot-${s.id}`}
+        aria-selected={i === 0 ? 'true' : 'false'}
+        tabindex={i === 0 ? 0 : -1}
+      >
+        {s.label}
+      </button>
+    ))}
+  </div>
+  {shots.map((s, i) => (
+    <figure class="shot" id={`shot-${s.id}`} role="tabpanel" aria-labelledby={`shot-tab-${s.id}`} hidden={i !== 0}>
+      <a href={s.src.src} title="Open the full size screenshot">
+        <Image
+          src={s.src}
+          alt={s.alt}
+          widths={[960, 1600, 2400]}
+          sizes="(max-width: 1240px) 100vw, 1200px"
+          loading={i === 0 ? 'eager' : 'lazy'}
+          fetchpriority={i === 0 ? 'high' : 'auto'}
+          quality={82}
+        />
+      </a>
+    </figure>
+  ))}
+</div>
+
+<style>
+  .screens {
+    padding: 1.1rem 1rem 1rem;
+  }
+
+  .tabs {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 1ch;
+    padding-bottom: 0.8rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.875rem;
+  }
+
+  [role='tab'] {
+    padding: 0.1rem 1ch;
+    border: 0;
+    background: none;
+    color: var(--fg-muted);
+  }
+
+  [role='tab']:hover {
+    color: var(--fg-strong);
+  }
+
+  [role='tab'][aria-selected='true'] {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  [role='tab'][aria-selected='true']::before {
+    content: '▹ ';
+  }
+
+  .shot img {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+  }
+</style>
