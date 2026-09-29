@@ -6,8 +6,6 @@
 
 <p align="center">
   <em>An API-as-code workbench for the terminal.</em>
-  <br>
-  <a href="https://resterm.app/docs/">Documentation</a>
 </p>
 
 <p align="center">
