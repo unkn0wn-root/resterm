@@ -9,10 +9,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/helpdoc"
 )
 
-type urlOpener interface {
-	Open(string) error
-}
-
 type docsOpenedMsg struct {
 	title string
 	url   string
@@ -37,10 +33,10 @@ func (m *Model) openTopicDoc(topic helpdoc.Topic) tea.Cmd {
 }
 
 func (m *Model) openDoc(title string, ref helpdoc.DocRef) tea.Cmd {
-	opener := m.docsOpener
+	launcher := m.launcher
 	link := ref.URL(m.docsRef)
 	return func() tea.Msg {
-		return docsOpenedMsg{title: title, url: link, err: opener.Open(link)}
+		return docsOpenedMsg{title: title, url: link, err: launcher.Open(link)}
 	}
 }
 

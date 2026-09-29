@@ -711,7 +711,7 @@ func (api *testAPI) responseAPI() map[string]any {
 			if strings.TrimSpace(nameCT) == "" {
 				nameCT = ct
 			}
-			return binaryview.FilenameHint(disposition, url, nameCT)
+			return binaryview.Body{ContentType: nameCT, Disposition: disposition, URL: url}.Name()
 		},
 		"saveBody": func(path string) bool {
 			if api.response == nil {

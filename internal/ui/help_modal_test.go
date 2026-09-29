@@ -207,9 +207,9 @@ func TestRenderHelpTopicUsesEmbeddedMarkdown(t *testing.T) {
 }
 
 func TestHelpTopicOpenWebDocsAndClose(t *testing.T) {
-	opener := &recordingURLopener{}
+	opener := &recordingOpener{}
 	model := New(Config{Version: "v2.0.0"})
-	model.docsOpener = opener
+	model.launcher = opener
 	topic, _ := helpdoc.Lookup("requests")
 	model.openHelpTopic(topic)
 
@@ -229,9 +229,9 @@ func TestHelpTopicOpenWebDocsAndClose(t *testing.T) {
 }
 
 func TestHelpTopicBrowserFailureIsReturnedAsMessage(t *testing.T) {
-	opener := &recordingURLopener{err: errors.New("no browser")}
+	opener := &recordingOpener{err: errors.New("no browser")}
 	model := New(Config{})
-	model.docsOpener = opener
+	model.launcher = opener
 	topic, _ := helpdoc.Lookup("requests")
 	model.openHelpTopic(topic)
 

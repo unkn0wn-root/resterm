@@ -370,7 +370,9 @@ While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire 
 
 Use `g+g` and `G` to jump to the start or end of the Pretty, Raw, or Headers tabs when the response pane is focused. The same keys jump to the first or last entry in the navigator when you are browsing files or workflows.
 
-Binary responses show size and type hints alongside quick previews. For large binary payloads, the Raw tab starts in a summary view and defers full dumps until requested. While the response pane is focused, press `g+b` to rotate the Raw tab between summary, hex, and base64 views. Press `g+Shift+D` to load the full hex dump immediately. Press `g+Shift+S` to open the Save Response Body prompt, which comes prefilled with a suggested path from your last save or workspace and writes the file after you hit Enter. `g+Shift+E` writes the body to a temporary file and opens it with your default app.
+Binary responses show size and type hints alongside quick previews. For large binary payloads, the Raw tab starts in a summary view and defers full dumps until requested. While the response pane is focused, press `g+b` to rotate the Raw tab between summary, hex, and base64 views. Press `g+Shift+D` to load the full hex dump immediately. Press `g+Shift+S` to open the Save Response Body prompt, which comes prefilled with a suggested path from your last save or workspace and writes the file after you hit Enter.
+
+Press `g+Shift+E` to open the body in your default app. Resterm only opens types from a fixed list: images, PDF, text, JSON, CSV, audio, video, archives, and Office files without macros. HTML, SVG, XML, and Markdown open as plain text so no scripts inside them can run. It finds the type from the `Content-Type` header, then the file name the server sent, then the body itself. The file extension always comes from that type, so a PDF sent as `invoice.exe` opens as `invoice.pdf`. If no type fits, Resterm shows a warning and you can save the body with `g+Shift+S` instead. Opened files are kept in a temporary folder that Resterm deletes when it exits.
 
 ### Pane minimization & zoom
 

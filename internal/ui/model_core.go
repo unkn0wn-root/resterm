@@ -181,13 +181,18 @@ type operatorState struct {
 	motionKeys []string
 }
 
+type opener interface {
+	Open(target string) error
+}
+
 type Model struct {
 	cfg          Config
 	ws           workspace
 	run          *rtrun.Runtime
 	rq           *rqeng.Engine
 	bindingsMap  *bindings.Map
-	docsOpener   urlOpener
+	launcher     opener
+	spool        *launch.Spool
 	docsRef      string
 	theme        theme.Theme
 	themeRuntime themeRuntime
@@ -626,7 +631,8 @@ func New(cfg Config) Model {
 		ws:                     ws,
 		run:                    run,
 		bindingsMap:            bindingMap,
-		docsOpener:             launch.New(),
+		launcher:               launch.New(),
+		spool:                  launch.NewSpool(""),
 		docsRef:                helpdoc.DocsRef(cfg.Version),
 		theme:                  th,
 		themeCatalog:           cfg.ThemeCatalog,

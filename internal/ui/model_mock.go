@@ -333,15 +333,15 @@ func (m *Model) detachMockServer(server *mock.Server) {
 }
 
 func (m *Model) Close() error {
-	recordErr := m.closeRecorder()
+	err := errors.Join(m.closeRecorder(), m.spool.Close())
 	server := m.mock.server
 	if server == nil {
-		return recordErr
+		return err
 	}
 	m.detachMockServer(server)
 	ctx, cancel := context.WithTimeout(context.Background(), mockCloseTimeout)
 	defer cancel()
-	return errors.Join(recordErr, server.Close(ctx))
+	return errors.Join(err, server.Close(ctx))
 }
 
 func (m *Model) activeMockServer() *mock.Server { return m.mock.server }

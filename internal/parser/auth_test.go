@@ -261,11 +261,12 @@ func TestParseCommandAuthSpecCmd(t *testing.T) {
 
 // This also fails if name becomes a command option, since name= names the definition.
 func TestParseCommandAuthAcceptsEveryOption(t *testing.T) {
-	src := "command"
+	var src strings.Builder
+	src.WriteString("command")
 	for _, key := range restfile.AuthCommandParams {
-		src += " " + key + "=v"
+		src.WriteString(" " + key + "=v")
 	}
-	spec, err := parseAuthSpec(authFields(src))
+	spec, err := parseAuthSpec(authFields(src.String()))
 	if err != nil || spec == nil {
 		t.Fatalf("parseAuthSpec() = %+v, %v", spec, err)
 	}

@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
-	"github.com/unkn0wn-root/resterm/internal/launch"
+	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -98,11 +98,16 @@ func (m *Model) responseSaveDir() string {
 
 func (m *Model) defaultResponseSavePath(snapshot *responseSnapshot) string {
 	base := m.responseSaveDir()
-	name := suggestResponseFilename(snapshot)
+	name := responseBody(snapshot).Name()
 	if strings.TrimSpace(name) == "" {
 		name = "response.bin"
 	}
 	return filepath.Join(base, name)
+}
+
+type responseOpenedMsg struct {
+	name string
+	err  error
 }
 
 func (m *Model) openResponseExternally() tea.Cmd {
@@ -111,44 +116,43 @@ func (m *Model) openResponseExternally() tea.Cmd {
 		msg := *status
 		return func() tea.Msg { return msg }
 	}
-	body := snapshot.body
-	if len(body) == 0 {
+	if len(snapshot.body) == 0 {
 		m.setStatusMessage(statusMsg{level: statusInfo, text: "No response body to open"})
 		return nil
 	}
 
-	name := suggestResponseFilename(snapshot)
-	ext := filepath.Ext(name)
-	if ext == "" {
-		ext = ".bin"
-	}
-
-	tmpFile, err := os.CreateTemp("", "resterm-*"+ext)
-	if err != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("Open failed: %v", err)})
-		return nil
-	}
-	tmpPath := tmpFile.Name()
-	if _, err := tmpFile.Write(body); err != nil {
-		_ = tmpFile.Close()
-		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("Open failed: %v", err)})
-		return nil
-	}
-	if err := tmpFile.Close(); err != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("Open failed: %v", err)})
+	body := responseBody(snapshot)
+	name, ok := body.ViewerName()
+	if !ok {
+		saveKey := m.helpActionKey(bindings.ActionSaveResponseBody, "g Shift+S")
+		m.setStatusMessage(statusMsg{
+			level: statusWarn,
+			text:  fmt.Sprintf("Can't pick a safe app for this body. Save it with %s.", saveKey),
+		})
 		return nil
 	}
 
-	if err := launch.New().Open(tmpPath); err != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("Open failed: %v", err)})
-		return nil
+	m.setStatusMessage(statusMsg{level: statusInfo, text: "Opening " + name})
+	spool, launcher := m.spool, m.launcher
+	return func() tea.Msg {
+		path, err := spool.Write(name, body.Data)
+		if err == nil {
+			err = launcher.Open(path)
+		}
+		return responseOpenedMsg{name: name, err: err}
 	}
+}
 
-	m.setStatusMessage(statusMsg{
-		level: statusInfo,
-		text:  fmt.Sprintf("Opening response body in external app (%s)", filepath.Base(tmpPath)),
-	})
-	return nil
+func (m *Model) handleResponseOpened(msg responseOpenedMsg) {
+	if msg.err != nil {
+		saveKey := m.helpActionKey(bindings.ActionSaveResponseBody, "g Shift+S")
+		m.setStatusMessage(statusMsg{
+			level: statusWarn,
+			text:  fmt.Sprintf("Open failed: %v. Save it with %s instead.", msg.err, saveKey),
+		})
+		return
+	}
+	m.setStatusMessage(statusMsg{level: statusInfo, text: "Opened " + msg.name + " in the default app"})
 }
 
 func (m *Model) submitResponseSave() tea.Cmd {
@@ -227,15 +231,13 @@ func (m *Model) activeResponseSnapshot() (*responseSnapshot, *statusMsg) {
 	return pane.snapshot, nil
 }
 
-func suggestResponseFilename(snapshot *responseSnapshot) string {
-	if snapshot == nil {
-		return "response.bin"
+func responseBody(snap *responseSnapshot) binaryview.Body {
+	return binaryview.Body{
+		Data:        snap.body,
+		ContentType: snap.contentType,
+		Disposition: snap.responseHeaders.Get("Content-Disposition"),
+		URL:         snap.effectiveURL,
 	}
-	disposition := ""
-	if snapshot.responseHeaders != nil {
-		disposition = snapshot.responseHeaders.Get("Content-Disposition")
-	}
-	return binaryview.FilenameHint(disposition, snapshot.effectiveURL, snapshot.contentType)
 }
 
 func ensureUniquePath(path string) (string, error) {

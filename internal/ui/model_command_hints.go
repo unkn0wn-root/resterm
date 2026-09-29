@@ -92,12 +92,16 @@ func (m Model) responseCommandHints() []commandHint {
 
 	switch pane.activeTab {
 	case responseTabPretty:
-		hints = append(hints, m.commandActionHint(bindings.ActionSaveResponseBody, "Save"))
+		hints = append(hints,
+			m.commandActionHint(bindings.ActionSaveResponseBody, "Save"),
+			m.commandActionHint(bindings.ActionOpenResponseExternally, "Open"),
+		)
 	case responseTabRaw:
 		hints = append(hints,
 			m.commandActionHint(bindings.ActionCycleRawView, "View"),
 			m.commandActionHint(bindings.ActionShowRawDump, "Dump"),
 			m.commandActionHint(bindings.ActionSaveResponseBody, "Save"),
+			m.commandActionHint(bindings.ActionOpenResponseExternally, "Open"),
 		)
 	case responseTabHeaders:
 		hints = append(hints, commandHint{key: "Enter", label: "Request/Response"})
