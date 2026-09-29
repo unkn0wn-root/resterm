@@ -58,7 +58,7 @@ function mount(term: HTMLElement) {
       observer.disconnect();
       void play(term, lines, caret);
     },
-    { threshold: 0.35 },
+    { rootMargin: '0px 0px -15% 0px' },
   ).observe(term);
 }
 
