@@ -2,165 +2,206 @@ package binaryview
 
 import (
 	"mime"
+	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
+	"unicode"
 )
 
-// FilenameHint tries to figure out a good filename for saving a response.
+type Body struct {
+	Data        []byte
+	ContentType string
+	Disposition string
+	URL         string
+}
+
+// Name tries to figure out a good filename for saving a response.
 // Order:
 // 1) Content-Disposition header
 // 2) URL path
 // 3) MIME type extension
 // 4) Fallback to "response.bin"
-func FilenameHint(disposition, rawURL, mimeType string) string {
-	name := filenameFromDisposition(disposition)
-	if name == "" {
-		name = filenameFromURL(rawURL)
-	}
-
-	ext := extensionForMIME(mimeType)
-
+func (b Body) Name() string {
+	name := b.serverName()
 	if name == "" {
 		name = "response"
 	}
-	if path.Ext(name) == "" && ext != "" {
-		name += ext
+	if path.Ext(name) != "" {
+		return name
 	}
-	if path.Ext(name) == "" {
-		name += ".bin"
+
+	mt, _ := parseContentType(b.ContentType)
+	if ft := lookupFileType(mt); ft.ext != "" {
+		return name + ft.ext
 	}
-	return sanitizeFilename(name)
+	exts, _ := mime.ExtensionsByType(mt)
+	if len(exts) == 0 {
+		return name + ".bin"
+	}
+	// The system list is sorted, so first try the extension named after the subtype.
+	_, sub, _ := strings.Cut(mt, "/")
+	base, _, _ := strings.Cut(sub, "+")
+	for _, ext := range []string{"." + base, "." + sub} {
+		if slices.Contains(exts, ext) {
+			return name + ext
+		}
+	}
+	return name + exts[0]
 }
 
-// filenameFromDisposition extracts filename from Content-Disposition.
-//
-// In Go (after reading source code - yeah, sometimes you must),
-// mime.ParseMediaType already decodes RFC 5987/RFC 2231
-// parameters (like filename*) and stores the decoded result in params["filename"].
-// So we should read params["filename"], not params["filename*"].
-func filenameFromDisposition(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return ""
+// ViewerName returns a file name that is safe to open with the default app.
+// The extension decides which app runs, so it always comes from fileTypes and
+// never from the server. We look at the Content-Type first, then the file
+// name the server sent, then the body bytes.
+func (b Body) ViewerName() (string, bool) {
+	const maxName = 64
+	server := b.serverName()
+	ext := path.Ext(server)
+	name := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune(" ._-", r) {
+			return r
+		}
+		return '_'
+	}, strings.TrimSuffix(server, ext))
+	if runes := []rune(name); len(runes) > maxName {
+		name = string(runes[:maxName])
+	}
+	name = avoidDevice(strings.Trim(name, " ."))
+	if name == "" {
+		name = "response"
 	}
 
-	_, params, err := mime.ParseMediaType(value)
+	for _, ct := range []string{b.ContentType, mime.TypeByExtension(ext), http.DetectContentType(b.Data)} {
+		mt, _ := parseContentType(ct)
+		switch ft := lookupFileType(mt); ft.open {
+		case openFile:
+			return name + ft.ext, true
+		case openText:
+			return name + ".txt", true
+		}
+	}
+	return "", false
+}
+
+func (b Body) serverName() string {
+	// ParseMediaType decodes filename* into params["filename"].
+	if _, params, err := mime.ParseMediaType(b.Disposition); err == nil {
+		if name := sanitizeFilename(params["filename"]); name != "" {
+			return name
+		}
+	}
+	u, err := url.Parse(b.URL)
 	if err != nil {
 		return ""
 	}
-	// this may already be the decoded filename* value when present.
-	if v := strings.TrimSpace(params["filename"]); v != "" {
-		return sanitizeFilename(v)
+	// A bare "/" segment sanitizes to "_", which is not a real name.
+	if name := sanitizeFilename(path.Base(u.Path)); name != "_" {
+		return name
 	}
 	return ""
 }
 
-func filenameFromURL(rawURL string) string {
-	trimmed := strings.TrimSpace(rawURL)
-	if trimmed == "" {
-		return ""
-	}
+type openMode int
 
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return ""
-	}
-	base := path.Base(parsed.Path)
+const (
+	openNever openMode = iota
+	openFile
+	openText
+)
 
-	// avoid returning "/" or "." which sanitize into "_" or "" and look broken.
-	if base == "" || base == "/" || base == "." {
-		return ""
-	}
-
-	name := sanitizeFilename(base)
-
-	// special-case: "/" sanitizes to "_" in our sanitizer - treat that as empty.
-	if name == "" || name == "_" {
-		return ""
-	}
-
-	return name
+type fileType struct {
+	ext  string
+	open openMode
 }
 
-func extensionForMIME(mimeType string) string {
-	mt := strings.TrimSpace(mimeType)
-	if mt == "" {
-		return ""
-	}
+// The system MIME tables differ per OS and sort extensions alphabetically,
+// so audio/mpeg would get .m2a. This table is checked first.
+// HTML, SVG, XML and Markdown can carry scripts, so they open as plain text.
+var fileTypes = map[string]fileType{
+	"application/gzip":              {".gz", openFile},
+	"application/json":              {".json", openFile},
+	"application/msword":            {".doc", openNever},
+	"application/pdf":               {".pdf", openFile},
+	"application/vnd.ms-excel":      {".xls", openNever},
+	"application/vnd.ms-powerpoint": {".ppt", openNever},
+	"application/x-gzip":            {".gz", openFile},
+	"application/xml":               {".xml", openText},
+	"application/yaml":              {".yaml", openFile},
+	"application/zip":               {".zip", openFile},
+	"audio/aac":                     {".aac", openFile},
+	"audio/flac":                    {".flac", openFile},
+	"audio/mp4":                     {".m4a", openFile},
+	"audio/mpeg":                    {".mp3", openFile},
+	"audio/ogg":                     {".ogg", openFile},
+	"audio/wav":                     {".wav", openFile},
+	"audio/wave":                    {".wav", openFile},
+	"image/avif":                    {".avif", openFile},
+	"image/bmp":                     {".bmp", openFile},
+	"image/gif":                     {".gif", openFile},
+	"image/heic":                    {".heic", openFile},
+	"image/jpeg":                    {".jpg", openFile},
+	"image/png":                     {".png", openFile},
+	"image/svg+xml":                 {".svg", openText},
+	"image/tiff":                    {".tiff", openFile},
+	"image/vnd.microsoft.icon":      {".ico", openFile},
+	"image/webp":                    {".webp", openFile},
+	"image/x-icon":                  {".ico", openFile},
+	"text/csv":                      {".csv", openFile},
+	"text/html":                     {".html", openText},
+	"text/markdown":                 {".md", openText},
+	"text/plain":                    {".txt", openFile},
+	"text/xml":                      {".xml", openText},
+	"video/mp4":                     {".mp4", openFile},
+	"video/quicktime":               {".mov", openFile},
+	"video/webm":                    {".webm", openFile},
 
-	// "application/json; charset=utf-8"
-	if mediaType, _, err := mime.ParseMediaType(mt); err == nil && mediaType != "" {
-		mt = strings.ToLower(mediaType)
-	}
-
-	exts, err := mime.ExtensionsByType(mt)
-	if err != nil || len(exts) == 0 {
-		return ""
-	}
-	if ext := preferredExtensionForMIME(mt, exts); ext != "" {
-		return ext
-	}
-	for _, ext := range exts {
-		if e := strings.ToLower(strings.TrimSpace(ext)); e != "" {
-			return e
-		}
-	}
-	return ""
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": {".pptx", openFile},
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         {".xlsx", openFile},
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   {".docx", openFile},
 }
 
-func preferredExtensionForMIME(mimeType string, exts []string) string {
-	preferredByType := map[string][]string{
-		"application/json": {".json"},
-		"application/pdf":  {".pdf"},
-		"application/xml":  {".xml"},
-		"image/jpeg":       {".jpg", ".jpeg"},
-		"image/png":        {".png"},
-		"image/svg+xml":    {".svg"},
-		"text/html":        {".html", ".htm"},
-		"text/plain":       {".txt"},
-		"text/xml":         {".xml"},
-	}
+var structuredSuffixes = map[string]string{
+	"+json": "application/json",
+	"+xml":  "application/xml",
+	"+yaml": "application/yaml",
+}
 
-	normalized := make(map[string]string, len(exts))
-	for _, ext := range exts {
-		e := strings.ToLower(strings.TrimSpace(ext))
-		if e != "" {
-			normalized[e] = e
-		}
+func lookupFileType(mimeType string) fileType {
+	if ft, ok := fileTypes[mimeType]; ok {
+		return ft
 	}
-
-	for _, candidate := range preferredByType[mimeType] {
-		if ext := normalized[candidate]; ext != "" {
-			return ext
-		}
+	if i := strings.LastIndexByte(mimeType, '+'); i >= 0 {
+		return fileTypes[structuredSuffixes[mimeType[i:]]]
 	}
-
-	slash := strings.IndexByte(mimeType, '/')
-	if slash < 0 || slash == len(mimeType)-1 {
-		return ""
-	}
-
-	subtype := mimeType[slash+1:]
-	if plus := strings.IndexByte(subtype, '+'); plus > 0 {
-		if ext := normalized["."+subtype[:plus]]; ext != "" {
-			return ext
-		}
-	}
-	if ext := normalized["."+subtype]; ext != "" {
-		return ext
-	}
-
-	return ""
+	return fileType{}
 }
 
 func sanitizeFilename(name string) string {
 	clean := strings.TrimSpace(name)
 	clean = strings.ReplaceAll(clean, "\\", "_")
 	clean = strings.ReplaceAll(clean, "/", "_")
-	clean = path.Base(clean)
-	clean = strings.Trim(clean, ".")
-	if clean == "" {
-		return ""
-	}
-	return clean
+	return avoidDevice(strings.Trim(clean, "."))
 }
+
+// Windows 10 and older open a device for these names, even with an extension.
+func avoidDevice(name string) string {
+	base := name
+	if i := strings.IndexAny(base, ".:"); i >= 0 {
+		base = base[:i]
+	}
+	if windowsDevices[strings.ToUpper(strings.TrimRight(base, " "))] {
+		return "_" + name
+	}
+	return name
+}
+
+var windowsDevices = func() map[string]bool {
+	names := map[string]bool{"CON": true, "PRN": true, "AUX": true, "NUL": true, "CONIN$": true, "CONOUT$": true}
+	for _, n := range []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "¹", "²", "³"} {
+		names["COM"+n] = true
+		names["LPT"+n] = true
+	}
+	return names
+}()

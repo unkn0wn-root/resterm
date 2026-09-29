@@ -126,6 +126,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.setStatusMessage(typed)
 	case docsOpenedMsg:
 		m.handleDocsOpened(typed)
+	case responseOpenedMsg:
+		m.handleResponseOpened(typed)
 	case statusPulseMsg:
 		if cmd := m.handleStatusPulse(typed); cmd != nil {
 			cmds = append(cmds, cmd)

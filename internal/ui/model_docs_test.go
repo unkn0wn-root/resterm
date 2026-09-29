@@ -6,20 +6,20 @@ import (
 	"testing"
 )
 
-type recordingURLopener struct {
+type recordingOpener struct {
 	links []string
 	err   error
 }
 
-func (o *recordingURLopener) Open(link string) error {
+func (o *recordingOpener) Open(link string) error {
 	o.links = append(o.links, link)
 	return o.err
 }
 
 func TestDocsCommandOpensVersionMatchedTopic(t *testing.T) {
-	opener := &recordingURLopener{}
+	opener := &recordingOpener{}
 	model := New(Config{Version: "v1.2.3"})
-	model.docsOpener = opener
+	model.launcher = opener
 
 	msg, ok := model.openDocsQuery([]string{"grpc"})().(docsOpenedMsg)
 	if !ok {
@@ -39,9 +39,9 @@ func TestDocsCommandOpensVersionMatchedTopic(t *testing.T) {
 }
 
 func TestBareDocsCommandUsesMainForDevelopmentBuild(t *testing.T) {
-	opener := &recordingURLopener{}
+	opener := &recordingOpener{}
 	model := New(Config{Version: "dev"})
-	model.docsOpener = opener
+	model.launcher = opener
 
 	msg := model.openDocsQuery(nil)().(docsOpenedMsg)
 	if !strings.HasSuffix(msg.url, "/blob/main/docs/resterm.md") {
@@ -62,9 +62,9 @@ func TestDocsCommandReportsUnknownTopic(t *testing.T) {
 }
 
 func TestDocsCommandFailureShowsCopyableURL(t *testing.T) {
-	opener := &recordingURLopener{err: errors.New("browser unavailable")}
+	opener := &recordingOpener{err: errors.New("browser unavailable")}
 	model := New(Config{Version: "v1.2.3"})
-	model.docsOpener = opener
+	model.launcher = opener
 
 	msg := model.openDocsQuery([]string{"requests"})().(docsOpenedMsg)
 	model.handleDocsOpened(msg)
