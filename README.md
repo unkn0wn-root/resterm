@@ -7,7 +7,7 @@
 <p align="center">
   <em>An API-as-code workbench for the terminal.</em>
   <br>
-  <a href="https://resterm.app">resterm.app</a> · <a href="https://resterm.app/docs/">Documentation</a>
+  <a href="https://resterm.app/docs/">Documentation</a>
 </p>
 
 <p align="center">
@@ -230,7 +230,7 @@ Press `?` for general Resterm help and `Shift+k` for help on whatever is under t
 
 ## Documentation
 
-The documentation lives at [resterm.app/docs](https://resterm.app/docs/). The site is built from the [`docs/`](./docs) directory in this repo, so the Markdown files there have the same content.
+The documentation lives at [resterm.app/docs](https://resterm.app/docs/). The site is built from the [`docs/`](./docs) directory in this repo.
 
 - [Request files, directives, scripting and transports](https://resterm.app/docs/), from [`docs/resterm.md`](./docs/resterm.md).
 - [CLI](https://resterm.app/docs/cli/) with `resterm run`, importers, collections and history, from [`docs/cli.md`](./docs/cli.md).
