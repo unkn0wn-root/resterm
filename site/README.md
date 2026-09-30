@@ -1,6 +1,6 @@
 # resterm web
 
-The website for Resterm: landing page and the documentation.
+Resterm landing page and the documentation.
 Static site built with [Astro](https://astro.build) and TypeScript.
 
 ## Commands
@@ -20,9 +20,3 @@ npm run check    # type check
 
 The site does not keep its own copy of the docs. At build time it reads `../docs/*.md`  and transforms doc files into pages.
 Screenshots are read from `../_media` and converted to WebP at build time.
-
-## Deploy on Cloudflare Pages
-
-```bash
-npm run build && npx wrangler pages deploy dist --project-name resterm
-```

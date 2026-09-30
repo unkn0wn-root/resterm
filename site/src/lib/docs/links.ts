@@ -1,4 +1,4 @@
-import { docHref, site } from '../../site';
+import { docHref, repoFile } from '../../site';
 import type { Anchors } from './assemble';
 
 const scheme = /^[a-z][a-z\d+.-]*:|^\/\//i;
@@ -16,7 +16,7 @@ export function resolveLink(url: string, file: string, slug: string, anchors: An
 
   const target = path ? docFile.exec(path)?.[1] : file;
   if (!target || !anchors.has(target)) {
-    return new URL(url, `${site.repo}/blob/main/docs/`).href;
+    return new URL(url, repoFile('docs/')).href;
   }
 
   const found = anchors.resolve(target, hash);

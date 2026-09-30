@@ -8,7 +8,9 @@ export const site = {
   license: 'Apache-2.0',
 };
 
+const ref = process.env.SITE_REF || 'main';
+
 export const repoFile = (path: string, line?: number) =>
-  `${site.repo}/blob/main/${path}${line ? `?plain=1#L${line}` : ''}`;
+  `${site.repo}/blob/${ref}/${path}${line ? `?plain=1#L${line}` : ''}`;
 
 export const docHref = (slug: string, hash?: string) => `/docs/${slug}/${hash ? `#${hash}` : ''}`;
