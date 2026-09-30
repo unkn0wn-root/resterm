@@ -193,7 +193,6 @@ type Model struct {
 	bindingsMap  *bindings.Map
 	launcher     opener
 	spool        *launch.Spool
-	docsRef      string
 	theme        theme.Theme
 	themeRuntime themeRuntime
 	themeCatalog theme.Catalog
@@ -633,7 +632,6 @@ func New(cfg Config) Model {
 		bindingsMap:            bindingMap,
 		launcher:               launch.New(),
 		spool:                  launch.NewSpool(""),
-		docsRef:                helpdoc.DocsRef(cfg.Version),
 		theme:                  th,
 		themeCatalog:           cfg.ThemeCatalog,
 		client:                 client,

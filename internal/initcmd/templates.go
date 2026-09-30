@@ -305,8 +305,6 @@ func buildHelpMD() string {
 	b.WriteString("- `")
 	b.WriteString(fileRTSHelpers)
 	b.WriteString("` shows object lists, `??`, and the ternary operator.\n")
-	b.WriteString(
-		"- See docs in [docs/resterm.md](https://github.com/unkn0wn-root/resterm/blob/main/docs/resterm.md) for details.\n",
-	)
+	b.WriteString("- See the [docs](https://resterm.app/docs/) for details.\n")
 	return b.String()
 }

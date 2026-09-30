@@ -99,7 +99,7 @@ var exCommands = exCatalog{
 		},
 		{
 			kind: exCommandDocs, name: "docs",
-			usage: "docs [topic]", summary: "Open version-matched web documentation", hasArgs: true, noBang: true,
+			usage: "docs [topic]", summary: "Open web documentation", hasArgs: true, noBang: true,
 		},
 	},
 	mock: []subCommandDef{

@@ -460,7 +460,7 @@ func (m Model) helpSections() []helpSection {
 				{":e [path] / :edit [path]", "Open a path directly, or show the path prompt when omitted"},
 				{":noh", "Clear search highlights"},
 				{":help [topic] / :man [topic]", "Open embedded help or a documentation topic"},
-				{":docs [topic]", "Open version-matched web documentation"},
+				{":docs [topic]", "Open web documentation"},
 				{"Up / Down / Tab / Enter", "Select, complete, or run command suggestions"},
 			},
 		},
