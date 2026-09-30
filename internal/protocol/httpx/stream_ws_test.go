@@ -163,6 +163,30 @@ func TestExecuteWebSocketChat(t *testing.T) {
 	}
 }
 
+func TestExecuteWebSocketReportsWSEffectiveURL(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	wsURL := strings.Replace(server.URL, "http", "ws", 1) + "/ws/chat"
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    wsURL,
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{{Type: restfile.WebSocketStepClose, Code: 1000}},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := NewClient(nil).ExecuteWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatalf("ExecuteWebSocket returned error: %v", err)
+	}
+	if resp.EffectiveURL != wsURL {
+		t.Fatalf("EffectiveURL = %q, want %q", resp.EffectiveURL, wsURL)
+	}
+}
+
 func TestWebSocketShutdownDoesNotRepeatAStartedClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	session := stream.NewSession(ctx, stream.KindWebSocket, stream.Config{})
