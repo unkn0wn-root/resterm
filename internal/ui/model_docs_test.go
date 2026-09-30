@@ -16,9 +16,9 @@ func (o *recordingOpener) Open(link string) error {
 	return o.err
 }
 
-func TestDocsCommandOpensVersionMatchedTopic(t *testing.T) {
+func TestDocsCommandOpensTopicPage(t *testing.T) {
 	opener := &recordingOpener{}
-	model := New(Config{Version: "v1.2.3"})
+	model := New(Config{})
 	model.launcher = opener
 
 	msg, ok := model.openDocsQuery([]string{"grpc"})().(docsOpenedMsg)
@@ -28,8 +28,8 @@ func TestDocsCommandOpensVersionMatchedTopic(t *testing.T) {
 	if len(opener.links) != 1 || opener.links[0] != msg.url {
 		t.Fatalf("opener links = %+v, message URL = %q", opener.links, msg.url)
 	}
-	if !strings.Contains(msg.url, "/blob/v1.2.3/docs/resterm.md#grpc") {
-		t.Fatalf("expected version-matched gRPC documentation URL, got %q", msg.url)
+	if msg.url != "https://resterm.app/docs/grpc/" {
+		t.Fatalf("expected gRPC documentation URL, got %q", msg.url)
 	}
 
 	model.handleDocsOpened(msg)
@@ -38,14 +38,14 @@ func TestDocsCommandOpensVersionMatchedTopic(t *testing.T) {
 	}
 }
 
-func TestBareDocsCommandUsesMainForDevelopmentBuild(t *testing.T) {
+func TestBareDocsCommandOpensDocsIndex(t *testing.T) {
 	opener := &recordingOpener{}
-	model := New(Config{Version: "dev"})
+	model := New(Config{})
 	model.launcher = opener
 
 	msg := model.openDocsQuery(nil)().(docsOpenedMsg)
-	if !strings.HasSuffix(msg.url, "/blob/main/docs/resterm.md") {
-		t.Fatalf("expected development build to open main manual, got %q", msg.url)
+	if msg.url != "https://resterm.app/docs/" {
+		t.Fatalf("expected docs index URL, got %q", msg.url)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestDocsCommandReportsUnknownTopic(t *testing.T) {
 
 func TestDocsCommandFailureShowsCopyableURL(t *testing.T) {
 	opener := &recordingOpener{err: errors.New("browser unavailable")}
-	model := New(Config{Version: "v1.2.3"})
+	model := New(Config{})
 	model.launcher = opener
 
 	msg := model.openDocsQuery([]string{"requests"})().(docsOpenedMsg)

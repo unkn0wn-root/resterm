@@ -3,51 +3,29 @@ package helpdoc
 import (
 	"net/url"
 	"path"
-	"regexp"
 	"strings"
 	"unicode"
-
-	"golang.org/x/mod/semver"
 )
 
-const (
-	docsHost   = "github.com"
-	docsRepo   = "unkn0wn-root/resterm"
-	manualPath = "docs/resterm.md"
-)
+const docsHost = "resterm.app"
 
-var gitDescribePattern = regexp.MustCompile(`-\d+-g[0-9a-f]+(?:-dirty)?$`)
-
+// DocRef points at a page on the docs site. Page is a slug from site/src/docs/nav.ts.
+// Important to remember that released binaries keep these links, so renaming
+// a page needs a redirect on the site.
 type DocRef struct {
-	Path    string
+	Page    string
 	Heading string
 }
 
 func Manual() DocRef {
-	return DocRef{Path: manualPath}
+	return DocRef{}
 }
 
-func manual(heading string) DocRef {
-	return DocRef{Path: manualPath, Heading: heading}
-}
-
-// DocsRef maps a build version to the git ref documentation links should use.
-// Release tags link to their tag. Dev, snapshot, and dirty builds track main.
-func DocsRef(version string) string {
-	version = strings.TrimSpace(version)
-	snapshot := gitDescribePattern.MatchString(version)
-	dirty := strings.HasSuffix(version, "-dirty")
-	if snapshot || dirty || !semver.IsValid(version) {
-		return "main"
-	}
-	return version
-}
-
-func (d DocRef) URL(ref string) string {
+func (d DocRef) URL() string {
 	u := url.URL{
 		Scheme:   "https",
 		Host:     docsHost,
-		Path:     path.Join(docsRepo, "blob", ref, d.Path),
+		Path:     path.Join("/docs", d.Page) + "/",
 		Fragment: d.anchor(),
 	}
 	return u.String()

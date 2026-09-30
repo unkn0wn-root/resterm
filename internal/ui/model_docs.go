@@ -34,7 +34,7 @@ func (m *Model) openTopicDoc(topic helpdoc.Topic) tea.Cmd {
 
 func (m *Model) openDoc(title string, ref helpdoc.DocRef) tea.Cmd {
 	launcher := m.launcher
-	link := ref.URL(m.docsRef)
+	link := ref.URL()
 	return func() tea.Msg {
 		return docsOpenedMsg{title: title, url: link, err: launcher.Open(link)}
 	}

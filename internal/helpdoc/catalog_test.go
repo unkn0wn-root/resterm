@@ -103,19 +103,32 @@ func TestDirectiveCoverage(t *testing.T) {
 	}
 }
 
-func TestDocumentHeadingsExist(t *testing.T) {
+func TestDocLinksExist(t *testing.T) {
 	root := os.DirFS("../..")
-	for _, topic := range Topics() {
-		if topic.Doc.Heading == "" {
-			continue
-		}
-		data, err := fs.ReadFile(root, topic.Doc.Path)
+	nav, err := fs.ReadFile(root, "site/src/docs/nav.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := fs.Glob(root, "docs/*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var docs strings.Builder
+	for _, name := range files {
+		data, err := fs.ReadFile(root, name)
 		if err != nil {
-			t.Errorf("read %s for %s: %v", topic.Doc.Path, topic.ID, err)
-			continue
+			t.Fatal(err)
 		}
-		if !hasHeading(string(data), topic.Doc.Heading) {
-			t.Errorf("%s does not contain heading %q for %s", topic.Doc.Path, topic.Doc.Heading, topic.ID)
+		docs.Write(data)
+		docs.WriteByte('\n')
+	}
+
+	for _, topic := range Topics() {
+		if !strings.Contains(string(nav), "slug: '"+topic.Doc.Page+"'") {
+			t.Errorf("site/src/docs/nav.ts has no page %q for %s", topic.Doc.Page, topic.ID)
+		}
+		if topic.Doc.Heading != "" && !hasHeading(docs.String(), topic.Doc.Heading) {
+			t.Errorf("docs/ has no heading %q for %s", topic.Doc.Heading, topic.ID)
 		}
 	}
 }

@@ -208,7 +208,7 @@ func TestRenderHelpTopicUsesEmbeddedMarkdown(t *testing.T) {
 
 func TestHelpTopicOpenWebDocsAndClose(t *testing.T) {
 	opener := &recordingOpener{}
-	model := New(Config{Version: "v2.0.0"})
+	model := New(Config{})
 	model.launcher = opener
 	topic, _ := helpdoc.Lookup("requests")
 	model.openHelpTopic(topic)
@@ -218,7 +218,7 @@ func TestHelpTopicOpenWebDocsAndClose(t *testing.T) {
 	if !ok || msg.err != nil {
 		t.Fatalf("expected docs result, got %+v", msg)
 	}
-	if len(opener.links) != 1 || !strings.Contains(opener.links[0], "/blob/v2.0.0/") {
+	if len(opener.links) != 1 || opener.links[0] != "https://resterm.app/docs/request-files/" {
 		t.Fatalf("unexpected opened links: %+v", opener.links)
 	}
 
