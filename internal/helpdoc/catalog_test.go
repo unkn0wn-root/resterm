@@ -1,6 +1,7 @@
 package helpdoc
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"strings"
@@ -105,30 +106,17 @@ func TestDirectiveCoverage(t *testing.T) {
 
 func TestDocLinksExist(t *testing.T) {
 	root := os.DirFS("../..")
-	nav, err := fs.ReadFile(root, "site/src/docs/nav.ts")
-	if err != nil {
-		t.Fatal(err)
-	}
-	files, err := fs.Glob(root, "docs/*.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var docs strings.Builder
-	for _, name := range files {
-		data, err := fs.ReadFile(root, name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		docs.Write(data)
-		docs.WriteByte('\n')
-	}
-
 	for _, topic := range Topics() {
-		if !strings.Contains(string(nav), "slug: '"+topic.Doc.Page+"'") {
-			t.Errorf("site/src/docs/nav.ts has no page %q for %s", topic.Doc.Page, topic.ID)
+		doc, err := fs.ReadFile(root, "docs/"+topic.Doc.Page+"/README.md")
+		if errors.Is(err, fs.ErrNotExist) {
+			doc, err = fs.ReadFile(root, "docs/"+topic.Doc.Page+".md")
 		}
-		if topic.Doc.Heading != "" && !hasHeading(docs.String(), topic.Doc.Heading) {
-			t.Errorf("docs/ has no heading %q for %s", topic.Doc.Heading, topic.ID)
+		if err != nil {
+			t.Errorf("docs/ has no page %q for %s: %v", topic.Doc.Page, topic.ID, err)
+			continue
+		}
+		if topic.Doc.Heading != "" && !hasHeading(string(doc), topic.Doc.Heading) {
+			t.Errorf("docs/%s has no heading %q for %s", topic.Doc.Page, topic.Doc.Heading, topic.ID)
 		}
 	}
 }

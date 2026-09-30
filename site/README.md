@@ -18,5 +18,5 @@ npm run check    # type check
 
 ## Docs come from docs/
 
-The site does not keep its own copy of the docs. At build time it reads `../docs/*.md`  and transforms doc files into pages.
+The site does not keep its own copy of the docs. At build time it reads `../docs/**/*.md` and turns each file into one page.
 Screenshots are read from `../_media` and converted to WebP at build time.

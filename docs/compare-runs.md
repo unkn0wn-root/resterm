@@ -1,0 +1,38 @@
+# Compare runs
+
+Run the same request across multiple environments either inline or from the CLI:
+
+- Add `# @compare dev stage prod base=stage` to a request block to pin the order/baseline inside the file. Provide at least two environments; `base` is optional and defaults to the first entry. `baseline`, `primary`, and `ref` are alternate names for `base`, so only one of them may carry a value. Writing `base=` or `group=` with nothing after it is reported rather than treated as omitted.
+- Supply global defaults with `resterm --compare dev,stage,prod --compare-base stage`, then press `g+c` anywhere in the editor to reuse those targets even if the request lacks `@compare`.
+- While a compare run is active Resterm automatically enables a split layout, pins the previous response in the secondary pane, and streams progress in the status bar (`Compare dev✓ stage… prod?`). The new Compare tab renders a table with status/code/duration/diff summaries per environment.
+- Each compare sweep writes one bundled history entry (`COMPARE` method). [History and diffing](history.md) covers replaying it.
+- Navigate the Compare tab with ↑/↓ (or PgUp/PgDn/Home/End) to highlight any environment, then press `Enter` to load that environment’s snapshot into the primary pane while the configured baseline stays pinned in the secondary pane. The Diff tab (and Pretty/Raw/Headers) now reflect “selected ↔ baseline,” so choosing the baseline row yields an “identical” diff, while choosing another environment shows how it diverges from the baseline. To compare against a different reference, rerun with a new `base=` value or load the desired pair from History.
+
+Grouped compare varies exactly one group and holds every other active choice fixed:
+
+```http
+# @compare group=api dev uat prod base=dev
+GET {{services.api.base}}/health
+```
+
+The CLI equivalent is:
+
+```bash
+resterm --compare dev,uat,prod --compare-group api --compare-base dev
+```
+
+Profiles with spaces can be quoted inline, or comma-separated on the CLI as [`resterm run`](cli/run.md) shows. Compare on a grouped file requires a group. Unknown profiles or a baseline that is not one of the targets fail before the first network request.
+
+Use `@compare` alongside the usual metadata, e.g. to couple request-scoped variables per environment:
+
+```http
+### Smoke workflow
+# @name smoke
+# @compare dev stage prod base=prod
+POST {{services.api.base}}/status
+Accept: application/json
+
+{
+  "env": "{{services.api.name}}"
+}
+```

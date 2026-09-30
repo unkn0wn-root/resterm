@@ -1,26 +1,28 @@
 import { docHref, repoFile } from '../../site';
-import type { Anchors } from './assemble';
+import type { SourcePage } from './parse';
 
 const scheme = /^[a-z][a-z\d+.-]*:|^\/\//i;
-const docFile = /^(?:\.\/)?([\w.-]+\.md)$/;
+const root = 'https://docs.invalid/docs/';
 
-// resolveLink turns a link written for GitHub into one for the site. Links
-// between docs go to the page that now holds the heading. Other relative links
-// point into the repo.
-export function resolveLink(url: string, file: string, slug: string, anchors: Anchors): string {
+export const slugOf = (file: string) => file.replace(/(^|\/)README\.md$/, '').replace(/\.md$/, '');
+
+export function resolveLink(url: string, file: string, sources: ReadonlyMap<string, SourcePage>): string {
   if (scheme.test(url)) return url;
 
-  const at = url.indexOf('#');
-  const path = at < 0 ? url : url.slice(0, at);
-  const hash = at < 0 ? '' : url.slice(at + 1);
-
-  const target = path ? docFile.exec(path)?.[1] : file;
-  if (!target || !anchors.has(target)) {
-    return new URL(url, repoFile('docs/')).href;
+  const to = new URL(url, root + file);
+  if (!to.href.startsWith(root) || !to.pathname.endsWith('.md')) {
+    return new URL(url, repoFile(`docs/${file}`)).href;
   }
 
-  const found = anchors.resolve(target, hash);
-  if (!found) throw new Error(`docs/${file}: link "${url}" points to a heading that does not exist`);
-  if (found.slug === slug) return hash ? `#${hash}` : docHref(slug);
-  return docHref(found.slug, found.primary ? undefined : hash);
+  const target = decodeURIComponent(to.pathname.slice('/docs/'.length));
+  const hash = decodeURIComponent(to.hash.slice(1));
+  if (target === 'README.md') return docHref('');
+
+  const page = sources.get(target);
+  if (!page) throw new Error(`docs/${file}: link "${url}" points to docs/${target}, which is not a page`);
+  if (hash && !page.ids.has(hash)) {
+    throw new Error(`docs/${file}: link "${url}" points to a heading that does not exist`);
+  }
+  if (target === file && hash) return `#${hash}`;
+  return docHref(slugOf(target), hash);
 }
