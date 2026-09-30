@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/tunnel"
 )
 
@@ -39,6 +40,13 @@ func (o sessionOpener) open(
 			return o.dial(ctx, cfg)
 		})
 	if err != nil {
+		// A refused connection or a rejected handshake is a route failure. The
+		// cause stays as text because its network class would outrank route and
+		// read as if the target failed. Timeouts and local causes keep their class.
+		switch diag.ClassOf(err) {
+		case diag.ClassNetwork, diag.ClassUnknown:
+			return nil, diag.Newf(diag.ClassRoute, "open ssh tunnel to %s: %v", cfg.addr(), err)
+		}
 		return nil, err
 	}
 

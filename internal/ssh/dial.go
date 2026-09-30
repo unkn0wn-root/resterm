@@ -41,7 +41,8 @@ func dialSSH(ctx context.Context, execCfg execConfig) (sshClient, error) {
 
 	conn, chans, reqs, err := xssh.NewClientConn(netConn, addr, sshCfg)
 	if err != nil {
-		return nil, joinCloseErr(err, closeAuthConn(netConn, closeAuth))
+		// NewClientConn closes netConn when the handshake fails.
+		return nil, joinCloseErr(err, closeAuthConn(nil, closeAuth))
 	}
 	return wrapClient(xssh.NewClient(conn, chans, reqs), closeAuth), nil
 }
