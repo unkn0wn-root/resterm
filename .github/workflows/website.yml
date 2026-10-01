@@ -1,20 +1,20 @@
-name: Site
+name: Website
 
 on:
   push:
     branches:
       - main
     paths:
-      - "site/**"
+      - "website/**"
       - "docs/**"
       - "_media/**"
-      - ".github/workflows/site.yml"
+      - ".github/workflows/website.yml"
   pull_request:
     paths:
-      - "site/**"
+      - "website/**"
       - "docs/**"
       - "_media/**"
-      - ".github/workflows/site.yml"
+      - ".github/workflows/website.yml"
   release:
     types:
       - released
@@ -28,14 +28,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: site
+        working-directory: website
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version-file: site/.node-version
+          node-version-file: website/.node-version
           cache: npm
-          cache-dependency-path: site/package-lock.json
+          cache-dependency-path: website/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm test
@@ -47,5 +47,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: site
+          workingDirectory: website
           command: pages deploy dist --project-name=resterm --branch=main
