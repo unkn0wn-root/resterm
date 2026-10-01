@@ -23,7 +23,7 @@ describe('search', () => {
   });
 
   it('prefers a word in the heading over a word in the text', () => {
-    expect(search(entries, 'oauth')[0].entry.h).toBe('OAuth 2.0 directive');
+    expect(search(entries, 'oauth')[0]?.entry.h).toBe('OAuth 2.0 directive');
   });
 
   it('returns nothing for an empty query', () => {
@@ -42,8 +42,8 @@ describe('snippet', () => {
   it('cuts long text around the first hit', () => {
     const text = `${'lorem '.repeat(100)}needle ${'ipsum '.repeat(100)}`;
     const spans = snippet(text, ['needle'], 60);
-    expect(spans[0].text).toBe('...');
-    expect(spans.at(-1)!.text).toBe('...');
+    expect(spans[0]?.text).toBe('...');
+    expect(spans.at(-1)?.text).toBe('...');
     expect(spans.some((s) => s.mark && s.text === 'needle')).toBe(true);
   });
 });

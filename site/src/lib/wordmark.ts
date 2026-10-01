@@ -1,6 +1,6 @@
 // The empty response pane logo from internal/ui/model_core.go. Each character
 // cell holds two square pixels: the top and bottom half of a block.
-const art = ['░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█', '░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█', '░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀'];
+const art = ['░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█', '░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█', '░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀'] as const;
 
 const halves: Record<string, [top: boolean, bottom: boolean]> = {
   '█': [true, true],
