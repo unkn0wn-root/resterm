@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.10.3](https://github.com/unkn0wn-root/resterm/compare/v1.10.2...v1.10.3) (2026-10-01)
+
+
+### Features
+
+* **www:** play the landing page terminal like a live session ([2d4d6cb](https://github.com/unkn0wn-root/resterm/commit/2d4d6cb9203a3829fb5ef82964b28988025aae56))
+
+
+### Bug Fixes
+
+* **www:** start the terminal when its first line is on screen ([cc8fa0d](https://github.com/unkn0wn-root/resterm/commit/cc8fa0dd649d34e19fde5b635e660900223415bc))
+
 ### [1.10.2](https://github.com/unkn0wn-root/resterm/compare/v1.10.1...v1.10.2) (2026-09-29)
 
 ### [1.10.1](https://github.com/unkn0wn-root/resterm/compare/v1.10.0...v1.10.1) (2026-09-28)
