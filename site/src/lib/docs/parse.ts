@@ -1,83 +1,105 @@
 import GithubSlugger from 'github-slugger';
-import type { Heading, RootContent } from 'mdast';
+import type { RootContent } from 'mdast';
 import { toString } from 'mdast-util-to-string';
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
-export interface Section {
+export interface TocItem {
   id: string;
-  title: string;
   depth: number;
-  line: number;
-  heading: Heading;
-  body: RootContent[];
-  parent?: Section;
-  children: Section[];
+  text: string;
 }
 
-export interface SourceDoc {
-  file: string;
+export interface SourcePage {
   title: string;
-  titleId: string;
-  intro: RootContent[];
-  sections: Section[];
-  byId: Map<string, Section>;
+  anchor: string;
+  nodes: RootContent[];
+  ids: Set<string>;
+  toc: TocItem[];
+}
+
+export interface TocEntry {
+  file: string;
+  label: string;
+  summary: string;
+  line: number;
+}
+
+export interface TocGroup {
+  title: string;
+  pages: TocEntry[];
 }
 
 const parser = unified().use(remarkParse).use(remarkGfm);
 
-// Heading ids use GitHub's slug rules over the whole file, in order, so every
-// anchor matches the one GitHub shows for docs/<file>.md.
-export function parseSource(file: string, text: string): SourceDoc {
-  const root = parser.parse(text);
+export function parsePage(file: string, text: string): SourcePage {
+  // Use one slugger per file so repeated headings get the same IDs as on GitHub.
   const slugger = new GithubSlugger();
-  const doc: SourceDoc = { file, title: '', titleId: '', intro: [], sections: [], byId: new Map() };
+  const nodes: RootContent[] = [];
+  const ids = new Set<string>();
+  const toc: TocItem[] = [];
+  let head: { title: string; anchor: string } | undefined;
 
-  let current: Section | undefined;
-  const open: Section[] = [];
-
-  for (const node of root.children) {
+  for (const node of parser.parse(text).children) {
     if (node.type !== 'heading') {
-      if (current) current.body.push(node);
-      else if (doc.title) doc.intro.push(node);
+      nodes.push(node);
       continue;
     }
-
     const title = toString(node);
     const id = slugger.slug(title);
-    if (node.depth === 1 && !doc.title) {
-      doc.title = title;
-      doc.titleId = id;
+    ids.add(id);
+    if (node.depth === 1 && !head && title) {
+      head = { title, anchor: id };
       continue;
     }
-
-    while (open.length && open.at(-1)!.depth >= node.depth) open.pop();
-    const parent = open.at(-1);
-    const section: Section = {
-      id,
-      title,
-      depth: node.depth,
-      line: node.position?.start.line ?? 0,
-      heading: node,
-      body: [],
-      parent,
-      children: [],
-    };
-    if (parent) parent.children.push(section);
-    else doc.sections.push(section);
-    doc.byId.set(id, section);
-    open.push(section);
-    current = section;
+    node.data = { ...node.data, hProperties: { id } };
+    if (node.depth <= 3) toc.push({ id, depth: node.depth, text: title });
+    nodes.push(node);
   }
 
-  for (const section of doc.byId.values()) trimRule(section.body);
-  trimRule(doc.intro);
-  return doc;
+  if (!head) throw new Error(`docs/${file}: the page has no "# Title" heading`);
+  return { ...head, nodes, ids, toc };
 }
 
-// The manual separates top-level sections with "---". On a page of its own a
-// trailing rule is noise.
-function trimRule(nodes: RootContent[]) {
-  while (nodes.at(-1)?.type === 'thematicBreak') nodes.pop();
+export function parseToc(text: string): TocGroup[] {
+  const groups: TocGroup[] = [];
+  const errors: string[] = [];
+
+  for (const node of parser.parse(text).children) {
+    if (node.type === 'heading' && node.depth === 2) {
+      groups.push({ title: toString(node), pages: [] });
+      continue;
+    }
+    const group = groups.at(-1);
+    if (!group) continue;
+    if (node.type !== 'list') {
+      const line = node.position?.start.line ?? 0;
+      errors.push(`docs/README.md:${line}: expected only a list of pages under "${group.title}"`);
+      continue;
+    }
+    for (const item of node.children) {
+      const line = item.position?.start.line ?? 0;
+      const [para] = item.children;
+      const [link, ...rest] = para?.type === 'paragraph' ? para.children : [];
+      const after = toString(rest);
+      const summary = after.startsWith(':') ? after.slice(1).trim() : '';
+      if (item.children.length !== 1 || link?.type !== 'link' || !summary) {
+        errors.push(`docs/README.md:${line}: write the item as "[Label](file.md): summary"`);
+        continue;
+      }
+      const label = toString(link).trim();
+      if (!label) {
+        errors.push(`docs/README.md:${line}: the page label must not be empty`);
+        continue;
+      }
+      group.pages.push({ file: link.url.replace(/^\.\//, ''), label, summary, line });
+    }
+  }
+
+  if (!errors.length && !groups.some((group) => group.pages.length)) {
+    errors.push('docs/README.md: the table of contents must contain at least one page');
+  }
+  if (errors.length) throw new Error(`docs/README.md is not a table of contents:\n  ${errors.join('\n  ')}`);
+  return groups;
 }

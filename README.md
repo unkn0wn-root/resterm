@@ -220,11 +220,11 @@ More in the [recording reference](https://resterm.app/docs/recording/).
 | **Auth and connectivity** | [OAuth 2.0](https://resterm.app/docs/authentication/#oauth-20-directive), [auth from your own CLI](https://resterm.app/docs/authentication/#command-backed-auth), [SSH tunnels](https://resterm.app/docs/ssh-tunnels/), [Kubernetes port-forwards](https://resterm.app/docs/kubernetes/) |
 | **Scripting** | [RestermScript](https://resterm.app/docs/rts/), [JavaScript hooks](https://resterm.app/docs/scripting/), [headless Go API](./headless), [resterm-runner](https://github.com/unkn0wn-root/resterm-runner) |
 | **In and out** | [curl import](https://resterm.app/docs/workspaces/#inline-requests), [OpenAPI import](https://resterm.app/docs/cli/import/), [collection sharing](https://resterm.app/docs/collections/), [response history and diffing](https://resterm.app/docs/history/) |
-| **Setup** | [environments and variables](https://resterm.app/docs/variables/), [configuration](https://resterm.app/docs/configuration/), [themes](https://resterm.app/docs/theming/), [key bindings](https://resterm.app/docs/ui-tour/#custom-bindings) |
+| **Setup** | [environments and variables](https://resterm.app/docs/variables/), [configuration](https://resterm.app/docs/configuration/), [themes](https://resterm.app/docs/theming/), [key bindings](https://resterm.app/docs/key-bindings/#custom-bindings) |
 
 ## Keys
 
-Press `?` for general Resterm help and `Shift+k` for help on whatever is under the cursor. The full table is in the [UI tour](https://resterm.app/docs/ui-tour/). For quick start, you only need:
+Press `?` for general Resterm help and `Shift+k` for help on whatever is under the cursor. The full table is in [Key bindings](https://resterm.app/docs/key-bindings/). For quick start, you only need:
 
 - `Ctrl+Enter` sends the request
 - `Tab` / `Shift+Tab` switches panes
@@ -232,14 +232,14 @@ Press `?` for general Resterm help and `Shift+k` for help on whatever is under t
 
 ## Documentation
 
-The documentation lives at [resterm.app/docs](https://resterm.app/docs/). The site is built from the [`docs/`](./docs) directory in this repo.
+The documentation lives at [resterm.app/docs](https://resterm.app/docs/). The site is built from the [`docs/`](./docs) directory in this repo, one file per page. [`docs/README.md`](./docs/README.md) lists every page.
 
-- [Request files, directives, scripting and transports](https://resterm.app/docs/), from [`docs/resterm.md`](./docs/resterm.md).
-- [CLI](https://resterm.app/docs/cli/) with `resterm run`, importers, collections and history, from [`docs/cli.md`](./docs/cli.md).
-- [RestermScript reference](https://resterm.app/docs/rts/), from [`docs/restermscript.md`](./docs/restermscript.md).
+- [Request files, directives, scripting and transports](https://resterm.app/docs/).
+- [CLI](https://resterm.app/docs/cli/) with `resterm run`, importers, collections and history.
+- [RestermScript reference](https://resterm.app/docs/rts/).
 - [Compatibility](https://resterm.app/docs/compatibility/) lists what stays stable through v1.
 
-Inside the TUI, `:help <topic>` opens the embedded manual and `:docs <topic>` opens the web copy for the installed release.
+Inside the TUI, `:help <topic>` opens the embedded manual and `:docs <topic>` opens the matching page on resterm.app.
 
 ## Sponsor
 

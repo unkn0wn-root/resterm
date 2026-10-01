@@ -18,7 +18,9 @@ const rect = (x: number, y: number, w: number, h: number) => `<rect x="${x}" y="
 function label(text: string, x: number, y: number, dot: number): string {
   let out = '';
   [...text].forEach((ch, i) => {
-    glyphs[ch].forEach((row, r) => {
+    const glyph = glyphs[ch];
+    if (!glyph) throw new Error(`Unsupported label character: ${ch}`);
+    glyph.forEach((row, r) => {
       [...row].forEach((c, col) => {
         if (c === '#') out += rect(x + (i * 4 + col) * dot, y + r * dot, dot * 0.9, dot * 0.9);
       });

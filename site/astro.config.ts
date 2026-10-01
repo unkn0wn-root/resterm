@@ -9,6 +9,9 @@ export default defineConfig({
     format: 'directory',
   },
   integrations: [sitemap()],
+  // Docs render through src/lib/docs. In dev Astro still runs its own markdown
+  // pass over the imported .md files, and its Shiki does not know rts.
+  markdown: { syntaxHighlight: false },
   vite: {
     server: {
       fs: {

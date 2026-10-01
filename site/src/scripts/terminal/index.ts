@@ -2,7 +2,7 @@ import { delayBefore, keyDelay, type Tone } from './timing';
 
 interface Line {
   el: HTMLElement;
-  tone?: Tone;
+  tone: Tone | undefined;
   cmd: HTMLElement | null;
 }
 

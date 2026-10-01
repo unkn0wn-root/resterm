@@ -9,9 +9,8 @@ import (
 
 const docsHost = "resterm.app"
 
-// DocRef points at a page on the docs site. Page is a slug from site/src/docs/nav.ts.
-// Important to remember that released binaries keep these links, so renaming
-// a page needs a redirect on the site.
+// DocRef points to a docs page. Page is a path under docs/ without .md.
+// Released binaries keep these links, so renamed pages need a redirect.
 type DocRef struct {
 	Page    string
 	Heading string

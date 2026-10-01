@@ -21,9 +21,7 @@ const { toc, source } = Astro.props;
       </ol>
     )}
     <p class="source">
-      <a href={source.url}>
-        {source.path}:{source.line}
-      </a>
+      <a href={source.url}>{source.path}</a>
     </p>
   </div>
 </aside>

@@ -10,7 +10,9 @@ export const site = {
 
 const ref = process.env.SITE_REF || 'main';
 
-export const repoFile = (path: string, line?: number) =>
-  `${site.repo}/blob/${ref}/${path}${line ? `?plain=1#L${line}` : ''}`;
+export const repoFile = (path: string) => `${site.repo}/blob/${ref}/${path}`;
 
-export const docHref = (slug: string, hash?: string) => `/docs/${slug}/${hash ? `#${hash}` : ''}`;
+export const docHref = (slug: string, hash?: string) => {
+  const path = slug ? `/docs/${slug}/` : '/docs/';
+  return hash ? `${path}#${hash}` : path;
+};

@@ -5,10 +5,9 @@ import { version } from '../lib/version';
 interface Props {
   file: string;
   focus: string;
-  source?: { line: number; url: string };
 }
 
-const { file, focus, source } = Astro.props;
+const { file, focus } = Astro.props;
 ---
 
 <footer class="status" aria-label="Status bar">
@@ -24,11 +23,6 @@ const { file, focus, source } = Astro.props;
     {focus}
   </span>
   <span class="plain mode">▸ NORMAL</span>
-  {source && (
-    <a class="plain pos" href={source.url} title="View this section in the source file">
-      Ln {source.line}
-    </a>
-  )}
   <span class="plain" id="status-scroll">
     Top
   </span>
