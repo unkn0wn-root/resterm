@@ -1,4 +1,4 @@
-.PHONY: fmt fmt-check fix site-dev site-check site-deploy
+.PHONY: fmt fmt-check fix website-dev website-check website-deploy
 
 fmt:
 	golangci-lint fmt .
@@ -10,12 +10,12 @@ fix:
 	go fix -omitzero=false ./...
 	$(MAKE) fmt
 
-site-dev:
-	cd site && npm run dev
+website-dev:
+	cd website && npm run dev
 
-site-check:
-	cd site && npm run check && npm test && npm run build
+website-check:
+	cd website && npm run check && npm test && npm run build
 
-site-deploy:
-	gh workflow run site.yml --ref main
+website-deploy:
+	gh workflow run website.yml --ref main
 	@echo "Deploy started. Follow it with: gh run watch"

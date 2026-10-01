@@ -1,6 +1,6 @@
 # Resterm documentation
 
-Each page below is one file in this directory. The same pages are published at https://resterm.app/docs/. To add or change a page, see [site/README.md](../site/README.md#docs-come-from-docs).
+Each page below is one file in this directory. The same pages are published at https://resterm.app/docs/. To add or change a page, see [website/README.md](../website/README.md#docs-come-from-docs).
 
 ## Getting started
 

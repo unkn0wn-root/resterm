@@ -16,8 +16,8 @@ npm test         # unit tests, including a full pass over the real docs
 npm run check    # type check
 ```
 
-From the repo root, `make site-dev`, `make site-check` and `make site-deploy` do the same.
-`make site-deploy` runs the Site workflow on `main`, which checks, builds and publishes to resterm.app. It needs `gh` to be logged in.
+From the repo root, `make website-dev`, `make website-check` and `make website-deploy` do the same.
+`make website-deploy` runs the Website workflow on `main`, which checks, builds and publishes to resterm.app. It needs `gh` to be logged in.
 
 ## Docs come from docs/
 
