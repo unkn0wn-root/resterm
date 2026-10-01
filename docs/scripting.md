@@ -88,7 +88,7 @@ Objects:
 - `tests.fail(message)` - explicit failure.
 - `response`
   - `status`, `statusCode`, `url`, `duration`
-  - `body()` (raw string)
+  - `body` (raw string)
   - `json()` (parsed JSON or `null`)
   - `headers.get(name)`, `headers.has(name)`, `headers.all` (lowercase map). For gRPC the map merges response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`, and `-bin` values arrive base64-encoded.
 - `stream`

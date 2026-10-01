@@ -207,7 +207,7 @@ GET https://api.github.com/user/repos
 | --- | --- | --- |
 | Basic | `# @auth basic user pass` | Injects `Authorization: Basic …`. Templates expand inside parameters. |
 | Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
-| API key | `# @auth apikey header X-API-Key {{key}}` | `placement` can be `header` or `query`. Defaults to the `X-API-Key` header if the name is omitted. |
+| API key | `# @auth apikey header X-API-Key {{key}}` | Write the placement, the name, and the value. `placement` can be `header` or `query`. An `auth` dict in `@apply` or `@patch` may leave out `name`, which then defaults to the `X-API-Key` header. |
 | Custom header | `# @auth Authorization CustomValue` | Any header and value. |
 | Command | `# @auth command cmd="gh auth token"` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
 | Named command | `# @auth use=gh` | Uses a command auth defined once with `@auth file` or `@auth global` and a name. |
