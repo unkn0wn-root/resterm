@@ -1,7 +1,9 @@
-// Tabs follow the ARIA tabs pattern: arrow keys move between tabs and only the
-// selected tab is in the tab order.
+// Tabs follow the ARIA tabs pattern: arrow keys along the tablist orientation
+// move between tabs and only the selected tab is in the tab order.
 function mount(root: Element) {
   const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const vertical = root.querySelector('[role="tablist"]')?.getAttribute('aria-orientation') === 'vertical';
+  const [next, prev] = vertical ? ['ArrowDown', 'ArrowUp'] : ['ArrowRight', 'ArrowLeft'];
   const select = (index: number, focus: boolean) => {
     tabs.forEach((tab, i) => {
       const on = i === index;
@@ -13,8 +15,8 @@ function mount(root: Element) {
     });
   };
   const keys: Record<string, (i: number) => number> = {
-    ArrowRight: (i) => (i + 1) % tabs.length,
-    ArrowLeft: (i) => (i - 1 + tabs.length) % tabs.length,
+    [next]: (i) => (i + 1) % tabs.length,
+    [prev]: (i) => (i - 1 + tabs.length) % tabs.length,
     Home: () => 0,
     End: () => tabs.length - 1,
   };

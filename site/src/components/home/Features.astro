@@ -1,158 +1,205 @@
 ---
+import authentication from '../../content/features/authentication.http?raw';
+import mockServers from '../../content/features/mock-servers.http?raw';
+import protocols from '../../content/features/protocols.http?raw';
+import recording from '../../content/features/recording.http?raw';
+import requestFiles from '../../content/features/request-files.http?raw';
+import restermRun from '../../content/features/resterm-run.http?raw';
+import restermscript from '../../content/features/restermscript.http?raw';
+import tracing from '../../content/features/tracing.http?raw';
+import tunnels from '../../content/features/tunnels.http?raw';
+import workflows from '../../content/features/workflows.http?raw';
 import { docHref } from '../../site';
+import EditorCode from './EditorCode.astro';
 
-const features = [
-  {
-    badge: 'HTTP',
-    tone: 'get',
-    name: 'request-files',
-    text: 'Plain .http and .rest files. Directives in # @ comments add names, captures, asserts and settings.',
-    href: docHref('request-files'),
-  },
-  {
-    badge: 'GRPC',
-    tone: 'grpc',
-    name: 'protocols',
-    text: 'HTTP, GraphQL, gRPC, WebSocket and SSE, all from the same editor.',
-    href: docHref('grpc'),
-  },
-  {
-    badge: 'WF',
-    tone: 'post',
-    name: 'workflows',
-    text: 'Chain requests into steps. Capture values, assert on responses, branch with @if and loop with @for-each.',
-    href: docHref('workflows'),
-  },
-  {
-    badge: 'MOCK',
-    tone: 'put',
-    name: 'mock-servers',
-    text: 'Mock responses live next to the requests they stand in for, with matching rules and sequences.',
-    href: docHref('mock-servers'),
-  },
-  {
-    badge: 'REC',
-    tone: 'delete',
-    name: 'recording',
-    text: 'Point your app at the Resterm proxy and save its traffic as requests, mocks or both.',
-    href: docHref('recording'),
-  },
-  {
-    badge: 'AUTH',
-    tone: 'patch',
-    name: 'authentication',
-    text: 'OAuth 2.0 with PKCE, or reuse tokens from CLIs you already have, like gh auth token.',
-    href: docHref('authentication'),
-  },
-  {
-    badge: 'SSH',
-    tone: 'ws',
-    name: 'tunnels',
-    text: '@ssh and @k8s send a request through a bastion or a port-forward that Resterm opens and closes.',
-    href: docHref('ssh-tunnels'),
-  },
+// Tones are the .method-* classes in src/styles/base.css.
+type Tone = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'grpc' | 'ws' | 'options' | 'rts';
+
+interface Feature {
+  badge: string;
+  tone: Tone;
+  name: string;
+  href: string;
+  example: string;
+}
+
+const features: Feature[] = [
+  { badge: 'HTTP', tone: 'get', name: 'request-files', href: docHref('request-files'), example: requestFiles },
+  { badge: 'GRPC', tone: 'grpc', name: 'protocols', href: docHref('grpc'), example: protocols },
+  { badge: 'WF', tone: 'post', name: 'workflows', href: docHref('workflows'), example: workflows },
+  { badge: 'MOCK', tone: 'put', name: 'mock-servers', href: docHref('mock-servers'), example: mockServers },
+  { badge: 'REC', tone: 'delete', name: 'recording', href: docHref('recording'), example: recording },
+  { badge: 'AUTH', tone: 'patch', name: 'authentication', href: docHref('authentication'), example: authentication },
+  { badge: 'SSH', tone: 'ws', name: 'tunnels', href: docHref('ssh-tunnels'), example: tunnels },
   {
     badge: 'TRACE',
     tone: 'options',
     name: 'tracing',
-    text: 'Timeline tracing, profiling and compare runs across environments.',
     href: docHref('ui-tour', 'timeline--tracing'),
+    example: tracing,
   },
-  {
-    badge: 'RTS',
-    tone: 'rts',
-    name: 'restermscript',
-    text: 'A small expression language made for requests. JavaScript hooks when you want them.',
-    href: docHref('rts'),
-  },
-  {
-    badge: 'RUN',
-    tone: 'get',
-    name: 'resterm-run',
-    text: 'Run the same files headless in CI, with JSON and JUnit output.',
-    href: docHref('cli/run'),
-  },
+  { badge: 'RTS', tone: 'rts', name: 'restermscript', href: docHref('rts'), example: restermscript },
+  { badge: 'RUN', tone: 'get', name: 'resterm-run', href: docHref('cli/run'), example: restermRun },
 ];
 ---
 
-<div class="nav pane">
-  <span class="pane-title">features.http ({features.length})</span>
-  <ul>
-    {features.map((f) => (
-      <li>
-        <a href={f.href}>
+<div class="features" data-tabs>
+  <div class="pane files">
+    <span class="pane-title">Files</span>
+    <p class="file" aria-hidden="true">
+      <span class="mark">•</span>
+      <span class="mark">▾</span>
+      features.http ({features.length})
+    </p>
+    <div role="tablist" aria-label="Features" aria-orientation="vertical">
+      {features.map((f, i) => (
+        <button
+          type="button"
+          role="tab"
+          id={`feature-tab-${f.name}`}
+          aria-controls={`feature-${f.name}`}
+          aria-selected={i === 0 ? 'true' : 'false'}
+          tabindex={i === 0 ? 0 : -1}
+        >
           <span class={`method method-${f.tone}`}>{f.badge}</span>
           <span class="name">{f.name}</span>
-          <span class="text">{f.text}</span>
+        </button>
+      ))}
+    </div>
+  </div>
+
+  <div class="pane pane-editor editor">
+    {features.map((f, i) => (
+      <div
+        class="panel"
+        id={`feature-${f.name}`}
+        role="tabpanel"
+        aria-labelledby={`feature-tab-${f.name}`}
+        hidden={i !== 0}
+      >
+        <span class="pane-title">{f.name}.http</span>
+        <EditorCode code={f.example} />
+        <a class="docs" href={f.href}>
+          <span aria-hidden="true">▣</span> {f.name} docs
         </a>
-      </li>
+      </div>
     ))}
-  </ul>
+  </div>
 </div>
 
 <style>
-  .nav {
-    padding: 1rem 0.5rem 0.75rem;
-  }
-
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  a {
+  .features {
     display: grid;
-    grid-template-columns: 1ch 6ch 15ch minmax(0, 1fr);
-    gap: 1.5ch;
-    align-items: baseline;
-    padding: 0.4rem 1ch;
-    color: var(--fg);
-    text-decoration: none;
+    grid-template-columns: minmax(max-content, 18rem) minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  .files {
+    padding: 1rem 0.5rem 0.75rem;
     font-size: 0.875rem;
   }
 
-  a::before {
+  /* The border shows keyboard focus, like the focused pane in the TUI. */
+  .files:has(:focus-visible) {
+    --pane-border: var(--focus);
+    --pane-title: var(--focus);
+  }
+
+  .file {
+    display: flex;
+    gap: 1ch;
+    padding: 0.2rem 0.75ch;
+    color: var(--fg-strong);
+    font-weight: 600;
+  }
+
+  .mark {
+    color: var(--fg-dim);
+    font-weight: 400;
+  }
+
+  [role='tab'] {
+    display: grid;
+    grid-template-columns: 1ch 5ch minmax(0, 1fr);
+    gap: 1ch;
+    width: 100%;
+    padding: 0.2rem 0.75ch 0.2rem 2.75ch;
+    border: 0;
+    background: none;
+    color: var(--fg);
+    text-align: left;
+  }
+
+  [role='tab']::before {
     content: '';
     color: var(--focus);
   }
 
-  a:hover,
-  a:focus-visible {
-    background: var(--bg-sel);
+  [role='tab']:hover {
+    background: var(--bg-hover);
+  }
+
+  [role='tab']:focus-visible {
     outline: none;
   }
 
-  a:hover::before,
-  a:focus-visible::before {
+  [role='tab'][aria-selected='true'] {
+    background: var(--bg-sel);
+  }
+
+  [role='tab'][aria-selected='true']::before {
     content: '›';
   }
 
-  :root[data-theme='light'] a:hover::before {
+  :root[data-theme='light'] [role='tab'][aria-selected='true']::before {
     color: var(--fg-strong);
   }
 
-  .name {
+  [aria-selected='true'] .name {
     color: var(--fg-strong);
+    font-weight: 600;
   }
 
-  .text {
-    font-family: var(--font-sans);
-    color: var(--fg-muted);
-    line-height: 1.5;
+  .editor {
+    display: grid;
+    font-size: 0.8rem;
+    line-height: 1.65;
   }
 
-  a:hover .text {
-    color: var(--fg);
+  /* The light theme comment color is too faint for the descriptions. */
+  :root[data-theme='light'] .editor {
+    --syn-comment: var(--fg-muted);
   }
 
-  @media (max-width: 720px) {
-    a {
-      grid-template-columns: 1ch 6ch minmax(0, 1fr);
-      row-gap: 0.15rem;
-    }
-    .text {
-      grid-column: 3;
+  .panel {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* Panels share one cell and hidden ones keep their space, so the pane fits
+     the longest example and does not resize when the selection changes. */
+  .panel[hidden] {
+    display: flex;
+    visibility: hidden;
+  }
+
+  .docs {
+    padding: 0.6rem 1rem 0.7rem;
+    border-top: 1px dashed var(--line);
+    color: var(--accent-text);
+    font-size: 0.8125rem;
+    text-decoration: none;
+  }
+
+  .docs:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 960px) {
+    .features {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>

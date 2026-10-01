@@ -1,0 +1,10 @@
+# Run the same files headless in CI, with JSON and JUnit
+# output.
+# resterm run --tag smoke --format junit api.http > report.xml
+
+### Health
+# @name health
+# @tag smoke
+# @assert response.statusCode == 200
+# @assert response.json("status") == "ok"
+GET {{base.url}}/health

@@ -1,11 +1,10 @@
 ---
 import source from '../../content/demo.http?raw';
-import { highlightHtml } from '../../lib/highlight';
 import type { Tone } from '../../scripts/terminal/timing';
+import EditorCode from './EditorCode.astro';
 
 // The transcript is a real run of src/content/demo.http against its own mocks.
 const cursor = source.split('\n').findIndex((l) => l.startsWith('POST {{base.url}}/hello')) + 1;
-const code = await highlightHtml(source.trimEnd(), 'http', cursor);
 
 const run: [text: string, tone?: Tone][] = [
   ['resterm mock requests.http &', 'cmd'],
@@ -50,7 +49,7 @@ const transcript = run
 <div class="demo">
   <div class="pane pane-editor editor">
     <span class="pane-title">requests.http</span>
-    <div class="code" set:html={code} />
+    <EditorCode code={source} {cursor} />
   </div>
   <div class="pane pane-response term" data-terminal>
     <span class="pane-title">Terminal</span>
@@ -82,50 +81,10 @@ const transcript = run
     line-height: 1.65;
   }
 
-  .code,
   .screen {
     flex: 1;
     overflow-x: auto;
-    padding-block: 1.2rem 1rem;
-  }
-
-  .code :global(pre) {
-    background: transparent !important;
-  }
-
-  .code :global(code) {
-    counter-reset: line;
-    display: block;
-    width: max-content;
-    min-width: 100%;
-  }
-
-  .code :global(.line) {
-    display: inline-block;
-    width: 100%;
-    padding-right: 1rem;
-  }
-
-  .code :global(.line)::before {
-    counter-increment: line;
-    content: counter(line);
-    display: inline-block;
-    width: 3ch;
-    margin: 0 1.5ch 0 1ch;
-    text-align: right;
-    color: var(--fg-dim);
-  }
-
-  .code :global(.cursor) {
-    background: var(--bg-hover);
-  }
-
-  .code :global(.cursor)::before {
-    color: var(--fg-strong);
-  }
-
-  .screen {
-    padding-inline: 1.25rem;
+    padding: 1.2rem 1.25rem 1rem;
     color: var(--fg);
   }
 

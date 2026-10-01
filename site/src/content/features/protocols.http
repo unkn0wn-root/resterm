@@ -1,0 +1,11 @@
+# HTTP, GraphQL, gRPC, WebSocket and SSE, all from the
+# same editor.
+
+### Generate report
+# @name GenerateReport
+# @grpc analytics.ReportingService/GenerateReport
+# @grpc-reflection true
+# @grpc-metadata x-trace-id: {{$uuid}}
+GRPC {{grpc.host}}
+
+{"reportId": "rep-42", "includeHistorical": true}

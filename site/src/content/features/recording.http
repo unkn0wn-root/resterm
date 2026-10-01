@@ -1,0 +1,15 @@
+# Point your app at the Resterm proxy and save its traffic
+# as requests, mocks or both.
+# resterm record --upstream https://api.example.com --out captured.http --mode both
+
+### get-users-42
+# @name get-users-42
+# @assert response.statusCode == 200
+GET {{recordedBaseUrl}}/users/42
+Accept: application/json
+
+### get-users-42-mock
+# @mock method=GET path=/users/42 name=get-users-42-mock interpolate=false
+HTTP/1.1 200 OK
+
+{"id": 42, "name": "Ada"}

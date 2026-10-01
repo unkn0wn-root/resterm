@@ -1,0 +1,10 @@
+# The @ssh and @k8s directives send a request through a
+# bastion or a port-forward that Resterm opens and closes.
+
+### Through a bastion
+# @ssh request host=bastion.example.com user=ops key=~/.ssh/id_ed25519
+GET http://10.0.0.10/v1/health
+
+### Through a Kubernetes port-forward
+# @k8s namespace=default service=api port=http
+GET http://api.default.svc.cluster.local/v1/health

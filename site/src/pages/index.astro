@@ -67,9 +67,10 @@ const hints: [string, string][] = [
         Requests are plain text
       </h2>
       <p>
-        <strong>Resterm</strong> works with the tools you already use. Edit requests in any text editor and track changes
-        in Git. Keep requests, mocks, workflows and environments alongside your code. Use the terminal UI with
-        autocomplete to edit and send requests, or run the same files in CI with <code>resterm run</code>.
+        Requests, mocks, workflows and environments are files in your repository. Edit them in any editor or in the
+        terminal UI with autocomplete, and review changes in Git with the rest of your code. One file can hold both
+        mocks and requests. <code>resterm mock</code> serves the mocks and <code>resterm run</code> sends the requests,
+        so you can test without a real backend.
       </p>
     </header>
     <RunDemo />
@@ -83,7 +84,7 @@ const hints: [string, string][] = [
         </span>
         What it does
       </h2>
-      <p>Send requests, build workflows and mock APIs from your terminal.</p>
+      <p>Most features are one directive in a request file. Pick one to see it in use.</p>
     </header>
     <Features />
   </section>
@@ -96,7 +97,7 @@ const hints: [string, string][] = [
         </span>
         Install
       </h2>
-      <p>Available for macOS, Linux and Windows. One binary. No runtime required.</p>
+      <p>A single binary for macOS, Linux and Windows.</p>
     </header>
     <Install />
   </section>

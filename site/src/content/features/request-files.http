@@ -1,0 +1,11 @@
+# Plain .http and .rest files. Directives in # @ comments
+# add names, captures, asserts and settings.
+
+### Log in
+# @name login
+# @capture file auth.token {{response.json.token}}
+# @assert response.statusCode == 200
+POST {{base.url}}/login
+Content-Type: application/json
+
+{"user": "ada", "password": "{{password}}"}
