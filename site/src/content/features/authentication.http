@@ -1,0 +1,11 @@
+# OAuth 2.0 with PKCE, or reuse tokens from CLIs you
+# already have, like gh auth token.
+# @auth file command cmd="gh auth token"
+
+### GitHub user
+GET https://api.github.com/user
+Accept: application/vnd.github+json
+
+### Sign in with OAuth 2.0 and PKCE
+# @auth oauth2 grant=authorization_code auth_url={{oauth.authUrl}} token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}}
+GET {{api.url}}/me

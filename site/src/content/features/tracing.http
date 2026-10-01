@@ -1,0 +1,14 @@
+# Timeline tracing, profiling and compare runs across
+# environments.
+
+### Trace with budgets
+# @trace dns<=40ms connect<=120ms ttfb<=300ms total<=600ms
+GET {{base.url}}/health
+
+### Profile latency
+# @profile count=50 warmup=5
+GET {{base.url}}/health
+
+### Compare environments
+# @compare dev stage prod base=stage
+GET {{base.url}}/health

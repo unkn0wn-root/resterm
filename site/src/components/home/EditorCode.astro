@@ -1,0 +1,56 @@
+---
+import { highlightHtml } from '../../lib/highlight';
+
+interface Props {
+  code: string;
+  cursor?: number;
+}
+
+const { code, cursor } = Astro.props;
+const html = await highlightHtml(code.trimEnd(), 'http', cursor);
+---
+
+<div class="code" set:html={html} />
+
+<style>
+  .code {
+    flex: 1;
+    overflow-x: auto;
+    padding-block: 1.2rem 1rem;
+  }
+
+  .code :global(pre) {
+    background: transparent !important;
+  }
+
+  .code :global(code) {
+    counter-reset: line;
+    display: block;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .code :global(.line) {
+    display: inline-block;
+    width: 100%;
+    padding-right: 1rem;
+  }
+
+  .code :global(.line)::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 3ch;
+    margin: 0 1.5ch 0 1ch;
+    text-align: right;
+    color: var(--fg-dim);
+  }
+
+  .code :global(.cursor) {
+    background: var(--bg-hover);
+  }
+
+  .code :global(.cursor)::before {
+    color: var(--fg-strong);
+  }
+</style>

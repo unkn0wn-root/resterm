@@ -1,0 +1,15 @@
+# Chain requests into steps. Capture values, assert on
+# responses, branch with @if and loop with @for-each.
+
+# @workflow signup
+# @step Create using=CreateUser expect.statuscode=201
+# @step Fetch using=GetUser expect.statuscode=200
+
+### Create user
+# @name CreateUser
+# @capture file user.id {{response.json.id}}
+POST {{base.url}}/users
+
+### Get user
+# @name GetUser
+GET {{base.url}}/users/{{user.id}}

@@ -1,0 +1,10 @@
+# A small expression language made for requests.
+# JavaScript hooks when you want them.
+
+### Search
+# @skip-if env.mode == "dry-run"
+# @assert len(response.json("items")) > 0
+# @script pre-request
+> request.setHeader("X-Request-ID", `req-${Date.now()}`);
+GET {{base.url}}/search?q={{= url.encode(vars.get("query")) }}
+Authorization: {{= "Bearer " + vars.get("auth.token") }}
