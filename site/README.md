@@ -16,6 +16,9 @@ npm test         # unit tests, including a full pass over the real docs
 npm run check    # type check
 ```
 
+From the repo root, `make site-dev`, `make site-check` and `make site-deploy` do the same.
+`make site-deploy` runs the Site workflow on `main`, which checks, builds and publishes to resterm.app. It needs `gh` to be logged in.
+
 ## Docs come from docs/
 
 The site does not keep its own copy of the docs. At build time it reads `../docs/**/*.md` and turns each file into one page.
