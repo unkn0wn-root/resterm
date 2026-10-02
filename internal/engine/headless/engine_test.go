@@ -243,8 +243,7 @@ func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
 
-	// Default (headless / `resterm run`): expression-relative column (base 1) and
-	// no source attached, exactly as before the source-span change.
+	// Default (headless / `resterm run`): the file column and no source attached.
 	res, err := New(engine.Config{}).ExecuteRequest(
 		doc,
 		doc.Requests[0],
@@ -263,8 +262,8 @@ func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
 	if len(rep.Source) != 0 {
 		t.Fatalf("expected no source attached without SourceDiagnostics, got %q", rep.Source)
 	}
-	if col := rep.Items[0].Span.Start.Col; col != 15 {
-		t.Fatalf("expected pre-gate expression-relative column 15, got %d", col)
+	if col := rep.Items[0].Span.Start.Col; col != 25 {
+		t.Fatalf("expected the file column 25, got %d", col)
 	}
 
 	// TUI (SourceDiagnostics): precise column at the '&' plus source for the caret.
@@ -308,8 +307,7 @@ func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
 
-	// Default (headless / `resterm run`): expression-relative column (base 1) and
-	// no source attached, exactly as before the source-span change.
+	// Default (headless / `resterm run`): the file column and no source attached.
 	res, err := New(engine.Config{}).ExecuteRequest(
 		doc,
 		doc.Requests[0],
@@ -328,8 +326,8 @@ func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
 	if len(rep.Source) != 0 {
 		t.Fatalf("expected no source attached without SourceDiagnostics, got %q", rep.Source)
 	}
-	if col := rep.Items[0].Span.Start.Col; col != 8 {
-		t.Fatalf("expected pre-gate expression-relative column 8, got %d", col)
+	if col := rep.Items[0].Span.Start.Col; col != 30 {
+		t.Fatalf("expected the file column 30, got %d", col)
 	}
 
 	// TUI (SourceDiagnostics): precise column at the '&' plus source for the caret.

@@ -573,3 +573,18 @@ GET `+srv.URL+`/plain
 		}
 	}
 }
+
+func TestDirectiveErrorPointsAtTheFileColumn(t *testing.T) {
+	doc, req := parseDoc(
+		t,
+		"### one\n# @name one\n# @assert vars.require(\"never.declared\", \"x\")\nGET http://example.test\n",
+	)
+	eng, _ := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, envWith(t, "dev", nil), ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.ScriptErr == nil || !strings.Contains(res.ScriptErr.Error(), "env_ref.http:3:23:") {
+		t.Fatalf("script error = %v, want the call at env_ref.http:3:23", res.ScriptErr)
+	}
+}
