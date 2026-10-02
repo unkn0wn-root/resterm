@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.11.0](https://github.com/unkn0wn-root/resterm/compare/v1.10.3...v1.11.0) (2026-10-02)
+
+
+### Features
+
+* **parser:** warn when apply or patch strings hold templates ([093e23d](https://github.com/unkn0wn-root/resterm/commit/093e23dfcf5a2bdebf122bd00da687d51162a3c4))
+* **rts:** add SHA-512 digest support ([24efccc](https://github.com/unkn0wn-root/resterm/commit/24efccc793f075b28c176bc33f27142058cd3d7a))
+
+
+### Bug Fixes
+
+* **cli:** preserve the -H header flag ([e6706e6](https://github.com/unkn0wn-root/resterm/commit/e6706e6e632fe3ea94e60906ac34f1b302ac5b36))
+* **grpc:** let TLS settings override plaintext defaults ([081254e](https://github.com/unkn0wn-root/resterm/commit/081254edd7c2762f65872c037a9677e1067d6f8a))
+* **grpc:** report certificate failures with the TLS exit code ([f31c038](https://github.com/unkn0wn-root/resterm/commit/f31c03897942f979be54be9cf9ec519a97872d4a))
+* **oauth:** preserve client auth defaults and cache keys ([812e8ef](https://github.com/unkn0wn-root/resterm/commit/812e8ef6b356ac0835da78547cf8a68a3ad2ff57))
+* **openapi:** honor preferred server selection ([6154ee2](https://github.com/unkn0wn-root/resterm/commit/6154ee2d3cf737fc4f2a3f7217a59096509988cb))
+* **record:** avoid output files on failed startup ([5762e48](https://github.com/unkn0wn-root/resterm/commit/5762e48294022b0d37e06cffff363dab093723ef))
+* **request:** keep runtime writes as literal data ([590bd64](https://github.com/unkn0wn-root/resterm/commit/590bd648224cc1f10712b900c3b1027da32ce839))
+* **rts:** report directive errors at their file column ([3056a7c](https://github.com/unkn0wn-root/resterm/commit/3056a7c655a82d53804743d07ce0b8af73f9f4ab))
+* **run:** report cancellation and skip remaining requests ([fd7e573](https://github.com/unkn0wn-root/resterm/commit/fd7e5736a64522767c04e0a9dc3f6a3230b468ae))
+* **run:** validate compare targets before sending ([26f41d4](https://github.com/unkn0wn-root/resterm/commit/26f41d452c998a28d5253acf68d98f80b9b8ee68))
+* **scripts:** give scripts the values the request sends ([19cdb0a](https://github.com/unkn0wn-root/resterm/commit/19cdb0ace72f9dac8fd2ee16f3f1f72ac07159a2))
+* **ssh:** report tunnel failures without close noise ([6c9e76e](https://github.com/unkn0wn-root/resterm/commit/6c9e76e8799636de6a63a166d44c45c25d3f63f6))
+* **tls:** classify verification errors and peer alerts ([37e1e63](https://github.com/unkn0wn-root/resterm/commit/37e1e63c83749355c359998cf31d0a92970e9fed))
+* **trace:** use the current response in captures ([e35baed](https://github.com/unkn0wn-root/resterm/commit/e35baed5371edaf408e7a23d2a1d440637964377))
+* **vars:** defer helpers in script variable reads ([2f4a9d2](https://github.com/unkn0wn-root/resterm/commit/2f4a9d2f8d052a3ca6b7ec9593da7acc846e47b2))
+* **websocket:** preserve the effective URL scheme ([7f6a091](https://github.com/unkn0wn-root/resterm/commit/7f6a091764341e926a6abad7cc1449bcd91dc9f7))
+* **workflow:** preserve skips and assertion failures ([3322a4d](https://github.com/unkn0wn-root/resterm/commit/3322a4dbd83be8295d9a4dded9f0231165280c9b))
+
 ### [1.10.3](https://github.com/unkn0wn-root/resterm/compare/v1.10.2...v1.10.3) (2026-10-01)
 
 
