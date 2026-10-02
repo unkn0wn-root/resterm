@@ -153,6 +153,16 @@ func TestStdlibCrypto(t *testing.T) {
 		v.S != "5031fe3d989c6d1537a013fa6e739da23463fdaec3b70137d828e36ace221bd0" {
 		t.Fatalf("expected hmac sha256")
 	}
+	v = evalExprCtx(t, ctx, "crypto.sha512(\"abc\")")
+	if v.K != rts.VStr ||
+		v.S != "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f" {
+		t.Fatalf("expected sha512")
+	}
+	v = evalExprCtx(t, ctx, "crypto.hmacSha512(\"key\", \"data\")")
+	if v.K != rts.VStr ||
+		v.S != "3c5953a18f7303ec653ba170ae334fafa08e3846f2efe317b87efce82376253cb52a8c31ddcde5a3a2eee183c2b34cb91f85e64ddbc325f7692b199473579c58" {
+		t.Fatalf("expected hmac sha512")
+	}
 }
 
 func TestStdlibEncoding(t *testing.T) {
