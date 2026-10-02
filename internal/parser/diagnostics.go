@@ -39,6 +39,32 @@ func (b *documentBuilder) warnUnclosedArgs(d parsedDirective) {
 	}
 }
 
+// Patch values are data when the request runs, so a variable or expression
+// placeholder typed in one of its strings is sent as written.
+func (b *documentBuilder) warnPatchTemplates(d parsedDirective) {
+	for _, r := range rts.StringRanges(d.Args) {
+		lit := d.Args[r[0]:r[1]]
+		for _, ph := range vars.Placeholders(lit) {
+			text := lit[ph[0]:ph[1]]
+			name := strings.TrimSpace(text[2 : len(text)-2])
+			if strings.HasPrefix(name, "$") {
+				continue
+			}
+			msg := d.Name.Tag() + " sends " + text + " as written. "
+			if strings.HasPrefix(name, "=") {
+				msg += "Write the expression without {{= }}."
+			} else {
+				msg += "Use vars.get(\"" + name + "\")."
+			}
+			item := restfile.ParseDiagnostic{Message: msg, Span: d.nameSpan}
+			if span, ok := d.argumentSpan(r[0]+ph[0], r[0]+ph[1]); ok {
+				item.Span = span
+			}
+			b.pushWarning(item)
+		}
+	}
+}
+
 func (d parsedDirective) unclosedPlaceholders() []vars.Unclosed {
 	args := d.Args
 	if d.scriptArgs() {

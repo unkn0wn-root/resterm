@@ -300,6 +300,7 @@ func (b *documentBuilder) handlePatchDirective(d parsedDirective) directiveOutco
 		return b.rejectError(d, err)
 	}
 	d.setExprCol(&spec.Col, spec.Expression)
+	b.warnPatchTemplates(d)
 	spec.SourcePath = b.doc.Path
 	b.file.patches = append(b.file.patches, spec)
 	return directiveApplied
