@@ -26,6 +26,7 @@ func (req *Request) Clone() *Request {
 	dst.WebSocket = cloneWebSocketRequest(req.WebSocket)
 	dst.SSH = cloneSSHSpec(req.SSH)
 	dst.K8s = cloneK8sSpec(req.K8s)
+	dst.Written = req.Written.Clone()
 	return &dst
 }
 

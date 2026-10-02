@@ -22,6 +22,7 @@ const (
 	ClassRoute      Class = "route"
 	ClassFilesystem Class = "filesystem"
 	ClassScript     Class = "script"
+	ClassAssertion  Class = "assertion"
 	ClassHistory    Class = "history"
 	ClassUI         Class = "ui"
 	ClassInternal   Class = "internal"
@@ -39,6 +40,7 @@ var knownClasses = [...]Class{
 	ClassRoute,
 	ClassFilesystem,
 	ClassScript,
+	ClassAssertion,
 	ClassHistory,
 	ClassUI,
 	ClassInternal,

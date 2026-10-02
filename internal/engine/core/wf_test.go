@@ -237,6 +237,7 @@ type fakeDep struct {
 	each         map[string][]rts.Value
 	execErr      error
 	execCanceled bool
+	onExec       func()
 	runVarEvals  int
 	sent         []request.ExecOptions
 	evalVars     []map[string]string
@@ -290,6 +291,9 @@ func (d *fakeDep) ExecuteWith(
 ) (engine.RequestResult, error) {
 	d.rec = append(d.rec, opt.Record)
 	d.sent = append(d.sent, opt)
+	if d.onExec != nil {
+		d.onExec()
+	}
 	if d.execErr != nil {
 		return engine.RequestResult{}, d.execErr
 	}

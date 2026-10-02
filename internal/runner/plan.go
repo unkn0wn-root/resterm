@@ -147,6 +147,12 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 	}
 	envName := env.Label()
 
+	for _, req := range tg.requests {
+		if err := exec.CheckCompare(req, opt.Selection); err != nil {
+			return nil, UsageError{err: fmt.Errorf("%s: %w", requestName(req), err)}
+		}
+	}
+
 	if err := loadRunnerState(exec, pl.state, opt); err != nil {
 		return nil, fmt.Errorf("load runner state: %w", err)
 	}
@@ -196,13 +202,19 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		default:
 			rep.add(requestRunResult(runReq, res, envName))
 		}
-		if opt.FailFast && resultFailed(rep.Results[len(rep.Results)-1]) {
-			rep.StopReason = stopReasonFailFast
-			for _, skipped := range tg.requests[i+1:] {
-				rep.add(skippedRequestResult(skipped, env, "skipped after --fail-fast"))
-			}
-			break
+		var reason string
+		switch {
+		case ctx.Err() != nil:
+			rep.StopReason, reason = stopReasonCanceled, "skipped after cancel"
+		case opt.FailFast && resultFailed(rep.Results[len(rep.Results)-1]):
+			rep.StopReason, reason = stopReasonFailFast, "skipped after --fail-fast"
+		default:
+			continue
 		}
+		for _, skipped := range tg.requests[i+1:] {
+			rep.add(skippedRequestResult(skipped, env, reason))
+		}
+		break
 	}
 	return finishRun(rep, exec, pl.state, opt)
 }

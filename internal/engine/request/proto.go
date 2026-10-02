@@ -117,9 +117,12 @@ func prepareGRPCRequest(
 	}
 
 	// Pre-request scripts update BodySource, so sync it back into the gRPC
-	// message fields before the request is sent.
+	// message fields before the request is sent. A written body that replaces
+	// the message is data. An empty one keeps the authored message.
+	body := strings.TrimSpace(req.Body.Text)
+	written := req.Written.Body && body != ""
 	switch {
-	case strings.TrimSpace(req.Body.Text) != "":
+	case body != "":
 		grpcReq.Message = req.Body.Text
 		grpcReq.MessageFile = ""
 	case strings.TrimSpace(req.Body.FilePath) != "":
@@ -142,7 +145,7 @@ func prepareGRPCRequest(
 		}
 		grpcReq.Target = strings.TrimSpace(target)
 
-		if msg := strings.TrimSpace(grpcReq.Message); msg != "" {
+		if msg := strings.TrimSpace(grpcReq.Message); msg != "" && !written {
 			out, err := res.ExpandTemplates(msg)
 			if err != nil {
 				return diag.WrapAs(diag.ClassProtocol, err, "expand grpc message")
@@ -182,6 +185,9 @@ func prepareGRPCRequest(
 		}
 		for k, vs := range req.Headers {
 			for i, v := range vs {
+				if req.Written.Header(k, v) {
+					continue
+				}
 				out, err := res.ExpandTemplatesAt(v, req.HeaderPos(k, v))
 				if err != nil {
 					return diag.WrapAsf(diag.ClassProtocol, err, "expand header %s", k)

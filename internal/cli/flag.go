@@ -15,6 +15,11 @@ const aliasUsagePrefix = "Alias for --"
 // ErrHelp is returned when Parse sees -h or --help.
 var ErrHelp = flag.ErrHelp
 
+// IsHelpArg matches -h and --help exactly because -H can be a real flag.
+func IsHelpArg(arg string) bool {
+	return arg == "-h" || arg == "--help" || strings.EqualFold(arg, "help")
+}
+
 // FlagSet accepts flags before or after positional arguments.
 // String flags are trimmed.
 type FlagSet struct {

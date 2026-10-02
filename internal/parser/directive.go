@@ -450,12 +450,6 @@ func parseAuthSpec(fields []directive.Field) (*restfile.AuthSpec, error) {
 		if params["token_url"] == "" && params["cache_key"] == "" {
 			return nil, nil
 		}
-		if params["grant"] == "" {
-			params["grant"] = "client_credentials"
-		}
-		if params["client_auth"] == "" {
-			params["client_auth"] = "basic"
-		}
 	case restfile.AuthCommand:
 		if len(fields) < 2 {
 			return nil, nil

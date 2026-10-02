@@ -66,6 +66,8 @@ type StopReason string
 const (
 	// StopReasonFailFast means Options.FailFast stopped execution after a failure.
 	StopReasonFailFast StopReason = "fail_fast"
+	// StopReasonCanceled means the run context was canceled.
+	StopReasonCanceled StopReason = "canceled"
 )
 
 // Report contains the results of a headless run.

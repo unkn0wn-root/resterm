@@ -277,6 +277,278 @@ func TestRunFailFastSkipsRemainingRequests(t *testing.T) {
 	}
 }
 
+func TestRunFailFastContinuesPastSkippedRequest(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "fail-fast-skip.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"# @when false",
+		"GET https://example.com/one",
+		"",
+		"### Two",
+		"# @name two",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	var calls int
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        countingClient(&calls),
+		Select:        Select{All: true},
+		FailFast:      true,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 1 || rep.Passed != 1 || rep.Skipped != 1 || rep.Failed != 0 {
+		t.Fatalf("calls=%d report=%+v, want the second request to run", calls, rep)
+	}
+	if rep.StopReason != "" {
+		t.Fatalf("stop reason = %q, want none", rep.StopReason)
+	}
+}
+
+func TestRunWorkflowSkippedStepDoesNotFail(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "workflow-skip.http")
+	src := strings.Join([]string{
+		"# @workflow demo",
+		"# @step One using=one",
+		"# @when false",
+		"# @step Two using=two",
+		"",
+		"### One",
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+		"### Two",
+		"# @name two",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	var calls int
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        countingClient(&calls),
+		Select:        Select{Workflow: "demo"},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 1 || rep.Passed != 1 || rep.Failed != 0 || !rep.Success() {
+		t.Fatalf("calls=%d report=%+v, want a passing workflow", calls, rep)
+	}
+	steps := rep.Results[0].Steps
+	if len(steps) != 2 || !steps[1].Skipped || !strings.Contains(steps[1].SkipReason, "@when") {
+		t.Fatalf("steps = %+v, want the second step skipped with its reason", steps)
+	}
+	model := ReportModel(rep)
+	if got := model.Results[0].Steps[1].SkipReason; got != steps[1].SkipReason {
+		t.Fatalf("report skip reason = %q, want %q", got, steps[1].SkipReason)
+	}
+}
+
+func TestRunCancelSkipsRemainingRequests(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "cancel.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+		"### Two",
+		"# @name two",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var calls int
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				cancel()
+				return nil, req.Context().Err()
+			}),
+		}, nil
+	})
+
+	rep, err := RunContext(ctx, Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        Select{All: true},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 1 || rep.Failed != 1 || rep.Skipped != 1 {
+		t.Fatalf("calls=%d report=%+v, want one canceled and one skipped request", calls, rep)
+	}
+	if rep.StopReason != stopReasonCanceled {
+		t.Fatalf("stop reason = %q, want %q", rep.StopReason, stopReasonCanceled)
+	}
+	if got := rep.Results[0].Failure.Code; got != runfail.CodeCanceled {
+		t.Fatalf("first result failure = %q, want canceled", got)
+	}
+	if !strings.Contains(rep.Results[1].SkipReason, "cancel") {
+		t.Fatalf("skip reason = %q, want the cancel reason", rep.Results[1].SkipReason)
+	}
+}
+
+func TestRunWorkflowFailBranchIsAnAssertion(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "workflow-fail.http")
+	src := strings.Join([]string{
+		"# @workflow by-if",
+		"# @step One using=one",
+		`# @if last.statusCode == 500 run=one`,
+		`# @else fail="deadline exceeded waiting for job"`,
+		"",
+		"# @workflow by-switch",
+		"# @step One using=one",
+		"# @switch last.statusCode",
+		"# @case 500 run=one",
+		`# @default fail="unauthorized token"`,
+		"",
+		"### One",
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	for _, name := range []string{"by-if", "by-switch"} {
+		var calls int
+		rep, err := RunContext(context.Background(), Options{
+			FilePath:      file,
+			WorkspaceRoot: dir,
+			Client:        countingClient(&calls),
+			Select:        Select{Workflow: name},
+		})
+		if err != nil {
+			t.Fatalf("%s: Run: %v", name, err)
+		}
+		if got := rep.Results[0].Failure.Code; got != runfail.CodeAssertion {
+			t.Errorf("%s: failure code = %q, want %q", name, got, runfail.CodeAssertion)
+		}
+		if got := ExitCode(rep, runfail.ExitDetailed); got != runfail.ExitFailure {
+			t.Errorf("%s: exit code = %d, want %d", name, got, runfail.ExitFailure)
+		}
+	}
+}
+
+func TestRunRejectsUnknownCompareEnvironmentBeforeSending(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "compare.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+		"### Two",
+		"# @name two",
+		"# @compare dev nope",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "prod": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+
+	var calls int
+	_, err = RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        countingClient(&calls),
+		Catalog:       cat,
+		Selection:     cat.DefaultSelection(),
+		Select:        Select{All: true},
+	})
+	if !IsUsageError(err) || !strings.Contains(err.Error(), `"nope"`) {
+		t.Fatalf("Run error = %v, want a usage error naming the environment", err)
+	}
+	if calls != 0 {
+		t.Fatalf("sent %d requests before rejecting the compare", calls)
+	}
+}
+
+func TestRunCompareOverrideIgnoresFileCompare(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "compare.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"# @compare dev nope",
+		"GET https://example.com/one",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "prod": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+
+	var calls int
+	_, err = RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        countingClient(&calls),
+		Catalog:       cat,
+		Selection:     cat.DefaultSelection(),
+		Select:        Select{All: true},
+		Compare:       engine.CompareConfig{Targets: []string{"dev", "prod"}},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("sent %d requests, want one per --compare target", calls)
+	}
+}
+
+func countingClient(calls *int) *httpx.Client {
+	return newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				*calls++
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+}
+
 func TestRunSelectRequestByLine(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "many.http")

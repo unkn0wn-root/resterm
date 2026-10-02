@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -22,9 +21,6 @@ type Output struct {
 }
 
 func CreateOutput(path string) (*Output, error) {
-	if ext := strings.ToLower(filepath.Ext(path)); ext != ".http" && ext != ".rest" {
-		return nil, errors.New("record output must be a .http or .rest file")
-	}
 	root, err := os.OpenRoot(filepath.Dir(path))
 	if err != nil {
 		return nil, fmt.Errorf("open output directory: %w", err)

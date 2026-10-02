@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -422,8 +423,14 @@ func cloneToken(tok Token) Token {
 	return out
 }
 
+// The parser used to write basic when client_auth was missing, so unset is
+// keyed as basic and existing tokens keep their keys.
 func (m *Manager) cacheKey(env string, cfg Config) string {
 	cfg = cfg.Normalized()
+	return cacheKeyWith(env, cfg, cmp.Or(cfg.ClientAuth, ClientAuthBasic))
+}
+
+func cacheKeyWith(env string, cfg Config, clientAuth string) string {
 	if cfg.CacheKey != "" {
 		return cachePart(env) + cachePart(cfg.CacheKey)
 	}
@@ -441,7 +448,7 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 		cfg.CodeMethod,
 		cfg.CodeVerifier,
 		cfg.Username,
-		cfg.ClientAuth,
+		clientAuth,
 	}
 	if len(cfg.Extra) > 0 {
 		keys := make([]string, 0, len(cfg.Extra))
@@ -492,7 +499,7 @@ func (m *Manager) requestToken(
 		}
 	}
 
-	authMode := resolveClientAuth(grant, cfg.ClientAuth, cfg)
+	authMode := cfg.clientAuth()
 
 	switch grant {
 	case GrantClientCredentials:
@@ -569,15 +576,11 @@ type clientAuthMode struct {
 	useBody   bool
 }
 
-func resolveClientAuth(grant, clientAuthRaw string, cfg Config) clientAuthMode {
-	mode := clientAuthRaw
-	if mode == "" {
-		mode = ClientAuthBasic
-	}
-
+func (cfg Config) clientAuth() clientAuthMode {
+	mode := cmp.Or(cfg.ClientAuth, ClientAuthBasic)
 	useHeader := mode == ClientAuthBasic
 	if useHeader && cfg.ClientSecret == "" &&
-		(clientAuthRaw == "" || grant == GrantAuthorizationCode) {
+		(cfg.ClientAuth == "" || cfg.GrantType == GrantAuthorizationCode) {
 		useHeader = false
 		mode = ClientAuthBody
 	}
@@ -620,8 +623,7 @@ func (m *Manager) refreshToken(
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/x-www-form-urlencoded")
 	headers.Set("Accept", "application/json")
-	clientAuth := cfg.ClientAuth
-	if clientAuth == ClientAuthBasic && cfg.ClientID != "" {
+	if cfg.clientAuth().useHeader && cfg.ClientID != "" {
 		credentials := cfg.ClientID + ":" + cfg.ClientSecret
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		headers.Set("Authorization", "Basic "+encoded)
@@ -664,6 +666,10 @@ func (m *Manager) lookupKeys(env string, cfg Config) (Config, string, string) {
 	}
 	if fallback == key {
 		fallback = ""
+	}
+	// Before 1.11 an @apply auth dict without client_auth was keyed with it empty.
+	if fallback == "" && resolved.CacheKey == "" && resolved.ClientAuth == "" {
+		fallback = cacheKeyWith(env, resolved, "")
 	}
 	return resolved, key, fallback
 }

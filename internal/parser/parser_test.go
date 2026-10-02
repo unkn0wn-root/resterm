@@ -1964,11 +1964,11 @@ func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
 	if spec.Params["token_url"] != "" {
 		t.Fatalf("expected empty token_url, got %q", spec.Params["token_url"])
 	}
-	if spec.Params["grant"] != "client_credentials" {
-		t.Fatalf("expected default grant client_credentials, got %q", spec.Params["grant"])
+	if _, ok := spec.Params["grant"]; ok {
+		t.Fatalf("expected grant to stay unset so it can be inherited, got %q", spec.Params["grant"])
 	}
-	if spec.Params["client_auth"] != "basic" {
-		t.Fatalf("expected default client_auth basic, got %q", spec.Params["client_auth"])
+	if _, ok := spec.Params["client_auth"]; ok {
+		t.Fatalf("expected client_auth to stay unset so it can be inherited, got %q", spec.Params["client_auth"])
 	}
 }
 

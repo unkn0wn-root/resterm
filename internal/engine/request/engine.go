@@ -310,6 +310,15 @@ func newExec(
 	if opt.Run != nil {
 		run.RunScope = *opt.Run
 	}
+	storeG := e.collectStoredGlobalValues(env)
+	run.helpers = e.pinHelpers(varSources{
+		doc:     doc,
+		req:     req,
+		env:     env,
+		globals: storeG,
+		sec:     keepSecrets,
+		run:     run,
+	})
 	base := e.collectVariables(doc, req, env, run)
 	hasRTS, hasJS := detectPreRequestScripts(req)
 	secrets := &vars.Secrets{}
@@ -331,7 +340,7 @@ func newExec(
 		sendCtx:    ctx,
 		cancel:     cancel,
 		baseVars:   base,
-		storeG:     e.collectStoredGlobalValues(env),
+		storeG:     storeG,
 		hasRTSPre:  hasRTS,
 		hasJSPre:   hasJS,
 		run:        run,
@@ -421,7 +430,29 @@ func (x *execCtx) currentGlobals() vars.Globals {
 }
 
 func (x *execCtx) evalScope(vv map[string]string) evalScope {
-	return newEvalScope(vv, x.currentGlobals())
+	sc := newEvalScope(vv, x.currentGlobals())
+	sc.expand = x.scriptExpand
+	return sc
+}
+
+// scriptExpand renders an authored request value as a script reads it.
+// Variables and expressions see the writes in set. A helper written in the
+// value stays as written, since each render makes a new value. Helpers in
+// declared values were rendered once when the request started.
+func (x *execCtx) scriptExpand(text string, set vars.NameMap[string]) (string, error) {
+	if !vars.HasPlaceholder(text) {
+		return text, nil
+	}
+	run := x.run
+	if set.Len() > 0 {
+		run.scripts = run.scripts.Clone()
+		run.scripts.Merge(set)
+	}
+	res := x.eng.buildResolver(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.storeG, x.locals, run)
+	if x.preview() {
+		res = res.Lenient()
+	}
+	return res.ExpandTemplatesKeepHelpers(text)
 }
 
 func (x *execCtx) captureVariables() map[string]string {
@@ -531,7 +562,7 @@ func (f flow) EvaluateRunVars() *xexec.RequestResult {
 	if !x.standalone || len(x.req.RunVars) == 0 {
 		return nil
 	}
-	vals, err := x.eng.evalRunVars(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.run.RunScope, x.req.RunVars)
+	vals, err := x.eng.evalRunVars(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.run, x.req.RunVars)
 	if err != nil {
 		x.exp.stage(
 			xplain.StageRunVars,
@@ -699,6 +730,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		BaseDir:   x.opts.BaseDir,
 		Context:   x.sendCtx,
 		Secrets:   x.secrets,
+		Expand:    x.scriptExpand,
 	})
 	if err != nil {
 		x.exp.stage(
@@ -1244,6 +1276,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					req:     in.Req,
 					res:     in.Resolver,
 					resp:    in.Response,
+					tr:      rtsTrace(in.HTTP),
 					stream:  in.Stream,
 					out:     &caps,
 					env:     x.env,
@@ -1263,10 +1296,9 @@ func (x *execCtx) httpRunner() xexec.Runner {
 				req *restfile.Request,
 				scriptVars vars.NameMap[string],
 			) map[string]string {
-				return x.eng.collectVariables(doc, req, x.env, execVars{
-					RunScope: x.run.RunScope,
-					scripts:  scriptVars,
-				})
+				run := x.run
+				run.scripts = scriptVars
+				return x.eng.collectVariables(doc, req, x.env, run)
 			},
 			CollectGlobalValues: func(doc *restfile.Document) vars.Globals {
 				return effectiveGlobalValues(doc, x.storeG, x.env.Refs())

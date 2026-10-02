@@ -37,27 +37,40 @@ func (c *Client) prepareBody(
 		}
 
 		if resolver != nil && req.Body.Options.ExpandTemplates {
-			start := diag.Pos{Path: path, Line: 1, Col: 1}
-			expanded, err := resolver.ExpandTemplatesAt(string(data), start)
-			if err != nil {
-				// No source: renderers quote the failing line, and a body
-				// may hold credentials beside the placeholder.
-				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err, "expand body file templates")
-			}
-
-			return c.textBodyPlan(expanded, lookup, req)
+			return c.textBodyPlan(string(data), func(text string, line int) (string, error) {
+				out, err := resolver.ExpandTemplatesAt(text, diag.Pos{Path: path, Line: line, Col: 1})
+				if err != nil {
+					// No source: renderers quote the failing line, and a body
+					// may hold credentials beside the placeholder.
+					return "", diag.WrapAs(diag.ClassProtocol, err, "expand body file templates")
+				}
+				return out, nil
+			}, lookup, req)
 		}
 		return bodyPlan{rd: bytes.NewReader(data)}, nil
+	case req.Body.Text != "" && req.Written.Body:
+		// A body written at run time is data. Expanding it, or reading an
+		// "@ path" line in it, could send variables or local files. Only
+		// multipart framing applies.
+		if !isMultipartRequest(req) {
+			return bodyPlan{rd: strings.NewReader(req.Body.Text)}, nil
+		}
+		var b bytes.Buffer
+		writeBodyText(&b, req.Body.Text, true)
+		return bodyPlan{rd: &b}, nil
 	case req.Body.Text != "":
-		expanded := req.Body.Text
+		var expand bodyExpand
 		if resolver != nil {
-			var err error
-			expanded, err = resolver.ExpandTemplatesLocated(req.Body.Text, req.LocateBody)
-			if err != nil {
-				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err, "expand body template")
+			expand = func(text string, line int) (string, error) {
+				locate := func(l, col int) diag.Pos { return req.LocateBody(line+l-1, col) }
+				out, err := resolver.ExpandTemplatesLocated(text, locate)
+				if err != nil {
+					return "", diag.WrapAs(diag.ClassProtocol, err, "expand body template")
+				}
+				return out, nil
 			}
 		}
-		return c.textBodyPlan(expanded, lookup, req)
+		return c.textBodyPlan(req.Body.Text, expand, lookup, req)
 	default:
 		return bodyPlan{}, nil
 	}
@@ -65,10 +78,11 @@ func (c *Client) prepareBody(
 
 func (c *Client) textBodyPlan(
 	body string,
+	expand bodyExpand,
 	lookup filelookup.Lookup,
 	req *restfile.Request,
 ) (bodyPlan, error) {
-	processed, err := c.injectBodyIncludes(body, lookup, isMultipartRequest(req))
+	processed, err := c.injectBodyIncludes(body, expand, lookup, isMultipartRequest(req))
 	if err != nil {
 		return bodyPlan{}, err
 	}
@@ -112,7 +126,11 @@ func (c *Client) prepareGraphQLBody(
 	}
 
 	if strings.EqualFold(req.Method, "GET") {
-		url, err := buildGraphQLURL(req.URL, resolver, query, op, varsJSON)
+		urlRes := resolver
+		if req.Written.URL {
+			urlRes = nil
+		}
+		url, err := buildGraphQLURL(req.URL, urlRes, query, op, varsJSON)
 		if err != nil {
 			return bodyPlan{}, err
 		}

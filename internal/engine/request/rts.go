@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
-	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -38,6 +36,7 @@ func (e *Engine) rtsReq(req *restfile.Request) (*rtshost.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+	out.Written = req.Written.Clone()
 	return out, nil
 }
 
@@ -152,6 +151,8 @@ type evalScope struct {
 	vars    map[string]string
 	resolve func(name string) (string, bool, error)
 	globals vars.Globals
+	// expand renders authored request values for @apply and pre-request scripts.
+	expand prerequest.ExpandFunc
 }
 
 // Keep the caller-owned map so mutations and later expressions share one
@@ -178,6 +179,7 @@ type rtIn struct {
 	vars    map[string]string
 	resolve func(name string) (string, bool, error)
 	globals vars.Globals
+	expand  prerequest.ExpandFunc
 	site    string
 	resp    *rtshost.Response
 	res     *rtshost.Response
@@ -222,9 +224,10 @@ func (e *Engine) buildRTWithScope(in rtIn, prep rtshost.PreparedScope) (rtshost.
 		}
 	}
 	// Keep in.res nil before the request runs. Falling back to resp would make
-	// response refer to last.
+	// response refer to last. Before a response, trace is the last traced
+	// response. After one, it is that response's trace, or nil when it was not traced.
 	tr := in.tr
-	if tr == nil {
+	if tr == nil && in.res == nil {
 		tr = e.rtsLastTrace()
 	}
 	scope, err := prep.BindVars(in.vars)
@@ -235,6 +238,9 @@ func (e *Engine) buildRTWithScope(in rtIn, prep rtshost.PreparedScope) (rtshost.
 	req, err := e.rtsReq(in.req)
 	if err != nil {
 		return rtshost.Runtime{}, err
+	}
+	if req != nil {
+		req.Expand = in.expand.Bind(nil)
 	}
 	return rtshost.Runtime{
 		Scope:       scope,
@@ -289,6 +295,7 @@ type EvalInput struct {
 	Vars    map[string]string
 	Locals  rts.Locals
 	globals vars.Globals
+	expand  prerequest.ExpandFunc
 }
 
 // ExprEvalOptions tunes how a {{= expr }} evaluator treats the RTS runtime.
@@ -408,6 +415,7 @@ func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, err
 		base:    in.Base,
 		vars:    vv,
 		globals: in.globals,
+		expand:  in.expand,
 		site:    in.Site,
 		locals:  in.Locals,
 		secrets: rtshost.IncludeSecrets,
@@ -710,6 +718,7 @@ func (e *Engine) runRTSPreRequest(
 	mut := rtshost.NewMutator(&out, rt.Request, vv, gv, secrets)
 	rt.Request = mut.Request()
 	rt.Mutator = mut
+	rt.Request.Expand = sc.expand.Bind(&out.Variables)
 
 	err = rtshost.RunPreRequest(ctx, e.re, rtshost.PreRequest{
 		Doc:     doc,
@@ -733,16 +742,10 @@ func (e *Engine) runRTSPreRequest(
 }
 
 type applyPatch struct {
-	method     *string
-	url        *string
-	headers    map[string][]string
-	headerDels map[string]struct{}
-	query      map[string]*string
-	body       *string
-	auth       *restfile.AuthSpec
-	authSet    bool
-	settings   map[string]*string
-	vars       vars.NameMap[string]
+	out      prerequest.Output
+	auth     *restfile.AuthSpec
+	authSet  bool
+	settings map[string]*string
 }
 
 func (e *Engine) parseApplyPatch(
@@ -761,11 +764,11 @@ func (e *Engine) parseApplyPatch(
 			if err != nil {
 				return applyPatch{}, err
 			}
-			s = strings.TrimSpace(s)
+			s = strings.ToUpper(strings.TrimSpace(s))
 			if s == "" {
 				return applyPatch{}, applyErr("method", "expects non-empty value")
 			}
-			p.method = &s
+			p.out.Method = &s
 		case "url":
 			s, err := e.applyScalar(ctx, pos, val, "url")
 			if err != nil {
@@ -775,25 +778,25 @@ func (e *Engine) parseApplyPatch(
 			if s == "" {
 				return applyPatch{}, applyErr("url", "expects non-empty value")
 			}
-			p.url = &s
+			p.out.URL = &s
 		case "headers":
 			set, del, err := e.parseApplyHeaders(ctx, pos, val)
 			if err != nil {
 				return applyPatch{}, err
 			}
-			p.headers, p.headerDels = set, del
+			p.out.Headers, p.out.HeaderDels = set, del
 		case "query":
 			out, err := e.parseApplyQuery(ctx, pos, val)
 			if err != nil {
 				return applyPatch{}, err
 			}
-			p.query = out
+			p.out.Query = out
 		case "body":
 			s, err := e.rtsValueString(ctx, pos, val)
 			if err != nil {
 				return applyPatch{}, applyErr("body", err.Error())
 			}
-			p.body = &s
+			p.out.Body = &s
 		case "auth":
 			if val.K == rts.VNull {
 				p.authSet = true
@@ -815,7 +818,7 @@ func (e *Engine) parseApplyPatch(
 			if err != nil {
 				return applyPatch{}, err
 			}
-			p.vars = out
+			p.out.Variables = out
 		default:
 			if key == "" {
 				return applyPatch{}, applyErr("", "empty field")
@@ -973,6 +976,10 @@ func (e *Engine) parseApplyAuth(
 			typ = strings.ToLower(strings.TrimSpace(s))
 			continue
 		}
+		s, err = vars.ExpandHelpers(s)
+		if err != nil {
+			return nil, applyErr("auth."+key, err.Error())
+		}
 		pm[key] = s
 	}
 	if strings.TrimSpace(typ) == "" {
@@ -985,6 +992,7 @@ func (e *Engine) parseApplyAuth(
 		Type:       restfile.AuthKind(typ),
 		Params:     pm,
 		SourcePath: pos.Path,
+		Written:    true,
 	}
 	if bad := spec.UnknownParams(); len(bad) > 0 {
 		return nil, applyErr("auth", fmt.Sprintf("%s does not accept %s", spec.Kind(), strings.Join(bad, ", ")))
@@ -1014,8 +1022,16 @@ func (e *Engine) parseApplySettings(
 		if err != nil {
 			return nil, err
 		}
-		cp := s
-		out[key] = &cp
+		s, err = vars.ExpandHelpers(s)
+		if err != nil {
+			return nil, applyErr("settings."+key, err.Error())
+		}
+		// Settings are expanded deep inside the transport, so run-time text with
+		// a template is refused instead of tracked there.
+		if vars.HasPlaceholder(s) {
+			return nil, applyErr("settings."+key, "contains template text. Write it in a @setting line")
+		}
+		out[key] = &s
 	}
 	if len(out) == 0 {
 		return nil, nil
@@ -1050,70 +1066,15 @@ func applyPatchToRequest(req *restfile.Request, vv map[string]string, p applyPat
 	if req == nil {
 		return nil
 	}
-	applyPatchMethod(req, p.method)
-	applyPatchURL(req, p.url)
-	if err := applyPatchQuery(req, p.query); err != nil {
+	if err := prerequest.Apply(req, p.out); err != nil {
 		return err
 	}
-	applyPatchHeaders(req, p.headers, p.headerDels)
-	applyPatchBody(req, p.body)
 	applyPatchAuth(req, p.auth, p.authSet)
 	applyPatchSettings(req, p.settings)
-	applyPatchVars(req, vv, p.vars)
+	if vv != nil {
+		vars.MergeInto(vv, p.out.Variables)
+	}
 	return nil
-}
-
-func applyPatchMethod(req *restfile.Request, val *string) {
-	if val != nil && req != nil {
-		req.Method = strings.ToUpper(strings.TrimSpace(*val))
-	}
-}
-
-func applyPatchURL(req *restfile.Request, val *string) {
-	if val != nil && req != nil {
-		req.SetURL(strings.TrimSpace(*val))
-	}
-}
-
-func applyPatchQuery(req *restfile.Request, q map[string]*string) error {
-	if req == nil || len(q) == 0 {
-		return nil
-	}
-	raw := strings.TrimSpace(req.URL)
-	if raw == "" {
-		return nil
-	}
-	out, err := urltpl.PatchQuery(raw, q)
-	if err != nil {
-		return fmt.Errorf("invalid url after @apply: %w", err)
-	}
-	req.SetURL(out)
-	return nil
-}
-
-func applyPatchHeaders(req *restfile.Request, set map[string][]string, del map[string]struct{}) {
-	if req == nil || (len(set) == 0 && len(del) == 0) {
-		return
-	}
-	if req.Headers == nil {
-		req.Headers = make(http.Header)
-	}
-	for name := range del {
-		req.Headers.Del(name)
-	}
-	for name, vs := range set {
-		req.Headers.Del(name)
-		for _, v := range vs {
-			req.Headers.Add(name, v)
-		}
-	}
-}
-
-func applyPatchBody(req *restfile.Request, val *string) {
-	if req == nil || val == nil {
-		return
-	}
-	req.SetBodyText(*val)
 }
 
 func applyPatchAuth(req *restfile.Request, auth *restfile.AuthSpec, set bool) {
@@ -1143,17 +1104,6 @@ func applyPatchSettings(req *restfile.Request, in map[string]*string) {
 		}
 		req.Settings[k] = *v
 	}
-}
-
-func applyPatchVars(req *restfile.Request, vv map[string]string, in vars.NameMap[string]) {
-	if req == nil || in.Len() == 0 {
-		return
-	}
-	prerequest.SetRequestVars(req, in)
-	if vv == nil {
-		return
-	}
-	vars.MergeInto(vv, in)
 }
 
 func applyKey(key string) string { return strings.ToLower(strings.TrimSpace(key)) }
@@ -1255,6 +1205,7 @@ func (e *Engine) runRTSApply(
 				Vars:    vv,
 				Locals:  locals,
 				globals: sc.globals,
+				expand:  sc.expand,
 			})
 			if err != nil {
 				return err

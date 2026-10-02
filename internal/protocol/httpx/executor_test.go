@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -87,7 +88,7 @@ func TestInjectBodyIncludes(t *testing.T) {
 
 	body := "part1\n@payload.json\n@{notIncluded}\n"
 	lookup := newFileLookup(baseDir, Options{})
-	processed, err := client.injectBodyIncludes(body, lookup, false)
+	processed, err := client.injectBodyIncludes(body, nil, lookup, false)
 	if err != nil {
 		t.Fatalf("inject body includes: %v", err)
 	}
@@ -106,12 +107,50 @@ func TestInjectBodyIncludesFallback(t *testing.T) {
 		"/does/not/exist",
 		Options{FallbackBaseDirs: []string{"workspace"}},
 	)
-	processed, err := client.injectBodyIncludes(body, lookup, false)
+	processed, err := client.injectBodyIncludes(body, nil, lookup, false)
 	if err != nil {
 		t.Fatalf("inject body includes with fallback: %v", err)
 	}
 	if string(processed) != "hi" {
 		t.Fatalf("expected fallback file contents, got %q", processed)
+	}
+}
+
+func TestInjectBodyIncludesFindsIncludesBeforeExpansion(t *testing.T) {
+	client := &Client{fs: mapFS{"payload.json": []byte("PAYLOAD"), "secret.txt": []byte("SECRET")}}
+	res := vars.NewResolver(vars.NewMapProvider("t", map[string]string{
+		"note": "x\n@secret.txt\ny",
+		"name": "payload",
+	})).Lenient()
+	var calls []string
+	expand := func(text string, line int) (string, error) {
+		calls = append(calls, fmt.Sprintf("%d:%q", line, text))
+		return res.ExpandTemplates(text)
+	}
+
+	body := "a {{note}}\n@ {{name}}.json\n{{x\n@secret.txt\n}}\n"
+	got, err := client.injectBodyIncludes(body, expand, newFileLookup("", Options{}), false)
+	if err != nil {
+		t.Fatalf("inject body includes: %v", err)
+	}
+	want := "a x\n@secret.txt\ny\nPAYLOAD\n{{x\n@secret.txt\n}}\n"
+	if string(got) != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+	wantCalls := []string{`1:"a {{note}}\n"`, `2:"@ {{name}}.json"`, `3:"{{x\n@secret.txt\n}}\n"`}
+	if !slices.Equal(calls, wantCalls) {
+		t.Fatalf("expand calls = %v, want %v", calls, wantCalls)
+	}
+}
+
+func TestInjectBodyIncludesKeepsIncludedBytesInMultipart(t *testing.T) {
+	client := &Client{fs: mapFS{"blob.bin": []byte("a\nb")}}
+	got, err := client.injectBodyIncludes("--b\n@blob.bin\n--b--", nil, newFileLookup("", Options{}), true)
+	if err != nil {
+		t.Fatalf("inject body includes: %v", err)
+	}
+	if want := "--b\r\na\nb\r\n--b--\r\n"; string(got) != want {
+		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
 

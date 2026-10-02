@@ -5,6 +5,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/http/query"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -124,6 +125,10 @@ type Request struct {
 	URL     string
 	Headers header.Values
 	Query   query.Values
+	// Written marks values set at run time. Expand renders the others, which
+	// are authored templates. A nil Expand shows them as written.
+	Written restfile.Written
+	Expand  func(string) (string, error)
 }
 
 // NewRequest validates and copies a request view. A nil query is derived lazily

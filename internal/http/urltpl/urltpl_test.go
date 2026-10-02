@@ -112,23 +112,7 @@ func TestParseTargetQueryProtectsTemplateSeparators(t *testing.T) {
 	}
 }
 
-func TestPatchQueryTemplateValueInPatch(t *testing.T) {
-	raw := "https://example.com/path?keep=1"
-	patch := map[string]*string{"q": strPtr("{{token}}")}
-
-	got, err := PatchQuery(raw, patch)
-	if err != nil {
-		t.Fatalf("PatchQuery: %v", err)
-	}
-	if strings.Contains(got, "%7B%7B") || strings.Contains(got, "%7D%7D") {
-		t.Fatalf("expected template braces unescaped, got %q", got)
-	}
-	if !strings.Contains(got, "q={{token}}") {
-		t.Fatalf("expected template value, got %q", got)
-	}
-}
-
-func TestPatchQueryTemplateEncodesNonTemplateValues(t *testing.T) {
+func TestPatchQueryEncodesTemplateTextInValues(t *testing.T) {
 	raw := "{{base}}/path?keep=1"
 	patch := map[string]*string{"q": strPtr("hello world {{token}}")}
 
@@ -136,8 +120,21 @@ func TestPatchQueryTemplateEncodesNonTemplateValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PatchQuery: %v", err)
 	}
-	if !strings.Contains(got, "q=hello+world+{{token}}") {
-		t.Fatalf("expected encoded spaces with template preserved, got %q", got)
+	if want := "{{base}}/path?keep=1&q=hello+world+%7B%7Btoken%7D%7D"; got != want {
+		t.Fatalf("PatchQuery() = %q, want %q", got, want)
+	}
+}
+
+func TestMergeQueryEncodesTemplateTextInValues(t *testing.T) {
+	raw := "{{base}}/path?keep=1"
+	patch := map[string][]string{"q": {"a", "{{token}}"}}
+
+	got, err := MergeQuery(raw, patch)
+	if err != nil {
+		t.Fatalf("MergeQuery: %v", err)
+	}
+	if want := "{{base}}/path?keep=1&q=a&q=%7B%7Btoken%7D%7D"; got != want {
+		t.Fatalf("MergeQuery() = %q, want %q", got, want)
 	}
 }
 

@@ -687,3 +687,106 @@ func TestNestedCycleOutranksUndefined(t *testing.T) {
 		t.Fatalf("strict render must report the cycle over the missing name, got %v", err)
 	}
 }
+
+func TestExpandTemplatesDeferredKeepsHelpersAndExpressions(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(NewTemplateProvider("file", map[string]string{
+		"base.part": "alpha",
+		"trace.id":  "{{$uuid}}",
+		"nested":    "{{trace.id}}-x",
+	}))
+	called := false
+	resolver.SetExprEval(func(string, ExprPos, Lookup) (string, error) {
+		called = true
+		return "evaluated", nil
+	})
+
+	for input, want := range map[string]string{
+		"{{base.part}}-{{$uuid}}-{{= 1+1 }}": "alpha-{{$uuid}}-{{= 1+1 }}",
+		"{{nested}}":                         "{{$uuid}}-x",
+	} {
+		got, err := resolver.ExpandTemplatesDeferred(input)
+		if err != nil {
+			t.Fatalf("ExpandTemplatesDeferred(%q) error = %v", input, err)
+		}
+		if got != want {
+			t.Fatalf("ExpandTemplatesDeferred(%q) = %q, want %q", input, got, want)
+		}
+	}
+	if called {
+		t.Fatal("deferred expansion evaluated an expression")
+	}
+	if _, err := resolver.ExpandTemplatesStatic("{{trace.id}}"); err == nil {
+		t.Fatal("static expansion accepted a helper after a deferred expansion")
+	}
+}
+
+func TestExpandTemplatesDeferredStillReportsErrors(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(NewTemplateProvider("file", map[string]string{
+		"a": "{{b}}",
+		"b": "{{a}}",
+	}))
+	if _, err := resolver.ExpandTemplatesDeferred("{{missing}}"); !errors.Is(err, ErrUndefinedVariable) {
+		t.Fatalf("undefined name error = %v, want ErrUndefinedVariable", err)
+	}
+	if _, err := resolver.ExpandTemplatesDeferred("{{a}}"); err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("cycle error = %v, want a variable cycle", err)
+	}
+}
+
+func TestExpandHelpersLeavesVariablesAndExpressions(t *testing.T) {
+	t.Parallel()
+
+	got, err := ExpandHelpers("{{api.token}}-{{= vars.get(\"x\") }}-{{$randomInt(7, 7)}}-{{$nope}}")
+	if err != nil {
+		t.Fatalf("ExpandHelpers() error = %v", err)
+	}
+	if want := "{{api.token}}-{{= vars.get(\"x\") }}-7-{{$nope}}"; got != want {
+		t.Fatalf("ExpandHelpers() = %q, want %q", got, want)
+	}
+	if _, err := ExpandHelpers("{{$randomChoice()}}"); err == nil {
+		t.Fatal("ExpandHelpers() accepted a misused helper")
+	}
+}
+
+func TestExpandTemplatesKeepHelpersEvaluatesExpressions(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(NewTemplateProvider("file", map[string]string{
+		"base": "alpha",
+		"sum":  "{{= 6 * 7 }}",
+	}))
+	resolver.SetExprEval(func(expr string, _ ExprPos, _ Lookup) (string, error) {
+		if expr != "6 * 7" {
+			t.Fatalf("expression = %q", expr)
+		}
+		return "42", nil
+	})
+
+	got, err := resolver.ExpandTemplatesKeepHelpers("{{base}}/{{sum}}/{{= 6 * 7 }}/{{$uuid}}")
+	if err != nil {
+		t.Fatalf("ExpandTemplatesKeepHelpers() error = %v", err)
+	}
+	if want := "alpha/42/42/{{$uuid}}"; got != want {
+		t.Fatalf("ExpandTemplatesKeepHelpers() = %q, want %q", got, want)
+	}
+	if _, err := resolver.ExpandTemplatesKeepHelpers("{{missing}}"); !errors.Is(err, ErrUndefinedVariable) {
+		t.Fatalf("undefined name error = %v, want ErrUndefinedVariable", err)
+	}
+}
+
+func TestResolverExpandHelpersLetsVariablesWin(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(NewMapProvider("file", map[string]string{"$uuid": "fixed"}))
+	got, err := resolver.ExpandHelpers("{{$uuid}} {{$randomInt(7, 7)}} {{name}}")
+	if err != nil {
+		t.Fatalf("ExpandHelpers() error = %v", err)
+	}
+	if want := "{{$uuid}} 7 {{name}}"; got != want {
+		t.Fatalf("ExpandHelpers() = %q, want %q", got, want)
+	}
+}

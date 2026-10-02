@@ -39,6 +39,12 @@ func resolveRequestTarget(
 	if err != nil {
 		return "", err
 	}
+	return resolveTarget(target, rawBase, resolver, scheme)
+}
+
+// resolveTarget resolves a target that is already expanded, or that a script
+// wrote and must not be expanded.
+func resolveTarget(target, rawBase string, resolver *vars.Resolver, scheme requestScheme) (string, error) {
 	if target == "" {
 		return "", targetError("request url is empty")
 	}

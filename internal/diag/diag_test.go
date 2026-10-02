@@ -1,6 +1,7 @@
 package diag_test
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -254,6 +255,25 @@ func TestClassOfStopsAfterFirstClass(t *testing.T) {
 	}
 }
 
+func TestClassOfTLSVerificationAndAlerts(t *testing.T) {
+	for name, err := range map[string]error{
+		"platform verifier": &url.Error{
+			Op:  "Get",
+			URL: "https://127.0.0.1",
+			Err: &tls.CertificateVerificationError{Err: errors.New("certificate is not trusted")},
+		},
+		"peer alert": &url.Error{
+			Op:  "Get",
+			URL: "https://127.0.0.1",
+			Err: &net.OpError{Op: "remote error", Err: errors.New("tls: certificate required")},
+		},
+	} {
+		if got := diag.ClassOf(err); got != diag.ClassTLS {
+			t.Errorf("%s: ClassOf = %q, want %q", name, got, diag.ClassTLS)
+		}
+	}
+}
+
 type panicUnwrapper struct{}
 
 func (panicUnwrapper) Error() string { return "unreachable" }
@@ -474,6 +494,7 @@ func TestClassKnownMembership(t *testing.T) {
 		diag.ClassRoute,
 		diag.ClassFilesystem,
 		diag.ClassScript,
+		diag.ClassAssertion,
 		diag.ClassHistory,
 		diag.ClassUI,
 		diag.ClassInternal,

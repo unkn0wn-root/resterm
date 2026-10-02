@@ -56,7 +56,7 @@ func ResolveAuth(
 	kind := auth.Kind()
 	expandResult := func(param string) (vars.Expansion, error) {
 		value := auth.Params[param]
-		if value == "" || resolver == nil {
+		if value == "" || resolver == nil || auth.Written {
 			return vars.Expansion{Value: value}, nil
 		}
 		out, err := resolver.ExpandTemplatesResultAt(value, auth.Pos())

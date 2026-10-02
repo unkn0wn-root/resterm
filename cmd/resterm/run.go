@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"golang.org/x/term"
 
@@ -38,14 +40,9 @@ func handleRunSubcommand(args []string) (bool, error) {
 }
 
 func runRun(args []string) error {
-	if len(args) > 0 {
-		op := strings.ToLower(args[0])
-		switch op {
-		case "-h", "--help", "help":
-			cmd := newRunCmd()
-			printRunUsage(os.Stdout, cmd.fs)
-			return nil
-		}
+	if len(args) > 0 && cli.IsHelpArg(args[0]) {
+		printRunUsage(os.Stdout, newRunCmd().fs)
+		return nil
 	}
 
 	cmd := newRunCmd()
@@ -228,7 +225,9 @@ func (c *runCmd) run() error {
 		}()
 	}
 
-	rep, err := c.execRun(context.Background(), src, cfg, client)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	rep, err := c.execRun(ctx, src, cfg, client)
 	if err != nil {
 		if runner.IsUsageError(err) {
 			return runExit(err, runExitCodeUsage)

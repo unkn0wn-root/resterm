@@ -16,7 +16,8 @@ import (
 // required when traffic is routed through an SSH/k8s tunnel dialer.
 const passthroughScheme = "passthrough:///"
 
-func buildDial(gr *restfile.GRPCRequest, opt Options) (string, []grpc.DialOption, error) {
+// failure records the TLS error of a connection that does not come up.
+func buildDial(gr *restfile.GRPCRequest, opt Options, failure *tlsFailure) (string, []grpc.DialOption, error) {
 	sshOn := opt.SSH != nil && opt.SSH.Active()
 	k8sOn := opt.K8s != nil && opt.K8s.Active()
 	if tunnel.HasConflict(sshOn, k8sOn) {
@@ -31,7 +32,7 @@ func buildDial(gr *restfile.GRPCRequest, opt Options) (string, []grpc.DialOption
 	if shouldUsePlaintext(gr, opt) {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else {
-		creds, err := buildTransportCredentials(opt)
+		creds, err := buildTransportCredentials(opt, failure)
 		if err != nil {
 			return "", nil, err
 		}
@@ -95,7 +96,7 @@ func isSchemeChar(r rune) bool {
 		r == '.'
 }
 
-func buildTransportCredentials(opt Options) (credentials.TransportCredentials, error) {
+func buildTransportCredentials(opt Options, failure *tlsFailure) (credentials.TransportCredentials, error) {
 	cfg, err := tlsconfig.Build(tlsconfig.Files{
 		RootCAs:    opt.RootCAs,
 		ClientCert: opt.ClientCert,
@@ -106,14 +107,17 @@ func buildTransportCredentials(opt Options) (credentials.TransportCredentials, e
 	if err != nil {
 		return nil, err
 	}
-	return credentials.NewTLS(cfg), nil
+	return tlsCreds{TransportCredentials: credentials.NewTLS(cfg), failure: failure}, nil
 }
 
 func shouldUsePlaintext(gr *restfile.GRPCRequest, opt Options) bool {
 	if v, ok := gr.Plaintext.Get(); ok {
 		return v
 	}
-	return opt.DefaultPlaintext.Or(!hasTLS(opt))
+	if hasTLS(opt) {
+		return false
+	}
+	return opt.DefaultPlaintext.Or(true)
 }
 
 func hasTLS(opt Options) bool {

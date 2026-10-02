@@ -16,6 +16,21 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+// CheckCompare resolves the compare targets req would run with, so a run can
+// reject an unknown environment before it sends anything.
+func (e *Engine) CheckCompare(req *restfile.Request, sel vars.Selection) error {
+	spec := core.NormalizeCompareSpec(e.compareSpec(req))
+	if spec == nil {
+		return nil
+	}
+	env, err := e.environment(sel)
+	if err != nil {
+		return err
+	}
+	_, err = e.cfg.Catalog.CompareTargets(env.Selection(), spec.Group, spec.Baseline, spec.Environments)
+	return err
+}
+
 func (e *Engine) executeCompare(
 	ctx context.Context,
 	doc *restfile.Document,

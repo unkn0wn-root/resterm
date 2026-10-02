@@ -288,8 +288,8 @@ func TestPreviewCyclicVariablesReportsError(t *testing.T) {
 		URL:     "http://example.test",
 		Headers: http.Header{"X-Test": []string{"{{a}}"}},
 		Variables: []restfile.Variable{
-			{Name: "a", Value: "{{b}}"},
-			{Name: "b", Value: "{{a}}"},
+			{Name: "a", Value: "{{b}}", Authored: true},
+			{Name: "b", Value: "{{a}}", Authored: true},
 		},
 	}
 
@@ -373,8 +373,8 @@ func TestPreviewCommandAuthStructuralErrorStaysFatal(t *testing.T) {
 		Method: http.MethodGet,
 		URL:    "http://example.test",
 		Variables: []restfile.Variable{
-			{Name: "a", Value: "{{b}}"},
-			{Name: "b", Value: "{{a}}"},
+			{Name: "a", Value: "{{b}}", Authored: true},
+			{Name: "b", Value: "{{a}}", Authored: true},
 		},
 		Metadata: restfile.RequestMetadata{
 			Auth: &restfile.AuthSpec{
@@ -466,8 +466,8 @@ func TestPreviewGRPCCyclicVariablesStaysFatal(t *testing.T) {
 		Method: "GRPC",
 		URL:    "localhost:50051",
 		Variables: []restfile.Variable{
-			{Name: "a", Value: "{{b}}"},
-			{Name: "b", Value: "{{a}}"},
+			{Name: "a", Value: "{{b}}", Authored: true},
+			{Name: "b", Value: "{{a}}", Authored: true},
 		},
 		GRPC: &restfile.GRPCRequest{
 			Target:     "localhost:50051",
@@ -520,8 +520,8 @@ func TestPreviewOAuthStructuralErrorOutranksUndefined(t *testing.T) {
 		Method: http.MethodGet,
 		URL:    "http://example.test",
 		Variables: []restfile.Variable{
-			{Name: "a", Value: "{{b}}"},
-			{Name: "b", Value: "{{a}}"},
+			{Name: "a", Value: "{{b}}", Authored: true},
+			{Name: "b", Value: "{{a}}", Authored: true},
 		},
 		Metadata: restfile.RequestMetadata{
 			Auth: &restfile.AuthSpec{
@@ -558,8 +558,8 @@ func TestPreviewCommandAuthStructuralErrorOutranksUndefined(t *testing.T) {
 			Method: http.MethodGet,
 			URL:    "http://example.test",
 			Variables: []restfile.Variable{
-				{Name: "a", Value: "{{b}}"},
-				{Name: "b", Value: "{{a}}"},
+				{Name: "a", Value: "{{b}}", Authored: true},
+				{Name: "b", Value: "{{a}}", Authored: true},
 			},
 			Metadata: restfile.RequestMetadata{
 				Auth: &restfile.AuthSpec{
@@ -592,8 +592,8 @@ func TestPreviewCommandAuthArgvCycleOutranksUndefinedParam(t *testing.T) {
 		Method: http.MethodGet,
 		URL:    "http://example.test",
 		Variables: []restfile.Variable{
-			{Name: "a", Value: "{{b}}"},
-			{Name: "b", Value: "{{a}}"},
+			{Name: "a", Value: "{{b}}", Authored: true},
+			{Name: "b", Value: "{{a}}", Authored: true},
 		},
 		Metadata: restfile.RequestMetadata{
 			Auth: &restfile.AuthSpec{

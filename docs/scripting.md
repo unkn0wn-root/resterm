@@ -65,6 +65,18 @@ Objects:
 
 The `set*` helpers do not return a value, but their changes still apply to the outgoing request. `removeHeader` can also remove headers declared in the request itself.
 
+`getURL()` and `getHeader()` return values from the request file with variable references expanded, the same way `vars.get` returns them. Values set by the same script with `vars.set` are included, and `{{= ... }}` expressions are evaluated with them. A dynamic helper written directly in the field, such as `{{$uuid}}`, stays unexpanded because each use makes a new value. Declare it instead, as in `# @request id {{$uuid}}`, and the getter returns the value that is sent. If a reference is undefined, the call throws an error.
+
+Values passed to the `set*` helpers are data. They are sent as written. Templates in them are not expanded, and `@ path` lines in a body are not read. Only dynamic helpers such as `{{$uuid}}` are rendered. Build values from variables instead of writing template text:
+
+```http
+# @script pre-request
+> request.setHeader("Authorization", "Bearer " + vars.get("token"));
+> request.setURL(request.getURL() + "?debug=1");
+```
+
+A `{{= ... }}` expression read through `vars.get` and written back is sent as text. Read it through a getter, or compute the value in the script.
+
 All `@script pre-request` blocks for a request share the same state. Each block sees changes made by earlier blocks through `vars.get`, `vars.global.get`, `getURL`, `getMethod`, and `getHeader`. RTS pre-request blocks run before JavaScript blocks, so their changes are visible too. Query parameters are different because they are merged into the URL after the scripts finish. So `getURL` does not show changes made by `setQueryParam`.
 
 ## Test scripts (`@script test`)
@@ -76,7 +88,7 @@ Objects:
 - `tests.fail(message)` - explicit failure.
 - `response`
   - `status`, `statusCode`, `url`, `duration`
-  - `body()` (raw string)
+  - `body` (raw string)
   - `json()` (parsed JSON or `null`)
   - `headers.get(name)`, `headers.has(name)`, `headers.all` (lowercase map). For gRPC the map merges response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`, and `-bin` values arrive base64-encoded.
 - `stream`

@@ -79,10 +79,26 @@ type variableKey struct {
 }
 
 type memoKey struct {
-	variable     variableKey
-	allowDynamic bool
-	allowExpr    bool
+	variable variableKey
+	mode     expandMode
 }
+
+type expandMode uint8
+
+const (
+	expandAll expandMode = iota
+	// expandStatic resolves variables. A helper or expression is an error.
+	expandStatic
+	// expandDeferred resolves variables. Helpers and expressions stay as written.
+	expandDeferred
+	// expandHelpers resolves dynamic helpers only. Everything else stays as written.
+	expandHelpers
+	// expandKeepHelpers resolves variables and expressions. A helper stays as
+	// written, since each render of it makes a new value.
+	expandKeepHelpers
+)
+
+var errDeferred = errors.New("deferred placeholder")
 
 const maxExpandDepth = 16
 
@@ -134,12 +150,12 @@ func (r *Resolver) WithProviders(providers ...Provider) *Resolver {
 }
 
 func (r *Resolver) Resolve(name string) (string, bool, error) {
-	return r.resolve(name, templateReach, r.exprPos, true, true, nil)
+	return r.resolve(name, templateReach, r.exprPos, expandAll, nil)
 }
 
 // ResolveExpr is Resolve for expressions. It skips template-only providers.
 func (r *Resolver) ResolveExpr(name string) (string, bool, error) {
-	return r.resolve(name, exprReach, r.exprPos, true, true, nil)
+	return r.resolve(name, exprReach, r.exprPos, expandAll, nil)
 }
 
 // A missing result still wins provider lookup, preventing fallthrough.
@@ -147,7 +163,7 @@ func (r *Resolver) resolve(
 	name string,
 	from reach,
 	pos ExprPos,
-	allowDynamic, allowExpr bool,
+	mode expandMode,
 	st *expandState,
 ) (string, bool, error) {
 	name = strings.TrimSpace(name)
@@ -171,14 +187,10 @@ func (r *Resolver) resolve(
 			return "", false, err
 		}
 
-		key := memoKey{
-			variable:     variable,
-			allowDynamic: allowDynamic,
-			allowExpr:    allowExpr,
-		}
+		key := memoKey{variable: variable, mode: mode}
 		value, cached := r.memoized(key)
 		if !cached {
-			expanded, err := r.expandValue(name, resolved, variable, pos, allowDynamic, allowExpr, st)
+			expanded, err := r.expandValue(name, resolved, variable, pos, mode, st)
 			if err != nil {
 				return "", false, err
 			}
@@ -209,7 +221,7 @@ func (r *Resolver) expandValue(
 	name, raw string,
 	key variableKey,
 	pos ExprPos,
-	allowDynamic, allowExpr bool,
+	mode expandMode,
 	st *expandState,
 ) (string, error) {
 	if st == nil {
@@ -218,7 +230,7 @@ func (r *Resolver) expandValue(
 
 	st.names[key] = true
 	st.stack = append(st.stack, name)
-	out, err := CompileTemplate(raw).render(r, pos, nil, allowDynamic, allowExpr, st)
+	out, err := CompileTemplate(raw).render(r, pos, nil, mode, st)
 	st.stack = st.stack[:len(st.stack)-1]
 	delete(st.names, key)
 
@@ -362,33 +374,53 @@ func providerLabel(p Provider) string {
 }
 
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
-	return CompileTemplate(input).render(r, r.exprPos, nil, true, true, nil)
+	return CompileTemplate(input).render(r, r.exprPos, nil, expandAll, nil)
 }
 
 // ExpandTemplatesResult expands input and reports whether resolution encountered
 // any undefined variables, including when a lenient resolver suppresses the error.
 func (r *Resolver) ExpandTemplatesResult(input string) (Expansion, error) {
-	return CompileTemplate(input).renderResult(r, r.exprPos, nil, true, true, nil)
+	return CompileTemplate(input).renderResult(r, r.exprPos, nil, expandAll, nil)
 }
 
 // ExpandTemplatesAt uses pos as the start of input in the source file.
 // Without a column, errors point to the whole line.
 func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) {
-	return CompileTemplate(input).render(r, pos, at(pos), true, true, nil)
+	return CompileTemplate(input).render(r, pos, at(pos), expandAll, nil)
 }
 
 // ExpandTemplatesLocated uses locate to find source positions when lines
 // have been removed from input, such as comments in a request body.
 func (r *Resolver) ExpandTemplatesLocated(input string, locate Locator) (string, error) {
-	return CompileTemplate(input).render(r, r.exprPos, locate, true, true, nil)
+	return CompileTemplate(input).render(r, r.exprPos, locate, expandAll, nil)
 }
 
 func (r *Resolver) ExpandTemplatesResultAt(input string, pos ExprPos) (Expansion, error) {
-	return CompileTemplate(input).renderResult(r, pos, at(pos), true, true, nil)
+	return CompileTemplate(input).renderResult(r, pos, at(pos), expandAll, nil)
 }
 
 func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
-	return CompileTemplate(input).render(r, r.exprPos, nil, false, false, nil)
+	return CompileTemplate(input).render(r, r.exprPos, nil, expandStatic, nil)
+}
+
+func (r *Resolver) ExpandTemplatesDeferred(input string) (string, error) {
+	return CompileTemplate(input).render(r, r.exprPos, nil, expandDeferred, nil)
+}
+
+func (r *Resolver) ExpandTemplatesKeepHelpers(input string) (string, error) {
+	return CompileTemplate(input).render(r, r.exprPos, nil, expandKeepHelpers, nil)
+}
+
+// ExpandHelpers renders the dynamic helpers in input and leaves everything else
+// as written. A variable named like a helper wins, as it does in a full render.
+func (r *Resolver) ExpandHelpers(input string) (string, error) {
+	return CompileTemplate(input).render(r, r.exprPos, nil, expandHelpers, nil)
+}
+
+// ExpandHelpers is for text written while a request runs. That text is data,
+// so it must never read variables or run expressions.
+func ExpandHelpers(input string) (string, error) {
+	return NewResolver().ExpandHelpers(input)
 }
 
 func (r *Resolver) SetTrace(tr *Trace) {
@@ -428,12 +460,15 @@ func replaces(err, firstErr error) bool {
 func (r *Resolver) resolveName(
 	name string,
 	pos ExprPos,
-	allowDynamic, allowExpr bool,
+	mode expandMode,
 	st *expandState,
 ) (string, error) {
 	if strings.HasPrefix(name, "=") {
-		if !allowExpr {
+		switch mode {
+		case expandStatic:
 			return "", fmt.Errorf("expressions not allowed")
+		case expandDeferred, expandHelpers:
+			return "", errDeferred
 		}
 		expr := strings.TrimSpace(name[1:])
 		if expr == "" {
@@ -443,11 +478,24 @@ func (r *Resolver) resolveName(
 			return "", fmt.Errorf("expressions not enabled")
 		}
 		return r.expr(expr, pos, func(n string) (string, bool, error) {
-			return r.resolve(n, exprReach, pos, allowDynamic, allowExpr, st)
+			return r.resolve(n, exprReach, pos, mode, st)
 		})
 	}
-	if allowDynamic && strings.HasPrefix(name, "$") {
-		value, ok, err := r.resolve(name, templateReach, pos, allowDynamic, allowExpr, st)
+	if mode == expandHelpers {
+		if !strings.HasPrefix(name, "$") {
+			return "", errDeferred
+		}
+		if _, ok, _ := r.resolve(name, templateReach, pos, mode, st); ok {
+			return "", errDeferred
+		}
+		value, err := dynamic.Resolve(name)
+		if errors.Is(err, dynamic.ErrUnknown) {
+			return "", errDeferred
+		}
+		return value, err
+	}
+	if mode == expandAll && strings.HasPrefix(name, "$") {
+		value, ok, err := r.resolve(name, templateReach, pos, mode, st)
 		if err != nil {
 			return "", err
 		}
@@ -471,12 +519,15 @@ func (r *Resolver) resolveName(
 			return "", err
 		}
 	}
-	value, ok, err := r.resolve(name, templateReach, pos, allowDynamic, allowExpr, st)
+	value, ok, err := r.resolve(name, templateReach, pos, mode, st)
 	if err != nil {
 		return "", err
 	}
 	if ok {
 		return value, nil
+	}
+	if (mode == expandDeferred || mode == expandKeepHelpers) && strings.HasPrefix(name, "$") {
+		return "", errDeferred
 	}
 	r.traceVar(ResolveTrace{Name: name, Missing: true, Uses: 1})
 	return "", fmt.Errorf("%w: %s", ErrUndefinedVariable, name)

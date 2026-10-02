@@ -220,8 +220,8 @@ func TestCaptureExpandsNestedDocumentGlobal(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "caps.http",
 		Globals: []restfile.Variable{
-			{Name: "base", Value: "expanded", Scope: directive.ScopeGlobal},
-			{Name: "nested", Value: "{{base}}", Scope: directive.ScopeGlobal},
+			{Name: "base", Value: "expanded", Scope: directive.ScopeGlobal, Authored: true},
+			{Name: "nested", Value: "{{base}}", Scope: directive.ScopeGlobal, Authored: true},
 		},
 	}
 	req := &restfile.Request{

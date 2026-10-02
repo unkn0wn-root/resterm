@@ -54,6 +54,27 @@ func TestShouldUsePlaintextDisabledWhenTLSConfigured(t *testing.T) {
 	}
 }
 
+func TestShouldUsePlaintextTLSSettingsBeatDefault(t *testing.T) {
+	for name, opts := range map[string]Options{
+		"root cas":    {DefaultPlaintext: restfile.OptOf(true), RootCAs: []string{"ca.pem"}},
+		"client cert": {DefaultPlaintext: restfile.OptOf(true), ClientCert: "cert.pem", ClientKey: "key.pem"},
+		"insecure":    {DefaultPlaintext: restfile.OptOf(true), Insecure: true},
+	} {
+		if shouldUsePlaintext(&restfile.GRPCRequest{}, opts) {
+			t.Errorf("%s: expected TLS settings to override the plaintext default", name)
+		}
+	}
+}
+
+func TestShouldUsePlaintextRequestBeatsTLSSettings(t *testing.T) {
+	opts := Options{RootCAs: []string{"ca.pem"}}
+	req := &restfile.GRPCRequest{Plaintext: restfile.OptOf(true)}
+
+	if !shouldUsePlaintext(req, opts) {
+		t.Fatalf("expected @grpc-plaintext true to win over TLS settings")
+	}
+}
+
 func TestExecuteRejectsSSHAndK8s(t *testing.T) {
 	client := NewClient()
 	grpcReq := &restfile.GRPCRequest{

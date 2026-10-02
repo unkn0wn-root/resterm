@@ -124,7 +124,7 @@ func (e *Engine) rtsPosForLine(doc *restfile.Document, req *restfile.Request, li
 
 func (e *Engine) rtsPosForLineCol(doc *restfile.Document, req *restfile.Request, line, col int) rts.Pos {
 	ps := e.rtsPosForLine(doc, req, line)
-	if col > 0 && e.cfg.SourceDiagnostics {
+	if col > 0 {
 		ps.Col = col
 	}
 	return ps

@@ -12,7 +12,7 @@ func TestNormalize(t *testing.T) {
 	body := "body"
 	out := Output{
 		Headers: http.Header{},
-		Query:   map[string]string{},
+		Query:   map[string]*string{},
 		Body:    &body,
 	}
 
@@ -58,12 +58,8 @@ func TestApplyPreservesTemplatedURL(t *testing.T) {
 		URL:    "{{base_url}}/anything",
 	}
 
-	err := Apply(req, Output{
-		Query: map[string]string{
-			"mode": "debug",
-			"pre":  "1",
-		},
-	})
+	mode, pre := "debug", "1"
+	err := Apply(req, Output{Query: map[string]*string{"mode": &mode, "pre": &pre}})
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -75,5 +71,29 @@ func TestApplyPreservesTemplatedURL(t *testing.T) {
 	}
 	if !strings.Contains(req.URL, "mode=debug") || !strings.Contains(req.URL, "pre=1") {
 		t.Fatalf("expected merged query params, got %q", req.URL)
+	}
+}
+
+func TestApplyMarksRuntimeWritesAsData(t *testing.T) {
+	req := &restfile.Request{
+		Method:  "GET",
+		URL:     "https://example.com",
+		Headers: http.Header{"X-Declared": {"{{token}}"}},
+	}
+	url, body := "https://example.com/{{token}}", "{{token}}"
+	out := Output{URL: &url, Body: &body}
+	out.SetHeader("X-Script", "{{token}}-{{$randomInt(7, 7)}}")
+
+	if err := Apply(req, out); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !req.Written.URL || !req.Written.Body {
+		t.Fatalf("written = %+v, want the URL and body marked", req.Written)
+	}
+	if got := req.Headers.Get("X-Script"); got != "{{token}}-7" {
+		t.Fatalf("X-Script = %q, want helpers rendered and the name left as written", got)
+	}
+	if !req.Written.Header("X-Script", "{{token}}-7") || req.Written.Header("X-Declared", "{{token}}") {
+		t.Fatalf("written headers = %v, want only the script header", req.Written.Headers)
 	}
 }

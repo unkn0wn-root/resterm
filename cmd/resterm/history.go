@@ -34,13 +34,14 @@ func runHistory(args []string) error {
 	if len(args) == 0 {
 		return errors.New(historyUsageText())
 	}
-	op := str.Trim(strings.ToLower(args[0]))
-	switch op {
-	case "-h", "--help", "help":
+	if cli.IsHelpArg(args[0]) {
 		if err := writeln(os.Stdout, historyUsageText()); err != nil {
 			return fmt.Errorf("history: write output: %w", err)
 		}
 		return nil
+	}
+	op := str.Trim(strings.ToLower(args[0]))
+	switch op {
 	case "export":
 		return runHistoryExport(args[1:])
 	case "import":

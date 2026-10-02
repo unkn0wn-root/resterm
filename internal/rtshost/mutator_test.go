@@ -64,11 +64,15 @@ func TestMutatorPatchesRequestURLOnQuery(t *testing.T) {
 
 	mut.SetQuery("user", "alice")
 
-	if out.Query["user"] != "alice" {
+	if got := out.Query["user"]; got == nil || *got != "alice" {
 		t.Fatalf("expected recorded query user=alice, got %#v", out.Query)
 	}
-	if got := req.Query["user"]; len(got) != 1 || got[0] != "alice" {
-		t.Fatalf("expected request view query user=alice, got %#v", req.Query)
+	q, err := queryValues(req)
+	if err != nil {
+		t.Fatalf("queryValues: %v", err)
+	}
+	if got := q["user"]; len(got) != 1 || got[0] != "alice" {
+		t.Fatalf("expected request view query user=alice, got %#v", q)
 	}
 	if !strings.Contains(req.URL, "seed=1") || !strings.Contains(req.URL, "user=alice") {
 		t.Fatalf("expected patched request url, got %q", req.URL)
@@ -83,13 +87,17 @@ func TestMutatorDerivesQueryAfterSetURL(t *testing.T) {
 	mut.SetURL("https://example.com/new?keep=1")
 	mut.SetQuery("added", "2")
 
-	if _, ok := req.Query["stale"]; ok {
-		t.Fatalf("request query retained the old URL: %#v", req.Query)
+	q, err := queryValues(req)
+	if err != nil {
+		t.Fatalf("queryValues: %v", err)
 	}
-	if got := req.Query["keep"]; !slices.Equal(got, []string{"1"}) {
+	if _, ok := q["stale"]; ok {
+		t.Fatalf("request query retained the old URL: %#v", q)
+	}
+	if got := q["keep"]; !slices.Equal(got, []string{"1"}) {
 		t.Fatalf("request query keep = %q, want [1]", got)
 	}
-	if got := req.Query["added"]; !slices.Equal(got, []string{"2"}) {
+	if got := q["added"]; !slices.Equal(got, []string{"2"}) {
 		t.Fatalf("request query added = %q, want [2]", got)
 	}
 }
@@ -101,7 +109,7 @@ func TestMutatorPatchesTheEmptyQueryName(t *testing.T) {
 
 	mut.SetQuery("", "1")
 
-	if out.Query[""] != "1" {
+	if got := out.Query[""]; got == nil || *got != "1" {
 		t.Fatalf("recorded query = %#v, want the empty name", out.Query)
 	}
 	if req.URL != "https://example.com/path?=1" {
@@ -187,7 +195,8 @@ func TestMutatorWithoutRuntimeViewsOnlyRecords(t *testing.T) {
 	if mut.Request() == nil {
 		t.Fatalf("expected an empty request view instead of nil")
 	}
-	if recorded, _ := out.Variables.Get("token"); recorded != "abc" || out.Query["user"] != "alice" {
+	recorded, _ := out.Variables.Get("token")
+	if user := out.Query["user"]; recorded != "abc" || user == nil || *user != "alice" {
 		t.Fatalf("expected recorded mutations, out=%#v", out)
 	}
 	if out.Body == nil || *out.Body != "payload" {

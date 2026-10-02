@@ -75,32 +75,29 @@ func outsideTemplate(s string, sep byte) int {
 	return -1
 }
 
+// PatchQuery keeps templates in raw intact. Keys and values are data and are
+// encoded, so a value cannot become a template.
 func PatchQuery(raw string, patch map[string]*string) (string, error) {
 	if len(patch) == 0 {
 		return raw, nil
 	}
 
 	state := newTemplateState(collectSources(raw, patch, nil)...)
-	raw = state.replace(raw)
-	patch = state.replacePatch(patch)
-
-	updated, err := patchQueryURL(raw, patch)
+	updated, err := patchQueryURL(state.replace(raw), patch)
 	if err != nil {
 		return "", err
 	}
 	return state.restore(updated), nil
 }
 
+// MergeQuery is PatchQuery for parameters with several values.
 func MergeQuery(raw string, patch map[string][]string) (string, error) {
 	if len(patch) == 0 {
 		return raw, nil
 	}
 
 	state := newTemplateState(collectSources(raw, nil, patch)...)
-	raw = state.replace(raw)
-	patch = state.replaceMergePatch(patch)
-
-	updated, err := mergeQueryURL(raw, patch)
+	updated, err := mergeQueryURL(state.replace(raw), patch)
 	if err != nil {
 		return "", err
 	}
@@ -206,46 +203,6 @@ func (s *templateState) replace(input string) string {
 		input = input[end+2:]
 	}
 	return b.String()
-}
-
-func (s *templateState) replacePatch(patch map[string]*string) map[string]*string {
-	if len(patch) == 0 {
-		return patch
-	}
-
-	out := make(map[string]*string, len(patch))
-	for key, val := range patch {
-		rkey := s.replace(key)
-		if val == nil {
-			out[rkey] = nil
-			continue
-		}
-		rval := s.replace(*val)
-		out[rkey] = &rval
-	}
-	return out
-}
-
-func (s *templateState) replaceMergePatch(patch map[string][]string) map[string][]string {
-	if len(patch) == 0 {
-		return patch
-	}
-
-	out := make(map[string][]string, len(patch))
-	for key, vals := range patch {
-		rkey := s.replace(key)
-		if len(vals) == 0 {
-			out[rkey] = nil
-			continue
-		}
-
-		outVals := make([]string, 0, len(vals))
-		for _, val := range vals {
-			outVals = append(outVals, s.replace(val))
-		}
-		out[rkey] = outVals
-	}
-	return out
 }
 
 func (s *templateState) restore(input string) string {

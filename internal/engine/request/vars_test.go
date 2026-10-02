@@ -152,10 +152,10 @@ func TestProvidersExpandDeclaredVariableTemplates(t *testing.T) {
 
 	e := New(engcfg.Config{}, nil)
 	doc := &restfile.Document{
-		Variables: []restfile.Variable{{Name: "file.greeting", Value: "hello {{name}}"}},
+		Variables: []restfile.Variable{{Name: "file.greeting", Value: "hello {{name}}", Authored: true}},
 	}
 	req := &restfile.Request{
-		Variables: []restfile.Variable{{Name: "trace.id", Value: "{{$uuid}}"}},
+		Variables: []restfile.Variable{{Name: "trace.id", Value: "{{$uuid}}", Authored: true}},
 	}
 	globs := vars.CollectNames(map[string]vars.GlobalMutation{
 		"captured": {Name: "captured", Value: "{{file.greeting}}"},

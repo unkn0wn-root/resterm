@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"time"
 
@@ -210,6 +211,10 @@ func (c *Client) StartWebSocket(
 			proto:  "HTTP/1.1",
 		},
 	)
+	// The handshake runs over http or https. Report the ws or wss URL the session used.
+	if u, err := url.Parse(meta.EffectiveURL); err == nil && schemeWebSocket.apply(u) == nil {
+		meta.EffectiveURL = u.String()
+	}
 
 	session := stream.NewSession(sessionCtx, stream.KindWebSocket, stream.Config{})
 	session.MarkOpen()

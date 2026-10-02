@@ -233,6 +233,7 @@ type WorkflowStep struct {
 	Tests      []scripts.TestResult
 	ScriptErr  error
 	Skipped    bool
+	SkipReason string
 	Canceled   bool
 	Success    bool
 	Duration   time.Duration

@@ -108,15 +108,15 @@ func newPlanFixture(t *testing.T, decls ...varDecl) planFixture {
 		case srcRun:
 			runVals[d.name] = d.value
 		case srcRequest:
-			f.req.Variables = append(f.req.Variables, restfile.Variable{Name: d.name, Value: d.value})
+			f.req.Variables = append(f.req.Variables, restfile.Variable{Name: d.name, Value: d.value, Authored: true})
 		case srcRuntimeGlobal:
 			f.globs.Set(d.name, vars.GlobalMutation{Name: d.name, Value: d.value})
 		case srcDocGlobal:
-			f.doc.Globals = append(f.doc.Globals, restfile.Variable{Name: d.name, Value: d.value})
+			f.doc.Globals = append(f.doc.Globals, restfile.Variable{Name: d.name, Value: d.value, Authored: true})
 		case srcRuntimeFile:
 			runtimeFiles = append(runtimeFiles, d)
 		case srcFileVar:
-			f.doc.Variables = append(f.doc.Variables, restfile.Variable{Name: d.name, Value: d.value})
+			f.doc.Variables = append(f.doc.Variables, restfile.Variable{Name: d.name, Value: d.value, Authored: true})
 		case srcEnvironment:
 			envValues[d.name] = d.value
 		default:
