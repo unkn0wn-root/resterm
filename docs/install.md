@@ -24,6 +24,28 @@ iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps
 
 Prebuilt Linux binaries need glibc 2.32 or newer. On an older distro, build from source or upgrade glibc.
 
+The commands below do the same download from a terminal. The Unix version needs `curl` and `jq`.
+
+```bash
+# Find the latest release tag
+LATEST_TAG=$(curl -fsSL https://api.github.com/repos/unkn0wn-root/resterm/releases/latest | jq -r .tag_name)
+
+# Download the matching binary (Darwin/Linux + amd64/arm64)
+curl -fL -o resterm "https://github.com/unkn0wn-root/resterm/releases/download/${LATEST_TAG}/resterm_$(uname -s)_$(uname -m)"
+
+# Install on PATH
+chmod +x resterm
+sudo install -m 0755 resterm /usr/local/bin/resterm
+```
+
+```powershell
+$latest = Invoke-RestMethod https://api.github.com/repos/unkn0wn-root/resterm/releases/latest
+$asset  = $latest.assets | Where-Object { $_.name -like 'resterm_Windows_*' } | Select-Object -First 1
+Invoke-WebRequest -Uri $asset.browser_download_url -OutFile resterm.exe
+# Optionally move to a directory on PATH:
+Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe"
+```
+
 ## Build from source
 
 ```bash
