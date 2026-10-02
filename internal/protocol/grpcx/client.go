@@ -104,10 +104,12 @@ func (c *Client) Execute(
 		parent = context.Background()
 	}
 
-	target, dialOpts, err := buildDial(gr, opt)
+	var tf tlsFailure
+	target, dialOpts, err := buildDial(gr, opt, &tf)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { err = tf.classify(err) }()
 
 	conn, err := c.dial(target, dialOpts)
 	if err != nil {
