@@ -73,6 +73,16 @@ type variablePlan struct {
 type execVars struct {
 	RunScope
 	scripts vars.NameMap[string]
+	// helpers holds authored declarations with their dynamic helpers rendered
+	// once, so one execution sees one value for each.
+	helpers map[declKey]string
+}
+
+// declKey names an authored declaration by its source, name, and text.
+type declKey struct {
+	source variableSource
+	name   string
+	text   string
 }
 
 type varSources struct {
@@ -307,7 +317,40 @@ func entries(source variableSource, src varSources, refs *vars.EnvRefs) []variab
 		if src.sec == omitSecrets && d.secret && !isEnvRef(d.authored, d.text) {
 			continue
 		}
-		out = append(out, variableEntry{name: d.name, val: declaredValue(refs, d.authored, d.text)})
+		text := d.text
+		if pinned, ok := src.run.helpers[declKey{source: source, name: d.name, text: d.text}]; ok && d.authored {
+			text = pinned
+		}
+		out = append(out, variableEntry{name: d.name, val: declaredValue(refs, d.authored, text)})
+	}
+	return out
+}
+
+// pinHelpers renders the dynamic helpers in each authored declaration once.
+// References stay as written, so they still read later script writes. An env:
+// reference is left alone because its name may not hold a helper.
+func (e *Engine) pinHelpers(src varSources) map[declKey]string {
+	res := vars.NewResolver(e.buildVariablePlan(src).providers()...)
+	var out map[declKey]string
+	for i, t := range sourceTable {
+		if !t.template {
+			continue
+		}
+		source := variableSource(i)
+		for _, d := range declarations(source, src.doc, src.req) {
+			if !d.authored || isEnvRef(d.authored, d.text) || !vars.HasPlaceholder(d.text) {
+				continue
+			}
+			// A helper that fails stays as written so the request reports it.
+			text, err := res.ExpandHelpers(d.text)
+			if err != nil || text == d.text {
+				continue
+			}
+			if out == nil {
+				out = make(map[declKey]string)
+			}
+			out[declKey{source: source, name: d.name, text: d.text}] = text
+		}
 	}
 	return out
 }

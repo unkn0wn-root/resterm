@@ -93,6 +93,9 @@ const (
 	expandDeferred
 	// expandHelpers resolves dynamic helpers only. Everything else stays as written.
 	expandHelpers
+	// expandKeepHelpers resolves variables and expressions. A helper stays as
+	// written, since each render of it makes a new value.
+	expandKeepHelpers
 )
 
 var errDeferred = errors.New("deferred placeholder")
@@ -404,10 +407,20 @@ func (r *Resolver) ExpandTemplatesDeferred(input string) (string, error) {
 	return CompileTemplate(input).render(r, r.exprPos, nil, expandDeferred, nil)
 }
 
+func (r *Resolver) ExpandTemplatesKeepHelpers(input string) (string, error) {
+	return CompileTemplate(input).render(r, r.exprPos, nil, expandKeepHelpers, nil)
+}
+
+// ExpandHelpers renders the dynamic helpers in input and leaves everything else
+// as written. A variable named like a helper wins, as it does in a full render.
+func (r *Resolver) ExpandHelpers(input string) (string, error) {
+	return CompileTemplate(input).render(r, r.exprPos, nil, expandHelpers, nil)
+}
+
 // ExpandHelpers is for text written while a request runs. That text is data,
 // so it must never read variables or run expressions.
 func ExpandHelpers(input string) (string, error) {
-	return CompileTemplate(input).render(NewResolver(), ExprPos{}, nil, expandHelpers, nil)
+	return NewResolver().ExpandHelpers(input)
 }
 
 func (r *Resolver) SetTrace(tr *Trace) {
@@ -472,6 +485,9 @@ func (r *Resolver) resolveName(
 		if !strings.HasPrefix(name, "$") {
 			return "", errDeferred
 		}
+		if _, ok, _ := r.resolve(name, templateReach, pos, mode, st); ok {
+			return "", errDeferred
+		}
 		value, err := dynamic.Resolve(name)
 		if errors.Is(err, dynamic.ErrUnknown) {
 			return "", errDeferred
@@ -510,7 +526,7 @@ func (r *Resolver) resolveName(
 	if ok {
 		return value, nil
 	}
-	if mode == expandDeferred && strings.HasPrefix(name, "$") {
+	if (mode == expandDeferred || mode == expandKeepHelpers) && strings.HasPrefix(name, "$") {
 		return "", errDeferred
 	}
 	r.traceVar(ResolveTrace{Name: name, Missing: true, Uses: 1})

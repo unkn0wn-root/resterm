@@ -85,12 +85,7 @@ func (e *Eng) Eval(ctx context.Context, cfg EvalConfig, src string, pos Pos) (Va
 	if e == nil {
 		return Null(), fmt.Errorf("nil engine")
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	e.ensure()
-	cx := e.newCtx(ctx, cfg)
-	pre, err := e.buildPre(cx, cfg, pos)
+	cx, pre, err := e.prepare(ctx, cfg, pos)
 	if err != nil {
 		return Null(), err
 	}
@@ -131,12 +126,7 @@ func (e *Eng) ExecModule(ctx context.Context, cfg EvalConfig, src string, pos Po
 	if e == nil {
 		return nil, fmt.Errorf("nil engine")
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	e.ensure()
-	cx := e.newCtx(ctx, cfg)
-	pre, err := e.buildPre(cx, cfg, pos)
+	cx, pre, err := e.prepare(ctx, cfg, pos)
 	if err != nil {
 		return nil, err
 	}
@@ -149,6 +139,19 @@ func (e *Eng) ExecModule(ctx context.Context, cfg EvalConfig, src string, pos Po
 		defer cx.pop()
 	}
 	return Exec(cx, mod, pre)
+}
+
+// prepare builds what one evaluation needs. Only this setup reads shared
+// engine state, so the lock is released before code runs. A host function can
+// then evaluate again without waiting on itself.
+func (e *Eng) prepare(ctx context.Context, cfg EvalConfig, pos Pos) (*Ctx, map[string]Value, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.ensure()
+	cx := e.newCtx(ctx, cfg)
+	pre, err := e.buildPre(cx, cfg, pos)
+	return cx, pre, err
 }
 
 func (e *Eng) ensure() {

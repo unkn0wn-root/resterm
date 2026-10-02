@@ -53,6 +53,16 @@ func TestScriptsReadAuthoredValuesExpanded(t *testing.T) {
 			check: wireURL("http://example.test/7/x"),
 		},
 		{
+			name:  "js expression",
+			block: "# @script pre-request\n> request.setURL(request.getURL() + \"/x\");\nGET {{base}}/{{= 6 * 7}}\n",
+			check: wireURL("http://example.test/42/x"),
+		},
+		{
+			name:  "rts expression sees a script write",
+			block: "# @rts pre-request\n> vars.set(\"n\", \"5\")\n> request.setURL(request.url + \"/x\")\nGET {{base}}/{{= vars.n}}\n",
+			check: wireURL("http://example.test/5/x"),
+		},
+		{
 			name:  "js signs the sent url",
 			block: "# @script pre-request\n> request.setHeader(\"X-Signed\", request.getURL());\nGET {{base}}/v1\n",
 			check: wireHeader("X-Signed", "http://example.test/v1"),

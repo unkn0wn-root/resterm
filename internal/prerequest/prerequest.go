@@ -24,8 +24,8 @@ type Input struct {
 	Expand ExpandFunc
 }
 
-// ExpandFunc renders an authored request value as a script reads it. Each
-// {{name}} reads as vars.get does, with set holding the script's own writes.
+// ExpandFunc renders an authored request value as a script reads it.
+// Variables and expressions see the script's own writes in set.
 type ExpandFunc func(text string, set vars.NameMap[string]) (string, error)
 
 // Bind returns f for a host that keeps its writes in set. set is read on each

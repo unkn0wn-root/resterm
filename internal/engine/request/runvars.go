@@ -29,7 +29,7 @@ func (e *Engine) EvalRunVars(
 		return sc.RunVars, nil
 	}
 	env := ResolveEnvironment(src, doc, req)
-	vals, err := e.evalRunVars(ctx, doc, req, env, e.fileDir(doc), sc, decls)
+	vals, err := e.evalRunVars(ctx, doc, req, env, e.fileDir(doc), execVars{RunScope: sc}, decls)
 	return vals, e.withSource(err, doc)
 }
 
@@ -42,15 +42,14 @@ func (e *Engine) evalRunVars(
 	req *restfile.Request,
 	env vars.ResolvedEnv,
 	base string,
-	sc RunScope,
+	run execVars,
 	decls []restfile.RunVar,
 ) (vars.NameMap[string], error) {
 	globs := e.collectStoredGlobalValues(env)
-	out := sc.RunVars.Clone()
+	out := run.RunVars.Clone()
 	for _, d := range decls {
-		run := sc
 		run.RunVars = out
-		res := e.buildResolver(ctx, doc, req, env, base, globs, rts.Locals{}, execVars{RunScope: run})
+		res := e.buildResolver(ctx, doc, req, env, base, globs, rts.Locals{}, run)
 		val, err := res.ExpandTemplatesAt(d.Value, vars.ExprPos{Path: e.filePath(doc), Line: d.Line, Col: d.Col})
 		if err != nil {
 			return vars.NameMap[string]{}, diag.WrapAs(diag.ClassScript, err, directive.RunVarTag+" "+d.Name)

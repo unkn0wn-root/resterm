@@ -751,3 +751,42 @@ func TestExpandHelpersLeavesVariablesAndExpressions(t *testing.T) {
 		t.Fatal("ExpandHelpers() accepted a misused helper")
 	}
 }
+
+func TestExpandTemplatesKeepHelpersEvaluatesExpressions(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(NewTemplateProvider("file", map[string]string{
+		"base": "alpha",
+		"sum":  "{{= 6 * 7 }}",
+	}))
+	resolver.SetExprEval(func(expr string, _ ExprPos, _ Lookup) (string, error) {
+		if expr != "6 * 7" {
+			t.Fatalf("expression = %q", expr)
+		}
+		return "42", nil
+	})
+
+	got, err := resolver.ExpandTemplatesKeepHelpers("{{base}}/{{sum}}/{{= 6 * 7 }}/{{$uuid}}")
+	if err != nil {
+		t.Fatalf("ExpandTemplatesKeepHelpers() error = %v", err)
+	}
+	if want := "alpha/42/42/{{$uuid}}"; got != want {
+		t.Fatalf("ExpandTemplatesKeepHelpers() = %q, want %q", got, want)
+	}
+	if _, err := resolver.ExpandTemplatesKeepHelpers("{{missing}}"); !errors.Is(err, ErrUndefinedVariable) {
+		t.Fatalf("undefined name error = %v, want ErrUndefinedVariable", err)
+	}
+}
+
+func TestResolverExpandHelpersLetsVariablesWin(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(NewMapProvider("file", map[string]string{"$uuid": "fixed"}))
+	got, err := resolver.ExpandHelpers("{{$uuid}} {{$randomInt(7, 7)}} {{name}}")
+	if err != nil {
+		t.Fatalf("ExpandHelpers() error = %v", err)
+	}
+	if want := "{{$uuid}} 7 {{name}}"; got != want {
+		t.Fatalf("ExpandHelpers() = %q, want %q", got, want)
+	}
+}

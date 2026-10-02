@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -112,23 +113,33 @@ func TestCaptureRTSVarsReadTheSentValue(t *testing.T) {
 	}
 }
 
-func TestPreRequestScriptsStillReadDeclaredText(t *testing.T) {
+// A helper in a declared value has one value per execution, and scripts read
+// the same one the request sends.
+func TestPreRequestScriptsReadTheSentHelperValue(t *testing.T) {
 	doc, req := parseDoc(t, `### one
 # @name one
-# @request id {{$randomInt(7, 7)}}
+# @request id {{$uuid}}
 GET http://example.test
+X-Id: {{id}}
 `)
 	req.Metadata.Scripts = append(req.Metadata.Scripts,
-		rtsPre(`request.setHeader("X-Raw", str(vars.get("id") == "{{$randomInt(7, 7)}}"))`),
+		rtsPre(`request.setHeader("X-RTS", vars.get("id"))`),
+		jsPre(`request.setHeader("X-JS", vars.get("id")); request.setHeader("X-Copy", request.getHeader("X-Id"));`),
 	)
 
 	sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
-	if got := sent.wire.Header.Get("X-Raw"); got != "true" {
-		t.Fatalf("X-Raw = %q, want the script to read the declared text", got)
+	id := sent.wire.Header.Get("X-Id")
+	if len(id) != 36 {
+		t.Fatalf("X-Id = %q, want a rendered UUID", id)
+	}
+	for _, name := range []string{"X-RTS", "X-JS", "X-Copy"} {
+		if got := sent.wire.Header.Get(name); got != id {
+			t.Fatalf("%s = %q, want the sent value %q", name, got, id)
+		}
 	}
 }
 
-func TestPreRequestScriptsReadReferencesExpandedAndHelpersDeferred(t *testing.T) {
+func TestPreRequestScriptsReadReferencesAndHelpersExpanded(t *testing.T) {
 	doc, req := parseDoc(t, `# @file base.part alpha
 ### one
 # @name one
@@ -136,14 +147,14 @@ func TestPreRequestScriptsReadReferencesExpandedAndHelpersDeferred(t *testing.T)
 GET http://example.test
 `)
 	req.Metadata.Scripts = append(req.Metadata.Scripts,
-		rtsPre(`request.setHeader("X-RTS", str(vars.get("combined") == "alpha-{{$randomInt(7, 7)}}"))`),
-		jsPre(`request.setHeader("X-JS", String(vars.get("combined") === "alpha-{{$randomInt(7, 7)}}"));`),
+		rtsPre(`request.setHeader("X-RTS", vars.get("combined"))`),
+		jsPre(`request.setHeader("X-JS", vars.get("combined"));`),
 	)
 
 	sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
 	for _, name := range []string{"X-RTS", "X-JS"} {
-		if got := sent.wire.Header.Get(name); got != "true" {
-			t.Fatalf("%s = %q, want the script to read the reference expanded and the helper deferred", name, got)
+		if got := sent.wire.Header.Get(name); got != "alpha-7" {
+			t.Fatalf("%s = %q, want alpha-7", name, got)
 		}
 	}
 }
@@ -284,4 +295,67 @@ func newEchoEngine() *Engine {
 		}),
 	)
 	return New(engcfg.Config{Client: echo}, nil)
+}
+
+// A run variable and the request read one value for a declared helper.
+func TestRunVarsShareTheExecutionHelperValue(t *testing.T) {
+	doc, req := parseDoc(t, `### one
+# @name one
+# @request id {{$uuid}}
+# @run var copy = {{id}}
+GET http://example.test
+X-Id: {{id}}
+X-Copy: {{copy}}
+`)
+
+	sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
+	id := sent.wire.Header.Get("X-Id")
+	if len(id) != 36 || sent.wire.Header.Get("X-Copy") != id {
+		t.Fatalf("X-Id = %q, X-Copy = %q, want one rendered UUID", id, sent.wire.Header.Get("X-Copy"))
+	}
+}
+
+// Helpers are rendered in authored text only. A captured helper is data.
+func TestCapturedHelperIsNotRendered(t *testing.T) {
+	doc := parser.Parse("pins.http", []byte(`### a
+# @name a
+# @capture global item {{response.json.item}}
+GET http://example.test/a
+
+### b
+# @name b
+GET http://example.test/b
+X-Item: {{item}}
+`))
+	eng, st := newStubEngine(t)
+	env := envWith(t, "dev", nil)
+	st.body = `{"item":"{{$uuid}}"}`
+	sendWith(t, eng, st, doc, doc.Requests[0], env, ExecOptions{})
+	sent := sendWith(t, eng, st, doc, doc.Requests[1], env, ExecOptions{})
+	if got := sent.wire.Header.Get("X-Item"); got != "{{$uuid}}" {
+		t.Fatalf("X-Item = %q, want the captured text", got)
+	}
+}
+
+// A helper cannot pick the OS variable an env: reference reads.
+func TestEnvRefNameIsNotRenderedFromAHelper(t *testing.T) {
+	t.Setenv("RESTERM_PIN_PROBE", "os-value")
+	doc, req := parseDoc(t, `# @file p env:{{$randomChoice(RESTERM_PIN_PROBE)}}
+
+### one
+# @name one
+GET http://example.test
+X-P: {{p}}
+`)
+	eng, st := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, envWith(t, "dev", nil), ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if st.wire != nil && st.wire.Header.Get("X-P") == "os-value" {
+		t.Fatal("a helper chose the OS variable")
+	}
+	if res.Err == nil {
+		t.Fatal("want an undefined variable error for p")
+	}
 }
