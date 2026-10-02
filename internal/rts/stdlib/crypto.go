@@ -3,6 +3,7 @@ package stdlib
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -11,11 +12,15 @@ import (
 const (
 	sigCryptoSHA256     = "crypto.sha256(text)"
 	sigCryptoHMACSHA256 = "crypto.hmacSha256(key, text)"
+	sigCryptoSHA512     = "crypto.sha512(text)"
+	sigCryptoHMACSHA512 = "crypto.hmacSha512(key, text)"
 )
 
 var cryptoSpec = nsSpec{name: "crypto", top: true, fns: map[string]rts.NativeFunc{
 	"sha256":     cryptoSHA256,
 	"hmacSha256": cryptoHMACSHA256,
+	"sha512":     cryptoSHA512,
+	"hmacSha512": cryptoHMACSHA512,
 }}
 
 func cryptoSHA256(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
@@ -50,6 +55,42 @@ func cryptoHMACSHA256(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, e
 	}
 
 	h := hmac.New(sha256.New, []byte(key))
+	_, _ = h.Write([]byte(msg))
+	return hexVal(ctx, pos, h.Sum(nil))
+}
+
+func cryptoSHA512(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigCryptoSHA512)
+	if err := na.Count(1); err != nil {
+		return rts.Null(), err
+	}
+
+	s, err := na.Str(0)
+	if err != nil {
+		return rts.Null(), err
+	}
+
+	sum := sha512.Sum512([]byte(s))
+	return hexVal(ctx, pos, sum[:])
+}
+
+func cryptoHMACSHA512(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigCryptoHMACSHA512)
+	if err := na.Count(2); err != nil {
+		return rts.Null(), err
+	}
+
+	key, err := na.Str(0)
+	if err != nil {
+		return rts.Null(), err
+	}
+
+	msg, err := na.Str(1)
+	if err != nil {
+		return rts.Null(), err
+	}
+
+	h := hmac.New(sha512.New, []byte(key))
 	_, _ = h.Write([]byte(msg))
 	return hexVal(ctx, pos, h.Sum(nil))
 }

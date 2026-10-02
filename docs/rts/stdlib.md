@@ -21,6 +21,8 @@ RTS provides a small standard library that covers common request needs without e
 
 - `rts.crypto.sha256(text)` returns a hex-encoded SHA-256 digest.
 - `rts.crypto.hmacSha256(key, text)` returns a hex-encoded HMAC-SHA256 digest.
+- `rts.crypto.sha512(text)` returns a hex-encoded SHA-512 digest.
+- `rts.crypto.hmacSha512(key, text)` returns a hex-encoded HMAC-SHA512 digest.
 
 ## Encoding and URL helpers
 
