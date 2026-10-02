@@ -19,25 +19,26 @@ POST https://example.com/users
 GET https://example.com/users/{{vars.workflow.userId}}
 ```
 
-Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Workflow** tab shows a workflow summary, stable step list, and selected-step response detail. Resterm selects the first failed or canceled step by default, or the first step when everything passes. Press `Enter` or `Space` on a selected step to focus its response detail and scroll long responses without changing the selected step. A consolidated entry is written to history so you can review results later.
+Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes, the **Workflow** tab shows a summary, a stable step list, and the response for the selected step. Resterm selects the first failed or canceled step by default, or the first step when everything passes. Press `Enter` or `Space` on a selected step to focus its response detail and scroll long responses without changing the selected step. One combined entry is written to history so you can review the results later.
 
 Key directives and tokens:
 
-- `@workflow <name>` starts a workflow; the name is required and cannot be replaced by an option. Add `on-failure=<stop|continue>` to change the default behaviour and attach other tokens (e.g. `region=us-east-1`) which are surfaced under `Workflow.Options` for tooling. Empty or invalid `on-failure` values are parse errors on both `@workflow` and `@step`.
+- `@workflow <name>` starts a workflow. The name is required and cannot be replaced by an option. Add `on-failure=<stop|continue>` to change the default behavior. Other tokens, such as `region=us-east-1`, are kept under `Workflow.Options` for tooling. Empty or invalid `on-failure` values are parse errors on both `@workflow` and `@step`.
 - `@description` / `@tag` lines inside the workflow build the description and tag list shown in the UI and stored in history.
 - `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments. The alias is the first word, so quote it when it holds spaces or an equals sign (`@step "Create Account" using=CreateUser`). `name=` sets it instead when the step starts with an option.
 - `vars.request.*` keys add step-scoped values that are available as `{{vars.request.<name>}}` during that request. They do not rewrite existing `@var` declarations automatically, so reference the namespaced token (or copy it in a pre-request script) when you want the override.
-- `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, letting later requests reuse or mutate shared context (e.g. `vars.workflow.userId`).
+- `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, so later requests can reuse or change shared values such as `vars.workflow.userId`.
 - `@run var <name> = <value>` gives the steps one shared value. See [Run variables](#run-variables).
-- Unknown tokens on `@workflow` or `@step` are preserved in `Options`, allowing custom scripts or future features to consume them without changing the file format.
+- Unknown tokens on `@workflow` or `@step` are kept in `Options`, so custom scripts or future features can use them without changing the file format.
 - An unknown directive between `@workflow` and the next request is a parse error. Directives attached to requests remain request-scoped, even when the workflow runs those requests. Resterm continues parsing valid workflow steps to report other problems, but it will not run the file until the error is fixed.
 - `expect.status` supports quoted or escaped values, so you can write `expect.status="201 Created"` alongside `expect.statuscode=201`.
 - `expect.status` / `expect.statuscode` require non-empty values, and `expect.statuscode` must be numeric.
 
 > **Tip:** Workflow assignments are expanded when a request runs. Use `@run var` when every step needs the same value from a helper such as `{{$uuid}}`.
-> **Tip:** Options are parsed like CLI flags; wrap values in quotes or escape spaces (`\ `) to keep text together (e.g. `expect.status="201 Created"`).
 
-Every workflow run is persisted alongside regular requests in History; the newest entry is highlighted automatically so you can open the generated `@workflow` definition and results from the History pane immediately after the run.
+> **Tip:** Options are parsed like CLI flags. Wrap values in quotes or escape spaces (`\ `) to keep text together, for example `expect.status="201 Created"`.
+
+Every workflow run is saved in History next to regular requests. The newest entry is highlighted, so you can open the generated `@workflow` definition and results from the History pane right after the run.
 
 ## Run variables
 

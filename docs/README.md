@@ -64,7 +64,7 @@ Each page below is one file in this directory. The same pages are published at h
 
 ## Reference
 
-- [Configuration](configuration.md): Where Resterm keeps settings, history and themes, and editor diagnostics.
+- [Configuration](configuration.md): Where Resterm keeps settings, history and themes, plus editor diagnostics.
 - [Theming](theming.md): Write and test your own color theme.
 - [Collection sharing](collections.md): Package a workspace as a bundle you can commit and import elsewhere.
 - [Security](security.md): What request files can run, the safety limits, and telemetry.

@@ -2,7 +2,7 @@
 
 Builtins and reserved words can be removed within a major version. One marked for removal is deprecated in a minor release and removed no earlier than the next one. While deprecated it keeps working, and the parser warns on the line that uses it (`WARN line <n>` in the status bar, full text in the Explain pane). Removals are listed in the release notes with their replacement. See [Compatibility](../compatibility.md) for what the version number covers elsewhere.
 
-RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The standard library is available as `rts`; `stdlib` remains as a deprecated alias. Core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also exposed at top level for convenience. `text`, `list`, `dict`, and `math` are available only under `rts`.
+RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The standard library is available as `rts`. `stdlib` still works as a deprecated alias. Core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also available at the top level. `text`, `list`, `dict`, and `math` are available only under `rts`.
 
 ## Core helpers
 
@@ -19,8 +19,8 @@ RTS provides a small standard library that covers common request needs without e
 
 ## Crypto helpers
 
-- `rts.crypto.sha256(text)` returns a hex encoded SHA-256 digest.
-- `rts.crypto.hmacSha256(key, text)` returns a hex encoded HMAC-SHA256 digest.
+- `rts.crypto.sha256(text)` returns a hex-encoded SHA-256 digest.
+- `rts.crypto.hmacSha256(key, text)` returns a hex-encoded HMAC-SHA256 digest.
 
 ## Encoding and URL helpers
 
@@ -30,8 +30,8 @@ RTS provides a small standard library that covers common request needs without e
 - `rts.encoding.hex.decode(x)` decodes a hex string.
 - `rts.encoding.base64url.encode(x)` encodes a string to base64url (no padding).
 - `rts.encoding.base64url.decode(x)` decodes a base64url string.
-- `rts.url.encode(x)` percent encodes a string for URL use.
-- `rts.url.decode(x)` decodes a percent encoded string.
+- `rts.url.encode(x)` percent-encodes a string for use in a URL.
+- `rts.url.decode(x)` decodes a percent-encoded string.
 
 ## Time helpers
 
@@ -40,7 +40,7 @@ RTS provides a small standard library that covers common request needs without e
 - `rts.time.nowUnixString()` returns the current time as a decimal unix seconds string.
 - `rts.time.nowUnixMs()` returns the current time as unix milliseconds.
 - `rts.time.format(layout)` formats the current time with the given layout string.
-- `rts.time.parse(layout, value)` parses the time string and returns unix seconds (fractional).
+- `rts.time.parse(layout, value)` parses a time string and returns unix seconds (fractional).
 - `rts.time.formatUnix(ts, layout)` formats a unix timestamp with the given layout.
 - `rts.time.addUnix(ts, secondsOrDuration)` adds seconds (number) or a duration string to a unix timestamp.
 - `rts.time.duration(value)` parses a duration string (including `d` and `w`) and returns seconds.
@@ -104,11 +104,11 @@ These helpers use keys exactly as written, like `dict[key]`. See [Keys and names
 - `query.encode(query)` encodes a query multimap into a query string.
 - `query.merge(url, query)` returns the URL with the parameters applied. Null or an empty list removes a parameter.
 
-Header and query dictionaries use cardinality-based values: `dict<string, string | list<string>>`. One value is a string, multiple values are a list, and zero values are an empty list. The result depends on the number of values rather than the input syntax, so a one-element input list is returned as a string. Helpers do not coerce numbers or booleans into strings. Null is not a stored value; it is accepted only as the removal marker in the patch argument to `headers.merge` and `query.merge`.
+Header and query dictionaries use cardinality-based values: `dict<string, string | list<string>>`. One value is a string, multiple values are a list, and zero values are an empty list. The result depends on the number of values rather than the input syntax, so a one-element input list is returned as a string. Helpers do not coerce numbers or booleans into strings. Null is not a stored value. It is accepted only as the removal marker in the patch argument to `headers.merge` and `query.merge`.
 
-Header names are case-insensitive HTTP field names. Two forms of the same header always return an error, because picking one would depend on map order. Every header helper validates the entire input block and the requested name. Returned header names are lowercased, and `headers.get` returns the first value regardless of whether the stored representation is a string or list.
+Header names are case-insensitive HTTP field names. Two forms of the same header always return an error, because picking one would depend on map order. Every header helper validates the entire input block and the requested name. Returned header names are lowercased, and `headers.get` returns the first value whether the stored value is a string or a list.
 
-Query helpers keep keys and values exactly as written, including empty keys and whitespace. Encoding preserves the data but may change order and escaping. `query.parse` removes one leading `?` as syntax and treats every other byte as query data. `query.fromURL` and `query.merge` do not trim or repair their URL argument. Use `rts.text.trim` explicitly when that is the behavior you want.
+Query helpers keep keys and values exactly as written, including empty keys and whitespace. Encoding preserves the data but may change order and escaping. `query.parse` removes one leading `?` as syntax and treats every other byte as query data. `query.fromURL` and `query.merge` do not trim or repair their URL argument. Call `rts.text.trim` yourself if you want trimming.
 
 ## Math helpers
 

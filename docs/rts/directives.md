@@ -16,11 +16,11 @@
 # @apply use=jsonApi,use=authProd
 ```
 
-`@apply` is a request scoped directive and you can use it multiple times in a request. Each apply expression is evaluated in order before pre-request scripts. The expression must return a dict patch with specific keys.
+`@apply` is a request-scoped directive, and you can use it more than once in a request. Each apply expression is evaluated in order before pre-request scripts. The expression must return a dict patch with specific keys.
 
-Header names in a patch follow the same rule as `request.setHeader`: they must be HTTP field names, whitespace is not trimmed, and a patch naming one header twice is an error rather than a choice made by map order. See [Keys and names](language.md#keys-and-names).
+Header names in a patch follow the same rule as `request.setHeader`: they must be HTTP field names, whitespace is not trimmed, and a patch that names one header twice is an error, so the result never depends on map order. See [Keys and names](language.md#keys-and-names).
 
-You can also reference reusable named patches with `use=`. Comma-separated `use=` entries run left-to-right inside the same `@apply` line.
+You can also reference reusable named patches with `use=`. Comma-separated `use=` entries run left to right inside the same `@apply` line.
 
 ## @patch
 
@@ -35,14 +35,16 @@ You can also reference reusable named patches with `use=`. Comma-separated `use=
 - Resolution for `@apply use=name` is file scope first, then global scope.
 - Patch names are case-insensitive when resolving.
 
-- `method` expects a string and replaces the HTTP method, and Resterm uppercases it.
+A patch can contain these keys:
+
+- `method` expects a string and replaces the HTTP method. Resterm uppercases it.
 - `url` expects a string and replaces the request URL.
-- `headers` expects a dict where values are strings, numbers, bools, or lists of those; null deletes a header.
-- `query` expects a dict where values are strings, numbers, or bools; null deletes the key.
-- `body` accepts any value. Strings are used as is, and other values are converted with `str()`.
+- `headers` expects a dict where values are strings, numbers, bools, or lists of those. Null deletes a header.
+- `query` expects a dict where values are strings, numbers, or bools. Null deletes the key.
+- `body` accepts any value. Strings are used as-is, and other values are converted with `str()`.
 - `auth` expects a dict with `type` plus optional params. Use `null` to clear auth for that run.
-- `settings` expects a dict where values are strings, numbers, or bools; null deletes a setting key.
-- `vars` expects a dict and sets request scope variables for this run (values are strings, numbers, or bools).
+- `settings` expects a dict where values are strings, numbers, or bools. Null deletes a setting key.
+- `vars` expects a dict and sets request-scope variables for this run (values are strings, numbers, or bools).
 
 ## @when and @skip-if
 
@@ -51,7 +53,7 @@ You can also reference reusable named patches with `use=`. Comma-separated `use=
 # @skip-if env.mode == "dry-run"
 ```
 
-These directives are evaluated before pre-request scripts. If the condition is false, the request is skipped and a reason is reported.
+These directives are evaluated before pre-request scripts. If a `@when` condition is false or a `@skip-if` condition is true, the request is skipped and Resterm reports why.
 
 ## @assert
 
@@ -60,11 +62,11 @@ These directives are evaluated before pre-request scripts. If the condition is f
 # @assert "json" in response.header("Content-Type")
 ```
 
-Each expression is evaluated and truthy means pass. Use `response` for the current request response.
+Each expression is evaluated, and a truthy result passes. Use `response` for the response to the current request.
 
 ## @if, @elif, and @else
 
-These directives are used in workflows to branch steps. Outside an active workflow they are ignored with a parser warning; use `@when` or `@skip-if` to gate an ordinary request.
+These directives are used in workflows to branch steps. Outside an active workflow, they are ignored and the parser shows a warning. Use `@when` or `@skip-if` to gate an ordinary request.
 
 ```http
 # @if last.statusCode == 200 run=StepOK
@@ -81,7 +83,7 @@ These directives are used in workflows to branch steps. Outside an active workfl
 # @default fail="unexpected status"
 ```
 
-These directives route workflow steps and are not the `switch` statement. They share the same equality relation, but each `@case` names a step to run instead of holding a statement list.
+These directives route workflow steps and are not the `switch` statement. They use the same equality rules, but each `@case` names a step to run instead of holding a statement list.
 
 ## @for-each
 
@@ -91,4 +93,4 @@ These directives route workflow steps and are not the `switch` statement. They s
 
 The expression must evaluate to a list. It introduces a loop variable that you can use in RestermScript expressions. In workflows, it also sets `vars.workflow.<name>` and `vars.request.<name>` for legacy templates.
 
-The loop variable is a local, so it shadows any standard library, host object, or `@use` alias of the same name for the whole request, including `@rts pre-request` blocks. JavaScript pre-request blocks do not see it as a typed value and continue to read `vars.request.<name>`. See [Name precedence](host-objects.md#name-precedence).
+The loop variable is a local, so it shadows any standard library, host object, or `@use` alias of the same name for the whole request, including `@rts pre-request` blocks. JavaScript pre-request blocks do not see it as a typed value and still read `vars.request.<name>`. See [Name precedence](host-objects.md#name-precedence).

@@ -18,9 +18,9 @@ iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps
 
 ## Prebuilt binaries
 
-1. Download the archive for your platform from the [GitHub Releases](https://github.com/unkn0wn-root/resterm/releases) page (macOS, Linux, or Windows; amd64 and arm64 builds are published).
-2. Mark the binary as executable (`chmod +x resterm` on Unix), then copy it into a directory on your `PATH`.
-3. Launch with `resterm --help` to confirm the CLI is available.
+1. Download the archive for your platform from the [GitHub Releases](https://github.com/unkn0wn-root/resterm/releases) page. There are builds for macOS, Linux, and Windows, on amd64 and arm64.
+2. Make the binary executable (`chmod +x resterm` on Unix), then copy it into a directory on your `PATH`.
+3. Run `resterm --help` to check that it works.
 
 Prebuilt Linux binaries need glibc 2.32 or newer. On an older distro, build from source or upgrade glibc.
 
@@ -52,8 +52,8 @@ Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe"
 go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 ```
 
-This requires Go 1.25 or newer. The binary will be installed in `$(go env GOPATH)/bin`.
+This needs Go 1.25 or newer. The binary goes into `$(go env GOPATH)/bin`.
 
 ## Updating
 
-Homebrew installs update with `brew upgrade resterm`. Binaries from the releases page or the install scripts use `resterm --check-update` and `resterm --update`, which downloads, verifies, and installs in place. On Windows the old binary stays next to the new one as `resterm.exe.old` and is removed on the next update.
+If you installed with Homebrew, update with `brew upgrade resterm`. If you used a release binary or the install scripts, run `resterm --check-update` to see if there is a new version, and `resterm --update` to download, verify, and install it in place. On Windows, the old binary stays next to the new one as `resterm.exe.old` and is removed on the next update.

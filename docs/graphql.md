@@ -1,21 +1,21 @@
 # GraphQL
 
-Enable GraphQL handling with `# @graphql` (requests start with it disabled). Resterm packages GraphQL requests according to HTTP method:
+Turn on GraphQL with `# @graphql`. It is off by default for every request. Resterm builds the GraphQL request based on the HTTP method:
 
 - **POST**: body becomes `{ "query": ..., "variables": ..., "operationName": ... }`.
-- **GET**: query parameters `query`, `variables`, `operationName` are attached.
+- **GET**: the `query`, `variables`, and `operationName` query parameters are added.
 - Template variables in the URL are expanded before the GET parameters are attached, so `GET {{graphql.endpoint}}` works even when the host is templated.
 
 Available directives:
 
 | Directive | Description |
 | --- | --- |
-| `@graphql [boolean]` | Enable/disable GraphQL processing for the request. |
+| `@graphql [boolean]` | Turn GraphQL on or off for the request. |
 | `@operation` / `@graphql-operation` | Sets the `operationName`. |
-| `@variables` | Starts a variables block; inline JSON or `< file.json`. |
+| `@variables` | Starts a variables block. Use inline JSON or `< file.json`. |
 | `@query` | Loads the query from a file instead of the inline body. |
 
-`@graphql` accepts the standard boolean values, including `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`, and `t`/`f`. It also accepts `disable` and `disabled` as false values; other values are reported as errors. Switching GraphQL off discards the operation, variables, and query collected so far, allowing the request to declare them again after GraphQL is re-enabled:
+`@graphql` accepts the standard boolean values, including `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`, and `t`/`f`. It also accepts `disable` and `disabled` as false values. Other values are reported as errors. Switching GraphQL off discards the operation, variables, and query collected so far, so the request can declare them again after GraphQL is turned back on:
 
 ```http
 ### Reconfigured

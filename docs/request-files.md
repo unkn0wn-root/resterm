@@ -9,7 +9,7 @@
 - Between `@workflow` and the next request, an unknown directive is a parse error. This catches mistakes such as `@stpe` that would otherwise remove a workflow step. Directives attached to requests are still request-scoped, even when a workflow runs those requests.
 - After `@mock` and before the response, only `@match` and `@expect` are allowed. Any other directive-shaped comment is a parse error.
 - To write a comment that starts like a directive, add another comment marker, for example `## @if ...`.
-- A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
+- A directive problem that does not invalidate the file becomes a warning, not an error. Parsing continues and keeps the valid parts where it can. An unknown option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped, and the rest of the directive still applies. A directive the parser cannot read at all, such as an `@capture` with no usable scope, is dropped completely and reported. Warnings never change the exit code.
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](mock-servers.md#splitting-a-long-matcher).
 - Write options as `key=value` with no spaces around `=`. In most directives a key on its own is a switch set to `true`, so `persist = false` would otherwise turn `persist` on. `key = value`, `key =value`, `key= value`, and a field with no key such as `=value` are errors, and none of them sets the key. An empty value such as `strict_hostkey=` is still allowed at the end of the line or before another `key=value` option. A global or file `@ssh` or `@k8s` profile written this way is not available to requests. An `@ssh` profile is reported as not found, and a `@k8s` profile reports the error to every request that uses it.
 - Alternate names count as the same option. For example, you cannot use both `known_hosts` and `known-hosts` on one `@ssh` directive. Empty values are ignored for regular options, but not for switches. `strict_hostkey=` enables the switch, so it conflicts with `strict-hostkey=false`.
@@ -48,20 +48,20 @@ Some directives can span multiple comment lines. Resterm keeps reading while the
 | Directive | Syntax | Description |
 | --- | --- | --- |
 | `@name` | `# @name identifier` | Friendly name used in the navigator, history, and captures. |
-| `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded; immutable and visible to all requests in the document. |
-| `@description` / `@desc` | `# @description ...` | Multi-line description (lines concatenate with newline). |
+| `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded. Immutable and visible to all requests in the document. |
+| `@description` / `@desc` | `# @description ...` | Multi-line description. Lines are joined with newlines. |
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
 | `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. |
 | `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
-| `@log-sensitive-headers` | `# @log-sensitive-headers [true\|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, API-token headers such as `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
+| `@log-sensitive-headers` | `# @log-sensitive-headers [true\|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, and API-token headers such as `X-API-Key`, `X-Access-Token`, and `X-Auth-Key`) to appear in history. Omit it or set it to `false` to keep them masked, which is the default. |
 | `@setting` | `# @setting key value` | Set an HTTP, transport, or TLS option such as `timeout`, `proxy`, `max-redirects`, or `max-response-size`. |
-| `@settings` | `# @settings key1=val1 key2=val2 ...` | Batch settings on one line; supports the same keys as `@setting` and future prefixes. |
+| `@settings` | `# @settings key1=val1 key2=val2 ...` | Several settings on one line. Supports the same keys as `@setting` and future prefixes. |
 | `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
 
 ## Body content
 
-- **Inline**: everything after the blank line separating headers and body.
-- **External file**: `< ./payloads/create-user.json` loads the file relative to the request file. To also search the workspace root / current working directory, set `RESTERM_ENABLE_FALLBACK=1` (opt-in).
+- **Inline**: everything after the blank line that separates headers and body.
+- **External file**: `< ./payloads/create-user.json` loads the file relative to the request file. To also search the workspace root and the current working directory, set `RESTERM_ENABLE_FALLBACK=1`.
 - **Inline includes**: lines in the body starting with `@ path/to/file` are replaced with the file contents (useful for multi-part templates).
 - **XML/SOAP**: inline XML is sent exactly as written after template expansion. XML tags such as `<soap:Envelope>` are body text, not file references.
 - **Forced inline body**: add `# @body inline` (or `# @body raw`) when a literal body line intentionally looks like a file reference, such as `< this is just a string`. This only affects parsing. Template expansion and inline includes still work as usual.

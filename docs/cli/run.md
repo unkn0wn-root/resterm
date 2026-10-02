@@ -1,12 +1,12 @@
 # resterm run
 
-`resterm run` is the headless execution path. It parses a request file, selects one or more targets, runs them with the same engine used by the TUI, and writes the result to stdout.
+`resterm run` runs request files without the TUI. It parses a request file, selects one or more targets, runs them with the same engine as the TUI, and writes the result to stdout.
 
 ```bash
 resterm run [flags] <file|->
 ```
 
-- Pass a file path to execute a request document from disk.
+- Pass a file path to run a request file from disk.
 - Pass `-` to read the request file from stdin.
 - Flags may appear before or after the file argument. See [Argument Order](README.md#argument-order).
 
@@ -42,7 +42,7 @@ Selector rules:
 Environment selection rules:
 
 - Named-environment files use `--env dev`. Grouped files use the repeatable `--env-group group=profile`. The two flags cannot be combined.
-- In the TUI these flags outlive a workspace change. Opening another workspace looks for the same environment there rather than taking its default, and leaves nothing selected when it does not exist. `--env-file` is kept across workspaces, and Resterm warns when the new one has an environment file of its own. See [Environment files](../variables.md#environment-files).
+- In the TUI, these flags stay in effect when you change workspace. Opening another workspace looks for the same environment there instead of using its default, and leaves nothing selected when it does not exist. `--env-file` is kept across workspaces, and Resterm warns when the new one has an environment file of its own. See [Environment files](../variables.md#environment-files).
 - Groups you do not pass keep their declared defaults. Profiles may contain spaces: `--env-group 'app=dev app 1'`.
 - Grouped compare requires `--compare-group`. Separate compare targets with commas when profile names contain spaces, for example `--compare 'dev app 1,dev app 2' --compare-group app`.
 - An unknown group, profile, or baseline is rejected before any request is sent.
@@ -69,10 +69,10 @@ Related flags:
 | `--headers` | `-H` | Include request and response headers when a single-request view is rendered. |
 | `--color <mode>` | `-c <mode>` | Pretty-output color mode: `auto`, `always`, `never`. |
 
-Output rules worth knowing:
+Output rules:
 
 - `--body` only works with `--format auto`, `--format pretty`, or `--format raw`
-- `--body` still preserves exit status; a failing run can print only the body and still exit `1`
+- `--body` keeps the exit status, so a failing run can print only the body and still exit `1`
 - `--format pretty`, `--format raw`, and `--body` all require exactly one request result
 - `--color auto` enables ANSI output only when stdout is a TTY and the terminal supports color
 - `--color always` forces pretty color even when output is piped
@@ -82,13 +82,13 @@ Output rules worth knowing:
 | Flag | Short | Description |
 | --- | --- | --- |
 | `--fail-fast` | `-ff` | Stop after the first failed top-level result and mark the remaining selected requests as skipped. |
-| `--exit-code-mode <mode>` | `-m <mode>` | `detailed` returns classified CI exit codes; `summary` preserves the legacy `0`/`1`/`2` contract. |
+| `--exit-code-mode <mode>` | `-m <mode>` | `detailed` returns classified CI exit codes. `summary` keeps the old `0`/`1`/`2` codes. |
 
 JSON output includes a top-level `schemaVersion`, `summary.exitCode`, `summary.failureCodes`, and per-result `failure` metadata when a result fails. Workflow, compare, and profile failures include the same structured failure object at the step or profile-iteration level. gRPC results include `grpc.statusDetails` with each status detail message encoded as JSON when the server returns any.
 
 ## Artifacts And Persisted State
 
-`resterm run` can write execution artifacts and optionally persist runtime state between invocations.
+`resterm run` can write artifacts from a run and, if you ask, keep runtime state between runs.
 
 | Flag | Short | Description |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ Behavior:
 - trace summaries are written under `<artifact-dir>/traces/`
 - when persistence is enabled and `--state-dir` is omitted, Resterm uses `<config-dir>/runner/<workspace>-<digest>`, one directory per workspace. State written before this became per-workspace stays at `<config-dir>/runner` and is not migrated, so the first run after upgrading re-authenticates
 - `--state-dir` is used exactly as given, so pass the same value only for workspaces that are meant to share state
-- persisted globals and auth are keyed by environment scope, and a scope names the environment file it came from, so two projects that both define a `dev` environment never read each other's globals or OAuth tokens even under one `--state-dir`
+- persisted globals and auth are keyed by environment scope. A scope includes the environment file it came from, so two projects that both define a `dev` environment never read each other's globals or OAuth tokens, even with the same `--state-dir`
 - `--persist-globals` writes `runtime.json`
 - `--persist-auth` writes `auth.json`
 - `--history` writes `history.db`
@@ -182,7 +182,7 @@ Read the request document from stdin:
 cat ./requests.http | resterm run - --request health
 ```
 
-Persist globals, auth, and history between invocations:
+Persist globals, auth, and history between runs:
 
 ```bash
 resterm run \
