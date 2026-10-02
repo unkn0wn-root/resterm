@@ -684,6 +684,38 @@ GET https://example.com
 	}
 }
 
+func TestParsePatchStringTemplatesWarn(t *testing.T) {
+	src := `# @patch file auth {headers: {"X-A": "{{api.token}}"}}
+
+### one
+# @apply {headers: {"X-B": "Bearer {{api.token}}", "X-Id": "{{$uuid}}", "X-C": "Bearer " + vars.get("api.token")}}
+# @apply {url: "{{= base }}/x"}
+GET https://example.com
+`
+	doc := Parse("apply.http", []byte(src))
+	lines := strings.Split(src, "\n")
+	want := []struct {
+		line int
+		text string
+		msg  string
+	}{
+		{1, "{{api.token}}", `@patch sends {{api.token}} as written. Use vars.get("api.token").`},
+		{4, "{{api.token}}", `@apply sends {{api.token}} as written. Use vars.get("api.token").`},
+		{5, "{{= base }}", "@apply sends {{= base }} as written. Write the expression without {{= }}."},
+	}
+	if len(doc.Warnings) != len(want) {
+		t.Fatalf("warnings = %+v, want %d", doc.Warnings, len(want))
+	}
+	for i, w := range want {
+		got := doc.Warnings[i]
+		col := strings.Index(lines[w.line-1], w.text) + 1
+		if got.Message != w.msg || got.Span.Start.Line != w.line || got.Span.Start.Col != col {
+			t.Fatalf("warning %d = %q at %d:%d, want %q at %d:%d",
+				i, got.Message, got.Span.Start.Line, got.Span.Start.Col, w.msg, w.line, col)
+		}
+	}
+}
+
 func TestParseApplyUseChain(t *testing.T) {
 	src := `# @apply use=jsonApi,use=authProd,use=strict
 GET https://example.com

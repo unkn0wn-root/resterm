@@ -142,6 +142,7 @@ func (b *documentBuilder) addApply(d parsedDirective) directiveOutcome {
 		return b.rejectError(d, err)
 	}
 	d.setExprCol(&spec.Col, spec.Expression)
+	b.warnPatchTemplates(d)
 	b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
 	return directiveApplied
 }

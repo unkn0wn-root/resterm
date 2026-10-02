@@ -48,3 +48,17 @@ func MaskText(src string) string {
 		copy(out[lx.start:lx.i], src[lx.start:lx.i])
 	}
 }
+
+func StringRanges(src string) [][2]int {
+	var out [][2]int
+	lx := NewLexer("", []byte(src))
+	for {
+		tok := lx.Next()
+		if tok.K == EOF {
+			return out
+		}
+		if tok.K == STRING {
+			out = append(out, [2]int{lx.start, lx.i})
+		}
+	}
+}
