@@ -36,6 +36,6 @@ RestermScript enforces hard limits to prevent runaway scripts and keep the UI re
 
 ## Design constraints and why they exist
 
-RestermScript prioritizes predictable evaluation and safe execution. It does not allow file writes or network access, and file reads are limited to `json.file` when enabled. It does not allow member assignment because it reduces side effects and simplifies the interpreter. It requires an explicit alias or module name to avoid name collisions and keep imports explicit. It keeps host objects read-only in most contexts because request evaluation should remain declarative. It sorts dict keys during `range` to keep iteration order deterministic across runs.
+RestermScript puts predictable evaluation and safe execution first. It does not allow file writes or network access, and file reads are limited to `json.file` when enabled. It has no member assignment, which reduces side effects and keeps the interpreter simple. It requires an explicit alias or module name to avoid name collisions and keep imports clear. Host objects are read-only in most contexts because request evaluation should stay declarative. Dict keys are sorted during `range`, so iteration order is the same on every run.
 
 If you need full scripting or side effects, use JavaScript `@script` blocks. For everything else, RestermScript is the safer and more readable choice.

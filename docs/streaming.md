@@ -1,6 +1,6 @@
 # WebSocket and SSE
 
-Streaming sessions surface in the Stream response tab, are captured in history, and can be consumed by captures and scripts.
+Streaming sessions show up in the Stream response tab and are saved in history. Captures and scripts can read them too.
 
 ## Server-Sent Events (`@sse`)
 
@@ -35,7 +35,7 @@ If the server returns a non-2xx status or a content type other than `text/event-
 | `limit:max_bytes` | `max-bytes` was reached. |
 | `limit:line_bytes` | One line was larger than `max-line-bytes`. |
 | `limit:event_bytes` | One event was larger than `max-event-bytes`. |
-| `context_canceled` | The run was cancelled. |
+| `context_canceled` | The run was canceled. |
 | `context_deadline` | The run's deadline expired before the stream reached one of its own limits. |
 | `error` | The stream failed. `summary.error` contains the error message and `summary.errorClass` names what kind of failure it was. |
 
@@ -43,7 +43,7 @@ A configured `duration` is a normal limit. An expired run deadline is a `timeout
 
 ## WebSockets (`@websocket`, `@ws`)
 
-Use `# @websocket` to negotiate an upgrade, then describe scripted interactions with `# @ws` lines:
+Use `# @websocket` to upgrade the connection, then script the session with `# @ws` lines:
 
 ```http
 ### Chat session
@@ -62,10 +62,10 @@ Available WebSocket options:
 | Token | Description |
 | --- | --- |
 | `timeout` | Handshake deadline (applies until the connection upgrades). |
-| `idle-timeout` | Idle timeout once the socket is open. Resets on any send or receive activity (0 leaves it unbounded). |
-| `max-message-bytes` | Upper bound on inbound frame sizes. |
+| `idle-timeout` | Idle timeout once the socket is open. Resets on every send or receive. Set it to 0 for no limit. |
+| `max-message-bytes` | Largest inbound message allowed. The default is 32 KiB. |
 | `subprotocols` | Comma-separated list advertised during the handshake. |
-| `compression=<true\|false>` | Explicitly enable or disable per-message compression. |
+| `compression=<true\|false>` | Turn per-message compression on or off. |
 
 Supported `@ws` steps:
 
@@ -75,8 +75,8 @@ Supported `@ws` steps:
 | `@ws send-json <object>` | Encode JSON and send it as text. |
 | `@ws send-base64 <data>` | Decode base64 and send the result as binary. |
 | `@ws send-file <path>` | Send a file from disk (relative to the request file unless absolute). |
-| `@ws ping [payload]` / `@ws pong [payload]` | Emit control frames (payload limited to 125 bytes). |
-| `@ws wait <duration>` | Pause for the specified duration (e.g. `500ms`). |
+| `@ws ping [payload]` / `@ws pong [payload]` | Send control frames (payload up to 125 bytes). |
+| `@ws wait <duration>` | Pause for the given duration, for example `500ms`. |
 | `@ws close [code] [reason]` | Close the connection with an optional status code (defaults to `1000`). |
 
 When the handshake fails, Resterm shows the HTTP response to help you find the problem. During a successful session, events appear in the UI and history together with their direction, opcode, size, and close status. Templates and scripts can read `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped` from the summary. `closedBy` has one of these values:
@@ -86,12 +86,12 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
 | `server` | The server closed the connection. |
 | `client` | Resterm closed the connection through `@ws close` or after the last step. |
 | `timeout` | The idle limit was reached, or the run's deadline expired. An idle timeout is a normal ending. An expired run deadline is a failure and sets `errorClass` to `timeout`. |
-| `canceled` | The run was cancelled. |
+| `canceled` | The run was canceled. |
 | `error` | The session failed. `closeReason` contains the error message and `errorClass` names what kind of failure it was. |
 
 `error`, `canceled`, and a `timeout` with an `errorClass` cause the request to fail. Resterm keeps the transcript in every case.
 
-> **Heads-up:** When you keep a WebSocket URL in `@const`, `@global`, or `@var`, write the request line as `GET {{ws.url}}` (or whichever variable you use). The parser needs the explicit method to recognise the line as a WebSocket request before template expansion. Literal `ws://` / `wss://` URLs without a method still work when written directly.
+> **Heads-up:** When you keep a WebSocket URL in `@const`, `@global`, or `@var`, write the request line as `GET {{ws.url}}` (or whichever variable you use). The parser needs the explicit method to recognize the line as a WebSocket request before template expansion. Literal `ws://` / `wss://` URLs without a method still work when written directly.
 
 ## Limits
 
@@ -104,10 +104,10 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
   ```
 - Most events arrive as a single `data:` line, so the line limit is the one they reach first. Raise `max-line-bytes` along with `max-event-bytes` when a single line carries the whole payload. Base64 adds about a third to a payload, so a 3 MiB file needs roughly 4 MiB of headroom.
 - Resterm limits how much stream data it keeps in memory. An SSE session keeps up to 1024 events and 16 MiB, or twice `max-event-bytes` when that is larger. The size of an SSE event includes its data, comment, id, name, and other saved fields. A WebSocket session and its saved transcript each have an 8 MiB limit. The Stream pane keeps up to 5000 events or 16 MiB. If Resterm removes older events, the summary counts them in `dropped`. The Stream tab shows `Transcript incomplete` when its view is missing events.
-- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end. The saved data includes everything read before the limit was reached. Other problems fail the request. These include an expired run deadline, a read error, an SSE line or event that exceeds its limit, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a cancelled run returns `130` and a stream error returns the code for the failure named in `summary.errorClass`: `20` for `timeout`, `21` for `network`, `22` for `tls`, `25` for `filesystem` such as an `@ws send-file` payload Resterm could not read, and `26` for `protocol`. A stream that failed for a reason Resterm cannot name reports `protocol`.
+- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end. The saved data includes everything read before the limit was reached. Other problems fail the request. These include an expired run deadline, a read error, an SSE line or event that exceeds its limit, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a canceled run returns `130`. A stream error returns the code for the failure named in `summary.errorClass`: `20` for `timeout`, `21` for `network`, `22` for `tls`, `25` for `filesystem` such as an `@ws send-file` payload Resterm could not read, and `26` for `protocol`. A stream that failed for a reason Resterm cannot name reports `protocol`.
 
 ## Stream tab, history, and console
 
 - The Stream tab appears automatically whenever a streaming session is active. Scroll to review frames, press `b` to bookmark important events, and switch tabs with the arrow keys (`Ctrl+H` / `Ctrl+L`).
 - While the Stream tab is focused, use `g+w` then `i` to toggle the interactive WebSocket console, `p` to send ping, `c` to close gracefully, or `l` to clear the live buffer. If the console is focused for typing, press `Esc` first. Inside the console, cycle payload modes with `F2`, send payloads with `Ctrl+S` or `Ctrl+Enter`, and reuse previous payloads with the arrow keys.
-- Completed transcripts are saved alongside the request in history with summary headers (`X-Resterm-Stream-Type`, `X-Resterm-Stream-Summary`). Scripts and captures can access the same data via `stream.*` templates and APIs (see [Scripting](scripting.md)).
+- Finished transcripts are saved with the request in history, along with summary headers (`X-Resterm-Stream-Type`, `X-Resterm-Stream-Summary`). Scripts and captures can read the same data through `stream.*` templates and APIs. See [Scripting](scripting.md).

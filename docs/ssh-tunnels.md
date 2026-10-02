@@ -1,28 +1,29 @@
 # SSH tunnels
 
-Use `@ssh` to route HTTP/gRPC/WebSocket/SSE traffic through an SSH bastion.
+Use `@ssh` to send HTTP, gRPC, WebSocket, and SSE traffic through an SSH bastion.
 
-**Syntax:** `# @ssh [scope] [name] key=value ...`
+The syntax is `# @ssh [scope] [name] key=value ...`. For example:
 
-- **TL;DR**:
-  - Define a reusable profile: `# @ssh global bastion host=jump.example.com user=ops key=~/.ssh/id_ed25519 persist`
-  - Use it in a request: `# @ssh use=bastion`
-  - Inline one-off: `# @ssh host=10.0.0.5 user=svc password=env:SSH_PW`
+- Define a reusable profile: `# @ssh global bastion host=jump.example.com user=ops key=~/.ssh/id_ed25519 persist`
+- Use it in a request: `# @ssh use=bastion`
+- Inline one-off: `# @ssh host=10.0.0.5 user=svc password=env:SSH_PW`
 
-- `scope`: `global`, `file`, or `request` (default request). Global/file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
+Options and rules:
+
+- `scope`: `global`, `file`, or `request` (default request). Global and file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
 - `name`: profile tag (default `default`).
-- Fields: `host` (required), `port` (default 22), `user`, `password`, `key`, `passphrase`, `agent` (default true when `SSH_AUTH_SOCK` is present), `known_hosts` (default `~/.ssh/known_hosts`), `strict_hostkey` (default true), `persist` (only honored for global/file), `timeout`, `keepalive`, `retries`, `use` (profile selection).
-- Values expand templates and support `env:VAR` to prefer terminal env vars before other scopes. Paths for `key` and `known_hosts` expand `~` and environment variables.
-- Key is optional: resterm will use your SSH agent (if present) or fall back to default keys (`~/.ssh/id_ed25519`, `id_rsa`, `id_ecdsa`); see "Default key detection" below.
-- Global profiles are shared across the workspace; file-scoped profiles override globals when names collide. `use=` resolves file profiles first, then globals.
-- Request-level `persist` is ignored to avoid leaking tunnels. Strict host key checking defaults to true; `strict_hostkey=false` is allowed but insecure.
+- Fields: `host` (required), `port` (default 22), `user`, `password`, `key`, `passphrase`, `agent` (default true when `SSH_AUTH_SOCK` is present), `known_hosts` (default `~/.ssh/known_hosts`), `strict_hostkey` (default true), `persist` (only used at global and file scope), `timeout`, `keepalive`, `retries`, `use` (profile selection).
+- Values expand templates and support `env:VAR`, which checks your shell environment variables before other scopes. Paths for `key` and `known_hosts` expand `~` and environment variables.
+- `key` is optional. Resterm uses your SSH agent if there is one, or falls back to the default keys (`~/.ssh/id_ed25519`, `id_rsa`, `id_ecdsa`). See [Default key detection](#default-key-detection) below.
+- Global profiles are shared across the workspace. File-scoped profiles override global ones when the names match. `use=` resolves file profiles first, then globals.
+- Request-level `persist` is ignored to avoid leaking tunnels. Strict host key checking is on by default. `strict_hostkey=false` is allowed but insecure.
 
 Scopes:
 
 - **Global** (workspace-wide): `# @ssh global bastion host=jump.example.com user=ops key=~/.ssh/id_ed25519 persist`
 - **File** (only this `.http`): `# @ssh file edge host=10.0.0.5 user=ops`
-- **Request inline** (scope keyword optional because request is default): `# @ssh host=192.168.1.50 user=svc password=env:SSH_PW timeout=12s`
-- **Reference** a profile: `# @ssh use=bastion` (picks file-scoped profile first, then global)
+- **Request inline** (the scope keyword is optional because request is the default): `# @ssh host=192.168.1.50 user=svc password=env:SSH_PW timeout=12s`
+- **Reference** a profile: `# @ssh use=bastion` (picks the file-scoped profile first, then the global one)
 
 Examples:
 
@@ -56,7 +57,7 @@ GRPC passthrough:///grpc-internal:8082
 
 ## How it works
 
-SSH tunneling operates at the transport layer, making it transparent to all other features (`@trace`, `@profile`, `@workflow`, `@sse`, `@websocket`, `@graphql`, `@grpc`, etc.).
+SSH tunneling works at the transport layer, so other features work over it as usual. That includes `@trace`, `@profile`, `@workflow`, `@sse`, `@websocket`, `@graphql`, and `@grpc`.
 
 ```text
 Your machine                    Bastion (SSH)                  Private VPC
@@ -73,7 +74,7 @@ Your machine                    Bastion (SSH)                  Private VPC
 
 ## Comparison with terminal tunnels
 
-What you'd do manually:
+What you would do by hand:
 
 ```bash
 # Create tunnel in terminal
@@ -81,7 +82,7 @@ ssh -L 8080:10.0.0.100:80 ops@bastion.example.com
 curl http://localhost:8080/api/users  # in another terminal
 ```
 
-What resterm does transparently:
+What Resterm does for you:
 
 ```http
 # @ssh global tunnel host=bastion.example.com user=ops key=~/.ssh/id_ed25519 persist
@@ -91,16 +92,16 @@ What resterm does transparently:
 GET http://10.0.0.100/api/users
 ```
 
-**Key difference:**
+The difference:
 
-- **Terminal tunnel:** bind a local port, then hit `localhost:port`.
-- **Resterm:** hit the **internal IP directly** (`10.0.0.100`); Resterm dials through the SSH tunnel to reach it.
+- With a terminal tunnel, you bind a local port, then call `localhost:port`.
+- With Resterm, you call the internal IP directly (`10.0.0.100`). Resterm dials through the SSH tunnel to reach it.
 
-This makes accessing Kubernetes pods, private VPC resources, or any internal service through a bastion host seamless. The `persist` option keeps the SSH connection alive so subsequent requests reuse it without reconnection overhead.
+You can reach Kubernetes pods, private VPC resources, or any other internal service behind a bastion host the same way. The `persist` option keeps the SSH connection open, so later requests reuse it instead of reconnecting.
 
 ## Default key detection
 
-When no `key` is specified, resterm automatically tries these paths in order:
+When no `key` is set, Resterm tries these paths in order:
 
 1. `~/.ssh/id_ed25519`
 2. `~/.ssh/id_rsa`

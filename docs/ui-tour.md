@@ -2,11 +2,11 @@
 
 ## Layout
 
-- **Sidebar**: unified navigator tree for files, requests, and workflows with a filter bar and tag/method chips. `→`/`Space` expand files, `g+k`/`g+j` expand or collapse the current branch, and `g+Shift+K`/`g+Shift+J` expand or collapse all. A detail well beneath the list shows the selected request/workflow summary. When focused, `g+h` shrinks and `g+l` expands the sidebar.
-- **Editor**: middle pane with modal editing (view mode by default, `i` to insert, `Esc` to return to view). Inline syntax highlighting marks metadata, headers, and bodies.
-- **Response panes**: right-hand side displays the most recent response, with optional splits for side-by-side comparisons.
-- **Header bar**: shows workspace, active environment, current request, test summaries, the latest transport status and RTT, and the Help shortcut.
-- **Command bar & status**: contextual hints, progress, and notifications. Long messages are shortened to preserve the file, focus, and mode sections. Errors and long warnings open a popup with the complete message; press `Esc` or `Enter` to dismiss it, or `j`/`k` to scroll. Press `g .` to inspect current document warnings, or to reopen the current status message when there are none. Run summaries and confirmation prompts remain in the bar because their details or next action are available elsewhere.
+- **Sidebar**: one navigator tree for files, requests, and workflows, with a filter bar and tag and method chips. `→`/`Space` expand files, `g+k`/`g+j` expand or collapse the current branch, and `g+Shift+K`/`g+Shift+J` expand or collapse all. A detail panel under the list shows a summary of the selected request or workflow. When the sidebar is focused, `g+h` shrinks it and `g+l` widens it.
+- **Editor**: the middle pane, with modal editing (view mode by default, `i` to insert, `Esc` to go back to view mode). Syntax highlighting marks metadata, headers, and bodies.
+- **Response panes**: the right side shows the most recent response. You can split it to compare responses side by side.
+- **Header bar**: shows the workspace, active environment, current request, test summaries, the latest transport status and RTT, and the Help shortcut.
+- **Command bar & status**: contextual hints, progress, and notifications. Long messages are shortened so the file, focus, and mode sections stay visible. Errors and long warnings open a popup with the full message. Press `Esc` or `Enter` to close it, or `j`/`k` to scroll. Press `g .` to see warnings for the current document, or to reopen the current status message when there are none. Run summaries and confirmation prompts stay in the bar, because their details or next step are available elsewhere.
 
 ## Core shortcuts
 
@@ -24,24 +24,24 @@
 
 [Key bindings](key-bindings.md) lists every shortcut and shows how to change them.
 
-The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), insert entries (`i`, `a`, `I`, `A`, `o`, `O`; `I` moves to the first non-blank character), visual selections with `v` / `V`, yank and delete/change operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F` or `/`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
+The editor supports common Vim motions such as `h`, `j`, `k`, `l`, `w`, `b`, `gg`, and `G`. Enter insert mode with `i`, `a`, `I`, `A`, `o`, or `O` (`I` moves to the first non-blank character). It also has visual selections with `v` / `V`, yank and delete/change operations, and undo/redo (`u` / `Ctrl+r`). Press `Shift+F` or `/` to search. `Ctrl+R` toggles regex, `n` jumps to the next match, and `p` to the previous one.
 
-Press `:` from normal mode panes to open a Vim-style command line. Supported actions include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e [path]`, `:help`, `:man`, `:docs`, `:noh`, and the `:mock` command family. Bare `:e` opens the path prompt; giving it a path opens that file or workspace directly.
+Press `:` in a normal mode pane to open a Vim-style command line. Supported commands include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e [path]`, `:help`, `:man`, `:docs`, `:noh`, and the `:mock` commands. `:e` without a path opens the path prompt. With a path, it opens that file or workspace directly.
 
 ## Finding help
 
-Resterm keeps concise documentation inside the binary, so the first layer of help works offline and matches the installed version:
+Resterm keeps short docs inside the binary, so the built-in help works offline and matches the version you have installed:
 
-- Press `?` for the searchable help index. Type `/` to filter shortcuts and topic contents, then use `Esc` to clear the filter or close help.
-- Run `:help <topic>` to open an embedded topic directly; `:man <topic>` is an alias. Run either command without a topic for the index.
-- In editor normal mode, put the cursor on an `@directive`, an HTTP/protocol keyword, or inside `{{ ... }}`, then press `K` for the relevant topic. If no exact topic is available, Resterm leaves the editor open and shows a short recovery hint.
-- Press `o` from an embedded topic, or run `:docs <topic>`, to open the matching page on resterm.app. Bare `:docs` opens the documentation index. If the browser cannot be started, Resterm shows the URL so it can be copied manually.
+- Press `?` for the searchable help index. Type `/` to filter shortcuts and topics, then press `Esc` to clear the filter or close help.
+- Run `:help <topic>` to open a built-in topic directly. `:man <topic>` does the same. Run either command without a topic to see the index.
+- In editor normal mode, put the cursor on an `@directive`, an HTTP or protocol keyword, or inside `{{ ... }}`, then press `K` to open the matching topic. If there is no exact match, Resterm stays in the editor and shows a short hint.
+- Press `o` in a built-in topic, or run `:docs <topic>`, to open the matching page on resterm.app. `:docs` on its own opens the docs index. If the browser can't be opened, Resterm shows the URL so you can copy it.
 
-The command line suggests commands, topics, `:mock` subcommands, and filesystem paths where the active argument accepts one. `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) selects a suggestion, `Tab` completes it without running, and `Enter` accepts and runs an explicit selection. `Tab` on a directory descends into it; `Enter` also descends when the command requires a file. If no row has been selected, `Enter` runs the text currently in the prompt. Paths containing whitespace are quoted automatically.
+The command line suggests commands, topics, `:mock` subcommands, and file paths when the current argument takes one. `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) selects a suggestion, `Tab` completes it without running it, and `Enter` runs the selected one. `Tab` on a directory moves into it. `Enter` also moves into a directory when the command needs a file. If you haven't selected a row, `Enter` runs whatever is in the prompt. Paths with spaces are quoted automatically.
 
-`Ctrl+O` opens the same filesystem picker as a standalone “Open File or Workspace” popup. Type a relative, absolute, or `~` path; use `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) to select, `Tab` to complete or descend, and `Enter` to open the selected supported file or directory as a workspace.
+`Ctrl+O` opens the same file picker as its own "Open File or Workspace" popup. Type a relative, absolute, or `~` path. Use `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) to select, `Tab` to complete or move into a directory, and `Enter` to open a supported file, or a directory as a workspace.
 
-The bottom command bar adapts to the focused pane, editor mode, and response tab. Its contextual keys use a flat presentation by default; themes can add keycap backgrounds through `command_segments`. The global Help shortcut remains visible in the header, and configured shortcuts are reflected in both contextual hints and the help overlay.
+The command bar at the bottom changes with the focused pane, editor mode, and response tab. Its key hints are plain text by default. Themes can add keycap backgrounds with `command_segments`. The Help shortcut always stays visible in the header. If you change a shortcut, the new key shows up in the hints and in the help overlay.
 
 ## Editor completions (IntelliSense)
 
@@ -55,7 +55,7 @@ active environment. It makes no network calls while you type.
 | `@` at the start of a line, with or without a comment marker | Directives, option keys, and values such as booleans, OAuth grants, HTTP/TLS modes, and workflow failure modes |
 | Header section (after the request line, before the blank line) | Header names, then values for well-known headers such as `Content-Type` |
 | Inside `{{ ... }}` | Variables in scope (file/global/request, `@const`, current-environment keys) and dynamic builtins (`$uuid`, `$timestamp`, ...) |
-| `@compare` arguments | Environment names or profiles from the selected group; baseline suggestions use the targets already chosen |
+| `@compare` arguments | Environment names or profiles from the selected group. Baseline suggestions use the targets already chosen |
 | `use=` on `@apply` / `@ssh` / `@k8s` | Matching `@patch` / `@ssh` / `@k8s` profile names |
 | `using=` / `run=` on workflow steps and branches | Named requests from the current document |
 | File paths | Files and directories for `@use`, descriptors, GraphQL/JSON inputs, TLS/SSH/Kubernetes options, request bodies, and script or body includes |
@@ -105,44 +105,44 @@ service, method, or field names.
 ## Response panes
 
 - **Pretty**: formatted JSON (or best-effort formatting for other types).
-- **Raw**: exact payload text.
-- **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
-- **Headers**: response and request header subviews with a visible in-pane switcher. Press `Enter` or `Space` while focused on the Headers tab to switch between the response headers and the sent request headers (cookies included).
-- **Profile** / **Workflow**: live results for profile and workflow runs. Profile results show progress, latency statistics, a histogram, and failures. On narrow panes, the sections stack vertically. Workflow results show a summary, a step list, and details for the selected step. The tab label follows the current run type. Use `j` / `k` or arrow keys to move between steps, `Enter` or `Space` to focus the selected step detail, `j` / `k` or `PageUp` / `PageDown` to scroll that detail, and `Esc`, `Enter`, or `Space` to return to the step list.
-- **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
+- **Raw**: the exact payload text.
+- **Stream**: a live transcript of WebSocket and SSE sessions, with bookmarks and a console.
+- **Headers**: the response headers and the request headers that were sent, with a switcher in the pane. Press `Enter` or `Space` on the Headers tab to switch between them. The request headers include cookies.
+- **Profile** / **Workflow**: live results for profile and workflow runs. Profile results show progress, latency statistics, a histogram, and failures. On narrow panes, the sections stack vertically. Workflow results show a summary, a step list, and details for the selected step. The tab label follows the current run type. Use `j` / `k` or the arrow keys to move between steps. Press `Enter` or `Space` to focus the details of the selected step, then `j` / `k` or `PageUp` / `PageDown` to scroll them. `Esc`, `Enter`, or `Space` takes you back to the step list.
+- **Timeline**: HTTP timings for each phase, with budget overlays. Available when tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.
-- **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
+- **History**: past responses for the selected request in time order, updated live. Press `p` for a full JSON preview or `d` to delete the focused entry.
 
 When a request opens a stream, the Stream tab becomes available. [Stream tab, history, and console](streaming.md#stream-tab-history-and-console) covers its keys and the WebSocket console.
 
-Use `Alt+V` or `Alt+H` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
+Use `Alt+V` or `Alt+H` to split the response pane. You can pin the second pane so later responses only fill the first one, which makes comparing easy.
 
-While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire Pretty, Raw, or Headers tab directly to your clipboard, matching the rendered text (no mouse selection required).
+When the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the whole Pretty, Raw, or Headers tab to your clipboard, exactly as it is shown. You don't need to select anything with the mouse.
 
 Use `g+g` and `G` to jump to the start or end of the Pretty, Raw, or Headers tabs when the response pane is focused. The same keys jump to the first or last entry in the navigator when you are browsing files or workflows.
 
-Binary responses show size and type hints alongside quick previews. For large binary payloads, the Raw tab starts in a summary view and defers full dumps until requested. While the response pane is focused, press `g+b` to rotate the Raw tab between summary, hex, and base64 views. Press `g+Shift+D` to load the full hex dump immediately. Press `g+Shift+S` to open the Save Response Body prompt, which comes prefilled with a suggested path from your last save or workspace and writes the file after you hit Enter.
+Binary responses show the size and type next to a short preview. For large binary payloads, the Raw tab starts in a summary view and loads the full dump only when you ask for it. With the response pane focused, press `g+b` to cycle the Raw tab through summary, hex, and base64 views. Press `g+Shift+D` to load the full hex dump right away. Press `g+Shift+S` to open the Save Response Body prompt. It suggests a path based on your last save or the workspace, and writes the file when you press Enter.
 
 Press `g+Shift+E` to open the body in your default app. Resterm only opens types from a fixed list: images, PDF, text, JSON, CSV, audio, video, archives, and Office files without macros. HTML, SVG, XML, and Markdown open as plain text so no scripts inside them can run. It finds the type from the `Content-Type` header, then the file name the server sent, then the body itself. The file extension always comes from that type, so a PDF sent as `invoice.exe` opens as `invoice.pdf`. If no type fits, Resterm shows a warning and you can save the body with `g+Shift+S` instead. Opened files are kept in a temporary folder that Resterm deletes when it exits.
 
 ## Pane minimization & zoom
 
-- Toggle the sidebar, editor, or response panes with `g+1`, `g+2`, and `g+3`. Minimized panes collapse into thin frames that display an indicator along with a reminder of the restoring shortcut.
-- Status bar badges (`Sidebar:min`, `Editor:min`, `Response:min`) mirror the current state so you can tell when something is hidden even if the stub scrolls out of view.
-- Use `g+z` to zoom the currently focused pane and hide the others temporarily; `g+Z` clears zoom and restores the previous layout (including any manual minimize state).
-- Resize chords such as `g+h` / `g+l` and `g+j` / `g+k` are disabled while a related pane is hidden or zoomed, preventing accidental layout resets.
+- Toggle the sidebar, editor, or response panes with `g+1`, `g+2`, and `g+3`. Minimized panes shrink to thin frames that show an indicator and the shortcut to restore them.
+- Status bar badges (`Sidebar:min`, `Editor:min`, `Response:min`) show which panes are minimized, so you can tell something is hidden even if its frame scrolls out of view.
+- Use `g+z` to zoom the focused pane and hide the others for a while. `g+Z` clears the zoom and restores the previous layout, including any panes you minimized.
+- Resize chords such as `g+h` / `g+l` and `g+j` / `g+k` are disabled while a related pane is hidden or zoomed, so you can't reset the layout by accident.
 
 ## Timeline & tracing
 
-- Add `# @trace` directives to enable HTTP tracing on a request. Budgets use `phase<=duration` notation (`dns<=50ms`, `total<=300ms`, etc.) with an optional `tolerance=` applied to every phase. Supported phases map to `nettrace`: `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
-- When a traced response arrives, Resterm evaluates budgets, raises status bar warnings for breaches, and unlocks the Timeline tab. Use `Ctrl+Alt+L` or the `g+t` chord to jump straight to it from anywhere.
-- The Timeline view renders proportional bars, annotates overruns, and lists budget breaches. Metadata such as cached DNS results or reused sockets appears beneath each phase, followed by Connection and TLS panels (protocol, reuse, proxy/SSH, resolved IPs, cipher/ALPN, cert chain, SANs, issuer, expiry).
-- Scripts can inspect traces through the `trace` binding (`trace.enabled()`, `trace.phases()`, `trace.connection()`, `trace.tls()`, `trace.breaches()`, `trace.withinBudget()`, etc.), allowing automated validations inside Goja test blocks.
-- See `_examples/trace.http` for a runnable pair of requests (one within budget, one deliberately breaching) that demonstrate the timeline output and status messaging.
-- Configure optional OpenTelemetry export with `RESTERM_TRACE_OTEL_ENDPOINT` (or `--trace-otel-endpoint`). Additional switches: `RESTERM_TRACE_OTEL_INSECURE` / `--trace-otel-insecure`, `RESTERM_TRACE_OTEL_SERVICE` / `--trace-otel-service`, `RESTERM_TRACE_OTEL_TIMEOUT`, and `RESTERM_TRACE_OTEL_HEADERS`. Spans are emitted only while tracing is enabled; HTTP failures and budget breaches mark the span status as `Error`.
+- Add a `# @trace` directive to turn on HTTP tracing for a request. Budgets use `phase<=duration`, such as `dns<=50ms` or `total<=300ms`, with an optional `tolerance=` that applies to every phase. The supported phases map to `nettrace`: `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
+- When a traced response arrives, Resterm checks the budgets, shows status bar warnings for breaches, and enables the Timeline tab. Press `Ctrl+Alt+L` or `g+t` to jump to it from anywhere.
+- The Timeline view draws proportional bars, marks overruns, and lists budget breaches. Details such as cached DNS results or reused sockets appear under each phase, followed by Connection and TLS panels (protocol, reuse, proxy/SSH, resolved IPs, cipher/ALPN, cert chain, SANs, issuer, expiry).
+- Scripts can read trace data through the `trace` binding, with calls such as `trace.enabled()`, `trace.phases()`, `trace.connection()`, `trace.tls()`, `trace.breaches()`, and `trace.withinBudget()`. Goja test blocks can use them to check timings automatically.
+- `_examples/trace.http` has two requests you can run, one within budget and one that breaks it on purpose, to show the timeline and status messages.
+- To export traces to OpenTelemetry, set `RESTERM_TRACE_OTEL_ENDPOINT` (or `--trace-otel-endpoint`). Other options are `RESTERM_TRACE_OTEL_INSECURE` / `--trace-otel-insecure`, `RESTERM_TRACE_OTEL_SERVICE` / `--trace-otel-service`, `RESTERM_TRACE_OTEL_TIMEOUT`, and `RESTERM_TRACE_OTEL_HEADERS`. Spans are only exported while tracing is enabled. HTTP failures and budget breaches set the span status to `Error`.
 
 ## History and globals
 
-- The history pane persists responses along with their request and environment metadata. Entries survive restarts (stored under the config directory; see [Configuration](configuration.md)).
+- The history pane saves responses together with their request and environment details. Entries are kept across restarts in the config directory. See [Configuration](configuration.md).
 - `Ctrl+G` shows current globals (request/file/runtime) with secrets masked. `Ctrl+Shift+G` (or `g Shift+G`) clears globals and cookies for the active environment.
 - `Ctrl+E` opens the environment picker to switch between `resterm.env.json` (or `rest-client.env.json`) entries.

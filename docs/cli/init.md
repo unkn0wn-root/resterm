@@ -1,6 +1,6 @@
 # resterm init
 
-`resterm init` creates a starter set of files in a directory so you can begin working with requests immediately.
+`resterm init` creates a starter set of files in a directory so you can start sending requests right away.
 
 ```bash
 # Create files in the current directory

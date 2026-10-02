@@ -2,8 +2,8 @@
 
 Resterm has four command-line entry points:
 
-- `resterm` opens the interactive TUI and also exposes import, update, history, and collection tooling.
-- `resterm run` executes the same `.http` / `.rest` files headlessly without opening the TUI.
+- `resterm` opens the interactive TUI. It also handles import, update, history, and collection tasks.
+- `resterm run` runs the same `.http` / `.rest` files without opening the TUI.
 - `resterm mock` serves mock responses declared in those files.
 - `resterm record` forwards HTTP traffic and saves it as requests or mocks.
 
@@ -20,7 +20,7 @@ Use this guide for command-line behavior. For request syntax, directives, workfl
 | `resterm mock reset [flags] [sequence]` | Reset all sequence cursors or every cursor with one name. |
 | `resterm mock clear [flags]` | Clear the standalone mock journal and access logs. |
 | `resterm mock verify [flags] [file\|dir]` | Verify exact `# @expect` call counts against a running mock server. |
-| `resterm init [dir]` | Bootstrap a new Resterm workspace. |
+| `resterm init [dir]` | Create a new Resterm workspace. |
 | `resterm collection ...` | Export, import, pack, and unpack portable request bundles. |
 | `resterm history ...` | Export, import, inspect, compact, and verify persisted history. |
 | `resterm --from-curl ...` | Convert curl commands into `.http` files. |
@@ -29,7 +29,7 @@ Use this guide for command-line behavior. For request syntax, directives, workfl
 
 ## Argument Order
 
-Flags and positional arguments may be interspersed, so `resterm run requests.http --request createPost` and `resterm run --request createPost requests.http` are the same command. Everything after a `--` terminator is treated as a positional argument, which is how you pass a file whose name starts with a dash.
+Flags and positional arguments can be mixed in any order, so `resterm run requests.http --request createPost` and `resterm run --request createPost requests.http` are the same command. Everything after a `--` terminator is treated as a positional argument, which is how you pass a file whose name starts with a dash.
 
 ## Shared Execution Flags
 
@@ -75,7 +75,7 @@ These flags belong to the top-level `resterm` command:
 | `--update` | `-u` | Download and install the latest release, if available. |
 | `--from-curl <cmd-or-path>` | `-fc <cmd-or-path>` | Curl command or file path to convert. |
 | `--from-openapi <path-or-url>` | `-fo <path-or-url>` | OpenAPI specification (local file or `http(s)` URL) to convert. |
-| `--http-out <path>` | `-o <path>` | Destination path for generated `.http` file. |
+| `--http-out <path>` | `-o <path>` | Destination path for the generated `.http` file. |
 | `--openapi-base-var <name>` | `-ob <name>` | Variable name for the generated base URL. |
 | `--openapi-resolve-refs` | `-or` | Resolve external `$ref` references during OpenAPI import. |
 | `--openapi-include-deprecated` | `-od` | Include deprecated operations when generating requests. |

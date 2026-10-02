@@ -1,23 +1,24 @@
 # Kubernetes port-forwards
 
-Use `@k8s` to route HTTP/gRPC/WebSocket/SSE traffic through a Kubernetes API port-forward managed by Resterm.
+Use `@k8s` to send HTTP, gRPC, WebSocket, and SSE traffic through a Kubernetes API port-forward that Resterm manages.
 
-**Syntax:** `# @k8s [scope] [name] key=value ...`
+The syntax is `# @k8s [scope] [name] key=value ...`. For example:
 
-- **TL;DR**:
-  - Define a reusable profile: `# @k8s global cluster-api namespace=default service=api port=http context=dev persist`
-  - Use it in a request: `# @k8s use=cluster-api`
-  - Inline one-off: `# @k8s deployment=payments port=https container=api`
+- Define a reusable profile: `# @k8s global cluster-api namespace=default service=api port=http context=dev persist`
+- Use it in a request: `# @k8s use=cluster-api`
+- Inline one-off: `# @k8s deployment=payments port=https container=api`
 
-- `scope`: `global`, `file`, or `request` (default request). Global/file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
+Options and rules:
+
+- `scope`: `global`, `file`, or `request` (default request). Global and file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
 - `name`: profile tag (default `default`).
 - Target fields:
   - `target=` accepts `pod:<name>`, `service:<name>`, `deployment:<name>`, `statefulset:<name>`.
   - Aliases: `pod=`, `service=` (`svc=`), `deployment=` (`deploy=`), `statefulset=` (`sts=`).
   - Exactly one target is allowed.
-- Transport fields: `namespace` (`ns`), `port` (number or named port), `container`, `local_port`, `address`, `pod_running_timeout`, `retries`, `persist` (only honored for global/file), `context`, `kubeconfig`, `use`.
-- Values expand templates and support `env:VAR` to prefer terminal env vars before other scopes.
-- `use=` resolves file-scoped profile first, then globals.
+- Transport fields: `namespace` (`ns`), `port` (number or named port), `container`, `local_port`, `address`, `pod_running_timeout`, `retries`, `persist` (only used at global and file scope), `context`, `kubeconfig`, `use`.
+- Values expand templates and support `env:VAR`, which checks your shell environment variables before other scopes.
+- `use=` checks file-scoped profiles first, then global ones.
 - Request-level `persist` is ignored to avoid leaking background forwarders.
 - `@ssh` and `@k8s` are mutually exclusive on a request.
 
@@ -25,7 +26,7 @@ Scopes:
 
 - **Global** (workspace-wide): `# @k8s global cluster namespace=default service=api port=http context=kind-dev persist`
 - **File** (only this `.http`): `# @k8s file edge namespace=payments deployment=api port=https`
-- **Request inline** (scope keyword optional because request is default): `# @k8s service=catalog port=http`
+- **Request inline** (the scope keyword is optional because request is the default): `# @k8s service=catalog port=http`
 - **Reference** a profile: `# @k8s use=cluster`
 
 Examples:
@@ -63,22 +64,22 @@ GRPC passthrough:///grpc-api.default.svc.cluster.local:8082
 How target resolution works:
 
 - `pod`: forwards to that pod directly.
-- `service`: resolves service selectors and chooses a deterministic pod (running/ready preferred, then by name).
-- `deployment` / `statefulset`: resolves selectors from the workload and picks a deterministic pod with the same policy.
+- `service`: uses the service selectors and picks a pod in a fixed order (running and ready pods first, then by name).
+- `deployment` / `statefulset`: uses the workload's selectors and picks a pod the same way.
 - For named ports:
-  - pod/workload targets resolve against container ports (`container` can disambiguate).
-  - service targets resolve service port or targetPort, then map to container port when needed.
+  - Pod and workload targets look up container ports. Set `container` when more than one container could match.
+  - Service targets look up the service port or targetPort, then map it to a container port when needed.
 
 Authentication and authorization:
 
-- Resterm uses `client-go` kubeconfig loading (`$KUBECONFIG`/default config, optional `kubeconfig=` override).
+- Resterm loads kubeconfig the same way `client-go` does, from `$KUBECONFIG` or the default config. `kubeconfig=` overrides the path.
 - `context=` selects a kube context explicitly.
 - Cluster auth plugins and exec credentials follow your kubeconfig with Resterm's configured exec policy.
-- RBAC still applies. You need permission to read target resources/pods and open pod port-forward sessions in the namespace.
+- RBAC still applies. You need permission to read the target resources and pods and to open port-forward sessions in the namespace.
 
 Troubleshooting:
 
 - `k8s target ... has no running pods`: check selectors, pod readiness, and namespace.
-- `does not expose named port`: verify container/service port names and set `container=` if multiple containers export the same name.
+- `does not expose named port`: check the container and service port names and set `container=` if multiple containers export the same name.
 - `service ... has no selector`: selector-less services cannot auto-resolve pods.
 - Use a higher `pod_running_timeout` when pods are still starting.

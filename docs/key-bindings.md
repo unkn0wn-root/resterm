@@ -28,7 +28,7 @@ The first table lists the default shortcuts by task. [Custom bindings](#custom-b
 | Run compare sweep (`@compare` or `--compare` targets) | `g+c` |
 | Start/stop workspace mock server | `g+Shift+M` |
 | Capture focused HTTP response as a mock | `g+a` |
-| Navigator filter | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
+| Navigator filter | `/` to focus, then type to search files, requests, and tags. `Esc` clears the filter and chips |
 | Navigator: toggle method filter for selected request | `m` (repeat to switch/clear) |
 | Navigator: toggle tag filters from selected item | `t` (repeat to toggle) |
 | Navigator: jump to selected request/workflow in editor | `l` / `r` (when a request or workflow is highlighted) |
@@ -48,7 +48,7 @@ The first table lists the default shortcuts by task. [Custom bindings](#custom-b
 
 ## Custom bindings
 
-Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first and `${RESTERM_CONFIG_DIR}/bindings.json` second (default: `~/.config/resterm`). Missing files fall back to the built-in bindings. Example:
+Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first, then `${RESTERM_CONFIG_DIR}/bindings.json`. The config directory defaults to `~/.config/resterm`. If neither file exists, Resterm uses the built-in bindings. Example:
 
 ```toml
 [bindings]
@@ -59,8 +59,8 @@ show_context_help = ["shift+k"]
 ```
 
 - Modifiers use `+` (`ctrl+shift+o`), while chord steps are separated by spaces (`"g s"`).
-- Bindings can have at most two steps; `send_request` must remain single-step so it can run inside the editor.
-- Unknown action IDs or duplicate bindings cause the file to be rejected (Resterm logs the error and keeps defaults).
+- A binding can have at most two steps. `send_request` must stay a single step so it works inside the editor.
+- If the file has an unknown action ID or a duplicate binding, Resterm rejects the file, logs the error, and keeps the defaults.
 
 ## Binding reference
 
@@ -72,7 +72,7 @@ show_context_help = ["shift+k"]
 | `show_globals` | Show global variable summary. | `ctrl+g` |
 | `clear_globals` | Clear global variables and cookies. | `ctrl+shift+g`, `g shift+g` |
 | `save_file` | Save the current `.http` / `.rest` file. | `ctrl+s` |
-| `save_layout` | Prompt to persist current layout (splits, widths) to settings. | `g shift+l` |
+| `save_layout` | Prompt to save the current layout (splits, widths) to settings. | `g shift+l` |
 | `toggle_response_split_vertical` | Toggle response inline vs vertical split. | `alt+v` |
 | `toggle_response_split_horizontal` | Toggle response inline vs horizontal split. | `alt+h` |
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
@@ -82,7 +82,7 @@ show_context_help = ["shift+k"]
 | `show_status_message` | Show current editor diagnostics, or the current status message when there are none. | `g .` (soft default) |
 | `open_path_modal` | Open the filesystem picker for a supported file or workspace. | `ctrl+o` |
 | `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
-| `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
+| `open_new_file_modal` | Open the "New Request" modal. | `ctrl+n` |
 | `open_file_in_editor` | Open the current or selected supported file in `$RESTERM_EDITOR`, `$VISUAL`, or `$EDITOR`. | `g e` |
 | `open_theme_selector` | Open theme selector. | `ctrl+alt+t`, `g m`, `g shift+t` |
 | `open_temp_document` | Open a scratch document. | `ctrl+t` |
@@ -99,8 +99,8 @@ show_context_help = ["shift+k"]
 
 | Action ID | Description | Default bindings | Repeatable |
 | --- | --- | --- | --- |
-| `sidebar_width_decrease` / `sidebar_width_increase` | Shrink/grow sidebar width when the navigator is focused; resize editor/response width in side-by-side layout. | `g h`, `g l` | ✓ |
-| `sidebar_height_decrease` / `sidebar_height_increase` | Collapse / expand the selected navigator branch; resize editor/response height in stacked layout. | `g j`, `g k` | ✓ |
+| `sidebar_width_decrease` / `sidebar_width_increase` | Shrink or grow the sidebar when the navigator is focused. In side-by-side layout, resize the editor and response width. | `g h`, `g l` | ✓ |
+| `sidebar_height_decrease` / `sidebar_height_increase` | Collapse or expand the selected navigator branch. In stacked layout, resize the editor and response height. | `g j`, `g k` | ✓ |
 | `workflow_height_increase` / `workflow_height_decrease` | Collapse all / expand all navigator branches. | `g shift+j`, `g shift+k` | ✓ |
 | `focus_requests` / `focus_response` / `focus_editor_normal` | Jump directly to a pane. | `g r`, `g p`, `g i` | ✗ |
 | `set_main_split_horizontal` / `set_main_split_vertical` | Stack vs side-by-side editor/response. | `g s`, `g v` | ✗ |
@@ -109,4 +109,4 @@ show_context_help = ["shift+k"]
 | `toggle_sidebar_collapse` / `toggle_editor_collapse` / `toggle_response_collapse` | Collapse/expand panes. | `g 1`, `g 2`, `g 3` | ✗ |
 | `toggle_zoom` / `clear_zoom` | Zoom current region / clear zoom. | `g z`, `g shift+z` | ✗ |
 
-`send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. The `show_context_help`, `show_status_message`, `next_diagnostic`, and `previous_diagnostic` shortcuts are soft defaults: an explicit binding for another action may claim their keys, and the corresponding default is then omitted. Explicit bindings still follow the conflict rules above.
+`send_request` is part of the editor's "send on Ctrl+Enter" handling, so keep it a single step. The `show_context_help`, `show_status_message`, `next_diagnostic`, and `previous_diagnostic` shortcuts are soft defaults. If you bind one of their keys to another action, your binding wins and that default is dropped. Explicit bindings still follow the conflict rules above.

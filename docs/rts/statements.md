@@ -80,7 +80,7 @@ Rules:
 - The tag is evaluated exactly once, before any case.
 - Clauses run top to bottom and the expressions within a clause run left to right. Evaluation stops at the first match, so later case expressions never run.
 - Only the matching clause runs. There is no fallthrough, implicit or explicit.
-- A tagged switch matches with the same equality as `==`. Kinds must match, and only null, bool, number, and string compare by value. Lists and dicts never compare equal, so `switch [1] { case [1]: ... }` falls through to `default`.
+- A tagged switch matches with the same equality as `==`. Kinds must match, and only null, bool, number, and string compare by value. Lists and dicts never compare equal, so `switch [1] { case [1]: ... }` ends up in `default`.
 - A tagless switch takes the first case expression that is truthy, using the same truth test as `if`. It does not require a bool.
 - `case` takes one or more expressions separated by commas. A comma can be followed by a newline, but the colon must stay on the last expression's line.
 - A clause body can be empty, in which case a match does nothing.
@@ -110,9 +110,9 @@ default:
 }
 ```
 
-Switch initializers, type switches, switch expressions that produce a value, and `fallthrough` are not part of the language. A switch can carry a label so that a `break` deeper inside can leave it by name, described under [Labels](#labels).
+Switch initializers, type switches, switch expressions that produce a value, and `fallthrough` are not part of the language. A switch can have a label so that a `break` deeper inside can leave it by name. See [Labels](#labels).
 
-This statement is separate from the `@switch` workflow directive. `@switch` selects a workflow step in an `.http` file and shares the same equality relation, while `switch` is a statement inside RestermScript code.
+This statement is separate from the `@switch` workflow directive. `@switch` selects a workflow step in an `.http` file and uses the same equality rules, while `switch` is a statement inside RestermScript code.
 
 ## for loops
 
@@ -124,23 +124,23 @@ for cond { ... }
 for let k, v range expr { ... }
 ```
 
-The language also supports a three clause loop with init, condition, and post clauses. The clauses are separated by the semicolon token.
+The language also supports a three-clause loop with init, condition, and post clauses. The clauses are separated by the semicolon token.
 
-Rules for loops are consistent. `continue` is valid only inside loops, and `break` is valid inside loops and switches. Both accept a label to target an enclosing statement by name. `const` is not allowed in loop headers. `for let` introduces loop scoped variables that do not escape the loop block. `for range` without `let` assigns to existing variables.
+`continue` is valid only inside loops, and `break` is valid inside loops and switches. Both accept a label to target an enclosing statement by name. `const` is not allowed in loop headers. `for let` introduces loop-scoped variables that do not escape the loop block. `for range` without `let` assigns to existing variables.
 
 ## range semantics
 
-Range iteration is deterministic and follows clear rules.
+Range iteration is deterministic.
 
 - When you range a list, the key is the index and the value is the item.
-- When you range a dict, the key is the string key and the value is the item, and keys are sorted to keep output stable.
-- When you range a string, the key is the byte index and the value is a single rune string.
+- When you range a dict, the key is the string key and the value is the item. Keys are sorted so the output stays stable.
+- When you range a string, the key is the byte index and the value is a single-rune string.
 
 Example:
 
 ```rts
 for let i, ch range "go" {
-  // i is the byte index, ch is "g" and then "o"
+  # i is the byte index, ch is "g" and then "o"
 }
 ```
 

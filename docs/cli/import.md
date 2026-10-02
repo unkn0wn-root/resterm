@@ -28,4 +28,4 @@ resterm --from-openapi https://petstore3.swagger.io/api/v3/openapi.json --http-o
 For a URL spec, relative `servers` URLs are resolved against it, and `--openapi-resolve-refs`
 follows external `$ref`s over HTTP. `--insecure` and `--proxy` apply to the fetch.
 
-Mock generation emits every concrete OpenAPI response status and media example. Named examples become named scenarios, and when a response has no example Resterm samples its schema. Range responses such as `2XX` and `default` are skipped. External examples and binary example bodies cannot produce a deterministic inline mock, so they are dropped with a diagnostic.
+Mock generation creates a mock for every concrete response status and media example in the spec. Named examples become named scenarios, and when a response has no example Resterm samples its schema. Range responses such as `2XX` and `default` are skipped. External examples and binary example bodies cannot produce a deterministic inline mock, so they are dropped with a diagnostic.

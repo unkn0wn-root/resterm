@@ -1,6 +1,6 @@
 # resterm history
 
-The history commands operate on persisted history storage. [Configuration](../configuration.md) says where it lives, and [History and diffing](../history.md) covers history in the TUI.
+The history commands work with persisted history. [Configuration](../configuration.md) says where it lives, and [History and diffing](../history.md) covers history in the TUI.
 
 | Command | What it does |
 | --- | --- |

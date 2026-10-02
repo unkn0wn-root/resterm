@@ -23,7 +23,7 @@ Example:
 POST https://httpbin.org/anything/analytics/sessions
 ```
 
-Template captures such as `{{response.json.token}}` remain supported and can be used alongside RTS capture expressions.
+Template captures such as `{{response.json.token}}` still work and can be used next to RTS capture expressions.
 
 `@capture` treats a value with a complete, unquoted `{{...}}` marker as interpolated text. Otherwise it parses the value as RestermScript. In text mode, surrounding characters such as `#` and unmatched brackets are literal. In script mode, `#` starts a comment.
 

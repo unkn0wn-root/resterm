@@ -8,7 +8,7 @@ Point your application's API base URL at `http://127.0.0.1:9000`. Resterm forwar
 
 In the TUI, run `:record start --upstream https://service.example.com`, view captures with `:record list`, and stop with `:record stop`. Use `:record as-request` or `:record as-mock` to insert all completed recordings into the current `.http` or `.rest` file. Pass a capture ID to insert one. The file must have a path, and each insertion can be undone. **Save the file after inserting recordings.** They count as exported only after saving.
 
-Recordings stay in memory when you switch files. `:record clear` discards a stopped session. Resterm warns before quitting with active recording or unsaved captures. `:q!` discards them.
+Recordings stay in memory when you switch files. `:record clear` discards a stopped session. Resterm warns you before quitting while a recording is active or captures are unsaved. `:q!` discards them.
 
 **Redaction uses header and field names.** Saved copies replace known credential headers and query, form, and JSON fields with `REDACTED`, and remove cookies. Repeat `--redact-header` or `--redact-field` to add names. Free text and values under unrecognized names are left unchanged, even if they contain tokens or passwords. Review recordings before sharing. Replace `REDACTED` request values with variables before replaying requests that need credentials. Forwarded traffic keeps its original credentials.
 
@@ -16,7 +16,7 @@ Use `--skip` and `--only` to choose what is recorded. Rules are `[METHOD ]path` 
 
 Supported bodies are empty, JSON, URL-encoded forms, and UTF-8 text. Gzip is decoded only in recorded copies. Bodies that would change when parsed as request-file syntax are saved in separate files in a `resterm-record-*` directory. Keep that directory beside the request file. Its bodies use the same redaction rules and are read as literal data, without running templates or includes.
 
-Binary, multipart, unsupported encodings, malformed JSON, duplicate JSON keys, oversized bodies, and incomplete bodies cannot be exported. Resterm reports why an export was skipped. Forwarding continues. CONNECT tunnels and protocol upgrades are rejected. WebSocket, gRPC, and SSE recording are unsupported.
+Binary, multipart, unsupported encodings, malformed JSON, duplicate JSON keys, oversized bodies, and incomplete bodies cannot be exported. Resterm reports why an export was skipped. Forwarding continues. CONNECT tunnels and protocol upgrades are rejected. Recording WebSocket, gRPC, and SSE traffic is not supported.
 
 The listener uses HTTP. The upstream must be one HTTP(S) origin, such as `https://service.example.com`, without credentials, a path prefix, query, or fragment. TLS uses the system's trusted certificates. Environment proxy settings are ignored. Redirects, CORS, cookies, and response URLs are forwarded unchanged, so redirected requests may bypass the recorder.
 

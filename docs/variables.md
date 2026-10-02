@@ -10,7 +10,7 @@ Resterm automatically searches, in order:
 
 It loads the first `resterm.env.json` or `rest-client.env.json` it finds. Each named environment must be an object. Values inside it can contain nested objects and arrays, which are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
 
-One environment file is resolved per workspace. Opening a request *file* from another directory does not reload it, because the active selection also keys globals, file variables, cookie jars and history scopes. So `resterm requests/api.http` picks up `requests/resterm.env.json`, while opening that same file from a workspace root with its own environment file keeps the root one. In a recursive workspace Resterm warns at startup about environment files it will not load. To use one of them, start Resterm in that directory or pass `--env-file`.
+One environment file is resolved per workspace. Opening a request *file* from another directory does not reload it, because the active selection also keys globals, file variables, cookie jars and history scopes. So `resterm requests/api.http` picks up `requests/resterm.env.json`, while opening that same file from a workspace root with its own environment file keeps the root one. In a recursive workspace, Resterm warns at startup about environment files it will not load. To use one of them, start Resterm in that directory or pass `--env-file`.
 
 Opening a *workspace*, or a request file that lives outside the current one, moves the workspace and re-resolves the environment for the new root:
 
@@ -68,7 +68,7 @@ GET https://api.example.com/reports
 Authorization: Bearer {{token}}
 ```
 
-`@const`, `@request`, `@global`, and `@file` all accept this form. The mapped value is available through templates and `vars`; constants remain template-only. File declarations do not appear in `env`, which only contains values from the selected environment.
+`@const`, `@request`, `@global`, and `@file` all accept this form. The mapped value is available through templates and `vars`. Constants stay template-only. File declarations do not appear in `env`, which only contains values from the selected environment.
 
 If the OS variable is missing, the declaration stays undefined and still shadows lower-precedence sources. Resterm first tries the name as written, then its uppercase form.
 
@@ -76,11 +76,11 @@ Values loaded through `env:NAME` are secrets. Resterm hides them from previews a
 
 An empty `env:` reference is an error. In a request file, Resterm reports the line where it appears. In an environment file, it stops `resterm run`. The TUI still starts so you can fix the file, but it blocks all requests until the file loads successfully.
 
-A reference name may contain a template, as in `env:{{picked}}`. Only declarations can supply `picked`; runtime data cannot choose which OS variable Resterm reads. If a capture replaces the declaration that supplied the name, nothing declares it any more and the reference becomes undefined rather than following the captured value.
+A reference name may contain a template, as in `env:{{picked}}`. Only declarations can supply `picked`. Runtime data cannot choose which OS variable Resterm reads. If a capture replaces the declaration that supplied the name, nothing declares it any more and the reference becomes undefined rather than following the captured value.
 
 ### Shared variables (`$shared`)
 
-Use the reserved `$shared` key to define variables that apply to **all** environments. This avoids duplicating common values (auth credentials, token URLs, etc.) across every environment. Environment-specific values override `$shared` when names collide.
+Use the reserved `$shared` key to define variables that apply to **all** environments. This avoids repeating common values, such as auth credentials and token URLs, in every environment. Environment-specific values override `$shared` when names collide.
 
 ```json
 {
@@ -104,7 +104,7 @@ In this example `dev` inherits `auth.clientId=demo-client` from `$shared`, while
 
 Use groups when you want to combine independent choices, like API endpoint, app, and credentials, without writing out every combination as its own environment. A file either defines named environments or groups. The two forms cannot be mixed.
 
-Runnable sample: `_examples/grouped/`. Its `resterm.env.json` declares three groups of 3 profiles, so 9 declarations cover 27 combinations, and `grouped-environments.http` has one request per group plus one that reads from all three.
+A runnable sample is in `_examples/grouped/`. Its `resterm.env.json` declares three groups of 3 profiles, so 9 declarations cover 27 combinations, and `grouped-environments.http` has one request per group plus one that reads from all three.
 
 ```json
 {
@@ -147,7 +147,7 @@ Runnable sample: `_examples/grouped/`. Its `resterm.env.json` declares three gro
 
 A group with more than one profile needs a `$default`. A group with a single profile uses that profile automatically. The default is matched case-insensitively and keeps the name as written on the profile. The example above defaults to `api=dev, app=dev app 1, credentials=personal`.
 
-When the file loads, Resterm checks that no variable name appears in two different groups, since profiles from different groups can be active at the same time. The check is case-insensitive. Reusing a variable across profiles of the same group is fine because only one of them is ever active. Profile values override `$shared`, also when the key only differs in case. A collision error names the variable and both `group=profile` sources but never prints the values.
+When the file loads, Resterm checks that no variable name appears in two different groups, since profiles from different groups can be active at the same time. The check is case-insensitive. Reusing a variable across profiles of the same group is fine because only one of them is ever active. Profile values override `$shared`, even when the key only differs in case. A collision error names the variable and both `group=profile` sources but never prints the values.
 
 In the TUI, `Ctrl+E` opens a searchable list with one `group = profile` row per choice. Active profiles are marked. Picking a row switches only that group, and the header and status line always show the full selection.
 
@@ -196,11 +196,11 @@ A workspace uses one environment file. There is no group-local `$shared`, and th
 
 Prefer JSON for multi-environment bundles, but you can point Resterm at a dotenv file when you only need a single workspace:
 
-- Pass `--env-file path/to/.env` (or `.env.prod`, `prod.env`, etc.). Dotenv files are **never** auto-discovered explicit opt-in avoids surprising overrides.
-- Supported syntax matches common `.env` loaders: optional `export` prefixes, `KEY=value` pairs, `#`/`;` comments, single- and double-quoted values (with escapes), and `${VAR}` or `$VAR` interpolation. We expand references using earlier keys from the same file and the current OS environment.
-- The environment name is derived from a `workspace` entry (case-insensitive). If that key is missing or blank we fall back to the file name (`.env.prod` → `prod`, `prod.env` → `prod`, bare `.env` → `default`).
-- Each dotenv file yields exactly one environment today. If you need multiple environments, stick with `resterm.env.json`.
-- Limitations: no multi-workspace support, no auto-discovery, and interpolation only sees keys declared above the current line (plus OS envs).
+- Pass `--env-file path/to/.env`. Names like `.env.prod` and `prod.env` work too. Dotenv files are **never** auto-discovered. You have to opt in, so they never override values by surprise.
+- Supported syntax matches common `.env` loaders: optional `export` prefixes, `KEY=value` pairs, `#`/`;` comments, single- and double-quoted values (with escapes), and `${VAR}` or `$VAR` interpolation. References expand using earlier keys from the same file and the current OS environment.
+- The environment name is derived from a `workspace` entry (case-insensitive). If that key is missing or blank, Resterm uses the file name instead. `.env.prod` and `prod.env` both become `prod`, and a bare `.env` becomes `default`.
+- Each dotenv file gives exactly one environment. If you need more than one, use `resterm.env.json`.
+- There is no multi-workspace support and no auto-discovery. Interpolation only sees keys declared above the current line, plus OS environment variables.
 
 ## Variable resolution order
 
@@ -253,23 +253,23 @@ Every reference is resolved on its own, so two `{{$uuid}}` references in one bod
 
 Generated addresses and hostnames stay under the reserved `example.com`, `example.net`, and `example.org` domains, and phone numbers come from a range reserved for fiction, so no helper output points at a real host, mailbox, or line.
 
-Arguments accept either quote form and may be left unquoted when they contain no comma: `{{$randomChoice(red, green)}}`. Inside a JSON body prefer single quotes, since a backslash-escaped `\"` is part of the argument rather than a quote. A helper used the wrong way, such as `{{$randomChoice()}}`, fails the request with an error that names the helper instead of reporting a missing variable.
+Arguments accept either quote form and may be left unquoted when they contain no comma: `{{$randomChoice(red, green)}}`. Inside a JSON body, prefer single quotes, since a backslash-escaped `\"` is part of the argument rather than a quote. A helper used the wrong way, such as `{{$randomChoice()}}`, fails the request with an error that names the helper instead of reporting a missing variable.
 
 Timestamp helpers accept optional offsets: `{{$timestamp + 6d}}`, `{{$timestampISO8601 - 90m}}`, `{{$timestampMs + 2h}}`. Supported units are the standard Go duration units plus `d` (days) and `w` (weeks).
 
 ## Variable declarations
 
-`@const`, `@var`, and `@global` provide static values evaluated before the request is sent. Constants resolve immediately when the file is parsed and cannot be overridden by captures or scripts; variables follow the usual resolution order and may be updated at runtime.
+`@const`, `@var`, and `@global` provide static values evaluated before the request is sent. Constants resolve when the file is parsed and cannot be overridden by captures or scripts. Variables follow the usual resolution order and can change at runtime.
 
 | Scope | Syntax | Visibility |
 | --- | --- | --- |
-| Constant | `# @const api.root https://api.example.com` | Immutable for the lifetime of the document; available to every request in the file. |
+| Constant | `# @const api.root https://api.example.com` | Immutable for the lifetime of the document. Available to every request in the file. |
 | Global | `# @global api.token value` / `# @global-secret api.token value` / `# @var global api.token value` | Visible to every request and every file (per environment). |
 | File | `# @file upload.root https://storage.example.com` / `# @file-secret upload.root ...` / `# @var file upload.root ...` | Visible to all requests in the same document only. |
 | Request | `# @request trace.id {{$uuid}}` / `# @request-secret trace.id ...` / `# @var request trace.id ...` | Visible only to the current request (useful for tests). |
 | Run | `# @run var order.ref = {{$uuid}}` | One value shared across a workflow or for-each run. See [Run variables](workflows.md#run-variables). |
 
-Values are taken verbatim which means that quotes are not special, so `# @file greeting "hello world"` stores the quotes as part of the value. If you need spaces, just write them directly: `# @file greeting hello world`.
+Values are taken as written. Quotes are not special, so `# @file greeting "hello world"` stores the quotes as part of the value. If you need spaces, write them directly: `# @file greeting hello world`.
 
 Declared values can reference other variables and dynamic helpers. For example, `# @request trace.id {{$uuid}}` generates one value per execution, so every `{{trace.id}}` reference in that request sees the same value. Captures and values written with `vars.set` are treated as data and are not expanded again. A self-reference or a cycle between variables fails the request with a `variable cycle` error that lists the reference chain. See [Variable resolution order](#variable-resolution-order) for how declared values are exposed to scripts.
 

@@ -1,20 +1,20 @@
 # Collection sharing
 
-Resterm can export a portable, self-contained collection bundle that you can commit to Git and import anywhere else. This is useful when you want a reliable "same inputs, same requests" handoff between developers, CI jobs, or support environments.
+Resterm can export a collection bundle that holds everything your requests need. You can commit it to Git and import it anywhere else. This helps when you want to hand the exact same requests and inputs to another developer, a CI job, or a support environment.
 
-A bundle export contains your request files plus the files those requests depend on, such as RTS modules, script includes, payload files, GraphQL query/variables files, gRPC descriptor/message files, and WebSocket `send-file` payloads. Resterm writes a `manifest.json` file with per-file checksums, and import verifies those checksums before writing to disk.
+A bundle contains your request files and the files they depend on, such as RTS modules, script includes, payload files, GraphQL query/variables files, gRPC descriptor/message files, and WebSocket `send-file` payloads. Resterm writes a `manifest.json` file with a checksum for each file, and import checks those checksums before it writes anything to disk.
 
 ## What happens to environment files
 
-Resterm treats environment sharing as an explicit safe template flow:
+Resterm shares environments as a safe example file, not as your real environment file:
 
 1. If `resterm.env.example.json` exists in the workspace, Resterm exports it exactly as written.
-2. If only `resterm.env.json` or `rest-client.env.json` exists, Resterm generates `resterm.env.example.json` and replaces every value with `REPLACE_ME`. In grouped files the group and profile keys and the `$default` strings are kept as they are, only the values under `$shared` and the profiles are redacted.
-3. If no environment file exists, Resterm still writes an empty `resterm.env.example.json` so the bundle shape remains predictable.
+2. If only `resterm.env.json` or `rest-client.env.json` exists, Resterm generates `resterm.env.example.json` and replaces every value with `REPLACE_ME`. In grouped files, the group and profile keys and the `$default` strings stay as they are. Only the values under `$shared` and the profiles are redacted.
+3. If no environment file exists, Resterm still writes an empty `resterm.env.example.json`, so every bundle has the same layout.
 
 ## Export a collection bundle
 
-The following command exports recursively and names the bundle:
+This command exports the workspace recursively and gives the bundle a name:
 
 ```bash
 resterm collection export \
@@ -35,7 +35,7 @@ shared/my-api-bundle/
   resterm.env.example.json
 ```
 
-You can commit this directory directly to Git and open it in code review like any other project files.
+You can commit this directory to Git and review it like any other files in your project.
 
 ## Import a collection bundle
 
@@ -47,7 +47,7 @@ resterm collection import \
   --workspace ./my-local-api
 ```
 
-If you want to inspect the plan before writing, run:
+To see what import will do before it writes anything, run:
 
 ```bash
 resterm collection import \
@@ -56,11 +56,11 @@ resterm collection import \
   --dry-run
 ```
 
-If destination files already exist and replacement is intentional, you can add `--force`.
+If files already exist in the destination and you want to replace them, add `--force`.
 
 ## Pack a bundle into a zip archive
 
-If you want to hand off a single file instead of a directory, you can pack an existing bundle:
+To hand off a single file instead of a directory, pack an existing bundle:
 
 ```bash
 resterm collection pack \
@@ -68,7 +68,7 @@ resterm collection pack \
   --out ./shared/my-api-bundle.zip
 ```
 
-This command reads and validates the bundle manifest and payload checksums before writing the archive, so you do not package a partially corrupted bundle by accident.
+This command checks the manifest and the file checksums before it writes the archive, so you don't pack a damaged bundle by accident.
 
 ## Unpack a zip archive back into a bundle directory
 
@@ -80,8 +80,8 @@ resterm collection unpack \
   --out ./shared/my-api-bundle
 ```
 
-Unpack validates archive paths, rejects unsafe entries (for example traversal paths and symlinks), validates checksums against `manifest.json`, and only then moves the unpacked bundle into place.
+Unpack checks archive paths and rejects unsafe entries, such as traversal paths and symlinks. It then checks the checksums against `manifest.json`, and only after that moves the unpacked bundle into place.
 
 ## Safety and validation behavior
 
-Export, import, pack, and unpack all enforce path safety and integrity checks. Resterm rejects references that escape the workspace, rejects malicious traversal paths in manifests and archives, rejects symlink escapes, and fails operations if size or checksum validation does not match the manifest.
+Export, import, pack, and unpack all check paths and file integrity. Resterm rejects references that point outside the workspace, traversal paths in manifests and archives, and symlinks that escape. An operation fails if a file's size or checksum does not match the manifest.

@@ -1,6 +1,6 @@
 # JavaScript hooks
 
-Scripts use ES5.1 JavaScript. Each script block stops after 30 seconds or when the run is cancelled. Scripts are not restricted to the workspace. See [Security](security.md).
+Scripts use ES5.1 JavaScript. Each script block stops after 30 seconds or when the run is canceled. Scripts are not restricted to the workspace. See [Security](security.md).
 
 ## Script blocks (`@script`)
 
@@ -25,7 +25,7 @@ client.test("status ok", function () {
 %}
 ```
 
-Lines inside the block don't need `>` (but a leading `>` is still stripped if present).
+Lines inside the block don't need `>`. A leading `>` is still stripped if present.
 The `{% ... %}` block is only for inline script content. Script file includes must be written as their own `> < ./path.js` line outside the block.
 
 Allowed example:
@@ -65,14 +65,14 @@ Objects:
 
 The `set*` helpers do not return a value, but their changes still apply to the outgoing request. `removeHeader` can also remove headers declared in the request itself.
 
-All `@script pre-request` blocks for a request share the same state. Each block sees changes made by earlier blocks through `vars.get`, `vars.global.get`, `getURL`, `getMethod`, and `getHeader`. RTS pre-request blocks run before JavaScript blocks, so their changes are visible too. Query parameters are different because they are merged into the URL after the scripts finish. This means `getURL` does not show changes made by `setQueryParam`.
+All `@script pre-request` blocks for a request share the same state. Each block sees changes made by earlier blocks through `vars.get`, `vars.global.get`, `getURL`, `getMethod`, and `getHeader`. RTS pre-request blocks run before JavaScript blocks, so their changes are visible too. Query parameters are different because they are merged into the URL after the scripts finish. So `getURL` does not show changes made by `setQueryParam`.
 
 ## Test scripts (`@script test`)
 
 Objects:
 
 - `client.test(name, fn)` - registers a named test. Exceptions or manual failures mark the test as failed.
-- `tests.assert(condition, message)` - add a pass/fail entry.
+- `tests.assert(condition, message)` - adds a pass/fail entry.
 - `tests.fail(message)` - explicit failure.
 - `response`
   - `status`, `statusCode`, `url`, `duration`
@@ -84,10 +84,10 @@ Objects:
   - `kind()` - returns `"sse"` or `"websocket"`.
   - `summary()` - copy of the transcript summary. [WebSocket and SSE](streaming.md) lists its fields. Resterm fails the request when the stream fails, so a test does not need to check for that separately.
   - `events()` - array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
-  - `onEvent(fn)` - registers a callback invoked for each event after the script runs; useful for assertions over the entire stream.
-  - `onClose(fn)` - registers a callback invoked once with the summary after all events replay.
-- `vars` - same API as pre-request scripts (allows reading request/file/global values and writing request-scope values for assertions).
-- `vars.global` - identical to pre-request usage; changes persist after the script.
+  - `onEvent(fn)` - registers a callback that is called for each event after the script finishes. Useful for assertions over the whole stream.
+  - `onClose(fn)` - registers a callback that is called once with the summary after all events replay.
+- `vars` - same API as pre-request scripts. It reads request, file, and global values, and writes request-scope values for assertions.
+- `vars.global` - same as in pre-request scripts. Changes persist after the script.
 - `console.*` - same placeholders as above.
 
 Example test block:

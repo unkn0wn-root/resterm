@@ -22,6 +22,6 @@ RestermScript builtins and reserved words have a narrower compatibility policy. 
 
 ## Outside the compatibility promise
 
-Presentation details may change in any release. This includes status message wording, rendered layout, colours, and log output. Code under `internal/` is also not covered.
+Presentation details may change in any release. This includes status message wording, rendered layout, colors, and log output. Code under `internal/` is also not covered.
 
 Minor releases may add directives, builtins, flags, and configuration keys. Older versions ignore unknown `@setting` keys, so a newly added setting alone will not prevent a request file from loading.
