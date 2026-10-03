@@ -59,7 +59,7 @@ Objects:
   - `setBody(text)`
   - `setQueryParam(name, value)`
 - `vars`
-  - `get(name)`, `set(name, value)`, `has(name)`
+  - `get(name)`, `set(name, value)`, `has(name)`, `interpolate(text)`
   - `global.get(name)`, `global.set(name, value, options)`, `global.has(name)`, `global.delete(name)` (`options.secret` masks values)
 - `console.log/warn/error` (no-op placeholders for compatibility)
 
@@ -77,10 +77,34 @@ Values passed to the `set*` helpers are data. They are sent as written. Template
 
 A `{{= ... }}` expression read through `vars.get` and written back is sent as text. Read it through a getter, or compute the value in the script.
 
+### Interpolating text
+
+Use `vars.interpolate(text)` to fill placeholders in a string. It replaces `{{name}}` with the value from `vars.get(name)`, including values set earlier in the script. A dynamic helper such as `{{$uuid}}` generates a new value unless a variable has the same name.
+
+```http
+# @file base https://api.example.com
+# @file token env:GITHUB_TOKEN
+
+### Repos
+# @name repos
+# @script pre-request
+> vars.set("userId", "42");
+> request.setURL(vars.interpolate("{{base}}/users/{{userId}}/repos"));
+> request.setHeader("Authorization", vars.interpolate("Bearer {{token}}"));
+GET https://api.example.com
+```
+
+- It reads the same variables as `vars.get`. It cannot read `@const` values or unmapped OS variables. Map an OS variable with `env:NAME`, as shown above.
+- Inserted values stay as written, even if they contain `{{...}}`.
+- Missing variables, `{{= ... }}` expressions, empty `{{ }}` placeholders, and placeholders without a closing `}}` throw an error. Compute expressions in the script.
+- Do not add response text directly to the input string: it could contain `{{token}}` and read a secret. Store it with `vars.set` and insert it through `{{name}}` instead.
+
+The same function is available in [RestermScript](rts/host-objects.md#vars).
+
 When a value set by a pre-request script, in JavaScript or RTS, still holds a variable, an unknown `{{$...}}` helper, or a `{{= ... }}` template, Resterm shows a warning with the file and line of the call:
 
 ```text
-api.http:12: Script sends {{token}} in header Authorization as written. Use vars.get("token").
+api.http:12: Script sends {{token}} in header Authorization as written. Use vars.get("token") or vars.interpolate().
 ```
 
 The warning appears in the status bar, in Explain, and under the request in `resterm run`.

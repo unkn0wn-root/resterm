@@ -9,4 +9,6 @@ JavaScript blocks can modify a request before sending it or test a response afte
 > })
 ```
 
-Pre-request scripts use `request.setHeader`, `request.setBody`, and `vars.set`. Use RestermScript directives for short expressions and JavaScript for stateful logic.
+Pre-request scripts can change headers and bodies with `request.setHeader` and `request.setBody`, or set variables with `vars.set`. Values are sent as written. Use `vars.interpolate("{{base}}/users/{{id}}")` to fill placeholders in a string.
+
+Use RestermScript directives for short expressions. Use JavaScript when you need to keep state between script blocks.

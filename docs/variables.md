@@ -271,7 +271,11 @@ Timestamp helpers accept optional offsets: `{{$timestamp + 6d}}`, `{{$timestampI
 
 Values are taken as written. Quotes are not special, so `# @file greeting "hello world"` stores the quotes as part of the value. If you need spaces, write them directly: `# @file greeting hello world`.
 
-Declared values can reference other variables and dynamic helpers. For example, `# @request trace.id {{$uuid}}` generates one value per execution, so every `{{trace.id}}` reference in that request, and every script that reads it, sees the same value. Captures and values written with `vars.set` are treated as data and are not expanded again. A self-reference or a cycle between variables fails the request with a `variable cycle` error that lists the reference chain. See [Variable resolution order](#variable-resolution-order) for how declared values are exposed to scripts.
+Declared values can refer to other variables and dynamic helpers. For example, `# @request trace.id {{$uuid}}` generates a new value each time the request runs. Every `{{trace.id}}` reference in that request, including reads from scripts, uses the same value.
+
+Captures and values written with `vars.set` stay as written. Use [`vars.interpolate`](scripting.md#interpolating-text) to fill placeholders in a script string.
+
+A self-reference or a cycle between variables fails the request with a `variable cycle` error that lists the names in the cycle. See [Variable resolution order](#variable-resolution-order) for how scripts read declared values.
 
 You can also use shorthand assignments outside comment blocks: `@requestId = {{$uuid}}`. Shorthand defaults to request scope while you're inside a request block and to file scope elsewhere. Add a prefix to override it (`@global api.token abc`, `@request trace.id {{$uuid}}`, or `@file base.url https://example.com`).
 

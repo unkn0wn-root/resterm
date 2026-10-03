@@ -50,6 +50,14 @@ A key mapped from an OS variable with `env:NAME` appears under its declared name
 
 `vars` contains values a run can override, so `@const` values and unmapped OS variables stay template-only. Everything else, including `env:NAME` mappings, follows the [variable resolution order](../variables.md#variable-resolution-order).
 
+`vars.interpolate(text)` fills placeholders in a string using the same [rules as JavaScript](../scripting.md#interpolating-text). It also works in `@apply`:
+
+```http
+# @apply {url: vars.interpolate("{{base}}/users/{{id}}")}
+```
+
+To read a variable named `interpolate`, use `vars.get("interpolate")`.
+
 Values written by scripts, captures, or workflow steps are plain data. Text beginning with `env:` in a runtime value stays literal.
 
 ## request
