@@ -145,9 +145,8 @@ func (o *Output) Warnings() []string {
 	return out
 }
 
-// Apply writes script or patch output onto req. The output is data, so only
-// its dynamic helpers are rendered, and req records what was written so
-// template expansion leaves it unchanged.
+// Apply copies script and patch values to req without expanding placeholders.
+// It marks written fields so later template expansion leaves them unchanged.
 func Apply(req *restfile.Request, out Output) error {
 	if req == nil {
 		return nil
@@ -156,11 +155,7 @@ func Apply(req *restfile.Request, out Output) error {
 		req.Method = *out.Method
 	}
 	if out.URL != nil {
-		u, err := renderHelpers("url", *out.URL)
-		if err != nil {
-			return err
-		}
-		req.SetURL(u)
+		req.SetURL(*out.URL)
 		req.Written.URL = true
 	}
 	if len(out.Query) > 0 {
@@ -168,27 +163,13 @@ func Apply(req *restfile.Request, out Output) error {
 			return err
 		}
 	}
-	if err := applyHeaders(req, out.Headers, out.HeaderDels); err != nil {
-		return err
-	}
+	applyHeaders(req, out.Headers, out.HeaderDels)
 	if out.Body != nil {
-		body, err := renderHelpers("body", *out.Body)
-		if err != nil {
-			return err
-		}
-		req.SetBodyText(body)
+		req.SetBodyText(*out.Body)
 		req.Written.Body = true
 	}
 	SetRequestVars(req, out.Variables)
 	return nil
-}
-
-func renderHelpers(field, value string) (string, error) {
-	out, err := vars.ExpandHelpers(value)
-	if err != nil {
-		return "", diag.WrapAs(diag.ClassScript, err, "render "+field)
-	}
-	return out, nil
 }
 
 type Literal struct {
@@ -196,21 +177,19 @@ type Literal struct {
 	Text, Hint string
 }
 
-// Literals finds templates that will be sent as text. Dynamic helpers such as
-// {{$uuid}} are skipped because they will be expanded.
+// Literals finds placeholders that will be sent unchanged.
 func Literals(text string) []Literal {
 	var out []Literal
 	for _, ph := range vars.Placeholders(text) {
 		l := Literal{Start: ph[0], End: ph[1], Text: text[ph[0]:ph[1]]}
 		name := strings.TrimSpace(l.Text[2 : len(l.Text)-2])
 		switch {
-		case strings.HasPrefix(name, "$"):
-			if !errors.Is(dynamic.Validate(name), dynamic.ErrUnknown) {
-				continue
-			}
-			l.Hint = fmt.Sprintf("Check the helper name, or use vars.get(%q).", name)
 		case strings.HasPrefix(name, "="):
 			l.Hint = "Write the expression without {{= }}."
+		case strings.HasPrefix(name, "$") && !errors.Is(dynamic.Validate(name), dynamic.ErrUnknown):
+			l.Hint = "Use vars.interpolate()."
+		case strings.HasPrefix(name, "$"):
+			l.Hint = fmt.Sprintf("Check the helper name, or use vars.get(%q).", name)
 		default:
 			l.Hint = fmt.Sprintf("Use vars.get(%q) or vars.interpolate().", name)
 		}
@@ -237,39 +216,18 @@ func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {
 }
 
 // Apply removals first so a value set later in the same batch is kept.
-func applyHeaders(req *restfile.Request, set http.Header, del map[string]struct{}) error {
+func applyHeaders(req *restfile.Request, set http.Header, del map[string]struct{}) {
 	for name := range del {
 		req.DelHeader(name)
 	}
 	for name, values := range set {
-		out := make([]string, len(values))
-		for i, value := range values {
-			v, err := renderHelpers("header "+name, value)
-			if err != nil {
-				return err
-			}
-			out[i] = v
-		}
-		req.SetWrittenHeader(name, out...)
+		req.SetWrittenHeader(name, values...)
 	}
-	return nil
 }
 
 func applyQuery(req *restfile.Request, q map[string]*string) error {
 	raw := req.URL
-	patch := make(map[string]*string, len(q))
-	for key, value := range q {
-		if value == nil {
-			patch[key] = nil
-			continue
-		}
-		v, err := renderHelpers("query "+key, *value)
-		if err != nil {
-			return err
-		}
-		patch[key] = &v
-	}
-	updated, err := urltpl.PatchQuery(raw, patch)
+	updated, err := urltpl.PatchQuery(raw, q)
 	if err != nil {
 		return diag.WrapAs(diag.ClassScript, err, "invalid url after request changes")
 	}

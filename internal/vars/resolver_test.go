@@ -740,14 +740,14 @@ func TestExpandTemplatesDeferredStillReportsErrors(t *testing.T) {
 func TestExpandHelpersLeavesVariablesAndExpressions(t *testing.T) {
 	t.Parallel()
 
-	got, err := ExpandHelpers("{{api.token}}-{{= vars.get(\"x\") }}-{{$randomInt(7, 7)}}-{{$nope}}")
+	got, err := NewResolver().ExpandHelpers("{{api.token}}-{{= vars.get(\"x\") }}-{{$randomInt(7, 7)}}-{{$nope}}")
 	if err != nil {
 		t.Fatalf("ExpandHelpers() error = %v", err)
 	}
 	if want := "{{api.token}}-{{= vars.get(\"x\") }}-7-{{$nope}}"; got != want {
 		t.Fatalf("ExpandHelpers() = %q, want %q", got, want)
 	}
-	if _, err := ExpandHelpers("{{$randomChoice()}}"); err == nil {
+	if _, err := NewResolver().ExpandHelpers("{{$randomChoice()}}"); err == nil {
 		t.Fatal("ExpandHelpers() accepted a misused helper")
 	}
 }

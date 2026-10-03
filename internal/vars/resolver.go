@@ -418,12 +418,6 @@ func (r *Resolver) ExpandHelpers(input string) (string, error) {
 	return CompileTemplate(input).render(r, r.exprPos, nil, expandHelpers, nil)
 }
 
-// ExpandHelpers is for text written while a request runs. That text is data,
-// so it must never read variables or run expressions.
-func ExpandHelpers(input string) (string, error) {
-	return NewResolver().ExpandHelpers(input)
-}
-
 func (r *Resolver) SetTrace(tr *Trace) {
 	r.trace = tr
 }

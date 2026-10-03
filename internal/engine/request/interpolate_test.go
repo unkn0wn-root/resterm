@@ -66,11 +66,11 @@ func TestVarsInterpolateInsertsCapturedValuesAsWritten(t *testing.T) {
 	doc := parser.Parse("interpolate.http", []byte(src))
 	eng, st := newStubEngine(t)
 	env := envWith(t, "dev", nil)
-	st.body = `{"note": "{{api.token}} {{= 1 + 1}}"}`
+	st.body = `{"note": "{{api.token}} {{= 1 + 1}} {{$randomInt(5, 5)}}"}`
 	sendWith(t, eng, st, doc, doc.Requests[0], env, ExecOptions{})
 
 	sent := sendWith(t, eng, st, doc, doc.Requests[1], env, ExecOptions{})
-	if got := sent.wire.Header.Get("X-Note"); got != "note: {{api.token}} {{= 1 + 1}}" {
+	if got := sent.wire.Header.Get("X-Note"); got != "note: {{api.token}} {{= 1 + 1}} {{$randomInt(5, 5)}}" {
 		t.Fatalf("X-Note = %q, want the captured text as written", got)
 	}
 	if got := wireText(t, sent); strings.Contains(got, secret) {

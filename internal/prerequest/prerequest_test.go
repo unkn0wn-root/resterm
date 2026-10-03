@@ -84,7 +84,8 @@ func TestApplyMarksRuntimeWritesAsData(t *testing.T) {
 	}
 	url, body := "https://example.com/{{token}}", "{{token}}"
 	out := Output{URL: &url, Body: &body}
-	out.SetHeader(diag.Pos{}, "X-Script", "{{token}}-{{$randomInt(7, 7)}}")
+	const script = "{{token}}-{{$randomInt(7, 7)}}"
+	out.SetHeader(diag.Pos{}, "X-Script", script)
 
 	if err := Apply(req, out); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -92,10 +93,10 @@ func TestApplyMarksRuntimeWritesAsData(t *testing.T) {
 	if !req.Written.URL || !req.Written.Body {
 		t.Fatalf("written = %+v, want the URL and body marked", req.Written)
 	}
-	if got := req.Headers.Get("X-Script"); got != "{{token}}-7" {
-		t.Fatalf("X-Script = %q, want helpers rendered and the name left as written", got)
+	if got := req.Headers.Get("X-Script"); got != script {
+		t.Fatalf("X-Script = %q, want the value as written", got)
 	}
-	if !req.Written.Header("X-Script", "{{token}}-7") || req.Written.Header("X-Declared", "{{token}}") {
+	if !req.Written.Header("X-Script", script) || req.Written.Header("X-Declared", "{{token}}") {
 		t.Fatalf("written headers = %v, want only the script header", req.Written.Headers)
 	}
 }
@@ -115,10 +116,12 @@ func TestOutputWarnings(t *testing.T) {
 
 	want := []string{
 		`a.http:1: Script sends {{base}} in the URL as written. Use vars.get("base") or vars.interpolate().`,
+		"a.http:1: Script sends {{$uuid}} in the URL as written. Use vars.interpolate().",
 		`a.http:3: Script sends {{api.token}} in header Authorization as written. Use vars.get("api.token") or vars.interpolate().`,
 		`a.http:4: Script sends {{accept}} in header Accept as written. Use vars.get("accept") or vars.interpolate().`,
 		`a.http:6: Script sends {{page}} in query param page as written. Use vars.get("page") or vars.interpolate().`,
 		`a.http:7: Script sends {{$uuuid}} in header X-Id as written. Check the helper name, or use vars.get("$uuuid").`,
+		"a.http:7: Script sends {{$randomInt(9, 1)}} in header X-Id as written. Use vars.interpolate().",
 		"Script sends {{= 1 + 1 }} in the body as written. Write the expression without {{= }}.",
 	}
 	if got := out.Warnings(); !slices.Equal(got, want) {

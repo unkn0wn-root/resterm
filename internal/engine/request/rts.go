@@ -976,10 +976,6 @@ func (e *Engine) parseApplyAuth(
 			typ = strings.ToLower(strings.TrimSpace(s))
 			continue
 		}
-		s, err = vars.ExpandHelpers(s)
-		if err != nil {
-			return nil, applyErr("auth."+key, err.Error())
-		}
 		pm[key] = s
 	}
 	if strings.TrimSpace(typ) == "" {
@@ -1022,12 +1018,7 @@ func (e *Engine) parseApplySettings(
 		if err != nil {
 			return nil, err
 		}
-		s, err = vars.ExpandHelpers(s)
-		if err != nil {
-			return nil, applyErr("settings."+key, err.Error())
-		}
-		// Settings are expanded deep inside the transport, so run-time text with
-		// a template is refused instead of tracked there.
+		// Reject placeholders here because transport settings are expanded later.
 		if vars.HasPlaceholder(s) {
 			return nil, applyErr("settings."+key, "contains template text. Write it in a @setting line")
 		}
