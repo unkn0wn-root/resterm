@@ -334,7 +334,7 @@ func jsVarsAPI(
 			out, err := vars.Interpolate(text, func(name string) (string, bool, error) {
 				v, ok := view[vars.NameKey(name)]
 				return v, ok, nil
-			})
+			}, vars.InterpolateOptions{})
 			if err != nil {
 				return "", fmt.Errorf("vars.interpolate: %w", err)
 			}

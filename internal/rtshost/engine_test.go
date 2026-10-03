@@ -563,3 +563,58 @@ func TestVarsInterpolateSeesScriptWrites(t *testing.T) {
 		t.Fatalf("Warnings = %q, want none", w)
 	}
 }
+
+func TestVarsInterpolateStopsAtStringLimit(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	eng.Core().Lim.MaxStr = 1024
+	rt := testRuntime(t)
+	scope, err := NewScope(ScopeInput{}, map[string]string{
+		"v":   strings.Repeat("x", 64),
+		"tpl": strings.Repeat("{{v}}", 128),
+	})
+	if err != nil {
+		t.Fatalf("NewScope: %v", err)
+	}
+	var calls int
+	scope.Resolve = func(string) (string, bool, error) {
+		calls++
+		return "", false, nil
+	}
+	rt.Scope = scope
+
+	_, err = eng.Eval(t.Context(), rt, `vars.interpolate(vars.get("tpl"))`, testPos)
+	if err == nil || !strings.Contains(err.Error(), "vars.interpolate: result is longer than 1024 bytes") {
+		t.Fatalf("error = %v, want the string limit", err)
+	}
+	// One lookup for tpl, 16 that fit, and one over the limit.
+	if calls != 18 {
+		t.Fatalf("looked up %d names, want 18", calls)
+	}
+}
+
+func TestVarsInterpolateStopsWhenCanceled(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+	scope, err := NewScope(ScopeInput{}, map[string]string{"v": "x", "tpl": strings.Repeat("{{v}}", 128)})
+	if err != nil {
+		t.Fatalf("NewScope: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	var calls int
+	scope.Resolve = func(name string) (string, bool, error) {
+		calls++
+		if name == "v" {
+			cancel()
+		}
+		return "", false, nil
+	}
+	rt.Scope = scope
+
+	_, err = eng.Eval(ctx, rt, `try vars.interpolate(vars.get("tpl"))`, testPos)
+	if err == nil || !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("error = %v, want cancellation", err)
+	}
+	if calls != 2 {
+		t.Fatalf("looked up %d names, want to stop after the first value", calls)
+	}
+}

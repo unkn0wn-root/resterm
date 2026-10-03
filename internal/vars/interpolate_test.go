@@ -40,7 +40,7 @@ func TestInterpolate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Interpolate(tt.text, look)
+			got, err := Interpolate(tt.text, look, InterpolateOptions{})
 			if err != nil {
 				t.Fatalf("Interpolate(%q) error: %v", tt.text, err)
 			}
@@ -52,7 +52,11 @@ func TestInterpolate(t *testing.T) {
 }
 
 func TestInterpolateRendersHelpers(t *testing.T) {
-	got, err := Interpolate("{{$timestamp}}|{{$randomInt(5, 5)}}|{{$uuid}}|{{$uuid}}", mapLookup(nil))
+	got, err := Interpolate(
+		"{{$timestamp}}|{{$randomInt(5, 5)}}|{{$uuid}}|{{$uuid}}",
+		mapLookup(nil),
+		InterpolateOptions{},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +87,7 @@ func TestInterpolateErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Interpolate(tt.text, mapLookup(map[string]string{"base": "b", "id": "1"}))
+			got, err := Interpolate(tt.text, mapLookup(map[string]string{"base": "b", "id": "1"}), InterpolateOptions{})
 			if err == nil {
 				t.Fatalf("Interpolate(%q) = %q, want error %q", tt.text, got, tt.want)
 			}
@@ -105,7 +109,7 @@ func TestInterpolateKeepsLookupErrors(t *testing.T) {
 		}
 		return "", false, nil
 	}
-	_, err := Interpolate("{{missing}} {{x}}", look)
+	_, err := Interpolate("{{missing}} {{x}}", look, InterpolateOptions{})
 	if !errors.Is(err, cycle) {
 		t.Fatalf("error = %v, want the lookup error", err)
 	}
@@ -117,10 +121,10 @@ func TestInterpolateDoesNotLookUpRejectedPlaceholders(t *testing.T) {
 		names = append(names, name)
 		return "v", true, nil
 	}
-	if _, err := Interpolate("{{= secret}} {{ }}", look); err == nil {
+	if _, err := Interpolate("{{= secret}} {{ }}", look, InterpolateOptions{}); err == nil {
 		t.Fatal("want an error")
 	}
-	if _, err := Interpolate("{{a}} {{b", look); err == nil {
+	if _, err := Interpolate("{{a}} {{b", look, InterpolateOptions{}); err == nil {
 		t.Fatal("want an error")
 	}
 	if len(names) != 0 {
@@ -130,8 +134,51 @@ func TestInterpolateDoesNotLookUpRejectedPlaceholders(t *testing.T) {
 
 func TestInterpolateDoesNotReadOSEnvironment(t *testing.T) {
 	t.Setenv("RESTERM_INTERPOLATE_LEAK", "leaked")
-	got, err := Interpolate("{{RESTERM_INTERPOLATE_LEAK}}", mapLookup(nil))
+	got, err := Interpolate("{{RESTERM_INTERPOLATE_LEAK}}", mapLookup(nil), InterpolateOptions{})
 	if !errors.Is(err, ErrUndefinedVariable) {
 		t.Fatalf("Interpolate = %q, %v, want an undefined variable", got, err)
+	}
+}
+
+func TestInterpolateMaxLen(t *testing.T) {
+	var calls int
+	look := func(string) (string, bool, error) {
+		calls++
+		return strings.Repeat("x", 64), true, nil
+	}
+	opt := InterpolateOptions{MaxLen: 1024}
+	got, err := Interpolate(strings.Repeat("{{v}}", 16), look, opt)
+	if err != nil || len(got) != 1024 {
+		t.Fatalf("Interpolate at the limit = %d bytes, %v, want 1024 bytes", len(got), err)
+	}
+
+	calls = 0
+	_, err = Interpolate(strings.Repeat("{{v}}", 128), look, opt)
+	if err == nil || err.Error() != "result is longer than 1024 bytes" {
+		t.Fatalf("error = %v, want the length limit", err)
+	}
+	if calls != 17 {
+		t.Fatalf("looked up %d names, want to stop at the 17th", calls)
+	}
+
+	for _, text := range []string{strings.Repeat("a", 1025), "{{$randomString(2000)}}"} {
+		if _, err := Interpolate(text, mapLookup(nil), opt); err == nil {
+			t.Fatalf("Interpolate(%.30q) passed the length limit", text)
+		}
+	}
+}
+
+func TestInterpolateStopsAtStructuralError(t *testing.T) {
+	var names []string
+	look := func(name string) (string, bool, error) {
+		names = append(names, name)
+		return "", false, nil
+	}
+	_, err := Interpolate("{{missing}} {{= x}} {{after}}", look, InterpolateOptions{})
+	if err == nil || err.Error() != "expression {{= x}} is not allowed" {
+		t.Fatalf("error = %v, want the expression error", err)
+	}
+	if len(names) != 1 || names[0] != "missing" {
+		t.Fatalf("looked up %q, want only missing", names)
 	}
 }
