@@ -688,7 +688,7 @@ func TestParsePatchStringTemplatesWarn(t *testing.T) {
 	src := `# @patch file auth {headers: {"X-A": "{{api.token}}"}}
 
 ### one
-# @apply {headers: {"X-B": "Bearer {{api.token}}", "X-Id": "{{$uuid}}", "X-C": "Bearer " + vars.get("api.token")}}
+# @apply {headers: {"X-B": "Bearer {{api.token}}", "X-Id": "{{$uuid}}", "X-D": "{{$uuuid}}", "X-C": "Bearer " + vars.get("api.token")}}
 # @apply {url: "{{= base }}/x"}
 GET https://example.com
 `
@@ -701,6 +701,7 @@ GET https://example.com
 	}{
 		{1, "{{api.token}}", `@patch sends {{api.token}} as written. Use vars.get("api.token").`},
 		{4, "{{api.token}}", `@apply sends {{api.token}} as written. Use vars.get("api.token").`},
+		{4, "{{$uuuid}}", `@apply sends {{$uuuid}} as written. Check the helper name, or use vars.get("$uuuid").`},
 		{5, "{{= base }}", "@apply sends {{= base }} as written. Write the expression without {{= }}."},
 	}
 	if len(doc.Warnings) != len(want) {

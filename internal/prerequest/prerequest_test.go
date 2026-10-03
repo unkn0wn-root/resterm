@@ -2,9 +2,11 @@ package prerequest
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -37,9 +39,9 @@ func TestApplyRemovesDeclaredHeaders(t *testing.T) {
 
 	var out Output
 	out.DelHeader("X-Declared")
-	out.SetHeader("X-Replaced", "script")
+	out.SetHeader(diag.Pos{}, "X-Replaced", "script")
 	out.DelHeader("X-Replaced")
-	out.SetHeader("X-Replaced", "final")
+	out.SetHeader(diag.Pos{}, "X-Replaced", "final")
 
 	if err := Apply(req, out); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -82,7 +84,7 @@ func TestApplyMarksRuntimeWritesAsData(t *testing.T) {
 	}
 	url, body := "https://example.com/{{token}}", "{{token}}"
 	out := Output{URL: &url, Body: &body}
-	out.SetHeader("X-Script", "{{token}}-{{$randomInt(7, 7)}}")
+	out.SetHeader(diag.Pos{}, "X-Script", "{{token}}-{{$randomInt(7, 7)}}")
 
 	if err := Apply(req, out); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -95,5 +97,31 @@ func TestApplyMarksRuntimeWritesAsData(t *testing.T) {
 	}
 	if !req.Written.Header("X-Script", "{{token}}-7") || req.Written.Header("X-Declared", "{{token}}") {
 		t.Fatalf("written headers = %v, want only the script header", req.Written.Headers)
+	}
+}
+
+func TestOutputWarnings(t *testing.T) {
+	at := func(line int) diag.Pos { return diag.Pos{Path: "a.http", Line: line, Col: 3} }
+	var out Output
+	out.SetURL(at(1), "{{base}}/users?id={{$uuid}}")
+	out.SetHeader(at(2), "Authorization", "Bearer {{old}}")
+	out.SetHeader(at(3), "authorization", "Bearer {{api.token}}")
+	out.AddHeader(at(4), "Accept", "{{accept}}")
+	out.SetHeader(at(5), "X-Gone", "{{gone}}")
+	out.DelHeader("X-Gone")
+	out.SetQuery(at(6), "page", "{{page}}")
+	out.SetHeader(at(7), "X-Id", "{{$uuuid}}-{{$randomInt(9, 1)}}")
+	out.SetBody(diag.Pos{}, `{"n": {{= 1 + 1 }}}`)
+
+	want := []string{
+		`a.http:1: Script sends {{base}} in the URL as written. Use vars.get("base").`,
+		`a.http:3: Script sends {{api.token}} in header Authorization as written. Use vars.get("api.token").`,
+		`a.http:4: Script sends {{accept}} in header Accept as written. Use vars.get("accept").`,
+		`a.http:6: Script sends {{page}} in query param page as written. Use vars.get("page").`,
+		`a.http:7: Script sends {{$uuuid}} in header X-Id as written. Check the helper name, or use vars.get("$uuuid").`,
+		"Script sends {{= 1 + 1 }} in the body as written. Write the expression without {{= }}.",
+	}
+	if got := out.Warnings(); !slices.Equal(got, want) {
+		t.Fatalf("Warnings =\n%q\nwant\n%q", got, want)
 	}
 }

@@ -67,3 +67,24 @@ func grpcStatusReport(details []string) *Report {
 		Failed: 1,
 	}
 }
+
+func TestWriteJSONIncludesResultWarnings(t *testing.T) {
+	warn := "Script sends {{token}} in header X-Id as written."
+	rep := &Report{Results: []Result{{Kind: "request", Status: StatusPass, Warnings: []string{warn}}}}
+
+	var out strings.Builder
+	if err := WriteJSON(&out, rep); err != nil {
+		t.Fatalf("WriteJSON(...): %v", err)
+	}
+	var got struct {
+		Results []struct {
+			Warnings []string `json:"warnings"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if len(got.Results) != 1 || len(got.Results[0].Warnings) != 1 || got.Results[0].Warnings[0] != warn {
+		t.Fatalf("results = %+v, want one warning %q", got.Results, warn)
+	}
+}

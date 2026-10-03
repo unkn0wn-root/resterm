@@ -302,3 +302,27 @@ var ansiSeq = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
 func stripANSI(s string) string {
 	return ansiSeq.ReplaceAllString(s, "")
 }
+
+func TestWriteTextIncludesResultWarnings(t *testing.T) {
+	rep := &Report{
+		FilePath: "a.http",
+		Results: []Result{{
+			Kind:     "request",
+			Name:     "one",
+			Method:   "GET",
+			Target:   "http://example.test",
+			Status:   StatusPass,
+			Warnings: []string{"Script sends {{token}} in header X-Id as written."},
+		}},
+		Total:  1,
+		Passed: 1,
+	}
+	var out strings.Builder
+	if err := WriteText(&out, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+	want := "PASS GET one\n  WARN Script sends {{token}} in header X-Id as written.\n"
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("expected %q in output, got %q", want, out.String())
+	}
+}

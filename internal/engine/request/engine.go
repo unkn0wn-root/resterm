@@ -203,7 +203,9 @@ func (e *Engine) ExecuteWith(
 		})
 	}
 	e.store(res)
-	return toResult(res), nil
+	out := toResult(res)
+	out.Warnings = x.warnings
+	return out, nil
 }
 
 func (e *Engine) store(res xrunResult) {
@@ -286,6 +288,7 @@ type execCtx struct {
 	secrets   *vars.Secrets
 	trace     *vars.Trace
 	exp       *explainBuilder
+	warnings  []string
 	onWarning func(Warning)
 	onRepeat  func(xexec.RepeatProgress)
 	onSSE     func(*httpx.StreamHandle, *restfile.Request)
@@ -514,10 +517,13 @@ func (x *execCtx) addCredentialHeaders(names ...string) {
 
 func (x *execCtx) warn(warning Warning) {
 	x.exp.warn(string(warning))
-	if x.preview() || x.onWarning == nil {
+	if x.preview() {
 		return
 	}
-	x.onWarning(warning)
+	x.warnings = append(x.warnings, string(warning))
+	if x.onWarning != nil {
+		x.onWarning(warning)
+	}
 }
 
 func requestTiming(start, end time.Time, res xrunResult) engine.Timing {
@@ -700,6 +706,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		)
 		return x.fail(err, "RTS pre-request failed")
 	}
+	for _, w := range rtsOut.Warnings() {
+		x.warn(Warning(w))
+	}
 	if before != nil {
 		x.exp.stage(
 			xplain.StageRTSPreRequest,
@@ -754,6 +763,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 			err.Error(),
 		)
 		return x.fail(err, "JS pre-request failed")
+	}
+	for _, w := range jsOut.Warnings() {
+		x.warn(Warning(w))
 	}
 	if before != nil {
 		x.exp.stage(

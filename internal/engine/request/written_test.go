@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -281,4 +282,36 @@ func wireText(t *testing.T, sent sentRequest) string {
 		b.WriteString("body: " + string(data) + "\n")
 	}
 	return b.String()
+}
+
+func TestPreRequestScriptTemplatesWarn(t *testing.T) {
+	doc, req := parseDoc(t, `### one
+# @apply {headers: {"X-Apply": "{{token}}"}}
+# @rts pre-request
+> request.setHeader("X-Rts", "{{token}}")
+# @script pre-request
+> request.setHeader("X-Js", "{{= 1 + 1 }}");
+> request.setQueryParam("id", "{{$uuid}}");
+GET http://example.test
+`)
+	eng, _ := newStubEngine(t)
+	var called []string
+	res, err := eng.ExecuteWith(doc, req, envWith(t, "dev", nil), ExecOptions{
+		OnWarning: func(w Warning) { called = append(called, string(w)) },
+	})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() = %v, %v", err, res.Err)
+	}
+	want := []string{
+		`env_ref.http:4: Script sends {{token}} in header X-Rts as written. Use vars.get("token").`,
+		"env_ref.http:6: Script sends {{= 1 + 1 }} in header X-Js as written. Write the expression without {{= }}.",
+	}
+	if !slices.Equal(res.Warnings, want) || !slices.Equal(called, want) {
+		t.Fatalf("warnings = %q, callback = %q, want %q", res.Warnings, called, want)
+	}
+	for _, w := range want {
+		if !slices.Contains(res.Explain.Warnings, w) {
+			t.Fatalf("explain warnings = %q, want %q", res.Explain.Warnings, w)
+		}
+	}
 }

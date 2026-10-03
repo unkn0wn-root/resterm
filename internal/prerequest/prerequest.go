@@ -2,13 +2,18 @@ package prerequest
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+	"github.com/unkn0wn-root/resterm/internal/vars/dynamic"
 )
 
 // Input is the host state available to a pre-request script runner.
@@ -57,14 +62,33 @@ type Output struct {
 	// Variables contains script writes, normalized to one entry per name.
 	Variables vars.NameMap[string]
 	Globals   vars.Globals
+
+	notes []note
 }
 
-func (o *Output) SetHeader(name, value string) {
+type note struct {
+	field string
+	text  string
+}
+
+func (o *Output) SetURL(at diag.Pos, value string) {
+	o.URL = &value
+	o.note(at, "the URL", value, true)
+}
+
+func (o *Output) SetBody(at diag.Pos, value string) {
+	o.Body = &value
+	o.note(at, "the body", value, true)
+}
+
+func (o *Output) SetHeader(at diag.Pos, name, value string) {
 	o.headers().Set(name, value)
+	o.note(at, headerField(name), value, true)
 }
 
-func (o *Output) AddHeader(name, value string) {
+func (o *Output) AddHeader(at diag.Pos, name, value string) {
 	o.headers().Add(name, value)
+	o.note(at, headerField(name), value, false)
 }
 
 func (o *Output) DelHeader(name string) {
@@ -73,13 +97,15 @@ func (o *Output) DelHeader(name string) {
 		o.HeaderDels = make(map[string]struct{})
 	}
 	o.HeaderDels[http.CanonicalHeaderKey(name)] = struct{}{}
+	o.drop(headerField(name))
 }
 
-func (o *Output) SetQuery(name, value string) {
+func (o *Output) SetQuery(at diag.Pos, name, value string) {
 	if o.Query == nil {
 		o.Query = make(map[string]*string)
 	}
 	o.Query[name] = &value
+	o.note(at, "query param "+name, value, true)
 }
 
 func (o *Output) headers() http.Header {
@@ -87,6 +113,36 @@ func (o *Output) headers() http.Header {
 		o.Headers = make(http.Header)
 	}
 	return o.Headers
+}
+
+func headerField(name string) string {
+	return "header " + http.CanonicalHeaderKey(name)
+}
+
+func (o *Output) note(at diag.Pos, field, value string, replace bool) {
+	if replace {
+		o.drop(field)
+	}
+	for _, l := range Literals(value) {
+		text := fmt.Sprintf("Script sends %s in %s as written. %s", l.Text, field, l.Hint)
+		if at.Line > 0 {
+			text = diag.Pos{Path: at.Path, Line: at.Line}.String() + ": " + text
+		}
+		o.notes = append(o.notes, note{field: field, text: text})
+	}
+}
+
+func (o *Output) drop(field string) {
+	o.notes = slices.DeleteFunc(o.notes, func(n note) bool { return n.field == field })
+}
+
+// Warnings returns warnings in script order, leaving out replaced or deleted values.
+func (o *Output) Warnings() []string {
+	var out []string
+	for _, n := range o.notes {
+		out = append(out, n.text)
+	}
+	return out
 }
 
 // Apply writes script or patch output onto req. The output is data, so only
@@ -133,6 +189,34 @@ func renderHelpers(field, value string) (string, error) {
 		return "", diag.WrapAs(diag.ClassScript, err, "render "+field)
 	}
 	return out, nil
+}
+
+type Literal struct {
+	Start, End int
+	Text, Hint string
+}
+
+// Literals finds templates that will be sent as text. Dynamic helpers such as
+// {{$uuid}} are skipped because they will be expanded.
+func Literals(text string) []Literal {
+	var out []Literal
+	for _, ph := range vars.Placeholders(text) {
+		l := Literal{Start: ph[0], End: ph[1], Text: text[ph[0]:ph[1]]}
+		name := strings.TrimSpace(l.Text[2 : len(l.Text)-2])
+		switch {
+		case strings.HasPrefix(name, "$"):
+			if !errors.Is(dynamic.Validate(name), dynamic.ErrUnknown) {
+				continue
+			}
+			l.Hint = fmt.Sprintf("Check the helper name, or use vars.get(%q).", name)
+		case strings.HasPrefix(name, "="):
+			l.Hint = "Write the expression without {{= }}."
+		default:
+			l.Hint = fmt.Sprintf("Use vars.get(%q).", name)
+		}
+		out = append(out, l)
+	}
+	return out
 }
 
 func Normalize(out *Output) {

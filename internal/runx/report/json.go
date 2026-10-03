@@ -43,6 +43,7 @@ type jsonResult struct {
 	Summary              string            `json:"summary,omitempty"`
 	Canceled             bool              `json:"canceled,omitempty"`
 	SkipReason           string            `json:"skipReason,omitempty"`
+	Warnings             []string          `json:"warnings,omitempty"`
 	Error                string            `json:"error,omitempty"`
 	ScriptError          string            `json:"scriptError,omitempty"`
 	Failure              *jsonFailure      `json:"failure,omitempty"`
@@ -264,6 +265,7 @@ func (res Result) json() jsonResult {
 		Summary:              res.Summary,
 		Canceled:             res.Canceled,
 		SkipReason:           res.SkipReason,
+		Warnings:             res.Warnings,
 		Error:                res.Error,
 		ScriptError:          res.ScriptError,
 		Failure:              res.Failure.json(),

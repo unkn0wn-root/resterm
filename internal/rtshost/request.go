@@ -3,6 +3,7 @@ package rtshost
 import (
 	"context"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/http/query"
 	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
@@ -72,14 +73,14 @@ var requestFns = map[string]rts.Value{
 func mut1[A any](
 	name, sig string,
 	a native.Decoder[A],
-	set func(RequestMutator, A),
+	set func(RequestMutator, diag.Pos, A),
 ) native.Def {
 	return native.Fn1(name, sig, a, func(call native.Call, av A) (rts.Value, error) {
 		mut, err := requestMutator(call)
 		if err != nil {
 			return rts.Null(), err
 		}
-		set(mut, av)
+		set(mut, diagPos(call.Pos), av)
 		return rts.Null(), nil
 	})
 }
@@ -87,14 +88,14 @@ func mut1[A any](
 func mut2[A, B any](
 	name, sig string,
 	a native.Decoder[A], b native.Decoder[B],
-	set func(RequestMutator, A, B),
+	set func(RequestMutator, diag.Pos, A, B),
 ) native.Def {
 	return native.Fn2(name, sig, a, b, func(call native.Call, av A, bv B) (rts.Value, error) {
 		mut, err := requestMutator(call)
 		if err != nil {
 			return rts.Null(), err
 		}
-		set(mut, av, bv)
+		set(mut, diagPos(call.Pos), av, bv)
 		return rts.Null(), nil
 	})
 }

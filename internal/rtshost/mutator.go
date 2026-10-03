@@ -3,6 +3,7 @@ package rtshost
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/http/query"
 	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
@@ -41,47 +42,47 @@ func NewMutator(
 
 func (m *Mutator) Request() *Request { return m.req }
 
-func (m *Mutator) SetMethod(value string) {
+func (m *Mutator) SetMethod(_ diag.Pos, value string) {
 	val := util.UpperTrim(value)
 	m.out.Method = &val
 	m.req.Method = val
 }
 
-func (m *Mutator) SetURL(value string) {
+func (m *Mutator) SetURL(at diag.Pos, value string) {
 	val := strings.TrimSpace(value)
-	m.out.URL = &val
+	m.out.SetURL(at, val)
 	m.req.URL = val
 	m.req.Written.URL = true
 	// Drop the parsed query so the request view re-reads it from the new URL.
 	m.req.Query = nil
 }
 
-func (m *Mutator) SetHeader(name header.Name, value string) {
-	m.out.SetHeader(name.Key(), value)
+func (m *Mutator) SetHeader(at diag.Pos, name header.Name, value string) {
+	m.out.SetHeader(at, name.Key(), value)
 	m.reqHeaders()[name.Key()] = []string{value}
 	m.req.Written.SetHeader(name.Key(), value)
 }
 
-func (m *Mutator) AddHeader(name header.Name, value string) {
-	m.out.AddHeader(name.Key(), value)
+func (m *Mutator) AddHeader(at diag.Pos, name header.Name, value string) {
+	m.out.AddHeader(at, name.Key(), value)
 	h := m.reqHeaders()
 	h[name.Key()] = append(h[name.Key()], value)
 	m.req.Written.AddHeader(name.Key(), value)
 }
 
-func (m *Mutator) DelHeader(name header.Name) {
+func (m *Mutator) DelHeader(_ diag.Pos, name header.Name) {
 	m.out.DelHeader(name.Key())
 	delete(m.req.Headers, name.Key())
 	m.req.Written.Headers.Del(name.Key())
 }
 
-func (m *Mutator) SetQuery(name, value string) {
-	m.out.SetQuery(name, value)
+func (m *Mutator) SetQuery(at diag.Pos, name, value string) {
+	m.out.SetQuery(at, name, value)
 	m.setReqQuery(name, value)
 }
 
-func (m *Mutator) SetBody(value string) {
-	m.out.Body = &value
+func (m *Mutator) SetBody(at diag.Pos, value string) {
+	m.out.SetBody(at, value)
 }
 
 // SetVar records the write and updates the host's plain-map view without
