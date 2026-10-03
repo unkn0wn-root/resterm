@@ -3,6 +3,7 @@ package rtshost
 import (
 	"fmt"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/http/query"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -97,15 +98,15 @@ func strictNames(kind string, src map[string]string) (vars.NameMap[string], erro
 	return out, nil
 }
 
-// RequestMutator changes a request through the owning host.
+// RequestMutator changes request values. at points to the script call.
 type RequestMutator interface {
-	SetMethod(value string)
-	SetURL(value string)
-	SetHeader(name header.Name, value string)
-	AddHeader(name header.Name, value string)
-	DelHeader(name header.Name)
-	SetQuery(name, value string)
-	SetBody(value string)
+	SetMethod(at diag.Pos, value string)
+	SetURL(at diag.Pos, value string)
+	SetHeader(at diag.Pos, name header.Name, value string)
+	AddHeader(at diag.Pos, name header.Name, value string)
+	DelHeader(at diag.Pos, name header.Name)
+	SetQuery(at diag.Pos, name, value string)
+	SetBody(at diag.Pos, value string)
 }
 
 // VarsMutator persists a runtime variable write.

@@ -1,12 +1,14 @@
 package parser
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -43,21 +45,10 @@ func (b *documentBuilder) warnUnclosedArgs(d parsedDirective) {
 // placeholder typed in one of its strings is sent as written.
 func (b *documentBuilder) warnPatchTemplates(d parsedDirective) {
 	for _, r := range rts.StringRanges(d.Args) {
-		lit := d.Args[r[0]:r[1]]
-		for _, ph := range vars.Placeholders(lit) {
-			text := lit[ph[0]:ph[1]]
-			name := strings.TrimSpace(text[2 : len(text)-2])
-			if strings.HasPrefix(name, "$") {
-				continue
-			}
-			msg := d.Name.Tag() + " sends " + text + " as written. "
-			if strings.HasPrefix(name, "=") {
-				msg += "Write the expression without {{= }}."
-			} else {
-				msg += "Use vars.get(\"" + name + "\")."
-			}
+		for _, l := range prerequest.Literals(d.Args[r[0]:r[1]]) {
+			msg := fmt.Sprintf("%s sends %s as written. %s", d.Name.Tag(), l.Text, l.Hint)
 			item := restfile.ParseDiagnostic{Message: msg, Span: d.nameSpan}
-			if span, ok := d.argumentSpan(r[0]+ph[0], r[0]+ph[1]); ok {
+			if span, ok := d.argumentSpan(r[0]+l.Start, r[0]+l.End); ok {
 				item.Span = span
 			}
 			b.pushWarning(item)

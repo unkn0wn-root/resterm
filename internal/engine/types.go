@@ -107,6 +107,7 @@ type RequestResult struct {
 	SkipReason     string
 	Preview        bool
 	Explain        *xplain.Report
+	Warnings       []string
 	Timing         Timing
 	Compare        *CompareResult
 	Profile        *ProfileResult

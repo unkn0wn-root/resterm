@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -775,5 +776,47 @@ func TestResponseAPIExposesBinaryHelpers(t *testing.T) {
 	}
 	if !bytes.Equal(data, body) {
 		t.Fatalf("saved body mismatch, got %v want %v", data, body)
+	}
+}
+
+func TestRunPreRequestWarningsPointAtSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pre.js")
+	if err := os.WriteFile(
+		path,
+		[]byte("\n\n// sets the id\nrequest.setHeader(\"X-File\", \"{{file}}\");\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	scripts := []restfile.ScriptBlock{
+		{
+			Kind:       "pre-request",
+			Body:       "var a = 1;\nrequest.setHeader(\"X-Inline\", \"{{inline}}\");",
+			SourcePath: "api.http",
+			Lines:      []restfile.ScriptLine{{Line: 7, Col: 3}, {Line: 8, Col: 3}},
+		},
+		{
+			Kind:       "pre-request",
+			Body:       "{%\nrequest.setBody(\"{{body}}\");\n%}",
+			SourcePath: "api.http",
+			Lines:      []restfile.ScriptLine{{Line: 10, Col: 3}, {Line: 11, Col: 1}, {Line: 12, Col: 1}},
+		},
+		{Kind: "pre-request", FilePath: path},
+	}
+
+	out, err := NewRunner(nil).RunPreRequest(scripts, prerequest.Input{
+		Request:   &restfile.Request{Method: "GET", URL: "https://example.com"},
+		Variables: map[string]string{},
+	})
+	if err != nil {
+		t.Fatalf("pre-request runner: %v", err)
+	}
+	want := []string{
+		`api.http:8: Script sends {{inline}} in header X-Inline as written. Use vars.get("inline").`,
+		`api.http:11: Script sends {{body}} in the body as written. Use vars.get("body").`,
+		path + `:4: Script sends {{file}} in header X-File as written. Use vars.get("file").`,
+	}
+	if got := out.Warnings(); !slices.Equal(got, want) {
+		t.Fatalf("Warnings =\n%q\nwant\n%q", got, want)
 	}
 }

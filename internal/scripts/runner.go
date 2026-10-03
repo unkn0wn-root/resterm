@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/dop251/goja"
 
@@ -82,15 +83,15 @@ func (r *Runner) RunPreRequest(
 			continue
 		}
 
-		script, err := r.loadScript(block, input.BaseDir)
+		src, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
 			return result, diag.WrapAsf(diag.ClassScript, err, "pre-request script %d", idx+1)
 		}
-		if script == "" {
+		if src.text == "" {
 			continue
 		}
 
-		if err := r.executePreRequestScript(ctx, script, api); err != nil {
+		if err := r.executePreRequestScript(ctx, src, api); err != nil {
 			return result, diag.WrapAsf(diag.ClassScript, err, "pre-request script %d", idx+1)
 		}
 	}
@@ -123,15 +124,15 @@ func (r *Runner) RunTests(
 			continue
 		}
 
-		script, err := r.loadScript(block, input.BaseDir)
+		src, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
 			return aggregated, changes, diag.WrapAsf(diag.ClassScript, err, "test script %d", idx+1)
 		}
-		if script == "" {
+		if src.text == "" {
 			continue
 		}
 
-		results, globals, err := r.executeTestScript(ctx, script, input)
+		results, globals, err := r.executeTestScript(ctx, src.text, input)
 		if err != nil {
 			return aggregated, changes, diag.WrapAsf(diag.ClassScript, err, "test script %d", idx+1)
 		}
@@ -145,7 +146,7 @@ func (r *Runner) RunTests(
 
 func (r *Runner) executePreRequestScript(
 	ctx context.Context,
-	script string,
+	src source,
 	api *preRequestAPI,
 ) error {
 	vm := goja.New()
@@ -156,7 +157,16 @@ func (r *Runner) executePreRequestScript(
 		return diag.WrapAs(diag.ClassScript, err, "bind console api")
 	}
 
-	if err := vm.Set("request", api.requestAPI()); err != nil {
+	// Skip the Go setter to find the line of the JavaScript call.
+	at := func() diag.Pos {
+		for _, f := range vm.CaptureCallStack(2, nil) {
+			if p := f.Position(); p.Line > 0 {
+				return src.pos(p.Line)
+			}
+		}
+		return diag.Pos{}
+	}
+	if err := vm.Set("request", api.requestAPI(at)); err != nil {
 		return diag.WrapAs(diag.ClassScript, err, "bind request api")
 	}
 
@@ -164,7 +174,7 @@ func (r *Runner) executePreRequestScript(
 		return diag.WrapAs(diag.ClassScript, err, "bind vars api")
 	}
 
-	if _, err := vm.RunString(script); err != nil {
+	if _, err := vm.RunString(src.text); err != nil {
 		if reason := stopReason(ctx, err); reason != nil {
 			return reason
 		}
@@ -244,22 +254,41 @@ func bindCommon(vm *goja.Runtime) error {
 	return vm.Set("console", console)
 }
 
-func normalizeScript(body string) string {
+// normalizeScript returns the script text and the count of leading lines removed.
+func normalizeScript(body string) (string, int) {
 	script := strings.TrimSpace(body)
-	if script == "" {
-		return script
-	}
-
+	off := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
 	if strings.HasPrefix(script, "{%") && strings.HasSuffix(script, "%}") {
-		script = strings.TrimSpace(script[2 : len(script)-2])
+		inner := script[2 : len(script)-2]
+		script = strings.TrimSpace(inner)
+		off += 2 + len(inner) - len(strings.TrimLeftFunc(inner, unicode.IsSpace))
 	}
-
-	return script
+	return script, strings.Count(body[:off], "\n")
 }
 
-func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string, error) {
+type source struct {
+	text  string
+	path  string
+	skip  int
+	lines []restfile.ScriptLine
+	file  bool
+}
+
+func (s source) pos(line int) diag.Pos {
+	i := s.skip + line - 1
+	switch {
+	case s.file:
+		return diag.Pos{Path: s.path, Line: i + 1}
+	case i < len(s.lines):
+		return diag.Pos{Path: s.path, Line: s.lines[i].Line}
+	}
+	return diag.Pos{}
+}
+
+func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (source, error) {
 	if block.FilePath == "" {
-		return normalizeScript(block.Body), nil
+		text, skip := normalizeScript(block.Body)
+		return source{text: text, path: block.SourcePath, skip: skip, lines: block.Lines}, nil
 	}
 
 	path := block.FilePath
@@ -269,9 +298,10 @@ func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string,
 
 	data, err := r.fs.ReadFile(path)
 	if err != nil {
-		return "", diag.WrapAsf(diag.ClassFilesystem, err, "read script file %s", path)
+		return source{}, diag.WrapAsf(diag.ClassFilesystem, err, "read script file %s", path)
 	}
-	return normalizeScript(string(data)), nil
+	text, skip := normalizeScript(string(data))
+	return source{text: text, path: path, skip: skip, file: true}, nil
 }
 
 // jsVarsAPI builds the vars object shared by pre-request and test scripts.
@@ -364,7 +394,7 @@ func (api *preRequestAPI) render(fn, text string) (string, error) {
 	return out, nil
 }
 
-func (api *preRequestAPI) requestAPI() map[string]any {
+func (api *preRequestAPI) requestAPI(at func() diag.Pos) map[string]any {
 	return map[string]any{
 		"getURL": func() (string, error) {
 			if api.request.written.URL {
@@ -383,12 +413,12 @@ func (api *preRequestAPI) requestAPI() map[string]any {
 			return api.render("getHeader", v)
 		},
 		"setHeader": func(name, value string) {
-			api.output.SetHeader(name, value)
+			api.output.SetHeader(at(), name, value)
 			api.request.headers.Set(name, value)
 			api.request.written.SetHeader(name, value)
 		},
 		"addHeader": func(name, value string) {
-			api.output.AddHeader(name, value)
+			api.output.AddHeader(at(), name, value)
 			api.request.headers.Add(name, value)
 			api.request.written.AddHeader(name, value)
 		},
@@ -397,10 +427,12 @@ func (api *preRequestAPI) requestAPI() map[string]any {
 			api.request.headers.Del(name)
 			api.request.written.Headers.Del(name)
 		},
-		"setQueryParam": api.output.SetQuery,
+		"setQueryParam": func(name, value string) {
+			api.output.SetQuery(at(), name, value)
+		},
 		"setURL": func(url string) {
 			val := strings.TrimSpace(url)
-			api.output.URL = &val
+			api.output.SetURL(at(), val)
 			api.request.url = val
 			api.request.written.URL = true
 		},
@@ -410,8 +442,7 @@ func (api *preRequestAPI) requestAPI() map[string]any {
 			api.request.method = val
 		},
 		"setBody": func(body string) {
-			copied := body
-			api.output.Body = &copied
+			api.output.SetBody(at(), body)
 		},
 	}
 }

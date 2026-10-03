@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/http/query"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
@@ -16,8 +17,8 @@ func TestMutatorNormalizesTokenMutations(t *testing.T) {
 	req := &Request{}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
-	mut.SetMethod(" post ")
-	mut.SetURL(" https://api.example.com/users ")
+	mut.SetMethod(diag.Pos{}, " post ")
+	mut.SetURL(diag.Pos{}, " https://api.example.com/users ")
 
 	if out.Method == nil || *out.Method != "POST" || req.Method != "POST" {
 		t.Fatalf("expected normalized method, out=%#v req=%q", out.Method, req.Method)
@@ -33,9 +34,9 @@ func TestMutatorMirrorsHeadersOntoRequestView(t *testing.T) {
 	req := &Request{Headers: header.Values{"x-drop": {"gone"}}}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
-	mut.SetHeader(mustHeaderName(t, "X-Test"), "1")
-	mut.AddHeader(mustHeaderName(t, "X-Test"), "2")
-	mut.DelHeader(mustHeaderName(t, "X-Drop"))
+	mut.SetHeader(diag.Pos{}, mustHeaderName(t, "X-Test"), "1")
+	mut.AddHeader(diag.Pos{}, mustHeaderName(t, "X-Test"), "2")
+	mut.DelHeader(diag.Pos{}, mustHeaderName(t, "X-Drop"))
 
 	if got := out.Headers.Values("X-Test"); len(got) != 2 || got[0] != "1" || got[1] != "2" {
 		t.Fatalf("expected recorded header values [1 2], got %#v", got)
@@ -62,7 +63,7 @@ func TestMutatorPatchesRequestURLOnQuery(t *testing.T) {
 	req := &Request{URL: "https://example.com/path?seed=1", Query: query.Values{"seed": {"1"}}}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
-	mut.SetQuery("user", "alice")
+	mut.SetQuery(diag.Pos{}, "user", "alice")
 
 	if got := out.Query["user"]; got == nil || *got != "alice" {
 		t.Fatalf("expected recorded query user=alice, got %#v", out.Query)
@@ -84,8 +85,8 @@ func TestMutatorDerivesQueryAfterSetURL(t *testing.T) {
 	req := &Request{URL: "https://example.com/old?stale=1"}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
-	mut.SetURL("https://example.com/new?keep=1")
-	mut.SetQuery("added", "2")
+	mut.SetURL(diag.Pos{}, "https://example.com/new?keep=1")
+	mut.SetQuery(diag.Pos{}, "added", "2")
 
 	q, err := queryValues(req)
 	if err != nil {
@@ -107,7 +108,7 @@ func TestMutatorPatchesTheEmptyQueryName(t *testing.T) {
 	req := &Request{URL: "https://example.com/path"}
 	mut := NewMutator(&out, req, nil, nil, nil)
 
-	mut.SetQuery("", "1")
+	mut.SetQuery(diag.Pos{}, "", "1")
 
 	if got := out.Query[""]; got == nil || *got != "1" {
 		t.Fatalf("recorded query = %#v, want the empty name", out.Query)
@@ -189,8 +190,8 @@ func TestMutatorWithoutRuntimeViewsOnlyRecords(t *testing.T) {
 	mut.SetVar("token", "abc")
 	mut.SetGlobal("token", "abc", false)
 	mut.DelGlobal("token")
-	mut.SetQuery("user", "alice")
-	mut.SetBody("payload")
+	mut.SetQuery(diag.Pos{}, "user", "alice")
+	mut.SetBody(diag.Pos{}, "payload")
 
 	if mut.Request() == nil {
 		t.Fatalf("expected an empty request view instead of nil")
