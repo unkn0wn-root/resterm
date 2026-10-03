@@ -77,6 +77,14 @@ Values passed to the `set*` helpers are data. They are sent as written. Template
 
 A `{{= ... }}` expression read through `vars.get` and written back is sent as text. Read it through a getter, or compute the value in the script.
 
+When a value set by a pre-request script, in JavaScript or RTS, still holds a variable or `{{= ... }}` template, Resterm shows a warning with the file and line of the call:
+
+```text
+api.http:12: Script sends {{token}} in header Authorization as written. Use vars.get("token").
+```
+
+The warning appears in the status bar, in Explain, and under the request in `resterm run`.
+
 All `@script pre-request` blocks for a request share the same state. Each block sees changes made by earlier blocks through `vars.get`, `vars.global.get`, `getURL`, `getMethod`, and `getHeader`. RTS pre-request blocks run before JavaScript blocks, so their changes are visible too. Query parameters are different because they are merged into the URL after the scripts finish. So `getURL` does not show changes made by `setQueryParam`.
 
 ## Test scripts (`@script test`)

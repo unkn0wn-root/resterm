@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +111,18 @@ func TestRequestRunResultUsesExplainMissingVarsAndEffectiveURL(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "reporting.token" {
 		t.Fatalf("expected only reporting.token to remain unresolved, got %v", got)
+	}
+}
+
+func TestRequestRunResultKeepsWarnings(t *testing.T) {
+	warns := []string{`Script sends {{token}} in header X-Id as written. Use vars.get("token").`}
+	req := &restfile.Request{Method: "GET", URL: "http://example.test"}
+	item := requestRunResult(req, engine.RequestResult{Warnings: warns}, "dev")
+	if !slices.Equal(item.Warnings, warns) {
+		t.Fatalf("result warnings = %q, want %q", item.Warnings, warns)
+	}
+	if got := ReportModel(&Report{Results: []Result{item}}).Results[0].Warnings; !slices.Equal(got, warns) {
+		t.Fatalf("report warnings = %q, want %q", got, warns)
 	}
 }
 

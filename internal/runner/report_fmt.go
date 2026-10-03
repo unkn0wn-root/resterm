@@ -78,6 +78,7 @@ func toFormatResult(res Result) runfmt.Result {
 		Duration:             resultDuration(res),
 		Canceled:             res.Canceled,
 		SkipReason:           str.Trim(res.SkipReason),
+		Warnings:             res.Warnings,
 		Error:                errText(res.Err),
 		ErrorDetail:          runfmt.ErrorDetailFromError(res.Err),
 		ScriptError:          errText(res.ScriptErr),

@@ -73,6 +73,11 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 		if err := writeTextTargetDetails(w, "  ", res.Target, res.EffectiveTarget, st); err != nil {
 			return err
 		}
+		for _, warn := range res.Warnings {
+			if _, err := fmt.Fprintf(w, "  %s %s\n", st.warnLabel("WARN"), st.value(warn)); err != nil {
+				return err
+			}
+		}
 		if err := writeTextProfileDetails(w, "  ", res, st); err != nil {
 			return err
 		}

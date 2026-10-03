@@ -107,6 +107,7 @@ type Result struct {
 	ScriptErr                 error
 	Skipped                   bool
 	SkipReason                string
+	Warnings                  []string
 	Stream                    *StreamInfo
 	Trace                     *TraceInfo
 	Compare                   *CompareInfo
@@ -333,6 +334,7 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		ScriptErr:            res.ScriptErr,
 		Skipped:              res.Skipped,
 		SkipReason:           str.Trim(res.SkipReason),
+		Warnings:             res.Warnings,
 		Stream:               streamResult(res.Stream),
 		Trace:                traceResult(res.Response),
 		transcript:           bytes.Clone(res.Transcript),

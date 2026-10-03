@@ -45,6 +45,7 @@ type Result struct {
 	Duration             time.Duration
 	Canceled             bool
 	SkipReason           string
+	Warnings             []string
 	Error                string
 	ErrorDetail          *ErrorDetail
 	ScriptError          string

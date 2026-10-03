@@ -363,3 +363,16 @@ func TestRenderBodyKeepsDataWhileRenderEscapes(t *testing.T) {
 		t.Error("human output dropped the escape")
 	}
 }
+
+func TestRenderHTTPPrettyIncludesResultWarnings(t *testing.T) {
+	rep := testHTTPPrettyReport()
+	rep.Results[0].Warnings = []string{"Script sends {{token}} in header X-Id as written."}
+
+	out, err := Render(rep, Options{Mode: ModePretty})
+	if err != nil {
+		t.Fatalf("Render(...): %v", err)
+	}
+	if !strings.Contains(out, "Script sends {{token}} in header X-Id as written.") {
+		t.Fatalf("expected the result warning, got %q", out)
+	}
+}

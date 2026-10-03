@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -210,8 +211,8 @@ func diagnosticIssue(label string, err error, st styler) string {
 
 // Parse warnings share this section with the run's own warnings.
 func requestWarnings(res runner.Result, warns []string, st styler) string {
-	lines := make([]string, 0, len(warns)+1)
-	for _, warn := range warns {
+	lines := make([]string, 0, len(warns)+len(res.Warnings)+1)
+	for _, warn := range slices.Concat(warns, res.Warnings) {
 		lines = append(lines, st.value(warn, toneCaution))
 	}
 	if items, _ := res.UnresolvedTemplateVars(); len(items) > 0 {
