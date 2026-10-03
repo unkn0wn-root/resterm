@@ -1,6 +1,9 @@
 package rts
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestMask(t *testing.T) {
 	tests := []struct {
@@ -73,6 +76,42 @@ func TestMaskText(t *testing.T) {
 				if got[i] != ' ' && got[i] != tt.src[i] {
 					t.Fatalf("MaskText(%q)[%d] = %q, want %q", tt.src, i, got[i], tt.src[i])
 				}
+			}
+		})
+	}
+}
+
+func TestStringRanges(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{name: "empty"},
+		{name: "strings", src: `{a: "x", b: 'y'}`, want: []string{`"x"`, `'y'`}},
+		{name: "callee arguments are left out", src: `{url: vars.interpolate("{{a}}/x")}`},
+		{
+			name: "nested arguments are left out",
+			src:  `vars.interpolate("{{a}}" + str(f("{{b}}")) + (true ? "c" : "d"))`,
+		},
+		{name: "strings after the call stay", src: `vars.interpolate("{{a}}") + "{{b}}"`, want: []string{`"{{b}}"`}},
+		{name: "other calls stay", src: `vars.get("{{a}}")`, want: []string{`"{{a}}"`}},
+		{name: "longer path stays", src: `x.vars.interpolate("{{a}}")`, want: []string{`"{{a}}"`}},
+		{name: "member of a result stays", src: `f().vars.interpolate("{{a}}")`, want: []string{`"{{a}}"`}},
+		{name: "bare name stays", src: `interpolate("{{a}}")`, want: []string{`"{{a}}"`}},
+		{name: "index form stays", src: `vars["interpolate"]("{{a}}")`, want: []string{`"interpolate"`, `"{{a}}"`}},
+		{name: "open call hides the rest", src: `vars.interpolate("{{a}}", "b"`},
+		{name: "line breaks inside the call", src: "vars.interpolate(\n  \"{{a}}\"\n) + \"b\"", want: []string{`"b"`}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var got []string
+			for _, r := range StringRanges(tt.src, "vars.interpolate") {
+				got = append(got, tt.src[r[0]:r[1]])
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("StringRanges(%q) = %q, want %q", tt.src, got, tt.want)
 			}
 		})
 	}

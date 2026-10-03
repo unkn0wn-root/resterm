@@ -1,13 +1,16 @@
 package rts
 
-import "bytes"
+import (
+	"bytes"
+	"strings"
+)
 
 // Mask hides strings, comments, and group contents with spaces.
 // Byte offsets stay the same, so callers can find top-level separators.
 func Mask(src string) string {
 	out := bytes.Repeat([]byte{' '}, len(src))
 	lx := NewLexer("", []byte(src))
-	depth := 0
+	var depth int
 	for {
 		tok := lx.Next()
 		if tok.K == EOF {
@@ -49,16 +52,46 @@ func MaskText(src string) string {
 	}
 }
 
-func StringRanges(src string) [][2]int {
-	var out [][2]int
+// StringRanges returns byte ranges for string literals in src.
+// It skips strings inside calls to callee, including nested arguments.
+func StringRanges(src, callee string) [][2]int {
+	var (
+		out   [][2]int
+		path  string
+		depth int
+		skip  int // call depth, or zero outside the call
+	)
 	lx := NewLexer("", []byte(src))
 	for {
 		tok := lx.Next()
-		if tok.K == EOF {
+		switch tok.K {
+		case EOF:
 			return out
+		case IDENT:
+			if !strings.HasSuffix(path, ".") {
+				path = ""
+			}
+			path += tok.Lit
+			continue
+		case DOT:
+			// A leading dot keeps f().vars.interpolate from matching vars.interpolate.
+			path += "."
+			continue
+		case LPAREN, LBRACK, LBRACE:
+			depth++
+			if tok.K == LPAREN && skip == 0 && path == callee {
+				skip = depth
+			}
+		case RPAREN, RBRACK, RBRACE:
+			if depth == skip {
+				skip = 0
+			}
+			depth = max(depth-1, 0)
+		case STRING:
+			if skip == 0 {
+				out = append(out, [2]int{lx.start, lx.i})
+			}
 		}
-		if tok.K == STRING {
-			out = append(out, [2]int{lx.start, lx.i})
-		}
+		path = ""
 	}
 }

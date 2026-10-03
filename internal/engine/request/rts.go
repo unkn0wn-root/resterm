@@ -149,7 +149,7 @@ func rtsStream(info *scripts.StreamInfo) *rtshost.Stream {
 
 type evalScope struct {
 	vars    map[string]string
-	resolve func(name string) (string, bool, error)
+	resolve vars.Lookup
 	globals vars.Globals
 	// expand renders authored request values for @apply and pre-request scripts.
 	expand prerequest.ExpandFunc
@@ -177,7 +177,7 @@ type rtIn struct {
 	env     vars.ResolvedEnv
 	base    string
 	vars    map[string]string
-	resolve func(name string) (string, bool, error)
+	resolve vars.Lookup
 	globals vars.Globals
 	expand  prerequest.ExpandFunc
 	site    string
@@ -358,7 +358,7 @@ func (e *Engine) ExprEvalWithOptions(
 	}
 }
 
-func pendingLookup(pending vars.NameMap[struct{}], look vars.Lookup) func(string) (string, bool, error) {
+func pendingLookup(pending vars.NameMap[struct{}], look vars.Lookup) vars.Lookup {
 	if pending.Len() == 0 {
 		return nil
 	}
@@ -976,10 +976,6 @@ func (e *Engine) parseApplyAuth(
 			typ = strings.ToLower(strings.TrimSpace(s))
 			continue
 		}
-		s, err = vars.ExpandHelpers(s)
-		if err != nil {
-			return nil, applyErr("auth."+key, err.Error())
-		}
 		pm[key] = s
 	}
 	if strings.TrimSpace(typ) == "" {
@@ -1022,12 +1018,7 @@ func (e *Engine) parseApplySettings(
 		if err != nil {
 			return nil, err
 		}
-		s, err = vars.ExpandHelpers(s)
-		if err != nil {
-			return nil, applyErr("settings."+key, err.Error())
-		}
-		// Settings are expanded deep inside the transport, so run-time text with
-		// a template is refused instead of tracked there.
+		// Reject placeholders here because transport settings are expanded later.
 		if vars.HasPlaceholder(s) {
 			return nil, applyErr("settings."+key, "contains template text. Write it in a @setting line")
 		}

@@ -242,6 +242,10 @@ type Unclosed struct {
 	Span diag.Span
 }
 
+func (u Unclosed) Message() string {
+	return "placeholder " + u.Text + " is not closed with }}"
+}
+
 // UnclosedPlaceholders reports unfinished placeholders relative to start.
 func UnclosedPlaceholders(input string, start diag.Pos) []Unclosed {
 	return UnclosedPlaceholdersLocated(input, at(start))

@@ -81,6 +81,31 @@ func TestRuntimeWritesAreSentAsData(t *testing.T) {
 			want:  "X-Copied: {{api.token}}",
 		},
 		{
+			name:  "js helper",
+			block: "# @script pre-request\n> request.setHeader(\"X-Copied\", \"{{$randomInt(5, 5)}}\");\nGET http://example.test\n",
+			want:  "X-Copied: {{$randomInt(5, 5)}}",
+		},
+		{
+			name:  "js invalid helper",
+			block: "# @script pre-request\n> request.setHeader(\"X-Copied\", \"{{$randomString(0)}}\");\nGET http://example.test\n",
+			want:  "X-Copied: {{$randomString(0)}}",
+		},
+		{
+			name:  "rts query helper",
+			block: "# @rts pre-request\n> request.setQueryParam(\"q\", \"{\" + \"{$uuid}}\")\nGET http://example.test\n",
+			want:  "q: {{$uuid}}",
+		},
+		{
+			name:  "apply body helper",
+			block: "# @apply {body: \"{\" + \"{$uuid}}\"}\nPOST http://example.test\n",
+			want:  "body: {{$uuid}}",
+		},
+		{
+			name:  "apply auth helper",
+			block: "# @apply {auth: {type: \"bearer\", token: \"{\" + \"{$uuid}}\"}}\nGET http://example.test\n",
+			want:  "Authorization: Bearer {{$uuid}}",
+		},
+		{
 			name:  "js body include",
 			block: "# @script pre-request\n> request.setBody(\"@ " + include + "\");\nPOST http://example.test\n",
 			want:  "body: @ " + include,
@@ -169,7 +194,7 @@ Content-Type: multipart/form-data; boundary=b
 	}
 }
 
-func TestRuntimeWritesStillRenderHelpers(t *testing.T) {
+func TestScriptsWriteDeclaredHelperValues(t *testing.T) {
 	doc, req := parseDoc(t, `### one
 # @name one
 # @request id {{$uuid}}
@@ -303,8 +328,9 @@ GET http://example.test
 		t.Fatalf("ExecuteWith() = %v, %v", err, res.Err)
 	}
 	want := []string{
-		`env_ref.http:4: Script sends {{token}} in header X-Rts as written. Use vars.get("token").`,
+		`env_ref.http:4: Script sends {{token}} in header X-Rts as written. Use vars.get("token") or vars.interpolate().`,
 		"env_ref.http:6: Script sends {{= 1 + 1 }} in header X-Js as written. Write the expression without {{= }}.",
+		"env_ref.http:7: Script sends {{$uuid}} in query param id as written. Use vars.interpolate().",
 	}
 	if !slices.Equal(res.Warnings, want) || !slices.Equal(called, want) {
 		t.Fatalf("warnings = %q, callback = %q, want %q", res.Warnings, called, want)
@@ -313,5 +339,21 @@ GET http://example.test
 		if !slices.Contains(res.Explain.Warnings, w) {
 			t.Fatalf("explain warnings = %q, want %q", res.Explain.Warnings, w)
 		}
+	}
+}
+
+func TestApplySettingsRefuseHelperText(t *testing.T) {
+	doc, req := parseDoc(t, "### one\n# @name one\n"+
+		"# @apply {settings: {timeout: \"{\" + \"{$randomInt(1, 2)}}s\"}}\nGET http://example.test\n")
+	eng, st := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, envWith(t, "dev", nil), ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "settings.timeout: contains template text") {
+		t.Fatalf("result error = %v, want the setting refused", res.Err)
+	}
+	if st.wire != nil {
+		t.Fatal("request was sent")
 	}
 }

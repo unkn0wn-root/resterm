@@ -278,7 +278,7 @@ func TestUnclosedPlaceholderWarnings(t *testing.T) {
 			var got []string
 			for _, item := range doc.Warnings {
 				marked := sourceSpanText(t, tt.source, item.Span)
-				if want := unclosedMessage(vars.Unclosed{Text: marked}); item.Message != want {
+				if want := (vars.Unclosed{Text: marked}).Message(); item.Message != want {
 					t.Fatalf("warning %q does not name what it marks, want %q", item.Message, want)
 				}
 				got = append(got, fmt.Sprintf("%d:%s", item.Span.Start.Line, marked))

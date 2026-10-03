@@ -59,28 +59,55 @@ Objects:
   - `setBody(text)`
   - `setQueryParam(name, value)`
 - `vars`
-  - `get(name)`, `set(name, value)`, `has(name)`
+  - `get(name)`, `set(name, value)`, `has(name)`, `interpolate(text)`
   - `global.get(name)`, `global.set(name, value, options)`, `global.has(name)`, `global.delete(name)` (`options.secret` masks values)
 - `console.log/warn/error` (no-op placeholders for compatibility)
 
-The `set*` helpers do not return a value, but their changes still apply to the outgoing request. `removeHeader` can also remove headers declared in the request itself.
+The `set*` functions change the outgoing request and return no value. `removeHeader` also removes headers declared in the request file.
 
-`getURL()` and `getHeader()` return values from the request file with variable references expanded, the same way `vars.get` returns them. Values set by the same script with `vars.set` are included, and `{{= ... }}` expressions are evaluated with them. A dynamic helper written directly in the field, such as `{{$uuid}}`, stays unexpanded because each use makes a new value. Declare it instead, as in `# @request id {{$uuid}}`, and the getter returns the value that is sent. If a reference is undefined, the call throws an error.
+`getURL()` and `getHeader()` expand variable references and `{{= ... }}` expressions in values from the request file. They include variables set earlier in the script. An undefined reference throws an error.
 
-Values passed to the `set*` helpers are data. They are sent as written. Templates in them are not expanded, and `@ path` lines in a body are not read. Only dynamic helpers such as `{{$uuid}}` are rendered. Build values from variables instead of writing template text:
+A helper written directly in a field, such as `{{$uuid}}`, stays unchanged when a getter reads it. Writing it back also sends it unchanged. To use the same generated value in both the script and the request, declare it with `# @request id {{$uuid}}` and read it with `vars.get("id")`.
+
+The `set*` functions and `addHeader` send the text you pass them. They do not expand variables, expressions, or helpers such as `{{$uuid}}`. A body line such as `@ path` is sent as text and does not read a file. Use `vars.get` to read a variable, or `vars.interpolate` to fill placeholders in a string:
 
 ```http
 # @script pre-request
 > request.setHeader("Authorization", "Bearer " + vars.get("token"));
+> request.setHeader("X-Request-Id", vars.interpolate("{{$uuid}}"));
 > request.setURL(request.getURL() + "?debug=1");
 ```
 
-A `{{= ... }}` expression read through `vars.get` and written back is sent as text. Read it through a getter, or compute the value in the script.
+`vars.get` returns `{{= ... }}` expressions as text. Use a request getter to evaluate an expression in a request field, or calculate it in the script.
 
-When a value set by a pre-request script, in JavaScript or RTS, still holds a variable, an unknown `{{$...}}` helper, or a `{{= ... }}` template, Resterm shows a warning with the file and line of the call:
+### Interpolating text
+
+`vars.interpolate(text)` replaces `{{name}}` with the value from `vars.get(name)`. It sees variables set earlier in the script. Helpers such as `{{$uuid}}` generate a new value each time they appear. If a variable has the same name as a helper, its value is used.
+
+```http
+# @file base https://api.example.com
+# @file token env:GITHUB_TOKEN
+
+### Repos
+# @name repos
+# @script pre-request
+> vars.set("userId", "42");
+> request.setURL(vars.interpolate("{{base}}/users/{{userId}}/repos"));
+> request.setHeader("Authorization", vars.interpolate("Bearer {{token}}"));
+GET https://api.example.com
+```
+
+- It reads the same variables as `vars.get`. It cannot read `@const` values or OS variables without an `env:NAME` mapping.
+- `{{...}}` inside an inserted value stays unchanged.
+- Missing variables, `{{= ... }}` expressions, empty `{{ }}` placeholders, and placeholders without a closing `}}` throw an error. Calculate expressions in the script.
+- Do not pass response text directly to `vars.interpolate`: it could contain `{{token}}` and read a secret. Store it with `vars.set` and insert it with `{{name}}` instead.
+
+The same function is available in [RestermScript](rts/host-objects.md#vars).
+
+Resterm warns when a value written by a pre-request script still contains `{{name}}`, `{{$helper}}`, or `{{= ... }}`. This applies to JavaScript and RTS. The warning includes the file and line of the setter call:
 
 ```text
-api.http:12: Script sends {{token}} in header Authorization as written. Use vars.get("token").
+api.http:12: Script sends {{token}} in header Authorization as written. Use vars.get("token") or vars.interpolate().
 ```
 
 The warning appears in the status bar, in Explain, and under the request in `resterm run`.

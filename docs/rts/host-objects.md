@@ -50,13 +50,23 @@ A key mapped from an OS variable with `env:NAME` appears under its declared name
 
 `vars` contains values a run can override, so `@const` values and unmapped OS variables stay template-only. Everything else, including `env:NAME` mappings, follows the [variable resolution order](../variables.md#variable-resolution-order).
 
+`vars.interpolate(text)` fills placeholders in a string using the same [rules as JavaScript](../scripting.md#interpolating-text). It also works in `@apply`:
+
+```http
+# @apply {url: vars.interpolate("{{base}}/users/{{id}}")}
+```
+
+To read a variable named `interpolate`, use `vars.get("interpolate")`.
+
 Values written by scripts, captures, or workflow steps are plain data. Text beginning with `env:` in a runtime value stays literal.
 
 ## request
 
 `request` provides a summary of the current request. It exposes `method`, `url`, `headers`, `header(name)`, and `query`. `headers` and `query` are `dict<string, string | list<string>>`: one value is a string, multiple values are a list, and zero values are an empty list. Header keys are lowercased, while query keys are exact. `header(name)` is a shortcut that returns the first value. A document header whose name is not an HTTP field name is rejected before evaluation. In `@rts pre-request` blocks, mutation helpers are available, including `request.setMethod`, `request.setURL`, `request.setHeader`, `request.addHeader`, `request.removeHeader`, `request.setQueryParam`, and `request.setBody`. Their string arguments are strict, so convert numbers or booleans with `str(...)` yourself. The longer `@script pre-request lang=rts` form works the same way. In `@apply`, the request object is read-only, so you return a patch dict instead of changing it.
 
-In `@apply` and pre-request blocks, `url`, `headers`, `header(name)`, and `query` expand variable references and `{{= ... }}` expressions in values from the request file, the same way `request.getURL()` does in JavaScript. Values set at run time are shown as written. An undefined reference is an error. Values passed to the mutation helpers or returned in a patch are data and are not expanded again.
+In `@apply` and pre-request blocks, `url`, `headers`, `header(name)`, and `query` expand variables and `{{= ... }}` expressions from the request file, just as `request.getURL()` does in JavaScript. Values set by scripts are shown unchanged. An undefined reference is an error.
+
+Values passed to `request.set*` or `request.addHeader`, or returned in a patch, are sent unchanged. This includes `{{$...}}` helpers. Use `vars.interpolate` to fill placeholders before writing a value.
 
 ## last
 
