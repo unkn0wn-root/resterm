@@ -40,11 +40,12 @@ func providerValue(p Provider, name string) (Value, bool) {
 
 type ExprPos = diag.Pos
 
-// Lookup resolves a name inside the running expansion, so an expression reads
-// the same value as a {{name}} placeholder and a self reference is a cycle.
-// It skips template-only providers.
+// Lookup reads a variable and reports whether it exists.
 type Lookup func(name string) (string, bool, error)
 
+// ExprEval evaluates a {{= expr}} template.
+// look resolves names in the current expansion and detects cycles.
+// It skips variables available only to templates.
 type ExprEval func(expr string, pos ExprPos, look Lookup) (string, error)
 
 // Expansion is the result of rendering one template input. Lenient rendering
