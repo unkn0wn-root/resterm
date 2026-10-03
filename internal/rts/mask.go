@@ -10,7 +10,7 @@ import (
 func Mask(src string) string {
 	out := bytes.Repeat([]byte{' '}, len(src))
 	lx := NewLexer("", []byte(src))
-	depth := 0
+	var depth int
 	for {
 		tok := lx.Next()
 		if tok.K == EOF {
@@ -55,11 +55,13 @@ func MaskText(src string) string {
 // StringRanges returns byte ranges for string literals in src.
 // It skips strings inside calls to callee, including nested arguments.
 func StringRanges(src, callee string) [][2]int {
-	var out [][2]int
+	var (
+		out   [][2]int
+		path  string
+		depth int
+		skip  int // call depth, or zero outside the call
+	)
 	lx := NewLexer("", []byte(src))
-	path := ""
-	depth := 0
-	skip := 0 // call depth, or zero outside the call
 	for {
 		tok := lx.Next()
 		switch tok.K {
