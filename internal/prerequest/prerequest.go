@@ -2,6 +2,7 @@ package prerequest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+	"github.com/unkn0wn-root/resterm/internal/vars/dynamic"
 )
 
 // Input is the host state available to a pre-request script runner.
@@ -203,7 +205,10 @@ func Literals(text string) []Literal {
 		name := strings.TrimSpace(l.Text[2 : len(l.Text)-2])
 		switch {
 		case strings.HasPrefix(name, "$"):
-			continue
+			if !errors.Is(dynamic.Validate(name), dynamic.ErrUnknown) {
+				continue
+			}
+			l.Hint = fmt.Sprintf("Check the helper name, or use vars.get(%q).", name)
 		case strings.HasPrefix(name, "="):
 			l.Hint = "Write the expression without {{= }}."
 		default:

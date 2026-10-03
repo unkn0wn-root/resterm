@@ -77,7 +77,7 @@ Values passed to the `set*` helpers are data. They are sent as written. Template
 
 A `{{= ... }}` expression read through `vars.get` and written back is sent as text. Read it through a getter, or compute the value in the script.
 
-When a value set by a pre-request script, in JavaScript or RTS, still holds a variable or `{{= ... }}` template, Resterm shows a warning with the file and line of the call:
+When a value set by a pre-request script, in JavaScript or RTS, still holds a variable, an unknown `{{$...}}` helper, or a `{{= ... }}` template, Resterm shows a warning with the file and line of the call:
 
 ```text
 api.http:12: Script sends {{token}} in header Authorization as written. Use vars.get("token").
