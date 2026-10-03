@@ -27,7 +27,7 @@ type Scope struct {
 	Globals vars.NameView[string]
 	// Resolve, when set, supplies a value for a name in Vars. ok false keeps
 	// the text in Vars.
-	Resolve func(name string) (string, bool, error)
+	Resolve vars.Lookup
 }
 
 // PreparedScope stores validated environment data that can be reused while

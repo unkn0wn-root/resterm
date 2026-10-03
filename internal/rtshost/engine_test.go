@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 )
@@ -494,5 +495,71 @@ func TestAssertionShorthandBindsStatusTextAsGiven(t *testing.T) {
 	if _, err := eng.EvalAssertion(context.Background(), rt, "response.statusText", testPos); err == nil ||
 		!strings.Contains(err.Error(), "string too long") {
 		t.Errorf("EvalAssertion(response.statusText) error = %v, want the string limit", err)
+	}
+}
+
+func TestVarsInterpolate(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+	scope, err := NewScope(ScopeInput{Env: map[string]string{"host": "env.test"}}, map[string]string{
+		"base":        "https://api.test",
+		"data":        "{{base}}",
+		"pending":     "{{= 1 + 1}}",
+		"interpolate": "a variable",
+	})
+	if err != nil {
+		t.Fatalf("NewScope: %v", err)
+	}
+	scope.Resolve = func(name string) (string, bool, error) {
+		if name == "pending" {
+			return "2", true, nil
+		}
+		return "", false, nil
+	}
+	rt.Scope = scope
+
+	tests := map[string]string{
+		`vars.interpolate("{{base}}/users")`: "https://api.test/users",
+		`vars.interpolate("{{data}}")`:       "{{base}}",
+		`vars.interpolate("{{pending}}")`:    "2",
+		`vars["interpolate"]`:                "a variable",
+		`vars.get("interpolate")`:            "a variable",
+	}
+	for src, want := range tests {
+		v := evalHost(t, eng, rt, src)
+		if v.K != rts.VStr || v.S != want {
+			t.Errorf("%s = %+v, want %q", src, v, want)
+		}
+	}
+
+	errs := map[string]string{
+		`vars.interpolate("{{host}}")`:  "vars.interpolate: undefined variable: host",
+		`vars.interpolate("{{= 1}}")`:   "vars.interpolate: expression {{= 1}} is not allowed",
+		`vars.interpolate("{{base}/x")`: "vars.interpolate: placeholder {{base} is not closed with }}",
+		`vars.interpolate(1)`:           "vars.interpolate(text)",
+	}
+	for src, want := range errs {
+		if _, err := eng.Eval(t.Context(), rt, src, testPos); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s error = %v, want %q", src, err, want)
+		}
+	}
+}
+
+func TestVarsInterpolateSeesScriptWrites(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+	var out prerequest.Output
+	rt.Mutator = NewMutator(&out, rt.Request, map[string]string{}, nil, nil)
+	rt.Request = rt.Mutator.Request()
+
+	src := "vars.set(\"id\", \"42\")\nrequest.setURL(vars.interpolate(\"/users/{{id}}?t={{token}}\"))"
+	if _, err := eng.ExecModule(t.Context(), rt, src, testPos); err != nil {
+		t.Fatalf("ExecModule: %v", err)
+	}
+	if out.URL == nil || *out.URL != "/users/42?t=abc" {
+		t.Fatalf("URL = %v, want the interpolated URL", out.URL)
+	}
+	if w := out.Warnings(); len(w) != 0 {
+		t.Fatalf("Warnings = %q, want none", w)
 	}
 }

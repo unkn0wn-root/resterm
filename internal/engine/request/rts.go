@@ -149,7 +149,7 @@ func rtsStream(info *scripts.StreamInfo) *rtshost.Stream {
 
 type evalScope struct {
 	vars    map[string]string
-	resolve func(name string) (string, bool, error)
+	resolve vars.Lookup
 	globals vars.Globals
 	// expand renders authored request values for @apply and pre-request scripts.
 	expand prerequest.ExpandFunc
@@ -177,7 +177,7 @@ type rtIn struct {
 	env     vars.ResolvedEnv
 	base    string
 	vars    map[string]string
-	resolve func(name string) (string, bool, error)
+	resolve vars.Lookup
 	globals vars.Globals
 	expand  prerequest.ExpandFunc
 	site    string
@@ -358,7 +358,7 @@ func (e *Engine) ExprEvalWithOptions(
 	}
 }
 
-func pendingLookup(pending vars.NameMap[struct{}], look vars.Lookup) func(string) (string, bool, error) {
+func pendingLookup(pending vars.NameMap[struct{}], look vars.Lookup) vars.Lookup {
 	if pending.Len() == 0 {
 		return nil
 	}

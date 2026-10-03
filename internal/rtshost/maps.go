@@ -14,7 +14,7 @@ import (
 type mapObj struct {
 	name    string
 	vals    vars.NameMap[string]
-	resolve func(name string) (string, bool, error)
+	resolve vars.Lookup
 	members map[string]rts.Value
 }
 
@@ -167,8 +167,22 @@ func newVarsObj(scope Scope, varsMut VarsMutator, globalMut GlobalMutator) *mapO
 	o := newMapObj("vars", scope.Vars)
 	o.resolve = scope.Resolve
 	o.members["set"] = varsSetDef(o, varsMut).Value()
+	o.members["interpolate"] = varsInterpolateDef(o.value).Value()
 	o.members["global"] = rts.Obj(newGlobalObj(scope.Globals, globalMut))
 	return o
+}
+
+func varsInterpolateDef(look vars.Lookup) native.Def {
+	sig := "vars.interpolate(text)"
+	return native.Fn1("vars.interpolate", sig, native.String,
+		func(call native.Call, text string) (rts.Value, error) {
+			out, err := vars.Interpolate(text, look)
+			if err != nil {
+				return rts.Null(), call.Errorf("vars.interpolate: %v", err)
+			}
+			return native.StringValue(call.Ctx, call.Pos, out)
+		},
+	)
 }
 
 func varsSetDef(o *mapObj, mut VarsMutator) native.Def {
