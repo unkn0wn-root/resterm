@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -818,5 +819,78 @@ func TestRunPreRequestWarningsPointAtSource(t *testing.T) {
 	}
 	if got := out.Warnings(); !slices.Equal(got, want) {
 		t.Fatalf("Warnings =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestPreRequestVarsInterpolate(t *testing.T) {
+	scripts := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Body: `vars.set("id", "42");
+request.setURL(vars.interpolate("{{base}}/users/{{id}}"));
+request.setHeader("Authorization", vars.interpolate("Bearer {{ Token }}"));
+request.setHeader("X-Data", vars.interpolate("{{data}}"));
+try { vars.interpolate("{{= 1 + 1}}"); } catch (e) { vars.set("caught", String(e)); }`,
+	}}
+	out, err := NewRunner(nil).RunPreRequest(scripts, prerequest.Input{
+		Request:   &restfile.Request{Method: "GET", URL: "https://example.com"},
+		Variables: map[string]string{"base": "https://api.test", "token": "t-1", "data": "{{token}}"},
+	})
+	if err != nil {
+		t.Fatalf("pre-request runner: %v", err)
+	}
+	if out.URL == nil || *out.URL != "https://api.test/users/42" {
+		t.Fatalf("URL = %v, want the interpolated URL", out.URL)
+	}
+	if got := out.Headers.Get("Authorization"); got != "Bearer t-1" {
+		t.Fatalf("Authorization = %q", got)
+	}
+	if got := out.Headers.Get("X-Data"); got != "{{token}}" {
+		t.Fatalf("X-Data = %q, want the value as written", got)
+	}
+	const msg = "vars.interpolate: expression {{= 1 + 1}} is not allowed"
+	if got, _ := out.Variables.Get("caught"); !strings.Contains(got, msg) {
+		t.Fatalf("caught = %q", got)
+	}
+}
+
+func TestPreRequestVarsInterpolateThrows(t *testing.T) {
+	scripts := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Body: `request.setURL(vars.interpolate("/u/{{missing}}"));`,
+	}}
+	out, err := NewRunner(nil).RunPreRequest(scripts, prerequest.Input{
+		Request:   &restfile.Request{Method: "GET", URL: "https://example.com"},
+		Variables: map[string]string{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "vars.interpolate: undefined variable: missing") {
+		t.Fatalf("error = %v, want the undefined variable", err)
+	}
+	if out.URL != nil {
+		t.Fatalf("URL = %q, want no write", *out.URL)
+	}
+}
+
+func TestTestScriptVarsInterpolate(t *testing.T) {
+	scripts := []restfile.ScriptBlock{{
+		Kind: "test",
+		Body: `vars.set("b", "2");
+client.test("interpolate", function () {
+  tests.assert(vars.interpolate("{{a}}-{{b}}") === "1-2", "interpolated");
+});`,
+	}}
+	results, _, err := NewRunner(nil).RunTests(t.Context(), scripts, TestInput{
+		Response:  &Response{Kind: ResponseKindHTTP, Code: 200},
+		Variables: map[string]string{"a": "1"},
+	})
+	if err != nil {
+		t.Fatalf("run tests: %v", err)
+	}
+	for _, r := range results {
+		if !r.Passed {
+			t.Fatalf("results = %+v", results)
+		}
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %+v, want two", results)
 	}
 }

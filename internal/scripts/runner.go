@@ -330,6 +330,16 @@ func jsVarsAPI(
 				record(name, value)
 			}
 		},
+		"interpolate": func(text string) (string, error) {
+			out, err := vars.Interpolate(text, func(name string) (string, bool, error) {
+				v, ok := view[vars.NameKey(name)]
+				return v, ok, nil
+			})
+			if err != nil {
+				return "", fmt.Errorf("vars.interpolate: %w", err)
+			}
+			return out, nil
+		},
 		"global": global,
 	}
 }
