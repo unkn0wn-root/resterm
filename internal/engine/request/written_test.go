@@ -303,7 +303,7 @@ GET http://example.test
 		t.Fatalf("ExecuteWith() = %v, %v", err, res.Err)
 	}
 	want := []string{
-		`env_ref.http:4: Script sends {{token}} in header X-Rts as written. Use vars.get("token").`,
+		`env_ref.http:4: Script sends {{token}} in header X-Rts as written. Use vars.get("token") or vars.interpolate().`,
 		"env_ref.http:6: Script sends {{= 1 + 1 }} in header X-Js as written. Write the expression without {{= }}.",
 	}
 	if !slices.Equal(res.Warnings, want) || !slices.Equal(called, want) {

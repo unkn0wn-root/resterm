@@ -114,10 +114,10 @@ func TestOutputWarnings(t *testing.T) {
 	out.SetBody(diag.Pos{}, `{"n": {{= 1 + 1 }}}`)
 
 	want := []string{
-		`a.http:1: Script sends {{base}} in the URL as written. Use vars.get("base").`,
-		`a.http:3: Script sends {{api.token}} in header Authorization as written. Use vars.get("api.token").`,
-		`a.http:4: Script sends {{accept}} in header Accept as written. Use vars.get("accept").`,
-		`a.http:6: Script sends {{page}} in query param page as written. Use vars.get("page").`,
+		`a.http:1: Script sends {{base}} in the URL as written. Use vars.get("base") or vars.interpolate().`,
+		`a.http:3: Script sends {{api.token}} in header Authorization as written. Use vars.get("api.token") or vars.interpolate().`,
+		`a.http:4: Script sends {{accept}} in header Accept as written. Use vars.get("accept") or vars.interpolate().`,
+		`a.http:6: Script sends {{page}} in query param page as written. Use vars.get("page") or vars.interpolate().`,
 		`a.http:7: Script sends {{$uuuid}} in header X-Id as written. Check the helper name, or use vars.get("$uuuid").`,
 		"Script sends {{= 1 + 1 }} in the body as written. Write the expression without {{= }}.",
 	}

@@ -813,9 +813,9 @@ func TestRunPreRequestWarningsPointAtSource(t *testing.T) {
 		t.Fatalf("pre-request runner: %v", err)
 	}
 	want := []string{
-		`api.http:8: Script sends {{inline}} in header X-Inline as written. Use vars.get("inline").`,
-		`api.http:11: Script sends {{body}} in the body as written. Use vars.get("body").`,
-		path + `:4: Script sends {{file}} in header X-File as written. Use vars.get("file").`,
+		`api.http:8: Script sends {{inline}} in header X-Inline as written. Use vars.get("inline") or vars.interpolate().`,
+		`api.http:11: Script sends {{body}} in the body as written. Use vars.get("body") or vars.interpolate().`,
+		path + `:4: Script sends {{file}} in header X-File as written. Use vars.get("file") or vars.interpolate().`,
 	}
 	if got := out.Warnings(); !slices.Equal(got, want) {
 		t.Fatalf("Warnings =\n%q\nwant\n%q", got, want)

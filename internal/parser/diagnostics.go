@@ -16,7 +16,7 @@ import (
 
 func (b *documentBuilder) warnUnclosed(text string, start diag.Pos) {
 	for _, u := range vars.UnclosedPlaceholders(text, start) {
-		b.pushWarning(restfile.ParseDiagnostic{Message: unclosedMessage(u), Span: u.Span})
+		b.pushWarning(restfile.ParseDiagnostic{Message: u.Message(), Span: u.Span})
 	}
 }
 
@@ -27,13 +27,13 @@ func (b *documentBuilder) warnUnclosedBody(req *restfile.Request) {
 		if u.Span.Start.Line <= 0 {
 			continue
 		}
-		b.pushWarning(restfile.ParseDiagnostic{Message: unclosedMessage(u), Span: u.Span})
+		b.pushWarning(restfile.ParseDiagnostic{Message: u.Message(), Span: u.Span})
 	}
 }
 
 func (b *documentBuilder) warnUnclosedArgs(d parsedDirective) {
 	for _, u := range d.unclosedPlaceholders() {
-		item := restfile.ParseDiagnostic{Message: unclosedMessage(u), Span: d.nameSpan}
+		item := restfile.ParseDiagnostic{Message: u.Message(), Span: d.nameSpan}
 		if span, ok := d.argumentSpan(u.Off, u.Off+len(u.Text)); ok {
 			item.Span = span
 		}
@@ -41,10 +41,9 @@ func (b *documentBuilder) warnUnclosedArgs(d parsedDirective) {
 	}
 }
 
-// Patch values are data when the request runs, so a variable or expression
-// placeholder typed in one of its strings is sent as written.
+// Patch strings are sent as written, except inside vars.interpolate calls.
 func (b *documentBuilder) warnPatchTemplates(d parsedDirective) {
-	for _, r := range rts.StringRanges(d.Args) {
+	for _, r := range rts.StringRanges(d.Args, "vars.interpolate") {
 		for _, l := range prerequest.Literals(d.Args[r[0]:r[1]]) {
 			msg := fmt.Sprintf("%s sends %s as written. %s", d.Name.Tag(), l.Text, l.Hint)
 			item := restfile.ParseDiagnostic{Message: msg, Span: d.nameSpan}
@@ -71,10 +70,6 @@ func (d parsedDirective) scriptArgs() bool {
 		return captureMode(expr) == restfile.CaptureExprModeRTS
 	}
 	return d.Name.ScriptArgs()
-}
-
-func unclosedMessage(u vars.Unclosed) string {
-	return "placeholder " + u.Text + " is not closed with }}"
 }
 
 func Diagnostics(doc *restfile.Document) diag.Report {

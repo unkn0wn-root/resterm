@@ -212,7 +212,7 @@ func Literals(text string) []Literal {
 		case strings.HasPrefix(name, "="):
 			l.Hint = "Write the expression without {{= }}."
 		default:
-			l.Hint = fmt.Sprintf("Use vars.get(%q).", name)
+			l.Hint = fmt.Sprintf("Use vars.get(%q) or vars.interpolate().", name)
 		}
 		out = append(out, l)
 	}

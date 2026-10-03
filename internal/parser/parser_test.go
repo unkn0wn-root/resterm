@@ -690,6 +690,7 @@ func TestParsePatchStringTemplatesWarn(t *testing.T) {
 ### one
 # @apply {headers: {"X-B": "Bearer {{api.token}}", "X-Id": "{{$uuid}}", "X-D": "{{$uuuid}}", "X-C": "Bearer " + vars.get("api.token")}}
 # @apply {url: "{{= base }}/x"}
+# @apply {url: vars.interpolate("{{base}}/{{$uuid}}/" + vars.interpolate("{{id}}")), body: "{{body}}"}
 GET https://example.com
 `
 	doc := Parse("apply.http", []byte(src))
@@ -699,10 +700,11 @@ GET https://example.com
 		text string
 		msg  string
 	}{
-		{1, "{{api.token}}", `@patch sends {{api.token}} as written. Use vars.get("api.token").`},
-		{4, "{{api.token}}", `@apply sends {{api.token}} as written. Use vars.get("api.token").`},
+		{1, "{{api.token}}", `@patch sends {{api.token}} as written. Use vars.get("api.token") or vars.interpolate().`},
+		{4, "{{api.token}}", `@apply sends {{api.token}} as written. Use vars.get("api.token") or vars.interpolate().`},
 		{4, "{{$uuuid}}", `@apply sends {{$uuuid}} as written. Check the helper name, or use vars.get("$uuuid").`},
 		{5, "{{= base }}", "@apply sends {{= base }} as written. Write the expression without {{= }}."},
+		{6, "{{body}}", `@apply sends {{body}} as written. Use vars.get("body") or vars.interpolate().`},
 	}
 	if len(doc.Warnings) != len(want) {
 		t.Fatalf("warnings = %+v, want %d", doc.Warnings, len(want))
