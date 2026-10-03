@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -892,5 +894,25 @@ client.test("interpolate", function () {
 	}
 	if len(results) != 2 {
 		t.Fatalf("results = %+v, want two", results)
+	}
+}
+
+func TestVarsAPIMatchesScriptAPI(t *testing.T) {
+	for _, tt := range []struct {
+		object string
+		api    map[string]any
+	}{
+		{"vars", jsVarsAPI(nil, nil, nil)},
+		{"vars.global", (&preRequestAPI{}).globalAPI()},
+		{"vars.global", (&testAPI{}).globalAPI()},
+	} {
+		var want []string
+		for _, m := range scriptapi.Members(tt.object, restfile.ScriptLangJS) {
+			want = append(want, m.Name)
+		}
+		slices.Sort(want)
+		if got := slices.Sorted(maps.Keys(tt.api)); !slices.Equal(got, want) {
+			t.Errorf("%s members = %q, scriptapi lists %q", tt.object, got, want)
+		}
 	}
 }
