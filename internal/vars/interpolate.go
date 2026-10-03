@@ -15,10 +15,10 @@ type InterpolateOptions struct {
 	MaxLen int
 }
 
-// Interpolate fills placeholders using look and dynamic helpers.
-// Inserted values stay as written. Expressions, missing variables, and invalid
-// placeholders return an error. It stops before the result passes MaxLen, and
-// at the first error a later placeholder could not replace.
+// Interpolate fills placeholders using look and built-in helpers.
+// It does not expand inserted values. Missing variables, expressions, and
+// invalid placeholders return an error. Other errors take priority over
+// missing variables.
 func Interpolate(text string, look Lookup, opt InterpolateOptions) (string, error) {
 	if u := UnclosedPlaceholders(text, diag.Pos{}); len(u) > 0 {
 		return "", errors.New(u[0].Message())
@@ -44,20 +44,22 @@ func Interpolate(text string, look Lookup, opt InterpolateOptions) (string, erro
 	}
 
 	var b strings.Builder
-	var firstErr error
+	var undef error
 	for _, seg := range CompileTemplate(text).segs {
 		v := seg.text
 		if seg.ph {
 			var err error
 			if v, err = value(seg); err != nil {
-				firstErr = PreferStructural(firstErr, err)
-				if !errors.Is(firstErr, ErrUndefinedVariable) {
-					return "", firstErr
+				if !errors.Is(err, ErrUndefinedVariable) {
+					return "", err
+				}
+				if undef == nil {
+					undef = err
 				}
 				continue
 			}
 		}
-		if firstErr != nil {
+		if undef != nil {
 			continue
 		}
 		if opt.MaxLen > 0 && b.Len()+len(v) > opt.MaxLen {
@@ -65,8 +67,8 @@ func Interpolate(text string, look Lookup, opt InterpolateOptions) (string, erro
 		}
 		b.WriteString(v)
 	}
-	if firstErr != nil {
-		return "", firstErr
+	if undef != nil {
+		return "", undef
 	}
 	return b.String(), nil
 }
