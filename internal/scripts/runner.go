@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -132,7 +133,7 @@ func (r *Runner) RunTests(
 			continue
 		}
 
-		results, globals, err := r.executeTestScript(ctx, src.text, input)
+		results, globals, err := r.executeTestScript(ctx, src, input)
 		if err != nil {
 			return aggregated, changes, diag.WrapAsf(diag.ClassScript, err, "test script %d", idx+1)
 		}
@@ -158,14 +159,7 @@ func (r *Runner) executePreRequestScript(
 	}
 
 	// Skip the Go setter to find the line of the JavaScript call.
-	at := func() diag.Pos {
-		for _, f := range vm.CaptureCallStack(2, nil) {
-			if p := f.Position(); p.Line > 0 {
-				return src.pos(p.Line)
-			}
-		}
-		return diag.Pos{}
-	}
+	at := func() diag.Pos { return src.at(vm.CaptureCallStack(2, nil)) }
 	if err := vm.Set("request", api.requestAPI(at)); err != nil {
 		return diag.WrapAs(diag.ClassScript, err, "bind request api")
 	}
@@ -178,14 +172,14 @@ func (r *Runner) executePreRequestScript(
 		if reason := stopReason(ctx, err); reason != nil {
 			return reason
 		}
-		return diag.WrapAs(diag.ClassScript, err, "execute pre-request script")
+		return diag.WrapAs(diag.ClassScript, src.exception(err), "execute pre-request script")
 	}
 	return nil
 }
 
 func (r *Runner) executeTestScript(
 	ctx context.Context,
-	script string,
+	src source,
 	input TestInput,
 ) ([]TestResult, vars.Globals, error) {
 	vm := goja.New()
@@ -229,18 +223,18 @@ func (r *Runner) executeTestScript(
 		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "bind trace api")
 	}
 
-	if _, err := vm.RunString(script); err != nil {
+	if _, err := vm.RunString(src.text); err != nil {
 		if reason := stopReason(ctx, err); reason != nil {
 			return nil, vars.Globals{}, reason
 		}
-		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "execute test script")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, src.exception(err), "execute test script")
 	}
 
 	if err := streamBinding.replay(); err != nil {
 		if reason := stopReason(ctx, err); reason != nil {
 			return nil, vars.Globals{}, reason
 		}
-		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, err, "execute stream callbacks")
+		return nil, vars.Globals{}, diag.WrapAs(diag.ClassScript, src.exception(err), "execute stream callbacks")
 	}
 	return tester.results(), tester.globalChanges(), nil
 }
@@ -254,8 +248,8 @@ func bindCommon(vm *goja.Runtime) error {
 	return vm.Set("console", console)
 }
 
-// normalizeScript returns the script text and the count of leading lines removed.
-func normalizeScript(body string) (string, int) {
+// normalizeScript returns the script text and the lines and first-line bytes it removed.
+func normalizeScript(body string) (string, int, int) {
 	script := strings.TrimSpace(body)
 	off := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
 	if strings.HasPrefix(script, "{%") && strings.HasSuffix(script, "%}") {
@@ -263,32 +257,69 @@ func normalizeScript(body string) (string, int) {
 		script = strings.TrimSpace(inner)
 		off += 2 + len(inner) - len(strings.TrimLeftFunc(inner, unicode.IsSpace))
 	}
-	return script, strings.Count(body[:off], "\n")
+	cut := body[:off]
+	return script, strings.Count(cut, "\n"), len(cut) - strings.LastIndexByte(cut, '\n') - 1
 }
 
 type source struct {
-	text  string
-	path  string
-	skip  int
-	lines []restfile.ScriptLine
-	file  bool
+	text    string
+	path    string
+	skip    int
+	skipCol int
+	lines   []restfile.ScriptLine
+	file    bool
 }
 
-func (s source) pos(line int) diag.Pos {
+func (s source) pos(line, col int) diag.Pos {
+	if line == 1 {
+		col += s.skipCol
+	}
 	i := s.skip + line - 1
 	switch {
 	case s.file:
-		return diag.Pos{Path: s.path, Line: i + 1}
+		return diag.Pos{Path: s.path, Line: i + 1, Col: col}
 	case i < len(s.lines):
-		return diag.Pos{Path: s.path, Line: s.lines[i].Line}
+		l := s.lines[i]
+		return diag.Pos{Path: s.path, Line: l.Line, Col: l.Col + col - 1}
 	}
 	return diag.Pos{}
 }
 
+// Go function frames have no line, so the first frame with one is script code.
+func (s source) at(frames []goja.StackFrame) diag.Pos {
+	for _, f := range frames {
+		if p := f.Position(); p.Line > 0 {
+			return s.pos(p.Line, p.Column)
+		}
+	}
+	return diag.Pos{}
+}
+
+// goja's error text names Go functions, so build the error from the exception.
+func (s source) exception(err error) error {
+	var exc *goja.Exception
+	if !errors.As(err, &exc) {
+		return err
+	}
+	return diag.FromReport(diag.Report{Items: []diag.Diagnostic{{
+		Class:    diag.ClassScript,
+		Severity: diag.SeverityError,
+		Message:  jsMessage(exc),
+		Span:     diag.Span{Start: s.at(exc.Stack())},
+	}}}, exc.Unwrap())
+}
+
+func jsMessage(exc *goja.Exception) string {
+	if err := exc.Unwrap(); err != nil {
+		return err.Error()
+	}
+	return exc.Value().String()
+}
+
 func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (source, error) {
 	if block.FilePath == "" {
-		text, skip := normalizeScript(block.Body)
-		return source{text: text, path: block.SourcePath, skip: skip, lines: block.Lines}, nil
+		text, skip, skipCol := normalizeScript(block.Body)
+		return source{text: text, path: block.SourcePath, skip: skip, skipCol: skipCol, lines: block.Lines}, nil
 	}
 
 	path := block.FilePath
@@ -300,8 +331,8 @@ func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (source,
 	if err != nil {
 		return source{}, diag.WrapAsf(diag.ClassFilesystem, err, "read script file %s", path)
 	}
-	text, skip := normalizeScript(string(data))
-	return source{text: text, path: path, skip: skip, file: true}, nil
+	text, skip, skipCol := normalizeScript(string(data))
+	return source{text: text, path: path, skip: skip, skipCol: skipCol, file: true}, nil
 }
 
 // jsVarsAPI builds the vars object shared by pre-request and test scripts.
@@ -935,6 +966,10 @@ func (api *testAPI) namedTest(name string, callable goja.Callable) {
 	if _, err := callable(goja.Undefined()); err != nil {
 		passed = false
 		message = err.Error()
+		var exc *goja.Exception
+		if errors.As(err, &exc) {
+			message = jsMessage(exc)
+		}
 	}
 }
 

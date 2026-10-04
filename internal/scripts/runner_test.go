@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -869,6 +870,116 @@ func TestPreRequestVarsInterpolateThrows(t *testing.T) {
 	}
 	if out.URL != nil {
 		t.Fatalf("URL = %q, want no write", *out.URL)
+	}
+}
+
+func TestScriptErrorsPointAtSource(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "pre.js")
+	if err := os.WriteFile(file, []byte("\n  nope();\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lines := []restfile.ScriptLine{{Line: 20, Col: 3}, {Line: 21, Col: 3}, {Line: 22, Col: 3}}
+	pre := "pre-request script 1: execute pre-request script: "
+	tests := []struct {
+		name   string
+		block  restfile.ScriptBlock
+		stream *StreamInfo
+		at     diag.Pos
+		want   string
+	}{
+		{
+			"host function",
+			restfile.ScriptBlock{
+				Kind: "pre-request",
+				Body: "var a = 1;\nrequest.setURL(vars.interpolate(\"{{nope}}\"));",
+			},
+			nil, diag.Pos{Path: "api.http", Line: 21, Col: 34},
+			pre + "error at line 21: vars.interpolate: undefined variable: nope",
+		},
+		{
+			"script throw",
+			restfile.ScriptBlock{Kind: "pre-request", Body: "var a = 1;\nthrow new Error(\"boom\");"},
+			nil, diag.Pos{Path: "api.http", Line: 21, Col: 9},
+			pre + "error at line 21: Error: boom",
+		},
+		{
+			"trimmed first line",
+			restfile.ScriptBlock{Kind: "pre-request", Body: "  nope();"},
+			nil, diag.Pos{Path: "api.http", Line: 20, Col: 9},
+			pre + "error at line 20: ReferenceError: nope is not defined",
+		},
+		{
+			"block on one line",
+			restfile.ScriptBlock{Kind: "pre-request", Body: "{% nope(); %}"},
+			nil, diag.Pos{Path: "api.http", Line: 20, Col: 10},
+			pre + "error at line 20: ReferenceError: nope is not defined",
+		},
+		{
+			"script file",
+			restfile.ScriptBlock{Kind: "pre-request", FilePath: file},
+			nil, diag.Pos{Path: file, Line: 2, Col: 7},
+			pre + "error at line 2: ReferenceError: nope is not defined",
+		},
+		{
+			"test script",
+			restfile.ScriptBlock{Kind: "test", Body: "var a = 1;\nvars.interpolate(\"{{nope}}\");"},
+			nil, diag.Pos{Path: "api.http", Line: 21, Col: 19},
+			"test script 1: execute test script: error at line 21: vars.interpolate: undefined variable: nope",
+		},
+		{
+			"stream callback",
+			restfile.ScriptBlock{
+				Kind: "test",
+				Body: "stream.onEvent(function () {\n  vars.interpolate(\"{{nope}}\");\n});",
+			},
+			&StreamInfo{Kind: "websocket", Events: []map[string]any{{"type": "text"}}},
+			diag.Pos{Path: "api.http", Line: 21, Col: 21},
+			"test script 1: execute stream callbacks: error at line 21: vars.interpolate: undefined variable: nope",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := tt.block
+			if block.FilePath == "" {
+				block.SourcePath, block.Lines = "api.http", lines
+			}
+			var err error
+			if block.Kind == "pre-request" {
+				_, err = NewRunner(nil).RunPreRequest([]restfile.ScriptBlock{block}, prerequest.Input{
+					Request:   &restfile.Request{Method: "GET", URL: "https://example.com"},
+					Variables: map[string]string{},
+				})
+			} else {
+				_, _, err = NewRunner(nil).RunTests(t.Context(), []restfile.ScriptBlock{block}, TestInput{
+					Response:  &Response{Kind: ResponseKindHTTP, Status: "200 OK", Code: 200},
+					Variables: map[string]string{},
+					Stream:    tt.stream,
+				})
+			}
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("error =\n%v\nwant\n%s", err, tt.want)
+			}
+			if it := diag.ReportOf(err).Items[0]; it.Class != diag.ClassScript || it.Span.Start != tt.at {
+				t.Fatalf("report = %s at %v, want script at %v", it.Class, it.Span.Start, tt.at)
+			}
+		})
+	}
+}
+
+func TestTestCaseErrorHidesGoFrames(t *testing.T) {
+	results, _, err := NewRunner(nil).RunTests(t.Context(), []restfile.ScriptBlock{{
+		Kind: "test",
+		Body: "client.test(\"reads nope\", function () {\n  vars.interpolate(\"{{nope}}\");\n});",
+	}}, TestInput{
+		Response:  &Response{Kind: ResponseKindHTTP, Status: "200 OK", Code: 200},
+		Variables: map[string]string{},
+	})
+	if err != nil {
+		t.Fatalf("RunTests: %v", err)
+	}
+	want := "vars.interpolate: undefined variable: nope"
+	if len(results) != 1 || results[0].Passed || results[0].Message != want {
+		t.Fatalf("results = %+v, want one failure with message %q", results, want)
 	}
 }
 
