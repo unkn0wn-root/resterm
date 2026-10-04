@@ -228,10 +228,10 @@ func closerText(closer rune) string {
 
 // Template captures follow markers. Captures without markers use RTS groups.
 func captureCloser(expr string) string {
-	if closer := capture.OpenMarker(expr); closer != "" {
-		return closer
-	}
-	if capture.HasUnquotedTemplateMarker(expr) {
+	switch capture.MarkerState(expr) {
+	case capture.TemplateOpen:
+		return "}}"
+	case capture.TemplateClosed:
 		return ""
 	}
 	return closerText(rts.OpenGroup(expr))

@@ -78,28 +78,28 @@ func TestHasUnquotedTemplateMarker(t *testing.T) {
 	}
 }
 
-func TestOpenMarker(t *testing.T) {
+func TestMarkerState(t *testing.T) {
 	tests := []struct {
 		name string
 		ex   string
-		want string
+		want TemplateState
 	}{
 		{name: "empty"},
 		{name: "no marker", ex: `response.json.token`},
-		{name: "closed marker", ex: `Bearer {{token}}`},
-		{name: "open marker", ex: `Bearer {{token`, want: "}}"},
-		{name: "open expression marker", ex: `{{=`, want: "}}"},
-		{name: "open after a closed one", ex: `{{a}} and {{b`, want: "}}"},
-		{name: "open across lines", ex: "{{\n  response.status", want: "}}"},
-		{name: "closed across lines", ex: "{{\n  response.status\n}}"},
+		{name: "closed marker", ex: `Bearer {{token}}`, want: TemplateClosed},
+		{name: "open marker", ex: `Bearer {{token`, want: TemplateOpen},
+		{name: "open expression marker", ex: `{{=`, want: TemplateOpen},
+		{name: "open after a closed one", ex: `{{a}} and {{b`, want: TemplateOpen},
+		{name: "open across lines", ex: "{{\n  response.status", want: TemplateOpen},
+		{name: "closed across lines", ex: "{{\n  response.status\n}}", want: TemplateClosed},
 		{name: "marker in a string", ex: `contains(response.text(), "{{token")`},
-		{name: "unmatched bracket", ex: `prefix[{{token}}`},
+		{name: "unmatched bracket", ex: `prefix[{{token}}`, want: TemplateClosed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := OpenMarker(tt.ex); got != tt.want {
-				t.Fatalf("OpenMarker(%q) = %q, want %q", tt.ex, got, tt.want)
+			if got := MarkerState(tt.ex); got != tt.want {
+				t.Fatalf("MarkerState(%q) = %d, want %d", tt.ex, got, tt.want)
 			}
 		})
 	}
@@ -122,7 +122,7 @@ func TestTemplateScannerMatchesBatchScanAtEveryChunkBoundary(t *testing.T) {
 			var scanner TemplateScanner
 			scanner.Feed(input[:cut])
 			scanner.Feed(input[cut:])
-			if got, want := scanner.State(), templateState(input); got != want {
+			if got, want := scanner.State(), MarkerState(input); got != want {
 				t.Fatalf("chunks [%q, %q] have state %d, whole read gives %d", input[:cut], input[cut:], got, want)
 			}
 			if got, want := scanner.HasMarker(), HasUnquotedTemplateMarker(input); got != want {
@@ -130,17 +130,6 @@ func TestTemplateScannerMatchesBatchScanAtEveryChunkBoundary(t *testing.T) {
 			}
 		}
 	}
-}
-
-func templateState(input string) TemplateState {
-	scan := scanTemplates(input)
-	if scan.open {
-		return TemplateOpen
-	}
-	if scan.has {
-		return TemplateClosed
-	}
-	return TemplateNone
 }
 
 func TestMixedTemplateRTSCall(t *testing.T) {
@@ -155,5 +144,8 @@ func TestMixedTemplateRTSCall(t *testing.T) {
 	}
 	if MixedTemplateRTSCall(`contains(response.text(), "{{token}}")`) {
 		t.Fatalf("did not expect quoted marker to be flagged")
+	}
+	if !MixedTemplateRTSCall(`{{a}} contains({{b`) {
+		t.Fatalf("expected a call before an open marker to be detected")
 	}
 }

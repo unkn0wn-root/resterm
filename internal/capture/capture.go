@@ -88,31 +88,34 @@ func (sc *exprScanner) advance(n int) {
 }
 
 func HasUnquotedTemplateMarker(ex string) bool {
-	return scanTemplates(ex).has
+	return scanTemplates(ex, nil).has
 }
 
-// OpenMarker returns "}}" when ex contains an unclosed template marker.
-func OpenMarker(ex string) string {
-	if !scanTemplates(ex).open {
-		return ""
+func MarkerState(ex string) TemplateState {
+	scan := scanTemplates(ex, nil)
+	switch {
+	case scan.open:
+		return TemplateOpen
+	case scan.has:
+		return TemplateClosed
 	}
-	return templateClose
+	return TemplateNone
 }
 
 // MixedTemplateRTSCall reports template markers mixed with RTS call syntax.
 // It only checks call syntax to avoid flagging ordinary template prefixes.
 func MixedTemplateRTSCall(ex string) bool {
-	scan := scanTemplates(ex)
-	if !scan.has {
+	var rem strings.Builder
+	rem.Grow(len(ex))
+	if !scanTemplates(ex, &rem).has {
 		return false
 	}
-	return mixedTemplateCallPattern.MatchString(strings.TrimSpace(scan.rem))
+	return mixedTemplateCallPattern.MatchString(strings.TrimSpace(rem.String()))
 }
 
 type templateScan struct {
-	rem  string // the text left once the closed markers are cut out
-	has  bool   // a marker closed
-	open bool   // the last marker never closed
+	has  bool // a marker closed
+	open bool // the last marker never closed
 }
 
 type TemplateState uint8
@@ -190,33 +193,29 @@ func (s *TemplateScanner) feedMarkerByte(ch byte) {
 }
 
 // scanTemplates ignores markers inside quoted RTS strings.
-func scanTemplates(ex string) templateScan {
+func scanTemplates(ex string, rem *strings.Builder) templateScan {
 	s := strings.TrimSpace(ex)
-	if s == "" {
-		return templateScan{}
-	}
 	sc := newExprScanner(s)
 	var scan templateScan
-	var b strings.Builder
-	b.Grow(len(s))
 
 	for !sc.done() {
 		ch := sc.ch()
 		if sc.inQuoted(ch) || sc.openQuote(ch) || !strings.HasPrefix(s[sc.i:], templateOpen) {
-			b.WriteByte(ch)
+			if rem != nil {
+				rem.WriteByte(ch)
+			}
 			sc.advance(1)
 			continue
 		}
 		body := sc.i + templateOpenLen
 		end := strings.Index(s[body:], templateClose)
 		if end < 0 {
-			scan.rem, scan.open = b.String(), true
+			scan.open = true
 			return scan
 		}
 		scan.has = true
 		sc.i = body + end + templateCloseLen
 	}
-	scan.rem = b.String()
 	return scan
 }
 

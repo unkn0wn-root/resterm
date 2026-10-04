@@ -359,15 +359,12 @@ func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.
 		return sourceComment(ln, c, SourceLineComment, 0), directive.Call{}, false
 	}
 
-	if result.open != nil {
-		syntax.ScriptArgs = result.open.scriptArgs()
-	} else {
-		syntax.ScriptArgs = result.directive.scriptArgs()
-	}
 	d, done := result.completed()
 	if !done {
+		syntax.ScriptArgs = result.open.scriptArgs()
 		return syntax, directive.Call{}, false
 	}
+	syntax.ScriptArgs = d.scriptArgs()
 	// A later line can turn a capture into a template.
 	for no := d.lines.Start; no < d.lines.End; no++ {
 		s.lines[no-1].ScriptArgs = syntax.ScriptArgs
