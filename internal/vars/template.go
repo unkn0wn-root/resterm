@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
@@ -354,16 +355,36 @@ type PlaceholderScanner struct {
 	expr  bool
 }
 
+// Feed runs on every edit, so it skips to the next brace that can change the
+// state. Only the spaces right after {{ are read rune by rune.
 func (s *PlaceholderScanner) Feed(text string) {
-	for _, r := range text {
+	for text != "" {
 		switch {
 		case !s.open:
-			s.open = s.brace && r == '{'
-			s.brace = !s.open && r == '{'
-		case r == '}':
+			i := strings.IndexByte(text, '{')
+			if i < 0 {
+				s.brace = false
+				return
+			}
+			s.open = s.brace && i == 0
+			s.brace = !s.open
+			text = text[i+1:]
+		case s.named:
+			i := strings.IndexByte(text, '}')
+			if i < 0 {
+				return
+			}
 			*s = PlaceholderScanner{}
-		case !s.named && !unicode.IsSpace(r):
-			s.named, s.expr = true, r == '='
+			text = text[i+1:]
+		default:
+			r, size := utf8.DecodeRuneInString(text)
+			switch {
+			case r == '}':
+				*s = PlaceholderScanner{}
+			case !unicode.IsSpace(r):
+				s.named, s.expr = true, r == '='
+			}
+			text = text[size:]
 		}
 	}
 }
