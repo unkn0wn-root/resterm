@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.12.0](https://github.com/unkn0wn-root/resterm/compare/v1.11.0...v1.12.0) (2026-10-04)
+
+
+### Features
+
+* **run:** show script warnings in request reports ([ecdc5de](https://github.com/unkn0wn-root/resterm/commit/ecdc5dee3946b81d8bc739be1281fdc4bc804b94))
+* **scripts:** warn about literal templates in request values ([a41df97](https://github.com/unkn0wn-root/resterm/commit/a41df97f98155aa0e34a0d6ebf9b47b9bd88712a))
+
+
+### Bug Fixes
+
+* **intellisense:** use the parser's script rule for directive args ([8ec92f5](https://github.com/unkn0wn-root/resterm/commit/8ec92f54c7758ae1b7ef1a4ab7507165957a77eb))
+* **scripts:** hint at one placeholder and keep interpolate aborts ([c19803c](https://github.com/unkn0wn-root/resterm/commit/c19803ca9277cefd789ac8c47fce9e34fb66d7db))
+* **scripts:** show JavaScript errors at their script line without Go frames ([cb35b85](https://github.com/unkn0wn-root/resterm/commit/cb35b854686a461967ee447f4f55f83bc5810b46))
+* **scripts:** suggest vars.get for unknown helper names ([47dca9c](https://github.com/unkn0wn-root/resterm/commit/47dca9cfaa53429e03357f5c68bd58d98404d938))
+
 ## [1.11.0](https://github.com/unkn0wn-root/resterm/compare/v1.10.3...v1.11.0) (2026-10-02)
 
 
