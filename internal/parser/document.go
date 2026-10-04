@@ -230,17 +230,16 @@ func (b *documentBuilder) ensureRequest(line int) {
 
 	b.inRequest = true
 	b.request = &requestBuilder{
-		startLine:         line,
-		sourcePath:        b.doc.Path,
-		metadata:          restfile.RequestMetadata{Tags: []string{}},
-		declared:          make(map[directive.Name]bool),
-		currentScriptKind: defaultScriptKind,
-		currentScriptLang: defaultScriptLang,
-		http:              httpbuilder.New(),
-		graphql:           graphqlbuilder.New(),
-		grpc:              grpcbuilder.New(),
-		sse:               ssebuilder.New(),
-		websocket:         wsbuilder.New(),
+		startLine:  line,
+		sourcePath: b.doc.Path,
+		metadata:   restfile.RequestMetadata{Tags: []string{}},
+		declared:   make(map[directive.Name]bool),
+		script:     defaultScriptMode,
+		http:       httpbuilder.New(),
+		graphql:    graphqlbuilder.New(),
+		grpc:       grpcbuilder.New(),
+		sse:        ssebuilder.New(),
+		websocket:  wsbuilder.New(),
 	}
 }
 
