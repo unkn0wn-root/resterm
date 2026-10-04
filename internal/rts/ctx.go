@@ -157,8 +157,7 @@ func rtAbort(ctx *Ctx, pos Pos, kind AbortKind, format string, args ...any) erro
 	return &StackError{Err: abort, Frames: frames}
 }
 
-// IsAbort reports whether err stops the script. try does not catch these errors,
-// so native functions must return them unchanged.
+// try cannot catch an abort, so natives must return it unchanged.
 func IsAbort(err error) bool {
 	if err == nil {
 		return false

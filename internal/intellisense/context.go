@@ -111,7 +111,7 @@ func Analyze(lines Lines, line, col int) (Context, bool) {
 	switch {
 	case src.Kind == parser.SourceLineScript:
 		return analyzeScript(lines, line, cur, col, src)
-	case src.Directive.ScriptArgs():
+	case src.ScriptArgs:
 		if ctx, ok := analyzeExpr(cur, src.ContentStart, col); ok {
 			return ctx, true
 		}

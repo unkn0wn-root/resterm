@@ -51,6 +51,15 @@ func (d parsedDirective) setExprCol(col *int, expr string) {
 	}
 }
 
+// Template captures expand placeholders even inside quotes.
+func (d parsedDirective) scriptArgs() bool {
+	if d.Name == directive.Capture {
+		_, _, expr := cutCapture(d.Args)
+		return captureMode(expr) == restfile.CaptureExprModeRTS
+	}
+	return d.Name.ScriptArgs()
+}
+
 // Directives are offered to handlers before their required values are checked.
 // This lets inactive features decline their directives without producing errors;
 // the router reports anything left unclaimed as a warning.

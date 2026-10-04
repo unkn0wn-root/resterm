@@ -137,6 +137,10 @@ func (s *TemplateScanner) Feed(src string) {
 	}
 }
 
+func (s *TemplateScanner) HasMarker() bool {
+	return s.closed
+}
+
 func (s *TemplateScanner) State() TemplateState {
 	if s.open {
 		return TemplateOpen

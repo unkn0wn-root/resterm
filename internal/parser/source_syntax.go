@@ -47,9 +47,10 @@ func (k SourceLineKind) String() string {
 // Offsets are rune positions in the source line. OptionValueEnd is zero unless
 // the line starts inside an option value.
 type SourceLine struct {
-	Kind      SourceLineKind
-	Directive directive.Name
-	Args      directive.ArgKind
+	Kind       SourceLineKind
+	Directive  directive.Name
+	Args       directive.ArgKind
+	ScriptArgs bool
 	// ScriptLang is "js" or "rts" for script lines, or empty if @rts was invalid.
 	ScriptLang     string
 	ContentStart   int
@@ -83,7 +84,7 @@ func (s *SourceSyntax) Classify(source string) {
 		s.effects = make(map[directiveKey]directiveEffect)
 	}
 
-	scan := sourceScan{effects: s.effects}
+	scan := sourceScan{effects: s.effects, lines: s.lines}
 	i := 0
 	for raw := range strings.SplitSeq(source, "\n") {
 		s.lines[i] = scan.classify(makeLine(i+1, strings.TrimSuffix(raw, "\r"), ""))
@@ -110,6 +111,7 @@ type sourceScan struct {
 	mock     mockScan
 	reader   directiveReader
 	effects  map[directiveKey]directiveEffect
+	lines    []SourceLine
 }
 
 type directiveKey struct {
@@ -345,20 +347,32 @@ func (s *sourceScan) observeHeader(raw string) {
 
 func (s *sourceScan) commentLine(ln line, c commentText) (SourceLine, directive.Call, bool) {
 	result := s.reader.read(ln.no, c)
+	var syntax SourceLine
 	switch result.kind {
-	case directiveReadStarted:
-		return sourceDirectiveLine(ln, c, result.owner), directive.Call{}, false
-	case directiveReadContinued:
-		return sourceDirectiveValue(ln, c, result), directive.Call{}, false
-	case directiveReadCompleted:
-		return sourceDirectiveLine(ln, c, result.owner), result.directive.Call, true
-	case directiveReadContinuationCompleted:
-		return sourceDirectiveValue(ln, c, result), result.directive.Call, true
+	case directiveReadStarted, directiveReadCompleted:
+		syntax = sourceDirectiveLine(ln, c, result.owner)
+	case directiveReadContinued, directiveReadContinuationCompleted:
+		syntax = sourceDirectiveValue(ln, c, result)
 	case directiveReadMark:
 		return sourceComment(ln, c, SourceLineDirective, directive.ArgNone), directive.Call{}, false
 	default:
 		return sourceComment(ln, c, SourceLineComment, 0), directive.Call{}, false
 	}
+
+	if result.open != nil {
+		syntax.ScriptArgs = result.open.scriptArgs()
+	} else {
+		syntax.ScriptArgs = result.directive.scriptArgs()
+	}
+	d, done := result.completed()
+	if !done {
+		return syntax, directive.Call{}, false
+	}
+	// A later line can turn a capture into a template.
+	for no := d.lines.Start; no < d.lines.End; no++ {
+		s.lines[no-1].ScriptArgs = syntax.ScriptArgs
+	}
+	return syntax, d.Call, true
 }
 
 func sourceDirectiveLine(ln line, c commentText, owner directive.Name) SourceLine {
@@ -484,7 +498,7 @@ func (s *sourceScan) endHeaders() {
 
 // Keep cached directive results between sections.
 func (s *sourceScan) endSection() {
-	*s = sourceScan{effects: s.effects}
+	*s = sourceScan{effects: s.effects, lines: s.lines}
 }
 
 type methodLineKind uint8

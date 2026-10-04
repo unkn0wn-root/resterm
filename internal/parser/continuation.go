@@ -52,6 +52,14 @@ func (o *openDirective) collect() string {
 	return o.d.Args
 }
 
+// Same result as parsedDirective.scriptArgs, without rescanning the args.
+func (o *openDirective) scriptArgs() bool {
+	if o.d.Name == directive.Capture {
+		return !o.state.capture.templates.HasMarker()
+	}
+	return o.d.Name.ScriptArgs()
+}
+
 // Parsing and editor highlighting share this reader for multiline directives.
 type directiveReader struct {
 	open *openDirective
@@ -73,6 +81,7 @@ type directiveReadResult struct {
 	directive parsedDirective
 	owner     directive.Name
 	cut       *openDirective
+	open      *openDirective
 	// Bytes used by the option value on this line.
 	optionValueLen int
 }
@@ -144,6 +153,7 @@ func (r *directiveReader) readNew(no int, c commentText, call directive.Call, cu
 			kind:  directiveReadStarted,
 			owner: d.Name,
 			cut:   cut,
+			open:  o,
 		}
 	}
 	return directiveReadResult{
@@ -161,6 +171,7 @@ func (r *directiveReader) grow(no int, c commentText) directiveReadResult {
 	res := directiveReadResult{
 		kind:           directiveReadContinued,
 		owner:          o.d.Name,
+		open:           o,
 		optionValueLen: valueLen,
 	}
 

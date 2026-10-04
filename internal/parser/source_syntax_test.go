@@ -535,6 +535,73 @@ func TestSourceSyntaxInExprAgreesWithParser(t *testing.T) {
 	}
 }
 
+func TestSourceSyntaxScriptArgsAgreesWithParser(t *testing.T) {
+	captures := []string{
+		"# @capture file id response.json.id",
+		"# @capture file url {{response.json.base}}/vars.",
+		`# @capture file q "{{a}}" + vars.get("b")`,
+		"# @capture file id f(\n#   response.json.id)",
+		"# @capture file url f(\n#   {{response.json.base}})",
+		"# @capture file url {{\n#   response.json.base}}",
+	}
+	for _, c := range captures {
+		source := c + "\nGET https://example.test"
+		caps := Parse("agree.http", []byte(source)).Requests[0].Metadata.Captures
+		if len(caps) != 1 {
+			t.Fatalf("%q parsed %d captures, want 1", source, len(caps))
+		}
+		want := caps[0].Mode == restfile.CaptureExprModeRTS
+		for no, got := range classifySource(c) {
+			if got.ScriptArgs != want {
+				t.Errorf("%q line %d ScriptArgs = %t, want %t from the parser", c, no+1, got.ScriptArgs, want)
+			}
+		}
+	}
+
+	for source, want := range map[string][]bool{
+		"# @assert status == 200":          {true},
+		"# @assert (\n#   true\n# )":       {true, true, true},
+		"# @name vars":                     {false},
+		"# @capture file id f(\n#   vars.": {true, true},
+	} {
+		for no, got := range classifySource(source) {
+			if got.ScriptArgs != want[no] {
+				t.Errorf("%q line %d ScriptArgs = %t, want %t", source, no+1, got.ScriptArgs, want[no])
+			}
+		}
+	}
+}
+
+func TestOpenDirectiveScriptArgsMatchesRescan(t *testing.T) {
+	sources := []string{
+		"# @capture file x f(\n#   a,\n#   {{b}} {{c\n#   d}}",
+		"# @capture file x {{a}} {{b\n#   c}}",
+		"# @capture file x f(\n#   \"{{a}}\",\n#   b)",
+		"# @capture file x {{\n#   a}}",
+		"# @capture file x f(\n#   g(\n#   1))",
+		"# @capture file x f(\n#   {{a}})",
+		"# @assert (\n#   true\n# )",
+	}
+	for _, src := range sources {
+		var r directiveReader
+		for i, raw := range strings.Split(src, "\n") {
+			c, _ := makeLine(i+1, raw, "").comment()
+			res := r.read(i+1, c)
+			if res.open == nil {
+				t.Fatalf("%q line %d is not in a multiline directive", src, i+1)
+			}
+			d := res.open.d
+			d.Args = res.open.args.String()
+			if got, want := res.open.scriptArgs(), d.scriptArgs(); got != want {
+				t.Errorf("%q line %d scriptArgs = %t, rescan gives %t", src, i+1, got, want)
+			}
+		}
+		if _, open := r.pending(); open {
+			t.Errorf("%q did not complete", src)
+		}
+	}
+}
+
 func TestArgKindComesFromCatalog(t *testing.T) {
 	for name, want := range map[directive.Name]directive.ArgKind{
 		"nolog":       directive.ArgNone,

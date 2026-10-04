@@ -63,15 +63,6 @@ func (d parsedDirective) unclosedPlaceholders() []vars.Unclosed {
 	return vars.UnclosedPlaceholders(args, diag.Pos{})
 }
 
-// Template captures expand placeholders even inside quotes.
-func (d parsedDirective) scriptArgs() bool {
-	if d.Name == directive.Capture {
-		_, _, expr := cutCapture(d.Args)
-		return captureMode(expr) == restfile.CaptureExprModeRTS
-	}
-	return d.Name.ScriptArgs()
-}
-
 func Diagnostics(doc *restfile.Document) diag.Report {
 	rep := diag.Report{Path: doc.Path, Source: doc.Raw}
 	lines := strings.Split(string(doc.Raw), "\n")

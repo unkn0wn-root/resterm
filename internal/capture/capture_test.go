@@ -125,6 +125,9 @@ func TestTemplateScannerMatchesBatchScanAtEveryChunkBoundary(t *testing.T) {
 			if got, want := scanner.State(), templateState(input); got != want {
 				t.Fatalf("chunks [%q, %q] have state %d, whole read gives %d", input[:cut], input[cut:], got, want)
 			}
+			if got, want := scanner.HasMarker(), HasUnquotedTemplateMarker(input); got != want {
+				t.Fatalf("chunks [%q, %q] HasMarker = %t, whole read gives %t", input[:cut], input[cut:], got, want)
+			}
 		}
 	}
 }
