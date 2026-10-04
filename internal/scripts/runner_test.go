@@ -897,7 +897,7 @@ client.test("interpolate", function () {
 	}
 }
 
-func TestVarsAPIMatchesScriptAPI(t *testing.T) {
+func TestMembersMatchScriptAPI(t *testing.T) {
 	for _, tt := range []struct {
 		object string
 		api    map[string]any

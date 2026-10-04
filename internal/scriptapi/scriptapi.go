@@ -26,35 +26,36 @@ type row struct {
 	Member
 }
 
+// TestMembersMatchScriptAPI in internal/scripts and internal/rtshost checks
+// these tables against both runtimes. Add new objects to both tests.
 var objects = map[string][]row{
-	"vars": {
-		{both, Member{Name: "get", Args: "name", Summary: "Read a variable"}},
-		{both, Member{Name: "has", Args: "name", Summary: "Check whether a variable exists"}},
-		{rts, Member{
-			Name:    "require",
-			Args:    "name",
-			Summary: "Read a variable or fail when it is empty, with an optional message",
-		}},
-		{both, Member{Name: "set", Args: "name, value", Summary: "Set a variable for this request", Writes: true}},
-		{both, Member{Name: "interpolate", Args: "text", Summary: "Fill {{name}} placeholders in text"}},
-		{both, Member{Name: "global", Summary: "Global variables shared across requests"}},
-	},
-	"vars.global": {
-		{both, Member{Name: "get", Args: "name", Summary: "Read a global variable"}},
-		{both, Member{Name: "has", Args: "name", Summary: "Check whether a global variable exists"}},
-		{rts, Member{
-			Name:    "require",
-			Args:    "name",
-			Summary: "Read a global variable or fail when it is empty, with an optional message",
-		}},
-		{both, Member{
+	"vars": append(mapRows("variable"),
+		row{both, Member{Name: "set", Args: "name, value", Summary: "Set a variable for this request", Writes: true}},
+		row{both, Member{Name: "interpolate", Args: "text", Summary: "Fill {{name}} placeholders in text"}},
+		row{both, Member{Name: "global", Summary: "Global variables shared across requests"}},
+	),
+	"vars.global": append(mapRows("global variable"),
+		row{both, Member{
 			Name:    "set",
 			Args:    "name, value",
 			Summary: "Set a global variable, with an optional secret flag",
 			Writes:  true,
 		}},
-		{both, Member{Name: "delete", Args: "name", Summary: "Delete a global variable", Writes: true}},
-	},
+		row{both, Member{Name: "delete", Args: "name", Summary: "Delete a global variable", Writes: true}},
+	),
+}
+
+// mapRows lists the lookup methods that every RTS mapObj has.
+func mapRows(noun string) []row {
+	return []row{
+		{both, Member{Name: "get", Args: "name", Summary: "Read a " + noun}},
+		{both, Member{Name: "has", Args: "name", Summary: "Check whether a " + noun + " exists"}},
+		{rts, Member{
+			Name:    "require",
+			Args:    "name",
+			Summary: "Read a " + noun + " or fail when it is empty, with an optional message",
+		}},
+	}
 }
 
 // Members returns an object's members for the given script language.

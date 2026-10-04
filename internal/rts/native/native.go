@@ -31,11 +31,15 @@ type Optional[T any] struct {
 // arity before any decoder or implementation runs.
 type Def struct {
 	name string
+	sig  string
 	fn   rts.NativeFunc
 }
 
 // Name returns the stack-frame name of the definition.
 func (d Def) Name() string { return d.name }
+
+// Sig returns the signature shown in argument errors. It is empty for Raw.
+func (d Def) Sig() string { return d.sig }
 
 // Func returns the raw ABI implementation for registries that store functions.
 func (d Def) Func() rts.NativeFunc { return d.fn }
@@ -51,7 +55,7 @@ func Raw(name string, fn rts.NativeFunc) Def {
 
 // Fn0 defines a function with no arguments.
 func Fn0(name, sig string, fn func(Call) (rts.Value, error)) Def {
-	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return Def{name: name, sig: sig, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
 		if err := count(call, len(args), 0); err != nil {
 			return rts.Null(), err
@@ -66,7 +70,7 @@ func FnOptional[A any](
 	a Decoder[A],
 	fn func(Call, Optional[A]) (rts.Value, error),
 ) Def {
-	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return Def{name: name, sig: sig, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
 		if err := countRange(call, len(args), 0, 1); err != nil {
 			return rts.Null(), err
@@ -90,7 +94,7 @@ func Fn1[A any](
 	a Decoder[A],
 	fn func(Call, A) (rts.Value, error),
 ) Def {
-	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return Def{name: name, sig: sig, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
 		if err := count(call, len(args), 1); err != nil {
 			return rts.Null(), err
@@ -109,7 +113,7 @@ func Fn2[A, B any](
 	a Decoder[A], b Decoder[B],
 	fn func(Call, A, B) (rts.Value, error),
 ) Def {
-	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return Def{name: name, sig: sig, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
 		if err := count(call, len(args), 2); err != nil {
 			return rts.Null(), err
@@ -132,7 +136,7 @@ func Fn3[A, B, C any](
 	a Decoder[A], b Decoder[B], c Decoder[C],
 	fn func(Call, A, B, C) (rts.Value, error),
 ) Def {
-	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return Def{name: name, sig: sig, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
 		if err := count(call, len(args), 3); err != nil {
 			return rts.Null(), err
@@ -159,7 +163,7 @@ func Fn1Optional[A, B any](
 	a Decoder[A], b Decoder[B],
 	fn func(Call, A, Optional[B]) (rts.Value, error),
 ) Def {
-	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return Def{name: name, sig: sig, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
 		if err := countRange(call, len(args), 1, 2); err != nil {
 			return rts.Null(), err
@@ -186,7 +190,7 @@ func Fn2Optional[A, B, C any](
 	a Decoder[A], b Decoder[B], c Decoder[C],
 	fn func(Call, A, B, Optional[C]) (rts.Value, error),
 ) Def {
-	return Def{name: name, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return Def{name: name, sig: sig, fn: func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		call := Call{Ctx: ctx, Pos: pos, Sig: sig}
 		if err := countRange(call, len(args), 2, 3); err != nil {
 			return rts.Null(), err
