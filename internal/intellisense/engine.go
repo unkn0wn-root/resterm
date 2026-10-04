@@ -15,6 +15,7 @@ func New() Engine {
 		schemeSource{},
 		headerSource{},
 		variableSource{},
+		memberSource{},
 	}}
 }
 

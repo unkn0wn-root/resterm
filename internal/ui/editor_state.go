@@ -164,7 +164,10 @@ func (e *requestEditor) setDiagnosticOverlay(o *diag.Overlay) {
 	e.styler.overlay = o
 }
 
-func (e requestEditor) sourceLine(line int) parser.SourceLine {
+func (e requestEditor) SourceLine(line int) parser.SourceLine {
+	if e.styler == nil {
+		return parser.SourceLine{}
+	}
 	return e.styler.sourceLine(line)
 }
 
