@@ -316,3 +316,32 @@ func TestRequestEditorChainsPastExistingSeparator(t *testing.T) {
 		})
 	}
 }
+
+func TestRequestEditorChainsVarsMembers(t *testing.T) {
+	editor := newScriptTestEditor("> ")
+	editor = typeRunes(editor, "vars.")
+	if !editor.hasActiveCompletion() {
+		t.Fatal("typing vars. did not open member completion")
+	}
+	if labels := editorCompletionLabels(editor); slices.Contains(labels, "require") {
+		t.Fatalf("JavaScript members = %q, want no require", labels)
+	}
+
+	selectEditorCompletion(t, &editor, "global")
+	editor.applyCompletion()
+	if got := editor.Value(); got != "> vars.global." {
+		t.Fatalf("global stage = %q", got)
+	}
+	if got, want := editorCompletionLabels(editor), []string{"get", "has", "set", "delete"}; !slices.Equal(got, want) {
+		t.Fatalf("global members = %q, want %q", got, want)
+	}
+}
+
+func TestRequestEditorKeepsEnterInTemplateText(t *testing.T) {
+	editor := newScriptTestEditor("> x = `")
+	editor = typeRunes(editor, "vars.")
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "> x = `vars.\n" {
+		t.Fatalf("Enter in template text = %q, want a new line", got)
+	}
+}

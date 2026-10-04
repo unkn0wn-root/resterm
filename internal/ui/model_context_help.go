@@ -31,7 +31,7 @@ func (m *Model) showContextDocumentation() tea.Cmd {
 
 func (m *Model) contextHelpTopic() (helpdoc.Topic, bool) {
 	pos := m.editor.caretPosition()
-	syntax := m.editor.sourceLine(pos.Line)
+	syntax := m.editor.SourceLine(pos.Line)
 	if syntax.Directive.Known() {
 		return helpdoc.Directive(syntax.Directive)
 	}

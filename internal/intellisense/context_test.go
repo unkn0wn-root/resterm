@@ -1,9 +1,11 @@
 package intellisense
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 )
 
 type testLines []string
@@ -17,6 +19,12 @@ func argKey(ctx Context) string {
 
 func (t testLines) LineCount() int         { return len(t) }
 func (t testLines) LineRunes(i int) []rune { return []rune(t[i]) }
+
+func (t testLines) SourceLine(i int) parser.SourceLine {
+	var syntax parser.SourceSyntax
+	syntax.Classify(strings.Join(t, "\n"))
+	return syntax.Line(i)
+}
 
 func TestAnalyzeClassifiesContexts(t *testing.T) {
 	cases := []struct {
@@ -254,6 +262,34 @@ func TestAnalyzeClassifiesContexts(t *testing.T) {
 			lines:    []string{"# @settings base=http://x"},
 			line:     0,
 			col:      25,
+			wantKind: KindNone,
+		},
+		{
+			name:     "script line is not a request line",
+			lines:    []string{"> h"},
+			line:     0,
+			col:      3,
+			wantKind: KindNone,
+		},
+		{
+			name:     "script line is not a header",
+			lines:    []string{"GET https://example.test", "> x"},
+			line:     1,
+			col:      3,
+			wantKind: KindNone,
+		},
+		{
+			name:     "script include path being typed",
+			lines:    []string{"> < "},
+			line:     0,
+			col:      4,
+			wantKind: KindPath,
+		},
+		{
+			name:     "comment inside a script block",
+			lines:    []string{"> {%", "# @", "> %}"},
+			line:     1,
+			col:      3,
 			wantKind: KindNone,
 		},
 	}

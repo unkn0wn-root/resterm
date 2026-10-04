@@ -65,17 +65,14 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 	case directive.Run:
 		return b.addRun(d)
 	case directive.Script:
-		if rest == "" {
-			b.request.discardScript = false
-			return directiveApplied
-		}
-		if err := b.setScript(rest, ""); err != nil {
+		if err := b.request.script.setScript(rest); err != nil {
 			b.report(d, err)
 			return directiveRejected
 		}
 		return directiveApplied
 	case directive.RTS:
-		if err := b.setRTSScript(rest); err != nil {
+		if err := b.request.script.setRTS(rest); err != nil {
+			b.request.flushPendingScript()
 			return b.rejectError(d, err)
 		}
 		return directiveApplied

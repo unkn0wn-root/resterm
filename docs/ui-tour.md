@@ -55,6 +55,7 @@ active environment. It makes no network calls while you type.
 | `@` at the start of a line, with or without a comment marker | Directives, option keys, and values such as booleans, OAuth grants, HTTP/TLS modes, and workflow failure modes |
 | Header section (after the request line, before the blank line) | Header names, then values for well-known headers such as `Content-Type` |
 | Inside `{{ ... }}` | Variables in scope (file/global/request, `@const`, current-environment keys) and dynamic builtins (`$uuid`, `$timestamp`, ...) |
+| `vars.` and `vars.global.` in scripts, `{{= ... }}` expressions, and RTS directives such as `@assert` | Methods such as `get`, `set`, and `interpolate`. `require` is only available in RTS. Expressions and directives are read-only, so `set` and `delete` are not suggested |
 | `@compare` arguments | Environment names or profiles from the selected group. Baseline suggestions use the targets already chosen |
 | `use=` on `@apply` / `@ssh` / `@k8s` | Matching `@patch` / `@ssh` / `@k8s` profile names |
 | `using=` / `run=` on workflow steps and branches | Named requests from the current document |

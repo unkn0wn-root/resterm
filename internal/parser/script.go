@@ -73,7 +73,7 @@ func (b *documentBuilder) handleScriptLine(ln line) bool {
 	if body, col, ok := ln.cutScriptMarker(); ok {
 		b.ensureRequest(ln.no)
 		if p, ok := scriptInc(body); ok {
-			b.request.appendScriptInclude(b.request.currentScriptKind, b.request.currentScriptLang, p)
+			b.request.appendScriptInclude(b.request.script.kind, b.request.script.lang, p)
 		} else {
 			b.addScriptLine(ln.no, col, body)
 		}
@@ -86,8 +86,8 @@ func (b *documentBuilder) addScriptLine(no, col int, body string) {
 	b.ensureRequest(no)
 	r := b.request
 	r.appendScriptLine(
-		r.currentScriptKind,
-		r.currentScriptLang,
+		r.script.kind,
+		r.script.lang,
 		body,
 		b.doc.Path,
 		restfile.ScriptLine{Line: no, Col: col},
@@ -128,10 +128,7 @@ func (b *documentBuilder) handleScriptBlockLine(ln line) bool {
 		return true
 	}
 
-	body, col, ok := ln.cutScriptMarker()
-	if !ok {
-		body, col = str.TrimRight(ln.raw), 1
-	}
+	body, col := ln.scriptBlockBody()
 	b.addScriptLine(ln.no, col, body)
 	b.appendLine(ln.raw)
 	return true
@@ -148,28 +145,34 @@ func (b *documentBuilder) endScriptBlock() {
 	}
 }
 
+// Shared by the document parser and SourceSyntax so they agree on script settings.
+type scriptMode struct {
+	kind    scriptKind
+	lang    scriptLang
+	discard bool
+}
+
+var defaultScriptMode = scriptMode{kind: defaultScriptKind, lang: defaultScriptLang}
+
 // Keep the parsed settings after an option error so the script body is not lost.
-func (b *documentBuilder) setScript(rest, lang string) error {
-	k, l, err := parseScriptSpec(rest)
-	if lang != "" {
-		l = normScriptLang(lang)
+func (m *scriptMode) setScript(args string) error {
+	m.discard = false
+	if args == "" {
+		return nil
 	}
-	b.request.currentScriptKind = k
-	b.request.currentScriptLang = l
-	b.request.discardScript = false
+	k, l, err := parseScriptSpec(args)
+	m.kind, m.lang = k, l
 	return err
 }
 
-func (b *documentBuilder) setRTSScript(rest string) error {
-	k, l, err := parseRTSScriptSpec(rest)
+// Ignore later script lines if @rts is invalid.
+func (m *scriptMode) setRTS(args string) error {
+	k, l, err := parseRTSScriptSpec(args)
 	if err != nil {
-		b.request.discardScript = true
-		b.request.flushPendingScript()
+		m.discard = true
 		return err
 	}
-	b.request.currentScriptKind = k
-	b.request.currentScriptLang = l
-	b.request.discardScript = false
+	*m = scriptMode{kind: k, lang: l}
 	return nil
 }
 
@@ -291,7 +294,7 @@ func (r *requestBuilder) appendScriptLine(
 	path string,
 	loc restfile.ScriptLine,
 ) {
-	if r.discardScript {
+	if r.script.discard {
 		return
 	}
 	if r.scriptBufferKind != "" &&
@@ -329,7 +332,7 @@ func (r *requestBuilder) flushPendingScript() {
 }
 
 func (r *requestBuilder) appendScriptInclude(kind scriptKind, lang scriptLang, path string) {
-	if r.discardScript {
+	if r.script.discard {
 		return
 	}
 	r.flushPendingScript()

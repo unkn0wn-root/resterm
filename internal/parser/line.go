@@ -157,3 +157,10 @@ func (ln line) cutScriptMarker() (body string, col int, ok bool) {
 	col += len(after) - len(b)
 	return str.TrimRight(b), col, true
 }
+
+func (ln line) scriptBlockBody() (body string, col int) {
+	if body, col, ok := ln.cutScriptMarker(); ok {
+		return body, col
+	}
+	return str.TrimRight(ln.raw), 1
+}

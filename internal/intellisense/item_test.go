@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func catalogItems() []Item {
@@ -22,6 +24,12 @@ func catalogItems() []Item {
 		}
 		for _, arg := range table.named {
 			items = append(items, arg.items()...)
+		}
+	}
+	for _, object := range []string{"vars", "vars.global"} {
+		for _, lang := range []string{restfile.ScriptLangJS, restfile.ScriptLangRTS} {
+			ctx := Context{Kind: KindMember, members: scriptapi.Members(object, lang)}
+			items = append(items, memberSource{}.Provide(ctx, Scope{})...)
 		}
 	}
 	return items
@@ -44,7 +52,6 @@ func TestCatalogPlaceholdersAreInsertedText(t *testing.T) {
 	}
 }
 
-// Header colons and the fixed @rts mode need no placeholder.
 func TestCatalogExamplesAreSelectable(t *testing.T) {
 	for _, it := range catalogItems() {
 		insert := it.InsertText()
@@ -52,6 +59,7 @@ func TestCatalogExamplesAreSelectable(t *testing.T) {
 		case it.Placeholder != "",
 			insert == it.Label,
 			insert == it.Label+":",
+			insert == it.Label+".",
 			insert == "@rts pre-request":
 			continue
 		}
@@ -169,6 +177,7 @@ func TestItemAppendsSpace(t *testing.T) {
 		{name: "variable", kind: KindVariable},
 		{name: "header value", kind: KindHeaderValue},
 		{name: "scheme", kind: KindScheme},
+		{name: "member", kind: KindMember},
 	}
 
 	for _, tt := range tests {

@@ -17,6 +17,12 @@ type completionLines []string
 func (l completionLines) LineCount() int         { return len(l) }
 func (l completionLines) LineRunes(i int) []rune { return []rune(l[i]) }
 
+func (l completionLines) SourceLine(i int) parser.SourceLine {
+	var syntax parser.SourceSyntax
+	syntax.Classify(strings.Join(l, "\n"))
+	return syntax.Line(i)
+}
+
 func TestMetadataRuneStylerNameDirective(t *testing.T) {
 	palette := theme.DefaultTheme().EditorMetadata
 	styler := newMetadataRuneStyler(palette)
@@ -202,7 +208,7 @@ func TestMetadataRuneStylerColoursMultilineOptionValues(t *testing.T) {
 }
 
 func TestDirectiveMarkMatchesCompletion(t *testing.T) {
-	lines := completionLines{"# @", "# @:", "# @:x", "# @::", "# ordinary prose", "#"}
+	lines := completionLines{"# @", "# @:", "# @:x", "# @::", "# ordinary prose", "#", "> {%", "# @", "> %}"}
 
 	var syntax parser.SourceSyntax
 	syntax.Classify(strings.Join(lines, "\n"))

@@ -64,7 +64,7 @@ func (it Item) AppendsSpace(kind Kind) bool {
 		return false
 	}
 	switch kind {
-	case KindVariable, KindHeaderValue, KindScheme:
+	case KindVariable, KindHeaderValue, KindScheme, KindMember:
 		return false
 	default:
 		return true

@@ -6,6 +6,8 @@ import (
 	"unicode"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 type Kind int
@@ -20,6 +22,7 @@ const (
 	KindHeaderValue       // value after "Name:" on a header line
 	KindVariable          // identifier inside an open {{ ... }}
 	KindPath              // a filesystem path, in a directive or a body reference
+	KindMember            // member of a script object, such as vars.get
 )
 
 // PathKind identifies which file types to suggest.
@@ -56,8 +59,9 @@ type Context struct {
 	header    string    // lowercased header name for KindHeaderValue
 	arg       *argument // argument whose value is being completed
 	completed completed
+	members   []scriptapi.Member
 	closing   string // text that completes an unfinished template
-	call      bool   // the identifier is followed by an argument list
+	call      bool   // arguments or a member follow the identifier
 	bare      bool   // the directive was typed without its comment marker
 }
 
@@ -90,6 +94,7 @@ func (c completed) last(key string) (string, bool) {
 type Lines interface {
 	LineCount() int
 	LineRunes(i int) []rune
+	SourceLine(i int) parser.SourceLine
 }
 
 func Analyze(lines Lines, line, col int) (Context, bool) {
@@ -99,8 +104,21 @@ func Analyze(lines Lines, line, col int) (Context, bool) {
 	cur := lines.LineRunes(line)
 	col = clamp(col, 0, len(cur))
 
-	if ctx, ok := analyzeVariable(cur, col); ok {
+	src := lines.SourceLine(line)
+	if ctx, ok := analyzeVariable(cur, col, src.Kind != parser.SourceLineScript); ok {
 		return ctx, true
+	}
+	switch {
+	case src.Kind == parser.SourceLineScript:
+		return analyzeScript(lines, line, cur, col, src)
+	case src.Directive.ScriptArgs():
+		if ctx, ok := analyzeExpr(cur, src.ContentStart, col); ok {
+			return ctx, true
+		}
+	case src.InExpr && !slices.Contains(cur[:col], '}'):
+		if ctx, ok := analyzeExpr(cur, 0, col); ok {
+			return ctx, true
+		}
 	}
 	if marker := commentPrefixLen(cur); marker >= 0 {
 		return analyzeDirective(cur, marker, col, false)
@@ -114,7 +132,8 @@ func Analyze(lines Lines, line, col int) (Context, bool) {
 	return analyzeRequest(lines, line, cur, col)
 }
 
-func analyzeVariable(cur []rune, col int) (Context, bool) {
+// Skip expression completion in scripts because vars.interpolate rejects {{= }}.
+func analyzeVariable(cur []rune, col int, exprs bool) (Context, bool) {
 	open := -1
 	for i := col - 1; i > 0; i-- {
 		if cur[i] == '{' && cur[i-1] == '{' {
@@ -127,6 +146,11 @@ func analyzeVariable(cur []rune, col int) (Context, bool) {
 	}
 	if open < 0 {
 		return Context{}, false
+	}
+	if eq := skipSpace(cur, open); exprs && eq < col && cur[eq] == '=' {
+		if ctx, ok := analyzeExpr(cur, eq+1, col); ok {
+			return ctx, true
+		}
 	}
 	start := col
 	for start > open && IsTokenRune(cur[start-1]) {
@@ -154,6 +178,25 @@ func analyzeVariable(cur []rune, col int) (Context, bool) {
 		ctx.closing = string(cur[end:next]) + strings.Repeat("}", 2-closers)
 	}
 	return ctx, true
+}
+
+func analyzeScript(lines Lines, line int, cur []rune, col int, src parser.SourceLine) (Context, bool) {
+	first := line
+	for first > 0 && lines.SourceLine(first-1).Kind == parser.SourceLineScript {
+		first--
+	}
+	var prior strings.Builder
+	for i := first; i < line; i++ {
+		runes := lines.LineRunes(i)
+		start, end, _ := lines.SourceLine(i).ContentRange(len(runes))
+		prior.WriteString(string(runes[start:end]))
+		prior.WriteByte('\n')
+	}
+	if ctx, ok := analyzeMember(prior.String(), cur, src.ContentStart, col, src.ScriptLang, true); ok {
+		return ctx, true
+	}
+	// Script lines allow include paths, but no request fields.
+	return analyzeBodyPath(cur, col)
 }
 
 // analyzeBodyPath handles body files ("< file"), script includes ("> < file"),

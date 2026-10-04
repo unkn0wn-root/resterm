@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
@@ -343,4 +344,52 @@ func nameLen(s string) int {
 		return len(s)
 	}
 	return i
+}
+
+// PlaceholderScanner tracks {{...}} placeholders across calls to Feed.
+// Do not split a UTF-8 character between calls.
+type PlaceholderScanner struct {
+	brace bool // a single { outside a placeholder
+	open  bool
+	named bool // found a non-space character inside the placeholder
+	expr  bool
+}
+
+// Feed runs on every edit, so it skips to the next brace that can change the
+// state. Only the spaces right after {{ are read rune by rune.
+func (s *PlaceholderScanner) Feed(text string) {
+	for text != "" {
+		switch {
+		case !s.open:
+			i := strings.IndexByte(text, '{')
+			if i < 0 {
+				s.brace = false
+				return
+			}
+			s.open = s.brace && i == 0
+			s.brace = !s.open
+			text = text[i+1:]
+		case s.named:
+			i := strings.IndexByte(text, '}')
+			if i < 0 {
+				return
+			}
+			*s = PlaceholderScanner{}
+			text = text[i+1:]
+		default:
+			r, size := utf8.DecodeRuneInString(text)
+			switch {
+			case r == '}':
+				*s = PlaceholderScanner{}
+			case !unicode.IsSpace(r):
+				s.named, s.expr = true, r == '='
+			}
+			text = text[size:]
+		}
+	}
+}
+
+// InExpr reports whether a {{= }} expression is still open.
+func (s *PlaceholderScanner) InExpr() bool {
+	return s.expr
 }

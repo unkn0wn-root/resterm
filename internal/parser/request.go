@@ -20,9 +20,7 @@ type requestBuilder struct {
 	variables         []restfile.Variable
 	runVars           []restfile.RunVar
 	originalLines     []string
-	currentScriptKind scriptKind
-	currentScriptLang scriptLang
-	discardScript     bool
+	script            scriptMode
 	scriptBufferKind  scriptKind
 	scriptBufferLang  scriptLang
 	scriptSourcePath  string

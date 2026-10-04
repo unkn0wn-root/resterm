@@ -8,6 +8,7 @@ import (
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type SourceLineKind uint8
@@ -19,6 +20,7 @@ const (
 	SourceLineDirectiveValue
 	SourceLineRequestSeparator
 	SourceLineLiteral
+	SourceLineScript
 )
 
 func (k SourceLineKind) String() string {
@@ -35,6 +37,8 @@ func (k SourceLineKind) String() string {
 		return "request separator"
 	case SourceLineLiteral:
 		return "literal"
+	case SourceLineScript:
+		return "script"
 	default:
 		return "unknown"
 	}
@@ -43,12 +47,16 @@ func (k SourceLineKind) String() string {
 // Offsets are rune positions in the source line. OptionValueEnd is zero unless
 // the line starts inside an option value.
 type SourceLine struct {
-	Kind           SourceLineKind
-	Directive      directive.Name
-	Args           directive.ArgKind
+	Kind      SourceLineKind
+	Directive directive.Name
+	Args      directive.ArgKind
+	// ScriptLang is "js" or "rts" for script lines, or empty if @rts was invalid.
+	ScriptLang     string
 	ContentStart   int
 	ContentEnd     int
 	OptionValueEnd int
+	// InExpr is true when a body line continues a {{= }} expression.
+	InExpr bool
 }
 
 func (l SourceLine) ContentRange(n int) (start, end int, ok bool) {
@@ -134,6 +142,8 @@ type requestScan struct {
 	headersDone bool
 	contentType string
 	multipart   *multipartSpan
+	script      scriptMode
+	body        vars.PlaceholderScanner
 }
 
 type mockScan struct {
@@ -167,7 +177,7 @@ func (s *sourceScan) classify(ln line) SourceLine {
 	}
 
 	if s.multipartBodyLine(ln) {
-		return SourceLine{Kind: SourceLineLiteral}
+		return s.bodyLine(ln)
 	}
 
 	if ln.isBlockCommentStart() {
@@ -182,9 +192,12 @@ func (s *sourceScan) classify(ln line) SourceLine {
 		return syntax
 	}
 
-	if ln.hasScriptMarker() {
+	if body, col, ok := ln.cutScriptMarker(); ok {
 		s.openRequest()
-		return SourceLine{}
+		if _, include := scriptInc(body); include {
+			return SourceLine{}
+		}
+		return s.scriptLine(ln, body, col)
 	}
 
 	if s.variableLine(ln) {
@@ -197,7 +210,7 @@ func (s *sourceScan) classify(ln line) SourceLine {
 	}
 
 	if s.request.hasMethod && s.request.headersDone {
-		return SourceLine{Kind: SourceLineLiteral}
+		return s.bodyLine(ln)
 	}
 
 	switch readMethodLine(ln.raw) {
@@ -215,6 +228,13 @@ func (s *sourceScan) classify(ln line) SourceLine {
 
 	s.openRequest()
 	return SourceLine{}
+}
+
+func (s *sourceScan) bodyLine(ln line) SourceLine {
+	syntax := SourceLine{Kind: SourceLineLiteral, InExpr: s.request.body.InExpr()}
+	s.request.body.Feed(ln.raw)
+	s.request.body.Feed("\n")
+	return syntax
 }
 
 func (s *sourceScan) blockCommentLine(ln line, opening bool) SourceLine {
@@ -235,11 +255,27 @@ func (s *sourceScan) scriptBlockLine(ln line) SourceLine {
 	switch {
 	case ln.isScriptBlockEnd():
 		s.inScript = false
+		return SourceLine{Kind: SourceLineLiteral}
 	case ln.isSeparator():
 		s.endSection()
 		return SourceLine{Kind: SourceLineRequestSeparator}
 	}
-	return SourceLine{Kind: SourceLineLiteral}
+	body, col := ln.scriptBlockBody()
+	return s.scriptLine(ln, body, col)
+}
+
+// col is the body's byte column, starting at 1.
+func (s *sourceScan) scriptLine(ln line, body string, col int) SourceLine {
+	start := utf8.RuneCountInString(ln.raw[:col-1])
+	syntax := SourceLine{
+		Kind:         SourceLineScript,
+		ContentStart: start,
+		ContentEnd:   start + utf8.RuneCountInString(body),
+	}
+	if !s.request.script.discard {
+		syntax.ScriptLang = s.request.script.lang.String()
+	}
+	return syntax
 }
 
 func (s *sourceScan) mockLine(ln line) SourceLine {
@@ -358,16 +394,22 @@ func (s *sourceScan) applyDirective(call directive.Call) {
 		return
 	}
 
-	if s.request.open {
-		return
+	if !s.request.open {
+		effect := s.effectOf(call, s.workflow)
+		switch {
+		case effect.startsMock:
+			s.mock = mockScan{active: true, sequence: effect.mockSequence}
+		case effect.opensRequest:
+			s.openRequest()
+		}
 	}
 
-	effect := s.effectOf(call, s.workflow)
-	switch {
-	case effect.startsMock:
-		s.mock = mockScan{active: true, sequence: effect.mockSequence}
-	case effect.opensRequest:
-		s.openRequest()
+	// The document parser reports errors. This scan only updates the script settings.
+	switch call.Name {
+	case directive.Script:
+		_ = s.request.script.setScript(call.Args)
+	case directive.RTS:
+		_ = s.request.script.setRTS(call.Args)
 	}
 }
 
@@ -415,6 +457,9 @@ func probeEffect(call directive.Call, inWorkflow bool) directiveEffect {
 }
 
 func (s *sourceScan) openRequest() {
+	if !s.request.open {
+		s.request.script = defaultScriptMode
+	}
 	s.request.open = true
 	s.workflow = false
 }

@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestRequestEditorCompletionPreservesExistingText(t *testing.T) {
@@ -205,5 +206,49 @@ func TestRequestEditorCompletionFollowsEditsInsideToken(t *testing.T) {
 	editor.applyCompletion()
 	if got := editor.Value(); got != "GET https://{{host}}" {
 		t.Fatalf("completion after editing inside the token = %q", got)
+	}
+}
+
+func newScriptTestEditor(content string) requestEditor {
+	editor := newTestEditor(content)
+	th := theme.DefaultTheme()
+	// The styler identifies script lines for completion.
+	editor.setStyler(newMetadataRuneStyler(th.EditorMetadata), th)
+	editor.moveCursorTo(strings.Count(content, "\n"), len([]rune(content[strings.LastIndexByte(content, '\n')+1:])))
+	editor.SetCompletionEnabled(true)
+	return editor
+}
+
+func TestRequestEditorCompletesVarsMembers(t *testing.T) {
+	cases := []struct {
+		name, input, label, want, selected string
+	}{
+		{"method", "> vars.ge|", "get", "> vars.get(name)", "name"},
+		{"existing arguments", `> vars.ge|t("x")`, "get", `> vars.get("x")`, ""},
+		{
+			"expression",
+			"GET https://example.test/{{= vars.ge|",
+			"get",
+			"GET https://example.test/{{= vars.get(name)",
+			"name",
+		},
+		{"directive", "# @assert vars.ha|", "has", "# @assert vars.has(name)", "name"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			before, after, _ := strings.Cut(tc.input, "|")
+			editor := newScriptTestEditor(before + after)
+			line := strings.Count(before, "\n")
+			editor.moveCursorTo(line, len([]rune(before[strings.LastIndexByte(before, '\n')+1:])))
+			editor, _ = editor.NextCompletion()
+			selectEditorCompletion(t, &editor, tc.label)
+			editor.applyCompletion()
+			if got := editor.Value(); got != tc.want {
+				t.Fatalf("got %q; want %q", got, tc.want)
+			}
+			if got := editor.selectedText(); got != tc.selected {
+				t.Fatalf("selected %q; want %q", got, tc.selected)
+			}
+		})
 	}
 }

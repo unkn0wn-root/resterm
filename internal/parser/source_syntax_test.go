@@ -3,8 +3,11 @@ package parser
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestSourceSyntaxComments(t *testing.T) {
@@ -193,7 +196,7 @@ func TestSourceSyntaxMarksADirectiveBeingTyped(t *testing.T) {
 			name:   "script block",
 			source: []string{"# @script test", "> {%", "# @", "> %}"},
 			line:   2,
-			want:   SourceLineLiteral,
+			want:   SourceLineScript,
 		},
 		{
 			name:   "mock response body",
@@ -252,11 +255,6 @@ func TestSourceSyntaxKeepsLiteralContentUnclassified(t *testing.T) {
 			source: "# @mock method=GET path=/health\nHTTP/1.1 200 OK\n\n# literal body",
 			line:   3,
 		},
-		{
-			name:   "script block",
-			source: "# @script test\n> {%\n// JavaScript comment\n> %}",
-			line:   2,
-		},
 	}
 
 	for _, tt := range tests {
@@ -313,6 +311,226 @@ func TestSourceSyntaxMockAgreesWithParser(t *testing.T) {
 		mocked := len(Parse("agree.http", []byte(source)).Mocks) == 1
 		if (got == SourceLineLiteral) != mocked {
 			t.Fatalf("case %d: body kind = %v, parser found mock = %v", no, got, mocked)
+		}
+	}
+}
+
+func TestSourceSyntaxScriptLines(t *testing.T) {
+	tests := []struct {
+		name    string
+		source  []string
+		line    int
+		kind    SourceLineKind
+		lang    string
+		content string
+	}{
+		{
+			name:    "default language",
+			source:  []string{`> vars.get("a")`},
+			kind:    SourceLineScript,
+			lang:    "js",
+			content: `vars.get("a")`,
+		},
+		{
+			name:    "rts block",
+			source:  []string{"# @rts pre-request", "> vars.set(1)"},
+			line:    1,
+			kind:    SourceLineScript,
+			lang:    "rts",
+			content: "vars.set(1)",
+		},
+		{
+			name:   "lang option",
+			source: []string{"# @script pre-request lang=rts", "> x"},
+			line:   1,
+			kind:   SourceLineScript,
+			lang:   "rts",
+		},
+		{
+			name:   "bare script keeps the language",
+			source: []string{"# @rts pre-request", "> a", "# @script", "> b"},
+			line:   3,
+			kind:   SourceLineScript,
+			lang:   "rts",
+		},
+		{
+			name:   "rejected rts drops the line",
+			source: []string{"# @rts test", "> a"},
+			line:   1,
+			kind:   SourceLineScript,
+		},
+		{
+			name:   "new request starts with javascript",
+			source: []string{"# @rts pre-request", "> a", "GET https://a.test", "", "###", "> b"},
+			line:   5,
+			kind:   SourceLineScript,
+			lang:   "js",
+		},
+		{
+			name:   "include",
+			source: []string{"> < scripts/pre.js"},
+			kind:   SourceLineCode,
+		},
+		{
+			name:   "include without a path",
+			source: []string{"> <"},
+			kind:   SourceLineScript,
+			lang:   "js",
+		},
+		{
+			name:    "block line",
+			source:  []string{"# @rts pre-request", "> {%", "  vars.get(1)", "> %}"},
+			line:    2,
+			kind:    SourceLineScript,
+			lang:    "rts",
+			content: "  vars.get(1)",
+		},
+		{
+			name:    "block line with a marker",
+			source:  []string{"> {%", "> vars.get(1)", "> %}"},
+			line:    1,
+			kind:    SourceLineScript,
+			lang:    "js",
+			content: "vars.get(1)",
+		},
+		{
+			name:    "block comment line",
+			source:  []string{"> {%", "// JavaScript comment", "> %}"},
+			line:    1,
+			kind:    SourceLineScript,
+			lang:    "js",
+			content: "// JavaScript comment",
+		},
+		{
+			name:   "block markers",
+			source: []string{"> {%", "x", "> %}"},
+			line:   2,
+			kind:   SourceLineLiteral,
+		},
+		{
+			name:    "indented marker",
+			source:  []string{"  >  é = 1"},
+			kind:    SourceLineScript,
+			lang:    "js",
+			content: " é = 1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifySource(strings.Join(tt.source, "\n"))[tt.line]
+			if got.Kind != tt.kind || got.ScriptLang != tt.lang {
+				t.Fatalf("line %d = %v %q, want %v %q", tt.line+1, got.Kind, got.ScriptLang, tt.kind, tt.lang)
+			}
+			if tt.content != "" {
+				if text := sourceContent(tt.source[tt.line], got); text != tt.content {
+					t.Fatalf("line %d content = %q, want %q", tt.line+1, text, tt.content)
+				}
+			}
+		})
+	}
+}
+
+func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
+	prefixes := []string{
+		"",
+		"# @script pre-request",
+		"# @script test",
+		"# @script pre-request lang=rts",
+		"# @script pre-request rts",
+		"# @script rts",
+		"# @script pre-request lang=python",
+		"# @script pre-request bogus=1",
+		"# @rts pre-request",
+		"# @rts",
+		"# @rts test",
+		"# @rts pre-request lang=js",
+		"# @rts pre-request\n# @script",
+		"# @rts pre-request\n# @rts bogus",
+		"# @rts bogus\n# @script",
+		"# @script pre-request lang=rts\n# @script test",
+		"GET https://a.test\n\n###\n# @rts pre-request",
+	}
+	bodies := []string{
+		"> a",
+		"> a\n> < x.js\n> b",
+		"> <",
+		"> {%\na\n> b\n> < x.js\n> %}",
+		"  >   a",
+	}
+
+	for _, prefix := range prefixes {
+		for _, body := range bodies {
+			source := strings.TrimPrefix(prefix+"\n"+body+"\nGET https://example.test", "\n")
+			want := make(map[int]restfile.ScriptLine)
+			langs := make(map[int]string)
+			for _, req := range Parse("agree.http", []byte(source)).Requests {
+				for _, block := range req.Metadata.Scripts {
+					for _, l := range block.Lines {
+						want[l.Line], langs[l.Line] = l, block.Lang
+					}
+				}
+			}
+
+			lines := strings.Split(source, "\n")
+			for no, got := range classifySource(source) {
+				l, ok := want[no+1]
+				if got.Kind != SourceLineScript || got.ScriptLang == "" {
+					if ok {
+						t.Errorf("%q line %d = %v, parser runs it as %s", source, no+1, got.Kind, langs[no+1])
+					}
+					continue
+				}
+				if !ok || got.ScriptLang != langs[no+1] {
+					t.Errorf("%q line %d lang = %q, parser has %q", source, no+1, got.ScriptLang, langs[no+1])
+					continue
+				}
+				if start := utf8.RuneCountInString(lines[no][:l.Col-1]); got.ContentStart != start {
+					t.Errorf("%q line %d starts at %d, parser has %d", source, no+1, got.ContentStart, start)
+				}
+			}
+		}
+	}
+}
+
+func TestSourceSyntaxInExprAgreesWithParser(t *testing.T) {
+	heads := []string{
+		"POST https://a.test\nContent-Type: application/json\n\n",
+		"POST https://a.test\nContent-Type: multipart/form-data; boundary=X\n\n--X\n" +
+			"Content-Disposition: form-data; name=\"a\"\n\n",
+	}
+	bodies := []string{
+		"{{=\n  vars.get(\"a\")\n}}",
+		"{\"a\": \"{{= 1 +\n  vars.get(\"a\")\n}}\"}",
+		"{{=\n# note\n\n> x\n@v = 1\n  vars.get(\"a\")\n}}",
+		"{{= a\n}} b\n{{= c\n  d }}",
+		"{{ name\n  x\n}}",
+		"{\n{= a\nb",
+		"{{= a } b\nc",
+		"{{ \n= a\nb }}",
+		"{{= a\n> {%\nb\n> %}\nc }}",
+	}
+
+	for _, head := range heads {
+		for _, body := range bodies {
+			source := head + body + "\n--X--\n\n###\nGET https://b.test\n\n{{= x\ny }}"
+			want := make(map[int]bool)
+			for _, req := range Parse("agree.http", []byte(source)).Requests {
+				var s vars.PlaceholderScanner
+				for i, text := range strings.Split(req.Body.Text, "\n") {
+					want[req.Body.Lines[i]] = s.InExpr()
+					s.Feed(text + "\n")
+				}
+			}
+
+			lines := strings.Split(source, "\n")
+			for no, got := range classifySource(source) {
+				// A blank line has nothing to complete.
+				w := want[no+1] && strings.TrimSpace(lines[no]) != ""
+				if got.InExpr != w {
+					t.Errorf("%q line %d InExpr = %t, parser body has %t", source, no+1, got.InExpr, w)
+				}
+			}
 		}
 	}
 }
