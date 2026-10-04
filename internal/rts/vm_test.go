@@ -1073,7 +1073,7 @@ case 1:
 }
 `
 	err := execModuleErr(t, src, Limits{MaxSteps: 6})
-	if !isAbort(err) {
+	if !IsAbort(err) {
 		t.Fatalf("expected abort, got %T (%v)", err, err)
 	}
 	if !strings.Contains(err.Error(), "step limit exceeded") {
@@ -1092,7 +1092,7 @@ case 1:
 }
 `
 	err := execModuleErr(t, src, Limits{MaxSteps: 200})
-	if !isAbort(err) {
+	if !IsAbort(err) {
 		t.Fatalf("expected abort, got %T (%v)", err, err)
 	}
 }

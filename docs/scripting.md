@@ -107,7 +107,8 @@ The same function is available in [RestermScript](rts/host-objects.md#vars).
 Resterm warns when a value written by a pre-request script still contains `{{name}}`, `{{$helper}}`, or `{{= ... }}`. This applies to JavaScript and RTS. The warning includes the file and line of the setter call:
 
 ```text
-api.http:12: Script sends {{token}} in header Authorization as written. Use vars.get("token") or vars.interpolate().
+api.http:12: Script sends {{token}} in header Authorization as written. Use vars.get("token").
+api.http:13: Script sends {{$uuid}} in header X-Request-Id as written. Use vars.interpolate("{{$uuid}}").
 ```
 
 The warning appears in the status bar, in Explain, and under the request in `resterm run`.

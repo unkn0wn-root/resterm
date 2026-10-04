@@ -700,12 +700,12 @@ GET https://example.com
 		text string
 		msg  string
 	}{
-		{1, "{{api.token}}", `@patch sends {{api.token}} as written. Use vars.get("api.token") or vars.interpolate().`},
-		{4, "{{api.token}}", `@apply sends {{api.token}} as written. Use vars.get("api.token") or vars.interpolate().`},
-		{4, "{{$uuid}}", "@apply sends {{$uuid}} as written. Use vars.interpolate()."},
+		{1, "{{api.token}}", `@patch sends {{api.token}} as written. Use vars.get("api.token").`},
+		{4, "{{api.token}}", `@apply sends {{api.token}} as written. Use vars.get("api.token").`},
+		{4, "{{$uuid}}", `@apply sends {{$uuid}} as written. Use vars.interpolate("{{$uuid}}").`},
 		{4, "{{$uuuid}}", `@apply sends {{$uuuid}} as written. Check the helper name, or use vars.get("$uuuid").`},
 		{5, "{{= base }}", "@apply sends {{= base }} as written. Write the expression without {{= }}."},
-		{6, "{{body}}", `@apply sends {{body}} as written. Use vars.get("body") or vars.interpolate().`},
+		{6, "{{body}}", `@apply sends {{body}} as written. Use vars.get("body").`},
 	}
 	if len(doc.Warnings) != len(want) {
 		t.Fatalf("warnings = %+v, want %d", doc.Warnings, len(want))

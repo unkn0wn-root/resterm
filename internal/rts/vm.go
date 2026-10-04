@@ -515,7 +515,7 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 	case *TryExpr:
 		v, err := vm.eval(env, e.X)
 		if err != nil {
-			if isAbort(err) {
+			if IsAbort(err) {
 				return Null(), err
 			}
 			return newResult(false, Null(), err), nil

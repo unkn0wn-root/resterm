@@ -618,3 +618,16 @@ func TestVarsInterpolateStopsWhenCanceled(t *testing.T) {
 		t.Fatalf("looked up %d names, want to stop after the first value", calls)
 	}
 }
+
+func TestVarsInterpolateKeepsLookupAborts(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+	abort := &rts.AbortError{RuntimeError: &rts.RuntimeError{Msg: "timeout exceeded"}, Kind: rts.AbortTimeout}
+	rt.Scope.Resolve = func(string) (string, bool, error) { return "", false, abort }
+
+	for _, src := range []string{`try vars.get("x")`, `try vars.interpolate("{{x}}")`} {
+		if _, err := eng.Eval(t.Context(), rt, src, testPos); !errors.Is(err, abort) {
+			t.Errorf("%s error = %v, want the lookup abort", src, err)
+		}
+	}
+}

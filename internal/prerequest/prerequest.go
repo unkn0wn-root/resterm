@@ -177,7 +177,8 @@ type Literal struct {
 	Text, Hint string
 }
 
-// Literals finds placeholders that will be sent unchanged.
+// Literals finds placeholders that will be sent unchanged. text may come from a
+// response, so hints never pass it to vars.interpolate, which could read a secret.
 func Literals(text string) []Literal {
 	var out []Literal
 	for _, ph := range vars.Placeholders(text) {
@@ -187,11 +188,11 @@ func Literals(text string) []Literal {
 		case strings.HasPrefix(name, "="):
 			l.Hint = "Write the expression without {{= }}."
 		case strings.HasPrefix(name, "$") && !errors.Is(dynamic.Validate(name), dynamic.ErrUnknown):
-			l.Hint = "Use vars.interpolate()."
+			l.Hint = fmt.Sprintf("Use vars.interpolate(%q).", l.Text)
 		case strings.HasPrefix(name, "$"):
 			l.Hint = fmt.Sprintf("Check the helper name, or use vars.get(%q).", name)
 		default:
-			l.Hint = fmt.Sprintf("Use vars.get(%q) or vars.interpolate().", name)
+			l.Hint = fmt.Sprintf("Use vars.get(%q).", name)
 		}
 		out = append(out, l)
 	}

@@ -176,18 +176,16 @@ func varsInterpolateDef(look vars.Lookup) native.Def {
 	sig := "vars.interpolate(text)"
 	return native.Fn1("vars.interpolate", sig, native.String,
 		func(call native.Call, text string) (rts.Value, error) {
-			var stop error
 			out, err := vars.Interpolate(text, func(name string) (string, bool, error) {
-				if stop = rts.Tick(call.Ctx, call.Pos); stop != nil {
-					return "", false, stop
+				if err := rts.Tick(call.Ctx, call.Pos); err != nil {
+					return "", false, err
 				}
 				return look(name)
 			}, vars.InterpolateOptions{MaxLen: call.Ctx.Lim.MaxStr})
-			// Return stop errors unchanged so try cannot catch them.
-			if stop != nil {
-				return rts.Null(), stop
-			}
-			if err != nil {
+			switch {
+			case rts.IsAbort(err):
+				return rts.Null(), err
+			case err != nil:
 				return rts.Null(), call.Errorf("vars.interpolate: %v", err)
 			}
 			return native.StringValue(call.Ctx, call.Pos, out)
