@@ -344,3 +344,31 @@ func nameLen(s string) int {
 	}
 	return i
 }
+
+// PlaceholderScanner tracks {{...}} placeholders across calls to Feed.
+// Do not split a UTF-8 character between calls.
+type PlaceholderScanner struct {
+	brace bool // a single { outside a placeholder
+	open  bool
+	named bool // found a non-space character inside the placeholder
+	expr  bool
+}
+
+func (s *PlaceholderScanner) Feed(text string) {
+	for _, r := range text {
+		switch {
+		case !s.open:
+			s.open = s.brace && r == '{'
+			s.brace = !s.open && r == '{'
+		case r == '}':
+			*s = PlaceholderScanner{}
+		case !s.named && !unicode.IsSpace(r):
+			s.named, s.expr = true, r == '='
+		}
+	}
+}
+
+// InExpr reports whether a {{= }} expression is still open.
+func (s *PlaceholderScanner) InExpr() bool {
+	return s.expr
+}

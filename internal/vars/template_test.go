@@ -287,3 +287,64 @@ func TestUnclosedPlaceholdersSpanLines(t *testing.T) {
 		t.Fatalf("expanded = %q, err = %v", got, err)
 	}
 }
+
+func TestPlaceholderScanner(t *testing.T) {
+	tests := []struct {
+		parts []string
+		want  bool
+	}{
+		{[]string{"{{="}, true},
+		{[]string{"{{=\n", "  vars."}, true},
+		{[]string{`{"a": "{{= 1 +` + "\n", "  vars."}, true},
+		{[]string{"{{ \n", "= x"}, true},
+		{[]string{"{{ = x"}, true},
+		{[]string{"{{= a", "}", " {{= b"}, true},
+		{[]string{"{{ name"}, false},
+		{[]string{"{{ a {{= b"}, false},
+		{[]string{"{{{= a"}, false},
+		{[]string{"{{= a }}"}, false},
+		{[]string{"{{= a }"}, false},
+		{[]string{"{\n", "{= a"}, false},
+		{[]string{"{{}}= a"}, false},
+	}
+	for _, tt := range tests {
+		var s PlaceholderScanner
+		for _, part := range tt.parts {
+			s.Feed(part)
+		}
+		if got := s.InExpr(); got != tt.want {
+			t.Errorf("%q InExpr = %t, want %t", tt.parts, got, tt.want)
+		}
+	}
+}
+
+func FuzzPlaceholderScannerMatchesPattern(f *testing.F) {
+	for _, seed := range []string{
+		"{{=\n  vars.get(\"a\")\n}}",
+		"{{ a {{= b }} {{= c",
+		"{\n{= a",
+		"{{}}{{ \n= x}",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, text string) {
+		var s PlaceholderScanner
+		var fed string
+		for line := range strings.SplitAfterSeq(text, "\n") {
+			s.Feed(line)
+			fed += line
+			if got, want := s.InExpr(), referenceInExpr(fed); got != want {
+				t.Fatalf("%q InExpr = %t, want %t", fed, got, want)
+			}
+		}
+	})
+}
+
+// referenceInExpr checks whether appending }} completes a {{= }} expression.
+func referenceInExpr(text string) bool {
+	ms := templateVarPattern.FindAllStringIndex(text+"}}", -1)
+	if len(ms) == 0 || ms[len(ms)-1][1] != len(text)+2 {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(text[ms[len(ms)-1][0]+2:]), "=")
+}
