@@ -14,18 +14,23 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is an API client for the terminal. Requests are saved in plain `.http` and `.rest` files, so they can live in your repo next to your code. Use them from the terminal UI, or run the same files in CI or CLI with `resterm run`.
+Resterm is an API client for the terminal. Requests are saved in plain `.http` and `.rest` files, so they can live in your repo next to your code. Use them from the terminal UI, or run the same files in CI with `resterm run`.
 
 ## Why Resterm
 
 - HTTP, GraphQL, gRPC, WebSocket and SSE.
-- Assertions, captures, loops, conditions and multi-step workflows, all written in the request file.
+- Assertions, captures, loops, conditions, polling, retries and multi-step workflows, all written in the http file.
 - Scripting with RestermScript, a small expression language made for Resterm, or JavaScript if you prefer.
 - Mock servers and traffic recording that use the same file format.
-- OAuth 2.0, tokens from CLIs you already have (like `gh auth token`).
+- OAuth 2.0 and tokens from CLIs (like `gh auth token`).
 - SSH tunnels and Kubernetes port-forwards.
-- Tracing, profiling and side-by-side comparison of responses across environments.
-- Vim-style keys with built-in help.
+- Tracing with OpenTelemetry export, profiling and side-by-side comparison of responses across environments.
+- Request history you can replay, and a Diff tab that compares a new response with a pinned one.
+- `resterm run` for scripts and CI, with JSON and JUnit reports.
+- Import from curl and OpenAPI. Share a workspace as a bundle that others can import.
+- Multiple environments, switched with `Ctrl+E` or `--env`.
+- Vim-style key bindings.
+- No AI features, no account, no telemetry.
 
 ## Screenshots
 
@@ -151,7 +156,7 @@ To run request files from your own Go code, see the [`headless`](./headless) pac
 
 ## Sponsor
 
-Resterm is and always will be free and open source. If it saves you time, you can [sponsor its development](https://github.com/sponsors/unkn0wn-root).
+Resterm is and always will be free and open source. If you like my work, you can [sponsor it on GitHub](https://github.com/sponsors/unkn0wn-root).
 
 ## License
 
