@@ -41,6 +41,8 @@ If the server returns a non-2xx status or a content type other than `text/event-
 
 A configured `duration` is a normal limit. An expired run deadline is a `timeout` failure. [Limits](#limits) lists which endings fail the request.
 
+Resterm reads events the way the [SSE specification](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation) describes. Lines can end with CRLF, LF, or CR. A byte order mark before the first line is dropped, and one space after a field's colon is removed. A `retry` value that is not only digits, or is over 2147483647, is ignored and does not fail the stream. The transcript is for inspecting what the server sent, so it also keeps what a browser `EventSource` drops: comments, blocks without a `data` line, and an unfinished block when the server closes the stream. Each event's `id` is the one sent in its own block, not the last id seen.
+
 ## WebSockets (`@websocket`, `@ws`)
 
 Use `# @websocket` to upgrade the connection, then script the session with `# @ws` lines:
