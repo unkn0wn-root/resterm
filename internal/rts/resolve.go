@@ -70,12 +70,12 @@ func (e *Eng) modHead(base, path string) (string, Pos, error) {
 	if err != nil {
 		return "", Pos{Path: p}, err
 	}
-	if cp := e.C.get(p, fp); cp != nil {
-		mp := cp.Mod.NamePos
+	if ent, ok := e.C.get(p, fp); ok {
+		mp := ent.comp.Mod.NamePos
 		if mp.Path == "" {
 			mp.Path = p
 		}
-		return cp.Mod.Name, mp, nil
+		return ent.comp.Mod.Name, mp, nil
 	}
 	data, err := e.C.fs.ReadFile(p)
 	if err != nil {

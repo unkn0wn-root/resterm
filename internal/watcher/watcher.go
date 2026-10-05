@@ -262,6 +262,13 @@ func metaSame(info fs.FileInfo, fp Fingerprint, hashAll bool, missing bool) bool
 	return info.ModTime().Equal(fp.Mod) && info.Size() == fp.Size
 }
 
+// Settled reports whether a file changed at mod is old enough to trust its size
+// and modification time. FAT stores modification times in 2s steps and HFS+ in
+// 1s steps, so a second write in the same step keeps the old time.
+func Settled(mod time.Time) bool {
+	return time.Since(mod) >= 2*time.Second
+}
+
 func cleanPath(path string) (string, bool) {
 	if path == "" {
 		return "", false
