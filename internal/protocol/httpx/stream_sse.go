@@ -48,8 +48,6 @@ const (
 	DefaultSSESessionBytes  = 16 << 20
 )
 
-var errSSELineTooLong = errors.New("sse line exceeds the line limit")
-
 type sseLimits struct {
 	stream int64
 	line   int64
@@ -305,7 +303,7 @@ func runSSESession(
 ) {
 	run := &sseRun{
 		session: session,
-		reader:  bufio.NewReader(body),
+		reader:  sseReader{br: bufio.NewReader(body)},
 		opts:    opts,
 		limits:  limits,
 		summary: SSESummary{Reason: sseReasonEOF},
@@ -325,7 +323,7 @@ func runSSESession(
 
 type sseRun struct {
 	session *stream.Session
-	reader  *bufio.Reader
+	reader  sseReader
 	opts    restfile.SSEOptions
 	limits  sseLimits
 	builder sseEventBuilder
@@ -368,19 +366,19 @@ func (r *sseRun) loop(ctx context.Context) error {
 			return diag.Wrap(err, "read sse stream")
 		}
 
-		if trimmed := strings.TrimRight(line, "\r\n"); trimmed == "" {
+		if line == "" {
 			if r.flush() && r.opts.MaxEvents > 0 && r.events >= r.opts.MaxEvents {
 				r.summary.Reason = sseReasonMaxEvents
 				return nil
 			}
 		} else {
-			r.block += int64(len(trimmed))
+			r.block += int64(len(line))
 			if r.block > r.limits.event {
 				r.summary.Reason = sseReasonEventBytes
 				r.failure = sseOverrun("event", r.limits.event, "max-event-bytes")
 				return nil
 			}
-			r.builder.consume(trimmed)
+			r.builder.consume(line)
 		}
 
 		if capped {
@@ -401,9 +399,9 @@ func (r *sseRun) loop(ctx context.Context) error {
 }
 
 func (r *sseRun) next() (string, error) {
-	line, err := readSSELine(r.reader, r.limits.lineBudget(r.bytes))
-	if len(line) > 0 {
-		r.bytes += int64(len(line))
+	line, n, err := r.reader.readLine(r.limits.lineBudget(r.bytes))
+	if n > 0 {
+		r.bytes += int64(n)
 		select {
 		case r.idle <- struct{}{}:
 		default:
@@ -484,21 +482,6 @@ func (r *sseRun) finish(ctx context.Context, err error) {
 		}
 	}
 	r.session.Close(closeErr)
-}
-
-func readSSELine(r *bufio.Reader, limit int) (string, error) {
-	var line strings.Builder
-	for {
-		chunk, err := r.ReadSlice('\n')
-		if line.Len()+len(chunk) > limit {
-			line.Write(chunk[:limit-line.Len()])
-			return line.String(), errSSELineTooLong
-		}
-		line.Write(chunk)
-		if !errors.Is(err, bufio.ErrBufferFull) {
-			return line.String(), err
-		}
-	}
 }
 
 func sseSummaryLine(sum SSESummary) string {

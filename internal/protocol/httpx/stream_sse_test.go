@@ -1,6 +1,8 @@
 package httpx
 
 import (
+	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,9 +12,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -235,6 +239,215 @@ func TestSSEIgnoresAMalformedRetry(t *testing.T) {
 	}
 	if len(transcript.Events) != 2 || transcript.Events[1].Data != "two" || transcript.Events[1].Retry != 0 {
 		t.Fatalf("events = %+v, want both events without a retry", transcript.Events)
+	}
+}
+
+func TestSSETranscriptSplitsLinesAtCROrLF(t *testing.T) {
+	tests := []struct {
+		name   string
+		chunks []string
+		data   []string
+	}{
+		{name: "CR", chunks: []string{"data: a\rdata: b\r\r"}, data: []string{"a\nb"}},
+		{name: "CR inside a line", chunks: []string{"data: a\rb\n\n"}, data: []string{"a"}},
+		{name: "CR then CRLF", chunks: []string{"data: a\r\r\n"}, data: []string{"a"}},
+		{name: "CRLF across writes", chunks: []string{"data: a\r", "\ndata: b\r\n\r\n"}, data: []string{"a\nb"}},
+		{name: "leading BOM", chunks: []string{"\ufeffdata: x\n\n"}, data: []string{"x"}},
+		{name: "second BOM", chunks: []string{"\ufeff\ufeffdata: x\n\ndata: y\n\n"}, data: []string{"y"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+				for _, chunk := range tt.chunks {
+					_, _ = io.WriteString(w, chunk)
+					flush()
+				}
+			})
+			transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{})
+			var data []string
+			for _, evt := range transcript.Events {
+				data = append(data, evt.Data)
+			}
+			if !slices.Equal(data, tt.data) {
+				t.Fatalf("data = %q, want %q", data, tt.data)
+			}
+			sum := transcript.Summary
+			if sum.Reason != sseReasonEOF || sum.Error != "" {
+				t.Fatalf("summary = %+v, want a clean EOF", sum)
+			}
+			if want := len(strings.Join(tt.chunks, "")); sum.ByteCount != int64(want) {
+				t.Fatalf("ByteCount = %d, want %d", sum.ByteCount, want)
+			}
+		})
+	}
+}
+
+func TestSSEDispatchesACREventWithoutWaitingForMore(t *testing.T) {
+	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+		_, _ = io.WriteString(w, "data: x\r\r")
+		flush()
+		<-t.Context().Done()
+	})
+
+	transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{IdleTimeout: 200 * time.Millisecond})
+	if len(transcript.Events) != 1 || transcript.Events[0].Data != "x" {
+		t.Fatalf("events = %+v, want the event before the idle timeout", transcript.Events)
+	}
+}
+
+type sseStep struct {
+	line string
+	n    int
+	err  error
+}
+
+func readSSESteps(r io.Reader, limit int) []sseStep {
+	sr := sseReader{br: bufio.NewReader(r)}
+	var steps []sseStep
+	for {
+		line, n, err := sr.readLine(limit)
+		steps = append(steps, sseStep{line, n, err})
+		if err != nil {
+			return steps
+		}
+	}
+}
+
+var sseChunkings = []struct {
+	name string
+	wrap func(io.Reader) io.Reader
+}{
+	{"one byte", iotest.OneByteReader},
+	{"half", iotest.HalfReader},
+	{"data with EOF", iotest.DataErrReader},
+}
+
+func TestSSEReaderSplitsLines(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		limit int
+		want  []sseStep
+	}{
+		{name: "empty", input: "", want: []sseStep{{"", 0, io.EOF}}},
+		{name: "LF", input: "a\nb\n", want: []sseStep{{"a", 2, nil}, {"b", 2, nil}, {"", 0, io.EOF}}},
+		{name: "CRLF", input: "a\r\nb\r\n", want: []sseStep{{"a", 2, nil}, {"b", 3, nil}, {"", 1, io.EOF}}},
+		{name: "CR", input: "a\rb\r", want: []sseStep{{"a", 2, nil}, {"b", 2, nil}, {"", 0, io.EOF}}},
+		{name: "CR then CRLF", input: "a\r\r\nb", want: []sseStep{{"a", 2, nil}, {"", 1, nil}, {"b", 2, io.EOF}}},
+		{
+			name:  "blank lines",
+			input: "\n\r\n\r",
+			want:  []sseStep{{"", 1, nil}, {"", 1, nil}, {"", 2, nil}, {"", 0, io.EOF}},
+		},
+		{name: "unterminated", input: "a", want: []sseStep{{"a", 1, io.EOF}}},
+		{name: "BOM", input: "\ufeffa\n", want: []sseStep{{"a", 5, nil}, {"", 0, io.EOF}}},
+		{name: "second BOM", input: "\ufeff\ufeffa\n", want: []sseStep{{"\ufeffa", 8, nil}, {"", 0, io.EOF}}},
+		{
+			name:  "BOM after the first line",
+			input: "a\n\ufeffb\n",
+			want:  []sseStep{{"a", 2, nil}, {"\ufeffb", 5, nil}, {"", 0, io.EOF}},
+		},
+		{name: "line at the limit", input: "abc\n", limit: 4, want: []sseStep{{"abc", 4, nil}, {"", 0, io.EOF}}},
+		{name: "end over the limit", input: "abc\n", limit: 3, want: []sseStep{{"abc", 3, errSSELineTooLong}}},
+		{name: "CRLF at the limit", input: "ab\r\nc", limit: 4, want: []sseStep{{"ab", 3, nil}, {"c", 2, io.EOF}}},
+		{
+			name:  "LF over the limit",
+			input: "abc\r\nd",
+			limit: 4,
+			want:  []sseStep{{"abc", 4, nil}, {"", 0, errSSELineTooLong}},
+		},
+		{
+			name:  "line after a CRLF at the limit",
+			input: "ab\r\ncde\n",
+			limit: 4,
+			want:  []sseStep{{"ab", 3, nil}, {"cde", 5, nil}, {"", 0, io.EOF}},
+		},
+		{name: "CR at the limit", input: "abc\rd", limit: 4, want: []sseStep{{"abc", 4, nil}, {"d", 1, io.EOF}}},
+		{name: "line over the limit", input: "abcdef", limit: 3, want: []sseStep{{"abc", 3, errSSELineTooLong}}},
+	}
+	for _, tt := range tests {
+		limit := cmp.Or(tt.limit, 1<<10)
+		t.Run(tt.name, func(t *testing.T) {
+			if got := readSSESteps(strings.NewReader(tt.input), limit); !slices.Equal(got, tt.want) {
+				t.Fatalf("steps = %+v, want %+v", got, tt.want)
+			}
+			for _, c := range sseChunkings {
+				if got := readSSESteps(c.wrap(strings.NewReader(tt.input)), limit); !slices.Equal(got, tt.want) {
+					t.Fatalf("%s steps = %+v, want %+v", c.name, got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func FuzzSSEReaderMatchesSplit(f *testing.F) {
+	for _, s := range []string{"", "a\nb\n", "a\r\nb\r\n", "a\rb\r", "a\r\r\nb", "\n\r\n\r", "\ufeff\ufeffa\n"} {
+		f.Add(s, 3)
+	}
+	ends := regexp.MustCompile("\r\n|\r|\n")
+	f.Fuzz(func(t *testing.T, input string, limit int) {
+		var (
+			lines []string
+			total int
+		)
+		for _, s := range readSSESteps(strings.NewReader(input), len(input)+1) {
+			lines = append(lines, s.line)
+			total += s.n
+		}
+		if want := ends.Split(strings.TrimPrefix(input, "\ufeff"), -1); !slices.Equal(lines, want) {
+			t.Fatalf("lines = %q, want %q", lines, want)
+		}
+		if total != len(input) {
+			t.Fatalf("read %d bytes, want %d", total, len(input))
+		}
+
+		limit = int(uint(limit)%16) + 1
+		whole := readSSESteps(strings.NewReader(input), limit)
+		for _, c := range sseChunkings {
+			if got := readSSESteps(c.wrap(strings.NewReader(input)), limit); !slices.Equal(got, whole) {
+				t.Fatalf("%s steps = %+v, want %+v", c.name, got, whole)
+			}
+		}
+
+		// Each line may use limit bytes, its own end included. A CRLF line
+		// whose LF alone does not fit is reported on the next step.
+		start, stop := 0, -1
+		for i, m := range append(ends.FindAllStringIndex(input, -1), []int{len(input), len(input)}) {
+			if m[1]-start > limit {
+				stop = i
+				if m[1]-m[0] == 2 && m[1]-start == limit+1 {
+					stop++
+				}
+				break
+			}
+			start = m[1]
+		}
+		last := whole[len(whole)-1]
+		if stop < 0 && last.err != io.EOF || stop >= 0 && (len(whole) != stop+1 || last.err != errSSELineTooLong) {
+			t.Fatalf("limit %d steps = %+v, want the limit to end step %d", limit, whole, stop)
+		}
+		for i, s := range whole[:len(whole)-1] {
+			if s.line != lines[i] {
+				t.Fatalf("limit %d step %d = %q, want %q", limit, i, s.line, lines[i])
+			}
+		}
+	})
+}
+
+func TestSSEBlankLineResetsTheIdleTimer(t *testing.T) {
+	idle := make(chan struct{}, 1)
+	run := &sseRun{
+		reader: sseReader{br: bufio.NewReader(strings.NewReader("\n"))},
+		limits: sseLimitsFor(restfile.SSEOptions{}, Options{}),
+		idle:   idle,
+	}
+	if line, err := run.next(); line != "" || err != nil {
+		t.Fatalf("next = %q, %v, want a blank line", line, err)
+	}
+	select {
+	case <-idle:
+	default:
+		t.Fatal("a blank line did not reset the idle timer")
 	}
 }
 
@@ -964,6 +1177,27 @@ func BenchmarkSSERun(b *testing.B) {
 				s := stream.NewSession(b.Context(), stream.KindSSE, stream.Config{MaxBytes: limits.sessionBytes()})
 				s.MarkOpen()
 				runSSESession(s, io.NopCloser(strings.NewReader(bc.body)), restfile.SSEOptions{}, limits, func() {})
+			}
+		})
+	}
+}
+
+func BenchmarkSSEReader(b *testing.B) {
+	for _, bc := range []struct{ name, body string }{
+		{"one 3MiB line", strings.Repeat("x", 3<<20) + "\n"},
+		{"CR only", strings.Repeat("\r", 1<<20)},
+		{"short CR lines", strings.Repeat("data: x\r", 1<<16)},
+		{"short LF lines", strings.Repeat("data: x\n", 1<<16)},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			b.SetBytes(int64(len(bc.body)))
+			for b.Loop() {
+				r := sseReader{br: bufio.NewReader(strings.NewReader(bc.body))}
+				for {
+					if _, _, err := r.readLine(DefaultSSEMaxLineBytes); err != nil {
+						break
+					}
+				}
 			}
 		})
 	}
