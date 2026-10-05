@@ -140,15 +140,10 @@ func TestSSEFieldValuesKeepWhitespace(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					var b sseEventBuilder
 					if field != "data" {
-						for _, line := range []string{"data: payload", field + ": old"} {
-							if err := b.consume(line); err != nil {
-								t.Fatal(err)
-							}
-						}
+						b.consume("data: payload")
+						b.consume(field + ": old")
 					}
-					if err := b.consume(field + ":" + tt.raw); err != nil {
-						t.Fatal(err)
-					}
+					b.consume(field + ":" + tt.raw)
 					evt, ok := b.finalize(0)
 					if !ok {
 						t.Fatal("field value produced no event")
@@ -168,6 +163,78 @@ func TestSSEFieldValuesKeepWhitespace(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestSSEBuilderFollowsTheFieldGrammar(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+		want  SSEEvent
+		ok    bool
+	}{
+		{name: "bare data", lines: []string{"data"}, ok: true},
+		{name: "bare data twice", lines: []string{"data", "data"}, want: SSEEvent{Data: "\n"}, ok: true},
+		{name: "colon in value", lines: []string{"data:x:y"}, want: SSEEvent{Data: "x:y"}, ok: true},
+		{
+			name:  "bare event clears",
+			lines: []string{"data: x", "event: a", "event"},
+			want:  SSEEvent{Data: "x"},
+			ok:    true,
+		},
+		{name: "bare id clears", lines: []string{"data: x", "id: 1", "id"}, want: SSEEvent{Data: "x"}, ok: true},
+		{name: "id with NUL", lines: []string{"id: 1", "id: a\x00b"}, want: SSEEvent{ID: "1"}, ok: true},
+		{name: "retry", lines: []string{"retry: 5"}, want: SSEEvent{Retry: 5}, ok: true},
+		{name: "retry without space", lines: []string{"retry:5"}, want: SSEEvent{Retry: 5}, ok: true},
+		{
+			name:  "invalid retry keeps the valid one",
+			lines: []string{"retry: 5", "retry: x"},
+			want:  SSEEvent{Retry: 5},
+			ok:    true,
+		},
+		{name: "retry two spaces", lines: []string{"retry:  5"}},
+		{name: "retry plus sign", lines: []string{"retry: +5"}},
+		{name: "retry minus sign", lines: []string{"retry: -5"}},
+		{name: "retry with unit", lines: []string{"retry: 5ms"}},
+		{name: "empty retry", lines: []string{"retry:"}},
+		{name: "bare retry", lines: []string{"retry"}},
+		{name: "retry overflow", lines: []string{"retry: 99999999999"}},
+		{name: "empty comment", lines: []string{":"}, ok: true},
+		{name: "comment", lines: []string{": ping"}, want: SSEEvent{Comment: "ping"}, ok: true},
+		{name: "comment two spaces", lines: []string{":  ping"}, want: SSEEvent{Comment: " ping"}, ok: true},
+		{name: "comment tab", lines: []string{":\tping"}, want: SSEEvent{Comment: "\tping"}, ok: true},
+		{name: "capitalized name", lines: []string{"Data: x"}},
+		{name: "space before name", lines: []string{" data: x"}},
+		{name: "space before colon", lines: []string{"data : x"}},
+		{name: "unknown name", lines: []string{"foo: x"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b sseEventBuilder
+			for _, line := range tt.lines {
+				b.consume(line)
+			}
+			got, ok := b.finalize(0)
+			got.Timestamp = time.Time{}
+			if ok != tt.ok || got != tt.want {
+				t.Fatalf("event = %+v, %v, want %+v, %v", got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestSSEIgnoresAMalformedRetry(t *testing.T) {
+	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+		_, _ = io.WriteString(w, "data: one\n\nretry: abc\ndata: two\n\n")
+		flush()
+	})
+
+	transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{})
+	if sum := transcript.Summary; sum.Reason != sseReasonEOF || sum.Error != "" {
+		t.Fatalf("summary = %+v, want a clean EOF", sum)
+	}
+	if len(transcript.Events) != 2 || transcript.Events[1].Data != "two" || transcript.Events[1].Retry != 0 {
+		t.Fatalf("events = %+v, want both events without a retry", transcript.Events)
 	}
 }
 

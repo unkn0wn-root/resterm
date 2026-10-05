@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
@@ -86,36 +85,28 @@ type sseEventBuilder struct {
 	hasRetry bool
 }
 
-func (b *sseEventBuilder) consume(line string) error {
-	switch {
-	case strings.HasPrefix(line, "data:"):
-		b.data = append(b.data, strings.TrimPrefix(line[5:], " "))
-	case strings.HasPrefix(line, "event:"):
-		b.event = strings.TrimPrefix(line[6:], " ")
-	case strings.HasPrefix(line, "id:"):
-		b.id = strings.TrimPrefix(line[3:], " ")
-	case strings.HasPrefix(line, "retry:"):
-		value := strings.TrimLeft(line[6:], " \t")
-		if value == "" {
-			b.retry = 0
-			b.hasRetry = false
-			return nil
+// A line without a colon is a field with an empty value, and unknown fields
+// are ignored, as the SSE spec says.
+func (b *sseEventBuilder) consume(line string) {
+	name, value, _ := strings.Cut(line, ":")
+	value = strings.TrimPrefix(value, " ")
+	switch name {
+	case "": // a leading colon makes a comment
+		b.comment = append(b.comment, value)
+	case "data":
+		b.data = append(b.data, value)
+	case "event":
+		b.event = value
+	case "id":
+		if !strings.Contains(value, "\x00") {
+			b.id = value
 		}
-		n, err := strconv.Atoi(value)
-		if err != nil {
-			return diag.WrapAs(diag.ClassProtocol, err, "parse retry directive")
+	case "retry":
+		// ParseUint rejects a sign, so only ASCII digits pass, and 31 bits fit an int everywhere.
+		if n, err := strconv.ParseUint(value, 10, 31); err == nil {
+			b.retry, b.hasRetry = int(n), true
 		}
-		if n < 0 {
-			return diag.New(diag.ClassProtocol, "retry directive must be non-negative")
-		}
-		b.retry = n
-		b.hasRetry = true
-	case strings.HasPrefix(line, ":"):
-		b.comment = append(b.comment, strings.TrimLeft(line[1:], " \t"))
-	default:
-		// Ignore unrecognised fields per SSE spec.
 	}
-	return nil
 }
 
 func (b *sseEventBuilder) finalize(index int) (SSEEvent, bool) {

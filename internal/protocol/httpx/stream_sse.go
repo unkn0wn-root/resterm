@@ -380,9 +380,7 @@ func (r *sseRun) loop(ctx context.Context) error {
 				r.failure = sseOverrun("event", r.limits.event, "max-event-bytes")
 				return nil
 			}
-			if cerr := r.builder.consume(trimmed); cerr != nil {
-				return cerr
-			}
+			r.builder.consume(trimmed)
 		}
 
 		if capped {
