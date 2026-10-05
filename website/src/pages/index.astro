@@ -21,8 +21,8 @@ const hints: [string, string][] = [
     <Wordmark animate class="mark" />
     <h1>An API-as-code workbench for the terminal.</h1>
     <p class="lead">
-      Resterm is an Open Source API client that keeps requests in plain <code>.http</code> files next to your code.
-      Use keyboard-driven TUI, or run the same files in CI with <code>resterm run</code>.
+      Resterm is an open source API client that keeps requests in plain <code>.http</code> files next to your code. Use
+      the keyboard-driven TUI, or run the same files in CI with <code>resterm run</code>.
     </p>
     <div class="cta">
       <div class="brew">
@@ -59,21 +59,22 @@ const hints: [string, string][] = [
   </section>
 
   <section class="band">
-    <header class="sec">
-      <h2>
-        <span class="sep" aria-hidden="true">
-          ###
-        </span>
-        Requests are plain text
-      </h2>
-      <p>
-        Requests, mocks, workflows and environments are files in your repository. Edit them in any editor or in the
-        terminal UI with autocomplete, and review changes in Git with the rest of your code. One file can hold both
-        mocks and requests. <code>resterm mock</code> serves the mocks and <code>resterm run</code> sends the requests,
-        so you can test without a real backend.
-      </p>
-    </header>
-    <RunDemo />
+    <RunDemo>
+      <header class="sec">
+        <h2>
+          <span class="sep" aria-hidden="true">
+            ###
+          </span>
+          Requests are plain text
+        </h2>
+        <p>
+          Requests, mocks, workflows, environments: almost everything in Resterm is a file in your repo. Use any editor,
+          or Resterm's TUI if you want autocomplete. Changes show up in <code>git diff</code> like any other code. Here{' '}
+          <code>requests.http</code> holds both the mocks and the requests. Start the mocks with{' '}
+          <code>resterm mock</code>, then send the requests with <code>resterm run</code>. No real backend needed.
+        </p>
+      </header>
+    </RunDemo>
   </section>
 
   <section class="band">

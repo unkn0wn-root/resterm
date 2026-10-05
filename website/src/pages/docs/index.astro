@@ -1,6 +1,7 @@
 ---
 import Docs from '../../layouts/Docs.astro';
 import { getDocs } from '../../lib/docs';
+import { version } from '../../lib/version';
 
 const { groups, pages } = await getDocs();
 const start = [
@@ -28,8 +29,8 @@ const start = [
         Documentation
       </h1>
       <p class="lead">
-        The reference for request files, directives, protocols, automation, RestermScript and the CLI. Every page is
-        built from the <code>docs/</code> directory in the repository.
+        The reference for request files, directives, protocols, automation, RestermScript and the CLI. These pages match
+        v{version}, the latest release. Run <code>resterm --version</code> to check yours.
       </p>
       <button class="search" type="button" data-search-open>
         <span class="key">/</span> Search {pages.length} pages
