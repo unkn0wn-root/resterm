@@ -14,23 +14,19 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is an API client for the terminal. Requests are saved in plain `.http` and `.rest` files, so they can live in your repo next to your code. Use them from the terminal UI, or run the same files in CI with `resterm run`.
+Resterm is an API client for the terminal. Send requests, test API flows, record HTTP traffic, and run local mock servers. Requests live in plain `.http` and `.rest` files alongside your code. Open them in the terminal UI, or run the same files in scripts and CI.
 
 ## Why Resterm
 
-- HTTP, GraphQL, gRPC, WebSocket and SSE.
-- Assertions, captures, loops, conditions, polling, retries and multi-step workflows, all written in the http file.
-- Scripting with RestermScript, a small expression language made for Resterm, or JavaScript if you prefer.
-- Mock servers and traffic recording that use the same file format.
-- OAuth 2.0 and tokens from CLIs (like `gh auth token`).
-- SSH tunnels and Kubernetes port-forwards.
-- Tracing with OpenTelemetry export, profiling and side-by-side comparison of responses across environments.
-- Request history you can replay, and a Diff tab that compares a new response with a pinned one.
-- `resterm run` for scripts and CI, with JSON and JUnit reports.
-- Import from curl and OpenAPI. Share a workspace as a bundle that others can import.
-- Multiple environments, switched with `Ctrl+E` or `--env`.
-- Vim-style key bindings.
-- No AI features, no account, no telemetry.
+- **Test complete API flows.** Log in, capture a token, create a resource, and check the result. Add assertions, loops, conditions, retries, and scripts directly in your request files.
+- **Turn real traffic into local mocks.** Record HTTP requests and responses, then save them as runnable requests or mock definitions. Keep mocks next to the requests that use them.
+- **Find out what changed.** Compare responses across environments, diff against earlier results, inspect request timings, and profile repeated runs.
+- **Run the same checks locally and in CI.** Use the terminal UI while developing, then run those files with `resterm run`. Export JSON or JUnit reports.
+- **Work across protocols.** Send HTTP, GraphQL, and gRPC requests, and work with WebSocket and SSE streams.
+
+Built-in SSH tunnels and Kubernetes port-forwards let you reach APIs behind a bastion or inside a cluster.
+
+No account, no telemetry, no AI features.
 
 ## Screenshots
 
