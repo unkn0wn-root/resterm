@@ -114,6 +114,147 @@ func publishedReason(t *testing.T, session *stream.Session) string {
 	return ""
 }
 
+func TestSSEFieldValuesKeepWhitespace(t *testing.T) {
+	values := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "no separator space", raw: "value", want: "value"},
+		{name: "one separator space", raw: " value", want: "value"},
+		{name: "two spaces", raw: "  value", want: " value"},
+		{name: "tab", raw: "\tvalue", want: "\tvalue"},
+		{name: "space then tab", raw: " \tvalue", want: "\tvalue"},
+		{name: "tab then space", raw: "\t value", want: "\t value"},
+		{name: "two tabs", raw: "\t\tvalue", want: "\t\tvalue"},
+		{name: "mixed indentation", raw: " \t value", want: "\t value"},
+		{name: "spaces only", raw: "   ", want: "  "},
+		{name: "tab only", raw: "\t", want: "\t"},
+		{name: "trailing whitespace", raw: "  value \t", want: " value \t"},
+		{name: "empty", raw: "", want: ""},
+	}
+
+	for _, field := range []string{"data", "event", "id"} {
+		t.Run(field, func(t *testing.T) {
+			for _, tt := range values {
+				t.Run(tt.name, func(t *testing.T) {
+					var b sseEventBuilder
+					if field != "data" {
+						for _, line := range []string{"data: payload", field + ": old"} {
+							if err := b.consume(line); err != nil {
+								t.Fatal(err)
+							}
+						}
+					}
+					if err := b.consume(field + ":" + tt.raw); err != nil {
+						t.Fatal(err)
+					}
+					evt, ok := b.finalize(0)
+					if !ok {
+						t.Fatal("field value produced no event")
+					}
+					var got string
+					switch field {
+					case "data":
+						got = evt.Data
+					case "event":
+						got = evt.Event
+					case "id":
+						got = evt.ID
+					}
+					if got != tt.want {
+						t.Fatalf("%s value = %q, want %q", field, got, tt.want)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestSSETranscriptKeepsFieldWhitespace(t *testing.T) {
+	tests := []struct {
+		name  string
+		raw   string
+		data  string
+		event string
+		id    string
+	}{
+		{
+			name: "multiline data",
+			raw:  "data:  first\ndata: \tsecond\ndata: \t third\n\n",
+			data: " first\n\tsecond\n\t third",
+		},
+		{
+			name:  "metadata overwrite",
+			raw:   "event: old\nid: old\nevent:  update\nid: \t42\ndata: payload\n\n",
+			data:  "payload",
+			event: " update",
+			id:    "\t42",
+		},
+		{
+			name: "whitespace only data",
+			raw:  "data:   \ndata: \t\n\n",
+			data: "  \n\t",
+		},
+		{
+			name:  "trailing whitespace",
+			raw:   "event:  update \t\nid:  42 \t\ndata:  payload \t\n\n",
+			data:  " payload \t",
+			event: " update \t",
+			id:    " 42 \t",
+		},
+		{
+			name: "empty data line",
+			raw:  "data:\ndata:  tail\n\n",
+			data: "\n tail",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+				_, _ = io.WriteString(w, tt.raw)
+				flush()
+			})
+			transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{})
+			if len(transcript.Events) != 1 {
+				t.Fatalf("events = %+v, want one event", transcript.Events)
+			}
+			evt := transcript.Events[0]
+			if evt.Data != tt.data || evt.Event != tt.event || evt.ID != tt.id {
+				t.Fatalf("event = %+v, want data %q, event %q, id %q", evt, tt.data, tt.event, tt.id)
+			}
+			if transcript.Summary.Reason != sseReasonEOF || transcript.Summary.Error != "" {
+				t.Fatalf("summary = %+v, want a clean EOF", transcript.Summary)
+			}
+			if transcript.Summary.ByteCount != int64(len(tt.raw)) {
+				t.Fatalf("ByteCount = %d, want %d", transcript.Summary.ByteCount, len(tt.raw))
+			}
+		})
+	}
+}
+
+func TestSSEIndentedDataCountsTowardEventLimit(t *testing.T) {
+	const line = "data:  \tpayload"
+	for _, limit := range []int64{int64(len(line)), int64(len(line) - 1)} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+				_, _ = io.WriteString(w, line+"\n\n")
+				flush()
+			})
+			transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{MaxEventBytes: limit})
+			if limit < int64(len(line)) {
+				if transcript.Summary.Reason != sseReasonEventBytes || len(transcript.Events) != 0 {
+					t.Fatalf("transcript = %+v, want the event byte limit", transcript)
+				}
+				return
+			}
+			if len(transcript.Events) != 1 || transcript.Events[0].Data != " \tpayload" {
+				t.Fatalf("events = %+v, want the indented payload", transcript.Events)
+			}
+		})
+	}
+}
+
 func quietSSE(t *testing.T) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
