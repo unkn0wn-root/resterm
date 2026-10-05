@@ -165,6 +165,23 @@ func TestSkipsHashWhenMetadataUnchangedByDefault(t *testing.T) {
 	}
 }
 
+func TestSettled(t *testing.T) {
+	now := time.Now()
+	for _, tt := range []struct {
+		name string
+		mod  time.Time
+		want bool
+	}{
+		{name: "just written", mod: now, want: false},
+		{name: "an hour old", mod: now.Add(-time.Hour), want: true},
+		{name: "in the future", mod: now.Add(time.Hour), want: false},
+	} {
+		if got := Settled(tt.mod); got != tt.want {
+			t.Errorf("%s: Settled = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestTrackIgnoresEmptyPath(t *testing.T) {
 	w := New(Options{})
 	w.Track("", []byte("ignored"))

@@ -201,6 +201,56 @@ HTTP/1.1 200 OK
 	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/value", nil), http.StatusOK, "two")
 }
 
+func TestReloaderTrustsAnUnchangedStatOnlyOnceItSettles(t *testing.T) {
+	tests := []struct {
+		name   string
+		age    time.Duration
+		wait   time.Duration
+		reload bool
+	}{
+		{name: "edit inside one timestamp step", age: 0, reload: true},
+		{name: "edit loaded after it settled", age: time.Second, wait: 1100 * time.Millisecond, reload: true},
+		{name: "settled file", age: time.Hour, reload: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			path := filepath.Join(root, "mocks.http")
+			fixture := filepath.Join(root, "body.txt")
+			writeFile(t, fixture, "one")
+			writeFile(t, path, "# @mock method=GET path=/value\nHTTP/1.1 200 OK\n\n< ./body.txt")
+			mod := time.Now().Add(-tt.age)
+			for _, f := range []string{path, fixture} {
+				if err := os.Chtimes(f, mod, mod); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			reloader := NewReloader(Sources{Path: root})
+			if handler, err := reloader.Reload("", nil); err != nil || handler == nil {
+				t.Fatalf("initial reload = %v, %v", handler, err)
+			}
+			if handler, err := reloader.Reload("", nil); err != nil || handler != nil {
+				t.Fatalf("unchanged reload = %v, %v", handler, err)
+			}
+			writeFile(t, fixture, "two")
+			if err := os.Chtimes(fixture, mod, mod); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(tt.wait)
+
+			handler, err := reloader.Reload("", nil)
+			if err != nil || (handler != nil) != tt.reload {
+				t.Fatalf("reload after a same-size edit = %v, %v, want a new handler: %v", handler, err, tt.reload)
+			}
+			if tt.reload {
+				assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/value", nil), http.StatusOK, "two")
+			}
+		})
+	}
+}
+
 func TestLoadFileListSelectsOnlyListedSources(t *testing.T) {
 	root := t.TempDir()
 	users := filepath.Join(root, "users.http")

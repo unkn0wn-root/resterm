@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/watcher"
 )
 
 type Reloader struct {
@@ -57,22 +58,28 @@ func (r *Reloader) fingerprint(overlayPath string, overlay []byte) string {
 	}
 
 	h := sha256.New()
+	settled := true
 	for _, f := range res.files {
-		writeStat(h, f)
+		settled = writeStat(h, f) && settled
 	}
 	for _, f := range r.fixtures {
-		writeStat(h, f)
+		settled = writeStat(h, f) && settled
+	}
+	if !settled {
+		// An empty fingerprint makes Reload compare content instead.
+		return ""
 	}
 	_, _ = fmt.Fprintf(h, "%s\x00%d\x00", overlayPath, len(overlay))
 	_, _ = h.Write(overlay)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func writeStat(w io.Writer, path string) {
+func writeStat(w io.Writer, path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
 		_, _ = fmt.Fprintf(w, "%s\x00missing\x00", path)
-		return
+		return true
 	}
 	_, _ = fmt.Fprintf(w, "%s\x00%d\x00%d\x00", path, info.Size(), info.ModTime().UnixNano())
+	return watcher.Settled(info.ModTime())
 }
