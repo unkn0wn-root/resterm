@@ -14,7 +14,7 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is an API client for the terminal. Send requests, test API flows, record HTTP traffic, and run local mock servers. Requests live in plain `.http` and `.rest` files alongside your code. Open them in the terminal UI, or run the same files in scripts and CI.
+Resterm is an API client that uses `.http`/`.rest` files as source code. Almost all the features live in your `.http` files. You can send requests, test API flows, record HTTP traffic and run local mock servers directly from the TUI or run the same definitions in scripts and CI with `resterm run` command.
 
 ## Why Resterm
 
