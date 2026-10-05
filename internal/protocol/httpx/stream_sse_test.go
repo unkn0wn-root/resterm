@@ -1,7 +1,6 @@
 package httpx
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -183,20 +182,25 @@ func TestSSEDispatchesACREventWithoutWaitingForMore(t *testing.T) {
 	}
 }
 
-func TestSSEBlankLineResetsTheIdleTimer(t *testing.T) {
-	idle := make(chan struct{}, 1)
-	run := &sseRun{
-		reader: sseReader{br: bufio.NewReader(strings.NewReader("\n"))},
-		limits: sseLimitsFor(restfile.SSEOptions{}, Options{}),
-		idle:   idle,
+func TestSSEIdleCountsDataInsideALine(t *testing.T) {
+	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+		_, _ = io.WriteString(w, "data: ")
+		flush()
+		for range 6 {
+			time.Sleep(50 * time.Millisecond)
+			_, _ = io.WriteString(w, strings.Repeat("x", 100))
+			flush()
+		}
+		_, _ = io.WriteString(w, "\n\n")
+		flush()
+	})
+
+	transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{IdleTimeout: 150 * time.Millisecond})
+	if sum := transcript.Summary; sum.Reason != sseReasonEOF {
+		t.Fatalf("Reason = %q after %d bytes, want %q", sum.Reason, sum.ByteCount, sseReasonEOF)
 	}
-	if line, err := run.next(); line != "" || err != nil {
-		t.Fatalf("next = %q, %v, want a blank line", line, err)
-	}
-	select {
-	case <-idle:
-	default:
-		t.Fatal("a blank line did not reset the idle timer")
+	if len(transcript.Events) != 1 || transcript.Events[0].Data != strings.Repeat("x", 600) {
+		t.Fatalf("events = %d, want the one line that kept arriving", len(transcript.Events))
 	}
 }
 

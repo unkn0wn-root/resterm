@@ -552,14 +552,14 @@ func TestManagerFindsTokensKeyedWithEmptyClientAuth(t *testing.T) {
 		ClientID:  "app",
 		GrantType: GrantAuthorizationCode,
 	}
-	var key string
+	var key strings.Builder
 	for _, part := range []string{"dev", cfg.TokenURL, cfg.AuthURL, "", "app", "", "", "", GrantAuthorizationCode, "", "", "", ""} {
-		key += cachePart(part)
+		key.WriteString(cachePart(part))
 	}
 	tok := Token{AccessToken: "seed", RefreshToken: "r", Expiry: time.Now().Add(time.Hour)}
 	mgr := NewManager(nil)
 	mgr.Restore([]SnapshotEntry{{
-		Key:    key,
+		Key:    key.String(),
 		Env:    "dev",
 		Config: cfg,
 		Token:  tok,

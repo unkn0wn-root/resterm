@@ -292,8 +292,6 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	return streamResp(handle.Meta, headers, body, acc.summary.Duration), nil
 }
 
-// Idle timer watches for activity resets - each incoming byte triggers a reset.
-// The drain logic after Stop() handles the race where the timer fires just before we reset.
 func runSSESession(
 	session *stream.Session,
 	body io.ReadCloser,
@@ -303,20 +301,19 @@ func runSSESession(
 ) {
 	run := &sseRun{
 		session: session,
-		reader:  sseReader{br: bufio.NewReader(body)},
 		opts:    opts,
 		limits:  limits,
 		summary: SSESummary{Reason: sseReasonEOF},
 	}
 
 	ctx := session.Context()
-	var stopIdle func()
-	run.idle, stopIdle = startIdleWatch(ctx, opts.IdleTimeout, func() {
+	r, stopIdle := watchIdle(ctx, body, opts.IdleTimeout, func() {
 		run.idled.Store(true)
 		// Cancel the request because stopping the session does not unblock the read.
 		stopRead()
 	})
 	defer stopIdle()
+	run.reader = sseReader{br: bufio.NewReader(r)}
 
 	run.finish(ctx, run.loop(ctx))
 }
@@ -329,7 +326,6 @@ type sseRun struct {
 	builder sseEventBuilder
 	summary SSESummary
 	failure error
-	idle    chan<- struct{}
 	idled   atomic.Bool
 	index   int
 	events  int
@@ -344,7 +340,8 @@ func (r *sseRun) loop(ctx context.Context) error {
 			return nil
 		}
 
-		line, err := r.next()
+		line, n, err := r.reader.readLine(r.limits.lineBudget(r.bytes))
+		r.bytes += int64(n)
 
 		if errors.Is(err, errSSELineTooLong) {
 			if r.capped() {
@@ -396,18 +393,6 @@ func (r *sseRun) loop(ctx context.Context) error {
 			return nil
 		}
 	}
-}
-
-func (r *sseRun) next() (string, error) {
-	line, n, err := r.reader.readLine(r.limits.lineBudget(r.bytes))
-	if n > 0 {
-		r.bytes += int64(n)
-		select {
-		case r.idle <- struct{}{}:
-		default:
-		}
-	}
-	return line, err
 }
 
 func (r *sseRun) capped() bool {

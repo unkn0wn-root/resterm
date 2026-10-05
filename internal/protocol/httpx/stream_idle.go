@@ -2,19 +2,15 @@ package httpx
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
-func startIdleWatch(
-	ctx context.Context,
-	d time.Duration,
-	onTimeout func(),
-) (chan<- struct{}, func()) {
+// watchIdle returns r wrapped so that every read that returns data restarts
+// the timer. onTimeout runs once if d passes without data. stop ends the watch.
+func watchIdle(ctx context.Context, r io.Reader, d time.Duration, onTimeout func()) (io.Reader, func()) {
 	if d <= 0 {
-		return nil, func() {}
-	}
-	if onTimeout == nil {
-		onTimeout = func() {}
+		return r, func() {}
 	}
 
 	reset := make(chan struct{}, 1)
@@ -33,16 +29,26 @@ func startIdleWatch(
 				onTimeout()
 				return
 			case <-reset:
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
 				timer.Reset(d)
 			}
 		}
 	}()
 
-	return reset, func() { close(stop) }
+	return idleReader{r: r, reset: reset}, func() { close(stop) }
+}
+
+type idleReader struct {
+	r     io.Reader
+	reset chan<- struct{}
+}
+
+func (r idleReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		select {
+		case r.reset <- struct{}{}:
+		default:
+		}
+	}
+	return n, err
 }
