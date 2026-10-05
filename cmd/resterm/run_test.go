@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -513,6 +516,84 @@ func TestRunCmdUsesDetailedFailureExitCodeByDefault(t *testing.T) {
 	}
 	if code := cli.ExitCode(err); code != 20 {
 		t.Fatalf("expected exit code 20, got %d (err=%v)", code, err)
+	}
+}
+
+func TestRunCmdClassifiesMalformedReplyAsProtocol(t *testing.T) {
+	type failure struct {
+		Code     string `json:"code"`
+		Category string `json:"category"`
+		ExitCode int    `json:"exitCode"`
+	}
+	protocol := failure{Code: "protocol", Category: "protocol", ExitCode: 26}
+	network := failure{Code: "network", Category: "network", ExitCode: 21}
+	tests := []struct {
+		name  string
+		reply string
+		want  failure
+	}{
+		{"status line", "HTTP/1.1 abc OK\r\n\r\n", protocol},
+		{"header", "HTTP/1.1 200 OK\r\nBad Header\r\n\r\n", protocol},
+		{"bad content length", "HTTP/1.1 200 OK\r\nContent-Length: x\r\n\r\n", protocol},
+		{"empty content length", "HTTP/1.1 200 OK\r\nContent-Length:\r\n\r\n", protocol},
+		{"two content lengths", "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n", protocol},
+		{"unknown transfer encoding", "HTTP/1.1 200 OK\r\nTransfer-Encoding: foo\r\n\r\n", protocol},
+		{
+			"two transfer encodings",
+			"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: gzip\r\n\r\n",
+			protocol,
+		},
+		{"no reply", "", network},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatalf("listen: %v", err)
+			}
+			t.Cleanup(func() { _ = ln.Close() })
+			go func() {
+				for {
+					conn, err := ln.Accept()
+					if err != nil {
+						return
+					}
+					_, _ = http.ReadRequest(bufio.NewReader(conn))
+					_, _ = io.WriteString(conn, tt.reply)
+					_ = conn.Close()
+				}
+			}()
+
+			file := filepath.Join(t.TempDir(), "bad.http")
+			src := "# @name bad\nGET http://" + ln.Addr().String() + "/\n"
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+
+			var out bytes.Buffer
+			cmd := newRunCmd()
+			cmd.out = &out
+			cmd.newClient = stubRunClient
+			if err := cmd.parse([]string{"--format", "json", file}); err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			err = cmd.run()
+			if code := cli.ExitCode(err); code != tt.want.ExitCode {
+				t.Fatalf("exit code = %d, want %d (err=%v)", code, tt.want.ExitCode, err)
+			}
+
+			var rep struct {
+				Results []struct {
+					Failure failure `json:"failure"`
+				} `json:"results"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+				t.Fatalf("decode report: %v\n%s", err, out.String())
+			}
+			if len(rep.Results) != 1 || rep.Results[0].Failure != tt.want {
+				t.Fatalf("results = %+v, want one with failure %+v", rep.Results, tt.want)
+			}
+		})
 	}
 }
 

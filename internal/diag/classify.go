@@ -7,8 +7,11 @@ import (
 	"errors"
 	"io/fs"
 	"net"
+	"net/textproto"
 	"net/url"
 	"os"
+	"slices"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -62,6 +65,9 @@ func classify(err error) Class {
 
 	if isTLSError(err) {
 		return ClassTLS
+	}
+	if isMalformedHTTP(err) {
+		return ClassProtocol
 	}
 
 	var dnsErr *net.DNSError
@@ -192,6 +198,27 @@ func isTLSError(err error) bool {
 	}
 	var recordHeader tls.RecordHeaderError
 	return errors.As(err, &recordHeader)
+}
+
+// net/http returns these response errors as plain text, not types.
+var malformedHTTP = [...]string{
+	"malformed HTTP",
+	"bad Content-Length",
+	"invalid empty Content-Length",
+	"http: message cannot contain multiple Content-Length headers",
+	"unsupported transfer encoding",
+	"too many transfer encodings",
+}
+
+func isMalformedHTTP(err error) bool {
+	var proto textproto.ProtocolError
+	if errors.As(err, &proto) {
+		return true
+	}
+	msg := err.Error()
+	return slices.ContainsFunc(malformedHTTP[:], func(p string) bool {
+		return strings.HasPrefix(msg, p)
+	})
 }
 
 func isTransportFailure(class Class) bool {
