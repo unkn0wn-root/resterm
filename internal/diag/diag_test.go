@@ -4,9 +4,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/textproto"
 	"net/url"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/rivo/uniseg"
@@ -271,6 +274,60 @@ func TestClassOfTLSVerificationAndAlerts(t *testing.T) {
 		if got := diag.ClassOf(err); got != diag.ClassTLS {
 			t.Errorf("%s: ClassOf = %q, want %q", name, got, diag.ClassTLS)
 		}
+	}
+}
+
+func TestClassesSplitMalformedRepliesFromDroppedConnections(t *testing.T) {
+	broken := func(err error) error {
+		return fmt.Errorf("net/http: HTTP/1.x transport connection broken: %w", err)
+	}
+	tests := []struct {
+		name string
+		err  error
+		want diag.Class
+	}{
+		{
+			name: "status line",
+			err:  broken(errors.New(`malformed HTTP status code "abc"`)),
+			want: diag.ClassProtocol,
+		},
+		{
+			name: "header",
+			err:  broken(textproto.ProtocolError(`malformed MIME header: missing colon: "Bad Header"`)),
+			want: diag.ClassProtocol,
+		},
+		{
+			name: "dns",
+			err:  &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "api.local"}},
+			want: diag.ClassNetwork,
+		},
+		{
+			name: "refused",
+			err:  &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED},
+			want: diag.ClassNetwork,
+		},
+		{
+			name: "reset",
+			err:  broken(&net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}),
+			want: diag.ClassNetwork,
+		},
+		{
+			name: "cut short",
+			err:  broken(io.ErrUnexpectedEOF),
+			want: diag.ClassNetwork,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := diag.Wrap(
+				&url.Error{Op: "Get", URL: "http://127.0.0.1", Err: tt.err},
+				"perform request",
+				diag.WithComponent(diag.ComponentHTTP),
+			)
+			if got := diag.Classes(err); len(got) != 1 || got[0] != tt.want {
+				t.Fatalf("Classes = %q, want [%q]", got, tt.want)
+			}
+		})
 	}
 }
 
