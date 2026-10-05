@@ -29,9 +29,6 @@ Resterm is an API client for the terminal. Requests are saved in plain `.http` a
 
 ## Screenshots
 
-<details>
-<summary>Click to see more of the UI</summary>
-
 <p align="center">
   <strong>Trace and timeline</strong>
 </p>
@@ -39,6 +36,9 @@ Resterm is an API client for the terminal. Requests are saved in plain `.http` a
 <p align="center">
   <img src="_media/resterm_trace_timeline.png" alt="Screenshot of Resterm with timeline" width="720" />
 </p>
+
+<details>
+<summary>Click to see more of the UI</summary>
 
 <p align="center">
   <strong>Workflows</strong>
