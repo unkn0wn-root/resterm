@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.12.1](https://github.com/unkn0wn-root/resterm/compare/v1.12.0...v1.12.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **mock:** reload same-size edits made within one timestamp step ([7761fa0](https://github.com/unkn0wn-root/resterm/commit/7761fa051143f8093dccac74897278e9cf92f944))
+* **rts:** recheck a recently edited module by content ([da442fa](https://github.com/unkn0wn-root/resterm/commit/da442fa1ab46c7d2163b0f3c051faa25e1859767))
+* **sse:** preserve leading whitespace in field values ([#448](https://github.com/unkn0wn-root/resterm/issues/448)) ([408cd47](https://github.com/unkn0wn-root/resterm/commit/408cd47800419cacf5872aefe4477b1018e1944c))
+
 ## [1.12.0](https://github.com/unkn0wn-root/resterm/compare/v1.11.0...v1.12.0) (2026-10-04)
 
 
