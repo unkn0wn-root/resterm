@@ -11,6 +11,7 @@ import (
 
 type memFS struct {
 	files map[string]*memFile
+	reads int
 }
 
 type memFile struct {
@@ -32,6 +33,7 @@ func (m memInfo) IsDir() bool        { return false }
 func (m memInfo) Sys() any           { return nil }
 
 func (fs *memFS) ReadFile(path string) ([]byte, error) {
+	fs.reads++
 	f, ok := fs.files[path]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -88,6 +90,92 @@ func TestModCacheReload(t *testing.T) {
 	v = m3.Exp["x"]
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected x=2")
+	}
+}
+
+func TestModCacheChecksARecentModuleByContent(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "mod.rts")
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte("export let x = 1"), mod: time.Now()}}}
+	c := NewCache(fs, testStdlib)
+	ctx := NewCtx(context.Background(), Limits{})
+
+	m1, _, err := c.Load(ctx, "", p)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	m2, _, err := c.Load(ctx, "", p)
+	if err != nil {
+		t.Fatalf("load2: %v", err)
+	}
+	if m1 != m2 {
+		t.Fatalf("expected cache hit for unchanged content")
+	}
+
+	fs.files[p].data = []byte("export let x = 2")
+	m3, _, err := c.Load(ctx, "", p)
+	if err != nil {
+		t.Fatalf("load3: %v", err)
+	}
+	if v := m3.Exp["x"]; v.K != VNum || v.N != 2 {
+		t.Fatalf("x = %v after a same-size edit with the same mtime, want 2", v.N)
+	}
+}
+
+func TestUseReadsARecentModuleNameFromTheFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "a.rts")
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte("module abc\nexport let x = 1"), mod: time.Now()}}}
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
+	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "a.rts"}}}
+	pos := Pos{Path: "test", Line: 1, Col: 1}
+
+	if v, err := e.Eval(context.Background(), cfg, "abc.x", pos); err != nil || v.N != 1 {
+		t.Fatalf("abc.x = %v, %v, want 1", v.N, err)
+	}
+	fs.files[p].data = []byte("module xyz\nexport let x = 2")
+	if v, err := e.Eval(context.Background(), cfg, "xyz.x", pos); err != nil || v.N != 2 {
+		t.Fatalf("xyz.x = %v, %v after a same-size rename with the same mtime, want 2", v.N, err)
+	}
+}
+
+func TestUseChecksAModuleOnceMoreAfterItSettles(t *testing.T) {
+	tests := []struct {
+		name string
+		edit string
+		expr string
+		want float64
+	}{
+		{name: "edited before it settled", edit: "module xyz\nexport let x = 2", expr: "xyz.x", want: 2},
+		{name: "unchanged", expr: "abc.x", want: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			p := filepath.Join(dir, "a.rts")
+			mod := time.Now().Add(-time.Second)
+			fs := &memFS{files: map[string]*memFile{p: {data: []byte("module abc\nexport let x = 1"), mod: mod}}}
+			e := NewEng(testStdlib)
+			e.C = NewCache(fs, e.modulePre)
+			cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "a.rts"}}}
+			pos := Pos{Path: "test", Line: 1, Col: 1}
+
+			if v, err := e.Eval(context.Background(), cfg, "abc.x", pos); err != nil || v.N != 1 {
+				t.Fatalf("abc.x = %v, %v, want 1", v.N, err)
+			}
+			if tt.edit != "" {
+				fs.files[p].data = []byte(tt.edit)
+			}
+			time.Sleep(1100 * time.Millisecond)
+			if v, err := e.Eval(context.Background(), cfg, tt.expr, pos); err != nil || v.N != tt.want {
+				t.Fatalf("%s = %v, %v after the module settled, want %v", tt.expr, v.N, err, tt.want)
+			}
+			reads := fs.reads
+			if _, err := e.Eval(context.Background(), cfg, tt.expr, pos); err != nil || fs.reads != reads {
+				t.Fatalf("read the module %d more times after it settled, want 0 (err %v)", fs.reads-reads, err)
+			}
+		})
 	}
 }
 

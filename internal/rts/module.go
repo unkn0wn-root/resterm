@@ -1,11 +1,14 @@
 package rts
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/watcher"
 )
 
 type FS interface {
@@ -18,8 +21,7 @@ type OSFS struct{}
 func (OSFS) ReadFile(path string) ([]byte, error)  { return os.ReadFile(path) }
 func (OSFS) Stat(path string) (os.FileInfo, error) { return os.Stat(path) }
 
-// ModCache compiles .rts modules once per file fingerprint and reloads them
-// when size or modification time changes.
+// ModCache compiles each .rts module once and recompiles it when the file changes.
 type ModCache struct {
 	fs  FS
 	mu  sync.RWMutex
@@ -30,6 +32,10 @@ type ModCache struct {
 type modEnt struct {
 	comp *Comp
 	fp   modFP
+	sum  [sha256.Size]byte
+	// settled means fp had settled before the content was read, so a later
+	// write must change fp.
+	settled bool
 }
 
 type modFP struct {
@@ -70,13 +76,22 @@ func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
 		return nil, p, err
 	}
 
-	if comp := c.get(p, fp); comp != nil {
-		return comp, p, nil
+	settled := watcher.Settled(fp.mod)
+	ent, ok := c.get(p, fp)
+	if ok {
+		return ent.comp, p, nil
 	}
 
 	data, err := c.fs.ReadFile(p)
 	if err != nil {
 		return nil, p, err
+	}
+	sum := sha256.Sum256(data)
+	if ent != nil && ent.fp == fp && ent.sum == sum {
+		if settled {
+			c.set(p, &modEnt{comp: ent.comp, fp: fp, sum: sum, settled: true})
+		}
+		return ent.comp, p, nil
 	}
 
 	mod, err := ParseModule(p, data)
@@ -89,26 +104,21 @@ func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
 	if err != nil {
 		return nil, p, err
 	}
-	c.set(p, fp, comp)
+	c.set(p, &modEnt{comp: comp, fp: fp, sum: sum, settled: settled})
 	return comp, p, nil
 }
 
-func (c *ModCache) get(path string, fp modFP) *Comp {
+// get returns the cached entry and whether fp alone proves it current.
+func (c *ModCache) get(path string, fp modFP) (*modEnt, bool) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-	ent, ok := c.ent[path]
-	if !ok {
-		return nil
-	}
-	if ent.fp == fp {
-		return ent.comp
-	}
-	return nil
+	ent := c.ent[path]
+	c.mu.RUnlock()
+	return ent, ent != nil && ent.settled && ent.fp == fp
 }
 
-func (c *ModCache) set(path string, fp modFP, comp *Comp) {
+func (c *ModCache) set(path string, ent *modEnt) {
 	c.mu.Lock()
-	c.ent[path] = &modEnt{comp: comp, fp: fp}
+	c.ent[path] = ent
 	c.mu.Unlock()
 }
 
