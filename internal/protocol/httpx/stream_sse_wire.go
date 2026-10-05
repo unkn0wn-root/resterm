@@ -117,7 +117,7 @@ func (b *sseEventBuilder) consume(line string) {
 }
 
 func (b *sseEventBuilder) finalize(index int) (SSEEvent, bool) {
-	if !b.hasContent() {
+	if len(b.data) == 0 && len(b.comment) == 0 && b.event == "" && b.id == "" && !b.hasRetry { // no content
 		return SSEEvent{}, false
 	}
 	evt := SSEEvent{
@@ -126,27 +126,9 @@ func (b *sseEventBuilder) finalize(index int) (SSEEvent, bool) {
 		Event:     b.event,
 		Data:      strings.Join(b.data, "\n"),
 		Comment:   strings.Join(b.comment, "\n"),
+		Retry:     b.retry,
 		Timestamp: time.Now(),
-	}
-	if b.hasRetry {
-		evt.Retry = b.retry
 	}
 	*b = sseEventBuilder{}
 	return evt, true
-}
-
-func (b *sseEventBuilder) hasContent() bool {
-	if len(b.data) > 0 {
-		return true
-	}
-	if len(b.comment) > 0 {
-		return true
-	}
-	if b.event != "" {
-		return true
-	}
-	if b.id != "" {
-		return true
-	}
-	return b.hasRetry
 }
