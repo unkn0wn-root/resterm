@@ -96,11 +96,11 @@ func (b *sseEventBuilder) consume(line string) error {
 
 	switch {
 	case strings.HasPrefix(line, "data:"):
-		b.data = append(b.data, strings.TrimLeft(line[5:], " \t"))
+		b.data = append(b.data, strings.TrimPrefix(line[5:], " "))
 	case strings.HasPrefix(line, "event:"):
-		b.event = strings.TrimLeft(line[6:], " \t")
+		b.event = strings.TrimPrefix(line[6:], " ")
 	case strings.HasPrefix(line, "id:"):
-		b.id = strings.TrimLeft(line[3:], " \t")
+		b.id = strings.TrimPrefix(line[3:], " ")
 	case strings.HasPrefix(line, "retry:"):
 		value := strings.TrimLeft(line[6:], " \t")
 		if value == "" {
