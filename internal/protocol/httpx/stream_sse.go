@@ -48,10 +48,7 @@ const (
 	DefaultSSESessionBytes  = 16 << 20
 )
 
-var (
-	errSSELineTooLong   = errors.New("sse line exceeds the line limit")
-	errSSEEventTooLarge = errors.New("sse event exceeds the event limit")
-)
+var errSSELineTooLong = errors.New("sse line exceeds the line limit")
 
 type sseLimits struct {
 	stream int64
@@ -311,7 +308,6 @@ func runSSESession(
 		reader:  bufio.NewReader(body),
 		opts:    opts,
 		limits:  limits,
-		builder: sseEventBuilder{limit: limits.event},
 		summary: SSESummary{Reason: sseReasonEOF},
 	}
 
@@ -340,6 +336,7 @@ type sseRun struct {
 	index   int
 	events  int
 	bytes   int64
+	block   int64
 }
 
 func (r *sseRun) loop(ctx context.Context) error {
@@ -376,13 +373,16 @@ func (r *sseRun) loop(ctx context.Context) error {
 				r.summary.Reason = sseReasonMaxEvents
 				return nil
 			}
-		} else if cerr := r.builder.consume(trimmed); cerr != nil {
-			if !errors.Is(cerr, errSSEEventTooLarge) {
+		} else {
+			r.block += int64(len(trimmed))
+			if r.block > r.limits.event {
+				r.summary.Reason = sseReasonEventBytes
+				r.failure = sseOverrun("event", r.limits.event, "max-event-bytes")
+				return nil
+			}
+			if cerr := r.builder.consume(trimmed); cerr != nil {
 				return cerr
 			}
-			r.summary.Reason = sseReasonEventBytes
-			r.failure = sseOverrun("event", r.limits.event, "max-event-bytes")
-			return nil
 		}
 
 		if capped {
@@ -438,6 +438,7 @@ func (r *sseRun) stop(reason string) {
 }
 
 func (r *sseRun) flush() bool {
+	r.block = 0
 	evt, ok := r.builder.finalize(r.index)
 	if !ok {
 		return false

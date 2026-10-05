@@ -78,8 +78,6 @@ func publishSSEEvent(session *stream.Session, evt SSEEvent) {
 }
 
 type sseEventBuilder struct {
-	limit    int64
-	size     int64
 	id       string
 	event    string
 	comment  []string
@@ -89,11 +87,6 @@ type sseEventBuilder struct {
 }
 
 func (b *sseEventBuilder) consume(line string) error {
-	if b.limit > 0 && b.size+int64(len(line)) > b.limit {
-		return errSSEEventTooLarge
-	}
-	b.size += int64(len(line))
-
 	switch {
 	case strings.HasPrefix(line, "data:"):
 		b.data = append(b.data, strings.TrimPrefix(line[5:], " "))
@@ -140,7 +133,7 @@ func (b *sseEventBuilder) finalize(index int) (SSEEvent, bool) {
 	if b.hasRetry {
 		evt.Retry = b.retry
 	}
-	*b = sseEventBuilder{limit: b.limit}
+	*b = sseEventBuilder{}
 	return evt, true
 }
 
