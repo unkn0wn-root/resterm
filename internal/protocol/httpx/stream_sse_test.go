@@ -659,22 +659,27 @@ func TestSSEFailureSummaryCountsWhatTheRunRead(t *testing.T) {
 	for i := range events {
 		_, _ = fmt.Fprintf(&raw, "data: event-%d\n\n", i)
 	}
-	raw.WriteString("retry: notanumber\n")
+	reset := &net.OpError{Op: "read", Err: errors.New("connection reset by peer")}
 
-	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
-		_, _ = w.Write([]byte(raw.String()))
-		flush()
-	})
+	req := &restfile.Request{Method: "GET", URL: "https://example.com/events", SSE: &restfile.SSERequest{}}
+	resp, err := failingSSEClient(t, raw.String(), reset).ExecuteSSE(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("ExecuteSSE: %v", err)
+	}
+	transcript, err := DecodeSSETranscript(resp.Body)
+	if err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
 
-	sum := sseTranscript(t, srv.URL, restfile.SSEOptions{}).Summary
+	sum := transcript.Summary
 	if sum.Reason != sseReasonErr {
 		t.Fatalf("Reason = %q, want %q", sum.Reason, sseReasonErr)
 	}
-	if !strings.Contains(sum.Error, "retry directive") {
-		t.Fatalf("Error = %q, want the parser failure", sum.Error)
+	if !strings.Contains(sum.Error, "read sse stream") {
+		t.Fatalf("Error = %q, want the read failure", sum.Error)
 	}
-	if sum.ErrorClass != diag.ClassProtocol {
-		t.Fatalf("ErrorClass = %q, want %q", sum.ErrorClass, diag.ClassProtocol)
+	if sum.ErrorClass != diag.ClassNetwork {
+		t.Fatalf("ErrorClass = %q, want %q", sum.ErrorClass, diag.ClassNetwork)
 	}
 	if sum.EventCount != events {
 		t.Fatalf("EventCount = %d, want the %d events the run read", sum.EventCount, events)
@@ -720,7 +725,7 @@ func TestSSEStreamWithoutEventsCountsNothing(t *testing.T) {
 	}
 }
 
-// sseBody serves one event and then fails, so the run ends on a read error.
+// sseBody serves its data and then fails, so the run ends on a read error.
 type sseBody struct {
 	data []byte
 	err  error
@@ -737,7 +742,7 @@ func (b *sseBody) Read(p []byte) (int, error) {
 
 func (b *sseBody) Close() error { return nil }
 
-func failingSSEClient(t *testing.T, err error) *Client {
+func failingSSEClient(t *testing.T, data string, err error) *Client {
 	t.Helper()
 	return newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		rt := roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -745,7 +750,7 @@ func failingSSEClient(t *testing.T, err error) *Client {
 				StatusCode: http.StatusOK,
 				Proto:      "HTTP/1.1",
 				Header:     make(http.Header),
-				Body:       &sseBody{data: []byte("data: ping\n\n"), err: err},
+				Body:       &sseBody{data: []byte(data), err: err},
 				Request:    req,
 			}
 			resp.Header.Set("Content-Type", "text/event-stream")
@@ -780,7 +785,7 @@ func TestSSEReadFailureKeepsItsClass(t *testing.T) {
 				URL:    "https://example.com/events",
 				SSE:    &restfile.SSERequest{},
 			}
-			resp, err := failingSSEClient(t, tt.err).ExecuteSSE(t.Context(), req, nil, Options{})
+			resp, err := failingSSEClient(t, "data: ping\n\n", tt.err).ExecuteSSE(t.Context(), req, nil, Options{})
 			if err != nil {
 				t.Fatalf("ExecuteSSE: %v", err)
 			}
@@ -874,6 +879,24 @@ func TestSSETellsACallerDeadlineFromTheDurationLimit(t *testing.T) {
 			}
 			if got := diag.ClassOf(sum.Err()); got != tt.want {
 				t.Fatalf("Err() class = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func BenchmarkSSERun(b *testing.B) {
+	limits := sseLimitsFor(restfile.SSEOptions{}, Options{})
+	for _, bc := range []struct{ name, body string }{
+		{"one 3MiB line", "data: " + strings.Repeat("x", 3<<20) + "\n\n"},
+		{"small LF events", strings.Repeat("id: 1\ndata: hello\n\n", 1<<12)},
+		{"small CRLF events", strings.Repeat("id: 1\r\ndata: hello\r\n\r\n", 1<<12)},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			b.SetBytes(int64(len(bc.body)))
+			for b.Loop() {
+				s := stream.NewSession(b.Context(), stream.KindSSE, stream.Config{MaxBytes: limits.sessionBytes()})
+				s.MarkOpen()
+				runSSESession(s, io.NopCloser(strings.NewReader(bc.body)), restfile.SSEOptions{}, limits, func() {})
 			}
 		})
 	}
