@@ -406,6 +406,21 @@ func TestSSEEventOverrunIsReported(t *testing.T) {
 	}
 }
 
+func TestSSEEventLimitCountsEachBlock(t *testing.T) {
+	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
+		_, _ = w.Write([]byte(strings.Repeat("foo: 0123456789\n\n", 20) + "data: done\n\n"))
+		flush()
+	})
+
+	transcript := sseTranscript(t, srv.URL, restfile.SSEOptions{MaxEventBytes: 64})
+	if sum := transcript.Summary; sum.Reason != sseReasonEOF || sum.Error != "" {
+		t.Fatalf("summary = %+v, want a clean EOF", sum)
+	}
+	if len(transcript.Events) != 1 || transcript.Events[0].Data != "done" {
+		t.Fatalf("events = %+v, want the one event after the ignored blocks", transcript.Events)
+	}
+}
+
 func TestSSEStreamLimitEndsCleanly(t *testing.T) {
 	srv := sseServer(t, func(w http.ResponseWriter, flush func()) {
 		for range 64 {

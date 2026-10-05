@@ -329,12 +329,12 @@ func FuzzPlaceholderScannerMatchesPattern(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, text string) {
 		var s PlaceholderScanner
-		var fed string
+		var fed strings.Builder
 		for line := range strings.SplitAfterSeq(text, "\n") {
 			s.Feed(line)
-			fed += line
-			if got, want := s.InExpr(), referenceInExpr(fed); got != want {
-				t.Fatalf("%q InExpr = %t, want %t", fed, got, want)
+			fed.WriteString(line)
+			if got, want := s.InExpr(), referenceInExpr(fed.String()); got != want {
+				t.Fatalf("%q InExpr = %t, want %t", fed.String(), got, want)
 			}
 		}
 	})
