@@ -31,19 +31,10 @@ func (s *WebSocketSender) fail(err error) {
 
 // Multiple contexts race here: per-message timeout, session lifetime, and write
 // completion. Nested selects give priority to results that are already available.
-func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
+func (s *WebSocketSender) enqueue(msg wsOutbound) error {
 	if msg.ctx == nil {
 		msg.ctx = s.runtime.session.Context()
 	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			err = diag.New(diag.ClassProtocol, "websocket session closed")
-			if msg.result != nil {
-				msg.result <- err
-			}
-		}
-	}()
 
 	select {
 	case <-s.runtime.session.Context().Done():
@@ -56,11 +47,11 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 		if msg.result != nil {
 			for {
 				select {
-				case err = <-msg.result:
+				case err := <-msg.result:
 					return err
 				case <-msg.ctx.Done():
 					select {
-					case err = <-msg.result:
+					case err := <-msg.result:
 						return err
 					default:
 						if msg.kind == wsOutboundClose {
@@ -70,7 +61,7 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 					}
 				case <-s.runtime.session.Context().Done():
 					select {
-					case err = <-msg.result:
+					case err := <-msg.result:
 						return err
 					default:
 						if msg.kind == wsOutboundClose {
@@ -85,7 +76,7 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 	case <-msg.ctx.Done():
 		if msg.result != nil {
 			select {
-			case err = <-msg.result:
+			case err := <-msg.result:
 				return err
 			default:
 				if msg.kind == wsOutboundClose {
