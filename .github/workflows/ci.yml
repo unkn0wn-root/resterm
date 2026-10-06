@@ -25,6 +25,8 @@ jobs:
         run: |
           go test -race ./internal/recorder
           go test -race ./internal/cli ./cmd/resterm ./internal/ui -run 'Record|Recording|ModalPrecedence'
+      - name: Run stream race tests
+        run: go test -race ./internal/stream ./internal/protocol/httpx
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
