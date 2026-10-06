@@ -94,6 +94,20 @@ func TestApplyGRPCAuthRejectsQueryPlacement(t *testing.T) {
 	}
 }
 
+func TestApplyGRPCAuthRejectsDigest(t *testing.T) {
+	auth := &restfile.AuthSpec{Type: "digest", Params: map[string]string{"username": "u", "password": "p"}}
+
+	err := applyGRPCAuth(grpcAuthRequest(auth), vars.NewResolver())
+	if err == nil || !strings.Contains(err.Error(), "digest auth is not supported for grpc") {
+		t.Fatalf("err = %v, want digest rejected", err)
+	}
+
+	req := grpcAuthRequest(auth, restfile.MetadataPair{Key: "authorization", Value: "Bearer from-user"})
+	if err := applyGRPCAuth(req, vars.NewResolver()); err != nil {
+		t.Fatalf("written metadata: %v", err)
+	}
+}
+
 func TestApplyGRPCAuthKeepsExplicitHeader(t *testing.T) {
 	req := grpcAuthRequest(&restfile.AuthSpec{
 		Type:   "bearer",

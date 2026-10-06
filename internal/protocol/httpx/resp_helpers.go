@@ -3,6 +3,7 @@ package httpx
 import (
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -65,4 +66,23 @@ func partialResp(
 		Timeline:    timeline,
 		TraceReport: report,
 	}
+}
+
+// SentHeaders adds the headers net/http writes from request fields, which
+// RequestHeaders does not hold.
+func (r *Response) SentHeaders() http.Header {
+	h := r.RequestHeaders.Clone()
+	if h == nil {
+		h = make(http.Header)
+	}
+	if h.Get("Host") == "" && r.ReqHost != "" {
+		h.Set("Host", r.ReqHost)
+	}
+	if h.Get("Transfer-Encoding") == "" && len(r.ReqTE) > 0 {
+		h["Transfer-Encoding"] = slices.Clone(r.ReqTE)
+	}
+	if h.Get("Content-Length") == "" && r.ReqLen > 0 {
+		h.Set("Content-Length", strconv.FormatInt(r.ReqLen, 10))
+	}
+	return h
 }

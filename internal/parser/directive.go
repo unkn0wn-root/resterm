@@ -423,7 +423,7 @@ func parseAuthSpec(fields []directive.Field) (*restfile.AuthSpec, error) {
 	authType := restfile.AuthKind(fields[0].Value).Canonical()
 	params := make(map[string]string)
 	switch authType {
-	case restfile.AuthBasic:
+	case restfile.AuthBasic, restfile.AuthDigest:
 		if len(fields) >= 3 {
 			params["username"] = fields[1].Value
 			params["password"] = joinValues(fields[2:])

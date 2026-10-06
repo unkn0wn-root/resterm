@@ -52,23 +52,28 @@ func (g redirectGuard) check(req *http.Request, via []*http.Request) error {
 	// request. The Referer belongs to the single hop being taken, so it is
 	// compared against the previous URL instead.
 	owner, previous := via[0], via[len(via)-1]
+	// net/http keeps a Host header through a redirect that is not a full URL,
+	// even one that moves to another server. Only the server the request was
+	// sent to gets it.
 	if !origin.Same(owner.URL, req.URL) {
+		req.Host = ""
+	}
+	if !sameVirtualHost(owner, req) {
 		if g.confined {
-			return diag.Newf(
-				diag.ClassProtocol,
-				"refusing to follow a redirect from %s to %s",
-				origin.Of(owner.URL),
-				origin.Of(req.URL),
-			)
+			from, to := origin.Of(owner.URL), origin.Of(req.URL)
+			if from == to {
+				from, to = authority(owner), authority(req)
+			}
+			return diag.Newf(diag.ClassProtocol, "refusing to follow a redirect from %s to %s", from, to)
 		}
 		deleteCookies(req.Header)
 	}
 
-	if !origin.Same(previous.URL, req.URL) {
+	if !sameVirtualHost(previous, req) {
 		narrowReferer(req.Header, owner.Header, previous.URL)
 	}
 
-	if g.keepsCredentials(via, req.URL) {
+	if g.keepsCredentials(via, req) {
 		g.restore(req.Header, owner.Header)
 		return nil
 	}
@@ -100,11 +105,44 @@ func (g redirectGuard) restore(dst, initial http.Header) {
 	}
 }
 
-func (g redirectGuard) keepsCredentials(via []*http.Request, next *url.URL) bool {
-	if leftTLS(via, next) {
+func (g redirectGuard) keepsCredentials(via []*http.Request, next *http.Request) bool {
+	if leftTLS(via, next.URL) {
 		return false
 	}
-	return origin.Same(via[0].URL, next) || g.forwardTo.Allows(origin.Of(next))
+	return sameVirtualHost(via[0], next) || g.forwardTo.Allows(origin.Of(next.URL))
+}
+
+// authority is the origin a request is sent to. A Host header replaces the
+// URL's host, because two virtual hosts on one address are separate
+// applications.
+func authority(req *http.Request) origin.Origin {
+	if req.Host == "" {
+		return origin.Of(req.URL)
+	}
+	u := *req.URL
+	u.Host = req.Host
+	return origin.Of(&u)
+}
+
+// sameVirtualHost reports whether b goes to the same server as a and sends the
+// same Host. Two virtual hosts on one address are separate applications.
+func sameVirtualHost(a, b *http.Request) bool {
+	x := authority(a)
+	return origin.Same(a.URL, b.URL) && x.Valid() && x == authority(b)
+}
+
+// reaches applies the credential rules to this redirect.
+// net/http links earlier requests through Response.Request.
+func (g redirectGuard) reaches(hop *http.Request) bool {
+	var via []*http.Request
+	for r := hop.Response; r != nil && r.Request != nil; r = r.Request.Response {
+		via = append(via, r.Request)
+	}
+	if len(via) == 0 {
+		return true
+	}
+	slices.Reverse(via)
+	return g.keepsCredentials(via, hop)
 }
 
 // leftTLS reports whether the chain has gone from an https hop to a plain http

@@ -278,17 +278,15 @@ func TestKeepsCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			next, err := url.Parse(tt.next)
-			if err != nil {
-				t.Fatal(err)
-			}
 			forwards := origin.Set{}
 			if tt.forwards != "" {
+				var err error
 				if forwards, err = ParseForwardCredentials(tt.forwards); err != nil {
 					t.Fatalf("ParseForwardCredentials(%q): %v", tt.forwards, err)
 				}
 			}
 			g := redirectGuard{forwardTo: forwards}
+			next := chain(t, tt.next)[0]
 			if got := g.keepsCredentials(chain(t, tt.chain...), next); got != tt.want {
 				t.Fatalf(
 					"keepsCredentials(%v, %s) = %t, want %t",
@@ -677,6 +675,7 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 		existing string
 		want     []string
 		wantSet  bool
+		digest   bool
 	}{
 		{
 			name: "apikey places its value",
@@ -716,6 +715,24 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 			want:     []string{"Authorization"},
 		},
 		{
+			name: "digest waits for the challenge",
+			auth: &restfile.AuthSpec{Type: restfile.AuthDigest, Params: map[string]string{
+				authParamUsername: "user",
+				authParamPassword: "secret",
+			}},
+			want:   []string{"Authorization"},
+			digest: true,
+		},
+		{
+			name: "digest defers to the request",
+			auth: &restfile.AuthSpec{Type: restfile.AuthDigest, Params: map[string]string{
+				authParamUsername: "user",
+				authParamPassword: "secret",
+			}},
+			existing: "Authorization",
+			want:     []string{"Authorization"},
+		},
+		{
 			name: "apikey in the query targets no header",
 			auth: &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: map[string]string{
 				authParamName:      "api_key",
@@ -742,6 +759,9 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 			}
 			if got := len(plan.Values) > 0; got != tt.wantSet {
 				t.Fatalf("placed a value = %t, want %t", got, tt.wantSet)
+			}
+			if got := plan.Digest != nil; got != tt.digest {
+				t.Fatalf("digest credentials = %t, want %t", got, tt.digest)
 			}
 		})
 	}
@@ -949,6 +969,14 @@ func TestConfinedRedirectIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "https://cdn.example.net") {
 		t.Fatalf("error = %v, want it to name the destination", err)
+	}
+
+	// Only the Host changes, so the error names it instead of one address twice.
+	reqs := chain(t, "https://10.0.0.1/token", "https://10.0.0.1/v2")
+	reqs[0].Host = "idp.example.com"
+	err = redirectPolicy(opts)(reqs[1], reqs[:1])
+	if err == nil || !strings.Contains(err.Error(), "from https://idp.example.com to https://10.0.0.1") {
+		t.Fatalf("error = %v, want it to name the Host the redirect left", err)
 	}
 }
 

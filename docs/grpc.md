@@ -24,7 +24,7 @@ Reserved transport metadata keys, such as `grpc-*`, `content-type`, `user-agent`
 
 Metadata keys ending in `-bin` carry binary values. Write the raw bytes in `@grpc-metadata`. gRPC base64-encodes them on the wire, so the request metadata pane shows the encoded form, not the literal you typed.
 
-`@auth` works on gRPC requests. `basic`, `bearer`, `apikey` and `header` auth are sent as metadata, as are `command` and `oauth2`. `apikey` with `placement query` is rejected, because gRPC has no query string.
+`@auth` works on gRPC requests. `basic`, `bearer`, `apikey` and `header` auth are sent as metadata, as are `command` and `oauth2`. `apikey` with `placement query` is rejected, because gRPC has no query string. Resterm does not support Digest auth for gRPC requests. Explicit `authorization` metadata takes precedence over `@auth`.
 
 Descriptor sets and message files resolve relative to the request file, then against the fallback roots used for HTTP body files.
 

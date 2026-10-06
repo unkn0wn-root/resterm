@@ -17,7 +17,7 @@ func optionLabels(keys []string) []string {
 
 // Each state offers only what the parser accepts next.
 func TestAuthArgsFollowTheGrammar(t *testing.T) {
-	kinds := []string{"basic", "bearer", "apikey", "oauth2", "command"}
+	kinds := []string{"basic", "bearer", "digest", "apikey", "oauth2", "command"}
 	request := slices.Concat([]string{"none"}, kinds, []string{"use="})
 	command := optionLabels(restfile.AuthCommandParams)
 	tests := []struct {
@@ -38,6 +38,7 @@ func TestAuthArgsFollowTheGrammar(t *testing.T) {
 		{"# @auth apikey header ", nil},
 		{"# @auth basic ", nil},
 		{"# @auth bearer ", nil},
+		{"# @auth digest ", nil},
 		{"# @auth none ", nil},
 	}
 	for _, tt := range tests {

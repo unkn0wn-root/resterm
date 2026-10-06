@@ -172,7 +172,7 @@ func (c *Client) StartSSE(
 	}
 
 	start := time.Now()
-	httpResp, err := client.Do(httpReq)
+	httpResp, err := withDigest(client, effectiveOpts).Do(httpReq)
 	if err != nil {
 		if k8sDiag != nil {
 			err = k8s.AnnotateRequestError(err, start, k8sDiag)

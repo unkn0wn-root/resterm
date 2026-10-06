@@ -69,10 +69,10 @@ func (c *Client) applyAuthentication(
 	req *http.Request,
 	resolver *vars.Resolver,
 	auth *restfile.AuthSpec,
-) ([]string, error) {
+) (AuthPlan, error) {
 	plan, err := ResolveAuth(auth, resolver, req.Header, diag.ComponentHTTP)
 	if err != nil {
-		return nil, err
+		return AuthPlan{}, err
 	}
 
 	for _, v := range plan.Values {
@@ -85,7 +85,12 @@ func (c *Client) applyAuthentication(
 			req.Header.Set(v.Name, v.Value)
 		}
 	}
-	return plan.Targets, nil
+	// net/http uses URL credentials for Basic auth when Authorization is absent.
+	// Remove them so @auth digest takes precedence.
+	if plan.Digest != nil {
+		req.URL.User = nil
+	}
+	return plan, nil
 }
 
 type reqMeta struct {

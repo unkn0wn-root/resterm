@@ -402,7 +402,7 @@ func setExplainHTTP(rep *xplain.Report, resp *httpx.Response) {
 	final.Mode = "sent"
 	final.Method = strings.TrimSpace(resp.ReqMethod)
 	final.URL = strings.TrimSpace(resp.EffectiveURL)
-	final.Headers = explainHeaders(resp.RequestHeaders)
+	final.Headers = explainHeaders(resp.SentHeaders())
 	if strings.TrimSpace(final.Protocol) == "" {
 		final.Protocol = "HTTP"
 	}
@@ -429,7 +429,13 @@ func setExplainHTTPPrepared(
 	if httpReq.URL != nil {
 		final.URL = strings.TrimSpace(httpReq.URL.String())
 	}
-	final.Headers = explainHeaders(httpReq.Header)
+	h := httpReq.Header
+	// Show Host from Request.Host; the request builder removes it from Header.
+	if httpReq.URL != nil && httpReq.Host != httpReq.URL.Host {
+		h = h.Clone()
+		h.Set("Host", httpReq.Host)
+	}
+	final.Headers = explainHeaders(h)
 	txt, note, ok := explainBuiltBody(req, body)
 	if !ok {
 		return
@@ -1055,7 +1061,7 @@ func AuthSecretValues(auth *restfile.AuthSpec, res *vars.Resolver) []string {
 	}
 
 	switch auth.Kind() {
-	case restfile.AuthBasic:
+	case restfile.AuthBasic, restfile.AuthDigest:
 		add(expand("password"))
 	case restfile.AuthBearer:
 		add(expand("token"))
@@ -1094,6 +1100,12 @@ func (e *Engine) prepareExplainAuthPreview(
 			status:  xplain.StageOK,
 			summary: xplain.SummaryAuthPrepared,
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
+		}, nil
+	case restfile.AuthDigest:
+		return explainAuthPreviewResult{
+			status:  xplain.StageOK,
+			summary: xplain.SummaryAuthPrepared,
+			notes:   []string{"digest auth is sent after the server's 401 challenge"},
 		}, nil
 	case restfile.AuthCommand:
 		if hdr, ok := e.commandAuthHeader(doc, auth, res); ok && requestHeaderPresent(req, hdr) {
