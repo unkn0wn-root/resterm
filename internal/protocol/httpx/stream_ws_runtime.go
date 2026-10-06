@@ -142,7 +142,7 @@ func (rt *wsRuntime) finishOutbound(evt *stream.Event, err error) {
 		for _, ev := range rt.q {
 			rt.session.Publish(ev)
 		}
-		if rt.writeErr == nil {
+		if err != nil && !errors.Is(err, net.ErrClosed) {
 			rt.writeErr = err
 		}
 		if rt.end {
@@ -292,7 +292,8 @@ func (rt *wsRuntime) touchActivity() {
 	}
 }
 
-// writeLoop never ends the session. readLoop does, after any close frame from the peer.
+// writeLoop never ends the session, and a failed write fails only its send. A write
+// can fail before it touches the connection. readLoop ends the session.
 func (rt *wsRuntime) writeLoop() {
 	ctx := rt.session.Context()
 	for {
@@ -304,7 +305,7 @@ func (rt *wsRuntime) writeLoop() {
 			if msg.result != nil {
 				msg.result <- err
 			}
-			if err != nil || msg.kind == wsOutboundClose {
+			if msg.kind == wsOutboundClose {
 				return
 			}
 		}

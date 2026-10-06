@@ -1465,15 +1465,57 @@ func TestWebSocketSendTimeoutEndsTheSession(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 		err = handle.Sender.SendBinary(ctx, payload, "test")
 		cancel()
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("send error = %v, want its deadline", err)
 		}
-		<-handle.Session.Done()
+		select {
+		case <-handle.Session.Done():
+		case <-time.After(5 * time.Second):
+			t.Fatal("session did not end")
+		}
 		if err := handle.Session.Err(); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("session error = %v, want the send's deadline", err)
 		}
+	}
+}
+
+func TestWebSocketCanceledSendKeepsTheWriterRunning(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		for {
+			if _, _, err := conn.Read(r.Context()); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	req := &restfile.Request{
+		Method:    http.MethodGet,
+		URL:       "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{},
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	for range 20 {
+		handle, _, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = handle.Sender.SendText(canceled, "x", "test")
+		ctx, stop := context.WithTimeout(t.Context(), time.Second)
+		err = handle.Sender.SendText(ctx, "y", "test")
+		stop()
+		if errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal("a send after a canceled one was never written")
+		}
+		handle.Session.Cancel()
+		<-handle.Session.Done()
 	}
 }
