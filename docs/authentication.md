@@ -50,12 +50,21 @@ Use this for machine-to-machine calls where no user is involved.
 GET https://api.example.com/internal/status
 ```
 
-By default, credentials are sent with HTTP Basic authentication. Some providers want them as form fields instead. Use `client_auth=body` for that:
+By default, the client ID and secret are sent to the token endpoint with HTTP Basic authentication. Some providers want them as form fields instead. Use `client_auth=body` for that:
 
 ```http
 # @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" client_auth=body
 GET {{base.url}}/resource
 ```
+
+Resterm puts the client ID and secret into the Basic header as written. The OAuth 2.0 specification asks clients to URL-encode both values first, and some providers expect this. With those providers, a secret containing `+` or `%`, or a client ID containing `:`, is rejected. Wrap the values in `url.encode`:
+
+```http
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{= url.encode(env.get("oauth.clientId")) }} client_secret={{= url.encode(env.get("oauth.clientSecret")) }}
+GET {{base.url}}/resource
+```
+
+If your provider accepts form fields, `client_auth=body` works as well. Do not combine it with `url.encode`. The form body is already encoded, so the secret would be encoded twice.
 
 ### Password grant
 

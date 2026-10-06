@@ -135,6 +135,40 @@ func TestManagerClientCredentialsBodyAuth(t *testing.T) {
 	}
 }
 
+func TestManagerBasicAuthSendsCredentialsUnchanged(t *testing.T) {
+	const id, secret = "my client", "Ab3+x/9Q==%2F:é"
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte(id+":"+secret))
+	auth := map[string]string{}
+	mgr := NewManager(nil)
+	mgr.SetRequestFunc(
+		func(_ context.Context, req *restfile.Request, _ httpx.Options) (*httpx.Response, error) {
+			values, err := url.ParseQuery(req.Body.Text)
+			if err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			auth[values.Get("grant_type")] = req.Headers.Get("Authorization")
+			return &httpx.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body:       []byte(`{"access_token":"t","token_type":"Bearer","expires_in":1,"refresh_token":"r"}`),
+				Headers:    http.Header{},
+			}, nil
+		},
+	)
+
+	cfg := Config{TokenURL: "https://auth.local/token", ClientID: id, ClientSecret: secret}
+	for range 2 {
+		if _, err := mgr.Token(t.Context(), "dev", cfg, httpx.Options{}); err != nil {
+			t.Fatalf("token: %v", err)
+		}
+	}
+	for _, grant := range []string{GrantClientCredentials, "refresh_token"} {
+		if auth[grant] != want {
+			t.Errorf("%s Authorization = %q, want %q", grant, auth[grant], want)
+		}
+	}
+}
+
 func TestManagerClientCredentialsExplicitBasicWithEmptySecret(t *testing.T) {
 	var capturedForm url.Values
 	var capturedAuth string
