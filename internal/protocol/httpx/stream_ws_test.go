@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -370,7 +371,7 @@ func TestWebSocketServerCloseDuringOutboundPublication(t *testing.T) {
 	}
 	closeNow <- struct{}{}
 	runtime.readLoop()
-	runtime.finishOutbound(nil, false)
+	runtime.finishOutbound(nil, nil)
 
 	state, stateErr := session.State()
 	if stateErr != nil {
@@ -1353,5 +1354,168 @@ func TestWebSocketServerPingsDoNotHoldAnIdleSession(t *testing.T) {
 	}
 	if sum := wsTranscript(t, resp).Summary; sum.ClosedBy != stream.WSClosedByTimeout || sum.ErrorClass != "" {
 		t.Fatalf("summary = %s %s %q, want an idle timeout", sum.ClosedBy, sum.ErrorClass, sum.CloseReason)
+	}
+}
+
+func TestWebSocketEndsTheSameWayWithSendsInFlight(t *testing.T) {
+	tests := []struct {
+		name        string
+		serverClose bool
+		end         func(*WebSocketHandle)
+		state       stream.State
+		err         error
+	}{
+		{name: "server close", serverClose: true, state: stream.StateClosed},
+		{
+			name:  "cancel",
+			end:   func(h *WebSocketHandle) { h.Session.Cancel() },
+			state: stream.StateFailed,
+			err:   context.Canceled,
+		},
+		{
+			name: "client close",
+			end: func(h *WebSocketHandle) {
+				_ = h.Sender.Close(context.Background(), stream.WSCloseNormal, "bye", "test")
+			},
+			state: stream.StateClosed,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				conn, err := websocket.Accept(w, r, nil)
+				if err != nil {
+					return
+				}
+				for {
+					if _, _, err := conn.Read(r.Context()); err != nil {
+						return
+					}
+					if tt.serverClose {
+						_ = conn.Close(websocket.StatusNormalClosure, "server done")
+						return
+					}
+				}
+			}))
+			t.Cleanup(srv.Close)
+
+			req := &restfile.Request{
+				Method:    http.MethodGet,
+				URL:       "ws" + strings.TrimPrefix(srv.URL, "http"),
+				WebSocket: &restfile.WebSocketRequest{},
+			}
+			for range 20 {
+				handle, _, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				var sent sync.Once
+				started := make(chan struct{})
+				var senders sync.WaitGroup
+				for range 8 {
+					senders.Go(func() {
+						for handle.Sender.SendText(t.Context(), "x", "test") == nil {
+							sent.Do(func() { close(started) })
+						}
+					})
+				}
+				if tt.end != nil {
+					<-started
+					tt.end(handle)
+				}
+				select {
+				case <-handle.Session.Done():
+				case <-time.After(5 * time.Second):
+					t.Fatal("session did not end")
+				}
+				senders.Wait()
+
+				state, err := handle.Session.State()
+				if state != tt.state || !errors.Is(err, tt.err) {
+					t.Fatalf("session ended %v with %v, want %v with %v", state, err, tt.state, tt.err)
+				}
+			}
+		})
+	}
+}
+
+func TestWebSocketSendTimeoutEndsTheSession(t *testing.T) {
+	hold := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		<-hold
+		_ = conn.CloseNow()
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(hold) })
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{Compression: restfile.OptOf(false)},
+		},
+	}
+	payload := make([]byte, 64<<20)
+	for range 3 {
+		handle, _, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		err = handle.Sender.SendBinary(ctx, payload, "test")
+		cancel()
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("send error = %v, want its deadline", err)
+		}
+		select {
+		case <-handle.Session.Done():
+		case <-time.After(5 * time.Second):
+			t.Fatal("session did not end")
+		}
+		if err := handle.Session.Err(); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("session error = %v, want the send's deadline", err)
+		}
+	}
+}
+
+func TestWebSocketCanceledSendKeepsTheWriterRunning(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		for {
+			if _, _, err := conn.Read(r.Context()); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	req := &restfile.Request{
+		Method:    http.MethodGet,
+		URL:       "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{},
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	for range 20 {
+		handle, _, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = handle.Sender.SendText(canceled, "x", "test")
+		ctx, stop := context.WithTimeout(t.Context(), time.Second)
+		err = handle.Sender.SendText(ctx, "y", "test")
+		stop()
+		if errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal("a send after a canceled one was never written")
+		}
+		handle.Session.Cancel()
+		<-handle.Session.Done()
 	}
 }

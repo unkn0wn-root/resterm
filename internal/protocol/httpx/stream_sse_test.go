@@ -929,8 +929,50 @@ func BenchmarkSSERun(b *testing.B) {
 			for b.Loop() {
 				s := stream.NewSession(b.Context(), stream.KindSSE, stream.Config{MaxBytes: limits.sessionBytes()})
 				s.MarkOpen()
-				runSSESession(s, io.NopCloser(strings.NewReader(bc.body)), restfile.SSEOptions{}, limits, func() {})
+				runSSESession(
+					s.Context(),
+					s,
+					io.NopCloser(strings.NewReader(bc.body)),
+					restfile.SSEOptions{},
+					limits,
+					func() {},
+				)
 			}
 		})
+	}
+}
+
+func TestSSESessionCancelStopsAWaitingRead(t *testing.T) {
+	hold := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: ping\n\n")
+		w.(http.Flusher).Flush()
+		select {
+		case <-hold:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(hold) })
+
+	req := &restfile.Request{Method: http.MethodGet, URL: srv.URL, SSE: &restfile.SSERequest{}}
+	handle, _, err := NewClient(nil).StartSSE(t.Context(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener := handle.Session.Subscribe()
+	defer listener.Cancel()
+	if len(listener.Snapshot.Events) == 0 {
+		<-listener.C
+	}
+	handle.Session.Cancel()
+	select {
+	case <-handle.Session.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceling the session did not stop the read")
+	}
+	if got := publishedReason(t, handle.Session); got != sseReasonCanceled {
+		t.Fatalf("reason = %q, want %q", got, sseReasonCanceled)
 	}
 }

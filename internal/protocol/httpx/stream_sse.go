@@ -210,10 +210,12 @@ func (c *Client) StartSSE(
 
 	go func() {
 		defer cancel()
+		// A canceled session must also stop a read that waits for data.
+		defer context.AfterFunc(session.Context(), cancel)()
 		defer func() {
 			_ = httpResp.Body.Close()
 		}()
-		runSSESession(session, httpResp.Body, streamOpts, limits, cancel)
+		runSSESession(streamCtx, session, httpResp.Body, streamOpts, limits, cancel)
 	}()
 
 	return &StreamHandle{Session: session, Meta: meta}, nil, nil
@@ -292,7 +294,10 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	return streamResp(handle.Meta, headers, body, acc.summary.Duration), nil
 }
 
+// ctx belongs to the read. The session context is its child and can still look
+// live for a moment after a cancel has ended the read.
 func runSSESession(
+	ctx context.Context,
 	session *stream.Session,
 	body io.ReadCloser,
 	opts restfile.SSEOptions,
@@ -306,7 +311,6 @@ func runSSESession(
 		summary: SSESummary{Reason: sseReasonEOF},
 	}
 
-	ctx := session.Context()
 	r, stopIdle := watchIdle(ctx, body, opts.IdleTimeout, func() {
 		run.idled.Store(true)
 		// Cancel the request because stopping the session does not unblock the read.

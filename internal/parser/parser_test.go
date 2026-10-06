@@ -4080,21 +4080,30 @@ GET wss://example.com/socket
 	}
 }
 
-func TestParseWebSocketCloseReasonWithoutCode(t *testing.T) {
-	src := `# @ws close going away
-GET wss://example.com/socket
-`
-
-	doc := Parse("websocket-close-reason.http", []byte(src))
-	if len(doc.Errors) != 0 {
-		t.Fatalf("expected reason-only close step to remain valid, got %v", doc.Errors)
+func TestParseWebSocketCloseReason(t *testing.T) {
+	tests := []struct {
+		step   string
+		code   int
+		reason string
+	}{
+		{step: "close going away", code: 1000, reason: "going away"},
+		{step: `close "going away"`, code: 1000, reason: "going away"},
+		{step: `close 4001 "client done"`, code: 4001, reason: "client done"},
+		{step: `close 4001 say "hi"`, code: 4001, reason: `say "hi"`},
 	}
-	if len(doc.Requests) != 1 || doc.Requests[0].WebSocket == nil {
-		t.Fatalf("expected WebSocket request, got %+v", doc.Requests)
-	}
-	steps := doc.Requests[0].WebSocket.Steps
-	if len(steps) != 1 || steps[0].Code != 1000 || steps[0].Reason != "going away" {
-		t.Fatalf("unexpected close step: %+v", steps)
+	for _, tt := range tests {
+		src := "# @ws " + tt.step + "\nGET wss://example.com/socket\n"
+		doc := Parse("websocket-close-reason.http", []byte(src))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("%s: unexpected errors %v", tt.step, doc.Errors)
+		}
+		if len(doc.Requests) != 1 || doc.Requests[0].WebSocket == nil {
+			t.Fatalf("%s: expected WebSocket request, got %+v", tt.step, doc.Requests)
+		}
+		steps := doc.Requests[0].WebSocket.Steps
+		if len(steps) != 1 || steps[0].Code != tt.code || steps[0].Reason != tt.reason {
+			t.Fatalf("%s: got %+v, want code %d reason %q", tt.step, steps, tt.code, tt.reason)
+		}
 	}
 }
 
