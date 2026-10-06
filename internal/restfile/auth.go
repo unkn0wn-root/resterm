@@ -21,6 +21,7 @@ const (
 	AuthHeader  AuthKind = "header"
 	AuthCommand AuthKind = "command"
 	AuthOAuth2  AuthKind = "oauth2"
+	AuthDigest  AuthKind = "digest"
 )
 
 var authAliases = map[AuthKind]AuthKind{"api-key": AuthAPIKey}
@@ -56,6 +57,7 @@ var authKeywords = map[AuthKind]struct{}{
 	AuthAPIKey:  {},
 	AuthCommand: {},
 	AuthOAuth2:  {},
+	AuthDigest:  {},
 }
 
 // A custom header named after a scope, the disable switch, or a type has no

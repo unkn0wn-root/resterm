@@ -25,6 +25,12 @@ func TestRenderRoundTripsEveryAuthForm(t *testing.T) {
 			params: map[string]string{"username": "user", "password": "pass"},
 		},
 		{
+			name:   "digest",
+			source: "# @auth Digest user pass word",
+			want:   restfile.AuthDigest,
+			params: map[string]string{"username": "user", "password": "pass word"},
+		},
+		{
 			name:   "bearer",
 			source: "# @auth bearer tok-123",
 			want:   restfile.AuthBearer,
@@ -148,7 +154,7 @@ func TestRenderRejectsAuthItCannotWrite(t *testing.T) {
 	}{
 		{
 			name: "unsupported type",
-			auth: restfile.AuthSpec{Type: "digest", Params: map[string]string{"user": "u"}},
+			auth: restfile.AuthSpec{Type: "ntlm", Params: map[string]string{"user": "u"}},
 		},
 		{
 			name: "custom header with no name",
@@ -201,9 +207,9 @@ func TestRenderRejectsAuthItCannotWrite(t *testing.T) {
 // a different way.
 func TestRenderRejectsReservedCustomHeaderNames(t *testing.T) {
 	reserved := []string{
-		"basic", "bearer", "apikey", "api-key", "oauth2", "command",
+		"basic", "bearer", "apikey", "api-key", "oauth2", "command", "digest",
 		"none", "request", "file", "global",
-		"Bearer", "BASIC", "None", "File", "Api-Key",
+		"Bearer", "BASIC", "None", "File", "Api-Key", "Digest",
 	}
 	// Several words give the reserved form enough tokens to parse, which is when
 	// the swap goes unnoticed instead of failing.
@@ -227,7 +233,7 @@ func TestRenderRejectsReservedCustomHeaderNames(t *testing.T) {
 
 // "header" is the only kind with no keyword of its own, so it stays usable.
 func TestRenderKeepsHeaderNamesThatAreNotReserved(t *testing.T) {
-	names := []string{"X-Release-Auth", "Authorization", "X-API-Token", "x-custom", "header", "digest", "token"}
+	names := []string{"X-Release-Auth", "Authorization", "X-API-Token", "x-custom", "header", "Digest-Auth", "token"}
 	values := []string{"secret", "user pass", "a b c"}
 
 	for _, name := range names {

@@ -373,3 +373,14 @@ func TestParseSpacedAuthKeepsItsPlace(t *testing.T) {
 		t.Fatalf("auth = %+v, want the line rejected, not read as a header named use", a)
 	}
 }
+
+func TestParseRejectsDigestAsCustomHeader(t *testing.T) {
+	src := "### h\n# @auth Digest sha-256=abc\nGET https://example.com/h\n"
+	doc := Parse("/ws/api.http", []byte(src))
+	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, "requires a valid auth spec") {
+		t.Fatalf("errors = %v, want the Digest header line rejected", doc.Errors)
+	}
+	if h := doc.Requests[0].Metadata.Auth; h == nil || h.Rejected == "" {
+		t.Fatalf("Digest header line = %+v, want rejected", h)
+	}
+}

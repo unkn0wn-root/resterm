@@ -74,6 +74,7 @@ func authKinds(command argument) []argument {
 	return []argument{
 		word("basic", "Basic auth with username and password").withExample("user pass").then(),
 		word("bearer", "Bearer token auth").withExample("{{token}}").then(),
+		word("digest", "Digest auth after a server challenge").withExample("user pass").then(),
 		word("apikey", "API key auth in header or query").
 			withExample("header X-API-Key {{key}}").
 			then(

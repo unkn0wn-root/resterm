@@ -313,8 +313,8 @@ func authArgs(auth restfile.AuthSpec) ([]string, error) {
 		return append([]string{"use=" + auth.Use}, params...), nil
 	}
 	switch kind := auth.Kind(); kind {
-	case restfile.AuthBasic:
-		return []string{"basic", strings.TrimSpace(p["username"]), strings.TrimSpace(p["password"])}, nil
+	case restfile.AuthBasic, restfile.AuthDigest:
+		return []string{string(kind), strings.TrimSpace(p["username"]), strings.TrimSpace(p["password"])}, nil
 	case restfile.AuthBearer:
 		return []string{"bearer", strings.TrimSpace(p["token"])}, nil
 	case restfile.AuthAPIKey:
