@@ -40,3 +40,7 @@ type WSMetadata struct {
 	Code     WSCloseCode
 	Reason   string
 }
+
+func (m WSMetadata) size() int {
+	return len(m.Step) + len(m.Reason)
+}

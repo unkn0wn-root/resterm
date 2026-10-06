@@ -49,7 +49,7 @@ func (e *Event) Size() int64 {
 	if e == nil {
 		return 0
 	}
-	size := len(e.Payload) + len(e.SSE.Name) + len(e.SSE.ID) + len(e.SSE.Comment) + len(e.WS.Step) + len(e.WS.Reason)
+	size := len(e.Payload) + e.SSE.size() + e.WS.size()
 	for key, value := range e.Metadata {
 		size += len(key) + len(value)
 	}
@@ -62,6 +62,10 @@ type SSEMetadata struct {
 	ID      string
 	Comment string
 	Retry   int
+}
+
+func (m SSEMetadata) size() int {
+	return len(m.Name) + len(m.ID) + len(m.Comment)
 }
 
 var seqCounter uint64
