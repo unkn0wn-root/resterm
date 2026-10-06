@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/cli"
 )
 
 func TestRunInitTakesDirFromFlagOrPositional(t *testing.T) {
@@ -43,8 +45,29 @@ func TestRunInitRejectsDirFlagWithPositional(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			t.Chdir(t.TempDir())
 			_, _, err := captureRunIO(t, func() error { return runInit(args) })
-			if err == nil {
-				t.Fatalf("runInit(%q) = nil, want an ambiguity error", args)
+			if cli.ExitCode(err) != 2 {
+				t.Fatalf("runInit(%q) = %v, want a usage error", args, err)
+			}
+		})
+	}
+}
+
+func TestRunInitUsageErrors(t *testing.T) {
+	for _, args := range [][]string{
+		{"--bogus"},
+		{"--list", "extra"},
+		{"one", "two"},
+		{"--template", "missing"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			_, _, err := captureRunIO(t, func() error { return runInit(args) })
+			if cli.ExitCode(err) != 2 {
+				t.Fatalf("runInit(%q) = %v, want a usage error", args, err)
+			}
+			if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+				t.Fatalf("runInit(%q) wrote files on a usage error", args)
 			}
 		})
 	}

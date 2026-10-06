@@ -58,11 +58,11 @@ func controlSetup(
 		if errors.Is(err, cli.ErrHelp) {
 			return nil, nil, true, nil
 		}
-		return nil, nil, false, mockUsageError(err)
+		return nil, nil, false, cli.UsageError(err)
 	}
 	client, err = cfg.client()
 	if err != nil {
-		return nil, nil, false, mockUsageError(fmt.Errorf("%s: %w", cmd, err))
+		return nil, nil, false, cli.UsageError(fmt.Errorf("%s: %w", cmd, err))
 	}
 	return client, fs.Args(), false, nil
 }
@@ -77,13 +77,13 @@ func runMockReset(args []string, out, errOut io.Writer) error {
 		return err
 	}
 	if len(pos) > 1 {
-		return mockUsageError(errors.New("mock reset accepts at most one sequence name"))
+		return cli.UsageError(errors.New("mock reset accepts at most one sequence name"))
 	}
 	name := ""
 	if len(pos) == 1 {
 		name = strings.TrimSpace(pos[0])
 		if name == "" || !restfile.ValidMockName(name) {
-			return mockUsageError(fmt.Errorf("invalid mock sequence name %q", pos[0]))
+			return cli.UsageError(fmt.Errorf("invalid mock sequence name %q", pos[0]))
 		}
 	}
 	ctx, stop := controlContext()
@@ -105,7 +105,7 @@ func runMockClear(args []string, out, errOut io.Writer) error {
 		return err
 	}
 	if len(pos) != 0 {
-		return mockUsageError(errors.New("mock clear does not accept positional arguments"))
+		return cli.UsageError(errors.New("mock clear does not accept positional arguments"))
 	}
 	ctx, stop := controlContext()
 	defer stop()
@@ -132,7 +132,7 @@ func runMockVerify(args []string, out, errOut io.Writer) error {
 		return err
 	}
 	if len(pos) > 1 {
-		return mockUsageError(errors.New("mock verify accepts at most one source"))
+		return cli.UsageError(errors.New("mock verify accepts at most one source"))
 	}
 	path := "."
 	if len(pos) == 1 {
@@ -140,16 +140,16 @@ func runMockVerify(args []string, out, errOut io.Writer) error {
 	}
 	src, err := mock.NewSources(path, recursive, sources)
 	if err != nil {
-		return mockUsageError(fmt.Errorf("mock verify: %w", err))
+		return cli.UsageError(fmt.Errorf("mock verify: %w", err))
 	}
 	handler, err := mock.Load(src, nil)
 	if err != nil {
-		return mockUsageError(fmt.Errorf("mock verify: %w", err))
+		return cli.UsageError(fmt.Errorf("mock verify: %w", err))
 	}
 	expectations := handler.Expectations()
 	if len(expectations) == 0 {
 		err := fmt.Errorf("mock verify: no # @expect declarations found in %s", path)
-		return mockUsageError(err)
+		return cli.UsageError(err)
 	}
 	ctx, stop := controlContext()
 	defer stop()

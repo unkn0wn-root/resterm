@@ -1,11 +1,14 @@
 package initcmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 )
+
+var ErrUnknownTemplate = errors.New("unknown template")
 
 // Command runs the init command with injectable dependencies.
 type Command struct {
@@ -62,7 +65,8 @@ func unknownTemplateErr(tpls TemplateStore, name string) error {
 		name = "(empty)"
 	}
 	return fmt.Errorf(
-		"init: unknown template %q (available: %s)",
+		"init: %w %q (available: %s)",
+		ErrUnknownTemplate,
 		name,
 		strings.Join(tpls.Names(), ", "),
 	)

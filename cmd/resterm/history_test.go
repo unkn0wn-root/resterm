@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -26,15 +27,15 @@ func TestHandleHistorySubcommandNotMatched(t *testing.T) {
 
 func TestRunHistoryRequiresSubcommand(t *testing.T) {
 	err := runHistory(nil)
-	if err == nil {
-		t.Fatalf("expected error for missing subcommand")
+	if cli.ExitCode(err) != 2 {
+		t.Fatalf("missing subcommand: err = %v, want a usage error", err)
 	}
 }
 
 func TestRunHistoryUnknownSubcommand(t *testing.T) {
 	err := runHistory([]string{"unknown"})
-	if err == nil {
-		t.Fatalf("expected error for unknown subcommand")
+	if cli.ExitCode(err) != 2 {
+		t.Fatalf("unknown subcommand: err = %v, want a usage error", err)
 	}
 }
 
@@ -274,11 +275,15 @@ func TestRunHistoryFlagErrorsHaveCommandPrefix(t *testing.T) {
 		{args: []string{"stats", "--bad"}, want: "history stats:"},
 		{args: []string{"check", "--bad"}, want: "history check:"},
 		{args: []string{"compact", "--bad"}, want: "history compact:"},
+		{args: []string{"stats", "extra"}, want: "history stats:"},
+		{args: []string{"export"}, want: "history export: --out is required"},
+		{args: []string{"import"}, want: "history import: --in is required"},
+		{args: []string{"backup"}, want: "history backup: --out is required"},
 	}
 	for _, tc := range cases {
 		err := runHistory(tc.args)
-		if err == nil {
-			t.Fatalf("expected error for %v", tc.args)
+		if cli.ExitCode(err) != 2 {
+			t.Fatalf("%v: err = %v, want a usage error", tc.args, err)
 		}
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("expected error %q to contain %q", err.Error(), tc.want)

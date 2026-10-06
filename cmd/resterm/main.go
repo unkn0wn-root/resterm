@@ -141,7 +141,7 @@ func run(a []string) error {
 			printMainUsage(os.Stderr, fs)
 			return nil
 		}
-		return cli.ExitErr{Err: err, Code: 2}
+		return cli.UsageError(err)
 	}
 
 	if showVersion {

@@ -30,7 +30,7 @@ func runInit(args []string) error {
 		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
-		return err
+		return cli.UsageError(err)
 	}
 	return c.run()
 }
@@ -71,7 +71,7 @@ func (c *initCmd) run() error {
 	extra := c.fs.Args()
 	if c.list {
 		if len(extra) > 0 {
-			return fmt.Errorf("init: unexpected args: %s", strings.Join(extra, " "))
+			return cli.UsageError(fmt.Errorf("init: unexpected args: %s", strings.Join(extra, " ")))
 		}
 		return initcmd.Run(initcmd.Opt{List: true, Out: os.Stdout})
 	}
@@ -79,7 +79,7 @@ func (c *initCmd) run() error {
 		if !c.fs.WasSet("dir") && len(extra) == 1 {
 			c.dir = extra[0]
 		} else {
-			return fmt.Errorf("init: unexpected args: %s", strings.Join(extra, " "))
+			return cli.UsageError(fmt.Errorf("init: unexpected args: %s", strings.Join(extra, " ")))
 		}
 	}
 
@@ -91,7 +91,11 @@ func (c *initCmd) run() error {
 		NoGitignore: c.noGi,
 		Out:         os.Stdout,
 	}
-	return initcmd.Run(o)
+	err := initcmd.Run(o)
+	if errors.Is(err, initcmd.ErrUnknownTemplate) {
+		return cli.UsageError(err)
+	}
+	return err
 }
 
 func (c *initCmd) usage() {
