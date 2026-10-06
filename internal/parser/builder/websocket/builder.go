@@ -260,11 +260,11 @@ func parseWSClose(rest string, step *restfile.WebSocketStep) error {
 			)
 		}
 		step.Code = code
-		step.Reason = str.Trim(tail)
+		step.Reason = directive.TrimQuotes(str.Trim(tail))
 		return nil
 	}
 	step.Code = wsCloseOK
-	step.Reason = str.Trim(rest)
+	step.Reason = directive.TrimQuotes(str.Trim(rest))
 	return nil
 }
 
