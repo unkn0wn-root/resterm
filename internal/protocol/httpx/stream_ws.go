@@ -8,10 +8,9 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strings"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
@@ -20,58 +19,33 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-const (
-	wsMetaType        = "resterm.ws.type"
-	wsMetaStep        = "resterm.ws.step"
-	wsMetaClosedBy    = "resterm.ws.closed.by"
-	wsMetaCloseCode   = "resterm.ws.close.code"
-	wsMetaCloseReason = "resterm.ws.close.reason"
-)
-
-// Values used for WebSocketSummary.ClosedBy.
-const (
-	wsClosedByServer   = "server"
-	wsClosedByClient   = "client"
-	wsClosedByTimeout  = "timeout"
-	wsClosedByCanceled = "canceled"
-	wsClosedByError    = "error"
-)
-
 const defaultWebSocketSendQueue = 32
 
 const webSocketSwitchingProtocolsStatus = "101 Switching Protocols"
 
-const (
-	wsOpcodeText   = 0x1
-	wsOpcodeBinary = 0x2
-	wsOpcodeClose  = 0x8
-	wsOpcodePing   = 0x9
-	wsOpcodePong   = 0xA
-
-	websocketControlMaxPayload = 125
-)
+const websocketControlMaxPayload = 125
 
 type WebSocketEvent struct {
-	Step      string    `json:"step,omitempty"`
-	Direction string    `json:"direction"`
-	Type      string    `json:"type"`
-	Size      int       `json:"size"`
-	Text      string    `json:"text,omitempty"`
-	Base64    string    `json:"base64,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
-	Code      int       `json:"code,omitempty"`
-	Reason    string    `json:"reason,omitempty"`
+	Step      string        `json:"step,omitempty"`
+	Direction string        `json:"direction"`
+	Type      stream.WSType `json:"type"`
+	Size      int           `json:"size"`
+	Text      string        `json:"text,omitempty"`
+	Base64    string        `json:"base64,omitempty"`
+	Timestamp time.Time     `json:"timestamp"`
+	Code      int           `json:"code,omitempty"`
+	Reason    string        `json:"reason,omitempty"`
 }
 
 type WebSocketSummary struct {
-	SentCount     int           `json:"sentCount"`
-	ReceivedCount int           `json:"receivedCount"`
-	Duration      time.Duration `json:"duration"`
-	ClosedBy      string        `json:"closedBy"`
-	CloseCode     int           `json:"closeCode,omitempty"`
-	CloseReason   string        `json:"closeReason,omitempty"`
-	Dropped       int64         `json:"dropped,omitempty"`
-	ErrorClass    diag.Class    `json:"errorClass,omitempty"`
+	SentCount     int               `json:"sentCount"`
+	ReceivedCount int               `json:"receivedCount"`
+	Duration      time.Duration     `json:"duration"`
+	ClosedBy      stream.WSClosedBy `json:"closedBy"`
+	CloseCode     int               `json:"closeCode,omitempty"`
+	CloseReason   string            `json:"closeReason,omitempty"`
+	Dropped       int64             `json:"dropped,omitempty"`
+	ErrorClass    diag.Class        `json:"errorClass,omitempty"`
 }
 
 type WebSocketTranscript struct {
@@ -83,17 +57,17 @@ type WebSocketTranscript struct {
 // deadline. A close from either side and an idle timeout are normal endings.
 func (s WebSocketSummary) Err() error {
 	switch s.ClosedBy {
-	case wsClosedByCanceled:
+	case stream.WSClosedByCanceled:
 		return diag.New(
 			s.ErrorClass.KnownOr(diag.ClassCanceled),
 			cmp.Or(s.CloseReason, "websocket stream canceled"),
 		)
-	case wsClosedByTimeout:
+	case stream.WSClosedByTimeout:
 		if !s.ErrorClass.Known() {
 			return nil
 		}
 		return diag.New(s.ErrorClass, cmp.Or(s.CloseReason, "websocket stream ran out of time"))
-	case wsClosedByError:
+	case stream.WSClosedByError:
 		return diag.New(
 			s.ErrorClass.KnownOr(diag.ClassProtocol),
 			cmp.Or(s.CloseReason, "websocket stream failed"),
@@ -119,14 +93,14 @@ const (
 )
 
 type wsOutbound struct {
-	ctx      context.Context
-	kind     wsOutboundKind
-	msgType  websocket.MessageType
-	payload  []byte
-	code     websocket.StatusCode
-	reason   string
-	metadata map[string]string
-	result   chan error
+	ctx     context.Context
+	kind    wsOutboundKind
+	typ     stream.WSType
+	payload []byte
+	code    stream.WSCloseCode
+	reason  string
+	step    string
+	result  chan error
 }
 
 func (c *Client) StartWebSocket(
@@ -165,14 +139,6 @@ func (c *Client) StartWebSocket(
 			diag.WithComponent(diag.ComponentHTTP),
 		)
 	}
-	// The websocket library uses the URL's host for its handshake.
-	if !strings.EqualFold(httpReq.Host, httpReq.URL.Host) {
-		return nil, nil, diag.Newf(
-			diag.ClassProtocol,
-			"a Host header other than the URL host (%s) is not supported for websocket requests",
-			httpReq.URL.Host,
-		)
-	}
 
 	client, err := c.streamClient(effectiveOpts)
 	if err != nil {
@@ -180,7 +146,16 @@ func (c *Client) StartWebSocket(
 		return nil, nil, err
 	}
 
-	dialOpts := wsDialOptions(httpReq, wsOpts, client)
+	// The conn reports control frames only from inside its own methods, which
+	// run after the runtime gets its conn and session below.
+	runtime := &wsRuntime{
+		writeCh: make(chan wsOutbound, defaultWebSocketSendQueue),
+		pulse:   make(chan struct{}, 1),
+		limit:   webSocketReadLimit(wsOpts.MaxMessageBytes, effectiveOpts.WSMaxMessageBytes),
+	}
+	dialOpts := wsDialOptions(httpReq, wsOpts, effectiveOpts.WSCompression, client)
+	dialOpts.OnPingReceived = runtime.pingReceived
+	dialOpts.OnPongReceived = runtime.pongReceived
 
 	dial := c.wsDial
 	if dial == nil {
@@ -235,16 +210,9 @@ func (c *Client) StartWebSocket(
 	session := stream.NewSession(sessionCtx, stream.KindWebSocket, stream.Config{})
 	session.MarkOpen()
 
-	runtime := &wsRuntime{
-		conn:    conn,
-		session: session,
-		writeCh: make(chan wsOutbound, defaultWebSocketSendQueue),
-		cancel:  sessionCancel,
-		pulse:   make(chan struct{}, 1),
-	}
+	runtime.conn, runtime.session, runtime.cancel = conn, session, sessionCancel
 	runtime.touchActivity()
-
-	conn.SetReadLimit(webSocketReadLimit(wsOpts.MaxMessageBytes, effectiveOpts.WSMaxMessageBytes))
+	conn.SetReadLimit(runtime.limit)
 
 	if wsOpts.IdleTimeout > 0 {
 		go runtime.idleWatch(wsOpts.IdleTimeout)
@@ -260,25 +228,22 @@ func (c *Client) StartWebSocket(
 func wsDialOptions(
 	req *http.Request,
 	wsOpts restfile.WebSocketOptions,
+	compression restfile.Opt[bool],
 	client *http.Client,
 ) *websocket.DialOptions {
-	var hdr http.Header
-	if req != nil {
-		hdr = req.Header.Clone()
+	// The directive wins over the ws-compression setting. The library offers no
+	// compression unless asked, so resterm asks by default.
+	mode := websocket.CompressionDisabled
+	if wsOpts.Compression.Or(compression.Or(true)) {
+		mode = websocket.CompressionNoContextTakeover
 	}
-	opts := &websocket.DialOptions{
-		HTTPHeader:   hdr,
-		Subprotocols: slices.Clone(wsOpts.Subprotocols),
-		HTTPClient:   client,
+	return &websocket.DialOptions{
+		HTTPHeader:      req.Header.Clone(),
+		Host:            req.Host,
+		Subprotocols:    slices.Clone(wsOpts.Subprotocols),
+		HTTPClient:      client,
+		CompressionMode: mode,
 	}
-	if on, ok := wsOpts.Compression.Get(); ok {
-		if on {
-			opts.CompressionMode = websocket.CompressionNoContextTakeover
-		} else {
-			opts.CompressionMode = websocket.CompressionDisabled
-		}
-	}
-	return opts
 }
 
 func (c *Client) ExecuteWebSocket(
@@ -337,12 +302,7 @@ func (c *Client) CompleteWebSocket(
 	}
 	// A session that already ended needs no close frame.
 	if !c.runWSSteps(session, sender, req, baseDir, opts) && session.Context().Err() == nil {
-		_ = sender.Close(
-			session.Context(),
-			websocket.StatusNormalClosure,
-			"resterm closed",
-			map[string]string{wsMetaType: "close", wsMetaStep: "auto-close"},
-		)
+		_ = sender.Close(session.Context(), stream.WSCloseNormal, "resterm closed", "auto-close")
 	}
 
 	select {

@@ -420,7 +420,7 @@ func convertWebSocketTranscript(t *httpx.WebSocketTranscript) *scripts.StreamInf
 		"sentCount":     t.Summary.SentCount,
 		"receivedCount": t.Summary.ReceivedCount,
 		"duration":      t.Summary.Duration,
-		"closedBy":      t.Summary.ClosedBy,
+		"closedBy":      string(t.Summary.ClosedBy),
 		"closeCode":     t.Summary.CloseCode,
 		"closeReason":   t.Summary.CloseReason,
 		"dropped":       t.Summary.Dropped,
@@ -432,7 +432,7 @@ func convertWebSocketTranscript(t *httpx.WebSocketTranscript) *scripts.StreamInf
 			events[i] = map[string]any{
 				"step":      evt.Step,
 				"direction": evt.Direction,
-				"type":      evt.Type,
+				"type":      string(evt.Type),
 				"size":      evt.Size,
 				"text":      evt.Text,
 				"base64":    evt.Base64,

@@ -460,7 +460,7 @@ func TestWebSocketAccumulatorStopsKeepingPayloadAtItsBudget(t *testing.T) {
 			Kind:      stream.KindWebSocket,
 			Direction: stream.DirReceive,
 			Payload:   []byte(strings.Repeat("A", 256)),
-			Metadata:  map[string]string{wsMetaType: "text"},
+			WS:        stream.WSMetadata{Type: stream.WSText},
 		}
 	}
 
@@ -489,14 +489,14 @@ func TestWebSocketAccumulatorKeepsTheCloseEvent(t *testing.T) {
 	acc.consume(&stream.Event{
 		Direction: stream.DirReceive,
 		Payload:   []byte(strings.Repeat("A", 64)),
-		Metadata:  map[string]string{wsMetaType: "text"},
+		WS:        stream.WSMetadata{Type: stream.WSText},
 	})
 	acc.consume(&stream.Event{
 		Direction: stream.DirReceive,
-		Metadata: map[string]string{
-			wsMetaType:        "close",
-			wsMetaClosedBy:    "server",
-			wsMetaCloseReason: "bye",
+		WS: stream.WSMetadata{
+			Type:     stream.WSClose,
+			ClosedBy: stream.WSClosedByServer,
+			Reason:   "bye",
 		},
 	})
 

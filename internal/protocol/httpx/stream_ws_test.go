@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
@@ -147,8 +147,8 @@ func TestExecuteWebSocketChat(t *testing.T) {
 	if err := transcript.Summary.Err(); err != nil {
 		t.Fatalf("scripted close ended as a stream failure: %v", err)
 	}
-	if transcript.Summary.ClosedBy != wsClosedByClient {
-		t.Fatalf("scripted close ended by %q, want %q", transcript.Summary.ClosedBy, wsClosedByClient)
+	if transcript.Summary.ClosedBy != stream.WSClosedByClient {
+		t.Fatalf("scripted close ended by %q, want %q", transcript.Summary.ClosedBy, stream.WSClosedByClient)
 	}
 
 	foundPong := false
@@ -213,25 +213,25 @@ func TestAccumulatorKeepsTheFirstCloseFrame(t *testing.T) {
 	acc.consume(&stream.Event{
 		Kind:      stream.KindWebSocket,
 		Direction: stream.DirSend,
-		Metadata: map[string]string{
-			wsMetaType:        "close",
-			wsMetaClosedBy:    wsClosedByClient,
-			wsMetaCloseCode:   "1000",
-			wsMetaCloseReason: "resterm closed",
+		WS: stream.WSMetadata{
+			Type:     stream.WSClose,
+			ClosedBy: stream.WSClosedByClient,
+			Code:     1000,
+			Reason:   "resterm closed",
 		},
 	})
 	acc.consume(&stream.Event{
 		Kind:      stream.KindWebSocket,
 		Direction: stream.DirReceive,
-		Metadata: map[string]string{
-			wsMetaType:        "close",
-			wsMetaClosedBy:    wsClosedByServer,
-			wsMetaCloseCode:   "1001",
-			wsMetaCloseReason: "server going away",
+		WS: stream.WSMetadata{
+			Type:     stream.WSClose,
+			ClosedBy: stream.WSClosedByServer,
+			Code:     1001,
+			Reason:   "server going away",
 		},
 	})
 
-	if acc.summary.ClosedBy != wsClosedByClient {
+	if acc.summary.ClosedBy != stream.WSClosedByClient {
 		t.Fatalf("closedBy = %q, want the side that closed first", acc.summary.ClosedBy)
 	}
 	if acc.summary.CloseCode != 1000 || acc.summary.CloseReason != "resterm closed" {
@@ -258,8 +258,8 @@ func TestWebSocketAutoCloseIsAttributedToTheClient(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &transcript); err != nil {
 		t.Fatalf("decode transcript: %v", err)
 	}
-	if transcript.Summary.ClosedBy != wsClosedByClient {
-		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByClient)
+	if transcript.Summary.ClosedBy != stream.WSClosedByClient {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, stream.WSClosedByClient)
 	}
 	if err := transcript.Summary.Err(); err != nil {
 		t.Fatalf("an auto close ended as a stream failure: %v", err)
@@ -313,8 +313,8 @@ func TestWebSocketServerCloseIsAttributedToTheServer(t *testing.T) {
 	state, stateErr := handle.Session.State()
 	applyWebSocketSummaryDefaults(&acc.summary, state, stateErr)
 
-	if acc.summary.ClosedBy != wsClosedByServer {
-		t.Fatalf("closedBy = %q, want %q", acc.summary.ClosedBy, wsClosedByServer)
+	if acc.summary.ClosedBy != stream.WSClosedByServer {
+		t.Fatalf("closedBy = %q, want %q", acc.summary.ClosedBy, stream.WSClosedByServer)
 	}
 	if acc.summary.CloseReason != "server going away" {
 		t.Fatalf("closeReason = %q, want the reason the server sent", acc.summary.CloseReason)
@@ -506,13 +506,13 @@ func TestApplyWebSocketSummaryDefaults(t *testing.T) {
 
 	sumCanceled := WebSocketSummary{}
 	applyWebSocketSummaryDefaults(&sumCanceled, stream.StateFailed, context.Canceled)
-	if sumCanceled.ClosedBy != wsClosedByCanceled {
+	if sumCanceled.ClosedBy != stream.WSClosedByCanceled {
 		t.Fatalf("closedBy = %q, want a canceled run named as one", sumCanceled.ClosedBy)
 	}
 
 	sumTimeout := WebSocketSummary{}
 	applyWebSocketSummaryDefaults(&sumTimeout, stream.StateFailed, context.DeadlineExceeded)
-	if sumTimeout.ClosedBy != wsClosedByTimeout {
+	if sumTimeout.ClosedBy != stream.WSClosedByTimeout {
 		t.Fatalf("closedBy = %q, want the elapsed duration named as a timeout", sumTimeout.ClosedBy)
 	}
 }
@@ -523,18 +523,18 @@ func TestWebSocketSummaryErr(t *testing.T) {
 		summary WebSocketSummary
 		class   diag.Class
 	}{
-		{name: "server closed", summary: WebSocketSummary{ClosedBy: wsClosedByServer}},
-		{name: "client closed", summary: WebSocketSummary{ClosedBy: wsClosedByClient}},
-		{name: "timed out", summary: WebSocketSummary{ClosedBy: wsClosedByTimeout}},
+		{name: "server closed", summary: WebSocketSummary{ClosedBy: stream.WSClosedByServer}},
+		{name: "client closed", summary: WebSocketSummary{ClosedBy: stream.WSClosedByClient}},
+		{name: "timed out", summary: WebSocketSummary{ClosedBy: stream.WSClosedByTimeout}},
 		{
 			name:    "read failed",
-			summary: WebSocketSummary{ClosedBy: wsClosedByError, CloseReason: "read: boom"},
+			summary: WebSocketSummary{ClosedBy: stream.WSClosedByError, CloseReason: "read: boom"},
 			class:   diag.ClassProtocol,
 		},
 		{
 			name: "canceled",
 			summary: WebSocketSummary{
-				ClosedBy:    wsClosedByCanceled,
+				ClosedBy:    stream.WSClosedByCanceled,
 				CloseReason: "context canceled",
 			},
 			class: diag.ClassCanceled,
@@ -649,16 +649,12 @@ func TestStartWebSocketInteractive(t *testing.T) {
 	if err := handle.Sender.SendText(
 		session.Context(),
 		message,
-		map[string]string{wsMetaType: "text"},
+		"",
 	); err != nil {
 		t.Fatalf("SendText failed: %v", err)
 	}
 
-	if err := handle.Sender.Pong(
-		session.Context(),
-		pongPayload,
-		map[string]string{wsMetaStep: "interactive"},
-	); err != nil {
+	if err := handle.Sender.Pong(session.Context(), pongPayload, "interactive"); err != nil {
 		t.Fatalf("Pong failed: %v", err)
 	}
 
@@ -681,10 +677,9 @@ loop:
 			if evt.Direction == stream.DirReceive && string(evt.Payload) == message {
 				receivedEcho = true
 			}
-			if evt.Direction == stream.DirSend && evt.Metadata != nil {
-				if evt.Metadata[wsMetaType] == "pong" && string(evt.Payload) == pongPayload {
-					receivedPong = true
-				}
+			if evt.Direction == stream.DirSend && evt.WS.Type == stream.WSPong &&
+				string(evt.Payload) == pongPayload {
+				receivedPong = true
 			}
 		case <-deadline:
 			t.Fatal("timed out waiting for websocket events")
@@ -693,9 +688,9 @@ loop:
 
 	if err := handle.Sender.Close(
 		session.Context(),
-		websocket.StatusNormalClosure,
+		stream.WSCloseNormal,
 		"done",
-		map[string]string{wsMetaType: "close"},
+		"",
 	); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
@@ -803,7 +798,7 @@ func TestStartWebSocketHandshakeTimeoutScope(t *testing.T) {
 	if err := handle.Sender.SendText(
 		session.Context(),
 		message,
-		map[string]string{wsMetaType: "text"},
+		"",
 	); err != nil {
 		t.Fatalf("SendText after handshake timeout failed: %v", err)
 	}
@@ -828,9 +823,9 @@ loop:
 
 	if err := handle.Sender.Close(
 		session.Context(),
-		websocket.StatusNormalClosure,
+		stream.WSCloseNormal,
 		"done",
-		map[string]string{wsMetaType: "close"},
+		"",
 	); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
@@ -912,8 +907,8 @@ func TestCompleteWebSocketKeepsTheTranscriptWhenTheServerClosesMidScript(t *test
 	if err := transcript.Summary.Err(); err != nil {
 		t.Fatalf("a normal server close ended as a stream failure: %v", err)
 	}
-	if transcript.Summary.ClosedBy != wsClosedByServer {
-		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByServer)
+	if transcript.Summary.ClosedBy != stream.WSClosedByServer {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, stream.WSClosedByServer)
 	}
 	if !wsSent(transcript, "hello") {
 		t.Fatalf("the transcript lost the frames sent before the close: %+v", transcript.Events)
@@ -941,8 +936,8 @@ func TestCompleteWebSocketReportsAStepFailureInTheSummary(t *testing.T) {
 	}
 
 	transcript := wsTranscript(t, resp)
-	if transcript.Summary.ClosedBy != wsClosedByError {
-		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByError)
+	if transcript.Summary.ClosedBy != stream.WSClosedByError {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, stream.WSClosedByError)
 	}
 	if !strings.Contains(transcript.Summary.CloseReason, "step 2:send_file") ||
 		!strings.Contains(transcript.Summary.CloseReason, "websocket payload file") {
@@ -989,8 +984,8 @@ func TestCompleteWebSocketNamesACancelledRunAndKeepsTheTranscript(t *testing.T) 
 	}
 
 	transcript := wsTranscript(t, resp)
-	if transcript.Summary.ClosedBy != wsClosedByCanceled {
-		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, wsClosedByCanceled)
+	if transcript.Summary.ClosedBy != stream.WSClosedByCanceled {
+		t.Fatalf("closedBy = %q, want %q", transcript.Summary.ClosedBy, stream.WSClosedByCanceled)
 	}
 	if !slices.Contains(diag.Classes(transcript.Summary.Err()), diag.ClassCanceled) {
 		t.Fatalf("Err() = %v, want a cancelled run", transcript.Summary.Err())
@@ -1064,8 +1059,8 @@ func TestWebSocketStepFailureKeepsItsClass(t *testing.T) {
 			}
 
 			sum := wsTranscript(t, resp).Summary
-			if sum.ClosedBy != wsClosedByError {
-				t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, wsClosedByError)
+			if sum.ClosedBy != stream.WSClosedByError {
+				t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, stream.WSClosedByError)
 			}
 			if sum.ErrorClass != tt.want {
 				t.Fatalf("errorClass = %q, want %q", sum.ErrorClass, tt.want)
@@ -1092,7 +1087,7 @@ func TestStreamSummaryErrFallsBackToProtocol(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ws := WebSocketSummary{ClosedBy: wsClosedByError, ErrorClass: tt.class}
+			ws := WebSocketSummary{ClosedBy: stream.WSClosedByError, ErrorClass: tt.class}
 			if got := diag.ClassOf(ws.Err()); got != tt.want {
 				t.Fatalf("websocket Err() class = %q, want %q", got, tt.want)
 			}
@@ -1144,8 +1139,8 @@ func TestWebSocketTellsACallerDeadlineFromTheIdleLimit(t *testing.T) {
 			}
 
 			sum := wsTranscript(t, resp).Summary
-			if sum.ClosedBy != wsClosedByTimeout {
-				t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, wsClosedByTimeout)
+			if sum.ClosedBy != stream.WSClosedByTimeout {
+				t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, stream.WSClosedByTimeout)
 			}
 			if sum.ErrorClass != tt.want {
 				t.Fatalf("errorClass = %q, want %q", sum.ErrorClass, tt.want)
@@ -1200,5 +1195,163 @@ func TestStartWebSocketHandshakeTimeoutIsATimeout(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), errStreamLimit.Error()) {
 		t.Fatalf("error = %q, want no internal cause in the message", err)
+	}
+}
+
+// The library stopped offering compression by default, so resterm offers it
+// itself unless the request turns it off.
+func TestWebSocketOffersCompressionByDefault(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		opt     restfile.Opt[bool]
+		setting string
+		offer   bool
+	}{
+		{name: "default", offer: true},
+		{name: "on", opt: restfile.OptOf(true), offer: true},
+		{name: "off", opt: restfile.OptOf(false)},
+		{name: "setting off", setting: "false"},
+		{name: "directive wins over the setting", opt: restfile.OptOf(true), setting: "false", offer: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			offered := make(chan bool, 1)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				offered <- strings.Contains(r.Header.Get("Sec-WebSocket-Extensions"), "permessage-deflate")
+				conn, err := websocket.Accept(w, r, nil)
+				if err != nil {
+					return
+				}
+				_ = conn.Close(websocket.StatusNormalClosure, "")
+			}))
+			t.Cleanup(srv.Close)
+
+			req := &restfile.Request{
+				Method: "GET",
+				URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+				WebSocket: &restfile.WebSocketRequest{
+					Options: restfile.WebSocketOptions{Compression: tt.opt},
+				},
+			}
+			if tt.setting != "" {
+				req.Settings = map[string]string{"ws-compression": tt.setting}
+			}
+			handle, _, err := NewClient(nil).StartWebSocket(context.Background(), req, nil, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			<-handle.Session.Done()
+			if got := <-offered; got != tt.offer {
+				t.Fatalf("offered permessage-deflate = %v, want %v", got, tt.offer)
+			}
+		})
+	}
+}
+
+// Like an SSE line, a message over the limit names the option that raises it.
+func TestWebSocketNamesTheMessageLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		_ = conn.Write(r.Context(), websocket.MessageText, []byte(strings.Repeat("x", 100)))
+		_, _, _ = conn.Read(r.Context())
+	}))
+	t.Cleanup(srv.Close)
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{MaxMessageBytes: 64},
+			Steps:   []restfile.WebSocketStep{{Type: restfile.WebSocketStepWait, Duration: time.Second}},
+		},
+	}
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := wsTranscript(t, resp).Summary
+	want := "websocket message exceeds 64 bytes, raise it with @websocket max-message-bytes"
+	if sum.ClosedBy != stream.WSClosedByError || sum.ErrorClass != diag.ClassProtocol || sum.CloseReason != want {
+		t.Fatalf("summary = %s %s %q, want error protocol %q", sum.ClosedBy, sum.ErrorClass, sum.CloseReason, want)
+	}
+}
+
+// Sent pings already count, so pings and pongs from the server do too.
+func TestWebSocketRecordsControlFramesFromTheServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		ctx := conn.CloseRead(r.Context())
+		_ = conn.Ping(ctx)
+		<-ctx.Done()
+	}))
+	t.Cleanup(srv.Close)
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepPing, Value: "hb"},
+				{Type: restfile.WebSocketStepWait, Duration: 300 * time.Millisecond},
+			},
+		},
+	}
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcript := wsTranscript(t, resp)
+	var ping, pong bool
+	for _, evt := range transcript.Events {
+		if evt.Direction != "receive" {
+			continue
+		}
+		ping = ping || evt.Type == stream.WSPing
+		pong = pong || evt.Type == stream.WSPong && evt.Text == "hb"
+	}
+	if !ping || !pong {
+		t.Fatalf("received ping %v, pong hb %v, want both in %+v", ping, pong, transcript.Events)
+	}
+	if transcript.Summary.ReceivedCount < 2 {
+		t.Fatalf("receivedCount = %d, want the control frames counted", transcript.Summary.ReceivedCount)
+	}
+}
+
+// A server keepalive is not activity, so idle-timeout still ends the session.
+func TestWebSocketServerPingsDoNotHoldAnIdleSession(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		ctx := conn.CloseRead(r.Context())
+		for ctx.Err() == nil {
+			_ = conn.Ping(ctx)
+			time.Sleep(50 * time.Millisecond)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{IdleTimeout: 300 * time.Millisecond},
+			Steps:   []restfile.WebSocketStep{{Type: restfile.WebSocketStepWait, Duration: 2 * time.Second}},
+		},
+	}
+	resp, err := NewClient(nil).ExecuteWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum := wsTranscript(t, resp).Summary; sum.ClosedBy != stream.WSClosedByTimeout || sum.ErrorClass != "" {
+		t.Fatalf("summary = %s %s %q, want an idle timeout", sum.ClosedBy, sum.ErrorClass, sum.CloseReason)
 	}
 }

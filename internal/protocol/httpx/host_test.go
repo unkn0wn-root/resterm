@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/coder/websocket"
+
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -59,24 +61,31 @@ func TestHostHeaderReachesTheServer(t *testing.T) {
 	}
 }
 
-func TestWebSocketRejectsAHostItCannotSend(t *testing.T) {
-	for _, tt := range []struct {
-		host   string
-		reject bool
-	}{
-		{host: "api.internal", reject: true},
-		{host: "127.0.0.1:1"},
-	} {
-		req := &restfile.Request{
-			Method:    "GET",
-			URL:       "ws://127.0.0.1:1/socket",
-			Headers:   http.Header{"Host": {tt.host}},
-			WebSocket: &restfile.WebSocketRequest{},
+func TestWebSocketSendsTheHostHeader(t *testing.T) {
+	hosts := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hosts <- r.Host
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
 		}
-		_, _, err := NewClient(nil).StartWebSocket(context.Background(), req, vars.NewResolver(), Options{})
-		if got := err != nil && strings.Contains(err.Error(), "Host header"); got != tt.reject {
-			t.Fatalf("Host %q: err = %v, want rejected = %v", tt.host, err, tt.reject)
-		}
+		_ = conn.Close(websocket.StatusNormalClosure, "")
+	}))
+	t.Cleanup(srv.Close)
+
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "ws" + strings.TrimPrefix(srv.URL, "http") + "/socket",
+		Headers:   http.Header{"Host": {"api.internal"}},
+		WebSocket: &restfile.WebSocketRequest{},
+	}
+	handle, _, err := NewClient(nil).StartWebSocket(context.Background(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-handle.Session.Done()
+	if got := <-hosts; got != "api.internal" {
+		t.Fatalf("handshake Host = %q, want api.internal", got)
 	}
 }
 

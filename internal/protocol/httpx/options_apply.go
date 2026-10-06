@@ -32,6 +32,7 @@ const (
 	optionSettingSSELineBytes    optionSettingKey = "sse-max-line-bytes"
 	optionSettingSSEEventBytes   optionSettingKey = "sse-max-event-bytes"
 	optionSettingWSMessageBytes  optionSettingKey = "ws-max-message-bytes"
+	optionSettingWSCompression   optionSettingKey = "ws-compression"
 )
 
 // Settings come from a file the user edits, so name the key and what it takes.
@@ -187,6 +188,15 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 			*size.dst = limit
 		case strict:
 			return invalidSetting(size.key, val, "a size such as 8mb")
+		}
+	}
+
+	if val, ok := settingValue(norm, optionSettingWSCompression); ok {
+		switch b, valid := directive.ParseBool(val); {
+		case valid:
+			opts.WSCompression = restfile.OptOf(b)
+		case strict:
+			return invalidBool(optionSettingWSCompression, val)
 		}
 	}
 

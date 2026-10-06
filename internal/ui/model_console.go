@@ -14,7 +14,6 @@ import (
 	bubbletextarea "github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"nhooyr.io/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -24,10 +23,8 @@ import (
 
 const (
 	consoleHistoryLimit = 128
-	wsMetaType          = "resterm.ws.type"
-	wsMetaStep          = "resterm.ws.step"
-	wsMetaCloseCode     = "resterm.ws.close.code"
-	wsMetaCloseReason   = "resterm.ws.close.reason"
+	// consoleStep labels what the console sends in the transcript.
+	consoleStep = "interactive"
 )
 
 const websocketConsoleSendTimeout = 5 * time.Second
@@ -281,15 +278,13 @@ func (wc *websocketConsole) payload() (func() error, string, string, error) {
 	if wc.sender == nil {
 		return nil, "", "", fmt.Errorf("websocket sender unavailable")
 	}
-	meta := map[string]string{wsMetaStep: "interactive"}
 	switch wc.mode {
 	case consoleModeText:
 		value := wc.input.Value()
-		meta[wsMetaType] = "text"
 		send := func() error {
 			ctx, cancel := wc.sendContext()
 			defer cancel()
-			return wc.sender.SendText(ctx, value, meta)
+			return wc.sender.SendText(ctx, value, consoleStep)
 		}
 		return send, fmt.Sprintf("Sent text (%d bytes)", len([]byte(value))), value, nil
 	case consoleModeJSON:
@@ -297,11 +292,10 @@ func (wc *websocketConsole) payload() (func() error, string, string, error) {
 		if !json.Valid([]byte(value)) {
 			return nil, "", "", fmt.Errorf("invalid JSON payload")
 		}
-		meta[wsMetaType] = "json"
 		send := func() error {
 			ctx, cancel := wc.sendContext()
 			defer cancel()
-			return wc.sender.SendJSON(ctx, value, meta)
+			return wc.sender.SendJSON(ctx, value, consoleStep)
 		}
 		return send, fmt.Sprintf("Sent json (%d bytes)", len([]byte(value))), value, nil
 	case consoleModeBase64:
@@ -320,11 +314,10 @@ func (wc *websocketConsole) payload() (func() error, string, string, error) {
 			return nil, "", "", fmt.Errorf("invalid base64: %w", err)
 		}
 		payload := append([]byte(nil), decoded...)
-		meta[wsMetaType] = "binary"
 		send := func() error {
 			ctx, cancel := wc.sendContext()
 			defer cancel()
-			return wc.sender.SendBinary(ctx, payload, meta)
+			return wc.sender.SendBinary(ctx, payload, consoleStep)
 		}
 		return send, fmt.Sprintf("Sent binary (%d bytes)", len(decoded)), trimmed, nil
 	case consoleModeFile:
@@ -342,11 +335,10 @@ func (wc *websocketConsole) payload() (func() error, string, string, error) {
 			return nil, "", "", fmt.Errorf("read file: %w", err)
 		}
 		payload := append([]byte(nil), data...)
-		meta[wsMetaType] = "binary"
 		send := func() error {
 			ctx, cancel := wc.sendContext()
 			defer cancel()
-			return wc.sender.SendBinary(ctx, payload, meta)
+			return wc.sender.SendBinary(ctx, payload, consoleStep)
 		}
 		return send, fmt.Sprintf(
 			"Sent file %s (%d bytes)",
@@ -355,11 +347,10 @@ func (wc *websocketConsole) payload() (func() error, string, string, error) {
 		), rawPath, nil
 	default:
 		value := wc.input.Value()
-		meta[wsMetaType] = "text"
 		send := func() error {
 			ctx, cancel := wc.sendContext()
 			defer cancel()
-			return wc.sender.SendText(ctx, value, meta)
+			return wc.sender.SendText(ctx, value, consoleStep)
 		}
 		return send, fmt.Sprintf("Sent text (%d bytes)", len([]byte(value))), value, nil
 	}
@@ -617,11 +608,7 @@ func (m *Model) sendConsolePing() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := console.sendContext()
 		defer cancel()
-		err := console.sender.Ping(
-			ctx,
-			"",
-			map[string]string{wsMetaType: "ping", wsMetaStep: "interactive"},
-		)
+		err := console.sender.Ping(ctx, "", consoleStep)
 		return wsConsoleResultMsg{err: err, status: "Ping sent", mode: mode}
 	}
 }
@@ -637,12 +624,7 @@ func (m *Model) sendConsoleClose() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := console.sendContext()
 		defer cancel()
-		err := console.sender.Close(
-			ctx,
-			websocket.StatusNormalClosure,
-			"interactive close",
-			map[string]string{wsMetaType: "close", wsMetaStep: "interactive"},
-		)
+		err := console.sender.Close(ctx, stream.WSCloseNormal, "interactive close", consoleStep)
 		return wsConsoleResultMsg{err: err, status: "Close frame sent", mode: mode}
 	}
 }

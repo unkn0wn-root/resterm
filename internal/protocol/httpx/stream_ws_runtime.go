@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"net"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -23,6 +21,8 @@ type wsRuntime struct {
 	writeCh chan wsOutbound
 	cancel  context.CancelFunc
 	pulse   chan struct{}
+	// limit is the read limit, named in the error a larger message ends with.
+	limit int64
 	// Keep transcript publication ordered around writes without holding this
 	// mutex during network I/O. Data frames received while an outbound frame is
 	// in flight are replayed after the send event is recorded.
@@ -172,59 +172,63 @@ func (rt *wsRuntime) readLoop() {
 				// Read completes the close handshake before returning a close error.
 				// Do not let shutdown try to close the connection again.
 				rt.closeStarted.Store(true)
-				meta := map[string]string{
-					wsMetaType:        "close",
-					wsMetaClosedBy:    wsClosedByServer,
-					wsMetaCloseCode:   strconv.Itoa(int(ce.Code)),
-					wsMetaCloseReason: ce.Reason,
-				}
 				rt.publishTerminal(&stream.Event{
 					Kind:      stream.KindWebSocket,
 					Direction: stream.DirReceive,
 					Timestamp: time.Now(),
-					Metadata:  meta,
 					WS: stream.WSMetadata{
-						Opcode: wsOpcodeClose,
-						Code:   ce.Code,
-						Reason: ce.Reason,
+						Type:     stream.WSClose,
+						ClosedBy: stream.WSClosedByServer,
+						Code:     stream.WSCloseCode(ce.Code),
+						Reason:   ce.Reason,
 					},
 				}, nil)
 				return
 			}
-			if ctx.Err() != nil {
+			switch {
+			case ctx.Err() != nil:
 				rt.closeTerminalNow(nil, ctx.Err())
-			} else {
-				rt.closeTerminalNow(
-					nil,
-					diag.Wrap(err, "read websocket message"),
-				)
+			case errors.Is(err, websocket.ErrMessageTooBig):
+				rt.closeTerminalNow(nil, diag.Newf(
+					diag.ClassProtocol,
+					"websocket message exceeds %d bytes, raise it with @websocket max-message-bytes",
+					rt.limit,
+				))
+			default:
+				rt.closeTerminalNow(nil, diag.Wrap(err, "read websocket message"))
 			}
 			return
 		}
 
 		rt.touchActivity()
 
-		payload := append([]byte(nil), data...)
-		metadata := map[string]string{}
-		opcode := wsOpcodeBinary
+		typ := stream.WSBinary
 		if msgType == websocket.MessageText {
-			opcode = wsOpcodeText
+			typ = stream.WSText
 		}
-
-		typ := opcodeToType(opcode)
-		metadata[wsMetaType] = typ
-
-		rt.publishReceive(&stream.Event{
-			Kind:      stream.KindWebSocket,
-			Direction: stream.DirReceive,
-			Timestamp: time.Now(),
-			Metadata:  metadata,
-			Payload:   payload,
-			WS: stream.WSMetadata{
-				Opcode: opcode,
-			},
-		})
+		rt.receive(typ, data)
 	}
+}
+
+// Pings and pongs from the peer go into the transcript. They are not activity,
+// so a keepalive cannot hold an idle session open.
+func (rt *wsRuntime) pingReceived(_ context.Context, payload []byte) bool {
+	rt.receive(stream.WSPing, payload)
+	return true
+}
+
+func (rt *wsRuntime) pongReceived(_ context.Context, payload []byte) {
+	rt.receive(stream.WSPong, payload)
+}
+
+func (rt *wsRuntime) receive(typ stream.WSType, payload []byte) {
+	rt.publishReceive(&stream.Event{
+		Kind:      stream.KindWebSocket,
+		Direction: stream.DirReceive,
+		Timestamp: time.Now(),
+		Payload:   append([]byte(nil), payload...),
+		WS:        stream.WSMetadata{Type: typ},
+	})
 }
 
 func (rt *wsRuntime) idleWatch(limit time.Duration) {
@@ -239,15 +243,14 @@ func (rt *wsRuntime) idleWatch(limit time.Duration) {
 		case <-rt.session.Context().Done():
 			return
 		case <-timer.C:
-			meta := map[string]string{
-				wsMetaClosedBy:    wsClosedByTimeout,
-				wsMetaCloseReason: fmt.Sprintf("idle timeout after %s", limit),
-			}
 			rt.closeTerminalNow(&stream.Event{
 				Kind:      stream.KindWebSocket,
 				Direction: stream.DirNA,
 				Timestamp: time.Now(),
-				Metadata:  meta,
+				WS: stream.WSMetadata{
+					ClosedBy: stream.WSClosedByTimeout,
+					Reason:   fmt.Sprintf("idle timeout after %s", limit),
+				},
 			}, nil)
 			return
 		case <-rt.pulse:
@@ -306,95 +309,35 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		ctx = session.Context()
 	}
 
+	evt := &stream.Event{
+		Kind:      stream.KindWebSocket,
+		Direction: stream.DirSend,
+		Timestamp: time.Now(),
+		Payload:   msg.payload,
+		WS:        stream.WSMetadata{Type: msg.typ, Step: msg.step},
+	}
 	switch msg.kind {
 	case wsOutboundMessage:
-		opcode := wsOpcodeBinary
-		if msg.msgType == websocket.MessageText {
-			opcode = wsOpcodeText
-		}
-
-		payload := append([]byte(nil), msg.payload...)
-		metadata := maps.Clone(msg.metadata)
-		if metadata == nil {
-			metadata = map[string]string{}
-		}
-		if _, ok := metadata[wsMetaType]; !ok {
-			metadata[wsMetaType] = opcodeToType(opcode)
-		}
-
-		evt := &stream.Event{
-			Kind:      stream.KindWebSocket,
-			Direction: stream.DirSend,
-			Timestamp: time.Now(),
-			Metadata:  metadata,
-			Payload:   payload,
-			WS: stream.WSMetadata{
-				Opcode: opcode,
-			},
+		msgType := websocket.MessageText
+		if msg.typ == stream.WSBinary {
+			msgType = websocket.MessageBinary
 		}
 		if err := rt.writeAndPublish(func() error {
-			return rt.conn.Write(ctx, msg.msgType, msg.payload)
+			return rt.conn.Write(ctx, msgType, msg.payload)
 		}, evt); err != nil {
 			return diag.Wrap(err, "send websocket frame")
 		}
 		return nil
 	case wsOutboundPing:
-		payload := append([]byte(nil), msg.payload...)
-		if len(payload) > websocketControlMaxPayload {
-			return diag.Newf(
-				diag.ClassProtocol,
-				"websocket ping payload exceeds %d bytes",
-				websocketControlMaxPayload,
-			)
-		}
-		metadata := maps.Clone(msg.metadata)
-		if metadata == nil {
-			metadata = map[string]string{}
-		}
-		metadata[wsMetaType] = "ping"
-		evt := &stream.Event{
-			Kind:      stream.KindWebSocket,
-			Direction: stream.DirSend,
-			Timestamp: time.Now(),
-			Metadata:  metadata,
-			Payload:   payload,
-			WS: stream.WSMetadata{
-				Opcode: wsOpcodePing,
-			},
-		}
 		if err := rt.writeAndPublish(func() error {
-			return wsWriteControl(rt.conn, ctx, wsOpcodePing, payload)
+			return wsWriteControl(rt.conn, ctx, wsOpcodePing, msg.payload)
 		}, evt); err != nil {
 			return diag.Wrap(err, "send websocket ping")
 		}
 		return nil
 	case wsOutboundPong:
-		payload := append([]byte(nil), msg.payload...)
-		if len(payload) > websocketControlMaxPayload {
-			return diag.Newf(
-				diag.ClassProtocol,
-				"websocket pong payload exceeds %d bytes",
-				websocketControlMaxPayload,
-			)
-		}
-
-		metadata := maps.Clone(msg.metadata)
-		if metadata == nil {
-			metadata = map[string]string{}
-		}
-		metadata[wsMetaType] = "pong"
-		evt := &stream.Event{
-			Kind:      stream.KindWebSocket,
-			Direction: stream.DirSend,
-			Timestamp: time.Now(),
-			Metadata:  metadata,
-			Payload:   payload,
-			WS: stream.WSMetadata{
-				Opcode: wsOpcodePong,
-			},
-		}
 		if err := rt.writeAndPublish(func() error {
-			return wsWriteControl(rt.conn, ctx, wsOpcodePong, payload)
+			return wsWriteControl(rt.conn, ctx, wsOpcodePong, msg.payload)
 		}, evt); err != nil {
 			return diag.Wrap(err, "send websocket pong")
 		}
@@ -404,29 +347,11 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 			return nil
 		}
 		session.MarkClosing()
-		metadata := maps.Clone(msg.metadata)
-		if metadata == nil {
-			metadata = map[string]string{}
-		}
-		metadata[wsMetaType] = "close"
-		metadata[wsMetaClosedBy] = wsClosedByClient
-		metadata[wsMetaCloseCode] = strconv.Itoa(int(msg.code))
-		if msg.reason != "" {
-			metadata[wsMetaCloseReason] = msg.reason
-		}
-		evt := &stream.Event{
-			Kind:      stream.KindWebSocket,
-			Direction: stream.DirSend,
-			Timestamp: time.Now(),
-			Metadata:  metadata,
-			WS: stream.WSMetadata{
-				Opcode: wsOpcodeClose,
-				Code:   msg.code,
-				Reason: msg.reason,
-			},
-		}
+		evt.WS.ClosedBy = stream.WSClosedByClient
+		evt.WS.Code = msg.code
+		evt.WS.Reason = msg.reason
 		if err := rt.writeAndPublish(func() error {
-			return rt.conn.Close(msg.code, msg.reason)
+			return rt.conn.Close(websocket.StatusCode(msg.code), msg.reason)
 		}, evt); err != nil {
 			return diag.Wrap(err, "close websocket")
 		}

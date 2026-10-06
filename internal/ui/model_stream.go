@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"nhooyr.io/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -819,19 +819,16 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 		parts = append(parts, nameStyled, payloadStyled)
 		return strings.Join(filterEmpty(parts), " ")
 	case stream.KindWebSocket:
-		typ := evt.Metadata[wsMetaType]
-		if typ == "" {
-			typ = opcodeToType(evt.WS.Opcode)
-		}
-		step := strings.TrimSpace(evt.Metadata[wsMetaStep])
-		if step != "" {
+		ws := evt.WS
+		typ := cmp.Or(ws.Type, "unknown")
+		if step := strings.TrimSpace(ws.Step); step != "" {
 			parts = append(parts, th.StreamSummary.Render(fmt.Sprintf("[%s]", step)))
 		}
-		typeStyled := th.StreamEventName.Render(typ)
+		typeStyled := th.StreamEventName.Render(string(typ))
 		switch typ {
-		case "text", "json", "pong", "ping":
+		case stream.WSText, stream.WSJSON, stream.WSPong, stream.WSPing:
 			trimmed := strings.TrimSpace(string(evt.Payload))
-			if (typ == "json" || typ == "text") && len(evt.Payload) > 0 {
+			if (typ == stream.WSJSON || typ == stream.WSText) && len(evt.Payload) > 0 {
 				if formatted, ok := formatJSONForStream(evt.Payload); ok {
 					indented := indentMultiline(formatted, streamJSONIndent)
 					parts = append(parts, typeStyled+"\n"+th.StreamData.Render(indented))
@@ -844,7 +841,7 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 			}
 			payload := fmt.Sprintf("\"%s\"", truncatePreview(trimmed))
 			parts = append(parts, typeStyled, th.StreamData.Render(payload))
-		case "binary":
+		case stream.WSBinary:
 			preview := base64.StdEncoding.EncodeToString(evt.Payload)
 			if preview == "" {
 				preview = "<empty>"
@@ -856,15 +853,15 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 				th.StreamBinary.Render(size),
 				th.StreamBinary.Render(truncatePreview(preview)),
 			)
-		case "close":
-			reason := strings.TrimSpace(evt.Metadata[wsMetaCloseReason])
-			code := evt.Metadata[wsMetaCloseCode]
-			if code == "" && evt.WS.Code != 0 {
-				code = strconv.Itoa(int(evt.WS.Code))
+		case stream.WSClose:
+			reason := strings.TrimSpace(ws.Reason)
+			code := ""
+			if ws.Code != 0 {
+				code = strconv.Itoa(int(ws.Code))
 			}
 			info := fmt.Sprintf("close %s", code)
 			style := th.StreamSummary
-			if evt.WS.Code != 0 && evt.WS.Code != websocket.StatusNormalClosure {
+			if ws.Code != 0 && ws.Code != stream.WSCloseNormal {
 				style = th.StreamError
 			}
 			if reason != "" {
@@ -1068,15 +1065,20 @@ func matchesFilter(filter string, evt *stream.Event) bool {
 		}
 		return strings.Contains(strings.ToLower(string(evt.Payload)), filter)
 	case stream.KindWebSocket:
-		if strings.Contains(strings.ToLower(string(evt.Payload)), filter) {
-			return true
+		ws := evt.WS
+		code := ""
+		if ws.Code != 0 {
+			code = strconv.Itoa(int(ws.Code))
 		}
-		if strings.Contains(strings.ToLower(evt.WS.Reason), filter) {
-			return true
-		}
-		if evt.Metadata != nil {
-			if typ, ok := evt.Metadata[wsMetaType]; ok &&
-				strings.Contains(strings.ToLower(typ), filter) {
+		for _, field := range []string{
+			string(evt.Payload),
+			string(ws.Type),
+			ws.Step,
+			string(ws.ClosedBy),
+			code,
+			ws.Reason,
+		} {
+			if strings.Contains(strings.ToLower(field), filter) {
 				return true
 			}
 		}
@@ -1090,23 +1092,6 @@ func matchesFilter(filter string, evt *stream.Event) bool {
 		return strings.Contains(strings.ToLower(string(evt.Payload)), filter)
 	}
 	return false
-}
-
-func opcodeToType(op int) string {
-	switch op {
-	case 0x1:
-		return "text"
-	case 0x2:
-		return "binary"
-	case 0x9:
-		return "ping"
-	case 0xA:
-		return "pong"
-	case 0x8:
-		return "close"
-	default:
-		return "unknown"
-	}
 }
 
 func (m *Model) refreshStreamPanes() {
