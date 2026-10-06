@@ -163,11 +163,9 @@ func TestDigestChallengeCookiesSurviveRedirects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			u := mustParseURL(t, srv.URL)
-			if host != "" {
-				u.Host = host
-			}
-			jar.SetCookies(u, []*http.Cookie{{Name: "sid", Value: "stale"}, {Name: "theme", Value: "dark"}})
+			// Put the cookies where this Go version's client looks for them.
+			seed := cookieURL(&http.Request{URL: mustParseURL(t, srv.URL), Host: host})
+			jar.SetCookies(seed, []*http.Cookie{{Name: "sid", Value: "stale"}, {Name: "theme", Value: "dark"}})
 
 			req := digestRequest("GET", srv.URL+"/login")
 			req.Headers = http.Header{"Cookie": {"sid=stale; lang=en"}}

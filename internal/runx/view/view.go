@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"slices"
 	"sort"
 	"strconv"
@@ -263,7 +262,7 @@ func requestHeadersText(res runner.Result, show bool, st styler) string {
 	reqText := ""
 	respText := ""
 	if resp := res.Response; resp != nil {
-		if reqHeaders := buildRequestHeaderMap(resp); len(reqHeaders) > 0 {
+		if reqHeaders := resp.SentHeaders(); len(reqHeaders) > 0 {
 			reqText = st.section("Request Headers:") + "\n" + formatHeaders(reqHeaders, st)
 		}
 		if len(resp.Headers) > 0 {
@@ -483,29 +482,6 @@ func contentLengthText(res runner.Result) string {
 		}
 	}
 	return ""
-}
-
-func buildRequestHeaderMap(resp *httpx.Response) http.Header {
-	var hdrs http.Header
-	if resp != nil && resp.RequestHeaders != nil {
-		hdrs = resp.RequestHeaders.Clone()
-	}
-	if hdrs == nil {
-		hdrs = make(http.Header)
-	}
-	if resp == nil {
-		return hdrs
-	}
-	if hdrs.Get("Host") == "" && str.Trim(resp.ReqHost) != "" {
-		hdrs.Set("Host", resp.ReqHost)
-	}
-	if hdrs.Get("Transfer-Encoding") == "" && len(resp.ReqTE) > 0 {
-		hdrs["Transfer-Encoding"] = append([]string(nil), resp.ReqTE...)
-	}
-	if hdrs.Get("Content-Length") == "" && resp.ReqLen > 0 {
-		hdrs.Set("Content-Length", fmt.Sprintf("%d", resp.ReqLen))
-	}
-	return hdrs
 }
 
 func traceFailureText(info *runner.TraceInfo) string {

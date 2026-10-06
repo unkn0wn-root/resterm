@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"net/url"
 
 	"github.com/unkn0wn-root/resterm/internal/http/digest"
 )
@@ -102,14 +101,4 @@ func (t *digestTransport) clone(req *http.Request) *http.Request {
 		}
 	}
 	return out
-}
-
-// net/http stores cookies under Request.Host when it overrides the URL's host.
-func cookieURL(req *http.Request) *url.URL {
-	if req.Host == "" {
-		return req.URL
-	}
-	u := *req.URL
-	u.Host = req.Host
-	return &u
 }

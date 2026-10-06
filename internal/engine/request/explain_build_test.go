@@ -30,10 +30,14 @@ func TestSetExplainHTTPExtendsPreparedReport(t *testing.T) {
 		ReqMethod:      "POST",
 		EffectiveURL:   "https://example.com/final",
 		RequestHeaders: http.Header{"X-Sent": {"2"}},
+		ReqHost:        "api.internal",
 	})
 
 	if rep.Final == nil {
 		t.Fatal("expected final explain section")
+	}
+	if got := previewHeaders(rep.Final.Headers).Get("Host"); got != "api.internal" {
+		t.Fatalf("expected the sent Host, got %q", got)
 	}
 	if rep.Final.Mode != "sent" {
 		t.Fatalf("expected sent mode, got %q", rep.Final.Mode)

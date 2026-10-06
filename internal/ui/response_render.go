@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -307,7 +306,7 @@ func (r responseRenderer) renderHTTPReqHdrs(resp *httpx.Response, width int) str
 	return r.renderHdrDoc(
 		strings.Join(parts, sub.Render(" · ")),
 		[]hdrPanel{{
-			fields: bodyfmt.HeaderFields(buildRequestHeaderMap(resp)),
+			fields: bodyfmt.HeaderFields(resp.SentHeaders()),
 			empty:  "No request headers captured",
 		}},
 		width,
@@ -637,32 +636,6 @@ func (r responseRenderer) renderGRPCStatusBlock(
 		))
 	}
 	return joinSections(sections...)
-}
-
-func buildRequestHeaderMap(resp *httpx.Response) http.Header {
-	var h http.Header
-	if resp != nil && resp.RequestHeaders != nil {
-		h = resp.RequestHeaders.Clone()
-	}
-	if h == nil {
-		h = make(http.Header)
-	}
-
-	if resp == nil {
-		return h
-	}
-
-	if h.Get("Host") == "" && strings.TrimSpace(resp.ReqHost) != "" {
-		h.Set("Host", resp.ReqHost)
-	}
-	if h.Get("Transfer-Encoding") == "" && len(resp.ReqTE) > 0 {
-		h["Transfer-Encoding"] = append([]string(nil), resp.ReqTE...)
-	}
-	if h.Get("Content-Length") == "" && resp.ReqLen > 0 {
-		h.Set("Content-Length", strconv.FormatInt(resp.ReqLen, 10))
-	}
-
-	return h
 }
 
 func grpcRequestHeaderMap(req *restfile.Request) http.Header {

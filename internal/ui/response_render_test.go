@@ -463,17 +463,6 @@ func TestHeaderPanelLongNameStacksValue(t *testing.T) {
 	}
 }
 
-func TestBuildRequestHeaderMapAddsDefaults(t *testing.T) {
-	resp := &httpx.Response{
-		ReqMethod: "GET",
-		ReqHost:   "example.com",
-	}
-	hdrs := buildRequestHeaderMap(resp)
-	if hdrs.Get("Host") != "example.com" {
-		t.Fatalf("expected host to be populated from request host, got %q", hdrs.Get("Host"))
-	}
-}
-
 func TestBinaryResponsesUseSummaryAndHexRaw(t *testing.T) {
 	body := []byte{0x00, 0x01, 0x02, 0x03}
 	resp := &httpx.Response{

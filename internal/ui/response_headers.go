@@ -157,7 +157,7 @@ func headerMap(s *responseSnapshot, view headersViewMode) http.Header {
 	if view == headersViewRequest {
 		switch {
 		case s.source.hasHTTP():
-			return buildRequestHeaderMap(s.source.http)
+			return s.source.http.SentHeaders()
 		case s.source.hasGRPC():
 			return grpcRequestHeaderMap(s.source.grpcReq)
 		default:

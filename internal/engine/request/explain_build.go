@@ -402,7 +402,7 @@ func setExplainHTTP(rep *xplain.Report, resp *httpx.Response) {
 	final.Mode = "sent"
 	final.Method = strings.TrimSpace(resp.ReqMethod)
 	final.URL = strings.TrimSpace(resp.EffectiveURL)
-	final.Headers = explainHeaders(resp.RequestHeaders)
+	final.Headers = explainHeaders(resp.SentHeaders())
 	if strings.TrimSpace(final.Protocol) == "" {
 		final.Protocol = "HTTP"
 	}
