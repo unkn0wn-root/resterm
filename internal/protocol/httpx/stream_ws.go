@@ -228,20 +228,18 @@ func wsDialOptions(
 	wsOpts restfile.WebSocketOptions,
 	client *http.Client,
 ) *websocket.DialOptions {
-	opts := &websocket.DialOptions{
-		HTTPHeader:   req.Header.Clone(),
-		Host:         req.Host,
-		Subprotocols: slices.Clone(wsOpts.Subprotocols),
-		HTTPClient:   client,
+	// The library offers no compression unless asked, so resterm asks.
+	mode := websocket.CompressionDisabled
+	if wsOpts.Compression.Or(true) {
+		mode = websocket.CompressionNoContextTakeover
 	}
-	if on, ok := wsOpts.Compression.Get(); ok {
-		if on {
-			opts.CompressionMode = websocket.CompressionNoContextTakeover
-		} else {
-			opts.CompressionMode = websocket.CompressionDisabled
-		}
+	return &websocket.DialOptions{
+		HTTPHeader:      req.Header.Clone(),
+		Host:            req.Host,
+		Subprotocols:    slices.Clone(wsOpts.Subprotocols),
+		HTTPClient:      client,
+		CompressionMode: mode,
 	}
-	return opts
 }
 
 func (c *Client) ExecuteWebSocket(

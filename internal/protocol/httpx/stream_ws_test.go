@@ -1197,3 +1197,46 @@ func TestStartWebSocketHandshakeTimeoutIsATimeout(t *testing.T) {
 		t.Fatalf("error = %q, want no internal cause in the message", err)
 	}
 }
+
+// The library stopped offering compression by default, so resterm offers it
+// itself unless the request turns it off.
+func TestWebSocketOffersCompressionByDefault(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		opt   restfile.Opt[bool]
+		offer bool
+	}{
+		{name: "default", offer: true},
+		{name: "on", opt: restfile.OptOf(true), offer: true},
+		{name: "off", opt: restfile.OptOf(false)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			offered := make(chan bool, 1)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				offered <- strings.Contains(r.Header.Get("Sec-WebSocket-Extensions"), "permessage-deflate")
+				conn, err := websocket.Accept(w, r, nil)
+				if err != nil {
+					return
+				}
+				_ = conn.Close(websocket.StatusNormalClosure, "")
+			}))
+			t.Cleanup(srv.Close)
+
+			req := &restfile.Request{
+				Method: "GET",
+				URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+				WebSocket: &restfile.WebSocketRequest{
+					Options: restfile.WebSocketOptions{Compression: tt.opt},
+				},
+			}
+			handle, _, err := NewClient(nil).StartWebSocket(context.Background(), req, nil, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			<-handle.Session.Done()
+			if got := <-offered; got != tt.offer {
+				t.Fatalf("offered permessage-deflate = %v, want %v", got, tt.offer)
+			}
+		})
+	}
+}

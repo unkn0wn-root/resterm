@@ -67,7 +67,7 @@ Available WebSocket options:
 | `idle-timeout` | Idle timeout once the socket is open. Resets on every send or receive. Set it to 0 for no limit. |
 | `max-message-bytes` | Largest inbound message allowed. The default is 32 KiB. |
 | `subprotocols` | Comma-separated list advertised during the handshake. |
-| `compression=<true\|false>` | Turn per-message compression on or off. |
+| `compression=<true\|false>` | Offer per-message compression to the server. The default is `true`, and `false` turns it off. |
 
 Supported `@ws` steps:
 
