@@ -1061,7 +1061,7 @@ func AuthSecretValues(auth *restfile.AuthSpec, res *vars.Resolver) []string {
 	}
 
 	switch auth.Kind() {
-	case restfile.AuthBasic:
+	case restfile.AuthBasic, restfile.AuthDigest:
 		add(expand("password"))
 	case restfile.AuthBearer:
 		add(expand("token"))
@@ -1100,6 +1100,12 @@ func (e *Engine) prepareExplainAuthPreview(
 			status:  xplain.StageOK,
 			summary: xplain.SummaryAuthPrepared,
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
+		}, nil
+	case restfile.AuthDigest:
+		return explainAuthPreviewResult{
+			status:  xplain.StageOK,
+			summary: xplain.SummaryAuthPrepared,
+			notes:   []string{"digest auth is sent after the server's 401 challenge"},
 		}, nil
 	case restfile.AuthCommand:
 		if hdr, ok := e.commandAuthHeader(doc, auth, res); ok && requestHeaderPresent(req, hdr) {

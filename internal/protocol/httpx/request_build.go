@@ -181,7 +181,6 @@ func (c *Client) buildHTTPRequest(
 			}
 		}
 	}
-
 	// net/http reads Host from Request.Host, not from Header.
 	// Connections and TLS still use the URL's host.
 	if host := httpReq.Header.Get("Host"); host != "" {
@@ -195,10 +194,11 @@ func (c *Client) buildHTTPRequest(
 		}
 	}
 
-	placed, err := c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
+	plan, err := c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
 	if err != nil {
 		return nil, opts, err
 	}
-	opts.CredentialHeaders = slices.Concat(opts.CredentialHeaders, placed)
+	opts.CredentialHeaders = slices.Concat(opts.CredentialHeaders, plan.Targets)
+	opts.digest = plan.Digest
 	return httpReq, opts, nil
 }

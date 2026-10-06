@@ -8,6 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
+	"github.com/unkn0wn-root/resterm/internal/http/digest"
 	"github.com/unkn0wn-root/resterm/internal/http/origin"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
@@ -48,6 +49,8 @@ type Options struct {
 	SSH                *ssh.Plan
 	K8s                *k8s.Plan
 	CookieJar          http.CookieJar
+
+	digest *digest.Credentials
 }
 
 type HTTPClientFactory func(Options) (*http.Client, error)
@@ -237,7 +240,7 @@ func (c *Client) executeHTTPRequest(
 	}
 
 	start := time.Now()
-	httpResp, err := client.Do(httpReq)
+	httpResp, err := withDigest(client, effectiveOpts).Do(httpReq)
 	if err != nil {
 		if k8sDiag != nil {
 			err = k8s.AnnotateRequestError(err, start, k8sDiag)

@@ -107,6 +107,20 @@ func (g redirectGuard) keepsCredentials(via []*http.Request, next *url.URL) bool
 	return origin.Same(via[0].URL, next) || g.forwardTo.Allows(origin.Of(next))
 }
 
+// reaches applies the credential rules to this redirect.
+// net/http links earlier requests through Response.Request.
+func (g redirectGuard) reaches(hop *http.Request) bool {
+	var via []*http.Request
+	for r := hop.Response; r != nil && r.Request != nil; r = r.Request.Response {
+		via = append(via, r.Request)
+	}
+	if len(via) == 0 {
+		return true
+	}
+	slices.Reverse(via)
+	return g.keepsCredentials(via, hop.URL)
+}
+
 // leftTLS reports whether the chain has gone from an https hop to a plain http
 // one. Trust does not come back if a later hop returns to https, because
 // whoever sat on the plain http hop picked every redirect after it.

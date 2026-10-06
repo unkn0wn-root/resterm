@@ -217,6 +217,13 @@ func applyGRPCAuth(req *restfile.Request, res *vars.Resolver) error {
 	if err != nil {
 		return err
 	}
+	if plan.Digest != nil {
+		return diag.New(
+			diag.ClassAuth,
+			"digest auth is not supported for grpc",
+			diag.WithComponent(diag.ComponentGRPC),
+		)
+	}
 
 	for _, v := range plan.Values {
 		if v.Placement == httpx.AuthInQuery {

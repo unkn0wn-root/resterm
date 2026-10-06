@@ -2,6 +2,8 @@ package runner
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -2457,5 +2459,51 @@ func TestRunInvalidProfileSendsNothing(t *testing.T) {
 		if err == nil || count != 0 {
 			t.Fatalf("%s: err = %v, requests = %d, want a parse error and no requests", directive, err, count)
 		}
+	}
+}
+
+func TestRunDigestExpandsFileAuthTemplates(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "digest.http")
+	md5Hex := func(s string) string {
+		sum := md5.Sum([]byte(s))
+		return hex.EncodeToString(sum[:])
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := r.Header.Get("Authorization")
+		_, cnonce, _ := strings.Cut(h, `cnonce="`)
+		cnonce, _, _ = strings.Cut(cnonce, `"`)
+		ha1 := md5Hex("alice:test:s3cret")
+		want := md5Hex(ha1 + ":n0nce:00000001:" + cnonce + ":auth:" + md5Hex("GET:/report"))
+		if !strings.Contains(h, `response="`+want+`"`) {
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", qop="auth", nonce="n0nce"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+
+	src := strings.Join([]string{
+		"# @const pw s3cret",
+		"# @auth file digest alice {{pw}}",
+		"",
+		"### Report",
+		"GET " + srv.URL + "/report",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	rep, err := RunContext(t.Context(), Options{FilePath: file, WorkspaceRoot: dir})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(rep.Results) != 1 || rep.Results[0].Response == nil {
+		t.Fatalf("expected one HTTP result, got %+v", rep.Results)
+	}
+	if resp := rep.Results[0].Response; resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/http/digest"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -28,6 +29,8 @@ type AuthValue struct {
 type AuthPlan struct {
 	Values  []AuthValue
 	Targets []string
+	// Digest holds credentials for the retry after a server challenge.
+	Digest *digest.Credentials
 }
 
 func (p *AuthPlan) claim(name string) {
@@ -79,7 +82,7 @@ func ResolveAuth(
 		return out.Value, err
 	}
 	switch kind {
-	case restfile.AuthBasic:
+	case restfile.AuthBasic, restfile.AuthDigest:
 		plan.claim(authorizationHeader)
 		if header.Present(existing, authorizationHeader) {
 			return plan, nil
@@ -92,8 +95,12 @@ func ResolveAuth(
 		if err != nil {
 			return AuthPlan{}, err
 		}
-		encoded := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
-		plan.header(authorizationHeader, basicPrefix+encoded)
+		if kind == restfile.AuthDigest {
+			plan.Digest = &digest.Credentials{Username: user, Password: pass}
+		} else {
+			encoded := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
+			plan.header(authorizationHeader, basicPrefix+encoded)
+		}
 
 	case restfile.AuthBearer:
 		plan.claim(authorizationHeader)

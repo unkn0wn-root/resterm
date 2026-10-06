@@ -677,6 +677,7 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 		existing string
 		want     []string
 		wantSet  bool
+		digest   bool
 	}{
 		{
 			name: "apikey places its value",
@@ -716,6 +717,24 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 			want:     []string{"Authorization"},
 		},
 		{
+			name: "digest waits for the challenge",
+			auth: &restfile.AuthSpec{Type: restfile.AuthDigest, Params: map[string]string{
+				authParamUsername: "user",
+				authParamPassword: "secret",
+			}},
+			want:   []string{"Authorization"},
+			digest: true,
+		},
+		{
+			name: "digest defers to the request",
+			auth: &restfile.AuthSpec{Type: restfile.AuthDigest, Params: map[string]string{
+				authParamUsername: "user",
+				authParamPassword: "secret",
+			}},
+			existing: "Authorization",
+			want:     []string{"Authorization"},
+		},
+		{
 			name: "apikey in the query targets no header",
 			auth: &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: map[string]string{
 				authParamName:      "api_key",
@@ -742,6 +761,9 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 			}
 			if got := len(plan.Values) > 0; got != tt.wantSet {
 				t.Fatalf("placed a value = %t, want %t", got, tt.wantSet)
+			}
+			if got := plan.Digest != nil; got != tt.digest {
+				t.Fatalf("digest credentials = %t, want %t", got, tt.digest)
 			}
 		})
 	}

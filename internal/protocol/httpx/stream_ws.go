@@ -158,7 +158,13 @@ func (c *Client) StartWebSocket(
 		handshakeCancel()
 		return nil, nil, err
 	}
-
+	if effectiveOpts.digest != nil {
+		return nil, nil, diag.New(
+			diag.ClassAuth,
+			"digest auth is not supported for websocket requests",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
+	}
 	// The websocket library uses the URL's host for its handshake.
 	if !strings.EqualFold(httpReq.Host, httpReq.URL.Host) {
 		return nil, nil, diag.Newf(
