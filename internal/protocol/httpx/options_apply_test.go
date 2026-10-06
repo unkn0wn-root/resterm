@@ -20,6 +20,12 @@ func TestApplyOptionSettingsRejectsInvalidValues(t *testing.T) {
 		{name: "followredirects", key: "followredirects", val: "maybe", want: `invalid followredirects "maybe" (use true or false)`},
 		{name: "insecure", key: "insecure", val: "maybe", want: `invalid insecure "maybe" (use true or false)`},
 		{name: "no-cookies", key: "no-cookies", val: "maybe", want: `invalid no-cookies "maybe" (use true or false)`},
+		{
+			name: "ws-compression",
+			key:  "ws-compression",
+			val:  "maybe",
+			want: `invalid ws-compression "maybe" (use true or false)`,
+		},
 		{name: "http-version", key: "http-version", val: "unsupported", want: `invalid http-version "unsupported"`},
 		{
 			name: "http-version 1.0",

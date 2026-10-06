@@ -27,6 +27,7 @@ type Options struct {
 	SSEMaxLineBytes    int64
 	SSEMaxEventBytes   int64
 	WSMaxMessageBytes  int64
+	WSCompression      restfile.Opt[bool]
 	BaseURL            string
 	FollowRedirects    bool
 	MaxRedirects       restfile.Opt[int]

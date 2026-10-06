@@ -170,6 +170,7 @@ var settingArgs = []argument{
 	opt("sse-max-line-bytes", "Default SSE line limit for every request", "4mb"),
 	opt("sse-max-event-bytes", "Default SSE event limit for every request", "8mb"),
 	opt("ws-max-message-bytes", "Default WebSocket message limit for every request", "32kb"),
+	flag("ws-compression", "Offer WebSocket compression for every request"),
 	choice(
 		"http-version",
 		"HTTP protocol version",

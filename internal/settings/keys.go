@@ -19,6 +19,7 @@ var httpSettingKeys = map[string]struct{}{
 	"sse-max-line-bytes":              {},
 	"sse-max-event-bytes":             {},
 	"ws-max-message-bytes":            {},
+	"ws-compression":                  {},
 }
 
 // IsHTTPKey reports whether key is a supported HTTP setting key.

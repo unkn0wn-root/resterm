@@ -153,7 +153,7 @@ func (c *Client) StartWebSocket(
 		pulse:   make(chan struct{}, 1),
 		limit:   webSocketReadLimit(wsOpts.MaxMessageBytes, effectiveOpts.WSMaxMessageBytes),
 	}
-	dialOpts := wsDialOptions(httpReq, wsOpts, client)
+	dialOpts := wsDialOptions(httpReq, wsOpts, effectiveOpts.WSCompression, client)
 	dialOpts.OnPingReceived = runtime.pingReceived
 	dialOpts.OnPongReceived = runtime.pongReceived
 
@@ -228,11 +228,13 @@ func (c *Client) StartWebSocket(
 func wsDialOptions(
 	req *http.Request,
 	wsOpts restfile.WebSocketOptions,
+	compression restfile.Opt[bool],
 	client *http.Client,
 ) *websocket.DialOptions {
-	// The library offers no compression unless asked, so resterm asks.
+	// The directive wins over the ws-compression setting. The library offers no
+	// compression unless asked, so resterm asks by default.
 	mode := websocket.CompressionDisabled
-	if wsOpts.Compression.Or(true) {
+	if wsOpts.Compression.Or(compression.Or(true)) {
 		mode = websocket.CompressionNoContextTakeover
 	}
 	return &websocket.DialOptions{

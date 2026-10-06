@@ -1202,13 +1202,16 @@ func TestStartWebSocketHandshakeTimeoutIsATimeout(t *testing.T) {
 // itself unless the request turns it off.
 func TestWebSocketOffersCompressionByDefault(t *testing.T) {
 	for _, tt := range []struct {
-		name  string
-		opt   restfile.Opt[bool]
-		offer bool
+		name    string
+		opt     restfile.Opt[bool]
+		setting string
+		offer   bool
 	}{
 		{name: "default", offer: true},
 		{name: "on", opt: restfile.OptOf(true), offer: true},
 		{name: "off", opt: restfile.OptOf(false)},
+		{name: "setting off", setting: "false"},
+		{name: "directive wins over the setting", opt: restfile.OptOf(true), setting: "false", offer: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			offered := make(chan bool, 1)
@@ -1228,6 +1231,9 @@ func TestWebSocketOffersCompressionByDefault(t *testing.T) {
 				WebSocket: &restfile.WebSocketRequest{
 					Options: restfile.WebSocketOptions{Compression: tt.opt},
 				},
+			}
+			if tt.setting != "" {
+				req.Settings = map[string]string{"ws-compression": tt.setting}
 			}
 			handle, _, err := NewClient(nil).StartWebSocket(context.Background(), req, nil, Options{})
 			if err != nil {

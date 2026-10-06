@@ -67,7 +67,7 @@ Available WebSocket options:
 | `idle-timeout` | Idle timeout once the socket is open. Resets on every frame Resterm sends and every message it receives. Pings and pongs from the server do not reset it. Set it to 0 for no limit. |
 | `max-message-bytes` | Largest inbound message allowed. The default is 32 KiB. |
 | `subprotocols` | Comma-separated list advertised during the handshake. |
-| `compression=<true\|false>` | Offer per-message compression to the server. The default is `true`, and `false` turns it off. |
+| `compression=<true\|false>` | Offer per-message compression to the server. The default is `true`, and `false` turns it off. To change the default for a whole file or an environment, use the `ws-compression` setting, for example `# @setting ws-compression false`. |
 
 Supported `@ws` steps:
 
