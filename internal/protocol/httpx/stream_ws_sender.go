@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"maps"
-
-	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
 type WebSocketSender struct {
@@ -101,155 +99,80 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 	}
 }
 
-func (s *WebSocketSender) SendText(ctx context.Context, text string, meta map[string]string) error {
-	payload := []byte(text)
-	m := maps.Clone(meta)
-	if m == nil {
-		m = map[string]string{}
-	}
-	m[wsMetaType] = "text"
-	msg := wsOutbound{
-		ctx:      ctx,
-		kind:     wsOutboundMessage,
-		msgType:  websocket.MessageText,
-		payload:  payload,
-		metadata: m,
-		result:   make(chan error, 1),
-	}
-	return s.enqueue(msg)
+func (s *WebSocketSender) SendText(ctx context.Context, text, step string) error {
+	return s.send(ctx, stream.WSText, []byte(text), step)
 }
 
-func (s *WebSocketSender) SendJSON(
-	ctx context.Context,
-	jsonPayload string,
-	meta map[string]string,
-) error {
+func (s *WebSocketSender) SendJSON(ctx context.Context, jsonPayload, step string) error {
 	if !json.Valid([]byte(jsonPayload)) {
 		return diag.New(diag.ClassProtocol, "invalid json payload for websocket send")
 	}
-	m := maps.Clone(meta)
-	if m == nil {
-		m = map[string]string{}
-	}
-	m[wsMetaType] = "json"
-	msg := wsOutbound{
-		ctx:      ctx,
-		kind:     wsOutboundMessage,
-		msgType:  websocket.MessageText,
-		payload:  []byte(jsonPayload),
-		metadata: m,
-		result:   make(chan error, 1),
-	}
-	return s.enqueue(msg)
+	return s.send(ctx, stream.WSJSON, []byte(jsonPayload), step)
 }
 
-func (s *WebSocketSender) SendBinary(
-	ctx context.Context,
-	data []byte,
-	meta map[string]string,
-) error {
-	payload := append([]byte(nil), data...)
-	m := maps.Clone(meta)
-	if m == nil {
-		m = map[string]string{}
-	}
-	m[wsMetaType] = "binary"
-	msg := wsOutbound{
-		ctx:      ctx,
-		kind:     wsOutboundMessage,
-		msgType:  websocket.MessageBinary,
-		payload:  payload,
-		metadata: m,
-		result:   make(chan error, 1),
-	}
-	return s.enqueue(msg)
+func (s *WebSocketSender) SendBinary(ctx context.Context, data []byte, step string) error {
+	return s.send(ctx, stream.WSBinary, append([]byte(nil), data...), step)
 }
 
-func (s *WebSocketSender) SendBase64(
-	ctx context.Context,
-	data string,
-	meta map[string]string,
-) error {
+func (s *WebSocketSender) SendBase64(ctx context.Context, data, step string) error {
 	decoded, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
 		return diag.WrapAs(diag.ClassProtocol, err, "decode base64 payload")
 	}
-	return s.SendBinary(ctx, decoded, meta)
+	return s.SendBinary(ctx, decoded, step)
 }
 
-func (s *WebSocketSender) Ping(ctx context.Context, payload string, meta map[string]string) error {
-	data := []byte(payload)
-	if len(data) > websocketControlMaxPayload {
-		return diag.Newf(
-			diag.ClassProtocol,
-			"websocket ping payload exceeds %d bytes",
-			websocketControlMaxPayload,
-		)
-	}
-	msg := wsOutbound{
-		ctx:      ctx,
-		kind:     wsOutboundPing,
-		payload:  append([]byte(nil), data...),
-		metadata: maps.Clone(meta),
-		result:   make(chan error, 1),
-	}
-	return s.enqueue(msg)
+func (s *WebSocketSender) send(ctx context.Context, typ stream.WSType, payload []byte, step string) error {
+	return s.enqueue(wsOutbound{
+		ctx:     ctx,
+		kind:    wsOutboundMessage,
+		typ:     typ,
+		payload: payload,
+		step:    step,
+		result:  make(chan error, 1),
+	})
 }
 
-func (s *WebSocketSender) Pong(ctx context.Context, payload string, meta map[string]string) error {
-	data := []byte(payload)
-	if len(data) > websocketControlMaxPayload {
-		return diag.Newf(
-			diag.ClassProtocol,
-			"websocket pong payload exceeds %d bytes",
-			websocketControlMaxPayload,
-		)
-	}
-	m := maps.Clone(meta)
-	if m == nil {
-		m = map[string]string{}
-	}
-	m[wsMetaType] = "pong"
-	msg := wsOutbound{
-		ctx:      ctx,
-		kind:     wsOutboundPong,
-		payload:  append([]byte(nil), data...),
-		metadata: m,
-		result:   make(chan error, 1),
-	}
-	return s.enqueue(msg)
+func (s *WebSocketSender) Ping(ctx context.Context, payload, step string) error {
+	return s.control(ctx, wsOutboundPing, stream.WSPing, payload, step)
 }
 
-func (s *WebSocketSender) Close(
+func (s *WebSocketSender) Pong(ctx context.Context, payload, step string) error {
+	return s.control(ctx, wsOutboundPong, stream.WSPong, payload, step)
+}
+
+func (s *WebSocketSender) control(
 	ctx context.Context,
-	code websocket.StatusCode,
-	reason string,
-	meta map[string]string,
+	kind wsOutboundKind,
+	typ stream.WSType,
+	payload, step string,
 ) error {
-	msg := wsOutbound{
-		ctx:      ctx,
-		kind:     wsOutboundClose,
-		code:     code,
-		reason:   reason,
-		metadata: maps.Clone(meta),
-		result:   make(chan error, 1),
+	if len(payload) > websocketControlMaxPayload {
+		return diag.Newf(
+			diag.ClassProtocol,
+			"websocket %s payload exceeds %d bytes",
+			typ,
+			websocketControlMaxPayload,
+		)
 	}
-	return s.enqueue(msg)
+	return s.enqueue(wsOutbound{
+		ctx:     ctx,
+		kind:    kind,
+		typ:     typ,
+		payload: []byte(payload),
+		step:    step,
+		result:  make(chan error, 1),
+	})
 }
 
-func opcodeToType(op int) string {
-	switch op {
-	case wsOpcodeText:
-		return "text"
-	case wsOpcodeBinary:
-		return "binary"
-	case wsOpcodePing:
-		return "ping"
-	case wsOpcodePong:
-		return "pong"
-	case wsOpcodeClose:
-		return "close"
-	default:
-		return "unknown"
-	}
+func (s *WebSocketSender) Close(ctx context.Context, code stream.WSCloseCode, reason, step string) error {
+	return s.enqueue(wsOutbound{
+		ctx:    ctx,
+		kind:   wsOutboundClose,
+		typ:    stream.WSClose,
+		code:   code,
+		reason: reason,
+		step:   step,
+		result: make(chan error, 1),
+	})
 }

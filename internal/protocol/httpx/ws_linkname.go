@@ -10,6 +10,12 @@ import (
 	"github.com/coder/websocket"
 )
 
+// Opcodes for the control frames resterm writes through wsWriteControl.
+const (
+	wsOpcodePing = 0x9
+	wsOpcodePong = 0xA
+)
+
 // this wraps the unexported (*websocket.Conn).writeControl method via go:linkname.
 // This allows us to emit control frames such as pong while reusing lib's framing logic.
 //

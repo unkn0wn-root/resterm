@@ -20,58 +20,33 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-const (
-	wsMetaType        = "resterm.ws.type"
-	wsMetaStep        = "resterm.ws.step"
-	wsMetaClosedBy    = "resterm.ws.closed.by"
-	wsMetaCloseCode   = "resterm.ws.close.code"
-	wsMetaCloseReason = "resterm.ws.close.reason"
-)
-
-// Values used for WebSocketSummary.ClosedBy.
-const (
-	wsClosedByServer   = "server"
-	wsClosedByClient   = "client"
-	wsClosedByTimeout  = "timeout"
-	wsClosedByCanceled = "canceled"
-	wsClosedByError    = "error"
-)
-
 const defaultWebSocketSendQueue = 32
 
 const webSocketSwitchingProtocolsStatus = "101 Switching Protocols"
 
-const (
-	wsOpcodeText   = 0x1
-	wsOpcodeBinary = 0x2
-	wsOpcodeClose  = 0x8
-	wsOpcodePing   = 0x9
-	wsOpcodePong   = 0xA
-
-	websocketControlMaxPayload = 125
-)
+const websocketControlMaxPayload = 125
 
 type WebSocketEvent struct {
-	Step      string    `json:"step,omitempty"`
-	Direction string    `json:"direction"`
-	Type      string    `json:"type"`
-	Size      int       `json:"size"`
-	Text      string    `json:"text,omitempty"`
-	Base64    string    `json:"base64,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
-	Code      int       `json:"code,omitempty"`
-	Reason    string    `json:"reason,omitempty"`
+	Step      string        `json:"step,omitempty"`
+	Direction string        `json:"direction"`
+	Type      stream.WSType `json:"type"`
+	Size      int           `json:"size"`
+	Text      string        `json:"text,omitempty"`
+	Base64    string        `json:"base64,omitempty"`
+	Timestamp time.Time     `json:"timestamp"`
+	Code      int           `json:"code,omitempty"`
+	Reason    string        `json:"reason,omitempty"`
 }
 
 type WebSocketSummary struct {
-	SentCount     int           `json:"sentCount"`
-	ReceivedCount int           `json:"receivedCount"`
-	Duration      time.Duration `json:"duration"`
-	ClosedBy      string        `json:"closedBy"`
-	CloseCode     int           `json:"closeCode,omitempty"`
-	CloseReason   string        `json:"closeReason,omitempty"`
-	Dropped       int64         `json:"dropped,omitempty"`
-	ErrorClass    diag.Class    `json:"errorClass,omitempty"`
+	SentCount     int               `json:"sentCount"`
+	ReceivedCount int               `json:"receivedCount"`
+	Duration      time.Duration     `json:"duration"`
+	ClosedBy      stream.WSClosedBy `json:"closedBy"`
+	CloseCode     int               `json:"closeCode,omitempty"`
+	CloseReason   string            `json:"closeReason,omitempty"`
+	Dropped       int64             `json:"dropped,omitempty"`
+	ErrorClass    diag.Class        `json:"errorClass,omitempty"`
 }
 
 type WebSocketTranscript struct {
@@ -83,17 +58,17 @@ type WebSocketTranscript struct {
 // deadline. A close from either side and an idle timeout are normal endings.
 func (s WebSocketSummary) Err() error {
 	switch s.ClosedBy {
-	case wsClosedByCanceled:
+	case stream.WSClosedByCanceled:
 		return diag.New(
 			s.ErrorClass.KnownOr(diag.ClassCanceled),
 			cmp.Or(s.CloseReason, "websocket stream canceled"),
 		)
-	case wsClosedByTimeout:
+	case stream.WSClosedByTimeout:
 		if !s.ErrorClass.Known() {
 			return nil
 		}
 		return diag.New(s.ErrorClass, cmp.Or(s.CloseReason, "websocket stream ran out of time"))
-	case wsClosedByError:
+	case stream.WSClosedByError:
 		return diag.New(
 			s.ErrorClass.KnownOr(diag.ClassProtocol),
 			cmp.Or(s.CloseReason, "websocket stream failed"),
@@ -119,14 +94,14 @@ const (
 )
 
 type wsOutbound struct {
-	ctx      context.Context
-	kind     wsOutboundKind
-	msgType  websocket.MessageType
-	payload  []byte
-	code     websocket.StatusCode
-	reason   string
-	metadata map[string]string
-	result   chan error
+	ctx     context.Context
+	kind    wsOutboundKind
+	typ     stream.WSType
+	payload []byte
+	code    stream.WSCloseCode
+	reason  string
+	step    string
+	result  chan error
 }
 
 func (c *Client) StartWebSocket(
@@ -337,12 +312,7 @@ func (c *Client) CompleteWebSocket(
 	}
 	// A session that already ended needs no close frame.
 	if !c.runWSSteps(session, sender, req, baseDir, opts) && session.Context().Err() == nil {
-		_ = sender.Close(
-			session.Context(),
-			websocket.StatusNormalClosure,
-			"resterm closed",
-			map[string]string{wsMetaType: "close", wsMetaStep: "auto-close"},
-		)
+		_ = sender.Close(session.Context(), stream.WSCloseNormal, "resterm closed", "auto-close")
 	}
 
 	select {

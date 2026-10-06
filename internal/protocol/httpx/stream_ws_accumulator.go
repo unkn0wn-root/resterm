@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"strconv"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -41,49 +40,23 @@ func (a *wsAccumulator) consume(evt *stream.Event) {
 	if evt == nil {
 		return
 	}
-	meta := evt.Metadata
-	typ := ""
-	if meta != nil {
-		typ = meta[wsMetaType]
-	}
+	ws := evt.WS
 	switch evt.Direction {
 	case stream.DirSend, stream.DirReceive:
-		if typ == "" {
-			typ = opcodeToType(evt.WS.Opcode)
-		}
 		jsonEvt := WebSocketEvent{
+			Step:      ws.Step,
 			Direction: directionToString(evt.Direction),
-			Type:      typ,
+			Type:      ws.Type,
 			Timestamp: evt.Timestamp,
 			Size:      len(evt.Payload),
+			Code:      int(ws.Code),
+			Reason:    ws.Reason,
 		}
-		if meta != nil {
-			if step, ok := meta[wsMetaStep]; ok {
-				jsonEvt.Step = step
-			}
-		}
-		switch typ {
-		case "text", "json", "pong", "ping":
+		switch ws.Type {
+		case stream.WSText, stream.WSJSON, stream.WSPing, stream.WSPong:
 			jsonEvt.Text = string(evt.Payload)
-		case "binary":
+		case stream.WSBinary:
 			jsonEvt.Base64 = base64.StdEncoding.EncodeToString(evt.Payload)
-		case "close":
-			if meta != nil {
-				if codeStr, ok := meta[wsMetaCloseCode]; ok {
-					if code, err := strconv.Atoi(codeStr); err == nil {
-						jsonEvt.Code = code
-					}
-				}
-				if reason, ok := meta[wsMetaCloseReason]; ok {
-					jsonEvt.Reason = reason
-				}
-			}
-			if evt.WS.Code != 0 && jsonEvt.Code == 0 {
-				jsonEvt.Code = int(evt.WS.Code)
-			}
-			if evt.WS.Reason != "" && jsonEvt.Reason == "" {
-				jsonEvt.Reason = evt.WS.Reason
-			}
 		}
 		if a.keep(evt) {
 			a.events = append(a.events, jsonEvt)
@@ -97,42 +70,17 @@ func (a *wsAccumulator) consume(evt *stream.Event) {
 		// the session. A close resterm sends is published before the reply it
 		// gets back, and a close it never managed to send is not published at
 		// all, which leaves the peer's frame first.
-		if typ == "close" && !a.closed {
+		if ws.Type == stream.WSClose && !a.closed {
 			a.closed = true
-			if meta != nil {
-				if by, ok := meta[wsMetaClosedBy]; ok {
-					a.summary.ClosedBy = by
-				}
-				if reason, ok := meta[wsMetaCloseReason]; ok && reason != "" {
-					a.summary.CloseReason = reason
-				}
-				if codeStr, ok := meta[wsMetaCloseCode]; ok {
-					if code, err := strconv.Atoi(codeStr); err == nil {
-						a.summary.CloseCode = code
-					}
-				}
-			}
-			if jsonEvt.Code != 0 {
-				a.summary.CloseCode = jsonEvt.Code
-			}
-			if jsonEvt.Reason != "" {
-				a.summary.CloseReason = jsonEvt.Reason
+			a.summary.ClosedBy = ws.ClosedBy
+			a.summary.CloseCode = int(ws.Code)
+			if ws.Reason != "" {
+				a.summary.CloseReason = ws.Reason
 			}
 		}
 	case stream.DirNA:
-		if meta != nil {
-			if by, ok := meta[wsMetaClosedBy]; ok {
-				a.summary.ClosedBy = by
-			}
-			if codeStr, ok := meta[wsMetaCloseCode]; ok {
-				if code, err := strconv.Atoi(codeStr); err == nil {
-					a.summary.CloseCode = code
-				}
-			}
-			if reason, ok := meta[wsMetaCloseReason]; ok {
-				a.summary.CloseReason = reason
-			}
-		}
+		a.summary.ClosedBy = ws.ClosedBy
+		a.summary.CloseReason = ws.Reason
 	}
 }
 
@@ -156,20 +104,20 @@ func applyWebSocketSummaryDefaults(sum *WebSocketSummary, state stream.State, st
 	if sum.ClosedBy == "" {
 		switch {
 		case errors.Is(stateErr, context.Canceled):
-			sum.ClosedBy = wsClosedByCanceled
+			sum.ClosedBy = stream.WSClosedByCanceled
 		case errors.Is(stateErr, context.DeadlineExceeded):
-			sum.ClosedBy = wsClosedByTimeout
+			sum.ClosedBy = stream.WSClosedByTimeout
 		case state == stream.StateFailed || stateErr != nil:
-			sum.ClosedBy = wsClosedByError
+			sum.ClosedBy = stream.WSClosedByError
 		default:
-			sum.ClosedBy = wsClosedByClient
+			sum.ClosedBy = stream.WSClosedByClient
 		}
 	}
 	if stateErr == nil {
 		return
 	}
 	switch sum.ClosedBy {
-	case wsClosedByCanceled, wsClosedByTimeout, wsClosedByError:
+	case stream.WSClosedByCanceled, stream.WSClosedByTimeout, stream.WSClosedByError:
 		if class := diag.ClassOf(stateErr); class.Known() {
 			sum.ErrorClass = class
 		}

@@ -3,8 +3,6 @@ package stream
 import (
 	"sync/atomic"
 	"time"
-
-	"github.com/coder/websocket"
 )
 
 type Kind int
@@ -39,6 +37,7 @@ type Event struct {
 	Timestamp time.Time
 	Sequence  uint64
 
+	// Metadata carries SSE and gRPC details. WebSocket events use WS.
 	Metadata map[string]string
 	Payload  []byte
 
@@ -50,7 +49,7 @@ func (e *Event) Size() int64 {
 	if e == nil {
 		return 0
 	}
-	size := len(e.Payload) + len(e.SSE.Name) + len(e.SSE.ID) + len(e.SSE.Comment) + len(e.WS.Reason)
+	size := len(e.Payload) + len(e.SSE.Name) + len(e.SSE.ID) + len(e.SSE.Comment) + len(e.WS.Step) + len(e.WS.Reason)
 	for key, value := range e.Metadata {
 		size += len(key) + len(value)
 	}
@@ -63,12 +62,6 @@ type SSEMetadata struct {
 	ID      string
 	Comment string
 	Retry   int
-}
-
-type WSMetadata struct {
-	Opcode int
-	Code   websocket.StatusCode
-	Reason string
 }
 
 var seqCounter uint64

@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coder/websocket"
-
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -50,37 +48,30 @@ func (c *Client) runWSSteps(
 		}
 
 		label := fmt.Sprintf("%d:%s", idx+1, string(step.Type))
-		meta := map[string]string{wsMetaStep: label}
 
 		var err error
 		switch step.Type {
 		case restfile.WebSocketStepSendText:
-			meta[wsMetaType] = "text"
-			err = sender.SendText(ctx, step.Value, meta)
+			err = sender.SendText(ctx, step.Value, label)
 		case restfile.WebSocketStepSendJSON:
-			meta[wsMetaType] = "json"
-			err = sender.SendJSON(ctx, cmp.Or(strings.TrimSpace(step.Value), "{}"), meta)
+			err = sender.SendJSON(ctx, cmp.Or(strings.TrimSpace(step.Value), "{}"), label)
 		case restfile.WebSocketStepSendBase64:
-			meta[wsMetaType] = "binary"
-			err = sender.SendBase64(ctx, step.Value, meta)
+			err = sender.SendBase64(ctx, step.Value, label)
 		case restfile.WebSocketStepSendFile:
-			meta[wsMetaType] = "binary"
 			var data []byte
 			data, _, err = c.readFile(lookup, step.File, "websocket payload file")
 			if err == nil {
-				err = sender.SendBinary(ctx, data, meta)
+				err = sender.SendBinary(ctx, data, label)
 			}
 		case restfile.WebSocketStepPing:
-			meta[wsMetaType] = "ping"
-			err = sender.Ping(ctx, step.Value, meta)
+			err = sender.Ping(ctx, step.Value, label)
 		case restfile.WebSocketStepPong:
-			err = sender.Pong(ctx, step.Value, meta)
+			err = sender.Pong(ctx, step.Value, label)
 		case restfile.WebSocketStepWait:
 			err = waitForDuration(ctx, step.Duration)
 		case restfile.WebSocketStepClose:
-			meta[wsMetaType] = "close"
-			code := cmp.Or(websocket.StatusCode(step.Code), websocket.StatusNormalClosure)
-			err = sender.Close(ctx, code, step.Reason, meta)
+			code := cmp.Or(stream.WSCloseCode(step.Code), stream.WSCloseNormal)
+			err = sender.Close(ctx, code, step.Reason, label)
 			closedByScript = err == nil
 		}
 
