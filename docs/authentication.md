@@ -60,7 +60,11 @@ GET {{base.url}}/resource
 Resterm puts the client ID and secret into the Basic header as written. The OAuth 2.0 specification asks clients to URL-encode both values first, and some providers expect this. With those providers, a secret containing `+` or `%`, or a client ID containing `:`, is rejected. Wrap the values in `url.encode`:
 
 ```http
-# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{= url.encode(env.get("oauth.clientId")) }} client_secret={{= url.encode(env.get("oauth.clientSecret")) }}
+# @const oauth.id {{= url.encode(env.get("oauth.clientId")) }}
+# @const oauth.secret {{= url.encode(env.get("oauth.clientSecret")) }}
+
+### Resource
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.id}} client_secret={{oauth.secret}}
 GET {{base.url}}/resource
 ```
 
