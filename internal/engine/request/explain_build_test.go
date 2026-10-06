@@ -2,10 +2,12 @@ package request
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -144,4 +146,20 @@ func explainPairValue(xs []xplain.Pair, key string) string {
 		}
 	}
 	return ""
+}
+
+func TestPreviewShowsTheHostHeader(t *testing.T) {
+	eng := New(engcfg.Config{}, nil)
+	req := &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     "http://example.test/x",
+		Headers: http.Header{"Host": {"api.internal"}},
+	}
+	res, err := eng.ExecuteWith(nil, req, envWith(t, "dev", nil), ExecOptions{Mode: ExecModePreview})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() = %v, %v", err, res.Err)
+	}
+	if got := previewHeaders(res.Explain.Final.Headers).Values("Host"); !slices.Equal(got, []string{"api.internal"}) {
+		t.Fatalf("preview Host = %q, want api.internal once", got)
+	}
 }

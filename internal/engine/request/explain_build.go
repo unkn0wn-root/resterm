@@ -429,7 +429,13 @@ func setExplainHTTPPrepared(
 	if httpReq.URL != nil {
 		final.URL = strings.TrimSpace(httpReq.URL.String())
 	}
-	final.Headers = explainHeaders(httpReq.Header)
+	h := httpReq.Header
+	// Show Host from Request.Host; the request builder removes it from Header.
+	if httpReq.URL != nil && httpReq.Host != httpReq.URL.Host {
+		h = h.Clone()
+		h.Set("Host", httpReq.Host)
+	}
+	final.Headers = explainHeaders(h)
 	txt, note, ok := explainBuiltBody(req, body)
 	if !ok {
 		return
