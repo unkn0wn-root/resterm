@@ -1,6 +1,6 @@
 # Authentication
 
-Use `@auth` to attach credentials. Types include `basic`, `bearer`, `apikey`, custom headers, `oauth2`, and `command` for tokens printed by a CLI.
+Use `@auth` to attach credentials. Types include `basic`, `bearer`, `digest`, `apikey`, custom headers, `oauth2`, and `command` for tokens printed by a CLI. Digest auth retries once after the server's `401` challenge.
 
 ```http
 # @auth bearer {{auth.token}}

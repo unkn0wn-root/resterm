@@ -133,6 +133,28 @@ GET https://api.example.com/data
 
 When `header` is something other than `Authorization`, Resterm sends only the raw token, without the `Bearer ` prefix. With the default `Authorization` header, the value is `Bearer <token>`.
 
+## Digest auth
+
+Use `# @auth digest <username> <password>` for HTTP Digest authentication (RFC 7616).
+
+```http
+### Digest-protected endpoint
+# @auth digest {{api.user}} {{api.password}}
+GET {{base.url}}/reports
+```
+
+Resterm sends the request without a Digest header. If the server returns a supported `401` challenge in `WWW-Authenticate`, Resterm retries once with an `Authorization: Digest` header and returns that response.
+
+- Supported algorithms are `MD5`, `SHA-256` and `SHA-512-256`, including their `-sess` variants. Resterm uses the first supported challenge in the server's list.
+- Resterm prefers `qop=auth`. With `qop=auth-int`, it also hashes the request body. Without `qop`, it uses the older RFC 2069 format. Session algorithms (`-sess`) require `qop`.
+- Cookies set with the challenge are saved in the cookie jar and sent on the retry.
+- Each redirect can get its own Digest header under the same credential rules as Basic auth. Sending credentials to another origin requires [`forward-credentials-on-redirect`](http-settings.md#other-http-settings). Credentials are never sent after an HTTPS-to-HTTP redirect, even if a later redirect returns to HTTPS.
+- An explicit `Authorization` header takes precedence over `@auth` and is sent unchanged. Otherwise, `@auth digest` overrides any username and password in the URL.
+
+Digest auth works with HTTP and SSE requests. Resterm does not support Digest auth for WebSocket or gRPC requests. An explicit `Authorization` header still takes precedence over `@auth` for these requests.
+
+If you used `# @auth Digest <value>` to send a custom header, replace it with `Digest: <value>` in the request. `digest` is now a reserved auth type: one value is rejected, and additional values are read as a username and password.
+
 ## Command-backed auth
 
 If the token is already in an environment variable, you do not need a command. Read it once per file:
@@ -207,8 +229,9 @@ GET https://api.github.com/user/repos
 | --- | --- | --- |
 | Basic | `# @auth basic user pass` | Injects `Authorization: Basic …`. Templates expand inside parameters. |
 | Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
+| Digest | `# @auth digest user pass` | Retries once after the server's `401` Digest challenge. See [Digest auth](#digest-auth). |
 | API key | `# @auth apikey header X-API-Key {{key}}` | Write the placement, the name, and the value. `placement` can be `header` or `query`. An `auth` dict in `@apply` or `@patch` may leave out `name`, which then defaults to the `X-API-Key` header. |
-| Custom header | `# @auth Authorization CustomValue` | Any header and value. |
+| Custom header | `# @auth Authorization CustomValue` | Any header and value. For a header named after an auth type, such as `Digest`, use a normal request header. |
 | Command | `# @auth command cmd="gh auth token"` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
 | Named command | `# @auth use=gh` | Uses a command auth defined once with `@auth file` or `@auth global` and a name. |
 | OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Fetches and caches tokens. Supports client_credentials, password, and authorization_code with PKCE. |
