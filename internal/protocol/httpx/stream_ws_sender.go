@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"maps"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
