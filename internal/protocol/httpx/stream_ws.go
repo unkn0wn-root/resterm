@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -140,14 +139,6 @@ func (c *Client) StartWebSocket(
 			diag.WithComponent(diag.ComponentHTTP),
 		)
 	}
-	// The websocket library uses the URL's host for its handshake.
-	if !strings.EqualFold(httpReq.Host, httpReq.URL.Host) {
-		return nil, nil, diag.Newf(
-			diag.ClassProtocol,
-			"a Host header other than the URL host (%s) is not supported for websocket requests",
-			httpReq.URL.Host,
-		)
-	}
 
 	client, err := c.streamClient(effectiveOpts)
 	if err != nil {
@@ -237,12 +228,9 @@ func wsDialOptions(
 	wsOpts restfile.WebSocketOptions,
 	client *http.Client,
 ) *websocket.DialOptions {
-	var hdr http.Header
-	if req != nil {
-		hdr = req.Header.Clone()
-	}
 	opts := &websocket.DialOptions{
-		HTTPHeader:   hdr,
+		HTTPHeader:   req.Header.Clone(),
+		Host:         req.Host,
 		Subprotocols: slices.Clone(wsOpts.Subprotocols),
 		HTTPClient:   client,
 	}

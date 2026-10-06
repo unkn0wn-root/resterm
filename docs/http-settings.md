@@ -96,7 +96,7 @@ A template can also provide part of the URL. Both `GET http://{{host}}/users` an
 - HTTP version: `@setting http-version 1.1` (accepts `1.1`, `2`, `HTTP/1.1`, `HTTP/2`). A trailing `HTTP/1.1` on the request line also sets the version. Explicit settings win. `2` is strict and fails if the response is not HTTP/2. WebSocket requests are incompatible with `2`.
 - HTTP/1.0 is not supported. Resterm rejects `http-version 1.0`, trailing `HTTP/1.0`, and other unsupported version tokens such as `HTTP/3`.
 - Only a trailing `HTTP/<major>` or `HTTP/<major>.<minor>` is read as a version. Any other trailing text stays part of the URL, so `GET https://example.com/a http/foo` requests `/a%20http/foo`.
-- Set a `Host` header to choose a virtual host. The connection and TLS server name still use the URL's host. Cookies use the `Host` value. A redirect to a path keeps the `Host` header. A redirect that names a host uses that host instead. WebSocket requests require `Host` to match the URL's host.
+- Set a `Host` header to choose a virtual host. The connection and TLS server name still use the URL's host. Cookies use the `Host` value. A redirect to a path keeps the `Host` header. A redirect that names a host uses that host instead. WebSocket handshakes send the `Host` header too.
 - Resterm removes credentials before following a redirect to another origin or to another `Host`, even on the same address. An origin is the scheme, host, and port. Changing any of these creates a different origin. Resterm removes known credential headers and any custom header named by `@auth`, even when that header was already on the request.
 - Use `@setting forward-credentials-on-redirect` to send credentials to specific origins:
 
