@@ -175,8 +175,12 @@ func (b *workflowBuilder) handleWorkflowCondition(
 ) (bool, error) {
 	switch call.Name {
 	case directive.When:
-		if _, err := b.requireNoPending(); err != nil {
-			return true, err
+		if w := b.pendWhen; w != nil {
+			return true, fmt.Errorf(
+				"next step already has %s on line %d. A step takes one @when or @skip-if",
+				w.Directive().Tag(),
+				w.Line,
+			)
 		}
 		spec, err := parseConditionSpec(
 			call.Args,
@@ -186,22 +190,16 @@ func (b *workflowBuilder) handleWorkflowCondition(
 		if err != nil {
 			return true, err
 		}
-		if b.pendWhen != nil {
-			return true, errors.New("@when directive already defined for next step")
-		}
 		b.pendWhen = spec
 		b.touch(line)
 		return true, nil
 	case directive.ForEach:
-		if _, err := b.requireNoPending(); err != nil {
-			return true, err
+		if e := b.pendEach; e != nil {
+			return true, fmt.Errorf("next step already has @for-each on line %d. A step takes one @for-each", e.Line)
 		}
 		spec, err := parseForEachSpec(call.Args, line)
 		if err != nil {
 			return true, err
-		}
-		if b.pendEach != nil {
-			return true, errors.New("@for-each directive already defined for next step")
 		}
 		b.pendEach = spec
 		b.touch(line)
@@ -312,8 +310,8 @@ func (b *workflowBuilder) handleWorkflowIf(
 
 // Both report the line of the directive left unfinished.
 func (b *workflowBuilder) requireNoPending() (int, error) {
-	if b.pendWhen != nil {
-		return b.pendWhen.Line, errors.New("@when must be followed by @step")
+	if w := b.pendWhen; w != nil {
+		return w.Line, fmt.Errorf("%s must be followed by @step", w.Directive().Tag())
 	}
 	if b.pendEach != nil {
 		return b.pendEach.Line, errors.New("@for-each must be followed by @step")

@@ -100,6 +100,14 @@ type ConditionSpec struct {
 	Negate     bool
 }
 
+// Directive returns the directive the condition was written with.
+func (c ConditionSpec) Directive() directive.Name {
+	if c.Negate {
+		return directive.SkipIf
+	}
+	return directive.When
+}
+
 type ForEachSpec struct {
 	Expression string
 	Var        string

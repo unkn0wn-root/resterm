@@ -481,10 +481,7 @@ func (e *Engine) evalCondition(
 	if expr == "" {
 		return true, "", nil
 	}
-	tag := directive.When.Tag()
-	if spec.Negate {
-		tag = directive.SkipIf.Tag()
-	}
+	tag := spec.Directive().Tag()
 	flat := str.FoldLines(expr)
 	val, err := e.rtsEvalValue(ctx, EvalInput{
 		Doc:     doc,

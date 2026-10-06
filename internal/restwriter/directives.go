@@ -101,10 +101,7 @@ func applyArg(a restfile.ApplySpec) (directive.Name, string) {
 }
 
 func conditionArg(c restfile.ConditionSpec) (directive.Name, string) {
-	if c.Negate {
-		return directive.SkipIf, c.Expression
-	}
-	return directive.When, c.Expression
+	return c.Directive(), c.Expression
 }
 
 // The "as" form is written because the expression may itself contain "in".

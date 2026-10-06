@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
@@ -605,10 +604,7 @@ func (f flow) EvaluateCondition() *xexec.RequestResult {
 		x.locals,
 	)
 	if err != nil {
-		tag := directive.When.Tag()
-		if x.req.Metadata.When != nil && x.req.Metadata.When.Negate {
-			tag = directive.SkipIf.Tag()
-		}
+		tag := x.req.Metadata.When.Directive().Tag()
 		x.exp.stage(
 			tag,
 			xplain.StageError,
