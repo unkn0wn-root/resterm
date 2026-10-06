@@ -64,7 +64,7 @@ Available WebSocket options:
 | Token | Description |
 | --- | --- |
 | `timeout` | Handshake deadline (applies until the connection upgrades). |
-| `idle-timeout` | Idle timeout once the socket is open. Resets on every send or receive. Set it to 0 for no limit. |
+| `idle-timeout` | Idle timeout once the socket is open. Resets on every frame Resterm sends and every message it receives. Pings and pongs from the server do not reset it. Set it to 0 for no limit. |
 | `max-message-bytes` | Largest inbound message allowed. The default is 32 KiB. |
 | `subprotocols` | Comma-separated list advertised during the handshake. |
 | `compression=<true\|false>` | Offer per-message compression to the server. The default is `true`, and `false` turns it off. |
@@ -81,7 +81,7 @@ Supported `@ws` steps:
 | `@ws wait <duration>` | Pause for the given duration, for example `500ms`. |
 | `@ws close [code] [reason]` | Close the connection with an optional status code (defaults to `1000`). |
 
-When the handshake fails, Resterm shows the HTTP response to help you find the problem. During a successful session, events appear in the UI and history together with their direction, opcode, size, and close status. Templates and scripts can read `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped` from the summary. `closedBy` has one of these values:
+When the handshake fails, Resterm shows the HTTP response to help you find the problem. During a successful session, events appear in the UI and history together with their direction, opcode, size, and close status. Pings and pongs from the server are listed as received frames and count toward `receivedCount`, as sent pings count toward `sentCount`. Resterm answers each ping. Templates and scripts can read `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped` from the summary. `closedBy` has one of these values:
 
 | Value | Meaning |
 | --- | --- |
@@ -97,7 +97,7 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
 
 ## Limits
 
-- SSE lines are limited to 4 MiB and SSE events to 8 MiB. Change these limits with `@sse max-line-bytes` and `@sse max-event-bytes`. A larger line or event stops the stream with an error naming the limit to raise. Reaching `@sse max-bytes` ends the stream without an error. WebSocket messages are limited to 32 KiB unless `@websocket max-message-bytes` sets another limit.
+- SSE lines are limited to 4 MiB and SSE events to 8 MiB. Change these limits with `@sse max-line-bytes` and `@sse max-event-bytes`. A larger line or event stops the stream with an error naming the limit to raise. Reaching `@sse max-bytes` ends the stream without an error. WebSocket messages are limited to 32 KiB unless `@websocket max-message-bytes` sets another limit. A larger message stops the session with an error naming that option.
 - To change these limits for more than one request, use the `sse-max-line-bytes`, `sse-max-event-bytes`, and `ws-max-message-bytes` settings. They take a size such as `8mb` and set the default every request starts from, so an environment or a file can raise a limit once instead of repeating it. A `@sse` or `@websocket` directive on the request still wins. These settings do not accept `none`, because a stream with no line limit has nothing to stop it.
 
   ```http

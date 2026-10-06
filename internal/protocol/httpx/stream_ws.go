@@ -146,7 +146,16 @@ func (c *Client) StartWebSocket(
 		return nil, nil, err
 	}
 
+	// The conn reports control frames only from inside its own methods, which
+	// run after the runtime gets its conn and session below.
+	runtime := &wsRuntime{
+		writeCh: make(chan wsOutbound, defaultWebSocketSendQueue),
+		pulse:   make(chan struct{}, 1),
+		limit:   webSocketReadLimit(wsOpts.MaxMessageBytes, effectiveOpts.WSMaxMessageBytes),
+	}
 	dialOpts := wsDialOptions(httpReq, wsOpts, client)
+	dialOpts.OnPingReceived = runtime.pingReceived
+	dialOpts.OnPongReceived = runtime.pongReceived
 
 	dial := c.wsDial
 	if dial == nil {
@@ -201,16 +210,9 @@ func (c *Client) StartWebSocket(
 	session := stream.NewSession(sessionCtx, stream.KindWebSocket, stream.Config{})
 	session.MarkOpen()
 
-	runtime := &wsRuntime{
-		conn:    conn,
-		session: session,
-		writeCh: make(chan wsOutbound, defaultWebSocketSendQueue),
-		cancel:  sessionCancel,
-		pulse:   make(chan struct{}, 1),
-	}
+	runtime.conn, runtime.session, runtime.cancel = conn, session, sessionCancel
 	runtime.touchActivity()
-
-	conn.SetReadLimit(webSocketReadLimit(wsOpts.MaxMessageBytes, effectiveOpts.WSMaxMessageBytes))
+	conn.SetReadLimit(runtime.limit)
 
 	if wsOpts.IdleTimeout > 0 {
 		go runtime.idleWatch(wsOpts.IdleTimeout)

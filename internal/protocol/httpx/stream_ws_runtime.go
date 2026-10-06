@@ -21,6 +21,8 @@ type wsRuntime struct {
 	writeCh chan wsOutbound
 	cancel  context.CancelFunc
 	pulse   chan struct{}
+	// limit is the read limit, named in the error a larger message ends with.
+	limit int64
 	// Keep transcript publication ordered around writes without holding this
 	// mutex during network I/O. Data frames received while an outbound frame is
 	// in flight are replayed after the send event is recorded.
@@ -183,13 +185,17 @@ func (rt *wsRuntime) readLoop() {
 				}, nil)
 				return
 			}
-			if ctx.Err() != nil {
+			switch {
+			case ctx.Err() != nil:
 				rt.closeTerminalNow(nil, ctx.Err())
-			} else {
-				rt.closeTerminalNow(
-					nil,
-					diag.Wrap(err, "read websocket message"),
-				)
+			case errors.Is(err, websocket.ErrMessageTooBig):
+				rt.closeTerminalNow(nil, diag.Newf(
+					diag.ClassProtocol,
+					"websocket message exceeds %d bytes, raise it with @websocket max-message-bytes",
+					rt.limit,
+				))
+			default:
+				rt.closeTerminalNow(nil, diag.Wrap(err, "read websocket message"))
 			}
 			return
 		}
@@ -200,14 +206,29 @@ func (rt *wsRuntime) readLoop() {
 		if msgType == websocket.MessageText {
 			typ = stream.WSText
 		}
-		rt.publishReceive(&stream.Event{
-			Kind:      stream.KindWebSocket,
-			Direction: stream.DirReceive,
-			Timestamp: time.Now(),
-			Payload:   append([]byte(nil), data...),
-			WS:        stream.WSMetadata{Type: typ},
-		})
+		rt.receive(typ, data)
 	}
+}
+
+// Pings and pongs from the peer go into the transcript. They are not activity,
+// so a keepalive cannot hold an idle session open.
+func (rt *wsRuntime) pingReceived(_ context.Context, payload []byte) bool {
+	rt.receive(stream.WSPing, payload)
+	return true
+}
+
+func (rt *wsRuntime) pongReceived(_ context.Context, payload []byte) {
+	rt.receive(stream.WSPong, payload)
+}
+
+func (rt *wsRuntime) receive(typ stream.WSType, payload []byte) {
+	rt.publishReceive(&stream.Event{
+		Kind:      stream.KindWebSocket,
+		Direction: stream.DirReceive,
+		Timestamp: time.Now(),
+		Payload:   append([]byte(nil), payload...),
+		WS:        stream.WSMetadata{Type: typ},
+	})
 }
 
 func (rt *wsRuntime) idleWatch(limit time.Duration) {

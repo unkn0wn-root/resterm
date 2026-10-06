@@ -1240,3 +1240,112 @@ func TestWebSocketOffersCompressionByDefault(t *testing.T) {
 		})
 	}
 }
+
+// Like an SSE line, a message over the limit names the option that raises it.
+func TestWebSocketNamesTheMessageLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		_ = conn.Write(r.Context(), websocket.MessageText, []byte(strings.Repeat("x", 100)))
+		_, _, _ = conn.Read(r.Context())
+	}))
+	t.Cleanup(srv.Close)
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{MaxMessageBytes: 64},
+			Steps:   []restfile.WebSocketStep{{Type: restfile.WebSocketStepWait, Duration: time.Second}},
+		},
+	}
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := wsTranscript(t, resp).Summary
+	want := "websocket message exceeds 64 bytes, raise it with @websocket max-message-bytes"
+	if sum.ClosedBy != stream.WSClosedByError || sum.ErrorClass != diag.ClassProtocol || sum.CloseReason != want {
+		t.Fatalf("summary = %s %s %q, want error protocol %q", sum.ClosedBy, sum.ErrorClass, sum.CloseReason, want)
+	}
+}
+
+// Sent pings already count, so pings and pongs from the server do too.
+func TestWebSocketRecordsControlFramesFromTheServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		ctx := conn.CloseRead(r.Context())
+		_ = conn.Ping(ctx)
+		<-ctx.Done()
+	}))
+	t.Cleanup(srv.Close)
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepPing, Value: "hb"},
+				{Type: restfile.WebSocketStepWait, Duration: 300 * time.Millisecond},
+			},
+		},
+	}
+	resp, err := NewClient(nil).ExecuteWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcript := wsTranscript(t, resp)
+	var ping, pong bool
+	for _, evt := range transcript.Events {
+		if evt.Direction != "receive" {
+			continue
+		}
+		ping = ping || evt.Type == stream.WSPing
+		pong = pong || evt.Type == stream.WSPong && evt.Text == "hb"
+	}
+	if !ping || !pong {
+		t.Fatalf("received ping %v, pong hb %v, want both in %+v", ping, pong, transcript.Events)
+	}
+	if transcript.Summary.ReceivedCount < 2 {
+		t.Fatalf("receivedCount = %d, want the control frames counted", transcript.Summary.ReceivedCount)
+	}
+}
+
+// A server keepalive is not activity, so idle-timeout still ends the session.
+func TestWebSocketServerPingsDoNotHoldAnIdleSession(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		ctx := conn.CloseRead(r.Context())
+		for ctx.Err() == nil {
+			_ = conn.Ping(ctx)
+			time.Sleep(50 * time.Millisecond)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{IdleTimeout: 300 * time.Millisecond},
+			Steps:   []restfile.WebSocketStep{{Type: restfile.WebSocketStepWait, Duration: 2 * time.Second}},
+		},
+	}
+	resp, err := NewClient(nil).ExecuteWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum := wsTranscript(t, resp).Summary; sum.ClosedBy != stream.WSClosedByTimeout || sum.ErrorClass != "" {
+		t.Fatalf("summary = %s %s %q, want an idle timeout", sum.ClosedBy, sum.ErrorClass, sum.CloseReason)
+	}
+}
