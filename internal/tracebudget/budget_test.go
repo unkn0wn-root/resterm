@@ -68,19 +68,50 @@ func TestFromTraceClampsNegative(t *testing.T) {
 }
 
 func TestNormalizePhase(t *testing.T) {
-	cs := map[string]string{
-		" DNS ":      "dns",
-		"header":     "request_headers",
-		"req_body":   "request_body",
-		"first_byte": "ttfb",
-		"overall":    "total",
-		"custom":     "custom",
-		"":           "",
+	cs := map[string]nettrace.PhaseKind{
+		" DNS ":           nettrace.PhaseDNS,
+		"header":          nettrace.PhaseReqHdrs,
+		"request-headers": nettrace.PhaseReqHdrs,
+		"request-body":    nettrace.PhaseReqBody,
+		"req_body":        nettrace.PhaseReqBody,
+		"first_byte":      nettrace.PhaseTTFB,
+		"overall":         nettrace.PhaseTotal,
 	}
 	for in, want := range cs {
-		got := NormalizePhase(in)
-		if got != want {
-			t.Fatalf("NormalizePhase(%q) = %q, want %q", in, got, want)
+		if got, ok := NormalizePhase(in); !ok || got != want {
+			t.Fatalf("NormalizePhase(%q) = %q, %v, want %q", in, got, ok, want)
 		}
+	}
+	for _, in := range []string{"custom", "request-hdrs", ""} {
+		if got, ok := NormalizePhase(in); ok {
+			t.Fatalf("NormalizePhase(%q) = %q, want no phase", in, got)
+		}
+	}
+}
+
+func TestNormalizePhaseKeepsCanonicalNames(t *testing.T) {
+	for _, k := range []nettrace.PhaseKind{
+		nettrace.PhaseDNS,
+		nettrace.PhaseConnect,
+		nettrace.PhaseTLS,
+		nettrace.PhaseReqHdrs,
+		nettrace.PhaseReqBody,
+		nettrace.PhaseTTFB,
+		nettrace.PhaseTransfer,
+		nettrace.PhaseTotal,
+	} {
+		if got, ok := NormalizePhase(string(k)); !ok || got != k {
+			t.Fatalf("NormalizePhase(%q) = %q, %v", k, got, ok)
+		}
+	}
+}
+
+func TestFromTraceDropsUnknownPhases(t *testing.T) {
+	b := FromTrace(restfile.TraceBudget{Phases: map[string]time.Duration{
+		"request-headers": 20 * time.Millisecond,
+		"custom":          30 * time.Millisecond,
+	}})
+	if len(b.Phases) != 1 || b.Phases[nettrace.PhaseReqHdrs] != 20*time.Millisecond {
+		t.Fatalf("phases = %v, want only request_headers", b.Phases)
 	}
 }

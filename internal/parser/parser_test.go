@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"reflect"
 	"strings"
@@ -4233,6 +4234,32 @@ GET https://example.com/api
 	}
 	if len(spec.Budgets.Phases) != 0 {
 		t.Fatalf("expected no phase budgets, got %v", spec.Budgets.Phases)
+	}
+	if want := `unknown @trace options "<=50ms", "=100ms"`; !hasParseMessage(doc.Warnings, want) {
+		t.Fatalf("warnings = %v, want %q", doc.Warnings, want)
+	}
+}
+
+// Completion used to insert request-headers<= and request-body<=, so files
+// carry them. A name that is no phase used to be kept and never checked.
+func TestParseTraceDirectivePhaseNames(t *testing.T) {
+	src := `# @trace request-headers<=20ms request-body=30ms dsn<=5ms custom=1ms bogus
+GET https://example.com/api
+`
+	doc := Parse("trace.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v", doc.Errors)
+	}
+	spec := doc.Requests[0].Metadata.Trace
+	if spec == nil || !spec.Enabled {
+		t.Fatalf("trace = %+v, want it enabled", spec)
+	}
+	want := map[string]time.Duration{"request_headers": 20 * time.Millisecond, "request_body": 30 * time.Millisecond}
+	if !maps.Equal(spec.Budgets.Phases, want) {
+		t.Fatalf("phases = %v, want %v", spec.Budgets.Phases, want)
+	}
+	if msg := `unknown @trace options "dsn", "custom", "bogus"`; !hasParseMessage(doc.Warnings, msg) {
+		t.Fatalf("warnings = %v, want %q", doc.Warnings, msg)
 	}
 }
 

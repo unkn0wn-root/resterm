@@ -5,6 +5,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -105,14 +106,14 @@ var scriptArgs = []argument{
 
 var traceArgs = []argument{
 	flag("enabled", "Toggle tracing"),
-	budget("total", "Set overall latency budget", "400ms"),
-	opt("total", "Set overall latency budget (alternate syntax)", "400ms"),
-	budget("dns", "Budget for DNS lookup", "50ms"),
-	budget("connect", "Budget for TCP connect", "120ms"),
-	budget("tls", "Budget for TLS handshake", "150ms"),
-	budget("request-headers", "Budget for sending request headers", "20ms"),
-	budget("request-body", "Budget for sending request body", "100ms"),
-	budget("ttfb", "Budget until first response byte", "200ms"),
-	budget("transfer", "Budget for response transfer", "250ms"),
+	budget(nettrace.PhaseTotal, "Set overall latency budget", "400ms"),
+	opt(string(nettrace.PhaseTotal), "Set overall latency budget (alternate syntax)", "400ms"),
+	budget(nettrace.PhaseDNS, "Budget for DNS lookup", "50ms"),
+	budget(nettrace.PhaseConnect, "Budget for TCP connect", "120ms"),
+	budget(nettrace.PhaseTLS, "Budget for TLS handshake", "150ms"),
+	budget(nettrace.PhaseReqHdrs, "Budget for sending request headers", "20ms"),
+	budget(nettrace.PhaseReqBody, "Budget for sending request body", "100ms"),
+	budget(nettrace.PhaseTTFB, "Budget until first response byte", "200ms"),
+	budget(nettrace.PhaseTransfer, "Budget for response transfer", "250ms"),
 	opt("tolerance", "Allow extra shared tolerance", "25ms").alias("allowance"),
 }

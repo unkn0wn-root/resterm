@@ -10,6 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/duration"
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
@@ -494,7 +495,8 @@ func joinValues(fields []directive.Field) string {
 }
 
 // Trace budgets use "<=" syntax, so duplicate checks use normalized target
-// names instead of parsed options.
+// names instead of parsed options. An unknown token is reported by the name
+// before its operator, or whole when it has none.
 func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 	spec := &restfile.TraceSpec{Enabled: true}
 	rest = strings.TrimSpace(rest)
@@ -502,43 +504,58 @@ func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 		return spec, nil
 	}
 
-	var set []string
+	var set, unknown []string
 	for _, field := range directive.Fields(rest) {
-		if value := strings.TrimSpace(field); value != "" {
-			if target := applyTraceToken(spec, value); target != "" {
-				set = append(set, target)
+		value := strings.TrimSpace(field)
+		if value == "" {
+			continue
+		}
+		target, ok := applyTraceToken(spec, value)
+		switch {
+		case !ok:
+			name := value
+			if i := strings.IndexAny(value, "<="); i > 0 {
+				name = strings.TrimSpace(value[:i])
 			}
+			unknown = append(unknown, name)
+		case target != "":
+			set = append(set, target)
 		}
 	}
+	unk := directive.UnknownOption(directive.Trace, unknown...)
 	if err := directive.RepeatedNames(directive.Trace, set); err != nil {
-		return nil, err
+		return nil, errors.Join(err, unk)
 	}
 
 	if len(spec.Budgets.Phases) == 0 {
 		spec.Budgets.Phases = nil
 	}
-	return spec, nil
+	return spec, unk
 }
 
-// applyTraceToken returns the normalized setting name used for duplicate checks.
-func applyTraceToken(spec *restfile.TraceSpec, value string) string {
+// applyTraceToken returns the normalized setting name used for duplicate checks,
+// and false when the token names no setting.
+func applyTraceToken(spec *restfile.TraceSpec, value string) (string, bool) {
 	switch strings.ToLower(value) {
 	case "off", "disable", "disabled", "false":
 		spec.Enabled = false
-		return ""
+		return "", true
 	case "on", "enable", "enabled", "true":
 		spec.Enabled = true
-		return ""
+		return "", true
 	}
 
-	if parts := strings.SplitN(value, "<=", 2); len(parts) == 2 {
-		name := tracebudget.NormalizePhase(parts[0])
-		dur := parseDuration(parts[1])
-		if name == "" || dur <= 0 {
-			return ""
+	if name, val, ok := strings.Cut(value, "<="); ok {
+		kind, ok := tracebudget.NormalizePhase(name)
+		if !ok {
+			return "", false
 		}
-		setTracePhaseBudget(spec, name, dur)
-		return name
+		dur := parseDuration(val)
+		if dur <= 0 {
+			return "", true
+		}
+		setTracePhaseBudget(spec, kind, dur)
+		return string(kind), true
 	}
 
 	if before, after, ok := strings.Cut(value, "="); ok {
@@ -546,50 +563,43 @@ func applyTraceToken(spec *restfile.TraceSpec, value string) string {
 		val := strings.TrimSpace(after)
 		return applyTraceOption(spec, key, val)
 	}
-	return ""
+	return "", false
 }
 
-func applyTraceOption(spec *restfile.TraceSpec, key, val string) string {
+func applyTraceOption(spec *restfile.TraceSpec, key, val string) (string, bool) {
 	switch key {
 	case "enabled":
 		if b, ok := directive.ParseBool(val); ok {
 			spec.Enabled = b
-			return key
-		}
-	case "total":
-		if dur := parseDuration(val); dur > 0 {
-			spec.Budgets.Total = dur
-			return tracebudget.TotalPhase
+			return key, true
 		}
 	case "tolerance", "allowance", "grace":
 		if dur := parseDuration(val); dur >= 0 {
 			spec.Budgets.Tolerance = dur
-			return "tolerance"
+			return "tolerance", true
 		}
 	default:
-		dur := parseDuration(val)
-		if dur <= 0 {
-			return ""
+		kind, ok := tracebudget.NormalizePhase(key)
+		if !ok {
+			return "", false
 		}
-		name := tracebudget.NormalizePhase(key)
-		if name == "" {
-			return ""
+		if dur := parseDuration(val); dur > 0 {
+			setTracePhaseBudget(spec, kind, dur)
+			return string(kind), true
 		}
-		setTracePhaseBudget(spec, name, dur)
-		return name
 	}
-	return ""
+	return "", true
 }
 
-func setTracePhaseBudget(spec *restfile.TraceSpec, name string, dur time.Duration) {
-	if name == tracebudget.TotalPhase {
+func setTracePhaseBudget(spec *restfile.TraceSpec, kind nettrace.PhaseKind, dur time.Duration) {
+	if kind == nettrace.PhaseTotal {
 		spec.Budgets.Total = dur
 		return
 	}
 	if spec.Budgets.Phases == nil {
 		spec.Budgets.Phases = make(map[string]time.Duration)
 	}
-	spec.Budgets.Phases[name] = dur
+	spec.Budgets.Phases[string(kind)] = dur
 }
 
 var compareBaselineKeys = []string{"base", "baseline", "primary", "ref"}

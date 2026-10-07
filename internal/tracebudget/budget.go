@@ -8,31 +8,32 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-var phaseMap = map[string]string{
-	"dns":             string(nettrace.PhaseDNS),
-	"lookup":          string(nettrace.PhaseDNS),
-	"name":            string(nettrace.PhaseDNS),
-	"connect":         string(nettrace.PhaseConnect),
-	"dial":            string(nettrace.PhaseConnect),
-	"tls":             string(nettrace.PhaseTLS),
-	"handshake":       string(nettrace.PhaseTLS),
-	"headers":         string(nettrace.PhaseReqHdrs),
-	"request_headers": string(nettrace.PhaseReqHdrs),
-	"req_headers":     string(nettrace.PhaseReqHdrs),
-	"header":          string(nettrace.PhaseReqHdrs),
-	"body":            string(nettrace.PhaseReqBody),
-	"request_body":    string(nettrace.PhaseReqBody),
-	"req_body":        string(nettrace.PhaseReqBody),
-	"ttfb":            string(nettrace.PhaseTTFB),
-	"first_byte":      string(nettrace.PhaseTTFB),
-	"wait":            string(nettrace.PhaseTTFB),
-	"transfer":        string(nettrace.PhaseTransfer),
-	"download":        string(nettrace.PhaseTransfer),
-	"total":           string(nettrace.PhaseTotal),
-	"overall":         string(nettrace.PhaseTotal),
+// Completion inserted the hyphenated request names, so files carry them.
+var phaseMap = map[string]nettrace.PhaseKind{
+	"dns":             nettrace.PhaseDNS,
+	"lookup":          nettrace.PhaseDNS,
+	"name":            nettrace.PhaseDNS,
+	"connect":         nettrace.PhaseConnect,
+	"dial":            nettrace.PhaseConnect,
+	"tls":             nettrace.PhaseTLS,
+	"handshake":       nettrace.PhaseTLS,
+	"headers":         nettrace.PhaseReqHdrs,
+	"request_headers": nettrace.PhaseReqHdrs,
+	"request-headers": nettrace.PhaseReqHdrs,
+	"req_headers":     nettrace.PhaseReqHdrs,
+	"header":          nettrace.PhaseReqHdrs,
+	"body":            nettrace.PhaseReqBody,
+	"request_body":    nettrace.PhaseReqBody,
+	"request-body":    nettrace.PhaseReqBody,
+	"req_body":        nettrace.PhaseReqBody,
+	"ttfb":            nettrace.PhaseTTFB,
+	"first_byte":      nettrace.PhaseTTFB,
+	"wait":            nettrace.PhaseTTFB,
+	"transfer":        nettrace.PhaseTransfer,
+	"download":        nettrace.PhaseTransfer,
+	"total":           nettrace.PhaseTotal,
+	"overall":         nettrace.PhaseTotal,
 }
-
-const TotalPhase = string(nettrace.PhaseTotal)
 
 func FromSpec(spec *restfile.TraceSpec) (nettrace.Budget, bool) {
 	if spec == nil || !spec.Enabled {
@@ -63,11 +64,11 @@ func FromTrace(tb restfile.TraceBudget) nettrace.Budget {
 		if d <= 0 {
 			continue
 		}
-		k := NormalizePhase(n)
-		if k == "" {
+		k, ok := NormalizePhase(n)
+		if !ok {
 			continue
 		}
-		ps[nettrace.PhaseKind(k)] = d
+		ps[k] = d
 	}
 	if len(ps) > 0 {
 		b.Phases = ps
@@ -82,13 +83,8 @@ func HasBudget(b nettrace.Budget) bool {
 	return len(b.Phases) > 0
 }
 
-func NormalizePhase(n string) string {
-	n = strings.ToLower(strings.TrimSpace(n))
-	if n == "" {
-		return ""
-	}
-	if c, ok := phaseMap[n]; ok {
-		return c
-	}
-	return n
+// NormalizePhase reports false for a name that is not a phase or an alias of one.
+func NormalizePhase(n string) (nettrace.PhaseKind, bool) {
+	k, ok := phaseMap[strings.ToLower(strings.TrimSpace(n))]
+	return k, ok
 }

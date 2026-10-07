@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 )
 
 type argForm uint8
@@ -164,8 +165,8 @@ func filePath(key, summary string, kind PathKind, form pathForm) argument {
 	return optValue(key, summary, pathValue(kind, form))
 }
 
-func budget(key, summary, example string) argument {
-	a := opt(key, summary, example)
+func budget(phase nettrace.PhaseKind, summary, example string) argument {
+	a := opt(string(phase), summary, example)
 	a.form = formBudget
 	return a
 }
