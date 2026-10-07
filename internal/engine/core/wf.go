@@ -230,12 +230,8 @@ func (r *wfRun) runReqStep(
 		return r.failStep(ctx, step, req, branch, err)
 	}
 
-	spec, err := workflowForEach(step, req)
-	if err != nil {
-		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagForEach))
-	}
-	// A loop checks the condition per item instead, where the loop variable is bound.
-	if step.When != nil && spec == nil {
+	perItem := step.ConditionPerItem()
+	if step.When != nil && !perItem {
 		ok, reason, err := r.dep.EvalCondition(
 			ctx,
 			r.pl.Doc,
@@ -247,11 +243,27 @@ func (r *wfRun) runReqStep(
 			rts.Locals{},
 		)
 		if err != nil {
-			return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagWhen))
+			var help diag.Option
+			var undef *rts.UndefinedNameError
+			if each := req.Metadata.ForEach; each != nil && errors.As(err, &undef) && undef.Name == each.Var {
+				help = diag.WithHelp(fmt.Sprintf(
+					"%s is checked before the @for-each of request %q starts, so %q is not set. "+
+						"Put the condition on the request to check each item",
+					step.When.Directive().Tag(),
+					req.Metadata.Name,
+					undef.Name,
+				))
+			}
+			return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagWhen, help))
 		}
 		if !ok {
 			return r.manualFinish(step, req, branch, engine.RequestResult{Skipped: true, SkipReason: reason})
 		}
+	}
+
+	spec, err := workflowForEach(step, req)
+	if err != nil {
+		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagForEach))
 	}
 	if spec == nil {
 		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, sc, rts.Locals{})
@@ -322,7 +334,7 @@ func (r *wfRun) runReqStep(
 		loc := rts.Local(spec.Var, item)
 		vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, loop)
 
-		if step.When != nil {
+		if step.When != nil && perItem {
 			ok, reason, err := r.dep.EvalCondition(
 				ctx,
 				r.pl.Doc,

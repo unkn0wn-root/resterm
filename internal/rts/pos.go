@@ -44,6 +44,11 @@ type AbortError struct {
 	Kind AbortKind
 }
 
+type UndefinedNameError struct {
+	*RuntimeError
+	Name string
+}
+
 type AbortKind int
 
 const (

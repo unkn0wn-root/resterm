@@ -1,6 +1,7 @@
 package rtshost
 
 import (
+	"errors"
 	"slices"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -39,11 +40,18 @@ func reportOf(err error) (diag.Report, bool) {
 		return errorReport(diag.ClassScript, e.Msg, e.Pos), true
 	case *rts.AbortError:
 		return errorReport(abortClass(e.Kind), e.Msg, e.Pos), true
+	case *rts.UndefinedNameError:
+		return errorReport(diag.ClassScript, e.Msg, e.Pos), true
 	case *rts.RuntimeError:
 		return errorReport(diag.ClassScript, e.Msg, e.Pos), true
 	case *rts.StackError:
 		return stackReport(e), true
 	default:
+		// Keep the abort class when a native wrapped it.
+		var abort *rts.AbortError
+		if errors.As(err, &abort) {
+			return errorReport(abortClass(abort.Kind), abort.Msg, abort.Pos), true
+		}
 		return diag.Report{}, false
 	}
 }

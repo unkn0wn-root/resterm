@@ -464,7 +464,8 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 	case *Ident:
 		v, ok := env.Get(e.Name)
 		if !ok {
-			return Null(), Errf(vm.ctx, e.Pos(), "undefined name %q", e.Name)
+			base := &RuntimeError{Pos: e.Pos(), Msg: fmt.Sprintf("undefined name %q", e.Name)}
+			return Null(), WrapErr(vm.ctx, &UndefinedNameError{RuntimeError: base, Name: e.Name})
 		}
 		if err := vm.checkBound(e.Pos(), v); err != nil {
 			return Null(), err

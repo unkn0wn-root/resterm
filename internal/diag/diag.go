@@ -91,12 +91,20 @@ type metadata struct {
 	component Component
 	source    []byte
 	path      string
+	notes     []Note
 }
 
 // WithComponent records the package or protocol area that produced a diagnostic.
 func WithComponent(component Component) Option {
 	return func(m *metadata) {
 		m.component = component
+	}
+}
+
+// WithHelp adds a help note to the diagnostic.
+func WithHelp(message string) Option {
+	return func(m *metadata) {
+		m.notes = append(m.notes, Note{Kind: NoteHelp, Message: message})
 	}
 }
 

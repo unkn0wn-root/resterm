@@ -292,6 +292,7 @@ func withOperation(rep Report, e *diagnosticError) Report {
 		chainOfError(e.err, rep.Items[0].Message, rep.Summary(), errorString(e.err)),
 		rep.Items[0].Chain,
 	)
+	rep.Items[0].Notes = append(rep.Items[0].Notes, e.meta.notes...)
 	return rep
 }
 
@@ -335,6 +336,7 @@ func leafDiagnostic(e *diagnosticError) Diagnostic {
 			Note{Kind: NoteHelp, Message: "No response payload was received."},
 		)
 	}
+	d.Notes = append(d.Notes, e.meta.notes...)
 	return d
 }
 

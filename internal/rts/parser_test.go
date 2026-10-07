@@ -1,6 +1,9 @@
 package rts
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestParseFnIf(t *testing.T) {
 	src := "export fn f(a, b) {\nif a { return b } elif b { return a } else { return null }\n}\n"
@@ -909,5 +912,31 @@ func TestParseLogicalSymbolContinuesLine(t *testing.T) {
 	}
 	if len(m.Stmts) != 1 {
 		t.Fatalf("expected 1 stmt, got %d", len(m.Stmts))
+	}
+}
+
+func TestInspectVisitsEveryNameInOrder(t *testing.T) {
+	ex, err := ParseExpr("t.rts", 1, 1, `a.b(c[d], {"k": e}) ?? (f ? g : -h) ?? try i`)
+	if err != nil {
+		t.Fatalf("ParseExpr: %v", err)
+	}
+	var got []string
+	Inspect(ex, func(e Expr) bool {
+		if id, ok := e.(*Ident); ok {
+			got = append(got, id.Name)
+		}
+		return true
+	})
+	if want := []string{"a", "c", "d", "e", "f", "g", "h", "i"}; !slices.Equal(got, want) {
+		t.Fatalf("names = %v, want %v", got, want)
+	}
+
+	var n int
+	Inspect(ex, func(Expr) bool {
+		n++
+		return false
+	})
+	if n != 1 {
+		t.Fatalf("visited %d expressions after false, want 1", n)
 	}
 }
