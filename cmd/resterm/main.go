@@ -215,7 +215,7 @@ func run(a []string) error {
 	}
 
 	if curlSrc != "" && openapiSpec != "" {
-		return errors.New("import error: choose either --from-curl or --from-openapi")
+		return cli.UsageError(errors.New("import error: choose either --from-curl or --from-openapi"))
 	}
 
 	if curlSrc != "" {
@@ -251,7 +251,7 @@ func run(a []string) error {
 	if openapiSpec != "" {
 		generationMode, err := openapi.ParseGenerationMode(openapiMode)
 		if err != nil {
-			return fmt.Errorf("openapi import error: %w", err)
+			return cli.UsageError(fmt.Errorf("openapi import error: %w", err))
 		}
 		targetOut := httpOut
 		if targetOut == "" {

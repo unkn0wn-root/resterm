@@ -90,6 +90,9 @@ func TestRunRejectsConflictingImportFlags(t *testing.T) {
 	if !strings.Contains(err.Error(), "choose either --from-curl or --from-openapi") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if code := cli.ExitCode(err); code != cli.ExitUsage {
+		t.Fatalf("exit code = %d, want %d", code, cli.ExitUsage)
+	}
 }
 
 func TestRunRejectsConflictingImportShortFlags(t *testing.T) {
@@ -103,6 +106,20 @@ func TestRunRejectsConflictingImportShortFlags(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "choose either --from-curl or --from-openapi") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if code := cli.ExitCode(err); code != cli.ExitUsage {
+		t.Fatalf("exit code = %d, want %d", code, cli.ExitUsage)
+	}
+}
+
+func TestRunRejectsUnknownOpenAPIMode(t *testing.T) {
+	t.Setenv("RESTERM_CONFIG_DIR", t.TempDir())
+	err := run([]string{"--from-openapi", "spec.yaml", "--openapi-mode", "bogus"})
+	if err == nil || !strings.Contains(err.Error(), `unsupported OpenAPI generation mode "bogus"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if code := cli.ExitCode(err); code != cli.ExitUsage {
+		t.Fatalf("exit code = %d, want %d", code, cli.ExitUsage)
 	}
 }
 
