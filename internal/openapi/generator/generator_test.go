@@ -3,6 +3,7 @@ package generator
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -426,6 +427,110 @@ func TestSerializeParamValueDefaults(t *testing.T) {
 		sampleObject,
 	); got != "a,1,b,2" {
 		t.Fatalf("unexpected object key/value value: %s", got)
+	}
+}
+
+// @auth apikey has no cookie placement, so the key joins the Cookie header.
+func TestBuilderGenerateCookieAPIKey(t *testing.T) {
+	spec := &model.Spec{
+		Servers: []model.Server{{URL: "https://api.example.com"}},
+		SecuritySchemes: map[string]model.SecurityScheme{
+			"cookieKey": {Type: model.SecurityAPIKey, Name: "session_id", In: model.InCookie},
+			"bearer":    {Type: model.SecurityHTTP, Subtype: "bearer"},
+		},
+		Operations: []model.Operation{{
+			ID:         "getMe",
+			Method:     model.MethodGet,
+			Path:       "/me",
+			Parameters: []model.Parameter{{Name: "theme", Location: model.InCookie}},
+			Security:   []model.SecurityRequirement{{SchemeName: "cookieKey"}, {SchemeName: "bearer"}},
+		}},
+	}
+	doc, err := NewBuilder().Generate(context.Background(), spec, openapi.GeneratorOptions{})
+	if err != nil {
+		t.Fatalf("generate document: %v", err)
+	}
+
+	req := findRequestByName(t, doc, "getMe")
+	if req.Metadata.Auth != nil {
+		t.Fatalf("auth = %+v, want none", req.Metadata.Auth)
+	}
+	got := req.Headers.Values("Cookie")
+	if want := []string{"theme={{cookie_theme}}; session_id={{auth.apiKey}}"}; !slices.Equal(got, want) {
+		t.Fatalf("Cookie = %q, want %q", got, want)
+	}
+	if v, ok := findVariable(doc.Globals, "auth.apiKey"); !ok || !v.Secret {
+		t.Fatalf("globals = %+v, want a secret auth.apiKey", doc.Globals)
+	}
+}
+
+// A parameter the API key scheme already fills would send a second value, and
+// a server that reads the first one gets the parameter instead of the key.
+func TestBuilderGenerateDropsParameterTheAPIKeyFills(t *testing.T) {
+	for _, tt := range []struct {
+		in     model.ParameterLocation
+		key    string
+		params []model.Parameter
+		check  func(*restfile.Request) bool
+		drop   string
+	}{
+		{
+			in:  model.InCookie,
+			key: "session_id",
+			params: []model.Parameter{
+				{Name: "session_id", Location: model.InCookie},
+				{Name: "theme", Location: model.InCookie},
+				{Name: "session_id", Location: model.InQuery},
+			},
+			check: func(r *restfile.Request) bool {
+				return slices.Equal(r.Headers.Values("Cookie"), []string{"theme={{cookie_theme}}; session_id={{auth.apiKey}}"}) &&
+					strings.Contains(r.URL, "session_id={{query_session_id}}")
+			},
+			drop: "cookie_session_id",
+		},
+		{
+			in:     model.InHeader,
+			key:    "X-API-Key",
+			params: []model.Parameter{{Name: "x-api-key", Location: model.InHeader}},
+			check: func(r *restfile.Request) bool {
+				return r.Headers.Get("X-API-Key") == "" && r.Metadata.Auth.Params["name"] == "X-API-Key"
+			},
+			drop: "header_x_api_key",
+		},
+		{
+			in:     model.InQuery,
+			key:    "api_key",
+			params: []model.Parameter{{Name: "api_key", Location: model.InQuery}},
+			check: func(r *restfile.Request) bool {
+				return !strings.Contains(r.URL, "api_key") && r.Metadata.Auth.Params["placement"] == "query"
+			},
+			drop: "query_api_key",
+		},
+	} {
+		spec := &model.Spec{
+			Servers: []model.Server{{URL: "https://api.example.com"}},
+			SecuritySchemes: map[string]model.SecurityScheme{
+				"key": {Type: model.SecurityAPIKey, Name: tt.key, In: tt.in},
+			},
+			Operations: []model.Operation{{
+				ID:         "getMe",
+				Method:     model.MethodGet,
+				Path:       "/me",
+				Parameters: tt.params,
+				Security:   []model.SecurityRequirement{{SchemeName: "key"}},
+			}},
+		}
+		doc, err := NewBuilder().Generate(context.Background(), spec, openapi.GeneratorOptions{})
+		if err != nil {
+			t.Fatalf("%s: generate document: %v", tt.in, err)
+		}
+		req := findRequestByName(t, doc, "getMe")
+		if !tt.check(req) {
+			t.Fatalf("%s: url = %q, headers = %v, auth = %+v", tt.in, req.URL, req.Headers, req.Metadata.Auth)
+		}
+		if _, ok := findVariable(req.Variables, tt.drop); ok {
+			t.Fatalf("%s: variables = %+v, want no %s", tt.in, req.Variables, tt.drop)
+		}
 	}
 }
 

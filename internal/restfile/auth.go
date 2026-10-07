@@ -28,6 +28,28 @@ var authAliases = map[AuthKind]AuthKind{"api-key": AuthAPIKey}
 
 const AuthDisableWord = "none"
 
+// APIKeyPlacement is where an apikey auth sends its key.
+type APIKeyPlacement string
+
+const (
+	APIKeyHeader APIKeyPlacement = "header"
+	APIKeyQuery  APIKeyPlacement = "query"
+)
+
+const DefaultAPIKeyName = "X-API-Key"
+
+// ParseAPIKeyPlacement reads an empty placement as a header.
+func ParseAPIKeyPlacement(s string) (APIKeyPlacement, bool) {
+	switch p := APIKeyPlacement(strings.ToLower(strings.TrimSpace(s))); p {
+	case "", APIKeyHeader:
+		return APIKeyHeader, true
+	case APIKeyQuery:
+		return p, true
+	default:
+		return "", false
+	}
+}
+
 // AuthCommandParams lists every command option, in the order it is written.
 // Any other key is rejected, since an unquoted cmd=mycli --role=admin would
 // otherwise run mycli without --role=admin.

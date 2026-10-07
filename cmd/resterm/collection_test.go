@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/cli"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -46,15 +47,15 @@ func TestHandleCollectionSubcommandAmbiguousFile(t *testing.T) {
 }
 
 func TestRunCollectionRequiresSubcommand(t *testing.T) {
-	if err := runCollection(nil); err == nil {
-		t.Fatalf("expected error for missing subcommand")
+	if err := runCollection(nil); cli.ExitCode(err) != 2 {
+		t.Fatalf("missing subcommand: err = %v, want a usage error", err)
 	}
 }
 
 func TestRunCollectionUnknownSubcommand(t *testing.T) {
 	err := runCollection([]string{"unknown"})
-	if err == nil {
-		t.Fatalf("expected error for unknown subcommand")
+	if cli.ExitCode(err) != 2 {
+		t.Fatalf("unknown subcommand: err = %v, want a usage error", err)
 	}
 }
 
@@ -82,11 +83,12 @@ func TestRunCollectionFlagErrorsHaveCommandPrefix(t *testing.T) {
 		{args: []string{"import", "--bad"}, want: "collection import:"},
 		{args: []string{"pack", "--bad"}, want: "collection pack:"},
 		{args: []string{"unpack", "--bad"}, want: "collection unpack:"},
+		{args: []string{"export", "--workspace", ".", "--out", "x", "extra"}, want: "collection export:"},
 	}
 	for _, tc := range cases {
 		err := runCollection(tc.args)
-		if err == nil {
-			t.Fatalf("expected error for %v", tc.args)
+		if cli.ExitCode(err) != 2 {
+			t.Fatalf("%v: err = %v, want a usage error", tc.args, err)
 		}
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("expected error %q to contain %q", err.Error(), tc.want)
@@ -134,8 +136,8 @@ func TestRunCollectionLibraryErrorsHaveCommandPrefix(t *testing.T) {
 	}
 	for _, tc := range cases {
 		err := runCollection(tc.args)
-		if err == nil {
-			t.Fatalf("expected error for %v", tc.args)
+		if cli.ExitCode(err) != 1 {
+			t.Fatalf("%v: err = %v, want exit code 1", tc.args, err)
 		}
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("expected error %q to contain %q", err.Error(), tc.want)
@@ -171,8 +173,8 @@ func TestRunCollectionRequiresFlags(t *testing.T) {
 	}
 	for _, tc := range cases {
 		err := runCollection(tc.args)
-		if err == nil {
-			t.Fatalf("expected error for %v", tc.args)
+		if cli.ExitCode(err) != 2 {
+			t.Fatalf("%v: err = %v, want a usage error", tc.args, err)
 		}
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("expected error %q to contain %q", err.Error(), tc.want)

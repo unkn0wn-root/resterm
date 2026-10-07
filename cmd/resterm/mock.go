@@ -84,10 +84,10 @@ func (c mockConfig) parseLimits() (int64, int64, error) {
 		return 0, 0, err
 	}
 	if body > total {
-		return 0, 0, mockUsageError(errors.New("mock: --journal-body-limit must not exceed --journal-bytes"))
+		return 0, 0, cli.UsageError(errors.New("mock: --journal-body-limit must not exceed --journal-bytes"))
 	}
 	if c.sequenceKeyLimit <= 0 || c.journalEntries <= 0 {
-		return 0, 0, mockUsageError(errors.New("mock: sequence key and journal entry limits must be positive"))
+		return 0, 0, cli.UsageError(errors.New("mock: sequence key and journal entry limits must be positive"))
 	}
 	return total, body, nil
 }
@@ -95,13 +95,9 @@ func (c mockConfig) parseLimits() (int64, int64, error) {
 func parseMockByteLimit(name, raw string) (int64, error) {
 	n, err := bytesize.Parse(raw)
 	if err != nil || n <= 0 {
-		return 0, mockUsageError(fmt.Errorf("mock: invalid %s %q", name, raw))
+		return 0, cli.UsageError(fmt.Errorf("mock: invalid %s %q", name, raw))
 	}
 	return n, nil
-}
-
-func mockUsageError(err error) error {
-	return cli.ExitErr{Err: err, Code: 2}
 }
 
 func runMockServe(args []string) error {
@@ -154,7 +150,7 @@ func runMockServe(args []string) error {
 		if errors.Is(err, cli.ErrHelp) {
 			return nil
 		}
-		return mockUsageError(err)
+		return cli.UsageError(err)
 	}
 	switch len(fs.Args()) {
 	case 0:
@@ -163,7 +159,7 @@ func runMockServe(args []string) error {
 		cfg.path = fs.Arg(0)
 	default:
 		err := fmt.Errorf("mock: unexpected args: %s", strings.Join(fs.Args()[1:], " "))
-		return mockUsageError(err)
+		return cli.UsageError(err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -173,11 +169,11 @@ func runMockServe(args []string) error {
 
 func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) error {
 	if (cfg.tlsCert == "") != (cfg.tlsKey == "") {
-		return mockUsageError(errors.New("mock: --tls-cert and --tls-key must be set together"))
+		return cli.UsageError(errors.New("mock: --tls-cert and --tls-key must be set together"))
 	}
 	cors, warning, err := mock.ResolveCORS(cfg.cors, cfg.addr)
 	if err != nil {
-		return mockUsageError(fmt.Errorf("mock: %w", err))
+		return cli.UsageError(fmt.Errorf("mock: %w", err))
 	}
 	if warning != "" {
 		_, _ = fmt.Fprintln(errOut, "warning:", warning)
@@ -192,7 +188,7 @@ func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) erro
 
 	src, err := mock.NewSources(cfg.path, cfg.recursive, cfg.sources)
 	if err != nil {
-		return mockUsageError(fmt.Errorf("mock: %w", err))
+		return cli.UsageError(fmt.Errorf("mock: %w", err))
 	}
 	reloader := mock.NewReloader(src)
 	handler, err := reloader.Reload("", nil)

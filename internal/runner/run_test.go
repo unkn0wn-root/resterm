@@ -1117,6 +1117,73 @@ func TestRunRequestForEach(t *testing.T) {
 	}
 }
 
+// A step condition on a loop runs for each item, so it can read the loop variable.
+func TestRunWorkflowStepConditionSeesLoopItem(t *testing.T) {
+	for name, lines := range map[string][]string{
+		"step loop": {
+			"# @workflow demo",
+			`# @when item != "b"`,
+			`# @for-each ["a","b","c"] as item`,
+			"# @step Each using=each",
+			"",
+			"### Each",
+			"# @name each",
+			"GET https://example.com/items/{{vars.request.item}}",
+		},
+		"request loop": {
+			"# @workflow demo",
+			`# @when item != "b"`,
+			"# @step Each using=each",
+			"",
+			"### Each",
+			"# @name each",
+			`# @for-each ["a","b","c"] as item`,
+			"GET https://example.com/items/{{vars.request.item}}",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := filepath.Join(dir, "wf.http")
+			if err := os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+
+			var seen []string
+			client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+				return &http.Client{
+					Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+						seen = append(seen, req.URL.Path)
+						return &http.Response{
+							Status:     "200 OK",
+							StatusCode: http.StatusOK,
+							Proto:      "HTTP/1.1",
+							Header:     make(http.Header),
+							Body:       io.NopCloser(strings.NewReader("{}")),
+							Request:    req,
+						}, nil
+					}),
+				}, nil
+			})
+
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+				Select:        Select{Workflow: "demo"},
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if rep.Total != 1 || rep.Passed != 1 {
+				t.Fatalf("unexpected report: %+v", rep.Results)
+			}
+			if got := strings.Join(seen, ","); got != "/items/a,/items/c" {
+				t.Fatalf("sent %s, want /items/a,/items/c", got)
+			}
+		})
+	}
+}
+
 func TestRunAllCarriesJSPreRequestGlobals(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "js.http")

@@ -119,7 +119,7 @@ func TestRedirectDropsAPIKeyPlacedByAuthDirective(t *testing.T) {
 				Params: map[string]string{
 					authParamName:      "X-API-Key",
 					authParamValue:     "secret",
-					authParamPlacement: authPlacementHeader,
+					authParamPlacement: string(restfile.APIKeyHeader),
 				},
 			},
 		},
@@ -500,7 +500,7 @@ func TestRedirectDropsHeadersAuthNamed(t *testing.T) {
 						Params: map[string]string{
 							authParamName:      hdr,
 							authParamValue:     "secret",
-							authParamPlacement: authPlacementHeader,
+							authParamPlacement: string(restfile.APIKeyHeader),
 						},
 					}},
 				}
@@ -582,7 +582,7 @@ func TestBuildHTTPRequestReportsAuthPlacedHeaders(t *testing.T) {
 			Params: map[string]string{
 				authParamName:      "X-Registry-Token",
 				authParamValue:     "secret",
-				authParamPlacement: authPlacementHeader,
+				authParamPlacement: string(restfile.APIKeyHeader),
 			},
 		}},
 	}
@@ -605,7 +605,7 @@ func TestBuildHTTPRequestIgnoresQueryPlacedAuth(t *testing.T) {
 			Params: map[string]string{
 				authParamName:      "api_key",
 				authParamValue:     "secret",
-				authParamPlacement: authPlacementQuery,
+				authParamPlacement: string(restfile.APIKeyQuery),
 			},
 		}},
 	}
@@ -631,7 +631,7 @@ func TestRedirectDropsAnAuthHeaderTheRequestSuppliedItself(t *testing.T) {
 				Params: map[string]string{
 					authParamName:      "X-Registry-Token",
 					authParamValue:     "from-directive",
-					authParamPlacement: authPlacementHeader,
+					authParamPlacement: string(restfile.APIKeyHeader),
 				},
 			},
 		},
@@ -682,7 +682,7 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 			auth: &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: map[string]string{
 				authParamName:      "X-Registry-Token",
 				authParamValue:     "secret",
-				authParamPlacement: authPlacementHeader,
+				authParamPlacement: string(restfile.APIKeyHeader),
 			}},
 			want:    []string{"X-Registry-Token"},
 			wantSet: true,
@@ -692,7 +692,7 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 			auth: &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: map[string]string{
 				authParamName:      "X-Registry-Token",
 				authParamValue:     "secret",
-				authParamPlacement: authPlacementHeader,
+				authParamPlacement: string(restfile.APIKeyHeader),
 			}},
 			existing: "X-Registry-Token",
 			want:     []string{"X-Registry-Token"},
@@ -737,7 +737,7 @@ func TestResolveAuthReportsTheHeaderItTargets(t *testing.T) {
 			auth: &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: map[string]string{
 				authParamName:      "api_key",
 				authParamValue:     "secret",
-				authParamPlacement: authPlacementQuery,
+				authParamPlacement: string(restfile.APIKeyQuery),
 			}},
 			wantSet: true,
 		},
@@ -1021,7 +1021,7 @@ func TestRedirectNarrowsTheRefererToTheOrigin(t *testing.T) {
 			Params: map[string]string{
 				authParamName:      "api_key",
 				authParamValue:     "secret",
-				authParamPlacement: authPlacementQuery,
+				authParamPlacement: string(restfile.APIKeyQuery),
 			},
 		}},
 	}, Options{})

@@ -9,7 +9,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/http/digest"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -122,16 +121,17 @@ func ResolveAuth(
 		if err != nil {
 			return AuthPlan{}, err
 		}
-		switch util.LowerTrim(placement.Value) {
-		case authPlacementQuery:
+		place, _ := restfile.ParseAPIKeyPlacement(placement.Value)
+		switch place {
+		case restfile.APIKeyQuery:
 			value, err := expand(authParamValue)
 			if err != nil {
 				return AuthPlan{}, err
 			}
 			plan.query(name, value)
-		case "", authPlacementHeader:
+		case restfile.APIKeyHeader:
 			if name == "" {
-				name = defaultAPIKeyHeader
+				name = restfile.DefaultAPIKeyName
 			}
 			plan.claim(name)
 			if header.Present(existing, name) {

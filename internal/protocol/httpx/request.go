@@ -19,10 +19,7 @@ const (
 	authParamValue     = "value"
 	authParamHeader    = "header"
 
-	authPlacementQuery  = "query"
-	authPlacementHeader = "header"
 	authorizationHeader = "Authorization"
-	defaultAPIKeyHeader = "X-API-Key"
 	bearerTokenPrefix   = "Bearer "
 	basicPrefix         = "Basic "
 )

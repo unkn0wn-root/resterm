@@ -58,24 +58,21 @@ func parseRecordArgs(args []string, errOut io.Writer) (*recordArgs, error) {
 			fs.Usage()
 			return nil, nil
 		}
-		return nil, cli.ExitErr{Err: err, Code: 2}
+		return nil, cli.UsageError(err)
 	}
 
 	cfg, err := flags.Resolve()
 	if err != nil {
-		return nil, cli.ExitErr{Err: err, Code: 2}
+		return nil, cli.UsageError(err)
 	}
 	parsed, modeErr := recorder.ParseMode(mode)
 	if path == "" || modeErr != nil || len(fs.Args()) != 0 {
-		return nil, cli.ExitErr{
-			Err: errors.New(
-				"record requires --out, accepts --mode requests|mocks|both, and takes no positional arguments",
-			),
-			Code: 2,
-		}
+		return nil, cli.UsageError(errors.New(
+			"record requires --out, accepts --mode requests|mocks|both, and takes no positional arguments",
+		))
 	}
 	if !files.IsRequest(path) {
-		return nil, cli.ExitErr{Err: errors.New("record output must be a .http or .rest file"), Code: 2}
+		return nil, cli.UsageError(errors.New("record output must be a .http or .rest file"))
 	}
 	return &recordArgs{cfg: cfg, path: path, mode: parsed}, nil
 }

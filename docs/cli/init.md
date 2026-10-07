@@ -41,4 +41,4 @@ Both templates add `resterm.env.json` to `.gitignore` so secrets stay out of ver
 | `--no-gitignore` | Skip updating `.gitignore`. |
 | `--list` | Print available templates and exit. |
 
-`resterm init` exits `0` on success and `1` on any error, including an unknown flag or a file that already exists without `--force`.
+`resterm init` exits `0` on success, `2` for an unknown flag, extra arguments, or an unknown template, and `1` for any other error, including a file that already exists without `--force`.

@@ -2,6 +2,10 @@ package cli
 
 import "errors"
 
+// ExitUsage is the status for a bad flag, a missing argument, or an unknown
+// subcommand.
+const ExitUsage = 2
+
 type ExitErr struct {
 	Err  error
 	Code int
@@ -27,6 +31,10 @@ func (e ExitErr) ExitCode() int {
 		return 1
 	}
 	return e.Code
+}
+
+func UsageError(err error) error {
+	return ExitErr{Err: err, Code: ExitUsage}
 }
 
 // IsExitCodeOnly reports whether err is only an exit-code carrier.

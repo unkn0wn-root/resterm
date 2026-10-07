@@ -8,6 +8,7 @@ import (
 	httpversion "github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 )
 
@@ -78,8 +79,8 @@ func authKinds(command argument) []argument {
 		word("apikey", "API key auth in header or query").
 			withExample("header X-API-Key {{key}}").
 			then(
-				word("header", "API key placement in headers").then(),
-				word("query", "API key placement in query string").then(),
+				word(string(restfile.APIKeyHeader), "API key placement in headers").then(),
+				word(string(restfile.APIKeyQuery), "API key placement in query string").then(),
 			),
 		word("oauth2", "Built-in OAuth 2.0 token acquisition and caching").chains().then(oauthAuthArgs...),
 		command,

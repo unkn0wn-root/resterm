@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"reflect"
 	"strings"
@@ -3170,6 +3171,60 @@ POST https://example.com/items
 	}
 }
 
+func TestParseWorkflowStepTakesConditionAndLoop(t *testing.T) {
+	for _, mods := range [][]string{
+		{"# @when ready", "# @for-each item in vars.items"},
+		{"# @for-each item in vars.items", "# @when ready"},
+	} {
+		src := "# @workflow demo\n" + strings.Join(mods, "\n") + "\n# @step Each using=Req"
+		doc := Parse("workflow.http", []byte(src))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("%q: errors = %+v", mods, doc.Errors)
+		}
+		st := doc.Workflows[0].Steps[0]
+		if st.Kind != restfile.WorkflowStepKindForEach || st.When == nil || st.ForEach == nil {
+			t.Fatalf("%q: step = %+v, want a condition and a loop", mods, st)
+		}
+	}
+}
+
+// The second modifier is rejected on its own line and the first one stays.
+func TestParseWorkflowRejectsSecondStepModifier(t *testing.T) {
+	for _, tt := range []struct {
+		first, second, want string
+	}{
+		{
+			"# @when a", "# @when b",
+			"next step already has @when on line 2. A step takes one @when or @skip-if",
+		},
+		{
+			"# @when a", "# @skip-if b",
+			"next step already has @when on line 2. A step takes one @when or @skip-if",
+		},
+		{
+			"# @skip-if a", "# @when b",
+			"next step already has @skip-if on line 2. A step takes one @when or @skip-if",
+		},
+		{
+			"# @for-each a as item", "# @for-each b as item",
+			"next step already has @for-each on line 2. A step takes one @for-each",
+		},
+	} {
+		src := strings.Join([]string{"# @workflow demo", tt.first, tt.second, "# @step S using=Req"}, "\n")
+		doc := Parse("workflow.http", []byte(src))
+		if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+			t.Fatalf("%s then %s: errors = %+v, want %q", tt.first, tt.second, doc.Errors, tt.want)
+		}
+		if got := doc.Errors[0].Span.Start.Line; got != 3 {
+			t.Fatalf("%s then %s: error line = %d, want 3", tt.first, tt.second, got)
+		}
+		st := doc.Workflows[0].Steps[0]
+		if st.When != nil && st.When.Expression != "a" || st.ForEach != nil && st.ForEach.Expr != "a" {
+			t.Fatalf("%s then %s: step = %+v, want the first modifier", tt.first, tt.second, st)
+		}
+	}
+}
+
 func TestParseBlockComments(t *testing.T) {
 	src := `/**
  * @name Blocked
@@ -4179,6 +4234,32 @@ GET https://example.com/api
 	}
 	if len(spec.Budgets.Phases) != 0 {
 		t.Fatalf("expected no phase budgets, got %v", spec.Budgets.Phases)
+	}
+	if want := `unknown @trace options "<=50ms", "=100ms"`; !hasParseMessage(doc.Warnings, want) {
+		t.Fatalf("warnings = %v, want %q", doc.Warnings, want)
+	}
+}
+
+// Completion used to insert request-headers<= and request-body<=, so files
+// carry them. A name that is no phase used to be kept and never checked.
+func TestParseTraceDirectivePhaseNames(t *testing.T) {
+	src := `# @trace request-headers<=20ms request-body=30ms dsn<=5ms custom=1ms bogus
+GET https://example.com/api
+`
+	doc := Parse("trace.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v", doc.Errors)
+	}
+	spec := doc.Requests[0].Metadata.Trace
+	if spec == nil || !spec.Enabled {
+		t.Fatalf("trace = %+v, want it enabled", spec)
+	}
+	want := map[string]time.Duration{"request_headers": 20 * time.Millisecond, "request_body": 30 * time.Millisecond}
+	if !maps.Equal(spec.Budgets.Phases, want) {
+		t.Fatalf("phases = %v, want %v", spec.Budgets.Phases, want)
+	}
+	if msg := `unknown @trace options "dsn", "custom", "bogus"`; !hasParseMessage(doc.Warnings, msg) {
+		t.Fatalf("warnings = %v, want %q", doc.Warnings, msg)
 	}
 }
 

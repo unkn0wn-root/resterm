@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 
@@ -299,13 +300,10 @@ func (x wfStepExplain) isAuthChange(c xplain.Change) bool {
 	case restfile.AuthHeader:
 		return strings.EqualFold(h, strings.TrimSpace(a.Params["header"]))
 	case restfile.AuthAPIKey:
-		if !strings.EqualFold(strings.TrimSpace(a.Params["placement"]), "header") {
+		if p, _ := restfile.ParseAPIKeyPlacement(a.Params["placement"]); p != restfile.APIKeyHeader {
 			return false
 		}
-		n := strings.TrimSpace(a.Params["name"])
-		if n == "" {
-			n = "X-API-Key"
-		}
+		n := cmp.Or(strings.TrimSpace(a.Params["name"]), restfile.DefaultAPIKeyName)
 		return strings.EqualFold(h, n)
 	default:
 		return false

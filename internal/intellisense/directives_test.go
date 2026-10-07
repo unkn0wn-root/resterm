@@ -6,6 +6,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 )
 
 func contains(items []Item, label string) bool {
@@ -208,6 +210,28 @@ func TestTraceArgsProvidePlaceholders(t *testing.T) {
 	}
 	if !contains(argOptions("trace", "d"), "dns<=") {
 		t.Fatal("expected dns<= in filtered trace args")
+	}
+}
+
+// Completion once inserted budgets the parser kept but never checked.
+func TestTraceBudgetSuggestionsParseIntoBudgets(t *testing.T) {
+	var n int
+	for _, it := range argOptions("trace", "") {
+		if !strings.HasSuffix(it.Label, "<=") {
+			continue
+		}
+		n++
+		doc := parser.Parse("trace.http", []byte("# @trace "+it.InsertText()+"\nGET http://example.com\n"))
+		if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+			t.Fatalf("%s: errors = %v, warnings = %v", it.Label, doc.Errors, doc.Warnings)
+		}
+		b, ok := tracebudget.FromSpec(doc.Requests[0].Metadata.Trace)
+		if !ok || b.Total == 0 && len(b.Phases) != 1 {
+			t.Fatalf("%s: budget = %+v, want one checked budget", it.Label, b)
+		}
+	}
+	if n == 0 {
+		t.Fatal("no trace budget suggestions")
 	}
 }
 

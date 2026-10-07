@@ -55,7 +55,7 @@ A patch can contain these keys:
 
 These directives are evaluated before pre-request scripts. If a `@when` condition is false or a `@skip-if` condition is true, the request is skipped and Resterm reports why.
 
-In a workflow, put `@when` or `@skip-if` on the line before a `@step` to gate that step. See [Workflows](../workflows.md).
+In a workflow, put `@when` or `@skip-if` above a `@step` to gate that step. See [Workflows](../workflows.md).
 
 ## @assert
 
@@ -94,6 +94,6 @@ These directives route workflow steps and are not the `switch` statement. They u
 # @for-each json.file("_data/users.json") as user
 ```
 
-The expression must evaluate to a list. It introduces a loop variable that you can use in RestermScript expressions. In workflows, it also sets `vars.workflow.<name>` and `vars.request.<name>` for legacy templates. `@for-each user in json.file("_data/users.json")` is the same loop with the variable first. In a workflow, `@for-each` on the line before a `@step` repeats that step.
+The expression must evaluate to a list. It introduces a loop variable that you can use in RestermScript expressions. In workflows, it also sets `vars.workflow.<name>` and `vars.request.<name>` for legacy templates. `@for-each user in json.file("_data/users.json")` is the same loop with the variable first. In a workflow, `@for-each` above a `@step` repeats that step.
 
 The loop variable is a local, so it shadows any standard library, host object, or `@use` alias of the same name for the whole request, including `@rts pre-request` blocks. JavaScript pre-request blocks do not see it as a typed value and still read `vars.request.<name>`. See [Name precedence](host-objects.md#name-precedence).

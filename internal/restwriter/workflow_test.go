@@ -98,6 +98,28 @@ func TestRenderWorkflowStepNameRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRenderWorkflowConditionAndLoopRoundTrip(t *testing.T) {
+	want := restfile.WorkflowStep{
+		Kind:      restfile.WorkflowStepKindForEach,
+		Name:      "Each",
+		Using:     "process",
+		OnFailure: restfile.WorkflowOnFailureStop,
+		When:      &restfile.ConditionSpec{Expression: "vars.disabled", Negate: true},
+		ForEach:   &restfile.WorkflowForEach{Expr: "vars.items", Var: "item"},
+	}
+	src := RenderWorkflow(restfile.Workflow{Name: "demo", Steps: []restfile.WorkflowStep{want}}, "")
+	doc := parser.Parse("workflow.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("rendered workflow did not parse: %v\n%s", doc.Errors, src)
+	}
+	got := doc.Workflows[0].Steps[0]
+	if got.Kind != want.Kind || got.When == nil || got.ForEach == nil ||
+		got.When.Expression != want.When.Expression || !got.When.Negate ||
+		got.ForEach.Expr != want.ForEach.Expr || got.ForEach.Var != want.ForEach.Var {
+		t.Fatalf("step changed after round trip: %+v\n%s", got, src)
+	}
+}
+
 // The writer quotes any value holding a space, so the reader has to keep it in
 // one piece. Branches used to come back with the tail of a quoted value parsed
 // as extra options and the quotes stripped off the expression.

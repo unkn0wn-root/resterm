@@ -84,6 +84,7 @@ func TestUnfinishedWorkflowDiagnosticLocations(t *testing.T) {
 		name, source, message string
 	}{
 		{"when", "# @when true", "@when must be followed by @step"},
+		{"skip-if", "# @skip-if true", "@skip-if must be followed by @step"},
 		{"for-each", "# @for-each [1] as item", "@for-each must be followed by @step"},
 		{"switch", "# @switch true", "@switch requires at least one @case or @default"},
 		{"continued when", "# @when (\n# true\n# )", "@when must be followed by @step"},

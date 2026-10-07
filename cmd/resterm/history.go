@@ -32,7 +32,7 @@ func handleHistorySubcommand(args []string) (bool, error) {
 
 func runHistory(args []string) error {
 	if len(args) == 0 {
-		return errors.New(historyUsageText())
+		return cli.UsageError(errors.New(historyUsageText()))
 	}
 	if cli.IsHelpArg(args[0]) {
 		if err := writeln(os.Stdout, historyUsageText()); err != nil {
@@ -55,7 +55,7 @@ func runHistory(args []string) error {
 	case "check":
 		return runHistoryCheck(args[1:])
 	default:
-		return fmt.Errorf("history: unknown subcommand %q\n\n%s", op, historyUsageText())
+		return cli.UsageError(fmt.Errorf("history: unknown subcommand %q\n\n%s", op, historyUsageText()))
 	}
 }
 
@@ -63,17 +63,11 @@ func runHistoryExport(args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "history export", os.Stderr)
 	var out string
 	fs.StringVar(&out, "out", "", "Output JSON file path")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("history export: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 	if out == "" {
-		return errors.New("history export: --out is required")
+		return cli.UsageError(errors.New("history export: --out is required"))
 	}
 
 	s, err := openHistoryStore(true)
@@ -96,17 +90,11 @@ func runHistoryImport(args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "history import", os.Stderr)
 	var in string
 	fs.StringVar(&in, "in", "", "Input JSON file path")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("history import: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 	if in == "" {
-		return errors.New("history import: --in is required")
+		return cli.UsageError(errors.New("history import: --in is required"))
 	}
 
 	s, err := openHistoryStore(false)
@@ -129,17 +117,11 @@ func runHistoryBackup(args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "history backup", os.Stderr)
 	var out string
 	fs.StringVar(&out, "out", "", "Output SQLite backup file path")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("history backup: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 	if out == "" {
-		return errors.New("history backup: --out is required")
+		return cli.UsageError(errors.New("history backup: --out is required"))
 	}
 
 	s, err := openHistoryStore(true)
@@ -159,13 +141,7 @@ func runHistoryBackup(args []string) error {
 
 func runHistoryStats(args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "history stats", os.Stderr)
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("history stats: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 
@@ -200,13 +176,7 @@ func runHistoryStats(args []string) error {
 
 func runHistoryCompact(args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "history compact", os.Stderr)
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("history compact: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 
@@ -245,13 +215,7 @@ func runHistoryCheck(args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "history check", os.Stderr)
 	var full bool
 	fs.BoolVar(&full, "full", false, "Use full integrity check")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("history check: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 
@@ -369,4 +333,18 @@ func byteLabel(n int64) string {
 	default:
 		return strconv.FormatInt(n, 10) + " B"
 	}
+}
+
+// parseSubcommand reports done after printing help, as controlSetup does.
+func parseSubcommand(fs *cli.FlagSet, args []string) (done bool, err error) {
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, cli.ErrHelp) {
+			return true, nil
+		}
+		return false, cli.UsageError(fmt.Errorf("%s: %w", fs.Name(), err))
+	}
+	if err := fs.UnexpectedArgs(); err != nil {
+		return false, cli.UsageError(err)
+	}
+	return false, nil
 }

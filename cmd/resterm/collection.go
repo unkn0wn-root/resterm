@@ -27,7 +27,7 @@ func handleCollectionSubcommand(args []string) (bool, error) {
 
 func runCollection(args []string) error {
 	if len(args) == 0 {
-		return errors.New(collectionUsageText())
+		return cli.UsageError(errors.New(collectionUsageText()))
 	}
 	if cli.IsHelpArg(args[0]) {
 		if err := writeln(os.Stdout, collectionUsageText()); err != nil {
@@ -46,7 +46,7 @@ func runCollection(args []string) error {
 	case "unpack":
 		return runCollectionUnpack(args[1:])
 	default:
-		return fmt.Errorf("collection: unknown subcommand %q\n\n%s", op, collectionUsageText())
+		return cli.UsageError(fmt.Errorf("collection: unknown subcommand %q\n\n%s", op, collectionUsageText()))
 	}
 }
 
@@ -64,21 +64,15 @@ func runCollectionExport(args []string) error {
 	fs.BoolVar(&recursive, "recursive", false, "Recursively scan workspace for request files")
 	fs.BoolVar(&force, "force", false, "Overwrite existing output directory")
 
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("collection export: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 
 	if workspace == "" {
-		return errors.New("collection export: --workspace is required")
+		return cli.UsageError(errors.New("collection export: --workspace is required"))
 	}
 	if out == "" {
-		return errors.New("collection export: --out is required")
+		return cli.UsageError(errors.New("collection export: --out is required"))
 	}
 
 	res, err := collection.ExportBundle(collection.ExportOptions{
@@ -122,21 +116,15 @@ func runCollectionImport(args []string) error {
 	fs.BoolVar(&force, "force", false, "Overwrite existing destination files")
 	fs.BoolVar(&dry, "dry-run", false, "Plan import without writing files")
 
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("collection import: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 
 	if in == "" {
-		return errors.New("collection import: --in is required")
+		return cli.UsageError(errors.New("collection import: --in is required"))
 	}
 	if workspace == "" {
-		return errors.New("collection import: --workspace is required")
+		return cli.UsageError(errors.New("collection import: --workspace is required"))
 	}
 
 	res, err := collection.ImportBundle(collection.ImportOptions{
@@ -184,21 +172,15 @@ func runCollectionPack(args []string) error {
 	fs.StringVar(&out, "out", "", "Output archive (.zip) path")
 	fs.BoolVar(&force, "force", false, "Overwrite existing archive file")
 
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("collection pack: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 
 	if in == "" {
-		return errors.New("collection pack: --in is required")
+		return cli.UsageError(errors.New("collection pack: --in is required"))
 	}
 	if out == "" {
-		return errors.New("collection pack: --out is required")
+		return cli.UsageError(errors.New("collection pack: --out is required"))
 	}
 
 	res, err := collection.PackBundle(collection.PackOptions{
@@ -231,21 +213,15 @@ func runCollectionUnpack(args []string) error {
 	fs.StringVar(&out, "out", "", "Output bundle directory path")
 	fs.BoolVar(&force, "force", false, "Overwrite existing output directory")
 
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, cli.ErrHelp) {
-			return nil
-		}
-		return fmt.Errorf("collection unpack: %w", err)
-	}
-	if err := fs.UnexpectedArgs(); err != nil {
+	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
 	}
 
 	if in == "" {
-		return errors.New("collection unpack: --in is required")
+		return cli.UsageError(errors.New("collection unpack: --in is required"))
 	}
 	if out == "" {
-		return errors.New("collection unpack: --out is required")
+		return cli.UsageError(errors.New("collection unpack: --out is required"))
 	}
 
 	res, err := collection.UnpackBundle(collection.UnpackOptions{

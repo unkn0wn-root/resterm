@@ -230,7 +230,12 @@ func (r *wfRun) runReqStep(
 		return r.failStep(ctx, step, req, branch, err)
 	}
 
-	if step.When != nil {
+	spec, err := workflowForEach(step, req)
+	if err != nil {
+		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagForEach))
+	}
+	// A loop checks the condition per item instead, where the loop variable is bound.
+	if step.When != nil && spec == nil {
 		ok, reason, err := r.dep.EvalCondition(
 			ctx,
 			r.pl.Doc,
@@ -247,11 +252,6 @@ func (r *wfRun) runReqStep(
 		if !ok {
 			return r.manualFinish(step, req, branch, engine.RequestResult{Skipped: true, SkipReason: reason})
 		}
-	}
-
-	spec, err := workflowForEach(step, req)
-	if err != nil {
-		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagForEach))
 	}
 	if spec == nil {
 		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, sc, rts.Locals{})

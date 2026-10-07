@@ -1,6 +1,7 @@
 package restwriter
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -318,14 +319,8 @@ func authArgs(auth restfile.AuthSpec) ([]string, error) {
 	case restfile.AuthBearer:
 		return []string{"bearer", strings.TrimSpace(p["token"])}, nil
 	case restfile.AuthAPIKey:
-		place := strings.TrimSpace(p["placement"])
-		if place == "" {
-			place = "header"
-		}
-		name := strings.TrimSpace(p["name"])
-		if name == "" {
-			name = "X-API-Key"
-		}
+		place := cmp.Or(strings.TrimSpace(p["placement"]), string(restfile.APIKeyHeader))
+		name := cmp.Or(strings.TrimSpace(p["name"]), restfile.DefaultAPIKeyName)
 		return []string{"apikey", place, name, strings.TrimSpace(p["value"])}, nil
 	case restfile.AuthHeader:
 		name := strings.TrimSpace(p["header"])
