@@ -65,12 +65,6 @@ type wfRun struct {
 }
 
 const (
-	wfTagForEach = "@" + string(directive.ForEach)
-	wfTagIf      = "@" + string(directive.If)
-	wfTagElif    = "@" + string(directive.Elif)
-	wfTagSwitch  = "@" + string(directive.Switch)
-	wfTagCase    = "@" + string(directive.Case)
-
 	wfSkipIfNoBranch     = "no @if branch matched"
 	wfSkipIfNoRun        = "no @if run target"
 	wfSkipSwitchNoCase   = "no @switch case matched"
@@ -263,7 +257,7 @@ func (r *wfRun) runReqStep(
 
 	spec, err := workflowForEach(step, req)
 	if err != nil {
-		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagForEach))
+		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, directive.ForEach.Tag()))
 	}
 	if spec == nil {
 		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, sc, rts.Locals{})
@@ -285,7 +279,7 @@ func (r *wfRun) runReqStep(
 	)
 	if err != nil {
 		return r.manualFinish(step, req, branch, engine.RequestResult{
-			Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach),
+			Err: diag.WrapAs(diag.ClassScript, err, directive.ForEach.Tag()),
 		})
 	}
 	if len(items) == 0 {
@@ -310,7 +304,7 @@ func (r *wfRun) runReqStep(
 				branch,
 				i+1,
 				len(items),
-				engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach)},
+				engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, directive.ForEach.Tag())},
 			)
 			if emitErr != nil {
 				return false, emitErr
@@ -698,18 +692,18 @@ func (r *wfRun) selectIfBranch(
 	step restfile.WorkflowStep,
 	vv map[string]string,
 ) (*restfile.WorkflowIfBranch, error) {
-	ok, err := r.evalStepBool(ctx, nil, step.If.Then.Line, wfTagIf, step.If.Then.Cond, vv, rts.Locals{})
+	ok, err := r.evalStepBool(ctx, nil, step.If.Then.Line, directive.If.Tag(), step.If.Then.Cond, vv, rts.Locals{})
 	if err != nil {
-		return nil, diag.WrapAs(diag.ClassScript, err, wfTagIf)
+		return nil, diag.WrapAs(diag.ClassScript, err, directive.If.Tag())
 	}
 	if ok {
 		return &step.If.Then, nil
 	}
 	for i := range step.If.Elifs {
 		item := &step.If.Elifs[i]
-		ok, err = r.evalStepBool(ctx, nil, item.Line, wfTagElif, item.Cond, vv, rts.Locals{})
+		ok, err = r.evalStepBool(ctx, nil, item.Line, directive.Elif.Tag(), item.Cond, vv, rts.Locals{})
 		if err != nil {
-			return nil, diag.WrapAs(diag.ClassScript, err, wfTagElif)
+			return nil, diag.WrapAs(diag.ClassScript, err, directive.Elif.Tag())
 		}
 		if ok {
 			return item, nil
@@ -733,13 +727,13 @@ func (r *wfRun) selectSwitchCase(
 		ctx,
 		nil,
 		step.Switch.Line,
-		wfTagSwitch,
+		directive.Switch.Tag(),
 		step.Switch.Expr,
 		vv,
 		rts.Locals{},
 	)
 	if err != nil {
-		return nil, diag.WrapAs(diag.ClassScript, err, wfTagSwitch)
+		return nil, diag.WrapAs(diag.ClassScript, err, directive.Switch.Tag())
 	}
 	for i := range step.Switch.Cases {
 		item := &step.Switch.Cases[i]
@@ -747,9 +741,9 @@ func (r *wfRun) selectSwitchCase(
 		if expr == "" {
 			continue
 		}
-		val, err := r.evalStepValue(ctx, nil, item.Line, wfTagCase, expr, vv, rts.Locals{})
+		val, err := r.evalStepValue(ctx, nil, item.Line, directive.Case.Tag(), expr, vv, rts.Locals{})
 		if err != nil {
-			return nil, diag.WrapAs(diag.ClassScript, err, wfTagCase)
+			return nil, diag.WrapAs(diag.ClassScript, err, directive.Case.Tag())
 		}
 		if rts.ValueEqual(base, val) {
 			return item, nil
