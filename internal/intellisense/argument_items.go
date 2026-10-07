@@ -1,20 +1,17 @@
 package intellisense
 
-import "cmp"
+import (
+	"cmp"
+
+	"github.com/unkn0wn-root/resterm/internal/directive"
+)
 
 func (a argument) label(key string) string {
-	switch a.form {
-	case formOption:
-		return key + "="
-	case formBudget:
-		return key + "<="
-	default:
-		return key
-	}
+	return key + a.op.String()
 }
 
 func (a argument) lead(key string) string {
-	if a.form == formWord {
+	if a.op == directive.OpNone {
 		return key + " "
 	}
 	return a.label(key)
@@ -47,13 +44,13 @@ func (a argument) itemNamed(key string, example argExample) Item {
 	switch {
 	case example.text == "" && a.takesValue():
 		it.Continue = true
-		if a.form != formWord {
+		if a.op != directive.OpNone {
 			it.Insert = it.Label
 			it = it.WithoutTrailingSpace()
 		}
 	case example.text == "":
 		it.Continue = a.chain
-	case example.call != "" && a.form == formWord:
+	case example.call != "" && a.op == directive.OpNone:
 		// The call already includes the argument name.
 		it.Insert = example.text
 	default:

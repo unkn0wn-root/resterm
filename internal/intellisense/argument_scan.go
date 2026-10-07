@@ -10,14 +10,14 @@ import (
 // field holds a decoded argument and its rune offsets in the source.
 type field struct {
 	start, end int
-	form       argForm
-	eq         int // rune offset of '=', or -1 for a positional field
+	op         directive.Op
+	val        int // rune offset of the value; used only when op is set
 	text       string
 }
 
 func (f field) key() string {
-	name, _, _ := strings.Cut(f.text, "=")
-	return strings.TrimSuffix(name, "<")
+	name, _, _ := strings.Cut(f.text, f.op.String())
+	return name
 }
 
 func scanFields(text []rune) []field {
@@ -25,12 +25,9 @@ func scanFields(text []rune) []field {
 	at := func(b int) int { return utf8.RuneCountInString(src[:b]) }
 	var out []field
 	for token := range directive.ScanFields(src) {
-		f := field{start: at(token.Start), end: at(token.End), eq: -1, text: token.Value}
-		switch token.Op {
-		case directive.OpEq:
-			f.form, f.eq = formOption, at(token.At)
-		case directive.OpLe:
-			f.form, f.eq = formBudget, at(token.ValueStart()-1)
+		f := field{start: at(token.Start), end: at(token.End), op: token.Op, text: token.Value}
+		if f.op != directive.OpNone {
+			f.val = at(token.ValueStart())
 		}
 		out = append(out, f)
 	}
@@ -55,8 +52,8 @@ func (a args) read(fields []field) scan {
 		case out.open != nil:
 			out.slots[i] = slot{arg: out.open, value: true}
 			out.open = nil
-		case f.eq >= 0:
-			if arg := a.findOption(f.key(), f.form); arg != nil {
+		case f.op != directive.OpNone:
+			if arg := a.findOption(f.key(), f.op); arg != nil {
 				out.slots[i] = slot{arg: arg, value: true}
 			}
 		default:

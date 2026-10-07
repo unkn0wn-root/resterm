@@ -8,14 +8,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 )
 
-type argForm uint8
-
-const (
-	formWord   argForm = iota // bare word, followed by a value if required
-	formOption                // key=value
-	formBudget                // key<=value, the @trace latency budgets
-)
-
 type pathForm uint8
 
 const (
@@ -58,7 +50,7 @@ type argument struct {
 	key     string
 	aliases []string
 	summary string
-	form    argForm
+	op      directive.Op // OpNone for positional arguments
 	value   value
 
 	repeat bool
@@ -98,16 +90,16 @@ func (a args) find(pred func(argument) bool) *argument {
 	return nil
 }
 
-func (a args) findOption(key string, form argForm) *argument {
+func (a args) findOption(key string, op directive.Op) *argument {
 	return a.find(func(arg argument) bool {
-		return arg.form == form && arg.matches(key)
+		return arg.op == op && arg.matches(key)
 	})
 }
 
 // findWord also accepts option names for directives that allow "key value".
 func (a args) findWord(text string) *argument {
 	return a.find(func(arg argument) bool {
-		return arg.form != formBudget && (arg.form == formWord || a.single) && arg.matches(text)
+		return (arg.op == directive.OpNone || a.single && arg.op == directive.OpEq) && arg.matches(text)
 	})
 }
 
@@ -129,21 +121,21 @@ func (a argument) loadsLine() bool {
 }
 
 func word(key, summary string) argument {
-	return argument{key: key, summary: summary, form: formWord}
+	return argument{key: key, summary: summary}
 }
 
 func opt(key, summary, example string) argument {
 	return argument{
 		key:      key,
 		summary:  summary,
-		form:     formOption,
+		op:       directive.OpEq,
 		value:    value{kind: valueText},
 		examples: []argExample{plainExample(example)},
 	}
 }
 
 func optValue(key, summary string, v value) argument {
-	return argument{key: key, summary: summary, form: formOption, value: v}
+	return argument{key: key, summary: summary, op: directive.OpEq, value: v}
 }
 
 func choice(key, summary string, choices ...string) argument {
@@ -157,7 +149,7 @@ func flag(key, summary string) argument {
 // toggle uses "key true" or "key false" instead of "key=value".
 func toggle(key, summary string) argument {
 	a := flag(key, summary)
-	a.form = formWord
+	a.op = directive.OpNone
 	return a
 }
 
@@ -167,12 +159,12 @@ func filePath(key, summary string, kind PathKind, form pathForm) argument {
 
 func budget(phase nettrace.PhaseKind, summary, example string) argument {
 	a := opt(string(phase), summary, example)
-	a.form = formBudget
+	a.op = directive.OpLe
 	return a
 }
 
 func directiveValue(a argument) *argument {
-	a.form = formWord
+	a.op = directive.OpNone
 	return &a
 }
 
@@ -188,7 +180,7 @@ func (a argument) withExample(text string) argument {
 
 // Keep quotes outside the selection so replacing the value preserves them.
 func (a argument) withOption(option string) argument {
-	a.examples = []argExample{{text: option, placeholder: directive.TrimQuotes(optionValue(option))}}
+	a.examples = []argExample{{text: option, placeholder: directive.TrimQuotes(optionValue(option, directive.OpEq))}}
 	return a
 }
 
