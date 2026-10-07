@@ -808,6 +808,23 @@ func TestSpacedKey(t *testing.T) {
 	}
 }
 
+func TestScanFieldsRecordsEveryOperator(t *testing.T) {
+	t.Parallel()
+
+	for _, op := range ops {
+		f := slices.Collect(ScanFields("k" + op + "v"))[0]
+		for _, other := range ops {
+			want := -1
+			if other == op {
+				want = 1
+			}
+			if got := f.at(other); got != want {
+				t.Fatalf("k%sv: at(%q) = %d, want %d", op, other, got, want)
+			}
+		}
+	}
+}
+
 func TestSpacedOptionWithBudgets(t *testing.T) {
 	t.Parallel()
 

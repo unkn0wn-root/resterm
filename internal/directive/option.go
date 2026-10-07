@@ -93,7 +93,7 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 		switch {
 		case noKey(f.Value): // =x, or = v with no key before it
 			spaced = append(spaced, f.Value)
-			if isOp(f.Value) && valueNext(fields, i) {
+			if slices.Contains(ops, f.Value) && valueNext(fields, i) {
 				i++
 			}
 		case f.Le >= 0:
@@ -117,40 +117,37 @@ func SpacedOption(fields []Field, i int) (string, int) {
 	f := fields[i]
 	if SpacedKey(fields, i) { // k = v, k =v
 		// A lone operator takes the next field as its value.
-		if isOp(fields[i+1].Value) && valueNext(fields, i+1) {
+		if slices.Contains(ops, fields[i+1].Value) && valueNext(fields, i+1) {
 			return f.Value, 3
 		}
 		return f.Value, 2
 	}
 	// k= v. Only the source tells k= from k="", so this reads the span.
-	if ((f.Eq >= 0 && f.Eq+1 == f.End) || (f.Le >= 0 && f.Le+2 == f.End)) && valueNext(fields, i) {
-		key, _, _ := strings.Cut(f.Value, "=")
-		return strings.TrimSuffix(key, "<"), 2
+	for _, op := range ops {
+		if at := f.at(op); at >= 0 && at+len(op) == f.End && valueNext(fields, i) {
+			return strings.TrimSuffix(f.Value, op), 2
+		}
 	}
 	return "", 0
 }
 
 func noKey(field string) bool {
 	field = strings.TrimSpace(field)
-	return strings.HasPrefix(field, "=") || strings.HasPrefix(field, "<=")
+	return slices.ContainsFunc(ops, func(op string) bool { return strings.HasPrefix(field, op) })
 }
 
-func isOp(field string) bool {
-	return field == "=" || field == "<="
-}
-
-// SpacedKey reports whether field i is a key whose = or <= was split off by a
+// SpacedKey reports whether field i is a key whose operator was split off by a
 // space, as in k = v or k =v.
 func SpacedKey(fields []Field, i int) bool {
 	key := fields[i].Value
-	return !strings.Contains(key, "=") && strings.TrimSpace(key) != "" &&
-		i+1 < len(fields) && noKey(fields[i+1].Value)
+	return !slices.ContainsFunc(ops, func(op string) bool { return strings.Contains(key, op) }) &&
+		strings.TrimSpace(key) != "" && i+1 < len(fields) && noKey(fields[i+1].Value)
 }
 
 // The field after i can be a value only if it is not an option of its own. Only
 // the source tells a=b from "a=b", so this reads the span.
 func valueNext(fields []Field, i int) bool {
-	return i+1 < len(fields) && fields[i+1].Eq < 0 && fields[i+1].Le < 0
+	return i+1 < len(fields) && !slices.ContainsFunc(ops, func(op string) bool { return fields[i+1].at(op) >= 0 })
 }
 
 // Every option is visited even after one fails, so a line with two mistakes
@@ -529,6 +526,19 @@ func ParseNameValue(input string) (string, string) {
 // field is positional. Le is the <= after a name, as in dns<=50ms.
 type FieldSpan struct {
 	Start, End, Eq, Le int
+}
+
+// Each operator needs a FieldSpan member, set by scanFields and returned by at.
+var ops = []string{"<=", "="}
+
+func (s FieldSpan) at(op string) int {
+	switch op {
+	case "=":
+		return s.Eq
+	case "<=":
+		return s.Le
+	}
+	return -1
 }
 
 // Field pairs a decoded option field with its byte offsets in the source.
