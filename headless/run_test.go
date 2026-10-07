@@ -473,6 +473,14 @@ func TestBuildReturnsValidationErrors(t *testing.T) {
 	if err := os.WriteFile(file, []byte("GET https://example.com/status\n"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
+	bad := filepath.Join(dir, "bad.http")
+	if err := os.WriteFile(
+		bad,
+		[]byte("# @auth apikey cookie sid {{key}}\nGET https://example.com\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
 
 	tests := []struct {
 		name  string
@@ -541,6 +549,26 @@ func TestBuildReturnsValidationErrors(t *testing.T) {
 					"selection.workflow cannot be combined with selection.request, selection.tag, or selection.all",
 				) {
 					t.Fatalf("unexpected error: %v", err)
+				}
+			},
+		},
+		{
+			name: "missing request file",
+			opt:  Options{Source: Source{Path: filepath.Join(dir, "missing.http")}},
+			check: func(t *testing.T, err error) {
+				t.Helper()
+				if !IsUsageError(err) || !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("expected usage error wrapping os.ErrNotExist, got %v", err)
+				}
+			},
+		},
+		{
+			name: "request file with a parse error",
+			opt:  Options{Source: Source{Path: bad}},
+			check: func(t *testing.T, err error) {
+				t.Helper()
+				if !IsUsageError(err) || !strings.Contains(diag.Render(err), "bad.http:1") {
+					t.Fatalf("expected usage error that keeps the parse diagnostic, got\n%s", diag.Render(err))
 				}
 			},
 		},

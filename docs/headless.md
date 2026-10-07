@@ -172,4 +172,4 @@ case err != nil:
 os.Exit(rep.ExitCode(headless.ExitCodeDetailed))
 ```
 
-Invalid options and selections return a `UsageError`. Use `errors.Is` to check for a specific one, such as `headless.ErrNoSourcePath` when `Source.Path` is empty or `headless.ErrTooFewTargets` when `Compare.Targets` names fewer than two environments.
+Invalid options and selections return a `UsageError`. So does a request file that cannot be read or has parse errors, so the example exits `2` for it, as `resterm run` does. Use `errors.Is` to check for a specific one, such as `headless.ErrNoSourcePath` when `Source.Path` is empty or `headless.ErrTooFewTargets` when `Compare.Targets` names fewer than two environments.

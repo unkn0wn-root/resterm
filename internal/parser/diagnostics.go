@@ -160,16 +160,21 @@ func (f *argFields) load(d parsedDirective) {
 		if end < 0 {
 			end = field.End // ParseOptions also accepts bare switches.
 		}
-
-		span, ok := d.argumentSpan(field.Start, end)
-		if !ok {
-			continue
+		f.add(d, field.Start, end)
+		if field.Le >= 0 {
+			f.add(d, field.Start, field.Le) // @trace names a budget by its phase.
 		}
-
-		key := strings.ToLower(d.Args[field.Start:end])
-		f.byKey[key] = append(f.byKey[key], len(f.spans))
-		f.spans = append(f.spans, span)
 	}
+}
+
+func (f *argFields) add(d parsedDirective, start, end int) {
+	span, ok := d.argumentSpan(start, end)
+	if !ok {
+		return
+	}
+	key := strings.ToLower(d.Args[start:end])
+	f.byKey[key] = append(f.byKey[key], len(f.spans))
+	f.spans = append(f.spans, span)
 }
 
 // Fall back to the directive name unless every option key maps to source text;

@@ -5,6 +5,7 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -4260,6 +4261,69 @@ GET https://example.com/api
 	}
 	if msg := `unknown @trace options "dsn", "custom", "bogus"`; !hasParseMessage(doc.Warnings, msg) {
 		t.Fatalf("warnings = %v, want %q", doc.Warnings, msg)
+	}
+}
+
+// Spaces around = or <= split a setting into fields that each read as an
+// unknown option. A known option written with <= read as unknown too.
+func TestParseTraceSettingWrittenWrong(t *testing.T) {
+	spaced := `@trace option %q has spaces around =. Write it as key=value`
+	for _, tt := range []struct {
+		rest, err, warn string
+	}{
+		{rest: "total = 300ms", err: fmt.Sprintf(spaced, "total")},
+		{rest: "total =300ms", err: fmt.Sprintf(spaced, "total")},
+		{rest: "total= 300ms", err: fmt.Sprintf(spaced, "total")},
+		{rest: "dns <= 50ms", err: fmt.Sprintf(spaced, "dns")},
+		{rest: "dns <=50ms", err: fmt.Sprintf(spaced, "dns")},
+		{rest: "dns<= 50ms", err: fmt.Sprintf(spaced, "dns")},
+		{
+			rest: "total = 300ms dns <= 50ms",
+			err:  `@trace options "total", "dns" have spaces around =. Write them as key=value`,
+		},
+		{
+			rest: "tolerance<=25ms",
+			err:  `@trace option "tolerance" takes = instead of <=. Write it as tolerance=25ms`,
+		},
+		{rest: "grace<=1s", err: `@trace option "grace" takes = instead of <=. Write it as grace=1s`},
+		{rest: "dns<50ms", warn: `unknown @trace option "dns<50ms"`},
+		{rest: "total =", err: fmt.Sprintf(spaced, "total")},
+		{rest: "enabled = false", err: fmt.Sprintf(spaced, "enabled")},
+		{rest: "= 300ms", warn: `unknown @trace options "=", "300ms"`},
+		{rest: `dns <= "a=b"`, err: fmt.Sprintf(spaced, "dns")},
+	} {
+		doc := Parse("trace.http", []byte("# @trace "+tt.rest+" connect<=120ms\nGET https://example.com\n"))
+		var errs, warns []string
+		for _, d := range doc.Errors {
+			errs = append(errs, d.Message)
+		}
+		for _, d := range doc.Warnings {
+			warns = append(warns, d.Message)
+		}
+		if strings.Join(errs, "\n") != tt.err || strings.Join(warns, "\n") != tt.warn {
+			t.Fatalf("%s: errors = %q, warnings = %q, want %q and %q", tt.rest, errs, warns, tt.err, tt.warn)
+		}
+		tr := doc.Requests[0].Metadata.Trace
+		if b := tr.Budgets; !tr.Enabled || b.Total != 0 || b.Tolerance != 0 ||
+			!maps.Equal(b.Phases, map[string]time.Duration{"connect": 120 * time.Millisecond}) {
+			t.Fatalf("%s: trace = %+v, want enabled with only connect", tt.rest, tr)
+		}
+	}
+}
+
+func TestParseTraceDiagnosticPointsAtTheSetting(t *testing.T) {
+	for rest, at := range map[string]string{
+		"dns<= 50ms":      "dns",
+		"total= 300ms":    "total",
+		"dns<=1s dns<=2s": "dns",
+		"foo<=1s":         "foo",
+	} {
+		line := "# @trace " + rest
+		doc := Parse("trace.http", []byte(line+"\nGET https://example.com\n"))
+		diags := slices.Concat(doc.Errors, doc.Warnings)
+		if want := strings.Index(line, at) + 1; len(diags) != 1 || diags[0].Span.Start.Col != want {
+			t.Fatalf("%s: diagnostics = %+v, want one at column %d", rest, diags, want)
+		}
 	}
 }
 

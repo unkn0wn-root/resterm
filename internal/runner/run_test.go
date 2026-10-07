@@ -1128,6 +1128,8 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 		sent    string
 		skipped int
 		help    string
+		// wrongTag is a directive the step error must not name.
+		wrongTag string
 	}{
 		{
 			name: "step loop",
@@ -1172,6 +1174,21 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 			},
 			help: `help: @skip-if is checked before the @for-each of request "each" starts, ` +
 				`so "item" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@when",
+		},
+		{
+			name: "step loop condition fails",
+			lines: []string{
+				"# @workflow demo",
+				"# @skip-if missing.disabled",
+				`# @for-each ["a"] as item`,
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"GET https://example.com/items/{{vars.request.item}}",
+			},
+			wrongTag: "@when",
 		},
 		{
 			name: "request loop variable shadows a stdlib name",
@@ -1256,8 +1273,12 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 			if skipped != tt.skipped {
 				t.Fatalf("skipped %d steps, want %d: %+v", skipped, tt.skipped, rep.Results[0].Steps)
 			}
-			if out := diag.Render(rep.Results[0].Steps[0].Err); !strings.Contains(out, tt.help) {
+			out := diag.Render(rep.Results[0].Steps[0].Err)
+			if !strings.Contains(out, tt.help) {
 				t.Fatalf("step error rendered\n%s\nwant %q", out, tt.help)
+			}
+			if tt.wrongTag != "" && strings.Contains(out, tt.wrongTag) {
+				t.Fatalf("step error rendered\n%s\nwant no %s", out, tt.wrongTag)
 			}
 		})
 	}

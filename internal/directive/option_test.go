@@ -795,8 +795,34 @@ func TestSpacedKey(t *testing.T) {
 	}
 	for input, want := range tests {
 		fields := slices.Collect(ScanFields(input))
-		if got := SpacedKey(fields, 0); got != want {
+		if got := SpacedKey(fields, 0, "="); got != want {
 			t.Fatalf("SpacedKey(%q, 0) = %t, want %t", input, got, want)
+		}
+	}
+}
+
+func TestSpacedOptionWithBudgets(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		key string
+		n   int
+	}{
+		"dns <= 50ms":            {"dns", 3},
+		"dns <=50ms":             {"dns", 2},
+		"dns<= 50ms":             {"dns", 2},
+		"total = 300ms":          {"total", 3},
+		"total = connect<=120ms": {"total", 2},
+		`dns <= "a=b"`:           {"dns", 3},
+		"dns<= connect<=120ms":   {"", 0},
+		"dns<=50ms":              {"", 0},
+		"<=50ms":                 {"", 0},
+		"dns<50ms":               {"", 0},
+	}
+	for input, want := range tests {
+		fields := slices.Collect(ScanFields(input))
+		if key, n := SpacedOption(fields, 0, "<=", "="); key != want.key || n != want.n {
+			t.Fatalf("SpacedOption(%q) = %q, %d, want %q, %d", input, key, n, want.key, want.n)
 		}
 	}
 }
