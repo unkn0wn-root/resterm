@@ -86,3 +86,20 @@ func TestAuthSpecUnknownParams(t *testing.T) {
 		}
 	}
 }
+
+func TestParseAPIKeyPlacement(t *testing.T) {
+	for in, want := range map[string]APIKeyPlacement{
+		"":         APIKeyHeader,
+		" Header ": APIKeyHeader,
+		"query":    APIKeyQuery,
+	} {
+		if got, ok := ParseAPIKeyPlacement(in); !ok || got != want {
+			t.Fatalf("ParseAPIKeyPlacement(%q) = %q, %v, want %q", in, got, ok, want)
+		}
+	}
+	for _, in := range []string{"cookie", "{{place}}"} {
+		if got, ok := ParseAPIKeyPlacement(in); ok {
+			t.Fatalf("ParseAPIKeyPlacement(%q) = %q, want no placement", in, got)
+		}
+	}
+}

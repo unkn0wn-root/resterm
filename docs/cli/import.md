@@ -54,7 +54,7 @@ Security schemes in the spec become `@auth` on the requests that use them:
 | --- | --- | --- |
 | HTTP basic | `@auth basic` | `auth.username`, `auth.password` |
 | HTTP bearer | `@auth bearer` | `auth.token` |
-| API key | `@auth apikey` in the header or query parameter the spec names. The header defaults to `X-API-Key`. | `auth.apiKey` |
+| API key | `@auth apikey` in the header or query parameter the spec names. The header defaults to `X-API-Key`. A key sent as a cookie goes into the request's `Cookie` header instead, because `@auth apikey` has no cookie placement. | `auth.apiKey` |
 | OAuth 2.0 | `@auth oauth2` with the client credentials, password, or authorization code flow, picked in that order | `oauth.clientId`, `oauth.clientSecret`, plus `oauth.scope`, `oauth.username`, and `oauth.password` when the flow needs them |
 | OAuth 2.0 implicit flow only | `@auth bearer` | `auth.token` |
 

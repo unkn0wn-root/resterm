@@ -384,3 +384,24 @@ func TestParseRejectsDigestAsCustomHeader(t *testing.T) {
 		t.Fatalf("Digest header line = %+v, want rejected", h)
 	}
 }
+
+// A template can still expand to a valid placement, so only a literal is checked here.
+func TestParseAPIKeyPlacement(t *testing.T) {
+	for line, want := range map[string]string{
+		"# @auth apikey QUERY api_key {{key}}":     "",
+		"# @auth apikey {{place}} X-Key {{key}}":   "",
+		"# @auth apikey cookie session_id {{key}}": `@auth apikey placement "cookie" is not supported. Use header or query`,
+		"# @auth global apikey body X-Key {{key}}": `@auth apikey placement "body" is not supported. Use header or query`,
+	} {
+		doc := Parse("/ws/api.http", []byte(line+"\nGET https://example.com\n"))
+		if want == "" {
+			if len(doc.Errors) != 0 {
+				t.Fatalf("%s: errors = %v", line, doc.Errors)
+			}
+			continue
+		}
+		if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+			t.Fatalf("%s: errors = %v, want %q", line, doc.Errors, want)
+		}
+	}
+}

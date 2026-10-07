@@ -666,3 +666,15 @@ func TestSyncResponsePanesRendersExplainInSplitView(t *testing.T) {
 		t.Fatalf("expected right explain pane to render its snapshot, got %q", rightView)
 	}
 }
+
+// An apikey auth with no placement sends a header, so its change counts as auth.
+func TestStepExplainAPIKeyHeaderIsAuthChange(t *testing.T) {
+	for placement, want := range map[string]bool{"": true, "header": true, "query": false} {
+		x := wfStepExplain{r: workflowStepResult{Src: &restfile.Request{Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: map[string]string{"placement": placement}},
+		}}}}
+		if got := x.isAuthChange(xplain.Change{Field: "header.X-API-Key"}); got != want {
+			t.Fatalf("placement %q: isAuthChange = %v, want %v", placement, got, want)
+		}
+	}
+}

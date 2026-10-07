@@ -435,7 +435,11 @@ func parseAuthSpec(fields []directive.Field) (*restfile.AuthSpec, error) {
 		}
 	case restfile.AuthAPIKey:
 		if len(fields) >= 4 {
-			params["placement"] = strings.ToLower(fields[1].Value)
+			place := fields[1].Value
+			if _, ok := restfile.ParseAPIKeyPlacement(place); !ok && !vars.HasPlaceholder(place) {
+				return nil, fmt.Errorf("@auth apikey placement %q is not supported. Use header or query", place)
+			}
+			params["placement"] = strings.ToLower(place)
 			params["name"] = fields[2].Value
 			params["value"] = joinValues(fields[3:])
 		}

@@ -3,6 +3,7 @@ package generator
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -426,6 +427,46 @@ func TestSerializeParamValueDefaults(t *testing.T) {
 		sampleObject,
 	); got != "a,1,b,2" {
 		t.Fatalf("unexpected object key/value value: %s", got)
+	}
+}
+
+// @auth apikey has no cookie placement, so the key joins the Cookie header.
+func TestBuilderGenerateCookieAPIKey(t *testing.T) {
+	spec := &model.Spec{
+		Servers: []model.Server{{URL: "https://api.example.com"}},
+		SecuritySchemes: map[string]model.SecurityScheme{
+			"cookieKey": {Type: model.SecurityAPIKey, Name: "session_id", In: model.InCookie},
+			"bearer":    {Type: model.SecurityHTTP, Subtype: "bearer"},
+		},
+		Operations: []model.Operation{{
+			ID:         "getMe",
+			Method:     model.MethodGet,
+			Path:       "/me",
+			Parameters: []model.Parameter{{Name: "theme", Location: model.InCookie}},
+			Security:   []model.SecurityRequirement{{SchemeName: "cookieKey"}, {SchemeName: "bearer"}},
+		}},
+	}
+	doc, err := NewBuilder().Generate(context.Background(), spec, openapi.GeneratorOptions{})
+	if err != nil {
+		t.Fatalf("generate document: %v", err)
+	}
+
+	req := findRequestByName(t, doc, "getMe")
+	if req.Metadata.Auth != nil {
+		t.Fatalf("auth = %+v, want none", req.Metadata.Auth)
+	}
+	if got, want := req.Headers.Values(
+		"Cookie",
+	), []string{
+		"theme={{cookie_theme}}; session_id={{auth.apiKey}}",
+	}; !slices.Equal(
+		got,
+		want,
+	) {
+		t.Fatalf("Cookie = %q, want %q", got, want)
+	}
+	if v, ok := findVariable(doc.Globals, "auth.apiKey"); !ok || !v.Secret {
+		t.Fatalf("globals = %+v, want a secret auth.apiKey", doc.Globals)
 	}
 }
 

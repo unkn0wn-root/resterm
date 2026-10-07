@@ -691,7 +691,7 @@ func convertSecuritySchemes(
 			Type:         model.SecuritySchemeType(sec.Type),
 			Subtype:      strings.ToLower(sec.Scheme),
 			Name:         sec.Name,
-			In:           model.ParameterLocation(sec.In),
+			In:           model.ParameterLocation(strings.ToLower(sec.In)),
 			Description:  sec.Description,
 			BearerFormat: sec.BearerFormat,
 		}

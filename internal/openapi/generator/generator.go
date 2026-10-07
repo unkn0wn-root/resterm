@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -43,8 +44,7 @@ const (
 	placeholderToken        = "replace-with-token"
 	placeholderAPIKey       = "replace-with-api-key"
 
-	defaultAPIKeyHeaderName = "X-API-Key"
-	jsonContentType         = "application/json"
+	jsonContentType = "application/json"
 )
 
 func NewBuilder() *Builder {
@@ -190,6 +190,8 @@ type requestBuilder struct {
 	headerParams []paramBinding
 	cookieParams []paramBinding
 	pathParams   []paramBinding
+	// authCookie is an apikey sent as a cookie, which @auth cannot place.
+	authCookie string
 }
 
 type paramBinding struct {
@@ -223,11 +225,11 @@ func (rb *requestBuilder) build() (*restfile.Request, error) {
 	req.URL = url
 
 	rb.applyHeaderParameters()
-	rb.applyCookieParameters()
 
 	rb.applyRequestBody(req)
 	rb.applyAcceptHeader(req)
 	rb.applySecurity(req)
+	rb.applyCookieParameters()
 
 	if len(rb.variables) > 0 {
 		req.Variables = append(req.Variables, rb.variables...)
@@ -441,12 +443,15 @@ func (rb *requestBuilder) applyHeaderParameters() {
 }
 
 func (rb *requestBuilder) applyCookieParameters() {
-	if len(rb.cookieParams) == 0 {
-		return
-	}
-	parts := make([]string, 0, len(rb.cookieParams))
+	parts := make([]string, 0, len(rb.cookieParams)+1)
 	for _, binding := range rb.cookieParams {
 		parts = append(parts, fmt.Sprintf("%s=%s", binding.Param.Name, varRef(binding.VarName)))
+	}
+	if rb.authCookie != "" {
+		parts = append(parts, rb.authCookie)
+	}
+	if len(parts) == 0 {
+		return
 	}
 	rb.headers.Add("Cookie", strings.Join(parts, "; "))
 }
@@ -545,7 +550,7 @@ func (rb *requestBuilder) applySecurity(req *restfile.Request) {
 		return
 	}
 	for _, requirement := range rb.op.Security {
-		if spec := rb.mapSecurity(requirement); spec != nil {
+		if spec := rb.mapSecurity(requirement); spec != nil || rb.authCookie != "" {
 			req.Metadata.Auth = spec
 			return
 		}
@@ -585,20 +590,22 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 			}
 		}
 	case model.SecurityAPIKey:
-		placement := strings.ToLower(string(scheme.In))
-		params := map[string]string{
-			"placement": placement,
-			"name":      scheme.Name,
-			"value":     varRef(globalAuthAPIKeyVar),
-		}
-		if placement == "" {
-			params["placement"] = "header"
-		}
-		if params["name"] == "" {
-			params["name"] = defaultAPIKeyHeaderName
-		}
+		name := cmp.Or(scheme.Name, restfile.DefaultAPIKeyName)
+		key := varRef(globalAuthAPIKeyVar)
 		rb.builder.registerGlobal(globalAuthAPIKeyVar, placeholderAPIKey, true)
-		return &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: params}
+		place := restfile.APIKeyHeader
+		switch scheme.In {
+		case model.InCookie:
+			rb.authCookie = name + "=" + key
+			return nil
+		case model.InQuery:
+			place = restfile.APIKeyQuery
+		}
+		return &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: map[string]string{
+			"placement": string(place),
+			"name":      name,
+			"value":     key,
+		}}
 	case model.SecurityOAuth2:
 		return rb.buildOAuthAuthSpec(scheme, req)
 	}
