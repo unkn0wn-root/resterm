@@ -5,6 +5,7 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -4286,6 +4287,10 @@ func TestParseTraceSettingWrittenWrong(t *testing.T) {
 		},
 		{rest: "grace<=1s", err: `@trace option "grace" takes = instead of <=. Write it as grace=1s`},
 		{rest: "dns<50ms", warn: `unknown @trace option "dns<50ms"`},
+		{rest: "total =", err: fmt.Sprintf(spaced, "total")},
+		{rest: "enabled = false", err: fmt.Sprintf(spaced, "enabled")},
+		{rest: "= 300ms", warn: `unknown @trace options "=", "300ms"`},
+		{rest: `dns <= "a=b"`, err: fmt.Sprintf(spaced, "dns")},
 	} {
 		doc := Parse("trace.http", []byte("# @trace "+tt.rest+" connect<=120ms\nGET https://example.com\n"))
 		var errs, warns []string
@@ -4298,10 +4303,26 @@ func TestParseTraceSettingWrittenWrong(t *testing.T) {
 		if strings.Join(errs, "\n") != tt.err || strings.Join(warns, "\n") != tt.warn {
 			t.Fatalf("%s: errors = %q, warnings = %q, want %q and %q", tt.rest, errs, warns, tt.err, tt.warn)
 		}
-		b := doc.Requests[0].Metadata.Trace.Budgets
-		if b.Total != 0 || b.Tolerance != 0 ||
+		tr := doc.Requests[0].Metadata.Trace
+		if b := tr.Budgets; !tr.Enabled || b.Total != 0 || b.Tolerance != 0 ||
 			!maps.Equal(b.Phases, map[string]time.Duration{"connect": 120 * time.Millisecond}) {
-			t.Fatalf("%s: budgets = %+v, want only connect", tt.rest, b)
+			t.Fatalf("%s: trace = %+v, want enabled with only connect", tt.rest, tr)
+		}
+	}
+}
+
+func TestParseTraceDiagnosticPointsAtTheSetting(t *testing.T) {
+	for rest, at := range map[string]string{
+		"dns<= 50ms":      "dns",
+		"total= 300ms":    "total",
+		"dns<=1s dns<=2s": "dns",
+		"foo<=1s":         "foo",
+	} {
+		line := "# @trace " + rest
+		doc := Parse("trace.http", []byte(line+"\nGET https://example.com\n"))
+		diags := slices.Concat(doc.Errors, doc.Warnings)
+		if want := strings.Index(line, at) + 1; len(diags) != 1 || diags[0].Span.Start.Col != want {
+			t.Fatalf("%s: diagnostics = %+v, want one at column %d", rest, diags, want)
 		}
 	}
 }

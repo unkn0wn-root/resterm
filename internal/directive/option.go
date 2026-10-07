@@ -81,31 +81,20 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 		spaced []string
 	)
 	for i := 0; i < len(fields); i++ {
+		// The key alone would read as true, so no field of a spaced option is stored.
+		if key, n := SpacedOption(fields, i, "="); n > 0 {
+			spaced = append(spaced, key)
+			i += n - 1
+			continue
+		}
 		f := fields[i]
 		key, val, ok := strings.Cut(f.Value, "=")
-		var next string
-		if i+1 < len(fields) {
-			next = fields[i+1].Value
-		}
-		// Spaces around = split one option into several fields. None of them is
-		// stored, since the key alone would read as true. A lone = or an empty
-		// k= takes the next field as its value.
 		switch {
-		case SpacedKey(fields, i): // k = v, k =v
+		case noKey(f.Value, "="): // =x, or = v with no key before it
 			spaced = append(spaced, f.Value)
-			i++
-			if next == "=" && valueNext(fields, i) {
+			if f.Value == "=" && valueNext(fields, i, "=") {
 				i++
 			}
-		case noKey(f.Value): // =x, or = v with no key before it
-			spaced = append(spaced, f.Value)
-			if f.Value == "=" && valueNext(fields, i) {
-				i++
-			}
-		// k= v. Only the source tells k= from k="", so this reads the span.
-		case f.Eq >= 0 && f.Eq == f.End-1 && valueNext(fields, i):
-			spaced = append(spaced, key)
-			i++
 		case ok:
 			rep.add(opts.put(key, val))
 		case bareIsTrue:
@@ -119,22 +108,42 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 	return opts, err
 }
 
-func noKey(field string) bool {
-	return strings.HasPrefix(strings.TrimSpace(field), "=")
+// SpacedOption returns the key and field count of an option at i that spaces split around one of ops.
+func SpacedOption(fields []Field, i int, ops ...string) (string, int) {
+	f := fields[i]
+	if SpacedKey(fields, i, ops...) { // k = v, k =v
+		// A lone operator takes the next field as its value.
+		if slices.Contains(ops, fields[i+1].Value) && valueNext(fields, i+1, ops...) {
+			return f.Value, 3
+		}
+		return f.Value, 2
+	}
+	// k= v. Only the source tells k= from k="", so this reads the span.
+	for _, op := range ops {
+		if at := f.at(op); at >= 0 && at+len(op) == f.End && valueNext(fields, i, ops...) {
+			return strings.TrimSuffix(f.Value, op), 2
+		}
+	}
+	return "", 0
 }
 
-// SpacedKey reports whether field i is a key whose = was split off by a space,
-// as in k = v or k =v.
-func SpacedKey(fields []Field, i int) bool {
+func noKey(field string, ops ...string) bool {
+	field = strings.TrimSpace(field)
+	return slices.ContainsFunc(ops, func(op string) bool { return strings.HasPrefix(field, op) })
+}
+
+// SpacedKey reports whether field i is a key whose operator was split off by a
+// space, as in k = v or k =v.
+func SpacedKey(fields []Field, i int, ops ...string) bool {
 	key := fields[i].Value
 	return !strings.Contains(key, "=") && strings.TrimSpace(key) != "" &&
-		i+1 < len(fields) && noKey(fields[i+1].Value)
+		i+1 < len(fields) && noKey(fields[i+1].Value, ops...)
 }
 
 // The field after i can be a value only if it is not an option of its own. Only
 // the source tells a=b from "a=b", so this reads the span.
-func valueNext(fields []Field, i int) bool {
-	return i+1 < len(fields) && fields[i+1].Eq < 0
+func valueNext(fields []Field, i int, ops ...string) bool {
+	return i+1 < len(fields) && !slices.ContainsFunc(ops, func(op string) bool { return fields[i+1].at(op) >= 0 })
 }
 
 // Every option is visited even after one fails, so a line with two mistakes
@@ -492,9 +501,19 @@ func ParseNameValue(input string) (string, string) {
 
 // FieldSpan locates one field of an option list in its source text. Offsets are
 // bytes. Eq is the equals sign that makes the field an option, -1 when the
-// field is positional.
+// field is positional. Le is the <= of a @trace budget such as dns<=50ms.
 type FieldSpan struct {
-	Start, End, Eq int
+	Start, End, Eq, Le int
+}
+
+func (s FieldSpan) at(op string) int {
+	switch op {
+	case "=":
+		return s.Eq
+	case "<=":
+		return s.Le
+	}
+	return -1
 }
 
 // Field pairs a decoded option field with its byte offsets in the source.
@@ -517,11 +536,15 @@ func scanFields(input string, escapes bool) iter.Seq[Field] {
 			if !ok {
 				return
 			}
-			eq := optionEq(input[tok.start:tok.end])
-			if eq >= 0 {
-				eq += tok.start
+			raw := input[tok.start:tok.end]
+			span := FieldSpan{Start: tok.start, End: tok.end, Eq: -1, Le: -1}
+			if eq := optionEq(raw); eq >= 0 {
+				span.Eq = tok.start + eq
+			} else if i := strings.IndexFunc(raw, func(r rune) bool { return !IsKeyRune(r) }); i > 0 &&
+				strings.HasPrefix(raw[i:], "<=") {
+				span.Le = tok.start + i
 			}
-			if !yield(Field{FieldSpan: FieldSpan{Start: tok.start, End: tok.end, Eq: eq}, Value: tok.val}) {
+			if !yield(Field{FieldSpan: span, Value: tok.val}) {
 				return
 			}
 		}

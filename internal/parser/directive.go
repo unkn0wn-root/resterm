@@ -310,7 +310,8 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, nil
 	}
 
-	if namesProfiles(fields[0].Value) || (strings.EqualFold(fields[0].Value, "use") && directive.SpacedKey(fields, 0)) {
+	if namesProfiles(fields[0].Value) ||
+		(strings.EqualFold(fields[0].Value, "use") && directive.SpacedKey(fields, 0, "=")) {
 		if dir.Scope != directive.ScopeRequest {
 			return dir, fmt.Errorf("@auth %s scope does not support use=", dir.Scope.String())
 		}
@@ -350,7 +351,7 @@ func authName(scope directive.Scope, fields []directive.Field) (string, error) {
 		// Before 1.10 this word was ignored and the line was a default. Rejecting
 		// it keeps an old default from quietly becoming a named definition.
 		w := fields[1].Value
-		if scope != directive.ScopeRequest && validProfileName(w) && !directive.SpacedKey(fields, 1) {
+		if scope != directive.ScopeRequest && validProfileName(w) && !directive.SpacedKey(fields, 1, "=") {
 			return "", fmt.Errorf(
 				"@auth expects key=value options but got %q. Write name=%s to name a definition",
 				w,
@@ -513,36 +514,19 @@ func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 	var set, unknown, spaced []string
 	var errs []error
 	for i := 0; i < len(fields); i++ {
-		f := fields[i]
-		if f.Value == "" {
-			continue
-		}
-		key, op, val := cutTraceOp(f.Value)
-		var nkey, nop, nval string
-		if i+1 < len(fields) {
-			nkey, nop, nval = cutTraceOp(fields[i+1].Value)
-		}
-		// Spaces around = or <= split one setting into several fields, and none
-		// of them is applied. After a lone operator, the next field is its value
-		// unless it is a setting of its own.
-		switch {
-		case op == "" && nop != "" && nkey == "": // total = 300ms, total =300ms
+		if key, n := directive.SpacedOption(fields, i, "<=", "="); n > 0 {
 			spaced = append(spaced, key)
-			i++
-			if nval == "" && i+1 < len(fields) && !strings.Contains(fields[i+1].Value, "=") {
-				i++
-			}
-			continue
-		case key != "" && val == "" && strings.HasSuffix(rest[f.Start:f.End], "=") && // total= 300ms
-			i+1 < len(fields) && nop == "":
-			spaced = append(spaced, key)
-			i++
+			i += n - 1
 			continue
 		}
-		target, err := applyTraceToken(spec, key, op, val)
+		if fields[i].Value == "" {
+			continue
+		}
+		target, err := applyTraceToken(spec, fields[i].Value)
+		var unk *directive.UnknownOptionsError
 		switch {
-		case errors.Is(err, errUnknownTrace):
-			unknown = append(unknown, cmp.Or(key, f.Value))
+		case errors.As(err, &unk):
+			unknown = append(unknown, unk.Keys...)
 		case err != nil:
 			errs = append(errs, err)
 		case target != "":
@@ -563,25 +547,12 @@ func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 	return spec, errors.Join(errs...)
 }
 
-// cutTraceOp splits a token at <=, which only budgets take, or at =.
-func cutTraceOp(s string) (key, op, val string) {
-	i := strings.IndexByte(s, '=')
-	switch {
-	case i < 0:
-		return strings.TrimSpace(s), "", ""
-	case i > 0 && s[i-1] == '<':
-		return strings.TrimSpace(s[:i-1]), "<=", strings.TrimSpace(s[i+1:])
-	default:
-		return strings.TrimSpace(s[:i]), "=", strings.TrimSpace(s[i+1:])
-	}
-}
-
-var errUnknownTrace = errors.New("unknown @trace setting")
-
 // applyTraceToken returns the normalized setting name used for duplicate checks.
 // An invalid duration or bool leaves the setting as it was.
-func applyTraceToken(spec *restfile.TraceSpec, key, op, val string) (string, error) {
-	if op == "" {
+func applyTraceToken(spec *restfile.TraceSpec, value string) (string, error) {
+	key, val, ok := strings.Cut(value, "=")
+	if !ok {
+		key = strings.TrimSpace(key)
 		switch strings.ToLower(key) {
 		case "off", "disable", "disabled", "false":
 			spec.Enabled = false
@@ -590,8 +561,10 @@ func applyTraceToken(spec *restfile.TraceSpec, key, op, val string) (string, err
 			spec.Enabled = true
 			return "", nil
 		}
-		return "", errUnknownTrace
+		return "", directive.UnknownOption(directive.Trace, cmp.Or(key, value))
 	}
+	key, le := strings.CutSuffix(key, "<")
+	key, val = strings.TrimSpace(key), strings.TrimSpace(val)
 	if kind, ok := tracebudget.NormalizePhase(key); ok {
 		if dur := parseDuration(val); dur > 0 {
 			setTracePhaseBudget(spec, kind, dur)
@@ -607,9 +580,9 @@ func applyTraceToken(spec *restfile.TraceSpec, key, op, val string) (string, err
 	case "tolerance", "allowance", "grace":
 		target = "tolerance"
 	default:
-		return "", errUnknownTrace
+		return "", directive.UnknownOption(directive.Trace, cmp.Or(key, value))
 	}
-	if op == "<=" {
+	if le {
 		return "", fmt.Errorf(
 			"%s option %q takes = instead of <=. Write it as %s=%s",
 			directive.Trace.Tag(),

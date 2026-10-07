@@ -28,21 +28,12 @@ func scanFields(text []rune) []field {
 		f := field{start: at(token.Start), end: at(token.End), eq: -1, text: token.Value}
 		if token.Eq >= 0 {
 			f.form, f.eq = formOption, at(token.Eq)
-		} else if eq := budgetEq(src[token.Start:token.End]); eq >= 0 {
-			f.form, f.eq = formBudget, at(token.Start+eq)
+		} else if token.Le >= 0 {
+			f.form, f.eq = formBudget, at(token.Le+1)
 		}
 		out = append(out, f)
 	}
 	return out
-}
-
-// budgetEq returns the byte offset of '=' in "key<=value", or -1 for other fields.
-func budgetEq(raw string) int {
-	key, _, ok := strings.Cut(raw, "<=")
-	if !ok || key == "" || strings.ContainsFunc(key, func(r rune) bool { return !directive.IsKeyRune(r) }) {
-		return -1
-	}
-	return len(key) + 1
 }
 
 type slot struct {
