@@ -162,7 +162,7 @@ func (f *argFields) load(d parsedDirective) {
 		}
 		f.add(d, field.Start, end)
 		if field.Le >= 0 {
-			f.add(d, field.Start, field.Le) // @trace names a budget by its phase.
+			f.add(d, field.Start, field.Le) // A name before <= is a key too.
 		}
 	}
 }

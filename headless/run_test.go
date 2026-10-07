@@ -474,11 +474,7 @@ func TestBuildReturnsValidationErrors(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 	bad := filepath.Join(dir, "bad.http")
-	if err := os.WriteFile(
-		bad,
-		[]byte("# @auth apikey cookie sid {{key}}\nGET https://example.com\n"),
-		0o644,
-	); err != nil {
+	if err := os.WriteFile(bad, []byte("# @k8s namespace=default\nGET https://example.com\n"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 

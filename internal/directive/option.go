@@ -501,7 +501,7 @@ func ParseNameValue(input string) (string, string) {
 
 // FieldSpan locates one field of an option list in its source text. Offsets are
 // bytes. Eq is the equals sign that makes the field an option, -1 when the
-// field is positional. Le is the <= of a @trace budget such as dns<=50ms.
+// field is positional. Le is the <= after a name, as in dns<=50ms.
 type FieldSpan struct {
 	Start, End, Eq, Le int
 }
