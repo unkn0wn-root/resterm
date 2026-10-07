@@ -190,8 +190,9 @@ type requestBuilder struct {
 	headerParams []paramBinding
 	cookieParams []paramBinding
 	pathParams   []paramBinding
-	// authCookie is an apikey sent as a cookie, which @auth cannot place.
-	authCookie string
+	// apiKey is the parameter an apiKey scheme fills. @auth cannot place a
+	// cookie, so a cookie key is written into the Cookie header.
+	apiKey model.Parameter
 }
 
 type paramBinding struct {
@@ -220,6 +221,7 @@ func (rb *requestBuilder) build() (*restfile.Request, error) {
 		Variables: nil,
 	}
 
+	rb.applySecurity(req)
 	rb.processParameters()
 	url := rb.composeURL()
 	req.URL = url
@@ -228,7 +230,6 @@ func (rb *requestBuilder) build() (*restfile.Request, error) {
 
 	rb.applyRequestBody(req)
 	rb.applyAcceptHeader(req)
-	rb.applySecurity(req)
 	rb.applyCookieParameters()
 
 	if len(rb.variables) > 0 {
@@ -251,7 +252,13 @@ func (rb *requestBuilder) buildMetadata() restfile.RequestMetadata {
 }
 
 func (rb *requestBuilder) processParameters() {
+	key := rb.apiKey
 	for _, param := range rb.op.Parameters {
+		// The scheme sends the key here. A second value could be the one a server reads.
+		if param.Location == key.Location && (param.Name == key.Name ||
+			key.Location == model.InHeader && strings.EqualFold(param.Name, key.Name)) {
+			continue
+		}
 		varName := rb.uniqueVariableName(param.Location, param.Name)
 		binding := rb.buildParamBinding(param, varName)
 		switch param.Location {
@@ -447,8 +454,8 @@ func (rb *requestBuilder) applyCookieParameters() {
 	for _, binding := range rb.cookieParams {
 		parts = append(parts, fmt.Sprintf("%s=%s", binding.Param.Name, varRef(binding.VarName)))
 	}
-	if rb.authCookie != "" {
-		parts = append(parts, rb.authCookie)
+	if rb.apiKey.Location == model.InCookie {
+		parts = append(parts, rb.apiKey.Name+"="+varRef(globalAuthAPIKeyVar))
 	}
 	if len(parts) == 0 {
 		return
@@ -550,7 +557,7 @@ func (rb *requestBuilder) applySecurity(req *restfile.Request) {
 		return
 	}
 	for _, requirement := range rb.op.Security {
-		if spec := rb.mapSecurity(requirement); spec != nil || rb.authCookie != "" {
+		if spec := rb.mapSecurity(requirement); spec != nil || rb.apiKey.Location == model.InCookie {
 			req.Metadata.Auth = spec
 			return
 		}
@@ -593,12 +600,14 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 		name := cmp.Or(scheme.Name, restfile.DefaultAPIKeyName)
 		key := varRef(globalAuthAPIKeyVar)
 		rb.builder.registerGlobal(globalAuthAPIKeyVar, placeholderAPIKey, true)
+		rb.apiKey = model.Parameter{Name: name, Location: model.InHeader}
 		place := restfile.APIKeyHeader
 		switch scheme.In {
 		case model.InCookie:
-			rb.authCookie = name + "=" + key
+			rb.apiKey.Location = model.InCookie
 			return nil
 		case model.InQuery:
+			rb.apiKey.Location = model.InQuery
 			place = restfile.APIKeyQuery
 		}
 		return &restfile.AuthSpec{Type: restfile.AuthAPIKey, Params: map[string]string{
