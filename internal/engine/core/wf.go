@@ -230,12 +230,11 @@ func (r *wfRun) runReqStep(
 		return r.failStep(ctx, step, req, branch, err)
 	}
 
-	spec, err := workflowForEach(step, req)
-	if err != nil {
-		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagForEach))
-	}
-	// A loop checks the condition per item instead, where the loop variable is bound.
-	if step.When != nil && spec == nil {
+	// A condition written next to the step's own @for-each is checked per item.
+	// A loop on the request runs inside the step, so the condition is checked once
+	// before it and can skip it whole.
+	perItem := step.Kind == restfile.WorkflowStepKindForEach
+	if step.When != nil && !perItem {
 		ok, reason, err := r.dep.EvalCondition(
 			ctx,
 			r.pl.Doc,
@@ -252,6 +251,11 @@ func (r *wfRun) runReqStep(
 		if !ok {
 			return r.manualFinish(step, req, branch, engine.RequestResult{Skipped: true, SkipReason: reason})
 		}
+	}
+
+	spec, err := workflowForEach(step, req)
+	if err != nil {
+		return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagForEach))
 	}
 	if spec == nil {
 		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, sc, rts.Locals{})
@@ -322,7 +326,7 @@ func (r *wfRun) runReqStep(
 		loc := rts.Local(spec.Var, item)
 		vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, loop)
 
-		if step.When != nil {
+		if step.When != nil && perItem {
 			ok, reason, err := r.dep.EvalCondition(
 				ctx,
 				r.pl.Doc,

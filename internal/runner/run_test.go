@@ -1117,34 +1117,69 @@ func TestRunRequestForEach(t *testing.T) {
 	}
 }
 
-// A step condition on a loop runs for each item, so it can read the loop variable.
-func TestRunWorkflowStepConditionSeesLoopItem(t *testing.T) {
-	for name, lines := range map[string][]string{
-		"step loop": {
-			"# @workflow demo",
-			`# @when item != "b"`,
-			`# @for-each ["a","b","c"] as item`,
-			"# @step Each using=each",
-			"",
-			"### Each",
-			"# @name each",
-			"GET https://example.com/items/{{vars.request.item}}",
+// A condition applies where it is written. Next to the step's own loop it
+// filters items. On a step whose request loops, it is checked once before the
+// loop, so it can skip a loop whose list would fail to load.
+func TestRunWorkflowStepConditionLevel(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		lines   []string
+		sent    string
+		skipped int
+	}{
+		{
+			name: "step loop",
+			lines: []string{
+				"# @workflow demo",
+				`# @when item != "b"`,
+				`# @for-each ["a","b","c"] as item`,
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"GET https://example.com/items/{{vars.request.item}}",
+			},
+			sent:    "/items/a,/items/c",
+			skipped: 1,
 		},
-		"request loop": {
-			"# @workflow demo",
-			`# @when item != "b"`,
-			"# @step Each using=each",
-			"",
-			"### Each",
-			"# @name each",
-			`# @for-each ["a","b","c"] as item`,
-			"GET https://example.com/items/{{vars.request.item}}",
+		{
+			name: "request loop skipped whole",
+			lines: []string{
+				"# @workflow demo",
+				`# @when try json.file("_data/items.json")`,
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @for-each json.file("_data/items.json") as item`,
+				"GET https://example.com/items/{{vars.request.item}}",
+			},
+			skipped: 1,
+		},
+		{
+			name: "request loop checked once",
+			lines: []string{
+				"# @workflow demo on-failure=continue",
+				"# @step Ping using=ping",
+				"# @skip-if last.statusCode == 500",
+				"# @step Each using=each",
+				"",
+				"### Ping",
+				"# @name ping",
+				"GET https://example.com/ping",
+				"",
+				"### Each",
+				"# @name each",
+				`# @for-each ["a","b","c"] as item`,
+				"GET https://example.com/items/{{vars.request.item}}",
+			},
+			sent: "/ping,/items/a,/items/b,/items/c",
 		},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			file := filepath.Join(dir, "wf.http")
-			if err := os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+			if err := os.WriteFile(file, []byte(strings.Join(tt.lines, "\n")+"\n"), 0o644); err != nil {
 				t.Fatalf("write file: %v", err)
 			}
 
@@ -1153,9 +1188,13 @@ func TestRunWorkflowStepConditionSeesLoopItem(t *testing.T) {
 				return &http.Client{
 					Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 						seen = append(seen, req.URL.Path)
+						code := http.StatusOK
+						if req.URL.Path == "/items/b" {
+							code = http.StatusInternalServerError
+						}
 						return &http.Response{
-							Status:     "200 OK",
-							StatusCode: http.StatusOK,
+							Status:     http.StatusText(code),
+							StatusCode: code,
 							Proto:      "HTTP/1.1",
 							Header:     make(http.Header),
 							Body:       io.NopCloser(strings.NewReader("{}")),
@@ -1174,11 +1213,17 @@ func TestRunWorkflowStepConditionSeesLoopItem(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
-			if rep.Total != 1 || rep.Passed != 1 {
-				t.Fatalf("unexpected report: %+v", rep.Results)
+			if got := strings.Join(seen, ","); got != tt.sent {
+				t.Fatalf("sent %q, want %q", got, tt.sent)
 			}
-			if got := strings.Join(seen, ","); got != "/items/a,/items/c" {
-				t.Fatalf("sent %s, want /items/a,/items/c", got)
+			var skipped int
+			for _, st := range rep.Results[0].Steps {
+				if st.Skipped {
+					skipped++
+				}
+			}
+			if skipped != tt.skipped {
+				t.Fatalf("skipped %d steps, want %d: %+v", skipped, tt.skipped, rep.Results[0].Steps)
 			}
 		})
 	}

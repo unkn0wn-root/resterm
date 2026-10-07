@@ -55,7 +55,7 @@ A patch can contain these keys:
 
 These directives are evaluated before pre-request scripts. If a `@when` condition is false or a `@skip-if` condition is true, the request is skipped and Resterm reports why.
 
-In a workflow, put `@when` or `@skip-if` above a `@step` to gate that step. See [Workflows](../workflows.md).
+In a workflow, put `@when` or `@skip-if` above a `@step` to gate that step. When the step has its own `@for-each`, the condition is checked for each item instead. See [Workflows](../workflows.md).
 
 ## @assert
 
