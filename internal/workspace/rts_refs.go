@@ -96,40 +96,14 @@ func walkBlock(block *rts.Block, add func(string)) {
 }
 
 func walkExpr(ex rts.Expr, add func(string)) {
-	switch e := ex.(type) {
-	case *rts.Unary:
-		walkExpr(e.X, add)
-	case *rts.Binary:
-		walkExpr(e.Left, add)
-		walkExpr(e.Right, add)
-	case *rts.Ternary:
-		walkExpr(e.Cond, add)
-		walkExpr(e.Then, add)
-		walkExpr(e.Else, add)
-	case *rts.TryExpr:
-		walkExpr(e.X, add)
-	case *rts.Call:
-		if path, ok := literalJSONFileCall(e); ok {
-			add(path)
+	rts.Inspect(ex, func(e rts.Expr) bool {
+		if call, ok := e.(*rts.Call); ok {
+			if path, ok := literalJSONFileCall(call); ok {
+				add(path)
+			}
 		}
-		walkExpr(e.Callee, add)
-		for _, arg := range e.Args {
-			walkExpr(arg, add)
-		}
-	case *rts.Index:
-		walkExpr(e.X, add)
-		walkExpr(e.Idx, add)
-	case *rts.Member:
-		walkExpr(e.X, add)
-	case *rts.ListLit:
-		for _, elem := range e.Elems {
-			walkExpr(elem, add)
-		}
-	case *rts.DictLit:
-		for _, entry := range e.Entries {
-			walkExpr(entry.Val, add)
-		}
-	}
+		return true
+	})
 }
 
 func literalJSONFileCall(call *rts.Call) (string, bool) {

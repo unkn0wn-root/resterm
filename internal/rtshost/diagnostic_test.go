@@ -3,6 +3,7 @@ package rtshost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -54,6 +55,42 @@ func TestDiagnosePreservesRTSErrorAndReport(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Render() missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestDiagnoseUndefinedName(t *testing.T) {
+	err := diagnose(&rts.StackError{Err: &rts.UndefinedNameError{
+		RuntimeError: &rts.RuntimeError{Pos: rts.Pos{Path: "wf.http", Line: 2, Col: 1}, Msg: `undefined name "user"`},
+		Name:         "user",
+	}})
+	got := diag.Render(err)
+	for _, want := range []string{`error[script]: undefined name "user"`, "--> wf.http:2:1"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Render() missing %q in %q", want, got)
+		}
+	}
+	var undef *rts.UndefinedNameError
+	if !errors.As(err, &undef) || undef.Name != "user" {
+		t.Fatalf("errors.As(%v) found no undefined name user", err)
+	}
+}
+
+func TestDiagnoseWrappedAbort(t *testing.T) {
+	abort := &rts.AbortError{
+		RuntimeError: &rts.RuntimeError{Pos: rts.Pos{Path: "hook.rts", Line: 3, Col: 7}, Msg: "timeout exceeded"},
+		Kind:         rts.AbortTimeout,
+	}
+	for name, err := range map[string]error{
+		"bare":       fmt.Errorf("native: %w", abort),
+		"with stack": fmt.Errorf("native: %w", &rts.StackError{Err: abort}),
+	} {
+		rep := diag.ReportOf(diagnose(err))
+		if len(rep.Items) == 0 || rep.Class() != diag.ClassTimeout {
+			t.Fatalf("%s: report = %+v, want a timeout", name, rep)
+		}
+		if got := rep.Items[0].Span.Start; got.Path != "hook.rts" || got.Line != 3 || got.Col != 7 {
+			t.Fatalf("%s: position = %+v, want hook.rts:3:7", name, got)
 		}
 	}
 }

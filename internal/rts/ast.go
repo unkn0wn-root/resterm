@@ -289,3 +289,42 @@ type DictLit struct {
 
 func (*DictLit) exprNode()  {}
 func (e *DictLit) Pos() Pos { return e.P }
+
+// Inspect walks ex depth first and calls f for each expression. If f returns
+// false, the children of that expression are skipped.
+func Inspect(ex Expr, f func(Expr) bool) {
+	if ex == nil || !f(ex) {
+		return
+	}
+	switch e := ex.(type) {
+	case *Unary:
+		Inspect(e.X, f)
+	case *Binary:
+		Inspect(e.Left, f)
+		Inspect(e.Right, f)
+	case *Ternary:
+		Inspect(e.Cond, f)
+		Inspect(e.Then, f)
+		Inspect(e.Else, f)
+	case *TryExpr:
+		Inspect(e.X, f)
+	case *Call:
+		Inspect(e.Callee, f)
+		for _, arg := range e.Args {
+			Inspect(arg, f)
+		}
+	case *Index:
+		Inspect(e.X, f)
+		Inspect(e.Idx, f)
+	case *Member:
+		Inspect(e.X, f)
+	case *ListLit:
+		for _, el := range e.Elems {
+			Inspect(el, f)
+		}
+	case *DictLit:
+		for _, en := range e.Entries {
+			Inspect(en.Val, f)
+		}
+	}
+}

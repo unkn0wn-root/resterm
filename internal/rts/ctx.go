@@ -2,6 +2,7 @@ package rts
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -37,6 +38,10 @@ type StackError struct {
 
 func (e *StackError) Error() string {
 	return e.Err.Error()
+}
+
+func (e *StackError) Unwrap() error {
+	return e.Err
 }
 
 func (e *StackError) Pretty() string {
@@ -157,19 +162,10 @@ func rtAbort(ctx *Ctx, pos Pos, kind AbortKind, format string, args ...any) erro
 	return &StackError{Err: abort, Frames: frames}
 }
 
-// try cannot catch an abort, so natives must return it unchanged.
+// try cannot catch an abort, even a wrapped one.
 func IsAbort(err error) bool {
-	if err == nil {
-		return false
-	}
-	if _, ok := err.(*AbortError); ok {
-		return true
-	}
-	if se, ok := err.(*StackError); ok {
-		_, ok := se.Err.(*AbortError)
-		return ok
-	}
-	return false
+	var abort *AbortError
+	return errors.As(err, &abort)
 }
 
 // WrapErr attaches the current call stack to err unless it already has one.

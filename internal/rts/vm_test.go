@@ -2,6 +2,8 @@ package rts
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -1030,10 +1032,11 @@ func TestSwitchErrorsKeepPosition(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected *StackError, got %T", err)
 			}
-			re, ok := se.Err.(*RuntimeError)
+			undef, ok := se.Err.(*UndefinedNameError)
 			if !ok {
-				t.Fatalf("expected *RuntimeError, got %T", se.Err)
+				t.Fatalf("expected *UndefinedNameError, got %T", se.Err)
 			}
+			re := undef.RuntimeError
 			if re.Msg != tc.msg {
 				t.Fatalf("msg: got %q, want %q", re.Msg, tc.msg)
 			}
@@ -1097,6 +1100,16 @@ case 1:
 	}
 }
 
+func TestIsAbortSeesWrappedAbort(t *testing.T) {
+	ctx := NewCtx(t.Context(), Limits{})
+	if !IsAbort(fmt.Errorf("native: %w", rtAbort(ctx, Pos{}, AbortTimeout, "timeout exceeded"))) {
+		t.Fatal("wrapped abort not seen")
+	}
+	if IsAbort(Errf(ctx, Pos{}, "boom")) {
+		t.Fatal("runtime error seen as abort")
+	}
+}
+
 func TestConstImmutable(t *testing.T) {
 	src := `
 const x = 1
@@ -1142,5 +1155,19 @@ let env = 1
 	_, err = Exec(ctx, m, pre)
 	if err == nil || !strings.Contains(err.Error(), "name already defined") {
 		t.Fatalf("expected name already defined error, got %v", err)
+	}
+}
+
+func TestUndefinedNameReportsTheName(t *testing.T) {
+	err := execModuleErr(t, "let v = missingName + 1\n", Limits{})
+	var undef *UndefinedNameError
+	if !errors.As(err, &undef) || undef.Name != "missingName" {
+		t.Fatalf("err = %#v, want undefined name missingName", err)
+	}
+	if !strings.Contains(err.Error(), `undefined name "missingName"`) {
+		t.Fatalf("message = %v", err)
+	}
+	if err := execModuleErr(t, "x = 1\n", Limits{}); errors.As(err, &undef) {
+		t.Fatalf("assignment error reported missing name %q", undef.Name)
 	}
 }

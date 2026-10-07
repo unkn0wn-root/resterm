@@ -662,3 +662,20 @@ func TestRenderEscapesUntrustedText(t *testing.T) {
 		}
 	}
 }
+
+func TestWithHelpAddsHelpNote(t *testing.T) {
+	script := diag.FromReport(diag.Report{Items: []diag.Diagnostic{{
+		Class:    diag.ClassScript,
+		Severity: diag.SeverityError,
+		Message:  `undefined name "user"`,
+	}}}, errors.New(`undefined name "user"`))
+	for name, inner := range map[string]error{
+		"plain error":   errors.New(`undefined name "user"`),
+		"script report": script,
+	} {
+		err := diag.WrapAs(diag.ClassScript, inner, "@when", diag.WithHelp("Put it on the request"))
+		if out := diag.Render(err); !strings.Contains(out, "help: Put it on the request") {
+			t.Fatalf("%s: rendered\n%s\nwant the help note", name, out)
+		}
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
@@ -1126,6 +1127,7 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 		lines   []string
 		sent    string
 		skipped int
+		help    string
 	}{
 		{
 			name: "step loop",
@@ -1155,6 +1157,35 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 				"GET https://example.com/items/{{vars.request.item}}",
 			},
 			skipped: 1,
+		},
+		{
+			name: "request loop variable not set yet",
+			lines: []string{
+				"# @workflow demo",
+				"# @skip-if item.disabled",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @for-each ["a","b","c"] as item`,
+				"GET https://example.com/items/{{vars.request.item}}",
+			},
+			help: `help: @skip-if is checked before the @for-each of request "each" starts, ` +
+				`so "item" is not set. Put the condition on the request to check each item`,
+		},
+		{
+			name: "request loop variable shadows a stdlib name",
+			lines: []string{
+				"# @workflow demo",
+				"# @when len([1]) > 0",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"# @for-each [1, 2] as len",
+				"GET https://example.com/items/{{vars.request.len}}",
+			},
+			sent: "/items/1,/items/2",
 		},
 		{
 			name: "request loop checked once",
@@ -1224,6 +1255,9 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 			}
 			if skipped != tt.skipped {
 				t.Fatalf("skipped %d steps, want %d: %+v", skipped, tt.skipped, rep.Results[0].Steps)
+			}
+			if out := diag.Render(rep.Results[0].Steps[0].Err); !strings.Contains(out, tt.help) {
+				t.Fatalf("step error rendered\n%s\nwant %q", out, tt.help)
 			}
 		})
 	}

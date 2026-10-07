@@ -230,10 +230,7 @@ func (r *wfRun) runReqStep(
 		return r.failStep(ctx, step, req, branch, err)
 	}
 
-	// A condition written next to the step's own @for-each is checked per item.
-	// A loop on the request runs inside the step, so the condition is checked once
-	// before it and can skip it whole.
-	perItem := step.Kind == restfile.WorkflowStepKindForEach
+	perItem := step.ConditionPerItem()
 	if step.When != nil && !perItem {
 		ok, reason, err := r.dep.EvalCondition(
 			ctx,
@@ -246,7 +243,18 @@ func (r *wfRun) runReqStep(
 			rts.Locals{},
 		)
 		if err != nil {
-			return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagWhen))
+			var help diag.Option
+			var undef *rts.UndefinedNameError
+			if each := req.Metadata.ForEach; each != nil && errors.As(err, &undef) && undef.Name == each.Var {
+				help = diag.WithHelp(fmt.Sprintf(
+					"%s is checked before the @for-each of request %q starts, so %q is not set. "+
+						"Put the condition on the request to check each item",
+					step.When.Directive().Tag(),
+					req.Metadata.Name,
+					undef.Name,
+				))
+			}
+			return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagWhen, help))
 		}
 		if !ok {
 			return r.manualFinish(step, req, branch, engine.RequestResult{Skipped: true, SkipReason: reason})

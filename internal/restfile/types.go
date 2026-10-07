@@ -697,6 +697,12 @@ type WorkflowStep struct {
 	ForEach   *WorkflowForEach
 }
 
+// ConditionPerItem reports whether When is checked for each item of the step's
+// own @for-each. Otherwise it is checked once, before any loop on the request.
+func (s WorkflowStep) ConditionPerItem() bool {
+	return s.Kind == WorkflowStepKindForEach
+}
+
 // Without an explicit name, use the request target or branch directive so the
 // UI still has something useful to show.
 func (s WorkflowStep) Label() string {
