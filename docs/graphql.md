@@ -12,8 +12,8 @@ Available directives:
 | --- | --- |
 | `@graphql [boolean]` | Turn GraphQL on or off for the request. |
 | `@operation` / `@graphql-operation` | Sets the `operationName`. |
-| `@variables` | Starts a variables block. Use inline JSON or `< file.json`. |
-| `@query` | Loads the query from a file instead of the inline body. |
+| `@variables` / `@graphql-variables` | Starts a variables block. Use inline JSON or `< file.json`. |
+| `@query` / `@graphql-query` | Loads the query from a file instead of the inline body. |
 
 `@graphql` accepts the standard boolean values, including `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`, and `t`/`f`. It also accepts `disable` and `disabled` as false values. Other values are reported as errors. Switching GraphQL off discards the operation, variables, and query collected so far, so the request can declare them again after GraphQL is turned back on:
 

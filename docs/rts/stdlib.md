@@ -52,7 +52,7 @@ RTS provides a small standard library that covers common request needs without e
 - `rts.json.file(path)` reads and parses JSON using the request base directory (only when file access is enabled).
 - `rts.json.parse(text)` parses a JSON string into RestermScript values.
 - `rts.json.stringify(value[, indent])` converts a value to JSON text. `indent` can be a string or a number (0-32).
-- `rts.json.get(value[, path])` returns the value at a dot or `[index]` path (optional leading `$`) and returns null when missing.
+- `rts.json.get(value[, path])` returns the value at a dot or `[index]` path (optional leading `$`) and returns null when missing. Quote a key that contains dots or spaces, as in `$["display.name"]` or `['a b']`.
 - `rts.json.has(value, path)` returns true when a value exists at the path.
 
 ## Text helpers

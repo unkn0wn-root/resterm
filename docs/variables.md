@@ -207,7 +207,7 @@ Prefer JSON for multi-environment bundles, but you can point Resterm at a dotenv
 When expanding `{{variable}}` templates, Resterm looks in:
 
 1. *File constants* (`@const`).
-2. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
+2. Values set by scripts for the current execution (`vars.set` in pre-request scripts).
 3. Workflow step variables and the `@for-each` value bound for the current iteration.
 4. Values declared with `@run var` for the current run. See [Run variables](workflows.md#run-variables).
 5. *Request-scope* variables (`@var request`, `@capture request`).
@@ -220,6 +220,8 @@ When expanding `{{variable}}` templates, Resterm looks in:
 Templates, RestermScript expressions, the RestermScript `vars` object, and the JavaScript `vars` API all use this order. `@const` and unmapped OS environment variables are available only to templates. They are not exposed through `vars` because scripts cannot override them. If a `@const` and another source use the same name, `vars` skips the constant and returns the value from the next source in the list.
 
 Declarations other than `@run var`, and values in the selected environment, may use `env:NAME`. The value is exposed under the declared name. A missing reference stays undefined and continues to shadow lower sources, including the OS fallback in step 10. See [Values from OS environment variables](#values-from-os-environment-variables).
+
+In templates, put a source name in front of a variable to read it from that source and skip the ones above it. `{{file.token}}` reads the `@file` value even when a request variable or a capture also defines `token`, or when a missing `env:NAME` reference hides `{{token}}`. The source names are `const`, `script`, `workflow`, `run`, `request`, `global` (runtime globals), `document-global` (`@global`), `file`, `environment`, and `env` (OS variables). A variable whose full name matches comes first, so one declared as `file.token` wins over this lookup.
 
 Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers in declared values are evaluated once when the request starts, so a script reads the same value the request sends. `{{= ... }}` expressions are left unchanged because they are evaluated later, when the request runs. Inside a `{{= ... }}` in a template, `vars` returns the same value as `{{name}}`, with helpers already evaluated. `@capture`, `@assert`, `@poll until=`, and `@retry-when` read the value the request sent. Captured values and values written by scripts are treated as data and are not expanded. Request getters in scripts, such as `request.getURL()` and the RestermScript `request.url`, also evaluate `{{= ... }}` expressions with the current variables.
 

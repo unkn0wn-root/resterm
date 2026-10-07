@@ -4,6 +4,7 @@
 
 - Begin each request with a line that starts with `###`. Everything up to the next separator belongs to the same request.
 - Lines prefixed with `#`, `//`, or `--` are treated as comments. Metadata directives live inside these comment blocks.
+- A block comment starts with `/*` at the beginning of a line and ends at `*/`. Directives inside it are read like any other comment, and a leading `*` on each line is skipped, so a `/** ... */` block with `* @name login` lines works.
 - A standalone comment whose content starts with `@name` is treated as a directive.
 - At file or request scope, an unknown directive is ignored with a warning. A known directive used in the wrong place is handled the same way.
 - Between `@workflow` and the next request, an unknown directive is a parse error. This catches mistakes such as `@stpe` that would otherwise remove a workflow step. Directives attached to requests are still request-scoped, even when a workflow runs those requests.
@@ -51,9 +52,9 @@ Some directives can span multiple comment lines. Resterm keeps reading while the
 | `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded. Immutable and visible to all requests in the document. |
 | `@description` / `@desc` | `# @description ...` | Multi-line description. Lines are joined with newlines. |
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
-| `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. |
-| `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
-| `@log-sensitive-headers` | `# @log-sensitive-headers [true\|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, and API-token headers such as `X-API-Key`, `X-Access-Token`, and `X-Auth-Key`) to appear in history. Omit it or set it to `false` to keep them masked, which is the default. |
+| `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. `@trace off` turns it off. See [Timeline & tracing](ui-tour.md#timeline--tracing). |
+| `@no-log` / `@nolog` | `# @no-log` | Prevents the response body snippet from being stored in history. |
+| `@log-sensitive-headers` / `@log-secret-headers` | `# @log-sensitive-headers [true\|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, and API-token headers such as `X-API-Key`, `X-Access-Token`, and `X-Auth-Key`) to appear in history. Omit it or set it to `false` to keep them masked, which is the default. |
 | `@setting` | `# @setting key value` | Set an HTTP, transport, or TLS option such as `timeout`, `proxy`, `max-redirects`, or `max-response-size`. |
 | `@settings` | `# @settings key1=val1 key2=val2 ...` | Several settings on one line. Supports the same keys as `@setting` and future prefixes. |
 | `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
@@ -61,8 +62,28 @@ Some directives can span multiple comment lines. Resterm keeps reading while the
 ## Body content
 
 - **Inline**: everything after the blank line that separates headers and body.
-- **External file**: `< ./payloads/create-user.json` loads the file relative to the request file. To also search the workspace root and the current working directory, set `RESTERM_ENABLE_FALLBACK=1`.
+- **External file**: `< ./payloads/create-user.json` loads the file relative to the request file and sends it as it is. Add `# @body expand` (or `# @body expand-templates`) to expand `{{...}}` templates and `@ path` include lines in the file first. To also search the workspace root and the current working directory, set `RESTERM_ENABLE_FALLBACK=1`.
 - **Inline includes**: lines in the body starting with `@ path/to/file` are replaced with the file contents (useful for multi-part templates). Only lines written in the body count. A value placed by a template never becomes an include, even when it contains a line that starts with `@`.
 - **XML/SOAP**: inline XML is sent exactly as written after template expansion. XML tags such as `<soap:Envelope>` are body text, not file references.
 - **Forced inline body**: add `# @body inline` (or `# @body raw`) when a literal body line intentionally looks like a file reference, such as `< this is just a string`. This only affects parsing. Template expansion and inline includes still work as usual.
+- **Multipart**: set `Content-Type: multipart/form-data; boundary=...` and write the parts inline. Everything from the first `--boundary` line to the closing `--boundary--` line is body text, so part lines that start with `#`, `//`, or `--` are sent as written instead of being read as comments. Without a `boundary` in the header, the boundary lines are still kept, but part lines that start with `#` or `//` are read as comments. An `@ path` line inside a part is replaced with the file's bytes unchanged, so binary files work. Resterm sends multipart bodies with CRLF line endings.
 - **GraphQL**: handled separately (see [GraphQL](graphql.md)).
+
+A multipart upload with one text field and one file:
+
+```http
+### Upload avatar
+POST https://example.com/upload
+Content-Type: multipart/form-data; boundary=resterm
+
+--resterm
+Content-Disposition: form-data; name="title"
+
+Profile photo
+--resterm
+Content-Disposition: form-data; name="file"; filename="avatar.png"
+Content-Type: image/png
+
+@ ./avatar.png
+--resterm--
+```

@@ -28,6 +28,8 @@ resterm mock --source users.http,payments.http ./workspace
 
 On loopback, `--cors=auto` enables wildcard CORS and automatic preflight responses. On a non-loopback bind it disables CORS and prints an exposure warning. Use `--cors=off`, `--cors='*'`, or a comma-separated origin allowlist to override it. Reloads are atomic: invalid edits are reported and the last valid route set stays live. Stop the server with `Ctrl+C` or `SIGTERM`. In-flight requests get a short grace period to finish.
 
+The server exits `0` when you stop it. It exits `2` for invalid flags, arguments, or `--source` values, and `1` when the request files fail to load, contain no `# @mock` blocks, or the server cannot start.
+
 `--tls-cert` and `--tls-key` switch the server to HTTPS. Resterm does not generate certificates. Bring your own pair, for example with [mkcert](https://github.com/FiloSottile/mkcert):
 
 ```bash
@@ -62,7 +64,17 @@ resterm mock verify --recursive .
 resterm mock verify --source users.http,payments.http
 ```
 
-The operations connect to `http://127.0.0.1:8080` by default. Each accepts `--url`, `--timeout`, and `--insecure`, and `verify` also accepts `--recursive` and `--source`. Flags can go on either side of the optional sequence or source argument, for example:
+The operations take these flags:
+
+| Flag | Short | Description |
+| --- | --- | --- |
+| `--url <url>` | `-u` | Mock server URL (default `http://127.0.0.1:8080`). |
+| `--timeout <duration>` | `-t` | Timeout for each control request (default `5s`). |
+| `--insecure` | `-k` | Skip HTTPS certificate verification. |
+| `--recursive` | `-r` | `verify` only. Scan nested workspace directories. |
+| `--source <file>` | `-s` | `verify` only. Check only these request files. Repeatable, and accepts comma-separated lists. |
+
+Flags can go on either side of the optional sequence or source argument, for example:
 
 ```bash
 resterm mock reset polling --url http://127.0.0.1:9090
@@ -71,6 +83,6 @@ resterm mock verify payments.http --url https://localhost:9443 --insecure
 
 The URL must contain only the `http` or `https` scheme and host. These commands do not support proxy base paths, by design. Source files or directories named `reset`, `clear`, or `verify` should be passed with an explicit path such as `./reset` so they are not interpreted as operations.
 
-`verify` exits `0` when every exact call count passes, `1` for mismatches, an incomplete journal, or a connection failure, and `2` for invalid usage, an invalid source, or a missing `@expect` declaration. Operational requests are excluded from both request counts and access logs.
+`reset` and `clear` exit `0` on success, `1` when the server cannot be reached or `reset` names a sequence that does not exist, and `2` for invalid usage. `verify` exits `0` when every exact call count passes, `1` for mismatches, an incomplete journal, or a connection failure, and `2` for invalid usage, an invalid source, or a missing `@expect` declaration. Operational requests are excluded from both request counts and access logs.
 
 See [Mock Servers](../mock-servers.md) for the response-block syntax, matching rules, selectors, and TUI commands.

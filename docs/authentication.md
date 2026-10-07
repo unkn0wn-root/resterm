@@ -60,7 +60,11 @@ GET {{base.url}}/resource
 Resterm puts the client ID and secret into the Basic header as written. The OAuth 2.0 specification asks clients to URL-encode both values first, and some providers expect this. With those providers, a secret containing `+` or `%`, or a client ID containing `:`, is rejected. Wrap the values in `url.encode`:
 
 ```http
-# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{= url.encode(env.get("oauth.clientId")) }} client_secret={{= url.encode(env.get("oauth.clientSecret")) }}
+# @const oauth.id {{= url.encode(env.get("oauth.clientId")) }}
+# @const oauth.secret {{= url.encode(env.get("oauth.clientSecret")) }}
+
+### Resource
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.id}} client_secret={{oauth.secret}}
 GET {{base.url}}/resource
 ```
 
@@ -239,7 +243,7 @@ GET https://api.github.com/user/repos
 | Basic | `# @auth basic user pass` | Injects `Authorization: Basic …`. Templates expand inside parameters. |
 | Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
 | Digest | `# @auth digest user pass` | Retries once after the server's `401` Digest challenge. See [Digest auth](#digest-auth). |
-| API key | `# @auth apikey header X-API-Key {{key}}` | Write the placement, the name, and the value. `placement` can be `header` or `query`. An `auth` dict in `@apply` or `@patch` may leave out `name`, which then defaults to the `X-API-Key` header. |
+| API key | `# @auth apikey header X-API-Key {{key}}` | `api-key` works too. Write the placement, the name, and the value. `placement` can be `header` or `query`. An `auth` dict in `@apply` or `@patch` may leave out `name`, which then defaults to the `X-API-Key` header. |
 | Custom header | `# @auth Authorization CustomValue` | Any header and value. For a header named after an auth type, such as `Digest`, use a normal request header. |
 | Command | `# @auth command cmd="gh auth token"` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
 | Named command | `# @auth use=gh` | Uses a command auth defined once with `@auth file` or `@auth global` and a name. |

@@ -48,7 +48,7 @@ The first table lists the default shortcuts by task. [Custom bindings](#custom-b
 
 ## Custom bindings
 
-Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first, then `${RESTERM_CONFIG_DIR}/bindings.json`. The config directory defaults to `~/.config/resterm`. If neither file exists, Resterm uses the built-in bindings. Example:
+Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first, then `${RESTERM_CONFIG_DIR}/bindings.json`. [Configuration](configuration.md) lists the default config directory for each system. If neither file exists, Resterm uses the built-in bindings. Example:
 
 ```toml
 [bindings]
