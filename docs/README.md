@@ -34,6 +34,7 @@ Each page below is one file in this directory. The same pages are published at h
 - [Mock servers](mock-servers.md): Serve mock responses defined next to your requests, with matching and sequences.
 - [Recording traffic](recording.md): Put the Resterm proxy in front of an API and save the traffic as requests or mocks.
 - [History and diffing](history.md): Browse, replay and diff past responses.
+- [Headless Go API](headless.md): Run request files from your own Go code with the headless package.
 
 ## Connectivity
 
