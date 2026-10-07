@@ -57,3 +57,7 @@ This needs Go 1.25 or newer. The binary goes into `$(go env GOPATH)/bin`.
 ## Updating
 
 If you installed with Homebrew, update with `brew upgrade resterm`. If you used a release binary or the install scripts, run `resterm --check-update` to see if there is a new version, and `resterm --update` to download, verify, and install it in place. On Windows, the old binary stays next to the new one as `resterm.exe.old` and is removed on the next update.
+
+`resterm --update` refuses to replace a Homebrew install and tells you to run `brew upgrade resterm` instead. `--check-update` still works there.
+
+A binary built with `go install` reports its version as `dev`. `--check-update` and `--update` only print that update checks are disabled for dev builds, and the TUI does not check for updates either. Run the `go install` command again to update.

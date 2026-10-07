@@ -135,10 +135,12 @@ Press `g+Shift+E` to open the body in your default app. Resterm only opens types
 
 ## Timeline & tracing
 
-- Add a `# @trace` directive to turn on HTTP tracing for a request. Budgets use `phase<=duration`, such as `dns<=50ms` or `total<=300ms`, with an optional `tolerance=` that applies to every phase. The supported phases map to `nettrace`: `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
+- Add a `# @trace` directive to turn on HTTP tracing for a request. Budgets use `phase<=duration` or `phase=duration`, such as `dns<=50ms` or `total=300ms`, with an optional `tolerance=` that applies to every phase. `allowance=` and `grace=` are other names for `tolerance=`. The supported phases are `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
+- Phases also have short names: `lookup` or `name` for `dns`, `dial` for `connect`, `handshake` for `tls`, `headers`, `header`, or `req_headers` for `request_headers`, `body` or `req_body` for `request_body`, `first_byte` or `wait` for `ttfb`, `download` for `transfer`, and `overall` for `total`. A budget with an unknown phase or an invalid duration is ignored without a warning.
+- `# @trace off` turns tracing off but keeps the directive in the file. `disable`, `false`, and `enabled=false` do the same.
 - When a traced response arrives, Resterm checks the budgets, shows status bar warnings for breaches, and enables the Timeline tab. Press `Ctrl+Alt+L` or `g+t` to jump to it from anywhere.
 - The Timeline view draws proportional bars, marks overruns, and lists budget breaches. Details such as cached DNS results or reused sockets appear under each phase, followed by Connection and TLS panels (protocol, reuse, proxy/SSH, resolved IPs, cipher/ALPN, cert chain, SANs, issuer, expiry).
-- Scripts can read trace data through the `trace` binding, with calls such as `trace.enabled()`, `trace.phases()`, `trace.connection()`, `trace.tls()`, `trace.breaches()`, and `trace.withinBudget()`. Goja test blocks can use them to check timings automatically.
+- Scripts can read trace data through the `trace` object, with calls such as `trace.enabled()`, `trace.phases()`, `trace.breaches()`, and `trace.withinBudget()`. JavaScript test blocks can use them to check timings automatically. `trace.connection()` and `trace.tls()` are only available in RestermScript.
 - `_examples/trace.http` has two requests you can run, one within budget and one that breaks it on purpose, to show the timeline and status messages.
 - To export traces to OpenTelemetry, set `RESTERM_TRACE_OTEL_ENDPOINT` (or `--trace-otel-endpoint`). Other options are `RESTERM_TRACE_OTEL_INSECURE` / `--trace-otel-insecure`, `RESTERM_TRACE_OTEL_SERVICE` / `--trace-otel-service`, `RESTERM_TRACE_OTEL_TIMEOUT`, and `RESTERM_TRACE_OTEL_HEADERS`. Spans are only exported while tracing is enabled. HTTP failures and budget breaches set the span status to `Error`.
 

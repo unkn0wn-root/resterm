@@ -1,6 +1,7 @@
 # Workspaces and files
 
 - Resterm scans the workspace root for `.http` and `.rest` files. Use `--workspace` to set the root. Without it, Resterm uses the directory of the file passed with `--file`. Add `--recursive` to scan subdirectories too. Hidden directories are skipped.
+- The navigator also lists environment files, marked with an `ENV` badge, and the files your requests use, such as `.rts` modules and `.graphql`, `.json` or `.js` files. Select one to open it in the editor.
 - The navigator filter sits above the tree. Press `/` to focus it, then type to match files, request and workflow names, URLs, tags, and badges. `m` toggles the method badge of the highlighted request (one at a time), `t` toggles tag badges, and `Esc` clears the text and any badges.
 - In Git workspaces, supported files show short status markers in the navigator (`M`, `A`, `U`, `D`, `R`, `!`), and the status bar shows the current branch and how many supported files changed. Unsupported files are ignored even when they have Git changes.
 - Highlight a request or workflow in the navigator and press `l` or `r` to restore the editor pane and jump to that definition.

@@ -40,3 +40,5 @@ Both templates add `resterm.env.json` to `.gitignore` so secrets stay out of ver
 | `--dry-run` | Print actions without writing anything. |
 | `--no-gitignore` | Skip updating `.gitignore`. |
 | `--list` | Print available templates and exit. |
+
+`resterm init` exits `0` on success and `1` on any error, including an unknown flag or a file that already exists without `--force`.

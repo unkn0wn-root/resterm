@@ -48,6 +48,8 @@ A key mapped from an OS variable with `env:NAME` appears under its declared name
 
 `vars` provides request runtime variables, including globals and workflow overrides. You can access values through `vars.get("key")`, `vars.has("key")`, `vars.require("key"[, msg])`, or `vars.key`. `vars.global` provides global reads and writes in pre-request scripts through `get`, `has`, `require`, `set`, and `delete`.
 
+In `@rts pre-request` blocks, `vars.set(name, value)` sets a script value for the current request, the same as `vars.set` in JavaScript. `vars.global.set(name, value, true)` stores the global as a secret.
+
 `vars` contains values a run can override, so `@const` values and unmapped OS variables stay template-only. Everything else, including `env:NAME` mappings, follows the [variable resolution order](../variables.md#variable-resolution-order).
 
 `vars.interpolate(text)` fills placeholders in a string using the same [rules as JavaScript](../scripting.md#interpolating-text). It also works in `@apply`:
@@ -70,7 +72,7 @@ Values passed to `request.set*` or `request.addHeader`, or returned in a patch, 
 
 ## last
 
-`last` provides a summary of the most recent response. It exposes `status`, `statusCode`, `statusText`, `url`, `headers`, `header(name)`, `text()`, and `json(path)`. Header values use the same cardinality-based representation as `request.headers`, and `header(name)` returns the first value. `json(path)` accepts a simple dot and `[index]` path (optional leading `$`) and returns null when a value is missing.
+`last` provides a summary of the most recent response. It exposes `status`, `statusCode`, `statusText`, `url`, `headers`, `header(name)`, `text()`, and `json(path)`. Header values use the same cardinality-based representation as `request.headers`, and `header(name)` returns the first value. `json(path)` accepts a simple dot and `[index]` path (optional leading `$`) and returns null when a value is missing. Quote a key that contains dots or spaces, as in `last.json("user['display.name']")`.
 
 For gRPC responses, `headers` merges the response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`. Values under keys ending in `-bin` are binary and read back base64-encoded without padding, the way they travel on the wire, so a trailer sent as `x-trace-bin` reads as `last.header("grpc-trailer-x-trace-bin")`.
 
@@ -82,11 +84,24 @@ Other expressions run before the current request completes. Use `last` for the p
 
 ## trace
 
-`trace` provides timing and budget information for the most recent response. It includes helpers such as `trace.enabled()`, `trace.durationMs()`, `trace.durationSeconds()`, `trace.durationString()`, `trace.error()`, `trace.started()`, `trace.completed()`, `trace.phases()`, `trace.phaseNames()`, `trace.getPhase("dns")`, `trace.budgets()`, `trace.breaches()`, `trace.withinBudget()`, and `trace.hasBudgets()`.
+`trace` provides timing and budget information for the most recent response. It includes helpers such as `trace.enabled()`, `trace.durationMs()`, `trace.durationSeconds()`, `trace.durationString()`, `trace.error()`, `trace.started()`, `trace.completed()`, `trace.phases()`, `trace.phaseNames()`, `trace.getPhase("dns")`, `trace.budgets()`, `trace.breaches()`, `trace.withinBudget()`, `trace.hasBudgets()`, `trace.connection()`, and `trace.tls()`.
+
+What the helpers return:
+
+- `phases()` lists every timed segment in order. Each one has `name`, `durationMs`, `durationSeconds`, `durationString`, `error`, `start`, `end`, and `meta` with `addr`, `reused`, and `cached`.
+- `getPhase(name)` adds up the segments of one phase and returns `name`, `count`, the three duration fields, and `segments`. It returns null when the phase did not run.
+- `budgets()` returns `enabled`, `totalMs`, `totalSeconds`, `toleranceMs`, `toleranceSeconds`, and `phases`, which maps each phase to its budget in milliseconds. Without budgets it returns `{enabled: false}`.
+- `breaches()` lists each broken budget with `name`, `limitMs`, `actualMs`, `overMs`, and the matching `Seconds` fields.
+- `connection()` returns `reused`, `wasIdle`, `idleMs`, `idleSeconds`, `idleString`, `network`, `dialAddr`, `localAddr`, `remoteAddr`, `resolvedAddrs`, `proxy`, `proxyTunnel`, `ssh`, `k8s`, and `protocol`.
+- `tls()` returns `version`, `cipher`, `alpn`, `serverName`, `resumed`, `verified`, and `certs`. Each certificate has `subject`, `issuer`, `sans`, `notBefore`, `notAfter`, and `serial`.
+
+`connection()` and `tls()` also return `available: true`. When there is nothing to report, such as `tls()` on a plain HTTP request, they return only `{available: false}`. JavaScript test scripts have the same `trace` object without these two helpers.
 
 ## stream
 
 `stream` provides information about SSE and WebSocket requests. Its helpers include `stream.enabled()`, `stream.kind()`, `stream.summary()`, and `stream.events()`. The summary and event fields depend on the stream type. SSE summaries include `eventCount`, `byteCount`, `duration`, `reason`, `error`, `errorClass`, and `dropped`. WebSocket summaries include `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped`. When a stream fails, `errorClass` names the kind of failure and decides the detailed exit code. A non-zero `dropped` value means that some events are missing from the transcript. If a stream fails, its request fails too.
+
+SSE events have `index`, `id`, `event`, `data`, `comment`, `retry`, and `timestamp`. WebSocket events have `step`, `direction` (`send` or `receive`), `type`, `size`, `text`, `base64`, `code`, `reason`, and `timestamp`. `text` holds text, JSON, ping, and pong payloads, `base64` holds binary payloads, and `code` and `reason` are set on close frames.
 
 ## mock
 

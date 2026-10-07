@@ -16,7 +16,7 @@ Options and rules:
   - `target=` accepts `pod:<name>`, `service:<name>`, `deployment:<name>`, `statefulset:<name>`.
   - Aliases: `pod=`, `service=` (`svc=`), `deployment=` (`deploy=`), `statefulset=` (`sts=`).
   - Exactly one target is allowed.
-- Transport fields: `namespace` (`ns`), `port` (number or named port), `container`, `local_port`, `address`, `pod_running_timeout`, `retries`, `persist` (only used at global and file scope), `context`, `kubeconfig`, `use`.
+- Transport fields: `namespace` (`ns`), `port` (number or named port), `container`, `local_port` (`local-port`, `localport`), `address` (`bind`), `pod_running_timeout` (`pod-running-timeout`, `podwait`), `retries`, `persist` (only used at global and file scope), `context` (`kube_context`, `kube-context`), `kubeconfig` (`config`), `use`.
 - Values expand templates and support `env:VAR`, which checks your shell environment variables before other scopes.
 - `use=` checks file-scoped profiles first, then global ones.
 - Request-level `persist` is ignored to avoid leaking background forwarders.

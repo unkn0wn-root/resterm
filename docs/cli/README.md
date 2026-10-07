@@ -41,8 +41,8 @@ These flags are shared by `resterm` and `resterm run` when request execution is 
 | `--recursive` | `-R` | Recursively scan the workspace for request files. |
 | `--env <name>` | `-e <name>` | Select an environment explicitly. |
 | `--env-group <group=profile>` |  | Select one group profile. Repeat for multiple groups. |
-| `--env-file <path>` | `-E <path>` | Use an explicit environment JSON file. |
-| `--timeout <duration>` | `-t <duration>` | Default HTTP timeout. |
+| `--env-file <path>` | `-E <path>` | Use an explicit environment file, either JSON or dotenv. |
+| `--timeout <duration>` | `-t <duration>` | Default HTTP timeout. The default is `30s`. |
 | `--insecure` | `-k` | Skip TLS certificate verification. |
 | `--follow` | `-L` | Follow redirects. Pass `--follow=false` or `-L=false` to disable it. |
 | `--max-redirects <n>` | | Maximum redirects to follow. The default is 10. Use `0` to disable redirects. |
@@ -71,13 +71,13 @@ These flags belong to the top-level `resterm` command:
 | --- | --- | --- |
 | `--file <path>` | `-f <path>` | Path to a `.http` / `.rest` file to open. |
 | `--version` | `-v` | Print the version, commit, build date, and checksum. |
-| `--check-update` | `-c` | Check for newer releases and exit. |
-| `--update` | `-u` | Download and install the latest release, if available. |
+| `--check-update` | `-c` | Check for a newer release and exit. When there is one, Resterm prints its changelog. |
+| `--update` | `-u` | Download and install the latest release, if available. See [Updating](../install.md#updating). |
 | `--from-curl <cmd-or-path>` | `-fc <cmd-or-path>` | Curl command or file path to convert. |
 | `--from-openapi <path-or-url>` | `-fo <path-or-url>` | OpenAPI specification (local file or `http(s)` URL) to convert. |
-| `--http-out <path>` | `-o <path>` | Destination path for the generated `.http` file. |
-| `--openapi-base-var <name>` | `-ob <name>` | Variable name for the generated base URL. |
+| `--http-out <path>` | `-o <path>` | Destination path for the generated `.http` file. An existing file is replaced. [Import curl and OpenAPI](import.md) lists the default names. |
+| `--openapi-base-var <name>` | `-ob <name>` | Variable name for the generated base URL. The default is `baseUrl`. |
 | `--openapi-resolve-refs` | `-or` | Resolve external `$ref` references during OpenAPI import. |
 | `--openapi-include-deprecated` | `-od` | Include deprecated operations when generating requests. |
-| `--openapi-server-index <n>` | `-os <n>` | Preferred server index from the spec to use as the base URL. |
+| `--openapi-server-index <n>` | `-os <n>` | Entry in the spec's `servers` list to use as the base URL, counting from 0. The default is 0. |
 | `--openapi-mode <mode>` |  | Generate `requests` (default), `mocks`, or `both`. |

@@ -13,6 +13,8 @@ Add `# @sse` to keep an HTTP request open for events:
 GET https://api.example.com/notifications
 ```
 
+`@sse off` turns SSE off again and clears the options set so far. Other false values such as `false` or `disable` work too.
+
 `@sse` accepts the following options:
 
 | Token | Description |
@@ -59,14 +61,16 @@ Use `# @websocket` to upgrade the connection, then script the session with `# @w
 GET wss://chat.example.com/room
 ```
 
+`@websocket off` turns WebSocket off again and clears the options and steps set so far. Other false values such as `false` or `disable` work too.
+
 Available WebSocket options:
 
 | Token | Description |
 | --- | --- |
 | `timeout` | Handshake deadline (applies until the connection upgrades). |
-| `idle-timeout` | Idle timeout once the socket is open. Resets on every frame Resterm sends and every message it receives. Pings and pongs from the server do not reset it. Set it to 0 for no limit. |
+| `idle-timeout` / `idle` | Idle timeout once the socket is open. Resets on every frame Resterm sends and every message it receives. Pings and pongs from the server do not reset it. Set it to 0 for no limit. |
 | `max-message-bytes` | Largest inbound message allowed. The default is 32 KiB. |
-| `subprotocols` | Comma-separated list advertised during the handshake. |
+| `subprotocols` / `subprotocol` | Comma-separated list advertised during the handshake. |
 | `compression=<true\|false>` | Offer per-message compression to the server. The default is `true`, and `false` turns it off. To change the default for a whole file or an environment, use the `ws-compression` setting, for example `# @setting ws-compression false`. |
 
 Supported `@ws` steps:
@@ -110,6 +114,6 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
 
 ## Stream tab, history, and console
 
-- The Stream tab appears automatically whenever a streaming session is active. Scroll to review frames, press `b` to bookmark important events, and switch tabs with the arrow keys (`Ctrl+H` / `Ctrl+L`).
+- The Stream tab appears automatically whenever a streaming session is active. Scroll to review frames, press `Ctrl+B` to bookmark important events, and switch tabs with the arrow keys (`Ctrl+H` / `Ctrl+L`).
 - While the Stream tab is focused, use `g+w` then `i` to toggle the interactive WebSocket console, `p` to send ping, `c` to close gracefully, or `l` to clear the live buffer. If the console is focused for typing, press `Esc` first. Inside the console, cycle payload modes with `F2`, send payloads with `Ctrl+S` or `Ctrl+Enter`, and reuse previous payloads with the arrow keys.
 - Finished transcripts are saved with the request in history, along with summary headers (`X-Resterm-Stream-Type`, `X-Resterm-Stream-Summary`). Scripts and captures can read the same data through `stream.*` templates and APIs. See [Scripting](scripting.md).

@@ -12,7 +12,7 @@ Options and rules:
 
 - `scope`: `global`, `file`, or `request` (default request). Global and file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
 - `name`: profile tag (default `default`).
-- Fields: `host` (required), `port` (default 22), `user`, `password`, `key`, `passphrase`, `agent` (default true when `SSH_AUTH_SOCK` is present), `known_hosts` (default `~/.ssh/known_hosts`), `strict_hostkey` (default true), `persist` (only used at global and file scope), `timeout`, `keepalive`, `retries`, `use` (profile selection).
+- Fields: `host` (required), `port` (default 22), `user` (defaults to `$USER`), `password`, `key`, `passphrase`, `agent` (default true when `SSH_AUTH_SOCK` is present), `known_hosts` (default `~/.ssh/known_hosts`), `strict_hostkey` (default true, `strict_host_key` works too), `persist` (only used at global and file scope), `timeout`, `keepalive`, `retries`, `use` (profile selection).
 - Values expand templates and support `env:VAR`, which checks your shell environment variables before other scopes. Paths for `key` and `known_hosts` expand `~` and environment variables.
 - `key` is optional. Resterm uses your SSH agent if there is one, or falls back to the default keys (`~/.ssh/id_ed25519`, `id_rsa`, `id_ecdsa`). See [Default key detection](#default-key-detection) below.
 - Global profiles are shared across the workspace. File-scoped profiles override global ones when the names match. `use=` resolves file profiles first, then globals.

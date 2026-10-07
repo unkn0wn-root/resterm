@@ -4,7 +4,9 @@ Scripts use ES5.1 JavaScript. Each script block stops after 30 seconds or when t
 
 ## Script blocks (`@script`)
 
-Add `# @script pre-request` or `# @script test` followed by lines that start with `>`.
+Add `# @script pre-request` or `# @script test` followed by lines that start with `>`. A bare `# @script` is a test script.
+
+Scripts are JavaScript by default. Add `lang=rts` to a pre-request block to write it in [RestermScript](rts/README.md) instead. `language=` works like `lang=`, and `javascript` and `restermlang` are accepted as values too.
 
 ```http
 # @script pre-request
@@ -60,7 +62,7 @@ Objects:
   - `setQueryParam(name, value)`
 - `vars`
   - `get(name)`, `set(name, value)`, `has(name)`, `interpolate(text)`
-  - `global.get(name)`, `global.set(name, value, options)`, `global.has(name)`, `global.delete(name)` (`options.secret` masks values)
+  - `global.get(name)`, `global.set(name, value, options)`, `global.has(name)`, `global.delete(name)` (`options.secret` masks values, and passing `true` instead of `options` does the same)
 - `console.log/warn/error` (no-op placeholders for compatibility)
 
 The `set*` functions change the outgoing request and return no value. `removeHeader` also removes headers declared in the request file.
@@ -119,23 +121,29 @@ All `@script pre-request` blocks for a request share the same state. Each block 
 
 Objects:
 
-- `client.test(name, fn)` - registers a named test. Exceptions or manual failures mark the test as failed.
+- `client.test(name, fn)` - registers a named test. Exceptions or manual failures mark the test as failed. `resterm.test(name, fn)` is the same function.
 - `tests.assert(condition, message)` - adds a pass/fail entry.
 - `tests.fail(message)` - explicit failure.
 - `response`
-  - `status`, `statusCode`, `url`, `duration`
+  - `kind` (`"http"` or `"grpc"`), `status`, `statusCode`, `url`, `duration`
+  - `contentType`, `isBinary`
   - `body` (raw string)
   - `json()` (parsed JSON or `null`)
+  - `bytes()`, `arrayBuffer()`, `base64()` - the body as bytes or base64 text. For gRPC this is the protobuf message, while `body` holds its JSON form.
+  - `filename()` - a file name for the body, taken from `Content-Disposition` or the URL, with an extension that matches the content type.
+  - `saveBody(path)` - writes the body bytes to a file and returns `true`. A relative path is resolved from the directory Resterm was started in, not from the request file.
+  - `stream()` - the stream as plain data: `enabled`, `kind`, `summary`, and `events`.
   - `headers.get(name)`, `headers.has(name)`, `headers.all` (lowercase map). For gRPC the map merges response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`, and `-bin` values arrive base64-encoded.
 - `stream`
   - `enabled()` - returns `true` when the current response is an SSE or WebSocket transcript.
   - `kind()` - returns `"sse"` or `"websocket"`.
   - `summary()` - copy of the transcript summary. [WebSocket and SSE](streaming.md) lists its fields. Resterm fails the request when the stream fails, so a test does not need to check for that separately.
-  - `events()` - array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
+  - `events()` - array of event objects. SSE events have `index`, `id`, `event`, `data`, `comment`, `retry`, and `timestamp`. WebSocket events have `step`, `direction` (`send` or `receive`), `type`, `size`, `text`, `base64`, `code`, `reason`, and `timestamp`. `text` holds text, JSON, ping, and pong payloads, `base64` holds binary payloads, and `code` and `reason` are set on close frames. `step` names the `@ws` step that sent a frame, such as `1:send`.
   - `onEvent(fn)` - registers a callback that is called for each event after the script finishes. Useful for assertions over the whole stream.
   - `onClose(fn)` - registers a callback that is called once with the summary after all events replay.
-- `vars` - same API as pre-request scripts. It reads request, file, and global values, and writes request-scope values for assertions.
+- `vars` - same API as pre-request scripts. It reads request, file, and global values. `vars.set` only changes the value for the rest of the test script. Use `vars.global.set` to keep a value after the script.
 - `vars.global` - same as in pre-request scripts. Changes persist after the script.
+- `trace` - timing and budget data when the request uses `@trace`. It has the same helpers as the [RestermScript `trace` object](rts/host-objects.md#trace), except `connection()` and `tls()`.
 - `console.*` - same placeholders as above.
 
 Example test block:

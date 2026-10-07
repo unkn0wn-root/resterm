@@ -8,7 +8,7 @@ Expressions can reference:
 
 - `response.statusCode`, `response.statusText`, `response.text()`
 - `response.headers["header-name"]` or `response.header("Header-Name")` for a single-valued header
-- `response.json.path` shorthand (equivalent to `response.json().path`)
+- `response.json.path` shorthand (equivalent to `response.json().path`). `last.json.path` works the same way.
 - `stream.kind()`, `stream.summary().sentCount`, `stream.summary().dropped`, and `stream.events()[0].text` for streaming transcripts (available when the request used `@sse` or `@websocket`). A non-zero `dropped` value means the retained transcript is incomplete.
 - `vars.*`, `env.*`, `last.*`, imported `@use` modules, and other RestermScript helpers
 
@@ -23,7 +23,12 @@ Example:
 POST https://httpbin.org/anything/analytics/sessions
 ```
 
-Template captures such as `{{response.json.token}}` still work and can be used next to RTS capture expressions.
+Template captures such as `{{response.json.token}}` still work and can be used next to RTS capture expressions. The template forms are:
+
+- `{{response.body}}`, `{{response.status}}`, and `{{response.statusCode}}`
+- `{{response.headers.X-Request-Id}}`. A header sent more than once gives its values joined with `, `.
+- `{{response.json}}` for the whole body, or a path such as `{{response.json.items[0].id}}`. A negative index counts from the end, so `{{response.json.items[-1]}}` is the last item.
+- `{{stream.kind}}`, `{{stream.summary.eventCount}}`, and `{{stream.events[-1].text}}` for streaming transcripts
 
 `@capture` treats a value with a complete, unquoted `{{...}}` marker as interpolated text. Otherwise it parses the value as RestermScript. In text mode, surrounding characters such as `#` and unmatched brackets are literal. In script mode, `#` starts a comment.
 

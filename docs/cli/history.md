@@ -10,3 +10,5 @@ The history commands work with persisted history. [Configuration](../configurati
 | `resterm history stats` | Print schema version, row counts, and sizes. |
 | `resterm history check [--full]` | Run integrity checks. |
 | `resterm history compact` | Checkpoint and compact `history.db`. |
+
+`resterm history vacuum` is another name for `compact`. These commands exit `0` on success and `1` on any error, including a missing or unknown flag.
