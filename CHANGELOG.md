@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.13.2](https://github.com/unkn0wn-root/resterm/compare/v1.13.1...v1.13.2) (2026-10-07)
+
+
+### Bug Fixes
+
+* **parser:** reject <= in option directives ([02801eb](https://github.com/unkn0wn-root/resterm/commit/02801eb6da921b2149ff8bcaa245d8cce556f62b))
+
 ### [1.13.1](https://github.com/unkn0wn-root/resterm/compare/v1.13.0...v1.13.1) (2026-10-07)
 
 
