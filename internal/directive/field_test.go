@@ -26,7 +26,7 @@ func TestScanFieldsKeepsValuesWithTheirSource(t *testing.T) {
 		if raw := input[field.Start:field.End]; raw != want[i].raw || field.Value != want[i].value {
 			t.Errorf("field %d: source %q, value %q; want %+v", i, raw, field.Value, want[i])
 		}
-		if got := field.Eq >= 0; got != want[i].option {
+		if got := field.Op == OpEq; got != want[i].option {
 			t.Errorf("field %d: option = %v", i, got)
 		}
 	}

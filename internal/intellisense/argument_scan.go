@@ -26,10 +26,11 @@ func scanFields(text []rune) []field {
 	var out []field
 	for token := range directive.ScanFields(src) {
 		f := field{start: at(token.Start), end: at(token.End), eq: -1, text: token.Value}
-		if token.Eq >= 0 {
-			f.form, f.eq = formOption, at(token.Eq)
-		} else if token.Le >= 0 {
-			f.form, f.eq = formBudget, at(token.Le+1)
+		switch token.Op {
+		case directive.OpEq:
+			f.form, f.eq = formOption, at(token.At)
+		case directive.OpLe:
+			f.form, f.eq = formBudget, at(token.ValueStart()-1)
 		}
 		out = append(out, f)
 	}

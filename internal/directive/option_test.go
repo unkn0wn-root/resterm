@@ -492,13 +492,13 @@ func TestFieldSpans(t *testing.T) {
 			t.Fatalf("span %d = %q, want %q", i, got, w.field)
 		}
 		if w.key == "" {
-			if f.Eq >= 0 {
-				t.Fatalf("span %d (%q) has Eq %d, want positional", i, w.field, f.Eq)
+			if f.Op != OpNone {
+				t.Fatalf("span %d (%q) has Op %q, want positional", i, w.field, f.Op)
 			}
 			continue
 		}
-		if f.Eq < 0 || input[f.Start:f.Eq] != w.key {
-			t.Fatalf("span %d (%q) Eq = %d, want key %q", i, w.field, f.Eq, w.key)
+		if f.Op != OpEq || input[f.Start:f.At] != w.key {
+			t.Fatalf("span %d (%q) = %+v, want key %q", i, w.field, f, w.key)
 		}
 	}
 }
@@ -808,19 +808,13 @@ func TestSpacedKey(t *testing.T) {
 	}
 }
 
-func TestScanFieldsRecordsEveryOperator(t *testing.T) {
+func TestScanFieldsReadsEveryOperator(t *testing.T) {
 	t.Parallel()
 
 	for _, op := range ops {
-		f := slices.Collect(ScanFields("k" + op + "v"))[0]
-		for _, other := range ops {
-			want := -1
-			if other == op {
-				want = 1
-			}
-			if got := f.at(other); got != want {
-				t.Fatalf("k%sv: at(%q) = %d, want %d", op, other, got, want)
-			}
+		f := slices.Collect(ScanFields("k" + op.String() + "v"))[0]
+		if f.Op != op || f.At != 1 || f.ValueStart() != 1+len(op.String()) {
+			t.Fatalf("k%sv = %+v", op, f)
 		}
 	}
 }

@@ -397,7 +397,7 @@ func parseExprRun(name directive.Name, rest, miss string) (expr, run, fail strin
 func cutBranch(rest string) (expr, opts string) {
 	mask := rts.Mask(rest)
 	for _, f := range directive.FieldSpans(mask) {
-		if f.Eq >= 0 {
+		if f.Op == directive.OpEq {
 			return strings.TrimSpace(rest[:f.Start]), rest[f.Start:]
 		}
 	}

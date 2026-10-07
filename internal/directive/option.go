@@ -93,11 +93,11 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 		switch {
 		case noKey(f.Value): // =x, or = v with no key before it
 			spaced = append(spaced, f.Value)
-			if slices.Contains(ops, f.Value) && valueNext(fields, i) {
+			if loneOp(f.Value) && valueNext(fields, i) {
 				i++
 			}
-		case f.Le >= 0:
-			k, v, _ := strings.Cut(f.Value, "<=")
+		case f.Op == OpLe:
+			k, v, _ := strings.Cut(f.Value, OpLe.String())
 			le = append(le, &LeOptionError{Directive: name, Key: k, Value: v})
 		case ok:
 			rep.add(opts.put(key, val))
@@ -112,42 +112,44 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 	return opts, errors.Join(append([]error{err}, le...)...)
 }
 
-// SpacedOption returns the key and field count of an option at i that spaces split around = or <=.
+// SpacedOption returns the key and number of fields in an option split by
+// spaces around its operator, or ("", 0) if fields[i] is not one.
 func SpacedOption(fields []Field, i int) (string, int) {
 	f := fields[i]
 	if SpacedKey(fields, i) { // k = v, k =v
-		// A lone operator takes the next field as its value.
-		if slices.Contains(ops, fields[i+1].Value) && valueNext(fields, i+1) {
+		if loneOp(fields[i+1].Value) && valueNext(fields, i+1) {
 			return f.Value, 3
 		}
 		return f.Value, 2
 	}
-	// k= v. Only the source tells k= from k="", so this reads the span.
-	for _, op := range ops {
-		if at := f.at(op); at >= 0 && at+len(op) == f.End && valueNext(fields, i) {
-			return strings.TrimSuffix(f.Value, op), 2
-		}
+	// k= v needs a value; k="" is already complete. Check the source offsets
+	// because both decode to k=.
+	if f.Op != OpNone && f.ValueStart() == f.End && valueNext(fields, i) {
+		return strings.TrimSuffix(f.Value, f.Op.String()), 2
 	}
 	return "", 0
 }
 
+func loneOp(field string) bool {
+	return slices.ContainsFunc(ops, func(op Op) bool { return field == op.String() })
+}
+
 func noKey(field string) bool {
 	field = strings.TrimSpace(field)
-	return slices.ContainsFunc(ops, func(op string) bool { return strings.HasPrefix(field, op) })
+	return slices.ContainsFunc(ops, func(op Op) bool { return strings.HasPrefix(field, op.String()) })
 }
 
 // SpacedKey reports whether field i is a key whose operator was split off by a
 // space, as in k = v or k =v.
 func SpacedKey(fields []Field, i int) bool {
 	key := fields[i].Value
-	return !slices.ContainsFunc(ops, func(op string) bool { return strings.Contains(key, op) }) &&
+	return !slices.ContainsFunc(ops, func(op Op) bool { return strings.Contains(key, op.String()) }) &&
 		strings.TrimSpace(key) != "" && i+1 < len(fields) && noKey(fields[i+1].Value)
 }
 
-// The field after i can be a value only if it is not an option of its own. Only
-// the source tells a=b from "a=b", so this reads the span.
+// A quoted "a=b" can be a value; an unquoted a=b starts another option.
 func valueNext(fields []Field, i int) bool {
-	return i+1 < len(fields) && !slices.ContainsFunc(ops, func(op string) bool { return fields[i+1].at(op) >= 0 })
+	return i+1 < len(fields) && fields[i+1].Op == OpNone
 }
 
 // Every option is visited even after one fails, so a line with two mistakes
@@ -521,24 +523,38 @@ func ParseNameValue(input string) (string, string) {
 	return tr[:end], strings.TrimSpace(val)
 }
 
-// FieldSpan locates one field of an option list in its source text. Offsets are
-// bytes. Eq is the equals sign that makes the field an option, -1 when the
-// field is positional. Le is the <= after a name, as in dns<=50ms.
-type FieldSpan struct {
-	Start, End, Eq, Le int
+// Op is the operator between an option's name and its value.
+type Op uint8
+
+const (
+	OpNone Op = iota // positional field
+	OpEq             // key=value
+	OpLe             // key<=value (@trace budget)
+)
+
+// Match longer operators first when one is a prefix of another.
+var ops = []Op{OpLe, OpEq}
+
+func (o Op) String() string {
+	switch o {
+	case OpEq:
+		return "="
+	case OpLe:
+		return "<="
+	}
+	return ""
 }
 
-// Each operator needs a FieldSpan member, set by scanFields and returned by at.
-var ops = []string{"<=", "="}
+// FieldSpan locates a field in the source. All offsets are in bytes.
+// At marks the operator and is only meaningful when Op != OpNone.
+type FieldSpan struct {
+	Start, End int
+	Op         Op
+	At         int
+}
 
-func (s FieldSpan) at(op string) int {
-	switch op {
-	case "=":
-		return s.Eq
-	case "<=":
-		return s.Le
-	}
-	return -1
+func (s FieldSpan) ValueStart() int {
+	return s.At + len(s.Op.String())
 }
 
 // Field pairs a decoded option field with its byte offsets in the source.
@@ -562,12 +578,9 @@ func scanFields(input string, escapes bool) iter.Seq[Field] {
 				return
 			}
 			raw := input[tok.start:tok.end]
-			span := FieldSpan{Start: tok.start, End: tok.end, Eq: -1, Le: -1}
-			if eq := optionEq(raw); eq >= 0 {
-				span.Eq = tok.start + eq
-			} else if i := strings.IndexFunc(raw, func(r rune) bool { return !IsKeyRune(r) }); i > 0 &&
-				strings.HasPrefix(raw[i:], "<=") {
-				span.Le = tok.start + i
+			span := FieldSpan{Start: tok.start, End: tok.end}
+			if op, at := scanOp(raw); op != OpNone {
+				span.Op, span.At = op, tok.start+at
 			}
 			if !yield(Field{FieldSpan: span, Value: tok.val}) {
 				return
@@ -586,25 +599,26 @@ func FieldSpans(input string) []FieldSpan {
 	return spans
 }
 
-// A name, then an equals sign typed outside quotes, then the value. This has to
-// read the source. The lexer decodes "a=b" and a=b to the same text and only one
-// of them was an option, so a decoded token cannot answer the question. A quote
-// is not a name rune, so a quoted word never counts, and "a==b" is a comparison.
-func optionEq(raw string) int {
-	for i, r := range raw {
-		if r == '=' {
-			if i > 0 && !strings.HasPrefix(raw[i+1:], "=") {
-				return i
-			}
-			return -1
-		}
-		if !IsKeyRune(r) {
-			return -1
-		}
+// Read the raw field: "a=b" and a=b decode to the same text, but only a=b
+// is an option. A quoted key or a comparison such as a==b has no option operator.
+func scanOp(raw string) (Op, int) {
+	i := strings.IndexFunc(raw, func(r rune) bool { return !IsKeyRune(r) })
+	if i <= 0 {
+		return OpNone, 0
 	}
-	return -1
+	for _, op := range ops {
+		if !strings.HasPrefix(raw[i:], op.String()) {
+			continue
+		}
+		if op == OpEq && strings.HasPrefix(raw[i+1:], "=") {
+			return OpNone, 0
+		}
+		return op, i
+	}
+	return OpNone, 0
 }
 
 func isOption(raw string) bool {
-	return optionEq(raw) >= 0
+	op, _ := scanOp(raw)
+	return op == OpEq
 }
