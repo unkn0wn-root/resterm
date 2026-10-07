@@ -196,3 +196,14 @@ func TestSpacedOptionFieldsReadQuotesFromSource(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthUseWithSpacedLessOrEqualIsRejected(t *testing.T) {
+	doc := Parse("/ws/api.http", []byte("# @auth use <= prod\nGET https://example.com\n"))
+	want := `@auth option "use" has spaces around =. Write it as key=value`
+	if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+		t.Fatalf("errors = %v, want %q", doc.Errors, want)
+	}
+	if a := doc.Requests[0].Metadata.Auth; a == nil || a.Rejected == "" || a.Type != "" {
+		t.Fatalf("auth = %+v, want it rejected instead of read as a header", a)
+	}
+}

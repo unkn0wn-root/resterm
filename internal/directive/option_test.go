@@ -795,10 +795,14 @@ func TestSpacedKey(t *testing.T) {
 		"= v":      false,
 		`" " = v`:  false,
 		`"a=b" =v`: false,
+		"k <= v":   true,
+		"k <=v":    true,
+		"k<= v":    false,
+		"k<=v":     false,
 	}
 	for input, want := range tests {
 		fields := slices.Collect(ScanFields(input))
-		if got := SpacedKey(fields, 0, "="); got != want {
+		if got := SpacedKey(fields, 0); got != want {
 			t.Fatalf("SpacedKey(%q, 0) = %t, want %t", input, got, want)
 		}
 	}
@@ -824,7 +828,7 @@ func TestSpacedOptionWithBudgets(t *testing.T) {
 	}
 	for input, want := range tests {
 		fields := slices.Collect(ScanFields(input))
-		if key, n := SpacedOption(fields, 0, "<=", "="); key != want.key || n != want.n {
+		if key, n := SpacedOption(fields, 0); key != want.key || n != want.n {
 			t.Fatalf("SpacedOption(%q) = %q, %d, want %q, %d", input, key, n, want.key, want.n)
 		}
 	}

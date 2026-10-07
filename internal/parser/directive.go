@@ -310,8 +310,7 @@ func parseAuthDirective(rest string) (authDirective, error) {
 		return dir, nil
 	}
 
-	if namesProfiles(fields[0].Value) ||
-		(strings.EqualFold(fields[0].Value, "use") && directive.SpacedKey(fields, 0, "=")) {
+	if namesProfiles(fields[0].Value) || (strings.EqualFold(fields[0].Value, "use") && directive.SpacedKey(fields, 0)) {
 		if dir.Scope != directive.ScopeRequest {
 			return dir, fmt.Errorf("@auth %s scope does not support use=", dir.Scope.String())
 		}
@@ -351,7 +350,7 @@ func authName(scope directive.Scope, fields []directive.Field) (string, error) {
 		// Before 1.10 this word was ignored and the line was a default. Rejecting
 		// it keeps an old default from quietly becoming a named definition.
 		w := fields[1].Value
-		if scope != directive.ScopeRequest && validProfileName(w) && !directive.SpacedKey(fields, 1, "=") {
+		if scope != directive.ScopeRequest && validProfileName(w) && !directive.SpacedKey(fields, 1) {
 			return "", fmt.Errorf(
 				"@auth expects key=value options but got %q. Write name=%s to name a definition",
 				w,
@@ -514,7 +513,7 @@ func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 	var set, unknown, spaced []string
 	var errs []error
 	for i := 0; i < len(fields); i++ {
-		if key, n := directive.SpacedOption(fields, i, "<=", "="); n > 0 {
+		if key, n := directive.SpacedOption(fields, i); n > 0 {
 			spaced = append(spaced, key)
 			i += n - 1
 			continue
