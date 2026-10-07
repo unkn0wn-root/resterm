@@ -756,6 +756,9 @@ func TestSpacedOptions(t *testing.T) {
 		{"quoted empty value", `k="" flag`, true, map[string]string{"k": "", "flag": "true"}, nil},
 		{"quoted value with =", `k="a=b" flag`, true, map[string]string{"k": "a=b", "flag": "true"}, nil},
 		{"fields value with a space", `cmd= "echo a=b"`, false, map[string]string{}, []string{"cmd"}},
+		{"spaces around <=", "timeout <= 1s flag", true, map[string]string{"flag": "true"}, []string{"timeout"}},
+		{"space after <=", "timeout<= 1s", true, map[string]string{}, []string{"timeout"}},
+		{"no key before <=", "<=1s", true, map[string]string{}, []string{"<=1s"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -824,6 +827,20 @@ func TestSpacedOptionWithBudgets(t *testing.T) {
 		if key, n := SpacedOption(fields, 0, "<=", "="); key != want.key || n != want.n {
 			t.Fatalf("SpacedOption(%q) = %q, %d, want %q, %d", input, key, n, want.key, want.n)
 		}
+	}
+}
+
+func TestLeOptionError(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions(Settings, "timeout<=1s timeout=2s")
+	var le *LeOptionError
+	if !maps.Equal(opts.vals, map[string]string{"timeout": "2s"}) || !errors.As(err, &le) ||
+		err.Error() != `@settings option "timeout" takes = instead of <=. Write it as timeout=1s` {
+		t.Fatalf("vals = %v, err = %v", opts.vals, err)
+	}
+	if got := OptionKeys(err); !slices.Equal(got, []string{"timeout"}) {
+		t.Fatalf("OptionKeys() = %v", got)
 	}
 }
 

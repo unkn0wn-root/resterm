@@ -583,13 +583,7 @@ func applyTraceToken(spec *restfile.TraceSpec, value string) (string, error) {
 		return "", directive.UnknownOption(directive.Trace, cmp.Or(key, value))
 	}
 	if le {
-		return "", fmt.Errorf(
-			"%s option %q takes = instead of <=. Write it as %s=%s",
-			directive.Trace.Tag(),
-			key,
-			key,
-			val,
-		)
+		return "", &directive.LeOptionError{Directive: directive.Trace, Key: key, Value: val}
 	}
 	switch target {
 	case "enabled":

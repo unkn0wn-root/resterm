@@ -79,10 +79,11 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 	var (
 		rep    repeats
 		spaced []string
+		le     []error
 	)
 	for i := 0; i < len(fields); i++ {
 		// The key alone would read as true, so no field of a spaced option is stored.
-		if key, n := SpacedOption(fields, i, "="); n > 0 {
+		if key, n := SpacedOption(fields, i, "<=", "="); n > 0 {
 			spaced = append(spaced, key)
 			i += n - 1
 			continue
@@ -90,11 +91,14 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 		f := fields[i]
 		key, val, ok := strings.Cut(f.Value, "=")
 		switch {
-		case noKey(f.Value, "="): // =x, or = v with no key before it
+		case noKey(f.Value, "<=", "="): // =x, or = v with no key before it
 			spaced = append(spaced, f.Value)
-			if f.Value == "=" && valueNext(fields, i, "=") {
+			if (f.Value == "=" || f.Value == "<=") && valueNext(fields, i, "<=", "=") {
 				i++
 			}
+		case f.Le >= 0:
+			k, v, _ := strings.Cut(f.Value, "<=")
+			le = append(le, &LeOptionError{Directive: name, Key: k, Value: v})
 		case ok:
 			rep.add(opts.put(key, val))
 		case bareIsTrue:
@@ -105,7 +109,7 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 	if len(spaced) > 0 {
 		err = errors.Join(err, &SpacedOptionsError{Directive: name, Keys: spaced})
 	}
-	return opts, err
+	return opts, errors.Join(append([]error{err}, le...)...)
 }
 
 // SpacedOption returns the key and field count of an option at i that spaces split around one of ops.
@@ -348,6 +352,21 @@ func (e *SpacedOptionsError) Error() string {
 	)
 }
 
+type LeOptionError struct {
+	Directive  Name
+	Key, Value string
+}
+
+func (e *LeOptionError) Error() string {
+	return fmt.Sprintf(
+		"%s option %q takes = instead of <=. Write it as %s=%s",
+		e.Directive.Tag(),
+		e.Key,
+		e.Key,
+		e.Value,
+	)
+}
+
 func UnknownOption(name Name, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
@@ -421,11 +440,14 @@ func OptionKeys(err error) []string {
 	var repeated *RepeatedOptionsError
 	var conflict *AliasConflictError
 	var spaced *SpacedOptionsError
+	var le *LeOptionError
 	switch {
 	case errors.As(err, &unknown):
 		return unknown.Keys
 	case errors.As(err, &spaced):
 		return spaced.Keys
+	case errors.As(err, &le):
+		return []string{le.Key}
 	case errors.As(err, &repeated):
 		return repeated.Keys
 	case errors.As(err, &conflict):

@@ -134,7 +134,7 @@ func (b *documentBuilder) reportStrict(d parsedDirective, err error) {
 }
 
 // True if err should reject the directive. Unknown options and options written
-// with spaces do not, so the caller keeps what it parsed.
+// with spaces or <= do not, so the caller keeps what it parsed.
 func fatalErr(err error) bool {
 	if err == nil {
 		return false
@@ -144,7 +144,8 @@ func fatalErr(err error) bool {
 	}
 	var unknown *directive.UnknownOptionsError
 	var spaced *directive.SpacedOptionsError
-	return !errors.As(err, &unknown) && !errors.As(err, &spaced)
+	var le *directive.LeOptionError
+	return !errors.As(err, &unknown) && !errors.As(err, &spaced) && !errors.As(err, &le)
 }
 
 func (b *documentBuilder) processLine(no int, raw, term string) {

@@ -35,9 +35,10 @@ func (b *documentBuilder) handleSSHDirective(d parsedDirective) directiveOutcome
 		b.request.ssh = res.Spec
 	case directive.ScopeGlobal, directive.ScopeFile:
 		// Other files use global profiles and do not see this file's errors. A
-		// profile with a spaced option is not shared, so its users fail.
+		// profile with a spaced or <= option is not shared, so its users fail.
 		var spaced *directive.SpacedOptionsError
-		if errors.As(err, &spaced) {
+		var le *directive.LeOptionError
+		if errors.As(err, &spaced) || errors.As(err, &le) {
 			return directiveRejected
 		}
 		res.Profile.Scope = res.Scope
@@ -77,8 +78,13 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 	case directive.ScopeGlobal, directive.ScopeFile:
 		res.Profile.Scope = res.Scope
 		var spaced *directive.SpacedOptionsError
-		if errors.As(err, &spaced) {
+		var le *directive.LeOptionError
+		switch {
+		case errors.As(err, &spaced):
 			b.addInvalidK8sProfile(d.lines.Start, res.Profile, spaced.Error())
+			return directiveRejected
+		case errors.As(err, &le):
+			b.addInvalidK8sProfile(d.lines.Start, res.Profile, le.Error())
 			return directiveRejected
 		}
 		res.Profile.Line = d.lines.Start

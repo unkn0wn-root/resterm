@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"maps"
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -328,5 +330,46 @@ func TestWrittenEmptySettingValueStaysEmpty(t *testing.T) {
 				t.Fatalf("settings[%q] = %q (present %t), want an empty value", tt.key, got, ok)
 			}
 		})
+	}
+}
+
+func TestOptionWrittenWithLessOrEqualIsAnError(t *testing.T) {
+	src := "# @settings timeout<=1s timeout=2s\n" +
+		"# @ssh global jump host=h port<=22\n" +
+		"# @k8s global k pod=p port=80 persist<=false\n" +
+		"# @settings retries <= 3\n\n" +
+		"### r\n# @sse timeout<=1s\nGET https://example.com\n"
+	doc := Parse("/ws/api.http", []byte(src))
+	lines := strings.Split(src, "\n")
+	want := []struct {
+		line int
+		key  string
+		msg  string
+	}{
+		{1, "timeout", `@settings option "timeout" takes = instead of <=. Write it as timeout=1s`},
+		{2, "port", `@ssh option "port" takes = instead of <=. Write it as port=22`},
+		{3, "persist", `@k8s option "persist" takes = instead of <=. Write it as persist=false`},
+		{4, "retries", `@settings option "retries" has spaces around =. Write it as key=value`},
+		{7, "timeout", `@sse option "timeout" takes = instead of <=. Write it as timeout=1s`},
+	}
+	if len(doc.Errors) != len(want) || len(doc.Warnings) != 0 {
+		t.Fatalf("errors = %v, warnings = %v, want %d errors", doc.Errors, doc.Warnings, len(want))
+	}
+	for i, w := range want {
+		got := doc.Errors[i]
+		col := strings.Index(lines[w.line-1], w.key) + 1
+		if got.Message != w.msg || got.Span.Start.Line != w.line || got.Span.Start.Col != col {
+			t.Fatalf("error %d = %q at %d:%d, want %q at %d:%d",
+				i, got.Message, got.Span.Start.Line, got.Span.Start.Col, w.msg, w.line, col)
+		}
+	}
+	if want := map[string]string{"timeout": "2s"}; !maps.Equal(doc.Settings, want) {
+		t.Fatalf("settings = %v, want %v", doc.Settings, want)
+	}
+	if len(doc.SSH) != 0 {
+		t.Fatalf("ssh = %+v, want the profile rejected", doc.SSH)
+	}
+	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid || doc.K8s[0].Error != want[2].msg {
+		t.Fatalf("k8s = %+v, want the profile kept as invalid", doc.K8s)
 	}
 }
