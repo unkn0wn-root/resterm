@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"net"
 	"os"
@@ -31,7 +32,7 @@ func TestExecuteReportsTLSFailuresAsTLS(t *testing.T) {
 	tlsAddr := startTestServerWith(t, reflect, grpc.Creds(credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{pki.server},
 	})))
-	mtlsAddr := startTestServerWith(t, reflect, grpc.Creds(credentials.NewTLS(&tls.Config{
+	mtlsAddr := serveTestServer(t, lingeringListener{listenTest(t)}, reflect, grpc.Creds(credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{pki.server},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    pki.pool,
@@ -61,6 +62,29 @@ func TestExecuteReportsTLSFailuresAsTLS(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Over TLS 1.3 the server rejects a missing client certificate after the client
+// has sent data. Closing with that data unread makes the kernel send a reset,
+// which can reach the client before the alert does. Real servers avoid this with
+// a lingering close: stop sending, read what is left, then close.
+type lingeringListener struct{ net.Listener }
+
+func (l lingeringListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return lingeringConn{conn.(*net.TCPConn)}, nil
+}
+
+type lingeringConn struct{ *net.TCPConn }
+
+func (c lingeringConn) Close() error {
+	_ = c.CloseWrite()
+	_ = c.SetReadDeadline(time.Now().Add(time.Second))
+	_, _ = io.Copy(io.Discard, c.TCPConn)
+	return c.TCPConn.Close()
 }
 
 type testPKI struct {

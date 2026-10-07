@@ -79,11 +79,25 @@ func startTestServer(t *testing.T) string {
 
 func startTestServerWith(t *testing.T, register func(*grpc.Server), opts ...grpc.ServerOption) string {
 	t.Helper()
+	return serveTestServer(t, listenTest(t), register, opts...)
+}
 
+func listenTest(t *testing.T) net.Listener {
+	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
+	return lis
+}
+
+func serveTestServer(
+	t *testing.T,
+	lis net.Listener,
+	register func(*grpc.Server),
+	opts ...grpc.ServerOption,
+) string {
+	t.Helper()
 	srv := grpc.NewServer(opts...)
 	testgrpc.RegisterTestServiceServer(srv, &testSvc{})
 	if register != nil {
