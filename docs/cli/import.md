@@ -24,7 +24,7 @@ Most curl flags have a direct equivalent:
 | `-k`, `-x`, `-L`, `-m` | The `http-insecure`, `proxy`, `followredirects`, and `timeout` settings. |
 | `--cacert`, `--cert`, `--key` | The `http-root-cas`, `http-client-cert`, and `http-client-key` settings. |
 
-Other flags, such as `--retry`, `--connect-timeout`, `--max-redirs`, `-v`, `-o`, and `--http2`, are ignored. The generated file starts with the original command as a comment, followed by a warning for each ignored flag.
+Other flags, such as `--retry`, `--connect-timeout`, `--max-redirs`, `-v`, `-o`, and `--http2`, are ignored. The generated file starts with a comment that names the Resterm version, then the original command under `Source:`, then a warning for each ignored flag.
 
 Generate a collection from OpenAPI:
 

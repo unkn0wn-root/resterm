@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -508,91 +509,128 @@ func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 		return spec, nil
 	}
 
-	var set, unknown []string
-	for _, field := range directive.Fields(rest) {
-		value := strings.TrimSpace(field)
-		if value == "" {
+	fields := slices.Collect(directive.ScanFields(rest))
+	var set, unknown, spaced []string
+	var errs []error
+	for i := 0; i < len(fields); i++ {
+		f := fields[i]
+		if f.Value == "" {
 			continue
 		}
-		target, ok := applyTraceToken(spec, value)
+		key, op, val := cutTraceOp(f.Value)
+		var nkey, nop, nval string
+		if i+1 < len(fields) {
+			nkey, nop, nval = cutTraceOp(fields[i+1].Value)
+		}
+		// Spaces around = or <= split one setting into several fields, and none
+		// of them is applied. After a lone operator, the next field is its value
+		// unless it is a setting of its own.
 		switch {
-		case !ok:
-			name := value
-			if i := strings.IndexAny(value, "<="); i > 0 {
-				name = strings.TrimSpace(value[:i])
+		case op == "" && nop != "" && nkey == "": // total = 300ms, total =300ms
+			spaced = append(spaced, key)
+			i++
+			if nval == "" && i+1 < len(fields) && !strings.Contains(fields[i+1].Value, "=") {
+				i++
 			}
-			unknown = append(unknown, name)
+			continue
+		case key != "" && val == "" && strings.HasSuffix(rest[f.Start:f.End], "=") && // total= 300ms
+			i+1 < len(fields) && nop == "":
+			spaced = append(spaced, key)
+			i++
+			continue
+		}
+		target, err := applyTraceToken(spec, key, op, val)
+		switch {
+		case errors.Is(err, errUnknownTrace):
+			unknown = append(unknown, cmp.Or(key, f.Value))
+		case err != nil:
+			errs = append(errs, err)
 		case target != "":
 			set = append(set, target)
 		}
 	}
-	unk := directive.UnknownOption(directive.Trace, unknown...)
+	if len(spaced) > 0 {
+		errs = append(errs, &directive.SpacedOptionsError{Directive: directive.Trace, Keys: spaced})
+	}
+	errs = append(errs, directive.UnknownOption(directive.Trace, unknown...))
 	if err := directive.RepeatedNames(directive.Trace, set); err != nil {
-		return nil, errors.Join(err, unk)
+		return nil, errors.Join(append([]error{err}, errs...)...)
 	}
 
 	if len(spec.Budgets.Phases) == 0 {
 		spec.Budgets.Phases = nil
 	}
-	return spec, unk
+	return spec, errors.Join(errs...)
 }
 
-// applyTraceToken returns the normalized setting name used for duplicate checks,
-// and false when the token names no setting.
-func applyTraceToken(spec *restfile.TraceSpec, value string) (string, bool) {
-	switch strings.ToLower(value) {
-	case "off", "disable", "disabled", "false":
-		spec.Enabled = false
-		return "", true
-	case "on", "enable", "enabled", "true":
-		spec.Enabled = true
-		return "", true
+// cutTraceOp splits a token at <=, which only budgets take, or at =.
+func cutTraceOp(s string) (key, op, val string) {
+	i := strings.IndexByte(s, '=')
+	switch {
+	case i < 0:
+		return strings.TrimSpace(s), "", ""
+	case i > 0 && s[i-1] == '<':
+		return strings.TrimSpace(s[:i-1]), "<=", strings.TrimSpace(s[i+1:])
+	default:
+		return strings.TrimSpace(s[:i]), "=", strings.TrimSpace(s[i+1:])
 	}
-
-	if name, val, ok := strings.Cut(value, "<="); ok {
-		kind, ok := tracebudget.NormalizePhase(name)
-		if !ok {
-			return "", false
-		}
-		dur := parseDuration(val)
-		if dur <= 0 {
-			return "", true
-		}
-		setTracePhaseBudget(spec, kind, dur)
-		return string(kind), true
-	}
-
-	if before, after, ok := strings.Cut(value, "="); ok {
-		key := strings.ToLower(strings.TrimSpace(before))
-		val := strings.TrimSpace(after)
-		return applyTraceOption(spec, key, val)
-	}
-	return "", false
 }
 
-func applyTraceOption(spec *restfile.TraceSpec, key, val string) (string, bool) {
-	switch key {
+var errUnknownTrace = errors.New("unknown @trace setting")
+
+// applyTraceToken returns the normalized setting name used for duplicate checks.
+// An invalid duration or bool leaves the setting as it was.
+func applyTraceToken(spec *restfile.TraceSpec, key, op, val string) (string, error) {
+	if op == "" {
+		switch strings.ToLower(key) {
+		case "off", "disable", "disabled", "false":
+			spec.Enabled = false
+			return "", nil
+		case "on", "enable", "enabled", "true":
+			spec.Enabled = true
+			return "", nil
+		}
+		return "", errUnknownTrace
+	}
+	if kind, ok := tracebudget.NormalizePhase(key); ok {
+		if dur := parseDuration(val); dur > 0 {
+			setTracePhaseBudget(spec, kind, dur)
+			return string(kind), nil
+		}
+		return "", nil
+	}
+
+	var target string
+	switch strings.ToLower(key) {
+	case "enabled":
+		target = "enabled"
+	case "tolerance", "allowance", "grace":
+		target = "tolerance"
+	default:
+		return "", errUnknownTrace
+	}
+	if op == "<=" {
+		return "", fmt.Errorf(
+			"%s option %q takes = instead of <=. Write it as %s=%s",
+			directive.Trace.Tag(),
+			key,
+			key,
+			val,
+		)
+	}
+	switch target {
 	case "enabled":
 		if b, ok := directive.ParseBool(val); ok {
 			spec.Enabled = b
-			return key, true
+			return target, nil
 		}
-	case "tolerance", "allowance", "grace":
+	case "tolerance":
 		if dur := parseDuration(val); dur >= 0 {
 			spec.Budgets.Tolerance = dur
-			return "tolerance", true
-		}
-	default:
-		kind, ok := tracebudget.NormalizePhase(key)
-		if !ok {
-			return "", false
-		}
-		if dur := parseDuration(val); dur > 0 {
-			setTracePhaseBudget(spec, kind, dur)
-			return string(kind), true
+			return target, nil
 		}
 	}
-	return "", true
+	return "", nil
 }
 
 func setTracePhaseBudget(spec *restfile.TraceSpec, kind nettrace.PhaseKind, dur time.Duration) {

@@ -44,14 +44,14 @@ func Build(opts Options) (*Plan, error) {
 	if data == nil {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read file: %w", err)
+			return nil, usageError("read file: %w", err)
 		}
 		data = raw
 	}
 
 	doc := parser.Parse(path, data)
 	if err := parser.Check(doc); err != nil {
-		return nil, err
+		return nil, UsageError{err: err}
 	}
 	warns := parser.WarningTexts(doc)
 

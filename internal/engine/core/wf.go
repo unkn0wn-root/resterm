@@ -65,7 +65,6 @@ type wfRun struct {
 }
 
 const (
-	wfTagWhen    = "@" + string(directive.When)
 	wfTagForEach = "@" + string(directive.ForEach)
 	wfTagIf      = "@" + string(directive.If)
 	wfTagElif    = "@" + string(directive.Elif)
@@ -243,18 +242,19 @@ func (r *wfRun) runReqStep(
 			rts.Locals{},
 		)
 		if err != nil {
+			tag := step.When.Directive().Tag()
 			var help diag.Option
 			var undef *rts.UndefinedNameError
 			if each := req.Metadata.ForEach; each != nil && errors.As(err, &undef) && undef.Name == each.Var {
 				help = diag.WithHelp(fmt.Sprintf(
 					"%s is checked before the @for-each of request %q starts, so %q is not set. "+
 						"Put the condition on the request to check each item",
-					step.When.Directive().Tag(),
+					tag,
 					req.Metadata.Name,
 					undef.Name,
 				))
 			}
-			return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, wfTagWhen, help))
+			return r.failStep(ctx, step, req, branch, diag.WrapAs(diag.ClassScript, err, tag, help))
 		}
 		if !ok {
 			return r.manualFinish(step, req, branch, engine.RequestResult{Skipped: true, SkipReason: reason})
@@ -357,7 +357,7 @@ func (r *wfRun) runReqStep(
 					branch,
 					i+1,
 					len(items),
-					engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagWhen)},
+					engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, step.When.Directive().Tag())},
 				)
 				if emitErr != nil {
 					return false, emitErr

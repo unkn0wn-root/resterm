@@ -4,7 +4,7 @@ Scripts use ES5.1 JavaScript. Each script block stops after 30 seconds or when t
 
 ## Script blocks (`@script`)
 
-Add `# @script pre-request` or `# @script test` followed by lines that start with `>`. A bare `# @script` is a test script.
+Add `# @script pre-request` or `# @script test` followed by lines that start with `>`. A bare `# @script` keeps the kind and language of the previous `@script` in the same request, and starts a test script when there is none.
 
 Scripts are JavaScript by default. Add `lang=rts` to a pre-request block to write it in [RestermScript](rts/README.md) instead. `language=` works like `lang=`, and `javascript` and `restermlang` are accepted as values too.
 
@@ -138,7 +138,7 @@ Objects:
   - `enabled()` - returns `true` when the current response is an SSE or WebSocket transcript.
   - `kind()` - returns `"sse"` or `"websocket"`.
   - `summary()` - copy of the transcript summary. [WebSocket and SSE](streaming.md) lists its fields. Resterm fails the request when the stream fails, so a test does not need to check for that separately.
-  - `events()` - array of event objects. SSE events have `index`, `id`, `event`, `data`, `comment`, `retry`, and `timestamp`. WebSocket events have `step`, `direction` (`send` or `receive`), `type`, `size`, `text`, `base64`, `code`, `reason`, and `timestamp`. `text` holds text, JSON, ping, and pong payloads, `base64` holds binary payloads, and `code` and `reason` are set on close frames. `step` names the `@ws` step that sent a frame, such as `1:send`.
+  - `events()` - array of event objects. SSE events have `index`, `id`, `event`, `data`, `comment`, `retry`, and `timestamp`. WebSocket events have `step`, `direction` (`send` or `receive`), `type`, `size`, `text`, `base64`, `code`, `reason`, and `timestamp`. `text` holds text, JSON, ping, and pong payloads, `base64` holds binary payloads, and `code` and `reason` are set on close frames. `step` names the `@ws` step that sent a frame by its number and kind, such as `1:send_text`.
   - `onEvent(fn)` - registers a callback that is called for each event after the script finishes. Useful for assertions over the whole stream.
   - `onClose(fn)` - registers a callback that is called once with the summary after all events replay.
 - `vars` - same API as pre-request scripts. It reads request, file, and global values. `vars.set` only changes the value for the rest of the test script. Use `vars.global.set` to keep a value after the script.

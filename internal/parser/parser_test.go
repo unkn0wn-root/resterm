@@ -4263,6 +4263,49 @@ GET https://example.com/api
 	}
 }
 
+// Spaces around = or <= split a setting into fields that each read as an
+// unknown option. A known option written with <= read as unknown too.
+func TestParseTraceSettingWrittenWrong(t *testing.T) {
+	spaced := `@trace option %q has spaces around =. Write it as key=value`
+	for _, tt := range []struct {
+		rest, err, warn string
+	}{
+		{rest: "total = 300ms", err: fmt.Sprintf(spaced, "total")},
+		{rest: "total =300ms", err: fmt.Sprintf(spaced, "total")},
+		{rest: "total= 300ms", err: fmt.Sprintf(spaced, "total")},
+		{rest: "dns <= 50ms", err: fmt.Sprintf(spaced, "dns")},
+		{rest: "dns <=50ms", err: fmt.Sprintf(spaced, "dns")},
+		{rest: "dns<= 50ms", err: fmt.Sprintf(spaced, "dns")},
+		{
+			rest: "total = 300ms dns <= 50ms",
+			err:  `@trace options "total", "dns" have spaces around =. Write them as key=value`,
+		},
+		{
+			rest: "tolerance<=25ms",
+			err:  `@trace option "tolerance" takes = instead of <=. Write it as tolerance=25ms`,
+		},
+		{rest: "grace<=1s", err: `@trace option "grace" takes = instead of <=. Write it as grace=1s`},
+		{rest: "dns<50ms", warn: `unknown @trace option "dns<50ms"`},
+	} {
+		doc := Parse("trace.http", []byte("# @trace "+tt.rest+" connect<=120ms\nGET https://example.com\n"))
+		var errs, warns []string
+		for _, d := range doc.Errors {
+			errs = append(errs, d.Message)
+		}
+		for _, d := range doc.Warnings {
+			warns = append(warns, d.Message)
+		}
+		if strings.Join(errs, "\n") != tt.err || strings.Join(warns, "\n") != tt.warn {
+			t.Fatalf("%s: errors = %q, warnings = %q, want %q and %q", tt.rest, errs, warns, tt.err, tt.warn)
+		}
+		b := doc.Requests[0].Metadata.Trace.Budgets
+		if b.Total != 0 || b.Tolerance != 0 ||
+			!maps.Equal(b.Phases, map[string]time.Duration{"connect": 120 * time.Millisecond}) {
+			t.Fatalf("%s: budgets = %+v, want only connect", tt.rest, b)
+		}
+	}
+}
+
 func TestParseUseDirectiveNoAlias(t *testing.T) {
 	src := `# @use ./rts/helpers.rts
 GET https://example.com
