@@ -845,12 +845,12 @@ func TestSpacedOptionWithBudgets(t *testing.T) {
 	}
 }
 
-func TestLeOptionError(t *testing.T) {
+func TestOpOptionError(t *testing.T) {
 	t.Parallel()
 
 	opts, err := ParseOptions(Settings, "timeout<=1s timeout=2s")
-	var le *LeOptionError
-	if !maps.Equal(opts.vals, map[string]string{"timeout": "2s"}) || !errors.As(err, &le) ||
+	var op *OpOptionError
+	if !maps.Equal(opts.vals, map[string]string{"timeout": "2s"}) || !errors.As(err, &op) ||
 		err.Error() != `@settings option "timeout" takes = instead of <=. Write it as timeout=1s` {
 		t.Fatalf("vals = %v, err = %v", opts.vals, err)
 	}

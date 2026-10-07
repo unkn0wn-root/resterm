@@ -79,7 +79,7 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 	var (
 		rep    repeats
 		spaced []string
-		le     []error
+		bad    []error
 	)
 	for i := 0; i < len(fields); i++ {
 		// The key alone would read as true, so no field of a spaced option is stored.
@@ -96,9 +96,9 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 			if loneOp(f.Value) && valueNext(fields, i) {
 				i++
 			}
-		case f.Op == OpLe:
-			k, v, _ := strings.Cut(f.Value, OpLe.String())
-			le = append(le, &LeOptionError{Directive: name, Key: k, Value: v})
+		case f.Op != OpNone && f.Op != OpEq:
+			k, v, _ := strings.Cut(f.Value, f.Op.String())
+			bad = append(bad, &OpOptionError{Directive: name, Key: k, Value: v, Op: f.Op})
 		case ok:
 			rep.add(opts.put(key, val))
 		case bareIsTrue:
@@ -109,7 +109,7 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 	if len(spaced) > 0 {
 		err = errors.Join(err, &SpacedOptionsError{Directive: name, Keys: spaced})
 	}
-	return opts, errors.Join(append([]error{err}, le...)...)
+	return opts, errors.Join(append([]error{err}, bad...)...)
 }
 
 // SpacedOption returns the key and number of fields in an option split by
@@ -354,16 +354,19 @@ func (e *SpacedOptionsError) Error() string {
 	)
 }
 
-type LeOptionError struct {
+// OpOptionError reports an option written with an operator other than =.
+type OpOptionError struct {
 	Directive  Name
 	Key, Value string
+	Op         Op
 }
 
-func (e *LeOptionError) Error() string {
+func (e *OpOptionError) Error() string {
 	return fmt.Sprintf(
-		"%s option %q takes = instead of <=. Write it as %s=%s",
+		"%s option %q takes = instead of %s. Write it as %s=%s",
 		e.Directive.Tag(),
 		e.Key,
+		e.Op,
 		e.Key,
 		e.Value,
 	)
@@ -442,14 +445,14 @@ func OptionKeys(err error) []string {
 	var repeated *RepeatedOptionsError
 	var conflict *AliasConflictError
 	var spaced *SpacedOptionsError
-	var le *LeOptionError
+	var op *OpOptionError
 	switch {
 	case errors.As(err, &unknown):
 		return unknown.Keys
 	case errors.As(err, &spaced):
 		return spaced.Keys
-	case errors.As(err, &le):
-		return []string{le.Key}
+	case errors.As(err, &op):
+		return []string{op.Key}
 	case errors.As(err, &repeated):
 		return repeated.Keys
 	case errors.As(err, &conflict):
