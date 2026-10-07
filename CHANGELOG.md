@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.13.1](https://github.com/unkn0wn-root/resterm/compare/v1.13.0...v1.13.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* **cli:** exit 2 on conflicting import flags and bad openapi mode ([b3fd224](https://github.com/unkn0wn-root/resterm/commit/b3fd2244bad653949a4af303adb78f63b10f43f1))
+* **cli:** exit 2 on usage errors in init, collection and history ([06383b5](https://github.com/unkn0wn-root/resterm/commit/06383b518dfa0ebb338082bf99c0de84e34c40c5))
+* **engine:** check a looping step's when per item with the loop variable ([bef569f](https://github.com/unkn0wn-root/resterm/commit/bef569f5aaff5af6c27023ed625195f3a7d978fd))
+* **openapi:** drop parameters an API key scheme already sends ([d8840c2](https://github.com/unkn0wn-root/resterm/commit/d8840c22ccfc4c5197cef5d123d003bafe267cdf))
+* **openapi:** write cookie API keys as a Cookie header and type apikey placement ([638e205](https://github.com/unkn0wn-root/resterm/commit/638e2050e22f19b68edfec73671b646bd50e5220))
+* **parser:** accept when with for-each on a step and name repeated step modifiers ([97cf0d3](https://github.com/unkn0wn-root/resterm/commit/97cf0d3f0c2cc4e8d2275276b39114544c4e0439))
+* **trace:** suggest real phase names and warn on unknown trace budgets ([9622ffe](https://github.com/unkn0wn-root/resterm/commit/9622ffeddd93b8690b61bd2ea163dc8a6615e2c0))
+
 ## [1.13.0](https://github.com/unkn0wn-root/resterm/compare/v1.12.1...v1.13.0) (2026-10-06)
 
 ### [1.12.1](https://github.com/unkn0wn-root/resterm/compare/v1.12.0...v1.12.1) (2026-10-05)
