@@ -89,20 +89,19 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 			continue
 		}
 		f := fields[i]
-		key, val, ok := strings.Cut(f.Value, "=")
+		key, val, _ := strings.Cut(f.Value, f.Op.String())
 		switch {
 		case noKey(f.Value): // =x, or = v with no key before it
 			spaced = append(spaced, f.Value)
 			if loneOp(f.Value) && valueNext(fields, i) {
 				i++
 			}
-		case f.Op != OpNone && f.Op != OpEq:
-			k, v, _ := strings.Cut(f.Value, f.Op.String())
-			bad = append(bad, &OpOptionError{Directive: name, Key: k, Value: v, Op: f.Op})
-		case ok:
+		case f.Op == OpEq:
 			rep.add(opts.put(key, val))
+		case f.Op != OpNone:
+			bad = append(bad, &OpOptionError{Directive: name, Key: key, Value: val, Op: f.Op})
 		case bareIsTrue:
-			rep.add(opts.put(key, "true"))
+			rep.add(opts.put(f.Value, "true"))
 		}
 	}
 	err := rep.err(name)
@@ -493,7 +492,7 @@ func ParseProfileHeader(name Name, rest string) (ProfileHeader, bool, error) {
 		head.Scope = scope
 		i++
 	}
-	if i < len(fields) && !strings.Contains(fields[i].Value, "=") {
+	if i < len(fields) && fields[i].Positional() {
 		head.Name = strings.TrimSpace(fields[i].Value)
 		i++
 	}
@@ -564,6 +563,12 @@ func (s FieldSpan) ValueStart() int {
 type Field struct {
 	FieldSpan
 	Value string
+}
+
+// Positional reports whether f is a plain value. Fields starting with an
+// operator (such as =x) are invalid options and return false.
+func (f Field) Positional() bool {
+	return f.Op == OpNone && !noKey(f.Value)
 }
 
 // ScanFields yields the values returned by Fields with their source byte offsets.

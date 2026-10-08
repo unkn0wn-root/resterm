@@ -94,6 +94,16 @@ func TestParseOptions(t *testing.T) {
 			input: `path=trailing\`,
 			want:  map[string]string{"path": `trailing\`},
 		},
+		{
+			name:  "a quoted option is a bare key",
+			input: `"timeout=1s" path="a=b"`,
+			want:  map[string]string{"timeout=1s": "true", "path": "a=b"},
+		},
+		{
+			name:  "a comparison is a bare key",
+			input: `last==200`,
+			want:  map[string]string{"last==200": "true"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -115,12 +125,11 @@ func TestParseOptions(t *testing.T) {
 	}
 }
 
-// A bare key is true for ParseOptions but is dropped here.
 func TestOptionFields(t *testing.T) {
 	t.Parallel()
 
 	got, err := OptionFields(Auth, slices.Collect(ScanFields(`a=1 bare "" " B = 2 "`)))
-	want := map[string]string{"a": "1", "b": "2"}
+	want := map[string]string{"a": "1"}
 	if !maps.Equal(got.vals, want) {
 		t.Fatalf("OptionFields() = %#v, want %#v", got, want)
 	}

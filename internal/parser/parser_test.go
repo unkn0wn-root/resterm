@@ -4264,8 +4264,6 @@ GET https://example.com/api
 	}
 }
 
-// Spaces around = or <= split a setting into fields that each read as an
-// unknown option. A known option written with <= read as unknown too.
 func TestParseTraceSettingWrittenWrong(t *testing.T) {
 	spaced := `@trace option %q has spaces around =. Write it as key=value`
 	for _, tt := range []struct {
@@ -4291,6 +4289,9 @@ func TestParseTraceSettingWrittenWrong(t *testing.T) {
 		{rest: "enabled = false", err: fmt.Sprintf(spaced, "enabled")},
 		{rest: "= 300ms", warn: `unknown @trace options "=", "300ms"`},
 		{rest: `dns <= "a=b"`, err: fmt.Sprintf(spaced, "dns")},
+		{rest: `"total=1s"`, warn: `unknown @trace option "total=1s"`},
+		{rest: `"dns"<=50ms`, warn: `unknown @trace option "dns<=50ms"`},
+		{rest: "dns==50ms", warn: `unknown @trace option "dns==50ms"`},
 	} {
 		doc := Parse("trace.http", []byte("# @trace "+tt.rest+" connect<=120ms\nGET https://example.com\n"))
 		var errs, warns []string
@@ -4308,6 +4309,14 @@ func TestParseTraceSettingWrittenWrong(t *testing.T) {
 			!maps.Equal(b.Phases, map[string]time.Duration{"connect": 120 * time.Millisecond}) {
 			t.Fatalf("%s: trace = %+v, want enabled with only connect", tt.rest, tr)
 		}
+	}
+}
+
+func TestParseTraceQuotedValues(t *testing.T) {
+	doc := Parse("trace.http", []byte("# @trace total<=\"400ms\" tolerance=\"25ms\"\nGET https://example.com\n"))
+	b := doc.Requests[0].Metadata.Trace.Budgets
+	if len(doc.Errors)+len(doc.Warnings) != 0 || b.Total != 400*time.Millisecond || b.Tolerance != 25*time.Millisecond {
+		t.Fatalf("diagnostics = %v %v, budgets = %+v", doc.Errors, doc.Warnings, b)
 	}
 }
 

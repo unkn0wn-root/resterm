@@ -81,13 +81,23 @@ func TestParseBareWordDefinitionStaysLoud(t *testing.T) {
 func TestParseAuthNameReadsLikeOtherOptions(t *testing.T) {
 	for _, line := range []string{
 		`# @auth file command name=" gh" cmd=x`,
-		`# @auth file command "name=gh" cmd=x`,
 		`# @auth file command NAME=gh cmd=x`,
 	} {
 		doc := Parse("/ws/api.http", []byte(line+"\n"))
 		if len(doc.Errors) != 0 || len(doc.Auth) != 1 || doc.Auth[0].Name != "gh" {
 			t.Fatalf("%s: errors = %v, profiles = %+v, want gh", line, doc.Errors, doc.Auth)
 		}
+	}
+}
+
+func TestParseAuthQuotedOptionIsAValue(t *testing.T) {
+	doc := Parse("/ws/api.http", []byte(`# @auth file command "name=gh" cmd=x`+"\n"))
+	want := `@auth expects key=value options but got "name=gh". Quote a value that has spaces`
+	if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+		t.Fatalf("errors = %v, want %q", doc.Errors, want)
+	}
+	if len(doc.Auth) != 1 || doc.Auth[0].Name != "" || doc.Auth[0].Spec.Rejected == "" {
+		t.Fatalf("profiles = %+v, want an unnamed rejected profile", doc.Auth)
 	}
 }
 

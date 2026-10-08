@@ -183,7 +183,7 @@ func parseScriptSpec(rest string) (scriptKind, scriptLang, error) {
 	kind := scriptKind("")
 	lang := scriptLang("")
 	for _, field := range fields {
-		if strings.Contains(field.Value, "=") {
+		if !field.Positional() {
 			continue
 		}
 		if kind == "" {
@@ -210,7 +210,7 @@ func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
 	kindSet := false
 
 	for _, field := range fields {
-		if strings.Contains(field.Value, "=") {
+		if !field.Positional() {
 			continue
 		}
 		if lang, ok := scriptLangToken(field.Value); ok {
