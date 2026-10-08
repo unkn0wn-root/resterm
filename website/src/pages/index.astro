@@ -60,7 +60,7 @@ const hints: [string, string][] = [
 
   <section class="band">
     <RunDemo>
-      <header class="sec">
+      <header class="sec demo-intro">
         <h2>
           <span class="sep" aria-hidden="true">
             ###
@@ -68,10 +68,14 @@ const hints: [string, string][] = [
           Requests are plain text
         </h2>
         <p>
-          Requests, mocks, workflows, environments: almost everything in Resterm is a file in your repo. Use any editor,
-          or Resterm's TUI if you want autocomplete. Changes show up in <code>git diff</code> like any other code. Here{' '}
-          <code>requests.http</code> holds both the mocks and the requests. Start the mocks with{' '}
-          <code>resterm mock</code>, then send the requests with <code>resterm run</code>. No real backend needed.
+          Requests, mocks, workflows, environments: almost everything in Resterm is a file in your repo. Use your usual
+          editor, or Resterm's terminal UI if you want autocomplete. Changes show up in <code>git diff</code>
+          just like any other code.
+        </p>
+        <p>
+          This example keeps requests and mock responses in <code>requests.http</code>. Start the mock server with{' '}
+          <code>resterm mock</code>, then send the requests with <code>resterm run</code>. The requests check response
+          values and loop over three user names.
         </p>
       </header>
     </RunDemo>
@@ -262,6 +266,21 @@ const hints: [string, string][] = [
     font-size: clamp(1.25rem, 2.4vw, 1.6rem);
     font-weight: 600;
     color: var(--fg-strong);
+  }
+
+  .demo-intro {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    max-width: none;
+  }
+
+  .demo-intro h2 {
+    grid-column: 1 / -1;
+  }
+
+  .demo-intro code {
+    white-space: nowrap;
   }
 
   .sep {
