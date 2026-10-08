@@ -20,6 +20,21 @@ func newOptions(size int) Options {
 	return Options{vals: make(map[string]string, size), clash: map[string][]string{}}
 }
 
+// All writes go through put. Lookups assume keys are lowercase.
+func (o Options) put(key, val string) (repeated string) {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if key == "" {
+		return ""
+	}
+	_, seen := o.vals[key]
+	// Values are already decoded. Keep any quotes that belong to the value itself.
+	o.vals[key] = strings.TrimSpace(val)
+	if !seen {
+		return ""
+	}
+	return key
+}
+
 func (o Options) Len() int {
 	return len(o.vals)
 }
@@ -46,9 +61,139 @@ func (o Options) CopyTo(dst map[string]string) {
 	maps.Copy(dst, o.vals)
 }
 
-// Option names are lowercased, and a bare name means true.
-// Quotes and bracketed values may contain spaces.
-// Repeated options are reported as errors.
+func (o Options) Get(key string) string {
+	return o.vals[key]
+}
+
+// First returns the first non-empty value in key order.
+func (o Options) First(keys ...string) (string, bool) {
+	o.given(keys)
+	for _, key := range keys {
+		if val := o.Get(key); val != "" {
+			return val, true
+		}
+	}
+	return "", false
+}
+
+func (o Options) Aliases(keys ...string) {
+	o.given(keys)
+}
+
+func (o Options) Pop(key string) string {
+	val := o.vals[key]
+	delete(o.vals, key)
+	return val
+}
+
+// PopAny removes all aliases and returns the first non-empty value.
+// Removing unused aliases prevents false unknown-option errors.
+func (o Options) PopAny(keys ...string) (string, bool) {
+	_, val, ok := o.PopKey(keys...)
+	return val, ok
+}
+
+// PopKey removes all aliases and returns the first with a non-empty value.
+// The key identifies the alias to use in diagnostics.
+func (o Options) PopKey(keys ...string) (string, string, bool) {
+	var outKey, outVal string
+	for _, key := range o.given(keys) {
+		if val := o.vals[key]; outKey == "" && val != "" {
+			outKey, outVal = key, val
+		}
+		delete(o.vals, key)
+	}
+	return outKey, outVal, outKey != ""
+}
+
+// PopBool removes the aliases and reads the first as a boolean. An empty value
+// means true; an invalid value is returned in bad for the caller to report.
+func (o Options) PopBool(keys ...string) (val, ok bool, bad string) {
+	var (
+		found bool
+		raw   string
+	)
+	for _, key := range o.present(keys) {
+		if !found {
+			found, raw = true, o.vals[key]
+		}
+		delete(o.vals, key)
+	}
+	if found {
+		if raw == "" {
+			return true, true, ""
+		}
+		if parsed, valid := ParseBool(raw); valid {
+			return parsed, true, ""
+		}
+		return true, true, raw
+	}
+	return false, false, ""
+}
+
+func (o Options) Unknown(name Name) error {
+	return UnknownOption(name, o.Keys()...)
+}
+
+// Leftover reports alias conflicts and unconsumed options.
+func (o Options) Leftover(name Name) error {
+	return errors.Join(o.Conflicts(name), o.Unknown(name))
+}
+
+func (o Options) Conflicts(name Name) error {
+	if len(o.clash) == 0 {
+		return nil
+	}
+	var errs []error
+	for _, group := range slices.Sorted(maps.Keys(o.clash)) {
+		errs = append(errs, &AliasConflictError{Directive: name, Keys: o.clash[group]})
+	}
+	return errors.Join(errs...)
+}
+
+func (o Options) given(keys []string) []string {
+	var (
+		written []string
+		set     []string
+	)
+	for _, key := range keys {
+		val, ok := o.vals[key]
+		if !ok {
+			continue
+		}
+		written = append(written, key)
+		if val != "" {
+			set = append(set, key)
+		}
+	}
+	o.noteClash(set)
+	return written
+}
+
+// Empty boolean values still enable the switch, so every supplied alias
+// counts when checking for conflicts.
+func (o Options) present(keys []string) []string {
+	var written []string
+	for _, key := range keys {
+		if o.Has(key) {
+			written = append(written, key)
+		}
+	}
+	o.noteClash(written)
+	return written
+}
+
+func (o Options) noteClash(keys []string) {
+	if len(keys) < 2 {
+		return
+	}
+	set := slices.Clone(keys)
+	slices.Sort(set)
+	o.clash[strings.Join(set, " ")] = set
+}
+
+// ParseOptions reads key=value options and treats bare keys as true.
+// Keys are lowercased; duplicate keys return an error.
 func ParseOptions(name Name, input string) (Options, error) {
 	return parseOptions(name, slices.Collect(scanFields(input, true)))
 }
@@ -63,11 +208,76 @@ func FieldsOpen(input string) rune {
 	return (&lexer{src: input}).open()
 }
 
-// OptionFields is for callers that already separated the input with
-// ScanFields. It only keeps key=value pairs, unlike ParseOptions where a bare
-// key means true.
+// OptionFields collects key=value options from fields returned by ScanFields.
+// Bare keys are ignored.
 func OptionFields(name Name, fields []Field) (Options, error) {
 	return collectOptions(name, fields, false)
+}
+
+// Every option is visited even after one fails, so a line with two mistakes
+// reports both.
+func ApplyOptions(name Name, raw string, aliases [][]string, apply func(key, val string) error) error {
+	opts, err := ParseOptions(name, raw)
+	errs := []error{err}
+	for _, group := range aliases {
+		opts.Aliases(group...)
+	}
+	for _, key := range opts.Keys() {
+		errs = append(errs, apply(key, opts.Get(key)))
+	}
+	return errors.Join(append(errs, opts.Conflicts(name))...)
+}
+
+// ProfileHeader holds [scope] [name] followed by options.
+// A leading option means the name was omitted.
+type ProfileHeader struct {
+	Scope   Scope
+	Name    string
+	Options Options
+}
+
+func ParseProfileHeader(name Name, rest string) (ProfileHeader, bool, error) {
+	fields := slices.Collect(scanFields(rest, true))
+	if len(fields) == 0 {
+		return ProfileHeader{}, false, nil
+	}
+
+	i := 0
+	head := ProfileHeader{Scope: ScopeRequest}
+	if scope, ok := ParseScope(fields[i].Value); ok {
+		head.Scope = scope
+		i++
+	}
+	if i < len(fields) && fields[i].Positional() {
+		head.Name = strings.TrimSpace(fields[i].Value)
+		i++
+	}
+	opts, err := parseOptions(name, fields[i:])
+	head.Options = opts
+	return head, true, err
+}
+
+// ParseNameValue accepts a name and value separated by whitespace, : or =.
+func ParseNameValue(input string) (string, string) {
+	tr := strings.TrimSpace(input)
+	end := strings.IndexFunc(tr, func(r rune) bool { return !IsKeyRune(r) })
+	if end == 0 {
+		return "", ""
+	}
+	if end < 0 {
+		return tr, ""
+	}
+
+	sep := tr[end:]
+	val := strings.TrimLeft(sep, " \t")
+	switch {
+	case strings.HasPrefix(val, ":"), strings.HasPrefix(val, "="):
+		val = val[1:]
+	case len(val) == len(sep):
+		// No whitespace or separator: the name contains an invalid character.
+		return "", ""
+	}
+	return tr[:end], strings.TrimSpace(val)
 }
 
 func parseOptions(name Name, fields []Field) (Options, error) {
@@ -93,7 +303,7 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 		switch {
 		case noKey(f.Value): // =x, or = v with no key before it
 			spaced = append(spaced, f.Value)
-			if loneOp(f.Value) && valueNext(fields, i) {
+			if isOp(f.Value) && valueNext(fields, i) {
 				i++
 			}
 		case f.Op == OpEq:
@@ -115,8 +325,8 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 // spaces around its operator, or ("", 0) if fields[i] is not one.
 func SpacedOption(fields []Field, i int) (string, int) {
 	f := fields[i]
-	if SpacedKey(fields, i) { // k = v, k =v
-		if loneOp(fields[i+1].Value) && valueNext(fields, i+1) {
+	if SpacedKey(fields, i) {
+		if isOp(fields[i+1].Value) && valueNext(fields, i+1) {
 			return f.Value, 3
 		}
 		return f.Value, 2
@@ -129,7 +339,14 @@ func SpacedOption(fields []Field, i int) (string, int) {
 	return "", 0
 }
 
-func loneOp(field string) bool {
+// SpacedKey reports whether spaces split a key from its operator (k = v or k =v).
+func SpacedKey(fields []Field, i int) bool {
+	key := fields[i].Value
+	return !slices.ContainsFunc(ops, func(op Op) bool { return strings.Contains(key, op.String()) }) &&
+		strings.TrimSpace(key) != "" && i+1 < len(fields) && noKey(fields[i+1].Value)
+}
+
+func isOp(field string) bool {
 	return slices.ContainsFunc(ops, func(op Op) bool { return field == op.String() })
 }
 
@@ -138,183 +355,9 @@ func noKey(field string) bool {
 	return slices.ContainsFunc(ops, func(op Op) bool { return strings.HasPrefix(field, op.String()) })
 }
 
-// SpacedKey reports whether field i is a key whose operator was split off by a
-// space, as in k = v or k =v.
-func SpacedKey(fields []Field, i int) bool {
-	key := fields[i].Value
-	return !slices.ContainsFunc(ops, func(op Op) bool { return strings.Contains(key, op.String()) }) &&
-		strings.TrimSpace(key) != "" && i+1 < len(fields) && noKey(fields[i+1].Value)
-}
-
 // A quoted "a=b" can be a value; an unquoted a=b starts another option.
 func valueNext(fields []Field, i int) bool {
 	return i+1 < len(fields) && fields[i+1].Op == OpNone
-}
-
-// Every option is visited even after one fails, so a line with two mistakes
-// reports both.
-func ApplyOptions(name Name, raw string, aliases [][]string, apply func(key, val string) error) error {
-	opts, err := ParseOptions(name, raw)
-	errs := []error{err}
-	for _, group := range aliases {
-		opts.Aliases(group...)
-	}
-	for _, key := range opts.Keys() {
-		errs = append(errs, apply(key, opts.Get(key)))
-	}
-	return errors.Join(append(errs, opts.Conflicts(name))...)
-}
-
-// The only writer, so every stored key is lowercase and every value trimmed.
-// Readers below rely on that.
-func (o Options) put(key, val string) (repeated string) {
-	key = strings.ToLower(strings.TrimSpace(key))
-	if key == "" {
-		return ""
-	}
-	_, seen := o.vals[key]
-	// The lexer already took the quotes off. Stripping again would eat a layer
-	// from a value that is itself a quoted string.
-	o.vals[key] = strings.TrimSpace(val)
-	if !seen {
-		return ""
-	}
-	return key
-}
-
-type repeats []string
-
-func (r *repeats) add(key string) {
-	if key != "" && !slices.Contains(*r, key) {
-		*r = append(*r, key)
-	}
-}
-
-func (r *repeats) err(name Name) error {
-	slices.Sort(*r)
-	return RepeatedOption(name, *r...)
-}
-
-func (o Options) Get(key string) string {
-	return o.vals[key]
-}
-
-// First returns the value of the first key that carries one. Keys present with
-// an empty value are skipped so aliases can be listed in preference order.
-func (o Options) First(keys ...string) (string, bool) {
-	o.given(keys)
-	for _, key := range keys {
-		if val := o.Get(key); val != "" {
-			return val, true
-		}
-	}
-	return "", false
-}
-
-func (o Options) Aliases(keys ...string) {
-	o.given(keys)
-}
-
-func (o Options) Pop(key string) string {
-	val := o.vals[key]
-	delete(o.vals, key)
-	return val
-}
-
-// Drops every alias, not just the one it returns. Otherwise the losing spelling
-// looks like an unknown option later.
-func (o Options) PopAny(keys ...string) (string, bool) {
-	_, val, ok := o.PopKey(keys...)
-	return val, ok
-}
-
-// Reports which spelling matched, for errors that should name what the file used.
-func (o Options) PopKey(keys ...string) (string, string, bool) {
-	var outKey, outVal string
-	for _, key := range o.given(keys) {
-		if val := o.vals[key]; outKey == "" && val != "" {
-			outKey, outVal = key, val
-		}
-		delete(o.vals, key)
-	}
-	return outKey, outVal, outKey != ""
-}
-
-func (o Options) given(keys []string) []string {
-	var (
-		written []string
-		set     []string
-	)
-	for _, key := range keys {
-		val, ok := o.vals[key]
-		if !ok {
-			continue
-		}
-		written = append(written, key)
-		if val != "" {
-			set = append(set, key)
-		}
-	}
-	o.noteClash(set)
-	return written
-}
-
-// Boolean aliases conflict whenever more than one spelling is present. An empty
-// value still enables a switch, so it cannot be ignored in favor of another
-// alias with an explicit value.
-func (o Options) present(keys []string) []string {
-	var written []string
-	for _, key := range keys {
-		if o.Has(key) {
-			written = append(written, key)
-		}
-	}
-	o.noteClash(written)
-	return written
-}
-
-func (o Options) noteClash(keys []string) {
-	if len(keys) < 2 {
-		return
-	}
-	set := slices.Clone(keys)
-	slices.Sort(set)
-	o.clash[strings.Join(set, " ")] = set
-}
-
-// A present boolean option defaults to true. Only a recognized false value
-// disables it, which keeps flag-style options such as "persist" working.
-// bad holds the raw text when it is not a boolean at all, so a typo gets
-// reported instead of quietly switching the option on.
-func (o Options) PopBool(keys ...string) (val, ok bool, bad string) {
-	var (
-		found bool
-		raw   string
-	)
-	for _, key := range o.present(keys) {
-		if !found {
-			found, raw = true, o.vals[key]
-		}
-		delete(o.vals, key)
-	}
-	if found {
-		if raw == "" {
-			return true, true, ""
-		}
-		if parsed, valid := ParseBool(raw); valid {
-			return parsed, true, ""
-		}
-		return true, true, raw
-	}
-	return false, false, ""
-}
-
-func quoteKeys(keys []string) string {
-	quoted := make([]string, len(keys))
-	for i, key := range keys {
-		quoted[i] = strconv.Quote(key)
-	}
-	return strings.Join(quoted, ", ")
 }
 
 // Parsers report this as a warning. A typo should not throw away the rest of
@@ -329,6 +372,13 @@ func (e *UnknownOptionsError) Error() string {
 		return fmt.Sprintf("unknown %s option %s", e.Directive.Tag(), quoteKeys(e.Keys))
 	}
 	return fmt.Sprintf("unknown %s options %s", e.Directive.Tag(), quoteKeys(e.Keys))
+}
+
+func UnknownOption(name Name, keys ...string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	return &UnknownOptionsError{Directive: name, Keys: keys}
 }
 
 // SpacedOptionsError reports options written with spaces around =. Keys holds
@@ -371,13 +421,6 @@ func (e *OpOptionError) Error() string {
 	)
 }
 
-func UnknownOption(name Name, keys ...string) error {
-	if len(keys) == 0 {
-		return nil
-	}
-	return &UnknownOptionsError{Directive: name, Keys: keys}
-}
-
 type RepeatedOptionsError struct {
 	Directive Name
 	Keys      []string
@@ -390,6 +433,13 @@ func (e *RepeatedOptionsError) Error() string {
 	return fmt.Sprintf("%s options %s are repeated", e.Directive.Tag(), quoteKeys(e.Keys))
 }
 
+func RepeatedOption(name Name, keys ...string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	return &RepeatedOptionsError{Directive: name, Keys: keys}
+}
+
 // RepeatedNames checks directives that use custom option syntax.
 func RepeatedNames(name Name, names []string) error {
 	opts := newOptions(len(names))
@@ -400,22 +450,17 @@ func RepeatedNames(name Name, names []string) error {
 	return rep.err(name)
 }
 
-func RepeatedOption(name Name, keys ...string) error {
-	if len(keys) == 0 {
-		return nil
+type repeats []string
+
+func (r *repeats) add(key string) {
+	if key != "" && !slices.Contains(*r, key) {
+		*r = append(*r, key)
 	}
-	return &RepeatedOptionsError{Directive: name, Keys: keys}
 }
 
-// Whatever is left after the caller popped every key it knows about.
-func (o Options) Unknown(name Name) error {
-	return UnknownOption(name, o.Keys()...)
-}
-
-// What is left for a caller that popped every option it knows: aliases of one
-// option given together, and options nobody claimed.
-func (o Options) Leftover(name Name) error {
-	return errors.Join(o.Conflicts(name), o.Unknown(name))
+func (r *repeats) err(name Name) error {
+	slices.Sort(*r)
+	return RepeatedOption(name, *r...)
 }
 
 type AliasConflictError struct {
@@ -461,172 +506,10 @@ func OptionKeys(err error) []string {
 	}
 }
 
-func (o Options) Conflicts(name Name) error {
-	if len(o.clash) == 0 {
-		return nil
+func quoteKeys(keys []string) string {
+	quoted := make([]string, len(keys))
+	for i, key := range keys {
+		quoted[i] = strconv.Quote(key)
 	}
-	var errs []error
-	for _, group := range slices.Sorted(maps.Keys(o.clash)) {
-		errs = append(errs, &AliasConflictError{Directive: name, Keys: o.clash[group]})
-	}
-	return errors.Join(errs...)
-}
-
-// Profile headers use [scope] [name] followed by options. A leading option
-// means the name was omitted.
-type ProfileHeader struct {
-	Scope   Scope
-	Name    string
-	Options Options
-}
-
-func ParseProfileHeader(name Name, rest string) (ProfileHeader, bool, error) {
-	fields := slices.Collect(scanFields(rest, true))
-	if len(fields) == 0 {
-		return ProfileHeader{}, false, nil
-	}
-
-	i := 0
-	head := ProfileHeader{Scope: ScopeRequest}
-	if scope, ok := ParseScope(fields[i].Value); ok {
-		head.Scope = scope
-		i++
-	}
-	if i < len(fields) && fields[i].Positional() {
-		head.Name = strings.TrimSpace(fields[i].Value)
-		i++
-	}
-	opts, err := parseOptions(name, fields[i:])
-	head.Options = opts
-	return head, true, err
-}
-
-// A name and value may be separated by whitespace, a colon, or an equals sign.
-func ParseNameValue(input string) (string, string) {
-	tr := strings.TrimSpace(input)
-	end := strings.IndexFunc(tr, func(r rune) bool { return !IsKeyRune(r) })
-	if end == 0 {
-		return "", ""
-	}
-	if end < 0 {
-		return tr, ""
-	}
-
-	sep := tr[end:]
-	val := strings.TrimLeft(sep, " \t")
-	switch {
-	case strings.HasPrefix(val, ":"), strings.HasPrefix(val, "="):
-		val = val[1:]
-	case len(val) == len(sep):
-		// Neither whitespace nor a separator followed the name, so the name
-		// itself holds a character that cannot appear in one.
-		return "", ""
-	}
-	return tr[:end], strings.TrimSpace(val)
-}
-
-// Op is the operator between an option's name and its value.
-type Op uint8
-
-const (
-	OpNone Op = iota // positional field
-	OpEq             // key=value
-	OpLe             // key<=value (@trace budget)
-)
-
-// Match longer operators first when one is a prefix of another.
-var ops = []Op{OpLe, OpEq}
-
-func (o Op) String() string {
-	switch o {
-	case OpEq:
-		return "="
-	case OpLe:
-		return "<="
-	}
-	return ""
-}
-
-// FieldSpan locates a field in the source. All offsets are in bytes.
-// At marks the operator and is only meaningful when Op != OpNone.
-type FieldSpan struct {
-	Start, End int
-	Op         Op
-	At         int
-}
-
-func (s FieldSpan) ValueStart() int {
-	return s.At + len(s.Op.String())
-}
-
-// Field pairs a decoded option field with its byte offsets in the source.
-type Field struct {
-	FieldSpan
-	Value string
-}
-
-// Positional reports whether f is a plain value. Fields starting with an
-// operator (such as =x) are invalid options and return false.
-func (f Field) Positional() bool {
-	return f.Op == OpNone && !noKey(f.Value)
-}
-
-// ScanFields yields the values returned by Fields with their source byte offsets.
-// It accepts incomplete quotes, JSON, and calls, and preserves bare backslashes.
-func ScanFields(input string) iter.Seq[Field] {
-	return scanFields(input, false)
-}
-
-func scanFields(input string, escapes bool) iter.Seq[Field] {
-	return func(yield func(Field) bool) {
-		lex := &lexer{src: input, escapes: escapes}
-		for {
-			tok, ok := lex.next()
-			if !ok {
-				return
-			}
-			raw := input[tok.start:tok.end]
-			span := FieldSpan{Start: tok.start, End: tok.end}
-			if op, at := scanOp(raw); op != OpNone {
-				span.Op, span.At = op, tok.start+at
-			}
-			if !yield(Field{FieldSpan: span, Value: tok.val}) {
-				return
-			}
-		}
-	}
-}
-
-// FieldSpans reports where each field sits, scanning the way ParseOptions does,
-// so a span never splits a quoted or bracketed value.
-func FieldSpans(input string) []FieldSpan {
-	var spans []FieldSpan
-	for field := range scanFields(input, true) {
-		spans = append(spans, field.FieldSpan)
-	}
-	return spans
-}
-
-// Read the raw field: "a=b" and a=b decode to the same text, but only a=b
-// is an option. A quoted key or a comparison such as a==b has no option operator.
-func scanOp(raw string) (Op, int) {
-	i := strings.IndexFunc(raw, func(r rune) bool { return !IsKeyRune(r) })
-	if i <= 0 {
-		return OpNone, 0
-	}
-	for _, op := range ops {
-		if !strings.HasPrefix(raw[i:], op.String()) {
-			continue
-		}
-		if op == OpEq && strings.HasPrefix(raw[i+1:], "=") {
-			return OpNone, 0
-		}
-		return op, i
-	}
-	return OpNone, 0
-}
-
-func isOption(raw string) bool {
-	op, _ := scanOp(raw)
-	return op == OpEq
+	return strings.Join(quoted, ", ")
 }
