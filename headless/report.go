@@ -87,20 +87,9 @@ type Report struct {
 	Warnings []string
 }
 
-// HasFailures reports whether the report contains any failed results.
+// HasFailures reports whether the report failed, which is when ExitCode is not 0.
 func (r *Report) HasFailures() bool {
-	if r == nil {
-		return false
-	}
-	if r.Failed > 0 {
-		return true
-	}
-	for _, res := range r.Results {
-		if res.Failed() {
-			return true
-		}
-	}
-	return false
+	return r.ExitCode(ExitCodeSummary) != ExitPass
 }
 
 // MarshalJSON writes the canonical report JSON format.
@@ -139,7 +128,7 @@ func (r Result) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.model())
 }
 
-// Failed reports whether the result represents a failure.
+// Failed reports whether the result failed. A failed step, profile run or stream counts too.
 func (r Result) Failed() bool {
 	return r.outcome().effectiveStatus() == StatusFail
 }
@@ -152,8 +141,11 @@ func (r Result) outcome() outcome {
 		err:       r.Error,
 		scriptErr: r.ScriptError,
 		failure:   r.Failure,
+		stream:    r.Stream,
 		trace:     r.Trace,
 		tests:     r.Tests,
+		profile:   r.Profile,
+		steps:     r.Steps,
 	}
 }
 
@@ -200,11 +192,13 @@ func (s Step) outcome() outcome {
 		err:       s.Error,
 		scriptErr: s.ScriptError,
 		failure:   s.Failure,
+		stream:    s.Stream,
 		trace:     s.Trace,
 		tests:     s.Tests,
 	}
 }
 
+// outcome applies the runner's failure rules from internal/runner/failure.go.
 type outcome struct {
 	status    Status
 	summary   string
@@ -212,8 +206,11 @@ type outcome struct {
 	err       string
 	scriptErr string
 	failure   *Failure
+	stream    *Stream
 	trace     *Trace
 	tests     []Test
+	profile   *Profile
+	steps     []Step
 }
 
 // skip wins, otherwise any failure evidence makes the result fail.
@@ -222,11 +219,37 @@ func (o outcome) effectiveStatus() Status {
 		return StatusSkip
 	}
 	failed := o.failure != nil || o.canceled || o.err != "" || o.scriptErr != "" ||
-		traceFailed(o.trace) || anyTestFailed(o.tests)
+		streamFailed(o.stream) || anyTestFailed(o.tests) || traceFailed(o.trace) ||
+		measuredFailure(o.profile) != nil || failedStep(o.steps) != nil
 	if o.status == StatusFail || failed {
 		return StatusFail
 	}
 	return StatusPass
+}
+
+func streamFailed(stream *Stream) bool {
+	return stream != nil && stream.Error != ""
+}
+
+func measuredFailure(prof *Profile) *Failure {
+	if prof == nil {
+		return nil
+	}
+	for _, f := range prof.Failures {
+		if !f.Warmup && f.Failure != nil {
+			return f.Failure
+		}
+	}
+	return nil
+}
+
+func failedStep(steps []Step) *Step {
+	for i := range steps {
+		if steps[i].Failed() {
+			return &steps[i]
+		}
+	}
+	return nil
 }
 
 func traceFailed(trace *Trace) bool {

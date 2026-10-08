@@ -297,6 +297,8 @@ func (o outcome) failureModel() *runfmt.Failure {
 		f = runfail.FromErrorSource(textError(o.err), "error")
 	case o.scriptErr != "":
 		f = runfail.Script(o.scriptErr, "scriptError")
+	case streamFailed(o.stream):
+		f = runfail.FromErrorSource(textError(o.stream.Error), "stream")
 	case anyTestFailed(o.tests):
 		msg := runfail.FirstTestFailureMessage(o.tests, func(t Test) runfail.TestFailureFields {
 			return runfail.TestFailureFields{Name: t.Name, Message: t.Message, Passed: t.Passed}
@@ -309,6 +311,12 @@ func (o outcome) failureModel() *runfmt.Failure {
 		)
 		f = runfail.TraceBudget(msg)
 	default:
+		if mf := measuredFailure(o.profile); mf != nil {
+			return mf.model()
+		}
+		if st := failedStep(o.steps); st != nil {
+			return st.outcome().failureModel()
+		}
 		f = runfail.Assertion(o.summary, "status")
 	}
 	return runfmt.FromFailure(f)

@@ -95,8 +95,7 @@ func (r *Report) ExitCode(mode ExitCodeMode) int {
 	if r == nil {
 		return ExitPass
 	}
-	rep := r.model()
-	return runfail.ExitCode(rep.Failures(), r.HasFailures(), runfail.ExitMode(mode))
+	return r.model().ExitCode(runfail.ExitMode(mode))
 }
 
 // FailureCodes returns the unique failure codes present in the report.

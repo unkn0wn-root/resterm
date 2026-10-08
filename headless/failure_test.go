@@ -1,6 +1,8 @@
 package headless
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
@@ -57,5 +59,99 @@ func TestFailureConstantsMatchInternalValues(t *testing.T) {
 		if string(tc.public) != string(tc.internal) {
 			t.Fatalf("%s = %q, want %q", tc.name, tc.public, tc.internal)
 		}
+	}
+}
+
+func TestResultFailsLikeTheRunner(t *testing.T) {
+	cases := []struct {
+		name string
+		res  Result
+		code FailureCode
+		exit int
+	}{
+		{
+			name: "failed step",
+			res: Result{Kind: KindWorkflow, Status: StatusPass, Steps: []Step{
+				{Name: "a", Status: StatusPass},
+				{Name: "b", Status: StatusPass, Failure: &Failure{Code: FailureTimeout, Message: "slow"}},
+			}},
+			code: FailureTimeout,
+			exit: ExitTimeout,
+		},
+		{
+			name: "measured profile failure",
+			res: Result{Kind: KindProfile, Status: StatusPass, Profile: &Profile{Failures: []ProfileFailure{
+				{Iteration: 1, Warmup: true, Failure: &Failure{Code: FailureNetwork}},
+				{Iteration: 2, Failure: &Failure{Code: FailureTimeout}},
+			}}},
+			code: FailureTimeout,
+			exit: ExitTimeout,
+		},
+		{
+			name: "stream error",
+			res:  Result{Kind: KindRequest, Status: StatusPass, Stream: &Stream{Error: "context deadline exceeded"}},
+			code: FailureTimeout,
+			exit: ExitTimeout,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := &Report{Results: []Result{tc.res}}
+			if !tc.res.Failed() || !rep.HasFailures() {
+				t.Fatalf("Failed() = %v, HasFailures() = %v, want both true", tc.res.Failed(), rep.HasFailures())
+			}
+			if got := rep.ExitCode(ExitCodeSummary); got != ExitFailure {
+				t.Fatalf("summary exit = %d, want %d", got, ExitFailure)
+			}
+			if got := rep.ExitCode(ExitCodeDetailed); got != tc.exit {
+				t.Fatalf("detailed exit = %d, want %d", got, tc.exit)
+			}
+			if got := rep.FailureCodes(); !reflect.DeepEqual(got, []FailureCode{tc.code}) {
+				t.Fatalf("FailureCodes() = %v, want [%s]", got, tc.code)
+			}
+			b, err := json.Marshal(tc.res)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			var got struct {
+				Status  string `json:"status"`
+				Failure struct {
+					Code FailureCode `json:"code"`
+				} `json:"failure"`
+			}
+			if err := json.Unmarshal(b, &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if got.Status != "fail" || got.Failure.Code != tc.code {
+				t.Fatalf("json status = %q failure = %q, want fail and %s", got.Status, got.Failure.Code, tc.code)
+			}
+		})
+	}
+}
+
+func TestWarmupProfileFailureDoesNotFailResult(t *testing.T) {
+	res := Result{Kind: KindProfile, Status: StatusPass, Profile: &Profile{Failures: []ProfileFailure{
+		{Iteration: 1, Warmup: true, Failure: &Failure{Code: FailureNetwork}},
+	}}}
+	rep := &Report{Results: []Result{res}}
+	if res.Failed() || rep.HasFailures() {
+		t.Fatalf("Failed() = %v, HasFailures() = %v, want both false", res.Failed(), rep.HasFailures())
+	}
+	if d, s := rep.ExitCode(ExitCodeDetailed), rep.ExitCode(ExitCodeSummary); d != ExitPass || s != ExitPass {
+		t.Fatalf("exit detailed = %d summary = %d, want 0 and 0", d, s)
+	}
+}
+
+func TestHasFailuresMatchesExitCode(t *testing.T) {
+	rep := &Report{Results: []Result{{
+		Kind:   KindWorkflow,
+		Status: StatusSkip,
+		Steps:  []Step{{Name: "a", Status: StatusFail, Failure: &Failure{Code: FailureTimeout}}},
+	}}}
+	if !rep.HasFailures() {
+		t.Fatal("HasFailures() = false for a report holding a failed step")
+	}
+	if d, s := rep.ExitCode(ExitCodeDetailed), rep.ExitCode(ExitCodeSummary); d != ExitTimeout || s != ExitFailure {
+		t.Fatalf("exit detailed = %d summary = %d, want %d and %d", d, s, ExitTimeout, ExitFailure)
 	}
 }
