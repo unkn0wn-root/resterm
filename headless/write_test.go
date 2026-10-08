@@ -191,7 +191,7 @@ func TestEncodeInvalidFormat(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "unsupported format 99") {
+	if !strings.Contains(err.Error(), "headless: unknown format 99") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

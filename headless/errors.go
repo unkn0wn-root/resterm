@@ -30,6 +30,9 @@ var (
 
 	// ErrNilWriter reports an attempt to write to a nil writer.
 	ErrNilWriter = errors.New("headless: nil writer")
+
+	// ErrUnknownFormat reports a format other than JSON, JUnit or Text.
+	ErrUnknownFormat = errors.New("headless: unknown format")
 )
 
 func (e UsageError) Error() string {

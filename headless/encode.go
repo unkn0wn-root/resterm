@@ -1,7 +1,6 @@
 package headless
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
@@ -10,10 +9,10 @@ import (
 // Encode writes the report in the given format.
 func (r *Report) Encode(w io.Writer, f Format) error {
 	if r == nil {
-		return ErrNilReport
+		return UsageError{err: ErrNilReport}
 	}
 	if w == nil {
-		return ErrNilWriter
+		return UsageError{err: ErrNilWriter}
 	}
 
 	rep := r.model()
@@ -25,7 +24,7 @@ func (r *Report) Encode(w io.Writer, f Format) error {
 	case Text:
 		return runfmt.WriteText(w, &rep)
 	default:
-		return fmt.Errorf("headless: unsupported format %d", int(f))
+		return usageError("%w %d", ErrUnknownFormat, int(f))
 	}
 }
 

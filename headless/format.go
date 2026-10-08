@@ -36,6 +36,6 @@ func ParseFormat(s string) (Format, error) {
 	case Text.String():
 		return Text, nil
 	default:
-		return 0, fmt.Errorf("headless: unknown format %q", s)
+		return 0, usageError("%w %q", ErrUnknownFormat, s)
 	}
 }

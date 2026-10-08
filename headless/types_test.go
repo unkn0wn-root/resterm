@@ -1,7 +1,9 @@
 package headless
 
 import (
+	"context"
 	"errors"
+	"io"
 	"reflect"
 	"testing"
 	"time"
@@ -24,6 +26,30 @@ func TestIsUsageError(t *testing.T) {
 func TestUsageErrorZero(t *testing.T) {
 	if got := (UsageError{}).Error(); got != "usage error" {
 		t.Fatalf("zero UsageError error = %q, want %q", got, "usage error")
+	}
+}
+
+func TestBadArgumentsAreUsageErrors(t *testing.T) {
+	var ctx context.Context
+	cases := []struct {
+		name string
+		call func() error
+		want error
+	}{
+		{"Run nil context", func() error { _, err := Run(ctx, Options{}); return err }, ErrNilContext},
+		{"RunPlan nil context", func() error { _, err := RunPlan(ctx, Plan{}); return err }, ErrNilContext},
+		{"Encode nil report", func() error { return (*Report)(nil).Encode(io.Discard, JSON) }, ErrNilReport},
+		{"Encode nil writer", func() error { return (&Report{}).Encode(nil, JSON) }, ErrNilWriter},
+		{"Encode unknown format", func() error { return (&Report{}).Encode(io.Discard, Format(99)) }, ErrUnknownFormat},
+		{"ParseFormat unknown", func() error { _, err := ParseFormat("yaml"); return err }, ErrUnknownFormat},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call()
+			if !IsUsageError(err) || !errors.Is(err, tc.want) {
+				t.Fatalf("got %T %v, want a UsageError wrapping %v", err, err, tc.want)
+			}
+		})
 	}
 }
 
