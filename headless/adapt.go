@@ -196,9 +196,9 @@ func (r Result) model() runfmt.Result {
 		Failure:              o.failureModel(),
 		HTTP:                 (*runfmt.HTTP)(r.HTTP),
 		GRPC:                 (*runfmt.GRPC)(r.GRPC),
-		Stream:               (*runfmt.Stream)(r.Stream),
+		Stream:               r.Stream.model(),
 		Trace:                r.Trace.model(),
-		Tests:                convert(r.Tests, func(t Test) runfmt.Test { return runfmt.Test(t) }),
+		Tests:                convert(r.Tests, Test.model),
 		Compare:              (*runfmt.Compare)(r.Compare),
 		Profile:              r.Profile.model(),
 		Steps:                convert(r.Steps, Step.model),
@@ -229,9 +229,9 @@ func (s Step) model() runfmt.Step {
 		Failure:              o.failureModel(),
 		HTTP:                 (*runfmt.HTTP)(s.HTTP),
 		GRPC:                 (*runfmt.GRPC)(s.GRPC),
-		Stream:               (*runfmt.Stream)(s.Stream),
+		Stream:               s.Stream.model(),
 		Trace:                s.Trace.model(),
-		Tests:                convert(s.Tests, func(t Test) runfmt.Test { return runfmt.Test(t) }),
+		Tests:                convert(s.Tests, Test.model),
 	}
 }
 
@@ -247,9 +247,9 @@ func (p *Profile) model() *runfmt.Profile {
 		WarmupRuns:     p.WarmupRuns,
 		SuccessfulRuns: p.SuccessfulRuns,
 		FailedRuns:     p.FailedRuns,
-		Latency:        (*runfmt.Latency)(p.Latency),
-		Percentiles:    convert(p.Percentiles, func(v Percentile) runfmt.Percentile { return runfmt.Percentile(v) }),
-		Histogram:      convert(p.Histogram, func(b HistBin) runfmt.HistBin { return runfmt.HistBin(b) }),
+		Latency:        p.Latency.model(),
+		Percentiles:    convert(p.Percentiles, Percentile.model),
+		Histogram:      convert(p.Histogram, HistBin.model),
 		Failures:       convert(p.Failures, ProfileFailure.model),
 	}
 }
@@ -284,11 +284,25 @@ func (t *Trace) model() *runfmt.Trace {
 	return &runfmt.Trace{
 		Duration:     t.Duration,
 		Error:        t.Error,
-		Budget:       (*runfmt.TraceBudget)(t.Budget),
-		Breaches:     convert(t.Breaches, func(b TraceBreach) runfmt.TraceBreach { return runfmt.TraceBreach(b) }),
+		Budget:       t.Budget.model(),
+		Breaches:     convert(t.Breaches, TraceBreach.model),
 		ArtifactPath: t.ArtifactPath,
 	}
 }
+
+func (t Test) model() runfmt.Test { return runfmt.Test(t) }
+
+func (l *Latency) model() *runfmt.Latency { return (*runfmt.Latency)(l) }
+
+func (p Percentile) model() runfmt.Percentile { return runfmt.Percentile(p) }
+
+func (b HistBin) model() runfmt.HistBin { return runfmt.HistBin(b) }
+
+func (s *Stream) model() *runfmt.Stream { return (*runfmt.Stream)(s) }
+
+func (b *TraceBudget) model() *runfmt.TraceBudget { return (*runfmt.TraceBudget)(b) }
+
+func (b TraceBreach) model() runfmt.TraceBreach { return runfmt.TraceBreach(b) }
 
 func (o outcome) failureModel() *runfmt.Failure {
 	if o.failure != nil {

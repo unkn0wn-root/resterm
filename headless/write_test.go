@@ -693,3 +693,67 @@ func sampleRunnerReport() *runner.Report {
 		},
 	}
 }
+
+func TestReportPartsMarshalLikeTheReport(t *testing.T) {
+	ms := time.Millisecond
+	res := Result{
+		Kind:    KindProfile,
+		Name:    "prof",
+		Status:  StatusFail,
+		Failure: &Failure{Code: FailureTimeout, Message: "slow", Frames: []FailureFrame{{Name: "check"}}},
+		Stream:  &Stream{Kind: "sse", EventCount: 2, Summary: map[string]any{"wait": 5 * ms}},
+		Trace: &Trace{
+			Duration: 30 * ms,
+			Budget:   &TraceBudget{Total: 20 * ms, Tolerance: ms, Phases: map[string]time.Duration{"dns": ms}},
+			Breaches: []TraceBreach{{Kind: "total", Limit: 20 * ms, Actual: 30 * ms, Over: 10 * ms}},
+		},
+		Tests: []Test{{Name: "status", Passed: true, Elapsed: 12 * ms}},
+		Profile: &Profile{
+			Count:       2,
+			Delay:       time.Second,
+			Latency:     &Latency{Count: 2, Min: ms, Max: 3 * ms, Mean: 2 * ms, Median: 2 * ms, StdDev: ms},
+			Percentiles: []Percentile{{Percentile: 50, Value: 2 * ms}},
+			Histogram:   []HistBin{{From: ms, To: 3 * ms, Count: 2}},
+			Failures:    []ProfileFailure{{Iteration: 2, Duration: 4 * ms, Failure: &Failure{Code: FailureTimeout}}},
+		},
+	}
+	decode := func(v any) any {
+		t.Helper()
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal %T: %v", v, err)
+		}
+		var out any
+		if err := json.Unmarshal(b, &out); err != nil {
+			t.Fatalf("unmarshal %T: %v", v, err)
+		}
+		return out
+	}
+	obj := func(v any) map[string]any { return v.(map[string]any) }
+	first := func(v any) any { return v.([]any)[0] }
+
+	whole := obj(first(obj(decode(&Report{Results: []Result{res}}))["results"]))
+	failure, trace, prof := obj(whole["failure"]), obj(whole["trace"]), obj(whole["profile"])
+	cases := []struct {
+		part any
+		want any
+	}{
+		{res.Tests[0], first(whole["tests"])},
+		{res.Failure, failure},
+		{res.Failure.Frames[0], first(failure["frames"])},
+		{res.Stream, whole["stream"]},
+		{res.Trace, trace},
+		{res.Trace.Budget, trace["budgets"]},
+		{res.Trace.Breaches[0], first(trace["breaches"])},
+		{res.Profile, prof},
+		{res.Profile.Latency, prof["latency"]},
+		{res.Profile.Percentiles[0], first(prof["percentiles"])},
+		{res.Profile.Histogram[0], first(prof["histogram"])},
+		{res.Profile.Failures[0], first(prof["failures"])},
+	}
+	for _, tc := range cases {
+		if got := decode(tc.part); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%T marshals as %v, the report has %v", tc.part, got, tc.want)
+		}
+	}
+}

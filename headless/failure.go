@@ -1,6 +1,8 @@
 package headless
 
 import (
+	"encoding/json"
+
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
@@ -72,13 +74,18 @@ const (
 // Failure contains structured machine-readable metadata for a failed result,
 // workflow step, compare step, or profile iteration.
 type Failure struct {
-	Code     FailureCode     `json:"code,omitempty"`
-	Category FailureCategory `json:"category,omitempty"`
-	ExitCode int             `json:"exitCode,omitempty"`
-	Message  string          `json:"message,omitempty"`
-	Source   string          `json:"source,omitempty"`
-	Chain    []FailureChain  `json:"chain,omitempty"`
-	Frames   []FailureFrame  `json:"frames,omitempty"`
+	Code     FailureCode
+	Category FailureCategory
+	ExitCode int
+	Message  string
+	Source   string
+	Chain    []FailureChain
+	Frames   []FailureFrame
+}
+
+// MarshalJSON writes the failure the way it appears in the report JSON.
+func (f Failure) MarshalJSON() ([]byte, error) {
+	return json.Marshal(f.model())
 }
 
 // FailureChain contains one context or cause entry in a failure chain.

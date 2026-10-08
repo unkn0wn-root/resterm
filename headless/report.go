@@ -288,10 +288,15 @@ type GRPC struct {
 
 // Test contains one assertion result.
 type Test struct {
-	Name    string        `json:"name,omitempty"`
-	Message string        `json:"message,omitempty"`
-	Passed  bool          `json:"passed"`
-	Elapsed time.Duration `json:"elapsed,omitempty"`
+	Name    string
+	Message string
+	Passed  bool
+	Elapsed time.Duration
+}
+
+// MarshalJSON writes the test the way it appears in the report JSON.
+func (t Test) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.model())
 }
 
 // Compare contains compare-run summary fields.
@@ -302,82 +307,127 @@ type Compare struct {
 
 // Profile contains profile-run summary fields.
 type Profile struct {
-	Count          int              `json:"count,omitempty"`
-	Warmup         int              `json:"warmup,omitempty"`
-	Delay          time.Duration    `json:"delay,omitempty"`
-	TotalRuns      int              `json:"totalRuns,omitempty"`
-	WarmupRuns     int              `json:"warmupRuns,omitempty"`
-	SuccessfulRuns int              `json:"successfulRuns,omitempty"`
-	FailedRuns     int              `json:"failedRuns,omitempty"`
-	Latency        *Latency         `json:"latency,omitempty"`
-	Percentiles    []Percentile     `json:"percentiles,omitempty"`
-	Histogram      []HistBin        `json:"histogram,omitempty"`
-	Failures       []ProfileFailure `json:"failures,omitempty"`
+	Count          int
+	Warmup         int
+	Delay          time.Duration
+	TotalRuns      int
+	WarmupRuns     int
+	SuccessfulRuns int
+	FailedRuns     int
+	Latency        *Latency
+	Percentiles    []Percentile
+	Histogram      []HistBin
+	Failures       []ProfileFailure
+}
+
+// MarshalJSON writes the profile the way it appears in the report JSON.
+func (p Profile) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.model())
 }
 
 // ProfileFailure contains one failed profile iteration.
 type ProfileFailure struct {
-	Iteration  int           `json:"iteration,omitempty"`
-	Warmup     bool          `json:"warmup,omitempty"`
-	Reason     string        `json:"reason,omitempty"`
-	Status     string        `json:"status,omitempty"`
-	StatusCode int           `json:"statusCode,omitempty"`
-	Duration   time.Duration `json:"duration,omitempty"`
-	Failure    *Failure      `json:"failure,omitempty"`
+	Iteration  int
+	Warmup     bool
+	Reason     string
+	Status     string
+	StatusCode int
+	Duration   time.Duration
+	Failure    *Failure
+}
+
+// MarshalJSON writes the profile failure the way it appears in the report JSON.
+func (p ProfileFailure) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.model())
 }
 
 // Latency contains aggregate profile latency statistics.
 type Latency struct {
-	Count  int           `json:"count,omitempty"`
-	Min    time.Duration `json:"min,omitempty"`
-	Max    time.Duration `json:"max,omitempty"`
-	Mean   time.Duration `json:"mean,omitempty"`
-	Median time.Duration `json:"median,omitempty"`
-	StdDev time.Duration `json:"stdDev,omitempty"`
+	Count  int
+	Min    time.Duration
+	Max    time.Duration
+	Mean   time.Duration
+	Median time.Duration
+	StdDev time.Duration
+}
+
+// MarshalJSON writes the latency the way it appears in the report JSON.
+func (l Latency) MarshalJSON() ([]byte, error) {
+	return json.Marshal(l.model())
 }
 
 // Percentile contains one profile percentile.
 type Percentile struct {
-	Percentile int           `json:"percentile"`
-	Value      time.Duration `json:"value,omitempty"`
+	Percentile int
+	Value      time.Duration
+}
+
+// MarshalJSON writes the percentile the way it appears in the report JSON.
+func (p Percentile) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.model())
 }
 
 // HistBin contains one profile histogram bin.
 type HistBin struct {
-	From  time.Duration `json:"from,omitempty"`
-	To    time.Duration `json:"to,omitempty"`
-	Count int           `json:"count,omitempty"`
+	From  time.Duration
+	To    time.Duration
+	Count int
+}
+
+// MarshalJSON writes the bin the way it appears in the report JSON.
+func (h HistBin) MarshalJSON() ([]byte, error) {
+	return json.Marshal(h.model())
 }
 
 // Stream contains streaming response metadata.
 type Stream struct {
-	Kind           string         `json:"kind,omitempty"`
-	EventCount     int            `json:"eventCount,omitempty"`
-	Summary        map[string]any `json:"summary,omitempty"`
-	TranscriptPath string         `json:"transcriptPath,omitempty"`
-	Error          string         `json:"error,omitempty"`
+	Kind           string
+	EventCount     int
+	Summary        map[string]any
+	TranscriptPath string
+	Error          string
+}
+
+// MarshalJSON writes the stream the way it appears in the report JSON.
+func (s Stream) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.model())
 }
 
 // Trace contains trace summary metadata.
 type Trace struct {
-	Duration     time.Duration `json:"duration,omitempty"`
-	Error        string        `json:"error,omitempty"`
-	Budget       *TraceBudget  `json:"budget,omitempty"`
-	Breaches     []TraceBreach `json:"breaches,omitempty"`
-	ArtifactPath string        `json:"artifactPath,omitempty"`
+	Duration     time.Duration
+	Error        string
+	Budget       *TraceBudget
+	Breaches     []TraceBreach
+	ArtifactPath string
+}
+
+// MarshalJSON writes the trace the way it appears in the report JSON.
+func (t Trace) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.model())
 }
 
 // TraceBudget contains trace budget limits.
 type TraceBudget struct {
-	Total     time.Duration            `json:"total,omitempty"`
-	Tolerance time.Duration            `json:"tolerance,omitempty"`
-	Phases    map[string]time.Duration `json:"phases,omitempty"`
+	Total     time.Duration
+	Tolerance time.Duration
+	Phases    map[string]time.Duration
+}
+
+// MarshalJSON writes the budget the way it appears in the report JSON.
+func (t TraceBudget) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.model())
 }
 
 // TraceBreach contains one trace budget breach.
 type TraceBreach struct {
-	Kind   string        `json:"kind,omitempty"`
-	Limit  time.Duration `json:"limit,omitempty"`
-	Actual time.Duration `json:"actual,omitempty"`
-	Over   time.Duration `json:"over,omitempty"`
+	Kind   string
+	Limit  time.Duration
+	Actual time.Duration
+	Over   time.Duration
+}
+
+// MarshalJSON writes the breach the way it appears in the report JSON.
+func (t TraceBreach) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.model())
 }
