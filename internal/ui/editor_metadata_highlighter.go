@@ -320,15 +320,14 @@ func (s *metadataRuneStyler) applyOptionStyles(
 		return r
 	}
 	for _, f := range directive.FieldSpans(rest) {
-		if f.Eq < 0 {
+		if f.Op != directive.OpEq {
 			continue
 		}
-		keyStart, keyEnd := runeAt(f.Start), runeAt(f.Eq)
 		if s.settingKeyEnabled {
-			p.paint(keyStart, keyEnd, s.settingKeyStyle)
+			p.paint(runeAt(f.Start), runeAt(f.At), s.settingKeyStyle)
 		}
 		if s.settingValueEnabled {
-			p.paint(keyEnd+1, runeAt(f.End), s.settingValueStyle)
+			p.paint(runeAt(f.ValueStart()), runeAt(f.End), s.settingValueStyle)
 		}
 	}
 }

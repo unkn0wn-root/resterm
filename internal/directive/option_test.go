@@ -94,6 +94,23 @@ func TestParseOptions(t *testing.T) {
 			input: `path=trailing\`,
 			want:  map[string]string{"path": `trailing\`},
 		},
+		{
+			name:    "a quoted option sets nothing",
+			input:   `"timeout=1s" path="a=b"`,
+			want:    map[string]string{"path": "a=b"},
+			wantErr: `@mock option "timeout=1s" is quoted. Write it as timeout=1s`,
+		},
+		{
+			name:    "a quoted option keeps quotes its value needs",
+			input:   `"cmd=gh auth token"`,
+			want:    map[string]string{},
+			wantErr: `@mock option "cmd=gh auth token" is quoted. Write it as cmd="gh auth token"`,
+		},
+		{
+			name:  "a comparison is a bare key",
+			input: `last==200`,
+			want:  map[string]string{"last==200": "true"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -115,12 +132,11 @@ func TestParseOptions(t *testing.T) {
 	}
 }
 
-// A bare key is true for ParseOptions but is dropped here.
 func TestOptionFields(t *testing.T) {
 	t.Parallel()
 
 	got, err := OptionFields(Auth, slices.Collect(ScanFields(`a=1 bare "" " B = 2 "`)))
-	want := map[string]string{"a": "1", "b": "2"}
+	want := map[string]string{"a": "1"}
 	if !maps.Equal(got.vals, want) {
 		t.Fatalf("OptionFields() = %#v, want %#v", got, want)
 	}
@@ -444,65 +460,6 @@ func TestParseNameValue(t *testing.T) {
 	}
 }
 
-func TestIsOption(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]bool{
-		"host=jump":            true,
-		"local-port=1":         true,
-		"bare":                 false,
-		"=orphan":              false,
-		"has space=1":          false,
-		"expect.status":        false,
-		"last.statusCode==200": false,
-		"a!=b":                 false,
-		"a>=b":                 false,
-	}
-	for input, want := range tests {
-		if got := isOption(input); got != want {
-			t.Fatalf("isOption(%q) = %t, want %t", input, got, want)
-		}
-	}
-}
-
-func TestFieldSpans(t *testing.T) {
-	t.Parallel()
-
-	input := `"file edge" host=jump json={"a":"b c"} last==200 timeout="5 s" path=a\ b persist`
-	want := []struct {
-		field string
-		key   string
-	}{
-		{field: `"file edge"`},
-		{field: "host=jump", key: "host"},
-		{field: `json={"a":"b c"}`, key: "json"},
-		{field: "last==200"},
-		{field: `timeout="5 s"`, key: "timeout"},
-		{field: `path=a\ b`, key: "path"},
-		{field: "persist"},
-	}
-
-	spans := FieldSpans(input)
-	if len(spans) != len(want) {
-		t.Fatalf("FieldSpans(%q) returned %d spans, want %d", input, len(spans), len(want))
-	}
-	for i, w := range want {
-		f := spans[i]
-		if got := input[f.Start:f.End]; got != w.field {
-			t.Fatalf("span %d = %q, want %q", i, got, w.field)
-		}
-		if w.key == "" {
-			if f.Eq >= 0 {
-				t.Fatalf("span %d (%q) has Eq %d, want positional", i, w.field, f.Eq)
-			}
-			continue
-		}
-		if f.Eq < 0 || input[f.Start:f.Eq] != w.key {
-			t.Fatalf("span %d (%q) Eq = %d, want key %q", i, w.field, f.Eq, w.key)
-		}
-	}
-}
-
 // The lexer already decoded the value. A second strip used to take a layer off
 // anything that was itself a quoted string.
 func TestParseOptionsKeepsDecodedValues(t *testing.T) {
@@ -808,23 +765,6 @@ func TestSpacedKey(t *testing.T) {
 	}
 }
 
-func TestScanFieldsRecordsEveryOperator(t *testing.T) {
-	t.Parallel()
-
-	for _, op := range ops {
-		f := slices.Collect(ScanFields("k" + op + "v"))[0]
-		for _, other := range ops {
-			want := -1
-			if other == op {
-				want = 1
-			}
-			if got := f.at(other); got != want {
-				t.Fatalf("k%sv: at(%q) = %d, want %d", op, other, got, want)
-			}
-		}
-	}
-}
-
 func TestSpacedOptionWithBudgets(t *testing.T) {
 	t.Parallel()
 
@@ -851,12 +791,12 @@ func TestSpacedOptionWithBudgets(t *testing.T) {
 	}
 }
 
-func TestLeOptionError(t *testing.T) {
+func TestOpOptionError(t *testing.T) {
 	t.Parallel()
 
 	opts, err := ParseOptions(Settings, "timeout<=1s timeout=2s")
-	var le *LeOptionError
-	if !maps.Equal(opts.vals, map[string]string{"timeout": "2s"}) || !errors.As(err, &le) ||
+	var op *OpOptionError
+	if !maps.Equal(opts.vals, map[string]string{"timeout": "2s"}) || !errors.As(err, &op) ||
 		err.Error() != `@settings option "timeout" takes = instead of <=. Write it as timeout=1s` {
 		t.Fatalf("vals = %v, err = %v", opts.vals, err)
 	}

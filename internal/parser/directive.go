@@ -378,7 +378,7 @@ func authOptionFields(fields []directive.Field) (directive.Options, error) {
 		return directive.Options{}, err
 	}
 	for _, f := range fields {
-		if !strings.Contains(f.Value, "=") {
+		if f.Positional() {
 			return directive.Options{}, fmt.Errorf(
 				"@auth expects key=value options but got %q. Quote a value that has spaces",
 				f.Value,
@@ -521,7 +521,7 @@ func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 		if fields[i].Value == "" {
 			continue
 		}
-		target, err := applyTraceToken(spec, fields[i].Value)
+		target, err := applyTraceToken(spec, fields[i])
 		var unk *directive.UnknownOptionsError
 		switch {
 		case errors.As(err, &unk):
@@ -548,10 +548,9 @@ func parseTraceSpec(rest string) (*restfile.TraceSpec, error) {
 
 // applyTraceToken returns the normalized setting name used for duplicate checks.
 // An invalid duration or bool leaves the setting as it was.
-func applyTraceToken(spec *restfile.TraceSpec, value string) (string, error) {
-	key, val, ok := strings.Cut(value, "=")
-	if !ok {
-		key = strings.TrimSpace(key)
+func applyTraceToken(spec *restfile.TraceSpec, f directive.Field) (string, error) {
+	if f.Op == directive.OpNone {
+		key := strings.TrimSpace(f.Value)
 		switch strings.ToLower(key) {
 		case "off", "disable", "disabled", "false":
 			spec.Enabled = false
@@ -560,11 +559,14 @@ func applyTraceToken(spec *restfile.TraceSpec, value string) (string, error) {
 			spec.Enabled = true
 			return "", nil
 		}
-		return "", directive.UnknownOption(directive.Trace, cmp.Or(key, value))
+		return "", directive.UnknownOption(directive.Trace, cmp.Or(key, f.Value))
 	}
-	key, le := strings.CutSuffix(key, "<")
-	key, val = strings.TrimSpace(key), strings.TrimSpace(val)
+	key, val, _ := strings.Cut(f.Value, f.Op.String())
+	val = strings.TrimSpace(val)
 	if kind, ok := tracebudget.NormalizePhase(key); ok {
+		if f.Op != directive.OpEq && f.Op != directive.OpLe {
+			return "", &directive.OpOptionError{Directive: directive.Trace, Key: key, Value: val, Op: f.Op}
+		}
 		if dur := parseDuration(val); dur > 0 {
 			setTracePhaseBudget(spec, kind, dur)
 			return string(kind), nil
@@ -579,10 +581,10 @@ func applyTraceToken(spec *restfile.TraceSpec, value string) (string, error) {
 	case "tolerance", "allowance", "grace":
 		target = "tolerance"
 	default:
-		return "", directive.UnknownOption(directive.Trace, cmp.Or(key, value))
+		return "", directive.UnknownOption(directive.Trace, key)
 	}
-	if le {
-		return "", &directive.LeOptionError{Directive: directive.Trace, Key: key, Value: val}
+	if f.Op != directive.OpEq {
+		return "", &directive.OpOptionError{Directive: directive.Trace, Key: key, Value: val, Op: f.Op}
 	}
 	switch target {
 	case "enabled":
@@ -670,7 +672,7 @@ func compareEnvironments(fields []directive.Field) ([]string, error) {
 	seen := make(map[string]struct{}, len(fields))
 	for _, field := range fields {
 		env := strings.TrimSpace(field.Value)
-		if env == "" || strings.Contains(env, "=") {
+		if env == "" || !field.Positional() {
 			continue
 		}
 		if vars.IsReservedEnvironment(env) {

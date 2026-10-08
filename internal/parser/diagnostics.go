@@ -156,14 +156,11 @@ func (f *argFields) load(d parsedDirective) {
 	f.args, f.parts = d.Args, len(d.argParts)
 	f.spans, f.byKey = nil, make(map[string][]int)
 	for _, field := range directive.FieldSpans(d.Args) {
-		end := field.Eq
-		if end < 0 {
-			end = field.End // ParseOptions also accepts bare switches.
+		end := field.End // Bare switches use the whole field as their key.
+		if field.Op != directive.OpNone {
+			end = field.At
 		}
 		f.add(d, field.Start, end)
-		if field.Le >= 0 {
-			f.add(d, field.Start, field.Le) // A name before <= is a key too.
-		}
 	}
 }
 

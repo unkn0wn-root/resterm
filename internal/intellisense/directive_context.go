@@ -108,17 +108,17 @@ func analyzeArguments(name directive.Name, text []rune, caret int) Context {
 	ctx.Start, ctx.End = f.start, f.end
 	ctx.Query = decodedPrefix(text[f.start:caret])
 	switch {
-	case f.eq >= 0 && caret > f.eq:
+	case f.op != directive.OpNone && caret >= f.val:
 		if s.arg == nil {
 			return Context{Kind: KindNone}
 		}
-		ctx.Start = f.eq + 1
-		ctx.Query = optionValue(ctx.Query)
+		ctx.Start = f.val
+		ctx.Query = optionValue(ctx.Query, f.op)
 		ctx.setValue(s.arg, table.single)
 		if s.arg.repeat {
 			ctx.narrowToSegment(s.arg, text, caret)
 		}
-	case s.value && f.eq < 0:
+	case s.value && f.op == directive.OpNone:
 		ctx.setValue(s.arg, table.single)
 	}
 	if ctx.Kind == KindPath && ctx.Path.List {
@@ -142,8 +142,8 @@ func (ctx *Context) record(s slot, f field) {
 		return
 	}
 	switch {
-	case s.value && f.eq >= 0:
-		ctx.completed.add(s.arg.key, optionValue(f.text))
+	case s.value && f.op != directive.OpNone:
+		ctx.completed.add(s.arg.key, optionValue(f.text, f.op))
 	case s.value, !s.arg.takesValue():
 		ctx.completed.add(s.arg.key, f.text)
 	}
@@ -205,8 +205,8 @@ func cutSegmentKey(arg *argument, part string) (int, string) {
 	return len(part) - len(value), value
 }
 
-func optionValue(text string) string {
-	_, value, _ := strings.Cut(text, "=")
+func optionValue(text string, op directive.Op) string {
+	_, value, _ := strings.Cut(text, op.String())
 	return value
 }
 

@@ -105,7 +105,7 @@ func valueItems(arg *argument, ctx Context, sc Scope) []Item {
 			item.Insert = directive.Quote(item.Label)
 		}
 		switch {
-		case arg.repeat && arg.form != formWord:
+		case arg.repeat && arg.op != directive.OpNone:
 			// Keep the caret next to the value for a following list separator.
 			item = item.WithoutTrailingSpace()
 		case !single && item.Placeholder == "":
