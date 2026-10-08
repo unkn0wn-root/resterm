@@ -95,9 +95,16 @@ func TestParseOptions(t *testing.T) {
 			want:  map[string]string{"path": `trailing\`},
 		},
 		{
-			name:  "a quoted option is a bare key",
-			input: `"timeout=1s" path="a=b"`,
-			want:  map[string]string{"timeout=1s": "true", "path": "a=b"},
+			name:    "a quoted option sets nothing",
+			input:   `"timeout=1s" path="a=b"`,
+			want:    map[string]string{"path": "a=b"},
+			wantErr: `@mock option "timeout=1s" is quoted. Write it as timeout=1s`,
+		},
+		{
+			name:    "a quoted option keeps quotes its value needs",
+			input:   `"cmd=gh auth token"`,
+			want:    map[string]string{},
+			wantErr: `@mock option "cmd=gh auth token" is quoted. Write it as cmd="gh auth token"`,
 		},
 		{
 			name:  "a comparison is a bare key",

@@ -311,7 +311,14 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 		case f.Op != OpNone:
 			bad = append(bad, &OpOptionError{Directive: name, Key: key, Value: val, Op: f.Op})
 		case bareIsTrue:
-			rep.add(opts.put(f.Value, "true"))
+			// Reject quoted options here so "timeout=1s" cannot become a boolean key.
+			text := strings.TrimSpace(f.Value)
+			if op, _ := scanOp(text); op != OpNone {
+				k, v, _ := strings.Cut(text, op.String())
+				bad = append(bad, &QuotedOptionError{Directive: name, Key: k, Value: v, Op: op})
+			} else {
+				rep.add(opts.put(f.Value, "true"))
+			}
 		}
 	}
 	err := rep.err(name)
@@ -418,6 +425,24 @@ func (e *OpOptionError) Error() string {
 		e.Op,
 		e.Key,
 		e.Value,
+	)
+}
+
+// QuotedOptionError reports an option quoted as a whole, such as "timeout=1s",
+// in a directive that takes only options.
+type QuotedOptionError struct {
+	Directive  Name
+	Key, Value string
+	Op         Op
+}
+
+func (e *QuotedOptionError) Error() string {
+	return fmt.Sprintf(
+		"%s option %q is quoted. Write it as %s=%s",
+		e.Directive.Tag(),
+		e.Key+e.Op.String()+e.Value,
+		e.Key,
+		Quote(e.Value),
 	)
 }
 

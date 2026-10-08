@@ -302,6 +302,18 @@ func TestSettingAcceptsTheEqualsSpelling(t *testing.T) {
 	})
 }
 
+// @settings accepts arbitrary keys, so quoted options need an explicit warning.
+func TestQuotedSettingWarns(t *testing.T) {
+	doc := Parse("/ws/api.http", []byte("# @settings \"timeout=1s\" retries=2\nGET https://example.com\n"))
+	want := `@settings option "timeout=1s" is quoted. Write it as timeout=1s`
+	if len(doc.Errors) != 0 || len(doc.Warnings) != 1 || doc.Warnings[0].Message != want {
+		t.Fatalf("errors = %v, warnings = %v, want one warning %q", doc.Errors, doc.Warnings, want)
+	}
+	if want := map[string]string{"retries": "2"}; !maps.Equal(doc.Settings, want) {
+		t.Fatalf("settings = %v, want %v", doc.Settings, want)
+	}
+}
+
 // A value written as empty is not a flag. These are the spellings that still
 // reach the appliers with nothing in them, which is what they report as missing.
 func TestWrittenEmptySettingValueStaysEmpty(t *testing.T) {

@@ -14,7 +14,7 @@
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](mock-servers.md#splitting-a-long-matcher).
 - Write options as `key=value` without spaces around `=`. In most directives, a bare key means `true`. Resterm rejects `key = value`, `key =value`, `key= value`, and `=value` without setting the option. This keeps `persist = false` from enabling persistence by mistake.
 - Use `=` for regular options: `timeout<=1s` is an error. `@trace` latency budgets also accept `<=`.
-- Quote only the value, as in `cmd="gh auth token"`. A quoted field such as `"timeout=1s"` is a plain word and does not set `timeout`.
+- Quote only the value, as in `cmd="gh auth token"`. A quoted field such as `"timeout=1s"` is a plain word and does not set `timeout`. Directives that accept only options, such as `@settings`, warn about quoted options.
 - An empty value such as `strict_hostkey=` is allowed at the end of the line or before another `key=value` option.
 - A file or global `@ssh` or `@k8s` profile with spaces around an operator, a missing key, or the wrong operator is unavailable to requests. Requests using an invalid `@ssh` profile report that it was not found; requests using an invalid `@k8s` profile report the profile's error.
 - Alternate names count as the same option. For example, you cannot use both `known_hosts` and `known-hosts` on one `@ssh` directive. Empty values are ignored for regular options, but not for switches. `strict_hostkey=` enables the switch, so it conflicts with `strict-hostkey=false`.

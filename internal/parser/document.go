@@ -97,9 +97,8 @@ func lineDiagnostic(line int, msg string) restfile.ParseDiagnostic {
 	return restfile.ParseDiagnostic{Message: msg, Span: diag.Span{Start: diag.Pos{Line: line}}}
 }
 
-// Joined errors are reported separately so the editor can show every problem on
-// the line. Unknown options are warnings because the rest of the directive may
-// still be valid.
+// Report each joined error separately so the editor can mark every problem.
+// Unknown and quoted options leave valid options usable, so report them as warnings.
 func (b *documentBuilder) report(d parsedDirective, err error) {
 	if err == nil {
 		return
@@ -112,7 +111,8 @@ func (b *documentBuilder) report(d parsedDirective, err error) {
 	}
 	item := d.diagnostic(err.Error(), err)
 	var unknown *directive.UnknownOptionsError
-	if errors.As(err, &unknown) {
+	var quoted *directive.QuotedOptionError
+	if errors.As(err, &unknown) || errors.As(err, &quoted) {
 		b.pushWarning(item)
 		return
 	}
@@ -133,7 +133,7 @@ func (b *documentBuilder) reportStrict(d parsedDirective, err error) {
 	b.pushError(d.diagnostic(err.Error(), err))
 }
 
-// Keep valid options when the only errors are unknown keys, spacing errors,
+// Keep valid options when the only errors are unknown keys, quoting, spacing,
 // or unsupported operators.
 func fatalErr(err error) bool {
 	if err == nil {
@@ -145,7 +145,9 @@ func fatalErr(err error) bool {
 	var unknown *directive.UnknownOptionsError
 	var spaced *directive.SpacedOptionsError
 	var op *directive.OpOptionError
-	return !errors.As(err, &unknown) && !errors.As(err, &spaced) && !errors.As(err, &op)
+	var quoted *directive.QuotedOptionError
+	return !errors.As(err, &unknown) && !errors.As(err, &spaced) && !errors.As(err, &op) &&
+		!errors.As(err, &quoted)
 }
 
 func (b *documentBuilder) processLine(no int, raw, term string) {
