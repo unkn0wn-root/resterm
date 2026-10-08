@@ -1,6 +1,6 @@
 # resterm collection
 
-The collection commands package a workspace so it can be copied or shared safely.
+Use the collection commands to bundle a workspace's request files and inputs, then import them into another workspace.
 
 | Command | What it does |
 | --- | --- |

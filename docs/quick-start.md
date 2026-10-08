@@ -1,9 +1,9 @@
 # Quick start
 
-1. Put one or more `.http` or `.rest` files in a directory, or use the samples in `_examples/`.
+1. Save the example below as a `.http` or `.rest` file in your project directory. You can also use a sample from `_examples/`.
 2. Run `resterm --workspace path/to/project`.
-3. In the navigator sidebar, expand a file (`→` or `Space`), highlight a request, and press `Ctrl+Enter` to send it (`Enter` runs, `Space` previews).
-4. Check the response in the Pretty, Raw, Headers, Diff, Compare, or History tabs on the right. Press `g+c` to run the current request against the `--compare` targets (or the ones in its `@compare` directive) and see the results without leaving the editor.
+3. Expand the file in the navigator sidebar with `→` or `Space`. Highlight a request and press `Ctrl+Enter` to send it. With a request highlighted, `Enter` also sends it and `Space` previews it.
+4. Read the response in the tabs on the right: Pretty, Raw, Headers, Diff, Compare, or History.
 
 A minimal `.http` file looks like this:
 
@@ -24,6 +24,8 @@ Content-Type: application/json
   "note": "created from Resterm"
 }
 ```
+
+To compare environments, press `g+c`. This runs the current request against the `--compare` targets, or the targets in its `@compare` directive, and shows the results beside the editor.
 
 ## Initializing a Project
 

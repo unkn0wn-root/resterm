@@ -1,8 +1,8 @@
 # Captures
 
-`@capture <scope> <name> <expression>` evaluates after the response arrives and stores the result for reuse.
+Use `@capture <scope> <name> <expression>` to save a value from a response for later requests. The expression runs after the response arrives.
 
-Captures run in declaration order. A capture can read values produced earlier in the same batch through `vars.get`, `{{= ... }}`, or `{{name}}`. Values are stored only after every capture succeeds, so a failed batch leaves request, file, and global values unchanged.
+Captures run from top to bottom. Each capture can read the results of earlier ones through `vars.get`, `{{= ... }}`, or `{{name}}`. Resterm saves the values only when every capture succeeds. If one fails, the existing request, file, and global values stay unchanged.
 
 Expressions can reference:
 
@@ -42,4 +42,4 @@ Set `# @setting capture.strict true` to make capture-path misses fail instead of
 
 Do not mix unquoted template markers and RTS call syntax in the same capture expression (for example `contains({{name}}, "x")`). Use pure RTS (`contains(vars.get("name") ?? "", "x")`) or a template expression (`{{= contains(...) }}`).
 
-`capture.strict` is the canonical key. `capture-strict` and `capture_strict` are accepted for compatibility. When multiple aliases are present, precedence is `capture.strict` > `capture-strict` > `capture_strict`.
+Use `capture.strict` in new files. The older spellings `capture-strict` and `capture_strict` still work. If more than one spelling is present, Resterm checks them in this order: `capture.strict` > `capture-strict` > `capture_strict`.

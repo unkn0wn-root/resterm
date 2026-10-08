@@ -1,8 +1,10 @@
 # Standard library
 
-Builtins and reserved words can be removed within a major version. One marked for removal is deprecated in a minor release and removed no earlier than the next one. While deprecated it keeps working, and the parser warns on the line that uses it (`WARN line <n>` in the status bar, full text in the Explain pane). Removals are listed in the release notes with their replacement. See [Compatibility](../compatibility.md) for what the version number covers elsewhere.
+The standard library provides helpers for text, JSON, lists, time, crypto, and other request tasks. It is available as `rts`, and `stdlib` still works as a deprecated alias. The library does not allow file writes or network access.
 
-RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The standard library is available as `rts`. `stdlib` still works as a deprecated alias. Core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also available at the top level. `text`, `list`, `dict`, and `math` are available only under `rts`.
+Core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also available at the top level. The `text`, `list`, `dict`, and `math` namespaces are available only under `rts`.
+
+Builtins and reserved words may be removed within a major version, but only after deprecation in a minor release. Removal happens no earlier than the next minor release. Until then, the builtin still works and the parser warns on each line that uses it (`WARN line <n>` in the status bar, with the full text in Explain). Release notes list each removal and its replacement. See [Compatibility](../compatibility.md) for the wider versioning policy.
 
 ## Core helpers
 
@@ -106,7 +108,9 @@ These helpers use keys exactly as written, like `dict[key]`. See [Keys and names
 - `query.encode(query)` encodes a query multimap into a query string.
 - `query.merge(url, query)` returns the URL with the parameters applied. Null or an empty list removes a parameter.
 
-Header and query dictionaries use cardinality-based values: `dict<string, string | list<string>>`. One value is a string, multiple values are a list, and zero values are an empty list. The result depends on the number of values rather than the input syntax, so a one-element input list is returned as a string. Helpers do not coerce numbers or booleans into strings. Null is not a stored value. It is accepted only as the removal marker in the patch argument to `headers.merge` and `query.merge`.
+Header and query dictionaries use `dict<string, string | list<string>>`. One value is a string, multiple values are a list, and zero values are an empty list. This depends on the number of values, so even a one-element input list is returned as a string.
+
+These helpers do not convert numbers or booleans to strings for you. Null is not a stored value; it only marks a value for removal in a patch passed to `headers.merge` or `query.merge`.
 
 Header names are case-insensitive HTTP field names. Two forms of the same header always return an error, because picking one would depend on map order. Every header helper validates the entire input block and the requested name. Returned header names are lowercased, and `headers.get` returns the first value whether the stored value is a string or a list.
 

@@ -1,7 +1,9 @@
 # Troubleshooting
 
 - Use `Ctrl+P` to force a reparse if the navigator seems out of sync with editor changes.
-- If a template fails to expand (undefined variable), Resterm blocks the send and reports the missing variable. This covers URLs, query parameters, headers, auth values, expanded bodies, gRPC targets and messages, and WebSocket steps. Errors in the URL, headers, and inline or file bodies name the variable and point at the placeholder with its file, line, and column, and the TUI quotes the line. A failing `{{= ... }}` expression keeps its script diagnostics and points at the expression. Explain previews keep the placeholder intact and list the unresolved names.
+- If a variable is undefined, Resterm reports its name and does not send the request. This applies to URLs, query parameters, headers, auth values, expanded bodies, gRPC targets and messages, and WebSocket steps.
+
+  For URLs, headers, and inline or file bodies, the error points to the placeholder's file, line, and column. The TUI also quotes the line. A failing `{{= ... }}` expression keeps its script diagnostics and points to the expression. Explain previews leave the placeholder visible and list unresolved names.
 - A placeholder that never closes, such as `{{token}`, is sent as literal text. The editor diagnostics warn about it before you send.
 - Combine `@capture request ...` with test scripts to assert on response headers without filling up the file and global scopes.
 - Inline curl import works best with single commands. Complex shell pipelines may need manual cleanup.

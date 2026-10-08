@@ -8,11 +8,13 @@
 
 ## Editor diagnostics
 
-Diagnostics are enabled by default for `.http`, `.rest`, and unnamed request buffers. They show the parser's existing warnings and errors, such as unknown directives, mistyped option keys, missing values, conflicting options, and placeholders such as `{{token}` that never close. Diagnostics refresh when you leave insert mode, without saving the buffer or changing the active request. They do not refresh while you type, even if you pause. Existing marks stay until an edit changes the text they point at. They then clear until you return to normal mode. Changes made in normal mode, such as undo or deletion, use a short debounce.
+Editor diagnostics mark errors and warnings in `.http`, `.rest`, and unnamed request buffers. They are enabled by default and show parsing problems such as unknown directives, mistyped option keys, missing values, conflicting options, and unclosed placeholders such as `{{token}`.
+
+The marks refresh when you leave insert mode. You do not need to save, and the active request stays the same. They do not refresh while you type, even if you pause. Editing marked text clears its marks until you return to normal mode. Changes made in normal mode, such as undo or deletion, refresh after a short delay.
 
 `K` (Shift+K) in normal mode opens a popup beside the cursor with diagnostics on that line. Findings under the cursor appear first. Errors come before warnings. `Enter` opens related documentation when available, `PgUp` / `PgDown` scroll long messages, and `Esc` or cursor movement closes the popup. On a line without diagnostics, `K` opens contextual help as usual. In insert mode, `K` types normally.
 
-Use `] d` / `[ d` or `:diagnostics next` / `:diagnostics prev` to visit diagnostic locations. Navigation wraps at the ends of the buffer. `:diagnostics` opens the full list. Empty-line and EOF findings use a line-number marker when there is no text to underline.
+Use `] d` / `[ d` or `:diagnostics next` / `:diagnostics prev` to move between marked locations. Navigation wraps at both ends of the buffer. `:diagnostics` opens the full list. Findings on an empty line or at the end of the file (EOF) use a line-number marker when there is no text to underline.
 
 `:diagnostics off` and `:diagnostics on` change the setting for this session. To disable diagnostics at startup, put this in `<config-dir>/settings.toml`:
 
@@ -23,6 +25,6 @@ diagnostics = false
 
 For `settings.json`, use `{"editor":{"diagnostics":false}}`. Omitting the setting enables diagnostics. Session overrides do not change the stored preference.
 
-This feature reports request-file parsing findings. It does not evaluate scripts, resolve runtime variables, or perform network checks, and it does not add script-language diagnostics to `.rts` files. It does not change how requests are checked when they run or how headless runs report warnings.
+Diagnostics check request-file syntax. They do not run scripts, resolve runtime variables, check the network, or check the script language in `.rts` files. Request validation and warning reports during headless runs work the same whether editor diagnostics are enabled or disabled.
 
 Themes can customize `[styles.editor_diagnostic_warning]` and `[styles.editor_diagnostic_error]` using the usual style fields, including `foreground` and `underline`. The defaults use plain terminal underlines and different colors for warnings and errors. Your terminal does not need undercurl support.

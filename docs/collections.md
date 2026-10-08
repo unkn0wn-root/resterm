@@ -1,12 +1,12 @@
 # Collection sharing
 
-Resterm can export a collection bundle that holds everything your requests need. You can commit it to Git and import it anywhere else. This helps when you want to hand the exact same requests and inputs to another developer, a CI job, or a support environment.
+Export a collection bundle to share request files and their inputs with another developer, a CI job, or a support environment. You can commit the bundle to Git and import it into another workspace.
 
-A bundle contains your request files and the files they depend on, such as RTS modules, script includes, payload files, GraphQL query/variables files, gRPC descriptor/message files, and WebSocket `send-file` payloads. Resterm writes a `manifest.json` file with a checksum for each file, and import checks those checksums before it writes anything to disk.
+A bundle contains your request files and the files they use: RTS modules, script includes, payloads, GraphQL queries and variables, gRPC descriptors and messages, and WebSocket `send-file` payloads. Its `manifest.json` records a checksum for each file. Import checks those checksums before writing anything to disk.
 
 ## What happens to environment files
 
-Resterm shares environments as a safe example file, not as your real environment file:
+The bundle includes an example environment file. Your working environment file is handled as follows:
 
 1. If `resterm.env.example.json` exists in the workspace, Resterm exports it exactly as written.
 2. If only `resterm.env.json` or `rest-client.env.json` exists, Resterm generates `resterm.env.example.json` and replaces every value with `REPLACE_ME`. In grouped files, the group and profile keys and the `$default` strings stay as they are. Only the values under `$shared` and the profiles are redacted.

@@ -6,7 +6,7 @@
 
 ## Blocks and statement endings
 
-Blocks use `{ ... }` and group statements together. A newline can end a statement when the previous token can finish a statement. Newlines inside `()` and `[]` are ignored. The language also accepts the semicolon token as a statement terminator, but this guide uses newlines for clarity.
+Blocks use `{ ... }` to group statements. A newline ends a statement when the preceding token can finish it. Newlines inside `()` and `[]` are ignored. You can also end a statement with a semicolon; the examples in this guide use newlines.
 
 ## Identifiers and keywords
 
@@ -248,7 +248,7 @@ headers.get({"X-Ok": "yes"}, "X Tok") # error, same rule
 headers.set(h, " X-Token ", "1")      # error, whitespace is not trimmed
 ```
 
-A malformed host map or header block fails as a whole. Helpers never drop an entry without telling you. This keeps every evaluation deterministic and shows bad input where it enters:
+A malformed host map or header block fails as a whole. Helpers report invalid entries rather than silently dropping them, so the result does not depend on which entry was visited first:
 
 ```rts
 env.get("   ")                                      # error

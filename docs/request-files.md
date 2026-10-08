@@ -1,5 +1,7 @@
 # Request file anatomy
 
+A `.http` or `.rest` file holds requests, with a method, URL, headers, and an optional body for each one. Comments can hold directives that name a request, set options, or add tests.
+
 ## Separators and comments
 
 - Begin each request with a line that starts with `###`. Everything up to the next separator belongs to the same request.
@@ -10,7 +12,9 @@
 - Between `@workflow` and the next request, an unknown directive is a parse error. This catches mistakes such as `@stpe` that would otherwise remove a workflow step. Directives attached to requests are still request-scoped, even when a workflow runs those requests.
 - After `@mock` and before the response, only `@match` and `@expect` are allowed. Any other directive-shaped comment is a parse error.
 - To write a comment that starts like a directive, add another comment marker, for example `## @if ...`.
-- A directive problem that does not invalidate the file becomes a warning, not an error. Parsing continues and keeps the valid parts where it can. An unknown option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped, and the rest of the directive still applies. A directive the parser cannot read at all, such as an `@capture` with no usable scope, is dropped completely and reported. Warnings never change the exit code.
+- If a directive problem does not make the file invalid, Resterm reports a warning and keeps parsing. For example, it drops an unknown option on `@ssh`, `@k8s`, `@sse`, or `@websocket` but keeps the rest of the directive.
+
+  If Resterm cannot read a directive at all, such as an `@capture` with no usable scope, it drops the whole directive and reports the problem. Warnings never change the exit code.
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](mock-servers.md#splitting-a-long-matcher).
 - Write options as `key=value` without spaces around `=`. In most directives, a bare key means `true`. Resterm rejects `key = value`, `key =value`, `key= value`, and `=value` without setting the option. This keeps `persist = false` from enabling persistence by mistake.
 - Use `=` for regular options: `timeout<=1s` is an error. `@trace` latency budgets also accept `<=`.
@@ -20,7 +24,9 @@
 - Alternate names count as the same option. For example, you cannot use both `known_hosts` and `known-hosts` on one `@ssh` directive. Empty values are ignored for regular options, but not for switches. `strict_hostkey=` enables the switch, so it conflicts with `strict-hostkey=false`.
 - `@compare` requires non-empty values for its baseline and group options. This is stricter than general alias conflict handling: `# @ssh host=h known-hosts=a known_hosts=` is valid, but `# @compare dev stage base=dev baseline=` reports an empty baseline.
 - Directives that require a value report `value missing` when left empty. This applies to `@name`, `@operation`, `@grpc-descriptor`, `@grpc-authority`, and `@grpc-metadata`. Some directives deliberately accept an empty value. `@graphql` enables GraphQL, `@query` and `@variables` read the lines below them, and `@grpc-reflection` defaults to on.
-- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@poll`, `@retry`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. A second declaration is a parse error, and the file does not run until it is removed. A declaration the parser rejects does not count, so a later one is not reported as a duplicate. A GraphQL directive ignored while GraphQL is off does not count either, but it does produce a warning.
+- A request directive that replaces one value may appear only once. This includes `@auth`, `@name`, `@timeout`, `@when`, `@for-each`, `@poll`, `@retry`, `@trace`, `@profile`, `@compare`, and the single-value gRPC and GraphQL directives. A second declaration is a parse error; remove it before running the file.
+
+  A declaration the parser rejects does not count toward this check. A GraphQL directive ignored while GraphQL is off does not count either, but it still produces a warning.
 - Directives such as `@tag`, `@capture`, `@assert`, `@apply`, `@var`, `@setting`, and `@body` add to earlier declarations. `@graphql`, `@sse`, and `@websocket` may repeat because `off` resets their state. For GraphQL, the reset also clears `@operation`, `@variables`, and `@query`, so they may be declared again after `@graphql off`. Duplicate directive checks apply only within a request. File directives may repeat because some of them define named profiles.
 - Files can be saved with parse errors. The status line shows the number of errors, for example `Saved requests.http (1 parse error)`. Requests cannot run until those errors are fixed.
 - In the TUI, live editor diagnostics underline offending text and show `ERR <n>` / `WARN <n>` counts beside the status message. Press `K` in editor normal mode for details on the current line, or `g .` / `:diagnostics` for the complete list. When editor diagnostics are disabled, the existing `WARN line <n>` segment reports warnings from the last matching parse. Parse warnings also appear in the Explain pane for each run.
@@ -53,7 +59,7 @@ Some directives can span multiple comment lines. Resterm keeps reading while the
 | Directive | Syntax | Description |
 | --- | --- | --- |
 | `@name` | `# @name identifier` | Friendly name used in the navigator, history, and captures. |
-| `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded. Immutable and visible to all requests in the document. |
+| `@const` | `# @const name value` | A constant resolved when the file is loaded. It cannot change and is available to every request in the document. |
 | `@description` / `@desc` | `# @description ...` | Multi-line description. Lines are joined with newlines. |
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
 | `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. `@trace off` turns it off. See [Timeline & tracing](ui-tour.md#timeline--tracing). |

@@ -26,7 +26,9 @@ resterm mock --source users.http,payments.http ./workspace
 
 `--source` entries must be `.http` or `.rest` files. They resolve against the positional directory (default `.`) and must stay inside it, because file-based response bodies are confined to that root. `--source` cannot be combined with `--recursive`.
 
-On loopback, `--cors=auto` enables wildcard CORS and automatic preflight responses. On a non-loopback bind it disables CORS and prints an exposure warning. Use `--cors=off`, `--cors='*'`, or a comma-separated origin allowlist to override it. Reloads are atomic: invalid edits are reported and the last valid route set stays live. Stop the server with `Ctrl+C` or `SIGTERM`. In-flight requests get a short grace period to finish.
+When listening on a loopback address such as localhost, `--cors=auto` allows browser requests from any origin and handles CORS preflights automatically. On other addresses, it disables CORS and warns that the server is exposed. Use `--cors=off`, `--cors='*'`, or a comma-separated list of allowed origins to override it.
+
+Reloads replace the routes in one operation. If an edit is invalid, Resterm reports it and keeps the last valid routes serving. Stop the server with `Ctrl+C` or `SIGTERM`; requests already in progress get a short grace period to finish.
 
 The server exits `0` when you stop it. It exits `2` for invalid flags, arguments, or `--source` values, and `1` when the request files fail to load, contain no `# @mock` blocks, or the server cannot start.
 
@@ -48,7 +50,9 @@ Relative CA paths resolve from the request file. Do not copy or share `rootCA-ke
 
 ## Mock operations
 
-A running standalone mock server has a small control channel for Resterm's own commands, reachable only from loopback. It is not a general mock administration API. The mock server started from the TUI does not enable it, and it never exposes raw journal entries. The literal `/.resterm/` path is reserved for these endpoints. Mocks cannot declare routes inside it, and wildcard routes that overlap it are shadowed while the control channel is enabled.
+Use the commands below to reset sequences, clear logs, or verify calls on a standalone mock server. They connect through a control channel reachable only from loopback. This channel is for Resterm's commands and never exposes raw journal entries. The TUI's mock server does not enable it.
+
+The path `/.resterm/` is reserved for these operations. Mock routes cannot use it. While the control channel is enabled, its endpoints take priority over wildcard routes that would match the same paths.
 
 ```bash
 # Reset all sequences, or every sequence named polling.

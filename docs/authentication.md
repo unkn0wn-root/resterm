@@ -4,7 +4,7 @@
 
 Use `@auth bearer {{token}}` or an `Authorization: Bearer {{token}}` header. Combine it with `@global` or environment values to reuse the token.
 
-When you want one auth definition to apply to many requests, scope it:
+To use the same authentication for every request in a file, add a file-scoped definition:
 
 ```http
 # @auth file bearer {{auth.token}}
@@ -107,7 +107,7 @@ The redirect URI has a few rules:
 
 #### PKCE details
 
-PKCE (Proof Key for Code Exchange) protects against authorization code interception. Resterm generates these values for you:
+PKCE (Proof Key for Code Exchange) helps protect your login if someone intercepts the authorization code. Resterm generates the values needed for the exchange:
 
 - **code_verifier** - 64 random bytes, base64url-encoded (about 86 characters). You can set your own. It must be 43 to 128 characters long (RFC 7636).
 - **code_challenge** - SHA-256 hash of the verifier, base64url-encoded.
@@ -224,7 +224,7 @@ Structured output works too:
 GET https://api.example.com/projects
 ```
 
-Older files share a token through `cache_key`. The first request seeds the slot and later requests name only the key. This still works, but the first request has to run before the others:
+Older files share a token through `cache_key`. The first request runs the command and fills the cache; later requests reuse it by naming the key. This still works, but the first request must run before the others:
 
 ```http
 ### Seed a reusable command-auth slot
@@ -240,12 +240,12 @@ GET https://api.github.com/user/repos
 
 | Type | Syntax | Notes |
 | --- | --- | --- |
-| Basic | `# @auth basic user pass` | Injects `Authorization: Basic …`. Templates expand inside parameters. |
-| Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
+| Basic | `# @auth basic user pass` | Adds `Authorization: Basic …`. Templates expand inside parameters. |
+| Bearer | `# @auth bearer {{token}}` | Adds `Authorization: Bearer …`. |
 | Digest | `# @auth digest user pass` | Retries once after the server's `401` Digest challenge. See [Digest auth](#digest-auth). |
 | API key | `# @auth apikey header X-API-Key {{key}}` | `api-key` works too. Write the placement, the name, and the value. `placement` can be `header` or `query`. An `auth` dict in `@apply` or `@patch` may leave out `name`, which then defaults to the `X-API-Key` header. |
 | Custom header | `# @auth Authorization CustomValue` | Any header and value. For a header named after an auth type, such as `Digest`, use a normal request header. |
-| Command | `# @auth command cmd="gh auth token"` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
+| Command | `# @auth command cmd="gh auth token"` | Runs a non-interactive command without a shell, reads its `stdout` output, and adds an auth header before sending the request. |
 | Named command | `# @auth use=gh` | Uses a command auth defined once with `@auth file` or `@auth global` and a name. |
 | OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Fetches and caches tokens. Supports client_credentials, password, and authorization_code with PKCE. |
 
@@ -291,7 +291,9 @@ Resterm caches tokens per environment and `cache_key`. When a request needs a to
 2. If the cached token is expired and has a `refresh_token`, Resterm tries to refresh it.
 3. If the refresh fails or there is no token, Resterm fetches a new one from the token endpoint.
 
-For grouped environments, "per environment" means the whole group selection. Changing only the credentials profile gives you a separate OAuth and command-auth cache. Explicit `cache_key` values are scoped to that selection too. Tokens saved under an explicit key before this scoping existed cannot be tied to a selection, so Resterm ignores them and fetches a new token under the new scoped key.
+For grouped environments, "per environment" means the full group selection. Changing just the credentials profile gives you a separate OAuth and command-auth cache. An explicit `cache_key` is also tied to that selection.
+
+Older tokens saved under an explicit key do not identify which selection they belong to. Resterm ignores those tokens and fetches new ones for the current selection.
 
 You can define the full OAuth parameters once, then use only `cache_key` in later requests:
 
@@ -329,7 +331,7 @@ If you leave out `token_url` on a later directive and the cache has not been see
 
 ### Command lines
 
-`cmd` splits its value into arguments and runs the first one directly. Nothing goes through a shell, so pipes, redirects, globbing, `$VAR`, and `$(...)` are passed to the command as plain text.
+`cmd` splits its value into arguments and runs the first one directly. No shell runs, so pipes, redirects, wildcard patterns (globbing), `$VAR`, and `$(...)` are passed to the command as plain text.
 
 - Spaces and tabs separate arguments.
 - Single quotes keep everything inside them as written.
@@ -349,7 +351,7 @@ Wrap `cmd` in the kind of quote the command line does not use: `cmd="gcloud auth
 - A `use=` name that no file or global definition has fails the request with the line that named it.
 - An unnamed definition without `cache_key` runs the command for every request.
 - With `cache_key`, the first full directive seeds a reusable command-auth config for that environment. Later directives can use only `cache_key`. Empty fields take their values from the seeded config. If the slot has not been seeded yet, Resterm fails with `@auth command requires cmd or argv (include it once per cache_key to seed the cache)`.
-- Reusing the same `cache_key` with different acquisition settings (`cmd` or `argv`, `format`, JSON paths, `ttl`, and related source fields) fails right away. `header`, `scheme`, and `timeout` can still vary per request.
+- Reusing a `cache_key` with different settings for obtaining the token fails right away. These settings include `cmd` or `argv`, `format`, JSON paths, `ttl`, and related source fields. You can still change `header`, `scheme`, and `timeout` per request.
 - Explain preview never runs commands. It only injects a header when a valid cached result already exists, so name the definition or add `cache_key` to preview it.
 - Text mode accepts exactly one non-empty line from `stdout`. Multi-line output fails. Use `format=json` for that.
 - Successful command output is treated as secret. Resterm redacts the raw token and the final injected header value in the explain and history views.

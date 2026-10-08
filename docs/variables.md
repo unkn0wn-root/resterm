@@ -10,13 +10,17 @@ Resterm automatically searches, in order:
 
 It loads the first `resterm.env.json` or `rest-client.env.json` it finds. Each named environment must be an object. Values inside it can contain nested objects and arrays, which are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
 
-One environment file is resolved per workspace. Opening a request *file* from another directory does not reload it, because the active selection also keys globals, file variables, cookie jars and history scopes. So `resterm requests/api.http` picks up `requests/resterm.env.json`, while opening that same file from a workspace root with its own environment file keeps the root one. In a recursive workspace, Resterm warns at startup about environment files it will not load. To use one of them, start Resterm in that directory or pass `--env-file`.
+Resterm uses one environment file per workspace. Opening another request *file* inside that workspace keeps the same environment file. This keeps globals, file variables, cookies, and history tied to the same selection.
+
+For example, `resterm requests/api.http` picks up `requests/resterm.env.json`. Opening that file from a workspace root that has its own environment file keeps the root's environment instead. In a recursive workspace, Resterm warns at startup about environment files it will not load. To use one of those files, start Resterm in its directory or pass `--env-file`.
 
 Opening a *workspace*, or a request file that lives outside the current one, moves the workspace and re-resolves the environment for the new root:
 
-- The environment that carries across is the one you asked for, not the one you ended up with. A session started with `--env prod` looks for `prod` in the new workspace, and a later `Ctrl+E` choice becomes what gets replayed instead.
-- When the new workspace does not have it, the catalog loads but nothing is selected, since falling back to that workspace's default could put a `dev` session on `prod`. The header reads `ENV: none selected`, `Ctrl+E` offers what the workspace does have, and requests are refused until you choose.
-- The last response is forgotten. Globals, file variables, cookie jars, OAuth tokens and command auth are kept, but they stay tied to the workspace they came from. Runtime values are keyed by a scope that names both the selection and the environment file it was read from, so the new workspace cannot read them, and switching back restores the old session without logging in again. Two workspaces pointed at one `--env-file` share that scope on purpose. A workspace without an environment file has no file to key its values by, so they are forgotten when you leave. The same goes for environments built through the Go API.
+- Resterm looks for the environment you last chose. A session started with `--env prod` looks for `prod` in the new workspace. If you later choose one with `Ctrl+E`, that choice carries across instead. Resterm remembers the requested choice even if it could not select it in the previous workspace.
+- If that environment is missing, Resterm loads the available environments but leaves nothing selected. Using the new workspace's default could accidentally switch a `dev` session to `prod`. The header reads `ENV: none selected`. Use `Ctrl+E` to choose an environment before sending a request.
+- The last response is cleared. Globals, file variables, cookie jars, OAuth tokens, and command auth are kept for the workspace they came from. Resterm separates runtime values by both the full environment selection and the environment file. The new workspace cannot read the old workspace's values; switching back restores the old session without another login.
+
+  Two workspaces using the same `--env-file` share those values. A workspace without an environment file loses its runtime values when you leave, because there is no environment file to identify them by. Environments supplied through the Go API work the same way.
 - A file passed with `--env-file` remains active when the workspace changes. Resterm warns if the new workspace has its own environment file. Without `--env-file`, moving to a workspace with no environment file clears the current environment. If the new workspace's environment file cannot load, the move is refused and the current workspace and environment remain active.
 - A move is refused while a request is running, because that request can still write runtime values back and undo the reset. Finish or cancel it first.
 
@@ -70,7 +74,7 @@ Authorization: Bearer {{token}}
 
 `@const`, `@request`, `@global`, and `@file` all accept this form. The mapped value is available through templates and `vars`. Constants stay template-only. File declarations do not appear in `env`, which only contains values from the selected environment.
 
-If the OS variable is missing, the declaration stays undefined and still shadows lower-precedence sources. Resterm first tries the name as written, then its uppercase form.
+If the OS variable is missing, the declared value stays undefined. Resterm does not fall back to another source with the same name. It first tries the OS variable's name as written, then its uppercase form.
 
 Values loaded through `env:NAME` are secrets. Resterm hides them from previews and redacts them from results, explain output, and history. References are resolved once, so an OS value that contains `env:OTHER` stays unchanged. Only declarations are interpreted as references. Values from captures, workflows, and scripts are plain data.
 
@@ -186,15 +190,15 @@ opt.Environment = headless.EnvironmentOptions{
 }
 ```
 
-`EnvironmentOptions.Set` and `Grouped` are mutually exclusive, as are `Name` and `Selection`. Injected definitions take precedence over `FilePath`, and a partial grouped selection is filled in from the group defaults.
+You cannot combine `EnvironmentOptions.Set` with `Grouped`, or `Name` with `Selection`. Definitions supplied by your code take priority over `FilePath`. Groups left out of a selection use their defaults.
 
-Runtime state is keyed by the full selection, not by the resolved values. Cookies, runtime globals, file captures, command-auth entries, OAuth tokens, and persisted runtime state stay separate even when only the credentials profile changes. Values and secrets are never part of that key.
+Resterm keeps separate runtime state for each full group selection. Changing just the credentials profile gives you separate cookies, runtime globals, file captures, command-auth entries, OAuth tokens, and saved runtime state. The selection identifies that state; the variable values and secrets are never part of the key.
 
 A workspace uses one environment file. There is no group-local `$shared`, and the active selection is not remembered across restarts.
 
 ### Dotenv files via `--env-file`
 
-Prefer JSON for multi-environment bundles, but you can point Resterm at a dotenv file when you only need a single workspace:
+Use JSON when you need several environments. For a single environment, you can load a dotenv file instead:
 
 - Pass `--env-file path/to/.env`. Names like `.env.prod` and `prod.env` work too. Dotenv files are **never** auto-discovered. You have to opt in, so they never override values by surprise.
 - Supported syntax matches common `.env` loaders: optional `export` prefixes, `KEY=value` pairs, `#`/`;` comments, single- and double-quoted values (with escapes), and `${VAR}` or `$VAR` interpolation. References expand using earlier keys from the same file and the current OS environment.
@@ -223,7 +227,11 @@ Declarations other than `@run var`, and values in the selected environment, may 
 
 In templates, put a source name in front of a variable to read it from that source and skip the ones above it. `{{file.token}}` reads the `@file` value even when a request variable or a capture also defines `token`, or when a missing `env:NAME` reference hides `{{token}}`. The source names are `const`, `script`, `workflow`, `run`, `request`, `global` (runtime globals), `document-global` (`@global`), `file`, `environment`, and `env` (OS variables). A variable whose full name matches comes first, so one declared as `file.token` wins over this lookup.
 
-Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers in declared values are evaluated once when the request starts, so a script reads the same value the request sends. `{{= ... }}` expressions are left unchanged because they are evaluated later, when the request runs. Inside a `{{= ... }}` in a template, `vars` returns the same value as `{{name}}`, with helpers already evaluated. `@capture`, `@assert`, `@poll until=`, and `@retry-when` read the value the request sent. Captured values and values written by scripts are treated as data and are not expanded. Request getters in scripts, such as `request.getURL()` and the RestermScript `request.url`, also evaluate `{{= ... }}` expressions with the current variables.
+Scripts receive declared values with ordinary variable references already expanded. For example, `vars.get("name")` returns the same value as `{{name}}`. Dynamic helpers in declarations run once when the request starts, so the script reads the same generated value that the request sends.
+
+Expressions such as `{{= ... }}` stay as text until the request runs. Inside a `{{= ... }}` template expression, `vars` returns the same value as `{{name}}`, with helpers already evaluated. After sending, `@capture`, `@assert`, `@poll until=`, and `@retry-when` read the value the request used.
+
+Captured values and values written by scripts are data and are not expanded again. Request getters, such as `request.getURL()` in JavaScript and `request.url` in RestermScript, also evaluate `{{= ... }}` expressions using the current variables.
 
 Variable names are case-insensitive and ignore surrounding whitespace. A file variable named `token`, for example, takes precedence over an environment variable named `TOKEN`. When the same source defines a name more than once, the last declaration or script write wins. Global deletes also ignore case.
 

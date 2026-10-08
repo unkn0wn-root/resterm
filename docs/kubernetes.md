@@ -1,6 +1,6 @@
 # Kubernetes port-forwards
 
-Use `@k8s` to send HTTP, gRPC, WebSocket, and SSE traffic through a Kubernetes API port-forward that Resterm manages.
+Use `@k8s` to reach a service inside a Kubernetes cluster. Resterm opens a port-forward through the Kubernetes API for HTTP, gRPC, WebSocket, and SSE requests.
 
 The syntax is `# @k8s [scope] [name] key=value ...`. For example:
 
@@ -11,7 +11,7 @@ The syntax is `# @k8s [scope] [name] key=value ...`. For example:
 Options and rules:
 
 - `scope`: `global`, `file`, or `request` (default request). Global and file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
-- `name`: profile tag (default `default`).
+- `name`: the profile's name (default `default`).
 - Target fields:
   - `target=` accepts `pod:<name>`, `service:<name>`, `deployment:<name>`, `statefulset:<name>`.
   - Aliases: `pod=`, `service=` (`svc=`), `deployment=` (`deploy=`), `statefulset=` (`sts=`).
@@ -19,8 +19,8 @@ Options and rules:
 - Transport fields: `namespace` (`ns`), `port` (number or named port), `container`, `local_port` (`local-port`, `localport`), `address` (`bind`), `pod_running_timeout` (`pod-running-timeout`, `podwait`), `retries`, `persist` (only used at global and file scope), `context` (`kube_context`, `kube-context`), `kubeconfig` (`config`), `use`.
 - Values expand templates and support `env:VAR`, which checks your shell environment variables before other scopes.
 - `use=` checks file-scoped profiles first, then global ones.
-- Request-level `persist` is ignored to avoid leaking background forwarders.
-- `@ssh` and `@k8s` are mutually exclusive on a request.
+- `persist` is ignored on individual requests so they cannot leave a background port-forward running.
+- A request can use either `@ssh` or `@k8s`, but not both.
 
 Scopes:
 

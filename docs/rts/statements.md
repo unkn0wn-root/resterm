@@ -7,7 +7,7 @@ let name = expr
 const name = expr
 ```
 
-`let` creates a mutable binding and `const` creates an immutable binding. Redeclaring a name in the same scope is an error, while shadowing a name in an inner block is allowed. Assignment requires the name to exist in the current or parent scope.
+Use `let` for a variable you can reassign and `const` for one you cannot. You cannot declare the same name twice in one scope, but an inner block can declare its own version of an outer name (shadowing). An assignment must refer to a name already declared in the current or an outer scope.
 
 ## Assignment
 
@@ -25,7 +25,7 @@ fn add(a, b) {
 }
 ```
 
-Functions close over their lexical environment. Function names are immutable because `fn` defines a constant binding. Function parameters are local variables and can be reassigned.
+Functions retain access to variables from the scope where they were defined (a closure). You cannot reassign a function's name because `fn` defines it as a constant. Parameters are local variables and can be reassigned.
 
 ## Conditionals
 

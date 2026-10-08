@@ -1,6 +1,6 @@
 # SSH tunnels
 
-Use `@ssh` to send HTTP, gRPC, WebSocket, and SSE traffic through an SSH bastion.
+Use `@ssh` to reach a service behind an SSH bastion (jump host). Resterm opens the tunnel for HTTP, gRPC, WebSocket, and SSE requests.
 
 The syntax is `# @ssh [scope] [name] key=value ...`. For example:
 
@@ -11,7 +11,7 @@ The syntax is `# @ssh [scope] [name] key=value ...`. For example:
 Options and rules:
 
 - `scope`: `global`, `file`, or `request` (default request). Global and file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
-- `name`: profile tag (default `default`).
+- `name`: the profile's name (default `default`).
 - Fields: `host` (required), `port` (default 22), `user` (defaults to `$USER`), `password`, `key`, `passphrase`, `agent` (default true when `SSH_AUTH_SOCK` is present), `known_hosts` (default `~/.ssh/known_hosts`), `strict_hostkey` (default true, `strict_host_key` works too), `persist` (only used at global and file scope), `timeout`, `keepalive`, `retries`, `use` (profile selection).
 - Values expand templates and support `env:VAR`, which checks your shell environment variables before other scopes. Paths for `key` and `known_hosts` expand `~` and environment variables.
 - `key` is optional. Resterm uses your SSH agent if there is one, or falls back to the default keys (`~/.ssh/id_ed25519`, `id_rsa`, `id_ecdsa`). See [Default key detection](#default-key-detection) below.
@@ -57,7 +57,7 @@ GRPC passthrough:///grpc-internal:8082
 
 ## How it works
 
-SSH tunneling works at the transport layer, so other features work over it as usual. That includes `@trace`, `@profile`, `@workflow`, `@sse`, `@websocket`, `@graphql`, and `@grpc`.
+The tunnel carries the connection; you write the request as usual. Features such as `@trace`, `@profile`, `@workflow`, `@sse`, `@websocket`, `@graphql`, and `@grpc` work over it.
 
 ```text
 Your machine                    Bastion (SSH)                  Private VPC

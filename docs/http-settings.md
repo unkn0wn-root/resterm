@@ -1,7 +1,7 @@
 # HTTP transport and settings
 
-- CLI-wide transport defaults are available through [shared flags](cli/README.md#shared-execution-flags) such as `--timeout`, `--follow`, `--insecure`, and `--proxy`.
-- Per-request overrides use `@setting`, `@settings`, or `@timeout`:
+- Set connection defaults on the command line with [shared flags](cli/README.md#shared-execution-flags) such as `--timeout`, `--follow`, `--insecure`, and `--proxy`.
+- To change a setting for one request, use `@setting`, `@settings`, or `@timeout`:
 
   ```http
   ### Fast timeout
@@ -42,9 +42,11 @@ The same setting can be selected globally through an environment:
 }
 ```
 
-Environment, file, and request values use the normal global < file < request precedence. Setting keys are case-insensitive. A base or request target may contain templates, such as `# @setting base-url {{services.api.base}}`. The base is expanded only when the final request target is relative. An absolute request target ignores `base-url`, including an invalid or unresolved non-empty value. A skipped request and a gRPC request do not use it either.
+Request settings override file settings, which override environment settings: global < file < request. Setting keys are case-insensitive. The base URL and the request URL can contain templates, such as `# @setting base-url {{services.api.base}}`.
 
-Relative targets follow standard URI-reference resolution, including path-relative, root-relative, query-only, parent-segment, and network-path references:
+Resterm expands the base only when the final request URL is relative. An absolute URL ignores `base-url`, even if the base contains an invalid or unresolved non-empty value. Skipped requests and gRPC requests do not use it either.
+
+Relative URLs follow the standard URI-reference rules. You can append a path, start from the host's root, replace the query, move up a directory, or name a different host:
 
 | Base `https://api.example.com/v1/` | Effective URL |
 | --- | --- |
@@ -57,7 +59,9 @@ Relative targets follow standard URI-reference resolution, including path-relati
 
 The trailing slash matters: `https://api.example.com/v1/` plus `users` keeps `/v1/`, while `https://api.example.com/v1` plus `users` produces `https://api.example.com/users`. Resterm does not insert a slash.
 
-The configured base must be an absolute `http` or `https` URL with a host. It may include a port and path, but not userinfo, a query, or a fragment. An explicitly empty value is an error. A relative request without a usable base fails before connecting. Network-path targets (`//host/path`) can change the destination host on purpose. Request headers and configured authentication go to that new host.
+The base must be an absolute `http` or `https` URL with a host. It may include a port and path, but cannot contain a username or password (userinfo), a query, or a fragment. An explicitly empty value is an error. A relative request without a usable base fails before connecting.
+
+A network-path URL (`//host/path`) changes the destination host. The request's headers and configured authentication go to that host too.
 
 REST, GraphQL, SSE, and WebSocket requests share the setting. For WebSockets, an effective `http` URL becomes `ws` and `https` becomes `wss`. WebSocket fragments are rejected. `base-url` does not change gRPC targets. A request method remains required, so `GET /users` is valid while a bare `/users` line is not a request.
 

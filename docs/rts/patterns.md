@@ -2,6 +2,8 @@
 
 ## Guarded requests
 
+Skip a request when a required value is missing. Here, the request runs only if an auth token is available:
+
 ```http
 # @when vars.has("auth.token")
 GET {{base_url}}/bearer
@@ -9,6 +11,8 @@ Authorization: {{= "Bearer " + vars.get("auth.token") }}
 ```
 
 ## Reusable module logic
+
+Put a function in a module when several requests need it. This function builds a user label with fallback values for missing fields:
 
 ```rts
 module users
@@ -24,7 +28,7 @@ X-User: {{= users.label(user) }}
 
 ## Limits and safety
 
-RestermScript enforces hard limits to prevent runaway scripts and keep the UI responsive. When a limit is exceeded, evaluation fails with a detailed error.
+RestermScript stops evaluation when any of these limits is exceeded. The error identifies the limit, so a runaway script cannot keep the UI busy indefinitely.
 
 | Limit | Value |
 | --- | --- |
@@ -36,6 +40,6 @@ RestermScript enforces hard limits to prevent runaway scripts and keep the UI re
 
 ## Design constraints and why they exist
 
-RestermScript puts predictable evaluation and safe execution first. It does not allow file writes or network access, and file reads are limited to `json.file` when enabled. It has no member assignment, which reduces side effects and keeps the interpreter simple. It requires an explicit alias or module name to avoid name collisions and keep imports clear. Host objects are read-only in most contexts because request evaluation should stay declarative. Dict keys are sorted during `range`, so iteration order is the same on every run.
+RTS does not allow file writes or network calls. It can read files only through `json.file`, when enabled. Use JavaScript `@script` blocks when you need fuller scripting support or side effects.
 
-If you need full scripting or side effects, use JavaScript `@script` blocks. For everything else, RestermScript is the safer and more readable choice.
+Other restrictions make request logic easier to follow. You cannot assign to an object member, which limits side effects and keeps the interpreter simple. Imports need an explicit alias or module name so names do not collide. Most host objects are read-only during request evaluation; pre-request blocks can change the request and variables. Dict keys are sorted during `range`, so the same dict is visited in the same order on every run.

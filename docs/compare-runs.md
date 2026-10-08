@@ -6,9 +6,11 @@ Run the same request across several environments, either from the request file o
 - Supply global defaults with `resterm --compare dev,stage,prod --compare-base stage`, then press `g+c` anywhere in the editor to reuse those targets even if the request lacks `@compare`.
 - While a compare run is active, Resterm switches to a split layout, pins the previous response in the secondary pane, and shows progress in the status bar (`Compare dev✓ stage… prod?`). The Compare tab shows a table with the status, code, duration, and diff summary for each environment.
 - Each compare sweep writes one bundled history entry (`COMPARE` method). [History and diffing](history.md) covers replaying it.
-- Navigate the Compare tab with ↑/↓ (or PgUp/PgDn/Home/End) to highlight any environment, then press `Enter` to load that environment's snapshot into the primary pane. The configured baseline stays pinned in the secondary pane. The Diff tab (and Pretty, Raw, and Headers) then compare the selected environment with the baseline. Choosing the baseline row gives an identical diff, and choosing another environment shows how it differs from the baseline. To compare against a different reference, run again with a new `base=` value or load the pair you want from History.
+- In the Compare tab, use ↑/↓ (or PgUp/PgDn/Home/End) to highlight an environment. Press `Enter` to load its saved response into the primary pane. The baseline stays pinned in the secondary pane, so Diff, Pretty, Raw, and Headers compare the selected environment with it.
 
-Grouped compare varies exactly one group and holds every other active choice fixed:
+  Selecting the baseline row shows no differences. Select another row to see what changed. To use a different baseline, run again with a new `base=` value or load the pair from History.
+
+With grouped environments, a compare run changes one group and keeps the other selections fixed. This example compares API profiles while keeping the same app and credentials:
 
 ```http
 # @compare group=api dev uat prod base=dev

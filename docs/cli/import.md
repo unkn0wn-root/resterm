@@ -60,7 +60,9 @@ Security schemes in the spec become `@auth` on the requests that use them:
 
 The globals are written at the top of the file with placeholder values such as `replace-with-token`, and secrets use `@global-secret`. Replace the placeholders before you send requests. Schemes Resterm cannot convert are skipped with a warning.
 
-Mock generation creates a mock for every concrete response status and media example in the spec. Named examples become named scenarios, and when a response has no example Resterm samples its schema. Range responses such as `2XX` and `default` are skipped. External examples and binary example bodies cannot produce a deterministic inline mock, so they are dropped with a diagnostic.
+Mock generation creates a mock for every specific response status and media example in the spec. Named examples become named scenarios. If a response has no example, Resterm generates a sample from its schema.
+
+Range responses such as `2XX` and `default` are skipped. External examples and binary bodies cannot be turned into a fixed inline mock, so Resterm skips them and reports why.
 
 Without `--http-out`, Resterm picks the output name:
 

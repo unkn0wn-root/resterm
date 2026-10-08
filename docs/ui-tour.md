@@ -1,11 +1,13 @@
 # UI tour
 
+The terminal interface has three main areas: the navigator on the left, the editor in the middle, and responses on the right. Use `Tab` to move between them and `?` to open help.
+
 ## Layout
 
 - **Sidebar**: one navigator tree for files, requests, and workflows, with a filter bar and tag and method chips. `→`/`Space` expand files, `g+k`/`g+j` expand or collapse the current branch, and `g+Shift+K`/`g+Shift+J` expand or collapse all. A detail panel under the list shows a summary of the selected request or workflow. When the sidebar is focused, `g+h` shrinks it and `g+l` widens it.
-- **Editor**: the middle pane, with modal editing (view mode by default, `i` to insert, `Esc` to go back to view mode). Syntax highlighting marks metadata, headers, and bodies.
+- **Editor**: the middle pane. It starts in view mode, where keys move the cursor or run commands. Press `i` to type and `Esc` to return to view mode. Syntax highlighting marks metadata, headers, and bodies.
 - **Response panes**: the right side shows the most recent response. You can split it to compare responses side by side.
-- **Header bar**: shows the workspace, active environment, current request, test summaries, the latest transport status and RTT, and the Help shortcut.
+- **Header bar**: shows the workspace, active environment, current request, test summaries, the latest connection status and round-trip time (RTT), and the Help shortcut.
 - **Command bar & status**: contextual hints, progress, and notifications. Long messages are shortened so the file, focus, and mode sections stay visible. Errors and long warnings open a popup with the full message. Press `Esc` or `Enter` to close it, or `j`/`k` to scroll. Press `g .` to see warnings for the current document, or to reopen the current status message when there are none. Run summaries and confirmation prompts stay in the bar, because their details or next step are available elsewhere.
 
 ## Core shortcuts
@@ -45,7 +47,7 @@ The command bar at the bottom changes with the focused pane, editor mode, and re
 
 ## Editor completions (IntelliSense)
 
-In insert mode, Resterm suggests completions at the caret using the open file and
+In insert mode, Resterm suggests completions at the cursor using the open file and
 active environment. It makes no network calls while you type.
 
 | Context | What completes |
@@ -138,7 +140,7 @@ Press `g+Shift+E` to open the body in your default app. Resterm only opens types
 - Add a `# @trace` directive to turn on HTTP tracing for a request. Budgets use `phase<=duration` or `phase=duration`, such as `dns<=50ms` or `total=300ms`, with an optional `tolerance=` that applies to every phase. `allowance=` and `grace=` are other names for `tolerance=`. The supported phases are `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
 - Phases also have other names: `lookup` or `name` for `dns`, `dial` for `connect`, `handshake` for `tls`, `headers`, `header`, `req_headers`, or `request-headers` for `request_headers`, `body`, `req_body`, or `request-body` for `request_body`, `first_byte` or `wait` for `ttfb`, `download` for `transfer`, and `overall` for `total`. An unknown phase or option is reported as a warning and has no effect. A setting written with spaces around `=` or `<=`, such as `total = 300ms`, is an error, and so is an option such as `tolerance` written with `<=`. A budget with an invalid duration is ignored without a warning.
 - `# @trace off` turns tracing off but keeps the directive in the file. `disable`, `false`, and `enabled=false` do the same.
-- When a traced response arrives, Resterm checks the budgets, shows status bar warnings for breaches, and enables the Timeline tab. Press `Ctrl+Alt+L` or `g+t` to jump to it from anywhere.
+- When a traced response arrives, Resterm checks the budgets, warns in the status bar if a phase took too long, and enables the Timeline tab. Press `Ctrl+Alt+L` or `g+t` to jump to it from anywhere.
 - The Timeline view draws proportional bars, marks overruns, and lists budget breaches. Details such as cached DNS results or reused sockets appear under each phase, followed by Connection and TLS panels (protocol, reuse, proxy/SSH, resolved IPs, cipher/ALPN, cert chain, SANs, issuer, expiry).
 - Scripts can read trace data through the `trace` object, with calls such as `trace.enabled()`, `trace.phases()`, `trace.breaches()`, and `trace.withinBudget()`. JavaScript test blocks can use them to check timings automatically. `trace.connection()` and `trace.tls()` are only available in RestermScript.
 - `_examples/trace.http` has two requests you can run, one within budget and one that breaks it on purpose, to show the timeline and status messages.

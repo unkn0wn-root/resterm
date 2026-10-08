@@ -1,6 +1,6 @@
 # JavaScript hooks
 
-Scripts use ES5.1 JavaScript. Each script block stops after 30 seconds or when the run is canceled. Scripts are not restricted to the workspace. See [Security](security.md).
+Use JavaScript hooks to prepare a request before sending it or test a response afterwards. Scripts use ES5.1 JavaScript. Each block stops after 30 seconds or when the run is canceled. Scripts are not restricted to the workspace. See [Security](security.md).
 
 ## Script blocks (`@script`)
 
@@ -115,7 +115,9 @@ api.http:13: Script sends {{$uuid}} in header X-Request-Id as written. Use vars.
 
 The warning appears in the status bar, in Explain, and under the request in `resterm run`.
 
-All `@script pre-request` blocks for a request share the same state. Each block sees changes made by earlier blocks through `vars.get`, `vars.global.get`, `getURL`, `getMethod`, and `getHeader`. RTS pre-request blocks run before JavaScript blocks, so their changes are visible too. Query parameters are different because they are merged into the URL after the scripts finish. So `getURL` does not show changes made by `setQueryParam`.
+All `@script pre-request` blocks for a request share the same state. Later blocks see earlier changes through `vars.get`, `vars.global.get`, `getURL`, `getMethod`, and `getHeader`. RTS pre-request blocks run before JavaScript blocks, so their changes are visible too.
+
+Query parameters are merged into the URL after all scripts finish. While scripts are running, `getURL` does not show changes made by `setQueryParam`.
 
 ## Test scripts (`@script test`)
 

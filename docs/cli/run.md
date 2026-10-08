@@ -1,6 +1,6 @@
 # resterm run
 
-`resterm run` runs request files without the TUI. It parses a request file, selects one or more targets, runs them with the same engine as the TUI, and writes the result to stdout.
+Use `resterm run` to run request files from a terminal, script, or CI job. It uses the same engine as the terminal interface (TUI), selects the requests or workflow you asked for, and writes results to standard output (stdout).
 
 ```bash
 resterm run [flags] <file|->
@@ -15,7 +15,7 @@ resterm run [flags] <file|->
 If you do not pass a selector:
 
 - a file with one request runs that request automatically
-- a file with multiple requests prompts for a choice when stdin/stdout are TTYs
+- a file with multiple requests opens a picker when both stdin and stdout are connected to terminals (TTYs)
 - a file with multiple requests prints a numbered list and exits with code `2` in non-interactive use
 
 The interactive picker follows the active theme and can be customized with `styles.cli_run_picker*` without changing TUI list or response-pane styling.
@@ -53,7 +53,7 @@ Environment selection rules:
 
 | Format | Behavior |
 | --- | --- |
-| `auto` | For exactly one request result, render a human request view similar to the TUI. Otherwise, fall back to the text report. |
+| `auto` | For exactly one request result, show a request view similar to the TUI. Otherwise, use the text report. |
 | `text` | Stable human-readable summary for requests, workflows, compare runs, and profiles. |
 | `json` | Machine-readable JSON report. |
 | `junit` | JUnit XML report for CI systems. |
@@ -82,13 +82,13 @@ Output rules:
 | Flag | Short | Description |
 | --- | --- | --- |
 | `--fail-fast` | `-ff` | Stop after the first failed top-level result and mark the remaining selected requests as skipped. |
-| `--exit-code-mode <mode>` | `-m <mode>` | `detailed` returns classified CI exit codes. `summary` keeps the old `0`/`1`/`2` codes. |
+| `--exit-code-mode <mode>` | `-m <mode>` | `detailed` returns a code for the kind of failure. `summary` keeps the old `0`/`1`/`2` codes. |
 
-JSON output includes a top-level `schemaVersion`, `summary.exitCode`, `summary.failureCodes`, and per-result `failure` metadata when a result fails. Workflow, compare, and profile failures include the same structured failure object at the step or profile-iteration level. gRPC results include `grpc.statusDetails` with each status detail message encoded as JSON when the server returns any.
+JSON output includes a top-level `schemaVersion`, `summary.exitCode`, and `summary.failureCodes`. Each failed result has a `failure` object. For workflows and compare runs, the same object appears on failed steps; for profiles, it appears on failed iterations. When a gRPC server returns status details, `grpc.statusDetails` contains those messages as JSON.
 
 ## Artifacts And Persisted State
 
-`resterm run` can write artifacts from a run and, if you ask, keep runtime state between runs.
+Save stream transcripts and trace summaries as artifacts, or keep globals, authentication, and history between runs with the flags below.
 
 | Flag | Short | Description |
 | --- | --- | --- |

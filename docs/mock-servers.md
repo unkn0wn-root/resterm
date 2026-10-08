@@ -1,6 +1,6 @@
 # Mock servers
 
-Mock scenarios live beside requests in ordinary `.http` / `.rest` files. A scenario starts after a `###` separator, declares its route with `@mock`, and contains a raw HTTP response:
+Define mock responses beside your requests in `.http` / `.rest` files. Each scenario starts with a `###` separator, uses `@mock` to say which route it serves, and includes the HTTP response to return:
 
 ```http
 ### Payment accepted
@@ -16,10 +16,10 @@ Serve a file or a workspace with `resterm mock payments.http`, or press `g Shift
 
 ## Route and response syntax
 
-- `method` and an origin-form `path` are required. Paths may be exact (`/health`), use segment wildcards (`/users/{id}`), or end in a remainder wildcard (`/assets/{path...}`). Wildcard names must be unique within a path. A trailing slash is significant.
+- `method` and `path` are required. Write the path from the root, without a scheme or host (origin form). It may be exact (`/health`), match one segment (`/users/{id}`), or match the rest of the path (`/assets/{path...}`). Wildcard names must be unique within a path. A trailing slash changes which route matches.
 - `name` is an optional scenario selector containing letters, digits, `.`, `_`, or `-`.
 - `sequence` names a response sequence and follows the same naming rules. It cannot be combined with `name`.
-- `sequence-key` optionally gives a sequence its own cursor per `path`, `query`, `header`, or `cookie` value. It requires `sequence`.
+- `sequence-key` gives each distinct `path`, `query`, `header`, or `cookie` value its own position in the sequence. It requires `sequence`.
 - `default=true` marks the fallback for a route. A route can have at most one default, and a default cannot also have `@match` conditions.
 - `latency` takes a non-negative duration such as `150ms` or `2s`, or a [distribution](#response-latency) that changes the delay from request to request. Waiting stops when the client cancels the request.
 - Response interpolation is enabled by default. Set `interpolate=false` to preserve `{{...}}` as literal response text.
@@ -29,7 +29,7 @@ Serve a file or a workspace with `resterm mock payments.http`, or press `g Shift
 
 ## Response latency
 
-`latency=150ms` delays every response by the same amount. Real services are less predictable than that, so `latency` also takes a distribution, which gives each request a different delay. That is what makes a mock useful for testing client timeouts, retries, and backoff:
+`latency=150ms` delays every response by the same amount. To vary the delay between requests, use a distribution. This lets you test how a client handles timeouts, retries, and backoff:
 
 ```http
 # @mock method=GET path=/slow latency=random(100ms,500ms)
@@ -124,7 +124,9 @@ HTTP/1.1 200 OK
 {"status":"completed"}
 ```
 
-Ordinary requests advance atomically through the sequence. Once the final response is reached, it repeats forever. Without `sequence-key`, there is one cursor per compiled scenario, shared by every client and every concrete wildcard path. `@match`, `default`, and `latency` apply to the whole sequence. A selected step is consumed before latency, interpolation, or response writing. Cancellation and rendering or write failures do not replay a transient step.
+Each ordinary request reserves the next response in the sequence, even when requests arrive at the same time. Once the last response is reached, it repeats. Without `sequence-key`, all clients and wildcard path values share one position (cursor) per compiled scenario. `@match`, `default`, and `latency` apply to the whole sequence.
+
+Resterm advances the cursor before waiting for latency, filling placeholders, or writing the response. If the client cancels or rendering or writing fails, the reserved response is still consumed.
 
 Use one of these key sources when callers should advance independently:
 
@@ -174,7 +176,9 @@ Query and header matchers share the same shorthand and the same rule objects:
 - `absent` requires no value at all.
 - `gt`, `gte`, `lt`, and `lte` are query-only. Each succeeds when any value reads as a number and compares that way against the operand.
 
-Each key declares exactly one rule. Header names are case-insensitive and query parameter names are case-sensitive. Values are case-sensitive in both. Every rule except `exact`, `present`, and `absent` tests each repeated value on its own and succeeds as soon as one of them matches. A comma-separated list inside a single value is never split, and a missing key fails all of them. Empty `prefix`, `contains`, and `regex` operands are rejected, as is an empty `oneOf` array. To match an empty value on purpose, write `{"regex":"^$"}`.
+Each key takes exactly one rule. Header names ignore case; query parameter names and all values are case-sensitive.
+
+Except for `exact`, `present`, and `absent`, each rule checks repeated values individually and passes if any one matches. A comma-separated list inside one value is not split, and a missing key fails these rules. Empty `prefix`, `contains`, and `regex` operands and empty `oneOf` arrays are rejected. To match an empty value, write `{"regex":"^$"}`.
 
 The numeric operand must be written as a JSON number, so `{"gte":2}` rather than `{"gte":"2"}`. A value that does not read as a number is an ordinary non-match, not an error, so `?page=none` fails `{"gte":2}`.
 
@@ -259,7 +263,7 @@ You can also split unrelated fields across declarations:
 
 Resterm merges repeated object values. Repeating a field or a non-object value is an error. When Resterm rewrites the file, it writes the matcher as one merged line.
 
-Scenario selection is deterministic:
+Resterm selects a scenario in this order:
 
 1. `X-Resterm-Mock: <name>` selects a named scenario directly.
 2. `X-Resterm-Mock-Status: <code>` limits candidates to a response status. It can be combined with the name selector. For a sequence, it pins the first matching step without advancing.
@@ -295,9 +299,11 @@ The pattern fields work like the matching `@match` options. [The `mock` object](
 
 CORS follows the `--cors` flag of [`resterm mock`](cli/mock.md). A declared `OPTIONS` mock takes precedence over automatic preflight handling.
 
-Watching is enabled by default. Source and fixture changes compile into a new immutable route set and swap atomically. A parse or compile error leaves the last valid routes serving. Reloading keeps the request journal, while verification uses the newly active expectations.
+Resterm watches source and fixture files by default. After a change, it builds a complete new set of routes and replaces the old set in one operation. If parsing or compilation fails, the last valid routes keep serving. Reloading keeps the request journal, while verification uses the new expectations.
 
-The access log and the verification journal are kept separately, and both have size limits. By default the log keeps 200 entries and the journal keeps 2000. The journal also has a 16 MiB limit for stored data and keeps up to 64 KiB of each request body. Change these with `--journal-entries`, `--journal-bytes`, and `--journal-body-limit`. The journal records matched, unmatched, and method-not-allowed requests, but not CORS preflights or private operational calls. If an entry is dropped or cannot be stored, verification fails instead of reporting a count that may be wrong. Patterns that only check metadata can still inspect a stored request whose body was truncated. A JSON pattern reports the journal as incomplete for that request.
+The access log shows recent traffic; the verification journal stores requests for call-count checks. They are separate and both have limits. By default, the log keeps 200 entries and the journal keeps 2000. The journal also limits stored data to 16 MiB and keeps up to 64 KiB of each request body. Change its limits with `--journal-entries`, `--journal-bytes`, and `--journal-body-limit`.
+
+The journal records matched, unmatched, and method-not-allowed requests. It excludes CORS preflights and private operational calls. If an entry is dropped or cannot be stored, verification fails rather than reporting a potentially wrong count. A pattern that checks only metadata can still inspect a request whose stored body was truncated. A JSON pattern reports the journal as incomplete for that request.
 
 Inside the TUI:
 
@@ -311,6 +317,8 @@ Inside the TUI:
 - While the server runs, the header shows its compact source scope when space allows. The status bar shows the active address, route count, call count, and reload-error marker.
 - The active editor buffer overlays its on-disk file during reload, so unsaved mock edits can be tested. Invalid edits keep the last valid routes.
 
-Press `g a` or run `:mock capture` to append the focused live or pinned HTTP response as a mock block. Capture keeps the status, ordinary headers, raw text body, method, and URL path. It deliberately skips query/header/body matchers and latency. The new block stays unsaved and the editor jumps to it for review. Persisted history entries, binary or non-UTF-8 bodies, bodies over 4 MiB, lines longer than the parser accepts, and bodies containing a `###` separator are not captured inline. Check captured headers and bodies for credentials or personal data before saving.
+Press `g a` or run `:mock capture` to append the focused live or pinned HTTP response as a mock block. Capture keeps the status, ordinary headers, raw text body, method, and URL path. It does not add query, header, or body matchers, or latency. The editor jumps to the new, unsaved block so you can review it.
+
+Inline capture does not accept persisted history entries, binary or non-UTF-8 bodies, bodies over 4 MiB, lines longer than the parser allows, or bodies containing a `###` separator. Check captured headers and bodies for credentials or personal data before saving.
 
 OpenAPI imports can create the same blocks with `--openapi-mode mocks` or combine requests and mocks with `--openapi-mode both`.

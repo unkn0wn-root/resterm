@@ -16,7 +16,7 @@
 # @apply use=jsonApi,use=authProd
 ```
 
-`@apply` is a request-scoped directive, and you can use it more than once in a request. Each apply expression is evaluated in order before pre-request scripts. The expression must return a dict patch with specific keys.
+Use `@apply` on a request to change its fields before pre-request scripts run. You can add more than one; Resterm evaluates them in order. Each expression must return a dict with the patch keys listed under `@patch` below.
 
 Header names in a patch follow the same rule as `request.setHeader`: they must be HTTP field names, whitespace is not trimmed, and a patch that names one header twice is an error, so the result never depends on map order. See [Keys and names](language.md#keys-and-names).
 
@@ -55,7 +55,7 @@ A patch can contain these keys:
 
 These directives are evaluated before pre-request scripts. If a `@when` condition is false or a `@skip-if` condition is true, the request is skipped and Resterm reports why.
 
-In a workflow, put `@when` or `@skip-if` above a `@step` to gate that step. When the step has its own `@for-each`, the condition is checked for each item instead. See [Workflows](../workflows.md).
+In a workflow, put `@when` or `@skip-if` above a `@step` to decide whether that step runs. When the step has its own `@for-each`, the condition is checked for each item instead. See [Workflows](../workflows.md).
 
 ## @assert
 
@@ -69,7 +69,7 @@ Each expression is evaluated, and a truthy result passes. Use `response` for the
 
 ## @if, @elif, and @else
 
-These directives are used in workflows to branch steps. Outside an active workflow, they are ignored and the parser shows a warning. Use `@when` or `@skip-if` to gate an ordinary request.
+Use these directives in workflows to choose a step based on a condition. Outside an active workflow, they are ignored and the parser shows a warning. Use `@when` or `@skip-if` to decide whether an ordinary request runs.
 
 ```http
 # @if last.statusCode == 200 run=StepOK

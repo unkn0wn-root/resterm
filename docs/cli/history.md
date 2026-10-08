@@ -1,6 +1,6 @@
 # resterm history
 
-The history commands work with persisted history. [Configuration](../configuration.md) says where it lives, and [History and diffing](../history.md) covers history in the TUI.
+Use the history commands to back up, inspect, or move saved history. [Configuration](../configuration.md) lists its location, and [History and diffing](../history.md) covers browsing and replaying it in the TUI.
 
 | Command | What it does |
 | --- | --- |

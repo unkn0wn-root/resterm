@@ -1,23 +1,25 @@
 # Resterm documentation
 
-Each page below is one file in this directory. The same pages are published at https://resterm.app/docs/. To add or change a page, see [website/README.md](../website/README.md#docs-come-from-docs).
+Start with [Install](install.md) and [Quick start](quick-start.md), then use the topics below as you need them.
+
+These Markdown files also supply the pages at https://resterm.app/docs/. To edit or add a page, see [website/README.md](../website/README.md#docs-come-from-docs).
 
 ## Getting started
 
 - [Install](install.md): Install Resterm with Homebrew, the install scripts, a release binary or Go.
-- [Quick start](quick-start.md): Write a first request file, send it, and bootstrap a project with resterm init.
-- [UI tour](ui-tour.md): The panes, completions, help and response views of the TUI.
+- [Quick start](quick-start.md): Write your first request file, send a request, or create a starter project with resterm init.
+- [UI tour](ui-tour.md): Find your way around the terminal interface (TUI), from the editor to help and response tabs.
 - [Key bindings](key-bindings.md): Every default shortcut, and how to change them in a bindings file.
 - [Workspaces and files](workspaces.md): How Resterm finds request files, and how to send a request without one.
 
 ## Request files
 
 - [Request file anatomy](request-files.md): Separators, comments, directives and bodies in .http and .rest files.
-- [Variables and environments](variables.md): Environment files, variable scopes, resolution order, dynamic helpers and secrets.
+- [Variables and environments](variables.md): Choose an environment, reuse values, generate test data and keep secrets out of request files.
 - [Captures](captures.md): Store values from a response and reuse them in later requests.
 - [Authentication](authentication.md): Static tokens, captured tokens, OAuth 2.0 and tokens from CLIs you already use.
 - [JavaScript hooks](scripting.md): JavaScript pre-request and test scripts with @script.
-- [HTTP transport and settings](http-settings.md): Base URLs, timeouts, proxies, TLS and other transport settings.
+- [HTTP transport and settings](http-settings.md): Set base URLs, timeouts, proxies, TLS and other connection options.
 
 ## Protocols
 
@@ -30,7 +32,7 @@ Each page below is one file in this directory. The same pages are published at h
 - [Workflows](workflows.md): Chain named requests into steps with @workflow and @step.
 - [Polling and retries](polling-and-retries.md): Repeat a request until a condition holds, or retry it on failure.
 - [Compare runs](compare-runs.md): Send the same request to several environments and diff the results.
-- [Profiling](profiling.md): Run a request many times and read its latency percentiles.
+- [Profiling](profiling.md): Repeat a request to measure response times, percentiles and failures.
 - [Mock servers](mock-servers.md): Serve mock responses defined next to your requests, with matching and sequences.
 - [Recording traffic](recording.md): Put the Resterm proxy in front of an API and save the traffic as requests or mocks.
 - [History and diffing](history.md): Browse, replay and diff past responses.
@@ -54,7 +56,7 @@ Each page below is one file in this directory. The same pages are published at h
 
 ## CLI
 
-- [Overview](cli/README.md): The command-line entry points, their argument order and shared flags.
+- [Overview](cli/README.md): Choose a command and look up its argument order and shared flags.
 - [resterm run](cli/run.md): Run request files without the TUI, for scripts and CI.
 - [resterm mock](cli/mock.md): Serve, reset, clear and verify mock servers from the command line.
 - [resterm record](cli/record.md): Record application traffic from the command line.

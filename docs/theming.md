@@ -1,6 +1,6 @@
 # Theming
 
-Resterm lets you override its Lip Gloss styles. Fonts and the final colors still come from your terminal emulator. The theme only controls which colors Resterm asks the terminal to use.
+Use a theme to change Resterm's colors and text styles. Theme files configure its Lip Gloss styles; your terminal emulator still controls the font and how the requested colors appear.
 
 ## Where themes live
 
@@ -11,7 +11,7 @@ Resterm lets you override its Lip Gloss styles. Fonts and the final colors still
 
 ## Theme anatomy
 
-Theme files can be TOML or JSON. Unspecified fields inherit defaults.
+Theme files can be TOML or JSON. You only need to include the fields you want to change; the rest keep their defaults.
 
 ```toml
 [metadata]

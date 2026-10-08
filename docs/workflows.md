@@ -1,6 +1,6 @@
 # Workflows
 
-Group existing requests into repeatable workflows using `@workflow` blocks. Each step references a request by name and can override variables or expectations.
+Use a `@workflow` block to run existing requests in order, such as logging in, creating a user, and fetching that user. Each step names a request and can override its variables or expected response.
 
 ```http
 ### Provision account
@@ -19,7 +19,9 @@ POST https://example.com/users
 GET https://example.com/users/{{vars.workflow.userId}}
 ```
 
-Workflows parsed from the current document appear in the navigator on the left, under their file. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes, the **Workflow** tab shows a summary, a stable step list, and the response for the selected step. Resterm selects the first failed or canceled step by default, or the first step when everything passes. Press `Enter` or `Space` on a selected step to focus its response detail and scroll long responses without changing the selected step. One combined entry is written to history so you can review the results later.
+Workflows appear under their file in the navigator on the left. Select one and press `Enter` (or `Space`) to run it. Resterm runs the steps in order and shows progress in the status bar. With `on-failure=continue`, later steps still run after a failure.
+
+When the run finishes, the **Workflow** tab shows a summary, a stable list of steps, and the selected step's response. Resterm selects the first failed or canceled step, or the first step if everything passed. Press `Enter` or `Space` on a step to focus its response and scroll without moving to another step. The full run is saved as one history entry.
 
 Key directives and tokens:
 
@@ -28,7 +30,11 @@ Key directives and tokens:
 - `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required, `run=` works too), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments. The alias is the first word, so quote it when it holds spaces or an equals sign (`@step "Create Account" using=CreateUser`). `name=` sets it instead when the step starts with an option.
 - `vars.request.*` keys add step-scoped values that are available as `{{vars.request.<name>}}` during that request. They do not rewrite existing `@var` declarations automatically, so reference the namespaced token (or copy it in a pre-request script) when you want the override.
 - `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, so later requests can reuse or change shared values such as `vars.workflow.userId`.
-- `@when` or `@skip-if`, and `@for-each`, written above a `@step` apply to that step. A step takes one of each, in either order. A false `@when` or a true `@skip-if` skips the step, and `@for-each` runs it once for each item. When the step has its own `@for-each`, the condition is checked for each item and can use the loop variable. When the `@for-each` is on the request, the condition is checked once, before the loop starts, so it can skip the whole step. The loop variable is not set yet, so a condition that uses it fails. To check each item, put the condition on the request. To skip a step loop whose list may be missing, make the list optional, as in `((try json.file("_data/users.json")).value ?? [])`. An empty list skips the step. A step loop cannot be combined with a `@for-each` on the request it uses. [Directives](rts/directives.md) covers the expressions.
+- Put `@when` or `@skip-if`, and `@for-each`, above a `@step` to apply them to that step. A step takes one of each, in either order. A false `@when` or a true `@skip-if` skips the step; `@for-each` runs it once per item.
+
+  If the step has its own `@for-each`, its condition is checked for each item and can read the loop variable. If the loop is on the request instead, the step's condition is checked once before the loop starts. The loop variable does not exist yet, so reading it fails. Put the condition on the request to check each item in that loop.
+
+  If a step's list may be missing, make it optional with `((try json.file("_data/users.json")).value ?? [])`. An empty list skips the step. You cannot put a loop on both a step and the request it uses. [Directives](rts/directives.md) covers the expressions.
 - `@run var <name> = <value>` gives the steps one shared value. See [Run variables](#run-variables).
 - Unknown tokens on `@workflow` or `@step` are kept in `Options`, so custom scripts or future features can use them without changing the file format.
 - An unknown directive between `@workflow` and the next request is a parse error. Directives attached to requests remain request-scoped, even when the workflow runs those requests. Resterm continues parsing valid workflow steps to report other problems, but it will not run the file until the error is fixed.

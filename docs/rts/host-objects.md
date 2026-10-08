@@ -1,6 +1,10 @@
 # Host objects
 
-Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers. Other available objects are read-only. Lookups in `env` and `vars` are case-insensitive and ignore surrounding whitespace. Header lookups are case-insensitive, while query parameters and JSON paths are exact. See [Keys and names](language.md#keys-and-names). The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped.
+Host objects give your expressions access to Resterm's environment, request, response, and other runtime data. They are available in templates, directives, `@apply`, assertions, and pre-request scripts. Pre-request scripts can change `request` and `vars`; the other available objects are read-only.
+
+Lookups in `env` and `vars` ignore case and surrounding whitespace. Header lookups ignore case, while query parameters and JSON paths must match exactly. See [Keys and names](language.md#keys-and-names).
+
+The TUI also provides `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped.
 
 ## Name precedence
 
@@ -12,7 +16,7 @@ Every evaluation binds its names in a fixed order, and a later layer wins:
 4. Local values, currently the `@for-each` loop variable. These shadow every layer above, so `# @for-each [1,2] as json` makes `json` the loop item for that request and hides the `json` namespace.
 5. The `@assert` shorthands, inside assertions only. `status`, `statusCode`, `statusText`, `header(name)`, and `text()` always refer to the response under test, so a loop variable named `status` is still the loop item everywhere except inside an `@assert`.
 
-Reserved words are never bindable at any layer. The parser rejects them in `@for-each` and `@use`, and the runtime rejects them again.
+Reserved words cannot be used as names in any layer. Both the parser and the runtime reject them, including in `@for-each` and `@use`.
 
 Shadowing applies to expressions. A module or an `@rts pre-request` block still cannot declare a name that is already bound, so `let json = 1` has always been an error. A local adds its own name to that rule. A request with `# @for-each [1,2] as item` cannot also declare `let item` in its pre-request block. Rename the declaration or the loop variable.
 
@@ -64,7 +68,11 @@ Values written by scripts, captures, or workflow steps are plain data. Text begi
 
 ## request
 
-`request` provides a summary of the current request. It exposes `method`, `url`, `headers`, `header(name)`, and `query`. `headers` and `query` are `dict<string, string | list<string>>`: one value is a string, multiple values are a list, and zero values are an empty list. Header keys are lowercased, while query keys are exact. `header(name)` is a shortcut that returns the first value. A document header whose name is not an HTTP field name is rejected before evaluation. In `@rts pre-request` blocks, mutation helpers are available, including `request.setMethod`, `request.setURL`, `request.setHeader`, `request.addHeader`, `request.removeHeader`, `request.setQueryParam`, and `request.setBody`. Their string arguments are strict, so convert numbers or booleans with `str(...)` yourself. The longer `@script pre-request lang=rts` form works the same way. In `@apply`, the request object is read-only, so you return a patch dict instead of changing it.
+`request` describes the current request through `method`, `url`, `headers`, `header(name)`, and `query`.
+
+The `headers` and `query` dictionaries use `dict<string, string | list<string>>`: one value is a string, multiple values are a list, and zero values are an empty list. Header keys are lowercased; query keys stay exactly as written. `header(name)` returns the first value. A header with an invalid HTTP field name is rejected before evaluation.
+
+In `@rts pre-request` blocks, you can change the request with `request.setMethod`, `request.setURL`, `request.setHeader`, `request.addHeader`, `request.removeHeader`, `request.setQueryParam`, and `request.setBody`. These helpers require string arguments. Convert numbers or booleans with `str(...)` before passing them. The longer `@script pre-request lang=rts` form works the same way. In `@apply`, the object is read-only: return a patch dict to describe your changes.
 
 In `@apply` and pre-request blocks, `url`, `headers`, `header(name)`, and `query` expand variables and `{{= ... }}` expressions from the request file, just as `request.getURL()` does in JavaScript. Values set by scripts are shown unchanged. An undefined reference is an error.
 
@@ -72,7 +80,9 @@ Values passed to `request.set*` or `request.addHeader`, or returned in a patch, 
 
 ## last
 
-`last` provides a summary of the most recent response. It exposes `status`, `statusCode`, `statusText`, `url`, `headers`, `header(name)`, `text()`, and `json(path)`. Header values use the same cardinality-based representation as `request.headers`, and `header(name)` returns the first value. `json(path)` accepts a simple dot and `[index]` path (optional leading `$`) and returns null when a value is missing. Quote a key that contains dots or spaces, as in `last.json("user['display.name']")`.
+`last` describes the most recent response through `status`, `statusCode`, `statusText`, `url`, `headers`, `header(name)`, `text()`, and `json(path)`.
+
+Header values use the same string-or-list form as `request.headers`, and `header(name)` returns the first value. `json(path)` accepts dot and `[index]` paths, with an optional leading `$`, and returns null when a value is missing. Quote a key that contains dots or spaces, as in `last.json("user['display.name']")`.
 
 For gRPC responses, `headers` merges the response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`. Values under keys ending in `-bin` are binary and read back base64-encoded without padding, the way they travel on the wire, so a trailer sent as `x-trace-bin` reads as `last.header("grpc-trailer-x-trace-bin")`.
 
