@@ -37,6 +37,7 @@ func newResult(m runfmt.Result) Result {
 		Name:                 m.Name,
 		Method:               m.Method,
 		Target:               m.Target,
+		EffectiveTarget:      m.EffectiveTarget,
 		Environment:          m.Environment,
 		EnvironmentSelection: m.EnvironmentSelection,
 		Status:               Status(m.Status),
@@ -45,7 +46,9 @@ func newResult(m runfmt.Result) Result {
 		Canceled:             m.Canceled,
 		SkipReason:           m.SkipReason,
 		Error:                m.Error,
+		ErrorDetail:          rendered(m.ErrorDetail),
 		ScriptError:          m.ScriptError,
+		ScriptErrorDetail:    rendered(m.ScriptErrorDetail),
 		Failure:              newFailure(m.Failure),
 		HTTP:                 (*HTTP)(m.HTTP),
 		GRPC:                 (*GRPC)(m.GRPC),
@@ -63,6 +66,7 @@ func newStep(m runfmt.Step) Step {
 		Name:                 m.Name,
 		Method:               m.Method,
 		Target:               m.Target,
+		EffectiveTarget:      m.EffectiveTarget,
 		Environment:          m.Environment,
 		EnvironmentSelection: m.EnvironmentSelection,
 		Branch:               m.Branch,
@@ -74,7 +78,9 @@ func newStep(m runfmt.Step) Step {
 		Canceled:             m.Canceled,
 		SkipReason:           m.SkipReason,
 		Error:                m.Error,
+		ErrorDetail:          rendered(m.ErrorDetail),
 		ScriptError:          m.ScriptError,
+		ScriptErrorDetail:    rendered(m.ScriptErrorDetail),
 		Failure:              newFailure(m.Failure),
 		HTTP:                 (*HTTP)(m.HTTP),
 		GRPC:                 (*GRPC)(m.GRPC),
@@ -175,6 +181,7 @@ func (r Result) model() runfmt.Result {
 		Name:                 r.Name,
 		Method:               r.Method,
 		Target:               r.Target,
+		EffectiveTarget:      r.EffectiveTarget,
 		Environment:          r.Environment,
 		EnvironmentSelection: r.EnvironmentSelection,
 		Status:               runfmt.Status(o.effectiveStatus()),
@@ -183,9 +190,9 @@ func (r Result) model() runfmt.Result {
 		Canceled:             r.Canceled,
 		SkipReason:           r.SkipReason,
 		Error:                r.Error,
-		ErrorDetail:          errDetail(r.Error),
+		ErrorDetail:          errDetail(r.Error, r.ErrorDetail),
 		ScriptError:          r.ScriptError,
-		ScriptErrorDetail:    errDetail(r.ScriptError),
+		ScriptErrorDetail:    errDetail(r.ScriptError, r.ScriptErrorDetail),
 		Failure:              o.failureModel(),
 		HTTP:                 (*runfmt.HTTP)(r.HTTP),
 		GRPC:                 (*runfmt.GRPC)(r.GRPC),
@@ -204,6 +211,7 @@ func (s Step) model() runfmt.Step {
 		Name:                 s.Name,
 		Method:               s.Method,
 		Target:               s.Target,
+		EffectiveTarget:      s.EffectiveTarget,
 		Environment:          s.Environment,
 		EnvironmentSelection: s.EnvironmentSelection,
 		Branch:               s.Branch,
@@ -215,9 +223,9 @@ func (s Step) model() runfmt.Step {
 		Canceled:             s.Canceled,
 		SkipReason:           s.SkipReason,
 		Error:                s.Error,
-		ErrorDetail:          errDetail(s.Error),
+		ErrorDetail:          errDetail(s.Error, s.ErrorDetail),
 		ScriptError:          s.ScriptError,
-		ScriptErrorDetail:    errDetail(s.ScriptError),
+		ScriptErrorDetail:    errDetail(s.ScriptError, s.ScriptErrorDetail),
 		Failure:              o.failureModel(),
 		HTTP:                 (*runfmt.HTTP)(s.HTTP),
 		GRPC:                 (*runfmt.GRPC)(s.GRPC),
@@ -326,11 +334,23 @@ type textError string
 
 func (e textError) Error() string { return string(e) }
 
-func errDetail(s string) *runfmt.ErrorDetail {
-	if s == "" {
+// The writers read only Rendered, so the other detail fields can stay empty.
+func errDetail(msg, text string) *runfmt.ErrorDetail {
+	switch {
+	case text != "":
+		return &runfmt.ErrorDetail{Message: msg, Rendered: text}
+	case msg != "":
+		return runfmt.ErrorDetailFromError(textError(msg))
+	default:
 		return nil
 	}
-	return runfmt.ErrorDetailFromError(textError(s))
+}
+
+func rendered(d *runfmt.ErrorDetail) string {
+	if d == nil {
+		return ""
+	}
+	return d.Rendered
 }
 
 func convert[S, D any](src []S, f func(S) D) []D {

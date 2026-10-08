@@ -103,6 +103,7 @@ type Result struct {
 	Name                 string
 	Method               string
 	Target               string
+	EffectiveTarget      string
 	Environment          string
 	EnvironmentSelection EnvironmentSelection
 	Status               Status
@@ -111,7 +112,9 @@ type Result struct {
 	Canceled             bool
 	SkipReason           string
 	Error                string
+	ErrorDetail          string
 	ScriptError          string
+	ScriptErrorDetail    string
 	Failure              *Failure
 	HTTP                 *HTTP
 	GRPC                 *GRPC
@@ -154,6 +157,7 @@ type Step struct {
 	Name                 string
 	Method               string
 	Target               string
+	EffectiveTarget      string
 	Environment          string
 	EnvironmentSelection EnvironmentSelection
 	Branch               string
@@ -165,7 +169,9 @@ type Step struct {
 	Canceled             bool
 	SkipReason           string
 	Error                string
+	ErrorDetail          string
 	ScriptError          string
+	ScriptErrorDetail    string
 	Failure              *Failure
 	HTTP                 *HTTP
 	GRPC                 *GRPC

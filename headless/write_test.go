@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -544,12 +545,13 @@ func sampleRunnerReport() *runner.Report {
 		Skipped:   1,
 		Results: []runner.Result{
 			{
-				Kind:        runner.ResultKindRequest,
-				Name:        "ok",
-				Method:      "GET",
-				Target:      "https://example.com/ok",
-				Environment: "dev",
-				Passed:      true,
+				Kind:            runner.ResultKindRequest,
+				Name:            "ok",
+				Method:          "GET",
+				Target:          "https://example.com/ok",
+				EffectiveTarget: "https://example.com/ok?id=7",
+				Environment:     "dev",
+				Passed:          true,
 				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: 200,
@@ -594,11 +596,12 @@ func sampleRunnerReport() *runner.Report {
 				Passed:   false,
 				Steps: []runner.StepResult{
 					{
-						Name:     "Login",
-						Method:   "GET",
-						Target:   "/login",
-						Passed:   true,
-						Duration: 40 * time.Millisecond,
+						Name:            "Login",
+						Method:          "GET",
+						Target:          "/login",
+						EffectiveTarget: "https://example.com/login",
+						Passed:          true,
+						Duration:        40 * time.Millisecond,
 						Response: &httpx.Response{
 							Status:     "200 OK",
 							StatusCode: 200,
@@ -650,6 +653,7 @@ func sampleRunnerReport() *runner.Report {
 						Environment: "stage",
 						Duration:    30 * time.Millisecond,
 						Err:         errors.New("stage failed"),
+						ScriptErr:   diag.New(diag.ClassScript, "assert status == 200"),
 					},
 				},
 			},
