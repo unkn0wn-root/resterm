@@ -564,6 +564,9 @@ func applyTraceToken(spec *restfile.TraceSpec, f directive.Field) (string, error
 	key, val, _ := strings.Cut(f.Value, f.Op.String())
 	val = strings.TrimSpace(val)
 	if kind, ok := tracebudget.NormalizePhase(key); ok {
+		if f.Op != directive.OpEq && f.Op != directive.OpLe {
+			return "", &directive.OpOptionError{Directive: directive.Trace, Key: key, Value: val, Op: f.Op}
+		}
 		if dur := parseDuration(val); dur > 0 {
 			setTracePhaseBudget(spec, kind, dur)
 			return string(kind), nil

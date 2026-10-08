@@ -4312,6 +4312,27 @@ func TestParseTraceSettingWrittenWrong(t *testing.T) {
 	}
 }
 
+// Check every scanner operator so new ones cannot bypass the budget restriction.
+func TestParseTraceBudgetOperators(t *testing.T) {
+	for op := directive.OpEq; op.String() != ""; op++ {
+		doc := Parse("trace.http", []byte("# @trace dns"+op.String()+"50ms\nGET https://example.com\n"))
+		got := doc.Requests[0].Metadata.Trace.Budgets.Phases["dns"]
+		var errs []string
+		for _, d := range doc.Errors {
+			errs = append(errs, d.Message)
+		}
+		budget, want := time.Duration(0), []string{
+			fmt.Sprintf(`@trace option "dns" takes = instead of %s. Write it as dns=50ms`, op),
+		}
+		if op == directive.OpEq || op == directive.OpLe {
+			budget, want = 50*time.Millisecond, nil
+		}
+		if got != budget || !slices.Equal(errs, want) {
+			t.Fatalf("dns%s50ms: budget = %v, errors = %q, want %v and %q", op, got, errs, budget, want)
+		}
+	}
+}
+
 func TestParseTraceQuotedValues(t *testing.T) {
 	doc := Parse("trace.http", []byte("# @trace total<=\"400ms\" tolerance=\"25ms\"\nGET https://example.com\n"))
 	b := doc.Requests[0].Metadata.Trace.Budgets
