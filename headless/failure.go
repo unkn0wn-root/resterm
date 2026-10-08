@@ -95,7 +95,7 @@ func (r *Report) ExitCode(mode ExitCodeMode) int {
 	if r == nil {
 		return ExitPass
 	}
-	rep := toFormatReport(r)
+	rep := r.model()
 	return runfail.ExitCode(rep.Failures(), r.HasFailures(), runfail.ExitMode(mode))
 }
 
@@ -104,7 +104,7 @@ func (r *Report) FailureCodes() []FailureCode {
 	if r == nil {
 		return nil
 	}
-	src := toFormatReport(r).FailureCodes()
+	src := r.model().FailureCodes()
 	if len(src) == 0 {
 		return nil
 	}

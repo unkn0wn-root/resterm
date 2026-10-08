@@ -722,6 +722,59 @@ func TestRunPlanAllowsConcurrentReuse(t *testing.T) {
 	}
 }
 
+func TestRunPlanReportsDoNotShareSelection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+
+	pl, err := Build(Options{
+		Source: Source{
+			Path:    filepath.Join(t.TempDir(), "api.http"),
+			Content: []byte("# @name ok\nGET {{api.url}}\n"),
+		},
+		Environment: EnvironmentOptions{Grouped: &GroupedEnvironmentSet{
+			Groups: EnvironmentGroups{"api": {
+				Default:  "dev",
+				Profiles: EnvironmentSet{"dev": {"api.url": srv.URL}, "prod": {"api.url": srv.URL}},
+			}},
+		}},
+		Compare: CompareOptions{Targets: []string{"dev", "prod"}, Group: "api"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	const n = 6
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	for range n {
+		wg.Go(func() {
+			rep, err := RunPlan(context.Background(), pl)
+			if err != nil {
+				errs <- err
+				return
+			}
+			sels := []EnvironmentSelection{rep.EnvironmentSelection}
+			for _, res := range rep.Results {
+				sels = append(sels, res.EnvironmentSelection)
+				for _, step := range res.Steps {
+					sels = append(sels, step.EnvironmentSelection)
+				}
+			}
+			for _, sel := range sels {
+				if sel["api"] == "edited" {
+					errs <- fmt.Errorf("report shares a selection map: %v", sel)
+				}
+				sel["api"] = "edited"
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("RunPlan: %v", err)
+	}
+}
+
 func TestRunPlanRejectsInvalidPlan(t *testing.T) {
 	_, err := RunPlan(context.Background(), Plan{})
 	if err == nil {

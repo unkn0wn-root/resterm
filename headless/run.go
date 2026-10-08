@@ -31,10 +31,7 @@ func RunPlan(ctx context.Context, pl Plan) (*Report, error) {
 	}
 	rep, err := runner.RunPlan(ctx, pl.pl)
 	if err != nil {
-		if runner.IsUsageError(err) {
-			return nil, UsageError{err: err}
-		}
-		return nil, err
+		return nil, wrapUsage(err)
 	}
 	return reportFromRunner(rep), nil
 }

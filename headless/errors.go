@@ -1,6 +1,11 @@
 package headless
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/unkn0wn-root/resterm/internal/runner"
+)
 
 // UsageError reports invalid input or options passed to the headless API.
 type UsageError struct {
@@ -42,4 +47,15 @@ func (e UsageError) Unwrap() error {
 func IsUsageError(err error) bool {
 	var target UsageError
 	return errors.As(err, &target)
+}
+
+func usageError(format string, args ...any) error {
+	return UsageError{err: fmt.Errorf(format, args...)}
+}
+
+func wrapUsage(err error) error {
+	if runner.IsUsageError(err) {
+		return UsageError{err: err}
+	}
+	return err
 }
