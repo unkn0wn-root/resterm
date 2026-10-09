@@ -317,3 +317,48 @@ func TestNewTraceSummaryKeepsBudgetWithoutPhases(t *testing.T) {
 		t.Fatalf("summary budget = %+v, breaches = %+v, want the report's", sum.Budgets, sum.Breaches)
 	}
 }
+
+func TestTraceSummaryKeepsPhaseStarts(t *testing.T) {
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	ms := time.Millisecond
+	phase := func(kind nettrace.PhaseKind, from, to time.Duration) nettrace.Phase {
+		return nettrace.Phase{Kind: kind, Start: at.Add(from), End: at.Add(to), Duration: to - from}
+	}
+	tl := &nettrace.Timeline{
+		Started:   at,
+		Completed: at.Add(200 * ms),
+		Duration:  200 * ms,
+		Phases: []nettrace.Phase{
+			phase(nettrace.PhaseDNS, 0, 10*ms),
+			phase(nettrace.PhaseConnect, 15*ms, 35*ms),
+			phase(nettrace.PhaseTLS, 35*ms, 60*ms),
+			phase(nettrace.PhaseTTFB, 70*ms, 200*ms),
+		},
+	}
+	raw, err := json.Marshal(NewTraceSummary(tl, nil))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var sum TraceSummary
+	if err := json.Unmarshal(raw, &sum); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := sum.Timeline(); !reflect.DeepEqual(got.Phases, tl.Phases) {
+		t.Fatalf("phases = %+v\nwant %+v", got.Phases, tl.Phases)
+	}
+}
+
+func TestTraceSummaryWithoutStartsLaysPhasesEndToEnd(t *testing.T) {
+	raw := `{"started":"2026-01-02T03:04:05Z","duration":200000000,"phases":[` +
+		`{"kind":"dns","duration":10000000},{"kind":"connect","duration":20000000}]}`
+	var sum TraceSummary
+	if err := json.Unmarshal([]byte(raw), &sum); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	ph := sum.Timeline().Phases
+	if !ph[0].Start.Equal(at) || !ph[1].Start.Equal(at.Add(10*time.Millisecond)) ||
+		!ph[1].End.Equal(at.Add(30*time.Millisecond)) {
+		t.Fatalf("phases = %+v, want dns then connect from %s", ph, at)
+	}
+}

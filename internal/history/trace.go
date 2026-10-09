@@ -21,6 +21,7 @@ type TraceSummary struct {
 
 type TracePhase struct {
 	Kind     string         `json:"kind"`
+	Start    time.Time      `json:"start,omitzero"`
 	Duration time.Duration  `json:"duration"`
 	Error    string         `json:"error,omitempty"`
 	Meta     TracePhaseMeta `json:"meta,omitempty"`
@@ -102,6 +103,7 @@ func NewTraceSummary(tl *nettrace.Timeline, rep *nettrace.Report) *TraceSummary 
 		for i, phase := range tl.Phases {
 			summary.Phases[i] = TracePhase{
 				Kind:     string(phase.Kind),
+				Start:    phase.Start,
 				Duration: phase.Duration,
 				Error:    phase.Err,
 				Meta:     TracePhaseMeta(phase.Meta),
@@ -149,12 +151,15 @@ func (s *TraceSummary) Timeline() *nettrace.Timeline {
 		return tl
 	}
 
-	// Only durations are stored, so phases are laid end to end from Started.
+	// Older entries only kept durations, so their phases are laid end to end from Started.
 	phases := make([]nettrace.Phase, len(s.Phases))
 	anchor := s.Started
 	for i, phase := range s.Phases {
 		dur := phase.Duration
-		start := anchor
+		start := phase.Start
+		if start.IsZero() {
+			start = anchor
+		}
 		end := start
 		if !start.IsZero() && dur > 0 {
 			end = start.Add(dur)
@@ -167,9 +172,7 @@ func (s *TraceSummary) Timeline() *nettrace.Timeline {
 			Err:      phase.Error,
 			Meta:     nettrace.PhaseMeta(phase.Meta),
 		}
-		if !anchor.IsZero() {
-			anchor = end
-		}
+		anchor = end
 	}
 
 	tl.Phases = phases
