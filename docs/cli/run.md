@@ -101,7 +101,7 @@ Save stream transcripts and trace summaries as artifacts, or keep globals, authe
 Behavior:
 
 - stream transcripts are written under `<artifact-dir>/streams/`
-- trace summaries are written under `<artifact-dir>/traces/`
+- trace summaries are written under `<artifact-dir>/traces/`, with each phase's start time and duration
 - when persistence is enabled and `--state-dir` is omitted, Resterm uses `<config-dir>/runner/<workspace>-<digest>`, one directory per workspace. State written before this became per-workspace stays at `<config-dir>/runner` and is not migrated, so the first run after upgrading re-authenticates
 - `--state-dir` is used exactly as given, so pass the same value only for workspaces that are meant to share state
 - persisted globals and auth are keyed by environment scope. A scope includes the environment file it came from, so two projects that both define a `dev` environment never read each other's globals or OAuth tokens, even with the same `--state-dir`
