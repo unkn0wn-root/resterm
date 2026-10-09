@@ -767,7 +767,7 @@ func (m *Model) recordHTTPHistory(
 	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
 	entry := history.Entry{
-		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  time.Now(),
 		Environment: environment,
 		EnvironmentSelection: history.EnvironmentSelection(
@@ -826,7 +826,7 @@ func (m *Model) recordSkippedHistory(
 	tags := normalizedTags(req.Metadata.Tags)
 
 	entry := history.Entry{
-		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  time.Now(),
 		Environment: environment,
 		EnvironmentSelection: history.EnvironmentSelection(
@@ -893,7 +893,7 @@ func (m *Model) recordGRPCHistory(
 	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
 	entry := history.Entry{
-		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  time.Now(),
 		Environment: environment,
 		EnvironmentSelection: history.EnvironmentSelection(

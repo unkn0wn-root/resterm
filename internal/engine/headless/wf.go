@@ -313,7 +313,7 @@ func (e *Engine) recordWorkflow(st *wfState, out *engine.WorkflowResult) {
 	}
 	now := time.Now()
 	ent := history.Entry{
-		ID:          fmt.Sprintf("%d", now.UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  now,
 		Environment: st.env.Label(),
 		EnvironmentSelection: history.EnvironmentSelection(

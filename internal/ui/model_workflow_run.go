@@ -779,7 +779,7 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 	}
 	workflowName := history.NormalizeWorkflowName(state.workflow.Name)
 	entry := history.Entry{
-		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  time.Now(),
 		Environment: state.env.Label(),
 		EnvironmentSelection: history.EnvironmentSelection(

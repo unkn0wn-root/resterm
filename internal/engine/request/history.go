@@ -68,7 +68,7 @@ func (e *Engine) recordHTTP(
 	txt := redactText(res.RequestText, secs, mask)
 	now := time.Now()
 	ent := history.Entry{
-		ID:          fmt.Sprintf("%d", now.UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  now,
 		Environment: res.Env.Label(),
 		EnvironmentSelection: history.EnvironmentSelection(
@@ -115,7 +115,7 @@ func (e *Engine) recordSkipped(
 	}
 	now := time.Now()
 	ent := history.Entry{
-		ID:          fmt.Sprintf("%d", now.UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  now,
 		Environment: res.Env.Label(),
 		EnvironmentSelection: history.EnvironmentSelection(
@@ -157,7 +157,7 @@ func (e *Engine) recordGRPC(
 	}
 	now := time.Now()
 	ent := history.Entry{
-		ID:          fmt.Sprintf("%d", now.UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  now,
 		Environment: res.Env.Label(),
 		EnvironmentSelection: history.EnvironmentSelection(
