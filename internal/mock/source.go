@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // Sources selects the request files a mock server compiles. Path is a request
@@ -53,7 +53,7 @@ func NewSources(root string, recursive bool, entries []string) (Sources, error) 
 			if err != nil {
 				return Sources{}, err
 			}
-			known := func(f string) bool { return util.SamePath(f, path) }
+			known := func(f string) bool { return fsx.SamePath(f, path) }
 			if !slices.ContainsFunc(src.Files, known) {
 				src.Files = append(src.Files, path)
 			}
@@ -156,7 +156,7 @@ func (r resolved) documents(overlay *restfile.Document) ([]*restfile.Document, e
 		if err != nil {
 			return nil, err
 		}
-		if overlay != nil && util.SamePath(f, overlay.Path) {
+		if overlay != nil && fsx.SamePath(f, overlay.Path) {
 			found = true
 		}
 		docs = append(docs, doc)
@@ -225,7 +225,7 @@ func rootedReader(root *os.Root, dir string) fixtureReader {
 }
 
 func loadDoc(path string, overlay *restfile.Document) (*restfile.Document, error) {
-	if overlay != nil && overlay.Path != "" && util.SamePath(path, overlay.Path) {
+	if overlay != nil && overlay.Path != "" && fsx.SamePath(path, overlay.Path) {
 		return overlay, nil
 	}
 	data, err := os.ReadFile(path)

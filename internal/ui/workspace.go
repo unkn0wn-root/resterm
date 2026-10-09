@@ -7,10 +7,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
-	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -93,7 +93,7 @@ func (w workspace) plan(root string) (wsMove, error) {
 			},
 			status: statusMsg{text: text, level: statusInfo},
 		}
-		if own := vars.DiscoverPath(root); own != "" && !util.SameFile(own, w.envFile) {
+		if own := vars.DiscoverPath(root); own != "" && !fsx.SameFile(own, w.envFile) {
 			mv.status = statusMsg{
 				text:  text + ". Keeping the environment file passed with --env-file",
 				level: statusWarn,
@@ -149,7 +149,7 @@ func (w workspace) ownsEnvFile(path string) bool {
 		return sameEnvFile(path, w.envFile)
 	}
 	own := vars.DiscoverPath(w.root)
-	return own != "" && util.SameFile(path, own)
+	return own != "" && fsx.SameFile(path, own)
 }
 
 // reloadEnv reads the environment file and reapplies the current selection
@@ -197,11 +197,11 @@ func (w workspace) sameEnv(root, envFile string) bool {
 	if sameEnvFile(envFile, w.envFile) {
 		return true
 	}
-	return envFile == "" && w.envFile == "" && util.SameFile(root, w.root)
+	return envFile == "" && w.envFile == "" && fsx.SameFile(root, w.root)
 }
 
 func sameEnvFile(a, b string) bool {
-	return a != "" && b != "" && util.SameFile(a, b)
+	return a != "" && b != "" && fsx.SameFile(a, b)
 }
 
 // moveBlocked refuses a move while a request is in flight, because that

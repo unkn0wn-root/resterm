@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -55,7 +55,7 @@ func inactiveEnvStatus(entries []files.Entry, active string, recursive bool) sta
 
 	var names []string
 	for _, entry := range entries {
-		if entry.Kind == files.KindEnv && !util.SameFile(entry.Path, active) {
+		if entry.Kind == files.KindEnv && !fsx.SameFile(entry.Path, active) {
 			names = append(names, entry.Name)
 		}
 	}

@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -152,7 +152,7 @@ func (l *lister) addRTSModuleRefs(referrerPath string, e files.Entry) {
 }
 
 func (l *lister) loadDoc(path string) *restfile.Document {
-	if l.opt.CurrentDoc != nil && util.SamePath(strings.TrimSpace(path), strings.TrimSpace(l.opt.CurrentFile)) {
+	if l.opt.CurrentDoc != nil && fsx.SamePath(strings.TrimSpace(path), strings.TrimSpace(l.opt.CurrentFile)) {
 		return l.opt.CurrentDoc
 	}
 
@@ -169,7 +169,7 @@ func (l *lister) addEntry(e files.Entry) {
 
 func (l *lister) addDoc(e files.Entry) {
 	for _, doc := range l.docs {
-		if util.SamePath(strings.TrimSpace(doc.Path), strings.TrimSpace(e.Path)) {
+		if fsx.SamePath(strings.TrimSpace(doc.Path), strings.TrimSpace(e.Path)) {
 			return
 		}
 	}

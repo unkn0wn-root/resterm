@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/extedit"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 )
 
 func (m *Model) openFileInEditor() tea.Cmd {
@@ -45,7 +45,7 @@ func (m *Model) openFileInEditor() tea.Cmd {
 		return nil
 	}
 
-	if m.dirty && util.SamePath(path, m.currentFile) {
+	if m.dirty && fsx.SamePath(path, m.currentFile) {
 		m.setStatusMessage(statusMsg{
 			text:  "Opening on-disk file; unsaved Resterm changes are not included",
 			level: statusWarn,
@@ -98,7 +98,7 @@ func (m *Model) handleExternalEditorMsg(msg externalEditorMsg) tea.Cmd {
 		return nil
 	}
 
-	if msg.path != "" && util.SamePath(msg.path, m.currentFile) && m.fileWatcher != nil {
+	if msg.path != "" && fsx.SamePath(msg.path, m.currentFile) && m.fileWatcher != nil {
 		m.fileWatcher.Scan()
 	}
 	m.setStatusMessage(statusMsg{

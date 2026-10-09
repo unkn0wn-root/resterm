@@ -1,7 +1,7 @@
 package files
 
 import (
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -52,7 +52,7 @@ func (f PathFilter) Accept(path string) bool {
 		kind, ok := classifyExt(path)
 		return ok && f.kinds&(1<<kind) != 0
 	case pathFilterWorkspace:
-		return IsWorkspace(path) || vars.IsDotEnvPath(path) || util.SameFile(path, f.envFile)
+		return IsWorkspace(path) || vars.IsDotEnvPath(path) || fsx.SameFile(path, f.envFile)
 	default: // pathFilterNone
 		return false
 	}

@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type requestDetailField struct {
@@ -85,7 +85,7 @@ func (m *Model) navigatorRequestContext() (*restfile.Request, *restfile.Document
 	}
 	path := n.Payload.FilePath
 	doc := m.doc
-	if path != "" && !util.SamePath(path, m.currentFile) {
+	if path != "" && !fsx.SamePath(path, m.currentFile) {
 		doc = m.loadDocFor(path)
 	}
 	if path == "" {

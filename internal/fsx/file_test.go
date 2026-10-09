@@ -1,4 +1,4 @@
-package util
+package fsx
 
 import (
 	"os"
@@ -8,13 +8,13 @@ import (
 	"testing"
 )
 
-func TestWriteFileAtomic(t *testing.T) {
+func TestWriteAtomic(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "out.json")
 	if err := os.WriteFile(p, []byte("old"), 0o644); err != nil {
 		t.Fatalf("write old: %v", err)
 	}
-	if err := WriteFileAtomic(p, []byte("new"), 0o600); err != nil {
+	if err := WriteAtomic(p, []byte("new"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	got, err := os.ReadFile(p)
@@ -36,16 +36,16 @@ func TestWriteFileAtomic(t *testing.T) {
 	}
 }
 
-func TestWriteFileAtomicMissingDir(t *testing.T) {
+func TestWriteAtomicMissingDir(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "missing", "out.json")
-	if err := WriteFileAtomic(p, []byte("x"), 0o600); err == nil {
+	if err := WriteAtomic(p, []byte("x"), 0o600); err == nil {
 		t.Fatal("expected an error for a missing directory")
 	}
 }
 
-func TestWriteFileAtomicLongName(t *testing.T) {
+func TestWriteAtomicLongName(t *testing.T) {
 	p := filepath.Join(t.TempDir(), strings.Repeat("a", 245)+".json")
-	if err := WriteFileAtomic(p, []byte("{}"), 0o600); err != nil {
+	if err := WriteAtomic(p, []byte("{}"), 0o600); err != nil {
 		t.Fatalf("write %d-char name: %v", len(filepath.Base(p)), err)
 	}
 }

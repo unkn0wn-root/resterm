@@ -8,9 +8,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -140,7 +140,7 @@ func rowActive(row Flat[any], state RenderState) bool {
 	if state.ActiveNodeID != "" && n.ID == state.ActiveNodeID {
 		return true
 	}
-	return n.Kind == KindFile && util.SamePath(n.Payload.FilePath, state.ActiveFilePath)
+	return n.Kind == KindFile && fsx.SamePath(n.Payload.FilePath, state.ActiveFilePath)
 }
 
 func rowTextStyles(

@@ -11,9 +11,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const stateFileVersion = 1
@@ -189,5 +189,5 @@ func writeStateFile(path string, state any) error {
 	if err != nil {
 		return err
 	}
-	return util.WriteFileAtomic(path, data, 0o600)
+	return fsx.WriteAtomic(path, data, 0o600)
 }

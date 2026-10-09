@@ -11,11 +11,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/stream"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // A and B both name their environments dev and prod, so their runtime scopes
@@ -274,7 +274,7 @@ func TestOpenWorkspaceKeepsExplicitEnvFile(t *testing.T) {
 	if got := m.ws.active.Values()["auth.token"]; got != "A-DEV" {
 		t.Fatalf("token = %q, want the explicit choice to survive", got)
 	}
-	if !util.SamePath(m.ws.envFile, explicit) {
+	if !fsx.SamePath(m.ws.envFile, explicit) {
 		t.Fatalf("environment file = %q, want %q", m.ws.envFile, explicit)
 	}
 }

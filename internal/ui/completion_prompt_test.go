@@ -10,8 +10,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/prompt"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func TestCommandLineCompletesRequestPath(t *testing.T) {
@@ -141,7 +141,7 @@ func TestEditCommandOpensQuotedPath(t *testing.T) {
 	model := New(Config{WorkspaceRoot: root})
 
 	collectMsgs(model.executeExCommand(`edit "space dir/demo file.http"`))
-	if !util.SamePath(model.currentFile, path) {
+	if !fsx.SamePath(model.currentFile, path) {
 		t.Fatalf("current file = %q, want %q", model.currentFile, path)
 	}
 }

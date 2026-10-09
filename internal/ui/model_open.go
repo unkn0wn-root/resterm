@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 )
 
 func (m *Model) openOpenModal() tea.Cmd {
@@ -107,7 +107,7 @@ func (m *Model) openPathFromCommand(input string) tea.Cmd {
 }
 
 func (m *Model) resolveOpenPath(input string) (string, error) {
-	path := util.ExpandHome(input)
+	path := fsx.ExpandHome(input)
 	if !filepath.IsAbs(path) {
 		base := m.ws.root
 		if base == "" {
