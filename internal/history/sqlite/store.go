@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,18 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-const (
-	drv = "sqlite"
-
-	histCols = `(id, id_num, exec_ns, env, env_sel_json, req_name, file_path, file_norm, method, url, status,
-		status_code, dur_ns, snippet, req_text, descr, tags_json, prof_json, trace_json, cmp_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	// Regular writes replace by ID so reruns can refresh the same row,
-	// while legacy migration keeps the first copy and skips duplicates.
-	qReplace = `INSERT OR REPLACE INTO hist ` + histCols
-	qIgnore  = `INSERT OR IGNORE INTO hist ` + histCols
-)
+const drv = "sqlite"
 
 type Store struct {
 	p string
@@ -55,7 +43,8 @@ func New(path string) *Store {
 }
 
 func (s *Store) Load() error {
-	return s.ensure()
+	_, err := s.handle()
+	return err
 }
 
 func (s *Store) Close() error {
@@ -83,7 +72,8 @@ func (s *Store) RecoveryInfo() *RecoverInfo {
 }
 
 func (s *Store) Append(e history.Entry) error {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return err
 	}
 
@@ -92,7 +82,7 @@ func (s *Store) Append(e history.Entry) error {
 		return err
 	}
 
-	if _, err = insertRow(s.db, qReplace, &r); err != nil {
+	if _, err = db.Exec(qReplace, r.args()...); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "insert history row")
 	}
 	return nil
@@ -129,10 +119,6 @@ func (s *Store) ByWorkflow(name string) ([]history.Entry, error) {
 }
 
 func (s *Store) ByFile(path string) ([]history.Entry, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil, nil
-	}
 	n := history.NormPath(path)
 	if n == "" {
 		return nil, nil
@@ -141,11 +127,12 @@ func (s *Store) ByFile(path string) ([]history.Entry, error) {
 }
 
 func (s *Store) Delete(id string) (bool, error) {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return false, err
 	}
 
-	res, err := s.db.Exec(`DELETE FROM hist WHERE id = ?`, id)
+	res, err := db.Exec(`DELETE FROM hist WHERE id = ?`, id)
 	if err != nil {
 		return false, diag.WrapAs(diag.ClassHistory, err, "delete history row")
 	}
@@ -157,22 +144,19 @@ func (s *Store) Delete(id string) (bool, error) {
 }
 
 func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return nil, err
 	}
 
-	q := `SELECT
-		id, id_num, exec_ns, env, env_sel_json, req_name, file_path, method, url, status, status_code, dur_ns,
-		snippet, req_text, descr, tags_json, prof_json, trace_json, cmp_json
-	FROM hist`
-	if strings.TrimSpace(where) != "" {
+	q := `SELECT ` + cols + ` FROM hist`
+	if where != "" {
 		q += " " + where
 	}
-	// This ordering is shared across list and migration paths so
-	// every caller sees the same history precedence for tied timestamps.
+	// Every list uses this order. When times tie, the IDs decide.
 	q += ` ORDER BY exec_ns DESC, id_num DESC, id DESC`
 
-	rs, err := s.db.Query(q, args...)
+	rs, err := db.Query(q, args...)
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassHistory, err, "query history rows")
 	}
@@ -192,230 +176,28 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 	return es, nil
 }
 
-func scanRow(rs *sql.Rows) (history.Entry, error) {
-	var (
-		id, env, reqName, filePath, method, url, status, snippet, reqText, descr string
-		idNum, execNs, statusCode, durNs                                         int64
-		envSelJSON, tagsJSON, profJSON, traceJSON, cmpJSON                       []byte
-	)
-	err := rs.Scan(
-		&id,
-		&idNum,
-		&execNs,
-		&env,
-		&envSelJSON,
-		&reqName,
-		&filePath,
-		&method,
-		&url,
-		&status,
-		&statusCode,
-		&durNs,
-		&snippet,
-		&reqText,
-		&descr,
-		&tagsJSON,
-		&profJSON,
-		&traceJSON,
-		&cmpJSON,
-	)
-	if err != nil {
-		return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "scan history row")
-	}
-
-	e := history.Entry{
-		ID:          id,
-		ExecutedAt:  nsToTime(execNs),
-		Environment: env,
-		RequestName: reqName,
-		FilePath:    filePath,
-		Method:      method,
-		URL:         url,
-		Status:      status,
-		StatusCode:  int(statusCode),
-		Duration:    time.Duration(durNs),
-		BodySnippet: snippet,
-		RequestText: reqText,
-		Description: descr,
-	}
-
-	if len(envSelJSON) > 0 {
-		sel, err := dec[history.EnvironmentSelection](envSelJSON)
-		if err != nil {
-			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode environment selection")
-		}
-		e.EnvironmentSelection = sel
-	}
-	if len(tagsJSON) > 0 {
-		tags, err := dec[[]string](tagsJSON)
-		if err != nil {
-			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history tags")
-		}
-		e.Tags = tags
-	}
-	if len(profJSON) > 0 {
-		p, err := dec[history.ProfileResults](profJSON)
-		if err != nil {
-			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history profile")
-		}
-		e.ProfileResults = &p
-	}
-	if len(traceJSON) > 0 {
-		t, err := dec[history.TraceSummary](traceJSON)
-		if err != nil {
-			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history trace")
-		}
-		e.Trace = &t
-	}
-	if len(cmpJSON) > 0 {
-		c, err := dec[history.CompareEntry](cmpJSON)
-		if err != nil {
-			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history compare")
-		}
-		e.Compare = &c
-	}
-
-	return e, nil
-}
-
-func mkRow(e history.Entry) (row, error) {
-	r := row{
-		id:         e.ID,
-		idNum:      parseIDNum(e.ID),
-		execNs:     timeToNS(e.ExecutedAt),
-		env:        e.Environment,
-		reqName:    e.RequestName,
-		filePath:   e.FilePath,
-		fileNorm:   history.NormPath(e.FilePath),
-		method:     e.Method,
-		url:        e.URL,
-		status:     e.Status,
-		statusCode: int64(e.StatusCode),
-		durNs:      int64(e.Duration),
-		snippet:    e.BodySnippet,
-		reqText:    e.RequestText,
-		descr:      e.Description,
-	}
-
-	var err error
-	if len(e.EnvironmentSelection) > 0 {
-		r.envSelJSON, err = enc(e.EnvironmentSelection)
-		if err != nil {
-			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode environment selection")
-		}
-	}
-	if len(e.Tags) > 0 {
-		r.tagsJSON, err = enc(e.Tags)
-		if err != nil {
-			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history tags")
-		}
-	}
-	if e.ProfileResults != nil {
-		r.profJSON, err = enc(e.ProfileResults)
-		if err != nil {
-			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history profile")
-		}
-	}
-	if e.Trace != nil {
-		r.traceJSON, err = enc(e.Trace)
-		if err != nil {
-			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history trace")
-		}
-	}
-	if e.Compare != nil {
-		r.cmpJSON, err = enc(e.Compare)
-		if err != nil {
-			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history compare")
-		}
-	}
-
-	return r, nil
-}
-
-type row struct {
-	id         string
-	idNum      int64
-	execNs     int64
-	env        string
-	envSelJSON []byte
-	reqName    string
-	filePath   string
-	fileNorm   string
-	method     string
-	url        string
-	status     string
-	statusCode int64
-	durNs      int64
-	snippet    string
-	reqText    string
-	descr      string
-	tagsJSON   []byte
-	profJSON   []byte
-	traceJSON  []byte
-	cmpJSON    []byte
-}
-
-func (r *row) args() []any {
-	return []any{
-		r.id, r.idNum, r.execNs, r.env, r.envSelJSON, r.reqName, r.filePath, r.fileNorm,
-		r.method, r.url, r.status, r.statusCode, r.durNs, r.snippet,
-		r.reqText, r.descr, r.tagsJSON, r.profJSON, r.traceJSON, r.cmpJSON,
-	}
-}
-
-type execer interface {
-	Exec(query string, args ...any) (sql.Result, error)
-}
-
-func insertRow(db execer, q string, r *row) (sql.Result, error) {
-	return db.Exec(q, r.args()...)
-}
-
-func parseIDNum(id string) int64 {
-	// Non numeric IDs still work because query ordering falls back to
-	// text ID after this value, so old rows remain deterministic.
-	n, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return n
-}
-
-func timeToNS(t time.Time) int64 {
-	if t.IsZero() {
-		return 0
-	}
-	return t.UnixNano()
-}
-
-func nsToTime(ns int64) time.Time {
-	if ns <= 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, ns)
-}
-
-func (s *Store) ensure() error {
+// Callers use the returned handle because Close may reset s.db at any time.
+func (s *Store) handle() (*sql.DB, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db != nil {
-		return nil
+		return s.db, nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(s.p), 0o755); err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "create history dir")
+	if err := os.MkdirAll(filepath.Dir(s.p), 0o700); err != nil {
+		return nil, diag.WrapAs(diag.ClassFilesystem, err, "create history dir")
 	}
 
 	// Opening is lazy so commands that never touch history do not pay
 	// the startup cost, but once opened this handle is reused safely.
 	db, rec, err := s.openWithRecover()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	s.db = db
 	s.rec = rec
-	return nil
+	return db, nil
 }
 
 func (s *Store) openWithRecover() (*sql.DB, *RecoverInfo, error) {
@@ -427,9 +209,8 @@ func (s *Store) openWithRecover() (*sql.DB, *RecoverInfo, error) {
 		return db, nil, nil
 	}
 	cause := err
-	// Recovery only runs when the file exists and the failure strongly
-	// looks like corruption, so regular open errors still surface.
-	if !shouldRecover(s.p, err) {
+	// Recovery only runs when the failure strongly looks like corruption, so regular open errors still surface.
+	if !isCorruptErr(err) {
 		return nil, nil, err
 	}
 
@@ -456,19 +237,24 @@ func (s *Store) openWithRecover() (*sql.DB, *RecoverInfo, error) {
 	return db, rec, nil
 }
 
-func openReadyDB(dsn string) (*sql.DB, error) {
+func openReadyDB(path string) (*sql.DB, error) {
 	// Opening does more than creating a handle.
 	// It applies schema changes and runs an integrity check before returning.
 	// A handle is returned only when the database is safe to use.
-	db, err := sql.Open(drv, dsn)
+	if _, err := createPrivate(path); err != nil {
+		return nil, err
+	}
+	makePrivate(path)
+	uri, err := fileURI(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open(drv, uri)
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassHistory, err, "open history db")
 	}
-	// SQLite behaves best here with a single connection because writes
-	// are serialized and this avoids avoidable lock contention.
+	// One connection serializes writes and keeps the pragmas, which are set per connection.
 	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(0)
 
 	if err := migrateSchema(db); err != nil {
 		_ = db.Close()
@@ -481,19 +267,7 @@ func openReadyDB(dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
-func shouldRecover(path string, err error) bool {
-	if !isCorruptErr(err) {
-		return false
-	}
-	_, stErr := os.Stat(path)
-	return stErr == nil
-}
-
 func isCorruptErr(err error) bool {
-	if err == nil {
-		return false
-	}
-
 	var integErr *integrityCheckError
 	if errors.As(err, &integErr) {
 		return true
@@ -511,44 +285,4 @@ func isCorruptErr(err error) bool {
 		}
 	}
 	return false
-}
-
-func quarantineDB(path string) (string, error) {
-	ts := time.Now().UTC().Format("20060102T150405Z")
-	dst := nextQuarantinePath(path + ".corrupt-" + ts)
-	if err := moveIfExists(path, dst); err != nil {
-		return "", err
-	}
-	// WAL and SHM files must move with the main file so SQLite never
-	// tries to replay stale pages into the replacement database.
-	if err := moveIfExists(path+"-wal", dst+"-wal"); err != nil {
-		return "", err
-	}
-	if err := moveIfExists(path+"-shm", dst+"-shm"); err != nil {
-		return "", err
-	}
-	return dst, nil
-}
-
-func nextQuarantinePath(base string) string {
-	p := base
-	// Recovery can run multiple times in the same second, so numbered
-	// suffixes keep each quarantined copy instead of overwriting one.
-	for i := 1; i < 1000; i++ {
-		if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
-			return p
-		}
-		p = base + "." + strconv.Itoa(i)
-	}
-	return base + ".x"
-}
-
-func moveIfExists(src, dst string) error {
-	if err := os.Rename(src, dst); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return diag.WrapAs(diag.ClassFilesystem, err, "move corrupted history file")
-	}
-	return nil
 }

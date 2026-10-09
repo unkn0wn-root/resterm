@@ -3,6 +3,7 @@ package runner
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -70,5 +71,40 @@ func TestBuildDerivesStateDirFromFile(t *testing.T) {
 	}
 	if auth[0] == auth[1] {
 		t.Fatalf("both workspaces share the auth file %q", auth[0])
+	}
+}
+
+func TestWriteStateFileIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use Unix file modes")
+	}
+	dir := filepath.Join(t.TempDir(), "state")
+	p := filepath.Join(dir, "auth.json")
+	mode := func(path string) os.FileMode {
+		t.Helper()
+		st, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		return st.Mode().Perm()
+	}
+	if err := writeStateFile(p, authStateFile{Version: stateFileVersion}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if got := mode(dir); got != 0o700 {
+		t.Fatalf("dir mode = %v, want 0700", got)
+	}
+	if err := os.Chmod(p, 0o644); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	if err := writeStateFile(p, authStateFile{Version: stateFileVersion}); err != nil {
+		t.Fatalf("write again: %v", err)
+	}
+	if got := mode(p); got != 0o600 {
+		t.Fatalf("file mode = %v, want 0600", got)
+	}
+	es, err := os.ReadDir(dir)
+	if err != nil || len(es) != 1 {
+		t.Fatalf("state dir holds %d entries, %v, want only auth.json", len(es), err)
 	}
 }

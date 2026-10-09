@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"errors"
 	"os"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -8,13 +9,14 @@ import (
 )
 
 func (s *Store) Stats() (history.Stats, error) {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return history.Stats{}, err
 	}
 
 	st := history.Stats{Path: s.p}
 	var minNS, maxNS int64
-	if err := s.db.QueryRow(
+	if err := db.QueryRow(
 		`SELECT COUNT(*), COALESCE(MIN(exec_ns), 0), COALESCE(MAX(exec_ns), 0) FROM hist`,
 	).Scan(&st.Rows, &minNS, &maxNS); err != nil {
 		return history.Stats{}, diag.WrapAs(diag.ClassHistory, err, "query history stats")
@@ -22,7 +24,7 @@ func (s *Store) Stats() (history.Stats, error) {
 	st.Oldest = nsToTime(minNS)
 	st.Newest = nsToTime(maxNS)
 
-	v, err := schemaVersion(s.db)
+	v, err := schemaVersion(db)
 	if err != nil {
 		return history.Stats{}, err
 	}
@@ -34,24 +36,35 @@ func (s *Store) Stats() (history.Stats, error) {
 }
 
 func (s *Store) Check(full bool) error {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return err
 	}
-	return checkDB(s.db, full)
+	return checkDB(db, full)
 }
 
 func (s *Store) Compact() error {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return err
 	}
-	if _, err := s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
-		return diag.WrapAs(diag.ClassHistory, err, "checkpoint history db")
-	}
-	if _, err := s.db.Exec(`VACUUM;`); err != nil {
+	if _, err := db.Exec(`VACUUM;`); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "compact history db")
 	}
-	if _, err := s.db.Exec(`PRAGMA optimize;`); err != nil {
+	if _, err := db.Exec(`PRAGMA optimize;`); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "optimize history db")
+	}
+	// In WAL mode VACUUM goes through the WAL. The file itself only shrinks at the checkpoint.
+	var busy, logFrames, checkpointed int
+	if err := db.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE);`).Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return diag.WrapAs(diag.ClassHistory, err, "checkpoint history db")
+	}
+	if busy != 0 {
+		return diag.WrapAs(
+			diag.ClassHistory,
+			errors.New("another process is using the history db, so its file did not shrink. Try again later"),
+			"checkpoint history db",
+		)
 	}
 	return nil
 }

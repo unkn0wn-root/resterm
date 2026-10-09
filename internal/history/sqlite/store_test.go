@@ -2,8 +2,10 @@ package sqlite
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -286,5 +288,111 @@ func TestEntriesReturnsErrorOnQueryFailure(t *testing.T) {
 
 	if _, err := s.Entries(); err == nil {
 		t.Fatalf("expected query error")
+	}
+}
+
+func TestStoreCloseDuringAppend(t *testing.T) {
+	s := New(filepath.Join(t.TempDir(), "history.db"))
+	var writers sync.WaitGroup
+	for i := range 4 {
+		writers.Go(func() {
+			for j := range 50 {
+				_ = s.Append(history.Entry{ID: fmt.Sprintf("%d-%d", i, j), ExecutedAt: time.Now()})
+			}
+		})
+	}
+	done := make(chan struct{})
+	closer := make(chan struct{})
+	go func() {
+		defer close(closer)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				_ = s.Close()
+			}
+		}
+	}()
+	writers.Wait()
+	close(done)
+	<-closer
+	_ = s.Close()
+}
+
+func TestStoreOpensPathWithQuestionMark(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not allow ? in file names")
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "api?v2", "history.db")
+	s := New(p)
+	defer func() { _ = s.Close() }()
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "api")); !os.IsNotExist(err) {
+		t.Fatalf("history went to a cut-off path: %v", err)
+	}
+	if st, err := os.Stat(p); err != nil || st.Size() == 0 {
+		t.Fatalf("history.db is missing or empty: %v", err)
+	}
+}
+
+func TestEntryRoundTrip(t *testing.T) {
+	s := New(filepath.Join(t.TempDir(), "history.db"))
+	defer func() { _ = s.Close() }()
+	want := history.Entry{
+		ID:                   "42",
+		ExecutedAt:           time.Unix(0, 1_700_000_000_123_456_789),
+		Environment:          "dev",
+		EnvironmentSelection: history.EnvironmentSelection{"api": "dev"},
+		RequestName:          "get-user",
+		FilePath:             "/tmp/x/../api.http",
+		Method:               "GET",
+		URL:                  "https://api.test/users/1",
+		Status:               "200 OK",
+		StatusCode:           200,
+		Duration:             1500 * time.Millisecond,
+		BodySnippet:          `{"id":1}`,
+		RequestText:          "GET https://api.test/users/1",
+		Description:          "fetch one user",
+		Tags:                 []string{"smoke", "users"},
+		ProfileResults:       &history.ProfileResults{TotalRuns: 3, SuccessfulRuns: 3},
+		Trace:                &history.TraceSummary{Duration: time.Second, Error: "slow"},
+		Compare: &history.CompareEntry{
+			Baseline: "dev",
+			Results:  []history.CompareResult{{Environment: "dev", StatusCode: 200}},
+		},
+	}
+	if err := s.Append(want); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	got, err := s.Entries()
+	if err != nil || len(got) != 1 {
+		t.Fatalf("entries = %d, %v, want 1", len(got), err)
+	}
+	if !reflect.DeepEqual(got[0], want) {
+		t.Fatalf("entry = %#v\nwant %#v", got[0], want)
+	}
+}
+
+func TestEntriesReadRowsWithNullFileNorm(t *testing.T) {
+	s := New(filepath.Join(t.TempDir(), "history.db"))
+	defer func() { _ = s.Close() }()
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	db, err := s.handle()
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	// The schema allows NULL here, and a db edited outside resterm can have it.
+	if _, err := db.Exec(`UPDATE hist SET file_norm = NULL`); err != nil {
+		t.Fatalf("clear file_norm: %v", err)
+	}
+	es, err := s.Entries()
+	if err != nil || len(es) != 1 {
+		t.Fatalf("entries = %d, %v, want 1", len(es), err)
 	}
 }

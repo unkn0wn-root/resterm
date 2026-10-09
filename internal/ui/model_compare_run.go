@@ -471,7 +471,7 @@ func (m *Model) recordCompareHistory(state *compareState) {
 	}
 
 	entry := history.Entry{
-		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  time.Now(),
 		RequestName: requestIdentifier(baseReq),
 		FilePath:    m.historyFilePath(),

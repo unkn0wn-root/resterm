@@ -109,7 +109,7 @@ func saveRunnerState(h engine.Executor, paths statePaths, opts Options) error {
 	if !usesStateDir(opts) {
 		return nil
 	}
-	if err := os.MkdirAll(paths.Root, 0o755); err != nil {
+	if err := os.MkdirAll(paths.Root, 0o700); err != nil {
 		return err
 	}
 	if opts.PersistGlobals {
@@ -181,12 +181,12 @@ func writeStateFile(path string, state any) error {
 	if path == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return str.WriteFileAtomic(path, data, 0o600)
 }

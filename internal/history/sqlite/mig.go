@@ -2,8 +2,8 @@ package sqlite
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -22,7 +22,8 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 	// Legacy import is designed to run once and then get out of the way.
 	// It marks completion even when there is nothing to import so startup stays predictable.
 	// Existing SQLite rows always win over legacy JSON content.
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return 0, err
 	}
 
@@ -32,7 +33,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 	}
 	path = filepath.Clean(path)
 
-	tx, err := s.db.BeginTx(context.Background(), nil)
+	tx, err := db.Begin()
 	if err != nil {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "begin history migration tx")
 	}
@@ -65,8 +66,8 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 		// If SQLite already has rows we treat it as the source of truth and
 		// only stamp completion, which avoids merging two diverged histories.
 		if existing == 0 {
-			es, err := dec[[]history.Entry](data)
-			if err != nil {
+			var es []history.Entry
+			if err := json.Unmarshal(data, &es); err != nil {
 				return 0, diag.WrapAs(diag.ClassHistory, err, "parse legacy history")
 			}
 			for _, e := range es {
@@ -76,7 +77,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 				}
 				// Duplicate IDs from legacy data are ignored so one bad file does
 				// not abort the whole migration transaction.
-				res, err := insertRow(tx, qIgnore, &r)
+				res, err := tx.Exec(qIgnore, r.args()...)
 				if err != nil {
 					return 0, diag.WrapAs(diag.ClassHistory, err, "insert migrated history row")
 				}

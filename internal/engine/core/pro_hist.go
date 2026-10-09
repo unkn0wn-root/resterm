@@ -29,7 +29,7 @@ func (s ProfileSnapshot) HistoryEntry(
 ) history.Entry {
 	now := time.Now()
 	return history.Entry{
-		ID:                   fmt.Sprintf("%d", now.UnixNano()),
+		ID:                   history.NewID(),
 		ExecutedAt:           now,
 		Environment:          env.Label(),
 		EnvironmentSelection: history.EnvironmentSelection(env.Selection().Groups()),

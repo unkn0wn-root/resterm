@@ -246,7 +246,7 @@ func (e *Engine) recordCompare(
 	}
 	now := time.Now()
 	ent := history.Entry{
-		ID:          fmt.Sprintf("%d", now.UnixNano()),
+		ID:          history.NewID(),
 		ExecutedAt:  now,
 		Environment: out.Environment,
 		EnvironmentSelection: history.EnvironmentSelection(

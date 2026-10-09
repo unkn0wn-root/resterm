@@ -1,44 +1,24 @@
 package sqlite
 
 import (
-	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
-	"strings"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 const (
 	schemaVer = 3
+
+	// The history db and backup targets wait this long for locks other connections hold.
+	busyTimeout = 5 * time.Second
 )
 
 type mig struct {
 	ver int
 	qs  []string
-}
-
-type integrityCheckStatus uint8
-
-const (
-	integrityCheckStatusOK integrityCheckStatus = iota + 1
-	integrityCheckStatusFailed
-)
-
-type integrityCheckResult struct {
-	status integrityCheckStatus
-	detail string
-}
-
-func parseIntegrityCheckResult(v string) integrityCheckResult {
-	s := strings.TrimSpace(v)
-	if s == "ok" {
-		return integrityCheckResult{status: integrityCheckStatusOK}
-	}
-	return integrityCheckResult{
-		status: integrityCheckStatusFailed,
-		detail: s,
-	}
 }
 
 type integrityCheckError struct {
@@ -47,9 +27,6 @@ type integrityCheckError struct {
 }
 
 func (e *integrityCheckError) Error() string {
-	if e == nil {
-		return ""
-	}
 	if e.Result == "" {
 		return "history " + e.Check + " failed"
 	}
@@ -59,7 +36,7 @@ func (e *integrityCheckError) Error() string {
 // These are applied on every open because several settings are
 // connection scoped and not persisted in the database file itself.
 var pragmas = []string{
-	`PRAGMA busy_timeout=5000;`,
+	fmt.Sprintf("PRAGMA busy_timeout=%d;", busyTimeout.Milliseconds()),
 	`PRAGMA journal_mode=WAL;`,
 	`PRAGMA synchronous=FULL;`,
 	`PRAGMA foreign_keys=ON;`,
@@ -134,9 +111,6 @@ func schemaVersion(db *sql.DB) (int, error) {
 }
 
 func setSchemaVersion(tx *sql.Tx, v int) error {
-	if v < 0 {
-		return diag.Newf(diag.ClassHistory, "invalid history schema version: %d", v)
-	}
 	q := "PRAGMA user_version = " + strconv.Itoa(v)
 	if _, err := tx.Exec(q); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "set history schema version")
@@ -191,7 +165,7 @@ func migrateSchema(db *sql.DB) error {
 func applyMigration(db *sql.DB, m mig) error {
 	// Each version step runs as a full transaction so either all DDL
 	// for that step is visible, or none of it is.
-	tx, err := db.BeginTx(context.Background(), nil)
+	tx, err := db.Begin()
 	if err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "begin history schema migration tx")
 	}
@@ -236,22 +210,20 @@ func checkDB(db *sql.DB, full bool) error {
 		if err := rs.Scan(&v); err != nil {
 			return diag.WrapAs(diag.ClassHistory, err, "scan history integrity check")
 		}
-		r := parseIntegrityCheckResult(v)
-		if r.status == integrityCheckStatusOK {
-			ok = true
-			continue
+		if v != "ok" {
+			return diag.WrapAs(
+				diag.ClassHistory,
+				&integrityCheckError{Check: checkName, Result: v},
+				"run history integrity check",
+			)
 		}
-		return diag.WrapAsf(
-			diag.ClassHistory,
-			&integrityCheckError{Check: checkName, Result: r.detail},
-			"run history integrity check",
-		)
+		ok = true
 	}
 	if err := rs.Err(); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "iterate history integrity check")
 	}
 	if !ok {
-		return diag.WrapAsf(
+		return diag.WrapAs(
 			diag.ClassHistory,
 			&integrityCheckError{Check: checkName, Result: "empty result"},
 			"run history integrity check",
