@@ -1,8 +1,6 @@
 package headless
 
 import (
-	"bytes"
-	"fmt"
 	"maps"
 	"path/filepath"
 	"time"
@@ -39,18 +37,9 @@ func Build(o Options) (Plan, error) {
 
 	pl, err := runner.Build(ro)
 	if err != nil {
-		if runner.IsUsageError(err) {
-			return Plan{}, UsageError{err: err}
-		}
-		return Plan{}, err
+		return Plan{}, wrapUsage(err)
 	}
 	return Plan{pl: pl}, nil
-}
-
-type builder struct {
-	opt Options
-	out runner.Options
-	sel runner.Select
 }
 
 func buildOptions(o Options) (runner.Options, error) {
@@ -58,157 +47,56 @@ func buildOptions(o Options) (runner.Options, error) {
 	if err != nil {
 		return runner.Options{}, err
 	}
-	b := builder{opt: o, sel: sel}
-	if err := b.buildPaths(); err != nil {
-		return runner.Options{}, err
-	}
-	b.buildSelection()
-	if err := b.buildEnvironment(); err != nil {
-		return runner.Options{}, err
-	}
-	if err := b.buildCompare(); err != nil {
-		return runner.Options{}, err
-	}
-	if err := b.buildHTTP(); err != nil {
-		return runner.Options{}, err
-	}
-	b.buildGRPC()
-	b.finalize()
-	return b.out, nil
-}
 
-func (b *builder) buildPaths() error {
-	path, err := absPath(b.opt.Source.Path)
+	path, err := absPath(o.Source.Path)
 	if err != nil {
-		return UsageError{err: fmt.Errorf("resolve source.path: %w", err)}
+		return runner.Options{}, usageError("resolve source.path: %w", err)
 	}
 	if path == "" {
-		return UsageError{err: ErrNoSourcePath}
+		return runner.Options{}, UsageError{err: ErrNoSourcePath}
 	}
-	work, err := workspacePath(path, b.opt.WorkspaceRoot)
-	if err != nil {
-		return UsageError{err: fmt.Errorf("resolve workspaceRoot: %w", err)}
-	}
-	b.out.FilePath = path
-	b.out.WorkspaceRoot = work
-	return nil
-}
-
-func (b *builder) buildSelection() {
-	b.out.Select = b.sel
-}
-
-func (b *builder) buildEnvironment() error {
-	cat, file, sel, err := environmentOptions(b.opt, b.out.FilePath, b.out.WorkspaceRoot)
-	if err != nil {
-		return err
-	}
-	b.out.Catalog = cat
-	b.out.EnvironmentFile = file
-	b.out.Selection = sel
-	return nil
-}
-
-func (b *builder) buildCompare() error {
-	targets, err := compareTargets(b.opt.Compare.Targets)
-	if err != nil {
-		return err
-	}
-	base := str.Trim(b.opt.Compare.Base)
-	if err := runcheck.ValidateConcreteEnvironment(base, "compare.base"); err != nil {
-		return UsageError{err: err}
-	}
-	ns := runcheck.Names{
-		Profile:  "profile.enabled",
-		Compare:  "compare.targets",
-		Workflow: "selection.workflow",
-	}
-	if err := runcheck.ValidateProfileCompare(
-		b.opt.Profile.Enabled,
-		len(targets) > 0,
-		ns,
-	); err != nil {
-		return UsageError{err: err}
-	}
-	if err := runcheck.ValidateWorkflowMode(
-		b.sel.Workflow != "",
-		b.opt.Profile.Enabled,
-		len(targets) > 0,
-		ns,
-	); err != nil {
-		return UsageError{err: err}
-	}
-	group := str.Trim(b.opt.Compare.Group)
-	if group != "" && len(targets) == 0 {
-		return UsageError{err: fmt.Errorf("compare.group requires compare.targets")}
-	}
-	if len(targets) > 0 {
-		if _, err := b.out.Catalog.CompareTargets(b.out.Selection, group, base, targets); err != nil {
-			return UsageError{err: err}
+	work := filepath.Dir(path)
+	if root := str.Trim(o.WorkspaceRoot); root != "" {
+		work, err = absPath(root)
+		if err != nil {
+			return runner.Options{}, usageError("resolve workspaceRoot: %w", err)
 		}
 	}
-	b.out.Compare = engine.CompareConfig{Targets: targets, Base: base, Group: group}
-	return nil
-}
 
-func (b *builder) buildHTTP() error {
-	opts, err := httpOptions(b.opt.HTTP)
+	env, err := environmentOptions(o.Environment, path, work)
 	if err != nil {
-		return err
+		return runner.Options{}, err
 	}
-	b.out.HTTPOptions = opts
-	return nil
-}
-
-func (b *builder) buildGRPC() {
-	b.out.GRPCOptions = grpcOptions(b.opt.GRPC)
-}
-
-func (b *builder) finalize() {
-	b.out.Version = str.Trim(b.opt.Version)
-	b.out.FileContent = bytes.Clone(b.opt.Source.Content)
-	b.out.Recursive = b.opt.Recursive
-	b.out.ArtifactDir = str.Trim(b.opt.State.ArtifactDir)
-	b.out.StateDir = str.Trim(b.opt.State.StateDir)
-	b.out.PersistGlobals = b.opt.State.PersistGlobals
-	b.out.PersistAuth = b.opt.State.PersistAuth
-	b.out.History = b.opt.State.History
-	b.out.FailFast = b.opt.FailFast
-	b.out.Profile = b.opt.Profile.Enabled
-}
-
-func httpOptions(opt HTTPOptions) (httpx.Options, error) {
-	out := httpx.Options{
-		Timeout:            timeoutOf(opt.Timeout),
-		FollowRedirects:    boolOr(opt.FollowRedirects, true),
-		InsecureSkipVerify: opt.InsecureSkipVerify,
-		ProxyURL:           str.Trim(opt.ProxyURL),
+	cmp, err := compareOptions(o, sel.Workflow != "", env)
+	if err != nil {
+		return runner.Options{}, err
 	}
-	if opt.MaxRedirects != nil {
-		if err := nonNegative("http.maxRedirects", int64(*opt.MaxRedirects)); err != nil {
-			return httpx.Options{}, err
-		}
-		out.MaxRedirects = restfile.OptOf(*opt.MaxRedirects)
+	httpOpts, err := httpOptions(o.HTTP)
+	if err != nil {
+		return runner.Options{}, err
 	}
-	if opt.MaxResponseBytes != nil {
-		if err := nonNegative("http.maxResponseBytes", *opt.MaxResponseBytes); err != nil {
-			return httpx.Options{}, err
-		}
-		// Zero means no limit, the same as max-response-size none.
-		out.MaxResponseBytes = bytesize.Of(*opt.MaxResponseBytes)
-	}
-	return out, nil
-}
 
-func nonNegative(name string, value int64) error {
-	if value < 0 {
-		return UsageError{err: fmt.Errorf("%s: %d must be non-negative", name, value)}
-	}
-	return nil
-}
-
-func grpcOptions(opt GRPCOptions) grpcx.Options {
-	return grpcx.Options{DefaultPlaintext: restfile.OptOf(boolOr(opt.Plaintext, true))}
+	return runner.Options{
+		Version:         o.Version,
+		FilePath:        path,
+		FileContent:     o.Source.Content,
+		WorkspaceRoot:   work,
+		Recursive:       o.Recursive,
+		ArtifactDir:     o.State.ArtifactDir,
+		StateDir:        o.State.StateDir,
+		PersistGlobals:  o.State.PersistGlobals,
+		PersistAuth:     o.State.PersistAuth,
+		History:         o.State.History,
+		FailFast:        o.FailFast,
+		Catalog:         env.cat,
+		Selection:       env.sel,
+		EnvironmentFile: env.file,
+		Compare:         cmp,
+		Profile:         o.Profile.Enabled,
+		HTTPOptions:     httpOpts,
+		GRPCOptions:     grpcx.Options{DefaultPlaintext: restfile.OptOf(boolOr(o.GRPC.Plaintext, true))},
+		Select:          sel,
+	}, nil
 }
 
 func selectionOptions(sel Selection) (runner.Select, error) {
@@ -220,101 +108,62 @@ func selectionOptions(sel Selection) (runner.Select, error) {
 	}
 	switch {
 	case out.Workflow != "" && (out.All || out.Request != "" || out.Tag != ""):
-		return runner.Select{}, UsageError{
-			err: fmt.Errorf(
-				"selection.workflow cannot be combined with selection.request, selection.tag, or selection.all",
-			),
-		}
+		return runner.Select{}, usageError(
+			"selection.workflow cannot be combined with selection.request, selection.tag, or selection.all",
+		)
 	case out.All && (out.Request != "" || out.Tag != ""):
-		return runner.Select{}, UsageError{
-			err: fmt.Errorf(
-				"selection.all cannot be combined with selection.request or selection.tag",
-			),
-		}
+		return runner.Select{}, usageError("selection.all cannot be combined with selection.request or selection.tag")
 	case out.Request != "" && out.Tag != "":
-		return runner.Select{}, UsageError{
-			err: fmt.Errorf("selection.request cannot be combined with selection.tag"),
-		}
+		return runner.Select{}, usageError("selection.request cannot be combined with selection.tag")
 	default:
 		return out, nil
 	}
 }
 
-func absPath(path string) (string, error) {
-	path = str.Trim(path)
-	if path == "" {
-		return "", nil
-	}
-	path = filepath.Clean(path)
-	if filepath.IsAbs(path) {
-		return path, nil
-	}
-	return filepath.Abs(path)
+type environment struct {
+	cat  vars.Catalog
+	file string
+	sel  vars.Selection
 }
 
-func workspacePath(path, work string) (string, error) {
-	work = str.Trim(work)
-	switch {
-	case work != "":
-		return absPath(work)
-	case path != "":
-		return filepath.Dir(path), nil
-	default:
-		return "", nil
+func environmentOptions(opt EnvironmentOptions, path, work string) (environment, error) {
+	if opt.Set != nil && opt.Grouped != nil {
+		return environment{}, usageError("environment.set cannot be combined with environment.grouped")
 	}
-}
-
-func environmentOptions(
-	opt Options,
-	path, work string,
-) (vars.Catalog, string, vars.Selection, error) {
-	if opt.Environment.Set != nil && opt.Environment.Grouped != nil {
-		return vars.Catalog{}, "", vars.Selection{}, UsageError{
-			err: fmt.Errorf("environment.set cannot be combined with environment.grouped"),
-		}
-	}
-	if str.Trim(opt.Environment.Name) != "" && opt.Environment.Selection != nil {
-		return vars.Catalog{}, "", vars.Selection{}, UsageError{
-			err: fmt.Errorf("environment.name cannot be combined with environment.selection"),
-		}
+	if str.Trim(opt.Name) != "" && opt.Selection != nil {
+		return environment{}, usageError("environment.name cannot be combined with environment.selection")
 	}
 
-	var cat vars.Catalog
-	envFile := str.Trim(opt.Environment.FilePath)
+	var env environment
 	var err error
+	file := str.Trim(opt.FilePath)
 	switch {
-	case opt.Environment.Set != nil:
-		cat, err = vars.NewCatalog(environmentSet(opt.Environment.Set))
-		envFile = ""
-	case opt.Environment.Grouped != nil:
-		cat, err = groupedCatalog(opt.Environment.Grouped)
-		envFile = ""
-	case envFile != "":
-		cat, err = vars.LoadEnvironmentFile(envFile)
+	case opt.Set != nil:
+		env.cat, err = vars.NewCatalog(environmentSet(opt.Set))
+	case opt.Grouped != nil:
+		env.cat, err = groupedCatalog(opt.Grouped)
+	case file != "":
+		env.file = file
+		env.cat, err = vars.LoadEnvironmentFile(file)
 	default:
-		cat, envFile, err = vars.Discover(envPaths(path, work)...)
+		env.cat, env.file, err = vars.Discover(filepath.Dir(path), work)
 	}
 	if err != nil {
-		return vars.Catalog{}, "", vars.Selection{}, UsageError{
-			err: fmt.Errorf("load environments: %w", err),
-		}
+		return environment{}, usageError("load environments: %w", err)
 	}
 
-	name := str.Trim(opt.Environment.Name)
+	name := str.Trim(opt.Name)
 	if err := runcheck.ValidateConcreteEnvironment(name, "environment.name"); err != nil {
-		return vars.Catalog{}, "", vars.Selection{}, UsageError{err: err}
+		return environment{}, UsageError{err: err}
 	}
-	sel, err := cat.Select(name, map[string]string(opt.Environment.Selection))
+	env.sel, err = env.cat.Select(name, map[string]string(opt.Selection))
 	if err != nil {
-		return vars.Catalog{}, "", vars.Selection{}, UsageError{err: err}
+		return environment{}, UsageError{err: err}
 	}
-	return cat, envFile, sel, nil
+	return env, nil
 }
 
 func groupedCatalog(src *GroupedEnvironmentSet) (vars.Catalog, error) {
-	if src == nil {
-		return vars.Catalog{}, nil
-	}
 	groups := make([]vars.Group, 0, len(src.Groups))
 	for name, group := range src.Groups {
 		groups = append(groups, vars.Group{
@@ -326,17 +175,6 @@ func groupedCatalog(src *GroupedEnvironmentSet) (vars.Catalog, error) {
 	return vars.NewGroupedCatalog(src.Shared, groups)
 }
 
-func envPaths(path, work string) []string {
-	out := make([]string, 0, 2)
-	if path != "" {
-		out = append(out, filepath.Dir(path))
-	}
-	if work != "" && (len(out) == 0 || out[len(out)-1] != work) {
-		out = append(out, work)
-	}
-	return out
-}
-
 func environmentSet(src EnvironmentSet) vars.EnvironmentSet {
 	if len(src) == 0 {
 		return nil
@@ -346,6 +184,39 @@ func environmentSet(src EnvironmentSet) vars.EnvironmentSet {
 		out[env] = maps.Clone(vals)
 	}
 	return out
+}
+
+func compareOptions(o Options, workflow bool, env environment) (engine.CompareConfig, error) {
+	targets, err := compareTargets(o.Compare.Targets)
+	if err != nil {
+		return engine.CompareConfig{}, err
+	}
+	base := str.Trim(o.Compare.Base)
+	if err := runcheck.ValidateConcreteEnvironment(base, "compare.base"); err != nil {
+		return engine.CompareConfig{}, UsageError{err: err}
+	}
+	ns := runcheck.Names{
+		Profile:  "profile.enabled",
+		Compare:  "compare.targets",
+		Workflow: "selection.workflow",
+	}
+	compare := len(targets) > 0
+	if err := runcheck.ValidateProfileCompare(o.Profile.Enabled, compare, ns); err != nil {
+		return engine.CompareConfig{}, UsageError{err: err}
+	}
+	if err := runcheck.ValidateWorkflowMode(workflow, o.Profile.Enabled, compare, ns); err != nil {
+		return engine.CompareConfig{}, UsageError{err: err}
+	}
+	group := str.Trim(o.Compare.Group)
+	if group != "" && !compare {
+		return engine.CompareConfig{}, usageError("compare.group requires compare.targets")
+	}
+	if compare {
+		if _, err := env.cat.CompareTargets(env.sel, group, base, targets); err != nil {
+			return engine.CompareConfig{}, UsageError{err: err}
+		}
+	}
+	return engine.CompareConfig{Targets: targets, Base: base, Group: group}, nil
 }
 
 func compareTargets(src []string) ([]string, error) {
@@ -378,11 +249,46 @@ func compareTargets(src []string) ([]string, error) {
 	return out, nil
 }
 
-func timeoutOf(d time.Duration) time.Duration {
-	if d > 0 {
-		return d
+func httpOptions(opt HTTPOptions) (httpx.Options, error) {
+	timeout := DefaultHTTPTimeout
+	if opt.Timeout > 0 {
+		timeout = opt.Timeout
 	}
-	return DefaultHTTPTimeout
+	out := httpx.Options{
+		Timeout:            timeout,
+		FollowRedirects:    boolOr(opt.FollowRedirects, true),
+		InsecureSkipVerify: opt.InsecureSkipVerify,
+		ProxyURL:           str.Trim(opt.ProxyURL),
+	}
+	if opt.MaxRedirects != nil {
+		if err := nonNegative("http.maxRedirects", int64(*opt.MaxRedirects)); err != nil {
+			return httpx.Options{}, err
+		}
+		out.MaxRedirects = restfile.OptOf(*opt.MaxRedirects)
+	}
+	if opt.MaxResponseBytes != nil {
+		if err := nonNegative("http.maxResponseBytes", *opt.MaxResponseBytes); err != nil {
+			return httpx.Options{}, err
+		}
+		// Zero means no limit, the same as max-response-size none.
+		out.MaxResponseBytes = bytesize.Of(*opt.MaxResponseBytes)
+	}
+	return out, nil
+}
+
+func nonNegative(name string, value int64) error {
+	if value < 0 {
+		return usageError("%s: %d must be non-negative", name, value)
+	}
+	return nil
+}
+
+func absPath(path string) (string, error) {
+	path = str.Trim(path)
+	if path == "" {
+		return "", nil
+	}
+	return filepath.Abs(path)
 }
 
 func boolOr(v *bool, def bool) bool {

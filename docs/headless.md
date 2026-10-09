@@ -133,7 +133,7 @@ To stop a run, cancel its context. When several requests are selected, the one i
 
 ## Read the report
 
-`Report` has the totals (`Total`, `Passed`, `Failed`, `Skipped`) and one `Result` for each request, workflow, compare run or profile run. Workflows and compare runs list their steps in `Steps`. A failed result or step carries a `Failure` with a `Code` such as `assertion`, `timeout` or `network`.
+`Report` has the totals (`Total`, `Passed`, `Failed`, `Skipped`) and one `Result` for each request, workflow, compare run or profile run. Workflows and compare runs list their steps in `Steps`. A failed result or step carries a `Failure` with a `Code` such as `assertion`, `timeout` or `network`. A result also fails when one of its steps, a profile run outside warmup or its stream fails, as it does in `resterm run`.
 
 ```go
 for _, res := range rep.Results {
@@ -142,6 +142,8 @@ for _, res := range rep.Results {
 	}
 }
 ```
+
+`EffectiveTarget` is the URL a request reached after variables were filled in and redirects followed. `ErrorDetail` and `ScriptErrorDetail` show an error the way `resterm run` prints it, with the file, line and column where it happened.
 
 `rep.FailureCodes()` returns each failure code in the report once. `rep.Warnings` lists parse warnings from the request file. Warnings never fail a run.
 
@@ -153,9 +155,9 @@ for _, res := range rep.Results {
 - `headless.JSON` for scripts and other tools
 - `headless.JUnit` for CI systems
 
-`ParseFormat` turns a name like `"junit"` into a `Format`, which helps when the format comes from a flag or a config file. `json.Marshal(rep)` gives the same JSON as `Encode`, without indentation.
+`ParseFormat` turns a name like `"junit"` into a `Format`, which helps when the format comes from a flag or a config file. `json.Marshal(rep)` gives the same JSON as `Encode`, without indentation. Each part of a report, such as a `Test`, `Trace` or `Failure`, marshals the way it appears in that JSON, so durations are in milliseconds. `json.Unmarshal` reads that JSON back into a `Report`, including JSON from `resterm run --format json`. Durations come back in whole milliseconds, and `ErrorDetail` and `ScriptErrorDetail` stay empty because the JSON does not include them.
 
-`rep.ExitCode(headless.ExitCodeDetailed)` returns the code `resterm run` would exit with. The [exit code table](cli/run.md#exit-codes) lists them, and each one has a constant such as `headless.ExitTimeout`. Pass `headless.ExitCodeSummary` to get only `0` or `1`.
+`rep.ExitCode(headless.ExitCodeDetailed)` returns the code `resterm run` would exit with. The [exit code table](cli/run.md#exit-codes) lists them, and each one has a constant such as `headless.ExitTimeout`. Pass `headless.ExitCodeSummary` to get only `0` or `1`. Both modes return `0` for the same reports. `rep.HasFailures()` is true when they return anything else.
 
 Errors returned by `Run` never reach the report, so decide on their exit code yourself:
 
@@ -172,4 +174,4 @@ case err != nil:
 os.Exit(rep.ExitCode(headless.ExitCodeDetailed))
 ```
 
-Invalid options and selections return a `UsageError`. So does a request file that cannot be read or has parse errors, so the example exits `2` for it, as `resterm run` does. Use `errors.Is` to check for a specific one, such as `headless.ErrNoSourcePath` when `Source.Path` is empty or `headless.ErrTooFewTargets` when `Compare.Targets` names fewer than two environments.
+Invalid options and selections return a `UsageError`. So does a request file that cannot be read or has parse errors, so the example exits `2` for it, as `resterm run` does. A nil context, report or writer and an unknown format are usage errors too. Use `errors.Is` to check for a specific one, such as `headless.ErrNoSourcePath` when `Source.Path` is empty, `headless.ErrTooFewTargets` when `Compare.Targets` names fewer than two environments, or `headless.ErrUnknownFormat` when `ParseFormat` gets a name it does not know.

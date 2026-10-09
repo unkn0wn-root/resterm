@@ -363,6 +363,10 @@ func (grpc *GRPC) json() *jsonGRPC {
 	}
 }
 
+func (failure Failure) MarshalJSON() ([]byte, error) {
+	return json.Marshal(failure.json())
+}
+
 func (failure *Failure) json() *jsonFailure {
 	if failure == nil {
 		return nil
@@ -401,12 +405,17 @@ func failureFramesJSON(src []FailureFrame) []jsonFailureFrame {
 	}
 	frames := make([]jsonFailureFrame, len(src))
 	for i, frame := range src {
-		frames[i] = jsonFailureFrame{
-			Name: frame.Name,
-			Pos:  failurePosJSON(frame.Pos),
-		}
+		frames[i] = frame.json()
 	}
 	return frames
+}
+
+func (frame FailureFrame) MarshalJSON() ([]byte, error) {
+	return json.Marshal(frame.json())
+}
+
+func (frame FailureFrame) json() jsonFailureFrame {
+	return jsonFailureFrame{Name: frame.Name, Pos: failurePosJSON(frame.Pos)}
 }
 
 func failurePosJSON(pos FailurePos) *jsonFailurePos {
@@ -414,6 +423,10 @@ func failurePosJSON(pos FailurePos) *jsonFailurePos {
 		return nil
 	}
 	return &jsonFailurePos{Path: pos.Path, Line: pos.Line, Col: pos.Col}
+}
+
+func (test Test) MarshalJSON() ([]byte, error) {
+	return json.Marshal(test.json())
 }
 
 func (test Test) json() jsonTest {
@@ -430,6 +443,10 @@ func (cmp *Compare) json() *jsonCompare {
 		return nil
 	}
 	return &jsonCompare{Baseline: cmp.Baseline, Group: cmp.Group}
+}
+
+func (prof Profile) MarshalJSON() ([]byte, error) {
+	return json.Marshal(prof.json())
 }
 
 func (prof *Profile) json() *jsonProfile {
@@ -469,6 +486,10 @@ func (prof *Profile) json() *jsonProfile {
 	return out
 }
 
+func (lat Latency) MarshalJSON() ([]byte, error) {
+	return json.Marshal(lat.json())
+}
+
 func (lat *Latency) json() *jsonLatency {
 	if lat == nil {
 		return nil
@@ -483,11 +504,19 @@ func (lat *Latency) json() *jsonLatency {
 	}
 }
 
+func (pct Percentile) MarshalJSON() ([]byte, error) {
+	return json.Marshal(pct.json())
+}
+
 func (pct Percentile) json() jsonPercentile {
 	return jsonPercentile{
 		Percentile: pct.Percentile,
 		ValueMs:    durMS(pct.Value),
 	}
+}
+
+func (bin HistBin) MarshalJSON() ([]byte, error) {
+	return json.Marshal(bin.json())
 }
 
 func (bin HistBin) json() jsonHistBin {
@@ -496,6 +525,10 @@ func (bin HistBin) json() jsonHistBin {
 		ToMs:   durMS(bin.To),
 		Count:  bin.Count,
 	}
+}
+
+func (fail ProfileFailure) MarshalJSON() ([]byte, error) {
+	return json.Marshal(fail.json())
 }
 
 func (fail ProfileFailure) json() jsonProfileFailure {
@@ -508,6 +541,10 @@ func (fail ProfileFailure) json() jsonProfileFailure {
 		DurationMs: durMS(fail.Duration),
 		Failure:    fail.Failure.json(),
 	}
+}
+
+func (stream Stream) MarshalJSON() ([]byte, error) {
+	return json.Marshal(stream.json())
 }
 
 func (stream *Stream) json() *jsonStream {
@@ -526,6 +563,10 @@ func (stream *Stream) json() *jsonStream {
 	return out
 }
 
+func (trace Trace) MarshalJSON() ([]byte, error) {
+	return json.Marshal(trace.json())
+}
+
 func (trace *Trace) json() *jsonTrace {
 	if trace == nil {
 		return nil
@@ -533,19 +574,8 @@ func (trace *Trace) json() *jsonTrace {
 	out := &jsonTrace{
 		DurationMs:   durMS(trace.Duration),
 		Error:        trace.Error,
+		Budgets:      trace.Budget.json(),
 		ArtifactPath: trace.ArtifactPath,
-	}
-	if bud := trace.Budget; bud != nil {
-		out.Budgets = &jsonTraceBudget{
-			TotalMs:     durMS(bud.Total),
-			ToleranceMs: durMS(bud.Tolerance),
-		}
-		if len(bud.Phases) > 0 {
-			out.Budgets.Phases = make(map[string]int64, len(bud.Phases))
-			for key, val := range bud.Phases {
-				out.Budgets.Phases[key] = durMS(val)
-			}
-		}
 	}
 	if len(trace.Breaches) > 0 {
 		out.Breaches = make([]jsonTraceBreach, 0, len(trace.Breaches))
@@ -554,6 +584,31 @@ func (trace *Trace) json() *jsonTrace {
 		}
 	}
 	return out
+}
+
+func (bud TraceBudget) MarshalJSON() ([]byte, error) {
+	return json.Marshal(bud.json())
+}
+
+func (bud *TraceBudget) json() *jsonTraceBudget {
+	if bud == nil {
+		return nil
+	}
+	out := &jsonTraceBudget{
+		TotalMs:     durMS(bud.Total),
+		ToleranceMs: durMS(bud.Tolerance),
+	}
+	if len(bud.Phases) > 0 {
+		out.Phases = make(map[string]int64, len(bud.Phases))
+		for key, val := range bud.Phases {
+			out.Phases[key] = durMS(val)
+		}
+	}
+	return out
+}
+
+func (breach TraceBreach) MarshalJSON() ([]byte, error) {
+	return json.Marshal(breach.json())
 }
 
 func (breach TraceBreach) json() jsonTraceBreach {

@@ -1,6 +1,7 @@
 package headless
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -191,7 +193,7 @@ func TestEncodeInvalidFormat(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "unsupported format 99") {
+	if !strings.Contains(err.Error(), "headless: unknown format 99") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -544,12 +546,13 @@ func sampleRunnerReport() *runner.Report {
 		Skipped:   1,
 		Results: []runner.Result{
 			{
-				Kind:        runner.ResultKindRequest,
-				Name:        "ok",
-				Method:      "GET",
-				Target:      "https://example.com/ok",
-				Environment: "dev",
-				Passed:      true,
+				Kind:            runner.ResultKindRequest,
+				Name:            "ok",
+				Method:          "GET",
+				Target:          "https://example.com/ok",
+				EffectiveTarget: "https://example.com/ok?id=7",
+				Environment:     "dev",
+				Passed:          true,
 				Response: &httpx.Response{
 					Status:     "200 OK",
 					StatusCode: 200,
@@ -594,11 +597,12 @@ func sampleRunnerReport() *runner.Report {
 				Passed:   false,
 				Steps: []runner.StepResult{
 					{
-						Name:     "Login",
-						Method:   "GET",
-						Target:   "/login",
-						Passed:   true,
-						Duration: 40 * time.Millisecond,
+						Name:            "Login",
+						Method:          "GET",
+						Target:          "/login",
+						EffectiveTarget: "https://example.com/login",
+						Passed:          true,
+						Duration:        40 * time.Millisecond,
 						Response: &httpx.Response{
 							Status:     "200 OK",
 							StatusCode: 200,
@@ -650,6 +654,7 @@ func sampleRunnerReport() *runner.Report {
 						Environment: "stage",
 						Duration:    30 * time.Millisecond,
 						Err:         errors.New("stage failed"),
+						ScriptErr:   diag.New(diag.ClassScript, "assert status == 200"),
 					},
 				},
 			},
@@ -687,5 +692,143 @@ func sampleRunnerReport() *runner.Report {
 				},
 			},
 		},
+	}
+}
+
+func TestReportPartsMarshalLikeTheReport(t *testing.T) {
+	res := partsResult()
+	decode := func(v any) any {
+		t.Helper()
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal %T: %v", v, err)
+		}
+		var out any
+		if err := json.Unmarshal(b, &out); err != nil {
+			t.Fatalf("unmarshal %T: %v", v, err)
+		}
+		return out
+	}
+	obj := func(v any) map[string]any { return v.(map[string]any) }
+	first := func(v any) any { return v.([]any)[0] }
+
+	whole := obj(first(obj(decode(&Report{Results: []Result{res}}))["results"]))
+	failure, trace, prof := obj(whole["failure"]), obj(whole["trace"]), obj(whole["profile"])
+	cases := []struct {
+		part any
+		want any
+	}{
+		{res.Tests[0], first(whole["tests"])},
+		{res.Failure, failure},
+		{res.Failure.Frames[0], first(failure["frames"])},
+		{res.Stream, whole["stream"]},
+		{res.Trace, trace},
+		{res.Trace.Budget, trace["budgets"]},
+		{res.Trace.Breaches[0], first(trace["breaches"])},
+		{res.Profile, prof},
+		{res.Profile.Latency, prof["latency"]},
+		{res.Profile.Percentiles[0], first(prof["percentiles"])},
+		{res.Profile.Histogram[0], first(prof["histogram"])},
+		{res.Profile.Failures[0], first(prof["failures"])},
+	}
+	for _, tc := range cases {
+		if got := decode(tc.part); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%T marshals as %v, the report has %v", tc.part, got, tc.want)
+		}
+	}
+}
+
+func partsResult() Result {
+	ms := time.Millisecond
+	return Result{
+		Kind:    KindProfile,
+		Name:    "prof",
+		Status:  StatusFail,
+		Failure: &Failure{Code: FailureTimeout, Message: "slow", Frames: []FailureFrame{{Name: "check"}}},
+		Stream:  &Stream{Kind: "sse", EventCount: 2, Summary: map[string]any{"wait": 5 * ms}},
+		Trace: &Trace{
+			Duration: 30 * ms,
+			Budget:   &TraceBudget{Total: 20 * ms, Tolerance: ms, Phases: map[string]time.Duration{"dns": ms}},
+			Breaches: []TraceBreach{{Kind: "total", Limit: 20 * ms, Actual: 30 * ms, Over: 10 * ms}},
+		},
+		Tests: []Test{{Name: "status", Passed: true, Elapsed: 12 * ms}},
+		Profile: &Profile{
+			Count:       2,
+			Delay:       time.Second,
+			Latency:     &Latency{Count: 2, Min: ms, Max: 3 * ms, Mean: 2 * ms, Median: 2 * ms, StdDev: ms},
+			Percentiles: []Percentile{{Percentile: 50, Value: 2 * ms}},
+			Histogram:   []HistBin{{From: ms, To: 3 * ms, Count: 2}},
+			Failures:    []ProfileFailure{{Iteration: 2, Duration: 4 * ms, Failure: &Failure{Code: FailureTimeout}}},
+		},
+	}
+}
+
+func TestReportJSONRoundTrip(t *testing.T) {
+	rep := reportFromRunner(sampleRunnerReport())
+	rep.Results = append(rep.Results, partsResult())
+	first, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back Report
+	if err := json.Unmarshal(first, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	second, err := json.Marshal(&back)
+	if err != nil {
+		t.Fatalf("marshal again: %v", err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatalf("round trip changed the JSON\nfirst:  %s\nsecond: %s", first, second)
+	}
+	if back.Results[0].HTTP == nil || back.Results[0].Duration != rep.Results[0].Duration {
+		t.Fatalf("decoded result = %+v", back.Results[0])
+	}
+}
+
+func TestReportPartsRoundTrip(t *testing.T) {
+	res := partsResult()
+	parts := []any{
+		&res.Tests[0], res.Failure, res.Stream, res.Trace, res.Trace.Budget, &res.Trace.Breaches[0],
+		res.Profile, res.Profile.Latency, &res.Profile.Percentiles[0], &res.Profile.Histogram[0],
+		&res.Profile.Failures[0],
+	}
+	for _, part := range parts {
+		first, err := json.Marshal(part)
+		if err != nil {
+			t.Fatalf("marshal %T: %v", part, err)
+		}
+		back := reflect.New(reflect.TypeOf(part).Elem()).Interface()
+		if err := json.Unmarshal(first, back); err != nil {
+			t.Fatalf("unmarshal %T: %v", part, err)
+		}
+		second, err := json.Marshal(back)
+		if err != nil {
+			t.Fatalf("marshal again %T: %v", part, err)
+		}
+		if !bytes.Equal(first, second) {
+			t.Errorf("%T round trip changed the JSON\nfirst:  %s\nsecond: %s", part, first, second)
+		}
+	}
+	var test Test
+	if err := json.Unmarshal([]byte(`{"name":"status","passed":true,"elapsedMs":12}`), &test); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if test.Elapsed != 12*time.Millisecond {
+		t.Fatalf("Elapsed = %v, want 12ms", test.Elapsed)
+	}
+}
+
+func TestReportJSONKeepsWholeMilliseconds(t *testing.T) {
+	b, err := json.Marshal(Test{Name: "status", Passed: true, Elapsed: 12*time.Millisecond + 500*time.Microsecond})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var test Test
+	if err := json.Unmarshal(b, &test); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if test.Elapsed != 12*time.Millisecond {
+		t.Fatalf("Elapsed = %v, want 12ms", test.Elapsed)
 	}
 }

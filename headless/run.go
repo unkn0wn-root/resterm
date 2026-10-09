@@ -10,7 +10,7 @@ import (
 // Use Run for one-shot execution when you do not need to reuse a prepared plan.
 func Run(ctx context.Context, opt Options) (*Report, error) {
 	if ctx == nil {
-		return nil, ErrNilContext
+		return nil, UsageError{err: ErrNilContext}
 	}
 	pl, err := Build(opt)
 	if err != nil {
@@ -24,17 +24,14 @@ func Run(ctx context.Context, opt Options) (*Report, error) {
 // validated plan multiple times.
 func RunPlan(ctx context.Context, pl Plan) (*Report, error) {
 	if ctx == nil {
-		return nil, ErrNilContext
+		return nil, UsageError{err: ErrNilContext}
 	}
 	if pl.pl == nil {
 		return nil, UsageError{err: ErrInvalidPlan}
 	}
 	rep, err := runner.RunPlan(ctx, pl.pl)
 	if err != nil {
-		if runner.IsUsageError(err) {
-			return nil, UsageError{err: err}
-		}
-		return nil, err
+		return nil, wrapUsage(err)
 	}
 	return reportFromRunner(rep), nil
 }

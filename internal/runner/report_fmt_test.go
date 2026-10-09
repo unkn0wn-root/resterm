@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"google.golang.org/grpc/codes"
 )
@@ -338,7 +340,7 @@ func TestStreamFailureKeepsItsExitCode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			res := Result{Stream: &StreamInfo{Kind: "websocket", Err: tt.sum.Err()}}
 
-			got := resultFailure(res)
+			got, _ := resultFailure(res)
 			if got.Code != tt.code || got.ExitCode != tt.exit {
 				t.Fatalf("failure = %s/%d, want %s/%d", got.Code, got.ExitCode, tt.code, tt.exit)
 			}
@@ -374,7 +376,7 @@ func TestWebSocketHandshakeTimeoutExitCode(t *testing.T) {
 	}
 	_, _, err = httpx.NewClient(nil).StartWebSocket(t.Context(), req, nil, httpx.Options{})
 
-	got := resultFailure(Result{Err: err})
+	got, _ := resultFailure(Result{Err: err})
 	if got.Code != runfail.CodeTimeout || got.ExitCode != runfail.ExitTimeout {
 		t.Fatalf("failure = %s/%d, want %s/%d",
 			got.Code, got.ExitCode, runfail.CodeTimeout, runfail.ExitTimeout)
@@ -411,7 +413,7 @@ func TestReportModelIgnoresWarmupProfileFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			res := Result{Kind: ResultKindProfile, Name: "prof", Passed: test.passed}
 			res.Profile = &ProfileInfo{Failures: test.failures}
-			res.Failure = resultFailure(res)
+			res.Failure, res.failureFrom = resultFailure(res)
 			if got := resultFailed(res); got == test.passed {
 				t.Fatalf("resultFailed() = %t, want %t", got, !test.passed)
 			}
@@ -423,5 +425,38 @@ func TestReportModelIgnoresWarmupProfileFailures(t *testing.T) {
 				t.Fatalf("result failure = %+v, want the measured one", got.Results[0].Failure)
 			}
 		})
+	}
+}
+
+func TestReportModelKeepsInheritedFailureDetails(t *testing.T) {
+	stepErr := diag.Wrap(diag.New(diag.ClassScript, "assert failed"), "run check")
+	profErr := diag.Wrap(diag.New(diag.ClassTimeout, "too slow"), "send request")
+	results := []Result{
+		{
+			Kind:  ResultKindWorkflow,
+			Steps: []StepResult{{Name: "ok", Passed: true}, {Name: "check", Err: stepErr}},
+		},
+		{
+			Kind: ResultKindProfile,
+			Profile: &ProfileInfo{Failures: []ProfileFailure{
+				{Iteration: 1, Err: profErr, Failure: runfail.FromError(profErr)},
+			}},
+		},
+	}
+	for _, stored := range []bool{false, true} {
+		in := append([]Result(nil), results...)
+		if stored {
+			for i := range in {
+				in[i].Failure, in[i].failureFrom = resultFailure(in[i])
+			}
+		}
+		m := ReportModel(&Report{Results: in})
+		children := []*runfmt.Failure{m.Results[0].Steps[1].Failure, m.Results[1].Profile.Failures[0].Failure}
+		for i, child := range children {
+			got := m.Results[i].Failure
+			if len(child.Chain) == 0 || !reflect.DeepEqual(got, child) {
+				t.Fatalf("stored=%v result %d failure = %+v, want the child's %+v", stored, i, got, child)
+			}
+		}
 	}
 }

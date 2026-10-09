@@ -249,7 +249,17 @@ func formatProfile(prof *ProfileInfo) *runfmt.Profile {
 }
 
 func formatResultFailure(res Result) *runfmt.Failure {
-	return formatRunFailure(resultFailure(res), resultErrorDetail(res))
+	f, from := resultFailure(res)
+	switch from {
+	case runfail.OriginProfile:
+		pf, _ := res.Profile.measuredFailure()
+		return formatProfileFailure(pf)
+	case runfail.OriginStep:
+		step, _ := firstFailedStep(res.Steps)
+		return formatStepFailure(step)
+	default:
+		return formatRunFailure(f, resultErrorDetail(res))
+	}
 }
 
 func formatStepFailure(step StepResult) *runfmt.Failure {

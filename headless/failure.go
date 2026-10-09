@@ -72,13 +72,13 @@ const (
 // Failure contains structured machine-readable metadata for a failed result,
 // workflow step, compare step, or profile iteration.
 type Failure struct {
-	Code     FailureCode     `json:"code,omitempty"`
-	Category FailureCategory `json:"category,omitempty"`
-	ExitCode int             `json:"exitCode,omitempty"`
-	Message  string          `json:"message,omitempty"`
-	Source   string          `json:"source,omitempty"`
-	Chain    []FailureChain  `json:"chain,omitempty"`
-	Frames   []FailureFrame  `json:"frames,omitempty"`
+	Code     FailureCode
+	Category FailureCategory
+	ExitCode int
+	Message  string
+	Source   string
+	Chain    []FailureChain
+	Frames   []FailureFrame
 }
 
 // FailureChain contains one context or cause entry in a failure chain.
@@ -95,8 +95,7 @@ func (r *Report) ExitCode(mode ExitCodeMode) int {
 	if r == nil {
 		return ExitPass
 	}
-	rep := toFormatReport(r)
-	return runfail.ExitCode(rep.Failures(), r.HasFailures(), runfail.ExitMode(mode))
+	return r.model().ExitCode(runfail.ExitMode(mode))
 }
 
 // FailureCodes returns the unique failure codes present in the report.
@@ -104,7 +103,7 @@ func (r *Report) FailureCodes() []FailureCode {
 	if r == nil {
 		return nil
 	}
-	src := toFormatReport(r).FailureCodes()
+	src := r.model().FailureCodes()
 	if len(src) == 0 {
 		return nil
 	}

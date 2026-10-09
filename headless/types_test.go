@@ -1,7 +1,9 @@
 package headless
 
 import (
+	"context"
 	"errors"
+	"io"
 	"reflect"
 	"testing"
 	"time"
@@ -24,6 +26,30 @@ func TestIsUsageError(t *testing.T) {
 func TestUsageErrorZero(t *testing.T) {
 	if got := (UsageError{}).Error(); got != "usage error" {
 		t.Fatalf("zero UsageError error = %q, want %q", got, "usage error")
+	}
+}
+
+func TestBadArgumentsAreUsageErrors(t *testing.T) {
+	var ctx context.Context
+	cases := []struct {
+		name string
+		call func() error
+		want error
+	}{
+		{"Run nil context", func() error { _, err := Run(ctx, Options{}); return err }, ErrNilContext},
+		{"RunPlan nil context", func() error { _, err := RunPlan(ctx, Plan{}); return err }, ErrNilContext},
+		{"Encode nil report", func() error { return (*Report)(nil).Encode(io.Discard, JSON) }, ErrNilReport},
+		{"Encode nil writer", func() error { return (&Report{}).Encode(nil, JSON) }, ErrNilWriter},
+		{"Encode unknown format", func() error { return (&Report{}).Encode(io.Discard, Format(99)) }, ErrUnknownFormat},
+		{"ParseFormat unknown", func() error { _, err := ParseFormat("yaml"); return err }, ErrUnknownFormat},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call()
+			if !IsUsageError(err) || !errors.Is(err, tc.want) {
+				t.Fatalf("got %T %v, want a UsageError wrapping %v", err, err, tc.want)
+			}
+		})
 	}
 }
 
@@ -99,20 +125,20 @@ func TestJSONTags(t *testing.T) {
 		{typ: reflect.TypeFor[HTTP](), name: "StatusCode", tag: "statusCode,omitempty"},
 		{typ: reflect.TypeFor[GRPC](), name: "StatusMessage", tag: "statusMessage,omitempty"},
 		{typ: reflect.TypeFor[GRPC](), name: "StatusDetails", tag: "statusDetails,omitempty"},
-		{typ: reflect.TypeFor[Test](), name: "Elapsed", tag: "elapsed,omitempty"},
-		{typ: reflect.TypeFor[Profile](), name: "TotalRuns", tag: "totalRuns,omitempty"},
-		{typ: reflect.TypeFor[ProfileFailure](), name: "StatusCode", tag: "statusCode,omitempty"},
-		{typ: reflect.TypeFor[ProfileFailure](), name: "Failure", tag: "failure,omitempty"},
-		{typ: reflect.TypeFor[Failure](), name: "Code", tag: "code,omitempty"},
-		{typ: reflect.TypeFor[Failure](), name: "Category", tag: "category,omitempty"},
-		{typ: reflect.TypeFor[Failure](), name: "ExitCode", tag: "exitCode,omitempty"},
-		{typ: reflect.TypeFor[Failure](), name: "Chain", tag: "chain,omitempty"},
+		{typ: reflect.TypeFor[Test](), name: "Elapsed", tag: ""},
+		{typ: reflect.TypeFor[Profile](), name: "TotalRuns", tag: ""},
+		{typ: reflect.TypeFor[ProfileFailure](), name: "StatusCode", tag: ""},
+		{typ: reflect.TypeFor[ProfileFailure](), name: "Failure", tag: ""},
+		{typ: reflect.TypeFor[Failure](), name: "Code", tag: ""},
+		{typ: reflect.TypeFor[Failure](), name: "Category", tag: ""},
+		{typ: reflect.TypeFor[Failure](), name: "ExitCode", tag: ""},
+		{typ: reflect.TypeFor[Failure](), name: "Chain", tag: ""},
 		{typ: reflect.TypeFor[FailureChain](), name: "Children", tag: "children,omitempty"},
 		{typ: reflect.TypeFor[FailureFrame](), name: "Pos", tag: "pos,omitempty"},
 		{typ: reflect.TypeFor[FailurePos](), name: "Line", tag: "line,omitempty"},
-		{typ: reflect.TypeFor[Stream](), name: "TranscriptPath", tag: "transcriptPath,omitempty"},
-		{typ: reflect.TypeFor[Trace](), name: "ArtifactPath", tag: "artifactPath,omitempty"},
-		{typ: reflect.TypeFor[TraceBudget](), name: "Phases", tag: "phases,omitempty"},
+		{typ: reflect.TypeFor[Stream](), name: "TranscriptPath", tag: ""},
+		{typ: reflect.TypeFor[Trace](), name: "ArtifactPath", tag: ""},
+		{typ: reflect.TypeFor[TraceBudget](), name: "Phases", tag: ""},
 	}
 	for _, tc := range cases {
 		if got := jsonTag(tc.typ, tc.name); got != tc.tag {
