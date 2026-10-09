@@ -2,8 +2,10 @@ package sqlite
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -316,4 +318,23 @@ func TestStoreCloseDuringAppend(t *testing.T) {
 	close(done)
 	<-closer
 	_ = s.Close()
+}
+
+func TestStoreOpensPathWithQuestionMark(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not allow ? in file names")
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "api?v2", "history.db")
+	s := New(p)
+	defer func() { _ = s.Close() }()
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "api")); !os.IsNotExist(err) {
+		t.Fatalf("history went to a cut-off path: %v", err)
+	}
+	if st, err := os.Stat(p); err != nil || st.Size() == 0 {
+		t.Fatalf("history.db is missing or empty: %v", err)
+	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,19 +122,9 @@ func (s *Store) Backup(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return diag.WrapAs(diag.ClassFilesystem, err, "create backup dir")
 	}
-	abs, err := filepath.Abs(path)
+	uri, err := fileURI(path)
 	if err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "resolve backup path")
-	}
-	// The driver stops reading a plain path at "?". An escaped file URI keeps all of it.
-	// A locked target is waited for, same as the live db.
-	uri := url.URL{
-		Scheme:   "file",
-		Path:     filepath.ToSlash(abs),
-		RawQuery: fmt.Sprintf("_pragma=busy_timeout(%d)", busyTimeout.Milliseconds()),
-	}
-	if !strings.HasPrefix(uri.Path, "/") {
-		uri.Path = "/" + uri.Path
+		return err
 	}
 
 	conn, err := db.Conn(context.Background())
@@ -143,15 +132,16 @@ func (s *Store) Backup(path string) error {
 		return diag.WrapAs(diag.ClassHistory, err, "backup history db")
 	}
 	defer func() { _ = conn.Close() }()
-	created, err := createPrivate(abs)
+	created, err := createPrivate(path)
 	if err != nil {
 		return err
 	}
 	// SQLite writes the target itself and respects its locks and any leftover WAL.
+	// A locked target is waited for, same as the live db.
 	err = conn.Raw(func(dc any) error {
 		b, err := dc.(interface {
 			NewBackup(string) (*sqlitedrv.Backup, error)
-		}).NewBackup(uri.String())
+		}).NewBackup(fmt.Sprintf("%s?_pragma=busy_timeout(%d)", uri, busyTimeout.Milliseconds()))
 		if err != nil {
 			return err
 		}
@@ -159,7 +149,7 @@ func (s *Store) Backup(path string) error {
 		// The target turns private right there, before the first page of history is copied in.
 		_, err = b.Step(0)
 		if err == nil {
-			makePrivate(abs)
+			makePrivate(path)
 			_, err = b.Step(-1)
 		}
 		if err != nil {
@@ -170,7 +160,7 @@ func (s *Store) Backup(path string) error {
 	})
 	if err != nil {
 		if created {
-			_ = os.Remove(abs)
+			_ = os.Remove(path)
 		}
 		if isCorruptErr(err) {
 			return notDB

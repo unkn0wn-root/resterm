@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -449,15 +450,19 @@ func (s *Store) openWithRecover() (*sql.DB, *RecoverInfo, error) {
 	return db, rec, nil
 }
 
-func openReadyDB(dsn string) (*sql.DB, error) {
+func openReadyDB(path string) (*sql.DB, error) {
 	// Opening does more than creating a handle.
 	// It applies schema changes and runs an integrity check before returning.
 	// A handle is returned only when the database is safe to use.
-	if _, err := createPrivate(dsn); err != nil {
+	if _, err := createPrivate(path); err != nil {
 		return nil, err
 	}
-	makePrivate(dsn)
-	db, err := sql.Open(drv, dsn)
+	makePrivate(path)
+	uri, err := fileURI(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open(drv, uri)
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassHistory, err, "open history db")
 	}
@@ -473,6 +478,21 @@ func openReadyDB(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// The driver stops reading a plain path at "?". An escaped file URI keeps all of it.
+func fileURI(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", diag.WrapAs(diag.ClassFilesystem, err, "resolve db path")
+	}
+	p := filepath.ToSlash(abs)
+	// A Windows drive path needs a leading slash, as in file:///C:/x.db.
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	u := url.URL{Scheme: "file", Path: p}
+	return u.String(), nil
 }
 
 // History rows hold response bodies. SQLite gives new -wal and -shm files the mode of this file.
