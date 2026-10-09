@@ -1,6 +1,7 @@
 package history
 
 import (
+	"slices"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -94,9 +95,8 @@ func NewTraceSummary(tl *nettrace.Timeline, rep *nettrace.Report) *TraceSummary 
 		Completed: tl.Completed,
 		Duration:  tl.Duration,
 		Error:     tl.Err,
+		Details:   traceDetailsFromTimeline(tl.Details),
 	}
-	summary.Details = traceDetailsFromTimeline(tl.Details)
-
 	if len(tl.Phases) == 0 {
 		return summary
 	}
@@ -107,47 +107,31 @@ func NewTraceSummary(tl *nettrace.Timeline, rep *nettrace.Report) *TraceSummary 
 			Kind:     string(phase.Kind),
 			Duration: phase.Duration,
 			Error:    phase.Err,
-			Meta: TracePhaseMeta{
-				Addr:   phase.Meta.Addr,
-				Reused: phase.Meta.Reused,
-				Cached: phase.Meta.Cached,
-			},
+			Meta:     TracePhaseMeta(phase.Meta),
 		}
 	}
 
-	if rep != nil {
-		budget := rep.Budget.Clone()
-		if tracebudget.HasBudget(budget) {
-			bud := &TraceBudget{Total: budget.Total, Tolerance: budget.Tolerance}
-			if len(budget.Phases) > 0 {
-				phases := make(map[string]time.Duration, len(budget.Phases))
-				for kind, dur := range budget.Phases {
-					if dur <= 0 {
-						continue
-					}
-					phases[string(kind)] = dur
-				}
-				if len(phases) > 0 {
-					bud.Phases = phases
-				}
-			}
-			summary.Budgets = bud
-		}
-
-		if len(rep.BudgetReport.Breaches) > 0 {
-			breaches := make([]TraceBreach, 0, len(rep.BudgetReport.Breaches))
-			for _, br := range rep.BudgetReport.Breaches {
-				breaches = append(breaches, TraceBreach{
-					Kind:   string(br.Kind),
-					Limit:  br.Limit,
-					Actual: br.Actual,
-					Over:   br.Over,
-				})
-			}
-			summary.Breaches = breaches
+	if rep == nil {
+		return summary
+	}
+	if tracebudget.HasBudget(rep.Budget) {
+		summary.Budgets = &TraceBudget{
+			Total:     rep.Budget.Total,
+			Tolerance: rep.Budget.Tolerance,
+			Phases:    phaseLimits[string](rep.Budget.Phases),
 		}
 	}
-
+	if len(rep.BudgetReport.Breaches) > 0 {
+		summary.Breaches = make([]TraceBreach, len(rep.BudgetReport.Breaches))
+		for i, br := range rep.BudgetReport.Breaches {
+			summary.Breaches[i] = TraceBreach{
+				Kind:   string(br.Kind),
+				Limit:  br.Limit,
+				Actual: br.Actual,
+				Over:   br.Over,
+			}
+		}
+	}
 	return summary
 }
 
@@ -161,12 +145,13 @@ func (s *TraceSummary) Timeline() *nettrace.Timeline {
 		Completed: s.Completed,
 		Duration:  s.Duration,
 		Err:       s.Error,
+		Details:   traceDetailsToTimeline(s.Details),
 	}
-	tl.Details = traceDetailsToTimeline(s.Details)
 	if len(s.Phases) == 0 {
 		return tl
 	}
 
+	// Only durations are stored, so phases are laid end to end from Started.
 	phases := make([]nettrace.Phase, len(s.Phases))
 	anchor := s.Started
 	for i, phase := range s.Phases {
@@ -182,11 +167,7 @@ func (s *TraceSummary) Timeline() *nettrace.Timeline {
 			End:      end,
 			Duration: dur,
 			Err:      phase.Error,
-			Meta: nettrace.PhaseMeta{
-				Addr:   phase.Meta.Addr,
-				Reused: phase.Meta.Reused,
-				Cached: phase.Meta.Cached,
-			},
+			Meta:     nettrace.PhaseMeta(phase.Meta),
 		}
 		if !anchor.IsZero() {
 			anchor = end
@@ -215,48 +196,43 @@ func (s *TraceSummary) Report() *nettrace.Report {
 		return nil
 	}
 
-	tl := s.Timeline()
-	if tl == nil {
-		return nil
-	}
-
 	var budget nettrace.Budget
 	if s.Budgets != nil {
-		budget.Total = s.Budgets.Total
-		budget.Tolerance = s.Budgets.Tolerance
-		if len(s.Budgets.Phases) > 0 {
-			phases := make(map[nettrace.PhaseKind]time.Duration, len(s.Budgets.Phases))
-			for name, dur := range s.Budgets.Phases {
-				if dur <= 0 {
-					continue
-				}
-				phases[nettrace.PhaseKind(name)] = dur
-			}
-			if len(phases) > 0 {
-				budget.Phases = phases
-			}
+		budget = nettrace.Budget{
+			Total:     s.Budgets.Total,
+			Tolerance: s.Budgets.Tolerance,
+			Phases:    phaseLimits[nettrace.PhaseKind](s.Budgets.Phases),
 		}
 	}
-
-	rep := nettrace.NewReport(tl, budget)
-	if rep == nil {
-		return nil
-	}
+	rep := nettrace.NewReport(s.Timeline(), budget)
 	if len(s.Breaches) == 0 {
 		return rep
 	}
 
-	breaches := make([]nettrace.BudgetBreach, len(s.Breaches))
+	rep.BudgetReport.Breaches = make([]nettrace.BudgetBreach, len(s.Breaches))
 	for i, br := range s.Breaches {
-		breaches[i] = nettrace.BudgetBreach{
+		rep.BudgetReport.Breaches[i] = nettrace.BudgetBreach{
 			Kind:   nettrace.PhaseKind(br.Kind),
 			Limit:  br.Limit,
 			Actual: br.Actual,
 			Over:   br.Over,
 		}
 	}
-	rep.BudgetReport.Breaches = breaches
 	return rep
+}
+
+// A phase without a positive limit has no budget, and no limits at all stays nil.
+func phaseLimits[To, From ~string](in map[From]time.Duration) map[To]time.Duration {
+	out := make(map[To]time.Duration, len(in))
+	for kind, limit := range in {
+		if limit > 0 {
+			out[To(kind)] = limit
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func traceDetailsFromTimeline(details *nettrace.TraceDetails) *TraceDetails {
@@ -287,119 +263,66 @@ func traceDetailsToTimeline(details *TraceDetails) *nettrace.TraceDetails {
 	return out
 }
 
+// TraceConn, TraceCert and TracePhaseMeta have the same fields as their nettrace types.
+// Converting directly means a field added there won't compile here until history keeps it too.
 func connFromTimeline(c *nettrace.ConnDetails) *TraceConn {
 	if c == nil {
 		return nil
 	}
-	return &TraceConn{
-		Reused:        c.Reused,
-		WasIdle:       c.WasIdle,
-		IdleTime:      c.IdleTime,
-		Network:       c.Network,
-		DialAddr:      c.DialAddr,
-		LocalAddr:     c.LocalAddr,
-		RemoteAddr:    c.RemoteAddr,
-		ResolvedAddrs: cloneStrings(c.ResolvedAddrs),
-		Proxy:         c.Proxy,
-		ProxyTunnel:   c.ProxyTunnel,
-		SSH:           c.SSH,
-		K8s:           c.K8s,
-		Protocol:      c.Protocol,
-	}
-}
-
-func tlsFromTimeline(t *nettrace.TLSDetails) *TraceTLS {
-	if t == nil {
-		return nil
-	}
-	return &TraceTLS{
-		Version:      t.Version,
-		Cipher:       t.Cipher,
-		ALPN:         t.ALPN,
-		ServerName:   t.ServerName,
-		Resumed:      t.Resumed,
-		Verified:     t.Verified,
-		Certificates: certsFromTimeline(t.Certificates),
-	}
-}
-
-func certsFromTimeline(certs []nettrace.TLSCert) []TraceCert {
-	if len(certs) == 0 {
-		return nil
-	}
-	out := make([]TraceCert, len(certs))
-	for i, cert := range certs {
-		out[i] = TraceCert{
-			Subject:   cert.Subject,
-			Issuer:    cert.Issuer,
-			SANs:      cloneStrings(cert.SANs),
-			NotBefore: cert.NotBefore,
-			NotAfter:  cert.NotAfter,
-			Serial:    cert.Serial,
-		}
-	}
-	return out
+	out := TraceConn(*c)
+	out.ResolvedAddrs = slices.Clone(c.ResolvedAddrs)
+	return &out
 }
 
 func connToTimeline(c *TraceConn) *nettrace.ConnDetails {
 	if c == nil {
 		return nil
 	}
-	return &nettrace.ConnDetails{
-		Reused:        c.Reused,
-		WasIdle:       c.WasIdle,
-		IdleTime:      c.IdleTime,
-		Network:       c.Network,
-		DialAddr:      c.DialAddr,
-		LocalAddr:     c.LocalAddr,
-		RemoteAddr:    c.RemoteAddr,
-		ResolvedAddrs: cloneStrings(c.ResolvedAddrs),
-		Proxy:         c.Proxy,
-		ProxyTunnel:   c.ProxyTunnel,
-		SSH:           c.SSH,
-		K8s:           c.K8s,
-		Protocol:      c.Protocol,
+	out := nettrace.ConnDetails(*c)
+	out.ResolvedAddrs = slices.Clone(c.ResolvedAddrs)
+	return &out
+}
+
+func tlsFromTimeline(t *nettrace.TLSDetails) *TraceTLS {
+	if t == nil {
+		return nil
 	}
+	out := &TraceTLS{
+		Version:    t.Version,
+		Cipher:     t.Cipher,
+		ALPN:       t.ALPN,
+		ServerName: t.ServerName,
+		Resumed:    t.Resumed,
+		Verified:   t.Verified,
+	}
+	if len(t.Certificates) > 0 {
+		out.Certificates = make([]TraceCert, len(t.Certificates))
+		for i, cert := range t.Certificates {
+			out.Certificates[i] = TraceCert(cert)
+			out.Certificates[i].SANs = slices.Clone(cert.SANs)
+		}
+	}
+	return out
 }
 
 func tlsToTimeline(t *TraceTLS) *nettrace.TLSDetails {
 	if t == nil {
 		return nil
 	}
-	return &nettrace.TLSDetails{
-		Version:      t.Version,
-		Cipher:       t.Cipher,
-		ALPN:         t.ALPN,
-		ServerName:   t.ServerName,
-		Resumed:      t.Resumed,
-		Verified:     t.Verified,
-		Certificates: certsToTimeline(t.Certificates),
+	out := &nettrace.TLSDetails{
+		Version:    t.Version,
+		Cipher:     t.Cipher,
+		ALPN:       t.ALPN,
+		ServerName: t.ServerName,
+		Resumed:    t.Resumed,
+		Verified:   t.Verified,
 	}
-}
-
-func certsToTimeline(certs []TraceCert) []nettrace.TLSCert {
-	if len(certs) == 0 {
-		return nil
-	}
-	out := make([]nettrace.TLSCert, len(certs))
-	for i, cert := range certs {
-		out[i] = nettrace.TLSCert{
-			Subject:   cert.Subject,
-			Issuer:    cert.Issuer,
-			SANs:      cloneStrings(cert.SANs),
-			NotBefore: cert.NotBefore,
-			NotAfter:  cert.NotAfter,
-			Serial:    cert.Serial,
+	if len(t.Certificates) > 0 {
+		out.Certificates = make([]nettrace.TLSCert, len(t.Certificates))
+		for i, cert := range t.Certificates {
+			out.Certificates[i] = nettrace.TLSCert(cert)
+			out.Certificates[i].SANs = slices.Clone(cert.SANs)
 		}
 	}
-	return out
-}
-
-func cloneStrings(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]string, len(in))
-	copy(out, in)
 	return out
 }
