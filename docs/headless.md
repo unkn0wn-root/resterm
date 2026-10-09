@@ -133,7 +133,7 @@ To stop a run, cancel its context. When several requests are selected, the one i
 
 ## Read the report
 
-`Report` has the totals (`Total`, `Passed`, `Failed`, `Skipped`) and one `Result` for each request, workflow, compare run or profile run. Workflows and compare runs list their steps in `Steps`. A failed result or step carries a `Failure` with a `Code` such as `assertion`, `timeout` or `network`.
+`Report` has the totals (`Total`, `Passed`, `Failed`, `Skipped`) and one `Result` for each request, workflow, compare run or profile run. Workflows and compare runs list their steps in `Steps`. A failed result or step carries a `Failure` with a `Code` such as `assertion`, `timeout` or `network`. A result also fails when one of its steps, a profile run outside warmup or its stream fails, as it does in `resterm run`.
 
 ```go
 for _, res := range rep.Results {
@@ -157,7 +157,7 @@ for _, res := range rep.Results {
 
 `ParseFormat` turns a name like `"junit"` into a `Format`, which helps when the format comes from a flag or a config file. `json.Marshal(rep)` gives the same JSON as `Encode`, without indentation. Each part of a report, such as a `Test`, `Trace` or `Failure`, marshals the way it appears in that JSON, so durations are in milliseconds.
 
-`rep.ExitCode(headless.ExitCodeDetailed)` returns the code `resterm run` would exit with. The [exit code table](cli/run.md#exit-codes) lists them, and each one has a constant such as `headless.ExitTimeout`. Pass `headless.ExitCodeSummary` to get only `0` or `1`.
+`rep.ExitCode(headless.ExitCodeDetailed)` returns the code `resterm run` would exit with. The [exit code table](cli/run.md#exit-codes) lists them, and each one has a constant such as `headless.ExitTimeout`. Pass `headless.ExitCodeSummary` to get only `0` or `1`. Both modes return `0` for the same reports. `rep.HasFailures()` is true when they return anything else.
 
 Errors returned by `Run` never reach the report, so decide on their exit code yourself:
 
