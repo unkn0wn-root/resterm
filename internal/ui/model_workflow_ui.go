@@ -1,9 +1,10 @@
 package ui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -85,8 +86,8 @@ func (m *Model) runSelectedWorkflow() tea.Cmd {
 }
 
 func (m *Model) setHistoryWorkflow(name string) {
-	trimmed := history.NormalizeWorkflowName(name)
-	if trimmed == "" {
+	name = strings.TrimSpace(name)
+	if name == "" {
 		if m.historyWorkflowName == "" && m.historyScope != historyScopeWorkflow {
 			return
 		}
@@ -99,10 +100,10 @@ func (m *Model) setHistoryWorkflow(name string) {
 		}
 		return
 	}
-	if m.historyWorkflowName == trimmed && m.historyScope == historyScopeWorkflow {
+	if m.historyWorkflowName == name && m.historyScope == historyScopeWorkflow {
 		return
 	}
-	m.historyWorkflowName = trimmed
+	m.historyWorkflowName = name
 	m.historyScope = historyScopeWorkflow
 	if m.ready {
 		m.syncHistory()

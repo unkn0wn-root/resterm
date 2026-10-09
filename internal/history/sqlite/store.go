@@ -106,7 +106,7 @@ func (s *Store) ByRequest(id string) ([]history.Entry, error) {
 }
 
 func (s *Store) ByWorkflow(name string) ([]history.Entry, error) {
-	name = history.NormalizeWorkflowName(name)
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, nil
 	}

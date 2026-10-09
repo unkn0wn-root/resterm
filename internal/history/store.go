@@ -42,10 +42,8 @@ type Stats struct {
 	SHMBytes int64
 }
 
-func NormalizeWorkflowName(name string) string {
-	return strings.TrimSpace(name)
-}
-
+// NormPath returns the key that ByFile matches on.
+// The sqlite store saves it with every row, so changing this breaks lookups of older history.
 func NormPath(p string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {
