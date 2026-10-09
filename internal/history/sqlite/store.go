@@ -25,8 +25,12 @@ import (
 const (
 	drv = "sqlite"
 
-	histCols = `(id, id_num, exec_ns, env, env_sel_json, req_name, file_path, file_norm, method, url, status,
-		status_code, dur_ns, snippet, req_text, descr, tags_json, prof_json, trace_json, cmp_json)
+	// Reads and writes share this list. row.args and scanRow follow its order.
+	cols = `id, id_num, exec_ns, env, env_sel_json, req_name, file_path, method, url, status,
+		status_code, dur_ns, snippet, req_text, descr, tags_json, prof_json, trace_json, cmp_json`
+
+	// file_norm only exists for ByFile lookups. It comes from file_path and is never read back.
+	histCols = `(` + cols + `, file_norm)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// Regular writes replace by ID so reruns can refresh the same row,
@@ -164,10 +168,7 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 		return nil, err
 	}
 
-	q := `SELECT
-		id, id_num, exec_ns, env, env_sel_json, req_name, file_path, method, url, status, status_code, dur_ns,
-		snippet, req_text, descr, tags_json, prof_json, trace_json, cmp_json
-	FROM hist`
+	q := `SELECT ` + cols + ` FROM hist`
 	if where != "" {
 		q += " " + where
 	}
@@ -195,86 +196,56 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 }
 
 func scanRow(rs *sql.Rows) (history.Entry, error) {
-	var (
-		id, env, reqName, filePath, method, url, status, snippet, reqText, descr string
-		idNum, execNs, statusCode, durNs                                         int64
-		envSelJSON, tagsJSON, profJSON, traceJSON, cmpJSON                       []byte
-	)
+	var r row
 	err := rs.Scan(
-		&id,
-		&idNum,
-		&execNs,
-		&env,
-		&envSelJSON,
-		&reqName,
-		&filePath,
-		&method,
-		&url,
-		&status,
-		&statusCode,
-		&durNs,
-		&snippet,
-		&reqText,
-		&descr,
-		&tagsJSON,
-		&profJSON,
-		&traceJSON,
-		&cmpJSON,
+		&r.id, &r.idNum, &r.execNs, &r.env, &r.envSelJSON, &r.reqName, &r.filePath,
+		&r.method, &r.url, &r.status, &r.statusCode, &r.durNs, &r.snippet,
+		&r.reqText, &r.descr, &r.tagsJSON, &r.profJSON, &r.traceJSON, &r.cmpJSON,
 	)
 	if err != nil {
 		return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "scan history row")
 	}
 
 	e := history.Entry{
-		ID:          id,
-		ExecutedAt:  nsToTime(execNs),
-		Environment: env,
-		RequestName: reqName,
-		FilePath:    filePath,
-		Method:      method,
-		URL:         url,
-		Status:      status,
-		StatusCode:  int(statusCode),
-		Duration:    time.Duration(durNs),
-		BodySnippet: snippet,
-		RequestText: reqText,
-		Description: descr,
+		ID:          r.id,
+		ExecutedAt:  nsToTime(r.execNs),
+		Environment: r.env,
+		RequestName: r.reqName,
+		FilePath:    r.filePath,
+		Method:      r.method,
+		URL:         r.url,
+		Status:      r.status,
+		StatusCode:  int(r.statusCode),
+		Duration:    time.Duration(r.durNs),
+		BodySnippet: r.snippet,
+		RequestText: r.reqText,
+		Description: r.descr,
 	}
 
-	if len(envSelJSON) > 0 {
-		sel, err := dec[history.EnvironmentSelection](envSelJSON)
-		if err != nil {
+	if len(r.envSelJSON) > 0 {
+		if err := json.Unmarshal(r.envSelJSON, &e.EnvironmentSelection); err != nil {
 			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode environment selection")
 		}
-		e.EnvironmentSelection = sel
 	}
-	if len(tagsJSON) > 0 {
-		tags, err := dec[[]string](tagsJSON)
-		if err != nil {
+	if len(r.tagsJSON) > 0 {
+		if err := json.Unmarshal(r.tagsJSON, &e.Tags); err != nil {
 			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history tags")
 		}
-		e.Tags = tags
 	}
-	if len(profJSON) > 0 {
-		p, err := dec[history.ProfileResults](profJSON)
-		if err != nil {
+	if len(r.profJSON) > 0 {
+		if err := json.Unmarshal(r.profJSON, &e.ProfileResults); err != nil {
 			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history profile")
 		}
-		e.ProfileResults = &p
 	}
-	if len(traceJSON) > 0 {
-		t, err := dec[history.TraceSummary](traceJSON)
-		if err != nil {
+	if len(r.traceJSON) > 0 {
+		if err := json.Unmarshal(r.traceJSON, &e.Trace); err != nil {
 			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history trace")
 		}
-		e.Trace = &t
 	}
-	if len(cmpJSON) > 0 {
-		c, err := dec[history.CompareEntry](cmpJSON)
-		if err != nil {
+	if len(r.cmpJSON) > 0 {
+		if err := json.Unmarshal(r.cmpJSON, &e.Compare); err != nil {
 			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history compare")
 		}
-		e.Compare = &c
 	}
 
 	return e, nil
@@ -288,7 +259,6 @@ func mkRow(e history.Entry) (row, error) {
 		env:        e.Environment,
 		reqName:    e.RequestName,
 		filePath:   e.FilePath,
-		fileNorm:   history.NormPath(e.FilePath),
 		method:     e.Method,
 		url:        e.URL,
 		status:     e.Status,
@@ -297,6 +267,7 @@ func mkRow(e history.Entry) (row, error) {
 		snippet:    e.BodySnippet,
 		reqText:    e.RequestText,
 		descr:      e.Description,
+		fileNorm:   history.NormPath(e.FilePath),
 	}
 
 	var err error
@@ -342,7 +313,6 @@ type row struct {
 	envSelJSON []byte
 	reqName    string
 	filePath   string
-	fileNorm   string
 	method     string
 	url        string
 	status     string
@@ -355,13 +325,14 @@ type row struct {
 	profJSON   []byte
 	traceJSON  []byte
 	cmpJSON    []byte
+	fileNorm   string
 }
 
 func (r *row) args() []any {
 	return []any{
-		r.id, r.idNum, r.execNs, r.env, r.envSelJSON, r.reqName, r.filePath, r.fileNorm,
+		r.id, r.idNum, r.execNs, r.env, r.envSelJSON, r.reqName, r.filePath,
 		r.method, r.url, r.status, r.statusCode, r.durNs, r.snippet,
-		r.reqText, r.descr, r.tagsJSON, r.profJSON, r.traceJSON, r.cmpJSON,
+		r.reqText, r.descr, r.tagsJSON, r.profJSON, r.traceJSON, r.cmpJSON, r.fileNorm,
 	}
 }
 

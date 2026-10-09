@@ -55,9 +55,11 @@ func (s *Store) ImportJSON(path string) (int, error) {
 	if err != nil {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "read history import")
 	}
-	es, err := dec[[]history.Entry](data)
-	if err != nil {
-		return 0, diag.WrapAs(diag.ClassHistory, err, "parse history import")
+	var es []history.Entry
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &es); err != nil {
+			return 0, diag.WrapAs(diag.ClassHistory, err, "parse history import")
+		}
 	}
 
 	tx, err := db.Begin()

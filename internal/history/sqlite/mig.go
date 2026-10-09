@@ -3,6 +3,7 @@ package sqlite
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -65,8 +66,8 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 		// If SQLite already has rows we treat it as the source of truth and
 		// only stamp completion, which avoids merging two diverged histories.
 		if existing == 0 {
-			es, err := dec[[]history.Entry](data)
-			if err != nil {
+			var es []history.Entry
+			if err := json.Unmarshal(data, &es); err != nil {
 				return 0, diag.WrapAs(diag.ClassHistory, err, "parse legacy history")
 			}
 			for _, e := range es {
