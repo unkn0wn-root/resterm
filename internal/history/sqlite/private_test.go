@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -107,22 +108,62 @@ func TestBackupIsPrivateAndReplacesTarget(t *testing.T) {
 		t.Fatalf("append: %v", err)
 	}
 	out := filepath.Join(dir, "history.bak.db")
-	if err := os.WriteFile(out, []byte("old backup"), 0o644); err != nil {
-		t.Fatalf("write old backup: %v", err)
+	old := New(out)
+	if err := old.Append(history.Entry{ID: "old", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("create old backup: %v", err)
+	}
+	if err := old.Close(); err != nil {
+		t.Fatalf("close old backup: %v", err)
+	}
+	if err := os.Chmod(out, 0o644); err != nil {
+		t.Fatalf("chmod old backup: %v", err)
 	}
 	if err := s.Backup(out); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
 	assertMode(t, out, 0o600)
-	es, err := os.ReadDir(dir)
+	got := New(out)
+	defer func() { _ = got.Close() }()
+	es, err := got.Entries()
+	if err != nil || len(es) != 1 || es[0].ID != "1" {
+		t.Fatalf("backup holds %+v, %v, want only 1", es, err)
+	}
+}
+
+func TestBackupMakesTargetPrivateBeforeCopying(t *testing.T) {
+	skipOnWindows(t)
+	if os.Geteuid() == 0 {
+		t.Skip("root can write into a read-only folder")
+	}
+	s := New(filepath.Join(t.TempDir(), "history.db"))
+	defer func() { _ = s.Close() }()
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	dir := t.TempDir()
+	out := filepath.Join(dir, "old.db")
+	db, err := sql.Open(drv, out)
 	if err != nil {
-		t.Fatalf("read dir: %v", err)
+		t.Fatalf("open old backup: %v", err)
 	}
-	for _, e := range es {
-		if e.IsDir() {
-			t.Fatalf("backup left %s behind", e.Name())
-		}
+	if _, err := db.Exec(`CREATE TABLE x (a)`); err != nil {
+		t.Fatalf("create old backup: %v", err)
 	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close old backup: %v", err)
+	}
+	if err := os.Chmod(out, 0o644); err != nil {
+		t.Fatalf("chmod old backup: %v", err)
+	}
+	// Read-only folder: no journal can be created, and the copy fails on its first write.
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatalf("chmod dir: %v", err)
+	}
+	defer func() { _ = os.Chmod(dir, 0o755) }()
+	if err := s.Backup(out); err == nil {
+		t.Fatal("backup succeeded in a read-only folder")
+	}
+	assertMode(t, out, 0o600)
 }
 
 func TestStoreKeepsReadOnlyMode(t *testing.T) {

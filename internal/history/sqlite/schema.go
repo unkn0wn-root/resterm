@@ -2,13 +2,18 @@ package sqlite
 
 import (
 	"database/sql"
+	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 const (
 	schemaVer = 3
+
+	// The history db and backup targets wait this long for locks other connections hold.
+	busyTimeout = 5 * time.Second
 )
 
 type mig struct {
@@ -31,7 +36,7 @@ func (e *integrityCheckError) Error() string {
 // These are applied on every open because several settings are
 // connection scoped and not persisted in the database file itself.
 var pragmas = []string{
-	`PRAGMA busy_timeout=5000;`,
+	fmt.Sprintf("PRAGMA busy_timeout=%d;", busyTimeout.Milliseconds()),
 	`PRAGMA journal_mode=WAL;`,
 	`PRAGMA synchronous=FULL;`,
 	`PRAGMA foreign_keys=ON;`,

@@ -1,11 +1,16 @@
 package sqlite
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	sqlitedrv "modernc.org/sqlite"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -97,34 +102,80 @@ func (s *Store) Backup(path string) error {
 	}
 
 	// The destination must be different from the live database path.
-	if util.SamePath(path, s.p) {
+	if util.SameFile(path, s.p) {
 		return diag.WrapAs(
 			diag.ClassHistory,
 			errors.New("backup path must differ from history db path"),
 			"backup history",
 		)
 	}
+	notDB := diag.WrapAs(
+		diag.ClassHistory,
+		fmt.Errorf(
+			"cannot replace %s because it is not a readable SQLite database. Remove it or pick another path",
+			filepath.Base(path),
+		),
+		"backup history",
+	)
+	if st, err := os.Stat(path); err == nil && !st.Mode().IsRegular() {
+		return notDB
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return diag.WrapAs(diag.ClassFilesystem, err, "create backup dir")
 	}
-	// VACUUM INTO won't overwrite a file. It writes into a temp dir and the result gets renamed.
-	tmpDir, err := os.MkdirTemp(filepath.Dir(path), ".resterm-backup-*")
+	abs, err := filepath.Abs(path)
 	if err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "create backup temp dir")
+		return diag.WrapAs(diag.ClassFilesystem, err, "resolve backup path")
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-	tmp := filepath.Join(tmpDir, filepath.Base(path))
+	// The driver stops reading a plain path at "?". An escaped file URI keeps all of it.
+	// A locked target is waited for, same as the live db.
+	uri := url.URL{
+		Scheme:   "file",
+		Path:     filepath.ToSlash(abs),
+		RawQuery: fmt.Sprintf("_pragma=busy_timeout(%d)", busyTimeout.Milliseconds()),
+	}
+	if !strings.HasPrefix(uri.Path, "/") {
+		uri.Path = "/" + uri.Path
+	}
 
-	// VACUUM INTO accepts a scalar expression for the output path.
-	// Using a bound value avoids SQL text interpolation and escaping logic.
-	if _, err := db.Exec(`VACUUM INTO ?`, tmp); err != nil {
+	conn, err := db.Conn(context.Background())
+	if err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "backup history db")
 	}
-	if err := os.Chmod(tmp, 0o600); err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "make backup private")
+	defer func() { _ = conn.Close() }()
+	created, err := createPrivate(abs)
+	if err != nil {
+		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "replace backup")
+	// SQLite writes the target itself and respects its locks and any leftover WAL.
+	err = conn.Raw(func(dc any) error {
+		b, err := dc.(interface {
+			NewBackup(string) (*sqlitedrv.Backup, error)
+		}).NewBackup(uri.String())
+		if err != nil {
+			return err
+		}
+		// Step(0) checks and locks the target but copies nothing.
+		// The target turns private right there, before the first page of history is copied in.
+		_, err = b.Step(0)
+		if err == nil {
+			makePrivate(abs)
+			_, err = b.Step(-1)
+		}
+		if err != nil {
+			_ = b.Finish()
+			return err
+		}
+		return b.Finish()
+	})
+	if err != nil {
+		if created {
+			_ = os.Remove(abs)
+		}
+		if isCorruptErr(err) {
+			return notDB
+		}
+		return diag.WrapAs(diag.ClassHistory, err, "backup history db")
 	}
 	return nil
 }
