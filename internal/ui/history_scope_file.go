@@ -25,8 +25,8 @@ func (m *Model) historyEntriesForFileScope() ([]history.Entry, error) {
 
 	// One entry can match more than one path variant, so dedupe IDs
 	// before sorting to keep the list stable and predictable.
-	seen := make(map[string]struct{}, history.InitCap)
-	out := make([]history.Entry, 0, history.InitCap)
+	seen := map[string]struct{}{}
+	var out []history.Entry
 	for _, v := range vars {
 		es, err := hs.ByFile(v)
 		if err != nil {

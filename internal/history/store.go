@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-const InitCap = 64
-
 type Store interface {
 	Load() error
 	Append(Entry) error

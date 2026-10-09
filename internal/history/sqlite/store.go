@@ -162,7 +162,7 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 	}
 	defer func() { _ = rs.Close() }()
 
-	es := make([]history.Entry, 0, history.InitCap)
+	es := []history.Entry{}
 	for rs.Next() {
 		e, err := scanRow(rs)
 		if err != nil {

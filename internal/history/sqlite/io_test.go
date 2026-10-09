@@ -447,3 +447,17 @@ func TestBackupRemovesFileItCreatedOnError(t *testing.T) {
 		t.Fatalf("failed backup left %s behind: %v", filepath.Base(dest), err)
 	}
 }
+
+func TestExportJSONWritesEmptyListForEmptyHistory(t *testing.T) {
+	dir := t.TempDir()
+	s := New(filepath.Join(dir, "history.db"))
+	defer func() { _ = s.Close() }()
+	out := filepath.Join(dir, "out.json")
+	if _, err := s.ExportJSON(out); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil || string(got) != "[]" {
+		t.Fatalf("export = %q, %v, want []", got, err)
+	}
+}
