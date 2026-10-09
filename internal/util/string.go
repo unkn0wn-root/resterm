@@ -3,7 +3,6 @@ package util
 import (
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 func TrimLeft(s string) string {
@@ -53,15 +52,4 @@ func AllBlank(lines []string) bool {
 		}
 	}
 	return true
-}
-
-func TrimLeadingOnce(s string) string {
-	if s == "" {
-		return s
-	}
-	r, size := utf8.DecodeRuneInString(s)
-	if unicode.IsSpace(r) {
-		return s[size:]
-	}
-	return s
 }
