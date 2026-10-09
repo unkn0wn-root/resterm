@@ -32,8 +32,11 @@ func (s *Store) ExportJSON(path string) (int, error) {
 	if err != nil {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "encode history export")
 	}
-	if err := writeFileAtom(path, data, 0o644); err != nil {
-		return 0, err
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return 0, diag.WrapAs(diag.ClassFilesystem, err, "create export dir")
+	}
+	if err := util.WriteFileAtomic(path, data, 0o600); err != nil {
+		return 0, diag.WrapAs(diag.ClassFilesystem, err, "write export file")
 	}
 	return len(es), nil
 }
@@ -99,7 +102,6 @@ func (s *Store) Backup(path string) error {
 	}
 
 	// The destination must be different from the live database path.
-	// Removing an existing file is part of backup preparation.
 	if util.SamePath(path, s.p) {
 		return diag.WrapAs(
 			diag.ClassHistory,
@@ -110,14 +112,24 @@ func (s *Store) Backup(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return diag.WrapAs(diag.ClassFilesystem, err, "create backup dir")
 	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return diag.WrapAs(diag.ClassFilesystem, err, "remove existing backup")
+	// VACUUM INTO won't overwrite a file. It writes into a temp dir and the result gets renamed.
+	tmpDir, err := os.MkdirTemp(filepath.Dir(path), ".resterm-backup-*")
+	if err != nil {
+		return diag.WrapAs(diag.ClassFilesystem, err, "create backup temp dir")
 	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	tmp := filepath.Join(tmpDir, filepath.Base(path))
 
 	// VACUUM INTO accepts a scalar expression for the output path.
 	// Using a bound value avoids SQL text interpolation and escaping logic.
-	if _, err := s.db.Exec(`VACUUM INTO ?`, path); err != nil {
+	if _, err := s.db.Exec(`VACUUM INTO ?`, tmp); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "backup history db")
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		return diag.WrapAs(diag.ClassFilesystem, err, "make backup private")
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return diag.WrapAs(diag.ClassFilesystem, err, "replace backup")
 	}
 	return nil
 }
@@ -128,14 +140,4 @@ func cleanPath(path string, op string) (string, error) {
 		return "", diag.WrapAsf(diag.ClassHistory, errors.New("empty path"), "%s", op)
 	}
 	return filepath.Clean(path), nil
-}
-
-func writeFileAtom(path string, data []byte, perm os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "create export dir")
-	}
-	if err := util.WriteFileAtomic(path, data, perm); err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "write export file")
-	}
-	return nil
 }

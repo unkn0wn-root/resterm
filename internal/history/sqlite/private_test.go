@@ -83,6 +83,48 @@ func TestRecoveredStoreIsPrivate(t *testing.T) {
 	assertMode(t, rec.Backup, 0o600)
 }
 
+func TestExportJSONIsPrivate(t *testing.T) {
+	skipOnWindows(t)
+	dir := t.TempDir()
+	s := New(filepath.Join(dir, "history.db"))
+	defer func() { _ = s.Close() }()
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	out := filepath.Join(dir, "history.json")
+	if _, err := s.ExportJSON(out); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	assertMode(t, out, 0o600)
+}
+
+func TestBackupIsPrivateAndReplacesTarget(t *testing.T) {
+	skipOnWindows(t)
+	dir := t.TempDir()
+	s := New(filepath.Join(dir, "history.db"))
+	defer func() { _ = s.Close() }()
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	out := filepath.Join(dir, "history.bak.db")
+	if err := os.WriteFile(out, []byte("old backup"), 0o644); err != nil {
+		t.Fatalf("write old backup: %v", err)
+	}
+	if err := s.Backup(out); err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	assertMode(t, out, 0o600)
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	for _, e := range es {
+		if e.IsDir() {
+			t.Fatalf("backup left %s behind", e.Name())
+		}
+	}
+}
+
 func TestStoreKeepsReadOnlyMode(t *testing.T) {
 	skipOnWindows(t)
 	p := filepath.Join(t.TempDir(), "history.db")
