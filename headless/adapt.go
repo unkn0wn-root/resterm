@@ -317,39 +317,39 @@ type outcome struct {
 	status   Status
 	failure  *Failure
 	evidence runfail.Evidence
+	profile  *Failure
+	step     *Step
 }
 
 func (r Result) outcome() outcome {
-	var prof runfail.Failure
+	o := outcome{status: r.Status, failure: r.Failure}
 	if r.Profile != nil {
 		if i := slices.IndexFunc(r.Profile.Failures, func(f ProfileFailure) bool { return !f.Warmup }); i >= 0 {
-			prof = r.Profile.Failures[i].Failure.runFailure()
+			o.profile = r.Profile.Failures[i].Failure
 		}
 	}
 	var step runfail.Failure
-	for _, s := range r.Steps {
-		if step = s.outcome().runFailure(); step.Code != "" {
+	for i := range r.Steps {
+		if step = r.Steps[i].outcome().runFailure(); step.Code != "" {
+			o.step = &r.Steps[i]
 			break
 		}
 	}
-	return outcome{
-		status:  r.Status,
-		failure: r.Failure,
-		evidence: runfail.Evidence{
-			Skipped:        r.Status == StatusSkip,
-			Canceled:       r.Canceled,
-			Err:            errorOf(r.Error),
-			ScriptErr:      errorOf(r.ScriptError),
-			StreamErr:      streamErr(r.Stream),
-			Tests:          testFields(r.Tests),
-			Breaches:       breachFields(r.Trace),
-			ProfileFailure: prof,
-			StepFailure:    step,
-			MarkedFailed:   r.Status == StatusFail,
-			Summary:        r.Summary,
-			StatusText:     runfmt.ProtocolStatus((*runfmt.HTTP)(r.HTTP), (*runfmt.GRPC)(r.GRPC)),
-		},
+	o.evidence = runfail.Evidence{
+		Skipped:        r.Status == StatusSkip,
+		Canceled:       r.Canceled,
+		Err:            errorOf(r.Error),
+		ScriptErr:      errorOf(r.ScriptError),
+		StreamErr:      streamErr(r.Stream),
+		Tests:          testFields(r.Tests),
+		Breaches:       breachFields(r.Trace),
+		ProfileFailure: o.profile.runFailure(),
+		StepFailure:    step,
+		MarkedFailed:   r.Status == StatusFail,
+		Summary:        r.Summary,
+		StatusText:     runfmt.ProtocolStatus((*runfmt.HTTP)(r.HTTP), (*runfmt.GRPC)(r.GRPC)),
 	}
+	return o
 }
 
 func (s Step) outcome() outcome {
@@ -386,14 +386,23 @@ func (o outcome) runFailure() runfail.Failure {
 	if o.failure != nil {
 		return o.failure.runFailure()
 	}
-	return runfail.FromEvidence(o.evidence)
+	f, _ := runfail.FromEvidence(o.evidence)
+	return f
 }
 
 func (o outcome) failureModel() *runfmt.Failure {
 	if o.failure != nil {
 		return o.failure.model()
 	}
-	return runfmt.FromFailure(runfail.FromEvidence(o.evidence))
+	f, from := runfail.FromEvidence(o.evidence)
+	switch from {
+	case runfail.OriginProfile:
+		return o.profile.model()
+	case runfail.OriginStep:
+		return o.step.outcome().failureModel()
+	default:
+		return runfmt.FromFailure(f)
+	}
 }
 
 func errorOf(s string) error {

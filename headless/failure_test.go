@@ -242,3 +242,35 @@ func TestFailureCodesEmpty(t *testing.T) {
 		t.Fatalf("passing report codes = %v, want nil", got)
 	}
 }
+
+func TestInheritedFailureKeepsChainAndFrames(t *testing.T) {
+	child := &Failure{
+		Code:    FailureScript,
+		Message: "assert failed",
+		Source:  "error",
+		Chain:   []FailureChain{{Code: "script", Kind: "cause", Message: "assert failed"}},
+		Frames:  []FailureFrame{{Name: "check", Pos: FailurePos{Path: "api.http", Line: 3, Col: 5}}},
+	}
+	results := []Result{
+		{Kind: KindWorkflow, Steps: []Step{{Name: "ok", Status: StatusPass}, {Name: "check", Failure: child}}},
+		{Kind: KindProfile, Profile: &Profile{Failures: []ProfileFailure{{Iteration: 1, Failure: child}}}},
+	}
+	decode := func(v any) any {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var out any
+		if err := json.Unmarshal(b, &out); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return out
+	}
+	want := decode(child)
+	for _, res := range results {
+		got := decode(res).(map[string]any)["failure"]
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s failure = %v, want %v", res.Kind, got, want)
+		}
+	}
+}

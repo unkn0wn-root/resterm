@@ -8,14 +8,15 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
-func resultFailure(res Result) runfail.Failure {
+func resultFailure(res Result) (runfail.Failure, runfail.Origin) {
 	if res.Failure.Code != "" {
-		return res.Failure
+		return res.Failure, res.failureFrom
 	}
 	var prof runfail.Failure
 	if f, ok := res.Profile.measuredFailure(); ok {
 		prof = f.Failure
 	}
+	_, step := firstFailedStep(res.Steps)
 	return runfail.FromEvidence(runfail.Evidence{
 		Skipped:        res.Skipped,
 		Canceled:       res.Canceled,
@@ -25,7 +26,7 @@ func resultFailure(res Result) runfail.Failure {
 		Tests:          testFields(res.Tests),
 		Breaches:       breachFields(res.Trace),
 		ProfileFailure: prof,
-		StepFailure:    firstStepFailure(res.Steps),
+		StepFailure:    step,
 		MarkedFailed:   !res.Passed,
 		Summary:        res.Summary,
 		StatusText:     protocolStatusText(res.Response, res.GRPC),
@@ -36,7 +37,7 @@ func stepFailure(step StepResult) runfail.Failure {
 	if step.Failure.Code != "" {
 		return step.Failure
 	}
-	return runfail.FromEvidence(runfail.Evidence{
+	f, _ := runfail.FromEvidence(runfail.Evidence{
 		Skipped:      step.Skipped,
 		Canceled:     step.Canceled,
 		Err:          step.Err,
@@ -48,15 +49,16 @@ func stepFailure(step StepResult) runfail.Failure {
 		Summary:      step.Summary,
 		StatusText:   protocolStatusText(step.Response, step.GRPC),
 	})
+	return f
 }
 
-func firstStepFailure(steps []StepResult) runfail.Failure {
+func firstFailedStep(steps []StepResult) (StepResult, runfail.Failure) {
 	for _, step := range steps {
 		if f := stepFailure(step); f.Code != "" {
-			return f
+			return step, f
 		}
 	}
-	return runfail.Failure{}
+	return StepResult{}, runfail.Failure{}
 }
 
 func streamErr(info *StreamInfo) error {

@@ -114,6 +114,7 @@ type Result struct {
 	Profile                   *ProfileInfo
 	Steps                     []StepResult
 	Failure                   runfail.Failure
+	failureFrom               runfail.Origin
 	transcript                []byte
 	unresolvedTemplateVars    []string
 	unresolvedTemplateVarsSet bool
@@ -235,7 +236,8 @@ func (r *Report) WriteText(w io.Writer) error {
 }
 
 func resultFailed(item Result) bool {
-	return resultFailure(item).Code != ""
+	f, _ := resultFailure(item)
+	return f.Code != ""
 }
 
 func resultDuration(item Result) time.Duration {
@@ -343,7 +345,7 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		item.SetUnresolvedTemplateVars(explainMissingTemplateVars(res.Explain))
 	}
 	item.Passed = !item.Skipped && !requestFailed(item)
-	item.Failure = resultFailure(item)
+	item.Failure, item.failureFrom = resultFailure(item)
 	item.Passed = !item.Skipped && item.Failure.Code == ""
 	return item
 }
@@ -398,7 +400,7 @@ func compareRunResult(req *restfile.Request, res engine.CompareResult, fallbackE
 		item.Steps = append(item.Steps, compareStepResult(req, row))
 	}
 	item.Passed = !item.Skipped && !item.Canceled && stepsPassed(item.Steps)
-	item.Failure = resultFailure(item)
+	item.Failure, item.failureFrom = resultFailure(item)
 	return item
 }
 
@@ -460,7 +462,7 @@ func profileRunResult(req *restfile.Request, res engine.ProfileResult, fallbackE
 			Failures: profileFailures(res.Failures),
 		},
 	}
-	item.Failure = resultFailure(item)
+	item.Failure, item.failureFrom = resultFailure(item)
 	return item
 }
 
@@ -530,7 +532,7 @@ func workflowRunResult(res engine.WorkflowResult, fallbackEnv string) Result {
 		item.Steps = append(item.Steps, workflowStepResult(step))
 	}
 	item.Passed = !item.Skipped && !item.Canceled && stepsPassed(item.Steps)
-	item.Failure = resultFailure(item)
+	item.Failure, item.failureFrom = resultFailure(item)
 	return item
 }
 
