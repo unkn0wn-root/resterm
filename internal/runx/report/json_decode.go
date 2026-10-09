@@ -207,15 +207,7 @@ func (j jsonProfileFailure) model() ProfileFailure {
 	}
 }
 
-func (j jsonStream) model() Stream {
-	return Stream{
-		Kind:           j.Kind,
-		EventCount:     j.EventCount,
-		Summary:        j.Summary,
-		TranscriptPath: j.TranscriptPath,
-		Error:          j.Error,
-	}
-}
+func (j jsonStream) model() Stream { return Stream(j) }
 
 func (j jsonTrace) model() Trace {
 	return Trace{
