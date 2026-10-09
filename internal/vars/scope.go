@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // Every scope key starts with one of these prefixes, so provenance is written
@@ -32,7 +30,7 @@ const scopeDigestLen = 16
 // withSource records the file a catalog was read from. The path is made
 // absolute so different spellings of one file keep one identity.
 func (c Catalog) withSource(path string) Catalog {
-	path = str.Trim(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return c
 	}

@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // Catalog holds every selectable environment from one env file. It is either
@@ -150,7 +149,7 @@ func buildGroup(in Group, groups *names) (Group, error) {
 		set[p] = values
 	}
 
-	def := str.Trim(in.Default)
+	def := strings.TrimSpace(in.Default)
 	if def == "" {
 		if len(set) != 1 {
 			return Group{}, diag.Newf(diag.ClassParse, "group %q requires %q", name, DefaultEnvKey)
@@ -205,7 +204,7 @@ func (g Group) ProfileNames() []string {
 }
 
 func (c Catalog) findEnv(name string) (entry, bool) {
-	name = str.Trim(name)
+	name = strings.TrimSpace(name)
 	i := slices.IndexFunc(c.envs, func(e entry) bool { return strings.EqualFold(e.name, name) })
 	if i < 0 {
 		return entry{}, false
@@ -214,7 +213,7 @@ func (c Catalog) findEnv(name string) (entry, bool) {
 }
 
 func (c Catalog) findGroup(name string) (Group, bool) {
-	name = str.Trim(name)
+	name = strings.TrimSpace(name)
 	i := slices.IndexFunc(c.groups, func(g Group) bool { return strings.EqualFold(g.Name, name) })
 	if i < 0 {
 		return Group{}, false
@@ -326,9 +325,9 @@ func parseGroups(root object) (Catalog, error) {
 	for _, f := range raw {
 		var obj object
 		if err := json.Unmarshal(f.raw, &obj); err != nil {
-			return Catalog{}, diag.Newf(diag.ClassParse, "group %q must be an object", str.Trim(f.name))
+			return Catalog{}, diag.Newf(diag.ClassParse, "group %q must be an object", strings.TrimSpace(f.name))
 		}
-		g, err := parseGroup(str.Trim(f.name), obj)
+		g, err := parseGroup(strings.TrimSpace(f.name), obj)
 		if err != nil {
 			return Catalog{}, err
 		}
@@ -496,7 +495,7 @@ func newNames(kind string, size int) *names {
 }
 
 func (n *names) add(raw string) (string, error) {
-	name := str.Trim(raw)
+	name := strings.TrimSpace(raw)
 	key := norm(name)
 	if key == "" {
 		return "", diag.Newf(diag.ClassParse, "%s name cannot be blank", n.kind)
@@ -513,7 +512,7 @@ func reservedName(kind, name string) error {
 }
 
 func mapName[V any](m map[string]V, name string) (string, bool) {
-	name = str.Trim(name)
+	name = strings.TrimSpace(name)
 	for n := range m {
 		if strings.EqualFold(n, name) {
 			return n, true

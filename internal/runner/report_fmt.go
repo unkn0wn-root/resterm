@@ -2,6 +2,7 @@ package runner
 
 import (
 	"slices"
+	"strings"
 
 	"io"
 	"sort"
@@ -43,9 +44,9 @@ func ReportModel(rep *Report) runfmt.Report {
 	}
 	out := runfmt.Report{
 		SchemaVersion:        str.FirstTrimmed(rep.SchemaVersion, runfmt.ReportSchemaVersion),
-		Version:              str.Trim(rep.Version),
+		Version:              strings.TrimSpace(rep.Version),
 		FilePath:             rep.FilePath,
-		EnvName:              str.Trim(rep.EnvName),
+		EnvName:              strings.TrimSpace(rep.EnvName),
 		EnvironmentSelection: rep.EnvironmentSelection,
 		StartedAt:            rep.StartedAt,
 		EndedAt:              rep.EndedAt,
@@ -67,17 +68,17 @@ func ReportModel(rep *Report) runfmt.Report {
 func toFormatResult(res Result) runfmt.Result {
 	out := runfmt.Result{
 		Kind:                 string(res.Kind),
-		Name:                 str.Trim(res.Name),
-		Method:               str.Trim(res.Method),
-		Target:               str.Trim(res.Target),
-		EffectiveTarget:      str.Trim(res.EffectiveTarget),
-		Environment:          str.Trim(res.Environment),
+		Name:                 strings.TrimSpace(res.Name),
+		Method:               strings.TrimSpace(res.Method),
+		Target:               strings.TrimSpace(res.Target),
+		EffectiveTarget:      strings.TrimSpace(res.EffectiveTarget),
+		Environment:          strings.TrimSpace(res.Environment),
 		EnvironmentSelection: res.EnvironmentSelection,
 		Status:               resultStatusOf(res),
-		Summary:              str.Trim(res.Summary),
+		Summary:              strings.TrimSpace(res.Summary),
 		Duration:             resultDuration(res),
 		Canceled:             res.Canceled,
-		SkipReason:           str.Trim(res.SkipReason),
+		SkipReason:           strings.TrimSpace(res.SkipReason),
 		Warnings:             res.Warnings,
 		Error:                errText(res.Err),
 		ErrorDetail:          runfmt.ErrorDetailFromError(res.Err),
@@ -98,20 +99,20 @@ func toFormatResult(res Result) runfmt.Result {
 
 func toFormatStep(step StepResult) runfmt.Step {
 	out := runfmt.Step{
-		Name:                 str.Trim(step.Name),
-		Method:               str.Trim(step.Method),
-		Target:               str.Trim(step.Target),
-		EffectiveTarget:      str.Trim(step.EffectiveTarget),
-		Environment:          str.Trim(step.Environment),
+		Name:                 strings.TrimSpace(step.Name),
+		Method:               strings.TrimSpace(step.Method),
+		Target:               strings.TrimSpace(step.Target),
+		EffectiveTarget:      strings.TrimSpace(step.EffectiveTarget),
+		Environment:          strings.TrimSpace(step.Environment),
 		EnvironmentSelection: step.EnvironmentSelection,
-		Branch:               str.Trim(step.Branch),
+		Branch:               strings.TrimSpace(step.Branch),
 		Iteration:            step.Iteration,
 		Total:                step.Total,
 		Status:               stepStatusOf(step),
-		Summary:              str.Trim(step.Summary),
+		Summary:              strings.TrimSpace(step.Summary),
 		Duration:             step.Duration,
 		Canceled:             step.Canceled,
-		SkipReason:           str.Trim(step.SkipReason),
+		SkipReason:           strings.TrimSpace(step.SkipReason),
 		Error:                errText(step.Err),
 		ErrorDetail:          runfmt.ErrorDetailFromError(step.Err),
 		ScriptError:          errText(step.ScriptErr),
@@ -169,9 +170,9 @@ func formatHTTP(resp *httpx.Response) *runfmt.HTTP {
 		return nil
 	}
 	return &runfmt.HTTP{
-		Status:     str.Trim(resp.Status),
+		Status:     strings.TrimSpace(resp.Status),
 		StatusCode: resp.StatusCode,
-		Protocol:   str.Trim(resp.Proto),
+		Protocol:   strings.TrimSpace(resp.Proto),
 	}
 }
 
@@ -182,7 +183,7 @@ func formatGRPC(resp *grpcx.Response) *runfmt.GRPC {
 	return &runfmt.GRPC{
 		Code:          resp.StatusCode.String(),
 		StatusCode:    int(resp.StatusCode),
-		StatusMessage: str.Trim(resp.StatusMessage),
+		StatusMessage: strings.TrimSpace(resp.StatusMessage),
 		StatusDetails: slices.Clone(resp.StatusDetails),
 	}
 }
@@ -194,8 +195,8 @@ func formatTests(src []scripts.TestResult) []runfmt.Test {
 	out := make([]runfmt.Test, 0, len(src))
 	for _, test := range src {
 		out = append(out, runfmt.Test{
-			Name:    str.Trim(test.Name),
-			Message: str.Trim(test.Message),
+			Name:    strings.TrimSpace(test.Name),
+			Message: strings.TrimSpace(test.Message),
 			Passed:  test.Passed,
 			Elapsed: test.Elapsed,
 		})
@@ -208,8 +209,8 @@ func formatCompare(info *CompareInfo) *runfmt.Compare {
 		return nil
 	}
 	return &runfmt.Compare{
-		Baseline: str.Trim(info.Baseline),
-		Group:    str.Trim(info.Group),
+		Baseline: strings.TrimSpace(info.Baseline),
+		Group:    strings.TrimSpace(info.Group),
 	}
 }
 
@@ -237,8 +238,8 @@ func formatProfile(prof *ProfileInfo) *runfmt.Profile {
 			out.Failures = append(out.Failures, runfmt.ProfileFailure{
 				Iteration:  fail.Iteration,
 				Warmup:     fail.Warmup,
-				Reason:     str.Trim(fail.Reason),
-				Status:     str.Trim(fail.Status),
+				Reason:     strings.TrimSpace(fail.Reason),
+				Status:     strings.TrimSpace(fail.Status),
 				StatusCode: fail.StatusCode,
 				Duration:   fail.Duration,
 				Failure:    formatProfileFailure(fail),
@@ -276,8 +277,8 @@ func formatRunFailure(failure runfail.Failure, detail *runfmt.ErrorDetail) *runf
 	}
 	return runfmt.AttachErrorDetail(runfmt.FromFailure(runfail.New(
 		failure.Code,
-		str.Trim(failure.Message),
-		str.Trim(failure.Source),
+		strings.TrimSpace(failure.Message),
+		strings.TrimSpace(failure.Source),
 	)), detail)
 }
 
@@ -351,9 +352,9 @@ func formatStream(info *StreamInfo) *runfmt.Stream {
 		return nil
 	}
 	out := &runfmt.Stream{
-		Kind:           str.Trim(info.Kind),
+		Kind:           strings.TrimSpace(info.Kind),
 		EventCount:     info.EventCount,
-		TranscriptPath: str.Trim(info.TranscriptPath),
+		TranscriptPath: strings.TrimSpace(info.TranscriptPath),
 	}
 	if info.Err != nil {
 		out.Error = info.Err.Error()
@@ -370,8 +371,8 @@ func formatTrace(info *TraceInfo) *runfmt.Trace {
 	}
 	out := &runfmt.Trace{
 		Duration:     info.Summary.Duration,
-		Error:        str.Trim(info.Summary.Error),
-		ArtifactPath: str.Trim(info.ArtifactPath),
+		Error:        strings.TrimSpace(info.Summary.Error),
+		ArtifactPath: strings.TrimSpace(info.ArtifactPath),
 	}
 	if bud := info.Summary.Budgets; bud != nil {
 		out.Budget = &runfmt.TraceBudget{
@@ -384,7 +385,7 @@ func formatTrace(info *TraceInfo) *runfmt.Trace {
 		out.Breaches = make([]runfmt.TraceBreach, 0, len(info.Summary.Breaches))
 		for _, breach := range info.Summary.Breaches {
 			out.Breaches = append(out.Breaches, runfmt.TraceBreach{
-				Kind:   str.Trim(breach.Kind),
+				Kind:   strings.TrimSpace(breach.Kind),
 				Limit:  breach.Limit,
 				Actual: breach.Actual,
 				Over:   breach.Over,

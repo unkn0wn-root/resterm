@@ -3,8 +3,7 @@ package runner
 import (
 	"bytes"
 	"sort"
-
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"strings"
 )
 
 func (r Result) Transcript() []byte {
@@ -30,7 +29,7 @@ func (r *Result) SetUnresolvedTemplateVars(items []string) {
 	seen := make(map[string]struct{}, len(items))
 	out := make([]string, 0, len(items))
 	for _, item := range items {
-		item = str.Trim(item)
+		item = strings.TrimSpace(item)
 		if item == "" {
 			continue
 		}

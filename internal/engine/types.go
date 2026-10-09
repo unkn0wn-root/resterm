@@ -3,6 +3,7 @@ package engine
 import (
 	"cmp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
@@ -19,7 +20,6 @@ import (
 	runfail "github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -55,8 +55,8 @@ type CompareConfig struct {
 // Clone copies the target list and trims the baseline and group names.
 func (c CompareConfig) Clone() CompareConfig {
 	c.Targets = slices.Clone(c.Targets)
-	c.Base = str.Trim(c.Base)
-	c.Group = str.Trim(c.Group)
+	c.Base = strings.TrimSpace(c.Base)
+	c.Group = strings.TrimSpace(c.Group)
 	return c
 }
 

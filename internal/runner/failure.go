@@ -1,11 +1,12 @@
 package runner
 
 import (
+	"strings"
+
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func resultFailure(res Result) (runfail.Failure, runfail.Origin) {
@@ -72,8 +73,8 @@ func testFields(tests []scripts.TestResult) []runfail.TestFailureFields {
 	out := make([]runfail.TestFailureFields, 0, len(tests))
 	for _, test := range tests {
 		out = append(out, runfail.TestFailureFields{
-			Name:    str.Trim(test.Name),
-			Message: str.Trim(test.Message),
+			Name:    strings.TrimSpace(test.Name),
+			Message: strings.TrimSpace(test.Message),
 			Passed:  test.Passed,
 		})
 	}
@@ -87,7 +88,7 @@ func breachFields(info *TraceInfo) []runfail.TraceBudgetBreachFields {
 	out := make([]runfail.TraceBudgetBreachFields, 0, len(info.Summary.Breaches))
 	for _, breach := range info.Summary.Breaches {
 		out = append(out, runfail.TraceBudgetBreachFields{
-			Kind:   str.Trim(breach.Kind),
+			Kind:   strings.TrimSpace(breach.Kind),
 			Limit:  breach.Limit,
 			Actual: breach.Actual,
 			Over:   breach.Over,
@@ -99,7 +100,7 @@ func breachFields(info *TraceInfo) []runfail.TraceBudgetBreachFields {
 func protocolStatusText(http *httpx.Response, grpc *grpcx.Response) string {
 	switch {
 	case http != nil:
-		return str.Trim(http.Status)
+		return strings.TrimSpace(http.Status)
 	case grpc != nil:
 		return grpc.StatusText()
 	default:

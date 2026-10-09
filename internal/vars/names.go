@@ -5,8 +5,7 @@ import (
 	"iter"
 	"maps"
 	"slices"
-
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"strings"
 )
 
 // NameKey returns the case-insensitive, whitespace-trimmed identity of name.
@@ -69,7 +68,7 @@ func (m *NameMap[V]) Set(name string, value V) bool {
 	if m.entries == nil {
 		m.entries = make(map[string]namedValue[V])
 	}
-	m.entries[key] = namedValue[V]{name: str.Trim(name), value: value}
+	m.entries[key] = namedValue[V]{name: strings.TrimSpace(name), value: value}
 	return true
 }
 
@@ -175,7 +174,7 @@ func CollectNames[V any](src map[string]V) NameMap[V] {
 // Upsert stores value under the trimmed name and removes equivalent forms.
 func Upsert(m map[string]string, name, value string) {
 	key := NameKey(name)
-	name = str.Trim(name)
+	name = strings.TrimSpace(name)
 	for cur := range m {
 		if cur != name && NameKey(cur) == key {
 			delete(m, cur)

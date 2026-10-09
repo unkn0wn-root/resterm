@@ -10,7 +10,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	restparser "github.com/unkn0wn-root/resterm/internal/parser"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func TestDefaultOpenAPIOutputPath(t *testing.T) {
@@ -67,7 +66,7 @@ func TestRunHelpFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run --help: %v", err)
 	}
-	if str.Trim(out) != "" {
+	if strings.TrimSpace(out) != "" {
 		t.Fatalf("expected empty stdout, got %q", out)
 	}
 	if !strings.Contains(errOut, "Usage: resterm [flags] [file]") {
@@ -219,7 +218,7 @@ func TestRunDispatchesHistorySubcommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run history -h: %v", err)
 	}
-	if str.Trim(errOut) != "" {
+	if strings.TrimSpace(errOut) != "" {
 		t.Fatalf("expected empty stderr, got %q", errOut)
 	}
 	if !strings.Contains(

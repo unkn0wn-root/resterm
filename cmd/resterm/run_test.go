@@ -21,7 +21,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func TestHandleRunSubcommandNotMatched(t *testing.T) {
@@ -76,7 +75,7 @@ func TestRunRunHelpFlagShowsUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help flag: %v", err)
 	}
-	if str.Trim(stderr) != "" {
+	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("expected empty stderr on help flag, got %q", stderr)
 	}
 	if !strings.Contains(stdout, "Usage: resterm run [flags] <file|->") {
@@ -247,7 +246,7 @@ func TestRunDispatchesRunSubcommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run dispatch: %v", err)
 	}
-	if str.Trim(stderr) != "" {
+	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
 	if !strings.Contains(stdout, "Usage: resterm run [flags] <file|->") {
@@ -485,7 +484,7 @@ func TestRunCmdMapsFailedReportToExitCodeOne(t *testing.T) {
 	if code := cli.ExitCode(err); code != 1 {
 		t.Fatalf("expected exit code 1, got %d (err=%v)", code, err)
 	}
-	if msg := str.Trim(err.Error()); msg != "" {
+	if msg := strings.TrimSpace(err.Error()); msg != "" {
 		t.Fatalf("expected silent failure message, got %q", msg)
 	}
 }
@@ -1145,7 +1144,7 @@ func TestRunCmdBodyKeepsExitCodeWithoutFailureBanner(t *testing.T) {
 	if code := cli.ExitCode(err); code != 1 {
 		t.Fatalf("expected exit code 1, got %d (err=%v)", code, err)
 	}
-	if msg := str.Trim(err.Error()); msg != "" {
+	if msg := strings.TrimSpace(err.Error()); msg != "" {
 		t.Fatalf("expected silent failure message, got %q", msg)
 	}
 	if out.String() != "{\n  \"message\": \"ok\"\n}\n" {

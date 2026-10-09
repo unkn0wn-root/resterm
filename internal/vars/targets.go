@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // Target is one compare run target. Profile is set only when a group is
@@ -28,8 +27,8 @@ func (c Catalog) CompareTargets(
 	group, baseline string,
 	names []string,
 ) ([]Target, error) {
-	group = str.Trim(group)
-	baseline = str.Trim(baseline)
+	group = strings.TrimSpace(group)
+	baseline = strings.TrimSpace(baseline)
 	switch {
 	case c.Grouped() && group == "":
 		return nil, diag.New(diag.ClassParse, "grouped compare requires a group")

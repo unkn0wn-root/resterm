@@ -13,7 +13,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func handleHistorySubcommand(args []string) (bool, error) {
@@ -40,7 +39,7 @@ func runHistory(args []string) error {
 		}
 		return nil
 	}
-	op := str.Trim(strings.ToLower(args[0]))
+	op := strings.TrimSpace(strings.ToLower(args[0]))
 	switch op {
 	case "export":
 		return runHistoryExport(args[1:])
@@ -265,7 +264,7 @@ func openHistoryStore(migrate bool) (history.MaintenanceStore, error) {
 }
 
 func historyUsageText() string {
-	return str.Trim(`
+	return strings.TrimSpace(`
 Usage: resterm history <export|import|backup|stats|check|compact> [flags]
 
 Subcommands:
@@ -282,7 +281,7 @@ func printHistoryRecoveryWarning(w io.Writer, rec *histdb.RecoverInfo) error {
 	if rec == nil {
 		return nil
 	}
-	cause := str.Trim(rec.Cause)
+	cause := strings.TrimSpace(rec.Cause)
 	if cause == "" {
 		cause = "unknown"
 	}

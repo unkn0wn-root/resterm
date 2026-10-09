@@ -17,7 +17,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rtfmt"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/update"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -116,7 +115,7 @@ type cliUpdater struct {
 func newCLIUpdater(cl update.Client, ver string) cliUpdater {
 	return cliUpdater{
 		cl:  cl,
-		ver: str.Trim(ver),
+		ver: strings.TrimSpace(ver),
 		out: os.Stdout,
 		color: termcolor.Resolve(termcolor.Input{
 			Mode:   termcolor.ModeAuto,
@@ -170,7 +169,7 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) error {
 }
 
 func resolveExecPath(path string) string {
-	clean := str.Trim(path)
+	clean := strings.TrimSpace(path)
 	if clean == "" {
 		return path
 	}
@@ -224,7 +223,7 @@ func (u cliUpdater) printChangelog(res update.Result) {
 // clipNotes bounds the renderer's input: the inline scanner is quadratic on
 // adversarial text, and anything longer is unreadable as a changelog anyway.
 func clipNotes(notes string) string {
-	notes = str.Trim(notes)
+	notes = strings.TrimSpace(notes)
 	if len(notes) <= changelogMaxNotes {
 		return notes
 	}

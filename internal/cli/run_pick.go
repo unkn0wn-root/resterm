@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/theme"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type RunRequestChoice struct {
@@ -125,7 +125,7 @@ func promptRunRequestChoiceText(
 			}
 			return RunRequestChoice{}, io.EOF
 		}
-		raw := str.Trim(sc.Text())
+		raw := strings.TrimSpace(sc.Text())
 		n, err := strconv.Atoi(raw)
 		if err == nil && n >= 1 && n <= len(choices) {
 			return choices[n-1], nil
@@ -145,9 +145,9 @@ func runRequestFields(req *restfile.Request) runRequestInfo {
 		return runRequestInfo{}
 	}
 	info := runRequestInfo{
-		method: str.Trim(engine.ReqMethod(req)),
-		name:   str.Trim(req.Metadata.Name),
-		target: str.Trim(engine.ReqTarget(req)),
+		method: strings.TrimSpace(engine.ReqMethod(req)),
+		name:   strings.TrimSpace(req.Metadata.Name),
+		target: strings.TrimSpace(engine.ReqTarget(req)),
 	}
 	if info.name == "" {
 		info.name = info.target

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // defaultEnvNames is the preference order for picking an environment when the
@@ -79,7 +78,7 @@ func (c Catalog) Select(name string, profiles map[string]string) (Selection, err
 				"group selection requires grouped environments",
 			)
 		}
-		name = str.Trim(name)
+		name = strings.TrimSpace(name)
 		if name == "" {
 			return c.DefaultSelection(), nil
 		}
@@ -93,7 +92,7 @@ func (c Catalog) Select(name string, profiles map[string]string) (Selection, err
 		return Selection{name: env.name}, nil
 	}
 
-	if str.Trim(name) != "" {
+	if strings.TrimSpace(name) != "" {
 		return Selection{}, diag.New(
 			diag.ClassParse,
 			"environment name cannot be combined with grouped environments",
@@ -114,7 +113,7 @@ func (c Catalog) Select(name string, profiles map[string]string) (Selection, err
 		if !ok {
 			return Selection{}, errUnknown(
 				"unknown profile %q in group %q",
-				str.Trim(rawProfile),
+				strings.TrimSpace(rawProfile),
 				g.Name,
 			)
 		}
@@ -126,11 +125,11 @@ func (c Catalog) Select(name string, profiles map[string]string) (Selection, err
 func (s Selection) WithGroup(group, profile string) Selection {
 	out := Selection{profiles: make(map[string]string, len(s.profiles)+1)}
 	maps.Copy(out.profiles, s.profiles)
-	name := str.Trim(group)
+	name := strings.TrimSpace(group)
 	if g, ok := mapName(out.profiles, name); ok {
 		name = g
 	}
-	out.profiles[name] = str.Trim(profile)
+	out.profiles[name] = strings.TrimSpace(profile)
 	return out
 }
 

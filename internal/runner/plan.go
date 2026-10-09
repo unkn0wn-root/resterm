@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // Plan stores prepared runner inputs that can be executed multiple times.
@@ -35,7 +35,7 @@ type Plan struct {
 }
 
 func Build(opts Options) (*Plan, error) {
-	path := str.Trim(opts.FilePath)
+	path := strings.TrimSpace(opts.FilePath)
 	if path == "" {
 		return nil, usageError("--file is required")
 	}
@@ -55,7 +55,7 @@ func Build(opts Options) (*Plan, error) {
 	}
 	warns := parser.WarningTexts(doc)
 
-	work := str.Trim(opts.WorkspaceRoot)
+	work := strings.TrimSpace(opts.WorkspaceRoot)
 	if work == "" {
 		work = filepath.Dir(path)
 	}
@@ -241,13 +241,13 @@ func finishRun(
 
 func clonePlanOptions(opts Options, path, work, art string) Options {
 	out := opts
-	out.Version = str.Trim(opts.Version)
+	out.Version = strings.TrimSpace(opts.Version)
 	out.FilePath = path
 	out.FileContent = nil
 	out.WorkspaceRoot = work
 	out.ArtifactDir = art
-	out.StateDir = str.Trim(opts.StateDir)
-	out.EnvironmentFile = str.Trim(opts.EnvironmentFile)
+	out.StateDir = strings.TrimSpace(opts.StateDir)
+	out.EnvironmentFile = strings.TrimSpace(opts.EnvironmentFile)
 	out.Compare = opts.Compare.Clone()
 	out.HTTPOptions = cloneHTTPOptions(opts.HTTPOptions)
 	out.GRPCOptions = cloneGRPCOptions(opts.GRPCOptions)

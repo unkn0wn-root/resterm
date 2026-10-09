@@ -30,7 +30,7 @@ func Parse(line string, opt Options) (string, bool) {
 	if opt.ForceInline {
 		return "", false
 	}
-	s := str.Trim(line)
+	s := strings.TrimSpace(line)
 	switch opt.Location {
 	case Line:
 		return parseLinePath(s)
@@ -70,7 +70,7 @@ func parsePath(s string) (string, bool) {
 	if !hasLeadingSpace(s) {
 		return "", false
 	}
-	p := str.Trim(s)
+	p := strings.TrimSpace(s)
 	if p == "" {
 		return "", false
 	}

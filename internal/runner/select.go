@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type selectSpec struct {
@@ -29,9 +28,9 @@ type resolvedTarget struct {
 
 func newSelectSpec(sel Select) selectSpec {
 	return selectSpec{
-		request:  str.Trim(sel.Request),
-		workflow: str.Trim(sel.Workflow),
-		tag:      str.Trim(sel.Tag),
+		request:  strings.TrimSpace(sel.Request),
+		workflow: strings.TrimSpace(sel.Workflow),
+		tag:      strings.TrimSpace(sel.Tag),
 		all:      sel.All,
 		line:     sel.Line,
 	}
@@ -138,7 +137,7 @@ func selectWorkflow(doc *restfile.Document, name string) (int, error) {
 	out := make([]int, 0, 1)
 	for i := range doc.Workflows {
 		wf := doc.Workflows[i]
-		if strings.EqualFold(str.Trim(wf.Name), name) {
+		if strings.EqualFold(strings.TrimSpace(wf.Name), name) {
 			out = append(out, i)
 		}
 	}
@@ -155,7 +154,7 @@ func selectWorkflow(doc *restfile.Document, name string) (int, error) {
 func selectByRequestName(reqs []*restfile.Request, name string) ([]int, error) {
 	out := make([]int, 0, 1)
 	for i, req := range reqs {
-		if req != nil && strings.EqualFold(str.Trim(req.Metadata.Name), name) {
+		if req != nil && strings.EqualFold(strings.TrimSpace(req.Metadata.Name), name) {
 			out = append(out, i)
 		}
 	}
@@ -176,7 +175,7 @@ func selectByTag(reqs []*restfile.Request, tag string) ([]int, error) {
 			continue
 		}
 		for _, item := range req.Metadata.Tags {
-			if strings.EqualFold(str.Trim(item), tag) {
+			if strings.EqualFold(strings.TrimSpace(item), tag) {
 				out = append(out, i)
 				break
 			}

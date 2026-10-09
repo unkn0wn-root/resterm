@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -27,7 +26,7 @@ var environmentFileCandidates = [...]string{
 
 // IsEnvFileName reports whether path names one of the files discovery opens.
 func IsEnvFileName(path string) bool {
-	base := strings.ToLower(filepath.Base(str.Trim(path)))
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(path)))
 	for _, name := range environmentFileCandidates {
 		if base == name {
 			return true
@@ -105,5 +104,5 @@ func DiscoverPath(roots ...string) string {
 }
 
 func norm(s string) string {
-	return strings.ToLower(str.Trim(s))
+	return strings.ToLower(strings.TrimSpace(s))
 }

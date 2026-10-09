@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type GroupFlags map[string]string
 
 func (f *GroupFlags) Set(value string) error {
 	group, profile, ok := strings.Cut(value, "=")
-	group = str.Trim(group)
-	profile = str.Trim(profile)
+	group = strings.TrimSpace(group)
+	profile = strings.TrimSpace(profile)
 	if !ok || group == "" || profile == "" {
 		return fmt.Errorf("expected group=profile")
 	}

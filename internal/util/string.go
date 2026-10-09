@@ -6,14 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-func Trim(s string) string {
-	return strings.TrimSpace(s)
-}
-
-func Lower(s string) string {
-	return strings.ToLower(s)
-}
-
 func TrimLeft(s string) string {
 	return strings.TrimLeftFunc(s, unicode.IsSpace)
 }
@@ -23,24 +15,16 @@ func TrimRight(s string) string {
 }
 
 func UpperTrim(s string) string {
-	return strings.ToUpper(Trim(s))
+	return strings.ToUpper(strings.TrimSpace(s))
 }
 
 func LowerTrim(s string) string {
-	return strings.ToLower(Trim(s))
-}
-
-func Contains(s, substr string) bool {
-	return strings.Contains(s, substr)
-}
-
-func HasPrefix(s, prefix string) bool {
-	return strings.HasPrefix(s, prefix)
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 func FirstTrimmed(values ...string) string {
 	for _, value := range values {
-		if value = Trim(value); value != "" {
+		if value = strings.TrimSpace(value); value != "" {
 			return value
 		}
 	}
