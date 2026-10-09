@@ -25,6 +25,9 @@
 // constants JSON, JUnit, and Text, and ParseFormat converts user-provided names
 // into a Format value.
 //
+// json.Unmarshal reads report JSON back into a Report, including the output of
+// the resterm run --format json command.
+//
 // Invalid library inputs are reported as UsageError values. Use IsUsageError to
 // classify them, and errors.Is to match specific sentinels such as ErrNoSourcePath
 // or ErrTooFewTargets.
