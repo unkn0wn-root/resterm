@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -402,7 +403,7 @@ func (s *Store) ensure() error {
 		return nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(s.p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.p), 0o700); err != nil {
 		return diag.WrapAs(diag.ClassFilesystem, err, "create history dir")
 	}
 
@@ -460,6 +461,10 @@ func openReadyDB(dsn string) (*sql.DB, error) {
 	// Opening does more than creating a handle.
 	// It applies schema changes and runs an integrity check before returning.
 	// A handle is returned only when the database is safe to use.
+	if _, err := createPrivate(dsn); err != nil {
+		return nil, err
+	}
+	makePrivate(dsn)
 	db, err := sql.Open(drv, dsn)
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassHistory, err, "open history db")
@@ -479,6 +484,32 @@ func openReadyDB(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// History rows hold response bodies. SQLite gives new -wal and -shm files the mode of this file.
+func createPrivate(path string) (bool, error) {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, fs.ErrExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, diag.WrapAs(diag.ClassFilesystem, err, "create history file")
+	}
+	_ = f.Close()
+	return true, nil
+}
+
+// Existing files are only changed by path and never opened.
+// If this process closed a file SQLite has open, it would drop SQLite's locks on it.
+func makePrivate(path string) {
+	for _, p := range []string{path, path + "-wal", path + "-shm"} {
+		st, err := os.Stat(p)
+		if err != nil || !st.Mode().IsRegular() {
+			continue
+		}
+		// Only the owner can change the mode. For anyone else, history opens as before.
+		_ = os.Chmod(p, st.Mode().Perm()&^0o077)
+	}
 }
 
 func shouldRecover(path string, err error) bool {
