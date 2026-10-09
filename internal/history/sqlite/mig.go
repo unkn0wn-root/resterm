@@ -22,7 +22,8 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 	// Legacy import is designed to run once and then get out of the way.
 	// It marks completion even when there is nothing to import so startup stays predictable.
 	// Existing SQLite rows always win over legacy JSON content.
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return 0, err
 	}
 
@@ -32,7 +33,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 	}
 	path = filepath.Clean(path)
 
-	tx, err := s.db.BeginTx(context.Background(), nil)
+	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "begin history migration tx")
 	}

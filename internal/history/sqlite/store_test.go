@@ -288,3 +288,32 @@ func TestEntriesReturnsErrorOnQueryFailure(t *testing.T) {
 		t.Fatalf("expected query error")
 	}
 }
+
+func TestStoreCloseDuringAppend(t *testing.T) {
+	s := New(filepath.Join(t.TempDir(), "history.db"))
+	var writers sync.WaitGroup
+	for i := range 4 {
+		writers.Go(func() {
+			for j := range 50 {
+				_ = s.Append(history.Entry{ID: fmt.Sprintf("%d-%d", i, j), ExecutedAt: time.Now()})
+			}
+		})
+	}
+	done := make(chan struct{})
+	closer := make(chan struct{})
+	go func() {
+		defer close(closer)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				_ = s.Close()
+			}
+		}
+	}()
+	writers.Wait()
+	close(done)
+	<-closer
+	_ = s.Close()
+}

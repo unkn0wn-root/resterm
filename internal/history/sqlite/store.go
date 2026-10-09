@@ -56,7 +56,8 @@ func New(path string) *Store {
 }
 
 func (s *Store) Load() error {
-	return s.ensure()
+	_, err := s.handle()
+	return err
 }
 
 func (s *Store) Close() error {
@@ -84,7 +85,8 @@ func (s *Store) RecoveryInfo() *RecoverInfo {
 }
 
 func (s *Store) Append(e history.Entry) error {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return err
 	}
 
@@ -93,7 +95,7 @@ func (s *Store) Append(e history.Entry) error {
 		return err
 	}
 
-	if _, err = insertRow(s.db, qReplace, &r); err != nil {
+	if _, err = insertRow(db, qReplace, &r); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "insert history row")
 	}
 	return nil
@@ -142,11 +144,12 @@ func (s *Store) ByFile(path string) ([]history.Entry, error) {
 }
 
 func (s *Store) Delete(id string) (bool, error) {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return false, err
 	}
 
-	res, err := s.db.Exec(`DELETE FROM hist WHERE id = ?`, id)
+	res, err := db.Exec(`DELETE FROM hist WHERE id = ?`, id)
 	if err != nil {
 		return false, diag.WrapAs(diag.ClassHistory, err, "delete history row")
 	}
@@ -158,7 +161,8 @@ func (s *Store) Delete(id string) (bool, error) {
 }
 
 func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return nil, err
 	}
 
@@ -173,7 +177,7 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 	// every caller sees the same history precedence for tied timestamps.
 	q += ` ORDER BY exec_ns DESC, id_num DESC, id DESC`
 
-	rs, err := s.db.Query(q, args...)
+	rs, err := db.Query(q, args...)
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassHistory, err, "query history rows")
 	}
@@ -396,27 +400,28 @@ func nsToTime(ns int64) time.Time {
 	return time.Unix(0, ns)
 }
 
-func (s *Store) ensure() error {
+// Callers use the returned handle because Close may reset s.db at any time.
+func (s *Store) handle() (*sql.DB, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db != nil {
-		return nil
+		return s.db, nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(s.p), 0o700); err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "create history dir")
+		return nil, diag.WrapAs(diag.ClassFilesystem, err, "create history dir")
 	}
 
 	// Opening is lazy so commands that never touch history do not pay
 	// the startup cost, but once opened this handle is reused safely.
 	db, rec, err := s.openWithRecover()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	s.db = db
 	s.rec = rec
-	return nil
+	return db, nil
 }
 
 func (s *Store) openWithRecover() (*sql.DB, *RecoverInfo, error) {

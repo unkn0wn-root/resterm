@@ -8,13 +8,14 @@ import (
 )
 
 func (s *Store) Stats() (history.Stats, error) {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return history.Stats{}, err
 	}
 
 	st := history.Stats{Path: s.p}
 	var minNS, maxNS int64
-	if err := s.db.QueryRow(
+	if err := db.QueryRow(
 		`SELECT COUNT(*), COALESCE(MIN(exec_ns), 0), COALESCE(MAX(exec_ns), 0) FROM hist`,
 	).Scan(&st.Rows, &minNS, &maxNS); err != nil {
 		return history.Stats{}, diag.WrapAs(diag.ClassHistory, err, "query history stats")
@@ -22,7 +23,7 @@ func (s *Store) Stats() (history.Stats, error) {
 	st.Oldest = nsToTime(minNS)
 	st.Newest = nsToTime(maxNS)
 
-	v, err := schemaVersion(s.db)
+	v, err := schemaVersion(db)
 	if err != nil {
 		return history.Stats{}, err
 	}
@@ -34,23 +35,25 @@ func (s *Store) Stats() (history.Stats, error) {
 }
 
 func (s *Store) Check(full bool) error {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return err
 	}
-	return checkDB(s.db, full)
+	return checkDB(db, full)
 }
 
 func (s *Store) Compact() error {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return err
 	}
-	if _, err := s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
+	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "checkpoint history db")
 	}
-	if _, err := s.db.Exec(`VACUUM;`); err != nil {
+	if _, err := db.Exec(`VACUUM;`); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "compact history db")
 	}
-	if _, err := s.db.Exec(`PRAGMA optimize;`); err != nil {
+	if _, err := db.Exec(`PRAGMA optimize;`); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "optimize history db")
 	}
 	return nil

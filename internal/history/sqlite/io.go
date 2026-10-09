@@ -13,7 +13,7 @@ import (
 )
 
 func (s *Store) ExportJSON(path string) (int, error) {
-	if err := s.ensure(); err != nil {
+	if _, err := s.handle(); err != nil {
 		return 0, err
 	}
 
@@ -42,11 +42,11 @@ func (s *Store) ExportJSON(path string) (int, error) {
 }
 
 func (s *Store) ImportJSON(path string) (int, error) {
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return 0, err
 	}
 
-	var err error
 	path, err = cleanPath(path, "import history")
 	if err != nil {
 		return 0, err
@@ -61,7 +61,7 @@ func (s *Store) ImportJSON(path string) (int, error) {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "parse history import")
 	}
 
-	tx, err := s.db.BeginTx(context.Background(), nil)
+	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "begin history import tx")
 	}
@@ -91,11 +91,11 @@ func (s *Store) Backup(path string) error {
 	// Backup writes a full SQLite snapshot to another file.
 	// It rejects same-path targets to avoid self-overwrite.
 	// The result is a standalone database that can be opened directly.
-	if err := s.ensure(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return err
 	}
 
-	var err error
 	path, err = cleanPath(path, "backup history")
 	if err != nil {
 		return err
@@ -122,7 +122,7 @@ func (s *Store) Backup(path string) error {
 
 	// VACUUM INTO accepts a scalar expression for the output path.
 	// Using a bound value avoids SQL text interpolation and escaping logic.
-	if _, err := s.db.Exec(`VACUUM INTO ?`, tmp); err != nil {
+	if _, err := db.Exec(`VACUUM INTO ?`, tmp); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "backup history db")
 	}
 	if err := os.Chmod(tmp, 0o600); err != nil {
