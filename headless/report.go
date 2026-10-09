@@ -116,6 +116,7 @@ type Result struct {
 	Compare              *Compare
 	Profile              *Profile
 	Steps                []Step
+	Warnings             []string
 }
 
 // Failed reports whether the result failed. A failed step, profile run or stream counts too.
