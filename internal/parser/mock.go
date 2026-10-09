@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -341,7 +342,7 @@ func addMatchers[T restfile.MockQueryRule | restfile.MockHeaderRule](
 		b.failMock(d, fmt.Sprintf("invalid @match %s: %s", opt, err))
 		return
 	}
-	for _, key := range util.SortedKeys(fields) {
+	for _, key := range slices.Sorted(maps.Keys(fields)) {
 		name := strings.TrimSpace(key)
 		if name == "" {
 			b.failMock(d, fmt.Sprintf("@match %s name cannot be empty", opt))

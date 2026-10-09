@@ -18,7 +18,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Builder struct {
@@ -872,7 +871,7 @@ func joinObjectExplode(fields map[string]string, sep string) string {
 		return ""
 	}
 
-	keys := util.SortedKeys(fields)
+	keys := slices.Sorted(maps.Keys(fields))
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%s", key, strings.TrimSpace(fields[key])))
@@ -885,7 +884,7 @@ func joinObjectKeyValueList(fields map[string]string, sep string) string {
 		return ""
 	}
 
-	keys := util.SortedKeys(fields)
+	keys := slices.Sorted(maps.Keys(fields))
 	parts := make([]string, 0, len(keys)*2)
 	for _, key := range keys {
 		parts = append(parts, key, strings.TrimSpace(fields[key]))
@@ -899,7 +898,7 @@ func joinDeepObject(name string, fields map[string]string) string {
 		name = string(model.TypeObject)
 	}
 
-	keys := util.SortedKeys(fields)
+	keys := slices.Sorted(maps.Keys(fields))
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
 		parts = append(parts, fmt.Sprintf("%s[%s]=%s", name, key, strings.TrimSpace(fields[key])))
