@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -17,7 +19,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const parRefPre = "#/components/parameters/"
@@ -50,7 +51,7 @@ func newHdrFix(root map[string]any) *hdrFix {
 
 	com := mapAt(root, "components")
 	prm := mapAt(com, "parameters")
-	for _, k := range util.SortedKeys(prm) {
+	for _, k := range slices.Sorted(maps.Keys(prm)) {
 		h, ok := hdrParam(prm, k, map[string]bool{k: true})
 		if ok {
 			fx.pm[k] = h
@@ -78,7 +79,7 @@ func (fx *hdrFix) walk(root map[string]any) {
 	}
 
 	pts := mapAt(root, "paths")
-	for _, p := range util.SortedKeys(pts) {
+	for _, p := range slices.Sorted(maps.Keys(pts)) {
 		pi := mapAt(pts, p)
 		if len(pi) == 0 {
 			continue
@@ -103,7 +104,7 @@ func (fx *hdrFix) walkPi(pi map[string]any, seg []string) {
 	}
 
 	extra := mapAt(pi, "additionalOperations")
-	for _, name := range util.SortedKeys(extra) {
+	for _, name := range slices.Sorted(maps.Keys(extra)) {
 		op := mapAt(extra, name)
 		if len(op) == 0 {
 			continue
@@ -112,7 +113,7 @@ func (fx *hdrFix) walkPi(pi map[string]any, seg []string) {
 		fx.walkOp(op, segAdd(seg, "additionalOperations", name))
 	}
 
-	for _, key := range util.SortedKeys(pi) {
+	for _, key := range slices.Sorted(maps.Keys(pi)) {
 		lk := strings.ToLower(key)
 		if seen[lk] {
 			continue
@@ -139,7 +140,7 @@ func (fx *hdrFix) walkOp(op map[string]any, seg []string) {
 }
 
 func (fx *hdrFix) walkRs(rs map[string]any, seg []string) {
-	for _, code := range util.SortedKeys(rs) {
+	for _, code := range slices.Sorted(maps.Keys(rs)) {
 		r := mapAt(rs, code)
 		if len(r) == 0 {
 			continue
@@ -151,7 +152,7 @@ func (fx *hdrFix) walkRs(rs map[string]any, seg []string) {
 }
 
 func (fx *hdrFix) walkRbs(rbs map[string]any, seg []string) {
-	for _, k := range util.SortedKeys(rbs) {
+	for _, k := range slices.Sorted(maps.Keys(rbs)) {
 		rb := mapAt(rbs, k)
 		if len(rb) == 0 {
 			continue
@@ -162,13 +163,13 @@ func (fx *hdrFix) walkRbs(rbs map[string]any, seg []string) {
 
 func (fx *hdrFix) walkRb(rb map[string]any, seg []string) {
 	cnt := mapAt(rb, "content")
-	for _, mt := range util.SortedKeys(cnt) {
+	for _, mt := range slices.Sorted(maps.Keys(cnt)) {
 		m := mapAt(cnt, mt)
 		if len(m) == 0 {
 			continue
 		}
 		enc := mapAt(m, "encoding")
-		for _, fld := range util.SortedKeys(enc) {
+		for _, fld := range slices.Sorted(maps.Keys(enc)) {
 			e := mapAt(enc, fld)
 			if len(e) == 0 {
 				continue
@@ -183,7 +184,7 @@ func (fx *hdrFix) walkRb(rb map[string]any, seg []string) {
 }
 
 func (fx *hdrFix) walkCbs(cbs map[string]any, seg []string) {
-	for _, cbn := range util.SortedKeys(cbs) {
+	for _, cbn := range slices.Sorted(maps.Keys(cbs)) {
 		cb := mapAt(cbs, cbn)
 		if len(cb) == 0 {
 			continue
@@ -191,7 +192,7 @@ func (fx *hdrFix) walkCbs(cbs map[string]any, seg []string) {
 		if _, ok := strAt(cb, "$ref"); ok {
 			continue
 		}
-		for _, exp := range util.SortedKeys(cb) {
+		for _, exp := range slices.Sorted(maps.Keys(cb)) {
 			pi := mapAt(cb, exp)
 			if len(pi) == 0 {
 				continue
@@ -202,7 +203,7 @@ func (fx *hdrFix) walkCbs(cbs map[string]any, seg []string) {
 }
 
 func (fx *hdrFix) fixHs(hs map[string]any, seg []string) {
-	for _, hk := range util.SortedKeys(hs) {
+	for _, hk := range slices.Sorted(maps.Keys(hs)) {
 		h := mapAt(hs, hk)
 		if len(h) == 0 {
 			continue

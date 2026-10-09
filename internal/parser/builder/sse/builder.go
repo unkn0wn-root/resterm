@@ -2,13 +2,13 @@ package sse
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Builder struct {
@@ -25,7 +25,7 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, re
 		return false, false, nil
 	}
 
-	rest = str.Trim(rest)
+	rest = strings.TrimSpace(rest)
 	if rest == "" {
 		b.enabled = true
 		return true, false, nil

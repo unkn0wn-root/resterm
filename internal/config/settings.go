@@ -11,7 +11,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 )
 
 const (
@@ -142,7 +142,7 @@ func SaveSettings(settings Settings, handle SettingsHandle) error {
 		return fmt.Errorf("encode settings: %w", err)
 	}
 
-	if err := util.WriteFileAtomic(path, data, 0o644); err != nil {
+	if err := fsx.WriteAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("write settings %q: %w", path, err)
 	}
 	return nil

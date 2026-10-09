@@ -8,8 +8,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
-	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -128,7 +128,7 @@ func applyTLSSettings(
 	// those have to reach the missing-value error like every other setting.
 	mode := prefix.key("root-mode")
 	if raw, ok := norm[mode]; ok {
-		switch util.LowerTrim(raw) {
+		switch str.LowerTrim(raw) {
 		case string(tlsconfig.RootModeAppend):
 			cfg.RootMode = tlsconfig.RootModeAppend
 		case string(tlsconfig.RootModeReplace):

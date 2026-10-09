@@ -1,4 +1,4 @@
-package util
+package fsx
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestSamePath(t *testing.T) {
-	abs, err := filepath.Abs(filepath.Join("internal", "util", "path.go"))
+	abs, err := filepath.Abs(filepath.Join("internal", "fsx", "path.go"))
 	if err != nil {
 		t.Fatalf("abs path: %v", err)
 	}
@@ -20,14 +20,14 @@ func TestSamePath(t *testing.T) {
 	}{
 		{
 			name: "relative absolute",
-			a:    filepath.Join("internal", "util", ".", "path.go"),
+			a:    filepath.Join("internal", "fsx", ".", "path.go"),
 			b:    abs,
 			want: true,
 		},
 		{
 			name: "clean equivalent",
-			a:    filepath.Join("internal", "util", "..", "util", "path.go"),
-			b:    filepath.Join("internal", "util", "path.go"),
+			a:    filepath.Join("internal", "fsx", "..", "fsx", "path.go"),
+			b:    filepath.Join("internal", "fsx", "path.go"),
 			want: true,
 		},
 		{
@@ -38,8 +38,8 @@ func TestSamePath(t *testing.T) {
 		},
 		{
 			name: "different",
-			a:    filepath.Join("internal", "util", "path.go"),
-			b:    filepath.Join("internal", "util", "string.go"),
+			a:    filepath.Join("internal", "fsx", "path.go"),
+			b:    filepath.Join("internal", "fsx", "string.go"),
 			want: false,
 		},
 	}
@@ -85,7 +85,7 @@ func TestSameFile(t *testing.T) {
 }
 
 func TestSamePathOrBothEmpty(t *testing.T) {
-	abs, err := filepath.Abs(filepath.Join("internal", "util", "path.go"))
+	abs, err := filepath.Abs(filepath.Join("internal", "fsx", "path.go"))
 	if err != nil {
 		t.Fatalf("abs path: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestSamePathOrBothEmpty(t *testing.T) {
 	if SamePathOrBothEmpty("", abs) {
 		t.Fatal("expected one empty path not to match")
 	}
-	if !SamePathOrBothEmpty(filepath.Join("internal", "util", "path.go"), abs) {
+	if !SamePathOrBothEmpty(filepath.Join("internal", "fsx", "path.go"), abs) {
 		t.Fatal("expected relative and absolute paths to match")
 	}
 }

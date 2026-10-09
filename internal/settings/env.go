@@ -1,9 +1,11 @@
 package settings
 
 import (
+	"maps"
+	"slices"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 const envSettingPrefix = "settings."
@@ -13,8 +15,8 @@ func FromValues(values map[string]string) map[string]string {
 		return nil
 	}
 	out := make(map[string]string)
-	for _, key := range util.SortedKeys(values) {
-		name, ok := strings.CutPrefix(util.LowerTrim(key), envSettingPrefix)
+	for _, key := range slices.Sorted(maps.Keys(values)) {
+		name, ok := strings.CutPrefix(str.LowerTrim(key), envSettingPrefix)
 		if ok && name != "" {
 			out[name] = values[key]
 		}
@@ -29,8 +31,8 @@ func FromValues(values map[string]string) map[string]string {
 func Merge(scopes ...map[string]string) map[string]string {
 	out := make(map[string]string)
 	for _, scope := range scopes {
-		for _, key := range util.SortedKeys(scope) {
-			if name := util.LowerTrim(key); name != "" {
+		for _, key := range slices.Sorted(maps.Keys(scope)) {
+			if name := str.LowerTrim(key); name != "" {
 				out[name] = scope[key]
 			}
 		}

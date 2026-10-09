@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 const maxBodyLineLen = 1 << 20
@@ -21,7 +21,7 @@ func CheckMockBody(body string) (string, error) {
 	}
 	lines := strings.Split(body, "\n")
 	_, isFile := bodyref.Parse(lines[0], bodyref.Options{Location: bodyref.Line})
-	if isFile && util.AllBlank(lines[1:]) {
+	if isFile && str.AllBlank(lines[1:]) {
 		return "", errors.New("mock body looks like a file reference")
 	}
 	return body, nil

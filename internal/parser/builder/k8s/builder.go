@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/connprofile"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/duration"
 	k8starget "github.com/unkn0wn-root/resterm/internal/k8s/target"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Directive struct {
@@ -75,7 +75,7 @@ func ParseDirective(rest string) (res Directive, err error) {
 		res.PersistIgnored = prof.Persist.Set
 		prof.Persist = restfile.Opt[bool]{}
 	} else {
-		if str.Trim(prof.Namespace) == "" {
+		if strings.TrimSpace(prof.Namespace) == "" {
 			prof.Namespace = k8starget.DefaultNamespace
 		}
 		if err := requireK8sTarget(prof); err != nil {
@@ -91,7 +91,7 @@ func ParseDirective(rest string) (res Directive, err error) {
 		if err := requireK8sTarget(prof); err != nil {
 			return res, fmt.Errorf("@k8s requires target and port or use=")
 		}
-		if str.Trim(prof.Namespace) == "" {
+		if strings.TrimSpace(prof.Namespace) == "" {
 			prof.Namespace = k8starget.DefaultNamespace
 		}
 	}
@@ -234,19 +234,19 @@ func k8sInlineSet(prof restfile.K8sProfile) bool {
 }
 
 func requireK8sTarget(prof restfile.K8sProfile) error {
-	if !hasK8sTarget(prof) || str.Trim(prof.PortStr) == "" {
+	if !hasK8sTarget(prof) || strings.TrimSpace(prof.PortStr) == "" {
 		return fmt.Errorf("requires target and port")
 	}
 	return nil
 }
 
 func hasK8sTarget(prof restfile.K8sProfile) bool {
-	return str.Trim(prof.Pod) != "" || str.Trim(prof.Target) != ""
+	return strings.TrimSpace(prof.Pod) != "" || strings.TrimSpace(prof.Target) != ""
 }
 
 func setK8sTarget(prof *restfile.K8sProfile, kind k8starget.Kind, name string) error {
 	k := k8starget.ParseKind(string(kind))
-	n := str.Trim(name)
+	n := strings.TrimSpace(name)
 	if k == "" || n == "" {
 		return fmt.Errorf("invalid @k8s target")
 	}
@@ -266,13 +266,13 @@ func setK8sTarget(prof *restfile.K8sProfile, kind k8starget.Kind, name string) e
 }
 
 func currentK8sTarget(prof restfile.K8sProfile) (k8starget.Kind, string) {
-	if raw := str.Trim(prof.Target); raw != "" {
+	if raw := strings.TrimSpace(prof.Target); raw != "" {
 		k, n, err := k8starget.ParseRef(raw)
 		if err == nil {
 			return k, n
 		}
 	}
-	if p := str.Trim(prof.Pod); p != "" {
+	if p := strings.TrimSpace(prof.Pod); p != "" {
 		return k8starget.Pod, p
 	}
 	return "", ""

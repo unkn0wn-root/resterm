@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 func (r *Report) writeArtifacts(dir string) error {

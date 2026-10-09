@@ -22,7 +22,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runx/view"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/theme"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func handleRunSubcommand(args []string) (bool, error) {
@@ -266,7 +265,7 @@ func (c *runCmd) hasRequestSelector() bool {
 }
 
 func (c *runCmd) loadSource(arg string) (cli.RunSource, error) {
-	path := str.Trim(arg)
+	path := strings.TrimSpace(arg)
 	switch path {
 	case "":
 		return cli.RunSource{}, errors.New("run: request file path is required")

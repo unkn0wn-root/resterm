@@ -7,7 +7,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Builder struct {
@@ -42,7 +41,7 @@ func (b *Builder) EnsureRequest() *restfile.GRPCRequest {
 
 func (b *Builder) SetTarget(target string) {
 	req := b.EnsureRequest()
-	req.Target = str.Trim(target)
+	req.Target = strings.TrimSpace(target)
 }
 
 // HandleDirective applies a gRPC directive. A directive with a missing value is
@@ -114,11 +113,11 @@ func parseSwitch(name directive.Name, rest string) (bool, error) {
 
 func parseMetadata(name directive.Name, rest string) (restfile.MetadataPair, error) {
 	before, after, ok := strings.Cut(rest, ":")
-	key := str.Trim(before)
+	key := strings.TrimSpace(before)
 	if !ok || key == "" {
 		return restfile.MetadataPair{}, fmt.Errorf("invalid %s %q, use key: value", name.Tag(), rest)
 	}
-	return restfile.MetadataPair{Key: key, Value: str.Trim(after)}, nil
+	return restfile.MetadataPair{Key: key, Value: strings.TrimSpace(after)}, nil
 }
 
 func fullMethod(pkg, service, method string) string {
@@ -133,7 +132,7 @@ func (b *Builder) HandleBodyLine(line string, forceInline bool) bool {
 		return false
 	}
 
-	if str.Trim(line) == "" {
+	if strings.TrimSpace(line) == "" {
 		return false
 	}
 
@@ -170,14 +169,14 @@ func (b *Builder) Finalize(
 	body := restfile.BodySource{}
 	if grpcCopy.MessageFile != "" {
 		body.FilePath = grpcCopy.MessageFile
-	} else if str.Trim(grpcCopy.Message) != "" {
+	} else if strings.TrimSpace(grpcCopy.Message) != "" {
 		body.Text = grpcCopy.Message
 	}
 	return &grpcCopy, body, existingMime, true
 }
 
 func parseMethod(spec string) (pkg string, service string, method string) {
-	working := str.Trim(spec)
+	working := strings.TrimSpace(spec)
 	if working == "" {
 		return "", "", ""
 	}
@@ -188,8 +187,8 @@ func parseMethod(spec string) (pkg string, service string, method string) {
 		return "", "", ""
 	}
 
-	serviceFQN := str.Trim(parts[0])
-	method = str.Trim(parts[1])
+	serviceFQN := strings.TrimSpace(parts[0])
+	method = strings.TrimSpace(parts[1])
 	if serviceFQN == "" || method == "" {
 		return "", "", ""
 	}

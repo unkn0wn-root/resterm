@@ -2,10 +2,10 @@ package generator
 
 import (
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -160,7 +160,7 @@ func (b *schemaSampler) sampleForObject(sch *model.Schema, depth int, context sa
 	}
 	result := make(map[string]any)
 
-	keys := util.SortedKeys(sch.Properties)
+	keys := slices.Sorted(maps.Keys(sch.Properties))
 	for _, name := range keys {
 		prop := sch.Properties[name]
 		if !sampleProperty(prop, context) {

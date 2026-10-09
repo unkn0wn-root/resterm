@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 )
 
 type ImportOptions struct {
@@ -262,7 +262,7 @@ func applyImportPlan(plan []impFile, wsAbs, wsReal string) error {
 		if err := checkNoSymlinkEscape(wsAbs, wsReal, f.dst); err != nil {
 			return fmt.Errorf("destination %s: %w", f.op.Path, err)
 		}
-		if err := util.WriteFileAtomic(f.dst, f.raw, 0o644); err != nil {
+		if err := fsx.WriteAtomic(f.dst, f.raw, 0o644); err != nil {
 			return fmt.Errorf("write destination file %s: %w", f.op.Path, err)
 		}
 	}

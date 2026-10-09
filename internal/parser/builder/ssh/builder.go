@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/connprofile"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Directive struct {
@@ -47,7 +47,7 @@ func ParseDirective(rest string) (res Directive, err error) {
 	}
 
 	if scope != directive.ScopeRequest {
-		if str.Trim(prof.Host) == "" {
+		if strings.TrimSpace(prof.Host) == "" {
 			return res, fmt.Errorf("@ssh %s scope requires host", scope.String())
 		}
 		res.Scope = scope

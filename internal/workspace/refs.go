@@ -1,8 +1,10 @@
 package workspace
 
 import (
+	"strings"
+
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 const (
@@ -96,7 +98,7 @@ func (c *refCollector) collectGRPC(req *restfile.GRPCRequest, line int) {
 func (c *refCollector) collectScripts(scripts []restfile.ScriptBlock, line int) {
 	for _, block := range scripts {
 		c.add(RefScript, block.FilePath, line)
-		if isRTS(block.Lang) && str.Trim(block.Body) != "" {
+		if isRTS(block.Lang) && strings.TrimSpace(block.Body) != "" {
 			c.module(block.Body, line)
 		}
 	}
@@ -188,7 +190,7 @@ func (c *refCollector) module(src string, line int) {
 }
 
 func (c *refCollector) add(kind RefKind, path string, line int) {
-	path = str.Trim(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return
 	}

@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -50,7 +48,7 @@ func installSrcFor(goos, src, exe string, env envFn) string {
 }
 
 func normSrc(src string) string {
-	s := strings.ToLower(str.Trim(src))
+	s := strings.ToLower(strings.TrimSpace(src))
 	if s == "" {
 		return ""
 	}
@@ -93,7 +91,7 @@ func isBrewExe(goos, exe string, env envFn) bool {
 func brewDirs(goos string, env envFn) []string {
 	var out []string
 	add := func(p string) {
-		p = str.Trim(p)
+		p = strings.TrimSpace(p)
 		if p == "" {
 			return
 		}
@@ -101,7 +99,7 @@ func brewDirs(goos string, env envFn) []string {
 	}
 	if env != nil {
 		add(env("HOMEBREW_CELLAR"))
-		pfx := str.Trim(env("HOMEBREW_PREFIX"))
+		pfx := strings.TrimSpace(env("HOMEBREW_PREFIX"))
 		if pfx != "" {
 			add(filepath.Join(pfx, "Cellar"))
 			add(filepath.Join(pfx, "opt"))

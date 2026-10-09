@@ -3,6 +3,7 @@ package headless
 import (
 	"maps"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
@@ -12,7 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -56,7 +57,7 @@ func buildOptions(o Options) (runner.Options, error) {
 		return runner.Options{}, UsageError{err: ErrNoSourcePath}
 	}
 	work := filepath.Dir(path)
-	if root := str.Trim(o.WorkspaceRoot); root != "" {
+	if root := strings.TrimSpace(o.WorkspaceRoot); root != "" {
 		work, err = absPath(root)
 		if err != nil {
 			return runner.Options{}, usageError("resolve workspaceRoot: %w", err)
@@ -101,9 +102,9 @@ func buildOptions(o Options) (runner.Options, error) {
 
 func selectionOptions(sel Selection) (runner.Select, error) {
 	out := runner.Select{
-		Request:  str.Trim(sel.Request),
-		Workflow: str.Trim(sel.Workflow),
-		Tag:      str.Trim(sel.Tag),
+		Request:  strings.TrimSpace(sel.Request),
+		Workflow: strings.TrimSpace(sel.Workflow),
+		Tag:      strings.TrimSpace(sel.Tag),
 		All:      sel.All,
 	}
 	switch {
@@ -130,13 +131,13 @@ func environmentOptions(opt EnvironmentOptions, path, work string) (environment,
 	if opt.Set != nil && opt.Grouped != nil {
 		return environment{}, usageError("environment.set cannot be combined with environment.grouped")
 	}
-	if str.Trim(opt.Name) != "" && opt.Selection != nil {
+	if strings.TrimSpace(opt.Name) != "" && opt.Selection != nil {
 		return environment{}, usageError("environment.name cannot be combined with environment.selection")
 	}
 
 	var env environment
 	var err error
-	file := str.Trim(opt.FilePath)
+	file := strings.TrimSpace(opt.FilePath)
 	switch {
 	case opt.Set != nil:
 		env.cat, err = vars.NewCatalog(environmentSet(opt.Set))
@@ -152,7 +153,7 @@ func environmentOptions(opt EnvironmentOptions, path, work string) (environment,
 		return environment{}, usageError("load environments: %w", err)
 	}
 
-	name := str.Trim(opt.Name)
+	name := strings.TrimSpace(opt.Name)
 	if err := runcheck.ValidateConcreteEnvironment(name, "environment.name"); err != nil {
 		return environment{}, UsageError{err: err}
 	}
@@ -191,7 +192,7 @@ func compareOptions(o Options, workflow bool, env environment) (engine.CompareCo
 	if err != nil {
 		return engine.CompareConfig{}, err
 	}
-	base := str.Trim(o.Compare.Base)
+	base := strings.TrimSpace(o.Compare.Base)
 	if err := runcheck.ValidateConcreteEnvironment(base, "compare.base"); err != nil {
 		return engine.CompareConfig{}, UsageError{err: err}
 	}
@@ -207,7 +208,7 @@ func compareOptions(o Options, workflow bool, env environment) (engine.CompareCo
 	if err := runcheck.ValidateWorkflowMode(workflow, o.Profile.Enabled, compare, ns); err != nil {
 		return engine.CompareConfig{}, UsageError{err: err}
 	}
-	group := str.Trim(o.Compare.Group)
+	group := strings.TrimSpace(o.Compare.Group)
 	if group != "" && !compare {
 		return engine.CompareConfig{}, usageError("compare.group requires compare.targets")
 	}
@@ -226,7 +227,7 @@ func compareTargets(src []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(src))
 	out := make([]string, 0, len(src))
 	for _, item := range src {
-		name := str.Trim(item)
+		name := strings.TrimSpace(item)
 		if name == "" {
 			continue
 		}
@@ -258,7 +259,7 @@ func httpOptions(opt HTTPOptions) (httpx.Options, error) {
 		Timeout:            timeout,
 		FollowRedirects:    boolOr(opt.FollowRedirects, true),
 		InsecureSkipVerify: opt.InsecureSkipVerify,
-		ProxyURL:           str.Trim(opt.ProxyURL),
+		ProxyURL:           strings.TrimSpace(opt.ProxyURL),
 	}
 	if opt.MaxRedirects != nil {
 		if err := nonNegative("http.maxRedirects", int64(*opt.MaxRedirects)); err != nil {
@@ -284,7 +285,7 @@ func nonNegative(name string, value int64) error {
 }
 
 func absPath(path string) (string, error) {
-	path = str.Trim(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", nil
 	}

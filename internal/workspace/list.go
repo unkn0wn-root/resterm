@@ -4,11 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -151,7 +152,7 @@ func (l *lister) addRTSModuleRefs(referrerPath string, e files.Entry) {
 }
 
 func (l *lister) loadDoc(path string) *restfile.Document {
-	if l.opt.CurrentDoc != nil && util.SamePath(util.Trim(path), util.Trim(l.opt.CurrentFile)) {
+	if l.opt.CurrentDoc != nil && fsx.SamePath(strings.TrimSpace(path), strings.TrimSpace(l.opt.CurrentFile)) {
 		return l.opt.CurrentDoc
 	}
 
@@ -168,7 +169,7 @@ func (l *lister) addEntry(e files.Entry) {
 
 func (l *lister) addDoc(e files.Entry) {
 	for _, doc := range l.docs {
-		if util.SamePath(util.Trim(doc.Path), util.Trim(e.Path)) {
+		if fsx.SamePath(strings.TrimSpace(doc.Path), strings.TrimSpace(e.Path)) {
 			return
 		}
 	}
@@ -176,7 +177,7 @@ func (l *lister) addDoc(e files.Entry) {
 }
 
 func (l *lister) currentEntry() (files.Entry, bool) {
-	path := util.Trim(l.opt.CurrentFile)
+	path := strings.TrimSpace(l.opt.CurrentFile)
 	if path == "" {
 		return files.Entry{}, false
 	}
@@ -188,7 +189,7 @@ func (l *lister) currentEntry() (files.Entry, bool) {
 }
 
 func (l *lister) refEntry(src, ref string) (files.Entry, bool) {
-	ref = util.Trim(ref)
+	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return files.Entry{}, false
 	}
@@ -248,7 +249,7 @@ func (l *lister) sorted() []files.Entry {
 }
 
 func pathKey(path string) string {
-	path = filepath.Clean(util.Trim(path))
+	path = filepath.Clean(strings.TrimSpace(path))
 	if abs, err := filepath.Abs(path); err == nil {
 		return abs
 	}
@@ -257,7 +258,7 @@ func pathKey(path string) string {
 
 func isDynamicRef(ref string) bool {
 	for _, marker := range templateMarkers {
-		if util.Contains(ref, marker) {
+		if strings.Contains(ref, marker) {
 			return true
 		}
 	}
@@ -268,7 +269,7 @@ func relEscapesRoot(rel string) bool {
 	switch {
 	case rel == parentRel:
 		return true
-	case util.HasPrefix(rel, parentRel+string(filepath.Separator)):
+	case strings.HasPrefix(rel, parentRel+string(filepath.Separator)):
 		return true
 	default:
 		return false
@@ -276,7 +277,7 @@ func relEscapesRoot(rel string) bool {
 }
 
 func rtsModuleRefScanKey(modulePath, referrerPath string) string {
-	rtbase := util.Trim(referrerPath)
+	rtbase := strings.TrimSpace(referrerPath)
 	if rtbase == "" {
 		rtbase = modulePath
 	}

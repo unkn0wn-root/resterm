@@ -8,7 +8,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/collection"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func handleCollectionSubcommand(args []string) (bool, error) {
@@ -35,7 +34,7 @@ func runCollection(args []string) error {
 		}
 		return nil
 	}
-	op := str.Trim(strings.ToLower(args[0]))
+	op := strings.TrimSpace(strings.ToLower(args[0]))
 	switch op {
 	case "export":
 		return runCollectionExport(args[1:])
@@ -252,7 +251,7 @@ func writeCollectionOutput(op, format string, args ...any) error {
 }
 
 func collectionUsageText() string {
-	return str.Trim(`
+	return strings.TrimSpace(`
 Usage: resterm collection <export|import|pack|unpack> [flags]
 
 Subcommands:

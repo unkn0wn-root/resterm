@@ -12,7 +12,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func TestHandleHistorySubcommandNotMatched(t *testing.T) {
@@ -46,7 +45,7 @@ func TestRunHistoryHelpFlagShowsUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help flag: %v", err)
 	}
-	if str.Trim(stderr) != "" {
+	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("expected empty stderr on help flag, got %q", stderr)
 	}
 	if !strings.Contains(
@@ -298,7 +297,7 @@ func TestRunHistorySubcommandHelpShowsUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("export -h: %v", err)
 	}
-	if str.Trim(stdout) != "" {
+	if strings.TrimSpace(stdout) != "" {
 		t.Fatalf("expected empty stdout on help, got %q", stdout)
 	}
 	if !strings.Contains(stderr, "Usage: resterm history export [flags]") {

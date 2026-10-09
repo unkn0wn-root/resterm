@@ -10,9 +10,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -320,7 +320,7 @@ func (m *Model) activateNavigatorMouseFile(n *navigator.Node[any]) tea.Cmd {
 	}
 
 	var cmds []tea.Cmd
-	if !util.SamePath(path, m.currentFile) {
+	if !fsx.SamePath(path, m.currentFile) {
 		if !m.confirmCrossFileNavigation(
 			n,
 			navActionOpenFile,

@@ -12,8 +12,8 @@ import (
 	sqlitedrv "modernc.org/sqlite"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (s *Store) ExportJSON(path string) (int, error) {
@@ -34,7 +34,7 @@ func (s *Store) ExportJSON(path string) (int, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return 0, diag.WrapAs(diag.ClassFilesystem, err, "create export dir")
 	}
-	if err := util.WriteFileAtomic(path, data, 0o600); err != nil {
+	if err := fsx.WriteAtomic(path, data, 0o600); err != nil {
 		return 0, diag.WrapAs(diag.ClassFilesystem, err, "write export file")
 	}
 	return len(es), nil
@@ -103,7 +103,7 @@ func (s *Store) Backup(path string) error {
 	}
 
 	// The destination must be different from the live database path.
-	if util.SameFile(path, s.p) {
+	if fsx.SameFile(path, s.p) {
 		return diag.WrapAs(
 			diag.ClassHistory,
 			errors.New("backup path must differ from history db path"),

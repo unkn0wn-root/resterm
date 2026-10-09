@@ -6,8 +6,6 @@ import (
 	"io"
 	"strings"
 	"time"
-
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const aliasUsagePrefix = "Alias for --"
@@ -39,7 +37,7 @@ func (v stringValue) String() string {
 }
 
 func (v stringValue) Set(s string) error {
-	*v.dst = str.Trim(s)
+	*v.dst = strings.TrimSpace(s)
 	return nil
 }
 
@@ -55,7 +53,7 @@ func (v stringListValue) String() string {
 }
 
 func (v stringListValue) Set(s string) error {
-	*v.dst = append(*v.dst, str.Trim(s))
+	*v.dst = append(*v.dst, strings.TrimSpace(s))
 	return nil
 }
 
@@ -163,7 +161,7 @@ func isBoolFlag(value flag.Value) bool {
 }
 
 func (f *FlagSet) StringVar(dst *string, name, value, usage string) {
-	*dst = str.Trim(value)
+	*dst = strings.TrimSpace(value)
 	f.Var(stringValue{dst: dst}, name, usage)
 }
 

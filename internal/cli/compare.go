@@ -5,11 +5,10 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func ParseCompareTargets(raw string) ([]string, error) {
-	raw = str.Trim(raw)
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, nil
 	}
@@ -29,7 +28,7 @@ func ParseCompareTargets(raw string) ([]string, error) {
 	seen := make(map[string]struct{}, len(fields))
 	targets := make([]string, 0, len(fields))
 	for _, rawField := range fields {
-		field := str.Trim(rawField)
+		field := strings.TrimSpace(rawField)
 		if err := runcheck.ValidateConcreteEnvironment(field, "environment"); err != nil {
 			return nil, err
 		}

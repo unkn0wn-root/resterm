@@ -2,8 +2,10 @@ package parser
 
 import (
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 // line stores the raw text, a trimmed form for matching, and its line ending.
@@ -153,9 +155,11 @@ func (ln line) cutScriptMarker() (body string, col int, ok bool) {
 		return "", 0, false
 	}
 	col = len(ln.raw) - len(s) + 2
-	b := str.TrimLeadingOnce(after)
-	col += len(after) - len(b)
-	return str.TrimRight(b), col, true
+	if r, size := utf8.DecodeRuneInString(after); unicode.IsSpace(r) {
+		after = after[size:]
+		col += size
+	}
+	return str.TrimRight(after), col, true
 }
 
 func (ln line) scriptBlockBody() (body string, col int) {

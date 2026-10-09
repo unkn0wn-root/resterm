@@ -15,7 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -69,7 +69,7 @@ func (e *Engine) resolveHTTPOptions(
 	if cwd, err := os.Getwd(); err == nil {
 		fbs = append(fbs, cwd)
 	}
-	opts.FallbackBaseDirs = util.DedupeNonEmptyStrings(fbs)
+	opts.FallbackBaseDirs = str.DedupeNonEmptyStrings(fbs)
 	opts.NoFallback = false
 	return opts
 }

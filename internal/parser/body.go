@@ -13,7 +13,7 @@ import (
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 func (b *documentBuilder) handleBlankLine(ln line) bool {
@@ -189,7 +189,7 @@ func parseHTTPBodyFile(line string, forceInline bool) (string, bool) {
 }
 
 func (r *requestBuilder) handleBodyDirective(rest string) bool {
-	rs := str.Trim(rest)
+	rs := strings.TrimSpace(rest)
 	if rs == "" {
 		return false
 	}
@@ -209,7 +209,7 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	}
 
 	enabled := true
-	if str.Trim(v) != "" {
+	if strings.TrimSpace(v) != "" {
 		b, ok := directive.ParseBool(v)
 		if !ok {
 			return false

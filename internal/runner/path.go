@@ -2,12 +2,11 @@ package runner
 
 import (
 	"path/filepath"
-
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"strings"
 )
 
 func absCleanPath(path string) (string, error) {
-	path = str.Trim(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", nil
 	}

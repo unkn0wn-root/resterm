@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/curl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const errWriterNotConfigured = "curlimport: writer not configured"
@@ -115,5 +115,5 @@ func uniqSorted(in []string) []string {
 		}
 	}
 	sort.Strings(out)
-	return util.DedupeSortedStrings(out)
+	return slices.Compact(out)
 }

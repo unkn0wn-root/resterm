@@ -7,7 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 // A method has to be followed by whitespace. A word boundary would also match
@@ -106,7 +106,7 @@ func unwrapMatchingQuotes(s string) string {
 }
 
 func hasScheme(url string, schemes []string) bool {
-	lower := str.Lower(url)
+	lower := strings.ToLower(url)
 	for _, scheme := range schemes {
 		if strings.HasPrefix(lower, scheme) {
 			return true
@@ -148,7 +148,7 @@ func (b *Builder) SetMethodAndURL(method, url string) {
 		m = stdhttp.MethodGet
 	}
 	b.method = m
-	b.url = str.Trim(url)
+	b.url = strings.TrimSpace(url)
 }
 
 func (b *Builder) Method() string {
@@ -215,7 +215,7 @@ func (b *Builder) BodyLines() []int {
 }
 
 func (b *Builder) SetBodyFromFile(path string) {
-	b.bodyFromFile = str.Trim(path)
+	b.bodyFromFile = strings.TrimSpace(path)
 	b.bodyLines = nil
 }
 

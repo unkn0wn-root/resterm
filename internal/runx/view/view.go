@@ -18,9 +18,9 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/theme"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 var ErrNilWriter = errors.New("runview: nil writer")
@@ -156,14 +156,14 @@ type summaryField struct {
 
 func requestSummary(res runner.Result, st styler) string {
 	fields := []summaryField{
-		{"Name", str.Trim(res.Name), toneValue},
+		{"Name", strings.TrimSpace(res.Name), toneValue},
 		{"Request", requestLine(res), toneValue},
 	}
 	if sourceTarget := requestSourceTargetText(res); sourceTarget != "" {
 		fields = append(fields, summaryField{"Source Target", sourceTarget, toneValue})
 	}
 	fields = append(fields,
-		summaryField{"Environment", str.Trim(res.Environment), toneValue},
+		summaryField{"Environment", strings.TrimSpace(res.Environment), toneValue},
 		summaryField{"Status", statusText(res), statusTone(res)},
 		summaryField{"Duration", durationText(res), toneDur},
 		summaryField{"Content-Length", contentLengthText(res), toneValue},
@@ -198,9 +198,9 @@ func requestIssues(res runner.Result, st styler) string {
 }
 
 func diagnosticIssue(label string, err error, st styler) string {
-	body := str.Trim(diag.Render(err))
+	body := strings.TrimSpace(diag.Render(err))
 	if body == "" && err != nil {
-		body = str.Trim(err.Error())
+		body = strings.TrimSpace(err.Error())
 	}
 	if body == "" {
 		return st.label(label + ":")
@@ -231,10 +231,10 @@ func testsText(res runner.Result, st styler) string {
 	var lines []string
 	for _, test := range res.Tests {
 		line := st.badge(testBadge(test))
-		if name := str.Trim(test.Name); name != "" {
+		if name := strings.TrimSpace(test.Name); name != "" {
 			line += " " + st.value(name, toneValue)
 		}
-		if msg := str.Trim(test.Message); msg != "" {
+		if msg := strings.TrimSpace(test.Message); msg != "" {
 			line += " - " + st.value(msg, toneMsg)
 		}
 		if test.Elapsed > 0 {
@@ -381,7 +381,7 @@ func streamSummaryText(info *runner.StreamInfo) string {
 		return ""
 	}
 	var lines []string
-	if kind := str.Trim(info.Kind); kind != "" {
+	if kind := strings.TrimSpace(info.Kind); kind != "" {
 		lines = append(lines, "Stream: "+kind)
 	}
 	if len(info.Summary) > 0 {
@@ -410,8 +410,8 @@ func requestLine(res runner.Result) string {
 }
 
 func requestSourceTargetText(res runner.Result) string {
-	target := str.Trim(res.Target)
-	effective := str.Trim(res.EffectiveTarget)
+	target := strings.TrimSpace(res.Target)
+	effective := strings.TrimSpace(res.EffectiveTarget)
 	if target == "" || effective == "" || target == effective {
 		return ""
 	}
@@ -421,7 +421,7 @@ func requestSourceTargetText(res runner.Result) string {
 func statusText(res runner.Result) string {
 	switch {
 	case res.Response != nil:
-		return str.Trim(res.Response.Status)
+		return strings.TrimSpace(res.Response.Status)
 	case res.GRPC != nil:
 		return res.GRPC.StatusText()
 	default:
@@ -464,7 +464,7 @@ func durationRound(d time.Duration) string {
 func contentLengthText(res runner.Result) string {
 	if resp := res.Response; resp != nil {
 		if resp.Headers != nil {
-			if raw := str.Trim(resp.Headers.Get("Content-Length")); raw != "" {
+			if raw := strings.TrimSpace(resp.Headers.Get("Content-Length")); raw != "" {
 				if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n >= 0 {
 					return bodyfmt.FormatByteQuantity(n)
 				}
@@ -489,7 +489,7 @@ func traceFailureText(info *runner.TraceInfo) string {
 		return ""
 	}
 	breach := info.Summary.Breaches[0]
-	label := str.Trim(breach.Kind)
+	label := strings.TrimSpace(breach.Kind)
 	if label == "" {
 		label = "trace"
 	}

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 )
 
 type PathSpec struct {
@@ -82,7 +82,7 @@ func newPathQuery(r PathRequest) (pathQuery, bool) {
 	typed, prefix := filepath.Split(value)
 	resolved := value
 	if r.Spec.ExpandHome && strings.HasPrefix(value, "~") {
-		resolved = util.ExpandHome(value)
+		resolved = fsx.ExpandHome(value)
 		// Treat a bare ~ as a directory, not a name prefix.
 		if value == "~" {
 			resolved += string(filepath.Separator)

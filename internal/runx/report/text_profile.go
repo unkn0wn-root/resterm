@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type textProfileRow struct {
@@ -342,7 +341,7 @@ func textProfileFailure(fail ProfileFailure) string {
 		label = fmt.Sprintf("Warmup %d", fail.Iteration)
 	}
 
-	msg := str.Trim(fail.Reason)
+	msg := strings.TrimSpace(fail.Reason)
 	meta := textProfileFailureMeta(fail)
 	switch {
 	case msg != "" && meta != "":
@@ -357,7 +356,7 @@ func textProfileFailure(fail ProfileFailure) string {
 
 func textProfileFailureMeta(fail ProfileFailure) string {
 	parts := make([]string, 0, 2)
-	if status := str.Trim(fail.Status); status != "" {
+	if status := strings.TrimSpace(fail.Status); status != "" {
 		parts = append(parts, status)
 	} else if fail.StatusCode > 0 {
 		parts = append(parts, strconv.Itoa(fail.StatusCode))

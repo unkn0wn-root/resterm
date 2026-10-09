@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func reportFileLabel(path string) string {
@@ -80,8 +78,8 @@ func resultName(res Result) string {
 }
 
 func targetDetails(target, effective string) (string, string, bool) {
-	target = str.Trim(target)
-	effective = str.Trim(effective)
+	target = strings.TrimSpace(target)
+	effective = strings.TrimSpace(effective)
 	if target == "" || effective == "" || target == effective {
 		return "", "", false
 	}

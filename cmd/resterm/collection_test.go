@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func TestHandleCollectionSubcommandNotMatched(t *testing.T) {
@@ -66,7 +65,7 @@ func TestRunCollectionHelpFlagShowsUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help flag: %v", err)
 	}
-	if str.Trim(stderr) != "" {
+	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("expected empty stderr on help flag, got %q", stderr)
 	}
 	if !strings.Contains(stdout, "Usage: resterm collection <export|import|pack|unpack> [flags]") {
@@ -189,7 +188,7 @@ func TestRunCollectionSubcommandHelpShowsUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("export -h: %v", err)
 	}
-	if str.Trim(stdout) != "" {
+	if strings.TrimSpace(stdout) != "" {
 		t.Fatalf("expected empty stdout on help, got %q", stdout)
 	}
 	if !strings.Contains(stderr, "Usage: resterm collection export [flags]") {

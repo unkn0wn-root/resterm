@@ -7,7 +7,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Builder struct {
@@ -27,7 +26,7 @@ func New() *Builder {
 func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, reset bool, err error) {
 	switch name {
 	case directive.GraphQL:
-		reset, err := b.toggle(str.Trim(rest))
+		reset, err := b.toggle(strings.TrimSpace(rest))
 		return true, reset, err
 	case directive.GraphQLOperation:
 		if b.enabled {
@@ -42,7 +41,7 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, re
 		b.variablesLines = nil
 		b.variablesFile = ""
 
-		rest = str.Trim(rest)
+		rest = strings.TrimSpace(rest)
 		if rest != "" {
 			if file, ok := bodyref.Parse(rest, bodyref.Options{Location: bodyref.Line}); ok {
 				b.variablesFile = file
@@ -59,7 +58,7 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, re
 		b.queryLines = nil
 		b.queryFile = ""
 
-		rest = str.Trim(rest)
+		rest = strings.TrimSpace(rest)
 		if rest != "" {
 			if file, ok := bodyref.Parse(rest, bodyref.Options{Location: bodyref.Line}); ok {
 				b.queryFile = file
@@ -129,9 +128,9 @@ func (b *Builder) Finalize(existingMime string) (*restfile.GraphQLBody, string, 
 	}
 
 	gql := &restfile.GraphQLBody{
-		Query:         str.Trim(strings.Join(b.queryLines, "\n")),
-		OperationName: str.Trim(b.operation),
-		Variables:     str.Trim(strings.Join(b.variablesLines, "\n")),
+		Query:         strings.TrimSpace(strings.Join(b.queryLines, "\n")),
+		OperationName: strings.TrimSpace(b.operation),
+		Variables:     strings.TrimSpace(strings.Join(b.variablesLines, "\n")),
 	}
 
 	if b.queryFile != "" {

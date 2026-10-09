@@ -11,7 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 type Builder struct {
@@ -59,7 +59,7 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, re
 }
 
 func (b *Builder) handleWebSocket(rest string) (reset bool, err error) {
-	t := str.Trim(rest)
+	t := strings.TrimSpace(rest)
 	if t == "" {
 		b.on = true
 		return false, nil
@@ -157,7 +157,7 @@ var wsStepParsers = map[string]wsStepParser{
 }
 
 func (b *Builder) handleStep(rest string) error {
-	t := str.Trim(rest)
+	t := strings.TrimSpace(rest)
 	if t == "" {
 		return errors.New("@ws requires an action")
 	}
@@ -168,7 +168,7 @@ func (b *Builder) handleStep(rest string) error {
 		return errors.New("@ws requires an action")
 	}
 	act = str.LowerTrim(act)
-	rem = str.Trim(rem)
+	rem = strings.TrimSpace(rem)
 
 	parse, ok := wsStepParsers[act]
 	if !ok {
@@ -204,7 +204,7 @@ func parseWSSendBase64(rest string, step *restfile.WebSocketStep) error {
 func parseWSSendFile(rest string, step *restfile.WebSocketStep) error {
 	step.Type = restfile.WebSocketStepSendFile
 	if after, ok := strings.CutPrefix(rest, "<"); ok {
-		rest = str.Trim(after)
+		rest = strings.TrimSpace(after)
 	}
 	if rest == "" {
 		return errors.New("@ws send-file requires a path")
@@ -260,11 +260,11 @@ func parseWSClose(rest string, step *restfile.WebSocketStep) error {
 			)
 		}
 		step.Code = code
-		step.Reason = directive.TrimQuotes(str.Trim(tail))
+		step.Reason = directive.TrimQuotes(strings.TrimSpace(tail))
 		return nil
 	}
 	step.Code = wsCloseOK
-	step.Reason = directive.TrimQuotes(str.Trim(rest))
+	step.Reason = directive.TrimQuotes(strings.TrimSpace(rest))
 	return nil
 }
 

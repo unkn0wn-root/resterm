@@ -6,8 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func navigatorFilterConsumesKey(msg tea.KeyMsg) bool {
@@ -186,7 +186,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
-				if path != "" && !util.SamePath(path, m.currentFile) {
+				if path != "" && !fsx.SamePath(path, m.currentFile) {
 					if !m.confirmCrossFileNavigation(
 						n,
 						navActionOpenFile,
@@ -217,7 +217,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
-				if path != "" && !util.SamePath(path, m.currentFile) {
+				if path != "" && !fsx.SamePath(path, m.currentFile) {
 					if !m.confirmCrossFileNavigation(
 						n,
 						navActionOpenFile,

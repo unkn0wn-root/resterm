@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -13,7 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 func (b *documentBuilder) addMockError(line int, msg string) {
@@ -341,7 +342,7 @@ func addMatchers[T restfile.MockQueryRule | restfile.MockHeaderRule](
 		b.failMock(d, fmt.Sprintf("invalid @match %s: %s", opt, err))
 		return
 	}
-	for _, key := range util.SortedKeys(fields) {
+	for _, key := range slices.Sorted(maps.Keys(fields)) {
 		name := strings.TrimSpace(key)
 		if name == "" {
 			b.failMock(d, fmt.Sprintf("@match %s name cannot be empty", opt))
@@ -416,7 +417,7 @@ func (m *mockBuilder) finishResponse(b *documentBuilder, line int) {
 	body := restfile.BodySource{MimeType: m.headers.Get("Content-Type")}
 	if len(m.body) > 0 {
 		file, ok := parseHTTPBodyFile(m.body[0], false)
-		if ok && util.AllBlank(m.body[1:]) {
+		if ok && str.AllBlank(m.body[1:]) {
 			body.FilePath = file
 		} else {
 			body.Text = strings.Join(m.body, "\n")

@@ -11,10 +11,10 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (m *Model) rebuildNavigator(entries []files.Entry) {
@@ -123,7 +123,7 @@ func (m *Model) buildFileNode(entry files.Entry) *navigator.Node[any] {
 	if doc, ok := m.cachedDoc(entry.Path); ok && doc != nil {
 		node.Count = len(doc.Requests)
 		node.Children = m.buildRequestNodes(doc, entry.Path)
-		if util.SamePath(entry.Path, m.currentFile) && navHasKids(node) {
+		if fsx.SamePath(entry.Path, m.currentFile) && navHasKids(node) {
 			node.Expanded = true
 		}
 	}
@@ -136,7 +136,7 @@ func fileEntryBadges(entry files.Entry, activeEnvFile string) []string {
 		badges = append(badges, label)
 	}
 
-	if entry.Kind == files.KindEnv && util.SameFile(entry.Path, activeEnvFile) {
+	if entry.Kind == files.KindEnv && fsx.SameFile(entry.Path, activeEnvFile) {
 		badges = append(badges, "ACTIVE")
 	}
 	return badges
@@ -402,7 +402,7 @@ func (m *Model) syncNavigatorSelection() {
 			if path != "" {
 				_ = m.selectFileByPath(path)
 			}
-			if util.SamePath(path, m.currentFile) {
+			if fsx.SamePath(path, m.currentFile) {
 				m.clearNavigatorOpenFileStatus()
 				m.setActiveRequest(req)
 			} else {
@@ -423,7 +423,7 @@ func (m *Model) syncNavigatorSelection() {
 			if path != "" {
 				_ = m.selectFileByPath(path)
 			}
-			if util.SamePath(path, m.currentFile) {
+			if fsx.SamePath(path, m.currentFile) {
 				m.clearNavigatorOpenFileStatus()
 				if m.selectWorkflowForNode(wf, n.ID) {
 					if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok &&

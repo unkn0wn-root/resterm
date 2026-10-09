@@ -10,7 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 )
 
 func (m *Model) saveResponseBody() tea.Cmd {
@@ -206,7 +206,7 @@ func (m *Model) submitResponseSave() tea.Cmd {
 }
 
 func (m *Model) resolveResponseSavePath(input string) (string, error) {
-	path := util.ExpandHome(input)
+	path := fsx.ExpandHome(input)
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(m.responseSaveDir(), path)
 	}

@@ -13,12 +13,12 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // Keep capture bounded because rendering and validating an inline response
@@ -126,7 +126,7 @@ func (m *Model) captureSources() mock.Sources {
 	if len(src.Files) == 0 || m.currentFile == "" {
 		return src
 	}
-	listed := func(f string) bool { return util.SamePath(f, m.currentFile) }
+	listed := func(f string) bool { return fsx.SamePath(f, m.currentFile) }
 	if slices.ContainsFunc(src.Files, listed) {
 		return src
 	}

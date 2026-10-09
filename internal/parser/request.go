@@ -10,7 +10,6 @@ import (
 	ssebuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/sse"
 	wsbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/websocket"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type requestBuilder struct {
@@ -95,7 +94,7 @@ func (r *requestBuilder) build() *restfile.Request {
 	req := &restfile.Request{
 		Metadata:  r.metadata,
 		Method:    r.http.Method(),
-		URL:       str.Trim(r.http.URL()),
+		URL:       strings.TrimSpace(r.http.URL()),
 		Headers:   r.http.HeaderMap(),
 		Body:      restfile.BodySource{},
 		Variables: vars,

@@ -3,7 +3,7 @@ package headless
 import (
 	"fmt"
 
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 type Format int

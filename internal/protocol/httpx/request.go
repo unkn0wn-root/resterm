@@ -6,7 +6,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -150,7 +150,7 @@ func normalizeSettings(settings map[string]string) map[string]string {
 	}
 	norm := make(map[string]string, len(settings))
 	for k, v := range settings {
-		if key := util.LowerTrim(k); key != "" {
+		if key := str.LowerTrim(k); key != "" {
 			norm[key] = v
 		}
 	}

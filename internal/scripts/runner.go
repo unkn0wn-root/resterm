@@ -22,7 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -478,7 +478,7 @@ func (api *preRequestAPI) requestAPI(at func() diag.Pos) map[string]any {
 			api.request.written.URL = true
 		},
 		"setMethod": func(method string) {
-			val := util.UpperTrim(method)
+			val := str.UpperTrim(method)
 			api.output.Method = &val
 			api.request.method = val
 		},

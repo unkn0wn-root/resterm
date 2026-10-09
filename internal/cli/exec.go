@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
@@ -16,7 +17,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -171,7 +171,7 @@ func (f ExecFlags) ResolveSession(filePath string) (ExecConfig, error) {
 	env := vars.Config{
 		Catalog:      cat,
 		File:         envFile,
-		FileExplicit: str.Trim(f.EnvFile) != "",
+		FileExplicit: strings.TrimSpace(f.EnvFile) != "",
 		Intent:       vars.Intent{Name: f.EnvName, Groups: maps.Clone(f.EnvGroups)},
 		FileErr:      fileErr,
 	}
@@ -242,7 +242,7 @@ func (f ExecFlags) compareConfig() (engine.CompareConfig, error) {
 	if err := runcheck.ValidateConcreteEnvironment(base, "--compare-base"); err != nil {
 		return engine.CompareConfig{}, fmt.Errorf("invalid --compare-base value: %w", err)
 	}
-	group := str.Trim(f.CompareGroup)
+	group := strings.TrimSpace(f.CompareGroup)
 	if group != "" && len(targets) == 0 {
 		return engine.CompareConfig{}, fmt.Errorf("--compare-group requires --compare")
 	}
@@ -253,7 +253,7 @@ func (f ExecFlags) compareConfig() (engine.CompareConfig, error) {
 // the launch context. It returns the path with load errors so the editor can
 // open a file that failed to parse.
 func (f ExecFlags) loadEnvironment(filePath, work string) (vars.Catalog, string, error) {
-	if explicit := str.Trim(f.EnvFile); explicit != "" {
+	if explicit := strings.TrimSpace(f.EnvFile); explicit != "" {
 		cat, err := vars.LoadEnvironmentFile(explicit)
 		return cat, explicit, err
 	}
@@ -267,7 +267,7 @@ func (f ExecFlags) loadEnvironment(filePath, work string) (vars.Catalog, string,
 }
 
 func CleanExecPath(path string) string {
-	path = str.Trim(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return ""
 	}
@@ -275,7 +275,7 @@ func CleanExecPath(path string) string {
 }
 
 func resolveWorkspace(filePath, workspace string) string {
-	workspace = str.Trim(workspace)
+	workspace = strings.TrimSpace(workspace)
 	if workspace == "" {
 		if filePath != "" {
 			return filepath.Dir(filePath)

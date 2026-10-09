@@ -9,11 +9,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (m Model) Init() tea.Cmd {
@@ -637,7 +637,7 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 	if sel.Kind != kind {
 		return false
 	}
-	if !util.SamePath(sel.Payload.FilePath, m.currentFile) {
+	if !fsx.SamePath(sel.Payload.FilePath, m.currentFile) {
 		if warn != "" {
 			m.setStatusMessage(statusMsg{text: warn, level: statusInfo})
 		}
@@ -678,7 +678,7 @@ func (m *Model) confirmCrossFileNavigation(
 		return true
 	}
 	path := n.Payload.FilePath
-	if path == "" || util.SamePath(path, m.currentFile) || !m.dirty {
+	if path == "" || fsx.SamePath(path, m.currentFile) || !m.dirty {
 		m.clearPendingCrossFileNavigation()
 		return true
 	}
@@ -718,10 +718,10 @@ func (p pendingCrossFileNavigation) matches(other pendingCrossFileNavigation) bo
 	if p.sourceRevision != other.sourceRevision {
 		return false
 	}
-	if !util.SamePathOrBothEmpty(p.sourcePath, other.sourcePath) {
+	if !fsx.SamePathOrBothEmpty(p.sourcePath, other.sourcePath) {
 		return false
 	}
-	return util.SamePathOrBothEmpty(p.targetPath, other.targetPath)
+	return fsx.SamePathOrBothEmpty(p.targetPath, other.targetPath)
 }
 
 func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
@@ -729,14 +729,14 @@ func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
 		return nil, true
 	}
 	path := n.Payload.FilePath
-	if path == "" || util.SamePath(path, m.currentFile) {
+	if path == "" || fsx.SamePath(path, m.currentFile) {
 		return nil, true
 	}
 	var cmds []tea.Cmd
 	if cmd := m.openFile(path); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	if util.SamePath(path, m.currentFile) {
+	if fsx.SamePath(path, m.currentFile) {
 		return cmds, true
 	}
 	return cmds, false

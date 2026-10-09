@@ -10,7 +10,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 var workflowFailureAliases = map[string]restfile.WorkflowFailureMode{
@@ -50,7 +49,7 @@ func newWorkflowBuilder(line int, name string) *workflowBuilder {
 		start: line,
 		end:   line,
 		wf: restfile.Workflow{
-			Name:             str.Trim(name),
+			Name:             strings.TrimSpace(name),
 			Tags:             []string{},
 			DefaultOnFailure: restfile.WorkflowOnFailureStop,
 		},
@@ -222,7 +221,7 @@ func (b *workflowBuilder) handleWorkflowSwitch(
 		if _, err := b.flushFlow(line); err != nil {
 			return true, err
 		}
-		expr := str.Trim(rest)
+		expr := strings.TrimSpace(rest)
 		if expr == "" {
 			return true, errors.New("@switch expression missing")
 		}
@@ -466,7 +465,7 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 // while bare words after it stay options the way @step has always read them. The
 // name= option is a fallback for a step that opens with an option.
 func parseStepSpec(rest string) (string, directive.Options, error) {
-	if str.Trim(rest) == "" {
+	if strings.TrimSpace(rest) == "" {
 		return "", directive.Options{}, errors.New("@step missing content")
 	}
 	name, tail := directive.CutName(rest)
@@ -493,13 +492,13 @@ func applyStepOpts(step *restfile.WorkflowStep, opts directive.Options) error {
 			switch suf := strings.TrimPrefix(key, "expect."); suf {
 			case "":
 			case "status":
-				if str.Trim(val) == "" {
+				if strings.TrimSpace(val) == "" {
 					errs = append(errs, errors.New("expect.status requires a value"))
 					continue
 				}
 				step.Expect.Status = val
 			case "statuscode":
-				t := str.Trim(val)
+				t := strings.TrimSpace(val)
 				if t == "" {
 					errs = append(errs, errors.New("expect.statuscode requires a value"))
 					continue
@@ -517,7 +516,7 @@ func applyStepOpts(step *restfile.WorkflowStep, opts directive.Options) error {
 				step.Expect.Extra[suf] = val
 			}
 		case strings.HasPrefix(key, "vars."):
-			key = str.Trim(key)
+			key = strings.TrimSpace(key)
 			if key == "" {
 				continue
 			}

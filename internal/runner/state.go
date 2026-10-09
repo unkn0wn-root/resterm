@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const stateFileVersion = 1
@@ -38,7 +39,7 @@ func resolveStatePaths(opts Options, work string) (statePaths, error) {
 	if !usesStateDir(opts) {
 		return statePaths{}, nil
 	}
-	root := str.Trim(opts.StateDir)
+	root := strings.TrimSpace(opts.StateDir)
 	if root == "" {
 		root = defaultStateDir(work)
 	}
@@ -59,7 +60,7 @@ func resolveStatePaths(opts Options, work string) (statePaths, error) {
 // other's globals and tokens. An explicit --state-dir is honoured as given.
 func defaultStateDir(workspace string) string {
 	base := filepath.Join(config.Dir(), "runner")
-	ws := str.Trim(workspace)
+	ws := strings.TrimSpace(workspace)
 	if ws == "" {
 		return base
 	}
@@ -81,7 +82,7 @@ func usesStateDir(opts Options) bool {
 }
 
 func openHistoryStore(paths statePaths, opts Options) history.Store {
-	if !opts.History || str.Trim(paths.History) == "" {
+	if !opts.History || strings.TrimSpace(paths.History) == "" {
 		return nil
 	}
 	return histdb.New(paths.History)
@@ -142,7 +143,7 @@ func readAuthState(path string) (engine.AuthState, error) {
 }
 
 func readStateFile(path string, dst any) error {
-	path = str.Trim(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil
 	}
@@ -177,7 +178,7 @@ func writeAuthState(path string, state engine.AuthState) error {
 }
 
 func writeStateFile(path string, state any) error {
-	path = str.Trim(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil
 	}
@@ -188,5 +189,5 @@ func writeStateFile(path string, state any) error {
 	if err != nil {
 		return err
 	}
-	return str.WriteFileAtomic(path, data, 0o600)
+	return fsx.WriteAtomic(path, data, 0o600)
 }

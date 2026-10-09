@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func parseJSONObject(raw string) (map[string]json.RawMessage, error) {
@@ -59,7 +60,7 @@ func mergeMockJSON(dst, src []byte) ([]byte, error) {
 	}
 
 	var dup []string
-	for _, key := range util.SortedKeys(from) {
+	for _, key := range slices.Sorted(maps.Keys(from)) {
 		if _, seen := into[key]; seen {
 			dup = append(dup, strconv.Quote(key))
 			continue

@@ -14,7 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/http/origin"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 type optionSettingKey string
@@ -213,7 +213,7 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 }
 
 func ParseForwardCredentials(val string) (origin.Set, error) {
-	word := util.LowerTrim(val)
+	word := str.LowerTrim(val)
 	if on, ok := directive.ParseBool(word); ok {
 		if on {
 			return origin.Any(), nil
@@ -238,7 +238,7 @@ func ParseForwardCredentials(val string) (origin.Set, error) {
 }
 
 func parseRedirectLimit(val string) (int, error) {
-	if util.LowerTrim(val) == "none" || directive.IsOff(val) {
+	if str.LowerTrim(val) == "none" || directive.IsOff(val) {
 		return 0, nil
 	}
 	limit, err := strconv.Atoi(strings.TrimSpace(val))

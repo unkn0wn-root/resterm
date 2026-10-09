@@ -11,10 +11,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/prompt"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const helpKeyColumnWidth = 32
@@ -381,7 +381,7 @@ func (m *Model) navigatorFileNode(path string) *navigator.Node[any] {
 		if n == nil || n.Kind != navigator.KindFile {
 			continue
 		}
-		if util.SamePath(n.Payload.FilePath, path) {
+		if fsx.SamePath(n.Payload.FilePath, path) {
 			return n
 		}
 	}

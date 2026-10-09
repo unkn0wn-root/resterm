@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
-	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -697,7 +697,7 @@ func TestNavigatorOpenFileHintClearsWhenRevealingRequestFile(t *testing.T) {
 	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
 		cmd()
 	}
-	if !util.SamePath(m.currentFile, fileB) {
+	if !fsx.SamePath(m.currentFile, fileB) {
 		t.Fatalf("expected editor to reveal %s, got %s", fileB, m.currentFile)
 	}
 	if m.statusMessage.text != "" {
@@ -1169,7 +1169,7 @@ func TestNavigatorRequestEnterSendsFromSidebar(t *testing.T) {
 		)
 	}
 	if sel := m.navigator.Selected(); sel == nil ||
-		!util.SamePath(sel.Payload.FilePath, m.currentFile) {
+		!fsx.SamePath(sel.Payload.FilePath, m.currentFile) {
 		t.Fatalf(
 			"expected navigator selection to target current file, got %v vs %q",
 			sel,
@@ -1609,7 +1609,7 @@ GET https://remote.test
 	m.markDirty()
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	if !util.SamePath(m.currentFile, fileA) {
+	if !fsx.SamePath(m.currentFile, fileA) {
 		t.Fatalf("expected first jump press to keep current file %q, got %q", fileA, m.currentFile)
 	}
 	if !strings.Contains(m.statusMessage.text, "Press l again to jump.") {
@@ -1617,7 +1617,7 @@ GET https://remote.test
 	}
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if !util.SamePath(m.currentFile, fileA) {
+	if !fsx.SamePath(m.currentFile, fileA) {
 		t.Fatalf(
 			"expected enter not to reuse jump confirmation, got current file %q",
 			m.currentFile,
@@ -1650,7 +1650,7 @@ func TestNavigatorCrossFilePreviewConfirmationIsNotReusedForRequestSend(t *testi
 	m.markDirty()
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
-	if !util.SamePath(m.currentFile, fileA) {
+	if !fsx.SamePath(m.currentFile, fileA) {
 		t.Fatalf(
 			"expected first preview press to keep current file %q, got %q",
 			fileA,
@@ -1662,7 +1662,7 @@ func TestNavigatorCrossFilePreviewConfirmationIsNotReusedForRequestSend(t *testi
 	}
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if !util.SamePath(m.currentFile, fileA) {
+	if !fsx.SamePath(m.currentFile, fileA) {
 		t.Fatalf(
 			"expected enter not to reuse preview confirmation, got current file %q",
 			m.currentFile,
@@ -1694,7 +1694,7 @@ func TestNavigatorCrossFileConfirmationIsBoundToSourceBuffer(t *testing.T) {
 	m.markDirty()
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
-	if !util.SamePath(m.currentFile, fileA) {
+	if !fsx.SamePath(m.currentFile, fileA) {
 		t.Fatalf(
 			"expected first preview press to keep current file %q, got %q",
 			fileA,
@@ -1714,7 +1714,7 @@ func TestNavigatorCrossFileConfirmationIsBoundToSourceBuffer(t *testing.T) {
 	m.markDirty()
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
-	if !util.SamePath(m.currentFile, fileC) {
+	if !fsx.SamePath(m.currentFile, fileC) {
 		t.Fatalf(
 			"expected stale confirmation not to open %q, got current file %q",
 			fileB,
@@ -1748,7 +1748,7 @@ func TestNavigatorCrossFileConfirmationIsInvalidatedByFurtherEdits(t *testing.T)
 	m.markDirty()
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
-	if !util.SamePath(m.currentFile, fileA) {
+	if !fsx.SamePath(m.currentFile, fileA) {
 		t.Fatalf(
 			"expected first preview press to keep current file %q, got %q",
 			fileA,
@@ -1761,7 +1761,7 @@ func TestNavigatorCrossFileConfirmationIsInvalidatedByFurtherEdits(t *testing.T)
 	m.editor.SetValue(original)
 	m.markDirty()
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
-	if !util.SamePath(m.currentFile, fileA) {
+	if !fsx.SamePath(m.currentFile, fileA) {
 		t.Fatalf(
 			"expected edited-then-restored buffer to require fresh confirmation, got current file %q",
 			m.currentFile,
@@ -1799,7 +1799,7 @@ func TestNavigatorDirtyJumpWarningClearsAfterConfirmedJump(t *testing.T) {
 	}
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	if !util.SamePath(m.currentFile, fileB) {
+	if !fsx.SamePath(m.currentFile, fileB) {
 		t.Fatalf("expected confirmed jump to open %q, got %q", fileB, m.currentFile)
 	}
 	if m.statusMessage.text != "" {
@@ -1824,7 +1824,7 @@ func TestNavigatorFileOpenRequiresDirtyConfirmation(t *testing.T) {
 	m.markDirty()
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if !util.SamePath(m.currentFile, fileA) {
+	if !fsx.SamePath(m.currentFile, fileA) {
 		t.Fatalf("expected first enter to keep dirty file %q, got %q", fileA, m.currentFile)
 	}
 	if !strings.Contains(m.statusMessage.text, "Press Enter again to open.") {
@@ -1832,7 +1832,7 @@ func TestNavigatorFileOpenRequiresDirtyConfirmation(t *testing.T) {
 	}
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if !util.SamePath(m.currentFile, fileB) {
+	if !fsx.SamePath(m.currentFile, fileB) {
 		t.Fatalf("expected repeated enter to open %q, got %q", fileB, m.currentFile)
 	}
 	if m.dirty {
@@ -1869,7 +1869,7 @@ func TestNavigatorDirtyWarningClearsWhenFileOpenedElsewhere(t *testing.T) {
 	if cmd := m.openFile(fileC); cmd != nil {
 		cmd()
 	}
-	if !util.SamePath(m.currentFile, fileC) {
+	if !fsx.SamePath(m.currentFile, fileC) {
 		t.Fatalf("expected opened file %q, got %q", fileC, m.currentFile)
 	}
 	if m.statusMessage.text != "" {
