@@ -13,7 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const stateFileVersion = 1
@@ -189,5 +189,5 @@ func writeStateFile(path string, state any) error {
 	if err != nil {
 		return err
 	}
-	return str.WriteFileAtomic(path, data, 0o600)
+	return util.WriteFileAtomic(path, data, 0o600)
 }

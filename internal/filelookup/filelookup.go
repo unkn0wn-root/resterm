@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 // FileSystem provides the file reads used during lookup.
@@ -82,7 +82,7 @@ func (l Lookup) Candidates(path string) []string {
 	if l.AllowRaw {
 		out = append(out, path)
 	}
-	return util.DedupeNonEmptyStrings(out)
+	return str.DedupeNonEmptyStrings(out)
 }
 
 // Fatal reports whether a lookup should stop instead of trying another root.

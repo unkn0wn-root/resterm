@@ -3,7 +3,7 @@ package settings
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -29,7 +29,7 @@ func (a Applier) ApplyAll(settings map[string]string) (map[string]string, error)
 	}
 	left := make(map[string]string)
 	for k, v := range settings {
-		key := util.LowerTrim(k)
+		key := str.LowerTrim(k)
 		if key == "" {
 			continue
 		}
@@ -54,9 +54,9 @@ func (a Applier) ApplyAll(settings map[string]string) (map[string]string, error)
 
 func PrefixMatcher(prefixes ...string) Matcher {
 	return func(key string) bool {
-		lower := util.LowerTrim(key)
+		lower := str.LowerTrim(key)
 		for _, p := range prefixes {
-			if strings.HasPrefix(lower, util.LowerTrim(p)) {
+			if strings.HasPrefix(lower, str.LowerTrim(p)) {
 				return true
 			}
 		}

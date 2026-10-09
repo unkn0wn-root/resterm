@@ -7,7 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 // A method has to be followed by whitespace. A word boundary would also match

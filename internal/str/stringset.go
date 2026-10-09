@@ -1,4 +1,4 @@
-package util
+package str
 
 // DedupeNonEmptyStrings returns a copy of values without empty strings or duplicates, preserving order.
 func DedupeNonEmptyStrings(values []string) []string {

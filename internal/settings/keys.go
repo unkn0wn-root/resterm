@@ -3,7 +3,7 @@ package settings
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 var httpSettingKeys = map[string]struct{}{
@@ -24,7 +24,7 @@ var httpSettingKeys = map[string]struct{}{
 
 // IsHTTPKey reports whether key is a supported HTTP setting key.
 func IsHTTPKey(key string) bool {
-	k := util.LowerTrim(key)
+	k := str.LowerTrim(key)
 
 	if _, ok := httpSettingKeys[k]; ok {
 		return true

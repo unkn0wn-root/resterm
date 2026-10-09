@@ -1,6 +1,6 @@
 package runfail
 
-import str "github.com/unkn0wn-root/resterm/internal/util"
+import "github.com/unkn0wn-root/resterm/internal/str"
 
 type Evidence struct {
 	Skipped        bool

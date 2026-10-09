@@ -13,7 +13,7 @@ import (
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 func (b *documentBuilder) handleBlankLine(ln line) bool {

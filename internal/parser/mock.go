@@ -14,7 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/delay"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 func (b *documentBuilder) addMockError(line int, msg string) {
@@ -417,7 +417,7 @@ func (m *mockBuilder) finishResponse(b *documentBuilder, line int) {
 	body := restfile.BodySource{MimeType: m.headers.Get("Content-Type")}
 	if len(m.body) > 0 {
 		file, ok := parseHTTPBodyFile(m.body[0], false)
-		if ok && util.AllBlank(m.body[1:]) {
+		if ok && str.AllBlank(m.body[1:]) {
 			body.FilePath = file
 		} else {
 			body.Text = strings.Join(m.body, "\n")

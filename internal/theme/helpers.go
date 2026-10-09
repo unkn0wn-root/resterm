@@ -2,7 +2,7 @@ package theme
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 func ResolveDefinition(c Catalog, key string, fb Theme) Definition {

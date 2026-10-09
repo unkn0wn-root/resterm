@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 const (

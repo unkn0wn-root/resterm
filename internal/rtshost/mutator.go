@@ -8,7 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/http/query"
 	"github.com/unkn0wn-root/resterm/internal/http/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -43,7 +43,7 @@ func NewMutator(
 func (m *Mutator) Request() *Request { return m.req }
 
 func (m *Mutator) SetMethod(_ diag.Pos, value string) {
-	val := util.UpperTrim(value)
+	val := str.UpperTrim(value)
 	m.out.Method = &val
 	m.req.Method = val
 }

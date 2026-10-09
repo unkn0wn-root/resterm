@@ -6,8 +6,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/theme"
-	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type themeState struct {
