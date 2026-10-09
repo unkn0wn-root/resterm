@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
@@ -153,5 +154,91 @@ func TestHasFailuresMatchesExitCode(t *testing.T) {
 	}
 	if d, s := rep.ExitCode(ExitCodeDetailed), rep.ExitCode(ExitCodeSummary); d != ExitTimeout || s != ExitFailure {
 		t.Fatalf("exit detailed = %d summary = %d, want %d and %d", d, s, ExitTimeout, ExitFailure)
+	}
+}
+
+func TestFailureFollowsTheEvidence(t *testing.T) {
+	ms := time.Millisecond
+	cases := []struct {
+		name string
+		res  Result
+		want *Failure
+	}{
+		{name: "pass", res: Result{Status: StatusPass}},
+		{name: "skip wins", res: Result{Status: StatusSkip, Error: "boom"}},
+		{
+			name: "canceled before error",
+			res:  Result{Canceled: true, Error: "boom"},
+			want: &Failure{Code: FailureCanceled, Message: "canceled", Source: "canceled"},
+		},
+		{
+			name: "error before script error",
+			res:  Result{Error: "context deadline exceeded", ScriptError: "x is not defined"},
+			want: &Failure{Code: FailureTimeout, Message: "context deadline exceeded", Source: "error"},
+		},
+		{
+			name: "script error",
+			res:  Result{ScriptError: "x is not defined"},
+			want: &Failure{Code: FailureScript, Message: "x is not defined", Source: "scriptError"},
+		},
+		{
+			name: "failed test",
+			res:  Result{Tests: []Test{{Name: "ok", Passed: true}, {Name: "status", Message: "want 200"}}},
+			want: &Failure{Code: FailureAssertion, Message: "status: want 200", Source: "tests"},
+		},
+		{
+			name: "trace breach",
+			res:  Result{Trace: &Trace{Breaches: []TraceBreach{{Kind: "total", Over: 5 * ms}}}},
+			want: &Failure{Code: FailureTraceBudget, Message: "trace budget breach total (+5ms)", Source: "trace"},
+		},
+		{
+			name: "status",
+			res:  Result{Status: StatusFail, Summary: "expected 200"},
+			want: &Failure{Code: FailureAssertion, Message: "expected 200", Source: "status"},
+		},
+	}
+	failureOf := func(t *testing.T, v any) *Failure {
+		t.Helper()
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var got struct{ Failure *Failure }
+		if err := json.Unmarshal(b, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got.Failure == nil {
+			return nil
+		}
+		return &Failure{Code: got.Failure.Code, Message: got.Failure.Message, Source: got.Failure.Source}
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := tc.res
+			step := Step{
+				Status:      r.Status,
+				Summary:     r.Summary,
+				Canceled:    r.Canceled,
+				Error:       r.Error,
+				ScriptError: r.ScriptError,
+				Trace:       r.Trace,
+				Tests:       r.Tests,
+			}
+			for _, v := range []any{r, step} {
+				if got := failureOf(t, v); !reflect.DeepEqual(got, tc.want) {
+					t.Fatalf("%T failure = %+v, want %+v", v, got, tc.want)
+				}
+			}
+		})
+	}
+}
+
+func TestFailureCodesEmpty(t *testing.T) {
+	if got := (*Report)(nil).FailureCodes(); got != nil {
+		t.Fatalf("nil report codes = %v, want nil", got)
+	}
+	rep := &Report{Results: []Result{{Status: StatusPass}, {Status: StatusSkip}}}
+	if got := rep.FailureCodes(); got != nil {
+		t.Fatalf("passing report codes = %v, want nil", got)
 	}
 }
