@@ -1,6 +1,8 @@
 package headless
 
 import (
+	"slices"
+
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
@@ -266,15 +268,22 @@ func (f ProfileFailure) model() runfmt.ProfileFailure {
 	}
 }
 
-// Category and exit code are derived from Code, not copied from f.
 func (f *Failure) model() *runfmt.Failure {
 	if f == nil {
 		return nil
 	}
-	out := runfmt.FromFailure(runfail.New(runfail.Code(f.Code), f.Message, f.Source))
+	out := runfmt.FromFailure(f.runFailure())
 	out.Chain = f.Chain
 	out.Frames = f.Frames
 	return out
+}
+
+// Category and exit code are derived from Code, not copied from f.
+func (f *Failure) runFailure() runfail.Failure {
+	if f == nil {
+		return runfail.Failure{}
+	}
+	return runfail.New(runfail.Code(f.Code), f.Message, f.Source)
 }
 
 func (t *Trace) model() *runfmt.Trace {
@@ -304,44 +313,116 @@ func (b *TraceBudget) model() *runfmt.TraceBudget { return (*runfmt.TraceBudget)
 
 func (b TraceBreach) model() runfmt.TraceBreach { return runfmt.TraceBreach(b) }
 
+type outcome struct {
+	status   Status
+	failure  *Failure
+	evidence runfail.Evidence
+}
+
+func (r Result) outcome() outcome {
+	var prof runfail.Failure
+	if r.Profile != nil {
+		if i := slices.IndexFunc(r.Profile.Failures, func(f ProfileFailure) bool { return !f.Warmup }); i >= 0 {
+			prof = r.Profile.Failures[i].Failure.runFailure()
+		}
+	}
+	var step runfail.Failure
+	for _, s := range r.Steps {
+		if step = s.outcome().runFailure(); step.Code != "" {
+			break
+		}
+	}
+	return outcome{
+		status:  r.Status,
+		failure: r.Failure,
+		evidence: runfail.Evidence{
+			Skipped:        r.Status == StatusSkip,
+			Canceled:       r.Canceled,
+			Err:            errorOf(r.Error),
+			ScriptErr:      errorOf(r.ScriptError),
+			StreamErr:      streamErr(r.Stream),
+			Tests:          testFields(r.Tests),
+			Breaches:       breachFields(r.Trace),
+			ProfileFailure: prof,
+			StepFailure:    step,
+			MarkedFailed:   r.Status == StatusFail,
+			Summary:        r.Summary,
+			StatusText:     runfmt.ProtocolStatus((*runfmt.HTTP)(r.HTTP), (*runfmt.GRPC)(r.GRPC)),
+		},
+	}
+}
+
+func (s Step) outcome() outcome {
+	return outcome{
+		status:  s.Status,
+		failure: s.Failure,
+		evidence: runfail.Evidence{
+			Skipped:      s.Status == StatusSkip,
+			Canceled:     s.Canceled,
+			Err:          errorOf(s.Error),
+			ScriptErr:    errorOf(s.ScriptError),
+			StreamErr:    streamErr(s.Stream),
+			Tests:        testFields(s.Tests),
+			Breaches:     breachFields(s.Trace),
+			MarkedFailed: s.Status == StatusFail,
+			Summary:      s.Summary,
+			StatusText:   runfmt.ProtocolStatus((*runfmt.HTTP)(s.HTTP), (*runfmt.GRPC)(s.GRPC)),
+		},
+	}
+}
+
+// skip wins, otherwise any failure evidence makes the result fail.
+func (o outcome) effectiveStatus() Status {
+	if o.status == StatusSkip {
+		return StatusSkip
+	}
+	if o.runFailure().Code != "" {
+		return StatusFail
+	}
+	return StatusPass
+}
+
+func (o outcome) runFailure() runfail.Failure {
+	if o.failure != nil {
+		return o.failure.runFailure()
+	}
+	return runfail.FromEvidence(o.evidence)
+}
+
 func (o outcome) failureModel() *runfmt.Failure {
 	if o.failure != nil {
 		return o.failure.model()
 	}
-	if o.effectiveStatus() != StatusFail {
+	return runfmt.FromFailure(runfail.FromEvidence(o.evidence))
+}
+
+func errorOf(s string) error {
+	if s == "" {
 		return nil
 	}
-	var f runfail.Failure
-	switch {
-	case o.canceled:
-		f = runfail.Canceled("canceled", "canceled")
-	case o.err != "":
-		f = runfail.FromErrorSource(textError(o.err), "error")
-	case o.scriptErr != "":
-		f = runfail.Script(o.scriptErr, "scriptError")
-	case streamFailed(o.stream):
-		f = runfail.FromErrorSource(textError(o.stream.Error), "stream")
-	case anyTestFailed(o.tests):
-		msg := runfail.FirstTestFailureMessage(o.tests, func(t Test) runfail.TestFailureFields {
-			return runfail.TestFailureFields{Name: t.Name, Message: t.Message, Passed: t.Passed}
-		})
-		f = runfail.Assertion(msg, "tests")
-	case traceFailed(o.trace):
-		msg := runfail.FirstTraceBudgetBreachMessage(
-			o.trace.Breaches,
-			func(b TraceBreach) runfail.TraceBudgetBreachFields { return runfail.TraceBudgetBreachFields(b) },
-		)
-		f = runfail.TraceBudget(msg)
-	default:
-		if mf := measuredFailure(o.profile); mf != nil {
-			return mf.model()
-		}
-		if st := failedStep(o.steps); st != nil {
-			return st.outcome().failureModel()
-		}
-		f = runfail.Assertion(o.summary, "status")
+	return textError(s)
+}
+
+func streamErr(s *Stream) error {
+	if s == nil {
+		return nil
 	}
-	return runfmt.FromFailure(f)
+	return errorOf(s.Error)
+}
+
+func testFields(tests []Test) []runfail.TestFailureFields {
+	return convert(tests, func(t Test) runfail.TestFailureFields {
+		return runfail.TestFailureFields{Name: t.Name, Message: t.Message, Passed: t.Passed}
+	})
+}
+
+func breachFields(t *Trace) []runfail.TraceBudgetBreachFields {
+	if t == nil {
+		return nil
+	}
+	return convert(t.Breaches, func(b TraceBreach) runfail.TraceBudgetBreachFields {
+		return runfail.TraceBudgetBreachFields(b)
+	})
 }
 
 type textError string

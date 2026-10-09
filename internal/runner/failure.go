@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
@@ -13,62 +12,42 @@ func resultFailure(res Result) runfail.Failure {
 	if res.Failure.Code != "" {
 		return res.Failure
 	}
-	if res.Skipped {
-		return runfail.Failure{}
+	var prof runfail.Failure
+	if f, ok := res.Profile.measuredFailure(); ok {
+		prof = f.Failure
 	}
-	switch {
-	case res.Canceled:
-		return runfail.Canceled("canceled", "canceled")
-	case res.Err != nil:
-		return runfail.FromErrorSource(res.Err, "error")
-	case res.ScriptErr != nil:
-		return runfail.Script(res.ScriptErr.Error(), "scriptError")
-	case streamFailed(res.Stream):
-		return runfail.FromErrorSource(res.Stream.Err, "stream")
-	case anyScriptTestFailed(res.Tests):
-		return runfail.Assertion(scriptTestFailureMessage(res.Tests), "tests")
-	case traceFailed(res.Trace):
-		return runfail.TraceBudget(traceBreachMessage(res.Trace))
-	}
-	if f, ok := res.Profile.measuredFailure(); ok && f.Failure.Code != "" {
-		return f.Failure
-	}
-	if f := firstStepFailure(res.Steps); f.Code != "" {
-		return f
-	}
-	if res.Passed {
-		return runfail.Failure{}
-	}
-	msg := str.FirstTrimmed(res.Summary, protocolStatusText(res.Response, res.GRPC))
-	return runfail.Assertion(msg, "status")
+	return runfail.FromEvidence(runfail.Evidence{
+		Skipped:        res.Skipped,
+		Canceled:       res.Canceled,
+		Err:            res.Err,
+		ScriptErr:      res.ScriptErr,
+		StreamErr:      streamErr(res.Stream),
+		Tests:          testFields(res.Tests),
+		Breaches:       breachFields(res.Trace),
+		ProfileFailure: prof,
+		StepFailure:    firstStepFailure(res.Steps),
+		MarkedFailed:   !res.Passed,
+		Summary:        res.Summary,
+		StatusText:     protocolStatusText(res.Response, res.GRPC),
+	})
 }
 
 func stepFailure(step StepResult) runfail.Failure {
 	if step.Failure.Code != "" {
 		return step.Failure
 	}
-	if step.Skipped {
-		return runfail.Failure{}
-	}
-	switch {
-	case step.Canceled:
-		return runfail.Canceled("canceled", "canceled")
-	case step.Err != nil:
-		return runfail.FromErrorSource(step.Err, "error")
-	case step.ScriptErr != nil:
-		return runfail.Script(step.ScriptErr.Error(), "scriptError")
-	case streamFailed(step.Stream):
-		return runfail.FromErrorSource(step.Stream.Err, "stream")
-	case anyScriptTestFailed(step.Tests):
-		return runfail.Assertion(scriptTestFailureMessage(step.Tests), "tests")
-	case traceFailed(step.Trace):
-		return runfail.TraceBudget(traceBreachMessage(step.Trace))
-	case step.Passed:
-		return runfail.Failure{}
-	default:
-		msg := str.FirstTrimmed(step.Summary, protocolStatusText(step.Response, step.GRPC))
-		return runfail.Assertion(msg, "status")
-	}
+	return runfail.FromEvidence(runfail.Evidence{
+		Skipped:      step.Skipped,
+		Canceled:     step.Canceled,
+		Err:          step.Err,
+		ScriptErr:    step.ScriptErr,
+		StreamErr:    streamErr(step.Stream),
+		Tests:        testFields(step.Tests),
+		Breaches:     breachFields(step.Trace),
+		MarkedFailed: !step.Passed,
+		Summary:      step.Summary,
+		StatusText:   protocolStatusText(step.Response, step.GRPC),
+	})
 }
 
 func firstStepFailure(steps []StepResult) runfail.Failure {
@@ -80,43 +59,39 @@ func firstStepFailure(steps []StepResult) runfail.Failure {
 	return runfail.Failure{}
 }
 
-func anyScriptTestFailed(tests []scripts.TestResult) bool {
+func streamErr(info *StreamInfo) error {
+	if info == nil {
+		return nil
+	}
+	return info.Err
+}
+
+func testFields(tests []scripts.TestResult) []runfail.TestFailureFields {
+	out := make([]runfail.TestFailureFields, 0, len(tests))
 	for _, test := range tests {
-		if !test.Passed {
-			return true
-		}
+		out = append(out, runfail.TestFailureFields{
+			Name:    str.Trim(test.Name),
+			Message: str.Trim(test.Message),
+			Passed:  test.Passed,
+		})
 	}
-	return false
+	return out
 }
 
-func scriptTestFailureMessage(tests []scripts.TestResult) string {
-	return runfail.FirstTestFailureMessage(
-		tests,
-		func(test scripts.TestResult) runfail.TestFailureFields {
-			return runfail.TestFailureFields{
-				Name:    str.Trim(test.Name),
-				Message: str.Trim(test.Message),
-				Passed:  test.Passed,
-			}
-		},
-	)
-}
-
-func traceBreachMessage(info *TraceInfo) string {
+func breachFields(info *TraceInfo) []runfail.TraceBudgetBreachFields {
 	if info == nil || info.Summary == nil {
-		return "trace budget breached"
+		return nil
 	}
-	return runfail.FirstTraceBudgetBreachMessage(
-		info.Summary.Breaches,
-		func(breach history.TraceBreach) runfail.TraceBudgetBreachFields {
-			return runfail.TraceBudgetBreachFields{
-				Kind:   str.Trim(breach.Kind),
-				Limit:  breach.Limit,
-				Actual: breach.Actual,
-				Over:   breach.Over,
-			}
-		},
-	)
+	out := make([]runfail.TraceBudgetBreachFields, 0, len(info.Summary.Breaches))
+	for _, breach := range info.Summary.Breaches {
+		out = append(out, runfail.TraceBudgetBreachFields{
+			Kind:   str.Trim(breach.Kind),
+			Limit:  breach.Limit,
+			Actual: breach.Actual,
+			Over:   breach.Over,
+		})
+	}
+	return out
 }
 
 func protocolStatusText(http *httpx.Response, grpc *grpcx.Response) string {

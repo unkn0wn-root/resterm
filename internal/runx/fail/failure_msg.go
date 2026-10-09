@@ -8,17 +8,6 @@ type TestFailureFields struct {
 	Passed  bool
 }
 
-func FirstTestFailureMessage[T any](tests []T, fields func(T) TestFailureFields) string {
-	for _, t := range tests {
-		g := fields(t)
-		if g.Passed {
-			continue
-		}
-		return TestFailureMessage(g.Name, g.Message)
-	}
-	return "test failed"
-}
-
 func TestFailureMessage(name, message string) string {
 	switch {
 	case name != "" && message != "":
@@ -37,17 +26,6 @@ type TraceBudgetBreachFields struct {
 	Limit  time.Duration
 	Actual time.Duration
 	Over   time.Duration
-}
-
-func FirstTraceBudgetBreachMessage[T any](
-	breaches []T,
-	fields func(T) TraceBudgetBreachFields,
-) string {
-	if len(breaches) == 0 {
-		return "trace budget breached"
-	}
-	f := fields(breaches[0])
-	return TraceBudgetBreachMessage(f.Kind, f.Limit, f.Actual, f.Over)
 }
 
 func TraceBudgetBreachMessage(kind string, limit, actual, over time.Duration) string {

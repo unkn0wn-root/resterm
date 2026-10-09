@@ -109,7 +109,7 @@ func stepName(step Step) string {
 	return "<step>"
 }
 
-func protocolStatus(http *HTTP, grpc *GRPC) string {
+func ProtocolStatus(http *HTTP, grpc *GRPC) string {
 	switch {
 	case http != nil:
 		return http.Status
@@ -126,11 +126,11 @@ func protocolStatus(http *HTTP, grpc *GRPC) string {
 }
 
 func resultStatus(res Result) string {
-	return protocolStatus(res.HTTP, res.GRPC)
+	return ProtocolStatus(res.HTTP, res.GRPC)
 }
 
 func stepStatus(step Step) string {
-	return protocolStatus(step.HTTP, step.GRPC)
+	return ProtocolStatus(step.HTTP, step.GRPC)
 }
 
 func resultLine(res Result) string {

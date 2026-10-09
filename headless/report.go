@@ -136,22 +136,6 @@ func (r Result) Failed() bool {
 	return r.outcome().effectiveStatus() == StatusFail
 }
 
-func (r Result) outcome() outcome {
-	return outcome{
-		status:    r.Status,
-		summary:   r.Summary,
-		canceled:  r.Canceled,
-		err:       r.Error,
-		scriptErr: r.ScriptError,
-		failure:   r.Failure,
-		stream:    r.Stream,
-		trace:     r.Trace,
-		tests:     r.Tests,
-		profile:   r.Profile,
-		steps:     r.Steps,
-	}
-}
-
 // Step contains one workflow or compare step result.
 type Step struct {
 	Name                 string
@@ -188,87 +172,6 @@ func (s Step) MarshalJSON() ([]byte, error) {
 // Failed reports whether the step represents a failure.
 func (s Step) Failed() bool {
 	return s.outcome().effectiveStatus() == StatusFail
-}
-
-func (s Step) outcome() outcome {
-	return outcome{
-		status:    s.Status,
-		summary:   s.Summary,
-		canceled:  s.Canceled,
-		err:       s.Error,
-		scriptErr: s.ScriptError,
-		failure:   s.Failure,
-		stream:    s.Stream,
-		trace:     s.Trace,
-		tests:     s.Tests,
-	}
-}
-
-// outcome applies the runner's failure rules from internal/runner/failure.go.
-type outcome struct {
-	status    Status
-	summary   string
-	canceled  bool
-	err       string
-	scriptErr string
-	failure   *Failure
-	stream    *Stream
-	trace     *Trace
-	tests     []Test
-	profile   *Profile
-	steps     []Step
-}
-
-// skip wins, otherwise any failure evidence makes the result fail.
-func (o outcome) effectiveStatus() Status {
-	if o.status == StatusSkip {
-		return StatusSkip
-	}
-	failed := o.failure != nil || o.canceled || o.err != "" || o.scriptErr != "" ||
-		streamFailed(o.stream) || anyTestFailed(o.tests) || traceFailed(o.trace) ||
-		measuredFailure(o.profile) != nil || failedStep(o.steps) != nil
-	if o.status == StatusFail || failed {
-		return StatusFail
-	}
-	return StatusPass
-}
-
-func streamFailed(stream *Stream) bool {
-	return stream != nil && stream.Error != ""
-}
-
-func measuredFailure(prof *Profile) *Failure {
-	if prof == nil {
-		return nil
-	}
-	for _, f := range prof.Failures {
-		if !f.Warmup && f.Failure != nil {
-			return f.Failure
-		}
-	}
-	return nil
-}
-
-func failedStep(steps []Step) *Step {
-	for i := range steps {
-		if steps[i].Failed() {
-			return &steps[i]
-		}
-	}
-	return nil
-}
-
-func traceFailed(trace *Trace) bool {
-	return trace != nil && len(trace.Breaches) > 0
-}
-
-func anyTestFailed(tests []Test) bool {
-	for _, test := range tests {
-		if !test.Passed {
-			return true
-		}
-	}
-	return false
 }
 
 // HTTP contains HTTP response summary fields.
