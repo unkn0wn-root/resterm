@@ -1,7 +1,7 @@
 package sqlite
 
 import (
-	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -13,12 +13,7 @@ import (
 )
 
 func (s *Store) ExportJSON(path string) (int, error) {
-	if _, err := s.handle(); err != nil {
-		return 0, err
-	}
-
-	var err error
-	path, err = cleanPath(path, "export history")
+	path, err := cleanPath(path, "export history")
 	if err != nil {
 		return 0, err
 	}
@@ -28,7 +23,7 @@ func (s *Store) ExportJSON(path string) (int, error) {
 		return 0, err
 	}
 
-	data, err := enc(es)
+	data, err := json.Marshal(es)
 	if err != nil {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "encode history export")
 	}
@@ -61,7 +56,7 @@ func (s *Store) ImportJSON(path string) (int, error) {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "parse history import")
 	}
 
-	tx, err := db.BeginTx(context.Background(), nil)
+	tx, err := db.Begin()
 	if err != nil {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "begin history import tx")
 	}
@@ -75,7 +70,7 @@ func (s *Store) ImportJSON(path string) (int, error) {
 		}
 		// Import replaces by ID so a fresh export can correct stale rows
 		// without asking users to clean the database first.
-		if _, err = insertRow(tx, qReplace, &r); err != nil {
+		if _, err = tx.Exec(qReplace, r.args()...); err != nil {
 			return 0, diag.WrapAs(diag.ClassHistory, err, "insert imported history row")
 		}
 		n++
@@ -137,7 +132,7 @@ func (s *Store) Backup(path string) error {
 func cleanPath(path string, op string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return "", diag.WrapAsf(diag.ClassHistory, errors.New("empty path"), "%s", op)
+		return "", diag.WrapAs(diag.ClassHistory, errors.New("empty path"), op)
 	}
 	return filepath.Clean(path), nil
 }

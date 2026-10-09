@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -95,7 +96,7 @@ func (s *Store) Append(e history.Entry) error {
 		return err
 	}
 
-	if _, err = insertRow(db, qReplace, &r); err != nil {
+	if _, err = db.Exec(qReplace, r.args()...); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "insert history row")
 	}
 	return nil
@@ -132,10 +133,6 @@ func (s *Store) ByWorkflow(name string) ([]history.Entry, error) {
 }
 
 func (s *Store) ByFile(path string) ([]history.Entry, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil, nil
-	}
 	n := history.NormPath(path)
 	if n == "" {
 		return nil, nil
@@ -170,11 +167,10 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 		id, id_num, exec_ns, env, env_sel_json, req_name, file_path, method, url, status, status_code, dur_ns,
 		snippet, req_text, descr, tags_json, prof_json, trace_json, cmp_json
 	FROM hist`
-	if strings.TrimSpace(where) != "" {
+	if where != "" {
 		q += " " + where
 	}
-	// This ordering is shared across list and migration paths so
-	// every caller sees the same history precedence for tied timestamps.
+	// Every list uses this order. When times tie, the IDs decide.
 	q += ` ORDER BY exec_ns DESC, id_num DESC, id DESC`
 
 	rs, err := db.Query(q, args...)
@@ -304,31 +300,31 @@ func mkRow(e history.Entry) (row, error) {
 
 	var err error
 	if len(e.EnvironmentSelection) > 0 {
-		r.envSelJSON, err = enc(e.EnvironmentSelection)
+		r.envSelJSON, err = json.Marshal(e.EnvironmentSelection)
 		if err != nil {
 			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode environment selection")
 		}
 	}
 	if len(e.Tags) > 0 {
-		r.tagsJSON, err = enc(e.Tags)
+		r.tagsJSON, err = json.Marshal(e.Tags)
 		if err != nil {
 			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history tags")
 		}
 	}
 	if e.ProfileResults != nil {
-		r.profJSON, err = enc(e.ProfileResults)
+		r.profJSON, err = json.Marshal(e.ProfileResults)
 		if err != nil {
 			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history profile")
 		}
 	}
 	if e.Trace != nil {
-		r.traceJSON, err = enc(e.Trace)
+		r.traceJSON, err = json.Marshal(e.Trace)
 		if err != nil {
 			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history trace")
 		}
 	}
 	if e.Compare != nil {
-		r.cmpJSON, err = enc(e.Compare)
+		r.cmpJSON, err = json.Marshal(e.Compare)
 		if err != nil {
 			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history compare")
 		}
@@ -366,14 +362,6 @@ func (r *row) args() []any {
 		r.method, r.url, r.status, r.statusCode, r.durNs, r.snippet,
 		r.reqText, r.descr, r.tagsJSON, r.profJSON, r.traceJSON, r.cmpJSON,
 	}
-}
-
-type execer interface {
-	Exec(query string, args ...any) (sql.Result, error)
-}
-
-func insertRow(db execer, q string, r *row) (sql.Result, error) {
-	return db.Exec(q, r.args()...)
 }
 
 func parseIDNum(id string) int64 {
@@ -433,9 +421,8 @@ func (s *Store) openWithRecover() (*sql.DB, *RecoverInfo, error) {
 		return db, nil, nil
 	}
 	cause := err
-	// Recovery only runs when the file exists and the failure strongly
-	// looks like corruption, so regular open errors still surface.
-	if !shouldRecover(s.p, err) {
+	// Recovery only runs when the failure strongly looks like corruption, so regular open errors still surface.
+	if !isCorruptErr(err) {
 		return nil, nil, err
 	}
 
@@ -474,11 +461,8 @@ func openReadyDB(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassHistory, err, "open history db")
 	}
-	// SQLite behaves best here with a single connection because writes
-	// are serialized and this avoids avoidable lock contention.
+	// One connection serializes writes and keeps the pragmas, which are set per connection.
 	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(0)
 
 	if err := migrateSchema(db); err != nil {
 		_ = db.Close()
@@ -517,19 +501,7 @@ func makePrivate(path string) {
 	}
 }
 
-func shouldRecover(path string, err error) bool {
-	if !isCorruptErr(err) {
-		return false
-	}
-	_, stErr := os.Stat(path)
-	return stErr == nil
-}
-
 func isCorruptErr(err error) bool {
-	if err == nil {
-		return false
-	}
-
 	var integErr *integrityCheckError
 	if errors.As(err, &integErr) {
 		return true

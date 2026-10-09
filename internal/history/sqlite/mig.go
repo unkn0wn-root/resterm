@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"errors"
 	"os"
@@ -33,7 +32,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 	}
 	path = filepath.Clean(path)
 
-	tx, err := db.BeginTx(context.Background(), nil)
+	tx, err := db.Begin()
 	if err != nil {
 		return 0, diag.WrapAs(diag.ClassHistory, err, "begin history migration tx")
 	}
@@ -77,7 +76,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 				}
 				// Duplicate IDs from legacy data are ignored so one bad file does
 				// not abort the whole migration transaction.
-				res, err := insertRow(tx, qIgnore, &r)
+				res, err := tx.Exec(qIgnore, r.args()...)
 				if err != nil {
 					return 0, diag.WrapAs(diag.ClassHistory, err, "insert migrated history row")
 				}
