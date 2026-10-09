@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"errors"
 	"os"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -47,14 +48,23 @@ func (s *Store) Compact() error {
 	if err != nil {
 		return err
 	}
-	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
-		return diag.WrapAs(diag.ClassHistory, err, "checkpoint history db")
-	}
 	if _, err := db.Exec(`VACUUM;`); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "compact history db")
 	}
 	if _, err := db.Exec(`PRAGMA optimize;`); err != nil {
 		return diag.WrapAs(diag.ClassHistory, err, "optimize history db")
+	}
+	// In WAL mode VACUUM goes through the WAL. The file itself only shrinks at the checkpoint.
+	var busy, logFrames, checkpointed int
+	if err := db.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE);`).Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return diag.WrapAs(diag.ClassHistory, err, "checkpoint history db")
+	}
+	if busy != 0 {
+		return diag.WrapAs(
+			diag.ClassHistory,
+			errors.New("another process is using the history db, so its file did not shrink. Try again later"),
+			"checkpoint history db",
+		)
 	}
 	return nil
 }
