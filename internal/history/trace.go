@@ -97,17 +97,15 @@ func NewTraceSummary(tl *nettrace.Timeline, rep *nettrace.Report) *TraceSummary 
 		Error:     tl.Err,
 		Details:   traceDetailsFromTimeline(tl.Details),
 	}
-	if len(tl.Phases) == 0 {
-		return summary
-	}
-
-	summary.Phases = make([]TracePhase, len(tl.Phases))
-	for i, phase := range tl.Phases {
-		summary.Phases[i] = TracePhase{
-			Kind:     string(phase.Kind),
-			Duration: phase.Duration,
-			Error:    phase.Err,
-			Meta:     TracePhaseMeta(phase.Meta),
+	if len(tl.Phases) > 0 {
+		summary.Phases = make([]TracePhase, len(tl.Phases))
+		for i, phase := range tl.Phases {
+			summary.Phases[i] = TracePhase{
+				Kind:     string(phase.Kind),
+				Duration: phase.Duration,
+				Error:    phase.Err,
+				Meta:     TracePhaseMeta(phase.Meta),
+			}
 		}
 	}
 

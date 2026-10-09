@@ -299,3 +299,21 @@ func TestTraceSummaryDoesNotShareSlices(t *testing.T) {
 		t.Fatal("the rebuilt timeline shares slices with the summary")
 	}
 }
+
+func TestNewTraceSummaryKeepsBudgetWithoutPhases(t *testing.T) {
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	tl := &nettrace.Timeline{
+		Started:   at,
+		Completed: at.Add(2 * time.Second),
+		Duration:  2 * time.Second,
+		Err:       "context canceled",
+	}
+	rep := nettrace.NewReport(tl, nettrace.Budget{Total: time.Second})
+	if len(rep.BudgetReport.Breaches) == 0 {
+		t.Fatal("the fixture should breach its total budget")
+	}
+	sum := NewTraceSummary(tl, rep)
+	if sum.Budgets == nil || sum.Budgets.Total != time.Second || len(sum.Breaches) != len(rep.BudgetReport.Breaches) {
+		t.Fatalf("summary budget = %+v, breaches = %+v, want the report's", sum.Budgets, sum.Breaches)
+	}
+}
