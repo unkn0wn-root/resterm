@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +40,12 @@ func TestWriteFileAtomicMissingDir(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "missing", "out.json")
 	if err := WriteFileAtomic(p, []byte("x"), 0o600); err == nil {
 		t.Fatal("expected an error for a missing directory")
+	}
+}
+
+func TestWriteFileAtomicLongName(t *testing.T) {
+	p := filepath.Join(t.TempDir(), strings.Repeat("a", 245)+".json")
+	if err := WriteFileAtomic(p, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write %d-char name: %v", len(filepath.Base(p)), err)
 	}
 }

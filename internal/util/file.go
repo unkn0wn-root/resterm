@@ -9,7 +9,7 @@ import (
 // The file gets perm even if path already existed.
 // A symlink at path is replaced, not followed.
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	f, err := os.CreateTemp(filepath.Dir(path), ".resterm-*.tmp")
 	if err != nil {
 		return err
 	}
