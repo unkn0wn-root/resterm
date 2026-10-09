@@ -9,8 +9,12 @@ import (
 )
 
 func reportFromRunner(src *runner.Report) *Report {
-	m := runner.ReportModel(src)
-	out := &Report{
+	rep := newReport(runner.ReportModel(src))
+	return &rep
+}
+
+func newReport(m runfmt.Report) Report {
+	out := Report{
 		SchemaVersion:        m.SchemaVersion,
 		Version:              m.Version,
 		FilePath:             m.FilePath,
@@ -51,14 +55,14 @@ func newResult(m runfmt.Result) Result {
 		ErrorDetail:          rendered(m.ErrorDetail),
 		ScriptError:          m.ScriptError,
 		ScriptErrorDetail:    rendered(m.ScriptErrorDetail),
-		Failure:              newFailure(m.Failure),
+		Failure:              ptr(m.Failure, newFailure),
 		HTTP:                 (*HTTP)(m.HTTP),
 		GRPC:                 (*GRPC)(m.GRPC),
-		Stream:               (*Stream)(m.Stream),
-		Trace:                newTrace(m.Trace),
-		Tests:                convert(m.Tests, func(t runfmt.Test) Test { return Test(t) }),
+		Stream:               ptr(m.Stream, newStream),
+		Trace:                ptr(m.Trace, newTrace),
+		Tests:                convert(m.Tests, newTest),
 		Compare:              (*Compare)(m.Compare),
-		Profile:              newProfile(m.Profile),
+		Profile:              ptr(m.Profile, newProfile),
 		Steps:                convert(m.Steps, newStep),
 	}
 }
@@ -83,20 +87,17 @@ func newStep(m runfmt.Step) Step {
 		ErrorDetail:          rendered(m.ErrorDetail),
 		ScriptError:          m.ScriptError,
 		ScriptErrorDetail:    rendered(m.ScriptErrorDetail),
-		Failure:              newFailure(m.Failure),
+		Failure:              ptr(m.Failure, newFailure),
 		HTTP:                 (*HTTP)(m.HTTP),
 		GRPC:                 (*GRPC)(m.GRPC),
-		Stream:               (*Stream)(m.Stream),
-		Trace:                newTrace(m.Trace),
-		Tests:                convert(m.Tests, func(t runfmt.Test) Test { return Test(t) }),
+		Stream:               ptr(m.Stream, newStream),
+		Trace:                ptr(m.Trace, newTrace),
+		Tests:                convert(m.Tests, newTest),
 	}
 }
 
-func newProfile(m *runfmt.Profile) *Profile {
-	if m == nil {
-		return nil
-	}
-	return &Profile{
+func newProfile(m runfmt.Profile) Profile {
+	return Profile{
 		Count:          m.Count,
 		Warmup:         m.Warmup,
 		Delay:          m.Delay,
@@ -104,9 +105,9 @@ func newProfile(m *runfmt.Profile) *Profile {
 		WarmupRuns:     m.WarmupRuns,
 		SuccessfulRuns: m.SuccessfulRuns,
 		FailedRuns:     m.FailedRuns,
-		Latency:        (*Latency)(m.Latency),
-		Percentiles:    convert(m.Percentiles, func(p runfmt.Percentile) Percentile { return Percentile(p) }),
-		Histogram:      convert(m.Histogram, func(b runfmt.HistBin) HistBin { return HistBin(b) }),
+		Latency:        ptr(m.Latency, newLatency),
+		Percentiles:    convert(m.Percentiles, newPercentile),
+		Histogram:      convert(m.Histogram, newHistBin),
 		Failures:       convert(m.Failures, newProfileFailure),
 	}
 }
@@ -119,15 +120,12 @@ func newProfileFailure(m runfmt.ProfileFailure) ProfileFailure {
 		Status:     m.Status,
 		StatusCode: m.StatusCode,
 		Duration:   m.Duration,
-		Failure:    newFailure(m.Failure),
+		Failure:    ptr(m.Failure, newFailure),
 	}
 }
 
-func newFailure(m *runfmt.Failure) *Failure {
-	if m == nil {
-		return nil
-	}
-	return &Failure{
+func newFailure(m runfmt.Failure) Failure {
+	return Failure{
 		Code:     FailureCode(m.Code),
 		Category: FailureCategory(m.Category),
 		ExitCode: m.ExitCode,
@@ -138,18 +136,29 @@ func newFailure(m *runfmt.Failure) *Failure {
 	}
 }
 
-func newTrace(m *runfmt.Trace) *Trace {
-	if m == nil {
-		return nil
-	}
-	return &Trace{
+func newTrace(m runfmt.Trace) Trace {
+	return Trace{
 		Duration:     m.Duration,
 		Error:        m.Error,
-		Budget:       (*TraceBudget)(m.Budget),
-		Breaches:     convert(m.Breaches, func(b runfmt.TraceBreach) TraceBreach { return TraceBreach(b) }),
+		Budget:       ptr(m.Budget, newTraceBudget),
+		Breaches:     convert(m.Breaches, newTraceBreach),
 		ArtifactPath: m.ArtifactPath,
 	}
 }
+
+func newTest(m runfmt.Test) Test { return Test(m) }
+
+func newLatency(m runfmt.Latency) Latency { return Latency(m) }
+
+func newPercentile(m runfmt.Percentile) Percentile { return Percentile(m) }
+
+func newHistBin(m runfmt.HistBin) HistBin { return HistBin(m) }
+
+func newStream(m runfmt.Stream) Stream { return Stream(m) }
+
+func newTraceBudget(m runfmt.TraceBudget) TraceBudget { return TraceBudget(m) }
+
+func newTraceBreach(m runfmt.TraceBreach) TraceBreach { return TraceBreach(m) }
 
 // The writers only read the model, so it shares the report's maps and slices.
 func (r *Report) model() runfmt.Report {
@@ -455,6 +464,14 @@ func rendered(d *runfmt.ErrorDetail) string {
 		return ""
 	}
 	return d.Rendered
+}
+
+func ptr[S, D any](src *S, f func(S) D) *D {
+	if src == nil {
+		return nil
+	}
+	out := f(*src)
+	return &out
 }
 
 func convert[S, D any](src []S, f func(S) D) []D {

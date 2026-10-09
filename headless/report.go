@@ -1,9 +1,6 @@
 package headless
 
-import (
-	"encoding/json"
-	"time"
-)
+import "time"
 
 // Kind identifies the executed result type.
 type Kind string
@@ -92,11 +89,6 @@ func (r *Report) HasFailures() bool {
 	return r.ExitCode(ExitCodeSummary) != ExitPass
 }
 
-// MarshalJSON writes the canonical report JSON format.
-func (r Report) MarshalJSON() ([]byte, error) {
-	return json.Marshal(r.model())
-}
-
 // Result contains one executed request, workflow, compare run, or profile run.
 type Result struct {
 	Kind                 Kind
@@ -124,11 +116,6 @@ type Result struct {
 	Compare              *Compare
 	Profile              *Profile
 	Steps                []Step
-}
-
-// MarshalJSON writes the canonical result JSON format.
-func (r Result) MarshalJSON() ([]byte, error) {
-	return json.Marshal(r.model())
 }
 
 // Failed reports whether the result failed. A failed step, profile run or stream counts too.
@@ -164,11 +151,6 @@ type Step struct {
 	Tests                []Test
 }
 
-// MarshalJSON writes the canonical step JSON format.
-func (s Step) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.model())
-}
-
 // Failed reports whether the step represents a failure.
 func (s Step) Failed() bool {
 	return s.outcome().effectiveStatus() == StatusFail
@@ -197,11 +179,6 @@ type Test struct {
 	Elapsed time.Duration
 }
 
-// MarshalJSON writes the test the way it appears in the report JSON.
-func (t Test) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.model())
-}
-
 // Compare contains compare-run summary fields.
 type Compare struct {
 	Baseline string `json:"baseline,omitempty"`
@@ -223,11 +200,6 @@ type Profile struct {
 	Failures       []ProfileFailure
 }
 
-// MarshalJSON writes the profile the way it appears in the report JSON.
-func (p Profile) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.model())
-}
-
 // ProfileFailure contains one failed profile iteration.
 type ProfileFailure struct {
 	Iteration  int
@@ -237,11 +209,6 @@ type ProfileFailure struct {
 	StatusCode int
 	Duration   time.Duration
 	Failure    *Failure
-}
-
-// MarshalJSON writes the profile failure the way it appears in the report JSON.
-func (p ProfileFailure) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.model())
 }
 
 // Latency contains aggregate profile latency statistics.
@@ -254,20 +221,10 @@ type Latency struct {
 	StdDev time.Duration
 }
 
-// MarshalJSON writes the latency the way it appears in the report JSON.
-func (l Latency) MarshalJSON() ([]byte, error) {
-	return json.Marshal(l.model())
-}
-
 // Percentile contains one profile percentile.
 type Percentile struct {
 	Percentile int
 	Value      time.Duration
-}
-
-// MarshalJSON writes the percentile the way it appears in the report JSON.
-func (p Percentile) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.model())
 }
 
 // HistBin contains one profile histogram bin.
@@ -275,11 +232,6 @@ type HistBin struct {
 	From  time.Duration
 	To    time.Duration
 	Count int
-}
-
-// MarshalJSON writes the bin the way it appears in the report JSON.
-func (h HistBin) MarshalJSON() ([]byte, error) {
-	return json.Marshal(h.model())
 }
 
 // Stream contains streaming response metadata.
@@ -291,11 +243,6 @@ type Stream struct {
 	Error          string
 }
 
-// MarshalJSON writes the stream the way it appears in the report JSON.
-func (s Stream) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.model())
-}
-
 // Trace contains trace summary metadata.
 type Trace struct {
 	Duration     time.Duration
@@ -305,21 +252,11 @@ type Trace struct {
 	ArtifactPath string
 }
 
-// MarshalJSON writes the trace the way it appears in the report JSON.
-func (t Trace) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.model())
-}
-
 // TraceBudget contains trace budget limits.
 type TraceBudget struct {
 	Total     time.Duration
 	Tolerance time.Duration
 	Phases    map[string]time.Duration
-}
-
-// MarshalJSON writes the budget the way it appears in the report JSON.
-func (t TraceBudget) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.model())
 }
 
 // TraceBreach contains one trace budget breach.
@@ -328,9 +265,4 @@ type TraceBreach struct {
 	Limit  time.Duration
 	Actual time.Duration
 	Over   time.Duration
-}
-
-// MarshalJSON writes the breach the way it appears in the report JSON.
-func (t TraceBreach) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.model())
 }

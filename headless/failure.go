@@ -1,8 +1,6 @@
 package headless
 
 import (
-	"encoding/json"
-
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
@@ -81,11 +79,6 @@ type Failure struct {
 	Source   string
 	Chain    []FailureChain
 	Frames   []FailureFrame
-}
-
-// MarshalJSON writes the failure the way it appears in the report JSON.
-func (f Failure) MarshalJSON() ([]byte, error) {
-	return json.Marshal(f.model())
 }
 
 // FailureChain contains one context or cause entry in a failure chain.

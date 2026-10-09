@@ -155,7 +155,7 @@ for _, res := range rep.Results {
 - `headless.JSON` for scripts and other tools
 - `headless.JUnit` for CI systems
 
-`ParseFormat` turns a name like `"junit"` into a `Format`, which helps when the format comes from a flag or a config file. `json.Marshal(rep)` gives the same JSON as `Encode`, without indentation. Each part of a report, such as a `Test`, `Trace` or `Failure`, marshals the way it appears in that JSON, so durations are in milliseconds.
+`ParseFormat` turns a name like `"junit"` into a `Format`, which helps when the format comes from a flag or a config file. `json.Marshal(rep)` gives the same JSON as `Encode`, without indentation. Each part of a report, such as a `Test`, `Trace` or `Failure`, marshals the way it appears in that JSON, so durations are in milliseconds. `json.Unmarshal` reads that JSON back into a `Report`, including JSON from `resterm run --format json`. Durations come back in whole milliseconds, and `ErrorDetail` and `ScriptErrorDetail` stay empty because the JSON does not include them.
 
 `rep.ExitCode(headless.ExitCodeDetailed)` returns the code `resterm run` would exit with. The [exit code table](cli/run.md#exit-codes) lists them, and each one has a constant such as `headless.ExitTimeout`. Pass `headless.ExitCodeSummary` to get only `0` or `1`. Both modes return `0` for the same reports. `rep.HasFailures()` is true when they return anything else.
 
