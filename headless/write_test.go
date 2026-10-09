@@ -551,6 +551,7 @@ func sampleRunnerReport() *runner.Report {
 				Method:          "GET",
 				Target:          "https://example.com/ok",
 				EffectiveTarget: "https://example.com/ok?id=7",
+				Warnings:        []string{"api.http:4: x is deprecated, use y"},
 				Environment:     "dev",
 				Passed:          true,
 				Response: &httpx.Response{

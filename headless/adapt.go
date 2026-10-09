@@ -64,6 +64,7 @@ func newResult(m runfmt.Result) Result {
 		Compare:              (*Compare)(m.Compare),
 		Profile:              ptr(m.Profile, newProfile),
 		Steps:                convert(m.Steps, newStep),
+		Warnings:             m.Warnings,
 	}
 }
 
@@ -213,6 +214,7 @@ func (r Result) model() runfmt.Result {
 		Compare:              (*runfmt.Compare)(r.Compare),
 		Profile:              r.Profile.model(),
 		Steps:                convert(r.Steps, Step.model),
+		Warnings:             r.Warnings,
 	}
 }
 
