@@ -307,7 +307,7 @@ func (e *Engine) recordWorkflow(st *wfState, out *engine.WorkflowResult) {
 	if hs == nil || st == nil || st.kind == wfKindForEach || out == nil {
 		return
 	}
-	name := history.NormalizeWorkflowName(st.wf.Name)
+	name := strings.TrimSpace(st.wf.Name)
 	if name == "" {
 		name = "Workflow"
 	}

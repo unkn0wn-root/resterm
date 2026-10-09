@@ -36,7 +36,6 @@ type RecoverInfo struct {
 }
 
 var _ history.Store = (*Store)(nil)
-var _ history.MaintenanceStore = (*Store)(nil)
 
 func New(path string) *Store {
 	return &Store{p: path}
@@ -106,7 +105,7 @@ func (s *Store) ByRequest(id string) ([]history.Entry, error) {
 }
 
 func (s *Store) ByWorkflow(name string) ([]history.Entry, error) {
-	name = history.NormalizeWorkflowName(name)
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, nil
 	}
@@ -162,7 +161,7 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 	}
 	defer func() { _ = rs.Close() }()
 
-	es := make([]history.Entry, 0, history.InitCap)
+	es := []history.Entry{}
 	for rs.Next() {
 		e, err := scanRow(rs)
 		if err != nil {

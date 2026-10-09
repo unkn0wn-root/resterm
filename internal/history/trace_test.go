@@ -1,6 +1,8 @@
 package history
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -181,5 +183,137 @@ func TestTraceSummaryRoundTrip(t *testing.T) {
 			len(report.BudgetReport.Breaches),
 			len(rebuiltReport.BudgetReport.Breaches),
 		)
+	}
+}
+
+func TestTraceSummaryKeepsEveryField(t *testing.T) {
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	ms := time.Millisecond
+	tl := &nettrace.Timeline{
+		Started:   at,
+		Completed: at.Add(60 * ms),
+		Duration:  60 * ms,
+		Err:       "read: connection reset",
+		Phases: []nettrace.Phase{
+			{
+				Kind:     nettrace.PhaseDNS,
+				Start:    at,
+				End:      at.Add(10 * ms),
+				Duration: 10 * ms,
+				Meta:     nettrace.PhaseMeta{Addr: "api.test", Cached: true},
+			},
+			{
+				Kind:     nettrace.PhaseConnect,
+				Start:    at.Add(10 * ms),
+				End:      at.Add(30 * ms),
+				Duration: 20 * ms,
+				Err:      "slow dial",
+				Meta:     nettrace.PhaseMeta{Addr: "10.0.0.1:443", Reused: true},
+			},
+			{Kind: nettrace.PhaseTransfer, Start: at.Add(30 * ms), End: at.Add(60 * ms), Duration: 30 * ms},
+		},
+		Details: &nettrace.TraceDetails{
+			Connection: &nettrace.ConnDetails{
+				Reused:        true,
+				WasIdle:       true,
+				IdleTime:      time.Second,
+				Network:       "tcp",
+				DialAddr:      "api.test:443",
+				LocalAddr:     "10.0.0.2:50000",
+				RemoteAddr:    "10.0.0.1:443",
+				ResolvedAddrs: []string{"10.0.0.1", "10.0.0.3"},
+				Proxy:         "http://proxy:8080",
+				ProxyTunnel:   true,
+				SSH:           "bastion",
+				K8s:           "default/api:8080",
+				Protocol:      "HTTP/2.0",
+			},
+			TLS: &nettrace.TLSDetails{
+				Version:    "TLS 1.3",
+				Cipher:     "TLS_AES_128_GCM_SHA256",
+				ALPN:       "h2",
+				ServerName: "api.test",
+				Resumed:    true,
+				Verified:   true,
+				Certificates: []nettrace.TLSCert{
+					{
+						Subject:   "CN=api.test",
+						Issuer:    "CN=Test CA",
+						SANs:      []string{"api.test", "*.api.test"},
+						NotBefore: at.Add(-time.Hour),
+						NotAfter:  at.Add(time.Hour),
+						Serial:    "01",
+					},
+					{Subject: "CN=Test CA", Issuer: "CN=Root", NotAfter: at.Add(24 * time.Hour), Serial: "02"},
+				},
+			},
+		},
+	}
+	budget := nettrace.Budget{
+		Total:     50 * ms,
+		Tolerance: ms,
+		Phases:    map[nettrace.PhaseKind]time.Duration{nettrace.PhaseConnect: 5 * ms},
+	}
+	rep := nettrace.NewReport(tl, budget)
+	if len(rep.BudgetReport.Breaches) == 0 {
+		t.Fatal("the fixture should breach its budget")
+	}
+
+	raw, err := json.Marshal(NewTraceSummary(tl, rep))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var sum TraceSummary
+	if err := json.Unmarshal(raw, &sum); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := sum.Timeline(); !reflect.DeepEqual(got, tl) {
+		t.Fatalf("timeline = %+v\nwant %+v", got, tl)
+	}
+	got := sum.Report()
+	if !reflect.DeepEqual(got.Budget, rep.Budget) || !reflect.DeepEqual(got.BudgetReport, rep.BudgetReport) {
+		t.Fatalf("report budget = %+v %+v\nwant %+v %+v", got.Budget, got.BudgetReport, rep.Budget, rep.BudgetReport)
+	}
+}
+
+func TestTraceSummaryDoesNotShareSlices(t *testing.T) {
+	tl := &nettrace.Timeline{
+		Details: &nettrace.TraceDetails{
+			Connection: &nettrace.ConnDetails{ResolvedAddrs: []string{"10.0.0.1"}},
+			TLS: &nettrace.TLSDetails{
+				Certificates: []nettrace.TLSCert{{SANs: []string{"api.test"}}},
+			},
+		},
+	}
+	sum := NewTraceSummary(tl, nil)
+	back := sum.Timeline()
+	tl.Details.Connection.ResolvedAddrs[0] = "changed"
+	tl.Details.TLS.Certificates[0].SANs[0] = "changed"
+	if sum.Details.Connection.ResolvedAddrs[0] != "10.0.0.1" || sum.Details.TLS.Certificates[0].SANs[0] != "api.test" {
+		t.Fatal("the summary shares slices with the timeline it came from")
+	}
+	sum.Details.Connection.ResolvedAddrs[0] = "changed"
+	sum.Details.TLS.Certificates[0].SANs[0] = "changed"
+	if back.Details.Connection.ResolvedAddrs[0] != "10.0.0.1" ||
+		back.Details.TLS.Certificates[0].SANs[0] != "api.test" {
+		t.Fatal("the rebuilt timeline shares slices with the summary")
+	}
+}
+
+func TestNewTraceSummaryKeepsBudgetWithoutPhases(t *testing.T) {
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	tl := &nettrace.Timeline{
+		Started:   at,
+		Completed: at.Add(2 * time.Second),
+		Duration:  2 * time.Second,
+		Err:       "context canceled",
+	}
+	rep := nettrace.NewReport(tl, nettrace.Budget{Total: time.Second})
+	if len(rep.BudgetReport.Breaches) == 0 {
+		t.Fatal("the fixture should breach its total budget")
+	}
+	sum := NewTraceSummary(tl, rep)
+	if sum.Budgets == nil || sum.Budgets.Total != time.Second || len(sum.Breaches) != len(rep.BudgetReport.Breaches) {
+		t.Fatalf("summary budget = %+v, breaches = %+v, want the report's", sum.Budgets, sum.Breaches)
 	}
 }

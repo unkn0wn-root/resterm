@@ -1215,7 +1215,7 @@ func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 	}
 	switch m.historyScope {
 	case historyScopeWorkflow:
-		name := history.NormalizeWorkflowName(m.historyWorkflowName)
+		name := strings.TrimSpace(m.historyWorkflowName)
 		if name == "" {
 			return nil, nil
 		}

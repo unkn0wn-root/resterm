@@ -11,7 +11,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/config"
-	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 )
 
@@ -237,7 +236,7 @@ func runHistoryCheck(args []string) error {
 	return nil
 }
 
-func openHistoryStore(migrate bool) (history.MaintenanceStore, error) {
+func openHistoryStore(migrate bool) (*histdb.Store, error) {
 	// This centralizes all history startup behavior used by CLI maintenance commands.
 	// It loads the database, prints recovery warnings, and optionally runs legacy import.
 	// On migration failure the store is closed before returning.

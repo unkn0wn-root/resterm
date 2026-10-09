@@ -777,7 +777,7 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 	if hs == nil || state == nil {
 		return
 	}
-	workflowName := history.NormalizeWorkflowName(state.workflow.Name)
+	workflowName := strings.TrimSpace(state.workflow.Name)
 	entry := history.Entry{
 		ID:          history.NewID(),
 		ExecutedAt:  time.Now(),
