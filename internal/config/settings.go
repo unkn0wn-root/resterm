@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 
 	toml "github.com/pelletier/go-toml/v2"
+
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -140,49 +142,8 @@ func SaveSettings(settings Settings, handle SettingsHandle) error {
 		return fmt.Errorf("encode settings: %w", err)
 	}
 
-	if err := writeFileAtomic(path, data, 0o644); err != nil {
+	if err := util.WriteFileAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("write settings %q: %w", path, err)
 	}
-	return nil
-}
-
-// write to temp file then rename so readers never see partial/corrupt data.
-// rename is atomic on most filesystems so the settings file is always valid.
-func writeFileAtomic(path string, data []byte, perm fs.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".resterm-settings-*.tmp")
-	if err != nil {
-		return err
-	}
-
-	tmpPath := tmp.Name()
-	defer func() {
-		_ = os.Remove(tmpPath)
-	}()
-
-	if _, err := tmp.Write(data); err != nil {
-		closeErr := tmp.Close()
-		if closeErr != nil {
-			return errors.Join(err, closeErr)
-		}
-		return err
-	}
-
-	if err := tmp.Chmod(perm); err != nil {
-		closeErr := tmp.Close()
-		if closeErr != nil {
-			return errors.Join(err, closeErr)
-		}
-		return err
-	}
-
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-
-	if err := os.Rename(tmpPath, path); err != nil {
-		return err
-	}
-
 	return nil
 }

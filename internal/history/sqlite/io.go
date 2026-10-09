@@ -131,33 +131,11 @@ func cleanPath(path string, op string) (string, error) {
 }
 
 func writeFileAtom(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return diag.WrapAs(diag.ClassFilesystem, err, "create export dir")
 	}
-
-	// Writing in place can leave a truncated export on failure.
-	// A temp file in the same directory keeps rename atomic.
-	f, err := os.CreateTemp(dir, ".resterm-history-*.tmp")
-	if err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "create export temp file")
-	}
-	tmp := f.Name()
-	defer func() { _ = os.Remove(tmp) }()
-
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		return diag.WrapAs(diag.ClassFilesystem, err, "write export temp file")
-	}
-	if err := f.Chmod(perm); err != nil {
-		_ = f.Close()
-		return diag.WrapAs(diag.ClassFilesystem, err, "chmod export temp file")
-	}
-	if err := f.Close(); err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "close export temp file")
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return diag.WrapAs(diag.ClassFilesystem, err, "replace export file")
+	if err := util.WriteFileAtomic(path, data, perm); err != nil {
+		return diag.WrapAs(diag.ClassFilesystem, err, "write export file")
 	}
 	return nil
 }

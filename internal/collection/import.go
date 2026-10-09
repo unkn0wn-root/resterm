@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type ImportOptions struct {
@@ -260,7 +262,7 @@ func applyImportPlan(plan []impFile, wsAbs, wsReal string) error {
 		if err := checkNoSymlinkEscape(wsAbs, wsReal, f.dst); err != nil {
 			return fmt.Errorf("destination %s: %w", f.op.Path, err)
 		}
-		if err := writeFileAtomic(f.dst, f.raw, 0o644); err != nil {
+		if err := util.WriteFileAtomic(f.dst, f.raw, 0o644); err != nil {
 			return fmt.Errorf("write destination file %s: %w", f.op.Path, err)
 		}
 	}
@@ -305,27 +307,4 @@ func checkNoSymlinkEscape(baseAbs, baseReal, dst string) error {
 		}
 	}
 	return nil
-}
-
-func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, ".resterm-import-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	defer func() { _ = os.Remove(tmp) }()
-
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Chmod(perm); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
 }
