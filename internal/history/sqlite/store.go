@@ -36,7 +36,6 @@ type RecoverInfo struct {
 }
 
 var _ history.Store = (*Store)(nil)
-var _ history.MaintenanceStore = (*Store)(nil)
 
 func New(path string) *Store {
 	return &Store{p: path}
