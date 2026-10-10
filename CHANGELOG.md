@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.14.0](https://github.com/unkn0wn-root/resterm/compare/v1.13.3...v1.14.0) (2026-10-10)
+
+
+### Features
+
+* **headless:** decode report JSON back into reports ([341d039](https://github.com/unkn0wn-root/resterm/commit/341d039e49c2cecdd12d7c0be749cd4df3685c89))
+* **headless:** report effective targets and full error details ([f4577cb](https://github.com/unkn0wn-root/resterm/commit/f4577cbb85dc692d9c9d02e90003282a0cc386a5))
+* **history:** keep each trace phase's start time ([#468](https://github.com/unkn0wn-root/resterm/issues/468)) ([777509d](https://github.com/unkn0wn-root/resterm/commit/777509d46b35ab16322917e0aff42c774995eeb5))
+
+
+### Bug Fixes
+
+* **headless:** fail results whose steps, profile runs or stream failed ([132cb15](https://github.com/unkn0wn-root/resterm/commit/132cb1571b7a9dbd035c6fde2a4234bde8a097ef))
+* **headless:** marshal report parts in the report JSON format ([516944a](https://github.com/unkn0wn-root/resterm/commit/516944ab8456d24314264cd727daa7820b32dc94))
+* **headless:** report bad arguments and unknown formats as usage errors ([3370d3f](https://github.com/unkn0wn-root/resterm/commit/3370d3ffd4206b517b33f1af4f317d8e9b10bacc))
+* **headless:** share one failure rule with the runner ([7211be3](https://github.com/unkn0wn-root/resterm/commit/7211be3d08baecd800b159fe12fa4b97cadf46c2))
+* **history:** checkpoint after vacuum so compact shrinks the file ([d83f55f](https://github.com/unkn0wn-root/resterm/commit/d83f55fb4cf1bdba2dd1ca8217cb6fede230be71))
+* **history:** give every entry a unique ID ([db5682b](https://github.com/unkn0wn-root/resterm/commit/db5682b974e5566d94cda28a9234ae36a670c917))
+* **history:** keep the history database private to its owner ([6cf164c](https://github.com/unkn0wn-root/resterm/commit/6cf164c6ef5a69782f2c9b34d87c716163fae598))
+* **history:** keep trace budgets when a timeline has no phases ([ef77774](https://github.com/unkn0wn-root/resterm/commit/ef7777441e92cc8deb48d6434dbce0d9d6cbbc02))
+* **history:** stop cutting history paths at a question mark ([2ceeeee](https://github.com/unkn0wn-root/resterm/commit/2ceeeeea64bd7926f97410aff748998d17cbd293))
+* **history:** use the store handle taken under its lock ([bee3f56](https://github.com/unkn0wn-root/resterm/commit/bee3f567731a41fb5e0dc04308e2db16ce42d645))
+* **history:** write backups in rollback journal mode ([c78a23c](https://github.com/unkn0wn-root/resterm/commit/c78a23c5465af59a5e4d7d68f057b14ff0429ff1))
+* **history:** write backups through SQLite ([0ff9f67](https://github.com/unkn0wn-root/resterm/commit/0ff9f67d6b06bf6c1547ed164eb06c543949033d))
+* **history:** write exports and backups for the owner only ([d9c32fe](https://github.com/unkn0wn-root/resterm/commit/d9c32fe04d2d6a8b71e75d0722f36109228e5503))
+* keep the child's chain and frames on inherited failures ([be28aee](https://github.com/unkn0wn-root/resterm/commit/be28aeeea046727fc6fd830c88de6720be203e0c))
+* mask secrets in effective targets and URL-encoded errors ([fabd55f](https://github.com/unkn0wn-root/resterm/commit/fabd55f4f3de907fdbf8551b487e0e19a7d9395e))
+* **runfmt:** convert the stream directly ([c495aad](https://github.com/unkn0wn-root/resterm/commit/c495aad8b84ce16be0ad8dbbee96932e91d610c9))
+* **runner:** write state files atomically for the owner only ([fe1ddd7](https://github.com/unkn0wn-root/resterm/commit/fe1ddd76cb84a25f183c3b80896a6155dc16ea30))
+* **util:** keep temp file names short ([81e1514](https://github.com/unkn0wn-root/resterm/commit/81e1514d440e6e8048a2e9015f44d16ef276768c))
+* **web:** restore space after git diff ([550dd54](https://github.com/unkn0wn-root/resterm/commit/550dd543b8dcde46a2de3ddd211cc202868ea3a3))
+
 ### [1.13.3](https://github.com/unkn0wn-root/resterm/compare/v1.13.2...v1.13.3) (2026-10-08)
 
 ### [1.13.2](https://github.com/unkn0wn-root/resterm/compare/v1.13.1...v1.13.2) (2026-10-07)
