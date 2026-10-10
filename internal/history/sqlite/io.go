@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	sqlitedrv "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/fsx"
@@ -158,7 +160,18 @@ func (s *Store) Backup(path string) error {
 			_ = b.Finish()
 			return err
 		}
-		return b.Finish()
+		// The copy keeps the live db's WAL flag. Rollback mode lets a backup open from read-only media.
+		dst, err := b.Commit()
+		if err != nil {
+			return err
+		}
+		_, err = dst.(driver.ExecerContext).ExecContext(context.Background(), `PRAGMA journal_mode=DELETE;`, nil)
+		var se *sqlitedrv.Error
+		if errors.As(err, &se) && se.Code()&0xff == sqlite3.SQLITE_BUSY {
+			// Another connection holds the target, so it stays in WAL mode. The copy is complete.
+			err = nil
+		}
+		return errors.Join(err, dst.Close())
 	})
 	if err != nil {
 		if created {

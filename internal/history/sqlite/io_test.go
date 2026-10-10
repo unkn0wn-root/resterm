@@ -102,6 +102,32 @@ func TestBackup(t *testing.T) {
 	}
 }
 
+func TestBackupUsesRollbackJournal(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "hist.bak.db")
+	s := New(filepath.Join(dir, "hist.db"))
+	defer func() { _ = s.Close() }()
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	if err := s.Backup(out); err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if b[18] != 1 || b[19] != 1 {
+		t.Fatalf("backup file format = %d/%d, want 1/1 (rollback journal)", b[18], b[19])
+	}
+	for _, sfx := range []string{"-wal", "-shm"} {
+		if _, err := os.Stat(out + sfx); !os.IsNotExist(err) {
+			t.Fatalf("backup left %s behind: %v", sfx, err)
+		}
+	}
+}
+
 func TestBackupSamePathRejected(t *testing.T) {
 	dir := t.TempDir()
 	db := filepath.Join(dir, "hist.db")
