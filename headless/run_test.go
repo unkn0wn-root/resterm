@@ -109,6 +109,44 @@ func TestRunUsesBaseURLFromInjectedEnvironment(t *testing.T) {
 	}
 }
 
+func TestRunMasksSecretsInEffectiveTarget(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	t.Setenv("RESTERM_HEADLESS_TOKEN", "os-secret-42")
+
+	src := "# @file-secret key file-secret-42\n# @name leak\nGET " + srv.URL + "/items?key={{key}}&token={{token}}\n"
+	rep, err := Run(t.Context(), Options{
+		Source: Source{Path: filepath.Join(t.TempDir(), "leak.http"), Content: []byte(src)},
+		Environment: EnvironmentOptions{
+			Set:  EnvironmentSet{"dev": {"token": "env:RESTERM_HEADLESS_TOKEN"}},
+			Name: "dev",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if rep.Passed != 1 || len(rep.Results) != 1 {
+		t.Fatalf("report = %+v, want one passing request", rep)
+	}
+	if want := srv.URL + "/items?key=•••&token=•••"; rep.Results[0].EffectiveTarget != want {
+		t.Fatalf("effective target = %q, want %q", rep.Results[0].EffectiveTarget, want)
+	}
+
+	var out strings.Builder
+	for _, f := range []Format{Text, JSON, JUnit} {
+		if err := rep.Encode(&out, f); err != nil {
+			t.Fatalf("Encode(%v) error = %v", f, err)
+		}
+	}
+	for _, secret := range []string{"file-secret-42", "os-secret-42"} {
+		if strings.Contains(out.String(), secret) {
+			t.Fatalf("report contains %q:\n%s", secret, out.String())
+		}
+	}
+}
+
 func TestRunSendsSchemelessTargetThroughTheParser(t *testing.T) {
 	tests := []struct {
 		name string

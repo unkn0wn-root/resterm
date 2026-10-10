@@ -5,9 +5,11 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -171,6 +173,130 @@ func TestWorkflowStepResultPreservesSourceTarget(t *testing.T) {
 	}
 	if step.EffectiveTarget != "https://httpbin.org/anything/api/reports" {
 		t.Fatalf("expected effective target, got %q", step.EffectiveTarget)
+	}
+}
+
+func TestRunMasksSecretsInEffectiveTargets(t *testing.T) {
+	const secret = "s3 cr+t/v=l"
+	dir := t.TempDir()
+	file := filepath.Join(dir, "secret.http")
+	src := strings.Join([]string{
+		"# @workflow flow",
+		"# @step Key using=key",
+		"",
+		"### Plain",
+		"# @file-secret token " + secret,
+		"# @name plain",
+		"GET https://api.example.com/items?token={{token}}",
+		"",
+		"### Path",
+		"# @name path",
+		"GET https://api.example.com/hooks/{{token}}",
+		"",
+		"### Key",
+		"# @name key",
+		"# @auth apikey query api_key {{token}}",
+		"GET https://api.example.com/items",
+		"",
+		"### Down",
+		"# @name down",
+		"# @auth apikey query api_key {{token}}",
+		"GET https://down.example.com/items",
+		"",
+		"### Each",
+		"# @name each",
+		"# @for-each item in [\"a\", \"b\"]",
+		"GET https://api.example.com/items/{{vars.request.item}}?token={{token}}",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Host == "down.example.com" {
+					return nil, errors.New("connection refused")
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "stage": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		sel  Select
+		cmp  engine.CompareConfig
+		fail bool
+	}{
+		{name: "query", sel: Select{Request: "plain"}},
+		{name: "path", sel: Select{Request: "path"}},
+		{name: "api key", sel: Select{Request: "key"}},
+		{name: "network error", sel: Select{Request: "down"}, fail: true},
+		{name: "for-each", sel: Select{Request: "each"}},
+		{name: "workflow", sel: Select{Workflow: "flow"}},
+		{name: "compare", sel: Select{Request: "plain"}, cmp: engine.CompareConfig{Targets: []string{"dev", "stage"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+				Catalog:       cat,
+				Selection:     cat.DefaultSelection(),
+				Select:        tt.sel,
+				Compare:       tt.cmp,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if failed := rep.Failed > 0; failed != tt.fail {
+				t.Fatalf("expected failed=%v, got %+v", tt.fail, rep.Results)
+			}
+
+			var out strings.Builder
+			for _, write := range []func(io.Writer) error{rep.WriteJSON, rep.WriteJUnit, rep.WriteText} {
+				if err := write(&out); err != nil {
+					t.Fatalf("write report: %v", err)
+				}
+			}
+			for _, form := range []string{secret, url.QueryEscape(secret), (&url.URL{Path: secret}).EscapedPath()} {
+				if strings.Contains(out.String(), form) {
+					t.Fatalf("report contains secret form %q:\n%s", form, out.String())
+				}
+			}
+			if !strings.Contains(out.String(), "•••") {
+				t.Fatalf("expected the report to show a masked value:\n%s", out.String())
+			}
+			if tt.fail {
+				return
+			}
+
+			var targets []string
+			for _, res := range rep.Results {
+				targets = append(targets, res.EffectiveTarget)
+				for _, step := range res.Steps {
+					targets = append(targets, step.EffectiveTarget)
+				}
+			}
+			for _, target := range targets {
+				if target != "" && !strings.Contains(target, "•••") {
+					t.Fatalf("expected a masked effective target, got %q", target)
+				}
+			}
+		})
 	}
 }
 

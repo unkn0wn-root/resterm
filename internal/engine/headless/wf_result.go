@@ -70,6 +70,7 @@ type wfStepRes struct {
 	tests   []scripts.TestResult
 	sErr    error
 	err     error
+	secrets []string
 	execReq *restfile.Request
 	reqText string
 }
@@ -120,6 +121,7 @@ func makeStepRes(
 		tests:   slices.Clone(out.Tests),
 		sErr:    out.ScriptErr,
 		err:     out.Err,
+		secrets: out.RuntimeSecrets,
 		execReq: request.CloneRequest(out.Executed),
 		reqText: out.RequestText,
 		msg:     strings.TrimSpace(out.SkipReason),
@@ -280,5 +282,7 @@ func toWorkflowStep(res wfStepRes) engine.WorkflowStep {
 		Canceled:   res.cancel,
 		Success:    res.ok,
 		Duration:   res.dur,
+
+		RuntimeSecrets: slices.Clone(res.secrets),
 	}
 }

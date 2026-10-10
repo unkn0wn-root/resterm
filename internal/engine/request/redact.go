@@ -1,10 +1,15 @@
 package request
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
+
+const secretMask = "•••"
 
 // Results are redacted at the engine boundary because errors and test output
 // can be rendered directly by the UI, workflows, and history. The complete
@@ -23,8 +28,8 @@ func (e *Engine) redactResult(
 	res.Err = redactErr(res.Err, secs)
 	res.ScriptErr = redactErr(res.ScriptErr, secs)
 	for i := range res.Tests {
-		res.Tests[i].Name = redactSecretText(res.Tests[i].Name, secs)
-		res.Tests[i].Message = redactSecretText(res.Tests[i].Message, secs)
+		res.Tests[i].Name = RedactSecrets(res.Tests[i].Name, secs)
+		res.Tests[i].Message = RedactSecrets(res.Tests[i].Message, secs)
 	}
 	return res
 }
@@ -48,7 +53,7 @@ func redactErr(err error, secs []string) error {
 	}
 	found := false
 	mask := func(s string) string {
-		out := redactSecretText(s, secs)
+		out := RedactSecrets(s, secs)
 		found = found || out != s
 		return out
 	}
@@ -58,4 +63,17 @@ func redactErr(err error, secs []string) error {
 		return err
 	}
 	return &redactedError{err: err, text: text, rep: rep}
+}
+
+// RedactSecrets masks each secret and the escaped forms a URL query or path gives it.
+func RedactSecrets(s string, secs []string) string {
+	for _, sec := range secs {
+		if sec == "" {
+			continue
+		}
+		for _, form := range [...]string{sec, url.QueryEscape(sec), (&url.URL{Path: sec}).EscapedPath()} {
+			s = strings.ReplaceAll(s, form, secretMask)
+		}
+	}
+	return s
 }

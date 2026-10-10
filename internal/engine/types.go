@@ -238,6 +238,8 @@ type WorkflowStep struct {
 	Canceled   bool
 	Success    bool
 	Duration   time.Duration
+
+	RuntimeSecrets []string
 }
 
 type RuntimeState struct {

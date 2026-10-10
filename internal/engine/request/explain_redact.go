@@ -11,8 +11,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-const explainMask = "•••"
-
 func (e *Engine) redactExplainReport(
 	rep *xplain.Report,
 	doc *restfile.Document,
@@ -26,69 +24,69 @@ func (e *Engine) redactExplainReport(
 	}
 	secs := e.explainSecrets(doc, req, env, globs, extra)
 
-	rep.Name = redactSecretText(rep.Name, secs)
-	rep.Method = redactSecretText(rep.Method, secs)
-	rep.URL = redactSecretText(rep.URL, secs)
-	rep.Decision = redactSecretText(rep.Decision, secs)
-	rep.Failure = redactSecretText(rep.Failure, secs)
+	rep.Name = RedactSecrets(rep.Name, secs)
+	rep.Method = RedactSecrets(rep.Method, secs)
+	rep.URL = RedactSecrets(rep.URL, secs)
+	rep.Decision = RedactSecrets(rep.Decision, secs)
+	rep.Failure = RedactSecrets(rep.Failure, secs)
 
 	for i := range rep.Vars {
-		rep.Vars[i].Value = redactSecretText(rep.Vars[i].Value, secs)
+		rep.Vars[i].Value = RedactSecrets(rep.Vars[i].Value, secs)
 	}
 	for i := range rep.Stages {
-		rep.Stages[i].Summary = redactSecretText(rep.Stages[i].Summary, secs)
+		rep.Stages[i].Summary = RedactSecrets(rep.Stages[i].Summary, secs)
 		for j := range rep.Stages[i].Changes {
 			ch := &rep.Stages[i].Changes[j]
 			ch.Before = redactExplainChangeValue(ch.Field, ch.Before, secs)
 			ch.After = redactExplainChangeValue(ch.Field, ch.After, secs)
 		}
 		for j := range rep.Stages[i].Notes {
-			rep.Stages[i].Notes[j] = redactSecretText(rep.Stages[i].Notes[j], secs)
+			rep.Stages[i].Notes[j] = RedactSecrets(rep.Stages[i].Notes[j], secs)
 		}
 	}
 	if rep.Final != nil {
-		rep.Final.Method = redactSecretText(rep.Final.Method, secs)
-		rep.Final.URL = redactSecretText(rep.Final.URL, secs)
-		rep.Final.Body = redactSecretText(rep.Final.Body, secs)
-		rep.Final.BodyNote = redactSecretText(rep.Final.BodyNote, secs)
+		rep.Final.Method = RedactSecrets(rep.Final.Method, secs)
+		rep.Final.URL = RedactSecrets(rep.Final.URL, secs)
+		rep.Final.Body = RedactSecrets(rep.Final.Body, secs)
+		rep.Final.BodyNote = RedactSecrets(rep.Final.BodyNote, secs)
 		for i := range rep.Final.Headers {
 			h := &rep.Final.Headers[i]
 			if header.Sensitive(h.Name) {
 				if strings.TrimSpace(h.Value) != "" {
-					h.Value = explainMask
+					h.Value = secretMask
 				}
 				continue
 			}
-			h.Value = redactSecretText(h.Value, secs)
+			h.Value = RedactSecrets(h.Value, secs)
 		}
 		for i := range rep.Final.Settings {
-			rep.Final.Settings[i].Value = redactSecretText(rep.Final.Settings[i].Value, secs)
+			rep.Final.Settings[i].Value = RedactSecrets(rep.Final.Settings[i].Value, secs)
 		}
 		for i := range rep.Final.Details {
 			d := &rep.Final.Details[i]
 			key := d.Key
 			val := d.Value
-			d.Key = redactSecretText(key, secs)
+			d.Key = RedactSecrets(key, secs)
 			if shouldMaskExplainPair(key, val) {
 				if strings.TrimSpace(val) != "" {
-					d.Value = explainMask
+					d.Value = secretMask
 				}
 				continue
 			}
-			d.Value = redactSecretText(val, secs)
+			d.Value = RedactSecrets(val, secs)
 		}
 		for i := range rep.Final.Steps {
-			rep.Final.Steps[i] = redactSecretText(rep.Final.Steps[i], secs)
+			rep.Final.Steps[i] = RedactSecrets(rep.Final.Steps[i], secs)
 		}
 		if rep.Final.Route != nil {
-			rep.Final.Route.Summary = redactSecretText(rep.Final.Route.Summary, secs)
+			rep.Final.Route.Summary = RedactSecrets(rep.Final.Route.Summary, secs)
 			for i := range rep.Final.Route.Notes {
-				rep.Final.Route.Notes[i] = redactSecretText(rep.Final.Route.Notes[i], secs)
+				rep.Final.Route.Notes[i] = RedactSecrets(rep.Final.Route.Notes[i], secs)
 			}
 		}
 	}
 	for i := range rep.Warnings {
-		rep.Warnings[i] = redactSecretText(rep.Warnings[i], secs)
+		rep.Warnings[i] = RedactSecrets(rep.Warnings[i], secs)
 	}
 	return rep
 }
@@ -132,23 +130,9 @@ func redactExplainChangeValue(field, val string, secs []string) string {
 		if strings.TrimSpace(val) == "" {
 			return val
 		}
-		return explainMask
+		return secretMask
 	}
-	return redactSecretText(val, secs)
-}
-
-func redactSecretText(s string, secs []string) string {
-	if strings.TrimSpace(s) == "" || len(secs) == 0 {
-		return s
-	}
-	out := s
-	for _, sec := range secs {
-		if sec == "" || !strings.Contains(out, sec) {
-			continue
-		}
-		out = strings.ReplaceAll(out, sec, explainMask)
-	}
-	return out
+	return RedactSecrets(val, secs)
 }
 
 func explainHeaderField(field string) (string, bool) {

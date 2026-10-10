@@ -69,11 +69,11 @@ func TestRedactExplainReportMasksSecretsAndSensitiveHeaders(t *testing.T) {
 	}
 	// The authorization header is masked because of its name, X-Trace because
 	// its value matches a secret variable.
-	if got.Final.Headers[0].Value != explainMask {
-		t.Fatalf("authorization header = %q, want %q", got.Final.Headers[0].Value, explainMask)
+	if got.Final.Headers[0].Value != secretMask {
+		t.Fatalf("authorization header = %q, want %q", got.Final.Headers[0].Value, secretMask)
 	}
-	if got.Final.Headers[1].Value != explainMask {
-		t.Fatalf("secret header value = %q, want %q", got.Final.Headers[1].Value, explainMask)
+	if got.Final.Headers[1].Value != secretMask {
+		t.Fatalf("secret header value = %q, want %q", got.Final.Headers[1].Value, secretMask)
 	}
 
 	for _, field := range []string{

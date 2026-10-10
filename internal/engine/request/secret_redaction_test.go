@@ -398,3 +398,24 @@ func TestRedactSourceOnlySecretSurvivesDisplayEscaping(t *testing.T) {
 		})
 	}
 }
+
+func TestRedactSecretsMasksURLEscapedForms(t *testing.T) {
+	const secret = "s3 cr+t/v=l;x"
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"raw", "token=s3 cr+t/v=l;x", "token=•••"},
+		{"query", "https://h/x?k=s3+cr%2Bt%2Fv%3Dl%3Bx&y=1", "https://h/x?k=•••&y=1"},
+		{"path", "https://h/hooks/s3%20cr+t/v=l;x", "https://h/hooks/•••"},
+		{"error", `Get "https://h/x?k=s3+cr%2Bt%2Fv%3Dl%3Bx": refused`, `Get "https://h/x?k=•••": refused`},
+		{"other", "https://h/x?k=other", "https://h/x?k=other"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RedactSecrets(tc.in, []string{secret}); got != tc.want {
+				t.Errorf("RedactSecrets(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
