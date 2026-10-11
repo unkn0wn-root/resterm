@@ -329,7 +329,12 @@ func splitAssert(text string) (expr, msg string, cut bool) {
 
 func (b *documentBuilder) lintRequestCaptures(req *restfile.Request) {
 	for _, c := range req.Metadata.Captures {
-		if capture.HasJSONPathDoubleDot(c.Expression) {
+		ex := c.Expression
+		if c.Mode == restfile.CaptureExprModeRTS {
+			// Template captures keep # as text.
+			ex = rts.MaskText(ex)
+		}
+		if capture.HasJSONPathDoubleDot(ex) {
 			b.addWarning(
 				c.Line,
 				fmt.Sprintf(

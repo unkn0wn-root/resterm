@@ -1898,6 +1898,37 @@ GET https://example.com
 	}
 }
 
+func TestParseCaptureDirectiveDoubleDotIgnoresRTSComments(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want bool
+	}{
+		{
+			name: "quote in a comment",
+			src:  "# @capture global id = (  # the user's id\n#   response.json..id\n# )\n",
+			want: true,
+		},
+		{
+			name: "double dot in a comment",
+			src:  "# @capture global code = response.statusCode # not response.json..id\n",
+		},
+		{
+			name: "hash in a template",
+			src:  "# @capture global id x#{{response.json..id}}\n",
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("capture-warn-json-comment.http", []byte(tt.src+"GET https://example.com\n"))
+			if got := hasParseMessage(doc.Warnings, "double dot after json"); got != tt.want {
+				t.Fatalf("double-dot warning = %t, want %t (warnings %v)", got, tt.want, doc.Warnings)
+			}
+		})
+	}
+}
+
 func TestParseCaptureDirectiveStrictAllowsTemplateSyntax(t *testing.T) {
 	src := `# @setting capture.strict true
 # @capture global auth.token {{response.json.token}}
