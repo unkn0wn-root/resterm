@@ -288,6 +288,36 @@ func TestApplyCapturesRSTKeepsQuotedTemplateMarkerInAComment(t *testing.T) {
 	}
 }
 
+func TestApplyCapturesRSTExpandsJSONShorthandAfterAQuoteInAComment(t *testing.T) {
+	eng := newCaptureEngine("")
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"id":"u-1"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      directive.ScopeRequest,
+				Name:       "id",
+				Expression: "(\n  # the user's id\n  response.json.id\n)",
+				Mode:       restfile.CaptureExprModeRTS,
+			}},
+		},
+	}
+
+	if err := eng.applyCaptures(captureRun{req: req, resp: resp}); err != nil {
+		t.Fatalf("applyCaptures: %v", err)
+	}
+	if len(req.Variables) != 1 {
+		t.Fatalf("captures = %d, want 1", len(req.Variables))
+	}
+	if req.Variables[0].Value != "u-1" {
+		t.Fatalf("value = %q, want %q", req.Variables[0].Value, "u-1")
+	}
+}
+
 func TestApplyCapturesTemplateKeepsLiteralDelimiters(t *testing.T) {
 	tests := map[string]string{
 		"prefix[{{response.json.token}}": "prefix[abc123",
@@ -568,6 +598,48 @@ func TestApplyCapturesErrorIncludesNormalizedExpression(t *testing.T) {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("expected error to include %q, got %q", want, msg)
 		}
+	}
+}
+
+func TestNormCaptureRTSExpr(t *testing.T) {
+	tests := []struct {
+		name string
+		ex   string
+		want string
+	}{
+		{name: "member", ex: `response.json.token`, want: `response.json().token`},
+		{name: "index", ex: `last.json[0]`, want: `last.json()[0]`},
+		{name: "called", ex: `response.json("token")`, want: `response.json("token")`},
+		{name: "bare", ex: `last.json`, want: `last.json`},
+		{name: "member of another value", ex: `x.response.json.a`, want: `x.response.json.a`},
+		{
+			name: "string",
+			ex:   `contains("response.json.a", response.json.a)`,
+			want: `contains("response.json.a", response.json().a)`,
+		},
+		{
+			name: "escaped quote",
+			ex:   `"a\"response.json.a" + response.json.a`,
+			want: `"a\"response.json.a" + response.json().a`,
+		},
+		{name: "comment", ex: `response.json.a # response.json.b`, want: `response.json().a # response.json.b`},
+		{
+			name: "quote in a comment",
+			ex:   "(  # the user's id\n  response.json.id\n)",
+			want: "(  # the user's id\n  response.json().id\n)",
+		},
+		{
+			name: "carriage return ends a comment",
+			ex:   "(  # it's\r\n  response.json.id\r\n)",
+			want: "(  # it's\r\n  response.json().id\r\n)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normCaptureRTSExpr(tt.ex); got != tt.want {
+				t.Fatalf("normCaptureRTSExpr(%q) = %q, want %q", tt.ex, got, tt.want)
+			}
+		})
 	}
 }
 
