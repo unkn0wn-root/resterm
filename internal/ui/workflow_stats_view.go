@@ -162,18 +162,18 @@ func (v *workflowStatsView) blurDetail() bool {
 	return true
 }
 
-func (v *workflowStatsView) scrollDetail(width, height, delta int) bool {
+func (v *workflowStatsView) scrollDetail(width, height, delta int, r responseRenderer) bool {
 	if v == nil || delta == 0 || !v.hasEntries() {
 		return false
 	}
-	layout := v.layout(width, height)
+	layout := v.layout(width, height, r.stats)
 	detailWidth := layout.detailWidth
 	detailHeight := layout.detailHeight
 	if detailWidth < 1 || detailHeight < 1 {
 		return false
 	}
-	_, body := v.detailParts(detailWidth)
-	bodyHeight := v.detailBodyHeight(detailWidth, detailHeight, len(body))
+	_, body := v.detailParts(detailWidth, r)
+	bodyHeight := v.detailBodyHeight(detailWidth, detailHeight, len(body), r.stats)
 	if bodyHeight < 1 {
 		return false
 	}
@@ -186,16 +186,16 @@ func (v *workflowStatsView) scrollDetail(width, height, delta int) bool {
 	return true
 }
 
-func (v *workflowStatsView) scrollDetailEdge(width, height int, top bool) bool {
+func (v *workflowStatsView) scrollDetailEdge(width, height int, top bool, r responseRenderer) bool {
 	if v == nil || !v.hasEntries() {
 		return false
 	}
-	layout := v.layout(width, height)
+	layout := v.layout(width, height, r.stats)
 	if layout.detailWidth < 1 || layout.detailHeight < 1 {
 		return false
 	}
-	_, body := v.detailParts(layout.detailWidth)
-	bodyHeight := v.detailBodyHeight(layout.detailWidth, layout.detailHeight, len(body))
+	_, body := v.detailParts(layout.detailWidth, r)
+	bodyHeight := v.detailBodyHeight(layout.detailWidth, layout.detailHeight, len(body), r.stats)
 	maxOffset := max(len(body)-bodyHeight, 0)
 	next := maxOffset
 	if top {
@@ -208,7 +208,7 @@ func (v *workflowStatsView) scrollDetailEdge(width, height int, top bool) bool {
 	return true
 }
 
-func (v *workflowStatsView) render(width, height int) workflowStatsRender {
+func (v *workflowStatsView) render(width, height int, r responseRenderer) workflowStatsRender {
 	if width <= 0 {
 		width = defaultResponseViewportWidth
 	}
@@ -216,7 +216,7 @@ func (v *workflowStatsView) render(width, height int) workflowStatsRender {
 		height = 24
 	}
 
-	lines := v.renderScreen(width, height)
+	lines := v.renderScreen(width, height, r)
 	content := strings.Join(lines, "\n")
 	if content != "" {
 		content += "\n"
@@ -227,30 +227,30 @@ func (v *workflowStatsView) render(width, height int) workflowStatsRender {
 	}
 }
 
-func (v *workflowStatsView) renderScreen(width, height int) []string {
-	lines := v.summaryLines(width)
+func (v *workflowStatsView) renderScreen(width, height int, r responseRenderer) []string {
+	lines := v.summaryLines(width, r.stats)
 	if !v.hasEntries() {
 		lines = append(
 			lines,
-			workflowFitLine(statsMessageStyle.Render("No workflow steps captured"), width),
+			workflowFitLine(r.stats.Message.Render("No workflow steps captured"), width),
 		)
 		return workflowFitLines(lines, width, height)
 	}
 
-	layout := v.layout(width, height)
-	lines = append(lines, workflowDivider(width))
+	layout := v.layout(width, height, r.stats)
+	lines = append(lines, workflowDivider(width, r.stats))
 	if layout.sideBySide {
-		left := v.renderStepList(layout.listWidth, layout.listHeight)
-		right := v.renderDetail(layout.detailWidth, layout.detailHeight)
+		left := v.renderStepList(layout.listWidth, layout.listHeight, r.stats)
+		right := v.renderDetail(layout.detailWidth, layout.detailHeight, r)
 		lines = append(
 			lines,
-			workflowJoinColumns(left, right, layout.listWidth, layout.detailWidth)...)
+			workflowJoinColumns(left, right, layout.listWidth, layout.detailWidth, r.stats)...)
 		return workflowFitLines(lines, width, height)
 	}
 
-	lines = append(lines, v.renderStepList(layout.listWidth, layout.listHeight)...)
-	lines = append(lines, workflowDivider(width))
-	lines = append(lines, v.renderDetail(layout.detailWidth, layout.detailHeight)...)
+	lines = append(lines, v.renderStepList(layout.listWidth, layout.listHeight, r.stats)...)
+	lines = append(lines, workflowDivider(width, r.stats))
+	lines = append(lines, v.renderDetail(layout.detailWidth, layout.detailHeight, r)...)
 	return workflowFitLines(lines, width, height)
 }
 
@@ -262,8 +262,8 @@ type workflowStatsLayout struct {
 	detailHeight int
 }
 
-func (v *workflowStatsView) layout(width, height int) workflowStatsLayout {
-	summaryHeight := len(v.summaryLines(width)) + 1
+func (v *workflowStatsView) layout(width, height int, pal statsPalette) workflowStatsLayout {
+	summaryHeight := len(v.summaryLines(width, pal)) + 1
 	available := max(height-summaryHeight, 1)
 
 	if width >= workflowStatsSplitMinWidth && height >= workflowStatsSplitMinH {
@@ -304,7 +304,7 @@ func (v *workflowStatsView) layout(width, height int) workflowStatsLayout {
 	}
 }
 
-func (v *workflowStatsView) summaryLines(width int) []string {
+func (v *workflowStatsView) summaryLines(width int, pal statsPalette) []string {
 	label := strings.TrimSpace(v.label)
 	if label == "" {
 		label = "Workflow"
@@ -315,9 +315,9 @@ func (v *workflowStatsView) summaryLines(width int) []string {
 	}
 
 	status := v.overallStatus()
-	title := statsTitleStyle.Render(label) + " " +
-		statsValueStyle.Render(workflowPlainTruncate(name, max(width-24, 8))) + " " +
-		workflowStatusBadge(status)
+	title := pal.Title.Render(label) + " " +
+		pal.Value.Render(workflowPlainTruncate(name, max(width-24, 8))) + " " +
+		workflowStatusBadge(status, pal)
 
 	counts := v.counts()
 	total := v.totalSteps
@@ -349,8 +349,8 @@ func (v *workflowStatsView) summaryLines(width int) []string {
 
 	return workflowFitLines([]string{
 		title,
-		statsSubLabelStyle.Render(countLine),
-		statsSubLabelStyle.Render(timeLine),
+		pal.SubLabel.Render(countLine),
+		pal.SubLabel.Render(timeLine),
 	}, width, 3)
 }
 
@@ -394,14 +394,14 @@ func (v *workflowStatsView) overallStatus() string {
 	}
 }
 
-func (v *workflowStatsView) renderStepList(width, height int) []string {
+func (v *workflowStatsView) renderStepList(width, height int, pal statsPalette) []string {
 	if width < 1 {
 		width = 1
 	}
 	if height < 1 {
 		return nil
 	}
-	lines := []string{workflowStatsSectionHeading("Steps", width, !v.detailFocus)}
+	lines := []string{workflowStatsSectionHeading("Steps", width, !v.detailFocus, pal)}
 	rowsHeight := height - 1
 	if rowsHeight < 1 {
 		return workflowFitLines(lines, width, height)
@@ -409,7 +409,7 @@ func (v *workflowStatsView) renderStepList(width, height int) []string {
 	start := workflowWindowStart(len(v.entries), v.selected, rowsHeight)
 	end := min(start+rowsHeight, len(v.entries))
 	for i := start; i < end; i++ {
-		lines = append(lines, v.renderStepRow(i, width))
+		lines = append(lines, v.renderStepRow(i, width, pal))
 	}
 	return workflowFitLines(lines, width, height)
 }
@@ -434,7 +434,7 @@ func workflowWindowStart(total, selected, height int) int {
 	return start
 }
 
-func (v *workflowStatsView) renderStepRow(idx, width int) string {
+func (v *workflowStatsView) renderStepRow(idx, width int, pal statsPalette) string {
 	entry := v.entries[idx]
 	selected := idx == v.selected
 	marker := " "
@@ -442,7 +442,7 @@ func (v *workflowStatsView) renderStepRow(idx, width int) string {
 		marker = ">"
 	}
 	prefix := fmt.Sprintf("%s %2d ", marker, entry.index+1)
-	status := workflowStatusBadge(workflowStatusText(entry.result))
+	status := workflowStatusBadge(workflowStatusText(entry.result), pal)
 	meta := workflowEntryMeta(entry.result)
 	metaWidth := visibleWidth(meta)
 	if metaWidth > 0 {
@@ -470,13 +470,13 @@ func (v *workflowStatsView) renderStepRow(idx, width int) string {
 	)
 	line := prefix + status + " " + name
 	if meta != "" {
-		line += " " + statsSubLabelStyle.Render(
+		line += " " + pal.SubLabel.Render(
 			workflowPlainTruncate(meta, max(width-visibleWidth(line)-1, 1)),
 		)
 	}
 	line = workflowFitLine(line, width)
 	if selected {
-		line = statsSelectedStyle.Render(line)
+		line = pal.Selected.Render(line)
 	}
 	return line
 }
@@ -486,7 +486,7 @@ func workflowEntryMeta(res workflowStepResult) string {
 	return strings.Join(parts, " ")
 }
 
-func (v *workflowStatsView) renderDetail(width, height int) []string {
+func (v *workflowStatsView) renderDetail(width, height int, r responseRenderer) []string {
 	if width < 1 {
 		width = 1
 	}
@@ -495,19 +495,19 @@ func (v *workflowStatsView) renderDetail(width, height int) []string {
 	}
 	if !v.hasEntries() || v.selected < 0 || v.selected >= len(v.entries) {
 		return workflowFitLines([]string{
-			workflowDetailHeading("Selected Step", width, v.detailFocus),
-			statsMessageStyle.Render("No step selected"),
+			workflowDetailHeading("Selected Step", width, v.detailFocus, r.stats),
+			r.stats.Message.Render("No step selected"),
 		}, width, height)
 	}
 
-	header, body := v.detailParts(width)
-	bodyHeight := v.detailBodyHeight(width, height, len(body))
+	header, body := v.detailParts(width, r)
+	bodyHeight := v.detailBodyHeight(width, height, len(body), r.stats)
 	v.clampDetailOffset(len(body), bodyHeight)
 	rangeLine := workflowDetailRangeLine(v.detailOffset, bodyHeight, len(body))
 
 	lines := append([]string{}, header...)
 	if rangeLine != "" && len(lines) < height {
-		lines = append(lines, workflowFitLine(statsSubLabelStyle.Render(rangeLine), width))
+		lines = append(lines, workflowFitLine(r.stats.SubLabel.Render(rangeLine), width))
 	}
 	if bodyHeight > 0 {
 		end := min(v.detailOffset+bodyHeight, len(body))
@@ -518,17 +518,21 @@ func (v *workflowStatsView) renderDetail(width, height int) []string {
 	return workflowFitLines(lines, width, height)
 }
 
-func (v *workflowStatsView) detailParts(width int) ([]string, []string) {
+func (v *workflowStatsView) detailParts(width int, r responseRenderer) ([]string, []string) {
 	entry := v.entries[v.selected]
-	header := v.detailHeader(entry, width)
-	body := workflowWrapLines(entry.detailBodyLines(""), width)
+	header := v.detailHeader(entry, width, r.stats)
+	body := workflowWrapLines(entry.detailBodyLines("", r), width)
 	if len(body) == 0 {
-		body = []string{statsMessageStyle.Render("<empty>")}
+		body = []string{r.stats.Message.Render("<empty>")}
 	}
 	return header, body
 }
 
-func (v *workflowStatsView) detailHeader(entry workflowStatsEntry, width int) []string {
+func (v *workflowStatsView) detailHeader(
+	entry workflowStatsEntry,
+	width int,
+	pal statsPalette,
+) []string {
 	title := fmt.Sprintf(
 		"%d. %s",
 		entry.index+1,
@@ -540,12 +544,12 @@ func (v *workflowStatsView) detailHeader(entry workflowStatsEntry, width int) []
 		),
 	)
 	lines := []string{
-		workflowDetailHeading("Selected Step", width, v.detailFocus),
-		workflowFitLine(statsValueStyle.Render(workflowPlainTruncate(title, width)), width),
+		workflowDetailHeading("Selected Step", width, v.detailFocus, pal),
+		workflowFitLine(pal.Value.Render(workflowPlainTruncate(title, width)), width),
 	}
 
 	fields := compactStrings(
-		workflowStatusBadge(workflowStatusText(entry.result)),
+		workflowStatusBadge(workflowStatusText(entry.result), pal),
 		workflowResultStatus(entry.result),
 		workflowFormatDuration(entry.result.Duration),
 	)
@@ -555,34 +559,39 @@ func (v *workflowStatsView) detailHeader(entry workflowStatsEntry, width int) []
 	if target := workflowStepTarget(entry.result); target != "" {
 		lines = append(
 			lines,
-			workflowFitLine(statsSubLabelStyle.Render(workflowPlainTruncate(target, width)), width),
+			workflowFitLine(pal.SubLabel.Render(workflowPlainTruncate(target, width)), width),
 		)
 	}
 	if msg := strings.TrimSpace(entry.result.Message); msg != "" {
-		for _, line := range wrapStructuredLine(statsMessageStyle.Render(msg), width) {
+		for _, line := range wrapStructuredLine(pal.Message.Render(msg), width) {
 			lines = append(lines, workflowFitLine(line, width))
 		}
 	}
 	return lines
 }
 
-func workflowDetailHeading(label string, width int, focused bool) string {
-	return workflowStatsSectionHeading(label, width, focused)
+func workflowDetailHeading(label string, width int, focused bool, pal statsPalette) string {
+	return workflowStatsSectionHeading(label, width, focused, pal)
 }
 
-func workflowStatsSectionHeading(label string, width int, focused bool) string {
-	style := statsHeadingStyle.Bold(false).Faint(true)
+func workflowStatsSectionHeading(
+	label string,
+	width int,
+	focused bool,
+	pal statsPalette,
+) string {
+	style := pal.SubLabel
 	if focused {
-		style = statsHeadingStyle.Bold(true).Faint(false)
+		style = pal.Heading
 	}
 	return workflowFitLine(style.Render(headerSwitchText(label, focused)), width)
 }
 
-func (v *workflowStatsView) detailBodyHeight(width, height, bodyLines int) int {
+func (v *workflowStatsView) detailBodyHeight(width, height, bodyLines int, pal statsPalette) int {
 	if !v.hasEntries() || v.selected < 0 || v.selected >= len(v.entries) {
 		return 0
 	}
-	header := v.detailHeader(v.entries[v.selected], width)
+	header := v.detailHeader(v.entries[v.selected], width, pal)
 	bodyHeight := max(height-len(header)-1, 0)
 	if bodyLines == 0 {
 		return 0
@@ -668,22 +677,22 @@ func workflowStatusText(res workflowStepResult) string {
 	}
 }
 
-func workflowStatusBadge(status string) string {
+func workflowStatusBadge(status string, pal statsPalette) string {
 	status = strings.ToUpper(strings.TrimSpace(status))
 	switch status {
 	case "PASS":
-		return statsSuccessStyle.Render(padStyled(status, 8))
+		return pal.Success.Render(padStyled(status, 8))
 	case "FAIL":
-		return statsWarnStyle.Render(padStyled(status, 8))
+		return pal.Warn.Render(padStyled(status, 8))
 	case "CANCELED":
-		return statsCautionStyle.Render(padStyled(status, 8))
+		return pal.Caution.Render(padStyled(status, 8))
 	case "SKIPPED":
-		return statsCautionStyle.Render(padStyled(status, 8))
+		return pal.Caution.Render(padStyled(status, 8))
 	default:
 		if status == "" {
 			status = "UNKNOWN"
 		}
-		return statsSubLabelStyle.Render(padStyled(workflowPlainTruncate(status, 8), 8))
+		return pal.SubLabel.Render(padStyled(workflowPlainTruncate(status, 8), 8))
 	}
 }
 
@@ -705,30 +714,30 @@ func workflowResultStatus(res workflowStepResult) string {
 	return ""
 }
 
-func (entry workflowStatsEntry) detailBodyLines(indent string) []string {
+func (entry workflowStatsEntry) detailBodyLines(indent string, r responseRenderer) []string {
 	if entry.result.Canceled && !entry.hasResponse() {
-		return []string{statsMessageStyle.Render(indent + "Canceled before response capture")}
+		return []string{r.stats.Message.Render(indent + "Canceled before response capture")}
 	}
 	if entry.result.Skipped {
 		reason := strings.TrimSpace(entry.result.Message)
 		if reason == "" {
 			reason = "Skipped"
 		}
-		return []string{statsMessageStyle.Render(indent + reason)}
+		return []string{r.stats.Message.Render(indent + reason)}
 	}
 	if entry.hasHTTP() {
-		views := buildHTTPResponseViews(
+		views := r.buildHTTPResponseViews(
 			entry.result.HTTP,
 			entry.result.Tests,
 			entry.result.ScriptErr,
 		)
-		return indentLines(views.pretty, indent)
+		return indentLines(views.pretty, indent, r.stats)
 	}
 	if entry.hasGRPC() {
-		detail := buildWorkflowGRPCDetail(entry.result)
-		return indentLines(detail, indent)
+		detail := buildWorkflowGRPCDetail(entry.result, r)
+		return indentLines(detail, indent, r.stats)
 	}
-	placeholder := statsMessageStyle.Render(indent + "<no response captured>")
+	placeholder := r.stats.Message.Render(indent + "<no response captured>")
 	return []string{placeholder}
 }
 
@@ -744,9 +753,9 @@ func (entry workflowStatsEntry) hasGRPC() bool {
 	return entry.result.GRPC != nil
 }
 
-func indentLines(content string, indent string) []string {
+func indentLines(content string, indent string, pal statsPalette) []string {
 	if strings.TrimSpace(content) == "" {
-		return []string{statsMessageStyle.Render(indent + "<empty>")}
+		return []string{pal.Message.Render(indent + "<empty>")}
 	}
 	lines := strings.Split(content, "\n")
 	out := make([]string, 0, len(lines))
@@ -757,13 +766,12 @@ func indentLines(content string, indent string) []string {
 	return out
 }
 
-func buildWorkflowGRPCDetail(result workflowStepResult) string {
+func buildWorkflowGRPCDetail(result workflowStepResult, renderer responseRenderer) string {
 	resp := result.GRPC
 	if resp == nil {
 		return ""
 	}
 	method := strings.TrimSpace(result.Step.Using)
-	renderer := defaultResponseRenderer()
 
 	builder := strings.Builder{}
 	builder.WriteString(renderer.renderGRPCStatusLine(resp, method))
@@ -810,7 +818,11 @@ func workflowWrapLines(lines []string, width int) []string {
 	return out
 }
 
-func workflowJoinColumns(left, right []string, leftWidth, rightWidth int) []string {
+func workflowJoinColumns(
+	left, right []string,
+	leftWidth, rightWidth int,
+	pal statsPalette,
+) []string {
 	height := max(len(left), len(right))
 	out := make([]string, 0, height)
 	for i := range height {
@@ -822,16 +834,16 @@ func workflowJoinColumns(left, right []string, leftWidth, rightWidth int) []stri
 		if i < len(right) {
 			r = workflowFitLine(right[i], rightWidth)
 		}
-		out = append(out, l+statsSubLabelStyle.Render(workflowStatsGap)+r)
+		out = append(out, l+pal.SubLabel.Render(workflowStatsGap)+r)
 	}
 	return out
 }
 
-func workflowDivider(width int) string {
+func workflowDivider(width int, pal statsPalette) string {
 	if width < 1 {
 		width = 1
 	}
-	return statsSubLabelStyle.Render(strings.Repeat("─", width))
+	return pal.SubLabel.Render(strings.Repeat("─", width))
 }
 
 func workflowFitLines(lines []string, width, height int) []string {
