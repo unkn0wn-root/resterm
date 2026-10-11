@@ -158,7 +158,11 @@ func (m *Model) responseSearchContent(
 	case responseTabStats:
 		if pane := m.pane(paneID); pane != nil {
 			if stats := workflowStatsFromPane(pane); stats != nil {
-				render := stats.render(width, pane.viewport.Height)
+				render := stats.render(
+					width,
+					pane.viewport.Height,
+					m.themeRuntime.responseRenderer(m.theme),
+				)
 				content := displayContent(render.content)
 				return content, responseTabStats, content
 			}

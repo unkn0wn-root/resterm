@@ -838,7 +838,11 @@ func (m *Model) syncWorkflowStatsPane(
 	if pane == nil || snapshot == nil || snapshot.workflowStats == nil {
 		return nil
 	}
-	render := snapshot.workflowStats.render(width, height)
+	render := snapshot.workflowStats.render(
+		width,
+		height,
+		m.themeRuntime.responseRenderer(m.theme),
+	)
 	pane.setCacheForTab(responseTabStats, rawViewText, pane.headersView, cachedWrap{
 		width:   width,
 		content: render.content,

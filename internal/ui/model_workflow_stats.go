@@ -58,7 +58,12 @@ func (m *Model) scrollWorkflowStatsDetail(delta int) tea.Cmd {
 	if pane == nil {
 		return nil
 	}
-	if !view.scrollDetail(pane.viewport.Width, pane.viewport.Height, delta) {
+	if !view.scrollDetail(
+		pane.viewport.Width,
+		pane.viewport.Height,
+		delta,
+		m.themeRuntime.responseRenderer(m.theme),
+	) {
 		return nil
 	}
 	m.invalidateStatsCaches(snapshot)
@@ -74,7 +79,12 @@ func (m *Model) scrollWorkflowStatsDetailEdge(top bool) tea.Cmd {
 	if pane == nil {
 		return nil
 	}
-	if !view.scrollDetailEdge(pane.viewport.Width, pane.viewport.Height, top) {
+	if !view.scrollDetailEdge(
+		pane.viewport.Width,
+		pane.viewport.Height,
+		top,
+		m.themeRuntime.responseRenderer(m.theme),
+	) {
 		return nil
 	}
 	m.invalidateStatsCaches(snapshot)

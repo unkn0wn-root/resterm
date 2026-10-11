@@ -9,6 +9,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -62,7 +64,7 @@ func TestWorkflowStatsRenderSplitListAndSelectedDetail(t *testing.T) {
 	view := workflowStatsTestView()
 	view.selected = 1
 
-	render := view.render(120, 18)
+	render := view.render(120, 18, defaultResponseRenderer())
 	plain := stripANSIEscape(render.content)
 
 	for _, want := range []string{
@@ -83,11 +85,11 @@ func TestWorkflowStatsRenderSplitListAndSelectedDetail(t *testing.T) {
 }
 
 func TestWorkflowStatsUsesContinuousDividers(t *testing.T) {
-	if got := stripANSIEscape(workflowDivider(4)); got != "────" {
+	if got := stripANSIEscape(workflowDivider(4, defaultStatsPalette())); got != "────" {
 		t.Fatalf("expected a continuous horizontal divider, got %q", got)
 	}
 
-	joined := workflowJoinColumns([]string{"A"}, []string{"B"}, 1, 1)
+	joined := workflowJoinColumns([]string{"A"}, []string{"B"}, 1, 1, defaultStatsPalette())
 	if got := stripANSIEscape(joined[0]); got != "A │ B" {
 		t.Fatalf("expected a continuous vertical divider, got %q", got)
 	}
@@ -96,7 +98,7 @@ func TestWorkflowStatsUsesContinuousDividers(t *testing.T) {
 func TestWorkflowStatsFocusHeadingsUseActiveMarker(t *testing.T) {
 	view := workflowStatsTestView()
 
-	plain := stripANSIEscape(view.render(120, 18).content)
+	plain := stripANSIEscape(view.render(120, 18, defaultResponseRenderer()).content)
 	if !strings.Contains(plain, "● Steps") {
 		t.Fatalf("expected active marker on step list heading, got %q", plain)
 	}
@@ -107,7 +109,7 @@ func TestWorkflowStatsFocusHeadingsUseActiveMarker(t *testing.T) {
 	if !view.toggle() {
 		t.Fatal("expected toggle to focus selected step detail")
 	}
-	plain = stripANSIEscape(view.render(120, 18).content)
+	plain = stripANSIEscape(view.render(120, 18, defaultResponseRenderer()).content)
 	if !strings.Contains(plain, "● Selected Step") {
 		t.Fatalf("expected active marker on selected step heading, got %q", plain)
 	}
@@ -122,7 +124,7 @@ func TestWorkflowStatsEmptyViewIsUnknown(t *testing.T) {
 	if got := view.overallStatus(); got != "UNKNOWN" {
 		t.Fatalf("expected empty workflow status UNKNOWN, got %q", got)
 	}
-	plain := stripANSIEscape(view.render(80, 10).content)
+	plain := stripANSIEscape(view.render(80, 10, defaultResponseRenderer()).content)
 	if !strings.Contains(plain, "UNKNOWN") {
 		t.Fatalf("expected rendered empty workflow to show UNKNOWN, got %q", plain)
 	}
@@ -137,7 +139,7 @@ func TestWorkflowStatsRenderShowsSelectedDetailOnly(t *testing.T) {
 	view.entries[1].result.HTTP.Body = []byte(`{"hidden":"beta-body"}`)
 	view.selected = 0
 
-	render := view.render(120, 18)
+	render := view.render(120, 18, defaultResponseRenderer())
 	plain := stripANSIEscape(render.content)
 	if !strings.Contains(plain, "alpha-body") {
 		t.Fatalf("expected selected step detail, got %q", plain)
@@ -152,7 +154,7 @@ func TestWorkflowStatsDetailScrollKeepsSelection(t *testing.T) {
 	view.selected = 0
 	view.entries[0].result.HTTP.Body = []byte(strings.Repeat("line\n", 40))
 
-	if !view.scrollDetail(120, 14, 5) {
+	if !view.scrollDetail(120, 14, 5, defaultResponseRenderer()) {
 		t.Fatal("expected detail scroll to move")
 	}
 	if view.selected != 0 {
@@ -166,7 +168,7 @@ func TestWorkflowStatsDetailScrollKeepsSelection(t *testing.T) {
 func TestWorkflowStatsMoveResetsDetailScroll(t *testing.T) {
 	view := workflowStatsTestView()
 	view.entries[0].result.HTTP.Body = []byte(strings.Repeat("line\n", 40))
-	if !view.scrollDetail(120, 14, 5) {
+	if !view.scrollDetail(120, 14, 5, defaultResponseRenderer()) {
 		t.Fatal("expected detail scroll to move")
 	}
 
@@ -293,7 +295,7 @@ func TestWorkflowStatsRenderNarrowLayout(t *testing.T) {
 	view := workflowStatsTestView()
 	view.selected = 1
 
-	render := view.render(60, 18)
+	render := view.render(60, 18, defaultResponseRenderer())
 	plain := stripANSIEscape(render.content)
 	if !strings.Contains(plain, "Steps") || !strings.Contains(plain, "Selected Step") {
 		t.Fatalf("expected narrow layout to stack list and detail, got %q", plain)
@@ -322,7 +324,7 @@ func TestWorkflowStatsDetailUsesSingleStatusDurationSeparator(t *testing.T) {
 		selected: 0,
 	}
 
-	plain := stripANSIEscape(view.render(100, 12).content)
+	plain := stripANSIEscape(view.render(100, 12, defaultResponseRenderer()).content)
 	if strings.Contains(plain, "context deadline exceeded  31s") {
 		t.Fatalf("expected single separator before duration, got %q", plain)
 	}
@@ -357,12 +359,12 @@ func TestWorkflowStatsCanceledAndSkippedDetails(t *testing.T) {
 		selected: 0,
 	}
 
-	plain := stripANSIEscape(view.render(100, 16).content)
+	plain := stripANSIEscape(view.render(100, 16, defaultResponseRenderer()).content)
 	if !strings.Contains(plain, "Canceled before response capture") {
 		t.Fatalf("expected canceled placeholder, got %q", plain)
 	}
 	view.selected = 1
-	plain = stripANSIEscape(view.render(100, 16).content)
+	plain = stripANSIEscape(view.render(100, 16, defaultResponseRenderer()).content)
 	if !strings.Contains(plain, "condition was false") {
 		t.Fatalf("expected skipped reason, got %q", plain)
 	}
@@ -460,7 +462,7 @@ func TestBuildWorkflowGRPCDetailEncodesBinaryMetadata(t *testing.T) {
 	detail := stripANSIEscape(buildWorkflowGRPCDetail(workflowStepResult{
 		GRPC: resp,
 		Step: restfile.WorkflowStep{Using: "/pkg.Service/Call"},
-	}))
+	}, defaultResponseRenderer()))
 	if strings.Contains(detail, raw) {
 		t.Fatalf("workflow detail kept raw binary metadata: %q", detail)
 	}
@@ -473,5 +475,47 @@ func TestBuildWorkflowGRPCDetailEncodesBinaryMetadata(t *testing.T) {
 	}
 	if strings.Contains(detail, "OK (OK)") {
 		t.Fatalf("workflow detail repeated the status code as its message: %q", detail)
+	}
+}
+
+func TestWorkflowStatsRenderUsesThemePalette(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prev)
+	})
+
+	themed := lipgloss.NewStyle().Foreground(lipgloss.Color("#123456"))
+	pal := statsPalette{
+		Title:       themed,
+		Heading:     themed,
+		HeadingWarn: themed,
+		Label:       themed,
+		SubLabel:    themed,
+		Value:       themed,
+		Success:     themed,
+		Warn:        themed,
+		Caution:     themed,
+		Neutral:     themed,
+		Message:     themed,
+		HeaderValue: themed,
+		Duration:    themed,
+		Selected:    themed.Background(lipgloss.Color("#654321")),
+	}
+	view := workflowStatsTestView()
+	view.selected = 1
+
+	content := view.render(120, 18, newResponseRenderer(pal, "monokai", eSty{})).content
+	if !strings.Contains(content, "38;2;18;52;86") {
+		t.Fatalf("expected workflow view to use the theme palette, got %q", content)
+	}
+	for name, sgr := range map[string]string{
+		"#A6A1BB": "38;2;166;161;187",
+		"#E8E9F0": "38;2;232;233;240",
+		"#7D56F4": "38;2;125;86;244",
+	} {
+		if strings.Contains(content, sgr) {
+			t.Fatalf("workflow view still renders built-in dark color %s: %q", name, content)
+		}
 	}
 }
