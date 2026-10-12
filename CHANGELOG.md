@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.14.1](https://github.com/unkn0wn-root/resterm/compare/v1.14.0...v1.14.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **parser:** ignore rts comments in the json double-dot warning ([772424c](https://github.com/unkn0wn-root/resterm/commit/772424c437d42017baa6c88782fe5968b936274e))
+* **request:** ignore rts comments when expanding json shorthand ([f4e0a14](https://github.com/unkn0wn-root/resterm/commit/f4e0a1407e3a8ca45b786c783fbdd465bda198bb))
+* **rts:** name the function on member or index reads ([#471](https://github.com/unkn0wn-root/resterm/issues/471)) ([5a5d35a](https://github.com/unkn0wn-root/resterm/commit/5a5d35a0f34305c50519a6fd981849a2e9355a8b))
+* **ui:** indent groups in explain final request ([#473](https://github.com/unkn0wn-root/resterm/issues/473)) ([9d3a894](https://github.com/unkn0wn-root/resterm/commit/9d3a894f50891de1d24d52fa35fc5b00becd9be1))
+* **ui:** render the workflow tab with the theme's stats palette ([1d0d113](https://github.com/unkn0wn-root/resterm/commit/1d0d113978dc9961f7557df8406689bde19d6882)), closes [#A6A1](https://github.com/unkn0wn-root/resterm/issues/A6A1) [#E8E9F0](https://github.com/unkn0wn-root/resterm/issues/E8E9F0) [#343B59](https://github.com/unkn0wn-root/resterm/issues/343B59) [#A6A1](https://github.com/unkn0wn-root/resterm/issues/A6A1)
+
 ## [1.14.0](https://github.com/unkn0wn-root/resterm/compare/v1.13.3...v1.14.0) (2026-10-10)
 
 
