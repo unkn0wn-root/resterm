@@ -273,6 +273,20 @@ func TestRuntimeResponseAndAssertionBindings(t *testing.T) {
 	}
 }
 
+func TestJSONMemberWithoutCallSuggestsACall(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+
+	_, err := eng.EvalAssertion(t.Context(), rt, `response.json.ok`, testPos)
+	if err == nil || !strings.Contains(err.Error(), "member on function response.json. Call it first") {
+		t.Fatalf("response.json.ok: error = %v, want a call hint", err)
+	}
+	_, err = eng.Eval(t.Context(), rt, `last.json.ok`, testPos)
+	if err == nil || !strings.Contains(err.Error(), "member on function last.json. Call it first") {
+		t.Fatalf("last.json.ok: error = %v, want a call hint", err)
+	}
+}
+
 func TestEnvironmentMetadataHonorsStringLimitsThroughEveryAccess(t *testing.T) {
 	eng := NewEngine(stdlib.New)
 	eng.Core().Lim.MaxStr = 2
