@@ -501,6 +501,73 @@ func TestRenderExplainStyledWrapsCleanlyInNarrowWidth(t *testing.T) {
 	}
 }
 
+func TestRenderExplainStyledIndentsFinalRequestGroups(t *testing.T) {
+	t.Parallel()
+
+	rep := &xplain.Report{
+		Name:   "CreateUser",
+		Method: "POST",
+		URL:    "https://example.com/users",
+		Status: xplain.StatusReady,
+		Final: &xplain.Final{
+			Mode:     "sent",
+			Method:   "POST",
+			URL:      "https://example.com/users",
+			Settings: []xplain.Pair{{Key: "timeout", Value: "5s"}},
+			Details:  []xplain.Pair{{Key: "Auth", Value: "bearer"}},
+			Headers:  []xplain.Header{{Name: "Content-Type", Value: "application/json"}},
+			Body:     `{"name": "ada"}`,
+			Steps:    []string{"resolve vars"},
+		},
+	}
+
+	out := ansi.Strip(renderExplainStyledView(buildExplainView(rep), 72, theme.DefaultTheme()))
+	want := strings.Join([]string{
+		"│ Settings: timeout=5s",
+		"│ Details",
+		"│   Auth: bearer",
+		"│ Headers",
+		"│   Content-Type: application/json",
+		"│ Body",
+		`│   {"name": "ada"}`,
+		"│ Steps",
+		"│   • resolve vars",
+	}, "\n")
+	if !strings.Contains(out, want) {
+		t.Fatalf("expected indented rows under final request groups, got:\n%s", out)
+	}
+}
+
+func TestRenderExplainStyledShowsBodyNoteWithoutBody(t *testing.T) {
+	t.Parallel()
+
+	rep := &xplain.Report{
+		Name:   "SayHello",
+		Method: "GRPC",
+		URL:    "grpc://localhost:50051",
+		Status: xplain.StatusReady,
+		Final: &xplain.Final{
+			Mode:     "sent",
+			Method:   "GRPC",
+			URL:      "grpc://localhost:50051",
+			Headers:  []xplain.Header{{Name: "Content-Type", Value: "application/grpc"}},
+			BodyNote: "gRPC message from ./hello.json",
+			Steps:    []string{"resolve vars"},
+		},
+	}
+
+	out := ansi.Strip(renderExplainStyledView(buildExplainView(rep), 72, theme.DefaultTheme()))
+	want := strings.Join([]string{
+		"│   Content-Type: application/grpc",
+		"│ Body",
+		"│   gRPC message from ./hello.json",
+		"│ Steps",
+	}, "\n")
+	if !strings.Contains(out, want) {
+		t.Fatalf("expected body note under its own title, got:\n%s", out)
+	}
+}
+
 func TestApplyResponseSearchOnExplainDoesNotWaitForResponseFormatting(t *testing.T) {
 	t.Parallel()
 
