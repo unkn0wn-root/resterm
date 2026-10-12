@@ -214,6 +214,53 @@ func TestMembershipRejectsUnsupportedContainers(t *testing.T) {
 	}
 }
 
+func TestReadOnFunctionSuggestsACall(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "native member",
+			src:  "let value = str.x\n",
+			want: "test:1:16: member on function str. Call it first",
+		},
+		{
+			name: "native index",
+			src:  "let value = str[0]\n",
+			want: "test:1:16: index on function str. Call it first",
+		},
+		{
+			name: "function member",
+			src:  "fn f() { return 1 }\nlet value = f.x\n",
+			want: "test:2:14: member on function f. Call it first",
+		},
+		{
+			name: "member chain",
+			src:  "let d = {\"f\": str}\nlet value = d.f.x\n",
+			want: "test:2:16: member on function d.f. Call it first",
+		},
+		{
+			name: "unnamed function",
+			src:  "let value = [str][0].x\n",
+			want: "test:1:21: member on function. Call it first",
+		},
+		{
+			name: "non-function",
+			src:  "let n = 1\nlet value = n.x\n",
+			want: "test:2:14: member on non-object",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := execModuleErr(t, tt.src, Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 // the operators answer with a bool, so 1 && 2 is true and not 2 as in JavaScript
 func TestEvalLogicalSymbols(t *testing.T) {
 	cases := []struct {

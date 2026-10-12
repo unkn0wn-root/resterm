@@ -565,6 +565,8 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 				return Null(), WrapErr(vm.ctx, err)
 			}
 			return v, nil
+		case VFunc, VNative:
+			return Null(), vm.callFirstErr(e.Pos(), "index", e.X)
 		default:
 			return Null(), Errf(vm.ctx, e.Pos(), "index on non-collection")
 		}
@@ -595,6 +597,8 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 				return Null(), nil
 			}
 			return v, nil
+		case VFunc, VNative:
+			return Null(), vm.callFirstErr(e.Pos(), "member", e.X)
 		default:
 			return Null(), Errf(vm.ctx, e.Pos(), "member on non-object")
 		}
@@ -911,4 +915,28 @@ func (vm *VM) checkBound(pos Pos, v Value) error {
 		return nil
 	}
 	return rtAbort(vm.ctx, pos, AbortScript, "%s", why)
+}
+
+// callFirstErr reports a member or index read on a function, as in f.x for f().x.
+func (vm *VM) callFirstErr(pos Pos, op string, x Expr) error {
+	if name, ok := qualifiedName(x); ok {
+		return Errf(vm.ctx, pos, "%s on function %s. Call it first", op, name)
+	}
+	return Errf(vm.ctx, pos, "%s on function. Call it first", op)
+}
+
+// qualifiedName renders an identifier or a member chain such as a.b.c.
+func qualifiedName(ex Expr) (string, bool) {
+	switch e := ex.(type) {
+	case *Ident:
+		return e.Name, true
+	case *Member:
+		base, ok := qualifiedName(e.X)
+		if !ok {
+			return "", false
+		}
+		return base + "." + e.Name, true
+	default:
+		return "", false
+	}
 }
