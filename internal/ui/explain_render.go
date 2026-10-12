@@ -107,32 +107,30 @@ func renderExplainFinalSection(v explainView, width int, st explainStyles) strin
 			lines = append(lines, line)
 		}
 	}
-	if len(v.Final.Details) > 0 {
-		lines = append(lines, st.muted.Render("Details"))
-		for _, f := range v.Final.Details {
-			if line := renderExplainField(f, width, st.label, st.value); line != "" {
-				lines = append(lines, line)
-			}
+	group := func(title string, fields []explainField, label lipgloss.Style) {
+		if len(fields) == 0 {
+			return
+		}
+		lines = append(lines, st.muted.Render(title))
+		for _, f := range fields {
+			lines = append(lines, renderExplainWrapped(f.Value, width, st.value, "  "+label.Render(f.Label+": ")))
 		}
 	}
-	if len(v.Final.Headers) > 0 {
-		lines = append(lines, st.muted.Render("Headers"))
-		for _, f := range v.Final.Headers {
-			if line := renderExplainField(f, width, st.headerName, st.value); line != "" {
-				lines = append(lines, line)
-			}
+	group("Details", v.Final.Details, st.label)
+	group("Headers", v.Final.Headers, st.headerName)
+	if v.Final.BodyNote != "" || v.Final.Body != "" {
+		lines = append(lines, st.muted.Render("Body"))
+		if v.Final.BodyNote != "" {
+			lines = append(lines, renderExplainWrapped(v.Final.BodyNote, width, st.bodyNote, "  "))
 		}
-	}
-	if strings.TrimSpace(v.Final.BodyNote) != "" {
-		lines = append(lines, st.bodyNote.Render(v.Final.BodyNote))
-	}
-	if strings.TrimSpace(v.Final.Body) != "" {
-		lines = append(lines, renderExplainBlock(v.Final.Body, width, st.body))
+		if v.Final.Body != "" {
+			lines = append(lines, renderExplainBlock(v.Final.Body, width, st.body))
+		}
 	}
 	if len(v.Final.Steps) > 0 {
 		lines = append(lines, st.muted.Render("Steps"))
 		for _, step := range v.Final.Steps {
-			if line := renderExplainWrapped(step, width, st.value, "• "); line != "" {
+			if line := renderExplainWrapped(step, width, st.value, "  • "); line != "" {
 				lines = append(lines, line)
 			}
 		}
