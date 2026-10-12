@@ -347,37 +347,12 @@ func normCaptureRTSExpr(ex string) string {
 	if ex == "" {
 		return ex
 	}
+	// Match on the masked code so strings and comments stay as written.
+	code := rts.MaskText(ex)
 	var b strings.Builder
 	b.Grow(len(ex) + 8)
-	var q byte
-	esc := false
 	for i := 0; i < len(ex); {
-		ch := ex[i]
-		if q != 0 {
-			b.WriteByte(ch)
-			if esc {
-				esc = false
-				i++
-				continue
-			}
-			if ch == '\\' {
-				esc = true
-				i++
-				continue
-			}
-			if ch == q {
-				q = 0
-			}
-			i++
-			continue
-		}
-		if ch == '"' || ch == '\'' {
-			q = ch
-			b.WriteByte(ch)
-			i++
-			continue
-		}
-		if n, p, ok := captureJSONPathPrefix(ex, i); ok {
+		if n, p, ok := captureJSONPathPrefix(code, i); ok {
 			b.WriteString(p)
 			if n < len(ex) {
 				switch ex[n] {
@@ -388,7 +363,7 @@ func normCaptureRTSExpr(ex string) string {
 			i = n
 			continue
 		}
-		b.WriteByte(ch)
+		b.WriteByte(ex[i])
 		i++
 	}
 	return b.String()
