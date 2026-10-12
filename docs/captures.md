@@ -8,7 +8,7 @@ Expressions can reference:
 
 - `response.statusCode`, `response.statusText`, `response.text()`
 - `response.headers["header-name"]` or `response.header("Header-Name")` for a single-valued header
-- `response.json.path` shorthand (equivalent to `response.json().path`). `last.json.path` works the same way.
+- `response.json.path` shorthand (equivalent to `response.json().path`). `last.json.path` works the same way. The shorthand works only in a capture expression, not inside `{{= ... }}` or other directives. Elsewhere, call the function: `response.json().path` in `@assert`, or `last.json("path")` in `@when`.
 - `stream.kind()`, `stream.summary().sentCount`, `stream.summary().dropped`, and `stream.events()[0].text` for streaming transcripts (available when the request used `@sse` or `@websocket`). A non-zero `dropped` value means the retained transcript is incomplete.
 - `vars.*`, `env.*`, `last.*`, imported `@use` modules, and other RestermScript helpers
 

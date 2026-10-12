@@ -230,7 +230,7 @@ Null, false, zero, the empty string, the empty list, and the empty dict are fals
 
 ## Indexing and member access
 
-List indexing uses numeric indices such as `list[0]`, and out-of-range indexes return null. Dict access uses `dict["key"]` or `dict.key`, and missing keys return null. Objects support member access. Whether they support indexing depends on the object.
+List indexing uses numeric indices such as `list[0]`, and out-of-range indexes return null. Dict access uses `dict["key"]` or `dict.key`, and missing keys return null. Objects support member access. Whether they support indexing depends on the object. Functions support neither, so `response.json.id` is an error outside an `@capture` expression. Call the function first, as in `response.json().id`.
 
 ## Keys and names
 
