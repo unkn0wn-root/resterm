@@ -176,8 +176,8 @@ func capture(t tour, dir, version string, cat theme.Catalog, v variant) (frames,
 	}
 
 	m := ui.New(ui.Config{
-		// At 148 columns the env file badges end at ENV +, and editor lines and response tabs stay whole.
-		Settings:       config.Settings{Layout: config.LayoutSettings{SidebarWidth: 0.205, EditorSplit: 0.5}},
+		// At 160 columns the file badges, editor lines and response tabs all stay whole.
+		Settings:       config.Settings{Layout: config.LayoutSettings{SidebarWidth: 0.23, EditorSplit: 0.5}},
 		FilePath:       path,
 		InitialContent: string(content),
 		Theme:          &v.def.Theme,
