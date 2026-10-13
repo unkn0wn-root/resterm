@@ -1,0 +1,146 @@
+---
+import { renderScreen, type Frames } from '../../lib/screen';
+
+interface Props {
+  frames: Frames;
+  at: number;
+  class?: string;
+}
+
+const { frames, at, class: cls } = Astro.props;
+---
+
+<div class:list={['screen', cls]} aria-hidden="true" style={`--cols:${frames.cols}`}>
+  <div class="grid" set:html={renderScreen(frames.styles, frames.frames[at]!.lines)} />
+</div>
+
+<style>
+  /* JetBrains Mono and DejaVu Sans Mono subsets. Licenses are in assets/fonts. */
+  @font-face {
+    font-family: 'Screen Mono';
+    src: url('../../assets/fonts/screen-mono-regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'Screen Mono';
+    src: url('../../assets/fonts/screen-mono-bold.woff2') format('woff2');
+    font-weight: 700;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'Screen Symbols';
+    src: url('../../assets/fonts/screen-symbols.woff2') format('woff2');
+    font-display: swap;
+  }
+
+  .screen {
+    --screen-fg: var(--fg);
+    --screen-bg: var(--bg);
+    --ansi-7: var(--fg);
+    container-type: inline-size;
+    background: var(--screen-bg);
+    color: var(--screen-fg);
+  }
+
+  /* JetBrains Mono's cell width is 0.6em. */
+  .grid {
+    font-family: 'Screen Mono', 'Screen Symbols', var(--font-mono);
+    font-size: calc(100cqi / (var(--cols) * 0.6));
+    font-variant-ligatures: none;
+    line-height: 1.25;
+  }
+
+  .grid :global(.r) {
+    display: flex;
+    height: 1.25em;
+    white-space: pre;
+    overflow: hidden;
+  }
+
+  .grid :global(.r > span) {
+    flex: none;
+    height: 100%;
+  }
+
+  .grid :global(.B) {
+    font-weight: 700;
+  }
+
+  .grid :global(.I) {
+    font-style: italic;
+  }
+
+  .grid :global(.U) {
+    text-decoration: underline;
+  }
+
+  .grid :global(.g) {
+    display: inline-block;
+    width: 1ch;
+    height: 100%;
+    vertical-align: top;
+    text-align: center;
+  }
+
+  .grid :global(.g2) {
+    width: 2ch;
+  }
+
+  .grid :global(.d) {
+    -webkit-text-fill-color: transparent;
+  }
+
+  .grid :global(.hex) {
+    background: currentColor;
+    clip-path: polygon(50% 28%, 90% 39%, 90% 61%, 50% 72%, 10% 61%, 10% 39%);
+  }
+
+  .grid :global(.full) {
+    background: currentColor;
+  }
+
+  .grid :global(.top) {
+    background: linear-gradient(currentColor 50%, transparent 0);
+  }
+
+  .grid :global(.left) {
+    background: linear-gradient(to right, currentColor 50%, transparent 0);
+  }
+
+  .grid :global(.right) {
+    background: linear-gradient(to left, currentColor 50%, transparent 0);
+  }
+
+  .grid :global(.e) {
+    background: linear-gradient(to top, currentColor var(--e), transparent 0);
+  }
+
+  .grid :global(.e1) {
+    --e: 12.5%;
+  }
+  .grid :global(.e2) {
+    --e: 25%;
+  }
+  .grid :global(.e3) {
+    --e: 37.5%;
+  }
+  .grid :global(.e4) {
+    --e: 50%;
+  }
+  .grid :global(.e5) {
+    --e: 62.5%;
+  }
+  .grid :global(.e6) {
+    --e: 75%;
+  }
+  .grid :global(.e7) {
+    --e: 87.5%;
+  }
+
+  .grid :global(.shade) {
+    background: color-mix(in srgb, currentColor 25%, transparent);
+  }
+</style>
