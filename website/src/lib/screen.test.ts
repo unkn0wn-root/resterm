@@ -31,6 +31,30 @@ describe('renderScreen', () => {
     );
     expect(one({ fg: '#ffffff', a: 'f' }, [0, 'x'])).toContain('color:color-mix(in srgb, #ffffff 55%, transparent)');
   });
+
+  it('paints one background under runs that share it', () => {
+    const styles = [
+      { fg: '#ffffff', bg: '#8fbc8f' },
+      { fg: '#000000', bg: '#8fbc8f', a: 'b' },
+      { fg: '#8fbc8f', a: 'r' },
+      { bg: '#000000' },
+    ];
+    expect(
+      renderScreen(styles, [
+        [
+          [0, ' '],
+          [1, '>_'],
+          [2, ' '],
+          [0, ' '],
+          [3, ' '],
+        ],
+      ]),
+    ).toBe(
+      '<div class="r"><span style="background:#8fbc8f"><span style="color:#ffffff"> </span>' +
+        '<span class="B" style="color:#000000">&gt;_</span><span style="color:var(--screen-bg)"> </span>' +
+        '<span style="color:#ffffff"> </span></span><span style="background:#000000"> </span></div>',
+    );
+  });
 });
 
 describe('tour frames', () => {
