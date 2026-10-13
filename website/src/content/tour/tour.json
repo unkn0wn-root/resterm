@@ -9,6 +9,8 @@
       "name": "Requests",
       "keys": ["j", "j"],
       "wait": "› GET ListUsers",
+      "focus": "requests",
+      "panes": ["requests", "editor", "response"],
       "press": "Enter",
       "label": "Start over",
       "caption": "Requests and their mocks live in one .http file."
@@ -18,6 +20,8 @@
       "name": "Mocks",
       "keys": ["g", "M"],
       "wait": "Mock server listening",
+      "focus": "requests",
+      "panes": ["requests", "editor", "response"],
       "press": "g Shift+M",
       "label": "Start mocks",
       "caption": "The mock server answers from the same file."
@@ -27,6 +31,8 @@
       "name": "Run",
       "keys": ["enter"],
       "wait": "Grace Hopper",
+      "focus": "requests",
+      "panes": ["requests", "editor", "response"],
       "press": "Enter",
       "label": "Run",
       "caption": "Run the selected request. Assertions check the response."
@@ -36,6 +42,8 @@
       "name": "Timeline",
       "keys": ["g", "t"],
       "wait": "Timeline -",
+      "focus": "response",
+      "panes": ["requests", "editor", "response"],
       "press": "g t",
       "label": "Timeline",
       "caption": "@trace times every phase and checks it against the budget."
@@ -45,6 +53,8 @@
       "name": "Explain",
       "keys": ["g", "x"],
       "wait": "Explain",
+      "focus": "response",
+      "panes": ["requests", "editor", "response"],
       "press": "g x",
       "label": "Explain",
       "caption": "Explain shows how the request was built: variables, settings and the final request."

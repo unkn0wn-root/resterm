@@ -13,6 +13,21 @@ export interface Frames {
   frames: { id: string; lines: Run[][] }[];
 }
 
+export interface Pane {
+  id: string;
+  box: [x: number, y: number, w: number, h: number]; // Includes the pane borders.
+  // Full screen with this pane focused. Omitted if the step already focuses it.
+  focus?: Run[][];
+  // Omitted if the content fits. keep preserves scroll position after a focus change.
+  body?: { x: number; y: number; w: number; h: number; strip: number; keep?: boolean };
+}
+
+export interface PaneData {
+  styles: Style[];
+  strips: Run[][][];
+  frames: { id: string; panes: Pane[] }[];
+}
+
 // Let the font connect box borders. Give other symbols a fixed cell width.
 const plain = /^[\0-\x7f\u2500-\u257f]$/;
 
