@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
@@ -172,6 +173,8 @@ type Config struct {
 	Compare        engine.CompareConfig
 	Bindings       *bindings.Map
 	Runtime        *rtrun.Runtime
+	StatusUser     string
+	StatusHost     string
 }
 
 type operatorState struct {
@@ -623,7 +626,8 @@ func New(cfg Config) Model {
 		updateCmd = "resterm --update"
 	}
 	updateEnabled := cfg.EnableUpdate && !update.DevBuild(updateVersion) && cfg.UpdateClient.Ready()
-	statusUser, statusHost := currentStatusIdentity()
+	statusUser := cmp.Or(cfg.StatusUser, currentStatusUsername())
+	statusHost := cmp.Or(cfg.StatusHost, currentStatusHost())
 
 	model := Model{
 		cfg:                    cfg,

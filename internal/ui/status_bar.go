@@ -968,10 +968,6 @@ func statusBarHexRGB(c lipgloss.Color) (int, int, int, bool) {
 	return int(v >> 16 & 0xff), int(v >> 8 & 0xff), int(v & 0xff), true
 }
 
-func currentStatusIdentity() (string, string) {
-	return currentStatusUsername(), currentStatusHost()
-}
-
 func currentStatusUsername() string {
 	if u, err := user.Current(); err == nil && u != nil {
 		if name := cleanStatusUsername(u.Username); name != "" {
