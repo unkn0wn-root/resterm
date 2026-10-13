@@ -1,0 +1,67 @@
+# Requests and their mocks, in one file.
+
+### List users
+# @name ListUsers
+# @trace total<=100ms
+# @assert response.statusCode == 200
+# @assert response.json()[0].role == "admin"
+GET {{base.url}}/users
+Accept: application/json
+
+### Create a user
+# @name CreateUser
+# @capture file user.id {{response.json.id}}
+# @assert response.statusCode == 201
+POST {{base.url}}/users
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{"name": "Margaret Hamilton"}
+
+### Get the new user
+# @name GetUser
+GET {{base.url}}/users/{{user.id}}
+Accept: application/json
+
+### Onboard
+# @workflow onboard
+# @step List using=ListUsers
+# @step Create using=CreateUser
+# @step Fetch using=GetUser
+
+### Mock: list users
+# @mock method=GET path=/users latency=12ms
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+[
+  {
+    "id": 1,
+    "name": "Ada Lovelace",
+    "role": "admin"
+  },
+  {
+    "id": 2,
+    "name": "Grace Hopper",
+    "role": "member"
+  },
+  {
+    "id": 3,
+    "name": "Linus Torvalds",
+    "role": "member"
+  }
+]
+
+### Mock: create user
+# @mock method=POST path=/users latency=20ms
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{"id": 4, "name": {{json.body.name}}, "role": "member"}
+
+### Mock: get user
+# @mock method=GET path=/users/4 latency=8ms
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"id": 4, "name": "Margaret Hamilton", "role": "member"}

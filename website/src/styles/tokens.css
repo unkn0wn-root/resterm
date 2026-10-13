@@ -9,7 +9,7 @@
   --font-pixel: 'Silkscreen', var(--font-mono);
 
   --header-h: 2.75rem;
-  --status-h: 1.75rem;
+  --status-h: 1.875rem;
   --content-w: 46rem;
   --gutter: clamp(1rem, 3vw, 1.5rem);
   --radius: 2px;

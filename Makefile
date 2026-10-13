@@ -1,4 +1,4 @@
-.PHONY: fmt fmt-check fix website-dev website-check website-deploy
+.PHONY: fmt fmt-check fix website-dev website-check website-deploy website-tour
 
 fmt:
 	golangci-lint fmt .
@@ -15,6 +15,9 @@ website-dev:
 
 website-check:
 	cd website && npm run check && npm test && npm run build
+
+website-tour:
+	go run ./website/capture
 
 website-deploy:
 	gh workflow run website.yml --ref main

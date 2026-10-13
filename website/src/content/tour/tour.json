@@ -1,0 +1,80 @@
+{
+  "cols": 148,
+  "rows": 43,
+  "file": "tour.http",
+  "env": "dev",
+  "steps": [
+    {
+      "id": "open",
+      "name": "Requests",
+      "keys": ["j", "j"],
+      "wait": "› GET ListUsers",
+      "press": "Enter",
+      "label": "Start over",
+      "caption": "Requests and their mocks live in one .http file."
+    },
+    {
+      "id": "mock",
+      "name": "Mocks",
+      "keys": ["g", "M"],
+      "wait": "Mock server listening",
+      "press": "g Shift+M",
+      "label": "Start mocks",
+      "caption": "The mock server answers from the same file."
+    },
+    {
+      "id": "send",
+      "name": "Run",
+      "keys": ["enter"],
+      "wait": "Grace Hopper",
+      "press": "Enter",
+      "label": "Run",
+      "caption": "Run the selected request. Assertions check the response."
+    },
+    {
+      "id": "timeline",
+      "name": "Timeline",
+      "keys": ["g", "t"],
+      "wait": "Timeline -",
+      "press": "g t",
+      "label": "Timeline",
+      "caption": "@trace times every phase and checks it against the budget."
+    },
+    {
+      "id": "explain",
+      "name": "Explain",
+      "keys": ["g", "x"],
+      "wait": "Explain",
+      "press": "g x",
+      "label": "Explain",
+      "caption": "Explain shows how the request was built: variables, settings and the final request."
+    },
+    {
+      "id": "workflow",
+      "name": "Workflow",
+      "keys": ["g", "r", "j", "j", "j", "enter"],
+      "wait": "onboard",
+      "press": "Enter",
+      "label": "Run workflow",
+      "caption": "Select the onboard workflow and run it. Each step reuses values captured by the last."
+    },
+    {
+      "id": "help",
+      "name": "Help",
+      "keys": ["?"],
+      "wait": "Help",
+      "press": "?",
+      "label": "Help",
+      "caption": "Everything is on the keyboard. Help is searchable and works offline."
+    },
+    {
+      "id": "themes",
+      "name": "Themes",
+      "keys": ["esc", "g", "m"],
+      "wait": "Aurora",
+      "press": "g m",
+      "label": "Themes",
+      "caption": "Pick a theme, or write your own in TOML."
+    }
+  ]
+}

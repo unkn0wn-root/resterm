@@ -2,7 +2,7 @@
 import Features from '../components/home/Features.astro';
 import Install from '../components/home/Install.astro';
 import RunDemo from '../components/home/RunDemo.astro';
-import Screens from '../components/home/Screens.astro';
+import Tour from '../components/home/Tour.astro';
 import Wordmark from '../components/Wordmark.astro';
 import Base from '../layouts/Base.astro';
 import { site } from '../site';
@@ -13,6 +13,13 @@ const hints: [string, string][] = [
   ['j/k', 'Scroll'],
   ['t', 'Theme'],
   ['?', 'Help'],
+];
+
+const links = [
+  { icon: '◇', name: 'GitHub', note: 'source and issues', href: site.repo },
+  { icon: '⇄', name: 'Releases', note: 'changelog and binaries', href: `${site.repo}/releases` },
+  { icon: '♥', name: 'Sponsor', note: 'support the work', href: site.sponsor },
+  { icon: '▣', name: 'Docs', note: 'guides and reference', href: '/docs/' },
 ];
 ---
 
@@ -55,7 +62,16 @@ const hints: [string, string][] = [
   </section>
 
   <section class="band">
-    <Screens />
+    <header class="sec">
+      <h2>
+        <span class="sep" aria-hidden="true">
+          ###
+        </span>
+        Take the tour
+      </h2>
+      <p>Click the screen and press the keys shown under it, or use the buttons.</p>
+    </header>
+    <Tour />
   </section>
 
   <section class="band">
@@ -104,23 +120,45 @@ const hints: [string, string][] = [
   </section>
 
   <section class="band last">
-    <div class="pane pane-response closing">
-      <span class="pane-title">Response</span>
-      <p class="status">
-        <span class="ok">HTTP/1.1 200 OK</span>
-      </p>
-      <p class="hdr">Content-Type: text/plain</p>
-      <p class="body">
-        No telemetry. No account.
-        <br />
-        Resterm is free and open source under the Apache 2.0 license.
-      </p>
-      <p class="links">
-        <a href={site.repo}>◇ GitHub</a>
-        <a href={`${site.repo}/releases`}>⇄ Releases</a>
-        <a href={site.sponsor}>♥ Sponsor</a>
-        <a href="/docs/">▣ Docs</a>
-      </p>
+    <div class="closing">
+      <div class="pane pane-response response">
+        <span class="pane-title">Response</span>
+        <dl>
+          <div>
+            <dt>Status</dt>
+            <dd class="ok">200 OK</dd>
+          </div>
+          <div>
+            <dt>Telemetry</dt>
+            <dd>none</dd>
+          </div>
+          <div>
+            <dt>Account</dt>
+            <dd>none</dd>
+          </div>
+          <div>
+            <dt>License</dt>
+            <dd>{site.license}</dd>
+          </div>
+        </dl>
+        <p class="body">Free and open source. Your requests stay plain text in your repo.</p>
+      </div>
+      <nav class="pane links" aria-label="Project links">
+        <span class="pane-title">Links</span>
+        <ul>
+          {links.map((l) => (
+            <li>
+              <a href={l.href}>
+                <span class="icon" aria-hidden="true">
+                  {l.icon}
+                </span>
+                <span class="name">{l.name}</span>
+                <span class="note">{l.note}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </div>
   </section>
 </Base>
@@ -128,7 +166,7 @@ const hints: [string, string][] = [
 <style>
   .hero,
   .band {
-    width: min(76rem, 100%);
+    width: min(96rem, 100%);
     margin: 0 auto;
     padding-inline: var(--gutter);
   }
@@ -159,7 +197,7 @@ const hints: [string, string][] = [
     max-width: 38rem;
     margin: 1.25rem auto 0;
     font-family: var(--font-sans);
-    font-size: clamp(1rem, 1.6vw, 1.15rem);
+    font-size: clamp(1rem, 1.8vw, 1.25rem);
     line-height: 1.65;
     color: var(--fg-muted);
     text-wrap: pretty;
@@ -204,7 +242,7 @@ const hints: [string, string][] = [
     border: 0;
     background: none;
     color: var(--fg-dim);
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
   }
 
   .brew button:hover {
@@ -242,7 +280,7 @@ const hints: [string, string][] = [
     justify-content: center;
     gap: 0.25rem 2ch;
     margin-top: 1.75rem;
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     color: var(--fg-dim);
   }
 
@@ -274,24 +312,50 @@ const hints: [string, string][] = [
   .sec p {
     margin-top: 0.6rem;
     font-family: var(--font-sans);
-    font-size: 1rem;
+    font-size: clamp(1rem, 1.4vw, 1.0625rem);
     color: var(--fg-muted);
     line-height: 1.65;
     text-wrap: pretty;
   }
 
+  /* Same columns as Install and Quick start above. */
   .closing {
-    padding: 1.5rem clamp(1rem, 3vw, 2rem);
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 1.25rem;
     font-size: 0.9rem;
   }
 
-  .ok {
-    color: var(--ok);
-    font-weight: 600;
+  .response {
+    padding: 1.5rem clamp(1rem, 3vw, 2rem);
   }
 
-  .hdr {
-    color: var(--fg-dim);
+  dl div {
+    display: flex;
+    gap: 1ch;
+    line-height: 1.8;
+  }
+
+  dt {
+    color: var(--syn-key);
+  }
+
+  dt::after {
+    content: ':';
+  }
+
+  dl,
+  dd {
+    margin: 0;
+  }
+
+  dd {
+    color: var(--fg-strong);
+  }
+
+  dd.ok {
+    color: var(--ok);
+    font-weight: 600;
   }
 
   .body {
@@ -301,19 +365,64 @@ const hints: [string, string][] = [
   }
 
   .links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem 3ch;
-    margin-top: 1.5rem;
+    padding: 1.4rem 0.75rem;
   }
 
+  .links ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Rows look like the navigator: the cursor marker shows on the row under
+     the pointer or keyboard focus. */
   .links a {
-    color: var(--fg-muted);
+    display: flex;
+    gap: 1ch;
+    padding: 0.2rem 0.75ch;
+    color: var(--fg);
     text-decoration: none;
   }
 
-  .links a:hover {
+  .links a::before {
+    content: '';
+    width: 1ch;
+    flex: none;
+  }
+
+  .links a:hover,
+  .links a:focus-visible {
+    background: var(--bg-hover);
     color: var(--fg-strong);
+  }
+
+  .links a:hover::before,
+  .links a:focus-visible::before {
+    content: '›';
+    color: var(--focus);
+  }
+
+  :global(:root[data-theme='light']) .links a::before {
+    color: var(--fg-strong);
+  }
+
+  .icon {
+    color: var(--icon);
+  }
+
+  .name {
+    width: 9ch;
+    flex: none;
+  }
+
+  .note {
+    color: var(--fg-dim);
+  }
+
+  @media (max-width: 960px) {
+    .closing {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   @media (max-width: 560px) {
