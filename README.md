@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="_media/resterm_logo.png" alt="Resterm" width="120" />
+  <img src="_media/resterm_logo.png" alt="Resterm" width="200" />
   <br>
   Resterm
 </h1>
