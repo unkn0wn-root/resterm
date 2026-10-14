@@ -14,19 +14,21 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is an API client that uses `.http`/`.rest` files as source code. Almost all the features live in `.http` files, so they are easy to review in Git or any other version control. You can send requests, test API flows, record HTTP traffic and run local mock servers directly from the TUI or run the same definitions in scripts and CI with `resterm run` command.
+Resterm is a *code-first* API client built around plain `.http`/`.rest` files. You write requests, workflows and local mocks directly in those files instead of configuring everything through forms and dropdowns. The same files work in Resterm's terminal UI during development and with `resterm run` in scripts and CI.
 
 ## Why Resterm
 
-- **Test complete API flows.** Log in, capture a token, create a resource, and check the result. Add assertions, loops, conditions, retries, and scripts directly in your request files.
-- **Turn real traffic into local mocks.** Record HTTP requests and responses, then save them as runnable requests or mock definitions. Keep mocks next to the requests that use them.
-- **Find out what changed.** Compare responses across environments, diff against earlier results, inspect request timings, and profile repeated runs.
-- **Run the same checks locally and in CI.** Use the terminal UI while developing, then run those files with `resterm run`. Export JSON or JUnit reports.
-- **Work across protocols.** Send HTTP, GraphQL, and gRPC requests, and work with WebSocket and SSE streams.
+* **Test complete API flows.** Log in, capture a token, create a resource, and verify the response. Add assertions, loops, conditions, retries, and scripts directly in your request files.
+* **Turn real traffic into local mocks.** Record HTTP requests and responses, then save them as runnable requests or mock definitions. Keep mocks alongside the requests that use them.
+* **Compare responses and track changes.** Diff responses across environments or against previous runs, inspect timings, and profile repeated requests.
+* **Run locally and in CI.** Use the terminal UI during development and `resterm run` for automation. Export JSON or JUnit reports.
+* **Work across protocols.** Send HTTP, GraphQL, and gRPC requests, and work with WebSocket and SSE streams.
 
 Built-in SSH tunnels and Kubernetes port-forwards let you reach APIs behind a bastion or inside a cluster.
 
-No account, no telemetry, no AI features.
+No account, no telemetry.
+
+If you want your agent to understand Resterm, point it at the docs. Resterm has no MCP server or built-in AI features and probably never will.
 
 ## Screenshots
 
@@ -99,7 +101,7 @@ go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 
 Prebuilt binaries for macOS, Linux and Windows are on the [releases page](https://github.com/unkn0wn-root/resterm/releases). The Linux binaries need **glibc 2.32** or newer.
 
-To update, run `brew upgrade resterm` if you installed with Homebrew. Otherwise run `resterm --update`. More in the [install guide](https://resterm.app/docs/install/).
+To update a Homebrew installation, run `brew upgrade resterm`. For release binaries or installations made with the scripts, run `resterm --update`. If you installed with Go, rerun the `go install` command above. More in the [install guide](https://resterm.app/docs/install/).
 
 ## Quick start
 
@@ -130,7 +132,7 @@ Resterm reads the standard `.http` format and adds `# @` directives on top for s
 ### Create users
 // Send this request once for each name in the list.
 # @for-each ["david", "tom"] as name
-# @when env.mode == "development"
+# @when env.meta.name == "dev"
 # @assert response.statusCode == 201
 POST users
 Content-Type: application/json
