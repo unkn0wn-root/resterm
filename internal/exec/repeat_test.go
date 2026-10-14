@@ -342,7 +342,7 @@ func TestRunHTTPDoesNotRetryStatusesOrAssertionsByDefault(t *testing.T) {
 		return repeatTestResponse(req, http.StatusServiceUnavailable, "busy", nil), nil
 	})
 	result := Runner{Hooks: HTTPHooks{
-		RunAsserts: func(AssertInput) ([]scriptapi.TestResult, error) {
+		RunTests: func(TestInput) ([]scriptapi.TestResult, error) {
 			return []scriptapi.TestResult{{Name: "failed assertion", Passed: false}}, nil
 		},
 	}}.RunHTTP(HTTPInput{
@@ -492,7 +492,7 @@ func TestRunHTTPFinalizesOutsideThePollDeadline(t *testing.T) {
 			EvaluatePredicate: func(in PredicateInput) (bool, error) {
 				return string(in.HTTP.Body) == "completed", nil
 			},
-			RunAsserts: func(in AssertInput) ([]scriptapi.TestResult, error) {
+			RunTests: func(in TestInput) ([]scriptapi.TestResult, error) {
 				time.Sleep(2 * time.Second)
 				assertCtxErr = in.Context.Err()
 				return nil, nil

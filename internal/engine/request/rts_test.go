@@ -545,6 +545,8 @@ func TestTraceObjectBelongsToTheCurrentResponse(t *testing.T) {
 # @name traced
 # @trace total<=10s
 # @capture request budgets = trace.hasBudgets()
+# @script test
+> {% tests.assert(trace.enabled(), "js trace") %}
 GET `+srv.URL+`/traced
 
 ### plain
@@ -561,10 +563,15 @@ GET `+srv.URL+`/plain
 		if err != nil || res.Err != nil {
 			t.Fatalf("request %d: err=%v result err=%v", i, err, res.Err)
 		}
+		var names []string
 		for _, test := range res.Tests {
 			if !test.Passed {
 				t.Fatalf("request %d assert failed: %s %s", i, test.Name, test.Message)
 			}
+			names = append(names, test.Name)
+		}
+		if i == 0 && !slices.Contains(names, "js trace") {
+			t.Fatalf("request 0 tests = %q, want the js trace test", names)
 		}
 		for name, value := range want {
 			if got := executedVar(t, res.Executed, name); got != value {

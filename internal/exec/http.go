@@ -23,7 +23,6 @@ const (
 
 type HTTPInput struct {
 	Client           *httpx.Client
-	Scripts          *scripts.Runner
 	Context          context.Context
 	Doc              *restfile.Document
 	Req              *restfile.Request
@@ -32,7 +31,6 @@ type HTTPInput struct {
 	EffectiveTimeout time.Duration
 	ScriptVars       vars.NameMap[string]
 	Locals           rts.Locals
-	Secrets          *vars.Secrets
 }
 
 type CaptureInput struct {
@@ -46,15 +44,12 @@ type CaptureInput struct {
 	Locals   rts.Locals
 }
 
-type AssertInput struct {
-	Context context.Context
-	Doc     *restfile.Document
-	Req     *restfile.Request
-	BaseDir string
-	Vars    map[string]string
-	Locals  rts.Locals
-	HTTP    *httpx.Response
-	Stream  *scripts.StreamInfo
+type TestInput struct {
+	Context  context.Context
+	Vars     map[string]string
+	Response *scripts.Response
+	HTTP     *httpx.Response
+	Stream   *scripts.StreamInfo
 }
 
 type PredicateInput struct {
@@ -111,13 +106,11 @@ type HTTPHooks struct {
 	ApplyCaptures         func(CaptureInput) error
 	// CollectVariables rebuilds variables after pre-request scripts; the third
 	// argument contains their writes at script precedence.
-	CollectVariables    func(*restfile.Document, *restfile.Request, vars.NameMap[string]) map[string]string
-	CollectGlobalValues func(*restfile.Document) vars.Globals
-	RunAsserts          func(AssertInput) ([]scriptapi.TestResult, error)
-	EvaluatePredicate   func(PredicateInput) (bool, error)
-	ApplyRuntimeGlobals func(vars.Globals)
-	OnRepeatProgress    func(RepeatProgress)
-	Warn                func(string)
+	CollectVariables  func(*restfile.Document, *restfile.Request, vars.NameMap[string]) map[string]string
+	RunTests          func(TestInput) ([]scriptapi.TestResult, error)
+	EvaluatePredicate func(PredicateInput) (bool, error)
+	OnRepeatProgress  func(RepeatProgress)
+	Warn              func(string)
 }
 
 type HTTPResult struct {
@@ -141,9 +134,6 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			Err:      diag.New(diag.ClassProtocol, "http client is not initialised"),
 			Decision: "HTTP request failed",
 		}
-	}
-	if in.Scripts == nil {
-		in.Scripts = scripts.NewRunner(nil)
 	}
 	if in.Req == nil {
 		return HTTPResult{
@@ -265,47 +255,15 @@ func (r Runner) finalizeHTTP(
 		}
 	}
 
-	testVars := r.collectVars(in.Doc, in.Req, in.ScriptVars)
-	testGlobals := r.collectGlobals(in.Doc)
-
-	var assertErr error
-	if r.Hooks.RunAsserts != nil {
-		res.Tests, assertErr = r.Hooks.RunAsserts(AssertInput{
-			Context: ctx,
-			Doc:     in.Doc,
-			Req:     in.Req,
-			BaseDir: in.Options.BaseDir,
-			Vars:    testVars,
-			Locals:  in.Locals,
-			HTTP:    resp,
-			Stream:  streamInfo,
+	if r.Hooks.RunTests != nil {
+		res.Tests, res.ScriptErr = r.Hooks.RunTests(TestInput{
+			Context:  ctx,
+			Vars:     r.collectVars(in.Doc, in.Req, in.ScriptVars),
+			Response: respForScripts,
+			HTTP:     resp,
+			Stream:   streamInfo,
 		})
 	}
-
-	var traceSpec *restfile.TraceSpec
-	if in.Req != nil {
-		traceSpec = in.Req.Metadata.Trace
-	}
-	traceInput := scripts.NewTraceInput(resp.Timeline, traceSpec)
-	tests, globalChanges, testErr := in.Scripts.RunTests(
-		in.Context,
-		in.Req.Metadata.Scripts,
-		scripts.TestInput{
-			Response:  respForScripts,
-			Variables: testVars,
-			Globals:   testGlobals,
-			BaseDir:   in.Options.BaseDir,
-			Stream:    streamInfo,
-			Trace:     traceInput,
-			Secrets:   in.Secrets,
-		},
-	)
-	if globalChanges.Len() > 0 && r.Hooks.ApplyRuntimeGlobals != nil {
-		r.Hooks.ApplyRuntimeGlobals(globalChanges)
-	}
-
-	res.Tests = append(res.Tests, tests...)
-	res.ScriptErr = joinErr(assertErr, testErr)
 	return res
 }
 
@@ -318,13 +276,6 @@ func (r Runner) collectVars(
 		return nil
 	}
 	return r.Hooks.CollectVariables(doc, req, scriptVars)
-}
-
-func (r Runner) collectGlobals(doc *restfile.Document) vars.Globals {
-	if r.Hooks.CollectGlobalValues == nil {
-		return vars.Globals{}
-	}
-	return r.Hooks.CollectGlobalValues(doc)
 }
 
 func httpFailureDecision(req *restfile.Request) string {
@@ -456,14 +407,4 @@ func cloneHeader(src map[string][]string) map[string][]string {
 		dst[key] = append([]string(nil), values...)
 	}
 	return dst
-}
-
-func joinErr(a, b error) error {
-	if a == nil {
-		return b
-	}
-	if b == nil {
-		return a
-	}
-	return fmt.Errorf("%v; %v", a, b)
 }

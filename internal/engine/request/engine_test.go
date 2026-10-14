@@ -658,3 +658,85 @@ func TestPreviewCommandAuthUndefinedParamOutranksDerivedParseError(t *testing.T)
 		t.Fatalf("preview must not construct a transport")
 	}
 }
+
+func TestResponseTestsRunAssertsBeforeScripts(t *testing.T) {
+	doc, req := parseDoc(
+		t,
+		"### one\n# @assert response.statusCode == 200\n# @assert fail(\"boom\")\nGET http://example.test\n",
+	)
+	req.Metadata.Scripts = append(req.Metadata.Scripts, jsTest(`
+vars.global.set("seen", "yes");
+tests.assert(response.statusCode === 200, "js");
+`))
+	eng, _ := newStubEngine(t)
+	env := testEnv("")
+	res, err := eng.ExecuteWith(doc, req, env, ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	var names []string
+	for _, tr := range res.Tests {
+		if !tr.Passed {
+			t.Fatalf("test %q failed: %s", tr.Name, tr.Message)
+		}
+		names = append(names, tr.Name)
+	}
+	if want := []string{"response.statusCode == 200", "js"}; !slices.Equal(names, want) {
+		t.Fatalf("tests = %q, want %q", names, want)
+	}
+	if res.ScriptErr == nil || !strings.Contains(res.ScriptErr.Error(), "boom") {
+		t.Fatalf("script error = %v, want the assert error", res.ScriptErr)
+	}
+	if got := eng.rt.Globals().Snapshot(env.Scope())["seen"].Value; got != "yes" {
+		t.Fatalf("store seen = %q, want %q", got, "yes")
+	}
+}
+
+func TestSSEScriptTestsReadTheStream(t *testing.T) {
+	client := httpx.NewClientWithOptions(
+		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
+			return &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					h := make(http.Header)
+					h.Set("Content-Type", "text/event-stream")
+					return &http.Response{
+						Status:     "200 OK",
+						StatusCode: http.StatusOK,
+						Header:     h,
+						Body:       io.NopCloser(strings.NewReader("data: hello\n\n")),
+						Request:    r,
+					}, nil
+				}),
+			}, nil
+		}),
+	)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "https://example.test/events",
+		SSE:    &restfile.SSERequest{},
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{jsTest(`
+tests.assert(response.json().summary.eventCount === 1, "event count");
+tests.assert(stream.summary().dropped === 0, "complete transcript");
+`)},
+		},
+	}
+	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(nil, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if res.Stream == nil || res.Stream.Kind != "sse" {
+		t.Fatalf("stream = %+v, want sse", res.Stream)
+	}
+	if res.ScriptErr != nil {
+		t.Fatalf("script error = %v", res.ScriptErr)
+	}
+	if len(res.Tests) != 2 {
+		t.Fatalf("tests = %+v, want 2", res.Tests)
+	}
+	for _, tr := range res.Tests {
+		if !tr.Passed {
+			t.Fatalf("test %q failed: %s", tr.Name, tr.Message)
+		}
+	}
+}

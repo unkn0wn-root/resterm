@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 type transportFunc func(*http.Request) (*http.Response, error)
@@ -52,33 +54,20 @@ func TestRunnerRunHTTPSSE(t *testing.T) {
 		Method: "GET",
 		URL:    "https://example.com/events",
 		SSE:    &restfile.SSERequest{},
-		Metadata: restfile.RequestMetadata{
-			Scripts: []restfile.ScriptBlock{{
-				Kind: "test",
-				Body: `{%
-						const summary = stream.summary();
-						tests.assert(response.json().summary.eventCount === 1, "event count");
-						tests.assert(summary.dropped === 0, "complete transcript");
-					%}`,
-			}},
-		},
 	}
 
-	seenStream := (*struct {
-		kind  string
-		count int
-	})(nil)
+	var capIn CaptureInput
+	var testIn TestInput
+	testErr := errors.New("boom")
 	run := Runner{
 		Hooks: HTTPHooks{
 			ApplyCaptures: func(in CaptureInput) error {
-				seenStream = &struct {
-					kind  string
-					count int
-				}{
-					kind:  in.Stream.Kind,
-					count: in.Stream.Summary["eventCount"].(int),
-				}
+				capIn = in
 				return nil
+			},
+			RunTests: func(in TestInput) ([]scriptapi.TestResult, error) {
+				testIn = in
+				return []scriptapi.TestResult{{Name: "hook", Passed: true}}, testErr
 			},
 		},
 	}
@@ -95,22 +84,20 @@ func TestRunnerRunHTTPSSE(t *testing.T) {
 	if res.Response == nil {
 		t.Fatalf("expected response")
 	}
-	if res.Stream == nil || res.Stream.Kind != "sse" {
-		t.Fatalf("expected sse stream info, got %+v", res.Stream)
+	if res.Stream == nil || res.Stream.Kind != "sse" || res.Stream.Summary["eventCount"] != 1 {
+		t.Fatalf("expected sse stream info with one event, got %+v", res.Stream)
 	}
-	if len(res.Tests) != 2 {
-		t.Fatalf("expected 2 test results, got %d", len(res.Tests))
+	if capIn.Stream != res.Stream || testIn.Stream != res.Stream {
+		t.Fatalf("hooks saw streams %p and %p, want %p", capIn.Stream, testIn.Stream, res.Stream)
 	}
-	for _, result := range res.Tests {
-		if !result.Passed {
-			t.Fatalf("expected test to pass, got %+v", result)
-		}
+	if testIn.Response == nil || testIn.Response != capIn.Response {
+		t.Fatalf("tests hook response = %p, want the capture response %p", testIn.Response, capIn.Response)
 	}
-	if seenStream == nil {
-		t.Fatalf("expected capture hook to observe stream info")
+	if testIn.HTTP != res.Response {
+		t.Fatalf("tests hook response = %p, want %p", testIn.HTTP, res.Response)
 	}
-	if seenStream.kind != "sse" || seenStream.count != 1 {
-		t.Fatalf("unexpected stream info %+v", seenStream)
+	if len(res.Tests) != 1 || res.Tests[0].Name != "hook" || !errors.Is(res.ScriptErr, testErr) {
+		t.Fatalf("tests = %+v, script error = %v", res.Tests, res.ScriptErr)
 	}
 }
 

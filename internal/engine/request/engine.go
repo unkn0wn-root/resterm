@@ -1204,38 +1204,17 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	}
 
 	x.applyRuntimeGlobals(caps.globals)
-	testScope := x.sentScope(x.captureVariables())
 	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
 	defer cancelAsserts()
-	rr, assertErr := rtsGRPC(resp)
-	var asserts []scriptapi.TestResult
-	if assertErr == nil {
-		asserts, assertErr = x.eng.runAsserts(
-			assertCtx,
-			x.doc,
-			x.req,
-			x.env,
-			x.opts.BaseDir,
-			testScope,
-			x.locals,
-			rr,
-			nil,
-			rtsStream(info),
-		)
-	}
-	tests, globalChanges, testErr := x.eng.sc.RunTests(
-		x.sendCtx,
-		x.req.Metadata.Scripts,
-		scripts.TestInput{
-			Response:  respForScripts,
-			Variables: testScope.vars,
-			Globals:   testScope.globals,
-			BaseDir:   x.opts.BaseDir,
-			Stream:    info,
-			Secrets:   x.secrets,
-		},
-	)
-	x.applyRuntimeGlobals(globalChanges)
+	rr, rrErr := rtsGRPC(resp)
+	tests, testErr := x.runTests(testRun{
+		ctx:    assertCtx,
+		vars:   x.captureVariables(),
+		resp:   respForScripts,
+		rr:     rr,
+		rrErr:  rrErr,
+		stream: info,
+	})
 	x.exp.setPrepared(x.req)
 	x.exp.setGRPC(x.req)
 
@@ -1243,11 +1222,57 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	res.GRPC = resp
 	res.Stream = info
 	res.Transcript = copyBytes(raw)
-	res.Tests = append(asserts, tests...)
-	res.ScriptErr = joinErr(assertErr, testErr)
+	res.Tests = tests
+	res.ScriptErr = testErr
 	res.RequestText = x.reqText()
 	res.Explain = x.exp.finish(xplain.StatusReady, "gRPC request sent", nil)
 	return res
+}
+
+type testRun struct {
+	ctx     context.Context
+	vars    map[string]string
+	resp    *scripts.Response
+	rr      *rtshost.Response
+	rrErr   error
+	trace   *rtshost.Trace
+	jsTrace *scripts.TraceInput
+	stream  *scripts.StreamInfo
+}
+
+func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
+	sc := x.sentScope(in.vars)
+	var asserts []scriptapi.TestResult
+	assertErr := in.rrErr
+	if assertErr == nil {
+		asserts, assertErr = x.eng.runAsserts(
+			in.ctx,
+			x.doc,
+			x.req,
+			x.env,
+			x.opts.BaseDir,
+			sc,
+			x.locals,
+			in.rr,
+			in.trace,
+			rtsStream(in.stream),
+		)
+	}
+	tests, changes, testErr := x.eng.sc.RunTests(
+		x.sendCtx,
+		x.req.Metadata.Scripts,
+		scripts.TestInput{
+			Response:  in.resp,
+			Variables: sc.vars,
+			Globals:   sc.globals,
+			BaseDir:   x.opts.BaseDir,
+			Stream:    in.stream,
+			Trace:     in.jsTrace,
+			Secrets:   x.secrets,
+		},
+	)
+	x.applyRuntimeGlobals(changes)
+	return append(asserts, tests...), joinErr(assertErr, testErr)
 }
 
 func (f flow) ExecuteHTTP() xexec.RequestResult {
@@ -1257,7 +1282,6 @@ func (f flow) ExecuteHTTP() xexec.RequestResult {
 	x := f.ctx
 	res := x.httpRunner().RunHTTP(xexec.HTTPInput{
 		Client:           x.eng.hc,
-		Scripts:          x.eng.sc,
 		Context:          x.sendCtx,
 		Doc:              x.doc,
 		Req:              x.req,
@@ -1266,7 +1290,6 @@ func (f flow) ExecuteHTTP() xexec.RequestResult {
 		EffectiveTimeout: x.timeout,
 		ScriptVars:       x.run.scripts,
 		Locals:           x.locals,
-		Secrets:          x.secrets,
 	})
 	return x.finishHTTP(res)
 }
@@ -1309,26 +1332,18 @@ func (x *execCtx) httpRunner() xexec.Runner {
 				run.scripts = scriptVars
 				return x.eng.collectVariables(doc, req, x.env, run)
 			},
-			CollectGlobalValues: func(doc *restfile.Document) vars.Globals {
-				return effectiveGlobalValues(doc, x.storeG, x.env.Refs())
-			},
-			RunAsserts: func(in xexec.AssertInput) ([]scriptapi.TestResult, error) {
+			RunTests: func(in xexec.TestInput) ([]scriptapi.TestResult, error) {
 				rr, err := rtsHTTP(in.HTTP)
-				if err != nil {
-					return nil, err
-				}
-				return x.eng.runAsserts(
-					in.Context,
-					in.Doc,
-					in.Req,
-					x.env,
-					in.BaseDir,
-					x.sentScope(in.Vars),
-					in.Locals,
-					rr,
-					rtsTrace(in.HTTP),
-					rtsStream(in.Stream),
-				)
+				return x.runTests(testRun{
+					ctx:     in.Context,
+					vars:    in.Vars,
+					resp:    in.Response,
+					rr:      rr,
+					rrErr:   err,
+					trace:   rtsTrace(in.HTTP),
+					jsTrace: scripts.NewTraceInput(in.HTTP.Timeline, x.req.Metadata.Trace),
+					stream:  in.Stream,
+				})
 			},
 			EvaluatePredicate: func(in xexec.PredicateInput) (bool, error) {
 				return x.eng.evaluateResponsePredicate(
@@ -1343,8 +1358,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					in.Predicate,
 				)
 			},
-			ApplyRuntimeGlobals: x.applyRuntimeGlobals,
-			OnRepeatProgress:    x.onRepeat,
+			OnRepeatProgress: x.onRepeat,
 			Warn: func(message string) {
 				x.warn(Warning(message))
 			},
