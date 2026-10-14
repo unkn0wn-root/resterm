@@ -110,7 +110,7 @@ dialog.pane {
   padding: 0 0.75ch;
   background: var(--bg);
   color: var(--pane-title);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1;
   white-space: nowrap;
 }
@@ -133,7 +133,6 @@ dialog.pane {
 kbd {
   color: var(--key);
   font-weight: 600;
-  font-size: 0.9em;
 }
 
 .method {
