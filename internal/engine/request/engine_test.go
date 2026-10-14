@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -689,6 +690,34 @@ tests.assert(response.statusCode === 200, "js");
 	}
 	if got := eng.rt.Globals().Snapshot(env.Scope())["seen"].Value; got != "yes" {
 		t.Fatalf("store seen = %q, want %q", got, "yes")
+	}
+}
+
+func TestResponseTestsKeepEveryScriptError(t *testing.T) {
+	doc, req := parseDoc(
+		t,
+		"### one\n# @assert fail(\"boom\")\n# @script test\n> throw new Error(\"bad\");\nGET http://example.test\n",
+	)
+	eng, _ := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	rep := diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) != 2 {
+		t.Fatalf("report has %d items, want 2: %v", len(rep.Items), res.ScriptErr)
+	}
+	as, js := rep.Items[0], rep.Items[1]
+	if as.Message != "boom" || as.Span.Start != (diag.Pos{Path: "env_ref.http", Line: 2, Col: 15}) ||
+		len(as.Frames) == 0 {
+		t.Fatalf("assert diagnostic = %+v, want boom at env_ref.http:2:15 with frames", as)
+	}
+	if js.Class != diag.ClassScript || js.Message != "Error: bad" ||
+		js.Span.Start != (diag.Pos{Path: "env_ref.http", Line: 4, Col: 9}) {
+		t.Fatalf("script diagnostic = %+v, want Error: bad at env_ref.http:4:9", js)
+	}
+	if got := diag.ClassOf(res.ScriptErr); got != diag.ClassScript {
+		t.Fatalf("class = %s, want %s", got, diag.ClassScript)
 	}
 }
 

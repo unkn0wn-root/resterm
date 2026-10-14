@@ -1223,13 +1223,3 @@ func (e *Engine) ApplyPatches(
 	env := ResolveEnvironment(src, doc, req)
 	return e.runRTSApply(ctx, doc, req, env, base, e.storedScope(doc, env, vv), locals)
 }
-
-func joinErr(a, b error) error {
-	if a == nil {
-		return b
-	}
-	if b == nil {
-		return a
-	}
-	return fmt.Errorf("%v; %v", a, b)
-}

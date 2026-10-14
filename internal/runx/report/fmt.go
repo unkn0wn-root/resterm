@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 func reportFileLabel(path string) string {
@@ -144,17 +146,17 @@ func resultLine(res Result) string {
 	switch {
 	case res.Status == StatusSkip:
 		if reason := res.SkipReason; reason != "" {
-			return fmt.Sprintf("%s [%s]", base, reason)
+			return fmt.Sprintf("%s [%s]", base, oneLine(reason))
 		}
 		return base
 	case res.Error != "":
-		return fmt.Sprintf("%s [%s]", base, res.Error)
+		return fmt.Sprintf("%s [%s]", base, oneLine(res.Error))
 	case res.ScriptError != "":
-		return fmt.Sprintf("%s [%s]", base, res.ScriptError)
+		return fmt.Sprintf("%s [%s]", base, oneLine(res.ScriptError))
 	}
 
 	if msg := streamFailureText(res.Stream); msg != "" {
-		return fmt.Sprintf("%s [%s]", base, msg)
+		return fmt.Sprintf("%s [%s]", base, oneLine(msg))
 	}
 	if n := failedTestCount(res.Tests); n > 0 {
 		return fmt.Sprintf("%s [%d test(s) failed]", base, n)
@@ -212,7 +214,7 @@ func profileLine(res Result) string {
 	if prof == nil ||
 		(prof.TotalRuns == 0 && prof.WarmupRuns == 0 && prof.SuccessfulRuns == 0 && prof.FailedRuns == 0) {
 		if summary := res.Summary; summary != "" {
-			return fmt.Sprintf("%s [%s]", base, summary)
+			return fmt.Sprintf("%s [%s]", base, oneLine(summary))
 		}
 		return base
 	}
@@ -255,25 +257,25 @@ func stepLine(step Step) string {
 	switch {
 	case step.Canceled:
 		if msg := step.Summary; msg != "" {
-			return fmt.Sprintf("%s [%s]", base, msg)
+			return fmt.Sprintf("%s [%s]", base, oneLine(msg))
 		}
 		return base
 	case step.Status == StatusSkip:
 		if msg := step.SkipReason; msg != "" {
-			return fmt.Sprintf("%s [%s]", base, msg)
+			return fmt.Sprintf("%s [%s]", base, oneLine(msg))
 		}
 		if msg := step.Summary; msg != "" {
-			return fmt.Sprintf("%s [%s]", base, msg)
+			return fmt.Sprintf("%s [%s]", base, oneLine(msg))
 		}
 		return base
 	case step.Error != "":
-		return fmt.Sprintf("%s [%s]", base, step.Error)
+		return fmt.Sprintf("%s [%s]", base, oneLine(step.Error))
 	case step.ScriptError != "":
-		return fmt.Sprintf("%s [%s]", base, step.ScriptError)
+		return fmt.Sprintf("%s [%s]", base, oneLine(step.ScriptError))
 	}
 
 	if msg := streamFailureText(step.Stream); msg != "" {
-		return fmt.Sprintf("%s [%s]", base, msg)
+		return fmt.Sprintf("%s [%s]", base, oneLine(msg))
 	}
 	if n := failedTestCount(step.Tests); n > 0 {
 		return fmt.Sprintf("%s [%d test(s) failed]", base, n)
@@ -283,7 +285,7 @@ func stepLine(step Step) string {
 	}
 	if step.Status == StatusFail {
 		if msg := step.Summary; msg != "" {
-			return fmt.Sprintf("%s [%s]", base, msg)
+			return fmt.Sprintf("%s [%s]", base, oneLine(msg))
 		}
 	}
 
@@ -465,4 +467,8 @@ func jsonAnyValue(v any) any {
 	default:
 		return x
 	}
+}
+
+func oneLine(s string) string {
+	return str.JoinLines(s, "; ")
 }

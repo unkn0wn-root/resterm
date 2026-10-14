@@ -1272,7 +1272,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 		},
 	)
 	x.applyRuntimeGlobals(changes)
-	return append(asserts, tests...), joinErr(assertErr, testErr)
+	return append(asserts, tests...), errors.Join(assertErr, testErr)
 }
 
 func (f flow) ExecuteHTTP() xexec.RequestResult {
