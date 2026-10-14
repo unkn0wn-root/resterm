@@ -28,4 +28,3 @@ Run it after UI changes and commit the frames. It serves mocks on `127.0.0.1:808
 ## Docs come from docs/
 
 The site does not keep its own copy of the docs. At build time it reads `../docs/**/*.md` and turns each file into one page.
-Screenshots are read from `../_media` and converted to WebP at build time.

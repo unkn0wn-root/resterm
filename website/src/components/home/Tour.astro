@@ -1,0 +1,207 @@
+---
+import dark from '../../content/tour/frames-dark.json';
+import light from '../../content/tour/frames-light.json';
+import tour from '../../content/tour/tour.json';
+import type { Frames } from '../../lib/screen';
+import Screen from './Screen.astro';
+
+const { steps } = tour;
+---
+
+<div class="tour pane" data-tabs data-tour>
+  <span class="pane-title">Tour</span>
+  <div class="head">
+    <div class="tabs" role="tablist" aria-label="Tour steps">
+      {steps.map((s, i) => (
+        <button
+          type="button"
+          role="tab"
+          id={`tour-tab-${s.id}`}
+          aria-controls={`tour-${s.id}`}
+          aria-selected={i === 0 ? 'true' : 'false'}
+          tabindex={i === 0 ? 0 : -1}
+        >
+          {s.name}
+        </button>
+      ))}
+    </div>
+    <button type="button" class="layout" data-tour-editor>
+      <kbd>g 2</kbd>
+      <span>Hide editor</span>
+    </button>
+  </div>
+  {steps.map((s, i) => {
+    const next = steps[(i + 1) % steps.length]!;
+    return (
+      <div
+        class="step"
+        id={`tour-${s.id}`}
+        role="tabpanel"
+        aria-labelledby={`tour-tab-${s.id}`}
+        tabindex="0"
+        data-press={next.press}
+        hidden={i > 0}
+      >
+        <Screen class="dark base" frames={dark as Frames} at={i} />
+        <Screen class="light base" frames={light as Frames} at={i} />
+        <div class="foot">
+          <p>{s.caption}</p>
+          <button type="button" class="next" data-tour-next>
+            <kbd>{next.press}</kbd>
+            <span>{next.label}</span>
+          </button>
+        </div>
+      </div>
+    );
+  })}
+</div>
+
+<script>
+  import '../../scripts/tour';
+</script>
+
+<style>
+  .tour {
+    padding: 1.1rem 1rem 0.25rem;
+  }
+
+  .tour:has(.step:focus) {
+    --pane-border: var(--focus);
+    --pane-title: var(--focus);
+  }
+
+  .head {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.5rem 1ch;
+    padding-bottom: 0.8rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.875rem;
+  }
+
+  .tabs {
+    grid-column: 2;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 1ch;
+  }
+
+  [role='tab'] {
+    padding: 0.1rem 1ch;
+    border: 0;
+    background: none;
+    color: var(--fg-muted);
+  }
+
+  [role='tab']:hover {
+    color: var(--fg-strong);
+  }
+
+  [role='tab'][aria-selected='true'] {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  [role='tab'][aria-selected='true']::before {
+    content: '▹ ';
+  }
+
+  .layout {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .step {
+    cursor: pointer;
+  }
+
+  .step:focus {
+    outline: none;
+  }
+
+  :global(:root[data-theme='dark']) .step :global(.screen.light),
+  :global(:root[data-theme='light']) .step :global(.screen.dark),
+  .tour:not(.editor-hidden) .step :global(.screen.alt),
+  .tour.editor-hidden .step :global(.screen.base) {
+    display: none;
+  }
+
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: 2ch;
+    margin-top: 1rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--line);
+    font-size: 0.875rem;
+    cursor: auto;
+  }
+
+  .foot p {
+    flex: 1;
+    color: var(--fg-muted);
+  }
+
+  .next,
+  .layout {
+    display: flex;
+    align-items: center;
+    gap: 1ch;
+    padding: 0.35rem 1.25ch;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--bg-pane);
+    color: var(--fg-strong);
+    white-space: nowrap;
+  }
+
+  .next::after {
+    content: '▸';
+    color: var(--fg-dim);
+  }
+
+  .next:hover,
+  .next.nudge,
+  .layout:hover {
+    border-color: var(--focus);
+  }
+
+  .editor-hidden .layout {
+    border-color: var(--accent);
+  }
+
+  @media (max-width: 900px) {
+    .head {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tabs,
+    .layout {
+      grid-column: 1;
+    }
+
+    .layout {
+      justify-self: center;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .tour {
+      padding-inline: 0.5rem;
+    }
+
+    .foot {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.75rem;
+    }
+
+    .next {
+      justify-content: center;
+      min-height: 2.75rem;
+    }
+  }
+</style>

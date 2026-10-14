@@ -2,7 +2,7 @@
 import Features from '../components/home/Features.astro';
 import Install from '../components/home/Install.astro';
 import RunDemo from '../components/home/RunDemo.astro';
-import Screens from '../components/home/Screens.astro';
+import Tour from '../components/home/Tour.astro';
 import Wordmark from '../components/Wordmark.astro';
 import Base from '../layouts/Base.astro';
 import { site } from '../site';
@@ -55,7 +55,16 @@ const hints: [string, string][] = [
   </section>
 
   <section class="band">
-    <Screens />
+    <header class="sec">
+      <h2>
+        <span class="sep" aria-hidden="true">
+          ###
+        </span>
+        Take the tour
+      </h2>
+      <p>Click the screen and press the keys shown under it, or use the buttons.</p>
+    </header>
+    <Tour />
   </section>
 
   <section class="band">
