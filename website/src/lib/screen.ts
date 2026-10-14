@@ -13,10 +13,25 @@ export interface Frames {
   frames: { id: string; lines: Run[][] }[];
 }
 
-// The font joins box lines across rows. Other symbols need explicit cell widths.
+export interface Pane {
+  id: string;
+  box: [x: number, y: number, w: number, h: number]; // Includes the pane borders.
+  // Full screen with this pane focused. Omitted if the step already focuses it.
+  focus?: Run[][];
+  // Omitted if the content fits. keep preserves scroll position after a focus change.
+  body?: { x: number; y: number; w: number; h: number; strip: number; keep?: boolean };
+}
+
+export interface PaneData {
+  styles: Style[];
+  strips: Run[][][];
+  frames: { id: string; panes: Pane[] }[];
+}
+
+// Let the font connect box borders. Give other symbols a fixed cell width.
 const plain = /^[\0-\x7f\u2500-\u257f]$/;
 
-// CSS fills block cells without gaps and supplies the missing ⬢ glyph.
+// Draw blocks with CSS to avoid gaps, and draw ⬢ because the font lacks it.
 const drawn: Record<string, string> = {
   '█': 'g d full',
   '▀': 'g d top',
@@ -37,17 +52,16 @@ const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').rep
 
 const color = (c: string | undefined, def: string) => (c?.startsWith('@') ? `var(--ansi-${c.slice(1)})` : c || def);
 
-function attrs({ fg, bg, a = '' }: Style): string {
+function paint({ fg, bg, a = '' }: Style) {
   let f = color(fg, 'var(--screen-fg)');
   let b = color(bg, '');
   if (a.includes('r')) [f, b] = [b || 'var(--screen-bg)', f];
   if (a.includes('f')) f = `color-mix(in srgb, ${f} 55%, transparent)`;
-  const style = [(fg || a) && `color:${f}`, b && `background:${b}`].filter(Boolean).join(';');
   const cls = [a.includes('b') && 'B', a.includes('i') && 'I', a.includes('u') && 'U'].filter(Boolean).join(' ');
-  return (cls && ` class="${cls}"`) + (style && ` style="${style}"`);
+  return { cls, fg: fg || a ? f : '', bg: b };
 }
 
-// Keep variation selectors in the same cell as their base character.
+// Variation selectors must stay with their base character in one cell.
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 function text(s: string): string {
@@ -58,14 +72,30 @@ function text(s: string): string {
   return out;
 }
 
+// Share the background span to avoid seams when cell widths fall between pixels.
 export function renderScreen(styles: Style[], lines: Run[][]): string {
-  const spans = styles.map(attrs);
+  const paints = styles.map(paint);
+  const run = ([id, t, w]: Run, bg: string) => {
+    const { cls, fg } = paints[id]!;
+    const style = [fg && `color:${fg}`, bg && `background:${bg}`].filter(Boolean).join(';');
+    const cell = w ? `<span class="g g2">${escape(t)}</span>` : text(t);
+    return `<span${cls && ` class="${cls}"`}${style && ` style="${style}"`}>${cell}</span>`;
+  };
   return lines
     .map((line) => {
-      const runs = line.map(
-        ([id, t, w]) => `<span${spans[id]}>${w ? `<span class="g g2">${escape(t)}</span>` : text(t)}</span>`,
+      const groups: { bg: string; runs: Run[] }[] = [];
+      for (const r of line) {
+        const { bg } = paints[r[0]]!;
+        const last = groups.at(-1);
+        if (bg && last?.bg === bg) last.runs.push(r);
+        else groups.push({ bg, runs: [r] });
+      }
+      const html = groups.map(({ bg, runs }) =>
+        runs.length === 1
+          ? run(runs[0]!, bg)
+          : `<span style="background:${bg}">${runs.map((r) => run(r, '')).join('')}</span>`,
       );
-      return `<div class="r">${runs.join('')}</div>`;
+      return `<div class="r">${html.join('')}</div>`;
     })
     .join('');
 }

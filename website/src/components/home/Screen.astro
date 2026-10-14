@@ -15,7 +15,7 @@ const { frames, at, class: cls } = Astro.props;
 </div>
 
 <style>
-  /* JetBrains Mono and DejaVu Sans Mono subsets. Licenses are in assets/fonts. */
+  /* Font subsets from JetBrains Mono and DejaVu Sans Mono. Licenses are in assets/fonts. */
   @font-face {
     font-family: 'Screen Mono';
     src: url('../../assets/fonts/screen-mono-regular.woff2') format('woff2');
@@ -37,6 +37,7 @@ const { frames, at, class: cls } = Astro.props;
   }
 
   .screen {
+    position: relative;
     --screen-fg: var(--fg);
     --screen-bg: var(--bg);
     --ansi-7: var(--fg);
@@ -45,12 +46,32 @@ const { frames, at, class: cls } = Astro.props;
     color: var(--screen-fg);
   }
 
-  /* JetBrains Mono's cell width is 0.6em. */
+  /* Divide by JetBrains Mono's 0.6em cell width to fit all columns. */
   .grid {
     font-family: 'Screen Mono', 'Screen Symbols', var(--font-mono);
     font-size: calc(100cqi / (var(--cols) * 0.6));
     font-variant-ligatures: none;
     line-height: 1.25;
+  }
+
+  /* Scroll boxes inherit .grid's font: 1ch is a column, 1lh is a row. */
+  .scroller {
+    position: absolute;
+    left: calc(var(--x) * 1ch);
+    top: calc(var(--y) * 1lh);
+    width: calc(var(--w) * 1ch);
+    height: calc(var(--h) * 1lh);
+    overflow-y: auto;
+    scrollbar-width: none;
+    background: var(--screen-bg);
+  }
+
+  .scroller::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scroller.idle {
+    opacity: 0;
   }
 
   .grid :global(.r) {

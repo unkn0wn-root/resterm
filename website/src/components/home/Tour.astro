@@ -40,6 +40,7 @@ const { steps } = tour;
         aria-labelledby={`tour-tab-${s.id}`}
         tabindex="0"
         data-press={next.press}
+        data-focus={s.focus}
         hidden={i > 0}
       >
         <Screen class="dark base" frames={dark as Frames} at={i} />
