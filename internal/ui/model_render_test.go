@@ -1972,3 +1972,16 @@ func assertTitleCenteredWithinNearestBorders(t *testing.T, view, title string) {
 func hasFaintSGR(s string) bool {
 	return strings.Contains(s, "\x1b[2m") || strings.Contains(s, "\x1b[2;")
 }
+
+func TestPaneTabsKeepBadgeAtEveryWidth(t *testing.T) {
+	snap := &responseSnapshot{pretty: withTrailingNewline("ok"), ready: true}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	model.pane(responsePanePrimary).followLatest = true
+
+	for w := 30; w <= 90; w++ {
+		row := firstLine(ansi.Strip(model.renderPaneTabs(responsePanePrimary, true, w)))
+		if !strings.Contains(row, "LIVE") && !strings.HasSuffix(strings.TrimSpace(row), " L") {
+			t.Fatalf("width %d: expected the mode badge, got %q", w, row)
+		}
+	}
+}

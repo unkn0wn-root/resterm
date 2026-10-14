@@ -32,6 +32,7 @@
       "keys": ["enter"],
       "wait": "Grace Hopper",
       "focus": "requests",
+      "split": 0.45,
       "panes": ["requests", "editor", "response"],
       "press": "Enter",
       "label": "Run",

@@ -20,7 +20,7 @@ From the repo root, `make website-dev` starts the dev server. `make website-chec
 
 ## The tour
 
-The landing page tour renders captured Resterm terminal output. `src/content/tour/tour.json` defines each step's keys, its initial `focus`, and the `panes` visitors can interact with.
+The landing page tour renders captured Resterm terminal output. `src/content/tour/tour.json` defines each step's keys, its initial `focus`, the `panes` visitors can interact with, and an optional editor `split` that carries over to later steps.
 
 Run `make website-tour` from the repo root after TUI changes. It runs Resterm against `tour.http` in both themes, with the editor shown and hidden (`g 2`). It starts a mock server on `127.0.0.1:8080`, so port 8080 must be free.
 

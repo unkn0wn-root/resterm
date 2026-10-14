@@ -57,11 +57,19 @@ Content-Type: application/json
 HTTP/1.1 201 Created
 Content-Type: application/json
 
-{"id": 4, "name": {{json.body.name}}, "role": "member"}
+{
+  "id": 4,
+  "name": {{json.body.name}},
+  "role": "member"
+}
 
 ### Mock: get user
 # @mock method=GET path=/users/4 latency=8ms
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"id": 4, "name": "Margaret Hamilton", "role": "member"}
+{
+  "id": 4,
+  "name": "Margaret Hamilton",
+  "role": "member"
+}

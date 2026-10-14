@@ -1204,7 +1204,7 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 	tabs := m.availableResponseTabsFor(id)
 	lineWidth := max(width, 1)
 	rowStyle := m.theme.Tabs.Width(lineWidth).Align(lipgloss.Center)
-	contentLimit := max(lineWidth, 1)
+	contentLimit := max(lineWidth-rowStyle.GetHorizontalFrameSize(), 1)
 	rowContent := m.buildTabRowContent(
 		tabs,
 		pane,

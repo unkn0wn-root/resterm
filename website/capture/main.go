@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"io"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -40,6 +41,7 @@ type step struct {
 	Keys  []string `json:"keys"`
 	Wait  string   `json:"wait"`
 	Focus string   `json:"focus"`
+	Split float64  `json:"split"`
 	Panes []string `json:"panes"`
 }
 
@@ -115,9 +117,10 @@ var (
 
 const (
 	// Resterm scrolls up to three rows per wheel notch.
-	notch  = 3
-	tries  = 5
-	settle = 400 * time.Millisecond
+	notch     = 3
+	tries     = 5
+	settle    = 400 * time.Millisecond
+	splitStep = 0.05
 )
 
 type snapMsg struct{ out chan<- string }
@@ -135,10 +138,10 @@ func (s shooter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 type variant struct {
-	name string
-	def  theme.Definition
-	dark bool
-	pre  []string
+	name   string
+	def    theme.Definition
+	dark   bool
+	hidden bool
 }
 
 func main() {
@@ -177,10 +180,10 @@ func main() {
 
 	var vs []variant
 	for _, v := range []variant{{name: "dark", def: theme.DefaultDefinition(), dark: true}, {name: "light", def: light}} {
-		hidden := v
-		hidden.name += "-editor-hidden"
-		hidden.pre = []string{"g", "2"}
-		vs = append(vs, v, hidden)
+		h := v
+		h.name += "-editor-hidden"
+		h.hidden = true
+		vs = append(vs, v, h)
 	}
 	for _, v := range vs {
 		fs, pd, err := capture(t, *dir, version, cat, v)
@@ -243,8 +246,10 @@ func capture(t tour, dir, version string, cat theme.Catalog, v variant) (frames,
 	}
 
 	m := ui.New(ui.Config{
-		// These splits fit file badges, editor lines and response tabs at 160 columns.
-		Settings:       config.Settings{Layout: config.LayoutSettings{SidebarWidth: 0.23, EditorSplit: 0.5}},
+		// The sidebar width fits file badges at 160 columns.
+		Settings: config.Settings{
+			Layout: config.LayoutSettings{SidebarWidth: 0.23, EditorSplit: config.LayoutEditorSplitDefault},
+		},
 		FilePath:       path,
 		InitialContent: string(content),
 		Theme:          &v.def.Theme,
@@ -280,8 +285,11 @@ func capture(t tour, dir, version string, cat theme.Catalog, v variant) (frames,
 	// Wait for the initial Git status update, which can move the selection.
 	time.Sleep(time.Second)
 	s := session{p: p, cols: t.Cols, rows: t.Rows}
-	s.press(v.pre...)
+	if v.hidden {
+		s.press("g", "2")
+	}
 
+	split := config.LayoutEditorSplitDefault
 	fs := frames{Cols: t.Cols, Rows: t.Rows}
 	var pd paneData
 	for _, st := range t.Steps {
@@ -299,6 +307,19 @@ func capture(t tour, dir, version string, cat theme.Catalog, v variant) (frames,
 			view = s.snap()
 		}
 		time.Sleep(settle)
+		if st.Split != 0 && !v.hidden {
+			k := "l"
+			if st.Split < split {
+				k = "h"
+			}
+			s.press(focusKeys["response"]...)
+			for range int(math.Round(math.Abs(st.Split-split) / splitStep)) {
+				s.press("g", k)
+			}
+			s.press(focusKeys[st.Focus]...)
+			split = st.Split
+			time.Sleep(settle)
+		}
 		view = s.snap()
 		buf := s.screen(view)
 		fs.Frames = append(fs.Frames, frame{ID: st.ID, Lines: fs.lines(buf, 0, t.Cols, 0, t.Rows)})
