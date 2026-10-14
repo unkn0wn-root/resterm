@@ -1,32 +1,26 @@
 package restfile
 
-import (
-	"strings"
+type (
+	ScriptKind string
+	ScriptLang string
 )
 
 const (
-	ScriptKindPreRequest = "pre-request"
-	ScriptLangJS         = "js"
-	ScriptLangRTS        = "rts"
+	ScriptKindPreRequest ScriptKind = "pre-request"
+	ScriptKindTest       ScriptKind = "test"
+
+	ScriptLangJS  ScriptLang = "js"
+	ScriptLangRTS ScriptLang = "rts"
 )
 
-// NormalizeScriptLang returns the canonical script language token.
-func NormalizeScriptLang(lang string) string {
-	val := strings.ToLower(strings.TrimSpace(lang))
-	switch val {
-	case "", "javascript":
-		return ScriptLangJS
-	case "restermlang":
-		return ScriptLangRTS
-	default:
-		return val
-	}
+func IsPreRequestScript(block ScriptBlock, lang ScriptLang) bool {
+	return block.Kind == ScriptKindPreRequest && block.hasLang(lang)
 }
 
-// IsPreRequestScript reports whether block is a pre-request script of lang.
-func IsPreRequestScript(block ScriptBlock, lang string) bool {
-	return strings.EqualFold(
-		block.Kind,
-		ScriptKindPreRequest,
-	) && NormalizeScriptLang(block.Lang) == NormalizeScriptLang(lang)
+func IsTestScript(block ScriptBlock, lang ScriptLang) bool {
+	return block.Kind == ScriptKindTest && block.hasLang(lang)
+}
+
+func (b ScriptBlock) hasLang(lang ScriptLang) bool {
+	return b.Lang == lang || b.Lang == "" && lang == ScriptLangJS
 }

@@ -454,11 +454,87 @@ GET https://example.com
 	}
 }
 
+func TestParseScriptStoresCanonicalKindAndLang(t *testing.T) {
+	tests := []struct {
+		dir  string
+		kind restfile.ScriptKind
+		lang restfile.ScriptLang
+	}{
+		{"# @script", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @script test", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @script tests", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @script Tests lang=JavaScript", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @script Pre-Request", restfile.ScriptKindPreRequest, restfile.ScriptLangJS},
+		{"# @script pre-request lang=", restfile.ScriptKindPreRequest, restfile.ScriptLangJS},
+		{"# @script pre-request lang=restermlang", restfile.ScriptKindPreRequest, restfile.ScriptLangRTS},
+		{"# @script pre-request language=RTS", restfile.ScriptKindPreRequest, restfile.ScriptLangRTS},
+		{"# @script pre-request restermlang", restfile.ScriptKindPreRequest, restfile.ScriptLangRTS},
+		{"# @script test lang=rts", restfile.ScriptKindTest, restfile.ScriptLangRTS},
+		{"# @script test python", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @rts pre-request language=restermlang", restfile.ScriptKindPreRequest, restfile.ScriptLangRTS},
+		{"# @script RTS", "rts", restfile.ScriptLangJS},
+		{"# @script test lang=Python", restfile.ScriptKindTest, "python"},
+	}
+	for _, tt := range tests {
+		doc := Parse("kind.http", []byte(tt.dir+"\n> x\nGET https://example.com\n"))
+		if len(doc.Errors) != 0 || len(doc.Requests) != 1 || len(doc.Requests[0].Metadata.Scripts) != 1 {
+			t.Fatalf("%s: errors = %v, requests = %+v", tt.dir, doc.Errors, doc.Requests)
+		}
+		got := doc.Requests[0].Metadata.Scripts[0]
+		if got.Kind != tt.kind || got.Lang != tt.lang {
+			t.Fatalf("%s: got %q %q, want %q %q", tt.dir, got.Kind, got.Lang, tt.kind, tt.lang)
+		}
+	}
+}
+
+func TestParseScriptWarnsOnUnknownKindAndLang(t *testing.T) {
+	tests := []struct {
+		src  string
+		want []string
+	}{
+		{"# @script rts", []string{`@script kind "rts" is not supported. Use pre-request or test`}},
+		{"# @script \"RTS\"", []string{`@script kind "RTS" is not supported. Use pre-request or test`}},
+		{"# @script test lang=python", []string{`@script language "python" is not supported. Use js or rts`}},
+		{"# @script language=Python", []string{`@script language "Python" is not supported. Use js or rts`}},
+		{
+			"# @script check lang=py",
+			[]string{
+				`@script kind "check" is not supported. Use pre-request or test`,
+				`@script language "py" is not supported. Use js or rts`,
+			},
+		},
+		{"# @script test python", []string{`@script ignores "python". Use lang=js or lang=rts to choose a language`}},
+		{"# @script test js extra", []string{`@script ignores "extra". Use lang=js or lang=rts to choose a language`}},
+		{"# @script test", nil},
+		{"# @script test js", nil},
+		{"# @script pre-request rts", nil},
+		{"# @script tests", nil},
+		{"# @script pre-request lang=rts", nil},
+		{"# @script test lang=rts", nil},
+		{"# @script Pre-Request language=JavaScript", nil},
+		{"# @script pre-request lang=", nil},
+		{"# @rts pre-request\n> a\n# @script", nil},
+	}
+	for _, tt := range tests {
+		doc := Parse("warn.http", []byte(tt.src+"\n> x\nGET https://example.com\n"))
+		var got []string
+		for _, w := range doc.Warnings {
+			got = append(got, w.Message)
+		}
+		if len(doc.Errors) != 0 || !slices.Equal(got, tt.want) {
+			t.Fatalf("%q: errors = %v, warnings = %q, want %q", tt.src, doc.Errors, got, tt.want)
+		}
+		if len(doc.Requests[0].Metadata.Scripts) == 0 {
+			t.Fatalf("%q: script block was dropped", tt.src)
+		}
+	}
+}
+
 func TestParseRTSDirectiveAlias(t *testing.T) {
 	tests := []struct {
 		name string
 		dir  string
-		kind string
+		kind restfile.ScriptKind
 	}{
 		{
 			name: "pre request",
@@ -569,6 +645,11 @@ func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
 		{
 			name: "language option without mode",
 			dir:  "# @rts lang=rts",
+			want: "@rts requires a mode",
+		},
+		{
+			name: "empty mode",
+			dir:  "# @rts \"\"",
 			want: "@rts requires a mode",
 		},
 		{

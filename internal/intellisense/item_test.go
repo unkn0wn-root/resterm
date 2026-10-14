@@ -27,7 +27,7 @@ func catalogItems() []Item {
 		}
 	}
 	for _, object := range []string{"vars", "vars.global"} {
-		for _, lang := range []string{restfile.ScriptLangJS, restfile.ScriptLangRTS} {
+		for _, lang := range []restfile.ScriptLang{restfile.ScriptLangJS, restfile.ScriptLangRTS} {
 			ctx := Context{Kind: KindMember, members: scriptapi.Members(object, lang)}
 			items = append(items, memberSource{}.Provide(ctx, Scope{})...)
 		}

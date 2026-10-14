@@ -59,8 +59,7 @@ func mapRows(noun string) []row {
 }
 
 // Members returns an object's members for the given script language.
-// lang is restfile.ScriptLangJS or restfile.ScriptLangRTS.
-func Members(object, lang string) []Member {
+func Members(object string, lang restfile.ScriptLang) []Member {
 	var want langSet
 	switch lang {
 	case restfile.ScriptLangJS:

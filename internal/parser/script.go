@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -10,54 +11,35 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
-type scriptKind string
-
-const (
-	scriptKindTest       scriptKind = "test"
-	scriptKindTests      scriptKind = "tests"
-	scriptKindPreRequest scriptKind = "pre-request"
-)
-
-func (k scriptKind) String() string {
-	return string(k)
-}
-
-type scriptLang string
-
-const (
-	scriptLangJS  scriptLang = "js"
-	scriptLangRTS scriptLang = "rts"
-)
-
-func (l scriptLang) String() string {
-	return string(l)
-}
-
-const (
-	defaultScriptKind = scriptKindTest
-	defaultScriptLang = scriptLangJS
-)
-
-func normScriptKind(kind string) scriptKind {
-	out := str.LowerTrim(kind)
-	if out == "" {
-		return defaultScriptKind
-	}
-	return scriptKind(out)
-}
-
-func normScriptLang(lang string) scriptLang {
-	out := str.LowerTrim(lang)
-	switch out {
-	case "":
-		return defaultScriptLang
-	case "javascript":
-		return defaultScriptLang
-	case "restermlang":
-		return scriptLangRTS
+func scriptKindToken(tok string) (restfile.ScriptKind, bool) {
+	switch kind := restfile.ScriptKind(str.LowerTrim(tok)); kind {
+	case restfile.ScriptKindTest, "tests":
+		return restfile.ScriptKindTest, true
+	case restfile.ScriptKindPreRequest:
+		return kind, true
 	default:
-		return scriptLang(out)
+		return kind, false
 	}
+}
+
+func scriptLangToken(tok string) (restfile.ScriptLang, bool) {
+	switch lang := restfile.ScriptLang(str.LowerTrim(tok)); lang {
+	case restfile.ScriptLangJS, "javascript":
+		return restfile.ScriptLangJS, true
+	case restfile.ScriptLangRTS, "restermlang":
+		return restfile.ScriptLangRTS, true
+	default:
+		return lang, false
+	}
+}
+
+type unknownScriptError struct {
+	msg        string
+	start, end int
+}
+
+func (e *unknownScriptError) Error() string {
+	return e.msg
 }
 
 func (b *documentBuilder) flushScriptIfNeeded(ln line) {
@@ -147,12 +129,12 @@ func (b *documentBuilder) endScriptBlock() {
 
 // Shared by the document parser and SourceSyntax so they agree on script settings.
 type scriptMode struct {
-	kind    scriptKind
-	lang    scriptLang
+	kind    restfile.ScriptKind
+	lang    restfile.ScriptLang
 	discard bool
 }
 
-var defaultScriptMode = scriptMode{kind: defaultScriptKind, lang: defaultScriptLang}
+var defaultScriptMode = scriptMode{kind: restfile.ScriptKindTest, lang: restfile.ScriptLangJS}
 
 // Keep the parsed settings after an option error so the script body is not lost.
 func (m *scriptMode) setScript(args string) error {
@@ -178,35 +160,74 @@ func (m *scriptMode) setRTS(args string) error {
 
 var scriptLangKeys = []string{"lang", "language"}
 
-func parseScriptSpec(rest string) (scriptKind, scriptLang, error) {
+func parseScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, error) {
 	fields := slices.Collect(directive.ScanFields(rest))
-	kind := scriptKind("")
-	lang := scriptLang("")
+	var (
+		head    directive.Field
+		lang    restfile.ScriptLang
+		ignored []directive.Field
+	)
 	for _, field := range fields {
 		if !field.Positional() {
 			continue
 		}
-		if kind == "" {
-			kind = scriptKind(field.Value)
+		if head.Value == "" {
+			head = field
 			continue
 		}
-		if lang == "" {
-			if v, ok := scriptLangToken(field.Value); ok {
-				lang = v
-			}
+		if v, ok := scriptLangToken(field.Value); ok && lang == "" {
+			lang = v
+			continue
 		}
+		ignored = append(ignored, field)
 	}
 	params, err := directive.OptionFields(directive.Script, fields)
-	if v, ok := params.First(scriptLangKeys...); ok {
-		lang = scriptLang(v)
+	errs := []error{err}
+
+	kind, known := scriptKindToken(head.Value)
+	switch {
+	case kind == "":
+		kind = restfile.ScriptKindTest
+	case !known:
+		errs = append(errs, &unknownScriptError{
+			msg:   fmt.Sprintf("@script kind %q is not supported. Use pre-request or test", head.Value),
+			start: head.Start,
+			end:   head.End,
+		})
 	}
-	err = errors.Join(err, params.Conflicts(directive.Script))
-	return normScriptKind(kind.String()), normScriptLang(lang.String()), err
+	for _, f := range ignored {
+		errs = append(errs, &unknownScriptError{
+			msg:   fmt.Sprintf("@script ignores %q. Use lang=js or lang=rts to choose a language", f.Value),
+			start: f.Start,
+			end:   f.End,
+		})
+	}
+
+	if key, v, ok := params.PopKey(scriptLangKeys...); ok {
+		lang, known = scriptLangToken(v)
+		if !known {
+			// PopKey drops source positions; find the field for the diagnostic.
+			i := slices.IndexFunc(fields, func(f directive.Field) bool {
+				k, val, _ := strings.Cut(f.Value, "=")
+				return f.Op == directive.OpEq && strings.EqualFold(k, key) && strings.TrimSpace(val) == v
+			})
+			errs = append(errs, &unknownScriptError{
+				msg:   fmt.Sprintf("@script language %q is not supported. Use js or rts", v),
+				start: fields[i].ValueStart(),
+				end:   fields[i].End,
+			})
+		}
+	}
+	if lang == "" {
+		lang = restfile.ScriptLangJS
+	}
+	errs = append(errs, params.Conflicts(directive.Script))
+	return kind, lang, errors.Join(errs...)
 }
 
-func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
+func parseRTSScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, error) {
 	fields := slices.Collect(directive.ScanFields(rest))
-	var kind scriptKind
+	var kind restfile.ScriptKind
 	kindSet := false
 
 	for _, field := range fields {
@@ -214,7 +235,7 @@ func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
 			continue
 		}
 		if lang, ok := scriptLangToken(field.Value); ok {
-			if lang != scriptLangRTS {
+			if lang != restfile.ScriptLangRTS {
 				return "", "", errRTSLangUnsupported
 			}
 			continue
@@ -238,14 +259,14 @@ func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
 		return "", "", errRTSModeRequired
 	}
 
-	return kind, scriptLangRTS, nil
+	return kind, restfile.ScriptLangRTS, nil
 }
 
-func parseRTSScriptKind(field string) (scriptKind, error) {
-	switch kind := normScriptKind(field); kind {
-	case scriptKindPreRequest:
+func parseRTSScriptKind(field string) (restfile.ScriptKind, error) {
+	switch kind, _ := scriptKindToken(field); kind {
+	case restfile.ScriptKindPreRequest:
 		return kind, nil
-	case scriptKindTest, scriptKindTests:
+	case restfile.ScriptKindTest:
 		return "", errRTSTestUnsupported
 	default:
 		return "", errRTSModeUnsupported
@@ -257,8 +278,10 @@ func validateRTSScriptLangOptions(fields []directive.Field) error {
 	if err != nil {
 		return err
 	}
-	if val, ok := params.First(scriptLangKeys...); ok && normScriptLang(val) != scriptLangRTS {
-		return errRTSLangUnsupported
+	if val, ok := params.First(scriptLangKeys...); ok {
+		if lang, _ := scriptLangToken(val); lang != restfile.ScriptLangRTS {
+			return errRTSLangUnsupported
+		}
 	}
 	return params.Conflicts(directive.RTS)
 }
@@ -275,21 +298,9 @@ var errRTSModeUnsupported = errors.New("@rts supports only pre-request mode, use
 
 var errRTSMultipleModes = errors.New("@rts accepts only one mode, use '@rts pre-request'")
 
-func scriptLangToken(tok string) (scriptLang, bool) {
-	out := strings.ToLower(strings.TrimSpace(tok))
-	switch out {
-	case "js", "javascript":
-		return scriptLangJS, true
-	case "rts", "restermlang":
-		return scriptLangRTS, true
-	default:
-		return "", false
-	}
-}
-
 func (r *requestBuilder) appendScriptLine(
-	kind scriptKind,
-	lang scriptLang,
+	kind restfile.ScriptKind,
+	lang restfile.ScriptLang,
 	body string,
 	path string,
 	loc restfile.ScriptLine,
@@ -318,8 +329,8 @@ func (r *requestBuilder) flushPendingScript() {
 	}
 	script := strings.Join(r.scriptBuffer, "\n")
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
-		Kind:       r.scriptBufferKind.String(),
-		Lang:       r.scriptBufferLang.String(),
+		Kind:       r.scriptBufferKind,
+		Lang:       r.scriptBufferLang,
 		Body:       script,
 		SourcePath: r.scriptSourcePath,
 		Lines:      append([]restfile.ScriptLine(nil), r.scriptBufferLines...),
@@ -331,14 +342,14 @@ func (r *requestBuilder) flushPendingScript() {
 	r.scriptBufferLines = nil
 }
 
-func (r *requestBuilder) appendScriptInclude(kind scriptKind, lang scriptLang, path string) {
+func (r *requestBuilder) appendScriptInclude(kind restfile.ScriptKind, lang restfile.ScriptLang, path string) {
 	if r.script.discard {
 		return
 	}
 	r.flushPendingScript()
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
-		Kind:     kind.String(),
-		Lang:     lang.String(),
+		Kind:     kind,
+		Lang:     lang,
 		FilePath: path,
 	})
 }

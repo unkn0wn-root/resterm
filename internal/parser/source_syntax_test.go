@@ -321,7 +321,7 @@ func TestSourceSyntaxScriptLines(t *testing.T) {
 		source  []string
 		line    int
 		kind    SourceLineKind
-		lang    string
+		lang    restfile.ScriptLang
 		content string
 	}{
 		{
@@ -440,6 +440,12 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 		"# @script pre-request rts",
 		"# @script rts",
 		"# @script pre-request lang=python",
+		"# @script tests lang=JavaScript",
+		"# @script test lang=rts",
+		"# @script Pre-Request language=restermlang",
+		"# @script pre-request lang=",
+		"# @script test python",
+		"# @script test js",
 		"# @script pre-request bogus=1",
 		"# @rts pre-request",
 		"# @rts",
@@ -463,7 +469,7 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 		for _, body := range bodies {
 			source := strings.TrimPrefix(prefix+"\n"+body+"\nGET https://example.test", "\n")
 			want := make(map[int]restfile.ScriptLine)
-			langs := make(map[int]string)
+			langs := make(map[int]restfile.ScriptLang)
 			for _, req := range Parse("agree.http", []byte(source)).Requests {
 				for _, block := range req.Metadata.Scripts {
 					for _, l := range block.Lines {

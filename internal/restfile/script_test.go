@@ -2,31 +2,29 @@ package restfile
 
 import "testing"
 
-func TestNormalizeScriptLang(t *testing.T) {
+func TestScriptBlockKindAndLang(t *testing.T) {
 	tests := []struct {
-		in   string
-		want string
+		block     ScriptBlock
+		lang      ScriptLang
+		pre, test bool
 	}{
-		{in: "", want: ScriptLangJS},
-		{in: "javascript", want: ScriptLangJS},
-		{in: " JS ", want: ScriptLangJS},
-		{in: "restermlang", want: ScriptLangRTS},
-		{in: "rts", want: ScriptLangRTS},
+		{ScriptBlock{Kind: ScriptKindPreRequest, Lang: ScriptLangRTS}, ScriptLangRTS, true, false},
+		{ScriptBlock{Kind: ScriptKindPreRequest, Lang: ScriptLangRTS}, ScriptLangJS, false, false},
+		{ScriptBlock{Kind: ScriptKindTest, Lang: ScriptLangRTS}, ScriptLangRTS, false, true},
+		{ScriptBlock{Kind: ScriptKindTest, Lang: ScriptLangJS}, ScriptLangJS, false, true},
+		{ScriptBlock{Kind: ScriptKindTest}, ScriptLangJS, false, true},
+		{ScriptBlock{Kind: ScriptKindPreRequest}, ScriptLangJS, true, false},
+		{ScriptBlock{Kind: ScriptKindTest}, ScriptLangRTS, false, false},
+		{ScriptBlock{Kind: "tests", Lang: ScriptLangJS}, ScriptLangJS, false, false},
+		{ScriptBlock{Kind: ScriptKindTest, Lang: "python"}, ScriptLangJS, false, false},
+		{ScriptBlock{Lang: ScriptLangJS}, ScriptLangJS, false, false},
 	}
-
 	for _, tt := range tests {
-		if got := NormalizeScriptLang(tt.in); got != tt.want {
-			t.Fatalf("NormalizeScriptLang(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := IsPreRequestScript(tt.block, tt.lang); got != tt.pre {
+			t.Errorf("IsPreRequestScript(%+v, %q) = %t", tt.block, tt.lang, got)
 		}
-	}
-}
-
-func TestIsPreRequestScript(t *testing.T) {
-	block := ScriptBlock{Kind: "Pre-Request", Lang: "restermlang"}
-	if !IsPreRequestScript(block, ScriptLangRTS) {
-		t.Fatalf("expected RTS pre-request script")
-	}
-	if IsPreRequestScript(block, ScriptLangJS) {
-		t.Fatalf("did not expect JS pre-request script")
+		if got := IsTestScript(tt.block, tt.lang); got != tt.test {
+			t.Errorf("IsTestScript(%+v, %q) = %t", tt.block, tt.lang, got)
+		}
 	}
 }

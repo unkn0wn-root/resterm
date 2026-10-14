@@ -112,10 +112,7 @@ func (r *Runner) RunTests(
 		if err := ctx.Err(); err != nil {
 			return aggregated, changes, err
 		}
-		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
-			continue
-		}
-		if restfile.NormalizeScriptLang(block.Lang) != restfile.ScriptLangJS {
+		if !restfile.IsTestScript(block, restfile.ScriptLangJS) {
 			continue
 		}
 
