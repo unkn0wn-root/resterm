@@ -17,7 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -424,7 +424,7 @@ func workflowResultFromRun(
 		GRPC:       res.GRPC.Clone(),
 		Stream:     cloneStreamInfo(res.Stream),
 		Transcript: append([]byte(nil), res.Transcript...),
-		Tests:      append([]scripts.TestResult(nil), res.Tests...),
+		Tests:      append([]scriptapi.TestResult(nil), res.Tests...),
 		ScriptErr:  res.ScriptErr,
 		Err:        res.Err,
 	}

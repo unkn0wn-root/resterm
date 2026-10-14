@@ -12,7 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
@@ -245,7 +245,7 @@ func (x *repeatRun) finish(
 func (x *repeatRun) exhausted(ctx context.Context, resp *httpx.Response) HTTPResult {
 	res := x.finish(ctx, resp, "HTTP retries exhausted")
 	if x.retry.When != nil && res.Err == nil {
-		res.Tests = append(res.Tests, scripts.TestResult{
+		res.Tests = append(res.Tests, scriptapi.TestResult{
 			Name:    directive.RetryWhen.Tag() + " " + str.FoldLines(x.retry.When.Expression),
 			Message: fmt.Sprintf("condition remained true after %d attempts", x.retry.Count+1),
 			Passed:  false,

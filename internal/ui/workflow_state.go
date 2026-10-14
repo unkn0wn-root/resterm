@@ -7,6 +7,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -27,7 +28,7 @@ type workflowStepResult struct {
 	GRPC       *grpcx.Response
 	Stream     *scripts.StreamInfo
 	Transcript []byte
-	Tests      []scripts.TestResult
+	Tests      []scriptapi.TestResult
 	ScriptErr  error
 	Err        error
 	Explain    *xplain.Report

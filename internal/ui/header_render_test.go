@@ -17,7 +17,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/recorder"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func headerTestModel(t *testing.T, width int) *Model {
@@ -57,7 +57,7 @@ func assertHeaderFits(t *testing.T, model *Model, label string) {
 
 func TestHeaderRendersLayout(t *testing.T) {
 	model := headerTestModel(t, 160)
-	model.testResults = []scripts.TestResult{{Name: "failed", Passed: false}}
+	model.testResults = []scriptapi.TestResult{{Name: "failed", Passed: false}}
 	model.headerTransport = headerTransportStatus{label: "201", level: statusSuccess}
 	model.latencySeries.add(120 * time.Millisecond)
 
@@ -208,7 +208,7 @@ func TestHeaderWithMockFitsSupportedWidths(t *testing.T) {
 			filepath.Join(model.ws.root, "payments.http"),
 		},
 	}
-	model.testResults = []scripts.TestResult{{Name: "passed", Passed: true}}
+	model.testResults = []scriptapi.TestResult{{Name: "passed", Passed: true}}
 
 	assertHeaderFits(t, model, "running mock")
 }
@@ -306,7 +306,7 @@ func TestHeaderOmitsActiveRequestWhenNoneSelected(t *testing.T) {
 			model.currentRequest = nil
 			model.activeRequestTitle = ""
 			model.requestItems = tt.items
-			model.testResults = []scripts.TestResult{{Name: "passed", Passed: true}}
+			model.testResults = []scriptapi.TestResult{{Name: "passed", Passed: true}}
 
 			for _, width := range []int{160, 70} {
 				model.width = width

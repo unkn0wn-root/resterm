@@ -15,7 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func TestRunHTTPPollsUntilPredicateMatches(t *testing.T) {
@@ -342,8 +342,8 @@ func TestRunHTTPDoesNotRetryStatusesOrAssertionsByDefault(t *testing.T) {
 		return repeatTestResponse(req, http.StatusServiceUnavailable, "busy", nil), nil
 	})
 	result := Runner{Hooks: HTTPHooks{
-		RunAsserts: func(AssertInput) ([]scripts.TestResult, error) {
-			return []scripts.TestResult{{Name: "failed assertion", Passed: false}}, nil
+		RunAsserts: func(AssertInput) ([]scriptapi.TestResult, error) {
+			return []scriptapi.TestResult{{Name: "failed assertion", Passed: false}}, nil
 		},
 	}}.RunHTTP(HTTPInput{
 		Client:  client,
@@ -492,7 +492,7 @@ func TestRunHTTPFinalizesOutsideThePollDeadline(t *testing.T) {
 			EvaluatePredicate: func(in PredicateInput) (bool, error) {
 				return string(in.HTTP.Body) == "completed", nil
 			},
-			RunAsserts: func(in AssertInput) ([]scripts.TestResult, error) {
+			RunAsserts: func(in AssertInput) ([]scriptapi.TestResult, error) {
 				time.Sleep(2 * time.Second)
 				assertCtxErr = in.Context.Err()
 				return nil, nil

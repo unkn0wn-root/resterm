@@ -29,7 +29,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -313,7 +313,7 @@ type Model struct {
 	latAnimOn        bool
 	latAnimT0        time.Time
 
-	testResults     []scripts.TestResult
+	testResults     []scriptapi.TestResult
 	scriptError     error
 	updateClient    update.Client
 	updateVersion   string

@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -47,7 +48,7 @@ func (m *Model) responseMsgFromRunState(res engine.RequestResult, done bool) res
 		streamID:       res.StreamID,
 		transcript:     append([]byte(nil), res.Transcript...),
 		err:            res.Err,
-		tests:          append([]scripts.TestResult(nil), res.Tests...),
+		tests:          append([]scriptapi.TestResult(nil), res.Tests...),
 		scriptErr:      res.ScriptErr,
 		executed:       res.Executed,
 		requestText:    res.RequestText,

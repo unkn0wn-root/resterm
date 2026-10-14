@@ -6,7 +6,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func TestRunResultConstructorsTrimOwnedStrings(t *testing.T) {
@@ -21,7 +21,7 @@ func TestRunResultConstructorsTrimOwnedStrings(t *testing.T) {
 	gotReq := requestRunResult(req, engine.RequestResult{
 		Environment: " dev ",
 		SkipReason:  " skipped ",
-		Tests: []scripts.TestResult{{
+		Tests: []scriptapi.TestResult{{
 			Name:    " status ",
 			Message: " failed ",
 			Passed:  false,
@@ -50,7 +50,7 @@ func TestRunResultConstructorsTrimOwnedStrings(t *testing.T) {
 			Environment: " stage ",
 			Summary:     " row summary ",
 			SkipReason:  " row skipped ",
-			Tests: []scripts.TestResult{{
+			Tests: []scriptapi.TestResult{{
 				Name:    " compare test ",
 				Message: " compare fail ",
 			}},
@@ -124,7 +124,7 @@ func TestRunResultConstructorsTrimOwnedStrings(t *testing.T) {
 			Target:  " https://example.com/login ",
 			Branch:  " main ",
 			Summary: " step summary ",
-			Tests: []scripts.TestResult{{
+			Tests: []scriptapi.TestResult{{
 				Name:    " wf test ",
 				Message: " wf fail ",
 			}},

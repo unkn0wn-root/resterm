@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -112,7 +113,7 @@ type HTTPHooks struct {
 	// argument contains their writes at script precedence.
 	CollectVariables    func(*restfile.Document, *restfile.Request, vars.NameMap[string]) map[string]string
 	CollectGlobalValues func(*restfile.Document) vars.Globals
-	RunAsserts          func(AssertInput) ([]scripts.TestResult, error)
+	RunAsserts          func(AssertInput) ([]scriptapi.TestResult, error)
 	EvaluatePredicate   func(PredicateInput) (bool, error)
 	ApplyRuntimeGlobals func(vars.Globals)
 	OnRepeatProgress    func(RepeatProgress)
@@ -122,7 +123,7 @@ type HTTPHooks struct {
 type HTTPResult struct {
 	Response  *httpx.Response
 	Stream    *scripts.StreamInfo
-	Tests     []scripts.TestResult
+	Tests     []scriptapi.TestResult
 	ScriptErr error
 	Err       error
 	Decision  string

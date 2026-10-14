@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -240,7 +241,7 @@ func toResult(res xrunResult) engine.RequestResult {
 		Stream:         res.Stream,
 		Transcript:     copyBytes(res.Transcript),
 		Err:            res.Err,
-		Tests:          append([]scripts.TestResult(nil), res.Tests...),
+		Tests:          append([]scriptapi.TestResult(nil), res.Tests...),
 		ScriptErr:      res.ScriptErr,
 		Executed:       res.Executed,
 		RequestText:    res.RequestText,
@@ -1207,7 +1208,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
 	defer cancelAsserts()
 	rr, assertErr := rtsGRPC(resp)
-	var asserts []scripts.TestResult
+	var asserts []scriptapi.TestResult
 	if assertErr == nil {
 		asserts, assertErr = x.eng.runAsserts(
 			assertCtx,
@@ -1311,7 +1312,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 			CollectGlobalValues: func(doc *restfile.Document) vars.Globals {
 				return effectiveGlobalValues(doc, x.storeG, x.env.Refs())
 			},
-			RunAsserts: func(in xexec.AssertInput) ([]scripts.TestResult, error) {
+			RunAsserts: func(in xexec.AssertInput) ([]scriptapi.TestResult, error) {
 				rr, err := rtsHTTP(in.HTTP)
 				if err != nil {
 					return nil, err

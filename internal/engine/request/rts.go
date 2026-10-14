@@ -18,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -559,7 +560,7 @@ func (e *Engine) runAsserts(
 	resp *rtshost.Response,
 	tr *rtshost.Trace,
 	st *rtshost.Stream,
-) ([]scripts.TestResult, error) {
+) ([]scriptapi.TestResult, error) {
 	if req == nil || len(req.Metadata.Asserts) == 0 {
 		return nil, nil
 	}
@@ -585,7 +586,7 @@ func (e *Engine) runAsserts(
 	if err != nil {
 		return nil, err
 	}
-	out := make([]scripts.TestResult, 0, len(req.Metadata.Asserts))
+	out := make([]scriptapi.TestResult, 0, len(req.Metadata.Asserts))
 	for _, as := range req.Metadata.Asserts {
 		expr := strings.TrimSpace(as.Expression)
 		if expr == "" {
@@ -598,7 +599,7 @@ func (e *Engine) runAsserts(
 		if err != nil {
 			return out, err
 		}
-		out = append(out, scripts.TestResult{
+		out = append(out, scriptapi.TestResult{
 			Name:    name,
 			Message: strings.TrimSpace(as.Message),
 			Passed:  val.IsTruthy(),

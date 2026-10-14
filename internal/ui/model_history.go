@@ -22,7 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -145,7 +145,7 @@ func requestErrorStatus(canceled bool) statusMsg {
 	return statusMsg{text: "Request failed ✗", level: statusError, noModal: true}
 }
 
-func responseTestStatusSummary(tests []scripts.TestResult, scriptErr error) (string, statusLevel) {
+func responseTestStatusSummary(tests []scriptapi.TestResult, scriptErr error) (string, statusLevel) {
 	switch {
 	case scriptErr != nil:
 		return "! test error", statusError

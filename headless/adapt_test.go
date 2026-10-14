@@ -11,7 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"google.golang.org/grpc/codes"
 )
 
@@ -42,7 +42,7 @@ func TestReportFromRunnerCounts(t *testing.T) {
 					Proto:      "HTTP/1.1",
 					Duration:   25 * time.Millisecond,
 				},
-				Tests: []scripts.TestResult{
+				Tests: []scriptapi.TestResult{
 					{Name: "status", Passed: true, Elapsed: time.Millisecond},
 				},
 				Stream: &runner.StreamInfo{
@@ -75,7 +75,7 @@ func TestReportFromRunnerCounts(t *testing.T) {
 						StatusCode: 200,
 						Proto:      "HTTP/1.1",
 					},
-					Tests:      []scripts.TestResult{{Name: "a", Passed: true}},
+					Tests:      []scriptapi.TestResult{{Name: "a", Passed: true}},
 					Trace:      &runner.TraceInfo{Summary: &history.TraceSummary{}},
 					SkipReason: "",
 				}},
@@ -168,7 +168,7 @@ func TestReportFromRunnerDetails(t *testing.T) {
 						StatusMessage: "ok",
 						Duration:      15 * time.Millisecond,
 					},
-					Tests:  []scripts.TestResult{{Name: "ok", Passed: true}},
+					Tests:  []scriptapi.TestResult{{Name: "ok", Passed: true}},
 					Stream: &runner.StreamInfo{Kind: "ws", EventCount: 2},
 					Trace: &runner.TraceInfo{
 						Summary: &history.TraceSummary{Duration: 15 * time.Millisecond},
@@ -307,7 +307,7 @@ func TestReportFromRunnerClones(t *testing.T) {
 			Method: "GET",
 			Passed: false,
 			Err:    errors.New("boom"),
-			Tests: []scripts.TestResult{{
+			Tests: []scriptapi.TestResult{{
 				Name:    "status",
 				Message: "bad",
 				Passed:  false,
@@ -386,7 +386,7 @@ func TestReportFromRunnerStrings(t *testing.T) {
 				Status: " 200 OK ",
 				Proto:  " HTTP/1.1 ",
 			},
-			Tests: []scripts.TestResult{{
+			Tests: []scriptapi.TestResult{{
 				Name:    "  status  ",
 				Message: "  failed  ",
 			}},
@@ -424,7 +424,7 @@ func TestReportFromRunnerStrings(t *testing.T) {
 					StatusCode:    codes.Internal,
 					StatusMessage: "  internal  ",
 				},
-				Tests: []scripts.TestResult{{
+				Tests: []scriptapi.TestResult{{
 					Name:    "  step test  ",
 					Message: "  bad  ",
 				}},

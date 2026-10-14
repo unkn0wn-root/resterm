@@ -17,7 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -248,7 +248,7 @@ func testsText(res runner.Result, st styler) string {
 	return st.section("Tests:") + "\n" + indent(strings.Join(lines, "\n"), "  ")
 }
 
-func testBadge(test scripts.TestResult) (string, bool) {
+func testBadge(test scriptapi.TestResult) (string, bool) {
 	if test.Passed {
 		return "[PASS]", true
 	}

@@ -11,7 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func TestWrapLineSegmentsPreservesLeadingIndent(t *testing.T) {
@@ -470,7 +470,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 }
 
 func TestFormatTestSummaryColorsStatuses(t *testing.T) {
-	results := []scripts.TestResult{
+	results := []scriptapi.TestResult{
 		{Name: "alpha", Passed: true, Elapsed: 1500 * time.Millisecond},
 		{Name: "beta", Passed: false, Message: "boom"},
 	}

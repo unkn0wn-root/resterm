@@ -21,7 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -554,7 +554,7 @@ func TestConsumeHTTPResponseUsesSeparateStatusBarTestSummary(t *testing.T) {
 		Headers:    http.Header{"Content-Type": []string{"text/plain"}},
 		Body:       []byte("body"),
 	}
-	tests := []scripts.TestResult{{Name: "status", Passed: false}}
+	tests := []scriptapi.TestResult{{Name: "status", Passed: false}}
 
 	if cmd := model.consumeHTTPResponse(responseMsg{response: resp, tests: tests}); cmd == nil {
 		t.Fatalf("expected consumeHTTPResponse to return render command")
@@ -810,7 +810,7 @@ func TestConsumeGRPCResponseKeepsViewWithinTerminalHeight(t *testing.T) {
 
 func TestResponseTestStatusSummaryUsesHeavyCheckForPassingTests(t *testing.T) {
 	got, level := responseTestStatusSummary(
-		[]scripts.TestResult{{Name: "status", Passed: true}},
+		[]scriptapi.TestResult{{Name: "status", Passed: true}},
 		nil,
 	)
 	if got != iconTestPass+" tests passed" {

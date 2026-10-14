@@ -18,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	runfail "github.com/unkn0wn-root/resterm/internal/runx/fail"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -96,7 +97,7 @@ type RequestResult struct {
 	StreamID       string
 	Transcript     []byte
 	Err            error
-	Tests          []scripts.TestResult
+	Tests          []scriptapi.TestResult
 	ScriptErr      error
 	Executed       *restfile.Request
 	RequestText    string
@@ -159,7 +160,7 @@ type CompareRow struct {
 	Stream      *scripts.StreamInfo
 	Transcript  []byte
 	Err         error
-	Tests       []scripts.TestResult
+	Tests       []scriptapi.TestResult
 	ScriptErr   error
 	// RuntimeSecrets contains the values exposed while this row ran.
 	RuntimeSecrets []string
@@ -231,7 +232,7 @@ type WorkflowStep struct {
 	Stream     *scripts.StreamInfo
 	Transcript []byte
 	Err        error
-	Tests      []scripts.TestResult
+	Tests      []scriptapi.TestResult
 	ScriptErr  error
 	Skipped    bool
 	SkipReason string

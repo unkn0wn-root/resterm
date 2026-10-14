@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/update"
@@ -48,7 +49,7 @@ type responseMsg struct {
 	streamID       string
 	transcript     []byte
 	err            error
-	tests          []scripts.TestResult
+	tests          []scriptapi.TestResult
 	scriptErr      error
 	executed       *restfile.Request
 	requestText    string

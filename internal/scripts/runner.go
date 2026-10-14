@@ -22,6 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -50,13 +51,6 @@ type TestInput struct {
 	Stream    *StreamInfo
 	Trace     *TraceInput
 	Secrets   *vars.Secrets
-}
-
-type TestResult struct {
-	Name    string
-	Message string
-	Passed  bool
-	Elapsed time.Duration
 }
 
 func (r *Runner) RunPreRequest(
@@ -106,12 +100,12 @@ func (r *Runner) RunTests(
 	ctx context.Context,
 	scripts []restfile.ScriptBlock,
 	input TestInput,
-) ([]TestResult, vars.Globals, error) {
+) ([]scriptapi.TestResult, vars.Globals, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	var aggregated []TestResult
+	var aggregated []scriptapi.TestResult
 	var changes vars.Globals
 
 	for idx, block := range scripts {
@@ -181,7 +175,7 @@ func (r *Runner) executeTestScript(
 	ctx context.Context,
 	src source,
 	input TestInput,
-) ([]TestResult, vars.Globals, error) {
+) ([]scriptapi.TestResult, vars.Globals, error) {
 	vm := goja.New()
 	stopGuard := guardVM(ctx, vm, r.scriptTimeout())
 	defer stopGuard()
@@ -559,7 +553,7 @@ type testAPI struct {
 	globals   vars.Globals
 	changes   vars.Globals
 	secrets   *vars.Secrets
-	cases     []TestResult
+	cases     []scriptapi.TestResult
 	stream    *StreamInfo
 	trace     *traceBinding
 	vm        *goja.Runtime
@@ -916,7 +910,7 @@ func (api *testAPI) assert(condition bool, message string) {
 		name = "assert"
 	}
 
-	result := TestResult{
+	result := scriptapi.TestResult{
 		Name:   name,
 		Passed: condition,
 	}
@@ -932,7 +926,7 @@ func (api *testAPI) fail(message string) {
 		message = "fail"
 	}
 
-	api.cases = append(api.cases, TestResult{
+	api.cases = append(api.cases, scriptapi.TestResult{
 		Name:    message,
 		Message: message,
 		Passed:  false,
@@ -949,7 +943,7 @@ func (api *testAPI) namedTest(name string, callable goja.Callable) {
 			passed = false
 			message = fmt.Sprintf("panic: %v", r)
 		}
-		api.cases = append(api.cases, TestResult{
+		api.cases = append(api.cases, scriptapi.TestResult{
 			Name:    name,
 			Message: message,
 			Passed:  passed,
@@ -973,6 +967,6 @@ func (api *testAPI) namedTest(name string, callable goja.Callable) {
 	}
 }
 
-func (api *testAPI) results() []TestResult {
-	return append([]TestResult(nil), api.cases...)
+func (api *testAPI) results() []scriptapi.TestResult {
+	return append([]scriptapi.TestResult(nil), api.cases...)
 }
