@@ -220,7 +220,8 @@ func (s *sourceScan) classify(ln line) SourceLine {
 
 	switch readMethodLine(ln.raw) {
 	case methodLineOpens:
-		s.openMethodLine()
+		s.openRequest()
+		s.request.hasMethod = true
 		return SourceLine{}
 	case methodLineRejected:
 		return SourceLine{}
@@ -479,22 +480,12 @@ func (s *sourceScan) openRequest() {
 	s.workflow = false
 }
 
-func (s *sourceScan) openMethodLine() {
-	s.openRequest()
-	s.request.hasMethod = true
-	s.request.headersDone = false
-	s.request.contentType = ""
-	s.request.multipart = nil
-}
-
 func (s *sourceScan) endHeaders() {
 	if !s.request.hasMethod || s.request.headersDone {
 		return
 	}
 	s.request.headersDone = true
-	if restfile.IsMultipartMime(s.request.contentType) {
-		s.request.multipart = newMultipartSpan(s.request.contentType)
-	}
+	s.request.multipart = newMultipartSpan(s.request.contentType)
 }
 
 // Keep cached directive results between sections.
