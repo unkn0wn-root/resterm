@@ -3,6 +3,7 @@ package headless
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,5 +138,23 @@ func TestMakeStepResSkippedHasNoDuration(t *testing.T) {
 	)
 	if res.dur != 0 {
 		t.Fatalf("skipped step duration = %s, want none", res.dur)
+	}
+}
+
+func TestWorkflowReportIndentsEveryMessageLine(t *testing.T) {
+	st := &wfState{
+		wf:    restfile.Workflow{Name: "wf"},
+		steps: []wfRuntime{{step: restfile.WorkflowStep{Name: "Orders"}}},
+		res: []wfStepRes{{
+			step: restfile.WorkflowStep{Name: "Orders"},
+			name: "Orders",
+			msg:  "api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
+		}},
+	}
+
+	got := workflowReport(st)
+	want := "\n    api.http:11: Order 0 has negative total\n    api.http:11: Order 3 missing tracking"
+	if !strings.HasSuffix(got, want) {
+		t.Fatalf("report =\n%s\nwant it to end with%s", got, want)
 	}
 }
