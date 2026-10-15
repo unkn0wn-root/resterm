@@ -76,14 +76,14 @@ RestermScript stops evaluation when any of these limits is exceeded. The error i
 
 | Limit | Value |
 | --- | --- |
-| Steps per expression | 10,000 |
-| Steps per `@rts` or `lang=rts` block | 100,000 |
+| Steps per evaluation | 10,000 |
+| Steps per test block | 100,000 |
 | Call depth | 64 |
 | String size | 65,536 bytes |
 | List size | 2,000 items |
 | Dict size | 2,000 entries |
 
-Templates and directives such as `@assert`, `@capture`, and `@apply` use the expression limit. Module functions use the caller's budget. Module initialization has a separate 10,000-step budget.
+Pre-request blocks, templates, and directives such as `@assert`, `@capture`, and `@apply` use the evaluation limit. Module functions use the caller's budget. Module initialization has a separate 10,000-step budget.
 
 ## Design constraints and why they exist
 

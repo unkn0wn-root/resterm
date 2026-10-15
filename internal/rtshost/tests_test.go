@@ -531,9 +531,9 @@ export fn spin(n) {
 	return rt
 }
 
-func TestBlocksGetBlockStepLimit(t *testing.T) {
+func TestOnlyTestBlocksGetTheLargerStepLimit(t *testing.T) {
 	rt := stepRuntime(t)
-	const fits, over = "work.spin(6250)", "work.spin(18750)"
+	const small, mid, big = "work.spin(1000)", "work.spin(6250)", "work.spin(18750)"
 
 	pre := func(body string) error {
 		return RunPreRequest(t.Context(), NewEngine(stdlib.New), PreRequest{
@@ -543,16 +543,16 @@ func TestBlocksGetBlockStepLimit(t *testing.T) {
 			Runtime: func() (Runtime, error) { return rt, nil },
 		})
 	}
-	if err := pre(fits); err != nil {
-		t.Fatalf("pre-request block of 50,000 steps: %v", err)
+	if err := pre(small); err != nil {
+		t.Fatalf("pre-request block of 8,000 steps: %v", err)
 	}
-	if err := pre(over); err == nil || !strings.Contains(err.Error(), "step limit exceeded") {
-		t.Fatalf("pre-request block of 150,000 steps: error = %v, want the step limit", err)
+	if err := pre(mid); err == nil || !strings.Contains(err.Error(), "step limit exceeded") {
+		t.Fatalf("pre-request block of 50,000 steps: error = %v, want the step limit", err)
 	}
 
 	got, err := runTests(t, rt,
-		testBlock("fits", 2, fits),
-		testBlock("over", 3, over),
+		testBlock("fits", 2, mid),
+		testBlock("over", 3, big),
 		testBlock("next", 4, `t.error("ran")`),
 	)
 	want := []result{{"fits", true, ""}, {"over", false, ""}, {"next", false, "api.http:4: ran"}}

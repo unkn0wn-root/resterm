@@ -73,6 +73,7 @@ func (e *Engine) EvalStr(ctx context.Context, rt Runtime, src string, pos rts.Po
 	return value, diagnose(err)
 }
 
+// ExecModule executes one module body against rt.
 func (e *Engine) ExecModule(
 	ctx context.Context,
 	rt Runtime,
@@ -82,16 +83,8 @@ func (e *Engine) ExecModule(
 	if e == nil || e.core == nil {
 		return nil, errNilEngine
 	}
-	comp, err := e.core.ExecModule(withRuntime(ctx, rt), blockConfig(rt), src, pos)
+	comp, err := e.core.ExecModule(withRuntime(ctx, rt), evalConfig(rt), src, pos)
 	return comp, diagnose(err)
-}
-
-const blockSteps = 100_000
-
-func blockConfig(rt Runtime) rts.EvalConfig {
-	cfg := evalConfig(rt)
-	cfg.MaxSteps = blockSteps
-	return cfg
 }
 
 func evalConfig(rt Runtime) rts.EvalConfig {

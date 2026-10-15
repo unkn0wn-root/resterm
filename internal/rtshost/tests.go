@@ -23,6 +23,8 @@ type Tests struct {
 	Runtime Runtime
 }
 
+const testSteps = 100_000
+
 func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResult, error) {
 	var (
 		out      []scriptapi.TestResult
@@ -60,7 +62,8 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 		default:
 			rt := in.Runtime
 			rt.Site = site
-			cfg := blockConfig(rt)
+			cfg := evalConfig(rt)
+			cfg.MaxSteps = testSteps
 			cfg.Overrides = rts.Local("t", rts.Obj(t))
 			_, err = eng.core.ExecModule(withRuntime(ctx, rt), cfg, src.Text, src.Pos)
 			var abort *rts.AbortError
