@@ -69,6 +69,28 @@ func TestRTSArgsOfferOneMode(t *testing.T) {
 	}
 }
 
+func TestScriptArgsOfferOnlyLangAfterKind(t *testing.T) {
+	tests := []struct {
+		line string
+		want []string
+	}{
+		{"# @script ", []string{"pre-request", "test", "lang=", "language="}},
+		{"# @script test ", []string{"lang=", "language="}},
+		{"# @script pre-request ", []string{"lang=", "language="}},
+		{"# @script pre-request js ", []string{"lang=", "language="}},
+		{"# @script test lang=", []string{"rts", "js"}},
+		{"# @script pre-request language=", []string{"rts", "js"}},
+		{"# @script test lang=rts ", nil},
+		{"# @script lang=rts ", []string{"pre-request", "test"}},
+		{"# @script lang=rts test ", nil},
+	}
+	for _, tt := range tests {
+		if got := labels(suggest(tt.line, Scope{})); !slices.Equal(got, tt.want) {
+			t.Errorf("%q\n got: %v\nwant: %v", tt.line, got, tt.want)
+		}
+	}
+}
+
 func TestRTSDirectiveContinuesToItsModes(t *testing.T) {
 	for _, it := range directives {
 		if it.Label != "@rts" {
