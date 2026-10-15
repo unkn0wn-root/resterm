@@ -2550,22 +2550,56 @@ GET https://example.com/api
 }
 
 func TestParseScriptInlineBraces(t *testing.T) {
-	src := `# @script test
-> {% client.test("ok"); %}
-GET https://example.com/api
-`
+	type line = restfile.ScriptLine
+	tests := []struct {
+		name  string
+		src   string
+		body  string
+		lines []line
+	}{
+		{"one line", `> {% t.error("x") %}`, `t.error("x")`, []line{{Line: 2, Col: 6}}},
+		{"no spaces", "> {%x%}", "x", []line{{Line: 2, Col: 5}}},
+		{"empty", "> {% %}", "", []line{{Line: 2, Col: 6}}},
+		{"empty without spaces", "> {%%}", "", []line{{Line: 2, Col: 5}}},
+		{"closer in a string", `> {% t.error("%}") %}`, `t.error("%}")`, []line{{Line: 2, Col: 6}}},
+		{"extra spaces", ">   {%  x  %}  ", "x", []line{{Line: 2, Col: 9}}},
+		{"blank line first", ">\n> {% x %}", "x", []line{{Line: 3, Col: 6}}},
+		{"braces span lines", "> {% a\n>   b %}", "a\n  b", []line{{Line: 2, Col: 6}, {Line: 3, Col: 3}}},
+		{"closer on its own line", "> {% a\n> %}", "a", []line{{Line: 2, Col: 6}}},
+		{"each line braced", "> {% a %}\n> {% b %}", "a %}\n{% b", []line{{Line: 2, Col: 6}, {Line: 3, Col: 3}}},
+		{"opener only", "> {%}", "{%}", []line{{Line: 2, Col: 3}}},
+		{"text after the closer", "> {% x %} // y", "{% x %} // y", []line{{Line: 2, Col: 3}}},
+		{"braces mid line", `> s = "{% x %}"`, `s = "{% x %}"`, []line{{Line: 2, Col: 3}}},
+		{"plain line", "> x", "x", []line{{Line: 2, Col: 3}}},
+		{"block", "> {%\nx\n> %}", "x", []line{{Line: 3, Col: 1}}},
+		{"braced code in a block", "> {%\n{% x %}\n> %}", "x", []line{{Line: 3, Col: 4}}},
+	}
 
-	doc := Parse("inline-braces.http", []byte(src))
-	if len(doc.Requests) != 1 {
-		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	for _, head := range []string{"# @script test", "# @rts test"} {
+		for _, tt := range tests {
+			t.Run(head+"/"+tt.name, func(t *testing.T) {
+				doc := Parse("inline.http", []byte(head+"\n"+tt.src+"\nGET https://example.com/api\n"))
+				if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+					t.Fatalf("errors = %v, requests = %d", doc.Errors, len(doc.Requests))
+				}
+				scripts := doc.Requests[0].Metadata.Scripts
+				if len(scripts) != 1 {
+					t.Fatalf("scripts = %+v, want one block", scripts)
+				}
+				if got := scripts[0]; got.Body != tt.body || !slices.Equal(got.Lines, tt.lines) {
+					t.Fatalf("block = %q %v, want %q %v", got.Body, got.Lines, tt.body, tt.lines)
+				}
+			})
+		}
 	}
-	req := doc.Requests[0]
-	if len(req.Metadata.Scripts) != 1 {
-		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
-	}
-	body := req.Metadata.Scripts[0].Body
-	if body != "{% client.test(\"ok\"); %}" {
-		t.Fatalf("unexpected inline script body: %q", body)
+}
+
+func TestParseScriptIncludesAroundInlineBraces(t *testing.T) {
+	src := "# @rts test\n> < ./a.rts\n> {% x %}\n> < ./b.rts\nGET https://example.com/api\n"
+	got := Parse("inline.http", []byte(src)).Requests[0].Metadata.Scripts
+	if len(got) != 3 || got[0].FilePath != "./a.rts" || got[2].FilePath != "./b.rts" || got[1].Body != "x" ||
+		!slices.Equal(got[1].Lines, []restfile.ScriptLine{{Line: 3, Col: 6}}) {
+		t.Fatalf("scripts = %+v, want a.rts, the inline code, then b.rts", got)
 	}
 }
 

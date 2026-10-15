@@ -886,6 +886,34 @@ GET http://example.test
 	}
 }
 
+func TestRTSOneLineBlocksRun(t *testing.T) {
+	doc, req := rtsTestDoc(t, `### one
+# @rts pre-request
+> {% request.setHeader("X-One", "yes") %}
+# @rts test ran
+> {% t.error("ran") %}
+# @rts test broken
+> {% let x = missing.value %}
+GET http://example.test
+`)
+	eng, st := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if got := st.wire.Header.Get("X-One"); got != "yes" {
+		t.Fatalf("X-One = %q, want the pre-request block to set it", got)
+	}
+	if len(res.Tests) != 2 || res.Tests[0].Name != "ran" || res.Tests[0].Message != "api.http:5: ran" ||
+		res.Tests[1].Name != "broken" || res.Tests[1].Passed {
+		t.Fatalf("tests = %+v, want ran then broken", res.Tests)
+	}
+	rep := diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) != 1 || rep.Items[0].Span.Start != (diag.Pos{Path: doc.Path, Line: 7, Col: 14}) {
+		t.Fatalf("script error = %+v, want the missing name at 7:14", rep.Items)
+	}
+}
+
 func TestRTSTestBlocksSkipWhenTheResponseHasNoRTSView(t *testing.T) {
 	client := httpx.NewClientWithOptions(
 		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {

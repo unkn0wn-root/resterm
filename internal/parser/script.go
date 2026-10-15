@@ -308,14 +308,24 @@ func (r *requestBuilder) flushPendingScript() {
 	if len(r.scriptBuffer) == 0 {
 		return
 	}
-	script := strings.Join(r.scriptBuffer, "\n")
+	body := strings.Join(r.scriptBuffer, "\n")
+	lines := append([]restfile.ScriptLine(nil), r.scriptBufferLines...)
+	if s := strings.TrimSpace(body); len(s) >= len("{%%}") && strings.HasPrefix(s, "{%") && strings.HasSuffix(s, "%}") {
+		inner := s[2 : len(s)-2]
+		off := len(body) - len(str.TrimLeft(body)) + 2 + len(inner) - len(str.TrimLeft(inner))
+		cut := body[:off]
+		body = strings.TrimSpace(inner)
+		skip := strings.Count(cut, "\n")
+		lines = lines[skip : skip+strings.Count(body, "\n")+1]
+		lines[0].Col += len(cut) - strings.LastIndexByte(cut, '\n') - 1
+	}
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
 		Kind:       r.scriptBufferMode.kind,
 		Lang:       r.scriptBufferMode.lang,
 		Name:       r.scriptBufferMode.name,
-		Body:       script,
+		Body:       body,
 		SourcePath: r.scriptSourcePath,
-		Lines:      append([]restfile.ScriptLine(nil), r.scriptBufferLines...),
+		Lines:      lines,
 	})
 	r.scriptBuffer = nil
 	r.scriptBufferMode = scriptMode{}

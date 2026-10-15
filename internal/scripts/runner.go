@@ -240,10 +240,10 @@ func bindCommon(vm *goja.Runtime) error {
 }
 
 // normalizeScript returns the script text and the lines and first-line bytes it removed.
-func normalizeScript(body string) (string, int, int) {
+func normalizeScript(body string, file bool) (string, int, int) {
 	script := strings.TrimSpace(body)
 	off := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
-	if strings.HasPrefix(script, "{%") && strings.HasSuffix(script, "%}") {
+	if file && len(script) >= len("{%%}") && strings.HasPrefix(script, "{%") && strings.HasSuffix(script, "%}") {
 		inner := script[2 : len(script)-2]
 		script = strings.TrimSpace(inner)
 		off += 2 + len(inner) - len(strings.TrimLeftFunc(inner, unicode.IsSpace))
@@ -309,7 +309,7 @@ func jsMessage(exc *goja.Exception) string {
 
 func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (source, error) {
 	if block.FilePath == "" {
-		text, skip, skipCol := normalizeScript(block.Body)
+		text, skip, skipCol := normalizeScript(block.Body, false)
 		return source{text: text, path: block.SourcePath, skip: skip, skipCol: skipCol, lines: block.Lines}, nil
 	}
 
@@ -322,7 +322,7 @@ func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (source,
 	if err != nil {
 		return source{}, diag.WrapAsf(diag.ClassFilesystem, err, "read script file %s", path)
 	}
-	text, skip, skipCol := normalizeScript(string(data))
+	text, skip, skipCol := normalizeScript(string(data), true)
 	return source{text: text, path: path, skip: skip, skipCol: skipCol, file: true}, nil
 }
 

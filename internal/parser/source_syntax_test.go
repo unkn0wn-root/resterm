@@ -409,6 +409,14 @@ func TestSourceSyntaxScriptLines(t *testing.T) {
 			content: "// JavaScript comment",
 		},
 		{
+			name:    "block on one line",
+			source:  []string{"# @rts test", `> {% t.error("x") %}`},
+			line:    1,
+			kind:    SourceLineScript,
+			lang:    "rts",
+			content: `{% t.error("x") %}`,
+		},
+		{
 			name:   "block markers",
 			source: []string{"> {%", "x", "> %}"},
 			line:   2,

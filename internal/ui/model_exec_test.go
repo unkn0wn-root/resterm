@@ -647,7 +647,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 			}},
 			Scripts: []restfile.ScriptBlock{{
 				Kind: "test",
-				Body: `{% tests.assert(response.json().summary.eventCount === 1, "event count"); %}`,
+				Body: `tests.assert(response.json().summary.eventCount === 1, "event count");`,
 			}},
 		},
 	}
