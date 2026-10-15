@@ -28,3 +28,39 @@ func TestScriptBlockKindAndLang(t *testing.T) {
 		}
 	}
 }
+
+func TestParseScriptKindAndLang(t *testing.T) {
+	kinds := []struct {
+		in    string
+		want  ScriptKind
+		known bool
+	}{
+		{"test", ScriptKindTest, true},
+		{" Tests ", ScriptKindTest, true},
+		{"PRE-REQUEST", ScriptKindPreRequest, true},
+		{"Check", "check", false},
+		{"", "", false},
+	}
+	for _, tt := range kinds {
+		if got, known := ParseScriptKind(tt.in); got != tt.want || known != tt.known {
+			t.Errorf("ParseScriptKind(%q) = %q, %t, want %q, %t", tt.in, got, known, tt.want, tt.known)
+		}
+	}
+	langs := []struct {
+		in    string
+		want  ScriptLang
+		known bool
+	}{
+		{"js", ScriptLangJS, true},
+		{"JavaScript", ScriptLangJS, true},
+		{" RTS", ScriptLangRTS, true},
+		{"restermlang", ScriptLangRTS, true},
+		{"Python", "python", false},
+		{"", "", false},
+	}
+	for _, tt := range langs {
+		if got, known := ParseScriptLang(tt.in); got != tt.want || known != tt.known {
+			t.Errorf("ParseScriptLang(%q) = %q, %t, want %q, %t", tt.in, got, known, tt.want, tt.known)
+		}
+	}
+}

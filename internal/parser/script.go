@@ -11,28 +11,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
-func scriptKindToken(tok string) (restfile.ScriptKind, bool) {
-	switch kind := restfile.ScriptKind(str.LowerTrim(tok)); kind {
-	case restfile.ScriptKindTest, "tests":
-		return restfile.ScriptKindTest, true
-	case restfile.ScriptKindPreRequest:
-		return kind, true
-	default:
-		return kind, false
-	}
-}
-
-func scriptLangToken(tok string) (restfile.ScriptLang, bool) {
-	switch lang := restfile.ScriptLang(str.LowerTrim(tok)); lang {
-	case restfile.ScriptLangJS, "javascript":
-		return restfile.ScriptLangJS, true
-	case restfile.ScriptLangRTS, "restermlang":
-		return restfile.ScriptLangRTS, true
-	default:
-		return lang, false
-	}
-}
-
 type scriptFieldError struct {
 	msg        string
 	start, end int
@@ -171,7 +149,7 @@ func parseScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, err
 			head = field
 			continue
 		}
-		if v, ok := scriptLangToken(field.Value); ok && lang == "" {
+		if v, ok := restfile.ParseScriptLang(field.Value); ok && lang == "" {
 			lang = v
 			continue
 		}
@@ -180,7 +158,7 @@ func parseScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, err
 	params, err := directive.OptionFields(directive.Script, fields)
 	errs := []error{err}
 
-	kind, known := scriptKindToken(head.Value)
+	kind, known := restfile.ParseScriptKind(head.Value)
 	switch {
 	case kind == "":
 		kind = restfile.ScriptKindTest
@@ -200,7 +178,7 @@ func parseScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, err
 	}
 
 	if key, v, ok := params.PopKey(scriptLangKeys...); ok {
-		lang, known = scriptLangToken(v)
+		lang, known = restfile.ParseScriptLang(v)
 		if !known {
 			// PopKey drops source positions; find the field for the diagnostic.
 			i := slices.IndexFunc(fields, func(f directive.Field) bool {
@@ -232,13 +210,13 @@ func parseRTSScriptSpec(rest string) (restfile.ScriptKind, string, error) {
 			continue
 		}
 		quoted := kind != "" && strings.ContainsRune(`"'`, rune(rest[f.Start]))
-		if lang, ok := scriptLangToken(f.Value); ok && !quoted {
+		if lang, ok := restfile.ParseScriptLang(f.Value); ok && !quoted {
 			if lang != restfile.ScriptLangRTS {
 				return "", "", errRTSLangUnsupported
 			}
 			continue
 		}
-		next, known := scriptKindToken(f.Value)
+		next, known := restfile.ParseScriptKind(f.Value)
 		switch {
 		case kind == "" && !known:
 			return "", "", errRTSModeUnsupported
@@ -274,7 +252,7 @@ func validateRTSScriptLangOptions(fields []directive.Field) error {
 		return err
 	}
 	if val, ok := params.PopAny(scriptLangKeys...); ok {
-		if lang, _ := scriptLangToken(val); lang != restfile.ScriptLangRTS {
+		if lang, _ := restfile.ParseScriptLang(val); lang != restfile.ScriptLangRTS {
 			return errRTSLangUnsupported
 		}
 	}
