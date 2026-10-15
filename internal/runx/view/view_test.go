@@ -78,6 +78,29 @@ func TestRenderPrettyAlignsTestMessageLines(t *testing.T) {
 	}
 }
 
+func TestRenderPrettyEscapesTestText(t *testing.T) {
+	rep := &runner.Report{
+		Results: []runner.Result{{
+			Kind:   runner.ResultKindRequest,
+			Name:   "orders",
+			Method: "GET",
+			Target: "https://example.com/orders",
+			Tests: []scriptapi.TestResult{{
+				Name:    "orders\x1b]0;pwn\a",
+				Message: "api.http:3: got \x1b[31mred\r\nnext\tline",
+			}},
+		}},
+	}
+
+	out, err := Render(rep, Options{Mode: ModePretty})
+	if err != nil {
+		t.Fatalf("Render(...): %v", err)
+	}
+	if strings.ContainsAny(out, "\x1b\a\r\t") {
+		t.Fatalf("output has raw control characters: %q", out)
+	}
+}
+
 func TestRenderHTTPPrettyUsesTrackedUnresolvedVarsAndEffectiveTarget(t *testing.T) {
 	rep := &runner.Report{
 		Results: []runner.Result{{

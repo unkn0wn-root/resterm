@@ -21,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -233,12 +234,12 @@ func testsText(res runner.Result, st styler) string {
 	for _, test := range res.Tests {
 		line := st.badge(testBadge(test))
 		if name := strings.TrimSpace(test.Name); name != "" {
-			line += " " + st.value(name, toneValue)
+			line += " " + st.value(termtext.Row(name), toneValue)
 		}
 		if msg := strings.TrimSpace(test.Message); msg != "" {
 			line += " - "
 			pad := "\n" + strings.Repeat(" ", ansi.StringWidth(line))
-			line += st.value(strings.ReplaceAll(msg, "\n", pad), toneMsg)
+			line += st.value(strings.ReplaceAll(termtext.Block(msg), "\n", pad), toneMsg)
 		}
 		if test.Elapsed > 0 {
 			line += " " + st.value(fmt.Sprintf("(%s)", durationRound(test.Elapsed)), toneDur)
