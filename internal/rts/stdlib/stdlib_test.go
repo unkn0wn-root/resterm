@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/jsonpath"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
@@ -328,6 +329,54 @@ func TestStdlibJSONParseStringify(t *testing.T) {
 	}
 }
 
+func jsonIface(ctx *rts.Ctx, pos rts.Pos, v rts.Value) (any, error) {
+	switch v.K {
+	case rts.VNull:
+		return nil, nil
+	case rts.VBool:
+		return v.B, nil
+	case rts.VNum:
+		return v.N, nil
+	case rts.VStr:
+		return v.S, nil
+	case rts.VList:
+		if ctx != nil && ctx.Lim.MaxList > 0 && len(v.L) > ctx.Lim.MaxList {
+			return nil, rts.Errf(ctx, pos, "list too large")
+		}
+		out := make([]any, 0, len(v.L))
+		for _, it := range v.L {
+			val, err := jsonIface(ctx, pos, it)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, val)
+		}
+		return out, nil
+	case rts.VDict:
+		if ctx != nil && ctx.Lim.MaxDict > 0 && len(v.M) > ctx.Lim.MaxDict {
+			return nil, rts.Errf(ctx, pos, "dict too large")
+		}
+		out := make(map[string]any, len(v.M))
+		for k, it := range v.M {
+			val, err := jsonIface(ctx, pos, it)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = val
+		}
+		return out, nil
+	case rts.VObj:
+		if v.O != nil {
+			if t, ok := v.O.(rts.InterfaceValuer); ok {
+				return t.ToInterface(), nil
+			}
+		}
+		return nil, rts.Errf(ctx, pos, "json stringify unsupported object")
+	default:
+		return nil, rts.Errf(ctx, pos, "json stringify unsupported type")
+	}
+}
+
 func marshalStringify(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (string, error) {
 	raw, err := jsonIface(ctx, pos, args[0])
 	if err != nil {
@@ -485,6 +534,119 @@ func TestStdlibJSONGet(t *testing.T) {
 	v = evalExprCtx(t, ctx, "json.has({\"a.b\":1}, \"[\\\"a.b\\\"]\")")
 	if v.K != rts.VBool || v.B != true {
 		t.Fatalf("expected json.has quoted")
+	}
+}
+
+func TestStdlibJSONGetMatchesPathGet(t *testing.T) {
+	ctx := testCtx()
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	docs := []rts.Value{
+		rts.Dict(map[string]rts.Value{
+			"a":            rts.List([]rts.Value{rts.Num(1), rts.Dict(map[string]rts.Value{"b": rts.Str("x")})}),
+			"display.name": rts.Num(2),
+			"a b":          rts.Num(3),
+			`say "hi"`:     rts.Num(4),
+			"line\n":       rts.Num(5),
+			"0":            rts.Str("zero"),
+			"":             rts.Num(6),
+			"$":            rts.Num(7),
+			"nul":          rts.Null(),
+		}),
+		rts.List([]rts.Value{rts.Dict(map[string]rts.Value{"b": rts.List(nil)}), rts.Null()}),
+		rts.Str("text"),
+		rts.Null(),
+	}
+	paths := []string{
+		"", "  ", "$", " $. ", "a", "$.a", "$a", "a..b", ".a.", "a b", "nul", "nul.x", "missing", "0", "a.0",
+		"a[0]", "a.[1]", "a[ 1 ].b", "a[1].b[0]", "a[-1]", "a[2]", "a[x]", "a[x][0]", "a[]", "a[0", "a[",
+		"[0]", "[1]", "[0].b", "[-1]", "[2]", "[0][0]",
+		`["0"]`, `$["display.name"]`, `['a b']`, `["say \"hi\""]`, `["line\n"]`, `[""]`, `["$"]`, `$$`,
+		`["a" ][1]`, `[ "a"]`, `a["b`, `a["b"c]`, `['a'][1]['b']`, `["a"]["1"]`,
+	}
+	for i, doc := range docs {
+		for _, p := range paths {
+			raw, found := jsonpath.Get(rts.ToIface(doc), p)
+			want, err := rts.FromIface(ctx, pos, raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args := []rts.Value{doc, rts.Str(p)}
+			if got, err := jsonGet(ctx, pos, args); err != nil || !deepEqual(got, want) {
+				t.Fatalf("doc %d: json.get(%q) = %+v, %v, want %+v", i, p, got, err, want)
+			}
+			if got, err := jsonHas(ctx, pos, args); err != nil || got.K != rts.VBool || got.B != found {
+				t.Fatalf("doc %d: json.has(%q) = %+v, %v, want %t", i, p, got, err, found)
+			}
+		}
+	}
+}
+
+func TestStdlibJSONGetPathArgs(t *testing.T) {
+	ctx := testCtx()
+	const doc = `let d = {"0": "zero", "true": "yes"}`
+	tests := []struct {
+		expr string
+		want rts.Value
+	}{
+		{"json.get(d, 0)", rts.Str("zero")},
+		{"json.get(d, true)", rts.Str("yes")},
+		{"json.get(d, null)[\"true\"]", rts.Str("yes")},
+		{"json.get(d)[\"0\"]", rts.Str("zero")},
+		{"json.has(d, 0)", rts.Bool(true)},
+		{"json.has(d, false)", rts.Bool(false)},
+	}
+	for _, tt := range tests {
+		if got := evalExprMod(t, ctx, doc, tt.expr); !deepEqual(got, tt.want) {
+			t.Fatalf("%s = %+v, want %+v", tt.expr, got, tt.want)
+		}
+	}
+}
+
+func TestStdlibJSONGetReadsDataPathsOnly(t *testing.T) {
+	ctx := testCtx()
+	const mod = "fn f() {\n  return 1\n}\nlet r = try 1"
+	tests := []struct {
+		expr string
+		want rts.Value
+	}{
+		{`json.get({a: 1, f: f}, "a")`, rts.Num(1)},
+		{`json.has({a: 1, f: f}, "a")`, rts.Bool(true)},
+		{`json.get([rts, 2], "[1]")`, rts.Num(2)},
+		{`json.get(r, "value")`, rts.Null()},
+		{`json.has(r, "ok")`, rts.Bool(false)},
+		{`json.get({r: r}, "r.value")`, rts.Null()},
+		{`json.get({r: {value: 1}}, "r.value")`, rts.Num(1)},
+	}
+	for _, tt := range tests {
+		if got := evalExprMod(t, ctx, mod, tt.expr); !deepEqual(got, tt.want) {
+			t.Fatalf("%s = %+v, want %+v", tt.expr, got, tt.want)
+		}
+	}
+	if v := evalExprMod(t, ctx, mod, "json.get(f)"); v.K != rts.VFunc || v.F.Name != "f" {
+		t.Fatalf("json.get(f) = %+v, want f", v)
+	}
+	if v := evalExprMod(t, ctx, mod, `json.get({f: f}, "f")`); v.K != rts.VFunc || v.F.Name != "f" {
+		t.Fatalf(`json.get({f: f}, "f") = %+v, want f`, v)
+	}
+	if v := evalExprMod(t, ctx, mod, "json.get(r)"); v.K != rts.VObj || v.O.TypeName() != "result" {
+		t.Fatalf("json.get(r) = %+v, want the result", v)
+	}
+}
+
+// Expanding these shared lists would visit 2^27 leaves just to read one path.
+func TestStdlibJSONGetReadsSharedValues(t *testing.T) {
+	v := rts.List([]rts.Value{rts.Num(0)})
+	for range 27 {
+		v = rts.List([]rts.Value{v, v})
+	}
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxSteps: 1, MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	for _, args := range [][]rts.Value{{v}, {v, rts.Str("[0][1][0]")}} {
+		if got, err := jsonGet(ctx, rts.Pos{}, args); err != nil || len(got.L) != 2 {
+			t.Fatalf("json.get with %d args = %d items, %v, want a list of two", len(args), len(got.L), err)
+		}
+	}
+	if got, err := jsonHas(ctx, rts.Pos{}, []rts.Value{v, rts.Str("[1]")}); err != nil || !got.B {
+		t.Fatalf(`json.has(v, "[1]") = %+v, %v, want true`, got, err)
 	}
 }
 

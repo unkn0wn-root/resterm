@@ -29,36 +29,37 @@ type indexResult struct {
 
 // Get resolves path against v.
 func Get(v any, path string) (any, bool) {
+	return Walk(v, path, func(v any, k string) (any, bool) {
+		m, _ := v.(map[string]any)
+		it, ok := m[k]
+		return it, ok
+	}, func(v any, i int) (any, bool) {
+		items, _ := v.([]any)
+		if i < 0 || i >= len(items) {
+			return nil, false
+		}
+		return items[i], true
+	})
+}
+
+func Walk[T any](v T, path string, key func(T, string) (T, bool), index func(T, int) (T, bool)) (T, bool) {
 	p := strings.TrimSpace(path)
-	if p == "" {
-		return v, true
-	}
 	if after, ok := strings.CutPrefix(p, "$"); ok {
 		p = strings.TrimPrefix(after, ".")
 	}
-
-	cur := v
 	for _, s := range split(p) {
+		var ok bool
 		if s.isIdx {
-			items, ok := cur.([]any)
-			if !ok || s.index < 0 || s.index >= len(items) {
-				return nil, false
-			}
-			cur = items[s.index]
-			continue
+			v, ok = index(v, s.index)
+		} else {
+			v, ok = key(v, s.key)
 		}
-
-		obj, ok := cur.(map[string]any)
 		if !ok {
-			return nil, false
-		}
-		var found bool
-		cur, found = obj[s.key]
-		if !found {
-			return nil, false
+			var zero T
+			return zero, false
 		}
 	}
-	return cur, true
+	return v, true
 }
 
 var keyQuoter = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)

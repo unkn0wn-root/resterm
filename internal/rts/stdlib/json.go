@@ -147,11 +147,6 @@ func jsonGet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 
-	raw, err := jsonIface(ctx, pos, na.Arg(0))
-	if err != nil {
-		return rts.Null(), err
-	}
-
 	path := ""
 	if na.Has(1) {
 		p, err := na.Str(1)
@@ -160,16 +155,11 @@ func jsonGet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		}
 		path = p
 	}
-	if path == "" {
-		return rts.FromIface(ctx, pos, raw)
-	}
 
-	val, ok := jsonpath.Get(raw, path)
-	if !ok {
-		return rts.Null(), nil
+	if v, ok := jsonLookup(na.Arg(0), path); ok {
+		return v, nil
 	}
-
-	return rts.FromIface(ctx, pos, val)
+	return rts.Null(), nil
 }
 
 func jsonHas(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
@@ -178,18 +168,28 @@ func jsonHas(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 
-	raw, err := jsonIface(ctx, pos, na.Arg(0))
-	if err != nil {
-		return rts.Null(), err
-	}
-
 	path, err := na.Str(1)
 	if err != nil {
 		return rts.Null(), err
 	}
 
-	_, ok := jsonpath.Get(raw, path)
+	_, ok := jsonLookup(na.Arg(0), path)
 	return rts.Bool(ok), nil
+}
+
+func jsonLookup(v rts.Value, path string) (rts.Value, bool) {
+	return jsonpath.Walk(v, path, func(v rts.Value, k string) (rts.Value, bool) {
+		if v.K != rts.VDict {
+			return rts.Null(), false
+		}
+		it, ok := v.M[k]
+		return it, ok
+	}, func(v rts.Value, i int) (rts.Value, bool) {
+		if v.K != rts.VList || i < 0 || i >= len(v.L) {
+			return rts.Null(), false
+		}
+		return v.L[i], true
+	})
 }
 
 const (
@@ -362,53 +362,5 @@ func jsonIndent(ctx *rts.Ctx, pos rts.Pos, v rts.Value) (string, error) {
 		return strings.Repeat(" ", n), nil
 	default:
 		return "", rts.Errf(ctx, pos, "indent must be string or number")
-	}
-}
-
-func jsonIface(ctx *rts.Ctx, pos rts.Pos, v rts.Value) (any, error) {
-	switch v.K {
-	case rts.VNull:
-		return nil, nil
-	case rts.VBool:
-		return v.B, nil
-	case rts.VNum:
-		return v.N, nil
-	case rts.VStr:
-		return v.S, nil
-	case rts.VList:
-		if ctx != nil && ctx.Lim.MaxList > 0 && len(v.L) > ctx.Lim.MaxList {
-			return nil, rts.Errf(ctx, pos, "list too large")
-		}
-		out := make([]any, 0, len(v.L))
-		for _, it := range v.L {
-			val, err := jsonIface(ctx, pos, it)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, val)
-		}
-		return out, nil
-	case rts.VDict:
-		if ctx != nil && ctx.Lim.MaxDict > 0 && len(v.M) > ctx.Lim.MaxDict {
-			return nil, rts.Errf(ctx, pos, "dict too large")
-		}
-		out := make(map[string]any, len(v.M))
-		for k, it := range v.M {
-			val, err := jsonIface(ctx, pos, it)
-			if err != nil {
-				return nil, err
-			}
-			out[k] = val
-		}
-		return out, nil
-	case rts.VObj:
-		if v.O != nil {
-			if t, ok := v.O.(rts.InterfaceValuer); ok {
-				return t.ToInterface(), nil
-			}
-		}
-		return nil, rts.Errf(ctx, pos, "json stringify unsupported object")
-	default:
-		return nil, rts.Errf(ctx, pos, "json stringify unsupported type")
 	}
 }

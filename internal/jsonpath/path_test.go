@@ -1,6 +1,10 @@
 package jsonpath
 
-import "testing"
+import (
+	"slices"
+	"strconv"
+	"testing"
+)
 
 func TestValid(t *testing.T) {
 	tests := []struct {
@@ -76,5 +80,92 @@ func TestGet(t *testing.T) {
 	got, ok := Get(doc, `$["items"][0]["display.name"]`)
 	if !ok || got != "Ada" {
 		t.Fatalf("Get() = %#v, %t", got, ok)
+	}
+}
+
+func TestWalk(t *testing.T) {
+	key := func(p, k string) (string, bool) {
+		return p + " " + strconv.Quote(k), true
+	}
+	index := func(p string, i int) (string, bool) {
+		return p + " " + strconv.Itoa(i), true
+	}
+	tests := []struct {
+		path string
+		want string
+	}{
+		{path: "", want: "$"},
+		{path: "  ", want: "$"},
+		{path: " $ ", want: "$"},
+		{path: "$.", want: "$"},
+		{path: "a", want: `$ "a"`},
+		{path: "$.a.b", want: `$ "a" "b"`},
+		{path: "$a", want: `$ "a"`},
+		{path: "a..b", want: `$ "a" "b"`},
+		{path: ".a.", want: `$ "a"`},
+		{path: "a b.c", want: `$ "a b" "c"`},
+		{path: "$[0]", want: "$ 0"},
+		{path: "a[ 1 ].b", want: `$ "a" 1 "b"`},
+		{path: "a.[0][2]", want: `$ "a" 0 2`},
+		{path: "a[-1]", want: `$ "a" -1`},
+		{path: "a[x].b", want: `$ "a" "b"`},
+		{path: "a[].b", want: `$ "a" "b"`},
+		{path: `["0"]`, want: `$ "0"`},
+		{path: `$["display.name"]`, want: `$ "display.name"`},
+		{path: `['a b'].c`, want: `$ "a b" "c"`},
+		{path: `["say \"hi\""]`, want: `$ "say \"hi\""`},
+		{path: `['it\'s']`, want: `$ "it's"`},
+		{path: `["a\\b\n\r\t\q"]`, want: `$ "a\\b\n\r\tq"`},
+		{path: `["a" ]`, want: `$ "a"`},
+		{path: `[ "a"]`, want: "$"},
+		{path: "a[0", want: `$ "a"`},
+		{path: "a[", want: `$ "a"`},
+		{path: `a["b`, want: `$ "a"`},
+		{path: `a["b\`, want: `$ "a"`},
+		{path: `a["b"c].d`, want: `$ "a"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got, ok := Walk("$", tt.path, key, index)
+			if !ok || got != tt.want {
+				t.Fatalf("Walk(%q) = %q, %t, want %q", tt.path, got, ok, tt.want)
+			}
+		})
+	}
+
+	var seen []string
+	miss := func(p, k string) (string, bool) {
+		seen = append(seen, k)
+		return p + "." + k, k != "miss"
+	}
+	got, ok := Walk("$", "a.miss.b[0]", miss, index)
+	if ok || got != "" || !slices.Equal(seen, []string{"a", "miss"}) {
+		t.Fatalf("Walk = %q, %t after reading %q, want a miss after a and miss", got, ok, seen)
+	}
+}
+
+func TestGetMisses(t *testing.T) {
+	doc := map[string]any{"a": []any{nil, map[string]any{"b": 1.0}}, "n": nil}
+	tests := []struct {
+		path string
+		want any
+		ok   bool
+	}{
+		{path: "a[1].b", want: 1.0, ok: true},
+		{path: "n", ok: true},
+		{path: "a[0]", ok: true},
+		{path: "a[2]", ok: false},
+		{path: "a[-1]", ok: false},
+		{path: "a.b", ok: false},
+		{path: "[0]", ok: false},
+		{path: "n.b", ok: false},
+		{path: "missing", ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got, ok := Get(doc, tt.path); ok != tt.ok || got != tt.want {
+				t.Fatalf("Get(%q) = %#v, %t, want %#v, %t", tt.path, got, ok, tt.want, tt.ok)
+			}
+		})
 	}
 }
