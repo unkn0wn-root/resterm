@@ -158,7 +158,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	if in.Req.Metadata.Poll != nil || in.Req.Metadata.Retry != nil {
 		return r.runRepeatedHTTP(ctx, in)
 	}
-	ctx, cancel := context.WithTimeout(ctx, in.EffectiveTimeout)
+	reqCtx, cancel := context.WithTimeout(ctx, in.EffectiveTimeout)
 	defer cancel()
 
 	res := HTTPResult{Decision: "HTTP request sent"}
@@ -171,7 +171,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	switch {
 	case in.Req.WebSocket != nil:
 		handle, fallback, startErr := in.Client.StartWebSocket(
-			ctx,
+			reqCtx,
 			in.Req,
 			in.Resolver,
 			in.Options,
@@ -187,10 +187,10 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			if r.Hooks.AttachWebSocketHandle != nil {
 				r.Hooks.AttachWebSocketHandle(handle, in.Req)
 			}
-			resp, err = in.Client.CompleteWebSocket(ctx, handle, in.Req, in.Options)
+			resp, err = in.Client.CompleteWebSocket(reqCtx, handle, in.Req, in.Options)
 		}
 	case in.Req.SSE != nil:
-		handle, fallback, startErr := in.Client.StartSSE(ctx, in.Req, in.Resolver, in.Options)
+		handle, fallback, startErr := in.Client.StartSSE(reqCtx, in.Req, in.Resolver, in.Options)
 		if startErr != nil {
 			res.Err = startErr
 			res.Decision = "SSE request failed"
@@ -205,7 +205,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			resp, err = httpx.CompleteSSE(handle)
 		}
 	default:
-		resp, err = in.Client.Execute(ctx, in.Req, in.Resolver, in.Options)
+		resp, err = in.Client.Execute(reqCtx, in.Req, in.Resolver, in.Options)
 	}
 
 	res.Response = resp
@@ -214,6 +214,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 		res.Decision = httpFailureDecision(in.Req)
 		return res
 	}
+	// Response checks set their own deadline.
 	return r.finalizeHTTP(ctx, in, resp)
 }
 

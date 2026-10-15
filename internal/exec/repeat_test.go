@@ -512,6 +512,33 @@ func TestRunHTTPFinalizesOutsideThePollDeadline(t *testing.T) {
 	})
 }
 
+func TestRunHTTPFinalizesOutsideTheRequestDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := repeatTestClient(func(req *http.Request) (*http.Response, error) {
+			return repeatTestResponse(req, http.StatusOK, "ok", nil), nil
+		})
+		var assertCtxErr error
+		result := Runner{Hooks: HTTPHooks{
+			RunTests: func(in TestInput) ([]scriptapi.TestResult, error) {
+				time.Sleep(2 * time.Second)
+				assertCtxErr = in.Context.Err()
+				return nil, nil
+			},
+		}}.RunHTTP(HTTPInput{
+			Client:           client,
+			Context:          t.Context(),
+			Req:              repeatTestRequest(nil),
+			EffectiveTimeout: time.Second,
+		})
+		if result.Err != nil {
+			t.Fatalf("RunHTTP() error = %v", result.Err)
+		}
+		if assertCtxErr != nil {
+			t.Fatalf("assert context error = %v, want none", assertCtxErr)
+		}
+	})
+}
+
 func TestRunHTTPDecisionMatchesAPlainRequestUntilItRepeats(t *testing.T) {
 	t.Parallel()
 	response := func(req *http.Request) (*http.Response, error) {

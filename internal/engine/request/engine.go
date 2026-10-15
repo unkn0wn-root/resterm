@@ -1204,11 +1204,9 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	}
 
 	x.applyRuntimeGlobals(caps.globals)
-	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
-	defer cancelAsserts()
 	rr, rrErr := rtsGRPC(resp)
 	tests, testErr := x.runTests(testRun{
-		ctx:    assertCtx,
+		ctx:    x.sendCtx,
 		vars:   x.captureVariables(),
 		resp:   respForScripts,
 		rr:     rr,
@@ -1241,12 +1239,14 @@ type testRun struct {
 }
 
 func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
+	ctx, cancel := context.WithTimeout(in.ctx, x.timeout)
+	defer cancel()
 	sc := x.sentScope(in.vars)
 	var checks []scriptapi.TestResult
 	checkErr := in.rrErr
 	if checkErr == nil {
 		checks, checkErr = x.eng.runRTSChecks(
-			in.ctx,
+			ctx,
 			x.doc,
 			x.req,
 			x.env,
