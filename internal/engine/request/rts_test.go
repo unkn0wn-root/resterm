@@ -301,6 +301,70 @@ func TestGRPCResponseCheckCancelEndsTheRequest(t *testing.T) {
 	}
 }
 
+func TestCancelBeforeSendEndsTheRequest(t *testing.T) {
+	const (
+		rtsPre = "# @rts pre-request\n> "
+		jsPre  = "# @script pre-request\n> "
+	)
+	tests := []struct {
+		name  string
+		pre   string
+		stop  bool
+		class diag.Class
+		dec   string
+	}{
+		{
+			// Keep the dict outside the template: its closing brace would end the template.
+			"run var cancel",
+			"@pat = {\"path\": \"/x\"}\n# @run var n = {{= mock.count(json.parse(vars.get(\"pat\"))) }}",
+			true,
+			diag.ClassCanceled,
+			"Request canceled",
+		},
+		{
+			"run var error",
+			"# @run var n = {{= missing.value }}",
+			false,
+			diag.ClassScript,
+			"Run variable evaluation failed",
+		},
+		{"when cancel", "# @when " + mockCount + " == 0", true, diag.ClassCanceled, "Request canceled"},
+		{"when error", "# @when missing.value", false, diag.ClassScript, "Condition evaluation failed"},
+		{"apply cancel", "# @apply {url: str(" + mockCount + ")}", true, diag.ClassCanceled, "Request canceled"},
+		{"apply error", "# @apply {url: missing.value}", false, diag.ClassScript, "Apply failed"},
+		{"rts cancel", rtsPre + "let n = " + mockCount, true, diag.ClassCanceled, "Request canceled"},
+		{"rts error", rtsPre + "let n = missing.value", false, diag.ClassScript, "RTS pre-request failed"},
+		{"js cancel", jsPre + "< ./slow.js", true, diag.ClassCanceled, "Request canceled"},
+		{"js error", jsPre + "throw new Error(\"bad\");", false, diag.ClassScript, "JS pre-request failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			doc, req := parseDoc(t, "### one\n"+tt.pre+"\nGET http://example.test\n")
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client(), MockInspector: stopInspector{cancel}}, nil)
+			eng.sc = scripts.NewRunner(stopFS{cancel})
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{Ctx: ctx})
+			if err != nil {
+				t.Fatalf("ExecuteWith() error = %v", err)
+			}
+			if got := diag.ClassOf(res.Err); got != tt.class {
+				t.Fatalf("class = %s (%v), want %s", got, res.Err, tt.class)
+			}
+			if errors.Is(res.Err, errStop) != tt.stop {
+				t.Fatalf("error = %v, want the cancel cause only for a cancel", res.Err)
+			}
+			if res.Explain.Decision != tt.dec {
+				t.Fatalf("decision = %q, want %q", res.Explain.Decision, tt.dec)
+			}
+			if st.wire != nil {
+				t.Fatal("the request was sent")
+			}
+		})
+	}
+}
+
 func TestRTSExtensionsBindMockAndYieldToLocals(t *testing.T) {
 	e := New(engcfg.Config{MockInspector: testMockInspector{}}, nil)
 	pos := rts.Pos{Path: "test", Line: 1, Col: 1}

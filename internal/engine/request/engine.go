@@ -418,8 +418,8 @@ func (x *execCtx) skip(reason string) *xrunResult {
 	return &res
 }
 
-func (x *execCtx) canceled(err error) *xrunResult {
-	return x.fail(err, "Request canceled")
+func (x *execCtx) canceled() *xrunResult {
+	return x.fail(context.Cause(x.sendCtx), "Request canceled")
 }
 
 func (x *execCtx) reqText() string { return renderRequestText(x.req) }
@@ -554,7 +554,7 @@ func (f flow) PendingCancel() *xexec.RequestResult {
 	}
 	select {
 	case <-f.ctx.sendCtx.Done():
-		return f.ctx.canceled(context.Canceled)
+		return f.ctx.canceled()
 	default:
 		return nil
 	}
@@ -575,6 +575,11 @@ func (f flow) EvaluateRunVars() *xexec.RequestResult {
 		return nil
 	}
 	vals, err := x.eng.evalRunVars(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.run, x.req.RunVars)
+	// Native calls may return plain context errors. Check cancellation before
+	// reporting a script failure.
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		x.exp.stage(
 			xplain.StageRunVars,
@@ -610,6 +615,9 @@ func (f flow) EvaluateCondition() *xexec.RequestResult {
 		x.evalScope(x.baseVars),
 		x.locals,
 	)
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		tag := x.req.Metadata.When.Directive().Tag()
 		x.exp.stage(
@@ -650,6 +658,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	// @for-each binds its item as a typed value, and @apply reads it the same way
 	// every other expression in the run does.
 	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.evalScope(vv), x.locals)
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		x.exp.stage(
 			xplain.StageApply,
@@ -686,6 +697,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		x.locals,
 		x.secrets,
 	)
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		x.exp.stage(
 			xplain.StageRTSPreRequest,
@@ -721,9 +735,6 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 			x.req,
 		)
 	}
-	if err := x.sendCtx.Err(); err != nil {
-		return x.canceled(err)
-	}
 
 	x.applyRuntimeGlobals(rtsOut.Globals)
 	x.addScriptVars(rtsOut.Variables)
@@ -744,6 +755,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		Secrets:   x.secrets,
 		Expand:    x.scriptExpand,
 	})
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		x.exp.stage(
 			xplain.StageJSPreRequest,
@@ -778,9 +792,6 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 			before,
 			x.req,
 		)
-	}
-	if err := x.sendCtx.Err(); err != nil {
-		return x.canceled(err)
 	}
 
 	x.applyRuntimeGlobals(jsOut.Globals)
@@ -1092,7 +1103,7 @@ func (x *execCtx) executeInteractiveWebSocket() xexec.RequestResult {
 	}
 
 	if !lt.detach() {
-		res := x.canceled(x.sendCtx.Err())
+		res := x.canceled()
 		res.RequestText = x.reqText()
 		return *res
 	}
