@@ -419,7 +419,16 @@ func (x *execCtx) skip(reason string) *xrunResult {
 }
 
 func (x *execCtx) canceled() *xrunResult {
-	return x.fail(context.Cause(x.sendCtx), "Request canceled")
+	return x.fail(x.withCtxErr(context.Cause(x.sendCtx)), "Request canceled")
+}
+
+// A custom cause need not wrap the context error. Add it so the error still
+// classifies as a cancel or a timeout and keeps its detail.
+func (x *execCtx) withCtxErr(err error) error {
+	if errors.Is(err, x.sendCtx.Err()) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", x.sendCtx.Err(), err)
 }
 
 func (x *execCtx) reqText() string { return renderRequestText(x.req) }
@@ -1176,6 +1185,10 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		return res
 	}
 	if err != nil {
+		// A gRPC status error matches neither context error and drops the cause.
+		if x.sendCtx.Err() != nil {
+			err = x.withCtxErr(context.Cause(x.sendCtx))
+		}
 		x.exp.setPrepared(x.req)
 		res := x.base()
 		res.Err = err
@@ -1246,7 +1259,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 func (x *execCtx) finishChecks(res xrunResult, dec string) xrunResult {
 	res.Checked = true
 	if x.sendCtx.Err() != nil {
-		res.Err = context.Cause(x.sendCtx)
+		res.Err = x.withCtxErr(context.Cause(x.sendCtx))
 		res.ScriptErr = nil
 		res.Explain = x.exp.finish(xplain.StatusError, "Request canceled", res.Err)
 		return res
@@ -1450,6 +1463,9 @@ func (x *execCtx) finishHTTP(res xexec.HTTPResult) xexec.RequestResult {
 		x.exp.sentHTTP(x.req, res.Response)
 	}
 	if res.Err != nil {
+		if x.sendCtx.Err() != nil {
+			res.Err = x.withCtxErr(res.Err)
+		}
 		if res.ErrStage == xexec.StageCaptures {
 			x.exp.stage(
 				xplain.StageCaptures,
