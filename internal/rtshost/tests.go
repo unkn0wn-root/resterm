@@ -119,7 +119,7 @@ func (o *testObj) reportDef(name string, end error) native.Def {
 	return native.Raw(name, func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		// A saved t.error or t.fatal bypasses Unbound.
 		if o.done {
-			return rts.Null(), rts.Errf(ctx, pos, testEnded)
+			return rts.Null(), rts.Abortf(ctx, pos, testEnded)
 		}
 		parts := make([]string, len(args))
 		for i, arg := range args {

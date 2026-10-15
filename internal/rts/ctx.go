@@ -152,6 +152,11 @@ func Errf(ctx *Ctx, pos Pos, format string, args ...any) error {
 	return &StackError{Err: base, Frames: frames}
 }
 
+// Abortf is Errf for errors that try cannot catch.
+func Abortf(ctx *Ctx, pos Pos, format string, args ...any) error {
+	return rtAbort(ctx, pos, AbortScript, format, args...)
+}
+
 func rtAbort(ctx *Ctx, pos Pos, kind AbortKind, format string, args ...any) error {
 	base := &RuntimeError{Pos: pos, Msg: fmt.Sprintf(format, args...)}
 	abort := &AbortError{RuntimeError: base, Kind: kind}

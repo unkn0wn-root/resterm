@@ -305,9 +305,18 @@ export fn useFatal() {
 export fn useError() {
   report("stale")
 }
+export fn tryT() {
+  let r = try saved.fatal("stale")
+}
+export fn tryFatal() {
+  let r = try fatal("stale")
+}
+export fn tryError() {
+  let r = try report("stale")
+}
 `)
 	const ended = "t belongs to a test block that has ended"
-	for _, use := range []string{"useT", "useFatal", "useError"} {
+	for _, use := range []string{"useT", "useFatal", "useError", "tryT", "tryFatal", "tryError"} {
 		t.Run(use, func(t *testing.T) {
 			eng := NewEngine(stdlib.New)
 			rt := testRuntime(t)
