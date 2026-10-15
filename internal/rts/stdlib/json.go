@@ -2,6 +2,7 @@ package stdlib
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -100,37 +101,44 @@ func jsonStringify(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, erro
 		return rts.Null(), err
 	}
 
-	raw, err := jsonIface(ctx, pos, na.Arg(0))
-	if err != nil {
-		return rts.Null(), err
-	}
-
-	var (
-		data   []byte
-		indent string
-	)
+	var indent string
 	if na.Has(1) {
-		indent, err = jsonIndent(ctx, pos, na.Arg(1))
+		in, err := jsonIndent(ctx, pos, na.Arg(1))
 		if err != nil {
 			return rts.Null(), err
 		}
+		indent = in
 	}
 
-	if indent == "" {
-		data, err = json.Marshal(raw)
-	} else {
-		data, err = json.MarshalIndent(raw, "", indent)
+	o := rts.JSONOptions{EscapeHTML: true, Indent: indent, Check: func(v rts.Value) error {
+		switch v.K {
+		case rts.VList:
+			return rts.CheckList(ctx, pos, len(v.L))
+		case rts.VDict:
+			return rts.CheckDict(ctx, pos, len(v.M))
+		case rts.VFunc, rts.VNative:
+			return rts.Errf(ctx, pos, "json stringify unsupported type")
+		case rts.VObj:
+			if _, ok := v.O.(rts.InterfaceValuer); !ok {
+				return rts.Errf(ctx, pos, "json stringify unsupported object")
+			}
+		}
+		return nil
+	}}
+	if ctx != nil {
+		o.Max = ctx.Lim.MaxStr
 	}
-
-	if err != nil {
+	s, err := rts.EncodeJSON(na.Arg(0), o)
+	switch {
+	case errors.Is(err, rts.ErrNotJSON):
 		return rts.Null(), rts.Errf(ctx, pos, "json stringify failed")
+	case err != nil:
+		return rts.Null(), err
 	}
-
-	if ctx != nil && ctx.Lim.MaxStr > 0 && len(data) > ctx.Lim.MaxStr {
-		return rts.Null(), rts.Errf(ctx, pos, "string too long")
+	if err := rts.CheckStr(ctx, pos, s); err != nil {
+		return rts.Null(), err
 	}
-
-	return rts.Str(string(data)), nil
+	return rts.Str(s), nil
 }
 
 func jsonGet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {

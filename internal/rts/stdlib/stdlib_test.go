@@ -2,6 +2,7 @@ package stdlib
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
@@ -323,6 +324,126 @@ func TestStdlibJSONParseStringify(t *testing.T) {
 	v = evalExprCtx(t, ctx, "json.stringify({a:1}, 2)")
 	if v.K != rts.VStr || !strings.Contains(v.S, "\n") || !strings.Contains(v.S, "\"a\": 1") {
 		t.Fatalf("expected indented json")
+	}
+}
+
+func marshalStringify(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (string, error) {
+	raw, err := jsonIface(ctx, pos, args[0])
+	if err != nil {
+		return "", err
+	}
+	var indent string
+	if len(args) > 1 {
+		if indent, err = jsonIndent(ctx, pos, args[1]); err != nil {
+			return "", err
+		}
+	}
+	var data []byte
+	if indent == "" {
+		data, err = json.Marshal(raw)
+	} else {
+		data, err = json.MarshalIndent(raw, "", indent)
+	}
+	if err != nil {
+		return "", rts.Errf(ctx, pos, "json stringify failed")
+	}
+	if err := rts.CheckStr(ctx, pos, string(data)); err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func TestStdlibJSONStringifyMatchesMarshal(t *testing.T) {
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 64, MaxList: 4, MaxDict: 4})
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	ok := evalExprCtx(t, ctx, `try [1, {a: "<b>"}]`)
+	failed := evalExprCtx(t, ctx, "try (1 / 0)")
+	nested := rts.Dict(map[string]rts.Value{
+		"b":  rts.List([]rts.Value{rts.Num(1.5), rts.Dict(nil), rts.List(nil), rts.Null()}),
+		"a<": rts.Dict(map[string]rts.Value{"z": rts.Bool(false), "y": rts.Str("é")}),
+	})
+	values := []rts.Value{
+		rts.Null(),
+		rts.Bool(true),
+		rts.Num(1e21),
+		rts.Num(1e-7),
+		rts.Num(math.Copysign(0, -1)),
+		rts.Num(9007199254740993),
+		rts.Str("<a&b> \u2028\u2029 \xff \"q\" \\ \x00\n\t"),
+		rts.List(nil),
+		rts.Dict(nil),
+		nested,
+		ok,
+		failed,
+		rts.List([]rts.Value{ok, failed}),
+		rts.Num(math.NaN()),
+		rts.List([]rts.Value{rts.Num(math.Inf(1))}),
+		rts.List([]rts.Value{rts.Fn(&rts.Func{})}),
+		rts.Dict(map[string]rts.Value{"a": rts.Native(nil)}),
+		rts.List([]rts.Value{rts.Obj(&objMap{name: "x"})}),
+		rts.List(make([]rts.Value, 5)),
+		rts.Dict(map[string]rts.Value{"a": {}, "b": {}, "c": {}, "d": {}, "e": {}}),
+		rts.Str(strings.Repeat("a", 62)),
+		rts.Str(strings.Repeat("a", 63)),
+		rts.List([]rts.Value{rts.Str(strings.Repeat("a", 40))}),
+	}
+	indents := [][]rts.Value{
+		nil,
+		{rts.Num(0)},
+		{rts.Num(2)},
+		{rts.Num(1)},
+		{rts.Num(32)},
+		{rts.Str("\t")},
+		{rts.Str("")},
+		{rts.Str("ab")},
+		{rts.Str(" \t")},
+	}
+	for i, v := range values {
+		for j, indent := range indents {
+			args := append([]rts.Value{v}, indent...)
+			want, werr := marshalStringify(ctx, pos, args)
+			got, err := jsonStringify(ctx, pos, args)
+			if fmt.Sprint(err) != fmt.Sprint(werr) || err == nil && got.S != want {
+				t.Fatalf("value %d, indent %d: json.stringify = %q, %v\nwant %q, %v", i, j, got.S, err, want, werr)
+			}
+		}
+	}
+	for i, indent := range []rts.Value{rts.Num(-1), rts.Num(33), rts.Bool(true)} {
+		args := []rts.Value{nested, indent}
+		_, werr := marshalStringify(ctx, pos, args)
+		if _, err := jsonStringify(ctx, pos, args); err == nil || err.Error() != werr.Error() {
+			t.Fatalf("bad indent %d: json.stringify error = %v, want %v", i, err, werr)
+		}
+	}
+}
+
+// Shared children expand to 2^60 lists unless encoding stops at the size limit.
+func TestStdlibJSONStringifyStopsAtStringLimit(t *testing.T) {
+	v := rts.List([]rts.Value{rts.Num(0)})
+	for range 60 {
+		v = rts.List([]rts.Value{v, v})
+	}
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 65536, MaxList: 2000, MaxDict: 2000})
+	for _, args := range [][]rts.Value{{v}, {v, rts.Num(2)}} {
+		_, err := jsonStringify(ctx, rts.Pos{}, args)
+		if err == nil || !strings.Contains(err.Error(), "string too long") {
+			t.Fatalf("json.stringify error = %v, want string too long", err)
+		}
+	}
+}
+
+// Indentation grows quadratically with depth; it must count toward the size limit.
+func TestStdlibJSONStringifyStopsDeepIndentAtStringLimit(t *testing.T) {
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 65536, MaxList: 2000, MaxDict: 2000})
+	for _, depth := range []int{9998, 25000} {
+		v := rts.List(nil)
+		for range depth {
+			v = rts.List([]rts.Value{v})
+		}
+		_, err := jsonStringify(ctx, rts.Pos{}, []rts.Value{v, rts.Num(32)})
+		if err == nil || !strings.Contains(err.Error(), "string too long") {
+			t.Fatalf("depth %d: json.stringify error = %v, want string too long", depth, err)
+		}
 	}
 }
 

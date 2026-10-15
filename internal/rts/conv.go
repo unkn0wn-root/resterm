@@ -1,7 +1,6 @@
 package rts
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -22,31 +21,30 @@ func ToStr(ctx *Ctx, pos Pos, v Value) (string, error) {
 	case VNull:
 		return "", nil
 	case VList, VDict:
-		data, err := json.Marshal(ToIface(v))
-		if err != nil {
-			return "", Errf(ctx, pos, "json encode failed")
-		}
-		if ctx != nil && ctx.Lim.MaxStr > 0 && len(data) > ctx.Lim.MaxStr {
-			return "", Errf(ctx, pos, "string too long")
-		}
-		return string(data), nil
+		return jsonStr(ctx, pos, v)
 	case VObj:
-		if v.O != nil {
-			if _, ok := v.O.(InterfaceValuer); ok {
-				data, err := json.Marshal(ToIface(v))
-				if err != nil {
-					return "", Errf(ctx, pos, "json encode failed")
-				}
-				if ctx != nil && ctx.Lim.MaxStr > 0 && len(data) > ctx.Lim.MaxStr {
-					return "", Errf(ctx, pos, "string too long")
-				}
-				return string(data), nil
-			}
+		if _, ok := v.O.(InterfaceValuer); ok {
+			return jsonStr(ctx, pos, v)
 		}
 		return "", Errf(ctx, pos, "cannot stringify %v", v.K)
 	default:
 		return "", Errf(ctx, pos, "cannot stringify %v", v.K)
 	}
+}
+
+func jsonStr(ctx *Ctx, pos Pos, v Value) (string, error) {
+	o := JSONOptions{EscapeHTML: true}
+	if ctx != nil {
+		o.Max = ctx.Lim.MaxStr
+	}
+	s, err := EncodeJSON(v, o)
+	if err != nil {
+		return "", Errf(ctx, pos, "json encode failed")
+	}
+	if err := CheckStr(ctx, pos, s); err != nil {
+		return "", err
+	}
+	return s, nil
 }
 
 // ScalarStr converts string, number, and bool values to strings.

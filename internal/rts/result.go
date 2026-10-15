@@ -57,14 +57,13 @@ func (o *resultObj) Index(ctx *Ctx, pos Pos, key Value) (Value, error) {
 func (o *resultObj) Truthy() bool { return o.ok }
 
 func (o *resultObj) ToInterface() any {
-	out := map[string]any{
-		"ok":    o.ok,
-		"value": ToIface(o.val),
+	return ToIface(o.dict())
+}
+
+func (o *resultObj) dict() Value {
+	msg := Null()
+	if !o.ok && o.err != "" {
+		msg = Str(o.err)
 	}
-	if o.ok || o.err == "" {
-		out["error"] = nil
-	} else {
-		out["error"] = o.err
-	}
-	return out
+	return Dict(map[string]Value{"ok": Bool(o.ok), "value": o.val, "error": msg})
 }
