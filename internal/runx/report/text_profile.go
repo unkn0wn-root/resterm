@@ -341,7 +341,7 @@ func textProfileFailure(fail ProfileFailure) string {
 		label = fmt.Sprintf("Warmup %d", fail.Iteration)
 	}
 
-	msg := strings.TrimSpace(fail.Reason)
+	msg := oneLine(strings.TrimSpace(fail.Reason))
 	meta := textProfileFailureMeta(fail)
 	switch {
 	case msg != "" && meta != "":

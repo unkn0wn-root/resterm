@@ -356,3 +356,27 @@ func TestErrorRowsStayOnOneLine(t *testing.T) {
 		}
 	}
 }
+
+func TestProfileFailureReasonStaysOnOneLine(t *testing.T) {
+	rep := &Report{
+		Results: []Result{{
+			Kind:   "profile",
+			Name:   "prof",
+			Method: "PROFILE",
+			Status: StatusFail,
+			Profile: &Profile{Failures: []ProfileFailure{
+				{Iteration: 1, Reason: "a\nb", Duration: 5 * time.Millisecond},
+				{Iteration: 2, Reason: "plain", Duration: 5 * time.Millisecond},
+			}},
+		}},
+	}
+	var out strings.Builder
+	if err := WriteText(&out, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+	for _, want := range []string{"- Run 1: a; b [5ms]\n", "- Run 2: plain [5ms]\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("expected %q in output, got %q", want, out.String())
+		}
+	}
+}
