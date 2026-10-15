@@ -414,7 +414,14 @@ func TestSourceSyntaxScriptLines(t *testing.T) {
 			line:    1,
 			kind:    SourceLineScript,
 			lang:    "rts",
-			content: `{% t.error("x") %}`,
+			content: `t.error("x")`,
+		},
+		{
+			name:    "text after a one-line block",
+			source:  []string{"> {% x %} // y"},
+			kind:    SourceLineScript,
+			lang:    "js",
+			content: "{% x %} // y",
 		},
 		{
 			name:   "block markers",
@@ -483,6 +490,9 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 		"> <",
 		"> {%\na\n> b\n> < x.js\n> %}",
 		"  >   a",
+		"> {% a %}\n> {%b%}\n>   {% %}\n> {%%}",
+		"> {% a %} b\n> {%}\n> {% a\n>   b %}",
+		"> {%\n> {% a %}\n{% b %}\n> %}",
 	}
 
 	for _, prefix := range prefixes {

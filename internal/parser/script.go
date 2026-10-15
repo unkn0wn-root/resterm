@@ -56,6 +56,8 @@ func (b *documentBuilder) handleScriptLine(ln line) bool {
 		b.ensureRequest(ln.no)
 		if p, ok := scriptInc(body); ok {
 			b.request.appendScriptInclude(p)
+		} else if code, off, ok := cutInlineBlock(body); ok {
+			b.addScriptLine(ln.no, col+off, code)
 		} else {
 			b.addScriptLine(ln.no, col, body)
 		}
@@ -308,24 +310,14 @@ func (r *requestBuilder) flushPendingScript() {
 	if len(r.scriptBuffer) == 0 {
 		return
 	}
-	body := strings.Join(r.scriptBuffer, "\n")
-	lines := append([]restfile.ScriptLine(nil), r.scriptBufferLines...)
-	if s := strings.TrimSpace(body); len(s) >= len("{%%}") && strings.HasPrefix(s, "{%") && strings.HasSuffix(s, "%}") {
-		inner := s[2 : len(s)-2]
-		off := len(body) - len(str.TrimLeft(body)) + 2 + len(inner) - len(str.TrimLeft(inner))
-		cut := body[:off]
-		body = strings.TrimSpace(inner)
-		skip := strings.Count(cut, "\n")
-		lines = lines[skip : skip+strings.Count(body, "\n")+1]
-		lines[0].Col += len(cut) - strings.LastIndexByte(cut, '\n') - 1
-	}
+	script := strings.Join(r.scriptBuffer, "\n")
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
 		Kind:       r.scriptBufferMode.kind,
 		Lang:       r.scriptBufferMode.lang,
 		Name:       r.scriptBufferMode.name,
-		Body:       body,
+		Body:       script,
 		SourcePath: r.scriptSourcePath,
-		Lines:      lines,
+		Lines:      append([]restfile.ScriptLine(nil), r.scriptBufferLines...),
 	})
 	r.scriptBuffer = nil
 	r.scriptBufferMode = scriptMode{}

@@ -199,6 +199,9 @@ func (s *sourceScan) classify(ln line) SourceLine {
 		if _, include := scriptInc(body); include {
 			return SourceLine{}
 		}
+		if code, off, ok := cutInlineBlock(body); ok {
+			body, col = code, col+off
+		}
 		return s.scriptLine(ln, body, col)
 	}
 

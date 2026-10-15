@@ -878,8 +878,7 @@ func TestScriptErrorsPointAtSource(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "pre.js")
 	braced := filepath.Join(dir, "braced.js")
-	opener := filepath.Join(dir, "opener.js")
-	for path, src := range map[string]string{file: "\n  nope();\n", braced: "{%\n  nope();\n%}\n", opener: "\n {%}\n"} {
+	for path, src := range map[string]string{file: "\n\n  nope();\n", braced: "{% x %}"} {
 		if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -909,7 +908,7 @@ func TestScriptErrorsPointAtSource(t *testing.T) {
 			pre + "error at line 21: Error: boom",
 		},
 		{
-			"trimmed first line",
+			"indented first line",
 			restfile.ScriptBlock{Kind: "pre-request", Body: "  nope();"},
 			nil, diag.Pos{Path: "api.http", Line: 20, Col: 9},
 			pre + "error at line 20: ReferenceError: nope is not defined",
@@ -922,20 +921,21 @@ func TestScriptErrorsPointAtSource(t *testing.T) {
 			pre + "error at line 2: ReferenceError: nope is not defined",
 		},
 		{
+			"blocks on two lines",
+			parser.Parse("api.http", []byte("# @script pre-request\n> {% 1 %}\n>  {% nope(); %}\nGET https://a.test")).
+				Requests[0].Metadata.Scripts[0],
+			nil, diag.Pos{Path: "api.http", Line: 3, Col: 11},
+			pre + "error at line 3: ReferenceError: nope is not defined",
+		},
+		{
 			"script file",
 			restfile.ScriptBlock{Kind: "pre-request", FilePath: file},
-			nil, diag.Pos{Path: file, Line: 2, Col: 7},
-			pre + "error at line 2: ReferenceError: nope is not defined",
+			nil, diag.Pos{Path: file, Line: 3, Col: 7},
+			pre + "error at line 3: ReferenceError: nope is not defined",
 		},
 		{
 			"braced script file",
 			restfile.ScriptBlock{Kind: "pre-request", FilePath: braced},
-			nil, diag.Pos{Path: braced, Line: 2, Col: 7},
-			pre + "error at line 2: ReferenceError: nope is not defined",
-		},
-		{
-			"opener-only script file",
-			restfile.ScriptBlock{Kind: "pre-request", FilePath: opener},
 			nil, diag.Pos{},
 			pre + "SyntaxError: SyntaxError: (anonymous): Line 1:2 Unexpected token % (and 1 more errors)",
 		},

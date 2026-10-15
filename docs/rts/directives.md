@@ -100,7 +100,7 @@ for let _, msg range validators.orders(orders) {
 %}
 ```
 
-One-line blocks also work: `> {% request.setHeader("X-Debug", "1") %}` in a pre-request block. To read code from a file, use `> < ./checks.rts` outside the `{% ... %}` block. The file contains plain code without `>`.
+One-line blocks also work: `> {% request.setHeader("X-Debug", "1") %}` in a pre-request block. To read code from a file, use `> < ./checks.rts` outside the `{% ... %}` block. The file contains plain code without `>` or `{% %}`.
 
 Response checks run after captures: `@assert` first, then RTS test blocks in file order, then JavaScript tests. An assertion failure or error does not skip the test blocks. This applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
 

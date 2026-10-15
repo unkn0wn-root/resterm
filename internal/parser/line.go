@@ -118,12 +118,17 @@ func (ln line) blockComment(opening bool) (c commentText, closed bool) {
 	return c, closed
 }
 
+const (
+	scriptOpen  = "{%"
+	scriptClose = "%}"
+)
+
 func (ln line) isScriptBlockStart() bool {
 	if !ln.hasScriptMarker() {
 		return false
 	}
 	rest := strings.TrimSpace(strings.TrimPrefix(ln.text, ">"))
-	return rest == "{%"
+	return rest == scriptOpen
 }
 
 func (ln line) isScriptBlockEnd() bool {
@@ -131,18 +136,15 @@ func (ln line) isScriptBlockEnd() bool {
 	if after, ok := strings.CutPrefix(text, ">"); ok {
 		text = str.TrimLeft(after)
 	}
-	if !strings.HasPrefix(text, "%}") {
+	rest, ok := strings.CutPrefix(text, scriptClose)
+	if !ok {
 		return false
-	}
-	rest := strings.TrimPrefix(text, "%}")
-	if rest == "" {
-		return true
 	}
 	rest = str.TrimLeft(rest)
 	if rest == "" {
 		return true
 	}
-	_, _, ok := stripComment(rest)
+	_, _, ok = stripComment(rest)
 	return ok
 }
 
@@ -160,6 +162,20 @@ func (ln line) cutScriptMarker() (body string, col int, ok bool) {
 		col += size
 	}
 	return str.TrimRight(after), col, true
+}
+
+// off is a byte offset in body.
+func cutInlineBlock(body string) (code string, off int, ok bool) {
+	rest, ok := strings.CutPrefix(str.TrimLeft(body), scriptOpen)
+	if !ok {
+		return "", 0, false
+	}
+	rest = str.TrimLeft(rest)
+	code, ok = strings.CutSuffix(rest, scriptClose)
+	if !ok {
+		return "", 0, false
+	}
+	return str.TrimRight(code), len(body) - len(rest), true
 }
 
 func (ln line) scriptBlockBody() (body string, col int) {

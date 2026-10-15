@@ -2550,29 +2550,30 @@ GET https://example.com/api
 }
 
 func TestParseScriptInlineBraces(t *testing.T) {
-	type line = restfile.ScriptLine
+	type pos = restfile.ScriptLine
 	tests := []struct {
 		name  string
 		src   string
 		body  string
-		lines []line
+		lines []pos
 	}{
-		{"one line", `> {% t.error("x") %}`, `t.error("x")`, []line{{Line: 2, Col: 6}}},
-		{"no spaces", "> {%x%}", "x", []line{{Line: 2, Col: 5}}},
-		{"empty", "> {% %}", "", []line{{Line: 2, Col: 6}}},
-		{"empty without spaces", "> {%%}", "", []line{{Line: 2, Col: 5}}},
-		{"closer in a string", `> {% t.error("%}") %}`, `t.error("%}")`, []line{{Line: 2, Col: 6}}},
-		{"extra spaces", ">   {%  x  %}  ", "x", []line{{Line: 2, Col: 9}}},
-		{"blank line first", ">\n> {% x %}", "x", []line{{Line: 3, Col: 6}}},
-		{"braces span lines", "> {% a\n>   b %}", "a\n  b", []line{{Line: 2, Col: 6}, {Line: 3, Col: 3}}},
-		{"closer on its own line", "> {% a\n> %}", "a", []line{{Line: 2, Col: 6}}},
-		{"each line braced", "> {% a %}\n> {% b %}", "a %}\n{% b", []line{{Line: 2, Col: 6}, {Line: 3, Col: 3}}},
-		{"opener only", "> {%}", "{%}", []line{{Line: 2, Col: 3}}},
-		{"text after the closer", "> {% x %} // y", "{% x %} // y", []line{{Line: 2, Col: 3}}},
-		{"braces mid line", `> s = "{% x %}"`, `s = "{% x %}"`, []line{{Line: 2, Col: 3}}},
-		{"plain line", "> x", "x", []line{{Line: 2, Col: 3}}},
-		{"block", "> {%\nx\n> %}", "x", []line{{Line: 3, Col: 1}}},
-		{"braced code in a block", "> {%\n{% x %}\n> %}", "x", []line{{Line: 3, Col: 4}}},
+		{"one line", `> {% t.error("x") %}`, `t.error("x")`, []pos{{Line: 2, Col: 6}}},
+		{"no spaces", "> {%x%}", "x", []pos{{Line: 2, Col: 5}}},
+		{"empty", "> {% %}", "", []pos{{Line: 2, Col: 6}}},
+		{"empty without spaces", "> {%%}", "", []pos{{Line: 2, Col: 5}}},
+		{"closer in a string", `> {% t.error("%}") %}`, `t.error("%}")`, []pos{{Line: 2, Col: 6}}},
+		{"extra spaces", ">   {%  x  %}  ", "x", []pos{{Line: 2, Col: 9}}},
+		{"blank line first", ">\n> {% x %}", "\nx", []pos{{Line: 2, Col: 2}, {Line: 3, Col: 6}}},
+		{"each line braced", "> {% a %}\n> {% b %}", "a\nb", []pos{{Line: 2, Col: 6}, {Line: 3, Col: 6}}},
+		{"braces span lines", "> {% a\n>   b %}", "{% a\n  b %}", []pos{{Line: 2, Col: 3}, {Line: 3, Col: 3}}},
+		{"closer on its own line", "> {% a\n> %}", "{% a\n%}", []pos{{Line: 2, Col: 3}, {Line: 3, Col: 3}}},
+		{"opener only", "> {%}", "{%}", []pos{{Line: 2, Col: 3}}},
+		{"text after the closer", "> {% x %} // y", "{% x %} // y", []pos{{Line: 2, Col: 3}}},
+		{"braces mid line", `> s = "{% x %}"`, `s = "{% x %}"`, []pos{{Line: 2, Col: 3}}},
+		{"plain line", "> x", "x", []pos{{Line: 2, Col: 3}}},
+		{"block", "> {%\nx\n> %}", "x", []pos{{Line: 3, Col: 1}}},
+		{"braced code in a block", "> {%\n{% x %}\n> %}", "{% x %}", []pos{{Line: 3, Col: 1}}},
+		{"braced marker line in a block", "> {%\n> {% x %}\n> %}", "{% x %}", []pos{{Line: 3, Col: 3}}},
 	}
 
 	for _, head := range []string{"# @script test", "# @rts test"} {
