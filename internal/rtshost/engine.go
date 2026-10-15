@@ -82,10 +82,16 @@ func (e *Engine) ExecModule(
 	if e == nil || e.core == nil {
 		return nil, errNilEngine
 	}
+	comp, err := e.core.ExecModule(withRuntime(ctx, rt), blockConfig(rt), src, pos)
+	return comp, diagnose(err)
+}
+
+const blockSteps = 100_000
+
+func blockConfig(rt Runtime) rts.EvalConfig {
 	cfg := evalConfig(rt)
 	cfg.MaxSteps = blockSteps
-	comp, err := e.core.ExecModule(withRuntime(ctx, rt), cfg, src, pos)
-	return comp, diagnose(err)
+	return cfg
 }
 
 func evalConfig(rt Runtime) rts.EvalConfig {
