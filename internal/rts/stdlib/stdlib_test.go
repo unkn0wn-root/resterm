@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -683,6 +684,105 @@ func TestStdlibJSONEqualAndDiffRejectNonJSON(t *testing.T) {
 	if _, err := jsonDiff(ctx, pos, []rts.Value{rts.Num(1), nan}); err == nil ||
 		!strings.Contains(err.Error(), "json.diff(got, want) cannot compare NaN") {
 		t.Fatalf("json.diff(1, [NaN]): error = %v", err)
+	}
+}
+
+// Shared children expand to 2^27 lists; validation must stop at the step limit.
+func TestStdlibJSONEqualAndDiffStopAtStepLimit(t *testing.T) {
+	const build = `
+let v = [0]
+for let i = 0; i < 27; i = i + 1 {
+  v = [v, v]
+}
+`
+	for _, expr := range []string{"json.equal(v, v)", "try json.equal(v, v)", "json.diff(v, v)", "try json.diff(v, v)"} {
+		mod, err := rts.ParseModule("test", []byte(build+"export let __v = "+expr))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		ctx := rts.NewCtx(t.Context(), rts.Limits{MaxSteps: 10000, MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+		_, err = rts.Exec(ctx, mod, New())
+		if !rts.IsAbort(err) || !strings.Contains(err.Error(), "step limit exceeded") {
+			t.Fatalf("%s error = %v, want the step limit abort", expr, err)
+		}
+	}
+}
+
+// Three containers in each argument use six steps, even when both arguments share v.
+func TestStdlibJSONEqualAndDiffStepCost(t *testing.T) {
+	const steps = 6
+	v := rts.List([]rts.Value{rts.Dict(map[string]rts.Value{"a": rts.List(nil)}), rts.Num(1)})
+	for name, f := range map[string]rts.NativeFunc{"json.equal": jsonEqual, "json.diff": jsonDiff} {
+		for _, limit := range []int{steps, steps - 1} {
+			ctx := rts.NewCtx(t.Context(), rts.Limits{MaxSteps: limit, MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+			_, err := f(ctx, rts.Pos{}, []rts.Value{v, v})
+			if rts.IsAbort(err) != (limit < steps) {
+				t.Fatalf("%s with %d steps: error = %v", name, limit, err)
+			}
+		}
+	}
+}
+
+func TestStdlibJSONEqualAndDiffStopWhenCanceled(t *testing.T) {
+	cx, cancel := context.WithCancel(t.Context())
+	cancel()
+	ctx := rts.NewCtx(cx, rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	v := rts.List([]rts.Value{rts.Num(1)})
+	for name, f := range map[string]rts.NativeFunc{"json.equal": jsonEqual, "json.diff": jsonDiff} {
+		_, err := f(ctx, rts.Pos{}, []rts.Value{v, v})
+		if !rts.IsAbort(err) || !strings.Contains(err.Error(), "canceled: context canceled") {
+			t.Fatalf("%s error = %v, want the canceled abort", name, err)
+		}
+	}
+}
+
+func TestStdlibJSONEqualAndDiffFitResponseBudget(t *testing.T) {
+	for _, nested := range []bool{false, true} {
+		resp := func() rts.Value {
+			items := make([]rts.Value, 2000)
+			for i := range items {
+				item := map[string]rts.Value{}
+				for f := range 10 {
+					item["field"+strconv.Itoa(f)] = rts.Num(float64(i*10 + f))
+				}
+				if nested {
+					item["field9"] = rts.Dict(map[string]rts.Value{"id": rts.Num(float64(i))})
+				}
+				items[i] = rts.Dict(item)
+			}
+			return rts.List(items)
+		}
+		want := resp()
+		want.L[1500].M["field3"] = rts.Str("changed")
+		cfg := rts.EvalConfig{Bindings: []rts.Extensions{
+			rts.Extension("got", resp()),
+			rts.Extension("same", resp()),
+			rts.Extension("want", want),
+		}}
+		eng := rts.NewEng(New)
+		v, err := eng.Eval(t.Context(), cfg, "json.equal(got, same)", rts.Pos{})
+		if err != nil || v.K != rts.VBool || !v.B {
+			t.Fatalf("nested %t: json.equal = %+v, %v, want true", nested, v, err)
+		}
+		v, err = eng.Eval(t.Context(), cfg, "json.diff(got, want)", rts.Pos{})
+		if err != nil {
+			t.Fatalf("nested %t: json.diff: %v", nested, err)
+		}
+		if got := strList(t, v); !slices.Equal(got, []string{`$[1500].field3: got 15003, want "changed"`}) {
+			t.Fatalf("nested %t: json.diff = %q", nested, got)
+		}
+	}
+}
+
+// Shared children expand to 2^60 dicts unless encoding stops at the display limit.
+func TestStdlibJSONDiffTextStopsAtCut(t *testing.T) {
+	v := rts.Num(0)
+	for range 60 {
+		v = rts.Dict(map[string]rts.Value{"a": v, "b": v})
+	}
+	const key = `{"a":`
+	if got, want := diffText(v), strings.Repeat(key, maxDiffText/len(key))+"..."; got != want {
+		t.Fatalf("diffText = %q, want %q", got, want)
 	}
 }
 

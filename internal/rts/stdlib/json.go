@@ -202,8 +202,10 @@ func jsonEqual(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	if err := na.Count(2); err != nil {
 		return rts.Null(), err
 	}
-	if err := checkJSON(ctx, pos, sigJSONEqual, rts.List(args)); err != nil {
-		return rts.Null(), err
+	for _, v := range args {
+		if err := checkJSON(ctx, pos, sigJSONEqual, v); err != nil {
+			return rts.Null(), err
+		}
 	}
 	return rts.Bool(deepEqual(args[0], args[1])), nil
 }
@@ -213,8 +215,10 @@ func jsonDiff(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	if err := na.Count(2); err != nil {
 		return rts.Null(), err
 	}
-	if err := checkJSON(ctx, pos, sigJSONDiff, rts.List(args)); err != nil {
-		return rts.Null(), err
+	for _, v := range args {
+		if err := checkJSON(ctx, pos, sigJSONDiff, v); err != nil {
+			return rts.Null(), err
+		}
 	}
 
 	var d differ
@@ -228,7 +232,8 @@ func jsonDiff(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	return rts.List(d.out), nil
 }
 
-// Sorted dict keys keep validation errors consistent.
+// Charge a step per container to bound traversal of shared children.
+// This also bounds the comparison, which visits at most the same containers.
 func checkJSON(ctx *rts.Ctx, pos rts.Pos, sig string, v rts.Value) error {
 	switch v.K {
 	case rts.VNum:
@@ -236,12 +241,18 @@ func checkJSON(ctx *rts.Ctx, pos rts.Pos, sig string, v rts.Value) error {
 			return rts.Errf(ctx, pos, "%s cannot compare %v", sig, v.N)
 		}
 	case rts.VList:
+		if err := rts.Tick(ctx, pos); err != nil {
+			return err
+		}
 		for _, it := range v.L {
 			if err := checkJSON(ctx, pos, sig, it); err != nil {
 				return err
 			}
 		}
 	case rts.VDict:
+		if err := rts.Tick(ctx, pos); err != nil {
+			return err
+		}
 		for _, k := range slices.Sorted(maps.Keys(v.M)) {
 			if err := checkJSON(ctx, pos, sig, v.M[k]); err != nil {
 				return err
@@ -321,12 +332,8 @@ func (d *differ) add(path string, got, want *rts.Value) {
 }
 
 func diffText(v rts.Value) string {
-	var b strings.Builder
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
 	// Validation already rejected values that JSON cannot encode.
-	_ = enc.Encode(rts.ToIface(v))
-	s := strings.TrimSuffix(b.String(), "\n")
+	s, _ := rts.EncodeJSON(v, rts.JSONOptions{Max: maxDiffText})
 	if len(s) <= maxDiffText {
 		return s
 	}

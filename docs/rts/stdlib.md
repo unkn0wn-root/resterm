@@ -61,7 +61,7 @@ Builtins and reserved words may be removed within a major version, but only afte
 
 `json.diff` sorts dict keys and shows values as compact JSON without escaping `<` or `&`. It shows up to 120 bytes of each value, adding `...` when truncated. Results contain up to 100 differences, followed by a count of the rest, such as `and 3 more differences`. Paths use the same syntax as `json.get`.
 
-Both helpers reject functions, host objects, NaN, and infinite numbers. Pass `response.json()` to compare a response body.
+Both helpers reject functions, host objects, NaN, and infinite numbers. Each list or dict counts toward the step limit. To compare response bodies, pass `response.json()`.
 
 ## Text helpers
 
