@@ -2,6 +2,9 @@ package stdlib
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -361,6 +364,220 @@ func TestStdlibJSONGet(t *testing.T) {
 	if v.K != rts.VBool || v.B != true {
 		t.Fatalf("expected json.has quoted")
 	}
+}
+
+func TestStdlibJSONEqual(t *testing.T) {
+	ctx := testCtx()
+	tests := []struct {
+		src  string
+		want bool
+	}{
+		{"json.equal(null, null)", true},
+		{"json.equal(true, true)", true},
+		{"json.equal(true, false)", false},
+		{"json.equal(null, false)", false},
+		{"json.equal(1, 1.0)", true},
+		{"json.equal(1, 2)", false},
+		{`json.equal("a", "a")`, true},
+		{`json.equal(1, "1")`, false},
+		{"json.equal([1, [2, {a: 3}]], [1, [2, {a: 3}]])", true},
+		{"json.equal([1, 2], [2, 1])", false},
+		{"json.equal([1, 2], [1, 2, 3])", false},
+		{"json.equal({a: {b: [1]}}, {a: {b: [1]}})", true},
+		{"json.equal({a: {b: [1]}}, {a: {b: [2]}})", false},
+		{"json.equal({a: 1, b: 2}, {b: 2, a: 1})", true},
+		{"json.equal({a: 1}, {a: 1, b: 2})", false},
+		{"json.equal({a: null}, {})", false},
+		{"json.equal({a: null}, {b: null})", false},
+		{"json.equal([], {})", false},
+		{"json.equal([], [])", true},
+		{"json.equal({}, {})", true},
+		{"rts.json.equal([1], [1])", true},
+		{"stdlib.json.equal([1], [1])", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.src, func(t *testing.T) {
+			v := evalExprCtx(t, ctx, tt.src)
+			if v.K != rts.VBool || v.B != tt.want {
+				t.Fatalf("%s = %+v, want %t", tt.src, v, tt.want)
+			}
+		})
+	}
+}
+
+func TestStdlibJSONDiff(t *testing.T) {
+	ctx := testCtx()
+	diffs := func(n int) string {
+		return `json.diff(rts.text.split("` + strings.Repeat("x,", n-1) + `x", ","), [])`
+	}
+	unexpected := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = fmt.Sprintf(`$[%d]: unexpected "x"`, i)
+		}
+		return out
+	}
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{"equal", `json.diff({a: [1, {b: null}], c: "x"}, {c: "x", a: [1, {b: null}]})`, []string{}},
+		{"value", "json.diff({user: {id: 7}}, {user: {id: 8}})", []string{"$.user.id: got 7, want 8"}},
+		{"kind", `json.diff({a: "1"}, {a: 1})`, []string{`$.a: got "1", want 1`}},
+		{"missing", `json.diff({user: {}}, {user: {email: "a@b.c"}})`, []string{`$.user.email: missing, want "a@b.c"`}},
+		{"unexpected", "json.diff({user: {extra: true}}, {user: {}})", []string{"$.user.extra: unexpected true"}},
+		{"null is not missing", "json.diff({a: null}, {})", []string{"$.a: unexpected null"}},
+		{
+			"got shorter",
+			"json.diff({items: [1]}, {items: [1, {id: 2}, 3]})",
+			[]string{`$.items[1]: missing, want {"id":2}`, "$.items[2]: missing, want 3"},
+		},
+		{"got longer", "json.diff([1, 2, [3]], [1])", []string{"$[1]: unexpected 2", "$[2]: unexpected [3]"}},
+		{
+			"nested",
+			`json.diff({items: [{tags: ["a"]}]}, {items: [{tags: ["b"]}]})`,
+			[]string{`$.items[0].tags[0]: got "a", want "b"`},
+		},
+		{
+			"quoted keys",
+			`json.diff({"display.name": 1, "0": 2, "a b": {"x-y": 3}}, {"display.name": 2, "0": 2, "a b": {"x-y": 4}})`,
+			[]string{`$["a b"]["x-y"]: got 3, want 4`, `$["display.name"]: got 1, want 2`},
+		},
+		{"root kind", "json.diff([], {})", []string{"$: got [], want {}"}},
+		{"root collection", "json.diff([1, 2], {a: [1]})", []string{`$: got [1,2], want {"a":[1]}`}},
+		{"root value", `json.diff("200", 200)`, []string{`$: got "200", want 200`}},
+		{"no html escape", `json.diff("<i> & é", 1)`, []string{`$: got "<i> & é", want 1`}},
+		{"compact", "json.diff({b: [1, 2.5, null]}, 1)", []string{`$: got {"b":[1,2.5,null]}, want 1`}},
+		{"nested kind", "json.diff({a: {b: 1}}, {a: [1]})", []string{`$.a: got {"b":1}, want [1]`}},
+		{
+			"order",
+			"json.diff({b: 1, a: [1, 2], c: {z: 1, y: 2}}, {c: {z: 2, y: 3}, b: 2, a: [1, 3], d: 0})",
+			[]string{
+				"$.a[1]: got 2, want 3",
+				"$.b: got 1, want 2",
+				"$.c.y: got 2, want 3",
+				"$.c.z: got 1, want 2",
+				"$.d: missing, want 0",
+			},
+		},
+		{
+			"fits",
+			`json.diff("` + strings.Repeat("a", 118) + `", 1)`,
+			[]string{`$: got "` + strings.Repeat("a", 118) + `", want 1`},
+		},
+		{
+			"cut",
+			`json.diff("` + strings.Repeat("a", 119) + `", 1)`,
+			[]string{`$: got "` + strings.Repeat("a", 119) + `..., want 1`},
+		},
+		{
+			"cut at rune",
+			`json.diff(1, "` + strings.Repeat("é", 100) + `")`,
+			[]string{`$: got 1, want "` + strings.Repeat("é", 59) + "..."},
+		},
+		{"cap", diffs(100), unexpected(100)},
+		{"one more", diffs(101), append(unexpected(100), "and 1 more difference")},
+		{"more", diffs(150), append(unexpected(100), "and 50 more differences")},
+		{"rts alias", "rts.json.diff(1, 2)", []string{"$: got 1, want 2"}},
+		{"stdlib alias", "stdlib.json.diff(1, 2)", []string{"$: got 1, want 2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for range 8 {
+				v := evalExprCtx(t, ctx, tt.src)
+				if got := strList(t, v); !slices.Equal(got, tt.want) {
+					t.Fatalf("%s =\n%s\nwant\n%s", tt.src, strings.Join(got, "\n"), strings.Join(tt.want, "\n"))
+				}
+			}
+		})
+	}
+}
+
+func TestStdlibJSONDiffPathsWorkWithGet(t *testing.T) {
+	ctx := testCtx()
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	for _, key := range []string{"id", "0", "", "display.name", "a b", `say "hi"`, `back\slash`, "line\nbreak", "café"} {
+		got := rts.Dict(map[string]rts.Value{
+			"x": rts.List([]rts.Value{rts.Null(), rts.Dict(map[string]rts.Value{key: rts.Num(1)})}),
+		})
+		want := rts.Dict(map[string]rts.Value{
+			"x": rts.List([]rts.Value{rts.Null(), rts.Dict(map[string]rts.Value{key: rts.Num(2)})}),
+		})
+		v, err := jsonDiff(ctx, pos, []rts.Value{got, want})
+		if err != nil {
+			t.Fatalf("json.diff with key %q: %v", key, err)
+		}
+		msgs := strList(t, v)
+		if len(msgs) != 1 || !strings.HasSuffix(msgs[0], ": got 1, want 2") {
+			t.Fatalf("json.diff with key %q = %q", key, msgs)
+		}
+		path := strings.TrimSuffix(msgs[0], ": got 1, want 2")
+		v, err = jsonGet(ctx, pos, []rts.Value{got, rts.Str(path)})
+		if err != nil || v.K != rts.VNum || v.N != 1 {
+			t.Fatalf("json.get(%s) = %+v, %v, want 1", path, v, err)
+		}
+	}
+}
+
+func TestStdlibJSONEqualAndDiffRejectNonJSON(t *testing.T) {
+	ctx := testCtx()
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{"json.equal(f, 1)", "json.equal(a, b) cannot compare function"},
+		{"json.equal(1, [{a: [f]}])", "json.equal(a, b) cannot compare function"},
+		{"json.equal([1], [1, f])", "json.equal(a, b) cannot compare function"},
+		{"json.equal(json.get, json.get)", "json.equal(a, b) cannot compare native"},
+		{"json.equal({a: rts}, {a: rts})", "json.equal(a, b) cannot compare rts"},
+		{"json.equal({b: try 1, a: f}, 1)", "json.equal(a, b) cannot compare function"},
+		{"json.diff([try 1], [])", "json.diff(got, want) cannot compare result"},
+		{"json.diff({a: 1}, {b: f})", "json.diff(got, want) cannot compare function"},
+		{"json.equal(1)", "json.equal(a, b) expects 2 args"},
+		{"json.equal(1, 2, 3)", "json.equal(a, b) expects 2 args"},
+		{"json.diff()", "json.diff(got, want) expects 2 args"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.src, func(t *testing.T) {
+			mod, err := rts.ParseModule("test", []byte("fn f() {\n  return 1\n}\nexport let __v = "+tt.src))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			for range 8 {
+				if _, err := rts.Exec(ctx, mod, New()); err == nil || !strings.Contains(err.Error(), tt.want) {
+					t.Fatalf("%s: error = %v, want %q", tt.src, err, tt.want)
+				}
+			}
+		})
+	}
+
+	inf := rts.Num(math.Inf(1))
+	if _, err := jsonEqual(ctx, pos, []rts.Value{inf, inf}); err == nil ||
+		!strings.Contains(err.Error(), "json.equal(a, b) cannot compare +Inf") {
+		t.Fatalf("json.equal(+Inf, +Inf): error = %v", err)
+	}
+	nan := rts.List([]rts.Value{rts.Num(math.NaN())})
+	if _, err := jsonDiff(ctx, pos, []rts.Value{rts.Num(1), nan}); err == nil ||
+		!strings.Contains(err.Error(), "json.diff(got, want) cannot compare NaN") {
+		t.Fatalf("json.diff(1, [NaN]): error = %v", err)
+	}
+}
+
+func strList(t *testing.T, v rts.Value) []string {
+	t.Helper()
+	if v.K != rts.VList {
+		t.Fatalf("got %+v, want a list", v)
+	}
+	out := make([]string, len(v.L))
+	for i, it := range v.L {
+		if it.K != rts.VStr {
+			t.Fatalf("item %d is %+v, want a string", i, it)
+		}
+		out[i] = it.S
+	}
+	return out
 }
 
 func TestStdlibHeadersHelpers(t *testing.T) {

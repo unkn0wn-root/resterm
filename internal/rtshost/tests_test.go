@@ -159,6 +159,37 @@ export fn each(t, items) {
 	}
 }
 
+func TestRunTestsReportsJSONDiff(t *testing.T) {
+	rt := testRuntime(t)
+	resp, err := NewResponse("200 OK", 200, nil, []byte(`{"user":{"id":7,"tags":["a","b"]},"extra":true}`), "")
+	if err != nil {
+		t.Fatalf("NewResponse: %v", err)
+	}
+	rt.Response = resp
+	got, err := runTests(t, rt, testBlock("user", 2,
+		`let want = {user: {id: 8, tags: ["a"]}, "display.name": "Ada"}`,
+		"for let _, d range json.diff(response.json(), want) {",
+		"  t.error(d)",
+		"}",
+		`if json.equal(response.json().user.tags, ["a", "b"]) {`,
+		`  t.error("tags match")`,
+		"}",
+	))
+	if err != nil {
+		t.Fatalf("RunTests: %v", err)
+	}
+	want := []result{{"user", false, strings.Join([]string{
+		`api.http:4: $["display.name"]: missing, want "Ada"`,
+		"api.http:4: $.extra: unexpected true",
+		"api.http:4: $.user.id: got 7, want 8",
+		`api.http:4: $.user.tags[1]: unexpected "b"`,
+		"api.http:7: tags match",
+	}, "\n")}}
+	if !slices.Equal(results(got), want) {
+		t.Fatalf("results = %+v, want %+v", results(got), want)
+	}
+}
+
 func TestRunTestsSkipsOtherBlocks(t *testing.T) {
 	got, err := runTests(t, testRuntime(t),
 		restfile.ScriptBlock{Kind: restfile.ScriptKindTest, Lang: restfile.ScriptLangJS, Body: "not rts"},
