@@ -519,3 +519,31 @@ func TestWorkflowStatsRenderUsesThemePalette(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkflowStatsDetailWrapsEachMessageLine(t *testing.T) {
+	view := &workflowStatsView{
+		name:       "wf",
+		started:    time.Now(),
+		ended:      time.Now(),
+		totalSteps: 1,
+		entries: []workflowStatsEntry{{
+			result: workflowStepResult{
+				Step:    restfile.WorkflowStep{Name: "Orders"},
+				Message: "api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
+			},
+		}},
+	}
+
+	lines := view.renderDetail(60, 10, defaultResponseRenderer())
+	for i, line := range lines {
+		if strings.Contains(line, "\n") {
+			t.Fatalf("line %d spans rows: %q", i, line)
+		}
+	}
+	plain := stripANSIEscape(strings.Join(lines, "\n"))
+	for _, want := range []string{"Order 0 has negative total", "Order 3 missing tracking"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("detail has no %q:\n%s", want, plain)
+		}
+	}
+}

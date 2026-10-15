@@ -563,8 +563,10 @@ func (v *workflowStatsView) detailHeader(
 		)
 	}
 	if msg := strings.TrimSpace(entry.result.Message); msg != "" {
-		for _, line := range wrapStructuredLine(pal.Message.Render(msg), width) {
-			lines = append(lines, workflowFitLine(line, width))
+		for ln := range strings.SplitSeq(msg, "\n") {
+			for _, line := range wrapStructuredLine(pal.Message.Render(ln), width) {
+				lines = append(lines, workflowFitLine(line, width))
+			}
 		}
 	}
 	return lines
