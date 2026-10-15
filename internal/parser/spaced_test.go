@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestSpacedSettingsAreNotSet(t *testing.T) {
@@ -205,5 +207,38 @@ func TestAuthUseWithSpacedLessOrEqualIsRejected(t *testing.T) {
 	}
 	if a := doc.Requests[0].Metadata.Auth; a == nil || a.Rejected == "" || a.Type != "" {
 		t.Fatalf("auth = %+v, want it rejected instead of read as a header", a)
+	}
+}
+
+func TestSpacedScriptOptionsReportOnlySpacing(t *testing.T) {
+	tests := []struct {
+		dir  string
+		kind restfile.ScriptKind
+	}{
+		{"# @script test lang = python", restfile.ScriptKindTest},
+		{"# @script pre-request lang =rts", restfile.ScriptKindPreRequest},
+		{"# @script test lang = rts", restfile.ScriptKindTest},
+		{"# @script test lang= rts", restfile.ScriptKindTest},
+		{"# @script lang = rts", restfile.ScriptKindTest},
+		{"# @rts pre-request lang = rts", ""},
+		{"# @rts test x lang = rts", ""},
+		{"# @rts test lang = rts", ""},
+	}
+	for _, tt := range tests {
+		doc := Parse("spaced.http", []byte(tt.dir+"\n> x\nGET https://example.com\n"))
+		if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, `option "lang" has spaces around =`) ||
+			len(doc.Warnings) != 0 {
+			t.Fatalf("%s: errors = %v, warnings = %v, want only the spacing error", tt.dir, doc.Errors, doc.Warnings)
+		}
+		scripts := doc.Requests[0].Metadata.Scripts
+		if tt.kind == "" {
+			if len(scripts) != 0 {
+				t.Fatalf("%s: scripts = %+v, want the block dropped", tt.dir, scripts)
+			}
+			continue
+		}
+		if len(scripts) != 1 || !scripts[0].Is(tt.kind, restfile.ScriptLangJS) {
+			t.Fatalf("%s: scripts = %+v, want one %s js block", tt.dir, scripts, tt.kind)
+		}
 	}
 }

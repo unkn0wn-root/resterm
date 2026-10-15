@@ -132,7 +132,12 @@ func parseScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, err
 		lang    restfile.ScriptLang
 		ignored []directive.Field
 	)
-	for _, field := range fields {
+	for i := 0; i < len(fields); i++ {
+		if _, n := directive.SpacedOption(fields, i); n > 0 {
+			i += n - 1
+			continue
+		}
+		field := fields[i]
 		if !field.Positional() {
 			continue
 		}
@@ -194,7 +199,12 @@ func parseRTSScriptSpec(rest string) (restfile.ScriptKind, string, error) {
 		kind restfile.ScriptKind
 		name string
 	)
-	for _, f := range fields {
+	for i := 0; i < len(fields); i++ {
+		if _, n := directive.SpacedOption(fields, i); n > 0 {
+			i += n - 1
+			continue
+		}
+		f := fields[i]
 		if !f.Positional() {
 			continue
 		}
