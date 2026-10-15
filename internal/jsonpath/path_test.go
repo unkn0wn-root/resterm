@@ -1,31 +1,116 @@
 package jsonpath
 
 import (
-	"slices"
-	"strconv"
+	"errors"
+	"reflect"
 	"testing"
 )
 
-func TestValid(t *testing.T) {
-	tests := []struct {
-		path string
-		want bool
-	}{
-		{path: "user.id", want: true},
-		{path: "items[0].id", want: true},
-		{path: "items.[0].id", want: true},
-		{path: `$["display.name"]`, want: true},
-		{path: "user..id", want: false},
-		{path: "items[invalid-index]", want: false},
-		{path: "items[-1]", want: false},
-		{path: "items[0", want: false},
-		{path: "$user", want: false},
-		{path: "user.", want: false},
+func TestGet(t *testing.T) {
+	doc := map[string]any{
+		"a":        map[string]any{"b": []any{map[string]any{"c": 1.0}}},
+		"items":    []any{10.0, 20.0, 30.0},
+		"a.b":      "dot",
+		"a b":      "space",
+		`say "hi"`: "quote",
+		"it's":     "apostrophe",
+		"line\n":   "newline",
+		"0":        "zero",
+		"":         "empty",
+		"$":        "dollar",
+		"ключ":     "unicode",
+		"n":        nil,
 	}
-	for _, test := range tests {
-		t.Run(test.path, func(t *testing.T) {
-			if got := Valid(test.path); got != test.want {
-				t.Fatalf("Valid(%q) = %t, want %t", test.path, got, test.want)
+	tests := []struct {
+		path   string
+		want   any
+		at     string
+		reason string
+		err    string
+	}{
+		{path: "", want: doc},
+		{path: "  ", want: doc},
+		{path: "$", want: doc},
+		{path: " $ ", want: doc},
+		{path: "a.b[0].c", want: 1.0},
+		{path: "$.a.b[0].c", want: 1.0},
+		{path: " a.b[0].c ", want: 1.0},
+		{path: `$["a"]['b'][0]["c"]`, want: 1.0},
+		{path: "items[0]", want: 10.0},
+		{path: "items[ 1 ]", want: 20.0},
+		{path: "items[+1]", want: 20.0},
+		{path: "items[01]", want: 20.0},
+		{path: "items[-1]", want: 30.0},
+		{path: "items[-3]", want: 10.0},
+		{path: "items.[0]", want: 10.0},
+		{path: "$.[0]", at: "$[0]", reason: "cannot index an object"},
+		{path: "$[0]", at: "$[0]", reason: "cannot index an object"},
+		{path: "[0]", at: "$[0]", reason: "cannot index an object"},
+		{path: `["a.b"]`, want: "dot"},
+		{path: `['a b']`, want: "space"},
+		{path: `[ "a b" ]`, want: "space"},
+		{path: `["say \"hi\""]`, want: "quote"},
+		{path: `['it\'s']`, want: "apostrophe"},
+		{path: `["it's"]`, want: "apostrophe"},
+		{path: `["line\n"]`, want: "newline"},
+		{path: `["a\.b"]`, want: "dot"},
+		{path: "0", want: "zero"},
+		{path: `["0"]`, want: "zero"},
+		{path: `[""]`, want: "empty"},
+		{path: "$.$", want: "dollar"},
+		{path: `["$"]`, want: "dollar"},
+		{path: "ключ", want: "unicode"},
+		{path: "n", want: nil},
+
+		{path: "missing", at: "$.missing", reason: "key not found"},
+		{path: "A", at: "$.A", reason: "key not found"},
+		{path: "a.x.y", at: "$.a.x", reason: "key not found"},
+		{path: `["a b"].c`, at: `$["a b"].c`, reason: "cannot traverse non-container value"},
+		{path: "items[3]", at: "$.items[3]", reason: "index 3 out of range"},
+		{path: "items[-4]", at: "$.items[-4]", reason: "index -4 out of range"},
+		{path: "items.x", at: "$.items.x", reason: "cannot access object key on array"},
+		{path: "a[0]", at: "$.a[0]", reason: "cannot index an object"},
+		{path: "n.x", at: "$.n.x", reason: "cannot traverse non-container value"},
+		{path: "items[0][0]", at: "$.items[0][0]", reason: "cannot traverse non-container value"},
+
+		{path: "$.", err: "empty path segment"},
+		{path: ".a", err: "empty path segment"},
+		{path: "a..b", err: "empty path segment"},
+		{path: "a.", err: "empty path segment"},
+		{path: "items[*]", err: `invalid array index "*"`},
+		{path: "items[abc]", err: `invalid array index "abc"`},
+		{path: "items[1e0]", err: `invalid array index "1e0"`},
+		{path: "items[]", err: "empty array index"},
+		{path: "items[ ]", err: "empty array index"},
+		{path: "items[0", err: "missing closing bracket"},
+		{path: "items[", err: "missing closing bracket"},
+		{path: `["a"`, err: "missing closing bracket"},
+		{path: `["a"b]`, err: "missing closing bracket"},
+		{path: `["a`, err: "missing closing quote"},
+		{path: `["a\`, err: "missing closing quote"},
+		{path: "$a", err: `expected '.' or '[', got 'a'`},
+		{path: "$$", err: `expected '.' or '[', got '$'`},
+		{path: "a]b", err: `expected '.' or '[', got ']'`},
+		{path: "items[0]x", err: `expected '.' or '[', got 'x'`},
+		{path: "a b", err: `unquoted key "a b" has a space. Use ["a b"]`},
+		{path: "a. b", err: `unquoted key " b" has a space. Use [" b"]`},
+		{path: "a\x00", err: `unquoted key "a\x00" has a control character. Use a quoted key`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got, err := Get(doc, tt.path)
+			var miss *Miss
+			switch {
+			case tt.err != "":
+				if err == nil || errors.As(err, &miss) || err.Error() != tt.err {
+					t.Fatalf("Get(%q) error = %v, want syntax error %q", tt.path, err, tt.err)
+				}
+			case tt.reason != "":
+				if !errors.As(err, &miss) || miss.At.Format("$") != tt.at || miss.Reason != tt.reason {
+					t.Fatalf("Get(%q) error = %v, want a miss at %s: %s", tt.path, err, tt.at, tt.reason)
+				}
+			case err != nil || !reflect.DeepEqual(got, tt.want):
+				t.Fatalf("Get(%q) = %#v, %v, want %#v", tt.path, got, err, tt.want)
 			}
 		})
 	}
@@ -62,110 +147,27 @@ func TestKeyRoundTripsThroughGet(t *testing.T) {
 			if path != tt.want {
 				t.Fatalf("Key(%q) = %s, want %s", tt.key, path, tt.want)
 			}
-			if !Valid(path) {
-				t.Fatalf("Valid(%s) = false", path)
+			p, err := Parse(path)
+			if err != nil || p.Format("$") != path {
+				t.Fatalf("Parse(%s) = %s, %v", path, p.Format("$"), err)
 			}
 			doc := map[string]any{"x": []any{map[string]any{tt.key: "hit", tt.key + "!": "miss"}}}
-			if got, ok := Get(doc, Key("$.x[0]", tt.key)); !ok || got != "hit" {
-				t.Fatalf("Get(%s) = %#v, %t", Key("$.x[0]", tt.key), got, ok)
+			if got, err := Get(doc, Key("$.x[0]", tt.key)); err != nil || got != "hit" {
+				t.Fatalf("Get(%s) = %#v, %v", Key("$.x[0]", tt.key), got, err)
 			}
 		})
 	}
 }
 
-func TestGet(t *testing.T) {
-	doc := map[string]any{
-		"items": []any{map[string]any{"display.name": "Ada"}},
+func TestFormat(t *testing.T) {
+	p, err := Parse(`items[-1]["a b"].id`)
+	if err != nil {
+		t.Fatal(err)
 	}
-	got, ok := Get(doc, `$["items"][0]["display.name"]`)
-	if !ok || got != "Ada" {
-		t.Fatalf("Get() = %#v, %t", got, ok)
+	if got, want := p.Format("json"), `json.items[-1]["a b"].id`; got != want {
+		t.Fatalf("Format = %s, want %s", got, want)
 	}
-}
-
-func TestWalk(t *testing.T) {
-	key := func(p, k string) (string, bool) {
-		return p + " " + strconv.Quote(k), true
-	}
-	index := func(p string, i int) (string, bool) {
-		return p + " " + strconv.Itoa(i), true
-	}
-	tests := []struct {
-		path string
-		want string
-	}{
-		{path: "", want: "$"},
-		{path: "  ", want: "$"},
-		{path: " $ ", want: "$"},
-		{path: "$.", want: "$"},
-		{path: "a", want: `$ "a"`},
-		{path: "$.a.b", want: `$ "a" "b"`},
-		{path: "$a", want: `$ "a"`},
-		{path: "a..b", want: `$ "a" "b"`},
-		{path: ".a.", want: `$ "a"`},
-		{path: "a b.c", want: `$ "a b" "c"`},
-		{path: "$[0]", want: "$ 0"},
-		{path: "a[ 1 ].b", want: `$ "a" 1 "b"`},
-		{path: "a.[0][2]", want: `$ "a" 0 2`},
-		{path: "a[-1]", want: `$ "a" -1`},
-		{path: "a[x].b", want: `$ "a" "b"`},
-		{path: "a[].b", want: `$ "a" "b"`},
-		{path: `["0"]`, want: `$ "0"`},
-		{path: `$["display.name"]`, want: `$ "display.name"`},
-		{path: `['a b'].c`, want: `$ "a b" "c"`},
-		{path: `["say \"hi\""]`, want: `$ "say \"hi\""`},
-		{path: `['it\'s']`, want: `$ "it's"`},
-		{path: `["a\\b\n\r\t\q"]`, want: `$ "a\\b\n\r\tq"`},
-		{path: `["a" ]`, want: `$ "a"`},
-		{path: `[ "a"]`, want: "$"},
-		{path: "a[0", want: `$ "a"`},
-		{path: "a[", want: `$ "a"`},
-		{path: `a["b`, want: `$ "a"`},
-		{path: `a["b\`, want: `$ "a"`},
-		{path: `a["b"c].d`, want: `$ "a"`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			got, ok := Walk("$", tt.path, key, index)
-			if !ok || got != tt.want {
-				t.Fatalf("Walk(%q) = %q, %t, want %q", tt.path, got, ok, tt.want)
-			}
-		})
-	}
-
-	var seen []string
-	miss := func(p, k string) (string, bool) {
-		seen = append(seen, k)
-		return p + "." + k, k != "miss"
-	}
-	got, ok := Walk("$", "a.miss.b[0]", miss, index)
-	if ok || got != "" || !slices.Equal(seen, []string{"a", "miss"}) {
-		t.Fatalf("Walk = %q, %t after reading %q, want a miss after a and miss", got, ok, seen)
-	}
-}
-
-func TestGetMisses(t *testing.T) {
-	doc := map[string]any{"a": []any{nil, map[string]any{"b": 1.0}}, "n": nil}
-	tests := []struct {
-		path string
-		want any
-		ok   bool
-	}{
-		{path: "a[1].b", want: 1.0, ok: true},
-		{path: "n", ok: true},
-		{path: "a[0]", ok: true},
-		{path: "a[2]", ok: false},
-		{path: "a[-1]", ok: false},
-		{path: "a.b", ok: false},
-		{path: "[0]", ok: false},
-		{path: "n.b", ok: false},
-		{path: "missing", ok: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			if got, ok := Get(doc, tt.path); ok != tt.ok || got != tt.want {
-				t.Fatalf("Get(%q) = %#v, %t, want %#v, %t", tt.path, got, ok, tt.want, tt.ok)
-			}
-		})
+	if got := Path(nil).Format("json"); got != "json" {
+		t.Fatalf("root Format = %s, want json", got)
 	}
 }

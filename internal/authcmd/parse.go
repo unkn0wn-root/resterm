@@ -8,6 +8,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/duration"
+	"github.com/unkn0wn-root/resterm/internal/jsonpath"
 )
 
 var shellNames = map[string]struct{}{
@@ -138,6 +139,16 @@ func validateParsed(cfg Config) error {
 	case FormatText, FormatJSON:
 	default:
 		return diag.Newf(diag.ClassAuth, "unsupported command auth format %q", cfg.Format)
+	}
+	for _, p := range []struct{ name, path string }{
+		{"token_path", cfg.TokenPath},
+		{"type_path", cfg.TypePath},
+		{"expiry_path", cfg.ExpiryPath},
+		{"expires_in_path", cfg.ExpiresInPath},
+	} {
+		if _, err := jsonpath.Parse(p.path); err != nil {
+			return diag.WrapAsf(diag.ClassAuth, err, "invalid %s %q", p.name, p.path)
+		}
 	}
 	if cfg.TTL < 0 {
 		return diag.New(diag.ClassAuth, "ttl must not be negative")

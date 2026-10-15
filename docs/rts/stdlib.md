@@ -54,7 +54,7 @@ Builtins and reserved words may be removed within a major version, but only afte
 - `rts.json.file(path)` reads and parses JSON using the request base directory (only when file access is enabled).
 - `rts.json.parse(text)` parses a JSON string into RestermScript values.
 - `rts.json.stringify(value[, indent])` converts a value to JSON text. `indent` can be a string or a number (0-32).
-- `rts.json.get(value[, path])` returns the value at a dot or `[index]` path in a dict or list (optional leading `$`) and returns null when missing. Quote a key that contains dots or spaces, as in `$["display.name"]` or `['a b']`.
+- `rts.json.get(value[, path])` returns the value at a dot or `[index]` path in a dict or list (optional leading `$`) and returns null when missing. Negative indexes count from the end; `items[-1]` reads the last item. Quote a key that contains dots or spaces, as in `$["display.name"]` or `['a b']`. Invalid paths such as `items[*]` return an error.
 - `rts.json.has(value, path)` returns true when a value exists at the path.
 - `rts.json.equal(a, b)` returns true for matching JSON values, including the contents of lists and dicts.
 - `rts.json.diff(got, want)` returns a list with one message per difference, or an empty list for equal values. Messages include the path: `$.user.id: got 7, want 8`, `$.extra: unexpected true`, or `$.tags[1]: missing, want "b"`.

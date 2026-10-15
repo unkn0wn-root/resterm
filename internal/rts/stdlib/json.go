@@ -156,10 +156,8 @@ func jsonGet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		path = p
 	}
 
-	if v, ok := jsonLookup(na.Arg(0), path); ok {
-		return v, nil
-	}
-	return rts.Null(), nil
+	v, _, err := jsonLookup(ctx, pos, sigJSONGet, na.Arg(0), path)
+	return v, err
 }
 
 func jsonHas(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
@@ -173,23 +171,27 @@ func jsonHas(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 
-	_, ok := jsonLookup(na.Arg(0), path)
+	_, ok, err := jsonLookup(ctx, pos, sigJSONHas, na.Arg(0), path)
+	if err != nil {
+		return rts.Null(), err
+	}
 	return rts.Bool(ok), nil
 }
 
-func jsonLookup(v rts.Value, path string) (rts.Value, bool) {
-	return jsonpath.Walk(v, path, func(v rts.Value, k string) (rts.Value, bool) {
-		if v.K != rts.VDict {
-			return rts.Null(), false
-		}
-		it, ok := v.M[k]
-		return it, ok
-	}, func(v rts.Value, i int) (rts.Value, bool) {
-		if v.K != rts.VList || i < 0 || i >= len(v.L) {
-			return rts.Null(), false
-		}
-		return v.L[i], true
+func jsonLookup(ctx *rts.Ctx, pos rts.Pos, sig string, v rts.Value, path string) (rts.Value, bool, error) {
+	p, err := jsonpath.Parse(path)
+	if err != nil {
+		return rts.Null(), false, rts.Errf(ctx, pos, "%s invalid path %q: %v", sig, path, err)
+	}
+	v, err = jsonpath.Walk(v, p, func(v rts.Value) (map[string]rts.Value, bool) {
+		return v.M, v.K == rts.VDict
+	}, func(v rts.Value) ([]rts.Value, bool) {
+		return v.L, v.K == rts.VList
 	})
+	if err != nil {
+		return rts.Null(), false, nil
+	}
+	return v, true, nil
 }
 
 const (

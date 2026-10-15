@@ -116,8 +116,8 @@ func validateTemplateName(name string, pathParams map[string]string) error {
 			return fmt.Errorf("invalid request header template %q", ref.subject)
 		}
 	case "body":
-		if !jsonpath.Valid(ref.subject) {
-			return fmt.Errorf("invalid JSON body template path %q", ref.subject)
+		if _, err := jsonpath.Parse(ref.subject); err != nil {
+			return fmt.Errorf("invalid JSON body template path %q: %w", ref.subject, err)
 		}
 	default:
 		return fmt.Errorf("unsupported response template namespace %q", ref.source)
@@ -261,12 +261,11 @@ func (p *requestProvider) resolveBody(path, name string) (any, bool) {
 		})
 		return "", false
 	}
-	value, found := jsonpath.Get(body, path)
-	if !found {
-		p.missing("JSON body field", path)
-		return "", false
+	if value, err := jsonpath.Get(body, path); err == nil {
+		return value, true
 	}
-	return value, true
+	p.missing("JSON body field", path)
+	return "", false
 }
 
 func (p *requestProvider) missing(kind, name string) {

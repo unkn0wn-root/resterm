@@ -125,9 +125,11 @@ func (o *responseObj) jsonDef() native.Def {
 			}
 			value := o.json
 			if path.Set {
-				var ok bool
-				value, ok = jsonpath.Get(value, path.Value)
-				if !ok {
+				p, err := jsonpath.Parse(path.Value)
+				if err != nil {
+					return rts.Null(), call.Errorf("invalid json path %q: %v", path.Value, err)
+				}
+				if value, err = p.Get(value); err != nil {
 					return rts.Null(), nil
 				}
 			}

@@ -1,6 +1,8 @@
 package jsonpath
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode"
@@ -13,58 +15,183 @@ type segment struct {
 	isIdx bool
 }
 
-type segmentResult struct {
-	segment segment
-	next    int
-	ok      bool
-	stop    bool
+// A nil or empty Path refers to the root.
+type Path []segment
+
+// Miss.At includes the segment where lookup failed.
+type Miss struct {
+	At     Path
+	Reason string
 }
 
-type indexResult struct {
-	index int
-	next  int
-	ok    bool
-	stop  bool
+func (m *Miss) Error() string {
+	return m.At.Format("$") + ": " + m.Reason
 }
 
-// Get resolves path against v.
-func Get(v any, path string) (any, bool) {
-	return Walk(v, path, func(v any, k string) (any, bool) {
-		m, _ := v.(map[string]any)
-		it, ok := m[k]
-		return it, ok
-	}, func(v any, i int) (any, bool) {
-		items, _ := v.([]any)
-		if i < 0 || i >= len(items) {
-			return nil, false
+func Parse(path string) (Path, error) {
+	s := strings.TrimSpace(path)
+	var p Path
+	var err error
+	if rest, ok := strings.CutPrefix(s, "$"); ok {
+		s = rest
+	} else if s != "" && s[0] != '[' {
+		var key string
+		if key, s, err = cutKey(s); err != nil {
+			return nil, err
 		}
-		return items[i], true
+		p = append(p, segment{key: key})
+	}
+	for s != "" {
+		var seg segment
+		switch {
+		case strings.HasPrefix(s, ".["):
+			s = s[1:]
+			continue
+		case s[0] == '.':
+			seg.key, s, err = cutKey(s[1:])
+		case s[0] == '[':
+			seg, s, err = cutBracket(s[1:])
+		default:
+			r, _ := utf8.DecodeRuneInString(s)
+			return nil, fmt.Errorf("expected '.' or '[', got %q", r)
+		}
+		if err != nil {
+			return nil, err
+		}
+		p = append(p, seg)
+	}
+	return p, nil
+}
+
+func cutKey(s string) (string, string, error) {
+	n := strings.IndexAny(s, ".[]")
+	if n < 0 {
+		n = len(s)
+	}
+	key := s[:n]
+	switch {
+	case key == "":
+		return "", "", errors.New("empty path segment")
+	case strings.ContainsFunc(key, unicode.IsSpace):
+		return "", "", fmt.Errorf("unquoted key %q has a space. Use %s", key, Key("", key))
+	case strings.ContainsFunc(key, unicode.IsControl):
+		return "", "", fmt.Errorf("unquoted key %q has a control character. Use a quoted key", key)
+	}
+	return key, s[n:], nil
+}
+
+var (
+	keyQuoter = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)
+	// Other escapes drop the backslash, so \q becomes q.
+	keyEscapes = map[byte]byte{'n': '\n', 'r': '\r', 't': '\t'}
+)
+
+func cutBracket(s string) (segment, string, error) {
+	s = strings.TrimLeftFunc(s, unicode.IsSpace)
+	if s == "" || s[0] != '"' && s[0] != '\'' {
+		idx, rest, ok := strings.Cut(s, "]")
+		if !ok {
+			return segment{}, "", errors.New("missing closing bracket")
+		}
+		idx = strings.TrimSpace(idx)
+		if idx == "" {
+			return segment{}, "", errors.New("empty array index")
+		}
+		i, err := strconv.Atoi(idx)
+		if err != nil {
+			return segment{}, "", fmt.Errorf("invalid array index %q", idx)
+		}
+		return segment{index: i, isIdx: true}, rest, nil
+	}
+
+	q := s[0]
+	var b strings.Builder
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == q:
+			rest, ok := strings.CutPrefix(strings.TrimLeftFunc(s[i+1:], unicode.IsSpace), "]")
+			if !ok {
+				return segment{}, "", errors.New("missing closing bracket")
+			}
+			return segment{key: b.String()}, rest, nil
+		case c == '\\' && i+1 < len(s):
+			i++
+			c = s[i]
+			if e, ok := keyEscapes[c]; ok {
+				c = e
+			}
+		}
+		b.WriteByte(c)
+	}
+	return segment{}, "", errors.New("missing closing quote")
+}
+
+func (p Path) Format(root string) string {
+	s := root
+	for _, seg := range p {
+		if seg.isIdx {
+			s += "[" + strconv.Itoa(seg.index) + "]"
+		} else {
+			s = Key(s, seg.key)
+		}
+	}
+	return s
+}
+
+func Get(v any, path string) (any, error) {
+	p, err := Parse(path)
+	if err != nil {
+		return nil, err
+	}
+	return p.Get(v)
+}
+
+func (p Path) Get(v any) (any, error) {
+	return Walk(v, p, func(v any) (map[string]any, bool) {
+		m, ok := v.(map[string]any)
+		return m, ok
+	}, func(v any) ([]any, bool) {
+		l, ok := v.([]any)
+		return l, ok
 	})
 }
 
-func Walk[T any](v T, path string, key func(T, string) (T, bool), index func(T, int) (T, bool)) (T, bool) {
-	p := strings.TrimSpace(path)
-	if after, ok := strings.CutPrefix(p, "$"); ok {
-		p = strings.TrimPrefix(after, ".")
-	}
-	for _, s := range split(p) {
-		var ok bool
-		if s.isIdx {
-			v, ok = index(v, s.index)
-		} else {
-			v, ok = key(v, s.key)
+func Walk[T any](v T, p Path, dict func(T) (map[string]T, bool), list func(T) ([]T, bool)) (T, error) {
+	var zero T
+	for i, seg := range p {
+		m, isDict := dict(v)
+		l, isList := list(v)
+		var reason string
+		switch {
+		case isDict && !seg.isIdx:
+			if it, ok := m[seg.key]; ok {
+				v = it
+				continue
+			}
+			reason = "key not found"
+		case isList && seg.isIdx:
+			n := seg.index
+			if n < 0 {
+				n += len(l)
+			}
+			if 0 <= n && n < len(l) {
+				v = l[n]
+				continue
+			}
+			reason = fmt.Sprintf("index %d out of range", seg.index)
+		case isList:
+			reason = "cannot access object key on array"
+		case isDict:
+			reason = "cannot index an object"
+		default:
+			reason = "cannot traverse non-container value"
 		}
-		if !ok {
-			var zero T
-			return zero, false
-		}
+		return zero, &Miss{At: p[:i+1], Reason: reason}
 	}
-	return v, true
+	return v, nil
 }
 
-var keyQuoter = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)
-
-// Key appends a key using the path syntax accepted by Get.
 func Key(path, key string) string {
 	plain := key != ""
 	for i := 0; plain && i < len(key); i++ {
@@ -75,211 +202,4 @@ func Key(path, key string) string {
 		return path + "." + key
 	}
 	return path + `["` + keyQuoter.Replace(key) + `"]`
-}
-
-// Valid reports whether path uses the supported syntax.
-func Valid(path string) bool {
-	p := strings.TrimSpace(path)
-	if p == "" {
-		return true
-	}
-	if strings.HasPrefix(p, "$") {
-		p = p[1:]
-		if p == "" {
-			return true
-		}
-		if p[0] == '.' {
-			p = p[1:]
-			if p == "" {
-				return false
-			}
-		} else if p[0] != '[' {
-			return false
-		}
-	}
-
-	needKey := true
-	for i := 0; i < len(p); {
-		switch p[i] {
-		case '.':
-			if needKey {
-				return false
-			}
-			needKey = true
-			i++
-		case '[':
-			next, ok := validBracket(p, i)
-			if !ok {
-				return false
-			}
-			needKey = false
-			i = next
-		default:
-			if !needKey {
-				return false
-			}
-			start := i
-			for i < len(p) && p[i] != '.' && p[i] != '[' {
-				r, size := utf8.DecodeRuneInString(p[i:])
-				if r == utf8.RuneError && size == 1 {
-					return false
-				}
-				if r == ']' || unicode.IsSpace(r) || unicode.IsControl(r) {
-					return false
-				}
-				i += size
-			}
-			if i == start {
-				return false
-			}
-			needKey = false
-		}
-	}
-	return !needKey
-}
-
-func validBracket(path string, start int) (int, bool) {
-	if start+1 >= len(path) {
-		return 0, false
-	}
-	i := start + 1
-	if path[i] == '"' || path[i] == '\'' {
-		_, end, ok := readQuoted(path, i)
-		return end + 1, ok
-	}
-	res := readIndex(path, i)
-	return res.next + 1, res.ok && res.index >= 0
-}
-
-func split(path string) []segment {
-	var out []segment
-	var buf strings.Builder
-	for i := 0; i < len(path); i++ {
-		switch path[i] {
-		case '.':
-			out = add(out, &buf)
-		case '[':
-			out = add(out, &buf)
-			res := readSegment(path, i)
-			if res.stop {
-				return out
-			}
-			if res.ok {
-				out = append(out, res.segment)
-			}
-			i = res.next
-		default:
-			buf.WriteByte(path[i])
-		}
-	}
-	return add(out, &buf)
-}
-
-func add(out []segment, buf *strings.Builder) []segment {
-	if buf.Len() == 0 {
-		return out
-	}
-	out = append(out, segment{key: buf.String()})
-	buf.Reset()
-	return out
-}
-
-func readSegment(path string, i int) segmentResult {
-	if i+1 >= len(path) {
-		return segmentResult{stop: true}
-	}
-	i++
-	if q := path[i]; q == '"' || q == '\'' {
-		key, next, ok := readQuoted(path, i)
-		if !ok {
-			return segmentResult{stop: true}
-		}
-		return segmentResult{segment: segment{key: key}, next: next, ok: true}
-	}
-	res := readIndex(path, i)
-	if res.stop {
-		return segmentResult{stop: true}
-	}
-	if res.ok {
-		return segmentResult{
-			segment: segment{index: res.index, isIdx: true},
-			next:    res.next,
-			ok:      true,
-		}
-	}
-	return segmentResult{next: res.next}
-}
-
-func readIndex(path string, i int) indexResult {
-	j := i
-	for j < len(path) && path[j] != ']' {
-		j++
-	}
-	if j >= len(path) {
-		return indexResult{stop: true}
-	}
-	idx, err := strconv.Atoi(strings.TrimSpace(path[i:j]))
-	if err != nil {
-		return indexResult{next: j}
-	}
-	return indexResult{index: idx, next: j, ok: true}
-}
-
-func readQuoted(path string, i int) (string, int, bool) {
-	quote := path[i]
-	i++
-	var buf strings.Builder
-	for i < len(path) {
-		ch := path[i]
-		if ch == '\\' {
-			if i+1 >= len(path) {
-				return "", 0, false
-			}
-			i++
-			buf.WriteByte(unescape(path[i]))
-			i++
-			continue
-		}
-		if ch == quote {
-			i = skipSpace(path, i+1)
-			if i >= len(path) || path[i] != ']' {
-				return "", 0, false
-			}
-			return buf.String(), i, true
-		}
-		buf.WriteByte(ch)
-		i++
-	}
-	return "", 0, false
-}
-
-func unescape(b byte) byte {
-	switch b {
-	case 'n':
-		return '\n'
-	case 'r':
-		return '\r'
-	case 't':
-		return '\t'
-	case '\\':
-		return '\\'
-	case '"':
-		return '"'
-	case '\'':
-		return '\''
-	default:
-		return b
-	}
-}
-
-func skipSpace(path string, i int) int {
-	for i < len(path) {
-		switch path[i] {
-		case ' ', '\t', '\n', '\r':
-			i++
-		default:
-			return i
-		}
-	}
-	return i
 }

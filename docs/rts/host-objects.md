@@ -82,7 +82,7 @@ Values passed to `request.set*` or `request.addHeader`, or returned in a patch, 
 
 `last` describes the most recent response through `status`, `statusCode`, `statusText`, `url`, `headers`, `header(name)`, `text()`, and `json(path)`.
 
-Header values use the same string-or-list form as `request.headers`, and `header(name)` returns the first value. `json(path)` accepts dot and `[index]` paths, with an optional leading `$`, and returns null when a value is missing. Quote a key that contains dots or spaces, as in `last.json("user['display.name']")`. `json` is a function, so read a field with `last.json().name` or `last.json("name")`. The `last.json.name` shorthand works only in an `@capture` expression, not inside `{{= ... }}`.
+Header values use the same string-or-list form as `request.headers`, and `header(name)` returns the first value. `json(path)` accepts dot and `[index]` paths, with an optional leading `$`, and returns null when a value is missing. Negative indexes count from the end. Invalid paths such as `items[*]` return an error. Quote a key that contains dots or spaces, as in `last.json("user['display.name']")`. `json` is a function, so read a field with `last.json().name` or `last.json("name")`. The `last.json.name` shorthand works only in an `@capture` expression, not inside `{{= ... }}`.
 
 For gRPC responses, `headers` merges the response metadata with the trailers, each trailer prefixed with `Grpc-Trailer-`. Values under keys ending in `-bin` are binary and read back base64-encoded without padding, the way they travel on the wire, so a trailer sent as `x-trace-bin` reads as `last.header("grpc-trailer-x-trace-bin")`.
 

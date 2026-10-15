@@ -537,7 +537,7 @@ func TestStdlibJSONGet(t *testing.T) {
 	}
 }
 
-func TestStdlibJSONGetMatchesPathGet(t *testing.T) {
+func TestStdlibJSONGetPaths(t *testing.T) {
 	ctx := testCtx()
 	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
 	docs := []rts.Value{
@@ -556,19 +556,25 @@ func TestStdlibJSONGetMatchesPathGet(t *testing.T) {
 		rts.Str("text"),
 		rts.Null(),
 	}
-	paths := []string{
-		"", "  ", "$", " $. ", "a", "$.a", "$a", "a..b", ".a.", "a b", "nul", "nul.x", "missing", "0", "a.0",
-		"a[0]", "a.[1]", "a[ 1 ].b", "a[1].b[0]", "a[-1]", "a[2]", "a[x]", "a[x][0]", "a[]", "a[0", "a[",
-		"[0]", "[1]", "[0].b", "[-1]", "[2]", "[0][0]",
-		`["0"]`, `$["display.name"]`, `['a b']`, `["say \"hi\""]`, `["line\n"]`, `[""]`, `["$"]`, `$$`,
-		`["a" ][1]`, `[ "a"]`, `a["b`, `a["b"c]`, `['a'][1]['b']`, `["a"]["1"]`,
+	hits := []string{
+		"", "  ", "$", " $ ", "a", "$.a", "nul", "0", "a[0]", "a.[1]", "a[ 1 ].b", "a[-1].b", "a[-2]",
+		`["0"]`, `$["display.name"]`, `['a b']`, `["say \"hi\""]`, `["line\n"]`, `[""]`, `["$"]`, "$.$",
+		`["a" ][1]`, `[ "a"]`, `['a'][1]['b']`,
+	}
+	misses := []string{
+		"missing", "nul.x", "a.0", "a[2]", "a[-3]", "a[1].b[0]", "[0]", "[1]", "[0].b", "[-1]", "[2]", "[0][0]",
+		`["a"]["1"]`,
 	}
 	for i, doc := range docs {
-		for _, p := range paths {
-			raw, found := jsonpath.Get(rts.ToIface(doc), p)
+		for _, p := range slices.Concat(hits, misses) {
+			raw, err := jsonpath.Get(rts.ToIface(doc), p)
+			found := err == nil
 			want, err := rts.FromIface(ctx, pos, raw)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if i == 0 && found != slices.Contains(hits, p) {
+				t.Fatalf("json.get(%q) found = %t on the first doc", p, found)
 			}
 			args := []rts.Value{doc, rts.Str(p)}
 			if got, err := jsonGet(ctx, pos, args); err != nil || !deepEqual(got, want) {
@@ -576,6 +582,33 @@ func TestStdlibJSONGetMatchesPathGet(t *testing.T) {
 			}
 			if got, err := jsonHas(ctx, pos, args); err != nil || got.K != rts.VBool || got.B != found {
 				t.Fatalf("doc %d: json.has(%q) = %+v, %v, want %t", i, p, got, err, found)
+			}
+		}
+	}
+
+	errs := map[string]string{
+		" $. ":    "empty path segment",
+		".a.":     "empty path segment",
+		"a..b":    "empty path segment",
+		"$a":      `expected '.' or '[', got 'a'`,
+		"$$":      `expected '.' or '[', got '$'`,
+		"a b":     `unquoted key "a b" has a space. Use ["a b"]`,
+		"a[x]":    `invalid array index "x"`,
+		"a[x][0]": `invalid array index "x"`,
+		"a[]":     "empty array index",
+		"a[0":     "missing closing bracket",
+		"a[":      "missing closing bracket",
+		`a["b"c]`: "missing closing bracket",
+		`a["b`:    "missing closing quote",
+	}
+	for p, detail := range errs {
+		for _, doc := range docs {
+			args := []rts.Value{doc, rts.Str(p)}
+			for sig, fn := range map[string]rts.NativeFunc{sigJSONGet: jsonGet, sigJSONHas: jsonHas} {
+				want := fmt.Sprintf("%s invalid path %q: %s", sig, p, detail)
+				if _, err := fn(ctx, pos, args); err == nil || !strings.Contains(err.Error(), want) {
+					t.Fatalf("%s with %q error = %v, want %q", sig, p, err, want)
+				}
 			}
 		}
 	}

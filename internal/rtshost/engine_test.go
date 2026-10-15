@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -203,6 +204,35 @@ func TestRuntimeExposesCardinalityBasedHeadersAndQuery(t *testing.T) {
 				t.Fatalf("%s = %+v, want kind %v and len %d", tt.src, v, tt.kind, tt.n)
 			}
 		})
+	}
+}
+
+func TestRuntimeResponseJSONPath(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+	for _, name := range []string{"response", "last"} {
+		for path, want := range map[string]rts.Value{
+			"ok":      rts.Bool(true),
+			"$.ok":    rts.Bool(true),
+			"missing": rts.Null(),
+			"ok.x":    rts.Null(),
+			"[0]":     rts.Null(),
+		} {
+			src := name + ".json(" + strconv.Quote(path) + ")"
+			if got := evalHost(t, eng, rt, src); !rts.ValueEqual(got, want) {
+				t.Errorf("%s = %+v, want %+v", src, got, want)
+			}
+		}
+		for path, want := range map[string]string{
+			"ok[":  `invalid json path "ok[": missing closing bracket`,
+			"$ok":  `invalid json path "$ok": expected '.' or '[', got 'o'`,
+			"ok x": `invalid json path "ok x": unquoted key "ok x" has a space. Use ["ok x"]`,
+		} {
+			src := name + ".json(" + strconv.Quote(path) + ")"
+			if _, err := eng.Eval(t.Context(), rt, src, testPos); err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("%s error = %v, want %q", src, err, want)
+			}
+		}
 	}
 }
 
