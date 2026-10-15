@@ -3,9 +3,12 @@ package request
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
@@ -22,6 +25,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 	"github.com/unkn0wn-root/resterm/internal/tunnel"
@@ -1242,23 +1246,61 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 	ctx, cancel := context.WithTimeout(in.ctx, x.timeout)
 	defer cancel()
 	sc := x.sentScope(in.vars)
-	var checks []scriptapi.TestResult
-	checkErr := in.rrErr
-	if checkErr == nil {
-		checks, checkErr = x.eng.runRTSChecks(
-			ctx,
-			x.doc,
-			x.req,
-			x.env,
-			x.opts.BaseDir,
-			sc,
-			x.locals,
-			in.rr,
-			in.trace,
-			rtsStream(in.stream),
-		)
+	var out []scriptapi.TestResult
+	errs := []error{in.rrErr}
+	blocks := slices.ContainsFunc(x.req.Metadata.Scripts, func(b restfile.ScriptBlock) bool {
+		return restfile.IsTestScript(b, restfile.ScriptLangRTS)
+	})
+	if in.rrErr == nil && (len(x.req.Metadata.Asserts) > 0 || blocks) {
+		rt, err := x.eng.buildRT(rtIn{
+			doc:     x.doc,
+			req:     x.req,
+			env:     x.env,
+			base:    x.opts.BaseDir,
+			vars:    sc.vars,
+			resolve: sc.resolve,
+			globals: sc.globals,
+			resp:    in.rr,
+			res:     in.rr,
+			tr:      in.trace,
+			st:      rtsStream(in.stream),
+			locals:  x.locals,
+			secrets: rtshost.IncludeSecrets,
+		})
+		errs = append(errs, err)
+		if err == nil {
+			for _, as := range x.req.Metadata.Asserts {
+				expr := strings.TrimSpace(as.Expression)
+				if expr == "" {
+					continue
+				}
+				name := str.FoldLines(expr)
+				rt.Site = directive.Assert.Tag() + " " + name
+				start := time.Now()
+				pos := x.eng.rtsPosForLineCol(x.doc, x.req, as.Line, as.Col)
+				val, err := x.eng.evalRTSAssert(ctx, x.doc, rt, expr, pos)
+				if err != nil {
+					errs = append(errs, err)
+					break
+				}
+				out = append(out, scriptapi.TestResult{
+					Name:    name,
+					Message: strings.TrimSpace(as.Message),
+					Passed:  val.IsTruthy(),
+					Elapsed: time.Since(start),
+				})
+			}
+			tests, err := rtshost.RunTests(ctx, x.eng.re, rtshost.Tests{
+				Doc:     x.doc,
+				Scripts: x.req.Metadata.Scripts,
+				BaseDir: rt.BaseDir,
+				Runtime: func() (rtshost.Runtime, error) { return rt, nil },
+			})
+			out = append(out, tests...)
+			errs = append(errs, err)
+		}
 	}
-	tests, changes, testErr := x.eng.sc.RunTests(
+	tests, changes, err := x.eng.sc.RunTests(
 		x.sendCtx,
 		x.req.Metadata.Scripts,
 		scripts.TestInput{
@@ -1272,7 +1314,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 		},
 	)
 	x.applyRuntimeGlobals(changes)
-	return append(checks, tests...), errors.Join(checkErr, testErr)
+	return append(out, tests...), errors.Join(append(errs, err)...)
 }
 
 func (f flow) ExecuteHTTP() xexec.RequestResult {

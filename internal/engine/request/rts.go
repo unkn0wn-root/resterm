@@ -2,13 +2,11 @@ package request
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
@@ -19,7 +17,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
-	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -548,86 +545,6 @@ func (e *Engine) EvalForEachItems(
 func (e *Engine) ValueString(ctx context.Context, pos rts.Pos, v rts.Value) (string, error) {
 	cx := rts.NewCtx(ctx, e.re.Limits())
 	return rts.ValueString(cx, pos, v)
-}
-
-// An assertion error must not skip the test blocks.
-func (e *Engine) runRTSChecks(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env vars.ResolvedEnv,
-	base string,
-	sc evalScope,
-	locals rts.Locals,
-	resp *rtshost.Response,
-	tr *rtshost.Trace,
-	st *rtshost.Stream,
-) ([]scriptapi.TestResult, error) {
-	if req == nil {
-		return nil, nil
-	}
-	blocks := slices.ContainsFunc(req.Metadata.Scripts, func(b restfile.ScriptBlock) bool {
-		return restfile.IsTestScript(b, restfile.ScriptLangRTS)
-	})
-	if len(req.Metadata.Asserts) == 0 && !blocks {
-		return nil, nil
-	}
-	vv := sc.vars
-	if vv == nil {
-		vv = e.collectVariables(doc, req, env, execVars{})
-	}
-	rt, err := e.buildRT(rtIn{
-		doc:     doc,
-		req:     req,
-		env:     env,
-		base:    base,
-		vars:    vv,
-		resolve: sc.resolve,
-		globals: sc.globals,
-		resp:    resp,
-		res:     resp,
-		tr:      tr,
-		st:      st,
-		locals:  locals,
-		secrets: rtshost.IncludeSecrets,
-	})
-	if err != nil {
-		return nil, err
-	}
-	var (
-		out       []scriptapi.TestResult
-		assertErr error
-	)
-	for _, as := range req.Metadata.Asserts {
-		expr := strings.TrimSpace(as.Expression)
-		if expr == "" {
-			continue
-		}
-		name := str.FoldLines(expr)
-		rt.Site = directive.Assert.Tag() + " " + name
-		start := time.Now()
-		val, err := e.evalRTSAssert(ctx, doc, rt, expr, e.rtsPosForLineCol(doc, req, as.Line, as.Col))
-		if err != nil {
-			assertErr = err
-			break
-		}
-		out = append(out, scriptapi.TestResult{
-			Name:    name,
-			Message: strings.TrimSpace(as.Message),
-			Passed:  val.IsTruthy(),
-			Elapsed: time.Since(start),
-		})
-	}
-	if !blocks {
-		return out, assertErr
-	}
-	tests, testErr := rtshost.RunTests(ctx, e.re, rtshost.Tests{
-		Doc:     doc,
-		Scripts: req.Metadata.Scripts,
-		BaseDir: rt.BaseDir,
-		Runtime: func() (rtshost.Runtime, error) { return rt, nil },
-	})
-	return append(out, tests...), errors.Join(assertErr, testErr)
 }
 
 func (e *Engine) evaluateResponsePredicate(
