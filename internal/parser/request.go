@@ -20,8 +20,6 @@ type requestBuilder struct {
 	runVars           []restfile.RunVar
 	originalLines     []string
 	script            scriptMode
-	scriptBufferMode  scriptMode
-	scriptSourcePath  string
 	scriptBufferLines []restfile.ScriptLine
 	scriptBuffer      []string
 	settings          map[string]string

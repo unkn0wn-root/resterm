@@ -68,7 +68,7 @@ func (b *documentBuilder) handleScriptLine(ln line) bool {
 
 func (b *documentBuilder) addScriptLine(no, col int, body string) {
 	b.ensureRequest(no)
-	b.request.appendScriptLine(body, b.doc.Path, restfile.ScriptLine{Line: no, Col: col})
+	b.request.appendScriptLine(body, restfile.ScriptLine{Line: no, Col: col})
 }
 
 func scriptInc(body string) (string, bool) {
@@ -291,16 +291,9 @@ var errRTSModeUnsupported = errors.New(
 
 var errRTSMultipleModes = errors.New("@rts accepts only one mode. Use '@rts pre-request' or '@rts test'")
 
-func (r *requestBuilder) appendScriptLine(body, path string, loc restfile.ScriptLine) {
+func (r *requestBuilder) appendScriptLine(body string, loc restfile.ScriptLine) {
 	if r.script.discard {
 		return
-	}
-	if len(r.scriptBuffer) > 0 && (r.scriptBufferMode != r.script || r.scriptSourcePath != path) {
-		r.flushPendingScript()
-	}
-	if len(r.scriptBuffer) == 0 {
-		r.scriptBufferMode = r.script
-		r.scriptSourcePath = path
 	}
 	r.scriptBuffer = append(r.scriptBuffer, body)
 	r.scriptBufferLines = append(r.scriptBufferLines, loc)
@@ -312,16 +305,14 @@ func (r *requestBuilder) flushPendingScript() {
 	}
 	script := strings.Join(r.scriptBuffer, "\n")
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
-		Kind:       r.scriptBufferMode.kind,
-		Lang:       r.scriptBufferMode.lang,
-		Name:       r.scriptBufferMode.name,
+		Kind:       r.script.kind,
+		Lang:       r.script.lang,
+		Name:       r.script.name,
 		Body:       script,
-		SourcePath: r.scriptSourcePath,
+		SourcePath: r.sourcePath,
 		Lines:      append([]restfile.ScriptLine(nil), r.scriptBufferLines...),
 	})
 	r.scriptBuffer = nil
-	r.scriptBufferMode = scriptMode{}
-	r.scriptSourcePath = ""
 	r.scriptBufferLines = nil
 }
 

@@ -72,7 +72,6 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 		return directiveApplied
 	case directive.RTS:
 		if err := b.request.script.setRTS(rest); err != nil {
-			b.request.flushPendingScript()
 			return b.rejectError(d, err)
 		}
 		return directiveApplied
