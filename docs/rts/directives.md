@@ -83,7 +83,24 @@ Use `@rts pre-request` to change the outgoing request and `@rts test` to check t
 
 Add a name after `test`; quote it if it contains spaces. Extra unquoted words are an error. Unnamed blocks, including `@script test lang=rts`, appear as `@rts test` in the results.
 
-Prefix each code line with `>`. A blank line or comment without `>` ends the block. Code after it starts a separate block with the same name and fresh variables. Write comments as `> #` and empty lines as `>`. You can also use a `{% ... %}` block or read code from a file with `> < ./checks.rts`.
+Prefix each code line with `>`. A blank line or comment without `>` ends the block; later code starts another block with the same name and a new scope. Use `> #` for comments and `>` for blank lines within a block.
+
+Use `> {%` and `%}` on separate lines to keep comments and blank lines in a block. Inside the braces, `>` is optional:
+
+```http
+# @use ./validators.rts
+# @rts test "orders are valid"
+> {%
+# Validate orders
+let orders = response.json().orders
+
+for let _, msg range validators.orders(orders) {
+  t.error(msg)
+}
+%}
+```
+
+One-line blocks also work: `> {% request.setHeader("X-Debug", "1") %}` in a pre-request block. To read code from a file, use `> < ./checks.rts` outside the `{% ... %}` block. The file contains plain code without `>`.
 
 Response checks run after captures: `@assert` first, then RTS test blocks in file order, then JavaScript tests. An assertion failure or error does not skip the test blocks. This applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
 
