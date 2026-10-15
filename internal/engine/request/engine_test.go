@@ -886,6 +886,75 @@ GET http://example.test
 	}
 }
 
+func TestRTSTestBlocksReadRequestState(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want []string
+		err  string
+	}{
+		{
+			name: "captures",
+			src: `### one
+# @capture request token = response.json().token
+# @rts test
+> t.error("token", vars.get("token"))
+GET http://example.test
+`,
+			want: []string{"@rts test api.http:4: token abc"},
+		},
+		{
+			name: "after an assert error",
+			src: `### one
+# @assert fail("boom")
+# @rts test ran
+> t.error("ran")
+GET http://example.test
+`,
+			want: []string{"ran api.http:4: ran"},
+			err:  "boom",
+		},
+		{
+			name: "import named t",
+			src: `# @use ./checks.rts as t
+### one
+# @rts test
+> t.error("shadowed")
+GET http://example.test
+`,
+			want: []string{"@rts test api.http:4: shadowed"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, req := rtsTestDoc(t, tc.src)
+			eng, st := newStubEngine(t)
+			st.body = `{"token": "abc"}`
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+			if err != nil || res.Err != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+			}
+			var got []string
+			for _, tr := range res.Tests {
+				if tr.Passed {
+					t.Fatalf("test %q passed, want each block to report", tr.Name)
+				}
+				got = append(got, tr.Name+" "+tr.Message)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("tests = %q, want %q", got, tc.want)
+			}
+			var msg string
+			if res.ScriptErr != nil {
+				msg = res.ScriptErr.Error()
+			}
+			if !strings.Contains(msg, tc.err) || (tc.err == "") != (res.ScriptErr == nil) {
+				t.Fatalf("script error = %v, want %q", res.ScriptErr, tc.err)
+			}
+		})
+	}
+}
+
 func TestRTSOneLineBlocksRun(t *testing.T) {
 	doc, req := rtsTestDoc(t, `### one
 # @rts pre-request
