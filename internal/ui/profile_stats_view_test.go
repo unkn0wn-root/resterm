@@ -411,3 +411,18 @@ func TestProfileStatsViewWrapsFailureReasons(t *testing.T) {
 		t.Fatalf("reason is not capped at %d lines:\n%s", profileFailureLines, strings.Join(lines[i:i+4], "\n"))
 	}
 }
+
+func TestProfileStatsViewEscapesFailureReasons(t *testing.T) {
+	snap := profileTestSnapshots()["fail"]
+	snap.Failures = []engine.ProfileFailure{{Iteration: 1, Reason: "bad \x1b]0;pwn\a body\r\nnext"}}
+	v := &profileStatsView{title: "GET getStatus", snap: snap}
+	out := v.render(80, defaultStatsPalette(), theme.DefaultTheme())
+	if strings.ContainsAny(out, "\a\r") || strings.Contains(out, "\x1b]") {
+		t.Fatalf("profile view keeps raw control characters: %q", out)
+	}
+	lines := strings.Split(ansi.Strip(out), "\n")
+	i := slices.Index(lines, `Run 1: bad \u001b]0;pwn\u0007 body`)
+	if i < 0 || i+1 >= len(lines) || lines[i+1] != strings.Repeat(" ", len("Run 1: "))+"next" {
+		t.Fatalf("reason is not escaped under the label:\n%s", strings.Join(lines, "\n"))
+	}
+}

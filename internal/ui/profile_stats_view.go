@@ -14,6 +14,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -297,7 +298,7 @@ func (v *profileStatsView) failures(width int, pal statsPalette) []string {
 		if f.Warmup {
 			label, style = fmt.Sprintf("Warmup %d", f.Iteration), pal.Caution
 		}
-		detail := f.Reason
+		detail := termtext.Block(f.Reason)
 		if f.Duration > 0 {
 			detail += profileSep + formatDurationShort(f.Duration)
 		}

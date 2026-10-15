@@ -547,3 +547,44 @@ func TestWorkflowStatsDetailWrapsEachMessageLine(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkflowStatsDetailEscapesControlCharacters(t *testing.T) {
+	for _, skipped := range []bool{false, true} {
+		view := &workflowStatsView{
+			name:       "wf",
+			started:    time.Now(),
+			ended:      time.Now(),
+			totalSteps: 1,
+			entries: []workflowStatsEntry{{
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Orders"},
+					Message: "api.http:11: bad \x1b]0;pwn\a body\r\napi.http:12: next",
+					Skipped: skipped,
+				},
+			}},
+		}
+
+		lines := view.renderDetail(60, 10, defaultResponseRenderer())
+		rows := make([]string, len(lines))
+		for i, line := range lines {
+			if strings.ContainsAny(line, "\a\r") || strings.Contains(line, "\x1b]") {
+				t.Fatalf("skipped=%v: line %d keeps raw control characters: %q", skipped, i, line)
+			}
+			rows[i] = strings.TrimRight(stripANSIEscape(line), " ")
+		}
+		want := 1
+		if skipped {
+			want = 2
+		}
+		msg := `api.http:11: bad \u001b]0;pwn\u0007 body` + "\napi.http:12: next"
+		if got := strings.Count(strings.Join(rows, "\n"), msg); got != want {
+			t.Fatalf(
+				"skipped=%v: escaped message shows %d times, want %d:\n%s",
+				skipped,
+				got,
+				want,
+				strings.Join(rows, "\n"),
+			)
+		}
+	}
+}

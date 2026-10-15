@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 type textProfileRow struct {
@@ -62,7 +63,7 @@ func writeTextProfileDetails(w io.Writer, indent string, res Result, st textStyl
 			w,
 			"%s    %s\n",
 			indent,
-			st.value("- "+textProfileFailure(fail)),
+			st.value("- "+termtext.Row(textProfileFailure(fail))),
 		); err != nil {
 			return err
 		}

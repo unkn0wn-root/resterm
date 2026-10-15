@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -619,9 +620,10 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 		m.recordWorkflowHistory(state, summary, report)
 	}
 
+	shown := termtext.Block(report)
 	if m.responseLatest != nil {
 		m.responseLatest.explain = explainState{report: explain}
-		m.responseLatest.stats = report
+		m.responseLatest.stats = shown
 		m.responseLatest.statsColored = ""
 		m.responseLatest.statsColorize = true
 		m.responseLatest.statsKind = statsReportKindWorkflow
@@ -629,11 +631,11 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	} else {
 		m.responseLatest = &responseSnapshot{
 			explain:        explainState{report: explain},
-			pretty:         report,
-			raw:            report,
-			headers:        report,
-			requestHeaders: report,
-			stats:          report,
+			pretty:         shown,
+			raw:            shown,
+			headers:        shown,
+			requestHeaders: shown,
+			stats:          shown,
 			statsColorize:  true,
 			statsKind:      statsReportKindWorkflow,
 			statsColored:   "",

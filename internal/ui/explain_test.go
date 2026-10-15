@@ -745,3 +745,25 @@ func TestStepExplainAPIKeyHeaderIsAuthChange(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderExplainStyledEscapesControlCharacters(t *testing.T) {
+	rep := &xplain.Report{
+		Name:    "wf",
+		Env:     "dev \x1b]0;pwn\a\nprod",
+		Failure: "api.http:11: bad \x1b]0;pwn\a body\r\napi.http:12: next",
+	}
+
+	out := renderExplainStyledView(buildExplainView(rep), 80, theme.DefaultTheme())
+	if strings.ContainsAny(out, "\a\r") || strings.Contains(out, "\x1b]") {
+		t.Fatalf("explain view keeps raw control characters: %q", out)
+	}
+	plain := ansi.Strip(out)
+	for _, want := range []string{
+		`Failure: api.http:11: bad \u001b]0;pwn\u0007 body` + "\n│ api.http:12: next",
+		`Environment: dev \u001b]0;pwn\u0007\nprod`,
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("explain view has no %q:\n%s", want, plain)
+		}
+	}
+}

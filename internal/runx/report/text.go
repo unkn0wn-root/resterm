@@ -5,6 +5,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 // TextPainter decorates text segments in the shared text formatter.
@@ -66,7 +68,7 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 			w,
 			"%s %s\n",
 			st.resultLabel(resultLabel(res)),
-			st.resultLine(resultLine(res)),
+			st.resultLine(termtext.Row(resultLine(res))),
 		); err != nil {
 			return err
 		}
@@ -96,7 +98,7 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 				"  %s %s %s\n",
 				st.index(i+1),
 				st.stepLabel(stepLabel(step)),
-				st.stepLine(stepLine(step)),
+				st.stepLine(termtext.Row(stepLine(step))),
 			); err != nil {
 				return err
 			}
