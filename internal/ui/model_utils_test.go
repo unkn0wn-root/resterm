@@ -495,18 +495,18 @@ func TestFormatTestSummaryColorsStatuses(t *testing.T) {
 }
 
 func TestFormatTestSummaryAlignsMessageLines(t *testing.T) {
-	results := []scriptapi.TestResult{{
-		Name:    "orders",
-		Message: "api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
-		Elapsed: 2 * time.Second,
-	}}
-
-	output := stripANSIEscape(defaultResponseRenderer().formatTestSummary(results, nil))
 	want := "Tests:\n" +
 		"  [FAIL] orders - api.http:11: Order 0 has negative total\n" +
 		"                  api.http:11: Order 3 missing tracking (2s)"
-	if output != want {
-		t.Fatalf("output =\n%s\nwant\n%s", output, want)
+	for _, msg := range []string{
+		"api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
+		"api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking\n",
+	} {
+		results := []scriptapi.TestResult{{Name: "orders", Message: msg, Elapsed: 2 * time.Second}}
+		output := stripANSIEscape(defaultResponseRenderer().formatTestSummary(results, nil))
+		if output != want {
+			t.Fatalf("message %q: output =\n%s\nwant\n%s", msg, output, want)
+		}
 	}
 }
 
