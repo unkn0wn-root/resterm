@@ -12,12 +12,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-var (
-	_ RequestMutator = (*Mutator)(nil)
-	_ VarsMutator    = (*Mutator)(nil)
-	_ GlobalMutator  = (*Mutator)(nil)
-)
-
 // Mutator records script mutations into a prerequest.Output and mirrors them
 // onto the runtime views so later statements read what earlier ones wrote.
 type Mutator struct {

@@ -12,23 +12,21 @@ import (
 // mapObj provides shared lookup methods for env, vars, and vars.global.
 // Constructors add the members specific to each object.
 type mapObj struct {
-	name    string
+	evalObj
 	vals    vars.NameMap[string]
 	resolve vars.Lookup
 	members map[string]rts.Value
 }
 
-func newMapObj(name string, vals vars.NameView[string]) *mapObj {
-	o := &mapObj{name: name, vals: vals.Clone()}
+func newMapObj(st *evalState, name string, vals vars.NameView[string]) *mapObj {
+	o := &mapObj{evalObj: evalObj{st, name}, vals: vals.Clone()}
 	o.members = map[string]rts.Value{
-		"get":     o.getDef().Value(),
-		"has":     o.hasDef().Value(),
-		"require": o.requireDef().Value(),
+		"get":     o.method(o.getDef()),
+		"has":     o.method(o.hasDef()),
+		"require": o.method(o.requireDef()),
 	}
 	return o
 }
-
-func (o *mapObj) TypeName() string { return o.name }
 
 func (o *mapObj) value(name string) (string, bool, error) {
 	if o.resolve != nil {
@@ -123,21 +121,21 @@ func nameArg(call native.Call, v rts.Value) (string, error) {
 	return name, nil
 }
 
-func newEnvObj(scope Scope) *mapObj {
-	o := newMapObj("env", scope.Env)
+func newEnvObj(st *evalState, scope Scope) *mapObj {
+	o := newMapObj(st, "env", scope.Env)
 	o.members["meta"] = rts.Obj(&envMetaObj{
-		meta:   scope.Meta,
-		groups: newMapObj("env.meta.groups", scope.Meta.Groups),
+		evalObj: evalObj{st, "env.meta"},
+		meta:    scope.Meta,
+		groups:  newMapObj(st, "env.meta.groups", scope.Meta.Groups),
 	})
 	return o
 }
 
 type envMetaObj struct {
+	evalObj
 	meta   EnvMeta
 	groups *mapObj
 }
-
-func (o *envMetaObj) TypeName() string { return "env.meta" }
 
 func (o *envMetaObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value, bool, error) {
 	switch name {
@@ -163,12 +161,12 @@ func (o *envMetaObj) Index(ctx *rts.Ctx, pos rts.Pos, key rts.Value) (rts.Value,
 	return v, nil
 }
 
-func newVarsObj(scope Scope, varsMut VarsMutator, globalMut GlobalMutator) *mapObj {
-	o := newMapObj("vars", scope.Vars)
+func newVarsObj(st *evalState, scope Scope) *mapObj {
+	o := newMapObj(st, "vars", scope.Vars)
 	o.resolve = scope.Resolve
-	o.members["set"] = varsSetDef(o, varsMut).Value()
-	o.members["interpolate"] = varsInterpolateDef(o.value).Value()
-	o.members["global"] = rts.Obj(newGlobalObj(scope.Globals, globalMut))
+	o.members["set"] = o.method(varsSetDef(o))
+	o.members["interpolate"] = o.method(varsInterpolateDef(o.value))
+	o.members["global"] = rts.Obj(newGlobalObj(st, scope.Globals))
 	return o
 }
 
@@ -193,12 +191,13 @@ func varsInterpolateDef(look vars.Lookup) native.Def {
 	)
 }
 
-func varsSetDef(o *mapObj, mut VarsMutator) native.Def {
+func varsSetDef(o *mapObj) native.Def {
 	sig := "vars.set(name, value)"
 	return native.Fn2("vars.set", sig, nameArg, native.String,
 		func(call native.Call, name, value string) (rts.Value, error) {
-			if mut == nil {
-				return rts.Null(), call.Errorf("vars is read-only")
+			mut, err := mutator(call, o.name)
+			if err != nil {
+				return rts.Null(), err
 			}
 			mut.SetVar(name, value)
 			o.vals.Set(name, value)
@@ -207,19 +206,20 @@ func varsSetDef(o *mapObj, mut VarsMutator) native.Def {
 	)
 }
 
-func newGlobalObj(vals vars.NameView[string], mut GlobalMutator) *mapObj {
-	o := newMapObj("vars.global", vals)
-	o.members["set"] = globalSetDef(o, mut).Value()
-	o.members["delete"] = globalDeleteDef(o, mut).Value()
+func newGlobalObj(st *evalState, vals vars.NameView[string]) *mapObj {
+	o := newMapObj(st, "vars.global", vals)
+	o.members["set"] = o.method(globalSetDef(o))
+	o.members["delete"] = o.method(globalDeleteDef(o))
 	return o
 }
 
-func globalSetDef(o *mapObj, mut GlobalMutator) native.Def {
+func globalSetDef(o *mapObj) native.Def {
 	sig := "vars.global.set(name, value[, secret])"
 	return native.Fn2Optional("vars.global.set", sig, nameArg, native.String, native.Bool,
 		func(call native.Call, name, value string, secret native.Optional[bool]) (rts.Value, error) {
-			if mut == nil {
-				return rts.Null(), call.Errorf("vars.global is read-only")
+			mut, err := mutator(call, o.name)
+			if err != nil {
+				return rts.Null(), err
 			}
 			mut.SetGlobal(name, value, secret.Set && secret.Value)
 			o.vals.Set(name, value)
@@ -228,12 +228,13 @@ func globalSetDef(o *mapObj, mut GlobalMutator) native.Def {
 	)
 }
 
-func globalDeleteDef(o *mapObj, mut GlobalMutator) native.Def {
+func globalDeleteDef(o *mapObj) native.Def {
 	sig := "vars.global.delete(name)"
 	return native.Fn1("vars.global.delete", sig, nameArg,
 		func(call native.Call, name string) (rts.Value, error) {
-			if mut == nil {
-				return rts.Null(), call.Errorf("vars.global is read-only")
+			mut, err := mutator(call, o.name)
+			if err != nil {
+				return rts.Null(), err
 			}
 			mut.DelGlobal(name)
 			o.vals.Delete(name)

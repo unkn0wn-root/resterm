@@ -52,7 +52,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			site += " " + directive.Quote(name)
 		}
 		start := time.Now()
-		t := newTestObj()
+		var msgs []string
 		src, err := loadSource(in.Doc, block, in.Runtime.BaseDir)
 		switch {
 		case err != nil:
@@ -62,10 +62,14 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 		default:
 			rt := in.Runtime
 			rt.Site = site
-			cfg := evalConfig(rt)
+			ctx, st := withRuntime(ctx, rt)
+			t := newTestObj(st)
+			cfg := evalConfig(st)
 			cfg.MaxSteps = testSteps
 			cfg.Overrides = rts.Local("t", rts.Obj(t))
-			_, err = eng.core.ExecModule(withRuntime(ctx, rt), cfg, src.Text, src.Pos)
+			_, err = eng.core.ExecModule(ctx, cfg, src.Text, src.Pos)
+			st.end()
+			msgs = t.msgs
 			var abort *rts.AbortError
 			canceled = errors.As(err, &abort) && abort.Kind == rts.AbortCanceled
 			if errors.Is(err, rts.ErrHalt) {
@@ -73,11 +77,10 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			}
 			err = src.annotate(err)
 		}
-		t.done = true
 		out = append(out, scriptapi.TestResult{
 			Name:    name,
-			Passed:  err == nil && len(t.msgs) == 0,
-			Message: strings.Join(t.msgs, "\n"),
+			Passed:  err == nil && len(msgs) == 0,
+			Message: strings.Join(msgs, "\n"),
 			Elapsed: time.Since(start),
 		})
 		if err != nil {
@@ -88,29 +91,18 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 }
 
 type testObj struct {
+	evalObj
 	msgs    []string
-	done    bool
 	members map[string]rts.Value
 }
 
-func newTestObj() *testObj {
-	o := &testObj{}
+func newTestObj(st *evalState) *testObj {
+	o := &testObj{evalObj: evalObj{st, "t"}}
 	o.members = map[string]rts.Value{
-		"error": o.reportDef("t.error", nil).Value(),
-		"fatal": o.reportDef("t.fatal", rts.ErrHalt).Value(),
+		"error": o.method(o.reportDef("t.error", nil)),
+		"fatal": o.method(o.reportDef("t.fatal", rts.ErrHalt)),
 	}
 	return o
-}
-
-func (*testObj) TypeName() string { return "t" }
-
-const testEnded = "t belongs to a test block that has ended"
-
-func (o *testObj) Unbound() string {
-	if o.done {
-		return testEnded
-	}
-	return ""
 }
 
 func (o *testObj) Member(_ *rts.Ctx, _ rts.Pos, name string) (rts.Value, bool, error) {
@@ -124,10 +116,6 @@ func (*testObj) Index(*rts.Ctx, rts.Pos, rts.Value) (rts.Value, error) {
 
 func (o *testObj) reportDef(name string, end error) native.Def {
 	return native.Raw(name, func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-		// A saved t.error or t.fatal bypasses Unbound.
-		if o.done {
-			return rts.Null(), rts.Abortf(ctx, pos, testEnded)
-		}
 		parts := make([]string, len(args))
 		for i, arg := range args {
 			s, err := rts.ToStr(ctx, pos, arg)

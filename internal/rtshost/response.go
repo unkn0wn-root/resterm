@@ -12,7 +12,7 @@ import (
 const unboundResponse = "response is not available until the request has run; use last for the previous response"
 
 type responseObj struct {
-	name    string
+	evalObj
 	resp    *Response
 	unbound string
 	json    any
@@ -21,25 +21,28 @@ type responseObj struct {
 	members map[string]rts.Value
 }
 
-func newResponseObj(name string, resp *Response) *responseObj {
-	o := &responseObj{name: name, resp: resp}
+func newResponseObj(st *evalState, name string, resp *Response) *responseObj {
+	o := &responseObj{evalObj: evalObj{st, name}, resp: resp}
 	o.members = map[string]rts.Value{
-		"header": o.headerDef().Value(),
-		"text":   o.textDef().Value(),
-		"json":   o.jsonDef().Value(),
+		"header": o.method(o.headerDef()),
+		"text":   o.method(o.textDef()),
+		"json":   o.method(o.jsonDef()),
 	}
 	return o
 }
 
-func newUnboundResponseObj(name string) *responseObj {
-	o := newResponseObj(name, nil)
+func newUnboundResponseObj(st *evalState, name string) *responseObj {
+	o := newResponseObj(st, name, nil)
 	o.unbound = unboundResponse
 	return o
 }
 
-func (o *responseObj) TypeName() string { return o.name }
-
-func (o *responseObj) Unbound() string { return o.unbound }
+func (o *responseObj) Unbound() string {
+	if o.unbound != "" {
+		return o.unbound
+	}
+	return o.evalObj.Unbound()
+}
 
 func (o *responseObj) Member(ctx *rts.Ctx, pos rts.Pos, name string) (rts.Value, bool, error) {
 	switch name {
@@ -138,8 +141,8 @@ func (o *responseObj) jsonDef() native.Def {
 // given: a name is one stored value with no hook on reading it, and checking
 // the string limit here would fail assertions that never mention statusText.
 // response.statusText applies the limit at the point it is read.
-func assertionOverrides(resp *Response) rts.Locals {
-	o := newResponseObj("response", resp)
+func assertionOverrides(st *evalState, resp *Response) rts.Locals {
+	o := newResponseObj(st, "response", resp)
 	code := 0
 	status := ""
 	if resp != nil {

@@ -10,22 +10,21 @@ import (
 )
 
 type streamObj struct {
+	evalObj
 	stream  *Stream
 	members map[string]rts.Value
 }
 
-func newStreamObj(s *Stream) *streamObj {
-	o := &streamObj{stream: s}
+func newStreamObj(st *evalState, s *Stream) *streamObj {
+	o := &streamObj{evalObj: evalObj{st, "stream"}, stream: s}
 	o.members = map[string]rts.Value{
-		"enabled": hostFn0("stream", "enabled", o.enabled),
-		"kind":    hostFn0("stream", "kind", o.kind),
-		"summary": hostFn0("stream", "summary", o.summary),
-		"events":  hostFn0("stream", "events", o.events),
+		"enabled": o.fn0("enabled", o.enabled),
+		"kind":    o.fn0("kind", o.kind),
+		"summary": o.fn0("summary", o.summary),
+		"events":  o.fn0("events", o.events),
 	}
 	return o
 }
-
-func (*streamObj) TypeName() string { return "stream" }
 
 func (o *streamObj) Member(_ *rts.Ctx, _ rts.Pos, name string) (rts.Value, bool, error) {
 	v, ok := o.members[name]

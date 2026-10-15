@@ -3,15 +3,19 @@ package rtshost
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 var testPos = rts.Pos{Path: "test", Line: 1, Col: 1}
@@ -412,6 +416,289 @@ func TestReadOnlyRuntimeRefusesEveryWrite(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Eval(%s) error = %v, want one holding %q", src, err, want)
 		}
+	}
+}
+
+func keepRuntime(t *testing.T, src string) Runtime {
+	t.Helper()
+	dir := t.TempDir()
+	writeModule(t, dir, "keep.rts", src)
+	rt := testRuntime(t)
+	rt.BaseDir = dir
+	rt.Uses = []rts.Use{{Path: "keep.rts"}}
+	return rt
+}
+
+func preRequest(eng *Engine, rt Runtime, bodies ...string) error {
+	var blocks []restfile.ScriptBlock
+	for _, body := range bodies {
+		blocks = append(blocks, restfile.ScriptBlock{
+			Kind: restfile.ScriptKindPreRequest,
+			Lang: restfile.ScriptLangRTS,
+			Body: body,
+		})
+	}
+	return RunPreRequest(context.Background(), eng, PreRequest{
+		Scripts: blocks,
+		BaseDir: rt.BaseDir,
+		Runtime: func() (Runtime, error) { return rt, nil },
+	})
+}
+
+const keepVars = `module keep
+let v = null
+let get = null
+let interp = null
+let set = null
+let gset = null
+let gdel = null
+export fn hold(vv) {
+  v = vv
+  get = vv.get
+  interp = vv.interpolate
+  set = vv.set
+  gset = vv.global.set
+  gdel = vv.global.delete
+}
+export fn write() {
+  v.set("kept", "1")
+  set("saved", "1")
+  gset("saved", "1")
+  gdel("shared")
+}
+export fn useVars() {
+  return v.get("token")
+}
+export fn useGet() {
+  return get("token")
+}
+export fn useInterpolate() {
+  return interp("{{token}}")
+}
+export fn useSet() {
+  set("x", "late")
+}
+export fn useGlobalSet() {
+  gset("x", "late")
+}
+export fn useGlobalDelete() {
+  gdel("shared")
+}
+export fn tryVars() {
+  let r = try v.set("x", "late")
+}
+export fn trySet() {
+  let r = try set("x", "late")
+}
+export fn tryGlobalSet() {
+  let r = try gset("x", "late")
+}
+`
+
+func TestKeptVarsStopWhenTheirEvaluationEnds(t *testing.T) {
+	for use, obj := range map[string]string{
+		"useVars":         "vars",
+		"useGet":          "vars",
+		"useInterpolate":  "vars",
+		"useSet":          "vars",
+		"useGlobalSet":    "vars.global",
+		"useGlobalDelete": "vars.global",
+		"tryVars":         "vars",
+		"trySet":          "vars",
+		"tryGlobalSet":    "vars.global",
+	} {
+		t.Run(use, func(t *testing.T) {
+			ended := obj + " belongs to an evaluation that has ended"
+			call := "keep." + use + "()"
+			eng := NewEngine(stdlib.New)
+			rt := keepRuntime(t, keepVars)
+			pre := rt
+			var out prerequest.Output
+			pre.Mutator = NewMutator(&out, rt.Request, nil, nil, nil)
+			err := preRequest(eng, pre, "keep.hold(vars)\nkeep.write()", call)
+			if err == nil || !strings.Contains(err.Error(), ended) {
+				t.Fatalf("next pre-request block: error = %v, want %q", err, ended)
+			}
+
+			_, err = eng.EvalAssertion(t.Context(), rt, call, testPos)
+			if err == nil || !strings.Contains(err.Error(), ended) {
+				t.Errorf("@assert: error = %v, want %q", err, ended)
+			}
+			_, err = RunTests(t.Context(), eng, Tests{
+				Doc:     &restfile.Document{Path: testDoc},
+				Scripts: []restfile.ScriptBlock{testBlock("", 2, call)},
+				Runtime: rt,
+			})
+			if err == nil || !strings.Contains(err.Error(), ended) {
+				t.Errorf("@rts test: error = %v, want %q", err, ended)
+			}
+			var next prerequest.Output
+			pre.Mutator = NewMutator(&next, rt.Request, nil, nil, nil)
+			if err := preRequest(eng, pre, call); err == nil || !strings.Contains(err.Error(), ended) {
+				t.Errorf("next request: error = %v, want %q", err, ended)
+			}
+			if next.Variables.Len() != 0 || next.Globals.Len() != 0 {
+				t.Errorf("next request output = %v %v, want none", next.Variables.Map(), next.Globals.Map())
+			}
+
+			wantVars := map[string]string{"kept": "1", "saved": "1"}
+			if got := out.Variables.Map(); !maps.Equal(got, wantVars) {
+				t.Errorf("vars output = %v, want %v", got, wantVars)
+			}
+			wantGlobals := map[string]vars.GlobalMutation{
+				"saved":  {Name: "saved", Value: "1"},
+				"shared": {Name: "shared", Delete: true},
+			}
+			if got := out.Globals.Map(); !maps.Equal(got, wantGlobals) {
+				t.Errorf("globals output = %v, want %v", got, wantGlobals)
+			}
+		})
+	}
+}
+
+func TestKeptVarsAreReadOnlyInANestedEvaluation(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := keepRuntime(t, keepVars)
+	nested := rt
+	calls := map[string]string{"read": "keep.useGet()", "write": "keep.useSet()"}
+	rt.Scope.Resolve = func(name string) (string, bool, error) {
+		src, ok := calls[name]
+		if !ok {
+			return "", false, nil
+		}
+		v, err := eng.EvalStr(t.Context(), nested, src, testPos)
+		return v, true, err
+	}
+	var out prerequest.Output
+	rt.Mutator = NewMutator(&out, rt.Request, nil, nil, nil)
+	err := preRequest(eng, rt, `keep.hold(vars)
+vars.set("read", vars.get("read"))
+vars.get("write")`)
+	if err == nil || !strings.Contains(err.Error(), "vars is read-only") {
+		t.Fatalf("error = %v, want vars is read-only", err)
+	}
+	if got, want := out.Variables.Map(), map[string]string{"read": "abc"}; !maps.Equal(got, want) {
+		t.Fatalf("vars output = %v, want %v", got, want)
+	}
+}
+
+func TestKeptReadersStopWhenTheirEvaluationEnds(t *testing.T) {
+	eng := NewEngine(stdlib.New)
+	rt := keepRuntime(t, `module keep
+let e = null
+let m = null
+let g = null
+let l = null
+let r = null
+let tr = null
+let s = null
+let eget = null
+let ljson = null
+let rheader = null
+let rtext = null
+let tphase = null
+let sevents = null
+export fn hold(ee, ll, rr, tt, ss) {
+  e = ee
+  m = ee.meta
+  g = ee.meta.groups
+  l = ll
+  r = rr
+  tr = tt
+  s = ss
+  eget = ee.get
+  ljson = ll.json
+  rheader = rr.header
+  rtext = rr.text
+  tphase = tt.getPhase
+  sevents = ss.events
+}
+export fn holdText(tx) {
+  rtext = tx
+}
+export fn env() {
+  return e.NAME
+}
+export fn meta() {
+  return m.name
+}
+export fn groups() {
+  return g.region
+}
+export fn last() {
+  return l.status
+}
+export fn response() {
+  return r.status
+}
+export fn trace() {
+  return tr.enabled()
+}
+export fn stream() {
+  return s.enabled()
+}
+export fn envGet() {
+  return eget("NAME")
+}
+export fn lastJSON() {
+  return ljson()
+}
+export fn header() {
+  return rheader("Content-Type")
+}
+export fn text() {
+  return rtext()
+}
+export fn phase() {
+  return tphase("dns")
+}
+export fn events() {
+  return sevents()
+}
+`)
+	reads := map[string]string{
+		"env":      "env",
+		"meta":     "env.meta",
+		"groups":   "env.meta.groups",
+		"last":     "last",
+		"response": "response",
+		"trace":    "trace",
+		"stream":   "stream",
+		"envGet":   "env",
+		"lastJSON": "last",
+		"header":   "response",
+		"text":     "response",
+		"phase":    "trace",
+		"events":   "stream",
+	}
+	block := []string{"keep.hold(env, last, response, trace, stream)"}
+	for _, read := range slices.Sorted(maps.Keys(reads)) {
+		block = append(block, "keep."+read+"()")
+	}
+	got, err := RunTests(t.Context(), eng, Tests{
+		Doc:     &restfile.Document{Path: testDoc},
+		Scripts: []restfile.ScriptBlock{testBlock("", 2, block...)},
+		Runtime: rt,
+	})
+	if err != nil || !got[0].Passed {
+		t.Fatalf("same block: results = %+v, error = %v", results(got), err)
+	}
+	for read, obj := range reads {
+		ended := obj + " belongs to an evaluation that has ended"
+		for _, src := range []string{"keep." + read + "()", "try keep." + read + "()"} {
+			if _, err := eng.Eval(t.Context(), rt, src, testPos); err == nil || !strings.Contains(err.Error(), ended) {
+				t.Errorf("%s: error = %v, want %q", src, err, ended)
+			}
+		}
+	}
+
+	if _, err := eng.EvalAssertion(t.Context(), rt, "keep.holdText(text)", testPos); err != nil {
+		t.Fatalf("hold the assertion text: %v", err)
+	}
+	_, err = eng.Eval(t.Context(), rt, "keep.text()", testPos)
+	ended := "response belongs to an evaluation that has ended"
+	if err == nil || !strings.Contains(err.Error(), ended) {
+		t.Errorf("assertion text: error = %v, want %q", err, ended)
 	}
 }
 

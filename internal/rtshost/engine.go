@@ -43,7 +43,9 @@ func (e *Engine) Eval(ctx context.Context, rt Runtime, src string, pos rts.Pos) 
 	if e == nil || e.core == nil {
 		return rts.Null(), errNilEngine
 	}
-	value, err := e.core.Eval(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	ctx, st := withRuntime(ctx, rt)
+	defer st.end()
+	value, err := e.core.Eval(ctx, evalConfig(st), src, pos)
 	return value, diagnose(err)
 }
 
@@ -57,9 +59,11 @@ func (e *Engine) EvalAssertion(
 	if e == nil || e.core == nil {
 		return rts.Null(), errNilEngine
 	}
-	cfg := evalConfig(rt)
-	cfg.Overrides = assertionOverrides(rt.Response)
-	value, err := e.core.Eval(withRuntime(ctx, rt), cfg, src, pos)
+	ctx, st := withRuntime(ctx, rt)
+	defer st.end()
+	cfg := evalConfig(st)
+	cfg.Overrides = assertionOverrides(st, rt.Response)
+	value, err := e.core.Eval(ctx, cfg, src, pos)
 	return value, diagnose(err)
 }
 
@@ -69,7 +73,9 @@ func (e *Engine) EvalStr(ctx context.Context, rt Runtime, src string, pos rts.Po
 	if e == nil || e.core == nil {
 		return "", errNilEngine
 	}
-	value, err := e.core.EvalStr(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	ctx, st := withRuntime(ctx, rt)
+	defer st.end()
+	value, err := e.core.EvalStr(ctx, evalConfig(st), src, pos)
 	return value, diagnose(err)
 }
 
@@ -83,29 +89,25 @@ func (e *Engine) ExecModule(
 	if e == nil || e.core == nil {
 		return nil, errNilEngine
 	}
-	comp, err := e.core.ExecModule(withRuntime(ctx, rt), evalConfig(rt), src, pos)
+	ctx, st := withRuntime(ctx, rt)
+	defer st.end()
+	comp, err := e.core.ExecModule(ctx, evalConfig(st), src, pos)
 	return comp, diagnose(err)
 }
 
-func evalConfig(rt Runtime) rts.EvalConfig {
-	// Assign the interfaces only when Mutator is set. A nil pointer stored in an
-	// interface is non-nil and could allow a read-only write to panic.
-	var varsMut VarsMutator
-	var globalMut GlobalMutator
-	if rt.Mutator != nil {
-		varsMut, globalMut = rt.Mutator, rt.Mutator
-	}
+func evalConfig(st *evalState) rts.EvalConfig {
+	rt := st.rt
 	bindings := map[string]rts.Value{
-		"env":    rts.Obj(newEnvObj(rt.Scope)),
-		"vars":   rts.Obj(newVarsObj(rt.Scope, varsMut, globalMut)),
-		"last":   rts.Obj(newResponseObj("last", rt.Last)),
-		"trace":  rts.Obj(newTraceObj(rt.Trace)),
-		"stream": rts.Obj(newStreamObj(rt.Stream)),
+		"env":    rts.Obj(newEnvObj(st, rt.Scope)),
+		"vars":   rts.Obj(newVarsObj(st, rt.Scope)),
+		"last":   rts.Obj(newResponseObj(st, "last", rt.Last)),
+		"trace":  rts.Obj(newTraceObj(st, rt.Trace)),
+		"stream": rts.Obj(newStreamObj(st, rt.Stream)),
 	}
 	if rt.Response == nil {
-		bindings["response"] = rts.Obj(newUnboundResponseObj("response"))
+		bindings["response"] = rts.Obj(newUnboundResponseObj(st, "response"))
 	} else {
-		bindings["response"] = rts.Obj(newResponseObj("response", rt.Response))
+		bindings["response"] = rts.Obj(newResponseObj(st, "response", rt.Response))
 	}
 	cfg := rts.EvalConfig{
 		Bindings:    []rts.Extensions{rts.NewExtensions(bindings), rt.Extensions},

@@ -13,17 +13,18 @@ import (
 )
 
 func TestMembersMatchScriptAPI(t *testing.T) {
-	v := newVarsObj(Scope{}, nil, nil)
-	g := newGlobalObj(vars.NameView[string]{}, nil)
+	st := &evalState{}
+	v := newVarsObj(st, Scope{})
+	g := newGlobalObj(st, vars.NameView[string]{})
 	for _, tt := range []struct {
 		obj  *mapObj
 		defs []native.Def
 	}{
 		{v, []native.Def{
-			v.getDef(), v.hasDef(), v.requireDef(), varsSetDef(v, nil), varsInterpolateDef(v.value),
+			v.getDef(), v.hasDef(), v.requireDef(), varsSetDef(v), varsInterpolateDef(v.value),
 		}},
 		{g, []native.Def{
-			g.getDef(), g.hasDef(), g.requireDef(), globalSetDef(g, nil), globalDeleteDef(g, nil),
+			g.getDef(), g.hasDef(), g.requireDef(), globalSetDef(g), globalDeleteDef(g),
 		}},
 	} {
 		sigs := map[string]string{}
