@@ -8,7 +8,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
 type scriptFieldError struct {
@@ -18,6 +17,10 @@ type scriptFieldError struct {
 
 func (e *scriptFieldError) Error() string {
 	return e.msg
+}
+
+func fieldErr(f directive.Field, msg string) error {
+	return &scriptFieldError{msg: msg, start: f.Start, end: f.End}
 }
 
 func (b *documentBuilder) flushScriptIfNeeded(ln line) {
@@ -47,18 +50,6 @@ func (b *documentBuilder) handleScriptLine(ln line) bool {
 func (b *documentBuilder) addScriptLine(no, col int, body string) {
 	b.ensureRequest(no)
 	b.request.appendScriptLine(body, restfile.ScriptLine{Line: no, Col: col})
-}
-
-func scriptInc(body string) (string, bool) {
-	h := str.TrimLeft(body)
-	if !strings.HasPrefix(h, "<") {
-		return "", false
-	}
-	p := strings.TrimSpace(strings.TrimPrefix(h, "<"))
-	if p == "" {
-		return "", false
-	}
-	return p, true
 }
 
 func (b *documentBuilder) handleScriptBlockStart(ln line) bool {
@@ -163,18 +154,16 @@ func parseScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, err
 	case kind == "":
 		kind = restfile.ScriptKindTest
 	case !known:
-		errs = append(errs, &scriptFieldError{
-			msg:   fmt.Sprintf("@script kind %q is not supported. Use pre-request or test", head.Value),
-			start: head.Start,
-			end:   head.End,
-		})
+		errs = append(
+			errs,
+			fieldErr(head, fmt.Sprintf("@script kind %q is not supported. Use pre-request or test", head.Value)),
+		)
 	}
 	for _, f := range ignored {
-		errs = append(errs, &scriptFieldError{
-			msg:   fmt.Sprintf("@script ignores %q. Use lang=js or lang=rts to choose a language", f.Value),
-			start: f.Start,
-			end:   f.End,
-		})
+		errs = append(
+			errs,
+			fieldErr(f, fmt.Sprintf("@script ignores %q. Use lang=js or lang=rts to choose a language", f.Value)),
+		)
 	}
 
 	if key, v, ok := params.PopKey(scriptLangKeys...); ok {
@@ -225,13 +214,9 @@ func parseRTSScriptSpec(rest string) (restfile.ScriptKind, string, error) {
 		case known && !quoted:
 			return "", "", errRTSMultipleModes
 		case kind == restfile.ScriptKindPreRequest:
-			return "", "", &scriptFieldError{msg: "@rts pre-request takes no name", start: f.Start, end: f.End}
+			return "", "", fieldErr(f, "@rts pre-request takes no name. Remove it")
 		case name != "":
-			return "", "", &scriptFieldError{
-				msg:   "@rts test takes one name. Quote a name with spaces",
-				start: f.Start,
-				end:   f.End,
-			}
+			return "", "", fieldErr(f, "@rts test takes one name. Quote a name with spaces")
 		default:
 			name = f.Value
 		}
