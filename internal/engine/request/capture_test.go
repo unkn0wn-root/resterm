@@ -520,7 +520,7 @@ func TestApplyCapturesStrictModeFailsOnMissingJSONPath(t *testing.T) {
 		`request="Login"`,
 		`line=7`,
 		`expr="{{response.json.missing.token}}"`,
-		`json path "json.missing.token" failed at "json.missing"`,
+		`json path "json.missing.token" failed at "json.missing": key not found`,
 	} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("expected error to include %q, got %q", want, msg)
@@ -675,75 +675,130 @@ func TestApplyCapturesStrictModeSupportsMultiIndexJSONPath(t *testing.T) {
 	}
 }
 
-func TestApplyCapturesStrictModeFailsOnMalformedJSONPath(t *testing.T) {
-	eng := newCaptureEngine("")
-	resp := &scripts.Response{
-		Kind:   scripts.ResponseKindHTTP,
-		Status: "200 OK",
-		Code:   200,
-		Body:   []byte(`{"items":[1,2,3]}`),
-	}
-	req := &restfile.Request{
-		Metadata: restfile.RequestMetadata{
-			Captures: []restfile.CaptureSpec{{
-				Scope:      directive.ScopeRequest,
-				Name:       "v",
-				Expression: "{{response.json.items[}}",
-				Line:       9,
-			}},
-		},
-		Settings: map[string]string{
-			"capture.strict": "true",
-		},
-	}
-
-	err := eng.applyCaptures(captureRun{
-		req:  req,
-		resp: resp,
-	})
-	if err == nil {
-		t.Fatalf("expected malformed strict json path to fail")
-	}
-	if !strings.Contains(err.Error(), "missing closing bracket") {
-		t.Fatalf("expected malformed path detail in error, got %q", err.Error())
+func TestApplyCapturesFailsOnMalformedJSONPath(t *testing.T) {
+	for ex, want := range map[string]string{
+		"{{response.json.items[}}":    `invalid json path "json.items[": missing closing bracket`,
+		"{{response.json.user]name}}": `invalid json path "json.user]name": expected '.' or '[', got ']'`,
+		"{{response.json.items[*]}}":  `invalid json path "json.items[*]": invalid array index "*"`,
+	} {
+		for _, body := range []string{`{"items":[1,2,3],"user":{"name":"Ada"}}`, "", "<html>"} {
+			for _, strict := range []string{"false", "true"} {
+				resp := &scripts.Response{
+					Kind:   scripts.ResponseKindHTTP,
+					Status: "200 OK",
+					Code:   200,
+					Body:   []byte(body),
+				}
+				req := &restfile.Request{
+					Metadata: restfile.RequestMetadata{
+						Captures: []restfile.CaptureSpec{{Scope: directive.ScopeRequest, Name: "v", Expression: ex}},
+					},
+					Settings: map[string]string{"capture.strict": strict},
+				}
+				err := newCaptureEngine("").applyCaptures(captureRun{req: req, resp: resp})
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Fatalf("%s on body %q with capture.strict=%s: error = %v, want %q", ex, body, strict, err, want)
+				}
+			}
+		}
 	}
 }
 
-func TestApplyCapturesStrictModeFailsOnUnexpectedJSONPathChar(t *testing.T) {
-	eng := newCaptureEngine("")
-	resp := &scripts.Response{
-		Kind:   scripts.ResponseKindHTTP,
-		Status: "200 OK",
-		Code:   200,
-		Body:   []byte(`{"user":{"name":"Ada"}}`),
-	}
-	req := &restfile.Request{
-		Metadata: restfile.RequestMetadata{
-			Captures: []restfile.CaptureSpec{{
-				Scope:      directive.ScopeRequest,
-				Name:       "v",
-				Expression: "{{response.json.user]name}}",
-				Line:       11,
-			}},
+func TestCaptureJSONPaths(t *testing.T) {
+	const body = `{"items":[1,2,3],"m":[["a","b"]],"a.b":"dot","$":"dollar","n":null}`
+	resp := &scripts.Response{Body: []byte(body)}
+	tests := []struct {
+		path   string
+		want   string
+		strict string
+		err    string
+	}{
+		{path: "json", want: body},
+		{path: "json.items[-1]", want: "3"},
+		{path: "json .items[0]", want: "1"},
+		{path: "JSON.items[0]", want: "1"},
+		{path: "json.m[0][1]", want: "b"},
+		{path: `json["a.b"]`, want: "dot"},
+		{path: "json.$", want: "dollar"},
+		{path: "json.n", want: ""},
+		{path: "json.missing.x", strict: `json path "json.missing.x" failed at "json.missing": key not found`},
+		{path: "json.items[3]", strict: `json path "json.items[3]" failed at "json.items[3]": index 3 out of range`},
+		{path: "json[0]", strict: `json path "json[0]" failed at "json[0]": cannot index an object`},
+		{
+			path:   "json.items.x",
+			strict: `json path "json.items.x" failed at "json.items.x": cannot access object key on array`,
 		},
-		Settings: map[string]string{
-			"capture.strict": "true",
-		},
+		{path: "json.n.x", strict: `json path "json.n.x" failed at "json.n.x": cannot traverse non-container value`},
+		{path: "json.items[*]", err: `invalid json path "json.items[*]": invalid array index "*"`},
+		{path: "json.", err: `invalid json path "json.": empty path segment`},
+		{path: "json.a b", err: `invalid json path "json.a b": unquoted key "a b" has a space. Use ["a b"]`},
+		{path: "jsonitems", err: `unsupported response reference "jsonitems"`},
+		{path: "json$.items", err: `unsupported response reference "json$.items"`},
 	}
+	for _, tt := range tests {
+		for _, strict := range []bool{false, true} {
+			want := tt.err
+			if strict && tt.strict != "" {
+				want = tt.strict
+			}
+			got, err := newCaptureContext(resp, nil, strict).lookupResponse(tt.path)
+			msg := ""
+			if err != nil {
+				msg = err.Error()
+			}
+			if got != tt.want || msg != want {
+				t.Errorf("lookupResponse(%q) strict=%t = %q, %q, want %q, %q", tt.path, strict, got, msg, tt.want, want)
+			}
+		}
+	}
+}
 
-	err := eng.applyCaptures(captureRun{
-		req:  req,
-		resp: resp,
-	})
-	if err == nil {
-		t.Fatalf("expected malformed strict json path to fail")
+func TestCaptureStreamPaths(t *testing.T) {
+	st := &scripts.StreamInfo{
+		Kind:    "grpc",
+		Summary: map[string]any{"sentCount": 1},
+		Events: []map[string]any{
+			{"text": "a", "json": map[string]any{"id": 7.0, "tags": []any{"x", "y"}}},
+			{"text": "b"},
+		},
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, `json path "json.user]name"`) {
-		t.Fatalf("expected malformed path in error, got %q", msg)
+	tests := []struct {
+		path string
+		want string
+		err  string
+	}{
+		{path: "kind", want: "grpc"},
+		{path: "summary.sentCount", want: "1"},
+		{path: "events[1].text", want: "b"},
+		{path: "events[-1].text", want: "b"},
+		{path: "events[ 0 ].text", want: "a"},
+		{path: `events[0]["text"]`, want: "a"},
+		{path: "events[0].json.id", want: "7"},
+		{path: "events[0].json.tags[-1]", want: "y"},
+		{path: "events[1]", want: `{"text":"b"}`},
+		{path: "$", err: `stream path "stream.$" failed at "stream[\"$\"]": key not found`},
+		{path: "[0]", err: `stream path "stream.[0]" failed at "stream[0]": cannot index an object`},
+		{path: "Kind", err: `stream path "stream.Kind" failed at "stream.Kind": key not found`},
+		{
+			path: "events[0].Text",
+			err:  `stream path "stream.events[0].Text" failed at "stream.events[0].Text": key not found`,
+		},
+		{path: "events[2]", err: `stream path "stream.events[2]" failed at "stream.events[2]": index 2 out of range`},
+		{path: "summary.x.y", err: `stream path "stream.summary.x.y" failed at "stream.summary.x": key not found`},
+		{path: "events[x]", err: `invalid stream path "stream.events[x]": invalid array index "x"`},
+		{path: "events[0]text", err: `invalid stream path "stream.events[0]text": expected '.' or '[', got 't'`},
 	}
-	if !strings.Contains(msg, "got ']'") {
-		t.Fatalf("expected offending char detail in error, got %q", msg)
+	for _, tt := range tests {
+		for _, strict := range []bool{false, true} {
+			got, err := newCaptureContext(nil, st, strict).lookupStream(tt.path)
+			msg := ""
+			if err != nil {
+				msg = err.Error()
+			}
+			if got != tt.want || msg != tt.err {
+				t.Errorf("lookupStream(%q) strict=%t = %q, %q, want %q, %q", tt.path, strict, got, msg, tt.want, tt.err)
+			}
+		}
 	}
 }
 

@@ -27,8 +27,8 @@ Template captures such as `{{response.json.token}}` still work and can be used n
 
 - `{{response.body}}`, `{{response.status}}`, and `{{response.statusCode}}`
 - `{{response.headers.X-Request-Id}}`. A header sent more than once gives its values joined with `, `.
-- `{{response.json}}` for the whole body, or a path such as `{{response.json.items[0].id}}`. A negative index counts from the end, so `{{response.json.items[-1]}}` is the last item.
-- `{{stream.kind}}`, `{{stream.summary.eventCount}}`, and `{{stream.events[-1].text}}` for streaming transcripts
+- `{{response.json}}` for the whole body, or a path such as `{{response.json.items[0].id}}`. A negative index counts from the end, so `{{response.json.items[-1]}}` is the last item. Use `{{response.json["display.name"]}}` for a key containing a dot.
+- `{{stream.kind}}`, `{{stream.summary.eventCount}}`, and `{{stream.events[-1].text}}` for streaming transcripts. Paths follow the same syntax as `{{response.json}}`; field names are case-sensitive.
 
 `@capture` treats a value with a complete, unquoted `{{...}}` marker as interpolated text. Otherwise it parses the value as RestermScript. In text mode, surrounding characters such as `#` and unmatched brackets are literal. In script mode, `#` starts a comment.
 
@@ -38,7 +38,7 @@ An unquoted marker in a script comment switches the capture to text mode. Rester
 # @capture request x response.statusCode # mention "{{token}}"
 ```
 
-Set `# @setting capture.strict true` to make capture-path misses fail instead of silently resolving to an empty string.
+Set `# @setting capture.strict true` to make capture-path misses fail instead of silently resolving to an empty string. Invalid paths, such as `{{response.json.items[*]}}`, always fail.
 
 Do not mix unquoted template markers and RTS call syntax in the same capture expression (for example `contains({{name}}, "x")`). Use pure RTS (`contains(vars.get("name") ?? "", "x")`) or a template expression (`{{= contains(...) }}`).
 
