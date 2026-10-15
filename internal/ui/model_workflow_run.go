@@ -18,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -722,7 +723,7 @@ func (state *workflowState) summaryFor(title string) string {
 		return fmt.Sprintf("%s finished with %d failure(s)", title, failed)
 	}
 	last := state.results[lastFailure]
-	reason := strings.TrimSpace(last.Message)
+	reason := str.FoldLines(strings.TrimSpace(last.Message))
 	if reason == "" {
 		reason = "step failed"
 	}

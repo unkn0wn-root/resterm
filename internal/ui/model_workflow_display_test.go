@@ -70,3 +70,20 @@ func TestWorkflowStepDurationFallsBackToStepWallTime(t *testing.T) {
 		t.Fatalf("step duration = %s, want 7ms", out.Duration)
 	}
 }
+
+func TestWorkflowSummaryStaysOnOneLine(t *testing.T) {
+	st := &workflowState{
+		workflow: restfile.Workflow{Name: "wf"},
+		steps:    []workflowStepRuntime{{step: restfile.WorkflowStep{Name: "Orders"}}},
+		results: []workflowStepResult{{
+			Step:    restfile.WorkflowStep{Name: "Orders"},
+			Message: "api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
+		}},
+	}
+
+	got := st.summaryFor("Workflow wf")
+	want := "Workflow wf failed at step Orders: api.http:11: Order 0 has negative total api.http:11: Order 3 missing tracking"
+	if got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+}
