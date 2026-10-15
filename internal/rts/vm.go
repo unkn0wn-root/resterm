@@ -2,7 +2,6 @@ package rts
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -517,7 +516,7 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 	case *TryExpr:
 		v, err := vm.eval(env, e.X)
 		if err != nil {
-			if IsAbort(err) || errors.Is(err, ErrHalt) {
+			if IsAbort(err) {
 				return Null(), err
 			}
 			return newResult(false, Null(), err), nil

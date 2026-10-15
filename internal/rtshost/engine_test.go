@@ -637,11 +637,12 @@ func TestVarsInterpolateKeepsLookupAborts(t *testing.T) {
 	eng := NewEngine(stdlib.New)
 	rt := testRuntime(t)
 	abort := &rts.AbortError{RuntimeError: &rts.RuntimeError{Msg: "timeout exceeded"}, Kind: rts.AbortTimeout}
-	rt.Scope.Resolve = func(string) (string, bool, error) { return "", false, abort }
-
-	for _, src := range []string{`try vars.get("x")`, `try vars.interpolate("{{x}}")`} {
-		if _, err := eng.Eval(t.Context(), rt, src, testPos); !errors.Is(err, abort) {
-			t.Errorf("%s error = %v, want the lookup abort", src, err)
+	for _, stop := range []error{abort, rts.ErrHalt} {
+		rt.Scope.Resolve = func(string) (string, bool, error) { return "", false, stop }
+		for _, src := range []string{`try vars.get("x")`, `try vars.interpolate("{{x}}")`} {
+			if _, err := eng.Eval(t.Context(), rt, src, testPos); !errors.Is(err, stop) {
+				t.Errorf("%s error = %v, want %v", src, err, stop)
+			}
 		}
 	}
 }

@@ -407,6 +407,45 @@ export fn tryError() {
 	}
 }
 
+func TestRunTestsFatalStopsANestedEvaluation(t *testing.T) {
+	dir := t.TempDir()
+	writeModule(t, dir, "keep.rts", `module keep
+let saved = null
+export fn hold(t) {
+  saved = t
+}
+export fn stop() {
+  saved.fatal("stop")
+}
+`)
+	eng := NewEngine(stdlib.New)
+	rt := testRuntime(t)
+	rt.BaseDir = dir
+	rt.Uses = []rts.Use{{Path: "keep.rts"}}
+	rt.Scope.Resolve = func(name string) (string, bool, error) {
+		if name != "lazy" {
+			return "", false, nil
+		}
+		v, err := eng.EvalStr(t.Context(), rt, "keep.stop()", testPos)
+		return v, true, err
+	}
+	got, err := RunTests(t.Context(), eng, Tests{
+		Doc: &restfile.Document{Path: testDoc},
+		Scripts: []restfile.ScriptBlock{testBlock("", 2,
+			"keep.hold(t)",
+			`let r = try vars.interpolate("x {{lazy}}")`,
+			`t.error("after", r.error)`,
+		)},
+		Runtime: rt,
+	})
+	if err != nil {
+		t.Fatalf("RunTests: %v", err)
+	}
+	if want := []result{{"@rts test", false, "keep.rts:7: stop"}}; !slices.Equal(results(got), want) {
+		t.Fatalf("results = %+v, want %+v", results(got), want)
+	}
+}
+
 func TestPreRequestHasNoT(t *testing.T) {
 	run := func(body string) error {
 		return RunPreRequest(t.Context(), NewEngine(stdlib.New), PreRequest{

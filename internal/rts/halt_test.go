@@ -46,8 +46,8 @@ func TestHaltEndsEvaluation(t *testing.T) {
 			if !errors.Is(err, rts.ErrHalt) {
 				t.Fatalf("err = %v, want the halt", err)
 			}
-			if rts.IsAbort(err) {
-				t.Fatalf("halt reads as an abort: %v", err)
+			if !rts.IsAbort(err) {
+				t.Fatalf("IsAbort misses the halt: %v", err)
 			}
 			if marks != 0 {
 				t.Fatalf("%d statements ran after the halt", marks)

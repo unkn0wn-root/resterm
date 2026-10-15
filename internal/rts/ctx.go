@@ -170,10 +170,10 @@ func rtAbort(ctx *Ctx, pos Pos, kind AbortKind, format string, args ...any) erro
 // ErrHalt stops execution without a script error and cannot be caught by try.
 var ErrHalt = errors.New("halt")
 
-// try cannot catch an abort, even a wrapped one.
+// IsAbort reports errors that try must not catch, including ErrHalt.
 func IsAbort(err error) bool {
 	var abort *AbortError
-	return errors.As(err, &abort)
+	return errors.As(err, &abort) || errors.Is(err, ErrHalt)
 }
 
 // WrapErr attaches the current call stack to err unless it already has one.
