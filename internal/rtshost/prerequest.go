@@ -8,6 +8,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
+const blockSteps = 100_000
+
 type PreRequest struct {
 	Doc     *restfile.Document
 	Scripts []restfile.ScriptBlock

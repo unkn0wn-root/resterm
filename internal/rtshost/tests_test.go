@@ -375,3 +375,80 @@ func TestRunTestsStopsOnCanceledContext(t *testing.T) {
 		t.Fatalf("results = %+v, error = %v, want none and context.Canceled", got, err)
 	}
 }
+
+func stepRuntime(t *testing.T) Runtime {
+	t.Helper()
+	dir := t.TempDir()
+	writeModule(t, dir, "work.rts", `module work
+export fn spin(n) {
+  for let i = 0; i < n; i = i + 1 {
+  }
+}
+`)
+	rt := testRuntime(t)
+	rt.BaseDir = dir
+	rt.Uses = []rts.Use{{Path: "work.rts"}}
+	return rt
+}
+
+func TestBlocksGetBlockStepLimit(t *testing.T) {
+	rt := stepRuntime(t)
+	const fits, over = "work.spin(6250)", "work.spin(18750)"
+
+	pre := func(body string) error {
+		return RunPreRequest(t.Context(), NewEngine(stdlib.New), PreRequest{
+			Scripts: []restfile.ScriptBlock{
+				{Kind: restfile.ScriptKindPreRequest, Lang: restfile.ScriptLangRTS, Body: body},
+			},
+			Runtime: func() (Runtime, error) { return rt, nil },
+		})
+	}
+	if err := pre(fits); err != nil {
+		t.Fatalf("pre-request block of 50,000 steps: %v", err)
+	}
+	if err := pre(over); err == nil || !strings.Contains(err.Error(), "step limit exceeded") {
+		t.Fatalf("pre-request block of 150,000 steps: error = %v, want the step limit", err)
+	}
+
+	got, err := runTests(t, rt,
+		testBlock("fits", 2, fits),
+		testBlock("over", 3, over),
+		testBlock("next", 4, `t.error("ran")`),
+	)
+	want := []result{{"fits", true, ""}, {"over", false, ""}, {"next", false, "api.http:4: ran"}}
+	if !slices.Equal(results(got), want) {
+		t.Fatalf("results = %+v, want %+v", results(got), want)
+	}
+	if err == nil || !strings.Contains(err.Error(), "step limit exceeded") {
+		t.Fatalf("error = %v, want the step limit", err)
+	}
+}
+
+func TestExpressionsKeepEngineStepLimit(t *testing.T) {
+	rt := stepRuntime(t)
+	eng := NewEngine(stdlib.New)
+	const spin = "work.spin(2500)"
+	if _, err := eng.EvalAssertion(t.Context(), rt, spin+" == null", testPos); err == nil ||
+		!strings.Contains(err.Error(), "step limit exceeded") {
+		t.Fatalf("assertion of 20,000 steps: error = %v, want the step limit", err)
+	}
+	if _, err := eng.EvalStr(t.Context(), rt, spin, testPos); err == nil ||
+		!strings.Contains(err.Error(), "step limit exceeded") {
+		t.Fatalf("template of 20,000 steps: error = %v, want the step limit", err)
+	}
+}
+
+func TestModuleLoadKeepsEngineStepLimit(t *testing.T) {
+	dir := t.TempDir()
+	writeModule(t, dir, "heavy.rts", "module heavy\nfor let i = 0; i < 6250; i = i + 1 {\n}\n")
+	rt := testRuntime(t)
+	rt.BaseDir = dir
+	rt.Uses = []rts.Use{{Path: "heavy.rts"}}
+	got, err := runTests(t, rt, testBlock("", 2, "let x = 1"))
+	if want := []result{{"@rts test", false, ""}}; !slices.Equal(results(got), want) {
+		t.Fatalf("results = %+v, want %+v", results(got), want)
+	}
+	if err == nil || !strings.Contains(err.Error(), "step limit exceeded") {
+		t.Fatalf("error = %v, want the step limit", err)
+	}
+}

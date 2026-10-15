@@ -67,3 +67,15 @@ func TestEngEvaluatesInParallel(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestEngMaxStepsReplacesTheLimit(t *testing.T) {
+	e := rts.NewEng(stdlib.New)
+	e.Lim.MaxSteps = 100
+	loop := "for let i = 0; i < 50; i = i + 1 {\n}"
+	if _, err := e.ExecModule(t.Context(), rts.EvalConfig{}, loop, rts.Pos{}); err == nil {
+		t.Fatal("engine limit: want the step limit")
+	}
+	if _, err := e.ExecModule(t.Context(), rts.EvalConfig{MaxSteps: 1000}, loop, rts.Pos{}); err != nil {
+		t.Fatalf("MaxSteps 1000: %v", err)
+	}
+}

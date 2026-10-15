@@ -58,6 +58,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 				rt.Site = site
 				cfg := evalConfig(rt)
 				cfg.Overrides = rts.Local("t", rts.Obj(t))
+				cfg.MaxSteps = blockSteps
 				_, err = eng.core.ExecModule(withRuntime(ctx, rt), cfg, src.Text, src.Pos)
 			}
 			if errors.Is(err, rts.ErrHalt) {

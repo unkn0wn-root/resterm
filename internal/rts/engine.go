@@ -43,6 +43,7 @@ type EvalConfig struct {
 	ReadFile    func(string) ([]byte, error)
 	AllowRandom bool
 	Site        string
+	MaxSteps    int
 }
 
 // EngOption configures an evaluator.
@@ -151,6 +152,10 @@ func (e *Eng) prepare(ctx context.Context, cfg EvalConfig, pos Pos) (*Ctx, map[s
 	e.ensure()
 	cx := e.newCtx(ctx, cfg)
 	pre, err := e.buildPre(cx, cfg, pos)
+	// Keep module loading on the engine budget; its results are cached.
+	if cfg.MaxSteps > 0 {
+		cx.Lim.MaxSteps = cfg.MaxSteps
+	}
 	return cx, pre, err
 }
 
