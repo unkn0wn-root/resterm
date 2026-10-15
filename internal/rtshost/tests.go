@@ -29,7 +29,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 	)
 	nth := 0
 	for _, block := range in.Scripts {
-		if !restfile.IsTestScript(block, restfile.ScriptLangRTS) {
+		if !block.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS) {
 			continue
 		}
 		if err := ctx.Err(); err != nil {

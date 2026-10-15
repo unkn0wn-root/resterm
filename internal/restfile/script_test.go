@@ -20,11 +20,11 @@ func TestScriptBlockKindAndLang(t *testing.T) {
 		{ScriptBlock{Lang: ScriptLangJS}, ScriptLangJS, false, false},
 	}
 	for _, tt := range tests {
-		if got := IsPreRequestScript(tt.block, tt.lang); got != tt.pre {
-			t.Errorf("IsPreRequestScript(%+v, %q) = %t", tt.block, tt.lang, got)
+		if got := tt.block.Is(ScriptKindPreRequest, tt.lang); got != tt.pre {
+			t.Errorf("%+v.Is(pre-request, %q) = %t", tt.block, tt.lang, got)
 		}
-		if got := IsTestScript(tt.block, tt.lang); got != tt.test {
-			t.Errorf("IsTestScript(%+v, %q) = %t", tt.block, tt.lang, got)
+		if got := tt.block.Is(ScriptKindTest, tt.lang); got != tt.test {
+			t.Errorf("%+v.Is(test, %q) = %t", tt.block, tt.lang, got)
 		}
 	}
 }

@@ -13,14 +13,6 @@ const (
 	ScriptLangRTS ScriptLang = "rts"
 )
 
-func IsPreRequestScript(block ScriptBlock, lang ScriptLang) bool {
-	return block.Kind == ScriptKindPreRequest && block.hasLang(lang)
-}
-
-func IsTestScript(block ScriptBlock, lang ScriptLang) bool {
-	return block.Kind == ScriptKindTest && block.hasLang(lang)
-}
-
-func (b ScriptBlock) hasLang(lang ScriptLang) bool {
-	return b.Lang == lang || b.Lang == "" && lang == ScriptLangJS
+func (b ScriptBlock) Is(kind ScriptKind, lang ScriptLang) bool {
+	return b.Kind == kind && (b.Lang == lang || b.Lang == "" && lang == ScriptLangJS)
 }

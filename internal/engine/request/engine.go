@@ -369,10 +369,10 @@ func detectPreRequestScripts(req *restfile.Request) (bool, bool) {
 	}
 	var hasRTS, hasJS bool
 	for _, blk := range req.Metadata.Scripts {
-		if restfile.IsPreRequestScript(blk, restfile.ScriptLangRTS) {
+		if blk.Is(restfile.ScriptKindPreRequest, restfile.ScriptLangRTS) {
 			hasRTS = true
 		}
-		if restfile.IsPreRequestScript(blk, restfile.ScriptLangJS) {
+		if blk.Is(restfile.ScriptKindPreRequest, restfile.ScriptLangJS) {
 			hasJS = true
 		}
 	}
@@ -1247,7 +1247,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 	var out []scriptapi.TestResult
 	errs := []error{in.rrErr}
 	blocks := slices.ContainsFunc(x.req.Metadata.Scripts, func(b restfile.ScriptBlock) bool {
-		return restfile.IsTestScript(b, restfile.ScriptLangRTS)
+		return b.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS)
 	})
 	if in.rrErr == nil && (len(x.req.Metadata.Asserts) > 0 || blocks) {
 		rt, err := x.eng.buildRT(rtIn{

@@ -664,7 +664,7 @@ func TestParseRTSTestBlocks(t *testing.T) {
 			t.Fatalf("%s: got %d script blocks, want 1", tt.dir, len(scripts))
 		}
 		got := scripts[0]
-		if !restfile.IsTestScript(got, restfile.ScriptLangRTS) || got.Name != tt.name || got.Body != "t.error(1)" {
+		if !got.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS) || got.Name != tt.name || got.Body != "t.error(1)" {
 			t.Fatalf("%s: got %q %q name %q body %q", tt.dir, got.Kind, got.Lang, got.Name, got.Body)
 		}
 	}
@@ -724,7 +724,7 @@ func TestParseRTSTestSplitByAnotherLine(t *testing.T) {
 		}
 		var got []string
 		for _, s := range doc.Requests[0].Metadata.Scripts {
-			if !restfile.IsTestScript(s, restfile.ScriptLangRTS) || s.Name != "orders" {
+			if !s.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS) || s.Name != "orders" {
 				t.Fatalf("gap %q: block %+v, want an rts test named orders", gap, s)
 			}
 			got = append(got, s.Body)

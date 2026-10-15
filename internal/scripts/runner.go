@@ -73,7 +73,7 @@ func (r *Runner) RunPreRequest(
 			return result, err
 		}
 
-		if !restfile.IsPreRequestScript(block, restfile.ScriptLangJS) {
+		if !block.Is(restfile.ScriptKindPreRequest, restfile.ScriptLangJS) {
 			continue
 		}
 
@@ -111,7 +111,7 @@ func (r *Runner) RunTests(
 		if err := ctx.Err(); err != nil {
 			return aggregated, changes, err
 		}
-		if !restfile.IsTestScript(block, restfile.ScriptLangJS) {
+		if !block.Is(restfile.ScriptKindTest, restfile.ScriptLangJS) {
 			continue
 		}
 
