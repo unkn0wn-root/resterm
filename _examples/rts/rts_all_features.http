@@ -78,13 +78,17 @@ X-Remove-Me: true
 # @use ./validators.rts as validators
 # @assert response.statusCode == 200
 # @rts test "orders are valid"
-> let orders = response.json("json.orders")
-> if typeof(orders) != "list" {
->   t.fatal("response has no orders list")
-> }
-> for let _, msg range validators.orders(orders) {
->   t.error(msg)
-> }
+> {%
+# one message for each bad order
+let orders = response.json("json.orders")
+if typeof(orders) != "list" {
+  t.fatal("response has no orders list")
+}
+
+for let _, msg range validators.orders(orders) {
+  t.error(msg)
+}
+%}
 # @rts test customer
 > let want = {id: 7, name: "Ada", tier: "gold"}
 > for let _, d range json.diff(response.json("json.customer"), want) {
