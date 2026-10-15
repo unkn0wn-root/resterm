@@ -18,9 +18,8 @@ import (
 type Tests struct {
 	Doc     *restfile.Document
 	Scripts []restfile.ScriptBlock
-	BaseDir string
-	// Runtime must return a read-only runtime (Mutator == nil).
-	Runtime func() (Runtime, error)
+	// Leave Mutator nil so tests cannot change request state.
+	Runtime Runtime
 }
 
 func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResult, error) {
@@ -46,21 +45,19 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 		}
 		start := time.Now()
 		t := newTestObj()
-		src, err := loadSource(in.Doc, block, in.BaseDir)
+		src, err := loadSource(in.Doc, block, in.Runtime.BaseDir)
 		switch {
 		case err != nil:
 			err = diag.WrapAsf(diag.ClassScript, err, "rts test script %d", nth)
 		case strings.TrimSpace(src.Text) == "":
 			continue
 		default:
-			var rt Runtime
-			if rt, err = in.Runtime(); err == nil {
-				rt.Site = site
-				cfg := evalConfig(rt)
-				cfg.Overrides = rts.Local("t", rts.Obj(t))
-				cfg.MaxSteps = blockSteps
-				_, err = eng.core.ExecModule(withRuntime(ctx, rt), cfg, src.Text, src.Pos)
-			}
+			rt := in.Runtime
+			rt.Site = site
+			cfg := evalConfig(rt)
+			cfg.Overrides = rts.Local("t", rts.Obj(t))
+			cfg.MaxSteps = blockSteps
+			_, err = eng.core.ExecModule(withRuntime(ctx, rt), cfg, src.Text, src.Pos)
 			if errors.Is(err, rts.ErrHalt) {
 				err = nil
 			}

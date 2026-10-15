@@ -1293,8 +1293,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 			tests, err := rtshost.RunTests(ctx, x.eng.re, rtshost.Tests{
 				Doc:     x.doc,
 				Scripts: x.req.Metadata.Scripts,
-				BaseDir: rt.BaseDir,
-				Runtime: func() (rtshost.Runtime, error) { return rt, nil },
+				Runtime: rt,
 			})
 			out = append(out, tests...)
 			errs = append(errs, err)

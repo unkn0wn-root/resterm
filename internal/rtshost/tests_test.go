@@ -37,8 +37,7 @@ func runTests(t *testing.T, rt Runtime, blocks ...restfile.ScriptBlock) ([]scrip
 	return RunTests(t.Context(), NewEngine(stdlib.New), Tests{
 		Doc:     &restfile.Document{Path: testDoc},
 		Scripts: blocks,
-		BaseDir: rt.BaseDir,
-		Runtime: func() (Runtime, error) { return rt, nil },
+		Runtime: rt,
 	})
 }
 
@@ -221,11 +220,11 @@ func TestRunTestsErrorEndsOnlyItsBlock(t *testing.T) {
 		testBlock("last", 10, `t.error("ran")`),
 	}
 	rt := testRuntime(t)
+	rt.BaseDir = t.TempDir()
 	got, err := RunTests(t.Context(), NewEngine(stdlib.New), Tests{
 		Doc:     doc,
 		Scripts: blocks,
-		BaseDir: t.TempDir(),
-		Runtime: func() (Runtime, error) { return rt, nil },
+		Runtime: rt,
 	})
 	want := []result{
 		{"broken", false, "api.http:2: first"},
@@ -328,8 +327,7 @@ export fn tryError() {
 					testBlock("", 2, "keep.hold(t)"),
 					testBlock("", 3, "keep."+use+"()", `t.error("ran")`),
 				},
-				BaseDir: dir,
-				Runtime: func() (Runtime, error) { return rt, nil },
+				Runtime: rt,
 			})
 			if err == nil || !strings.Contains(err.Error(), ended) {
 				t.Fatalf("error = %v, want the ended block", err)
@@ -375,10 +373,7 @@ func TestRunTestsStopsOnCanceledContext(t *testing.T) {
 	cancel()
 	got, err := RunTests(ctx, NewEngine(stdlib.New), Tests{
 		Scripts: []restfile.ScriptBlock{testBlock("", 2, "let x = 1")},
-		Runtime: func() (Runtime, error) {
-			t.Fatal("ran a block after cancel")
-			return Runtime{}, nil
-		},
+		Runtime: testRuntime(t),
 	})
 	if !errors.Is(err, context.Canceled) || len(got) != 0 {
 		t.Fatalf("results = %+v, error = %v, want none and context.Canceled", got, err)
