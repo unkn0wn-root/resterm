@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -177,6 +178,13 @@ func (f *argFields) add(d parsedDirective, start, end int) {
 // Fall back to the directive name unless every option key maps to source text;
 // custom grammars may report normalized names that do not appear in the source.
 func (d parsedDirective) locate(cause error) (diag.Span, []diag.Label) {
+	var script *scriptFieldError
+	if errors.As(cause, &script) {
+		if span, ok := d.argumentSpan(script.start, script.end); ok {
+			return span, nil
+		}
+		return d.nameSpan, nil
+	}
 	keys := directive.OptionKeys(cause)
 	if len(keys) == 0 {
 		return d.nameSpan, nil

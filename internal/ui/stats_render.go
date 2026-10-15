@@ -68,7 +68,7 @@ func colorizeWorkflowStats(report string) string {
 			continue
 		}
 
-		if strings.HasPrefix(line, "    ") {
+		if strings.HasPrefix(line, workflowReportIndent) {
 			out = append(out, prefix+statsMessageStyle.Render(trimmed))
 			continue
 		}

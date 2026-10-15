@@ -16,7 +16,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/internal/wrap"
@@ -57,7 +57,7 @@ func stripANSIEscape(s string) string {
 var ansiSequenceRegex = bodyfmt.ANSISequenceRegex
 
 func (r responseRenderer) formatTestSummary(
-	results []scripts.TestResult,
+	results []scriptapi.TestResult,
 	scriptErr error,
 ) string {
 	if len(results) == 0 && scriptErr == nil {
@@ -85,9 +85,16 @@ func (r responseRenderer) formatTestSummary(
 			line.WriteString(" ")
 			line.WriteString(r.stats.Value.Render(termtext.Row(result.Name)))
 		}
-		if strings.TrimSpace(result.Message) != "" {
+		if msg := strings.TrimSpace(result.Message); msg != "" {
 			line.WriteString(" - ")
-			line.WriteString(r.stats.Message.Render(termtext.Block(result.Message)))
+			// Render each line separately to avoid lipgloss padding the whole block.
+			pad := "\n" + strings.Repeat(" ", lipgloss.Width(line.String()))
+			for i, l := range strings.Split(termtext.Block(msg), "\n") {
+				if i > 0 {
+					line.WriteString(pad)
+				}
+				line.WriteString(r.stats.Message.Render(l))
+			}
 		}
 		if result.Elapsed > 0 {
 			dur := result.Elapsed.Truncate(time.Millisecond)
@@ -101,7 +108,7 @@ func (r responseRenderer) formatTestSummary(
 
 func (r responseRenderer) buildRespSum(
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 ) string {
 	return r.buildRespSummary(resp, tests, scriptErr, false)
@@ -109,7 +116,7 @@ func (r responseRenderer) buildRespSum(
 
 func (r responseRenderer) buildRespSumPretty(
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 ) string {
 	return r.buildRespSummary(resp, tests, scriptErr, true)
@@ -117,7 +124,7 @@ func (r responseRenderer) buildRespSumPretty(
 
 func (r responseRenderer) buildRespSummary(
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 	prettyLength bool,
 ) string {

@@ -15,7 +15,7 @@ import (
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 type profileRun struct {
@@ -268,7 +268,7 @@ func TestProfileRunKeepsLastTestResults(t *testing.T) {
 	r.start(0)
 	r.done(0, engine.RequestResult{
 		Response: testHTTPResp("https://example.com/profile", 200, `{"ok":true}`, 10*time.Millisecond),
-		Tests:    []scripts.TestResult{{Name: "ok", Passed: true}, {Name: "slow", Passed: false}},
+		Tests:    []scriptapi.TestResult{{Name: "ok", Passed: true}, {Name: "slow", Passed: false}},
 	})
 	r.finish(core.RunDone{})
 

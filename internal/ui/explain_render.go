@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -235,7 +236,7 @@ func renderExplainField(
 	valueStyle lipgloss.Style,
 ) string {
 	label := strings.TrimSpace(f.Label)
-	val := strings.TrimSpace(f.Value)
+	val := termtext.Row(strings.TrimSpace(f.Value))
 	if label == "" || val == "" {
 		return ""
 	}
@@ -261,7 +262,7 @@ func renderExplainField(
 }
 
 func renderExplainWrapped(text string, width int, st lipgloss.Style, prefix string) string {
-	text = strings.TrimSpace(text)
+	text = termtext.Block(strings.TrimSpace(text))
 	if text == "" {
 		return ""
 	}

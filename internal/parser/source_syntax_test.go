@@ -321,7 +321,7 @@ func TestSourceSyntaxScriptLines(t *testing.T) {
 		source  []string
 		line    int
 		kind    SourceLineKind
-		lang    string
+		lang    restfile.ScriptLang
 		content string
 	}{
 		{
@@ -355,9 +355,16 @@ func TestSourceSyntaxScriptLines(t *testing.T) {
 		},
 		{
 			name:   "rejected rts drops the line",
-			source: []string{"# @rts test", "> a"},
+			source: []string{"# @rts response", "> a"},
 			line:   1,
 			kind:   SourceLineScript,
+		},
+		{
+			name:   "rts test block",
+			source: []string{`# @rts test "orders are valid"`, "> a"},
+			line:   1,
+			kind:   SourceLineScript,
+			lang:   "rts",
 		},
 		{
 			name:   "new request starts with javascript",
@@ -402,6 +409,21 @@ func TestSourceSyntaxScriptLines(t *testing.T) {
 			content: "// JavaScript comment",
 		},
 		{
+			name:    "block on one line",
+			source:  []string{"# @rts test", `> {% t.error("x") %}`},
+			line:    1,
+			kind:    SourceLineScript,
+			lang:    "rts",
+			content: `t.error("x")`,
+		},
+		{
+			name:    "text after a one-line block",
+			source:  []string{"> {% x %} // y"},
+			kind:    SourceLineScript,
+			lang:    "js",
+			content: "{% x %} // y",
+		},
+		{
 			name:   "block markers",
 			source: []string{"> {%", "x", "> %}"},
 			line:   2,
@@ -440,10 +462,25 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 		"# @script pre-request rts",
 		"# @script rts",
 		"# @script pre-request lang=python",
+		"# @script tests lang=JavaScript",
+		"# @script test lang=rts",
+		"# @script Pre-Request language=restermlang",
+		"# @script pre-request lang=",
+		"# @script test python",
+		"# @script test js",
 		"# @script pre-request bogus=1",
+		"# @script test lang = rts",
+		"# @script test lang = python",
 		"# @rts pre-request",
 		"# @rts",
 		"# @rts test",
+		"# @rts test checkout",
+		"# @rts test \"orders are valid\"",
+		"# @rts test \"orders are valid",
+		"# @rts test a b",
+		"# @rts pre-request setup",
+		"# @rts test x lang = rts",
+		"# @rts test checkout\n# @script",
 		"# @rts pre-request lang=js",
 		"# @rts pre-request\n# @script",
 		"# @rts pre-request\n# @rts bogus",
@@ -457,17 +494,21 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 		"> <",
 		"> {%\na\n> b\n> < x.js\n> %}",
 		"  >   a",
+		"> {% a %}\n> {%b%}\n>   {% %}\n> {%%}",
+		"> {% a %} b\n> {%}\n> {% a\n>   b %}",
+		"> {%\n> {% a %}\n{% b %}\n> %}",
 	}
 
 	for _, prefix := range prefixes {
 		for _, body := range bodies {
 			source := strings.TrimPrefix(prefix+"\n"+body+"\nGET https://example.test", "\n")
 			want := make(map[int]restfile.ScriptLine)
-			langs := make(map[int]string)
+			langs := make(map[int]restfile.ScriptLang)
+			kinds := make(map[int]restfile.ScriptKind)
 			for _, req := range Parse("agree.http", []byte(source)).Requests {
 				for _, block := range req.Metadata.Scripts {
 					for _, l := range block.Lines {
-						want[l.Line], langs[l.Line] = l, block.Lang
+						want[l.Line], langs[l.Line], kinds[l.Line] = l, block.Lang, block.Kind
 					}
 				}
 			}
@@ -481,8 +522,9 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 					}
 					continue
 				}
-				if !ok || got.ScriptLang != langs[no+1] {
-					t.Errorf("%q line %d lang = %q, parser has %q", source, no+1, got.ScriptLang, langs[no+1])
+				if !ok || got.ScriptLang != langs[no+1] || got.ScriptKind != kinds[no+1] {
+					t.Errorf("%q line %d = %q %q, parser has %q %q",
+						source, no+1, got.ScriptKind, got.ScriptLang, kinds[no+1], langs[no+1])
 					continue
 				}
 				if start := utf8.RuneCountInString(lines[no][:l.Col-1]); got.ContentStart != start {

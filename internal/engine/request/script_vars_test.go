@@ -24,6 +24,10 @@ func jsPre(body string) restfile.ScriptBlock {
 	return restfile.ScriptBlock{Kind: "pre-request", Lang: "js", Body: body}
 }
 
+func jsTest(body string) restfile.ScriptBlock {
+	return restfile.ScriptBlock{Kind: "test", Lang: "js", Body: body}
+}
+
 func envWith(t *testing.T, name string, values map[string]string) vars.Environment {
 	t.Helper()
 

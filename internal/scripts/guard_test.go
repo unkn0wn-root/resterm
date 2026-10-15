@@ -11,7 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func endlessScript(kind string) []restfile.ScriptBlock {
+func endlessScript(kind restfile.ScriptKind) []restfile.ScriptBlock {
 	return []restfile.ScriptBlock{{Kind: kind, Lang: "js", Body: "while (true) {}"}}
 }
 

@@ -16,7 +16,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func TestBuildAndRunPlanMatchRunContext(t *testing.T) {
@@ -326,11 +326,11 @@ func parityGRPCResponse(src *grpcx.Response) *grpcx.Response {
 	return &out
 }
 
-func parityRunnerTests(src []scripts.TestResult) []scripts.TestResult {
+func parityRunnerTests(src []scriptapi.TestResult) []scriptapi.TestResult {
 	if len(src) == 0 {
 		return nil
 	}
-	out := append([]scripts.TestResult(nil), src...)
+	out := append([]scriptapi.TestResult(nil), src...)
 	for i := range out {
 		out[i].Elapsed = 0
 	}

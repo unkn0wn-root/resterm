@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/dop251/goja"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -52,13 +52,6 @@ type TestInput struct {
 	Secrets   *vars.Secrets
 }
 
-type TestResult struct {
-	Name    string
-	Message string
-	Passed  bool
-	Elapsed time.Duration
-}
-
 func (r *Runner) RunPreRequest(
 	scripts []restfile.ScriptBlock,
 	input prerequest.Input,
@@ -80,7 +73,7 @@ func (r *Runner) RunPreRequest(
 			return result, err
 		}
 
-		if !restfile.IsPreRequestScript(block, restfile.ScriptLangJS) {
+		if !block.Is(restfile.ScriptKindPreRequest, restfile.ScriptLangJS) {
 			continue
 		}
 
@@ -88,7 +81,7 @@ func (r *Runner) RunPreRequest(
 		if err != nil {
 			return result, diag.WrapAsf(diag.ClassScript, err, "pre-request script %d", idx+1)
 		}
-		if src.text == "" {
+		if strings.TrimSpace(src.text) == "" {
 			continue
 		}
 
@@ -106,22 +99,19 @@ func (r *Runner) RunTests(
 	ctx context.Context,
 	scripts []restfile.ScriptBlock,
 	input TestInput,
-) ([]TestResult, vars.Globals, error) {
+) ([]scriptapi.TestResult, vars.Globals, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	var aggregated []TestResult
+	var aggregated []scriptapi.TestResult
 	var changes vars.Globals
 
 	for idx, block := range scripts {
 		if err := ctx.Err(); err != nil {
 			return aggregated, changes, err
 		}
-		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
-			continue
-		}
-		if restfile.NormalizeScriptLang(block.Lang) != restfile.ScriptLangJS {
+		if !block.Is(restfile.ScriptKindTest, restfile.ScriptLangJS) {
 			continue
 		}
 
@@ -129,7 +119,7 @@ func (r *Runner) RunTests(
 		if err != nil {
 			return aggregated, changes, diag.WrapAsf(diag.ClassScript, err, "test script %d", idx+1)
 		}
-		if src.text == "" {
+		if strings.TrimSpace(src.text) == "" {
 			continue
 		}
 
@@ -181,7 +171,7 @@ func (r *Runner) executeTestScript(
 	ctx context.Context,
 	src source,
 	input TestInput,
-) ([]TestResult, vars.Globals, error) {
+) ([]scriptapi.TestResult, vars.Globals, error) {
 	vm := goja.New()
 	stopGuard := guardVM(ctx, vm, r.scriptTimeout())
 	defer stopGuard()
@@ -248,38 +238,19 @@ func bindCommon(vm *goja.Runtime) error {
 	return vm.Set("console", console)
 }
 
-// normalizeScript returns the script text and the lines and first-line bytes it removed.
-func normalizeScript(body string) (string, int, int) {
-	script := strings.TrimSpace(body)
-	off := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
-	if strings.HasPrefix(script, "{%") && strings.HasSuffix(script, "%}") {
-		inner := script[2 : len(script)-2]
-		script = strings.TrimSpace(inner)
-		off += 2 + len(inner) - len(strings.TrimLeftFunc(inner, unicode.IsSpace))
-	}
-	cut := body[:off]
-	return script, strings.Count(cut, "\n"), len(cut) - strings.LastIndexByte(cut, '\n') - 1
-}
-
 type source struct {
-	text    string
-	path    string
-	skip    int
-	skipCol int
-	lines   []restfile.ScriptLine
-	file    bool
+	text  string
+	path  string
+	lines []restfile.ScriptLine
+	file  bool
 }
 
 func (s source) pos(line, col int) diag.Pos {
-	if line == 1 {
-		col += s.skipCol
-	}
-	i := s.skip + line - 1
 	switch {
 	case s.file:
-		return diag.Pos{Path: s.path, Line: i + 1, Col: col}
-	case i < len(s.lines):
-		l := s.lines[i]
+		return diag.Pos{Path: s.path, Line: line, Col: col}
+	case line <= len(s.lines):
+		l := s.lines[line-1]
 		return diag.Pos{Path: s.path, Line: l.Line, Col: l.Col + col - 1}
 	}
 	return diag.Pos{}
@@ -318,8 +289,7 @@ func jsMessage(exc *goja.Exception) string {
 
 func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (source, error) {
 	if block.FilePath == "" {
-		text, skip, skipCol := normalizeScript(block.Body)
-		return source{text: text, path: block.SourcePath, skip: skip, skipCol: skipCol, lines: block.Lines}, nil
+		return source{text: block.Body, path: block.SourcePath, lines: block.Lines}, nil
 	}
 
 	path := block.FilePath
@@ -331,8 +301,7 @@ func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (source,
 	if err != nil {
 		return source{}, diag.WrapAsf(diag.ClassFilesystem, err, "read script file %s", path)
 	}
-	text, skip, skipCol := normalizeScript(string(data))
-	return source{text: text, path: path, skip: skip, skipCol: skipCol, file: true}, nil
+	return source{text: string(data), path: path, file: true}, nil
 }
 
 // jsVarsAPI builds the vars object shared by pre-request and test scripts.
@@ -559,7 +528,7 @@ type testAPI struct {
 	globals   vars.Globals
 	changes   vars.Globals
 	secrets   *vars.Secrets
-	cases     []TestResult
+	cases     []scriptapi.TestResult
 	stream    *StreamInfo
 	trace     *traceBinding
 	vm        *goja.Runtime
@@ -916,7 +885,7 @@ func (api *testAPI) assert(condition bool, message string) {
 		name = "assert"
 	}
 
-	result := TestResult{
+	result := scriptapi.TestResult{
 		Name:   name,
 		Passed: condition,
 	}
@@ -932,7 +901,7 @@ func (api *testAPI) fail(message string) {
 		message = "fail"
 	}
 
-	api.cases = append(api.cases, TestResult{
+	api.cases = append(api.cases, scriptapi.TestResult{
 		Name:    message,
 		Message: message,
 		Passed:  false,
@@ -949,7 +918,7 @@ func (api *testAPI) namedTest(name string, callable goja.Callable) {
 			passed = false
 			message = fmt.Sprintf("panic: %v", r)
 		}
-		api.cases = append(api.cases, TestResult{
+		api.cases = append(api.cases, scriptapi.TestResult{
 			Name:    name,
 			Message: message,
 			Passed:  passed,
@@ -973,6 +942,6 @@ func (api *testAPI) namedTest(name string, callable goja.Callable) {
 	}
 }
 
-func (api *testAPI) results() []TestResult {
-	return append([]TestResult(nil), api.cases...)
+func (api *testAPI) results() []scriptapi.TestResult {
+	return append([]scriptapi.TestResult(nil), api.cases...)
 }

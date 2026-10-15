@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -266,7 +267,7 @@ func workflowSummary(st *wfState) string {
 		return fmt.Sprintf("%s finished with %d failure(s)", title, fail)
 	}
 	last := st.res[lastFail]
-	reason := strings.TrimSpace(last.msg)
+	reason := str.FoldLines(strings.TrimSpace(last.msg))
 	if reason == "" {
 		reason = "step failed"
 	}
@@ -296,7 +297,7 @@ func workflowReport(st *wfState) string {
 		b.WriteString(workflowLine(i, res))
 		b.WriteString("\n")
 		if msg := strings.TrimSpace(res.msg); msg != "" {
-			fmt.Fprintf(&b, "    %s\n", msg)
+			fmt.Fprintf(&b, "    %s\n", strings.ReplaceAll(msg, "\n", "\n    "))
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")

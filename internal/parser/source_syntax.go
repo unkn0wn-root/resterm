@@ -47,12 +47,12 @@ func (k SourceLineKind) String() string {
 // Offsets are rune positions in the source line. OptionValueEnd is zero unless
 // the line starts inside an option value.
 type SourceLine struct {
-	Kind       SourceLineKind
-	Directive  directive.Name
-	Args       directive.ArgKind
-	ScriptArgs bool
-	// ScriptLang is "js" or "rts" for script lines, or empty if @rts was invalid.
-	ScriptLang     string
+	Kind           SourceLineKind
+	Directive      directive.Name
+	Args           directive.ArgKind
+	ScriptArgs     bool
+	ScriptKind     restfile.ScriptKind
+	ScriptLang     restfile.ScriptLang
 	ContentStart   int
 	ContentEnd     int
 	OptionValueEnd int
@@ -199,6 +199,9 @@ func (s *sourceScan) classify(ln line) SourceLine {
 		if _, include := scriptInc(body); include {
 			return SourceLine{}
 		}
+		if code, off, ok := cutInlineBlock(body); ok {
+			body, col = code, col+off
+		}
 		return s.scriptLine(ln, body, col)
 	}
 
@@ -275,7 +278,8 @@ func (s *sourceScan) scriptLine(ln line, body string, col int) SourceLine {
 		ContentEnd:   start + utf8.RuneCountInString(body),
 	}
 	if !s.request.script.discard {
-		syntax.ScriptLang = s.request.script.lang.String()
+		syntax.ScriptKind = s.request.script.kind
+		syntax.ScriptLang = s.request.script.lang
 	}
 	return syntax
 }

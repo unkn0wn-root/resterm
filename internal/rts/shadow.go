@@ -16,7 +16,7 @@ import (
 //	Extensions                          added, must not collide with the base
 //	@use aliases                        added, must not collide with either
 //	Locals                              shadow everything before them
-//	assertion shorthands                shadow locals, inside an assertion only
+//	assertion shorthands and test t     shadow locals in assertions and tests
 //
 // Extensions sit on the additive side of that rule, so a name the base runtime
 // already binds is a host bug rather than a shadow.

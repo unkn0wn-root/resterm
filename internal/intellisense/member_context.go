@@ -10,7 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
-func analyzeMember(prior string, cur []rune, from, col int, lang string, writes bool) (Context, bool) {
+func analyzeMember(prior string, cur []rune, from, col int, lang restfile.ScriptLang, writes bool) (Context, bool) {
 	if from > col {
 		return Context{}, false
 	}

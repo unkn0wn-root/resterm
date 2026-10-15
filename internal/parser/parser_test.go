@@ -454,11 +454,89 @@ GET https://example.com
 	}
 }
 
+func TestParseScriptStoresCanonicalKindAndLang(t *testing.T) {
+	tests := []struct {
+		dir  string
+		kind restfile.ScriptKind
+		lang restfile.ScriptLang
+	}{
+		{"# @script", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @script test", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @script tests", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @script Tests lang=JavaScript", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @script Pre-Request", restfile.ScriptKindPreRequest, restfile.ScriptLangJS},
+		{"# @script pre-request lang=", restfile.ScriptKindPreRequest, restfile.ScriptLangJS},
+		{"# @script pre-request lang=restermlang", restfile.ScriptKindPreRequest, restfile.ScriptLangRTS},
+		{"# @script pre-request language=RTS", restfile.ScriptKindPreRequest, restfile.ScriptLangRTS},
+		{"# @script pre-request restermlang", restfile.ScriptKindPreRequest, restfile.ScriptLangRTS},
+		{"# @script test lang=rts", restfile.ScriptKindTest, restfile.ScriptLangRTS},
+		{"# @script test python", restfile.ScriptKindTest, restfile.ScriptLangJS},
+		{"# @rts pre-request language=restermlang", restfile.ScriptKindPreRequest, restfile.ScriptLangRTS},
+		{"# @script RTS", "rts", restfile.ScriptLangJS},
+		{"# @script test lang=Python", restfile.ScriptKindTest, "python"},
+	}
+	for _, tt := range tests {
+		doc := Parse("kind.http", []byte(tt.dir+"\n> x\nGET https://example.com\n"))
+		if len(doc.Errors) != 0 || len(doc.Requests) != 1 || len(doc.Requests[0].Metadata.Scripts) != 1 {
+			t.Fatalf("%s: errors = %v, requests = %+v", tt.dir, doc.Errors, doc.Requests)
+		}
+		got := doc.Requests[0].Metadata.Scripts[0]
+		if got.Kind != tt.kind || got.Lang != tt.lang {
+			t.Fatalf("%s: got %q %q, want %q %q", tt.dir, got.Kind, got.Lang, tt.kind, tt.lang)
+		}
+	}
+}
+
+func TestParseScriptWarnsOnUnknownKindAndLang(t *testing.T) {
+	tests := []struct {
+		src  string
+		want []string
+	}{
+		{"# @script rts", []string{`@script kind "rts" is not supported. Use pre-request or test`}},
+		{"# @script \"RTS\"", []string{`@script kind "RTS" is not supported. Use pre-request or test`}},
+		{"# @script test lang=python", []string{`@script language "python" is not supported. Use js or rts`}},
+		{"# @script language=Python", []string{`@script language "Python" is not supported. Use js or rts`}},
+		{
+			"# @script check lang=py",
+			[]string{
+				`@script kind "check" is not supported. Use pre-request or test`,
+				`@script language "py" is not supported. Use js or rts`,
+			},
+		},
+		{"# @script test python", []string{`@script ignores "python". Use lang=js or lang=rts to choose a language`}},
+		{"# @script test js extra", []string{`@script ignores "extra". Use lang=js or lang=rts to choose a language`}},
+		{"# @script test extra=1", []string{`unknown @script option "extra"`}},
+		{"# @script test name=orders lang=js", []string{`unknown @script option "name"`}},
+		{"# @script test", nil},
+		{"# @script test js", nil},
+		{"# @script pre-request rts", nil},
+		{"# @script tests", nil},
+		{"# @script pre-request lang=rts", nil},
+		{"# @script test lang=rts", nil},
+		{"# @script Pre-Request language=JavaScript", nil},
+		{"# @script pre-request lang=", nil},
+		{"# @rts pre-request\n> a\n# @script", nil},
+	}
+	for _, tt := range tests {
+		doc := Parse("warn.http", []byte(tt.src+"\n> x\nGET https://example.com\n"))
+		var got []string
+		for _, w := range doc.Warnings {
+			got = append(got, w.Message)
+		}
+		if len(doc.Errors) != 0 || !slices.Equal(got, tt.want) {
+			t.Fatalf("%q: errors = %v, warnings = %q, want %q", tt.src, doc.Errors, got, tt.want)
+		}
+		if len(doc.Requests[0].Metadata.Scripts) == 0 {
+			t.Fatalf("%q: script block was dropped", tt.src)
+		}
+	}
+}
+
 func TestParseRTSDirectiveAlias(t *testing.T) {
 	tests := []struct {
 		name string
 		dir  string
-		kind string
+		kind restfile.ScriptKind
 	}{
 		{
 			name: "pre request",
@@ -550,6 +628,114 @@ GET https://example.com
 	}
 }
 
+func TestParseRTSTestBlocks(t *testing.T) {
+	tests := []struct {
+		dir  string
+		name string
+	}{
+		{"# @rts test", ""},
+		{"# @rts tests", ""},
+		{"# @rts Test", ""},
+		{"# @rts test checkout", "checkout"},
+		{`# @rts test "orders are valid"`, "orders are valid"},
+		{"# @rts test 'orders are valid'", "orders are valid"},
+		{`# @rts test "js"`, "js"},
+		{`# @rts test "rts"`, "rts"},
+		{`# @rts test "test"`, "test"},
+		{`# @rts test ""`, ""},
+		{`# @rts test "a=b"`, "a=b"},
+		{"# @rts test a#b", "a#b"},
+		{`# @rts test a"b`, `a"b`},
+		{"# @rts test rts", ""},
+		{"# @rts test rts checkout", "checkout"},
+		{"# @rts rts test checkout", "checkout"},
+		{"# @rts test lang=rts checkout", "checkout"},
+		{"# @rts test checkout language=restermlang", "checkout"},
+		{"# @script test lang=rts", ""},
+		{"# @script test language=rts", ""},
+		{"# @script tests restermlang", ""},
+	}
+	for _, tt := range tests {
+		doc := Parse("rts-test.http", []byte(tt.dir+"\n> t.error(1)\nGET https://example.com\n"))
+		if len(doc.Errors) != 0 || len(doc.Warnings) != 0 || len(doc.Requests) != 1 {
+			t.Fatalf("%s: errors = %v, warnings = %v", tt.dir, doc.Errors, doc.Warnings)
+		}
+		scripts := doc.Requests[0].Metadata.Scripts
+		if len(scripts) != 1 {
+			t.Fatalf("%s: got %d script blocks, want 1", tt.dir, len(scripts))
+		}
+		got := scripts[0]
+		if !got.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS) || got.Name != tt.name || got.Body != "t.error(1)" {
+			t.Fatalf("%s: got %q %q name %q body %q", tt.dir, got.Kind, got.Lang, got.Name, got.Body)
+		}
+	}
+}
+
+func TestParseRTSTestNameBelongsToItsBlock(t *testing.T) {
+	src := `# @rts test first
+> a
+# @rts test second
+> b
+# @script
+> c
+# @rts test
+> d
+# @rts test checks
+> < ./checks.rts
+# @rts pre-request
+> e
+GET https://example.com
+`
+	doc := Parse("names.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+		t.Fatalf("errors = %v", doc.Errors)
+	}
+	type block struct {
+		kind restfile.ScriptKind
+		name string
+		body string
+		file string
+	}
+	want := []block{
+		{restfile.ScriptKindTest, "first", "a", ""},
+		{restfile.ScriptKindTest, "second", "b", ""},
+		{restfile.ScriptKindTest, "", "c", ""},
+		{restfile.ScriptKindTest, "", "d", ""},
+		{restfile.ScriptKindTest, "checks", "", "./checks.rts"},
+		{restfile.ScriptKindPreRequest, "", "e", ""},
+	}
+	var got []block
+	for _, s := range doc.Requests[0].Metadata.Scripts {
+		if s.Lang != restfile.ScriptLangRTS {
+			t.Fatalf("block %q lang = %q, want rts", s.Body, s.Lang)
+		}
+		got = append(got, block{s.Kind, s.Name, s.Body, s.FilePath})
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("blocks = %+v, want %+v", got, want)
+	}
+}
+
+func TestParseRTSTestSplitByAnotherLine(t *testing.T) {
+	for _, gap := range []string{"", "# note"} {
+		src := "# @rts test orders\n> a\n" + gap + "\n> b\nGET https://example.com\n"
+		doc := Parse("split.http", []byte(src))
+		if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+			t.Fatalf("gap %q: errors = %v", gap, doc.Errors)
+		}
+		var got []string
+		for _, s := range doc.Requests[0].Metadata.Scripts {
+			if !s.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS) || s.Name != "orders" {
+				t.Fatalf("gap %q: block %+v, want an rts test named orders", gap, s)
+			}
+			got = append(got, s.Body)
+		}
+		if !slices.Equal(got, []string{"a", "b"}) {
+			t.Fatalf("gap %q: bodies = %q, want two blocks", gap, got)
+		}
+	}
+}
+
 func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -559,7 +745,7 @@ func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
 		{
 			name: "bare directive",
 			dir:  "# @rts",
-			want: "@rts requires a mode",
+			want: "@rts requires a mode. Use '@rts pre-request' or '@rts test'",
 		},
 		{
 			name: "language token without mode",
@@ -572,29 +758,69 @@ func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
 			want: "@rts requires a mode",
 		},
 		{
+			name: "empty mode",
+			dir:  "# @rts \"\"",
+			want: "@rts requires a mode",
+		},
+		{
 			name: "pre alias",
 			dir:  "# @rts pre",
-			want: "@rts supports only pre-request mode",
+			want: "@rts supports only pre-request and test modes. Use '@rts pre-request' or '@rts test'",
 		},
 		{
 			name: "duplicate kind",
 			dir:  "# @rts pre-request pre-request",
+			want: "@rts accepts only one mode. Use '@rts pre-request' or '@rts test'",
+		},
+		{
+			name: "mode after test",
+			dir:  "# @rts test pre-request",
 			want: "@rts accepts only one mode",
 		},
 		{
-			name: "test kind",
-			dir:  "# @rts test",
-			want: "@rts test is not supported",
+			name: "two test names",
+			dir:  "# @rts test orders stock",
+			want: "@rts test takes one name. Quote a name with spaces",
 		},
 		{
-			name: "tests kind",
-			dir:  "# @rts tests",
-			want: "@rts test is not supported",
+			name: "quoted and bare test names",
+			dir:  "# @rts test \"orders\" stock",
+			want: "@rts test takes one name",
+		},
+		{
+			name: "unclosed double quote",
+			dir:  `# @rts test "orders are valid`,
+			want: `@rts is missing a closing "\""`,
+		},
+		{
+			name: "unclosed single quote",
+			dir:  "# @rts test 'orders",
+			want: `@rts is missing a closing "'"`,
+		},
+		{
+			name: "unclosed quote after pre-request",
+			dir:  `# @rts pre-request "x`,
+			want: `@rts is missing a closing "\""`,
+		},
+		{
+			name: "pre-request name",
+			dir:  "# @rts pre-request setup",
+			want: "@rts pre-request takes no name",
+		},
+		{
+			name: "quoted pre-request name",
+			dir:  "# @rts pre-request \"set up\"",
+			want: "@rts pre-request takes no name",
+		},
+		{
+			name: "javascript token after test",
+			dir:  "# @rts test js",
+			want: "@rts only supports RestermScript",
 		},
 		{
 			name: "javascript option",
 			dir:  "# @rts pre-request lang=js",
-			want: "@rts only supports RestermScript",
+			want: "@rts only supports RestermScript. Remove lang=js or use @script for JavaScript",
 		},
 		{
 			name: "javascript token",
@@ -604,7 +830,17 @@ func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
 		{
 			name: "unknown kind",
 			dir:  "# @rts response",
-			want: "@rts supports only pre-request mode",
+			want: "@rts supports only pre-request and test modes",
+		},
+		{
+			name: "unknown option",
+			dir:  "# @rts test name=orders",
+			want: `unknown @rts option "name"`,
+		},
+		{
+			name: "unknown option with language",
+			dir:  "# @rts pre-request lang=rts extra=1",
+			want: `unknown @rts option "extra"`,
 		},
 	}
 
@@ -2342,22 +2578,57 @@ GET https://example.com/api
 }
 
 func TestParseScriptInlineBraces(t *testing.T) {
-	src := `# @script test
-> {% client.test("ok"); %}
-GET https://example.com/api
-`
+	type pos = restfile.ScriptLine
+	tests := []struct {
+		name  string
+		src   string
+		body  string
+		lines []pos
+	}{
+		{"one line", `> {% t.error("x") %}`, `t.error("x")`, []pos{{Line: 2, Col: 6}}},
+		{"no spaces", "> {%x%}", "x", []pos{{Line: 2, Col: 5}}},
+		{"empty", "> {% %}", "", []pos{{Line: 2, Col: 6}}},
+		{"empty without spaces", "> {%%}", "", []pos{{Line: 2, Col: 5}}},
+		{"closer in a string", `> {% t.error("%}") %}`, `t.error("%}")`, []pos{{Line: 2, Col: 6}}},
+		{"extra spaces", ">   {%  x  %}  ", "x", []pos{{Line: 2, Col: 9}}},
+		{"blank line first", ">\n> {% x %}", "\nx", []pos{{Line: 2, Col: 2}, {Line: 3, Col: 6}}},
+		{"each line braced", "> {% a %}\n> {% b %}", "a\nb", []pos{{Line: 2, Col: 6}, {Line: 3, Col: 6}}},
+		{"braces span lines", "> {% a\n>   b %}", "{% a\n  b %}", []pos{{Line: 2, Col: 3}, {Line: 3, Col: 3}}},
+		{"closer on its own line", "> {% a\n> %}", "{% a\n%}", []pos{{Line: 2, Col: 3}, {Line: 3, Col: 3}}},
+		{"opener only", "> {%}", "{%}", []pos{{Line: 2, Col: 3}}},
+		{"text after the closer", "> {% x %} // y", "{% x %} // y", []pos{{Line: 2, Col: 3}}},
+		{"braces mid line", `> s = "{% x %}"`, `s = "{% x %}"`, []pos{{Line: 2, Col: 3}}},
+		{"plain line", "> x", "x", []pos{{Line: 2, Col: 3}}},
+		{"block", "> {%\nx\n> %}", "x", []pos{{Line: 3, Col: 1}}},
+		{"braced code in a block", "> {%\n{% x %}\n> %}", "{% x %}", []pos{{Line: 3, Col: 1}}},
+		{"braced marker line in a block", "> {%\n> {% x %}\n> %}", "{% x %}", []pos{{Line: 3, Col: 3}}},
+	}
 
-	doc := Parse("inline-braces.http", []byte(src))
-	if len(doc.Requests) != 1 {
-		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	for _, head := range []string{"# @script test", "# @rts test"} {
+		for _, tt := range tests {
+			t.Run(head+"/"+tt.name, func(t *testing.T) {
+				doc := Parse("inline.http", []byte(head+"\n"+tt.src+"\nGET https://example.com/api\n"))
+				if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+					t.Fatalf("errors = %v, requests = %d", doc.Errors, len(doc.Requests))
+				}
+				scripts := doc.Requests[0].Metadata.Scripts
+				if len(scripts) != 1 {
+					t.Fatalf("scripts = %+v, want one block", scripts)
+				}
+				if got := scripts[0]; got.Body != tt.body || !slices.Equal(got.Lines, tt.lines) {
+					t.Fatalf("block = %q %v, want %q %v", got.Body, got.Lines, tt.body, tt.lines)
+				}
+			})
+		}
 	}
-	req := doc.Requests[0]
-	if len(req.Metadata.Scripts) != 1 {
-		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
-	}
-	body := req.Metadata.Scripts[0].Body
-	if body != "{% client.test(\"ok\"); %}" {
-		t.Fatalf("unexpected inline script body: %q", body)
+}
+
+func TestParseScriptIncludesAroundInlineBraces(t *testing.T) {
+	src := "# @rts test\n> < ./a.rts\n> {% x %}\n> < ./b.rts\nGET https://example.com/api\n"
+	got := Parse("inline.http", []byte(src)).Requests[0].Metadata.Scripts
+	if len(got) != 3 || got[0].FilePath != "./a.rts" || got[2].FilePath != "./b.rts" || got[1].Body != "x" ||
+		!slices.Equal(got[1].Lines, []restfile.ScriptLine{{Line: 3, Col: 6}}) {
+		t.Fatalf("scripts = %+v, want a.rts, the inline code, then b.rts", got)
 	}
 }
 

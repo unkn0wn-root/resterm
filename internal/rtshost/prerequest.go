@@ -20,7 +20,7 @@ type PreRequest struct {
 func RunPreRequest(ctx context.Context, eng *Engine, in PreRequest) error {
 	nth := 0
 	for _, block := range in.Scripts {
-		if !restfile.IsPreRequestScript(block, restfile.ScriptLangRTS) {
+		if !block.Is(restfile.ScriptKindPreRequest, restfile.ScriptLangRTS) {
 			continue
 		}
 		if err := ctx.Err(); err != nil {

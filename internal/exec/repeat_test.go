@@ -15,7 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func TestRunHTTPPollsUntilPredicateMatches(t *testing.T) {
@@ -342,8 +342,8 @@ func TestRunHTTPDoesNotRetryStatusesOrAssertionsByDefault(t *testing.T) {
 		return repeatTestResponse(req, http.StatusServiceUnavailable, "busy", nil), nil
 	})
 	result := Runner{Hooks: HTTPHooks{
-		RunAsserts: func(AssertInput) ([]scripts.TestResult, error) {
-			return []scripts.TestResult{{Name: "failed assertion", Passed: false}}, nil
+		RunTests: func(TestInput) ([]scriptapi.TestResult, error) {
+			return []scriptapi.TestResult{{Name: "failed assertion", Passed: false}}, nil
 		},
 	}}.RunHTTP(HTTPInput{
 		Client:  client,
@@ -492,7 +492,7 @@ func TestRunHTTPFinalizesOutsideThePollDeadline(t *testing.T) {
 			EvaluatePredicate: func(in PredicateInput) (bool, error) {
 				return string(in.HTTP.Body) == "completed", nil
 			},
-			RunAsserts: func(in AssertInput) ([]scripts.TestResult, error) {
+			RunTests: func(in TestInput) ([]scriptapi.TestResult, error) {
 				time.Sleep(2 * time.Second)
 				assertCtxErr = in.Context.Err()
 				return nil, nil
@@ -501,6 +501,33 @@ func TestRunHTTPFinalizesOutsideThePollDeadline(t *testing.T) {
 			Client:           client,
 			Context:          t.Context(),
 			Req:              req,
+			EffectiveTimeout: time.Second,
+		})
+		if result.Err != nil {
+			t.Fatalf("RunHTTP() error = %v", result.Err)
+		}
+		if assertCtxErr != nil {
+			t.Fatalf("assert context error = %v, want none", assertCtxErr)
+		}
+	})
+}
+
+func TestRunHTTPFinalizesOutsideTheRequestDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := repeatTestClient(func(req *http.Request) (*http.Response, error) {
+			return repeatTestResponse(req, http.StatusOK, "ok", nil), nil
+		})
+		var assertCtxErr error
+		result := Runner{Hooks: HTTPHooks{
+			RunTests: func(in TestInput) ([]scriptapi.TestResult, error) {
+				time.Sleep(2 * time.Second)
+				assertCtxErr = in.Context.Err()
+				return nil, nil
+			},
+		}}.RunHTTP(HTTPInput{
+			Client:           client,
+			Context:          t.Context(),
+			Req:              repeatTestRequest(nil),
 			EffectiveTimeout: time.Second,
 		})
 		if result.Err != nil {

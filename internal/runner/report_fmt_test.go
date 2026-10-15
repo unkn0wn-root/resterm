@@ -17,7 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"google.golang.org/grpc/codes"
 )
 
@@ -39,7 +39,7 @@ func TestReportModelTrimsStrings(t *testing.T) {
 				Status: "  200 OK  ",
 				Proto:  "  HTTP/1.1  ",
 			},
-			Tests: []scripts.TestResult{{
+			Tests: []scriptapi.TestResult{{
 				Name:    "  status  ",
 				Message: "  ok  ",
 				Passed:  true,
@@ -79,7 +79,7 @@ func TestReportModelTrimsStrings(t *testing.T) {
 					StatusCode:    codes.OK,
 					StatusMessage: "  ok  ",
 				},
-				Tests: []scripts.TestResult{{
+				Tests: []scriptapi.TestResult{{
 					Name:    "  pass  ",
 					Message: "  ok  ",
 					Passed:  true,

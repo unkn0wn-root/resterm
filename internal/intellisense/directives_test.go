@@ -1,6 +1,7 @@
 package intellisense
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,13 +53,51 @@ func TestDirectiveCatalogContainsRequiredDirectives(t *testing.T) {
 	}
 }
 
-func TestRTSDirectiveInsertsExplicitPreRequestMode(t *testing.T) {
+func TestRTSArgsOfferOneMode(t *testing.T) {
+	tests := []struct {
+		line string
+		want []string
+	}{
+		{"# @rts ", []string{"pre-request", "test"}},
+		{"# @rts test ", nil},
+		{"# @rts pre-request ", nil},
+	}
+	for _, tt := range tests {
+		if got := labels(suggest(tt.line, Scope{})); !slices.Equal(got, tt.want) {
+			t.Errorf("%q\n got: %v\nwant: %v", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestScriptArgsOfferOnlyLangAfterKind(t *testing.T) {
+	tests := []struct {
+		line string
+		want []string
+	}{
+		{"# @script ", []string{"pre-request", "test", "lang=", "language="}},
+		{"# @script test ", []string{"lang=", "language="}},
+		{"# @script pre-request ", []string{"lang=", "language="}},
+		{"# @script pre-request js ", []string{"lang=", "language="}},
+		{"# @script test lang=", []string{"rts", "js"}},
+		{"# @script pre-request language=", []string{"rts", "js"}},
+		{"# @script test lang=rts ", nil},
+		{"# @script lang=rts ", []string{"pre-request", "test"}},
+		{"# @script lang=rts test ", nil},
+	}
+	for _, tt := range tests {
+		if got := labels(suggest(tt.line, Scope{})); !slices.Equal(got, tt.want) {
+			t.Errorf("%q\n got: %v\nwant: %v", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestRTSDirectiveContinuesToItsModes(t *testing.T) {
 	for _, it := range directives {
 		if it.Label != "@rts" {
 			continue
 		}
-		if it.Insert != "@rts pre-request" {
-			t.Fatalf("expected @rts to insert explicit mode, got %q", it.Insert)
+		if it.InsertText() != "@rts" || !it.Continue {
+			t.Fatalf("@rts inserts %q, continue = %v, want @rts and the mode list", it.InsertText(), it.Continue)
 		}
 		return
 	}
@@ -70,8 +109,8 @@ func TestBareDirectiveSuggestionsInsertCanonicalComment(t *testing.T) {
 	if len(bare) != 1 || bare[0].Label != "@rts" {
 		t.Fatalf("bare @rt suggestions = %v, want @rts", bare)
 	}
-	if got := bare[0].InsertText(); got != "# @rts pre-request" {
-		t.Fatalf("bare @rts insert = %q, want %q", got, "# @rts pre-request")
+	if got := bare[0].InsertText(); got != "# @rts" {
+		t.Fatalf("bare @rts insert = %q, want %q", got, "# @rts")
 	}
 
 	alias := suggest("@desc", Scope{})
@@ -83,7 +122,7 @@ func TestBareDirectiveSuggestionsInsertCanonicalComment(t *testing.T) {
 	}
 
 	commented := suggest("# @rt", Scope{})
-	if got := commented[0].InsertText(); got != "@rts pre-request" {
+	if got := commented[0].InsertText(); got != "@rts" {
 		t.Fatalf("bare completion mutated the directive catalog: %q", got)
 	}
 }
@@ -130,7 +169,7 @@ func TestDirectiveArgsFilterByPrefix(t *testing.T) {
 	}
 
 	rts := argOptions("rts", "")
-	if !contains(rts, "pre-request") || contains(rts, "test") {
+	if len(rts) != 2 || !contains(rts, "pre-request") || !contains(rts, "test") {
 		t.Fatalf("rts args = %v", rts)
 	}
 	if run := argOptions("run", ""); len(run) != 1 || run[0].InsertText() != "var name = {{$uuid}}" {

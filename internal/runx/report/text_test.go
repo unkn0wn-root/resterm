@@ -326,3 +326,92 @@ func TestWriteTextIncludesResultWarnings(t *testing.T) {
 		t.Fatalf("expected %q in output, got %q", want, out.String())
 	}
 }
+
+func TestErrorRowsStayOnOneLine(t *testing.T) {
+	two := "join.http:2:15: boom\n\n  test script 1: Error: bad  "
+	rep := &Report{
+		Results: []Result{
+			{Kind: "request", Name: "script", Method: "GET", Status: StatusFail, ScriptError: two},
+			{Kind: "request", Name: "request", Method: "GET", Status: StatusFail, Error: two},
+			{Kind: "workflow", Name: "flow", Method: "WORKFLOW", Status: StatusFail, Steps: []Step{
+				{Name: "step-script", Status: StatusFail, ScriptError: two},
+				{Name: "step-request", Status: StatusFail, Error: two},
+			}},
+		},
+	}
+	var text, junit strings.Builder
+	if err := WriteText(&text, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+	if err := WriteJUnit(&junit, rep); err != nil {
+		t.Fatalf("WriteJUnit(...): %v", err)
+	}
+	for _, name := range []string{"GET script", "GET request", "step-script", "step-request"} {
+		row := name + " [join.http:2:15: boom; test script 1: Error: bad]"
+		if !strings.Contains(text.String(), row+"\n") {
+			t.Fatalf("text output lacks row %q:\n%s", row, text.String())
+		}
+		if out := "<system-out>" + row + "</system-out>"; !strings.Contains(junit.String(), out) {
+			t.Fatalf("junit output lacks %q:\n%s", out, junit.String())
+		}
+	}
+}
+
+func TestProfileFailureReasonStaysOnOneLine(t *testing.T) {
+	rep := &Report{
+		Results: []Result{{
+			Kind:   "profile",
+			Name:   "prof",
+			Method: "PROFILE",
+			Status: StatusFail,
+			Profile: &Profile{Failures: []ProfileFailure{
+				{Iteration: 1, Reason: "a\nb", Duration: 5 * time.Millisecond},
+				{Iteration: 2, Reason: "plain", Duration: 5 * time.Millisecond},
+			}},
+		}},
+	}
+	var out strings.Builder
+	if err := WriteText(&out, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+	for _, want := range []string{"- Run 1: a; b [5ms]\n", "- Run 2: plain [5ms]\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("expected %q in output, got %q", want, out.String())
+		}
+	}
+}
+
+func TestTextRowsEscapeControlCharacters(t *testing.T) {
+	msg := "a.http:2:1: bad \x1b]0;pwn\a body\r\nnext"
+	rep := &Report{
+		Results: []Result{
+			{Kind: "request", Name: "script", Method: "GET", Status: StatusFail, ScriptError: msg},
+			{Kind: "workflow", Name: "flow", Method: "WORKFLOW", Status: StatusFail, Steps: []Step{
+				{Name: "step", Status: StatusFail, ScriptError: msg},
+			}},
+			{Kind: "profile", Name: "prof", Method: "PROFILE", Status: StatusFail, Profile: &Profile{
+				Failures: []ProfileFailure{{Iteration: 1, Reason: msg}},
+			}},
+		},
+	}
+	var text, junit strings.Builder
+	if err := WriteText(&text, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+	if err := WriteJUnit(&junit, rep); err != nil {
+		t.Fatalf("WriteJUnit(...): %v", err)
+	}
+	out := text.String()
+	esc := `a.http:2:1: bad \u001b]0;pwn\u0007 body; next`
+	for _, want := range []string{"GET script [" + esc + "]\n", "step [" + esc + "]\n", "- Run 1: " + esc + "\n"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in output, got %q", want, out)
+		}
+	}
+	if strings.ContainsAny(out, "\x1b\a\r") {
+		t.Fatalf("text output keeps raw control characters: %q", out)
+	}
+	if strings.Contains(junit.String(), `\u001b`) {
+		t.Fatalf("junit output escapes for the terminal: %q", junit.String())
+	}
+}

@@ -1157,6 +1157,19 @@ func TestIsAbortSeesWrappedAbort(t *testing.T) {
 	}
 }
 
+func TestCancelAbortNamesTheCause(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(t.Context())
+	cancel(errors.New("checks timed out"))
+	if err := NewCtx(ctx, Limits{}).tick(Pos{}); err == nil || err.Error() != "canceled: checks timed out" {
+		t.Fatalf("error = %v, want the cause", err)
+	}
+	ctx, stop := context.WithCancel(t.Context())
+	stop()
+	if err := NewCtx(ctx, Limits{}).tick(Pos{}); err == nil || err.Error() != "canceled: context canceled" {
+		t.Fatalf("error = %v, want the context error", err)
+	}
+}
+
 func TestConstImmutable(t *testing.T) {
 	src := `
 const x = 1

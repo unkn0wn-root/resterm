@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -22,7 +23,6 @@ const (
 
 type HTTPInput struct {
 	Client           *httpx.Client
-	Scripts          *scripts.Runner
 	Context          context.Context
 	Doc              *restfile.Document
 	Req              *restfile.Request
@@ -31,7 +31,6 @@ type HTTPInput struct {
 	EffectiveTimeout time.Duration
 	ScriptVars       vars.NameMap[string]
 	Locals           rts.Locals
-	Secrets          *vars.Secrets
 }
 
 type CaptureInput struct {
@@ -41,19 +40,14 @@ type CaptureInput struct {
 	Response *scripts.Response
 	HTTP     *httpx.Response
 	Stream   *scripts.StreamInfo
-	Vars     map[string]string
 	Locals   rts.Locals
 }
 
-type AssertInput struct {
-	Context context.Context
-	Doc     *restfile.Document
-	Req     *restfile.Request
-	BaseDir string
-	Vars    map[string]string
-	Locals  rts.Locals
-	HTTP    *httpx.Response
-	Stream  *scripts.StreamInfo
+type TestInput struct {
+	Context  context.Context
+	Response *scripts.Response
+	HTTP     *httpx.Response
+	Stream   *scripts.StreamInfo
 }
 
 type PredicateInput struct {
@@ -110,19 +104,17 @@ type HTTPHooks struct {
 	ApplyCaptures         func(CaptureInput) error
 	// CollectVariables rebuilds variables after pre-request scripts; the third
 	// argument contains their writes at script precedence.
-	CollectVariables    func(*restfile.Document, *restfile.Request, vars.NameMap[string]) map[string]string
-	CollectGlobalValues func(*restfile.Document) vars.Globals
-	RunAsserts          func(AssertInput) ([]scripts.TestResult, error)
-	EvaluatePredicate   func(PredicateInput) (bool, error)
-	ApplyRuntimeGlobals func(vars.Globals)
-	OnRepeatProgress    func(RepeatProgress)
-	Warn                func(string)
+	CollectVariables  func(*restfile.Document, *restfile.Request, vars.NameMap[string]) map[string]string
+	RunTests          func(TestInput) ([]scriptapi.TestResult, error)
+	EvaluatePredicate func(PredicateInput) (bool, error)
+	OnRepeatProgress  func(RepeatProgress)
+	Warn              func(string)
 }
 
 type HTTPResult struct {
 	Response  *httpx.Response
 	Stream    *scripts.StreamInfo
-	Tests     []scripts.TestResult
+	Tests     []scriptapi.TestResult
 	ScriptErr error
 	Err       error
 	Decision  string
@@ -140,9 +132,6 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			Err:      diag.New(diag.ClassProtocol, "http client is not initialised"),
 			Decision: "HTTP request failed",
 		}
-	}
-	if in.Scripts == nil {
-		in.Scripts = scripts.NewRunner(nil)
 	}
 	if in.Req == nil {
 		return HTTPResult{
@@ -167,7 +156,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	if in.Req.Metadata.Poll != nil || in.Req.Metadata.Retry != nil {
 		return r.runRepeatedHTTP(ctx, in)
 	}
-	ctx, cancel := context.WithTimeout(ctx, in.EffectiveTimeout)
+	reqCtx, cancel := context.WithTimeout(ctx, in.EffectiveTimeout)
 	defer cancel()
 
 	res := HTTPResult{Decision: "HTTP request sent"}
@@ -180,7 +169,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	switch {
 	case in.Req.WebSocket != nil:
 		handle, fallback, startErr := in.Client.StartWebSocket(
-			ctx,
+			reqCtx,
 			in.Req,
 			in.Resolver,
 			in.Options,
@@ -196,10 +185,10 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			if r.Hooks.AttachWebSocketHandle != nil {
 				r.Hooks.AttachWebSocketHandle(handle, in.Req)
 			}
-			resp, err = in.Client.CompleteWebSocket(ctx, handle, in.Req, in.Options)
+			resp, err = in.Client.CompleteWebSocket(reqCtx, handle, in.Req, in.Options)
 		}
 	case in.Req.SSE != nil:
-		handle, fallback, startErr := in.Client.StartSSE(ctx, in.Req, in.Resolver, in.Options)
+		handle, fallback, startErr := in.Client.StartSSE(reqCtx, in.Req, in.Resolver, in.Options)
 		if startErr != nil {
 			res.Err = startErr
 			res.Decision = "SSE request failed"
@@ -214,7 +203,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			resp, err = httpx.CompleteSSE(handle)
 		}
 	default:
-		resp, err = in.Client.Execute(ctx, in.Req, in.Resolver, in.Options)
+		resp, err = in.Client.Execute(reqCtx, in.Req, in.Resolver, in.Options)
 	}
 
 	res.Response = resp
@@ -223,6 +212,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 		res.Decision = httpFailureDecision(in.Req)
 		return res
 	}
+	// Response checks set their own deadline.
 	return r.finalizeHTTP(ctx, in, resp)
 }
 
@@ -253,7 +243,6 @@ func (r Runner) finalizeHTTP(
 			Response: respForScripts,
 			HTTP:     resp,
 			Stream:   streamInfo,
-			Vars:     r.collectVars(in.Doc, in.Req, in.ScriptVars),
 			Locals:   in.Locals,
 		})
 		if err != nil {
@@ -264,47 +253,14 @@ func (r Runner) finalizeHTTP(
 		}
 	}
 
-	testVars := r.collectVars(in.Doc, in.Req, in.ScriptVars)
-	testGlobals := r.collectGlobals(in.Doc)
-
-	var assertErr error
-	if r.Hooks.RunAsserts != nil {
-		res.Tests, assertErr = r.Hooks.RunAsserts(AssertInput{
-			Context: ctx,
-			Doc:     in.Doc,
-			Req:     in.Req,
-			BaseDir: in.Options.BaseDir,
-			Vars:    testVars,
-			Locals:  in.Locals,
-			HTTP:    resp,
-			Stream:  streamInfo,
+	if r.Hooks.RunTests != nil {
+		res.Tests, res.ScriptErr = r.Hooks.RunTests(TestInput{
+			Context:  ctx,
+			Response: respForScripts,
+			HTTP:     resp,
+			Stream:   streamInfo,
 		})
 	}
-
-	var traceSpec *restfile.TraceSpec
-	if in.Req != nil {
-		traceSpec = in.Req.Metadata.Trace
-	}
-	traceInput := scripts.NewTraceInput(resp.Timeline, traceSpec)
-	tests, globalChanges, testErr := in.Scripts.RunTests(
-		in.Context,
-		in.Req.Metadata.Scripts,
-		scripts.TestInput{
-			Response:  respForScripts,
-			Variables: testVars,
-			Globals:   testGlobals,
-			BaseDir:   in.Options.BaseDir,
-			Stream:    streamInfo,
-			Trace:     traceInput,
-			Secrets:   in.Secrets,
-		},
-	)
-	if globalChanges.Len() > 0 && r.Hooks.ApplyRuntimeGlobals != nil {
-		r.Hooks.ApplyRuntimeGlobals(globalChanges)
-	}
-
-	res.Tests = append(res.Tests, tests...)
-	res.ScriptErr = joinErr(assertErr, testErr)
 	return res
 }
 
@@ -317,13 +273,6 @@ func (r Runner) collectVars(
 		return nil
 	}
 	return r.Hooks.CollectVariables(doc, req, scriptVars)
-}
-
-func (r Runner) collectGlobals(doc *restfile.Document) vars.Globals {
-	if r.Hooks.CollectGlobalValues == nil {
-		return vars.Globals{}
-	}
-	return r.Hooks.CollectGlobalValues(doc)
 }
 
 func httpFailureDecision(req *restfile.Request) string {
@@ -455,14 +404,4 @@ func cloneHeader(src map[string][]string) map[string][]string {
 		dst[key] = append([]string(nil), values...)
 	}
 	return dst
-}
-
-func joinErr(a, b error) error {
-	if a == nil {
-		return b
-	}
-	if b == nil {
-		return a
-	}
-	return fmt.Errorf("%v; %v", a, b)
 }

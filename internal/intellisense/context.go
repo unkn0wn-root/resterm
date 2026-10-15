@@ -7,6 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
@@ -192,7 +193,8 @@ func analyzeScript(lines Lines, line int, cur []rune, col int, src parser.Source
 		prior.WriteString(string(runes[start:end]))
 		prior.WriteByte('\n')
 	}
-	if ctx, ok := analyzeMember(prior.String(), cur, src.ContentStart, col, src.ScriptLang, true); ok {
+	writes := src.ScriptLang != restfile.ScriptLangRTS || src.ScriptKind != restfile.ScriptKindTest
+	if ctx, ok := analyzeMember(prior.String(), cur, src.ContentStart, col, src.ScriptLang, writes); ok {
 		return ctx, true
 	}
 	// Script lines allow include paths, but no request fields.

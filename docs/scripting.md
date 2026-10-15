@@ -6,7 +6,9 @@ Use JavaScript hooks to prepare a request before sending it or test a response a
 
 Add `# @script pre-request` or `# @script test` followed by lines that start with `>`. A bare `# @script` keeps the kind and language of the previous `@script` in the same request, and starts a test script when there is none.
 
-Scripts are JavaScript by default. Add `lang=rts` to a pre-request block to write it in [RestermScript](rts/README.md) instead. `language=` works like `lang=`, and `javascript` and `restermlang` are accepted as values too.
+Scripts default to JavaScript. Use `lang=rts` or [`@rts`](rts/directives.md#rts) for [RestermScript](rts/README.md). `language=` is an alias for `lang=`; `javascript` and `restermlang` are aliases for `js` and `rts`.
+
+Unknown kinds or languages (`# @script check`, `lang=python`) produce a warning and the block does not run. Extra words and unknown options, such as `python` in `# @script test python` or `name=orders`, produce a warning but are otherwise ignored.
 
 ```http
 # @script pre-request
@@ -120,6 +122,8 @@ All `@script pre-request` blocks for a request share the same state. Later block
 Query parameters are merged into the URL after all scripts finish. While scripts are running, `getURL` does not show changes made by `setQueryParam`.
 
 ## Test scripts (`@script test`)
+
+For RestermScript test blocks, see [`@rts`](rts/directives.md#rts). They run before JavaScript test blocks.
 
 Objects:
 

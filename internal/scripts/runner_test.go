@@ -17,6 +17,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
@@ -801,9 +802,9 @@ func TestRunPreRequestWarningsPointAtSource(t *testing.T) {
 		},
 		{
 			Kind:       "pre-request",
-			Body:       "{%\nrequest.setBody(\"{{body}}\");\n%}",
+			Body:       "\nrequest.setBody(\"{{body}}\");",
 			SourcePath: "api.http",
-			Lines:      []restfile.ScriptLine{{Line: 10, Col: 3}, {Line: 11, Col: 1}, {Line: 12, Col: 1}},
+			Lines:      []restfile.ScriptLine{{Line: 10, Col: 2}, {Line: 11, Col: 3}},
 		},
 		{Kind: "pre-request", FilePath: path},
 	}
@@ -874,9 +875,13 @@ func TestPreRequestVarsInterpolateThrows(t *testing.T) {
 }
 
 func TestScriptErrorsPointAtSource(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "pre.js")
-	if err := os.WriteFile(file, []byte("\n  nope();\n"), 0o600); err != nil {
-		t.Fatal(err)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "pre.js")
+	braced := filepath.Join(dir, "braced.js")
+	for path, src := range map[string]string{file: "\n\n  nope();\n", braced: "{% x %}"} {
+		if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	lines := []restfile.ScriptLine{{Line: 20, Col: 3}, {Line: 21, Col: 3}, {Line: 22, Col: 3}}
 	pre := "pre-request script 1: execute pre-request script: "
@@ -903,22 +908,36 @@ func TestScriptErrorsPointAtSource(t *testing.T) {
 			pre + "error at line 21: Error: boom",
 		},
 		{
-			"trimmed first line",
+			"indented first line",
 			restfile.ScriptBlock{Kind: "pre-request", Body: "  nope();"},
 			nil, diag.Pos{Path: "api.http", Line: 20, Col: 9},
 			pre + "error at line 20: ReferenceError: nope is not defined",
 		},
 		{
 			"block on one line",
-			restfile.ScriptBlock{Kind: "pre-request", Body: "{% nope(); %}"},
-			nil, diag.Pos{Path: "api.http", Line: 20, Col: 10},
-			pre + "error at line 20: ReferenceError: nope is not defined",
+			parser.Parse("api.http", []byte("# @script pre-request\n> {% nope(); %}\nGET https://a.test\n")).
+				Requests[0].Metadata.Scripts[0],
+			nil, diag.Pos{Path: "api.http", Line: 2, Col: 10},
+			pre + "error at line 2: ReferenceError: nope is not defined",
+		},
+		{
+			"blocks on two lines",
+			parser.Parse("api.http", []byte("# @script pre-request\n> {% 1 %}\n>  {% nope(); %}\nGET https://a.test")).
+				Requests[0].Metadata.Scripts[0],
+			nil, diag.Pos{Path: "api.http", Line: 3, Col: 11},
+			pre + "error at line 3: ReferenceError: nope is not defined",
 		},
 		{
 			"script file",
 			restfile.ScriptBlock{Kind: "pre-request", FilePath: file},
-			nil, diag.Pos{Path: file, Line: 2, Col: 7},
-			pre + "error at line 2: ReferenceError: nope is not defined",
+			nil, diag.Pos{Path: file, Line: 3, Col: 7},
+			pre + "error at line 3: ReferenceError: nope is not defined",
+		},
+		{
+			"braced script file",
+			restfile.ScriptBlock{Kind: "pre-request", FilePath: braced},
+			nil, diag.Pos{},
+			pre + "SyntaxError: SyntaxError: (anonymous): Line 1:2 Unexpected token % (and 1 more errors)",
 		},
 		{
 			"test script",
@@ -940,7 +959,7 @@ func TestScriptErrorsPointAtSource(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			block := tt.block
-			if block.FilePath == "" {
+			if block.FilePath == "" && block.Lines == nil {
 				block.SourcePath, block.Lines = "api.http", lines
 			}
 			var err error

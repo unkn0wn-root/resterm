@@ -61,6 +61,21 @@ func Get(v any, path string) (any, bool) {
 	return cur, true
 }
 
+var keyQuoter = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)
+
+// Key appends a key using the path syntax accepted by Get.
+func Key(path, key string) string {
+	plain := key != ""
+	for i := 0; plain && i < len(key); i++ {
+		c := key[i]
+		plain = c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || i > 0 && '0' <= c && c <= '9'
+	}
+	if plain {
+		return path + "." + key
+	}
+	return path + `["` + keyQuoter.Replace(key) + `"]`
+}
+
 // Valid reports whether path uses the supported syntax.
 func Valid(path string) bool {
 	p := strings.TrimSpace(path)

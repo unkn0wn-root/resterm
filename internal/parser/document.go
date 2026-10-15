@@ -98,7 +98,6 @@ func lineDiagnostic(line int, msg string) restfile.ParseDiagnostic {
 }
 
 // Report each joined error separately so the editor can mark every problem.
-// Unknown and quoted options leave valid options usable, so report them as warnings.
 func (b *documentBuilder) report(d parsedDirective, err error) {
 	if err == nil {
 		return
@@ -112,7 +111,8 @@ func (b *documentBuilder) report(d parsedDirective, err error) {
 	item := d.diagnostic(err.Error(), err)
 	var unknown *directive.UnknownOptionsError
 	var quoted *directive.QuotedOptionError
-	if errors.As(err, &unknown) || errors.As(err, &quoted) {
+	var script *scriptFieldError
+	if errors.As(err, &unknown) || errors.As(err, &quoted) || errors.As(err, &script) {
 		b.pushWarning(item)
 		return
 	}

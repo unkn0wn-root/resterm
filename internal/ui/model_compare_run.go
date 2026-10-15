@@ -15,7 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -284,7 +284,7 @@ func (m *Model) consumeCompareRow(
 		Selection:      msg.selection,
 		Stream:         cloneStreamInfo(msg.stream),
 		Transcript:     append([]byte(nil), msg.transcript...),
-		Tests:          append([]scripts.TestResult(nil), msg.tests...),
+		Tests:          append([]scriptapi.TestResult(nil), msg.tests...),
 		ScriptErr:      msg.scriptErr,
 		RuntimeSecrets: append([]string(nil), msg.runtimeSecrets...),
 		RequestText:    state.requestText,

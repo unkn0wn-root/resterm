@@ -17,7 +17,9 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
+	"github.com/unkn0wn-root/resterm/internal/str"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -424,7 +426,7 @@ func workflowResultFromRun(
 		GRPC:       res.GRPC.Clone(),
 		Stream:     cloneStreamInfo(res.Stream),
 		Transcript: append([]byte(nil), res.Transcript...),
-		Tests:      append([]scripts.TestResult(nil), res.Tests...),
+		Tests:      append([]scriptapi.TestResult(nil), res.Tests...),
 		ScriptErr:  res.ScriptErr,
 		Err:        res.Err,
 	}
@@ -618,9 +620,10 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 		m.recordWorkflowHistory(state, summary, report)
 	}
 
+	shown := termtext.Block(report)
 	if m.responseLatest != nil {
 		m.responseLatest.explain = explainState{report: explain}
-		m.responseLatest.stats = report
+		m.responseLatest.stats = shown
 		m.responseLatest.statsColored = ""
 		m.responseLatest.statsColorize = true
 		m.responseLatest.statsKind = statsReportKindWorkflow
@@ -628,11 +631,11 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	} else {
 		m.responseLatest = &responseSnapshot{
 			explain:        explainState{report: explain},
-			pretty:         report,
-			raw:            report,
-			headers:        report,
-			requestHeaders: report,
-			stats:          report,
+			pretty:         shown,
+			raw:            shown,
+			headers:        shown,
+			requestHeaders: shown,
+			stats:          shown,
 			statsColorize:  true,
 			statsKind:      statsReportKindWorkflow,
 			statsColored:   "",
@@ -722,7 +725,7 @@ func (state *workflowState) summaryFor(title string) string {
 		return fmt.Sprintf("%s finished with %d failure(s)", title, failed)
 	}
 	last := state.results[lastFailure]
-	reason := strings.TrimSpace(last.Message)
+	reason := str.FoldLines(strings.TrimSpace(last.Message))
 	if reason == "" {
 		reason = "step failed"
 	}
@@ -766,7 +769,8 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 		b.WriteString(workflowStepLine(entry.index, entry.result))
 		b.WriteString("\n")
 		if strings.TrimSpace(entry.result.Message) != "" {
-			fmt.Fprintf(&b, "    %s\n", entry.result.Message)
+			msg := strings.ReplaceAll(entry.result.Message, "\n", "\n"+workflowReportIndent)
+			b.WriteString(workflowReportIndent + msg + "\n")
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")

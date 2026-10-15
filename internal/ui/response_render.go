@@ -17,7 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
@@ -166,7 +166,7 @@ func defaultResponseRenderer() responseRenderer {
 
 func buildHTTPResponseViews(
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 ) responseViews {
 	return defaultResponseRenderer().buildHTTPResponseViews(resp, tests, scriptErr)
@@ -174,7 +174,7 @@ func buildHTTPResponseViews(
 
 func (r responseRenderer) buildHTTPResponseViews(
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 ) responseViews {
 	return r.buildHTTPResponseViewsCtx(context.Background(), resp, tests, scriptErr)
@@ -183,7 +183,7 @@ func (r responseRenderer) buildHTTPResponseViews(
 func (r responseRenderer) buildHTTPResponseViewsCtx(
 	ctx context.Context,
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 ) responseViews {
 	if resp == nil {
@@ -240,7 +240,7 @@ func (r responseRenderer) buildHTTPResponseViewsCtx(
 
 func (r responseRenderer) renderHTTPRespHdrs(
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 	width int,
 ) string {
@@ -259,7 +259,7 @@ func (r responseRenderer) renderHTTPRespHdrs(
 
 func (r responseRenderer) buildRespHdrSum(
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 ) string {
 	sub := r.stats.SubLabel

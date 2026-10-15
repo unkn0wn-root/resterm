@@ -27,7 +27,7 @@ func catalogItems() []Item {
 		}
 	}
 	for _, object := range []string{"vars", "vars.global"} {
-		for _, lang := range []string{restfile.ScriptLangJS, restfile.ScriptLangRTS} {
+		for _, lang := range []restfile.ScriptLang{restfile.ScriptLangJS, restfile.ScriptLangRTS} {
 			ctx := Context{Kind: KindMember, members: scriptapi.Members(object, lang)}
 			items = append(items, memberSource{}.Provide(ctx, Scope{})...)
 		}
@@ -59,8 +59,7 @@ func TestCatalogExamplesAreSelectable(t *testing.T) {
 		case it.Placeholder != "",
 			insert == it.Label,
 			insert == it.Label+":",
-			insert == it.Label+".",
-			insert == "@rts pre-request":
+			insert == it.Label+".":
 			continue
 		}
 		t.Errorf("%s inserts %q with no placeholder to type over", it.Label, insert)

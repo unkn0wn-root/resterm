@@ -12,14 +12,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -232,10 +234,12 @@ func testsText(res runner.Result, st styler) string {
 	for _, test := range res.Tests {
 		line := st.badge(testBadge(test))
 		if name := strings.TrimSpace(test.Name); name != "" {
-			line += " " + st.value(name, toneValue)
+			line += " " + st.value(termtext.Row(name), toneValue)
 		}
 		if msg := strings.TrimSpace(test.Message); msg != "" {
-			line += " - " + st.value(msg, toneMsg)
+			line += " - "
+			pad := "\n" + strings.Repeat(" ", ansi.StringWidth(line))
+			line += st.value(strings.ReplaceAll(termtext.Block(msg), "\n", pad), toneMsg)
 		}
 		if test.Elapsed > 0 {
 			line += " " + st.value(fmt.Sprintf("(%s)", durationRound(test.Elapsed)), toneDur)
@@ -248,7 +252,7 @@ func testsText(res runner.Result, st styler) string {
 	return st.section("Tests:") + "\n" + indent(strings.Join(lines, "\n"), "  ")
 }
 
-func testBadge(test scripts.TestResult) (string, bool) {
+func testBadge(test scriptapi.TestResult) (string, bool) {
 	if test.Passed {
 		return "[PASS]", true
 	}

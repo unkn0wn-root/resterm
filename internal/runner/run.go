@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -104,7 +105,7 @@ type Result struct {
 	Response                  *httpx.Response
 	GRPC                      *grpcx.Response
 	Err                       error
-	Tests                     []scripts.TestResult
+	Tests                     []scriptapi.TestResult
 	ScriptErr                 error
 	Skipped                   bool
 	SkipReason                string
@@ -188,7 +189,7 @@ type StepResult struct {
 	Response             *httpx.Response
 	GRPC                 *grpcx.Response
 	Err                  error
-	Tests                []scripts.TestResult
+	Tests                []scriptapi.TestResult
 	ScriptErr            error
 	Passed               bool
 	Skipped              bool
@@ -656,13 +657,13 @@ func cloneStreamSummary(src map[string]any) map[string]any {
 	return out
 }
 
-func cloneTests(src []scripts.TestResult) []scripts.TestResult {
+func cloneTests(src []scriptapi.TestResult) []scriptapi.TestResult {
 	if len(src) == 0 {
 		return nil
 	}
-	out := make([]scripts.TestResult, 0, len(src))
+	out := make([]scriptapi.TestResult, 0, len(src))
 	for _, test := range src {
-		out = append(out, scripts.TestResult{
+		out = append(out, scriptapi.TestResult{
 			Name:    strings.TrimSpace(test.Name),
 			Message: strings.TrimSpace(test.Message),
 			Passed:  test.Passed,

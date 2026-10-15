@@ -32,7 +32,7 @@ The `_examples/` directory has request files you can run right away:
 Folders:
 
 - `grouped/` - grouped environments, with a mock backend that echoes what each request carried.
-- `rts/` - RestermScript modules, `@apply` profiles, loops, pre-request blocks, and a file that uses every feature.
+- `rts/` - RestermScript modules, `@apply` profiles, loops, and pre-request and test blocks.
 - `bindings/` - a sample `bindings.toml`. See [Key bindings](key-bindings.md).
 - `themes/` - the Aurora and Daybreak themes. See [Theming](theming.md).
 

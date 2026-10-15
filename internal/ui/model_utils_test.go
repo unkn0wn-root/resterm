@@ -11,7 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func TestWrapLineSegmentsPreservesLeadingIndent(t *testing.T) {
@@ -470,7 +470,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 }
 
 func TestFormatTestSummaryColorsStatuses(t *testing.T) {
-	results := []scripts.TestResult{
+	results := []scriptapi.TestResult{
 		{Name: "alpha", Passed: true, Elapsed: 1500 * time.Millisecond},
 		{Name: "beta", Passed: false, Message: "boom"},
 	}
@@ -491,6 +491,22 @@ func TestFormatTestSummaryColorsStatuses(t *testing.T) {
 	}
 	if !strings.Contains(output, statsMessageStyle.Render("boom")) {
 		t.Fatalf("expected message to be colored, got %q", output)
+	}
+}
+
+func TestFormatTestSummaryAlignsMessageLines(t *testing.T) {
+	want := "Tests:\n" +
+		"  [FAIL] orders - api.http:11: Order 0 has negative total\n" +
+		"                  api.http:11: Order 3 missing tracking (2s)"
+	for _, msg := range []string{
+		"api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
+		"api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking\n",
+	} {
+		results := []scriptapi.TestResult{{Name: "orders", Message: msg, Elapsed: 2 * time.Second}}
+		output := stripANSIEscape(defaultResponseRenderer().formatTestSummary(results, nil))
+		if output != want {
+			t.Fatalf("message %q: output =\n%s\nwant\n%s", msg, output, want)
+		}
 	}
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 func resultFailure(res Result) (runfail.Failure, runfail.Origin) {
@@ -69,7 +69,7 @@ func streamErr(info *StreamInfo) error {
 	return info.Err
 }
 
-func testFields(tests []scripts.TestResult) []runfail.TestFailureFields {
+func testFields(tests []scriptapi.TestResult) []runfail.TestFailureFields {
 	out := make([]runfail.TestFailureFields, 0, len(tests))
 	for _, test := range tests {
 		out = append(out, runfail.TestFailureFields{

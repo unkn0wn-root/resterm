@@ -19,9 +19,6 @@ func directiveItems() []Item {
 			Continue:        !argsFor(spec.Name).empty(),
 			noTrailingSpace: spec.Args == directive.ArgNone,
 		}
-		if spec.Name == directive.RTS {
-			items[i].Insert = directive.RTS.Tag() + " pre-request"
-		}
 	}
 	return items
 }

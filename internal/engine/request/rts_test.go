@@ -30,6 +30,63 @@ func (testMockInspector) Count(context.Context, mock.RequestPattern) (uint64, er
 	return 0, nil
 }
 
+type waitingInspector struct{}
+
+func (waitingInspector) Count(ctx context.Context, _ mock.RequestPattern) (uint64, error) {
+	<-ctx.Done()
+	return 0, nil
+}
+
+func TestResponseChecksNameTheirTimeoutOnce(t *testing.T) {
+	type row struct {
+		name   string
+		passed bool
+	}
+	tests := []struct {
+		name  string
+		check string
+		at    string
+		rows  []row
+	}{
+		{
+			"test block",
+			"# @rts test first\n> let n = mock.count({path: \"/x\"})\n> t.error(\"after\")\n",
+			"env_ref.http:5:3",
+			[]row{{"first", false}, {"js", true}},
+		},
+		{
+			"assert",
+			"# @assert mock.count({path: \"/x\"}) + 1 == 1\n",
+			"env_ref.http:3:38",
+			[]row{{"js", true}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, req := parseDoc(t, "### one\n# @timeout 50ms\n"+tt.check+
+				"# @rts test second\n> t.error(\"ran\")\n# @script test\n> tests.assert(true, \"js\");\n"+
+				"GET http://example.test\n")
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client(), MockInspector: waitingInspector{}}, nil)
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+			if err != nil || res.Err != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+			}
+			var rows []row
+			for _, r := range res.Tests {
+				rows = append(rows, row{r.Name, r.Passed})
+			}
+			if !slices.Equal(rows, tt.rows) {
+				t.Fatalf("tests = %+v, want %+v", rows, tt.rows)
+			}
+			want := tt.at + ": canceled: response checks timed out after 50ms: context deadline exceeded"
+			if res.ScriptErr == nil || res.ScriptErr.Error() != want {
+				t.Fatalf("script error = %q, want %q", res.ScriptErr, want)
+			}
+		})
+	}
+}
+
 func TestRTSExtensionsBindMockAndYieldToLocals(t *testing.T) {
 	e := New(engcfg.Config{MockInspector: testMockInspector{}}, nil)
 	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
@@ -545,6 +602,8 @@ func TestTraceObjectBelongsToTheCurrentResponse(t *testing.T) {
 # @name traced
 # @trace total<=10s
 # @capture request budgets = trace.hasBudgets()
+# @script test
+> {% tests.assert(trace.enabled(), "js trace") %}
 GET `+srv.URL+`/traced
 
 ### plain
@@ -561,10 +620,15 @@ GET `+srv.URL+`/plain
 		if err != nil || res.Err != nil {
 			t.Fatalf("request %d: err=%v result err=%v", i, err, res.Err)
 		}
+		var names []string
 		for _, test := range res.Tests {
 			if !test.Passed {
 				t.Fatalf("request %d assert failed: %s %s", i, test.Name, test.Message)
 			}
+			names = append(names, test.Name)
+		}
+		if i == 0 && !slices.Contains(names, "js trace") {
+			t.Fatalf("request 0 tests = %q, want the js trace test", names)
 		}
 		for name, value := range want {
 			if got := executedVar(t, res.Executed, name); got != value {

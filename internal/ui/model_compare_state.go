@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -24,7 +25,7 @@ type compareResult struct {
 	Stream      *scripts.StreamInfo
 	Transcript  []byte
 	Err         error
-	Tests       []scripts.TestResult
+	Tests       []scriptapi.TestResult
 	ScriptErr   error
 	// RuntimeSecrets contains the values exposed while this row ran.
 	RuntimeSecrets []string
@@ -187,7 +188,7 @@ func summarizeCompareDelta(base, target *compareResult) string {
 	}
 }
 
-func countTestFailures(tests []scripts.TestResult) int {
+func countTestFailures(tests []scriptapi.TestResult) int {
 	n := 0
 	for _, t := range tests {
 		if !t.Passed {

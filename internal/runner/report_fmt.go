@@ -12,7 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
@@ -188,7 +188,7 @@ func formatGRPC(resp *grpcx.Response) *runfmt.GRPC {
 	}
 }
 
-func formatTests(src []scripts.TestResult) []runfmt.Test {
+func formatTests(src []scriptapi.TestResult) []runfmt.Test {
 	if len(src) == 0 {
 		return nil
 	}

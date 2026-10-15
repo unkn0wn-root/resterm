@@ -4,15 +4,9 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
-const (
-	rtsExprStartCol = 1
-
-	scriptLangRTS           = "rts"
-	scriptLangRestermScript = "restermlang"
-)
+const rtsExprStartCol = 1
 
 type RefKind uint8
 
@@ -98,7 +92,7 @@ func (c *refCollector) collectGRPC(req *restfile.GRPCRequest, line int) {
 func (c *refCollector) collectScripts(scripts []restfile.ScriptBlock, line int) {
 	for _, block := range scripts {
 		c.add(RefScript, block.FilePath, line)
-		if isRTS(block.Lang) && strings.TrimSpace(block.Body) != "" {
+		if block.Lang == restfile.ScriptLangRTS && strings.TrimSpace(block.Body) != "" {
 			c.module(block.Body, line)
 		}
 	}
@@ -195,13 +189,4 @@ func (c *refCollector) add(kind RefKind, path string, line int) {
 		return
 	}
 	c.refs = append(c.refs, Ref{Path: path, Kind: kind, Line: line})
-}
-
-func isRTS(lang string) bool {
-	switch str.LowerTrim(lang) {
-	case scriptLangRTS, scriptLangRestermScript:
-		return true
-	default:
-		return false
-	}
 }

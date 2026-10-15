@@ -21,7 +21,10 @@ func addExecutionArgs(c argumentCatalog) {
 		opt("jitter", "Random delay percentage", "20%"),
 	}}, directive.RetryBackoff)
 	c.add(args{named: scriptArgs}, directive.Script)
-	c.add(args{named: []argument{word("pre-request", "Run RestermScript before the request")}}, directive.RTS)
+	c.add(args{named: []argument{
+		word("pre-request", "Run RestermScript before the request").then(),
+		word("test", "Run RestermScript tests after the response").then(),
+	}}, directive.RTS)
 	c.add(args{named: []argument{
 		word(directive.RunVarWord, "Set a variable once per run").withExample("name = {{$uuid}}"),
 	}}, directive.Run)
@@ -98,10 +101,16 @@ var pollArgs = []argument{
 	opt("until", "Condition that stops polling (must be last)", `response.json().status == "completed"`),
 }
 
+var (
+	scriptLang = choice("lang", "Script language", "rts", "js").alias("language")
+	scriptPre  = word("pre-request", "Run script before the request")
+	scriptTest = word("test", "Run script after the response")
+)
+
 var scriptArgs = []argument{
-	word("pre-request", "Run script before the request").chains(),
-	word("test", "Run script after the response").chains(),
-	choice("lang", "Script language", "rts", "js").alias("language"),
+	scriptPre.chains().then(scriptLang),
+	scriptTest.chains().then(scriptLang),
+	scriptLang.then(scriptPre.then(), scriptTest.then()),
 }
 
 var traceArgs = []argument{

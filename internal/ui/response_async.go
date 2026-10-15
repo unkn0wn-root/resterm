@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 const (
@@ -107,7 +107,7 @@ func (m *Model) respFmtCmd(
 	ctx context.Context,
 	token string,
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 	width int,
 ) tea.Cmd {
@@ -116,7 +116,7 @@ func (m *Model) respFmtCmd(
 	}
 
 	rc := cloneHTTPResponse(resp)
-	tc := append([]scripts.TestResult(nil), tests...)
+	tc := append([]scriptapi.TestResult(nil), tests...)
 
 	if width <= 0 {
 		width = defaultResponseViewportWidth

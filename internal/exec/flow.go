@@ -6,6 +6,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -16,7 +17,7 @@ type RequestResult struct {
 	Stream         *scripts.StreamInfo
 	Transcript     []byte
 	Err            error
-	Tests          []scripts.TestResult
+	Tests          []scriptapi.TestResult
 	ScriptErr      error
 	Executed       *restfile.Request
 	RequestText    string

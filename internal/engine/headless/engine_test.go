@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -496,7 +497,8 @@ func TestEngineExecuteRequestCapturesScriptedWebSocketTranscript(t *testing.T) {
 	}
 }
 
-func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
+func grpcStreamRequest(t *testing.T) *restfile.Request {
+	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -507,12 +509,11 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 	go func() {
 		_ = srv.Serve(lis)
 	}()
-	defer func() {
+	t.Cleanup(func() {
 		srv.Stop()
 		_ = lis.Close()
-	}()
-
-	req := &restfile.Request{
+	})
+	return &restfile.Request{
 		Method:   "GRPC",
 		Settings: map[string]string{},
 		GRPC: &restfile.GRPCRequest{
@@ -524,16 +525,20 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 			UseReflection: true,
 			Plaintext:     restfile.OptOf(true),
 		},
-		Metadata: restfile.RequestMetadata{
-			Asserts: []restfile.AssertSpec{{
-				Expression: "stream.summary().receivedCount == 2",
-			}},
-			Captures: []restfile.CaptureSpec{{
-				Scope:      directive.ScopeRequest,
-				Name:       "grpc.count",
-				Expression: "{{stream.summary.receivedCount}}",
-			}},
-		},
+	}
+}
+
+func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
+	req := grpcStreamRequest(t)
+	req.Metadata = restfile.RequestMetadata{
+		Asserts: []restfile.AssertSpec{{
+			Expression: "stream.summary().receivedCount == 2",
+		}},
+		Captures: []restfile.CaptureSpec{{
+			Scope:      directive.ScopeRequest,
+			Name:       "grpc.count",
+			Expression: "{{stream.summary.receivedCount}}",
+		}},
 	}
 	doc := &restfile.Document{Path: "grpc.http", Requests: []*restfile.Request{req}}
 
@@ -571,6 +576,52 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 	got, ok := findReqVar(res.Executed, "grpc.count")
 	if !ok || got.Value != "2" {
 		t.Fatalf("unexpected captured grpc count: %+v %v", got, ok)
+	}
+}
+
+func TestGRPCResponseTestsRunAssertsBeforeScripts(t *testing.T) {
+	req := grpcStreamRequest(t)
+	req.Metadata.Asserts = []restfile.AssertSpec{
+		{Expression: "stream.summary().receivedCount == 2"},
+		{Expression: `fail("boom")`},
+	}
+	req.Metadata.Scripts = []restfile.ScriptBlock{
+		{
+			Kind: "test",
+			Lang: "js",
+			Body: `tests.assert(stream.summary().receivedCount === 2, "js");`,
+		},
+		{
+			Kind: "test",
+			Lang: "rts",
+			Name: "rts",
+			Body: "if stream.summary().receivedCount != 2 {\n  t.error(stream.summary())\n}",
+		},
+	}
+	doc := &restfile.Document{Path: "grpc.http", Requests: []*restfile.Request{req}}
+
+	eng := New(engine.Config{
+		GRPCOptions: grpcx.Options{
+			DefaultPlaintext: restfile.OptOf(true),
+			DialTimeout:      time.Second,
+		},
+	})
+	res, err := eng.ExecuteRequest(doc, req, testSelection(""))
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteRequest() error = %v, result error = %v", err, res.Err)
+	}
+	var names []string
+	for _, tr := range res.Tests {
+		if !tr.Passed {
+			t.Fatalf("test %q failed: %s", tr.Name, tr.Message)
+		}
+		names = append(names, tr.Name)
+	}
+	if want := []string{"stream.summary().receivedCount == 2", "rts", "js"}; !slices.Equal(names, want) {
+		t.Fatalf("tests = %q, want %q", names, want)
+	}
+	if res.ScriptErr == nil || !strings.Contains(res.ScriptErr.Error(), "boom") {
+		t.Fatalf("script error = %v, want the assert error", res.ScriptErr)
 	}
 }
 

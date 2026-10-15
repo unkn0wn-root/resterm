@@ -247,6 +247,30 @@ func TestFailedProducerKeepsStoredSecretRedactable(t *testing.T) {
 	}
 }
 
+func TestRTSTestBlockKeepsStoredSecretRedactable(t *testing.T) {
+	eng, _ := newStubEngine(t)
+	env := testEnv("")
+	eng.rt.Globals().Set(env.Scope(), "token", leakedSecret, true)
+	req := secretLeakRequest(restfile.ScriptBlock{
+		Kind: "test",
+		Lang: "rts",
+		Body: `t.error("token", vars.global.get("token"))
+fail(vars.global.get("token"))`,
+	})
+
+	res, err := eng.ExecuteWith(nil, req, env, ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if len(res.Tests) != 1 || res.Tests[0].Passed || !strings.Contains(res.Tests[0].Message, "token "+secretMask) {
+		t.Fatalf("Tests = %#v, want one failed test that read the secret", res.Tests)
+	}
+	if res.ScriptErr == nil {
+		t.Fatal("expected the block to fail")
+	}
+	assertSecretStaysRedactable(t, res)
+}
+
 func TestFailedAssertKeepsSecretRedactable(t *testing.T) {
 	req := &restfile.Request{
 		Method: http.MethodGet,

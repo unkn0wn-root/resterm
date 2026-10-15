@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -67,7 +68,7 @@ type wfStepRes struct {
 	grpc    *grpcx.Response
 	stream  *scripts.StreamInfo
 	raw     []byte
-	tests   []scripts.TestResult
+	tests   []scriptapi.TestResult
 	sErr    error
 	err     error
 	secrets []string
@@ -210,7 +211,7 @@ func workflowTransportOutcome(res *wfStepRes) (bool, string) {
 	}
 }
 
-func firstFailedWorkflowTest(tests []scripts.TestResult) (string, bool) {
+func firstFailedWorkflowTest(tests []scriptapi.TestResult) (string, bool) {
 	for _, test := range tests {
 		if test.Passed {
 			continue

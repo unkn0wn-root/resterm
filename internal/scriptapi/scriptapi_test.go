@@ -10,7 +10,7 @@ import (
 func TestMembers(t *testing.T) {
 	tests := []struct {
 		object string
-		lang   string
+		lang   restfile.ScriptLang
 		want   []string
 	}{
 		{"vars", restfile.ScriptLangJS, []string{"get", "has", "set", "interpolate", "global"}},

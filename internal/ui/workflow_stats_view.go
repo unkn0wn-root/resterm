@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
 const (
@@ -563,8 +564,10 @@ func (v *workflowStatsView) detailHeader(
 		)
 	}
 	if msg := strings.TrimSpace(entry.result.Message); msg != "" {
-		for _, line := range wrapStructuredLine(pal.Message.Render(msg), width) {
-			lines = append(lines, workflowFitLine(line, width))
+		for ln := range strings.SplitSeq(termtext.Block(msg), "\n") {
+			for _, line := range wrapStructuredLine(pal.Message.Render(ln), width) {
+				lines = append(lines, workflowFitLine(line, width))
+			}
 		}
 	}
 	return lines
@@ -719,7 +722,7 @@ func (entry workflowStatsEntry) detailBodyLines(indent string, r responseRendere
 		return []string{r.stats.Message.Render(indent + "Canceled before response capture")}
 	}
 	if entry.result.Skipped {
-		reason := strings.TrimSpace(entry.result.Message)
+		reason := termtext.Block(strings.TrimSpace(entry.result.Message))
 		if reason == "" {
 			reason = "Skipped"
 		}

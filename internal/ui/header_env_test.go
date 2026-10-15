@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -111,7 +111,7 @@ func TestHeaderKeepsActiveAndTestsWithGroupedEnvironment(t *testing.T) {
 	model.width = 120
 	model.height = 30
 	model.activeRequestTitle = "GET users"
-	model.testResults = []scripts.TestResult{{Name: "ok", Passed: true}}
+	model.testResults = []scriptapi.TestResult{{Name: "ok", Passed: true}}
 
 	view := ansi.Strip(model.renderHeader())
 	for _, want := range []string{labelHeaderEnv, iconHeaderActive, "GET users", iconTestPass} {

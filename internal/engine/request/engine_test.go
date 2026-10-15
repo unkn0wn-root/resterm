@@ -3,12 +3,16 @@ package request
 import (
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -656,5 +660,356 @@ func TestPreviewCommandAuthUndefinedParamOutranksDerivedParseError(t *testing.T)
 	}
 	if transportCalled() {
 		t.Fatalf("preview must not construct a transport")
+	}
+}
+
+func TestResponseTestsRunAssertsBeforeScripts(t *testing.T) {
+	doc, req := parseDoc(
+		t,
+		"### one\n# @assert response.statusCode == 200\n# @assert fail(\"boom\")\nGET http://example.test\n",
+	)
+	req.Metadata.Scripts = append(req.Metadata.Scripts, jsTest(`
+vars.global.set("seen", "yes");
+tests.assert(response.statusCode === 200, "js");
+`))
+	eng, _ := newStubEngine(t)
+	env := testEnv("")
+	res, err := eng.ExecuteWith(doc, req, env, ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	var names []string
+	for _, tr := range res.Tests {
+		if !tr.Passed {
+			t.Fatalf("test %q failed: %s", tr.Name, tr.Message)
+		}
+		names = append(names, tr.Name)
+	}
+	if want := []string{"response.statusCode == 200", "js"}; !slices.Equal(names, want) {
+		t.Fatalf("tests = %q, want %q", names, want)
+	}
+	if res.ScriptErr == nil || !strings.Contains(res.ScriptErr.Error(), "boom") {
+		t.Fatalf("script error = %v, want the assert error", res.ScriptErr)
+	}
+	if got := eng.rt.Globals().Snapshot(env.Scope())["seen"].Value; got != "yes" {
+		t.Fatalf("store seen = %q, want %q", got, "yes")
+	}
+}
+
+func TestResponseTestsKeepEveryScriptError(t *testing.T) {
+	doc, req := parseDoc(
+		t,
+		"### one\n# @assert fail(\"boom\")\n# @script test\n> throw new Error(\"bad\");\nGET http://example.test\n",
+	)
+	eng, _ := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	rep := diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) != 2 {
+		t.Fatalf("report has %d items, want 2: %v", len(rep.Items), res.ScriptErr)
+	}
+	as, js := rep.Items[0], rep.Items[1]
+	if as.Message != "boom" || as.Span.Start != (diag.Pos{Path: "env_ref.http", Line: 2, Col: 15}) ||
+		len(as.Frames) == 0 {
+		t.Fatalf("assert diagnostic = %+v, want boom at env_ref.http:2:15 with frames", as)
+	}
+	if js.Class != diag.ClassScript || js.Message != "Error: bad" ||
+		js.Span.Start != (diag.Pos{Path: "env_ref.http", Line: 4, Col: 9}) {
+		t.Fatalf("script diagnostic = %+v, want Error: bad at env_ref.http:4:9", js)
+	}
+	if got := diag.ClassOf(res.ScriptErr); got != diag.ClassScript {
+		t.Fatalf("class = %s, want %s", got, diag.ClassScript)
+	}
+}
+
+func TestSSEScriptTestsReadTheStream(t *testing.T) {
+	client := httpx.NewClientWithOptions(
+		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
+			return &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					h := make(http.Header)
+					h.Set("Content-Type", "text/event-stream")
+					return &http.Response{
+						Status:     "200 OK",
+						StatusCode: http.StatusOK,
+						Header:     h,
+						Body:       io.NopCloser(strings.NewReader("data: hello\n\n")),
+						Request:    r,
+					}, nil
+				}),
+			}, nil
+		}),
+	)
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "https://example.test/events",
+		SSE:    &restfile.SSERequest{},
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{
+				jsTest(`
+tests.assert(response.json().summary.eventCount === 1, "event count");
+tests.assert(stream.summary().dropped === 0, "complete transcript");
+`),
+				{Kind: "test", Lang: "rts", Name: "rts events", Body: `let evs = stream.events()
+if len(evs) != 1 or evs[0].data != "hello" {
+  t.error(evs)
+}`},
+			},
+		},
+	}
+	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(nil, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if res.Stream == nil || res.Stream.Kind != "sse" {
+		t.Fatalf("stream = %+v, want sse", res.Stream)
+	}
+	if res.ScriptErr != nil {
+		t.Fatalf("script error = %v", res.ScriptErr)
+	}
+	if len(res.Tests) != 3 || res.Tests[0].Name != "rts events" {
+		t.Fatalf("tests = %+v, want the rts block then 2", res.Tests)
+	}
+	for _, tr := range res.Tests {
+		if !tr.Passed {
+			t.Fatalf("test %q failed: %s", tr.Name, tr.Message)
+		}
+	}
+}
+
+func rtsTestDoc(t *testing.T, src string) (*restfile.Document, *restfile.Request) {
+	t.Helper()
+	dir := t.TempDir()
+	mod := `export fn orders(list) {
+  let out = []
+  for let i, o range list {
+    if o.total < 0 {
+      out = rts.list.append(out, "Order " + str(i) + " has negative total")
+    }
+  }
+  return out
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "checks.rts"), []byte(mod), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+		t.Fatalf("parse errors = %v", doc.Errors)
+	}
+	return doc, doc.Requests[0]
+}
+
+func TestRTSTestBlocksRunBetweenAssertsAndScripts(t *testing.T) {
+	doc, req := rtsTestDoc(t, `# @use ./checks.rts as checks
+### orders
+# @assert response.statusCode == 200
+# @rts test "orders are valid"
+> let body = try response.json()
+> if not body.ok {
+>   t.fatal("body is not JSON:", body.error)
+> }
+> for let _, msg range checks.orders(body.value.orders) {
+>   t.error(msg)
+> }
+# @rts test stock
+> if response.json().stock < 1 {
+>   t.error("no stock")
+> }
+# @script test
+> tests.assert(response.statusCode === 200, "js");
+GET http://example.test/orders
+`)
+	eng, st := newStubEngine(t)
+	st.body = `{"orders": [{"total": 5}, {"total": -1}, {"total": -2}], "stock": 3}`
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil || res.ScriptErr != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v, script error = %v", err, res.Err, res.ScriptErr)
+	}
+	type result struct {
+		name   string
+		passed bool
+		msg    string
+	}
+	var got []result
+	for _, tr := range res.Tests {
+		got = append(got, result{tr.Name, tr.Passed, tr.Message})
+	}
+	want := []result{
+		{"response.statusCode == 200", true, ""},
+		{"orders are valid", false, "api.http:10: Order 1 has negative total\napi.http:10: Order 2 has negative total"},
+		{"stock", true, ""},
+		{"js", true, ""},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("tests = %+v, want %+v", got, want)
+	}
+}
+
+func TestRTSTestBlockErrorKeepsEveryScriptError(t *testing.T) {
+	doc, req := rtsTestDoc(t, `### one
+# @rts test "broken block"
+> t.error("before")
+> let x = missing.value
+# @rts test after
+> t.error("ran")
+# @script test
+> throw new Error("bad");
+GET http://example.test
+`)
+	eng, _ := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if len(res.Tests) != 2 || res.Tests[0].Name != "broken block" || res.Tests[0].Message != "api.http:3: before" ||
+		res.Tests[1].Name != "after" || res.Tests[1].Message != "api.http:6: ran" {
+		t.Fatalf("tests = %+v, want broken then after", res.Tests)
+	}
+	rep := diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) != 2 {
+		t.Fatalf("report has %d items, want 2: %v", len(rep.Items), res.ScriptErr)
+	}
+	block, js := rep.Items[0], rep.Items[1]
+	if block.Message != `undefined name "missing"` || block.Span.Start != (diag.Pos{Path: doc.Path, Line: 4, Col: 11}) {
+		t.Fatalf("block diagnostic = %+v, want the missing name at line 4", block)
+	}
+	if js.Message != "Error: bad" {
+		t.Fatalf("script diagnostic = %+v, want Error: bad", js)
+	}
+	out := diag.Render(res.ScriptErr)
+	if !strings.Contains(out, "   4 | > let x = missing.value") ||
+		!strings.Contains(out, `:3:1 in @rts test "broken block"`) {
+		t.Fatalf("rendered error has no source line or block frame:\n%s", out)
+	}
+}
+
+func TestRTSTestBlocksReadRequestState(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want []string
+		err  string
+	}{
+		{
+			name: "captures",
+			src: `### one
+# @capture request token = response.json().token
+# @rts test
+> t.error("token", vars.get("token"))
+GET http://example.test
+`,
+			want: []string{"@rts test api.http:4: token abc"},
+		},
+		{
+			name: "after an assert error",
+			src: `### one
+# @assert fail("boom")
+# @rts test ran
+> t.error("ran")
+GET http://example.test
+`,
+			want: []string{"ran api.http:4: ran"},
+			err:  "boom",
+		},
+		{
+			name: "import named t",
+			src: `# @use ./checks.rts as t
+### one
+# @rts test
+> t.error("shadowed")
+GET http://example.test
+`,
+			want: []string{"@rts test api.http:4: shadowed"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, req := rtsTestDoc(t, tc.src)
+			eng, st := newStubEngine(t)
+			st.body = `{"token": "abc"}`
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+			if err != nil || res.Err != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+			}
+			var got []string
+			for _, tr := range res.Tests {
+				if tr.Passed {
+					t.Fatalf("test %q passed, want each block to report", tr.Name)
+				}
+				got = append(got, tr.Name+" "+tr.Message)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("tests = %q, want %q", got, tc.want)
+			}
+			var msg string
+			if res.ScriptErr != nil {
+				msg = res.ScriptErr.Error()
+			}
+			if !strings.Contains(msg, tc.err) || (tc.err == "") != (res.ScriptErr == nil) {
+				t.Fatalf("script error = %v, want %q", res.ScriptErr, tc.err)
+			}
+		})
+	}
+}
+
+func TestRTSOneLineBlocksRun(t *testing.T) {
+	doc, req := rtsTestDoc(t, `### one
+# @rts pre-request
+> {% request.setHeader("X-One", "yes") %}
+# @rts test ran
+> {% t.error("ran") %}
+# @rts test broken
+> {% let x = missing.value %}
+GET http://example.test
+`)
+	eng, st := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if got := st.wire.Header.Get("X-One"); got != "yes" {
+		t.Fatalf("X-One = %q, want the pre-request block to set it", got)
+	}
+	if len(res.Tests) != 2 || res.Tests[0].Name != "ran" || res.Tests[0].Message != "api.http:5: ran" ||
+		res.Tests[1].Name != "broken" || res.Tests[1].Passed {
+		t.Fatalf("tests = %+v, want ran then broken", res.Tests)
+	}
+	rep := diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) != 1 || rep.Items[0].Span.Start != (diag.Pos{Path: doc.Path, Line: 7, Col: 14}) {
+		t.Fatalf("script error = %+v, want the missing name at 7:14", rep.Items)
+	}
+}
+
+func TestRTSTestBlocksSkipWhenTheResponseHasNoRTSView(t *testing.T) {
+	client := httpx.NewClientWithOptions(
+		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
+			return &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					return &http.Response{
+						Status:     "200 OK",
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"X Bad": {"x"}},
+						Body:       io.NopCloser(strings.NewReader("ok")),
+						Request:    r,
+					}, nil
+				}),
+			}, nil
+		}),
+	)
+	doc, req := parseDoc(t, "### one\n# @rts test\n> t.error(\"ran\")\n# @script test\n"+
+		"> tests.assert(true, \"js\");\nGET http://example.test\n")
+	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if len(res.Tests) != 1 || res.Tests[0].Name != "js" {
+		t.Fatalf("tests = %+v, want only the JavaScript test", res.Tests)
+	}
+	if rep := diag.ReportOf(res.ScriptErr); len(rep.Items) != 1 ||
+		!strings.Contains(rep.Items[0].Message, "not an HTTP header name") {
+		t.Fatalf("script error = %v, want the header error once", res.ScriptErr)
 	}
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"google.golang.org/grpc/codes"
@@ -48,6 +48,56 @@ func TestRenderHTTPPrettyWithHeadersAndFailures(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in output, got %q", want, out)
 		}
+	}
+}
+
+func TestRenderPrettyAlignsTestMessageLines(t *testing.T) {
+	rep := &runner.Report{
+		Results: []runner.Result{{
+			Kind:   runner.ResultKindRequest,
+			Name:   "orders",
+			Method: "GET",
+			Target: "https://example.com/orders",
+			Tests: []scriptapi.TestResult{{
+				Name:    "orders",
+				Message: "api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
+				Elapsed: 3 * time.Millisecond,
+			}},
+		}},
+	}
+
+	out, err := Render(rep, Options{Mode: ModePretty})
+	if err != nil {
+		t.Fatalf("Render(...): %v", err)
+	}
+	want := "Tests:\n" +
+		"  [FAIL] orders - api.http:11: Order 0 has negative total\n" +
+		"                  api.http:11: Order 3 missing tracking (3ms)"
+	if !strings.Contains(out, want) {
+		t.Fatalf("output =\n%s\nwant it to contain\n%s", out, want)
+	}
+}
+
+func TestRenderPrettyEscapesTestText(t *testing.T) {
+	rep := &runner.Report{
+		Results: []runner.Result{{
+			Kind:   runner.ResultKindRequest,
+			Name:   "orders",
+			Method: "GET",
+			Target: "https://example.com/orders",
+			Tests: []scriptapi.TestResult{{
+				Name:    "orders\x1b]0;pwn\a",
+				Message: "api.http:3: got \x1b[31mred\r\nnext\tline",
+			}},
+		}},
+	}
+
+	out, err := Render(rep, Options{Mode: ModePretty})
+	if err != nil {
+		t.Fatalf("Render(...): %v", err)
+	}
+	if strings.ContainsAny(out, "\x1b\a\r\t") {
+		t.Fatalf("output has raw control characters: %q", out)
 	}
 }
 
@@ -303,7 +353,7 @@ func testHTTPPrettyReport() *runner.Report {
 				ReqTE:        []string{"gzip"},
 			},
 			ScriptErr: errors.New("script boom"),
-			Tests: []scripts.TestResult{
+			Tests: []scriptapi.TestResult{
 				{
 					Name:    "method",
 					Message: "expected GET",

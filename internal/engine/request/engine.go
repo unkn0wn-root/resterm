@@ -3,9 +3,13 @@ package request
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
@@ -19,8 +23,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 	"github.com/unkn0wn-root/resterm/internal/tunnel"
@@ -240,7 +246,7 @@ func toResult(res xrunResult) engine.RequestResult {
 		Stream:         res.Stream,
 		Transcript:     copyBytes(res.Transcript),
 		Err:            res.Err,
-		Tests:          append([]scripts.TestResult(nil), res.Tests...),
+		Tests:          append([]scriptapi.TestResult(nil), res.Tests...),
 		ScriptErr:      res.ScriptErr,
 		Executed:       res.Executed,
 		RequestText:    res.RequestText,
@@ -364,10 +370,10 @@ func detectPreRequestScripts(req *restfile.Request) (bool, bool) {
 	}
 	var hasRTS, hasJS bool
 	for _, blk := range req.Metadata.Scripts {
-		if restfile.IsPreRequestScript(blk, restfile.ScriptLangRTS) {
+		if blk.Is(restfile.ScriptKindPreRequest, restfile.ScriptLangRTS) {
 			hasRTS = true
 		}
-		if restfile.IsPreRequestScript(blk, restfile.ScriptLangJS) {
+		if blk.Is(restfile.ScriptKindPreRequest, restfile.ScriptLangJS) {
 			hasJS = true
 		}
 	}
@@ -1203,38 +1209,14 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	}
 
 	x.applyRuntimeGlobals(caps.globals)
-	testScope := x.sentScope(x.captureVariables())
-	assertCtx, cancelAsserts := context.WithTimeout(x.sendCtx, x.timeout)
-	defer cancelAsserts()
-	rr, assertErr := rtsGRPC(resp)
-	var asserts []scripts.TestResult
-	if assertErr == nil {
-		asserts, assertErr = x.eng.runAsserts(
-			assertCtx,
-			x.doc,
-			x.req,
-			x.env,
-			x.opts.BaseDir,
-			testScope,
-			x.locals,
-			rr,
-			nil,
-			rtsStream(info),
-		)
-	}
-	tests, globalChanges, testErr := x.eng.sc.RunTests(
-		x.sendCtx,
-		x.req.Metadata.Scripts,
-		scripts.TestInput{
-			Response:  respForScripts,
-			Variables: testScope.vars,
-			Globals:   testScope.globals,
-			BaseDir:   x.opts.BaseDir,
-			Stream:    info,
-			Secrets:   x.secrets,
-		},
-	)
-	x.applyRuntimeGlobals(globalChanges)
+	rr, rrErr := rtsGRPC(resp)
+	tests, testErr := x.runTests(testRun{
+		ctx:    x.sendCtx,
+		resp:   respForScripts,
+		rr:     rr,
+		rrErr:  rrErr,
+		stream: info,
+	})
 	x.exp.setPrepared(x.req)
 	x.exp.setGRPC(x.req)
 
@@ -1242,11 +1224,105 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	res.GRPC = resp
 	res.Stream = info
 	res.Transcript = copyBytes(raw)
-	res.Tests = append(asserts, tests...)
-	res.ScriptErr = joinErr(assertErr, testErr)
+	res.Tests = tests
+	res.ScriptErr = testErr
 	res.RequestText = x.reqText()
 	res.Explain = x.exp.finish(xplain.StatusReady, "gRPC request sent", nil)
 	return res
+}
+
+type testRun struct {
+	ctx     context.Context
+	resp    *scripts.Response
+	rr      *rtshost.Response
+	rrErr   error
+	trace   *rtshost.Trace
+	jsTrace *scripts.TraceInput
+	stream  *scripts.StreamInfo
+}
+
+func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
+	ctx, cancel := context.WithTimeoutCause(
+		in.ctx,
+		x.timeout,
+		fmt.Errorf("response checks timed out after %s: %w", x.timeout, context.DeadlineExceeded),
+	)
+	defer cancel()
+	sc := x.sentScope(x.captureVariables())
+	var out []scriptapi.TestResult
+	errs := []error{in.rrErr}
+	blocks := slices.ContainsFunc(x.req.Metadata.Scripts, func(b restfile.ScriptBlock) bool {
+		return b.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS)
+	})
+	if in.rrErr == nil && (len(x.req.Metadata.Asserts) > 0 || blocks) {
+		rt, err := x.eng.buildRT(rtIn{
+			doc:     x.doc,
+			req:     x.req,
+			env:     x.env,
+			base:    x.opts.BaseDir,
+			vars:    sc.vars,
+			resolve: sc.resolve,
+			globals: sc.globals,
+			resp:    in.rr,
+			res:     in.rr,
+			tr:      in.trace,
+			st:      rtsStream(in.stream),
+			locals:  x.locals,
+			secrets: rtshost.IncludeSecrets,
+		})
+		errs = append(errs, err)
+		if err == nil {
+			cut := false
+			for _, as := range x.req.Metadata.Asserts {
+				expr := strings.TrimSpace(as.Expression)
+				if expr == "" {
+					continue
+				}
+				name := str.FoldLines(expr)
+				rt.Site = directive.Assert.Tag() + " " + name
+				start := time.Now()
+				pos := x.eng.rtsPosForLineCol(x.doc, x.req, as.Line, as.Col)
+				val, err := x.eng.evalRTSAssert(ctx, x.doc, rt, expr, pos)
+				if err != nil {
+					errs = append(errs, err)
+					// Avoid reporting the same cancellation again in RunTests.
+					var abort *rts.AbortError
+					cut = errors.As(err, &abort) && abort.Kind == rts.AbortCanceled
+					break
+				}
+				out = append(out, scriptapi.TestResult{
+					Name:    name,
+					Message: strings.TrimSpace(as.Message),
+					Passed:  val.IsTruthy(),
+					Elapsed: time.Since(start),
+				})
+			}
+			if !cut {
+				tests, err := rtshost.RunTests(ctx, x.eng.re, rtshost.Tests{
+					Doc:     x.doc,
+					Scripts: x.req.Metadata.Scripts,
+					Runtime: rt,
+				})
+				out = append(out, tests...)
+				errs = append(errs, err)
+			}
+		}
+	}
+	tests, changes, err := x.eng.sc.RunTests(
+		x.sendCtx,
+		x.req.Metadata.Scripts,
+		scripts.TestInput{
+			Response:  in.resp,
+			Variables: sc.vars,
+			Globals:   sc.globals,
+			BaseDir:   x.opts.BaseDir,
+			Stream:    in.stream,
+			Trace:     in.jsTrace,
+			Secrets:   x.secrets,
+		},
+	)
+	x.applyRuntimeGlobals(changes)
+	return append(out, tests...), errors.Join(append(errs, err)...)
 }
 
 func (f flow) ExecuteHTTP() xexec.RequestResult {
@@ -1256,7 +1332,6 @@ func (f flow) ExecuteHTTP() xexec.RequestResult {
 	x := f.ctx
 	res := x.httpRunner().RunHTTP(xexec.HTTPInput{
 		Client:           x.eng.hc,
-		Scripts:          x.eng.sc,
 		Context:          x.sendCtx,
 		Doc:              x.doc,
 		Req:              x.req,
@@ -1265,7 +1340,6 @@ func (f flow) ExecuteHTTP() xexec.RequestResult {
 		EffectiveTimeout: x.timeout,
 		ScriptVars:       x.run.scripts,
 		Locals:           x.locals,
-		Secrets:          x.secrets,
 	})
 	return x.finishHTTP(res)
 }
@@ -1308,26 +1382,17 @@ func (x *execCtx) httpRunner() xexec.Runner {
 				run.scripts = scriptVars
 				return x.eng.collectVariables(doc, req, x.env, run)
 			},
-			CollectGlobalValues: func(doc *restfile.Document) vars.Globals {
-				return effectiveGlobalValues(doc, x.storeG, x.env.Refs())
-			},
-			RunAsserts: func(in xexec.AssertInput) ([]scripts.TestResult, error) {
+			RunTests: func(in xexec.TestInput) ([]scriptapi.TestResult, error) {
 				rr, err := rtsHTTP(in.HTTP)
-				if err != nil {
-					return nil, err
-				}
-				return x.eng.runAsserts(
-					in.Context,
-					in.Doc,
-					in.Req,
-					x.env,
-					in.BaseDir,
-					x.sentScope(in.Vars),
-					in.Locals,
-					rr,
-					rtsTrace(in.HTTP),
-					rtsStream(in.Stream),
-				)
+				return x.runTests(testRun{
+					ctx:     in.Context,
+					resp:    in.Response,
+					rr:      rr,
+					rrErr:   err,
+					trace:   rtsTrace(in.HTTP),
+					jsTrace: scripts.NewTraceInput(in.HTTP.Timeline, x.req.Metadata.Trace),
+					stream:  in.Stream,
+				})
 			},
 			EvaluatePredicate: func(in xexec.PredicateInput) (bool, error) {
 				return x.eng.evaluateResponsePredicate(
@@ -1342,8 +1407,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					in.Predicate,
 				)
 			},
-			ApplyRuntimeGlobals: x.applyRuntimeGlobals,
-			OnRepeatProgress:    x.onRepeat,
+			OnRepeatProgress: x.onRepeat,
 			Warn: func(message string) {
 				x.warn(Warning(message))
 			},

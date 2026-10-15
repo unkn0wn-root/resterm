@@ -13,7 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/analysis"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	runfail "github.com/unkn0wn-root/resterm/internal/runx/fail"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 const (
@@ -270,7 +270,7 @@ func iterFailure(it IterMeta, res engine.RequestResult) (engine.ProfileFailure, 
 	if r := res.Response; r != nil {
 		f.Status, f.StatusCode, f.Duration = r.Status, r.StatusCode, r.Duration
 	}
-	test := slices.IndexFunc(res.Tests, func(t scripts.TestResult) bool { return !t.Passed })
+	test := slices.IndexFunc(res.Tests, func(t scriptapi.TestResult) bool { return !t.Passed })
 	switch {
 	case res.Err != nil:
 		f.Failure, f.Err = runfail.FromErrorSource(res.Err, profileSource), res.Err

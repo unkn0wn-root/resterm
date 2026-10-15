@@ -67,6 +67,47 @@ In a workflow, put `@when` or `@skip-if` above a `@step` to decide whether that 
 
 Each expression is evaluated, and a truthy result passes. Use `response` for the response to the current request. Add `=> "message"` after the expression to show your own message with the result.
 
+## @rts
+
+```http
+# @use ./validators.rts
+# @rts pre-request
+> request.setHeader("X-Request-Id", uuid())
+# @rts test "orders are valid"
+> for let _, msg range validators.orders(response.json().orders) {
+>   t.error(msg)
+> }
+```
+
+Use `@rts pre-request` to change the outgoing request and `@rts test` to check the response. `# @script pre-request lang=rts` and `# @script test lang=rts` are equivalent.
+
+A test name is optional. Quote names that contain spaces. Extra words and unknown options, such as `name=orders`, prevent the block from running. Unnamed blocks appear as `@rts test` in the results.
+
+Prefix each code line with `>`. A blank line or comment without `>` ends the block; later code starts another block with the same name and a new scope. Use `> #` for comments and `>` for blank lines within a block.
+
+Use `> {%` and `%}` on separate lines to keep comments and blank lines in a block. Inside the braces, `>` is optional:
+
+```http
+# @use ./validators.rts
+# @rts test "orders are valid"
+> {%
+# Validate orders
+let orders = response.json().orders
+
+for let _, msg range validators.orders(orders) {
+  t.error(msg)
+}
+%}
+```
+
+One-line blocks also work: `> {% request.setHeader("X-Debug", "1") %}` in a pre-request block. To read code from a file, use `> < ./checks.rts` outside the `{% ... %}` block. The file contains plain code without `>` or `{% %}`.
+
+After captures, response checks run in this order: `@assert`, RTS test blocks in file order, then JavaScript tests. Failed assertions and script errors do not skip RTS test blocks. A timeout or cancellation skips blocks that have not started. This order applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
+
+Test blocks can read `response`, `last`, `stream`, `trace`, `env`, `vars`, `request`, imported modules, loop values, and captures. Calls to `vars.set`, `vars.global.set`, or request mutation helpers fail. Use `@capture` to save response values, including module results: `# @capture file token = auth.pick(response.json())`.
+
+Report failures with [`t.error` and `t.fatal`](host-objects.md#t). Runtime errors, including `fail()`, also fail the block and include the file and line. Earlier failures are kept, and later blocks still run. `resterm run` exits with code 1 for test failures or 24 for script errors. See [Exit codes](../cli/run.md#exit-codes).
+
 ## @if, @elif, and @else
 
 Use these directives in workflows to choose a step based on a condition. Outside an active workflow, they are ignored and the parser shows a warning. Use `@when` or `@skip-if` to decide whether an ordinary request runs.

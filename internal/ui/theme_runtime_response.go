@@ -9,7 +9,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 )
 
 type responseRenderSource struct {
@@ -17,18 +17,18 @@ type responseRenderSource struct {
 	grpc       *grpcx.Response
 	grpcReq    *restfile.Request
 	grpcMethod string
-	tests      []scripts.TestResult
+	tests      []scriptapi.TestResult
 	scriptErr  error
 }
 
 func newHTTPResponseRenderSource(
 	resp *httpx.Response,
-	tests []scripts.TestResult,
+	tests []scriptapi.TestResult,
 	scriptErr error,
 ) responseRenderSource {
 	return responseRenderSource{
 		http:      cloneHTTPResponse(resp),
-		tests:     append([]scripts.TestResult(nil), tests...),
+		tests:     append([]scriptapi.TestResult(nil), tests...),
 		scriptErr: scriptErr,
 	}
 }

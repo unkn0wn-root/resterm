@@ -2,6 +2,11 @@ package stdlib
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"math"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -323,6 +328,126 @@ func TestStdlibJSONParseStringify(t *testing.T) {
 	}
 }
 
+func marshalStringify(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (string, error) {
+	raw, err := jsonIface(ctx, pos, args[0])
+	if err != nil {
+		return "", err
+	}
+	var indent string
+	if len(args) > 1 {
+		if indent, err = jsonIndent(ctx, pos, args[1]); err != nil {
+			return "", err
+		}
+	}
+	var data []byte
+	if indent == "" {
+		data, err = json.Marshal(raw)
+	} else {
+		data, err = json.MarshalIndent(raw, "", indent)
+	}
+	if err != nil {
+		return "", rts.Errf(ctx, pos, "json stringify failed")
+	}
+	if err := rts.CheckStr(ctx, pos, string(data)); err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func TestStdlibJSONStringifyMatchesMarshal(t *testing.T) {
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 64, MaxList: 4, MaxDict: 4})
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	ok := evalExprCtx(t, ctx, `try [1, {a: "<b>"}]`)
+	failed := evalExprCtx(t, ctx, "try (1 / 0)")
+	nested := rts.Dict(map[string]rts.Value{
+		"b":  rts.List([]rts.Value{rts.Num(1.5), rts.Dict(nil), rts.List(nil), rts.Null()}),
+		"a<": rts.Dict(map[string]rts.Value{"z": rts.Bool(false), "y": rts.Str("é")}),
+	})
+	values := []rts.Value{
+		rts.Null(),
+		rts.Bool(true),
+		rts.Num(1e21),
+		rts.Num(1e-7),
+		rts.Num(math.Copysign(0, -1)),
+		rts.Num(9007199254740993),
+		rts.Str("<a&b> \u2028\u2029 \xff \"q\" \\ \x00\n\t"),
+		rts.List(nil),
+		rts.Dict(nil),
+		nested,
+		ok,
+		failed,
+		rts.List([]rts.Value{ok, failed}),
+		rts.Num(math.NaN()),
+		rts.List([]rts.Value{rts.Num(math.Inf(1))}),
+		rts.List([]rts.Value{rts.Fn(&rts.Func{})}),
+		rts.Dict(map[string]rts.Value{"a": rts.Native(nil)}),
+		rts.List([]rts.Value{rts.Obj(&objMap{name: "x"})}),
+		rts.List(make([]rts.Value, 5)),
+		rts.Dict(map[string]rts.Value{"a": {}, "b": {}, "c": {}, "d": {}, "e": {}}),
+		rts.Str(strings.Repeat("a", 62)),
+		rts.Str(strings.Repeat("a", 63)),
+		rts.List([]rts.Value{rts.Str(strings.Repeat("a", 40))}),
+	}
+	indents := [][]rts.Value{
+		nil,
+		{rts.Num(0)},
+		{rts.Num(2)},
+		{rts.Num(1)},
+		{rts.Num(32)},
+		{rts.Str("\t")},
+		{rts.Str("")},
+		{rts.Str("ab")},
+		{rts.Str(" \t")},
+	}
+	for i, v := range values {
+		for j, indent := range indents {
+			args := append([]rts.Value{v}, indent...)
+			want, werr := marshalStringify(ctx, pos, args)
+			got, err := jsonStringify(ctx, pos, args)
+			if fmt.Sprint(err) != fmt.Sprint(werr) || err == nil && got.S != want {
+				t.Fatalf("value %d, indent %d: json.stringify = %q, %v\nwant %q, %v", i, j, got.S, err, want, werr)
+			}
+		}
+	}
+	for i, indent := range []rts.Value{rts.Num(-1), rts.Num(33), rts.Bool(true)} {
+		args := []rts.Value{nested, indent}
+		_, werr := marshalStringify(ctx, pos, args)
+		if _, err := jsonStringify(ctx, pos, args); err == nil || err.Error() != werr.Error() {
+			t.Fatalf("bad indent %d: json.stringify error = %v, want %v", i, err, werr)
+		}
+	}
+}
+
+// Shared children expand to 2^60 lists unless encoding stops at the size limit.
+func TestStdlibJSONStringifyStopsAtStringLimit(t *testing.T) {
+	v := rts.List([]rts.Value{rts.Num(0)})
+	for range 60 {
+		v = rts.List([]rts.Value{v, v})
+	}
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 65536, MaxList: 2000, MaxDict: 2000})
+	for _, args := range [][]rts.Value{{v}, {v, rts.Num(2)}} {
+		_, err := jsonStringify(ctx, rts.Pos{}, args)
+		if err == nil || !strings.Contains(err.Error(), "string too long") {
+			t.Fatalf("json.stringify error = %v, want string too long", err)
+		}
+	}
+}
+
+// Indentation grows quadratically with depth; it must count toward the size limit.
+func TestStdlibJSONStringifyStopsDeepIndentAtStringLimit(t *testing.T) {
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 65536, MaxList: 2000, MaxDict: 2000})
+	for _, depth := range []int{9998, 25000} {
+		v := rts.List(nil)
+		for range depth {
+			v = rts.List([]rts.Value{v})
+		}
+		_, err := jsonStringify(ctx, rts.Pos{}, []rts.Value{v, rts.Num(32)})
+		if err == nil || !strings.Contains(err.Error(), "string too long") {
+			t.Fatalf("depth %d: json.stringify error = %v, want string too long", depth, err)
+		}
+	}
+}
+
 func TestStdlibJSONGet(t *testing.T) {
 	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 4096, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "json.get({a:{b:[1,2]}}, \"a.b[1]\")")
@@ -361,6 +486,319 @@ func TestStdlibJSONGet(t *testing.T) {
 	if v.K != rts.VBool || v.B != true {
 		t.Fatalf("expected json.has quoted")
 	}
+}
+
+func TestStdlibJSONEqual(t *testing.T) {
+	ctx := testCtx()
+	tests := []struct {
+		src  string
+		want bool
+	}{
+		{"json.equal(null, null)", true},
+		{"json.equal(true, true)", true},
+		{"json.equal(true, false)", false},
+		{"json.equal(null, false)", false},
+		{"json.equal(1, 1.0)", true},
+		{"json.equal(1, 2)", false},
+		{`json.equal("a", "a")`, true},
+		{`json.equal(1, "1")`, false},
+		{"json.equal([1, [2, {a: 3}]], [1, [2, {a: 3}]])", true},
+		{"json.equal([1, 2], [2, 1])", false},
+		{"json.equal([1, 2], [1, 2, 3])", false},
+		{"json.equal({a: {b: [1]}}, {a: {b: [1]}})", true},
+		{"json.equal({a: {b: [1]}}, {a: {b: [2]}})", false},
+		{"json.equal({a: 1, b: 2}, {b: 2, a: 1})", true},
+		{"json.equal({a: 1}, {a: 1, b: 2})", false},
+		{"json.equal({a: null}, {})", false},
+		{"json.equal({a: null}, {b: null})", false},
+		{"json.equal([], {})", false},
+		{"json.equal([], [])", true},
+		{"json.equal({}, {})", true},
+		{"rts.json.equal([1], [1])", true},
+		{"stdlib.json.equal([1], [1])", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.src, func(t *testing.T) {
+			v := evalExprCtx(t, ctx, tt.src)
+			if v.K != rts.VBool || v.B != tt.want {
+				t.Fatalf("%s = %+v, want %t", tt.src, v, tt.want)
+			}
+		})
+	}
+}
+
+func TestStdlibJSONDiff(t *testing.T) {
+	ctx := testCtx()
+	diffs := func(n int) string {
+		return `json.diff(rts.text.split("` + strings.Repeat("x,", n-1) + `x", ","), [])`
+	}
+	unexpected := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = fmt.Sprintf(`$[%d]: unexpected "x"`, i)
+		}
+		return out
+	}
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{"equal", `json.diff({a: [1, {b: null}], c: "x"}, {c: "x", a: [1, {b: null}]})`, []string{}},
+		{"value", "json.diff({user: {id: 7}}, {user: {id: 8}})", []string{"$.user.id: got 7, want 8"}},
+		{"kind", `json.diff({a: "1"}, {a: 1})`, []string{`$.a: got "1", want 1`}},
+		{"missing", `json.diff({user: {}}, {user: {email: "a@b.c"}})`, []string{`$.user.email: missing, want "a@b.c"`}},
+		{"unexpected", "json.diff({user: {extra: true}}, {user: {}})", []string{"$.user.extra: unexpected true"}},
+		{"null is not missing", "json.diff({a: null}, {})", []string{"$.a: unexpected null"}},
+		{
+			"got shorter",
+			"json.diff({items: [1]}, {items: [1, {id: 2}, 3]})",
+			[]string{`$.items[1]: missing, want {"id":2}`, "$.items[2]: missing, want 3"},
+		},
+		{"got longer", "json.diff([1, 2, [3]], [1])", []string{"$[1]: unexpected 2", "$[2]: unexpected [3]"}},
+		{
+			"nested",
+			`json.diff({items: [{tags: ["a"]}]}, {items: [{tags: ["b"]}]})`,
+			[]string{`$.items[0].tags[0]: got "a", want "b"`},
+		},
+		{
+			"quoted keys",
+			`json.diff({"display.name": 1, "0": 2, "a b": {"x-y": 3}}, {"display.name": 2, "0": 2, "a b": {"x-y": 4}})`,
+			[]string{`$["a b"]["x-y"]: got 3, want 4`, `$["display.name"]: got 1, want 2`},
+		},
+		{"root kind", "json.diff([], {})", []string{"$: got [], want {}"}},
+		{"root collection", "json.diff([1, 2], {a: [1]})", []string{`$: got [1,2], want {"a":[1]}`}},
+		{"root value", `json.diff("200", 200)`, []string{`$: got "200", want 200`}},
+		{"no html escape", `json.diff("<i> & é", 1)`, []string{`$: got "<i> & é", want 1`}},
+		{"compact", "json.diff({b: [1, 2.5, null]}, 1)", []string{`$: got {"b":[1,2.5,null]}, want 1`}},
+		{"nested kind", "json.diff({a: {b: 1}}, {a: [1]})", []string{`$.a: got {"b":1}, want [1]`}},
+		{
+			"order",
+			"json.diff({b: 1, a: [1, 2], c: {z: 1, y: 2}}, {c: {z: 2, y: 3}, b: 2, a: [1, 3], d: 0})",
+			[]string{
+				"$.a[1]: got 2, want 3",
+				"$.b: got 1, want 2",
+				"$.c.y: got 2, want 3",
+				"$.c.z: got 1, want 2",
+				"$.d: missing, want 0",
+			},
+		},
+		{
+			"fits",
+			`json.diff("` + strings.Repeat("a", 118) + `", 1)`,
+			[]string{`$: got "` + strings.Repeat("a", 118) + `", want 1`},
+		},
+		{
+			"cut",
+			`json.diff("` + strings.Repeat("a", 119) + `", 1)`,
+			[]string{`$: got "` + strings.Repeat("a", 119) + `..., want 1`},
+		},
+		{
+			"cut at rune",
+			`json.diff(1, "` + strings.Repeat("é", 100) + `")`,
+			[]string{`$: got 1, want "` + strings.Repeat("é", 59) + "..."},
+		},
+		{"cap", diffs(100), unexpected(100)},
+		{"one more", diffs(101), append(unexpected(100), "and 1 more difference")},
+		{"more", diffs(150), append(unexpected(100), "and 50 more differences")},
+		{"rts alias", "rts.json.diff(1, 2)", []string{"$: got 1, want 2"}},
+		{"stdlib alias", "stdlib.json.diff(1, 2)", []string{"$: got 1, want 2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for range 8 {
+				v := evalExprCtx(t, ctx, tt.src)
+				if got := strList(t, v); !slices.Equal(got, tt.want) {
+					t.Fatalf("%s =\n%s\nwant\n%s", tt.src, strings.Join(got, "\n"), strings.Join(tt.want, "\n"))
+				}
+			}
+		})
+	}
+}
+
+func TestStdlibJSONDiffPathsWorkWithGet(t *testing.T) {
+	ctx := testCtx()
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	for _, key := range []string{"id", "0", "", "display.name", "a b", `say "hi"`, `back\slash`, "line\nbreak", "café"} {
+		got := rts.Dict(map[string]rts.Value{
+			"x": rts.List([]rts.Value{rts.Null(), rts.Dict(map[string]rts.Value{key: rts.Num(1)})}),
+		})
+		want := rts.Dict(map[string]rts.Value{
+			"x": rts.List([]rts.Value{rts.Null(), rts.Dict(map[string]rts.Value{key: rts.Num(2)})}),
+		})
+		v, err := jsonDiff(ctx, pos, []rts.Value{got, want})
+		if err != nil {
+			t.Fatalf("json.diff with key %q: %v", key, err)
+		}
+		msgs := strList(t, v)
+		if len(msgs) != 1 || !strings.HasSuffix(msgs[0], ": got 1, want 2") {
+			t.Fatalf("json.diff with key %q = %q", key, msgs)
+		}
+		path := strings.TrimSuffix(msgs[0], ": got 1, want 2")
+		v, err = jsonGet(ctx, pos, []rts.Value{got, rts.Str(path)})
+		if err != nil || v.K != rts.VNum || v.N != 1 {
+			t.Fatalf("json.get(%s) = %+v, %v, want 1", path, v, err)
+		}
+	}
+}
+
+func TestStdlibJSONEqualAndDiffRejectNonJSON(t *testing.T) {
+	ctx := testCtx()
+	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{"json.equal(f, 1)", "json.equal(a, b) cannot compare function"},
+		{"json.equal(1, [{a: [f]}])", "json.equal(a, b) cannot compare function"},
+		{"json.equal([1], [1, f])", "json.equal(a, b) cannot compare function"},
+		{"json.equal(json.get, json.get)", "json.equal(a, b) cannot compare native"},
+		{"json.equal({a: rts}, {a: rts})", "json.equal(a, b) cannot compare rts"},
+		{"json.equal({b: try 1, a: f}, 1)", "json.equal(a, b) cannot compare function"},
+		{"json.diff([try 1], [])", "json.diff(got, want) cannot compare result"},
+		{"json.diff({a: 1}, {b: f})", "json.diff(got, want) cannot compare function"},
+		{"json.equal(1)", "json.equal(a, b) expects 2 args"},
+		{"json.equal(1, 2, 3)", "json.equal(a, b) expects 2 args"},
+		{"json.diff()", "json.diff(got, want) expects 2 args"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.src, func(t *testing.T) {
+			mod, err := rts.ParseModule("test", []byte("fn f() {\n  return 1\n}\nexport let __v = "+tt.src))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			for range 8 {
+				if _, err := rts.Exec(ctx, mod, New()); err == nil || !strings.Contains(err.Error(), tt.want) {
+					t.Fatalf("%s: error = %v, want %q", tt.src, err, tt.want)
+				}
+			}
+		})
+	}
+
+	inf := rts.Num(math.Inf(1))
+	if _, err := jsonEqual(ctx, pos, []rts.Value{inf, inf}); err == nil ||
+		!strings.Contains(err.Error(), "json.equal(a, b) cannot compare +Inf") {
+		t.Fatalf("json.equal(+Inf, +Inf): error = %v", err)
+	}
+	nan := rts.List([]rts.Value{rts.Num(math.NaN())})
+	if _, err := jsonDiff(ctx, pos, []rts.Value{rts.Num(1), nan}); err == nil ||
+		!strings.Contains(err.Error(), "json.diff(got, want) cannot compare NaN") {
+		t.Fatalf("json.diff(1, [NaN]): error = %v", err)
+	}
+}
+
+// Shared children expand to 2^27 lists; validation must stop at the step limit.
+func TestStdlibJSONEqualAndDiffStopAtStepLimit(t *testing.T) {
+	const build = `
+let v = [0]
+for let i = 0; i < 27; i = i + 1 {
+  v = [v, v]
+}
+`
+	for _, expr := range []string{"json.equal(v, v)", "try json.equal(v, v)", "json.diff(v, v)", "try json.diff(v, v)"} {
+		mod, err := rts.ParseModule("test", []byte(build+"export let __v = "+expr))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		ctx := rts.NewCtx(t.Context(), rts.Limits{MaxSteps: 10000, MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+		_, err = rts.Exec(ctx, mod, New())
+		if !rts.IsAbort(err) || !strings.Contains(err.Error(), "step limit exceeded") {
+			t.Fatalf("%s error = %v, want the step limit abort", expr, err)
+		}
+	}
+}
+
+// Three containers in each argument use six steps, even when both arguments share v.
+func TestStdlibJSONEqualAndDiffStepCost(t *testing.T) {
+	const steps = 6
+	v := rts.List([]rts.Value{rts.Dict(map[string]rts.Value{"a": rts.List(nil)}), rts.Num(1)})
+	for name, f := range map[string]rts.NativeFunc{"json.equal": jsonEqual, "json.diff": jsonDiff} {
+		for _, limit := range []int{steps, steps - 1} {
+			ctx := rts.NewCtx(t.Context(), rts.Limits{MaxSteps: limit, MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+			_, err := f(ctx, rts.Pos{}, []rts.Value{v, v})
+			if rts.IsAbort(err) != (limit < steps) {
+				t.Fatalf("%s with %d steps: error = %v", name, limit, err)
+			}
+		}
+	}
+}
+
+func TestStdlibJSONEqualAndDiffStopWhenCanceled(t *testing.T) {
+	cx, cancel := context.WithCancel(t.Context())
+	cancel()
+	ctx := rts.NewCtx(cx, rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	v := rts.List([]rts.Value{rts.Num(1)})
+	for name, f := range map[string]rts.NativeFunc{"json.equal": jsonEqual, "json.diff": jsonDiff} {
+		_, err := f(ctx, rts.Pos{}, []rts.Value{v, v})
+		if !rts.IsAbort(err) || !strings.Contains(err.Error(), "canceled: context canceled") {
+			t.Fatalf("%s error = %v, want the canceled abort", name, err)
+		}
+	}
+}
+
+func TestStdlibJSONEqualAndDiffFitResponseBudget(t *testing.T) {
+	for _, nested := range []bool{false, true} {
+		resp := func() rts.Value {
+			items := make([]rts.Value, 2000)
+			for i := range items {
+				item := map[string]rts.Value{}
+				for f := range 10 {
+					item["field"+strconv.Itoa(f)] = rts.Num(float64(i*10 + f))
+				}
+				if nested {
+					item["field9"] = rts.Dict(map[string]rts.Value{"id": rts.Num(float64(i))})
+				}
+				items[i] = rts.Dict(item)
+			}
+			return rts.List(items)
+		}
+		want := resp()
+		want.L[1500].M["field3"] = rts.Str("changed")
+		cfg := rts.EvalConfig{Bindings: []rts.Extensions{
+			rts.Extension("got", resp()),
+			rts.Extension("same", resp()),
+			rts.Extension("want", want),
+		}}
+		eng := rts.NewEng(New)
+		v, err := eng.Eval(t.Context(), cfg, "json.equal(got, same)", rts.Pos{})
+		if err != nil || v.K != rts.VBool || !v.B {
+			t.Fatalf("nested %t: json.equal = %+v, %v, want true", nested, v, err)
+		}
+		v, err = eng.Eval(t.Context(), cfg, "json.diff(got, want)", rts.Pos{})
+		if err != nil {
+			t.Fatalf("nested %t: json.diff: %v", nested, err)
+		}
+		if got := strList(t, v); !slices.Equal(got, []string{`$[1500].field3: got 15003, want "changed"`}) {
+			t.Fatalf("nested %t: json.diff = %q", nested, got)
+		}
+	}
+}
+
+// Shared children expand to 2^60 dicts unless encoding stops at the display limit.
+func TestStdlibJSONDiffTextStopsAtCut(t *testing.T) {
+	v := rts.Num(0)
+	for range 60 {
+		v = rts.Dict(map[string]rts.Value{"a": v, "b": v})
+	}
+	const key = `{"a":`
+	if got, want := diffText(v), strings.Repeat(key, maxDiffText/len(key))+"..."; got != want {
+		t.Fatalf("diffText = %q, want %q", got, want)
+	}
+}
+
+func strList(t *testing.T, v rts.Value) []string {
+	t.Helper()
+	if v.K != rts.VList {
+		t.Fatalf("got %+v, want a list", v)
+	}
+	out := make([]string, len(v.L))
+	for i, it := range v.L {
+		if it.K != rts.VStr {
+			t.Fatalf("item %d is %+v, want a string", i, it)
+		}
+		out[i] = it.S
+	}
+	return out
 }
 
 func TestStdlibHeadersHelpers(t *testing.T) {

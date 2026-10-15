@@ -14,7 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/fsx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
@@ -441,7 +441,7 @@ func TestCommitMoveClearsResponseAndStreamState(t *testing.T) {
 	m.liveSessions[sess.ID()] = newLiveSession(sess.ID(), 10)
 	m.responsePanes[0].snapshot = &responseSnapshot{}
 	m.render = pendingRender{token: "t", snapshot: &responseSnapshot{}, cancel: func() {}}
-	m.testResults = []scripts.TestResult{{Name: "x", Passed: true}}
+	m.testResults = []scriptapi.TestResult{{Name: "x", Passed: true}}
 	m.scriptError = errors.New("old")
 	m.lastError = errors.New("old")
 	m.cfg.HTTPOptions.BaseDir = filepath.Join(base, "A")

@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
@@ -546,69 +545,6 @@ func (e *Engine) EvalForEachItems(
 func (e *Engine) ValueString(ctx context.Context, pos rts.Pos, v rts.Value) (string, error) {
 	cx := rts.NewCtx(ctx, e.re.Limits())
 	return rts.ValueString(cx, pos, v)
-}
-
-func (e *Engine) runAsserts(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env vars.ResolvedEnv,
-	base string,
-	sc evalScope,
-	locals rts.Locals,
-	resp *rtshost.Response,
-	tr *rtshost.Trace,
-	st *rtshost.Stream,
-) ([]scripts.TestResult, error) {
-	if req == nil || len(req.Metadata.Asserts) == 0 {
-		return nil, nil
-	}
-	vv := sc.vars
-	if vv == nil {
-		vv = e.collectVariables(doc, req, env, execVars{})
-	}
-	rt, err := e.buildRT(rtIn{
-		doc:     doc,
-		req:     req,
-		env:     env,
-		base:    base,
-		vars:    vv,
-		resolve: sc.resolve,
-		globals: sc.globals,
-		resp:    resp,
-		res:     resp,
-		tr:      tr,
-		st:      st,
-		locals:  locals,
-		secrets: rtshost.IncludeSecrets,
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]scripts.TestResult, 0, len(req.Metadata.Asserts))
-	for _, as := range req.Metadata.Asserts {
-		expr := strings.TrimSpace(as.Expression)
-		if expr == "" {
-			continue
-		}
-		name := str.FoldLines(expr)
-		rt.Site = directive.Assert.Tag() + " " + name
-		start := time.Now()
-		val, err := e.evalRTSAssert(ctx, doc, rt, expr, e.rtsPosForLineCol(doc, req, as.Line, as.Col))
-		if err != nil {
-			return out, err
-		}
-		out = append(out, scripts.TestResult{
-			Name:    name,
-			Message: strings.TrimSpace(as.Message),
-			Passed:  val.IsTruthy(),
-			Elapsed: time.Since(start),
-		})
-	}
-	if len(out) == 0 {
-		return nil, nil
-	}
-	return out, nil
 }
 
 func (e *Engine) evaluateResponsePredicate(
@@ -1221,14 +1157,4 @@ func (e *Engine) ApplyPatches(
 ) error {
 	env := ResolveEnvironment(src, doc, req)
 	return e.runRTSApply(ctx, doc, req, env, base, e.storedScope(doc, env, vv), locals)
-}
-
-func joinErr(a, b error) error {
-	if a == nil {
-		return b
-	}
-	if b == nil {
-		return a
-	}
-	return fmt.Errorf("%v; %v", a, b)
 }

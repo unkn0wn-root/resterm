@@ -1,0 +1,36 @@
+module validators
+
+export fn orders(list) {
+  let msgs = []
+  for let i, o range list {
+    let msg = order(o)
+    if msg != null {
+      msgs = rts.list.append(msgs, "order " + str(i) + ": " + msg)
+    }
+  }
+  return msgs
+}
+
+fn order(o) {
+  if o.id == null {
+    return "missing id"
+  }
+  if typeof(o.total) != "number" {
+    return "total is " + typeof(o.total) + ", want number"
+  }
+  if o.total < 0 {
+    return "total " + str(o.total) + " is negative"
+  }
+  if not o.items {
+    return "no items"
+  }
+  for let _, item range o.items {
+    if typeof(item.qty) != "number" {
+      return "item " + item.sku + " has no quantity"
+    }
+    if item.qty < 1 {
+      return "item " + item.sku + " has quantity " + str(item.qty)
+    }
+  }
+  return null
+}

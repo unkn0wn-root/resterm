@@ -12,7 +12,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/update"
@@ -775,7 +775,7 @@ func TestStatusBarUsesStatusMessageTestSummaryOnly(t *testing.T) {
 	model.width = 96
 	model.statusUser = ""
 	model.statusHost = ""
-	model.testResults = []scripts.TestResult{{Name: "status", Passed: false}}
+	model.testResults = []scriptapi.TestResult{{Name: "status", Passed: false}}
 	model.statusMessage = statusMsg{text: "Saved draft.http", level: statusSuccess}
 
 	plain := ansi.Strip(model.renderStatusBar())

@@ -125,7 +125,7 @@ func (c *Ctx) tick(pos Pos) error {
 	}
 	select {
 	case <-c.Ctx.Done():
-		return rtAbort(c, pos, AbortCanceled, "canceled: %v", c.Ctx.Err())
+		return rtAbort(c, pos, AbortCanceled, "canceled: %v", context.Cause(c.Ctx))
 	default:
 		return nil
 	}
@@ -152,6 +152,11 @@ func Errf(ctx *Ctx, pos Pos, format string, args ...any) error {
 	return &StackError{Err: base, Frames: frames}
 }
 
+// Abortf is Errf for errors that try cannot catch.
+func Abortf(ctx *Ctx, pos Pos, format string, args ...any) error {
+	return rtAbort(ctx, pos, AbortScript, format, args...)
+}
+
 func rtAbort(ctx *Ctx, pos Pos, kind AbortKind, format string, args ...any) error {
 	base := &RuntimeError{Pos: pos, Msg: fmt.Sprintf(format, args...)}
 	abort := &AbortError{RuntimeError: base, Kind: kind}
@@ -162,10 +167,13 @@ func rtAbort(ctx *Ctx, pos Pos, kind AbortKind, format string, args ...any) erro
 	return &StackError{Err: abort, Frames: frames}
 }
 
-// try cannot catch an abort, even a wrapped one.
+// ErrHalt stops execution without a script error and cannot be caught by try.
+var ErrHalt = errors.New("halt")
+
+// IsAbort reports errors that try must not catch, including ErrHalt.
 func IsAbort(err error) bool {
 	var abort *AbortError
-	return errors.As(err, &abort)
+	return errors.As(err, &abort) || errors.Is(err, ErrHalt)
 }
 
 // WrapErr attaches the current call stack to err unless it already has one.
