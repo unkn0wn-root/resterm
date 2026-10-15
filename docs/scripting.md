@@ -8,7 +8,7 @@ Add `# @script pre-request` or `# @script test` followed by lines that start wit
 
 Scripts default to JavaScript. Use `lang=rts` or [`@rts`](rts/directives.md#rts) for [RestermScript](rts/README.md). `language=` is an alias for `lang=`; `javascript` and `restermlang` are aliases for `js` and `rts`.
 
-Unknown kinds or languages (`# @script check`, `lang=python`) produce a warning and the block does not run. Extra words, such as `python` in `# @script test python`, produce a warning but are otherwise ignored.
+Unknown kinds or languages (`# @script check`, `lang=python`) produce a warning and the block does not run. Extra words and unknown options, such as `python` in `# @script test python` or `name=orders`, produce a warning but are otherwise ignored.
 
 ```http
 # @script pre-request

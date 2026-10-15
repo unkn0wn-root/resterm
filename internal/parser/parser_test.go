@@ -505,6 +505,8 @@ func TestParseScriptWarnsOnUnknownKindAndLang(t *testing.T) {
 		},
 		{"# @script test python", []string{`@script ignores "python". Use lang=js or lang=rts to choose a language`}},
 		{"# @script test js extra", []string{`@script ignores "extra". Use lang=js or lang=rts to choose a language`}},
+		{"# @script test extra=1", []string{`unknown @script option "extra"`}},
+		{"# @script test name=orders lang=js", []string{`unknown @script option "name"`}},
 		{"# @script test", nil},
 		{"# @script test js", nil},
 		{"# @script pre-request rts", nil},
@@ -813,6 +815,16 @@ func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
 			name: "unknown kind",
 			dir:  "# @rts response",
 			want: "@rts supports only pre-request and test modes",
+		},
+		{
+			name: "unknown option",
+			dir:  "# @rts test name=orders",
+			want: `unknown @rts option "name"`,
+		},
+		{
+			name: "unknown option with language",
+			dir:  "# @rts pre-request lang=rts extra=1",
+			want: `unknown @rts option "extra"`,
 		},
 	}
 

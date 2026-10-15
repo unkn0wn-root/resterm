@@ -217,7 +217,7 @@ func parseScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, err
 	if lang == "" {
 		lang = restfile.ScriptLangJS
 	}
-	errs = append(errs, params.Conflicts(directive.Script))
+	errs = append(errs, params.Leftover(directive.Script))
 	return kind, lang, errors.Join(errs...)
 }
 
@@ -273,12 +273,12 @@ func validateRTSScriptLangOptions(fields []directive.Field) error {
 	if err != nil {
 		return err
 	}
-	if val, ok := params.First(scriptLangKeys...); ok {
+	if val, ok := params.PopAny(scriptLangKeys...); ok {
 		if lang, _ := scriptLangToken(val); lang != restfile.ScriptLangRTS {
 			return errRTSLangUnsupported
 		}
 	}
-	return params.Conflicts(directive.RTS)
+	return params.Leftover(directive.RTS)
 }
 
 var errRTSLangUnsupported = errors.New("@rts only supports RestermScript. Remove lang=js or use @script for JavaScript")
