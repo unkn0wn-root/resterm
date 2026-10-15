@@ -167,8 +167,7 @@ func rtAbort(ctx *Ctx, pos Pos, kind AbortKind, format string, args ...any) erro
 	return &StackError{Err: abort, Frames: frames}
 }
 
-// ErrHalt stops a script without a runtime error. It bypasses try and is
-// returned unchanged to the host.
+// ErrHalt stops execution without a script error and cannot be caught by try.
 var ErrHalt = errors.New("halt")
 
 // try cannot catch an abort, even a wrapped one.

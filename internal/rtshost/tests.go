@@ -28,6 +28,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 		errs []error
 	)
 	nth := 0
+	tag := directive.RTS.Tag() + " " + string(restfile.ScriptKindTest)
 	for _, block := range in.Scripts {
 		if !block.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS) {
 			continue
@@ -36,8 +37,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			return out, errors.Join(append(errs, err)...)
 		}
 		nth++
-		site := directive.RTS.Tag() + " test"
-		name := block.Name
+		site, name := tag, block.Name
 		if name == "" {
 			name = site
 		} else {
@@ -125,17 +125,13 @@ func (o *testObj) reportDef(name string, end error) native.Def {
 			}
 			parts[i] = s
 		}
-		msg := strings.Join(parts, " ")
-		if pos.Line > 0 {
-			at := diag.Pos{Line: pos.Line}
-			if pos.Path != "" {
-				at.Path = filepath.Base(pos.Path)
-			}
-			if msg == "" {
-				msg = at.String()
-			} else {
-				msg = at.String() + ": " + msg
-			}
+		at := diag.Pos{Line: pos.Line}
+		if pos.Path != "" {
+			at.Path = filepath.Base(pos.Path)
+		}
+		msg := at.String()
+		if text := strings.Join(parts, " "); text != "" {
+			msg += ": " + text
 		}
 		o.msgs = append(o.msgs, msg)
 		return rts.Null(), end
