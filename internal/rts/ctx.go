@@ -125,7 +125,7 @@ func (c *Ctx) tick(pos Pos) error {
 	}
 	select {
 	case <-c.Ctx.Done():
-		return rtAbort(c, pos, AbortCanceled, "canceled: %v", c.Ctx.Err())
+		return rtAbort(c, pos, AbortCanceled, "canceled: %v", context.Cause(c.Ctx))
 	default:
 		return nil
 	}

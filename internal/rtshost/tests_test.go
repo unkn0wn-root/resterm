@@ -475,6 +475,47 @@ func TestRunTestsStopsOnCanceledContext(t *testing.T) {
 	}
 }
 
+func TestRunTestsReportsTheCancelCauseOnce(t *testing.T) {
+	cause := errors.New("checks timed out")
+	tests := []struct {
+		name string
+		stop string
+		want []result
+	}{
+		{"before the first block", "", nil},
+		{"during a block", "stop", []result{{"first", false, ""}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			if tt.stop == "" {
+				cancel(cause)
+			}
+			rt := testRuntime(t)
+			rt.Scope.Resolve = func(name string) (string, bool, error) {
+				if name == tt.stop {
+					cancel(cause)
+				}
+				return "", false, nil
+			}
+			got, err := RunTests(ctx, NewEngine(stdlib.New), Tests{
+				Doc: &restfile.Document{Path: testDoc},
+				Scripts: []restfile.ScriptBlock{
+					testBlock("first", 2, `let v = vars.get("stop")`, `t.error("after")`),
+					testBlock("second", 4, `t.error("ran")`),
+				},
+				Runtime: rt,
+			})
+			if !slices.Equal(results(got), tt.want) {
+				t.Fatalf("results = %+v, want %+v", results(got), tt.want)
+			}
+			if err == nil || strings.Count(err.Error(), cause.Error()) != 1 {
+				t.Fatalf("error = %q, want the cause once", err)
+			}
+		})
+	}
+}
+
 func stepRuntime(t *testing.T) Runtime {
 	t.Helper()
 	dir := t.TempDir()

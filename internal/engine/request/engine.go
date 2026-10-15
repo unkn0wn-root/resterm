@@ -3,6 +3,7 @@ package request
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -1241,7 +1242,11 @@ type testRun struct {
 }
 
 func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
-	ctx, cancel := context.WithTimeout(in.ctx, x.timeout)
+	ctx, cancel := context.WithTimeoutCause(
+		in.ctx,
+		x.timeout,
+		fmt.Errorf("response checks timed out after %s: %w", x.timeout, context.DeadlineExceeded),
+	)
 	defer cancel()
 	sc := x.sentScope(x.captureVariables())
 	var out []scriptapi.TestResult
@@ -1267,6 +1272,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 		})
 		errs = append(errs, err)
 		if err == nil {
+			cut := false
 			for _, as := range x.req.Metadata.Asserts {
 				expr := strings.TrimSpace(as.Expression)
 				if expr == "" {
@@ -1279,6 +1285,9 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 				val, err := x.eng.evalRTSAssert(ctx, x.doc, rt, expr, pos)
 				if err != nil {
 					errs = append(errs, err)
+					// Avoid reporting the same cancellation again in RunTests.
+					var abort *rts.AbortError
+					cut = errors.As(err, &abort) && abort.Kind == rts.AbortCanceled
 					break
 				}
 				out = append(out, scriptapi.TestResult{
@@ -1288,13 +1297,15 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 					Elapsed: time.Since(start),
 				})
 			}
-			tests, err := rtshost.RunTests(ctx, x.eng.re, rtshost.Tests{
-				Doc:     x.doc,
-				Scripts: x.req.Metadata.Scripts,
-				Runtime: rt,
-			})
-			out = append(out, tests...)
-			errs = append(errs, err)
+			if !cut {
+				tests, err := rtshost.RunTests(ctx, x.eng.re, rtshost.Tests{
+					Doc:     x.doc,
+					Scripts: x.req.Metadata.Scripts,
+					Runtime: rt,
+				})
+				out = append(out, tests...)
+				errs = append(errs, err)
+			}
 		}
 	}
 	tests, changes, err := x.eng.sc.RunTests(

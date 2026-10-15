@@ -102,7 +102,7 @@ for let _, msg range validators.orders(orders) {
 
 One-line blocks also work: `> {% request.setHeader("X-Debug", "1") %}` in a pre-request block. To read code from a file, use `> < ./checks.rts` outside the `{% ... %}` block. The file contains plain code without `>` or `{% %}`.
 
-Response checks run after captures: `@assert` first, then RTS test blocks in file order, then JavaScript tests. An assertion failure or error does not skip the test blocks. This applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
+After captures, response checks run in this order: `@assert`, RTS test blocks in file order, then JavaScript tests. Failed assertions and script errors do not skip RTS test blocks. A timeout or cancellation skips blocks that have not started. This order applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
 
 Test blocks can read `response`, `last`, `stream`, `trace`, `env`, `vars`, `request`, imported modules, loop values, and captures. Calls to `vars.set`, `vars.global.set`, or request mutation helpers fail. Use `@capture` to save response values, including module results: `# @capture file token = auth.pick(response.json())`.
 

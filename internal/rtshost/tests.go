@@ -25,8 +25,9 @@ type Tests struct {
 
 func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResult, error) {
 	var (
-		out  []scriptapi.TestResult
-		errs []error
+		out      []scriptapi.TestResult
+		errs     []error
+		canceled bool
 	)
 	nth := 0
 	tag := directive.RTS.Tag() + " " + string(restfile.ScriptKindTest)
@@ -34,8 +35,12 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 		if !block.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS) {
 			continue
 		}
-		if err := ctx.Err(); err != nil {
-			return out, errors.Join(append(errs, err)...)
+		if ctx.Err() != nil {
+			// Do not report a cancellation twice.
+			if !canceled {
+				errs = append(errs, context.Cause(ctx))
+			}
+			break
 		}
 		nth++
 		site, name := tag, block.Name
@@ -58,6 +63,8 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			cfg := blockConfig(rt)
 			cfg.Overrides = rts.Local("t", rts.Obj(t))
 			_, err = eng.core.ExecModule(withRuntime(ctx, rt), cfg, src.Text, src.Pos)
+			var abort *rts.AbortError
+			canceled = errors.As(err, &abort) && abort.Kind == rts.AbortCanceled
 			if errors.Is(err, rts.ErrHalt) {
 				err = nil
 			}
