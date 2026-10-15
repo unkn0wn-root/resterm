@@ -21,7 +21,10 @@ func addExecutionArgs(c argumentCatalog) {
 		opt("jitter", "Random delay percentage", "20%"),
 	}}, directive.RetryBackoff)
 	c.add(args{named: scriptArgs}, directive.Script)
-	c.add(args{named: []argument{word("pre-request", "Run RestermScript before the request")}}, directive.RTS)
+	c.add(args{named: []argument{
+		word("pre-request", "Run RestermScript before the request").then(),
+		word("test", "Run RestermScript tests after the response").then(),
+	}}, directive.RTS)
 	c.add(args{named: []argument{
 		word(directive.RunVarWord, "Set a variable once per run").withExample("name = {{$uuid}}"),
 	}}, directive.Run)

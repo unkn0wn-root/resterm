@@ -494,8 +494,8 @@ func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
 	}
 	plain := stripANSIEscape(model.responseLatest.pretty)
 	for _, want := range []string{
-		"error[parse]: @rts supports only pre-request mode",
-		"@rts supports only pre-request mode",
+		"error[parse]: @rts supports only pre-request and test modes",
+		"@rts supports only pre-request and test modes",
 		"--> sample.http:1:3",
 		"   1 | # @rts pre",
 		"     |   ^",
@@ -535,7 +535,7 @@ func TestStartConfigCompareHardFailsOnParseError(t *testing.T) {
 	}
 	if model.responseLatest == nil || !strings.Contains(
 		stripANSIEscape(model.responseLatest.pretty),
-		"@rts supports only pre-request mode",
+		"@rts supports only pre-request and test modes",
 	) {
 		t.Fatalf("expected parse error in response pane, got %#v", model.responseLatest)
 	}

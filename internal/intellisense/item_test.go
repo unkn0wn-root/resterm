@@ -59,8 +59,7 @@ func TestCatalogExamplesAreSelectable(t *testing.T) {
 		case it.Placeholder != "",
 			insert == it.Label,
 			insert == it.Label+":",
-			insert == it.Label+".",
-			insert == "@rts pre-request":
+			insert == it.Label+".":
 			continue
 		}
 		t.Errorf("%s inserts %q with no placeholder to type over", it.Label, insert)

@@ -144,7 +144,13 @@ var specs = []Spec{
 		Repeat:  Many,
 		Topic:   "scripting",
 	},
-	{Name: RTS, Summary: "Start a RestermScript pre-request block", Args: ArgToken, Repeat: Many, Topic: "rts"},
+	{
+		Name:    RTS,
+		Summary: "Start a RestermScript pre-request or test block",
+		Args:    ArgToken,
+		Repeat:  Many,
+		Topic:   "rts",
+	},
 	{
 		Name:      Patch,
 		Summary:   "Define a reusable apply profile at file/global scope",

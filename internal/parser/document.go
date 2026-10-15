@@ -111,7 +111,7 @@ func (b *documentBuilder) report(d parsedDirective, err error) {
 	item := d.diagnostic(err.Error(), err)
 	var unknown *directive.UnknownOptionsError
 	var quoted *directive.QuotedOptionError
-	var script *unknownScriptError
+	var script *scriptFieldError
 	if errors.As(err, &unknown) || errors.As(err, &quoted) || errors.As(err, &script) {
 		b.pushWarning(item)
 		return

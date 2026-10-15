@@ -585,11 +585,19 @@ func TestGRPCResponseTestsRunAssertsBeforeScripts(t *testing.T) {
 		{Expression: "stream.summary().receivedCount == 2"},
 		{Expression: `fail("boom")`},
 	}
-	req.Metadata.Scripts = []restfile.ScriptBlock{{
-		Kind: "test",
-		Lang: "js",
-		Body: `tests.assert(stream.summary().receivedCount === 2, "js");`,
-	}}
+	req.Metadata.Scripts = []restfile.ScriptBlock{
+		{
+			Kind: "test",
+			Lang: "js",
+			Body: `tests.assert(stream.summary().receivedCount === 2, "js");`,
+		},
+		{
+			Kind: "test",
+			Lang: "rts",
+			Name: "rts",
+			Body: "if stream.summary().receivedCount != 2 {\n  t.error(stream.summary())\n}",
+		},
+	}
 	doc := &restfile.Document{Path: "grpc.http", Requests: []*restfile.Request{req}}
 
 	eng := New(engine.Config{
@@ -609,7 +617,7 @@ func TestGRPCResponseTestsRunAssertsBeforeScripts(t *testing.T) {
 		}
 		names = append(names, tr.Name)
 	}
-	if want := []string{"stream.summary().receivedCount == 2", "js"}; !slices.Equal(names, want) {
+	if want := []string{"stream.summary().receivedCount == 2", "rts", "js"}; !slices.Equal(names, want) {
 		t.Fatalf("tests = %q, want %q", names, want)
 	}
 	if res.ScriptErr == nil || !strings.Contains(res.ScriptErr.Error(), "boom") {

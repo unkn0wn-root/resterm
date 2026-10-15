@@ -1,0 +1,146 @@
+package rtshost
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/native"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
+)
+
+type Tests struct {
+	Doc     *restfile.Document
+	Scripts []restfile.ScriptBlock
+	BaseDir string
+	// Runtime must return a read-only runtime (Mutator == nil).
+	Runtime func() (Runtime, error)
+}
+
+func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResult, error) {
+	var (
+		out  []scriptapi.TestResult
+		errs []error
+	)
+	nth := 0
+	for _, block := range in.Scripts {
+		if !restfile.IsTestScript(block, restfile.ScriptLangRTS) {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return out, errors.Join(append(errs, err)...)
+		}
+		nth++
+		site := directive.RTS.Tag() + " test"
+		name := block.Name
+		if name == "" {
+			name = site
+		} else {
+			site += " " + directive.Quote(name)
+		}
+		start := time.Now()
+		t := newTestObj()
+		src, err := loadSource(in.Doc, block, in.BaseDir)
+		switch {
+		case err != nil:
+			err = diag.WrapAsf(diag.ClassScript, err, "rts test script %d", nth)
+		case strings.TrimSpace(src.Text) == "":
+			continue
+		default:
+			var rt Runtime
+			if rt, err = in.Runtime(); err == nil {
+				rt.Site = site
+				cfg := evalConfig(rt)
+				cfg.Overrides = rts.Local("t", rts.Obj(t))
+				_, err = eng.core.ExecModule(withRuntime(ctx, rt), cfg, src.Text, src.Pos)
+			}
+			if errors.Is(err, rts.ErrHalt) {
+				err = nil
+			}
+			err = src.annotate(err)
+		}
+		t.done = true
+		out = append(out, scriptapi.TestResult{
+			Name:    name,
+			Passed:  err == nil && len(t.msgs) == 0,
+			Message: strings.Join(t.msgs, "\n"),
+			Elapsed: time.Since(start),
+		})
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return out, errors.Join(errs...)
+}
+
+type testObj struct {
+	msgs    []string
+	done    bool
+	members map[string]rts.Value
+}
+
+func newTestObj() *testObj {
+	o := &testObj{}
+	o.members = map[string]rts.Value{
+		"error": o.reportDef("t.error", nil).Value(),
+		"fatal": o.reportDef("t.fatal", rts.ErrHalt).Value(),
+	}
+	return o
+}
+
+func (*testObj) TypeName() string { return "t" }
+
+const testEnded = "t belongs to a test block that has ended"
+
+func (o *testObj) Unbound() string {
+	if o.done {
+		return testEnded
+	}
+	return ""
+}
+
+func (o *testObj) Member(_ *rts.Ctx, _ rts.Pos, name string) (rts.Value, bool, error) {
+	v, ok := o.members[name]
+	return v, ok, nil
+}
+
+func (*testObj) Index(*rts.Ctx, rts.Pos, rts.Value) (rts.Value, error) {
+	return rts.Null(), nil
+}
+
+func (o *testObj) reportDef(name string, end error) native.Def {
+	return native.Raw(name, func(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+		// A saved t.error or t.fatal bypasses Unbound.
+		if o.done {
+			return rts.Null(), rts.Errf(ctx, pos, testEnded)
+		}
+		parts := make([]string, len(args))
+		for i, arg := range args {
+			s, err := rts.ToStr(ctx, pos, arg)
+			if err != nil {
+				return rts.Null(), err
+			}
+			parts[i] = s
+		}
+		msg := strings.Join(parts, " ")
+		if pos.Line > 0 {
+			at := diag.Pos{Line: pos.Line}
+			if pos.Path != "" {
+				at.Path = filepath.Base(pos.Path)
+			}
+			if msg == "" {
+				msg = at.String()
+			} else {
+				msg = at.String() + ": " + msg
+			}
+		}
+		o.msgs = append(o.msgs, msg)
+		return rts.Null(), end
+	})
+}

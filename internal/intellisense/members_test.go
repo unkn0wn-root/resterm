@@ -28,6 +28,9 @@ func TestMemberCompletion(t *testing.T) {
 		{"javascript test", []string{"# @script test", "> vars."}, js},
 		{"rts", []string{"# @rts pre-request", "> vars."}, rts},
 		{"rts option", []string{"# @script pre-request lang=rts", "> vars."}, rts},
+		{"rts test", []string{"# @rts test checkout", "> vars."}, readOnly},
+		{"rts test option", []string{"# @script test lang=rts", "> vars."}, readOnly},
+		{"rts test global", []string{"# @rts test", "> vars.global."}, []string{"get", "has", "require"}},
 		{"javascript global", []string{"> x = vars.global."}, []string{"get", "has", "set", "delete"}},
 		{
 			"rts global",
@@ -56,7 +59,7 @@ func TestMemberCompletion(t *testing.T) {
 		{"longer path", []string{"> x.vars."}, nil},
 		{"unknown object", []string{"> request."}, nil},
 		{"no member yet", []string{"> vars"}, nil},
-		{"rejected rts", []string{"# @rts test", "> vars."}, nil},
+		{"rejected rts", []string{"# @rts response", "> vars."}, nil},
 		{"directive without script", []string{"# @name vars."}, nil},
 		{"template text", []string{"> x = `vars."}, nil},
 		{"template text after a substitution", []string{"> x = `${a} vars."}, nil},

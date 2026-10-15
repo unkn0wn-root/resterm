@@ -51,6 +51,7 @@ type SourceLine struct {
 	Directive      directive.Name
 	Args           directive.ArgKind
 	ScriptArgs     bool
+	ScriptKind     restfile.ScriptKind
 	ScriptLang     restfile.ScriptLang
 	ContentStart   int
 	ContentEnd     int
@@ -274,6 +275,7 @@ func (s *sourceScan) scriptLine(ln line, body string, col int) SourceLine {
 		ContentEnd:   start + utf8.RuneCountInString(body),
 	}
 	if !s.request.script.discard {
+		syntax.ScriptKind = s.request.script.kind
 		syntax.ScriptLang = s.request.script.lang
 	}
 	return syntax

@@ -3,6 +3,8 @@ package request
 import (
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -744,10 +747,16 @@ func TestSSEScriptTestsReadTheStream(t *testing.T) {
 		URL:    "https://example.test/events",
 		SSE:    &restfile.SSERequest{},
 		Metadata: restfile.RequestMetadata{
-			Scripts: []restfile.ScriptBlock{jsTest(`
+			Scripts: []restfile.ScriptBlock{
+				jsTest(`
 tests.assert(response.json().summary.eventCount === 1, "event count");
 tests.assert(stream.summary().dropped === 0, "complete transcript");
-`)},
+`),
+				{Kind: "test", Lang: "rts", Name: "rts events", Body: `let evs = stream.events()
+if len(evs) != 1 or evs[0].data != "hello" {
+  t.error(evs)
+}`},
+			},
 		},
 	}
 	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(nil, req, testEnv(""), ExecOptions{})
@@ -760,12 +769,150 @@ tests.assert(stream.summary().dropped === 0, "complete transcript");
 	if res.ScriptErr != nil {
 		t.Fatalf("script error = %v", res.ScriptErr)
 	}
-	if len(res.Tests) != 2 {
-		t.Fatalf("tests = %+v, want 2", res.Tests)
+	if len(res.Tests) != 3 || res.Tests[0].Name != "rts events" {
+		t.Fatalf("tests = %+v, want the rts block then 2", res.Tests)
 	}
 	for _, tr := range res.Tests {
 		if !tr.Passed {
 			t.Fatalf("test %q failed: %s", tr.Name, tr.Message)
 		}
+	}
+}
+
+func rtsTestDoc(t *testing.T, src string) (*restfile.Document, *restfile.Request) {
+	t.Helper()
+	dir := t.TempDir()
+	mod := `export fn orders(list) {
+  let out = []
+  for let i, o range list {
+    if o.total < 0 {
+      out = rts.list.append(out, "Order " + str(i) + " has negative total")
+    }
+  }
+  return out
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "checks.rts"), []byte(mod), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Requests) != 1 {
+		t.Fatalf("parse errors = %v", doc.Errors)
+	}
+	return doc, doc.Requests[0]
+}
+
+func TestRTSTestBlocksRunBetweenAssertsAndScripts(t *testing.T) {
+	doc, req := rtsTestDoc(t, `# @use ./checks.rts as checks
+### orders
+# @assert response.statusCode == 200
+# @rts test "orders are valid"
+> let body = try response.json()
+> if not body.ok {
+>   t.fatal("body is not JSON:", body.error)
+> }
+> for let _, msg range checks.orders(body.value.orders) {
+>   t.error(msg)
+> }
+# @rts test stock
+> if response.json().stock < 1 {
+>   t.error("no stock")
+> }
+# @script test
+> tests.assert(response.statusCode === 200, "js");
+GET http://example.test/orders
+`)
+	eng, st := newStubEngine(t)
+	st.body = `{"orders": [{"total": 5}, {"total": -1}, {"total": -2}], "stock": 3}`
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil || res.ScriptErr != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v, script error = %v", err, res.Err, res.ScriptErr)
+	}
+	type result struct {
+		name   string
+		passed bool
+		msg    string
+	}
+	var got []result
+	for _, tr := range res.Tests {
+		got = append(got, result{tr.Name, tr.Passed, tr.Message})
+	}
+	want := []result{
+		{"response.statusCode == 200", true, ""},
+		{"orders are valid", false, "api.http:10: Order 1 has negative total\napi.http:10: Order 2 has negative total"},
+		{"stock", true, ""},
+		{"js", true, ""},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("tests = %+v, want %+v", got, want)
+	}
+}
+
+func TestRTSTestBlockErrorKeepsEveryScriptError(t *testing.T) {
+	doc, req := rtsTestDoc(t, `### one
+# @rts test "broken block"
+> t.error("before")
+> let x = missing.value
+# @rts test after
+> t.error("ran")
+# @script test
+> throw new Error("bad");
+GET http://example.test
+`)
+	eng, _ := newStubEngine(t)
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if len(res.Tests) != 2 || res.Tests[0].Name != "broken block" || res.Tests[0].Message != "api.http:3: before" ||
+		res.Tests[1].Name != "after" || res.Tests[1].Message != "api.http:6: ran" {
+		t.Fatalf("tests = %+v, want broken then after", res.Tests)
+	}
+	rep := diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) != 2 {
+		t.Fatalf("report has %d items, want 2: %v", len(rep.Items), res.ScriptErr)
+	}
+	block, js := rep.Items[0], rep.Items[1]
+	if block.Message != `undefined name "missing"` || block.Span.Start != (diag.Pos{Path: doc.Path, Line: 4, Col: 11}) {
+		t.Fatalf("block diagnostic = %+v, want the missing name at line 4", block)
+	}
+	if js.Message != "Error: bad" {
+		t.Fatalf("script diagnostic = %+v, want Error: bad", js)
+	}
+	out := diag.Render(res.ScriptErr)
+	if !strings.Contains(out, "   4 | > let x = missing.value") ||
+		!strings.Contains(out, `:3:1 in @rts test "broken block"`) {
+		t.Fatalf("rendered error has no source line or block frame:\n%s", out)
+	}
+}
+
+func TestRTSTestBlocksSkipWhenTheResponseHasNoRTSView(t *testing.T) {
+	client := httpx.NewClientWithOptions(
+		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
+			return &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					return &http.Response{
+						Status:     "200 OK",
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"X Bad": {"x"}},
+						Body:       io.NopCloser(strings.NewReader("ok")),
+						Request:    r,
+					}, nil
+				}),
+			}, nil
+		}),
+	)
+	doc, req := parseDoc(t, "### one\n# @rts test\n> t.error(\"ran\")\n# @script test\n"+
+		"> tests.assert(true, \"js\");\nGET http://example.test\n")
+	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if len(res.Tests) != 1 || res.Tests[0].Name != "js" {
+		t.Fatalf("tests = %+v, want only the JavaScript test", res.Tests)
+	}
+	if rep := diag.ReportOf(res.ScriptErr); len(rep.Items) != 1 ||
+		!strings.Contains(rep.Items[0].Message, "not an HTTP header name") {
+		t.Fatalf("script error = %v, want the header error once", res.ScriptErr)
 	}
 }

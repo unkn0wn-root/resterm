@@ -1026,6 +1026,94 @@ func TestRunCountsFailedAsserts(t *testing.T) {
 	}
 }
 
+func TestRunReportsRTSTestBlocks(t *testing.T) {
+	tests := []struct {
+		name   string
+		body   []string
+		msg    string
+		script string
+		exit   int
+	}{
+		{
+			name: "failed",
+			body: []string{`> t.error("order", 1, "has negative total")`},
+			msg:  "rts.http:4: order 1 has negative total",
+			exit: runfail.ExitFailure,
+		},
+		{
+			name:   "error",
+			body:   []string{`> t.error("before")`, `> fail("boom")`},
+			msg:    "rts.http:4: before",
+			script: "boom",
+			exit:   runfail.ExitScript,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := filepath.Join(dir, "rts.http")
+			lines := append([]string{"### RTS", "# @name orders", `# @rts test "orders are valid"`}, tt.body...)
+			src := strings.Join(append(lines, "GET https://example.com/orders", ""), "\n")
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+			client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+				return &http.Client{
+					Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+						return &http.Response{
+							Status:     "200 OK",
+							StatusCode: http.StatusOK,
+							Proto:      "HTTP/1.1",
+							Header:     make(http.Header),
+							Body:       io.NopCloser(strings.NewReader("{}")),
+							Request:    req,
+						}, nil
+					}),
+				}, nil
+			})
+
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if got := ExitCode(rep, runfail.ExitDetailed); got != tt.exit {
+				t.Fatalf("exit code = %d, want %d", got, tt.exit)
+			}
+			var out strings.Builder
+			if err := rep.WriteJSON(&out); err != nil {
+				t.Fatalf("WriteJSON: %v", err)
+			}
+			var got struct {
+				Results []struct {
+					ScriptError string `json:"scriptError"`
+					Tests       []struct {
+						Name    string `json:"name"`
+						Message string `json:"message"`
+						Passed  bool   `json:"passed"`
+					} `json:"tests"`
+				} `json:"results"`
+			}
+			if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+				t.Fatalf("unmarshal json: %v", err)
+			}
+			if len(got.Results) != 1 || len(got.Results[0].Tests) != 1 {
+				t.Fatalf("report = %s, want one result with one test", out.String())
+			}
+			res := got.Results[0]
+			if tr := res.Tests[0]; tr.Name != "orders are valid" || tr.Message != tt.msg || tr.Passed {
+				t.Fatalf("test = %+v, want a failed orders are valid with %q", tr, tt.msg)
+			}
+			if !strings.Contains(res.ScriptError, tt.script) || (tt.script == "") != (res.ScriptError == "") {
+				t.Fatalf("scriptError = %q, want %q", res.ScriptError, tt.script)
+			}
+		})
+	}
+}
+
 func TestRunWorkflowByName(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "workflow.http")

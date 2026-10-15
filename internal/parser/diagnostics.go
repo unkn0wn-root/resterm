@@ -178,7 +178,7 @@ func (f *argFields) add(d parsedDirective, start, end int) {
 // Fall back to the directive name unless every option key maps to source text;
 // custom grammars may report normalized names that do not appear in the source.
 func (d parsedDirective) locate(cause error) (diag.Span, []diag.Label) {
-	var script *unknownScriptError
+	var script *scriptFieldError
 	if errors.As(cause, &script) {
 		if span, ok := d.argumentSpan(script.start, script.end); ok {
 			return span, nil

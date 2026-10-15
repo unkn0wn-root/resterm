@@ -75,6 +75,7 @@ type AuthProfile struct {
 type ScriptBlock struct {
 	Kind       ScriptKind
 	Lang       ScriptLang
+	Name       string
 	Body       string
 	FilePath   string
 	SourcePath string       `json:"-"`

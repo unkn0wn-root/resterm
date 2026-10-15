@@ -1480,7 +1480,7 @@ func TestRequestEditorCompletionsAddMissingDirectiveComment(t *testing.T) {
 		{name: "hash comment unchanged", initial: "# ", typed: "@na", want: "# @name "},
 		{name: "slash comment unchanged", initial: "// ", typed: "@na", want: "// @name "},
 		{name: "dash comment unchanged", initial: "-- ", typed: "@na", want: "-- @name "},
-		{name: "special insert preserved", typed: "@rt", want: "# @rts pre-request "},
+		{name: "mode follows", typed: "@rt", want: "# @rts "},
 	}
 
 	for _, tt := range tests {

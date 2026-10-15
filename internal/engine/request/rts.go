@@ -2,6 +2,7 @@ package request
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -549,7 +550,8 @@ func (e *Engine) ValueString(ctx context.Context, pos rts.Pos, v rts.Value) (str
 	return rts.ValueString(cx, pos, v)
 }
 
-func (e *Engine) runAsserts(
+// An assertion error must not skip the test blocks.
+func (e *Engine) runRTSChecks(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
@@ -561,7 +563,13 @@ func (e *Engine) runAsserts(
 	tr *rtshost.Trace,
 	st *rtshost.Stream,
 ) ([]scriptapi.TestResult, error) {
-	if req == nil || len(req.Metadata.Asserts) == 0 {
+	if req == nil {
+		return nil, nil
+	}
+	blocks := slices.ContainsFunc(req.Metadata.Scripts, func(b restfile.ScriptBlock) bool {
+		return restfile.IsTestScript(b, restfile.ScriptLangRTS)
+	})
+	if len(req.Metadata.Asserts) == 0 && !blocks {
 		return nil, nil
 	}
 	vv := sc.vars
@@ -586,7 +594,10 @@ func (e *Engine) runAsserts(
 	if err != nil {
 		return nil, err
 	}
-	out := make([]scriptapi.TestResult, 0, len(req.Metadata.Asserts))
+	var (
+		out       []scriptapi.TestResult
+		assertErr error
+	)
 	for _, as := range req.Metadata.Asserts {
 		expr := strings.TrimSpace(as.Expression)
 		if expr == "" {
@@ -597,7 +608,8 @@ func (e *Engine) runAsserts(
 		start := time.Now()
 		val, err := e.evalRTSAssert(ctx, doc, rt, expr, e.rtsPosForLineCol(doc, req, as.Line, as.Col))
 		if err != nil {
-			return out, err
+			assertErr = err
+			break
 		}
 		out = append(out, scriptapi.TestResult{
 			Name:    name,
@@ -606,10 +618,16 @@ func (e *Engine) runAsserts(
 			Elapsed: time.Since(start),
 		})
 	}
-	if len(out) == 0 {
-		return nil, nil
+	if !blocks {
+		return out, assertErr
 	}
-	return out, nil
+	tests, testErr := rtshost.RunTests(ctx, e.re, rtshost.Tests{
+		Doc:     doc,
+		Scripts: req.Metadata.Scripts,
+		BaseDir: rt.BaseDir,
+		Runtime: func() (rtshost.Runtime, error) { return rt, nil },
+	})
+	return append(out, tests...), errors.Join(assertErr, testErr)
 }
 
 func (e *Engine) evaluateResponsePredicate(

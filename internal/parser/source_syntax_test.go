@@ -355,9 +355,16 @@ func TestSourceSyntaxScriptLines(t *testing.T) {
 		},
 		{
 			name:   "rejected rts drops the line",
-			source: []string{"# @rts test", "> a"},
+			source: []string{"# @rts response", "> a"},
 			line:   1,
 			kind:   SourceLineScript,
+		},
+		{
+			name:   "rts test block",
+			source: []string{`# @rts test "orders are valid"`, "> a"},
+			line:   1,
+			kind:   SourceLineScript,
+			lang:   "rts",
 		},
 		{
 			name:   "new request starts with javascript",
@@ -450,6 +457,11 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 		"# @rts pre-request",
 		"# @rts",
 		"# @rts test",
+		"# @rts test checkout",
+		"# @rts test \"orders are valid\"",
+		"# @rts test a b",
+		"# @rts pre-request setup",
+		"# @rts test checkout\n# @script",
 		"# @rts pre-request lang=js",
 		"# @rts pre-request\n# @script",
 		"# @rts pre-request\n# @rts bogus",
@@ -470,10 +482,11 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 			source := strings.TrimPrefix(prefix+"\n"+body+"\nGET https://example.test", "\n")
 			want := make(map[int]restfile.ScriptLine)
 			langs := make(map[int]restfile.ScriptLang)
+			kinds := make(map[int]restfile.ScriptKind)
 			for _, req := range Parse("agree.http", []byte(source)).Requests {
 				for _, block := range req.Metadata.Scripts {
 					for _, l := range block.Lines {
-						want[l.Line], langs[l.Line] = l, block.Lang
+						want[l.Line], langs[l.Line], kinds[l.Line] = l, block.Lang, block.Kind
 					}
 				}
 			}
@@ -487,8 +500,9 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 					}
 					continue
 				}
-				if !ok || got.ScriptLang != langs[no+1] {
-					t.Errorf("%q line %d lang = %q, parser has %q", source, no+1, got.ScriptLang, langs[no+1])
+				if !ok || got.ScriptLang != langs[no+1] || got.ScriptKind != kinds[no+1] {
+					t.Errorf("%q line %d = %q %q, parser has %q %q",
+						source, no+1, got.ScriptKind, got.ScriptLang, kinds[no+1], langs[no+1])
 					continue
 				}
 				if start := utf8.RuneCountInString(lines[no][:l.Col-1]); got.ContentStart != start {

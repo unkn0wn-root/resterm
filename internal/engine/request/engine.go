@@ -1242,10 +1242,10 @@ type testRun struct {
 
 func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 	sc := x.sentScope(in.vars)
-	var asserts []scriptapi.TestResult
-	assertErr := in.rrErr
-	if assertErr == nil {
-		asserts, assertErr = x.eng.runAsserts(
+	var checks []scriptapi.TestResult
+	checkErr := in.rrErr
+	if checkErr == nil {
+		checks, checkErr = x.eng.runRTSChecks(
 			in.ctx,
 			x.doc,
 			x.req,
@@ -1272,7 +1272,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 		},
 	)
 	x.applyRuntimeGlobals(changes)
-	return append(asserts, tests...), errors.Join(assertErr, testErr)
+	return append(checks, tests...), errors.Join(checkErr, testErr)
 }
 
 func (f flow) ExecuteHTTP() xexec.RequestResult {
