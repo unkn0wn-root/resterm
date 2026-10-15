@@ -3,6 +3,7 @@ package rtshost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -125,12 +126,18 @@ func (o *testObj) reportDef(name string, end error) native.Def {
 			}
 			parts[i] = s
 		}
-		at := diag.Pos{Line: pos.Line}
-		if pos.Path != "" {
-			at.Path = filepath.Base(pos.Path)
+		text := strings.Join(parts, " ")
+		if err := rts.CheckStr(ctx, pos, text); err != nil {
+			return rts.Null(), err
 		}
-		msg := at.String()
-		if text := strings.Join(parts, " "); text != "" {
+		if err := rts.CheckList(ctx, pos, len(o.msgs)+1); err != nil {
+			return rts.Null(), err
+		}
+		msg := fmt.Sprintf("line %d", pos.Line)
+		if pos.Path != "" {
+			msg = fmt.Sprintf("%s:%d", filepath.Base(pos.Path), pos.Line)
+		}
+		if text != "" {
 			msg += ": " + text
 		}
 		o.msgs = append(o.msgs, msg)

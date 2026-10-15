@@ -120,7 +120,7 @@ SSE events have `index`, `id`, `event`, `data`, `comment`, `retry`, and `timesta
 - `t.error(args...)` records a failure and continues.
 - `t.fatal(args...)` records a failure and stops the block, including calls from module functions or `rts.list.map` callbacks. `try` cannot catch it.
 
-Messages join the arguments with spaces after converting each with `str()`. They start with the file name and line of the call, including calls inside modules.
+Arguments are converted with `str()` and joined with spaces. Each message starts with the call's file name and line, including calls in modules. Message length and count follow the [string and list limits](patterns.md#limits-and-safety).
 
 Each block reports one result. It passes if no failures or runtime errors occur. Multiple failure messages appear on separate lines in the Tests section of `resterm run`:
 

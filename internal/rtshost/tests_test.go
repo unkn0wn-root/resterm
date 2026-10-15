@@ -158,6 +158,62 @@ export fn each(t, items) {
 	}
 }
 
+func TestRunTestsNamesTheLineWithoutAPath(t *testing.T) {
+	block := testBlock("", 2, `t.error("x")`, "t.error()")
+	block.SourcePath = ""
+	got, err := RunTests(t.Context(), NewEngine(stdlib.New), Tests{
+		Scripts: []restfile.ScriptBlock{block},
+		Runtime: testRuntime(t),
+	})
+	if err != nil {
+		t.Fatalf("RunTests: %v", err)
+	}
+	if want := []result{{"@rts test", false, "line 2: x\nline 3"}}; !slices.Equal(results(got), want) {
+		t.Fatalf("results = %+v, want %+v", results(got), want)
+	}
+}
+
+func TestRunTestsLimitsMessages(t *testing.T) {
+	tests := []struct {
+		name string
+		body []string
+		msg  string
+		err  string
+	}{
+		{"message at the string limit", []string{`t.error("abc", "abcd")`}, "api.http:2: abc abcd", ""},
+		{"message over the string limit", []string{`t.error("abcd", "abcd")`}, "", "string too long"},
+		{"messages at the list limit", []string{`t.error("a")`, `t.error("b")`}, "api.http:2: a\napi.http:3: b", ""},
+		{
+			"messages over the list limit",
+			[]string{`t.error("a")`, `t.error("b")`, `t.fatal("c")`},
+			"api.http:2: a\napi.http:3: b",
+			"list too large",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eng := NewEngine(stdlib.New)
+			eng.Core().Lim.MaxStr = 8
+			eng.Core().Lim.MaxList = 2
+			got, err := RunTests(t.Context(), eng, Tests{
+				Doc:     &restfile.Document{Path: testDoc},
+				Scripts: []restfile.ScriptBlock{testBlock("", 2, tt.body...)},
+				Runtime: testRuntime(t),
+			})
+			if want := []result{{"@rts test", false, tt.msg}}; !slices.Equal(results(got), want) {
+				t.Fatalf("results = %+v, want %+v", results(got), want)
+			}
+			if tt.err == "" {
+				if err != nil {
+					t.Fatalf("RunTests: %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tt.err) {
+				t.Fatalf("error = %v, want %q", err, tt.err)
+			}
+		})
+	}
+}
+
 func TestRunTestsReportsJSONDiff(t *testing.T) {
 	rt := testRuntime(t)
 	resp, err := NewResponse("200 OK", 200, nil, []byte(`{"user":{"id":7,"tags":["a","b"]},"extra":true}`), "")
