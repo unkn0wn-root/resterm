@@ -27,9 +27,9 @@ const testSteps = 100_000
 
 func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResult, error) {
 	var (
-		out      []scriptapi.TestResult
-		errs     []error
-		canceled bool
+		out  []scriptapi.TestResult
+		errs []error
+		cut  bool
 	)
 	nth := 0
 	tag := directive.RTS.Tag() + " " + string(restfile.ScriptKindTest)
@@ -38,8 +38,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			continue
 		}
 		if ctx.Err() != nil {
-			// Do not report a cancellation twice.
-			if !canceled {
+			if !cut {
 				errs = append(errs, context.Cause(ctx))
 			}
 			break
@@ -71,7 +70,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			st.end()
 			msgs = t.msgs
 			var abort *rts.AbortError
-			canceled = errors.As(err, &abort) && abort.Kind == rts.AbortCanceled
+			cut = errors.As(err, &abort) && (abort.Kind == rts.AbortCanceled || abort.Kind == rts.AbortTimeout)
 			if errors.Is(err, rts.ErrHalt) {
 				err = nil
 			}

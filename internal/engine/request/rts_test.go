@@ -80,9 +80,12 @@ func TestResponseChecksNameTheirTimeoutOnce(t *testing.T) {
 			if got := rows(res); !slices.Equal(got, tt.rows) {
 				t.Fatalf("tests = %+v, want %+v", got, tt.rows)
 			}
-			want := tt.at + ": canceled: response checks timed out after 50ms: context deadline exceeded"
+			want := tt.at + ": response checks timed out after 50ms: context deadline exceeded"
 			if res.ScriptErr == nil || res.ScriptErr.Error() != want {
 				t.Fatalf("script error = %q, want %q", res.ScriptErr, want)
+			}
+			if got := diag.ClassOf(res.ScriptErr); got != diag.ClassTimeout {
+				t.Fatalf("class = %s, want %s", got, diag.ClassTimeout)
 			}
 		})
 	}

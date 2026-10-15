@@ -1309,9 +1309,9 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 				val, err := x.eng.evalRTSAssert(ctx, x.doc, rt, expr, pos)
 				if err != nil {
 					errs = append(errs, err)
-					// Avoid reporting the same cancellation again in RunTests.
+					// Skip RunTests after cancellation or timeout to avoid a duplicate error.
 					var abort *rts.AbortError
-					cut = errors.As(err, &abort) && abort.Kind == rts.AbortCanceled
+					cut = errors.As(err, &abort) && (abort.Kind == rts.AbortCanceled || abort.Kind == rts.AbortTimeout)
 					break
 				}
 				out = append(out, scriptapi.TestResult{
