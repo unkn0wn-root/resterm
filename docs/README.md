@@ -50,8 +50,8 @@ These Markdown files also supply the pages at https://resterm.app/docs/. To edit
 - [Statements](rts/statements.md): Bindings, functions, conditionals, switch and loops.
 - [Modules and exports](rts/modules.md): Share logic between request files with .rts modules and @use.
 - [Standard library](rts/stdlib.md): Built-in helpers for text, JSON, lists, time, crypto and more.
-- [Host objects](rts/host-objects.md): The env, vars, request, response, trace, stream and mock objects.
-- [Directives](rts/directives.md): Directives that evaluate RestermScript: @apply, @assert, @if, @for-each and others.
+- [Host objects](rts/host-objects.md): The env, vars, request, response, trace, stream, t and mock objects.
+- [Directives](rts/directives.md): Directives that evaluate RestermScript: @apply, @assert, @rts, @if, @for-each and others.
 - [Patterns and limits](rts/patterns.md): Common patterns, hard limits and the reasons behind the design.
 
 ## CLI

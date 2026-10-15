@@ -72,6 +72,35 @@ Content-Type: application/json
 POST {{base_url}}/anything
 X-Remove-Me: true
 
+### RTS Test Blocks
+# @name RTS_Tests
+# @description Checks the echoed orders with @rts test blocks and a module.
+# @use ./validators.rts as validators
+# @assert response.statusCode == 200
+# @rts test "orders are valid"
+> let orders = response.json("json.orders")
+> if typeof(orders) != "list" {
+>   t.fatal("response has no orders list")
+> }
+> for let _, msg range validators.orders(orders) {
+>   t.error(msg)
+> }
+# @rts test customer
+> let want = {id: 7, name: "Ada", tier: "gold"}
+> for let _, d range json.diff(response.json("json.customer"), want) {
+>   t.error(d)
+> }
+POST {{base_url}}/anything/orders
+Content-Type: application/json
+
+{
+  "customer": {"id": 7, "name": "Ada", "tier": "gold"},
+  "orders": [
+    {"id": "A-1", "total": 25.5, "items": [{"sku": "pen", "qty": 2}]},
+    {"id": "A-2", "total": 12, "items": [{"sku": "ink", "qty": 1}, {"sku": "pad", "qty": 3}]}
+  ]
+}
+
 ### RTS Apply Patch
 # @name RTS_Apply
 # @description Applies a dict patch to method/url/headers/query/body/vars.

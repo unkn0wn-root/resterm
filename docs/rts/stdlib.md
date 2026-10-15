@@ -56,6 +56,12 @@ Builtins and reserved words may be removed within a major version, but only afte
 - `rts.json.stringify(value[, indent])` converts a value to JSON text. `indent` can be a string or a number (0-32).
 - `rts.json.get(value[, path])` returns the value at a dot or `[index]` path (optional leading `$`) and returns null when missing. Quote a key that contains dots or spaces, as in `$["display.name"]` or `['a b']`.
 - `rts.json.has(value, path)` returns true when a value exists at the path.
+- `rts.json.equal(a, b)` returns true for matching JSON values, including the contents of lists and dicts.
+- `rts.json.diff(got, want)` returns a list with one message per difference, or an empty list for equal values. Messages include the path: `$.user.id: got 7, want 8`, `$.extra: unexpected true`, or `$.tags[1]: missing, want "b"`.
+
+`json.diff` sorts dict keys and shows values as compact JSON without escaping `<` or `&`. It shows up to 120 bytes of each value, adding `...` when truncated. Results contain up to 100 differences, followed by a count of the rest, such as `and 3 more differences`. Paths use the same syntax as `json.get`.
+
+Both helpers reject functions, host objects, NaN, and infinite numbers. Pass `response.json()` to compare a response body.
 
 ## Text helpers
 

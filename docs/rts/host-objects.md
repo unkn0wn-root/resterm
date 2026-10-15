@@ -1,6 +1,6 @@
 # Host objects
 
-Host objects give your expressions access to Resterm's environment, request, response, and other runtime data. They are available in templates, directives, `@apply`, assertions, and pre-request scripts. Pre-request scripts can change `request` and `vars`; the other available objects are read-only.
+Host objects expose Resterm's environment, request, response, and other runtime data to templates, directives, `@apply`, assertions, and `@rts` blocks. Only pre-request blocks can change `request` and `vars`.
 
 Lookups in `env` and `vars` ignore case and surrounding whitespace. Header lookups ignore case, while query parameters and JSON paths must match exactly. See [Keys and names](language.md#keys-and-names).
 
@@ -14,11 +14,11 @@ Every evaluation binds its names in a fixed order, and a later layer wins:
 2. Host extensions such as `mock`. These are additive and cannot reuse a name from the first layer.
 3. `@use` aliases. These cannot reuse a name from either layer above.
 4. Local values, currently the `@for-each` loop variable. These shadow every layer above, so `# @for-each [1,2] as json` makes `json` the loop item for that request and hides the `json` namespace.
-5. The `@assert` shorthands, inside assertions only. `status`, `statusCode`, `statusText`, `header(name)`, and `text()` always refer to the response under test, so a loop variable named `status` is still the loop item everywhere except inside an `@assert`.
+5. Response check bindings. Inside `@assert`, `status`, `statusCode`, `statusText`, `header(name)`, and `text()` refer to the current response, even if a loop variable has the same name. Inside `@rts test`, `t` takes precedence over the earlier layers.
 
 Reserved words cannot be used as names in any layer. Both the parser and the runtime reject them, including in `@for-each` and `@use`.
 
-Shadowing applies to expressions. A module or an `@rts pre-request` block still cannot declare a name that is already bound, so `let json = 1` has always been an error. A local adds its own name to that rule. A request with `# @for-each [1,2] as item` cannot also declare `let item` in its pre-request block. Rename the declaration or the loop variable.
+Modules and `@rts` blocks cannot declare a name already in scope. For example, `let json = 1` conflicts with the standard library. A request with `# @for-each [1,2] as item` cannot declare `let item` in its pre-request block either. Rename the declaration or the loop variable.
 
 ## env
 
@@ -88,7 +88,7 @@ For gRPC responses, `headers` merges the response metadata with the trailers, ea
 
 ## response
 
-`response` has the same shape as `last`. It is available after the current request completes in `@assert` and both forms of `@capture`, including a `{{= ... }}` expression inside one.
+`response` has the same shape as `last`. It is available after the current request completes in `@assert`, `@rts test` blocks, and both forms of `@capture`, including a `{{= ... }}` expression inside one.
 
 Other expressions run before the current request completes. Use `last` for the previous response in URLs, headers, bodies, and conditions such as `@when`, `@skip-if`, `@for-each`, `@if`, and `@switch`. Using `response` in those contexts is an error that `try` cannot catch.
 
@@ -112,6 +112,44 @@ What the helpers return:
 `stream` provides information about SSE and WebSocket requests. Its helpers include `stream.enabled()`, `stream.kind()`, `stream.summary()`, and `stream.events()`. The summary and event fields depend on the stream type. SSE summaries include `eventCount`, `byteCount`, `duration`, `reason`, `error`, `errorClass`, and `dropped`. WebSocket summaries include `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped`. When a stream fails, `errorClass` names the kind of failure and decides the detailed exit code. A non-zero `dropped` value means that some events are missing from the transcript. If a stream fails, its request fails too.
 
 SSE events have `index`, `id`, `event`, `data`, `comment`, `retry`, and `timestamp`. WebSocket events have `step`, `direction` (`send` or `receive`), `type`, `size`, `text`, `base64`, `code`, `reason`, and `timestamp`. `text` holds text, JSON, ping, and pong payloads, `base64` holds binary payloads, and `code` and `reason` are set on close frames.
+
+## t
+
+`t` reports failures in `@rts test` blocks:
+
+- `t.error(args...)` records a failure and continues.
+- `t.fatal(args...)` records a failure and stops the block, including calls from module functions or `rts.list.map` callbacks. `try` cannot catch it.
+
+Messages join the arguments with spaces after converting each with `str()`. They start with the file name and line of the call, including calls inside modules.
+
+Each block reports one result. It passes if no failures or runtime errors occur. Multiple failure messages appear on separate lines in the Tests section of `resterm run`:
+
+```text
+[FAIL] orders are valid - api.http:10: order 1: total -5 is negative
+                          api.http:10: order 3: no items (2ms)
+```
+
+Pass `t` to module functions that need to report failures:
+
+```rts
+module checks
+
+export fn ids(t, items) {
+  for let i, item range items {
+    if item.id == null {
+      t.error("item", i, "has no id")
+    }
+  }
+}
+```
+
+```http
+# @use ./checks.rts
+# @rts test
+> checks.ids(t, response.json().items)
+```
+
+`t` is available only while its test block runs. It shadows an import or loop value named `t`, and a top-level `let t` is an error. Saving it in a module and using it in a later block is also an error. See [Name precedence](#name-precedence).
 
 ## mock
 

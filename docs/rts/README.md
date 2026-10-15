@@ -14,7 +14,7 @@ Use RestermScript for calculations, conditions, and checks that belong with a re
 
 - Template values such as `{{= expr }}` are a good fit when you want computed headers, URLs, or JSON bodies.
 - Request and workflow control directives such as `@when`, `@skip-if`, `@if`, `@switch`, and `@for-each` can be driven by RestermScript expressions.
-- Assertions using `@assert` check a response and report a failure when a condition does not hold.
+- Use `@assert` for a single response check or `@rts test` for checks that need loops or several statements.
 - Reusable `.rts` modules imported with `@use` let you share logic across requests without bringing in JavaScript.
 
 Use JavaScript when you need its full language features or already have hooks you want to keep.
@@ -61,4 +61,15 @@ An apply patch is an expression that returns a dict describing changes to the ou
 # @rts pre-request
 ```
 
-Pre-request scripts run full RestermScript blocks and can change the outgoing request and variables. They run before JavaScript pre-request blocks. The longer `# @script pre-request lang=rts` form still works. Use `@assert` for RestermScript response checks.
+Pre-request blocks can change the outgoing request and variables. They run before JavaScript pre-request blocks. `# @script pre-request lang=rts` is the longer form. Use `@assert` or a test block for response checks.
+
+6) Test blocks
+
+```http
+# @rts test "has items"
+> if len(response.json().items) == 0 {
+>   t.error("no items")
+> }
+```
+
+Each block reports one test result after the response arrives. `t.error` records a failure; `t.fatal` also stops the block. Test blocks cannot change the request or variables. See [@rts](directives.md#rts).

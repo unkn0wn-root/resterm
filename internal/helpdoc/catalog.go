@@ -263,7 +263,7 @@ func topicDefs() []topicDef {
 		},
 		{
 			id: "rts", title: "RestermScript",
-			summary: "Use expression directives, modules, patches, and assertions",
+			summary: "Use expressions, modules, patches, assertions, and test blocks",
 			aliases: []string{"restermscript"},
 			doc:     DocRef{Page: "rts"},
 		},

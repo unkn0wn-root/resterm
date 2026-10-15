@@ -56,7 +56,7 @@ Listed from tightest to loosest. Each level binds more tightly than the one belo
 
 `??` sits near the bottom, so it binds looser than arithmetic, comparison, and both logical operators. `a ?? b + c` means `a ?? (b + c)`, and `a ?? b or c` means `a ?? (b or c)`. Add parentheses when you want the other grouping.
 
-`+` adds numbers or concatenates strings. Non-numeric values are converted to strings with `str()`. Ordering comparisons only work for numbers or strings, and equality only works for primitive types.
+`+` adds numbers or concatenates strings. Non-numeric values are converted to strings with `str()`. Ordering comparisons only work for numbers or strings, and equality only works for primitive types. Use `json.equal` to compare lists and dicts by their contents.
 
 ## Membership operators
 

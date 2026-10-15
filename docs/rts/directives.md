@@ -67,6 +67,30 @@ In a workflow, put `@when` or `@skip-if` above a `@step` to decide whether that 
 
 Each expression is evaluated, and a truthy result passes. Use `response` for the response to the current request. Add `=> "message"` after the expression to show your own message with the result.
 
+## @rts
+
+```http
+# @use ./validators.rts
+# @rts pre-request
+> request.setHeader("X-Request-Id", uuid())
+# @rts test "orders are valid"
+> for let _, msg range validators.orders(response.json().orders) {
+>   t.error(msg)
+> }
+```
+
+Use `@rts pre-request` to change the outgoing request and `@rts test` to check the response. `# @script pre-request lang=rts` and `# @script test lang=rts` are equivalent.
+
+Add a name after `test`; quote it if it contains spaces. Extra unquoted words are an error. Unnamed blocks, including `@script test lang=rts`, appear as `@rts test` in the results.
+
+Prefix each code line with `>`. A blank line or comment without `>` ends the block. Code after it starts a separate block with the same name and fresh variables. Write comments as `> #` and empty lines as `>`. You can also use a `{% ... %}` block or read code from a file with `> < ./checks.rts`.
+
+Response checks run after captures: `@assert` first, then RTS test blocks in file order, then JavaScript tests. An assertion failure or error does not skip the test blocks. This applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
+
+Test blocks can read `response`, `last`, `stream`, `trace`, `env`, `vars`, `request`, imported modules, loop values, and captures. Calls to `vars.set`, `vars.global.set`, or request mutation helpers fail. Use `@capture` to save response values, including module results: `# @capture file token = auth.pick(response.json())`.
+
+Report failures with [`t.error` and `t.fatal`](host-objects.md#t). Runtime errors, including `fail()`, also fail the block and include the file and line. Earlier failures are kept, and later blocks still run. `resterm run` exits with code 1 for test failures or 24 for script errors. See [Exit codes](../cli/run.md#exit-codes).
+
 ## @if, @elif, and @else
 
 Use these directives in workflows to choose a step based on a condition. Outside an active workflow, they are ignored and the parser shows a warning. Use `@when` or `@skip-if` to decide whether an ordinary request runs.
