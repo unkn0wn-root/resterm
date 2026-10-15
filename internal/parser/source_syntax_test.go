@@ -476,6 +476,7 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 		"# @rts test",
 		"# @rts test checkout",
 		"# @rts test \"orders are valid\"",
+		"# @rts test \"orders are valid",
 		"# @rts test a b",
 		"# @rts pre-request setup",
 		"# @rts test x lang = rts",

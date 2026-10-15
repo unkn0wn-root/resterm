@@ -645,6 +645,7 @@ func TestParseRTSTestBlocks(t *testing.T) {
 		{`# @rts test ""`, ""},
 		{`# @rts test "a=b"`, "a=b"},
 		{"# @rts test a#b", "a#b"},
+		{`# @rts test a"b`, `a"b`},
 		{"# @rts test rts", ""},
 		{"# @rts test rts checkout", "checkout"},
 		{"# @rts rts test checkout", "checkout"},
@@ -785,6 +786,21 @@ func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
 			name: "quoted and bare test names",
 			dir:  "# @rts test \"orders\" stock",
 			want: "@rts test takes one name",
+		},
+		{
+			name: "unclosed double quote",
+			dir:  `# @rts test "orders are valid`,
+			want: `@rts is missing a closing "\""`,
+		},
+		{
+			name: "unclosed single quote",
+			dir:  "# @rts test 'orders",
+			want: `@rts is missing a closing "'"`,
+		},
+		{
+			name: "unclosed quote after pre-request",
+			dir:  `# @rts pre-request "x`,
+			want: `@rts is missing a closing "\""`,
 		},
 		{
 			name: "pre-request name",

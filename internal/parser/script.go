@@ -194,6 +194,9 @@ func parseScriptSpec(rest string) (restfile.ScriptKind, restfile.ScriptLang, err
 }
 
 func parseRTSScriptSpec(rest string) (restfile.ScriptKind, string, error) {
+	if closer := directive.FieldsOpen(rest); closer != 0 {
+		return "", "", &directive.UnclosedError{Directive: directive.RTS, Closer: string(closer)}
+	}
 	fields := slices.Collect(directive.ScanFields(rest))
 	var (
 		kind restfile.ScriptKind
