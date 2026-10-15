@@ -87,7 +87,14 @@ func (r responseRenderer) formatTestSummary(
 		}
 		if strings.TrimSpace(result.Message) != "" {
 			line.WriteString(" - ")
-			line.WriteString(r.stats.Message.Render(termtext.Block(result.Message)))
+			// Render each line separately to avoid lipgloss padding the whole block.
+			pad := "\n" + strings.Repeat(" ", lipgloss.Width(line.String()))
+			for i, l := range strings.Split(termtext.Block(result.Message), "\n") {
+				if i > 0 {
+					line.WriteString(pad)
+				}
+				line.WriteString(r.stats.Message.Render(l))
+			}
 		}
 		if result.Elapsed > 0 {
 			dur := result.Elapsed.Truncate(time.Millisecond)

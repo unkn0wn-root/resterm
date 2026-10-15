@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -235,7 +236,9 @@ func testsText(res runner.Result, st styler) string {
 			line += " " + st.value(name, toneValue)
 		}
 		if msg := strings.TrimSpace(test.Message); msg != "" {
-			line += " - " + st.value(msg, toneMsg)
+			line += " - "
+			pad := "\n" + strings.Repeat(" ", ansi.StringWidth(line))
+			line += st.value(strings.ReplaceAll(msg, "\n", pad), toneMsg)
 		}
 		if test.Elapsed > 0 {
 			line += " " + st.value(fmt.Sprintf("(%s)", durationRound(test.Elapsed)), toneDur)

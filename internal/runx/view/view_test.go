@@ -51,6 +51,33 @@ func TestRenderHTTPPrettyWithHeadersAndFailures(t *testing.T) {
 	}
 }
 
+func TestRenderPrettyAlignsTestMessageLines(t *testing.T) {
+	rep := &runner.Report{
+		Results: []runner.Result{{
+			Kind:   runner.ResultKindRequest,
+			Name:   "orders",
+			Method: "GET",
+			Target: "https://example.com/orders",
+			Tests: []scriptapi.TestResult{{
+				Name:    "orders",
+				Message: "api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
+				Elapsed: 3 * time.Millisecond,
+			}},
+		}},
+	}
+
+	out, err := Render(rep, Options{Mode: ModePretty})
+	if err != nil {
+		t.Fatalf("Render(...): %v", err)
+	}
+	want := "Tests:\n" +
+		"  [FAIL] orders - api.http:11: Order 0 has negative total\n" +
+		"                  api.http:11: Order 3 missing tracking (3ms)"
+	if !strings.Contains(out, want) {
+		t.Fatalf("output =\n%s\nwant it to contain\n%s", out, want)
+	}
+}
+
 func TestRenderHTTPPrettyUsesTrackedUnresolvedVarsAndEffectiveTarget(t *testing.T) {
 	rep := &runner.Report{
 		Results: []runner.Result{{

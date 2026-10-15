@@ -31,6 +31,23 @@ func TestWorkflowRunSubjectForEachUsesRequestBaseTitle(t *testing.T) {
 	}
 }
 
+func TestWorkflowReportIndentsEveryMessageLine(t *testing.T) {
+	st := &workflowState{
+		workflow: restfile.Workflow{Name: "wf"},
+		steps:    []workflowStepRuntime{{step: restfile.WorkflowStep{Name: "Orders"}}},
+		results: []workflowStepResult{{
+			Step:    restfile.WorkflowStep{Name: "Orders"},
+			Message: "api.http:11: Order 0 has negative total\napi.http:11: Order 3 missing tracking",
+		}},
+	}
+
+	got := (&Model{}).buildWorkflowReport(st)
+	want := "\n    api.http:11: Order 0 has negative total\n    api.http:11: Order 3 missing tracking"
+	if !strings.HasSuffix(got, want) {
+		t.Fatalf("report =\n%s\nwant it to end with%s", got, want)
+	}
+}
+
 func TestWorkflowStepDurationIncludesPollWaits(t *testing.T) {
 	res := engine.RequestResult{
 		Executed: &restfile.Request{Method: "GET", URL: "https://example.com/jobs/1"},
