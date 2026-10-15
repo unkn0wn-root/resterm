@@ -40,13 +40,11 @@ type CaptureInput struct {
 	Response *scripts.Response
 	HTTP     *httpx.Response
 	Stream   *scripts.StreamInfo
-	Vars     map[string]string
 	Locals   rts.Locals
 }
 
 type TestInput struct {
 	Context  context.Context
-	Vars     map[string]string
 	Response *scripts.Response
 	HTTP     *httpx.Response
 	Stream   *scripts.StreamInfo
@@ -245,7 +243,6 @@ func (r Runner) finalizeHTTP(
 			Response: respForScripts,
 			HTTP:     resp,
 			Stream:   streamInfo,
-			Vars:     r.collectVars(in.Doc, in.Req, in.ScriptVars),
 			Locals:   in.Locals,
 		})
 		if err != nil {
@@ -259,7 +256,6 @@ func (r Runner) finalizeHTTP(
 	if r.Hooks.RunTests != nil {
 		res.Tests, res.ScriptErr = r.Hooks.RunTests(TestInput{
 			Context:  ctx,
-			Vars:     r.collectVars(in.Doc, in.Req, in.ScriptVars),
 			Response: respForScripts,
 			HTTP:     resp,
 			Stream:   streamInfo,

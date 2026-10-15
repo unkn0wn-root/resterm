@@ -1211,7 +1211,6 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	rr, rrErr := rtsGRPC(resp)
 	tests, testErr := x.runTests(testRun{
 		ctx:    x.sendCtx,
-		vars:   x.captureVariables(),
 		resp:   respForScripts,
 		rr:     rr,
 		rrErr:  rrErr,
@@ -1233,7 +1232,6 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 
 type testRun struct {
 	ctx     context.Context
-	vars    map[string]string
 	resp    *scripts.Response
 	rr      *rtshost.Response
 	rrErr   error
@@ -1245,7 +1243,7 @@ type testRun struct {
 func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 	ctx, cancel := context.WithTimeout(in.ctx, x.timeout)
 	defer cancel()
-	sc := x.sentScope(in.vars)
+	sc := x.sentScope(x.captureVariables())
 	var out []scriptapi.TestResult
 	errs := []error{in.rrErr}
 	blocks := slices.ContainsFunc(x.req.Metadata.Scripts, func(b restfile.ScriptBlock) bool {
@@ -1377,7 +1375,6 @@ func (x *execCtx) httpRunner() xexec.Runner {
 				rr, err := rtsHTTP(in.HTTP)
 				return x.runTests(testRun{
 					ctx:     in.Context,
-					vars:    in.Vars,
 					resp:    in.Response,
 					rr:      rr,
 					rrErr:   err,
