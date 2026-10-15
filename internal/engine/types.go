@@ -113,6 +113,8 @@ type RequestResult struct {
 	Compare        *CompareResult
 	Profile        *ProfileResult
 	Workflow       *WorkflowResult
+	// Checked means Response or GRPC is final, even if checks were canceled.
+	Checked bool
 }
 
 type Timing struct {

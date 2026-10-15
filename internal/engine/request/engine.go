@@ -248,6 +248,7 @@ func toResult(res xrunResult) engine.RequestResult {
 		Err:            res.Err,
 		Tests:          append([]scriptapi.TestResult(nil), res.Tests...),
 		ScriptErr:      res.ScriptErr,
+		Checked:        res.Checked,
 		Executed:       res.Executed,
 		RequestText:    res.RequestText,
 		RuntimeSecrets: append([]string(nil), res.RuntimeSecrets...),
@@ -1191,7 +1192,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		secrets: x.secrets,
 		locals:  x.locals,
 		run:     x.run,
-	}); err != nil {
+	}); err != nil && x.sendCtx.Err() == nil {
 		x.exp.stage(
 			xplain.StageCaptures,
 			xplain.StageError,
@@ -1227,7 +1228,19 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	res.Tests = tests
 	res.ScriptErr = testErr
 	res.RequestText = x.reqText()
-	res.Explain = x.exp.finish(xplain.StatusReady, "gRPC request sent", nil)
+	return x.finishChecks(res, "gRPC request sent")
+}
+
+// Cancellation during checks takes precedence over script errors.
+func (x *execCtx) finishChecks(res xrunResult, dec string) xrunResult {
+	res.Checked = true
+	if x.sendCtx.Err() != nil {
+		res.Err = context.Cause(x.sendCtx)
+		res.ScriptErr = nil
+		res.Explain = x.exp.finish(xplain.StatusError, "Request canceled", res.Err)
+		return res
+	}
+	res.Explain = x.exp.finish(xplain.StatusReady, dec, nil)
 	return res
 }
 
@@ -1367,7 +1380,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					locals:  in.Locals,
 					run:     x.run,
 				})
-				if err != nil {
+				if err != nil && x.sendCtx.Err() == nil {
 					return err
 				}
 				x.applyRuntimeGlobals(caps.globals)
@@ -1455,6 +1468,5 @@ func (x *execCtx) finishHTTP(res xexec.HTTPResult) xexec.RequestResult {
 	out.Tests = res.Tests
 	out.ScriptErr = res.ScriptErr
 	out.RequestText = x.reqText()
-	out.Explain = x.exp.finish(xplain.StatusReady, res.Decision, nil)
-	return out
+	return x.finishChecks(out, res.Decision)
 }

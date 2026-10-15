@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/http/httptrace"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -26,6 +27,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -33,6 +35,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
 )
@@ -278,6 +281,77 @@ func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 			got = model.responseLatest.pretty
 		}
 		t.Fatalf("expected response view to mention grpc status, got %q", got)
+	}
+}
+
+func TestHandleResponseMsgShowsCancelWithAResponse(t *testing.T) {
+	sse := http.Header{}
+	sse.Set("Content-Type", "application/json")
+	sse.Set(httpx.StreamHeaderType, "sse")
+	get := &restfile.Request{Method: "GET", URL: "https://example.com"}
+	tests := []struct {
+		name  string
+		msg   responseMsg
+		shown string
+	}{
+		{"send", responseMsg{response: &httpx.Response{Duration: time.Second}, executed: get}, ""},
+		{"poll wait", responseMsg{
+			response: &httpx.Response{Status: "200 OK", StatusCode: http.StatusOK, Body: []byte(`{"state":"pending"}`)},
+			executed: &restfile.Request{
+				Method:   "GET",
+				URL:      "https://example.com/job",
+				Metadata: restfile.RequestMetadata{Poll: &restfile.PollSpec{Every: time.Minute, Timeout: time.Hour}},
+			},
+		}, ""},
+		{"http", responseMsg{
+			response: &httpx.Response{Status: "200 OK", StatusCode: http.StatusOK, Body: []byte(`{"id":"from-http"}`)},
+			executed: get,
+			checked:  true,
+		}, "from-http"},
+		{"sse", responseMsg{
+			response: &httpx.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Headers:    sse,
+				Body:       []byte(`{"events":[{"data":"from-sse"}]}`),
+			},
+			executed: &restfile.Request{Method: "GET", URL: "https://example.com/events", SSE: &restfile.SSERequest{}},
+			checked:  true,
+		}, "from-sse"},
+		{"grpc", responseMsg{
+			grpc:     &grpcx.Response{StatusCode: codes.OK, StatusMessage: "OK", Message: `{"id":"from-grpc"}`},
+			executed: &restfile.Request{Method: "GRPC", GRPC: &restfile.GRPCRequest{FullMethod: "/pkg.Service/Call"}},
+			checked:  true,
+		}, "from-grpc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := histdb.New(filepath.Join(t.TempDir(), "history.db"))
+			model := New(Config{History: store})
+			model.ready = true
+			if cmd := model.applyLayout(); cmd != nil {
+				collectMsgs(cmd)
+			}
+			tt.msg.err = context.Canceled
+			tt.msg.tests = []scriptapi.TestResult{{Name: "true", Passed: true}}
+			drainResponseCommands(t, &model, model.handleResponseMessage(tt.msg))
+			if want := requestErrorStatus(true); model.statusMessage != want {
+				t.Fatalf("status = %+v, want %+v", model.statusMessage, want)
+			}
+			body, runs, last, lastGRPC := "error[canceled]", 0, (*httpx.Response)(nil), (*grpcx.Response)(nil)
+			if tt.shown != "" {
+				body, runs, last, lastGRPC = tt.shown, 1, tt.msg.response, tt.msg.grpc
+			}
+			if model.responseLatest == nil || !strings.Contains(model.responseLatest.pretty, body) {
+				t.Fatalf("response view does not show %q", body)
+			}
+			if entries, err := store.Entries(); err != nil || len(entries) != runs {
+				t.Fatalf("history entries = %d (%v), want %d", len(entries), err, runs)
+			}
+			if model.lastResponse != last || model.lastGRPC != lastGRPC {
+				t.Fatalf("last = %p %p, want %p %p", model.lastResponse, model.lastGRPC, last, lastGRPC)
+			}
+		})
 	}
 }
 

@@ -51,6 +51,7 @@ type responseMsg struct {
 	err            error
 	tests          []scriptapi.TestResult
 	scriptErr      error
+	checked        bool
 	executed       *restfile.Request
 	requestText    string
 	runtimeSecrets []string
