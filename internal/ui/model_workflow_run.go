@@ -767,7 +767,8 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 		b.WriteString(workflowStepLine(entry.index, entry.result))
 		b.WriteString("\n")
 		if strings.TrimSpace(entry.result.Message) != "" {
-			fmt.Fprintf(&b, "    %s\n", strings.ReplaceAll(entry.result.Message, "\n", "\n    "))
+			msg := strings.ReplaceAll(entry.result.Message, "\n", "\n"+workflowReportIndent)
+			b.WriteString(workflowReportIndent + msg + "\n")
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")

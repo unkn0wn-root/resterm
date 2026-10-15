@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"time"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
@@ -40,3 +41,5 @@ const (
 	workflowStatusCanceled = "[CANCELED]"
 	workflowStatusSkipped  = "[SKIPPED]"
 )
+
+var workflowReportIndent = strings.Repeat(" ", 4)
