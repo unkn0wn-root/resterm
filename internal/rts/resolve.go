@@ -73,7 +73,7 @@ func (e *Eng) modHead(base, path string) (string, Pos, error) {
 		}
 		return m.Name, m.NamePos, nil
 	}
-	data, err := e.C.read(p)
+	data, err := e.C.fs.ReadFile(p)
 	if err != nil {
 		return "", Pos{}, err
 	}

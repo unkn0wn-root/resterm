@@ -78,7 +78,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			if errors.Is(err, rts.ErrHalt) {
 				err = nil
 			}
-			err = src.annotate(eng.diagnose(err))
+			err = src.annotate(diagnose(err))
 		}
 		out = append(out, scriptapi.TestResult{
 			Name:    name,

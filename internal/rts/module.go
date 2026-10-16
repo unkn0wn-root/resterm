@@ -26,7 +26,6 @@ type ModCache struct {
 	fs  FS
 	mu  sync.RWMutex
 	ent map[string]*modEnt
-	src map[string][]byte
 	std func() map[string]Value
 }
 
@@ -49,7 +48,7 @@ func NewCache(fs FS, std func() map[string]Value) *ModCache {
 	if fs == nil {
 		fs = OSFS{}
 	}
-	return &ModCache{fs: fs, ent: map[string]*modEnt{}, src: map[string][]byte{}, std: prelude(std)}
+	return &ModCache{fs: fs, ent: map[string]*modEnt{}, std: prelude(std)}
 }
 
 // SetStdlib installs the prelude used when compiling modules through the cache.
@@ -83,7 +82,7 @@ func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
 		return ent.comp, p, nil
 	}
 
-	data, err := c.read(p)
+	data, err := c.fs.ReadFile(p)
 	if err != nil {
 		return nil, p, err
 	}
@@ -107,24 +106,6 @@ func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
 	}
 	c.set(p, &modEnt{comp: comp, fp: fp, sum: sum, settled: settled})
 	return comp, p, nil
-}
-
-// Source returns the text the cache last read for path, or nil if it never read it.
-func (c *ModCache) Source(path string) []byte {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.src[path]
-}
-
-func (c *ModCache) read(path string) ([]byte, error) {
-	data, err := c.fs.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	c.mu.Lock()
-	c.src[path] = data
-	c.mu.Unlock()
-	return data, nil
 }
 
 // get returns the cached entry and whether fp alone proves it current.

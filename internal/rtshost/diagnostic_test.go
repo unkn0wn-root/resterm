@@ -33,12 +33,11 @@ func TestDiagnosePreservesRTSErrorAndReport(t *testing.T) {
 		},
 	}
 
-	eng := NewEngine(nil)
-	err := eng.diagnose(original)
+	err := diagnose(original)
 	if err.Error() != original.Error() {
 		t.Fatalf("diagnose(error).Error() = %q, want %q", err.Error(), original.Error())
 	}
-	if got := eng.diagnose(err); got != err {
+	if got := diagnose(err); got != err {
 		t.Fatalf("diagnose(diagnose(error)) returned a new error")
 	}
 	var stackErr *rts.StackError
@@ -63,7 +62,7 @@ func TestDiagnosePreservesRTSErrorAndReport(t *testing.T) {
 }
 
 func TestDiagnoseUndefinedName(t *testing.T) {
-	err := NewEngine(nil).diagnose(&rts.StackError{Err: &rts.UndefinedNameError{
+	err := diagnose(&rts.StackError{Err: &rts.UndefinedNameError{
 		RuntimeError: &rts.RuntimeError{Pos: rts.NewFile("wf.http", nil).Pos(2, 1), Msg: `undefined name "user"`},
 		Name:         "user",
 	}})
@@ -88,7 +87,7 @@ func TestDiagnoseWrappedAbort(t *testing.T) {
 		"bare":       fmt.Errorf("native: %w", abort),
 		"with stack": fmt.Errorf("native: %w", &rts.StackError{Err: abort}),
 	} {
-		rep := diag.ReportOf(NewEngine(nil).diagnose(err))
+		rep := diag.ReportOf(diagnose(err))
 		if len(rep.Items) == 0 || rep.Class() != diag.ClassTimeout {
 			t.Fatalf("%s: report = %+v, want a timeout", name, rep)
 		}
@@ -170,7 +169,7 @@ func TestDiagnoseAbortClasses(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := NewEngine(nil).diagnose(&rts.AbortError{
+			err := diagnose(&rts.AbortError{
 				RuntimeError: &rts.RuntimeError{
 					Pos: rts.NewFile("hook.rts", nil).Pos(2, 3),
 					Msg: "stopped",
@@ -203,7 +202,7 @@ func TestDiagnoseStackErrorKeepsInnerReport(t *testing.T) {
 		}}},
 	}
 
-	err := NewEngine(nil).diagnose(&rts.StackError{
+	err := diagnose(&rts.StackError{
 		Err:    inner,
 		Frames: []rts.Frame{{Pos: rts.NewFile("hook.rts", nil).Pos(2, 1), Name: "sign"}},
 	})
@@ -229,7 +228,7 @@ func TestDiagnoseStackErrorKeepsInnerReport(t *testing.T) {
 }
 
 func TestDiagnoseStackErrorFallsBackToMessage(t *testing.T) {
-	err := NewEngine(nil).diagnose(&rts.StackError{
+	err := diagnose(&rts.StackError{
 		Err:    errors.New("boom"),
 		Frames: []rts.Frame{{Pos: rts.NewFile("hook.rts", nil).Pos(5, 2)}},
 	})
@@ -250,7 +249,7 @@ func TestDiagnoseStackErrorFallsBackToMessage(t *testing.T) {
 
 func TestDiagnoseLeavesNonRTSErrorUnchanged(t *testing.T) {
 	original := errors.New("boom")
-	if got := NewEngine(nil).diagnose(original); got != original {
+	if got := diagnose(original); got != original {
 		t.Fatalf("diagnose(error) = %T %v, want original", got, got)
 	}
 }
@@ -335,15 +334,192 @@ func TestErrorsShowTheLineOfTheFileTheyPointAt(t *testing.T) {
 			if err == nil {
 				t.Fatal("run succeeded, want an error")
 			}
-			var excerpt []string
-			for _, l := range diag.Lines(diag.ReportOf(err)) {
-				if l.Kind == diag.LineSrc || l.Kind == diag.LineMark {
-					excerpt = append(excerpt, l.Text)
-				}
-			}
-			if got := strings.Join(excerpt, "\n"); got != tt.want {
+			if got := excerpt(err); got != tt.want {
 				t.Fatalf("excerpt =\n%s\nwant\n%s\nin:\n%s", got, tt.want, diag.Render(err))
 			}
 		})
 	}
+}
+
+// The rows run in order against one engine. Each edit stays for the rows after
+// it, and the functions saved before the table outlive them.
+func TestErrorsQuoteTheModuleTextTheCodeCameFrom(t *testing.T) {
+	dir := t.TempDir()
+	writeModule(
+		t,
+		dir,
+		"keep.rts",
+		"module keep\n\nlet f = null\nlet g = null\n\nexport fn put(a, b) {\n  f = a\n  g = b\n}\n\n"+
+			"export fn first() {\n  return f()\n}\n\nexport fn second() {\n  return g()\n}\n",
+	)
+	writeModule(
+		t,
+		dir,
+		"m.rts",
+		"module m\n\nexport fn boom() {\n  let old = null\n  return old.body\n}\n\n"+
+			"export fn maker() {\n  fn inner() {\n    let gone = null\n    return gone.away\n  }\n  return inner\n}\n",
+	)
+	eng := NewEngine(nil)
+	at := rts.NewFile(testDoc, nil).Pos(1, 1)
+	eval := func(src string, uses ...string) error {
+		rt := Runtime{BaseDir: dir}
+		for _, path := range uses {
+			rt.Uses = append(rt.Uses, rts.Use{Path: path})
+		}
+		_, err := eng.Eval(t.Context(), rt, src, at)
+		return err
+	}
+	if err := eval("keep.put(m.boom, m.maker())", "keep.rts", "m.rts"); err != nil {
+		t.Fatal(err)
+	}
+	edited := "module m\n\nexport fn boom() {\n  let fresh = null\n  return fresh.next\n}\n\n" +
+		"export fn maker() {\n  fn inner() {\n    let here = null\n    return here.now\n  }\n  return inner\n}\n"
+	old := "   5 |   return old.body\n     |             ^"
+	tests := []struct {
+		name string
+		edit string
+		run  func() error
+		want string
+	}{
+		{
+			"function saved before an edit",
+			edited,
+			func() error { return eval("keep.first()", "keep.rts", "m.rts") },
+			old,
+		},
+		{
+			"closure made before the edit",
+			"",
+			func() error { return eval("keep.second()", "keep.rts", "m.rts") },
+			"  11 |     return gone.away\n     |                ^",
+		},
+		{
+			"function read after the edit",
+			"",
+			func() error { return eval("m.boom()", "m.rts") },
+			"   5 |   return fresh.next\n     |               ^",
+		},
+		{
+			"edit that does not parse",
+			"module m\n\nexport fn boom() {\n  return 1 +\n}\n",
+			func() error { return eval("1", "m.rts") },
+			"   5 | }\n     | ^",
+		},
+		{
+			"function saved before the broken edit",
+			"",
+			func() error { return eval("keep.first()", "keep.rts") },
+			old,
+		},
+		{
+			"merged with a block error",
+			"",
+			func() error {
+				block := RunPreRequest(t.Context(), eng, PreRequest{
+					Doc: &restfile.Document{
+						Path: testDoc,
+						Raw: []byte(
+							"### One\n# @rts pre-request\n> let y = null\n> y.name\nGET https://example.test\n",
+						),
+					},
+					Scripts: []restfile.ScriptBlock{{
+						Kind:       restfile.ScriptKindPreRequest,
+						Lang:       restfile.ScriptLangRTS,
+						Body:       "let y = null\ny.name",
+						SourcePath: testDoc,
+						Lines:      []restfile.ScriptLine{{Line: 3, Col: 3}, {Line: 4, Col: 3}},
+					}},
+					Runtime: func() (Runtime, error) { return Runtime{BaseDir: dir}, nil },
+				})
+				return errors.Join(eval("keep.first()", "keep.rts"), block)
+			},
+			old + "\n   4 | > y.name\n     |    ^",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.edit != "" {
+				writeModule(t, dir, "m.rts", tt.edit)
+			}
+			err := tt.run()
+			if got := excerpt(err); got != tt.want {
+				t.Fatalf("excerpt =\n%s\nwant\n%s\nin:\n%s", got, tt.want, diag.Render(err))
+			}
+		})
+	}
+}
+
+func TestFileBlockQuotesTheTextItRead(t *testing.T) {
+	dir := t.TempDir()
+	writeModule(t, dir, "x.rts", "module x\n\nexport let a = 1\nexport let b = 2\n")
+	eng := NewEngine(nil)
+	rt := Runtime{BaseDir: dir, Uses: []rts.Use{{Path: "x.rts"}}}
+	if _, err := eng.Eval(t.Context(), rt, "x.a", rts.NewFile(testDoc, nil).Pos(1, 1)); err != nil {
+		t.Fatal(err)
+	}
+	writeModule(t, dir, "x.rts", "module x\n\nlet b = null\nlet c = b.name\n")
+
+	err := RunPreRequest(t.Context(), eng, PreRequest{
+		Doc: &restfile.Document{Path: testDoc},
+		Scripts: []restfile.ScriptBlock{{
+			Kind:     restfile.ScriptKindPreRequest,
+			Lang:     restfile.ScriptLangRTS,
+			FilePath: "x.rts",
+		}},
+		BaseDir: dir,
+		Runtime: func() (Runtime, error) { return Runtime{BaseDir: dir}, nil },
+	})
+	want := "   4 | let c = b.name\n     |          ^"
+	if got := excerpt(err); got != want {
+		t.Fatalf("excerpt =\n%s\nwant\n%s\nin:\n%s", got, want, diag.Render(err))
+	}
+}
+
+// A function defined in a request block and kept by a module still quotes the
+// document it was defined in after that document changes.
+func TestBlockFunctionQuotesTheDocumentItCameFrom(t *testing.T) {
+	dir := t.TempDir()
+	writeModule(t, dir, "keep.rts", "module keep\n\nlet f = null\n\nexport fn put(a) {\n  f = a\n}\n\n"+
+		"export fn first() {\n  return f()\n}\n")
+	eng := NewEngine(nil)
+	run := func(lines ...string) error {
+		block := restfile.ScriptBlock{
+			Kind:       restfile.ScriptKindPreRequest,
+			Lang:       restfile.ScriptLangRTS,
+			Body:       strings.Join(lines, "\n"),
+			SourcePath: testDoc,
+		}
+		doc := []string{"### One", "# @rts pre-request"}
+		for _, line := range lines {
+			doc = append(doc, "> "+line)
+			block.Lines = append(block.Lines, restfile.ScriptLine{Line: len(doc), Col: 3})
+		}
+		doc = append(doc, "GET https://example.test", "")
+		return RunPreRequest(t.Context(), eng, PreRequest{
+			Doc:     &restfile.Document{Path: testDoc, Raw: []byte(strings.Join(doc, "\n"))},
+			Scripts: []restfile.ScriptBlock{block},
+			BaseDir: dir,
+			Runtime: func() (Runtime, error) {
+				return Runtime{BaseDir: dir, Uses: []rts.Use{{Path: "keep.rts"}}}, nil
+			},
+		})
+	}
+	if err := run("fn boom() {", "  let gone = null", "  return gone.away", "}", "keep.put(boom)"); err != nil {
+		t.Fatal(err)
+	}
+	err := run("let a = 1", "let b = 2", "keep.first()")
+	want := "   5 | >   return gone.away\n     |                ^"
+	if got := excerpt(err); got != want {
+		t.Fatalf("excerpt =\n%s\nwant\n%s\nin:\n%s", got, want, diag.Render(err))
+	}
+}
+
+func excerpt(err error) string {
+	var out []string
+	for _, l := range diag.Lines(diag.ReportOf(err)) {
+		if l.Kind == diag.LineSrc || l.Kind == diag.LineMark {
+			out = append(out, l.Text)
+		}
+	}
+	return strings.Join(out, "\n")
 }
