@@ -145,7 +145,8 @@ func TestEvalRunVarsShadowsWithoutMutatingTheRun(t *testing.T) {
 	sc := RunScope{RunVars: vars.CollectNames(map[string]string{"x": "old", "keep": "kept"})}
 	decls := []restfile.RunVar{{Name: "x", Value: "{{base}}-new", Line: 1}}
 
-	got, err := newTestEngine().EvalRunVars(context.Background(), doc, nil, envWith(t, "dev", nil), sc, decls)
+	eng := newTestEngine()
+	got, err := eng.EvalRunVars(context.Background(), eng.RunDoc(doc), nil, envWith(t, "dev", nil), sc, decls)
 	if err != nil {
 		t.Fatalf("EvalRunVars() error = %v", err)
 	}
@@ -167,7 +168,8 @@ func TestEvalRunVarsDerivesFromTheValueItShadows(t *testing.T) {
 		{Name: "next", Value: `{{= vars.get("suffix") + "-y" }}`, Line: 2},
 	}
 
-	got, err := newTestEngine().EvalRunVars(context.Background(), nil, nil, envWith(t, "dev", nil), sc, decls)
+	eng := newTestEngine()
+	got, err := eng.EvalRunVars(context.Background(), eng.RunDoc(nil), nil, envWith(t, "dev", nil), sc, decls)
 	if err != nil {
 		t.Fatalf("EvalRunVars() error = %v", err)
 	}
@@ -181,7 +183,8 @@ func TestEvalRunVarsDerivesFromTheValueItShadows(t *testing.T) {
 
 func TestEvalRunVarsReportsUndefinedAsUndefined(t *testing.T) {
 	decls := []restfile.RunVar{{Name: "x", Value: "{{missing}}", Line: 4}}
-	_, err := newTestEngine().EvalRunVars(context.Background(), nil, nil, envWith(t, "dev", nil), RunScope{}, decls)
+	eng := newTestEngine()
+	_, err := eng.EvalRunVars(context.Background(), eng.RunDoc(nil), nil, envWith(t, "dev", nil), RunScope{}, decls)
 	if !errors.Is(err, vars.ErrUndefinedVariable) {
 		t.Fatalf("EvalRunVars() error = %v, want ErrUndefinedVariable", err)
 	}

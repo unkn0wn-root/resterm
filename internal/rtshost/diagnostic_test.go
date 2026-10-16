@@ -14,20 +14,21 @@ import (
 )
 
 func TestDiagnosePreservesRTSErrorAndReport(t *testing.T) {
+	hook := rts.NewFile("hook.rts", nil)
 	original := &rts.StackError{
 		Err: &rts.RuntimeError{
-			Pos: rts.Pos{Path: "hook.rts", Line: 3, Col: 7},
+			Pos: hook.Pos(3, 7),
 			Msg: "boom",
 		},
 		Frames: []rts.Frame{
 			{
 				Kind: rts.FrameFn,
-				Pos:  rts.Pos{Path: "hook.rts", Line: 2, Col: 1},
+				Pos:  hook.Pos(2, 1),
 				Name: "sign",
 			},
 			{
 				Kind: rts.FrameFn,
-				Pos:  rts.Pos{Path: "hook.rts", Line: 1, Col: 1},
+				Pos:  hook.Pos(1, 1),
 			},
 		},
 	}
@@ -63,7 +64,7 @@ func TestDiagnosePreservesRTSErrorAndReport(t *testing.T) {
 
 func TestDiagnoseUndefinedName(t *testing.T) {
 	err := NewEngine(nil).diagnose(&rts.StackError{Err: &rts.UndefinedNameError{
-		RuntimeError: &rts.RuntimeError{Pos: rts.Pos{Path: "wf.http", Line: 2, Col: 1}, Msg: `undefined name "user"`},
+		RuntimeError: &rts.RuntimeError{Pos: rts.NewFile("wf.http", nil).Pos(2, 1), Msg: `undefined name "user"`},
 		Name:         "user",
 	}})
 	got := diag.Render(err)
@@ -80,7 +81,7 @@ func TestDiagnoseUndefinedName(t *testing.T) {
 
 func TestDiagnoseWrappedAbort(t *testing.T) {
 	abort := &rts.AbortError{
-		RuntimeError: &rts.RuntimeError{Pos: rts.Pos{Path: "hook.rts", Line: 3, Col: 7}, Msg: "timeout exceeded"},
+		RuntimeError: &rts.RuntimeError{Pos: rts.NewFile("hook.rts", nil).Pos(3, 7), Msg: "timeout exceeded"},
 		Kind:         rts.AbortTimeout,
 	}
 	for name, err := range map[string]error{
@@ -99,7 +100,7 @@ func TestDiagnoseWrappedAbort(t *testing.T) {
 
 func TestEngineDiagnosesCoreErrors(t *testing.T) {
 	eng := NewEngine(func() map[string]rts.Value { return nil })
-	pos := rts.Pos{Path: "boundary.rts", Line: 4, Col: 6}
+	pos := rts.NewFile("boundary.rts", nil).Pos(4, 6)
 	tests := []struct {
 		name string
 		eval func() error
@@ -149,8 +150,8 @@ func TestEngineDiagnosesCoreErrors(t *testing.T) {
 				t.Fatalf("ReportOf(error) has %d items, want 1", len(report.Items))
 			}
 			item := report.Items[0]
-			if item.Class != diag.ClassScript || item.Span.Start.Path != pos.Path {
-				t.Fatalf("ReportOf(error) = %+v, want script diagnostic in %q", item, pos.Path)
+			if item.Class != diag.ClassScript || item.Span.Start.Path != pos.Path() {
+				t.Fatalf("ReportOf(error) = %+v, want script diagnostic in %q", item, pos.Path())
 			}
 		})
 	}
@@ -171,7 +172,7 @@ func TestDiagnoseAbortClasses(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			err := NewEngine(nil).diagnose(&rts.AbortError{
 				RuntimeError: &rts.RuntimeError{
-					Pos: rts.Pos{Path: "hook.rts", Line: 2, Col: 3},
+					Pos: rts.NewFile("hook.rts", nil).Pos(2, 3),
 					Msg: "stopped",
 				},
 				Kind: test.kind,
@@ -204,7 +205,7 @@ func TestDiagnoseStackErrorKeepsInnerReport(t *testing.T) {
 
 	err := NewEngine(nil).diagnose(&rts.StackError{
 		Err:    inner,
-		Frames: []rts.Frame{{Pos: rts.Pos{Path: "hook.rts", Line: 2, Col: 1}, Name: "sign"}},
+		Frames: []rts.Frame{{Pos: rts.NewFile("hook.rts", nil).Pos(2, 1), Name: "sign"}},
 	})
 
 	report := diag.ReportOf(err)
@@ -230,7 +231,7 @@ func TestDiagnoseStackErrorKeepsInnerReport(t *testing.T) {
 func TestDiagnoseStackErrorFallsBackToMessage(t *testing.T) {
 	err := NewEngine(nil).diagnose(&rts.StackError{
 		Err:    errors.New("boom"),
-		Frames: []rts.Frame{{Pos: rts.Pos{Path: "hook.rts", Line: 5, Col: 2}}},
+		Frames: []rts.Frame{{Pos: rts.NewFile("hook.rts", nil).Pos(5, 2)}},
 	})
 
 	report := diag.ReportOf(err)
@@ -288,12 +289,13 @@ func TestErrorsShowTheLineOfTheFileTheyPointAt(t *testing.T) {
 		_, err := RunTests(t.Context(), eng, Tests{Doc: doc, Scripts: []restfile.ScriptBlock{b}, Runtime: rt})
 		return err
 	}
+	host := rts.NewFile(testDoc, nil)
 	assert := func(rt Runtime, b restfile.ScriptBlock) error {
-		_, err := eng.EvalAssertion(t.Context(), rt, b.Body, rts.Pos{Path: testDoc, Line: 4, Col: 3})
+		_, err := eng.EvalAssertion(t.Context(), rt, b.Body, host.Pos(4, 3))
 		return err
 	}
 	load := func(rt Runtime, _ restfile.ScriptBlock) error {
-		return eng.Load(t.Context(), rt, rts.Pos{Path: testDoc, Line: 1, Col: 1})
+		return eng.Load(t.Context(), rt, host.Pos(1, 1))
 	}
 	moduleLine := "   4 |   return x.name\n     |           ^"
 	blockLine := "   5 | > y.name\n     |    ^"

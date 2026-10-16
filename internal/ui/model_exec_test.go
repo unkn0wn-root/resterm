@@ -629,7 +629,7 @@ func TestHandleResponseMsgRendersRTSStack(t *testing.T) {
 		context.Background(),
 		rtshost.Runtime{},
 		"fn sign() {\n  fail(\"boom\")\n}\nsign()\n",
-		rts.Pos{Path: "hook.rts", Line: 1, Col: 1},
+		rts.NewFile("hook.rts", nil).Pos(1, 1),
 	)
 	if scriptErr == nil {
 		t.Fatal("expected RTS module to fail")

@@ -164,6 +164,7 @@ func (f planFixture) expand(t *testing.T, input string) string {
 	res := f.eng.buildResolver(
 		context.Background(),
 		f.doc,
+		f.eng.RunDoc(f.doc).File,
 		f.req,
 		f.env.Resolve(),
 		"",

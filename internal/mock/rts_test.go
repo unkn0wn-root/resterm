@@ -47,7 +47,7 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
   },
   json: {status: "completed"},
   jsonRules: {amount: {gt: 100}, tier: {oneOf: ["gold", "silver"]}}
-})`, rts.Pos{Path: "test.http", Line: 1, Col: 1})
+})`, rts.NewFile("test.http", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatal(err)
 	}

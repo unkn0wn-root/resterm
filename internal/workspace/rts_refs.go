@@ -14,12 +14,12 @@ const (
 	stdlibNamespace = "stdlib"
 )
 
-func jsonFileExprs(path string, line, col int, src string) []string {
+func jsonFileExprs(src string) []string {
 	src = strings.TrimSpace(src)
 	if src == "" {
 		return nil
 	}
-	ex, err := rts.ParseExpr(path, line, col, src)
+	ex, err := rts.ParseExpr(src, rts.Pos{})
 	if err != nil {
 		return nil
 	}
@@ -32,7 +32,7 @@ func jsonFileExprs(path string, line, col int, src string) []string {
 }
 
 func jsonFileModuleRefs(path string, src string) []string {
-	mod, err := rts.ParseModule(path, []byte(src))
+	mod, err := rts.ParseModule(rts.NewFile(path, []byte(src)))
 	if err != nil {
 		return nil
 	}

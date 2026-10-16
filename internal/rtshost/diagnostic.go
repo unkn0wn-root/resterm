@@ -94,7 +94,7 @@ func errorReport(class diag.Class, message string, pos rts.Pos) diag.Report {
 }
 
 func diagPos(pos rts.Pos) diag.Pos {
-	return diag.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col}
+	return diag.Pos{Path: pos.Path(), Line: pos.Line, Col: pos.Col}
 }
 
 func diagFrames(frames []rts.Frame) []diag.StackFrame {

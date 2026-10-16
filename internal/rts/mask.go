@@ -9,7 +9,7 @@ import (
 // Byte offsets stay the same, so callers can find top-level separators.
 func Mask(src string) string {
 	out := bytes.Repeat([]byte{' '}, len(src))
-	lx := NewLexer("", []byte(src))
+	lx := NewLexerAt([]byte(src), Pos{})
 	var depth int
 	for {
 		tok := lx.Next()
@@ -39,7 +39,7 @@ func Mask(src string) string {
 // It keeps code inside groups and preserves byte offsets.
 func MaskText(src string) string {
 	out := bytes.Repeat([]byte{' '}, len(src))
-	lx := NewLexer("", []byte(src))
+	lx := NewLexerAt([]byte(src), Pos{})
 	for {
 		tok := lx.Next()
 		if tok.K == EOF {
@@ -61,7 +61,7 @@ func StringRanges(src, callee string) [][2]int {
 		depth int
 		skip  int // call depth, or zero outside the call
 	)
-	lx := NewLexer("", []byte(src))
+	lx := NewLexerAt([]byte(src), Pos{})
 	for {
 		tok := lx.Next()
 		switch tok.K {

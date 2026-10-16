@@ -63,7 +63,7 @@ func TestBodySourceKeepsExtraBodyLinesVerbatim(t *testing.T) {
 
 func TestAnnotateAddsSourceToDiagnostic(t *testing.T) {
 	err := NewEngine(nil).diagnose(&rts.RuntimeError{
-		Pos: rts.Pos{Path: "sample.http", Line: 3, Col: 3},
+		Pos: rts.NewFile("sample.http", nil).Pos(3, 3),
 		Msg: "boom",
 	})
 	src := source{

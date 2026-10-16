@@ -18,7 +18,7 @@ func (r *wfRun) evalWorkflowRunVars(ctx context.Context) {
 	sc := request.RunScope{Overlay: r.vars}
 	r.wfRunVars.vals, r.wfRunVars.err = r.dep.EvalRunVars(
 		ctx,
-		r.pl.Doc,
+		r.doc,
 		nil,
 		r.pl.Run.Env,
 		sc,
@@ -39,7 +39,7 @@ func (r *wfRun) runVarsFor(
 	set, ok := r.reqRunVars[req]
 	if !ok {
 		sc := request.RunScope{Overlay: overlay, RunVars: wf.vals}
-		set.vals, set.err = r.dep.EvalRunVars(ctx, r.pl.Doc, req, r.pl.Run.Env, sc, req.RunVars)
+		set.vals, set.err = r.dep.EvalRunVars(ctx, r.doc, req, r.pl.Run.Env, sc, req.RunVars)
 		r.reqRunVars[req] = set
 	}
 	return set.vals, set.err

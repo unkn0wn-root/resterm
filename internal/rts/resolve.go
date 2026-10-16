@@ -26,11 +26,7 @@ func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, pre map[string]Value) ([]Use,
 				return nil, err
 			}
 			if nm == "" {
-				p := mp
-				if p.Line == 0 {
-					p = Pos{Path: mp.Path, Line: 1, Col: 1}
-				}
-				return nil, Errf(cx, p, "missing module name (add 'module <name>' at top of file)")
+				return nil, Errf(cx, mp, "missing module name (add 'module <name>' at top of file)")
 			}
 			al = nm
 			u.Alias = nm
@@ -68,35 +64,34 @@ func (e *Eng) modHead(base, path string) (string, Pos, error) {
 	}
 	fp, err := e.C.stat(p)
 	if err != nil {
-		return "", Pos{Path: p}, err
+		return "", Pos{}, err
 	}
 	if ent, ok := e.C.get(p, fp); ok {
-		mp := ent.comp.Mod.NamePos
-		if mp.Path == "" {
-			mp.Path = p
+		m := ent.comp.Mod
+		if m.Name == "" {
+			return "", m.File.Pos(1, 1), nil
 		}
-		return ent.comp.Mod.Name, mp, nil
+		return m.Name, m.NamePos, nil
 	}
 	data, err := e.C.read(p)
 	if err != nil {
-		return "", Pos{Path: p}, err
+		return "", Pos{}, err
 	}
-	nm, mp, err := modHead(p, data)
-	if mp.Path == "" {
-		mp.Path = p
-	}
-	return nm, mp, err
+	return modHead(NewFile(p, data))
 }
 
-func modHead(path string, src []byte) (string, Pos, error) {
-	lx := NewLexer(path, src)
+// modHead returns the module name declared at the top of f and where it is
+// declared. A file without a declaration reports its first line, where the
+// declaration belongs.
+func modHead(f *File) (string, Pos, error) {
+	lx := NewLexer(f)
 	for {
 		tok := lx.Next()
 		switch tok.K {
 		case SEMI, AUTO_SEMI:
 			continue
 		case EOF:
-			return "", Pos{Path: path}, nil
+			return "", f.Pos(1, 1), nil
 		case ILLEGAL:
 			return "", tok.P, &ParseError{Pos: tok.P, Msg: tok.Lit}
 		case KW_MODULE:
@@ -122,7 +117,7 @@ func modHead(path string, src []byte) (string, Pos, error) {
 			if ok {
 				return "", mp, &ParseError{Pos: mp, Msg: "module must appear before statements"}
 			}
-			return "", Pos{Path: path}, nil
+			return "", f.Pos(1, 1), nil
 		}
 	}
 }

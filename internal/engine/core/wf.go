@@ -52,6 +52,7 @@ type wfRun struct {
 	sink       Sink
 	ectx       context.Context
 	pl         *WorkflowPlan
+	doc        request.RunDoc
 	idx        int
 	seq        int
 	vars       vars.NameMap[string]
@@ -152,6 +153,7 @@ func RunPlan(ctx context.Context, dep Dep, sink Sink, pl *WorkflowPlan) error {
 		sink:       sink,
 		ectx:       emitCtx(ctx),
 		pl:         pl,
+		doc:        dep.RunDoc(pl.Doc),
 		vars:       vars.CollectNames(pl.Vars),
 		reqRunVars: make(map[*restfile.Request]runVarSet),
 		skip:       true,
@@ -227,7 +229,7 @@ func (r *wfRun) runReqStep(
 	if step.When != nil && !perItem {
 		ok, reason, err := r.dep.EvalCondition(
 			ctx,
-			r.pl.Doc,
+			r.doc,
 			req,
 			r.pl.Run.Env,
 			baseDir(r.pl.Doc),
@@ -269,7 +271,7 @@ func (r *wfRun) runReqStep(
 
 	items, err := r.dep.EvalForEachItems(
 		ctx,
-		r.pl.Doc,
+		r.doc,
 		req,
 		r.pl.Run.Env,
 		baseDir(r.pl.Doc),
@@ -290,8 +292,9 @@ func (r *wfRun) runReqStep(
 	}
 
 	reqKey, wfKey := restfile.WorkflowVarKeys(spec.Var, r.pl.WfVars)
+	at := r.doc.At(req, spec.Line)
 	for i, item := range items {
-		itemStr, err := r.dep.ValueString(ctx, r.dep.PosForLine(r.pl.Doc, req, spec.Line), item)
+		itemStr, err := r.dep.ValueString(ctx, at, item)
 		if err != nil {
 			if ctx.Err() != nil {
 				r.canceled = true
@@ -331,7 +334,7 @@ func (r *wfRun) runReqStep(
 		if step.When != nil && perItem {
 			ok, reason, err := r.dep.EvalCondition(
 				ctx,
-				r.pl.Doc,
+				r.doc,
 				req,
 				r.pl.Run.Env,
 				baseDir(r.pl.Doc),
@@ -651,13 +654,13 @@ func (r *wfRun) evalStepValue(
 	// Not Environment.Resolve: a templated env: reference needs the document's
 	// declarations to expand its name.
 	return r.dep.EvalValue(ctx, request.EvalInput{
-		Doc:    r.pl.Doc,
+		RunDoc: r.doc,
 		Req:    req,
 		Env:    request.ResolveEnvironment(r.pl.Run.Env, r.pl.Doc, req),
 		Base:   baseDir(r.pl.Doc),
 		Expr:   expr,
 		Site:   tag + " " + str.FoldLines(expr),
-		Pos:    r.dep.PosForLine(r.pl.Doc, req, line),
+		Pos:    r.doc.At(req, line),
 		Vars:   vv,
 		Locals: locals,
 	})

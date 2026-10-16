@@ -22,8 +22,9 @@ func TestEvalConditionErrorCarriesSource(t *testing.T) {
 	req := &restfile.Request{}
 	spec := &restfile.ConditionSpec{Expression: "missing.value", Line: 2}
 
-	_, _, err := model.requestSvc(httpx.Options{}).EvalCondition(
-		context.Background(), doc, req, testEnv(""), "", spec, nil, rts.Locals{},
+	rq := model.requestSvc(httpx.Options{})
+	_, _, err := rq.EvalCondition(
+		context.Background(), rq.RunDoc(doc), req, testEnv(""), "", spec, nil, rts.Locals{},
 	)
 	if err == nil {
 		t.Fatalf("expected @when condition error")

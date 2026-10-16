@@ -111,19 +111,44 @@ func (e *Engine) rtsPos(doc *restfile.Document, req *restfile.Request) vars.Expr
 	return vars.ExprPos{Path: path, Line: line, Col: 1}
 }
 
-func (e *Engine) rtsPosForLine(doc *restfile.Document, req *restfile.Request, line int) rts.Pos {
-	path := e.filePath(doc)
+// RunDoc is a document as one run reads it. A run makes one where it starts
+// and passes it on, so its positions in Doc share one File and the text it read.
+type RunDoc struct {
+	Doc  *restfile.Document
+	File *rts.File
+}
+
+func (e *Engine) RunDoc(doc *restfile.Document) RunDoc {
+	return RunDoc{Doc: doc, File: docFile(doc, e.filePath(doc))}
+}
+
+// At returns the start of line. Without a line it is the start of req.
+func (d RunDoc) At(req *restfile.Request, line int) rts.Pos {
+	return rtsPosForLine(d.File, req, line)
+}
+
+// docFile is the file at path. It holds the doc text only when path is empty
+// or the doc's own, the rule withSource follows.
+func docFile(doc *restfile.Document, path string) *rts.File {
+	var src []byte
+	if doc != nil && (path == "" || path == doc.Path) {
+		src = doc.Raw
+	}
+	return rts.NewFile(path, src)
+}
+
+func rtsPosForLine(file *rts.File, req *restfile.Request, line int) rts.Pos {
 	if line <= 0 && req != nil && req.LineRange.Start > 0 {
 		line = req.LineRange.Start
 	}
 	if line <= 0 {
 		line = 1
 	}
-	return rts.Pos{Path: path, Line: line, Col: 1}
+	return file.Pos(line, 1)
 }
 
-func (e *Engine) rtsPosForLineCol(doc *restfile.Document, req *restfile.Request, line, col int) rts.Pos {
-	ps := e.rtsPosForLine(doc, req, line)
+func rtsPosForLineCol(file *rts.File, req *restfile.Request, line, col int) rts.Pos {
+	ps := rtsPosForLine(file, req, line)
 	if col > 0 {
 		ps.Col = col
 	}
@@ -155,6 +180,7 @@ func (e *Engine) rtsBase(doc *restfile.Document, base string) string {
 func (e *Engine) buildResolver(
 	ctx context.Context,
 	doc *restfile.Document,
+	file *rts.File,
 	req *restfile.Request,
 	env vars.ResolvedEnv,
 	base string,
@@ -172,6 +198,7 @@ func (e *Engine) buildResolver(
 	})
 	in := ExprInput{
 		Doc:     doc,
+		file:    file,
 		Req:     req,
 		Env:     env,
 		Base:    base,
@@ -204,6 +231,7 @@ func (e *Engine) DisplayResolver(
 	})
 	in := ExprInput{
 		Doc:     doc,
+		file:    e.RunDoc(doc).File,
 		Req:     req,
 		Env:     env,
 		Base:    e.rtsBase(doc, base),

@@ -134,7 +134,7 @@ GET https://example.com/
 	if strings.Contains(as.Expression, "status") {
 		t.Fatalf("expression ran past its closer: %q", as.Expression)
 	}
-	if _, err := rts.ParseExpr("continue.http", as.Line, as.Col, as.Expression); err == nil {
+	if _, err := rts.ParseExpr(as.Expression, rts.NewFile("continue.http", nil).Pos(as.Line, as.Col)); err == nil {
 		t.Fatal("expected the script parser to reject the stray closer")
 	}
 }
@@ -146,7 +146,7 @@ func TestParseContinuationReportsPositionsOnLaterLines(t *testing.T) {
 # )
 GET https://example.com/
 `)
-	_, err := rts.ParseExpr("continue.http", as.Line, as.Col, as.Expression)
+	_, err := rts.ParseExpr(as.Expression, rts.NewFile("continue.http", nil).Pos(as.Line, as.Col))
 	var perr *rts.ParseError
 	if !errors.As(err, &perr) {
 		t.Fatalf("err = %v, want a parse error", err)
@@ -249,7 +249,7 @@ GET https://example.com/
 	if as.Expression != "sum(\n 1, 2\n ) == 3" {
 		t.Fatalf("expression = %q", as.Expression)
 	}
-	if _, err := rts.ParseExpr("continue.http", as.Line, as.Col, as.Expression); err != nil {
+	if _, err := rts.ParseExpr(as.Expression, rts.NewFile("continue.http", nil).Pos(as.Line, as.Col)); err != nil {
 		t.Fatalf("parse expression: %v", err)
 	}
 }

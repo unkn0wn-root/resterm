@@ -370,7 +370,7 @@ func TestCancelBeforeSendEndsTheRequest(t *testing.T) {
 
 func TestRTSExtensionsBindMockAndYieldToLocals(t *testing.T) {
 	e := New(engcfg.Config{MockInspector: testMockInspector{}}, nil)
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 
 	bound, err := e.re.Eval(
 		context.Background(),
@@ -400,7 +400,7 @@ func TestRTSExtensionsBindMockAndYieldToLocals(t *testing.T) {
 
 func TestRTSExtensionsAreEmptyWithoutAnInspector(t *testing.T) {
 	e := New(engcfg.Config{}, nil)
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 
 	_, err := e.re.Eval(
 		context.Background(),
@@ -428,6 +428,7 @@ GET https://example.com
 	_, err := eng.runRTSPreRequest(
 		context.Background(),
 		doc,
+		eng.RunDoc(doc).File,
 		doc.Requests[0],
 		testEnv("").Resolve(),
 		"",
@@ -481,6 +482,7 @@ func TestRunRTSPreRequestRejectsResponse(t *testing.T) {
 			_, err := eng.runRTSPreRequest(
 				context.Background(),
 				doc,
+				eng.RunDoc(doc).File,
 				doc.Requests[0],
 				testEnv("").Resolve(),
 				"",
@@ -511,7 +513,7 @@ GET https://example.com
 
 	_, err := eng.EvalForEachItems(
 		context.Background(),
-		doc,
+		eng.RunDoc(doc),
 		doc.Requests[0],
 		testEnv(""),
 		"",
@@ -574,7 +576,7 @@ func TestRequestErrorShowsItsMessageOnce(t *testing.T) {
 
 func TestRTSRequestHeadersReachTheRuntimeWithCardinalityShape(t *testing.T) {
 	e := New(engcfg.Config{}, nil)
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 	req := &restfile.Request{
 		Method: "GET",
 		URL:    "https://example.test/path",
@@ -641,7 +643,7 @@ func TestRTSRequestQueryAllowsTemplatedTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRT: %v", err)
 	}
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 	tests := []struct {
 		name string
 		src  string
@@ -692,7 +694,7 @@ func TestRTSEnvKeepsTheSelectionOutOfTheValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRT: %v", err)
 	}
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 
 	tests := map[string]string{
 		`env.meta.name`:   "dev",
@@ -715,7 +717,7 @@ func TestRTSEnvKeepsTheSelectionOutOfTheValues(t *testing.T) {
 // boundary receives the selected values.
 func TestRTSEnvSelectionHasUniqueNames(t *testing.T) {
 	e := New(engcfg.Config{}, nil)
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 
 	// Resolve the environment inside the loop: the collapse is what has to be
 	// stable, and reusing one runtime would only re-read a map already keyed.
@@ -739,7 +741,7 @@ func TestRTSEnvSelectionHasUniqueNames(t *testing.T) {
 // winner between equivalent names.
 func TestRTSRejectsAmbiguousCallerSuppliedVars(t *testing.T) {
 	e := New(engcfg.Config{}, nil)
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 
 	for range 16 {
 		_, err := e.EvalValue(context.Background(), EvalInput{
@@ -786,6 +788,7 @@ GET https://example.com
 	out, err := e.runRTSPreRequest(
 		context.Background(),
 		doc,
+		e.RunDoc(doc).File,
 		doc.Requests[0],
 		testEnvValues(t, "dev", map[string]string{"NAME": "payments-service"}).Resolve(),
 		"",

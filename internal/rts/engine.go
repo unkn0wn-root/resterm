@@ -97,7 +97,7 @@ func (e *Eng) Eval(ctx context.Context, cfg EvalConfig, src string, pos Pos) (Va
 		env.DefConst(k, v)
 	}
 
-	ex, err := ParseExpr(pos.Path, pos.Line, pos.Col, src)
+	ex, err := ParseExpr(src, pos)
 	if err != nil {
 		return Null(), err
 	}
@@ -141,7 +141,7 @@ func (e *Eng) ExecModule(ctx context.Context, cfg EvalConfig, src string, pos Po
 	if err != nil {
 		return nil, err
 	}
-	mod, err := ParseModuleAt(pos.Path, []byte(src), pos)
+	mod, err := ParseModuleAt([]byte(src), pos)
 	if err != nil {
 		return nil, err
 	}

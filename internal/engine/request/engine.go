@@ -263,11 +263,12 @@ func toResult(res xrunResult) engine.RequestResult {
 }
 
 type execCtx struct {
-	eng *Engine
-	doc *restfile.Document
-	req *restfile.Request
-	env vars.ResolvedEnv
-	mod ExecMode
+	eng  *Engine
+	doc  *restfile.Document
+	file *rts.File
+	req  *restfile.Request
+	env  vars.ResolvedEnv
+	mod  ExecMode
 
 	opts httpx.Options
 
@@ -342,6 +343,7 @@ func newExec(
 	return &execCtx{
 		eng:        e,
 		doc:        doc,
+		file:       e.RunDoc(doc).File,
 		req:        req,
 		env:        env,
 		mod:        opt.Mode,
@@ -466,7 +468,7 @@ func (x *execCtx) scriptExpand(text string, set vars.NameMap[string]) (string, e
 		run.scripts = run.scripts.Clone()
 		run.scripts.Merge(set)
 	}
-	res := x.eng.buildResolver(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.storeG, x.locals, run)
+	res := x.eng.buildResolver(x.sendCtx, x.doc, x.file, x.req, x.env, x.opts.BaseDir, x.storeG, x.locals, run)
 	if x.preview() {
 		res = res.Lenient()
 	}
@@ -583,7 +585,7 @@ func (f flow) EvaluateRunVars() *xexec.RequestResult {
 	if !x.standalone || len(x.req.RunVars) == 0 {
 		return nil
 	}
-	vals, err := x.eng.evalRunVars(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.run, x.req.RunVars)
+	vals, err := x.eng.evalRunVars(x.sendCtx, x.doc, x.file, x.req, x.env, x.opts.BaseDir, x.run, x.req.RunVars)
 	// Native calls may return plain context errors. Check cancellation before
 	// reporting a script failure.
 	if x.sendCtx.Err() != nil {
@@ -617,6 +619,7 @@ func (f flow) EvaluateCondition() *xexec.RequestResult {
 	ok, reason, err := x.eng.evalCondition(
 		x.sendCtx,
 		x.doc,
+		x.file,
 		x.req,
 		x.env,
 		x.opts.BaseDir,
@@ -666,7 +669,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	}
 	// @for-each binds its item as a typed value, and @apply reads it the same way
 	// every other expression in the run does.
-	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.evalScope(vv), x.locals)
+	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.file, x.req, x.env, x.opts.BaseDir, x.evalScope(vv), x.locals)
 	if x.sendCtx.Err() != nil {
 		return x.canceled()
 	}
@@ -699,6 +702,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	rtsOut, err := x.eng.runRTSPreRequest(
 		x.sendCtx,
 		x.doc,
+		x.file,
 		x.req,
 		x.env,
 		x.opts.BaseDir,
@@ -812,6 +816,7 @@ func (x *execCtx) buildResolver() {
 	x.res = x.eng.buildResolver(
 		x.sendCtx,
 		x.doc,
+		x.file,
 		x.req,
 		x.env,
 		x.opts.BaseDir,
@@ -1206,6 +1211,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		ctx:     x.sendCtx,
 		base:    x.opts.BaseDir,
 		doc:     x.doc,
+		file:    x.file,
 		req:     x.req,
 		res:     x.res,
 		resp:    respForScripts,
@@ -1294,6 +1300,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 	if in.rrErr == nil && (len(x.req.Metadata.Asserts) > 0 || blocks) {
 		rt, err := x.eng.buildRT(rtIn{
 			doc:     x.doc,
+			file:    x.file,
 			req:     x.req,
 			env:     x.env,
 			base:    x.opts.BaseDir,
@@ -1310,7 +1317,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 		errs = append(errs, err)
 		if err == nil {
 			// Load the modules once, so a broken one is reported once.
-			at := x.eng.rtsPosForLine(x.doc, x.req, x.req.LineRange.Start)
+			at := rtsPosForLine(x.file, x.req, x.req.LineRange.Start)
 			lerr := withSource(x.eng.re.Load(ctx, rt, at), x.doc)
 			asserts := x.req.Metadata.Asserts
 			if lerr != nil {
@@ -1325,7 +1332,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 				name := str.FoldLines(expr)
 				rt.Site = directive.Assert.Tag() + " " + name
 				start := time.Now()
-				pos := x.eng.rtsPosForLineCol(x.doc, x.req, as.Line, as.Col)
+				pos := rtsPosForLineCol(x.file, x.req, as.Line, as.Col)
 				val, err := x.eng.evalRTSAssert(ctx, x.doc, rt, expr, pos)
 				if err != nil {
 					stop = err
@@ -1401,6 +1408,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					ctx:     x.sendCtx,
 					base:    x.opts.BaseDir,
 					doc:     in.Doc,
+					file:    x.file,
 					req:     in.Req,
 					res:     in.Resolver,
 					resp:    in.Response,
@@ -1444,6 +1452,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 				return x.eng.evaluateResponsePredicate(
 					in.Context,
 					in.Doc,
+					x.file,
 					in.Req,
 					x.env,
 					in.BaseDir,

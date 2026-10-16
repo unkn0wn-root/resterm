@@ -19,7 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-var testPos = rts.Pos{Path: "test", Line: 1, Col: 1}
+var testPos = rts.NewFile("test", nil).Pos(1, 1)
 
 func testRuntime(t *testing.T) Runtime {
 	t.Helper()

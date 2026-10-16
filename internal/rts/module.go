@@ -95,7 +95,7 @@ func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
 		return ent.comp, p, nil
 	}
 
-	mod, err := ParseModule(p, data)
+	mod, err := ParseModule(NewFile(p, data))
 	if err != nil {
 		return nil, p, err
 	}

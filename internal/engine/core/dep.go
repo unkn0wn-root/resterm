@@ -19,7 +19,7 @@ type Dep interface {
 	) map[string]string
 	EvalRunVars(
 		ctx context.Context,
-		doc *restfile.Document,
+		doc request.RunDoc,
 		req *restfile.Request,
 		env vars.Environment,
 		sc request.RunScope,
@@ -33,7 +33,7 @@ type Dep interface {
 	) (engine.RequestResult, error)
 	EvalCondition(
 		ctx context.Context,
-		doc *restfile.Document,
+		doc request.RunDoc,
 		req *restfile.Request,
 		env vars.Environment,
 		base string,
@@ -43,7 +43,7 @@ type Dep interface {
 	) (bool, string, error)
 	EvalForEachItems(
 		ctx context.Context,
-		doc *restfile.Document,
+		doc request.RunDoc,
 		req *restfile.Request,
 		env vars.Environment,
 		base string,
@@ -52,6 +52,6 @@ type Dep interface {
 		locals rts.Locals,
 	) ([]rts.Value, error)
 	EvalValue(ctx context.Context, in request.EvalInput) (rts.Value, error)
-	PosForLine(doc *restfile.Document, req *restfile.Request, line int) rts.Pos
+	RunDoc(doc *restfile.Document) request.RunDoc
 	ValueString(ctx context.Context, pos rts.Pos, v rts.Value) (string, error)
 }

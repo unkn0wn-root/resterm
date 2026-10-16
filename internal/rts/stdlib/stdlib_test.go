@@ -17,7 +17,7 @@ import (
 
 func evalExprCtx(t *testing.T, ctx *rts.Ctx, src string) rts.Value {
 	t.Helper()
-	mod, err := rts.ParseModule("test", []byte("export let __v = "+src))
+	mod, err := rts.ParseModule(rts.NewFile("test", []byte("export let __v = "+src)))
 	if err != nil {
 		t.Fatalf("parse mod: %v", err)
 	}
@@ -30,7 +30,7 @@ func evalExprCtx(t *testing.T, ctx *rts.Ctx, src string) rts.Value {
 
 func evalExprMod(t *testing.T, ctx *rts.Ctx, modSrc, expr string) rts.Value {
 	t.Helper()
-	mod, err := rts.ParseModule("test", []byte(modSrc+"\nexport let __v = "+expr))
+	mod, err := rts.ParseModule(rts.NewFile("test", []byte(modSrc+"\nexport let __v = "+expr)))
 	if err != nil {
 		t.Fatalf("parse mod: %v", err)
 	}
@@ -43,7 +43,7 @@ func evalExprMod(t *testing.T, ctx *rts.Ctx, modSrc, expr string) rts.Value {
 
 func evalExprErrCtx(t *testing.T, ctx *rts.Ctx, src string) error {
 	t.Helper()
-	mod, err := rts.ParseModule("test", []byte("export let __v = "+src))
+	mod, err := rts.ParseModule(rts.NewFile("test", []byte("export let __v = "+src)))
 	if err != nil {
 		t.Fatalf("parse mod: %v", err)
 	}
@@ -405,7 +405,7 @@ func marshalStringify(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (string, erro
 
 func TestStdlibJSONStringifyMatchesMarshal(t *testing.T) {
 	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 64, MaxList: 4, MaxDict: 4})
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 	ok := evalExprCtx(t, ctx, `try [1, {a: "<b>"}]`)
 	failed := evalExprCtx(t, ctx, "try (1 / 0)")
 	nested := rts.Dict(map[string]rts.Value{
@@ -539,7 +539,7 @@ func TestStdlibJSONGet(t *testing.T) {
 
 func TestStdlibJSONGetPaths(t *testing.T) {
 	ctx := testCtx()
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 	docs := []rts.Value{
 		rts.Dict(map[string]rts.Value{
 			"a":            rts.List([]rts.Value{rts.Num(1), rts.Dict(map[string]rts.Value{"b": rts.Str("x")})}),
@@ -813,7 +813,7 @@ func TestStdlibJSONDiff(t *testing.T) {
 
 func TestStdlibJSONDiffPathsWorkWithGet(t *testing.T) {
 	ctx := testCtx()
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 	for _, key := range []string{"id", "0", "", "display.name", "a b", `say "hi"`, `back\slash`, "line\nbreak", "café"} {
 		got := rts.Dict(map[string]rts.Value{
 			"x": rts.List([]rts.Value{rts.Null(), rts.Dict(map[string]rts.Value{key: rts.Num(1)})}),
@@ -839,7 +839,7 @@ func TestStdlibJSONDiffPathsWorkWithGet(t *testing.T) {
 
 func TestStdlibJSONEqualAndDiffRejectNonJSON(t *testing.T) {
 	ctx := testCtx()
-	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
+	pos := rts.NewFile("test", nil).Pos(1, 1)
 	tests := []struct {
 		src  string
 		want string
@@ -858,7 +858,9 @@ func TestStdlibJSONEqualAndDiffRejectNonJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.src, func(t *testing.T) {
-			mod, err := rts.ParseModule("test", []byte("fn f() {\n  return 1\n}\nexport let __v = "+tt.src))
+			mod, err := rts.ParseModule(
+				rts.NewFile("test", []byte("fn f() {\n  return 1\n}\nexport let __v = "+tt.src)),
+			)
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
@@ -891,7 +893,7 @@ for let i = 0; i < 27; i = i + 1 {
 }
 `
 	for _, expr := range []string{"json.equal(v, v)", "try json.equal(v, v)", "json.diff(v, v)", "try json.diff(v, v)"} {
-		mod, err := rts.ParseModule("test", []byte(build+"export let __v = "+expr))
+		mod, err := rts.ParseModule(rts.NewFile("test", []byte(build+"export let __v = "+expr)))
 		if err != nil {
 			t.Fatalf("parse: %v", err)
 		}

@@ -6,8 +6,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-const rtsExprStartCol = 1
-
 type RefKind uint8
 
 const (
@@ -172,7 +170,7 @@ func (c *refCollector) collectWorkflowStep(step restfile.WorkflowStep) {
 }
 
 func (c *refCollector) expr(expr string, line int) {
-	for _, path := range jsonFileExprs(c.doc.Path, line, rtsExprStartCol, expr) {
+	for _, path := range jsonFileExprs(expr) {
 		c.add(RefRTSJSON, path, line)
 	}
 }

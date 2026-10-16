@@ -4,7 +4,7 @@ package rts
 // Groups inside strings and comments are ignored.
 // A mismatched closer does not close a group.
 func OpenGroup(src string) (closer rune) {
-	lx := NewLexer("", []byte(src))
+	lx := NewLexerAt([]byte(src), Pos{})
 	var open []rune
 	for {
 		switch lx.Next().K {

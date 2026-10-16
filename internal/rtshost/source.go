@@ -35,7 +35,7 @@ func loadSource(doc *restfile.Document, block restfile.ScriptBlock, base string)
 		Text: string(data),
 		Path: path,
 		Raw:  data,
-		Pos:  rts.Pos{Path: path, Line: 1, Col: 1},
+		Pos:  rts.NewFile(path, data).Pos(1, 1),
 	}, nil
 }
 
@@ -63,9 +63,9 @@ func inlineSource(doc *restfile.Document, block restfile.ScriptBlock) source {
 			raw = doc.Raw
 		}
 	}
-	pos := rts.Pos{Path: path, Line: 1, Col: 1}
+	line := 1
 	if len(block.Lines) > 0 && block.Lines[0].Line > 0 {
-		pos.Line = block.Lines[0].Line
+		line = block.Lines[0].Line
 	}
 	// Keep Col at 1: bodySource pads each inline line to its source column.
 	// Setting Pos.Col from block.Lines would double-count the first line offset.
@@ -73,7 +73,7 @@ func inlineSource(doc *restfile.Document, block restfile.ScriptBlock) source {
 		Text: bodySource(block.Body, block.Lines),
 		Path: path,
 		Raw:  raw,
-		Pos:  pos,
+		Pos:  rts.NewFile(path, raw).Pos(line, 1),
 	}
 }
 

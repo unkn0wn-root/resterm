@@ -135,8 +135,8 @@ func (o *testObj) reportDef(name string, end error) native.Def {
 			return rts.Null(), err
 		}
 		msg := fmt.Sprintf("line %d", pos.Line)
-		if pos.Path != "" {
-			msg = fmt.Sprintf("%s:%d", filepath.Base(pos.Path), pos.Line)
+		if path := pos.Path(); path != "" {
+			msg = fmt.Sprintf("%s:%d", filepath.Base(path), pos.Line)
 		}
 		if text != "" {
 			msg += ": " + text
