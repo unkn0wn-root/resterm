@@ -62,10 +62,10 @@ func TestBodySourceKeepsExtraBodyLinesVerbatim(t *testing.T) {
 }
 
 func TestAnnotateAddsSourceToDiagnostic(t *testing.T) {
-	err := &rts.RuntimeError{
+	err := NewEngine(nil).diagnose(&rts.RuntimeError{
 		Pos: rts.Pos{Path: "sample.http", Line: 3, Col: 3},
 		Msg: "boom",
-	}
+	})
 	src := source{
 		Path: "sample.http",
 		Raw:  []byte("### Sample\n# @rts pre-request\n> boom()\n"),
@@ -78,10 +78,10 @@ func TestAnnotateAddsSourceToDiagnostic(t *testing.T) {
 }
 
 func TestAnnotateAddsPathWithoutSource(t *testing.T) {
-	err := &rts.RuntimeError{
+	err := NewEngine(nil).diagnose(&rts.RuntimeError{
 		Pos: rts.Pos{Line: 2, Col: 4},
 		Msg: "boom",
-	}
+	})
 
 	out := diag.Render(source{Path: "inline.http"}.annotate(err))
 	if !strings.Contains(out, "--> inline.http:2:4") {

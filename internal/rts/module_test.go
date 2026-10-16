@@ -121,6 +121,30 @@ func TestModCacheChecksARecentModuleByContent(t *testing.T) {
 	}
 }
 
+func TestModCacheSourceIsTheTextLastRead(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "mod.rts")
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte("export let x = 1"), mod: time.Unix(10, 0)}}}
+	c := NewCache(fs, testStdlib)
+	ctx := NewCtx(context.Background(), Limits{})
+
+	if _, _, err := c.Load(ctx, "", p); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got := string(c.Source(p)); got != "export let x = 1" {
+		t.Fatalf("Source = %q after a load, want the module text", got)
+	}
+	fs.files[p] = &memFile{data: []byte("export let x = ("), mod: time.Unix(20, 0)}
+	if _, _, err := c.Load(ctx, "", p); err == nil {
+		t.Fatal("load of a broken module succeeded")
+	}
+	if got := string(c.Source(p)); got != "export let x = (" {
+		t.Fatalf("Source = %q after a failed load, want the text that failed", got)
+	}
+	if got := c.Source(filepath.Join(filepath.Dir(p), "other.rts")); got != nil {
+		t.Fatalf("Source = %q for a file never read, want nil", got)
+	}
+}
+
 func TestUseReadsARecentModuleNameFromTheFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.rts")

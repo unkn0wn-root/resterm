@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
@@ -31,11 +32,12 @@ func TestDiagnosePreservesRTSErrorAndReport(t *testing.T) {
 		},
 	}
 
-	err := diagnose(original)
+	eng := NewEngine(nil)
+	err := eng.diagnose(original)
 	if err.Error() != original.Error() {
 		t.Fatalf("diagnose(error).Error() = %q, want %q", err.Error(), original.Error())
 	}
-	if got := diagnose(err); got != err {
+	if got := eng.diagnose(err); got != err {
 		t.Fatalf("diagnose(diagnose(error)) returned a new error")
 	}
 	var stackErr *rts.StackError
@@ -60,7 +62,7 @@ func TestDiagnosePreservesRTSErrorAndReport(t *testing.T) {
 }
 
 func TestDiagnoseUndefinedName(t *testing.T) {
-	err := diagnose(&rts.StackError{Err: &rts.UndefinedNameError{
+	err := NewEngine(nil).diagnose(&rts.StackError{Err: &rts.UndefinedNameError{
 		RuntimeError: &rts.RuntimeError{Pos: rts.Pos{Path: "wf.http", Line: 2, Col: 1}, Msg: `undefined name "user"`},
 		Name:         "user",
 	}})
@@ -85,7 +87,7 @@ func TestDiagnoseWrappedAbort(t *testing.T) {
 		"bare":       fmt.Errorf("native: %w", abort),
 		"with stack": fmt.Errorf("native: %w", &rts.StackError{Err: abort}),
 	} {
-		rep := diag.ReportOf(diagnose(err))
+		rep := diag.ReportOf(NewEngine(nil).diagnose(err))
 		if len(rep.Items) == 0 || rep.Class() != diag.ClassTimeout {
 			t.Fatalf("%s: report = %+v, want a timeout", name, rep)
 		}
@@ -167,7 +169,7 @@ func TestDiagnoseAbortClasses(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := diagnose(&rts.AbortError{
+			err := NewEngine(nil).diagnose(&rts.AbortError{
 				RuntimeError: &rts.RuntimeError{
 					Pos: rts.Pos{Path: "hook.rts", Line: 2, Col: 3},
 					Msg: "stopped",
@@ -200,7 +202,7 @@ func TestDiagnoseStackErrorKeepsInnerReport(t *testing.T) {
 		}}},
 	}
 
-	err := diagnose(&rts.StackError{
+	err := NewEngine(nil).diagnose(&rts.StackError{
 		Err:    inner,
 		Frames: []rts.Frame{{Pos: rts.Pos{Path: "hook.rts", Line: 2, Col: 1}, Name: "sign"}},
 	})
@@ -226,7 +228,7 @@ func TestDiagnoseStackErrorKeepsInnerReport(t *testing.T) {
 }
 
 func TestDiagnoseStackErrorFallsBackToMessage(t *testing.T) {
-	err := diagnose(&rts.StackError{
+	err := NewEngine(nil).diagnose(&rts.StackError{
 		Err:    errors.New("boom"),
 		Frames: []rts.Frame{{Pos: rts.Pos{Path: "hook.rts", Line: 5, Col: 2}}},
 	})
@@ -247,7 +249,83 @@ func TestDiagnoseStackErrorFallsBackToMessage(t *testing.T) {
 
 func TestDiagnoseLeavesNonRTSErrorUnchanged(t *testing.T) {
 	original := errors.New("boom")
-	if got := diagnose(original); got != original {
+	if got := NewEngine(nil).diagnose(original); got != original {
 		t.Fatalf("diagnose(error) = %T %v, want original", got, got)
+	}
+}
+
+func TestErrorsShowTheLineOfTheFileTheyPointAt(t *testing.T) {
+	dir := t.TempDir()
+	writeModule(t, dir, "m.rts", "module m\n\nexport fn boom(x) {\n  return x.name\n}\n")
+	writeModule(t, dir, "a.rts", "module a\n\nexport fn call(f) {\n  return f(null)\n}\n")
+	writeModule(t, dir, "setup.rts", "module setup\n\nlet cfg = null\nlet v = cfg.name\n")
+	writeModule(t, dir, "bad.rts", "module bad\n\nexport fn f() {\n  return 1 +\n}\n")
+	writeModule(t, dir, "late.rts", "let x = 1\nmodule late\n")
+	writeModule(t, dir, "x.rts", "let a = 1\nlet b = null\nb.name\n")
+	doc := &restfile.Document{
+		Path: testDoc,
+		Raw: []byte(
+			"### One\n# @use ./m.rts\n# @rts pre-request\n> let y = null\n> y.name\nGET https://example.test\n",
+		),
+	}
+	eng := NewEngine(nil)
+	pre := func(rt Runtime, b restfile.ScriptBlock) error {
+		b.Kind = restfile.ScriptKindPreRequest
+		return RunPreRequest(t.Context(), eng, PreRequest{
+			Doc:     doc,
+			Scripts: []restfile.ScriptBlock{b},
+			BaseDir: dir,
+			Runtime: func() (Runtime, error) { return rt, nil },
+		})
+	}
+	file := func(rt Runtime, b restfile.ScriptBlock) error {
+		b.Body, b.FilePath = "", "x.rts"
+		return pre(rt, b)
+	}
+	test := func(rt Runtime, b restfile.ScriptBlock) error {
+		b.Kind = restfile.ScriptKindTest
+		_, err := RunTests(t.Context(), eng, Tests{Doc: doc, Scripts: []restfile.ScriptBlock{b}, Runtime: rt})
+		return err
+	}
+	assert := func(rt Runtime, b restfile.ScriptBlock) error {
+		_, err := eng.EvalAssertion(t.Context(), rt, b.Body, rts.Pos{Path: testDoc, Line: 4, Col: 3})
+		return err
+	}
+	moduleLine := "   4 |   return x.name\n     |           ^"
+	blockLine := "   5 | > y.name\n     |    ^"
+	tests := []struct {
+		name string
+		run  func(Runtime, restfile.ScriptBlock) error
+		uses []string
+		body string
+		want string
+	}{
+		{"module function", pre, []string{"m.rts"}, "m.boom(null)", moduleLine},
+		{"function passed to another module", pre, []string{"a.rts", "m.rts"}, "a.call(m.boom)", moduleLine},
+		{"module top level", pre, []string{"setup.rts"}, "1", "   4 | let v = cfg.name\n     |            ^"},
+		{"module parse error", pre, []string{"bad.rts"}, "1", "   5 | }\n     | ^"},
+		{"module header", pre, []string{"late.rts"}, "1", "   2 | module late\n     | ^"},
+		{"request block", pre, []string{"m.rts"}, "let y = null\ny.name", blockLine},
+		{"block read from a file", file, nil, "", "   3 | b.name\n     |  ^"},
+		{"test block calling a module", test, []string{"m.rts"}, "m.boom(null)", moduleLine},
+		{"test block", test, []string{"m.rts"}, "let y = null\ny.name", blockLine},
+		{"assertion calling a module", assert, []string{"m.rts"}, "m.boom(null) == 1", moduleLine},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := Runtime{BaseDir: dir}
+			for _, path := range tt.uses {
+				rt.Uses = append(rt.Uses, rts.Use{Path: path})
+			}
+			err := tt.run(rt, restfile.ScriptBlock{
+				Lang:       restfile.ScriptLangRTS,
+				Body:       tt.body,
+				SourcePath: testDoc,
+				Lines:      []restfile.ScriptLine{{Line: 4, Col: 3}, {Line: 5, Col: 3}},
+			})
+			if out := diag.Render(err); !strings.Contains(out, tt.want) {
+				t.Fatalf("rendered error has no\n%s\nin:\n%s", tt.want, out)
+			}
+		})
 	}
 }

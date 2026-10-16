@@ -77,7 +77,7 @@ func (e *Eng) modHead(base, path string) (string, Pos, error) {
 		}
 		return ent.comp.Mod.Name, mp, nil
 	}
-	data, err := e.C.fs.ReadFile(p)
+	data, err := e.C.read(p)
 	if err != nil {
 		return "", Pos{Path: p}, err
 	}

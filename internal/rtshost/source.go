@@ -39,12 +39,12 @@ func loadSource(doc *restfile.Document, block restfile.ScriptBlock, base string)
 	}, nil
 }
 
-// annotate attaches the script source to err so diagnostics can render the offending line.
+// annotate attaches the script source to a diagnosed err so diagnostics can
+// render the offending line.
 func (s source) annotate(err error) error {
 	if err == nil {
 		return nil
 	}
-	err = diagnose(err)
 	if s.Path == "" && len(s.Raw) == 0 {
 		return err
 	}

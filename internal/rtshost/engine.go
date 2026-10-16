@@ -46,7 +46,7 @@ func (e *Engine) Eval(ctx context.Context, rt Runtime, src string, pos rts.Pos) 
 	ctx, st := withRuntime(ctx, rt)
 	defer st.end()
 	value, err := e.core.Eval(ctx, evalConfig(st), src, pos)
-	return value, diagnose(err)
+	return value, e.diagnose(err)
 }
 
 // EvalAssertion evaluates an assertion with response shorthand overrides.
@@ -64,7 +64,7 @@ func (e *Engine) EvalAssertion(
 	cfg := evalConfig(st)
 	cfg.Overrides = assertionOverrides(st, rt.Response)
 	value, err := e.core.Eval(ctx, cfg, src, pos)
-	return value, diagnose(err)
+	return value, e.diagnose(err)
 }
 
 // EvalStr evaluates an expression and applies RTS's explicit result-to-string
@@ -76,7 +76,7 @@ func (e *Engine) EvalStr(ctx context.Context, rt Runtime, src string, pos rts.Po
 	ctx, st := withRuntime(ctx, rt)
 	defer st.end()
 	value, err := e.core.EvalStr(ctx, evalConfig(st), src, pos)
-	return value, diagnose(err)
+	return value, e.diagnose(err)
 }
 
 // ExecModule executes one module body against rt.
@@ -92,7 +92,7 @@ func (e *Engine) ExecModule(
 	ctx, st := withRuntime(ctx, rt)
 	defer st.end()
 	comp, err := e.core.ExecModule(ctx, evalConfig(st), src, pos)
-	return comp, diagnose(err)
+	return comp, e.diagnose(err)
 }
 
 func evalConfig(st *evalState) rts.EvalConfig {

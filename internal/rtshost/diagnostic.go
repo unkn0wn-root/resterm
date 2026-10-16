@@ -19,8 +19,9 @@ func (e *diagnosticError) Error() string           { return e.err.Error() }
 func (e *diagnosticError) Unwrap() error           { return e.err }
 func (e *diagnosticError) Diagnostic() diag.Report { return e.report }
 
-// diagnose translates language errors at the Resterm host boundary.
-func diagnose(err error) error {
+// diagnose translates language errors at the Resterm host boundary. An error
+// inside a module gets that module's text, so its excerpt quotes the module.
+func (e *Engine) diagnose(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -30,6 +31,9 @@ func diagnose(err error) error {
 	report, ok := reportOf(err)
 	if !ok {
 		return err
+	}
+	if src := e.core.C.Source(report.Items[0].Span.Start.Path); src != nil {
+		report.Items[0].Source = src
 	}
 	return &diagnosticError{err: err, report: report}
 }
