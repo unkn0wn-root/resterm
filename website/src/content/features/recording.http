@@ -1,5 +1,4 @@
-# Point your app at the Resterm proxy and save its traffic
-# as requests, mocks or both.
+# Proxy your app through Resterm and save the traffic as requests, mocks or both.
 # resterm record --upstream https://api.example.com --out captured.http --mode both
 
 ### get-users-42

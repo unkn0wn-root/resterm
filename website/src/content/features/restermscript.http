@@ -1,10 +1,17 @@
-# A small expression language made for requests.
-# JavaScript hooks when you want them.
+# A small language for request logic, and you can write your tests in it too.
 
 ### Search
 # @skip-if env.mode == "dry-run"
 # @assert len(response.json("items")) > 0
-# @script pre-request
-> request.setHeader("X-Request-ID", `req-${Date.now()}`);
+# @rts test "every item has an id"
+> {%
+for let i, it range response.json("items") {
+  if it.id == null {
+    t.error("item", i, "has no id")
+  }
+}
+%}
+# @rts pre-request
+> request.setHeader("X-Request-ID", uuid())
 GET {{base.url}}/search?q={{= url.encode(vars.get("query")) }}
 Authorization: {{= "Bearer " + vars.get("auth.token") }}

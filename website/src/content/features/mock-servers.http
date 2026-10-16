@@ -1,5 +1,5 @@
-# Mock responses live next to the requests they stand in
-# for, with matching rules and sequences.
+# Mocks go in your .http files, next to the requests that call them.
+# The first poll gets 503 pending. Every poll after that gets 200 completed.
 
 ### Poll payment
 # @mock method=GET path=/payments/{id} sequence=polling
