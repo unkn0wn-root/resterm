@@ -1,15 +1,16 @@
-# Run requests as steps. Each step can pass values on to the next one.
-# Use @if to pick a step and @for-each to repeat one over a list.
+# Run requests as steps and pass values from one to the next.
 
 # @workflow signup
 # @step Create using=CreateUser expect.statuscode=201
-# @step Fetch using=GetUser expect.statuscode=200
+# @if last.json().plan != "team" fail="expected a team account"
+# @for-each ["admin", "billing"] as role
+# @step Grant using=GrantRole
 
 ### Create user
 # @name CreateUser
 # @capture file user.id {{response.json.id}}
 POST {{base.url}}/users
 
-### Get user
-# @name GetUser
-GET {{base.url}}/users/{{user.id}}
+### Grant role
+# @name GrantRole
+PUT {{base.url}}/users/{{user.id}}/roles/{{= role }}
