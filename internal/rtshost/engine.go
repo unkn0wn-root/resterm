@@ -49,6 +49,16 @@ func (e *Engine) Eval(ctx context.Context, rt Runtime, src string, pos rts.Pos) 
 	return value, e.diagnose(err)
 }
 
+// Load loads rt.Uses as an evaluation against rt would.
+func (e *Engine) Load(ctx context.Context, rt Runtime, pos rts.Pos) error {
+	if e == nil || e.core == nil {
+		return errNilEngine
+	}
+	ctx, st := withRuntime(ctx, rt)
+	defer st.end()
+	return e.diagnose(e.core.Load(ctx, evalConfig(st), pos))
+}
+
 // EvalAssertion evaluates an assertion with response shorthand overrides.
 func (e *Engine) EvalAssertion(
 	ctx context.Context,

@@ -46,7 +46,7 @@ func (e *Engine) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Us
 			path := strings.TrimSpace(spec.Path)
 			alias := strings.TrimSpace(spec.Alias)
 			if path != "" {
-				out = append(out, rts.Use{Path: path, Alias: alias})
+				out = append(out, rts.Use{Path: path, Alias: alias, Pos: e.rtsPosForLine(doc, req, spec.Line)})
 			}
 		}
 	}
@@ -55,7 +55,7 @@ func (e *Engine) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Us
 			path := strings.TrimSpace(spec.Path)
 			alias := strings.TrimSpace(spec.Alias)
 			if path != "" {
-				out = append(out, rts.Use{Path: path, Alias: alias})
+				out = append(out, rts.Use{Path: path, Alias: alias, Pos: e.rtsPosForLine(doc, req, spec.Line)})
 			}
 		}
 	}

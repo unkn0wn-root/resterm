@@ -292,6 +292,9 @@ func TestErrorsShowTheLineOfTheFileTheyPointAt(t *testing.T) {
 		_, err := eng.EvalAssertion(t.Context(), rt, b.Body, rts.Pos{Path: testDoc, Line: 4, Col: 3})
 		return err
 	}
+	load := func(rt Runtime, _ restfile.ScriptBlock) error {
+		return eng.Load(t.Context(), rt, rts.Pos{Path: testDoc, Line: 1, Col: 1})
+	}
 	moduleLine := "   4 |   return x.name\n     |           ^"
 	blockLine := "   5 | > y.name\n     |    ^"
 	tests := []struct {
@@ -312,6 +315,8 @@ func TestErrorsShowTheLineOfTheFileTheyPointAt(t *testing.T) {
 		{"test block calling a module", test, []string{"m.rts"}, "m.boom(null)", moduleLine},
 		{"test block", test, []string{"m.rts"}, "let y = null\ny.name", blockLine},
 		{"assertion calling a module", assert, []string{"m.rts"}, "m.boom(null) == 1", moduleLine},
+		{"module parse error on load", load, []string{"bad.rts"}, "", "   5 | }\n     | ^"},
+		{"module top level on load", load, []string{"setup.rts"}, "", "   4 | let v = cfg.name\n     |            ^"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

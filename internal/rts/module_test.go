@@ -2,6 +2,7 @@ package rts
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,6 +225,88 @@ func TestUseAliasCollisionBeforeParse(t *testing.T) {
 	_, err := e.Eval(context.Background(), cfg, "1", Pos{Path: "test", Line: 1, Col: 1})
 	if err == nil || !strings.Contains(err.Error(), "alias already defined: mod") {
 		t.Fatalf("expected alias collision error, got %v", err)
+	}
+}
+
+func TestUseAliasErrorsPointAtTheUse(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "a.rts")
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte("module len\nexport let x = 1"), mod: time.Unix(10, 0)}}}
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
+	at := Pos{Path: "api.http", Line: 3, Col: 1}
+	tests := []struct {
+		name string
+		use  Use
+		msg  string
+	}{
+		{"taken name", Use{Path: "a.rts", Pos: at}, "alias already defined: len"},
+		{"reserved word", Use{Path: "a.rts", Alias: "default", Pos: at}, "alias is a reserved word: default"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := EvalConfig{BaseDir: dir, Uses: []Use{tt.use}}
+			_, err := e.Eval(t.Context(), cfg, "1", Pos{Path: "test", Line: 9, Col: 1})
+			var re *RuntimeError
+			if !errors.As(err, &re) || re.Msg != tt.msg || re.Pos != at {
+				t.Fatalf("error = %v, want %q at %s", err, tt.msg, at)
+			}
+		})
+	}
+}
+
+func TestLoadGivesTheErrorEvalWould(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "bad.rts")
+	src := "module bad\n\nexport fn ok(x) {\n  return x ==\n}\n"
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte(src), mod: time.Unix(10, 0)}}}
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
+	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "bad.rts"}}}
+	pos := Pos{Path: "test", Line: 1, Col: 1}
+
+	err := e.Load(t.Context(), cfg, pos)
+	_, want := e.Eval(t.Context(), cfg, "1", pos)
+	var pe *ParseError
+	if !errors.As(err, &pe) || want == nil || err.Error() != want.Error() {
+		t.Fatalf("Load = %v, want the parse error Eval gives: %v", err, want)
+	}
+	if err := e.Load(t.Context(), EvalConfig{}, pos); err != nil {
+		t.Fatalf("Load with no modules = %v, want nil", err)
+	}
+}
+
+func TestLoadRunsModuleSetupOnce(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cnt.rts")
+	src := `module cnt
+let n = 0
+let inits = 0
+inits = inits + 1
+export fn bump() {
+  n = n + 1
+  return n
+}
+export fn seen() {
+  return inits
+}
+`
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte(src), mod: time.Unix(10, 0)}}}
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
+	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "cnt.rts"}}}
+	pos := Pos{Path: "test", Line: 1, Col: 1}
+
+	if err := e.Load(t.Context(), cfg, pos); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, want := range []float64{1, 2} {
+		if v, err := e.Eval(t.Context(), cfg, "cnt.bump()", pos); err != nil || v.N != want {
+			t.Fatalf("cnt.bump() = %v, %v, want %v", v.N, err, want)
+		}
+	}
+	if v, err := e.Eval(t.Context(), cfg, "cnt.seen()", pos); err != nil || v.N != 1 {
+		t.Fatalf("setup ran %v times, %v, want once", v.N, err)
 	}
 }
 

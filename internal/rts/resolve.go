@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, pre map[string]Value, pos Pos) ([]Use, error) {
+func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, pre map[string]Value) ([]Use, error) {
 	if len(cfg.Uses) == 0 {
 		return nil, nil
 	}
@@ -36,10 +36,10 @@ func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, pre map[string]Value, pos Pos
 			u.Alias = nm
 		}
 		if IsKeyword(al) {
-			return nil, Errf(cx, pos, "alias is a reserved word: %s", al)
+			return nil, Errf(cx, u.Pos, "alias is a reserved word: %s", al)
 		}
 		if _, ok := seen[al]; ok {
-			return nil, Errf(cx, pos, "alias already defined: %s", al)
+			return nil, Errf(cx, u.Pos, "alias already defined: %s", al)
 		}
 		seen[al] = struct{}{}
 		out = append(out, u)

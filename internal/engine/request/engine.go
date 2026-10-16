@@ -1309,8 +1309,15 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 		})
 		errs = append(errs, err)
 		if err == nil {
-			cut := false
-			for _, as := range x.req.Metadata.Asserts {
+			// Load the modules once, so a broken one is reported once.
+			at := x.eng.rtsPosForLine(x.doc, x.req, x.req.LineRange.Start)
+			lerr := x.eng.withSource(x.eng.re.Load(ctx, rt, at), x.doc)
+			asserts := x.req.Metadata.Asserts
+			if lerr != nil {
+				asserts = nil
+			}
+			stop := lerr
+			for _, as := range asserts {
 				expr := strings.TrimSpace(as.Expression)
 				if expr == "" {
 					continue
@@ -1321,10 +1328,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 				pos := x.eng.rtsPosForLineCol(x.doc, x.req, as.Line, as.Col)
 				val, err := x.eng.evalRTSAssert(ctx, x.doc, rt, expr, pos)
 				if err != nil {
-					errs = append(errs, err)
-					// Skip RunTests after cancellation or timeout to avoid a duplicate error.
-					var abort *rts.AbortError
-					cut = errors.As(err, &abort) && (abort.Kind == rts.AbortCanceled || abort.Kind == rts.AbortTimeout)
+					stop = err
 					break
 				}
 				out = append(out, scriptapi.TestResult{
@@ -1334,11 +1338,16 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 					Elapsed: time.Since(start),
 				})
 			}
+			errs = append(errs, stop)
+			// Skip RunTests after cancellation or timeout to avoid a duplicate error.
+			var abort *rts.AbortError
+			cut := errors.As(stop, &abort) && (abort.Kind == rts.AbortCanceled || abort.Kind == rts.AbortTimeout)
 			if !cut {
 				tests, err := rtshost.RunTests(ctx, x.eng.re, rtshost.Tests{
-					Doc:     x.doc,
-					Scripts: x.req.Metadata.Scripts,
-					Runtime: rt,
+					Doc:        x.doc,
+					Scripts:    x.req.Metadata.Scripts,
+					Runtime:    rt,
+					UsesFailed: lerr != nil,
 				})
 				out = append(out, tests...)
 				errs = append(errs, err)

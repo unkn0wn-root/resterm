@@ -21,6 +21,9 @@ type Tests struct {
 	Scripts []restfile.ScriptBlock
 	// Leave Mutator nil so tests cannot change request state.
 	Runtime Runtime
+	// UsesFailed fails every block without running it. Set it when the
+	// caller could not load Runtime.Uses and has reported why.
+	UsesFailed bool
 }
 
 const testSteps = 100_000
@@ -58,6 +61,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			err = diag.WrapAsf(diag.ClassScript, err, "rts test script %d", nth)
 		case strings.TrimSpace(src.Text) == "":
 			continue
+		case in.UsesFailed:
 		default:
 			rt := in.Runtime
 			rt.Site = site
@@ -78,7 +82,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 		}
 		out = append(out, scriptapi.TestResult{
 			Name:    name,
-			Passed:  err == nil && len(msgs) == 0,
+			Passed:  err == nil && len(msgs) == 0 && !in.UsesFailed,
 			Message: strings.Join(msgs, "\n"),
 			Elapsed: time.Since(start),
 		})
