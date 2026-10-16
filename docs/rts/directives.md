@@ -81,7 +81,7 @@ Each expression is evaluated, and a truthy result passes. Use `response` for the
 
 Use `@rts pre-request` to change the outgoing request and `@rts test` to check the response. `# @script pre-request lang=rts` and `# @script test lang=rts` are equivalent.
 
-A test name is optional. Quote names that contain spaces. Extra words and unknown options, such as `name=orders`, prevent the block from running. Unnamed blocks appear as `@rts test` in the results.
+A test name is optional. Quote names that contain spaces. Extra words, unknown options such as `name=orders`, and an unclosed quote are parse errors, not warnings as with `@script`. No request in the file runs until they are fixed. Unnamed blocks appear as `@rts test` in the results.
 
 Prefix each code line with `>`. A blank line or comment without `>` ends the block; later code starts another block with the same name and a new scope. Use `> #` for comments and `>` for blank lines within a block.
 
