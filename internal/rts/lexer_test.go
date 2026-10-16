@@ -5,10 +5,10 @@ import "slices"
 import "testing"
 
 func lexKinds(src string) []Kind {
-	lx := NewLexer(NewFile("test", []byte(src)))
+	lx := newLexer(NewFile("test", []byte(src)))
 	var out []Kind
 	for {
-		t := lx.Next()
+		t := lx.scan()
 		out = append(out, t.K)
 		if t.K == EOF {
 			return out
@@ -116,9 +116,9 @@ func TestLexerLoneAmpersandOrPipeIsIllegal(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.src, func(t *testing.T) {
-			lx := NewLexer(NewFile("test", []byte(tc.src)))
-			lx.Next()
-			tok := lx.Next()
+			lx := newLexer(NewFile("test", []byte(tc.src)))
+			lx.scan()
+			tok := lx.scan()
 			if tok.K != ILLEGAL || tok.Lit != tc.msg {
 				t.Fatalf("token: got %v %q, want ILLEGAL %q", tok.K, tok.Lit, tc.msg)
 			}

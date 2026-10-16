@@ -4,8 +4,8 @@ import (
 	"fmt"
 )
 
-// Lexer splits RTS code into tokens, one per call to Next.
-type Lexer struct {
+// lexer splits RTS code into tokens, one per call to scan.
+type lexer struct {
 	src     []byte
 	file    *File
 	i       int
@@ -20,14 +20,14 @@ type Lexer struct {
 	eofSemi bool
 }
 
-// NewLexer reads the whole text of f.
-func NewLexer(f *File) *Lexer {
-	return NewLexerAt(f.src, f.Start())
+// newLexer reads the whole text of f.
+func newLexer(f *File) *lexer {
+	return newLexerAt(f.src, f.Start())
 }
 
-// NewLexerAt reads src as a snippet that starts at the line and column of at.
+// newLexerAt reads src as a snippet that starts at the line and column of at.
 // Its positions are in at's file.
-func NewLexerAt(src []byte, at Pos) *Lexer {
+func newLexerAt(src []byte, at Pos) *lexer {
 	ln := at.Line
 	if ln <= 0 {
 		ln = 1
@@ -37,12 +37,12 @@ func NewLexerAt(src []byte, at Pos) *Lexer {
 	if cl <= 0 {
 		cl = 1
 	}
-	return &Lexer{src: src, file: at.file, line: ln, col: cl}
+	return &lexer{src: src, file: at.file, line: ln, col: cl}
 }
 
-// Next returns the next token. At the end of the text it inserts a semicolon
+// scan returns the next token. At the end of the text it inserts a semicolon
 // after a token that can end a statement, then returns EOF on every call.
-func (l *Lexer) Next() Tok {
+func (l *lexer) scan() Tok {
 	if l.pend != nil {
 		t := *l.pend
 		l.pend = nil
@@ -221,28 +221,28 @@ func (l *Lexer) Next() Tok {
 	}
 }
 
-func (l *Lexer) pos() Pos {
+func (l *lexer) pos() Pos {
 	return Pos{file: l.file, Line: l.line, Col: l.col}
 }
 
-func (l *Lexer) emit(k Kind, lit string, p Pos) Tok {
+func (l *lexer) emit(k Kind, lit string, p Pos) Tok {
 	l.last = k
 	return Tok{K: k, Lit: lit, P: p}
 }
 
-func (l *Lexer) illegal(p Pos, msg string) Tok {
+func (l *lexer) illegal(p Pos, msg string) Tok {
 	l.last = ILLEGAL
 	return Tok{K: ILLEGAL, Lit: msg, P: p}
 }
 
-func (l *Lexer) peek() byte {
+func (l *lexer) peek() byte {
 	if l.i >= len(l.src) {
 		return 0
 	}
 	return l.src[l.i]
 }
 
-func (l *Lexer) read() byte {
+func (l *lexer) read() byte {
 	if l.i >= len(l.src) {
 		return 0
 	}
@@ -265,7 +265,7 @@ func (l *Lexer) read() byte {
 	return b
 }
 
-func (l *Lexer) skipComment() {
+func (l *lexer) skipComment() {
 	for {
 		ch := l.peek()
 		if ch == 0 || ch == '\n' || ch == '\r' {
@@ -275,7 +275,7 @@ func (l *Lexer) skipComment() {
 	}
 }
 
-func (l *Lexer) scanIdent() string {
+func (l *lexer) scanIdent() string {
 	start := l.i
 	l.read()
 	for isIdent(l.peek()) {
@@ -284,7 +284,7 @@ func (l *Lexer) scanIdent() string {
 	return string(l.src[start:l.i])
 }
 
-func (l *Lexer) scanNumber() string {
+func (l *lexer) scanNumber() string {
 	start := l.i
 	l.read()
 	for isDigit(l.peek()) {
@@ -305,7 +305,7 @@ func (l *Lexer) scanNumber() string {
 	return string(l.src[start:l.i])
 }
 
-func (l *Lexer) scanString() (string, bool) {
+func (l *lexer) scanString() (string, bool) {
 	q := l.read()
 	start := l.i
 	var out []byte

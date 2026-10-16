@@ -84,9 +84,9 @@ func (e *Eng) modHead(base, path string) (string, Pos, error) {
 // declared. A file without a declaration reports its first line, where the
 // declaration belongs.
 func modHead(f *File) (string, Pos, error) {
-	lx := NewLexer(f)
+	lx := newLexer(f)
 	for {
-		tok := lx.Next()
+		tok := lx.scan()
 		switch tok.K {
 		case SEMI, AUTO_SEMI:
 			continue
@@ -95,7 +95,7 @@ func modHead(f *File) (string, Pos, error) {
 		case ILLEGAL:
 			return "", tok.P, &ParseError{Pos: tok.P, Msg: tok.Lit}
 		case KW_MODULE:
-			nt := lx.Next()
+			nt := lx.scan()
 			if nt.K == ILLEGAL {
 				return "", nt.P, &ParseError{Pos: nt.P, Msg: nt.Lit}
 			}
@@ -122,9 +122,9 @@ func modHead(f *File) (string, Pos, error) {
 	}
 }
 
-func scanMod(lx *Lexer) (Pos, bool, error) {
+func scanMod(lx *lexer) (Pos, bool, error) {
 	for {
-		tok := lx.Next()
+		tok := lx.scan()
 		switch tok.K {
 		case SEMI, AUTO_SEMI:
 			continue

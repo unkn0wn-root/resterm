@@ -31,7 +31,7 @@ func TestParseDuplicateParamRejected(t *testing.T) {
 }
 
 func TestParseModuleAtUsesInitialPos(t *testing.T) {
-	_, err := ParseModuleAt([]byte("  fn f( {}\n"), NewFile("hook.rts", nil).Pos(10, 1))
+	_, err := parseModuleAt([]byte("  fn f( {}\n"), NewFile("hook.rts", nil).Pos(10, 1))
 	if err == nil {
 		t.Fatalf("expected parse error")
 	}
@@ -69,7 +69,7 @@ func TestModStartIsWhereTheTextBegins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	snip, err := ParseModuleAt([]byte(src), at)
+	snip, err := parseModuleAt([]byte(src), at)
 	if err != nil {
 		t.Fatalf("parse at %s: %v", at, err)
 	}
@@ -95,7 +95,7 @@ func TestSnippetPositionsTakeTheFileOfAt(t *testing.T) {
 	at := NewFile("api.http", nil).Pos(4, 3)
 	doc := "GET https://example.test\n# @assert 1 +\n"
 	held := NewFile("api.http", []byte(doc)).Pos(2, 11)
-	_, modErr := ParseModuleAt([]byte("let y = (\n"), at)
+	_, modErr := parseModuleAt([]byte("let y = (\n"), at)
 	_, exprErr := ParseExpr("1 +", at)
 	_, heldErr := ParseExpr("1 +", held)
 	tests := []struct {
@@ -107,7 +107,7 @@ func TestSnippetPositionsTakeTheFileOfAt(t *testing.T) {
 		{"module text", errPos(t, modErr), "api.http", ""},
 		{"expression", errPos(t, exprErr), "api.http", ""},
 		{"expression in text the host holds", errPos(t, heldErr), "api.http", doc},
-		{"lexed snippet", NewLexerAt([]byte("x"), Pos{}).Next().P, "", ""},
+		{"lexed snippet", newLexerAt([]byte("x"), Pos{}).scan().P, "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -27,9 +27,9 @@ type stmtLabel struct {
 	pos  Pos
 }
 
-// Parser builds the syntax tree of RTS code from the tokens of a Lexer.
-type Parser struct {
-	lx    *Lexer
+// parser builds the syntax tree of RTS code from the tokens of a lexer.
+type parser struct {
+	lx    *lexer
 	cur   Tok
 	peek  Tok
 	ahead []Tok
@@ -39,24 +39,24 @@ type Parser struct {
 	controls []controlTarget
 }
 
-// NewParserAt returns a Parser for src, a snippet that starts at the line and
+// newParserAt returns a parser for src, a snippet that starts at the line and
 // column of at. Its positions are in at's file.
-func NewParserAt(src []byte, at Pos) *Parser {
-	lx := NewLexerAt(src, at)
-	p := &Parser{lx: lx}
-	p.cur = lx.Next()
-	p.peek = lx.Next()
+func newParserAt(src []byte, at Pos) *parser {
+	lx := newLexerAt(src, at)
+	p := &parser{lx: lx}
+	p.cur = lx.scan()
+	p.peek = lx.scan()
 	return p
 }
 
 // ParseModule parses the whole text of f.
 func ParseModule(f *File) (*Mod, error) {
-	return ParseModuleAt(f.src, f.Start())
+	return parseModuleAt(f.src, f.Start())
 }
 
-// ParseModuleAt parses src as a snippet that starts at the line and column of
+// parseModuleAt parses src as a snippet that starts at the line and column of
 // at. Its positions are in at's file.
-func ParseModuleAt(src []byte, at Pos) (m *Mod, err error) {
+func parseModuleAt(src []byte, at Pos) (m *Mod, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if pe, ok := r.(*ParseError); ok {
@@ -67,7 +67,7 @@ func ParseModuleAt(src []byte, at Pos) (m *Mod, err error) {
 			panic(r)
 		}
 	}()
-	p := NewParserAt(src, at)
+	p := newParserAt(src, at)
 	m = p.parseMod(at)
 	return m, err
 }
@@ -85,12 +85,12 @@ func ParseExpr(src string, at Pos) (ex Expr, err error) {
 			panic(r)
 		}
 	}()
-	p := NewParserAt([]byte(src), at)
+	p := newParserAt([]byte(src), at)
 	ex = p.parseExprOnly()
 	return ex, err
 }
 
-func (p *Parser) parseMod(start Pos) *Mod {
+func (p *parser) parseMod(start Pos) *Mod {
 	m := &Mod{Start: start}
 	for p.cur.K != EOF {
 		if p.isSemi(p.cur.K) {
@@ -114,7 +114,7 @@ func (p *Parser) parseMod(start Pos) *Mod {
 	return m
 }
 
-func (p *Parser) parseModDecl() (string, Pos) {
+func (p *parser) parseModDecl() (string, Pos) {
 	pos := p.expect(KW_MODULE).P
 	// the module name becomes the binding when @use omits an alias
 	if p.cur.K.isKeyword() {
@@ -128,7 +128,7 @@ func (p *Parser) parseModDecl() (string, Pos) {
 	return nm, pos
 }
 
-func (p *Parser) parseExprOnly() Expr {
+func (p *parser) parseExprOnly() Expr {
 	ex := p.parseExpr()
 	for p.isSemi(p.cur.K) {
 		p.next()
@@ -139,7 +139,7 @@ func (p *Parser) parseExprOnly() Expr {
 	return ex
 }
 
-func (p *Parser) parseStmt() Stmt {
+func (p *parser) parseStmt() Stmt {
 	switch p.cur.K {
 	case KW_EXPORT:
 		return p.parseExport()
@@ -176,7 +176,7 @@ func (p *Parser) parseStmt() Stmt {
 	return p.parseExprStmt()
 }
 
-func (p *Parser) parseExport() Stmt {
+func (p *parser) parseExport() Stmt {
 	p.expect(KW_EXPORT)
 	switch p.cur.K {
 	case KW_LET:
@@ -191,7 +191,7 @@ func (p *Parser) parseExport() Stmt {
 	}
 }
 
-func (p *Parser) parseLet(exp bool, isConst bool) Stmt {
+func (p *parser) parseLet(exp bool, isConst bool) Stmt {
 	var pos Pos
 	if isConst {
 		pos = p.expect(KW_CONST).P
@@ -205,7 +205,7 @@ func (p *Parser) parseLet(exp bool, isConst bool) Stmt {
 	return &LetStmt{P: pos, Exported: exp, Const: isConst, Name: name, Val: val}
 }
 
-func (p *Parser) parseAssign() Stmt {
+func (p *parser) parseAssign() Stmt {
 	tok := p.expect(IDENT)
 	pos := tok.P
 	name := tok.Lit
@@ -214,7 +214,7 @@ func (p *Parser) parseAssign() Stmt {
 	return &AssignStmt{P: pos, Name: name, Val: val}
 }
 
-func (p *Parser) parseReturn() Stmt {
+func (p *parser) parseReturn() Stmt {
 	pos := p.expect(KW_RETURN).P
 	if p.cur.K == EOF || p.cur.K == RBRACE || p.isSemi(p.cur.K) {
 		return &ReturnStmt{P: pos}
@@ -223,13 +223,13 @@ func (p *Parser) parseReturn() Stmt {
 	return &ReturnStmt{P: pos, Val: val}
 }
 
-func (p *Parser) parseExprStmt() Stmt {
+func (p *parser) parseExprStmt() Stmt {
 	pos := p.cur.P
 	ex := p.parseExpr()
 	return &ExprStmt{P: pos, Exp: ex}
 }
 
-func (p *Parser) parseFn(exp bool) Stmt {
+func (p *parser) parseFn(exp bool) Stmt {
 	pos := p.expect(KW_FN).P
 	name := p.expect(IDENT).Lit
 	p.expect(LPAREN)
@@ -242,7 +242,7 @@ func (p *Parser) parseFn(exp bool) Stmt {
 	return &FnDef{P: pos, Exported: exp, Name: name, Params: params, Body: body}
 }
 
-func (p *Parser) parseParams() []string {
+func (p *parser) parseParams() []string {
 	if p.cur.K == RPAREN {
 		return nil
 	}
@@ -272,7 +272,7 @@ func (p *Parser) parseParams() []string {
 	return out
 }
 
-func (p *Parser) parseIf() Stmt {
+func (p *parser) parseIf() Stmt {
 	pos := p.expect(KW_IF).P
 	cond := p.parseExpr()
 	then := p.parseBlock()
@@ -295,7 +295,7 @@ func (p *Parser) parseIf() Stmt {
 // parseLabeled reads "name:" in front of a for or switch. Labels live in their
 // own namespace and decorate nothing else, so there is no general labeled
 // statement and no goto
-func (p *Parser) parseLabeled() Stmt {
+func (p *parser) parseLabeled() Stmt {
 	tok := p.cur
 	if tok.Lit == "_" {
 		p.fail(tok.P, fmt.Sprintf("invalid label %q", tok.Lit))
@@ -321,17 +321,17 @@ func (p *Parser) parseLabeled() Stmt {
 	}
 }
 
-func (p *Parser) pushControl(kind controlKind, lb stmtLabel) {
+func (p *parser) pushControl(kind controlKind, lb stmtLabel) {
 	p.controls = append(p.controls, controlTarget{kind: kind, label: lb.name, pos: lb.pos})
 }
 
-func (p *Parser) popControl() {
+func (p *parser) popControl() {
 	p.controls = p.controls[:len(p.controls)-1]
 }
 
 // findControl looks up an active label. It is never called with an empty name,
 // which would match the unlabeled targets
-func (p *Parser) findControl(label string) *controlTarget {
+func (p *parser) findControl(label string) *controlTarget {
 	for i := len(p.controls) - 1; i >= 0; i-- {
 		if p.controls[i].label == label {
 			return &p.controls[i]
@@ -340,7 +340,7 @@ func (p *Parser) findControl(label string) *controlTarget {
 	return nil
 }
 
-func (p *Parser) inLoop() bool {
+func (p *parser) inLoop() bool {
 	for _, c := range p.controls {
 		if c.kind == controlLoop {
 			return true
@@ -351,7 +351,7 @@ func (p *Parser) inLoop() bool {
 
 // labelRef reads the optional target of a break or continue. The lexer inserts
 // a semicolon after both keywords, so a label only parses on the same line
-func (p *Parser) labelRef() (Tok, bool) {
+func (p *parser) labelRef() (Tok, bool) {
 	if p.cur.K != IDENT {
 		return Tok{}, false
 	}
@@ -362,7 +362,7 @@ func (p *Parser) labelRef() (Tok, bool) {
 
 // parseSwitch reads both switch forms. A brace right after the keyword means
 // the tagless form, mirroring Go: a dict literal tag has to be parenthesized
-func (p *Parser) parseSwitch(lb stmtLabel) Stmt {
+func (p *parser) parseSwitch(lb stmtLabel) Stmt {
 	pos := p.expect(KW_SWITCH).P
 	var tag Expr
 	if p.cur.K != LBRACE {
@@ -376,7 +376,7 @@ func (p *Parser) parseSwitch(lb stmtLabel) Stmt {
 	return &SwitchStmt{P: pos, Label: lb.name, LabelPos: lb.pos, Tag: tag, Clauses: clauses}
 }
 
-func (p *Parser) parseCaseClauses() []CaseClause {
+func (p *parser) parseCaseClauses() []CaseClause {
 	var out []CaseClause
 	seenDefault := false
 	for {
@@ -400,14 +400,14 @@ func (p *Parser) parseCaseClauses() []CaseClause {
 	}
 }
 
-func (p *Parser) parseCase() CaseClause {
+func (p *parser) parseCase() CaseClause {
 	pos := p.expect(KW_CASE).P
 	exprs := p.parseCaseExprs()
 	colon := p.expect(COLON).P
 	return CaseClause{P: pos, Exprs: exprs, Body: p.parseClauseBody(colon)}
 }
 
-func (p *Parser) parseCaseExprs() []Expr {
+func (p *parser) parseCaseExprs() []Expr {
 	var out []Expr
 	for {
 		if p.cur.K == COLON {
@@ -421,13 +421,13 @@ func (p *Parser) parseCaseExprs() []Expr {
 	}
 }
 
-func (p *Parser) parseDefault() CaseClause {
+func (p *parser) parseDefault() CaseClause {
 	pos := p.expect(KW_DEFAULT).P
 	colon := p.expect(COLON).P
 	return CaseClause{P: pos, Body: p.parseClauseBody(colon)}
 }
 
-func (p *Parser) parseClauseBody(pos Pos) *Block {
+func (p *parser) parseClauseBody(pos Pos) *Block {
 	var out []Stmt
 	for {
 		p.skipSemi()
@@ -441,7 +441,7 @@ func (p *Parser) parseClauseBody(pos Pos) *Block {
 	}
 }
 
-func (p *Parser) parseFor(lb stmtLabel) Stmt {
+func (p *parser) parseFor(lb stmtLabel) Stmt {
 	pos := p.expect(KW_FOR).P
 	if p.cur.K == LBRACE {
 		return p.parseForBody(pos, lb, nil, nil, nil, nil)
@@ -474,7 +474,7 @@ func (p *Parser) parseFor(lb stmtLabel) Stmt {
 	return p.parseForBody(pos, lb, nil, exprStmt.Exp, nil, nil)
 }
 
-func (p *Parser) isForRangeStart() bool {
+func (p *parser) isForRangeStart() bool {
 	tok := p.cur
 	idx := 0
 	if tok.K == KW_LET {
@@ -497,7 +497,7 @@ func (p *Parser) isForRangeStart() bool {
 	return next.K == KW_RANGE
 }
 
-func (p *Parser) parseForRange(pos Pos, lb stmtLabel) Stmt {
+func (p *parser) parseForRange(pos Pos, lb stmtLabel) Stmt {
 	decl := false
 	if p.cur.K == KW_LET {
 		decl = true
@@ -523,25 +523,25 @@ func (p *Parser) parseForRange(pos Pos, lb stmtLabel) Stmt {
 	return p.parseForBody(pos, lb, nil, nil, nil, rng)
 }
 
-func (p *Parser) parseForCond() Expr {
+func (p *parser) parseForCond() Expr {
 	if p.isSemi(p.cur.K) {
 		return nil
 	}
 	return p.parseExpr()
 }
 
-func (p *Parser) parseForInit() Stmt {
+func (p *parser) parseForInit() Stmt {
 	return p.parseForClause(true, "init")
 }
 
-func (p *Parser) parseForPost() Stmt {
+func (p *parser) parseForPost() Stmt {
 	if p.cur.K == LBRACE {
 		return nil
 	}
 	return p.parseForClause(false, "post")
 }
 
-func (p *Parser) parseForClause(allowLet bool, label string) Stmt {
+func (p *parser) parseForClause(allowLet bool, label string) Stmt {
 	switch p.cur.K {
 	case KW_LET:
 		if !allowLet {
@@ -560,7 +560,7 @@ func (p *Parser) parseForClause(allowLet bool, label string) Stmt {
 	return p.parseExprStmt()
 }
 
-func (p *Parser) parseForBody(
+func (p *parser) parseForBody(
 	pos Pos,
 	lb stmtLabel,
 	init Stmt,
@@ -583,7 +583,7 @@ func (p *Parser) parseForBody(
 	}
 }
 
-func (p *Parser) parseBreak() Stmt {
+func (p *parser) parseBreak() Stmt {
 	pos := p.expect(KW_BREAK).P
 	tok, ok := p.labelRef()
 	if !ok {
@@ -598,7 +598,7 @@ func (p *Parser) parseBreak() Stmt {
 	return &BreakStmt{P: pos, Label: tok.Lit}
 }
 
-func (p *Parser) parseContinue() Stmt {
+func (p *parser) parseContinue() Stmt {
 	pos := p.expect(KW_CONTINUE).P
 	tok, ok := p.labelRef()
 	if !ok {
@@ -618,7 +618,7 @@ func (p *Parser) parseContinue() Stmt {
 	return &ContinueStmt{P: pos, Label: tok.Lit}
 }
 
-func (p *Parser) parseBlock() *Block {
+func (p *parser) parseBlock() *Block {
 	pos := p.expect(LBRACE).P
 	var out []Stmt
 	for p.cur.K != RBRACE {
@@ -639,13 +639,13 @@ func (p *Parser) parseBlock() *Block {
 	return &Block{P: pos, Stmts: out}
 }
 
-func (p *Parser) parseExpr() Expr {
+func (p *parser) parseExpr() Expr {
 	return p.parseTernary()
 }
 
 type binOpMatcher func(Kind) (BinOp, bool)
 
-func (p *Parser) parseBinary(next func() Expr, opOf binOpMatcher) Expr {
+func (p *parser) parseBinary(next func() Expr, opOf binOpMatcher) Expr {
 	left := next()
 	for {
 		op, ok := opOf(p.cur.K)
@@ -659,7 +659,7 @@ func (p *Parser) parseBinary(next func() Expr, opOf binOpMatcher) Expr {
 	}
 }
 
-func (p *Parser) parseTernary() Expr {
+func (p *parser) parseTernary() Expr {
 	cond := p.parseCoalesce()
 	if p.cur.K != QUESTION {
 		return cond
@@ -673,23 +673,23 @@ func (p *Parser) parseTernary() Expr {
 	return &Ternary{P: pos, Cond: cond, Then: then, Else: els}
 }
 
-func (p *Parser) parseCoalesce() Expr {
+func (p *parser) parseCoalesce() Expr {
 	return p.parseBinary(p.parseOr, coalesceOp)
 }
 
-func (p *Parser) parseOr() Expr {
+func (p *parser) parseOr() Expr {
 	return p.parseBinary(p.parseAnd, orOp)
 }
 
-func (p *Parser) parseAnd() Expr {
+func (p *parser) parseAnd() Expr {
 	return p.parseBinary(p.parseEq, andOp)
 }
 
-func (p *Parser) parseEq() Expr {
+func (p *parser) parseEq() Expr {
 	return p.parseBinary(p.parseCmp, eqOp)
 }
 
-func (p *Parser) parseCmp() Expr {
+func (p *parser) parseCmp() Expr {
 	left := p.parseAdd()
 	for {
 		pos := p.cur.P
@@ -722,11 +722,11 @@ func (p *Parser) parseCmp() Expr {
 	}
 }
 
-func (p *Parser) parseAdd() Expr {
+func (p *parser) parseAdd() Expr {
 	return p.parseBinary(p.parseMul, addOp)
 }
 
-func (p *Parser) parseMul() Expr {
+func (p *parser) parseMul() Expr {
 	return p.parseBinary(p.parseUnary, mulOp)
 }
 
@@ -818,7 +818,7 @@ func unaryOp(k Kind) (UnOp, bool) {
 	}
 }
 
-func (p *Parser) parseUnary() Expr {
+func (p *parser) parseUnary() Expr {
 	if p.cur.K == KW_TRY {
 		pos := p.cur.P
 		p.next()
@@ -835,7 +835,7 @@ func (p *Parser) parseUnary() Expr {
 	return p.parsePostfix()
 }
 
-func (p *Parser) parsePostfix() Expr {
+func (p *parser) parsePostfix() Expr {
 	left := p.parsePrimary()
 	for {
 		switch p.cur.K {
@@ -868,7 +868,7 @@ func (p *Parser) parsePostfix() Expr {
 	}
 }
 
-func (p *Parser) parseArgs() []Expr {
+func (p *parser) parseArgs() []Expr {
 	if p.cur.K == RPAREN {
 		return nil
 	}
@@ -888,7 +888,7 @@ func (p *Parser) parseArgs() []Expr {
 	return out
 }
 
-func (p *Parser) parsePrimary() Expr {
+func (p *parser) parsePrimary() Expr {
 	switch p.cur.K {
 	case IDENT:
 		pos := p.cur.P
@@ -935,7 +935,7 @@ func (p *Parser) parsePrimary() Expr {
 	return nil
 }
 
-func (p *Parser) parseList() Expr {
+func (p *parser) parseList() Expr {
 	pos := p.expect(LBRACK).P
 	p.skipSemi()
 	if p.cur.K == RBRACK {
@@ -964,7 +964,7 @@ func (p *Parser) parseList() Expr {
 	return &ListLit{P: pos, Elems: elems}
 }
 
-func (p *Parser) parseDict() Expr {
+func (p *parser) parseDict() Expr {
 	pos := p.expect(LBRACE).P
 	p.skipSemi()
 	if p.cur.K == RBRACE {
@@ -1012,34 +1012,34 @@ func (p *Parser) parseDict() Expr {
 	return &DictLit{P: pos, Entries: entries}
 }
 
-func (p *Parser) skipSemi() {
+func (p *parser) skipSemi() {
 	for p.isSemi(p.cur.K) {
 		p.next()
 	}
 }
 
-func (p *Parser) isSemi(k Kind) bool {
+func (p *parser) isSemi(k Kind) bool {
 	return k == SEMI || k == AUTO_SEMI
 }
 
-func (p *Parser) expectSemi() {
+func (p *parser) expectSemi() {
 	if !p.isSemi(p.cur.K) {
 		p.failCur(fmt.Sprintf("expected %s, got %s", SEMI, p.cur.K))
 	}
 	p.next()
 }
 
-func (p *Parser) next() {
+func (p *parser) next() {
 	p.cur = p.peek
 	if len(p.ahead) > 0 {
 		p.peek = p.ahead[0]
 		p.ahead = p.ahead[1:]
 		return
 	}
-	p.peek = p.lx.Next()
+	p.peek = p.lx.scan()
 }
 
-func (p *Parser) peekN(n int) Tok {
+func (p *parser) peekN(n int) Tok {
 	if n <= 0 {
 		return p.cur
 	}
@@ -1047,12 +1047,12 @@ func (p *Parser) peekN(n int) Tok {
 		return p.peek
 	}
 	for len(p.ahead) < n-1 {
-		p.ahead = append(p.ahead, p.lx.Next())
+		p.ahead = append(p.ahead, p.lx.scan())
 	}
 	return p.ahead[n-2]
 }
 
-func (p *Parser) expect(k Kind) Tok {
+func (p *parser) expect(k Kind) Tok {
 	if p.cur.K != k {
 		p.failCur(fmt.Sprintf("expected %s, got %s", k, p.cur.K))
 	}
@@ -1061,13 +1061,13 @@ func (p *Parser) expect(k Kind) Tok {
 	return t
 }
 
-func (p *Parser) fail(pos Pos, msg string) {
+func (p *parser) fail(pos Pos, msg string) {
 	panic(&ParseError{Pos: pos, Msg: msg})
 }
 
 // failCur reports a parse error at the current token. An ILLEGAL token already
 // carries the lexer's diagnostic (e.g. unexpected '&')
-func (p *Parser) failCur(fallback string) {
+func (p *parser) failCur(fallback string) {
 	msg := fallback
 	if p.cur.K == ILLEGAL {
 		msg = p.cur.Lit
