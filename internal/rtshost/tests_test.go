@@ -341,8 +341,7 @@ func TestRunTestsBindsTOverLocals(t *testing.T) {
 }
 
 func TestRunTestsRejectsTFromAnEndedBlock(t *testing.T) {
-	dir := t.TempDir()
-	writeModule(t, dir, "keep.rts", `module keep
+	const keep = `module keep
 let saved = null
 let fatal = null
 let report = null
@@ -369,14 +368,12 @@ export fn tryFatal() {
 export fn tryError() {
   let r = try report("stale")
 }
-`)
-	const ended = "t belongs to a test block that has ended"
+`
+	const ended = "t belongs to an evaluation that has ended"
 	for _, use := range []string{"useT", "useFatal", "useError", "tryT", "tryFatal", "tryError"} {
 		t.Run(use, func(t *testing.T) {
 			eng := NewEngine(stdlib.New)
-			rt := testRuntime(t)
-			rt.BaseDir = dir
-			rt.Uses = []rts.Use{{Path: "keep.rts"}}
+			rt := keepRuntime(t, keep)
 			got, err := RunTests(t.Context(), eng, Tests{
 				Doc: &restfile.Document{Path: testDoc},
 				Scripts: []restfile.ScriptBlock{
@@ -393,13 +390,7 @@ export fn tryError() {
 				t.Fatalf("results = %+v, want %+v", results(got), want)
 			}
 
-			err = RunPreRequest(t.Context(), eng, PreRequest{
-				Scripts: []restfile.ScriptBlock{
-					{Kind: restfile.ScriptKindPreRequest, Lang: restfile.ScriptLangRTS, Body: "keep." + use + "()"},
-				},
-				BaseDir: dir,
-				Runtime: func() (Runtime, error) { return rt, nil },
-			})
+			err = preRequest(eng, rt, "keep."+use+"()")
 			if err == nil || !strings.Contains(err.Error(), ended) || errors.Is(err, rts.ErrHalt) {
 				t.Fatalf("pre-request error = %v, want the ended block", err)
 			}
@@ -408,8 +399,8 @@ export fn tryError() {
 }
 
 func TestRunTestsFatalStopsANestedEvaluation(t *testing.T) {
-	dir := t.TempDir()
-	writeModule(t, dir, "keep.rts", `module keep
+	eng := NewEngine(stdlib.New)
+	rt := keepRuntime(t, `module keep
 let saved = null
 export fn hold(t) {
   saved = t
@@ -418,10 +409,6 @@ export fn stop() {
   saved.fatal("stop")
 }
 `)
-	eng := NewEngine(stdlib.New)
-	rt := testRuntime(t)
-	rt.BaseDir = dir
-	rt.Uses = []rts.Use{{Path: "keep.rts"}}
 	rt.Scope.Resolve = func(name string) (string, bool, error) {
 		if name != "lazy" {
 			return "", false, nil

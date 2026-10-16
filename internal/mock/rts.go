@@ -1,9 +1,10 @@
 package mock
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
@@ -60,7 +61,7 @@ func (o *rtsInspector) requestCount(
 	if err := parsed.Count(1); err != nil {
 		return 0, err
 	}
-	pattern, err := requestPatternFromValue(parsed.Arg(0))
+	pattern, err := requestPatternFromValue(ctx, parsed.Arg(0))
 	if err != nil {
 		return 0, rts.Errf(ctx, pos, "%s: %v", sig, err)
 	}
@@ -74,19 +75,34 @@ func (o *rtsInspector) requestCount(
 // requestPatternFromValue decodes a script dict through the pattern's JSON
 // schema, so scripts, the control API, and .http files accept the same shape.
 // Count validates the decoded pattern when it compiles it.
-func requestPatternFromValue(value rts.Value) (RequestPattern, error) {
+func requestPatternFromValue(ctx *rts.Ctx, value rts.Value) (RequestPattern, error) {
 	if value.K != rts.VDict {
 		return RequestPattern{}, errors.New("pattern must be a dict")
 	}
-	data, err := rts.ToIfaceStrict(value)
-	if err != nil {
+	o := rts.JSONOptions{Max: ctx.Lim.MaxStr, EscapeHTML: true, Check: func(v rts.Value) error {
+		var name string
+		switch v.K {
+		case rts.VFunc:
+			name = "function"
+		case rts.VNative:
+			name = "native"
+		case rts.VObj:
+			name = v.O.TypeName()
+		default:
+			return nil
+		}
+		return fmt.Errorf("cannot convert %s to a data value", name)
+	}}
+	text, err := rts.EncodeJSON(value, o)
+	switch {
+	case errors.Is(err, rts.ErrNotJSON):
+		return RequestPattern{}, errors.New("pattern numbers must be finite")
+	case err != nil:
 		return RequestPattern{}, err
+	case o.Max > 0 && len(text) > o.Max:
+		return RequestPattern{}, errors.New("pattern too large")
 	}
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return RequestPattern{}, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder := json.NewDecoder(strings.NewReader(text))
 	decoder.DisallowUnknownFields()
 	var pattern RequestPattern
 	if err := decoder.Decode(&pattern); err != nil {

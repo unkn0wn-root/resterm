@@ -15,6 +15,7 @@ type Trace struct {
 }
 
 type traceObj struct {
+	evalObj
 	tl      *nettrace.Timeline
 	bud     nettrace.Budget
 	br      []nettrace.BudgetBreach
@@ -42,8 +43,8 @@ type trSeg struct {
 
 func phaseKey(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
 
-func newTraceObj(t *Trace) *traceObj {
-	o := &traceObj{ag: make(map[string]*trAgg)}
+func newTraceObj(st *evalState, t *Trace) *traceObj {
+	o := &traceObj{evalObj: evalObj{st, "trace"}, ag: make(map[string]*trAgg)}
 	if t != nil && t.Report != nil && t.Report.Timeline != nil {
 		rep := t.Report
 		if c := rep.Clone(); c != nil {
@@ -57,24 +58,24 @@ func newTraceObj(t *Trace) *traceObj {
 		}
 	}
 	o.members = map[string]rts.Value{
-		"enabled":         hostFn0("trace", "enabled", o.enabled),
-		"durationMs":      hostFn0("trace", "durationMs", o.durationMs),
-		"durationSeconds": hostFn0("trace", "durationSeconds", o.durationSeconds),
-		"durationString":  hostFn0("trace", "durationString", o.durationString),
-		"error":           hostFn0("trace", "error", o.errText),
-		"started":         hostFn0("trace", "started", o.started),
-		"completed":       hostFn0("trace", "completed", o.completed),
-		"phases":          hostFn0("trace", "phases", o.phases),
-		"phaseNames":      hostFn0("trace", "phaseNames", o.phaseNames),
-		"budgets":         hostFn0("trace", "budgets", o.budgets),
-		"connection":      hostFn0("trace", "connection", o.connection),
-		"tls":             hostFn0("trace", "tls", o.tls),
-		"breaches":        hostFn0("trace", "breaches", o.breaches),
-		"withinBudget":    hostFn0("trace", "withinBudget", o.withinBudget),
-		"hasBudgets":      hostFn0("trace", "hasBudgets", o.hasBudgets),
-		"getPhase": native.Fn1(
+		"enabled":         o.fn0("enabled", o.enabled),
+		"durationMs":      o.fn0("durationMs", o.durationMs),
+		"durationSeconds": o.fn0("durationSeconds", o.durationSeconds),
+		"durationString":  o.fn0("durationString", o.durationString),
+		"error":           o.fn0("error", o.errText),
+		"started":         o.fn0("started", o.started),
+		"completed":       o.fn0("completed", o.completed),
+		"phases":          o.fn0("phases", o.phases),
+		"phaseNames":      o.fn0("phaseNames", o.phaseNames),
+		"budgets":         o.fn0("budgets", o.budgets),
+		"connection":      o.fn0("connection", o.connection),
+		"tls":             o.fn0("tls", o.tls),
+		"breaches":        o.fn0("breaches", o.breaches),
+		"withinBudget":    o.fn0("withinBudget", o.withinBudget),
+		"hasBudgets":      o.fn0("hasBudgets", o.hasBudgets),
+		"getPhase": o.method(native.Fn1(
 			"trace.getPhase", "trace.getPhase(name)", native.String, o.getPhase,
-		).Value(),
+		)),
 	}
 	return o
 }
@@ -103,8 +104,6 @@ func (o *traceObj) addPhase(ph nettrace.Phase) {
 	a.cnt++
 	a.seg = append(a.seg, s)
 }
-
-func (o *traceObj) TypeName() string { return "trace" }
 
 func (o *traceObj) Member(_ *rts.Ctx, _ rts.Pos, name string) (rts.Value, bool, error) {
 	v, ok := o.members[name]

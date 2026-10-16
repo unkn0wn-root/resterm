@@ -487,6 +487,12 @@ func TestSourceSyntaxScriptLangAgreesWithParser(t *testing.T) {
 		"# @rts bogus\n# @script",
 		"# @script pre-request lang=rts\n# @script test",
 		"GET https://a.test\n\n###\n# @rts pre-request",
+		"GET https://a.test\nContent-Type: multipart/form-data; boundary=B\nGET https://b.test\n\n--B",
+		"GET https://a.test\nContent-Type: multipart/form-data; boundary=B\nGET https://b.test\n" +
+			"Content-Type: application/json\n\n--B",
+		"GET https://a.test\nContent-Type: multipart/form-data; boundary=B\n###\nGET https://b.test\n\n--B",
+		"GET https://a.test\nContent-Type: multipart/form-data; boundary=B\n\nGET https://b.test\n--B",
+		"GET https://a.test\nContent-Type: text/plain\nGET https://b.test\n\n--B",
 	}
 	bodies := []string{
 		"> a",
@@ -540,6 +546,7 @@ func TestSourceSyntaxInExprAgreesWithParser(t *testing.T) {
 		"POST https://a.test\nContent-Type: application/json\n\n",
 		"POST https://a.test\nContent-Type: multipart/form-data; boundary=X\n\n--X\n" +
 			"Content-Disposition: form-data; name=\"a\"\n\n",
+		"POST https://a.test\nContent-Type: multipart/form-data; boundary=X\nPOST https://b.test\n\n--X\n\n",
 	}
 	bodies := []string{
 		"{{=\n  vars.get(\"a\")\n}}",

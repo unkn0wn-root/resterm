@@ -75,6 +75,24 @@ func TestExtractJSON(t *testing.T) {
 	}
 }
 
+func TestExtractJSONPaths(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Format:        FormatJSON,
+		TokenPath:     "tokens[-1]",
+		TypePath:      `["meta"].type`,
+		ExpiresInPath: "missing.seconds",
+	}
+	res, err := extractResult(cfg, []byte(`{"tokens":["a","b"],"meta":{"type":"Token"}}`), time.Unix(100, 0))
+	if err != nil {
+		t.Fatalf("extractResult() error = %v", err)
+	}
+	if res.Token != "b" || res.Type != "Token" || !res.Expiry.IsZero() {
+		t.Fatalf("extractResult() = %+v, want the last token, its type and no expiry", res)
+	}
+}
+
 func TestExtractJSONRejectsTrailingGarbage(t *testing.T) {
 	t.Parallel()
 

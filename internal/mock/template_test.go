@@ -208,6 +208,17 @@ func TestResponseInterpolationFailures(t *testing.T) {
 			detail: "missing JSON body field",
 		},
 		{
+			name:   "JSON index out of range",
+			source: "# @mock method=POST path=/x\nHTTP/1.1 200 OK\n\n{{body.items[-3]}}",
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{"items":[1,"two"]}`))
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+			status: http.StatusBadRequest,
+			detail: "missing JSON body field",
+		},
+		{
 			name:   "invalid JSON",
 			source: "# @mock method=POST path=/x\nHTTP/1.1 200 OK\n\n{{body.user.id}}",
 			request: func() *http.Request {
@@ -355,6 +366,13 @@ HTTP/1.1 200 OK
 	assertResponse(t, handler, req, http.StatusOK, "{{}} {{ }} expanded")
 }
 
+func TestResponseInterpolationCountsNegativeIndexFromEnd(t *testing.T) {
+	handler := compileSource(t, "# @mock method=POST path=/x\nHTTP/1.1 200 OK\n\n{{body.items[-1]}}")
+	req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{"items":[1,"two"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	assertResponse(t, handler, req, http.StatusOK, "two")
+}
+
 func TestCompileRejectsInvalidResponseTemplates(t *testing.T) {
 	tests := []struct {
 		name string
@@ -368,7 +386,13 @@ func TestCompileRejectsInvalidResponseTemplates(t *testing.T) {
 		{name: "JSON dynamic helper", body: "{{json.$uuid}}", want: "unsupported"},
 		{name: "unknown encoded path parameter", body: "{{json.path.other}}", want: "no parameter"},
 		{name: "expression", body: "{{= 1 + 1}}", want: "do not support expressions"},
-		{name: "invalid body path", body: "{{body.items[invalid-index]}}", want: "invalid JSON body"},
+		{
+			name: "invalid body path",
+			body: "{{body.items[invalid-index]}}",
+			want: `invalid JSON body template path "items[invalid-index]": invalid array index "invalid-index"`,
+		},
+		{name: "wildcard body path", body: "{{body.items[*]}}", want: `invalid array index "*"`},
+		{name: "spaced body key", body: "{{body.a b}}", want: `unquoted key "a b" has a space. Use ["a b"]`},
 		{name: "invalid encoded body path", body: "{{json.body.items[invalid-index]}}", want: "invalid JSON body"},
 		{name: "unsupported dynamic", body: "{{$uuid + 1s}}", want: "unsupported dynamic"},
 		{name: "dynamic helper arity", body: "{{$randomChoice()}}", want: "takes at least 1 argument"},

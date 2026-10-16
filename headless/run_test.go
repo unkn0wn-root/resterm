@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +18,9 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 
 	"github.com/coder/websocket"
+	"google.golang.org/grpc"
+	testgrpc "google.golang.org/grpc/interop/grpc_testing"
+	"google.golang.org/grpc/reflection"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
@@ -337,6 +341,220 @@ func TestRunUsesContext(t *testing.T) {
 	}
 	if msg := strings.ToLower(got.Results[0].Error); !strings.Contains(msg, "canceled") {
 		t.Fatalf("expected canceled error, got %+v", got.Results[0])
+	}
+}
+
+// signalStop stands in for the cause of a signal.NotifyContext cancel.
+type signalStop struct{}
+
+func (signalStop) Error() string { return "interrupt signal received" }
+
+func (signalStop) Is(target error) bool { return target == context.Canceled }
+
+type arriveSvc struct {
+	testgrpc.UnimplementedTestServiceServer
+	arrive func(context.Context)
+}
+
+func (s arriveSvc) UnaryCall(ctx context.Context, _ *testgrpc.SimpleRequest) (*testgrpc.SimpleResponse, error) {
+	s.arrive(ctx)
+	return &testgrpc.SimpleResponse{}, nil
+}
+
+// Stages that reach the server fire the stop from the handler, so a slow send
+// cannot stop the run early. A timeout gives the request a second to arrive.
+func TestRunKeepsTheStopCause(t *testing.T) {
+	const (
+		pause    = 50 * time.Millisecond
+		deadline = time.Second
+	)
+	cancelWith := func(cause error) func(*testing.T) (context.Context, func()) {
+		return func(t *testing.T) (context.Context, func()) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			return ctx, func() { cancel(cause) }
+		}
+	}
+	timeoutWith := func(cause error) func(*testing.T) (context.Context, func()) {
+		return func(t *testing.T) (context.Context, func()) {
+			ctx, cancel := context.WithTimeoutCause(t.Context(), deadline, cause)
+			t.Cleanup(cancel)
+			return ctx, func() {}
+		}
+	}
+	ctxs := []struct {
+		name string
+		ctx  func(*testing.T) (context.Context, func())
+		code FailureCode
+		exit int
+		err  string
+		// The texts of an HTTP send error and of a @poll or @retry error.
+		sendText   string
+		repeatText string
+	}{
+		{
+			name:       "custom cancel",
+			ctx:        cancelWith(errors.New("stop")),
+			code:       FailureCanceled,
+			exit:       ExitCanceled,
+			err:        "context canceled: stop",
+			sendText:   `context canceled: perform request: Get %q: stop`,
+			repeatText: "context canceled: repeat HTTP request: stop",
+		},
+		{
+			name:       "custom timeout",
+			ctx:        timeoutWith(errors.New("too slow")),
+			code:       FailureTimeout,
+			exit:       ExitTimeout,
+			err:        "context deadline exceeded: too slow",
+			sendText:   `context deadline exceeded: perform request: Get %q: too slow`,
+			repeatText: "context deadline exceeded: repeat HTTP request: too slow",
+		},
+		{
+			name:       "signal",
+			ctx:        cancelWith(signalStop{}),
+			code:       FailureCanceled,
+			exit:       ExitCanceled,
+			err:        "interrupt signal received",
+			sendText:   `perform request: Get %q: interrupt signal received`,
+			repeatText: "interrupt signal received",
+		},
+		{
+			name:       "plain cancel",
+			ctx:        cancelWith(nil),
+			code:       FailureCanceled,
+			exit:       ExitCanceled,
+			err:        "context canceled",
+			sendText:   `perform request: Get %q: context canceled`,
+			repeatText: "context canceled",
+		},
+		{
+			name:       "plain timeout",
+			ctx:        timeoutWith(nil),
+			code:       FailureTimeout,
+			exit:       ExitTimeout,
+			err:        "context deadline exceeded",
+			sendText:   `perform request: Get %q: context deadline exceeded`,
+			repeatText: "context deadline exceeded",
+		},
+	}
+
+	overHTTP := func(t *testing.T, arrive func(context.Context)) (string, string) {
+		srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			arrive(r.Context())
+		}))
+		t.Cleanup(srv.Close)
+		return "GET " + srv.URL + "\n", srv.URL
+	}
+	overGRPC := func(t *testing.T, arrive func(context.Context)) (string, string) {
+		lis, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		srv := grpc.NewServer()
+		testgrpc.RegisterTestServiceServer(srv, arriveSvc{arrive: arrive})
+		reflection.Register(srv)
+		go func() { _ = srv.Serve(lis) }()
+		t.Cleanup(srv.Stop)
+		addr := lis.Addr().String()
+		return "# @grpc grpc.testing.TestService/UnaryCall\n# @grpc-plaintext true\nGRPC " + addr + "\n\n{}\n", addr
+	}
+	stages := []struct {
+		name   string
+		script string
+		serve  func(*testing.T, func(context.Context)) (string, string)
+		before bool
+		// Nothing reaches the server, so the stop fires after a pause.
+		timed      bool
+		block      bool
+		sent       int32
+		sendText   bool
+		repeatText bool
+		// gRPC sends the deadline to the server, which can end the call
+		// before the client context expires.
+		cancelOnly bool
+	}{
+		{name: "before the run", serve: overHTTP, before: true},
+		{name: "pre-request", script: "# @script pre-request\n> while (true) {}\n", serve: overHTTP, timed: true},
+		{name: "send", serve: overHTTP, block: true, sent: 1, sendText: true},
+		{name: "grpc send", serve: overGRPC, block: true, sent: 1, cancelOnly: true},
+		{name: "checks", script: "# @script test\n> while (true) {}\n", serve: overHTTP, sent: 1},
+		{
+			name:       "poll wait",
+			script:     "# @poll every=1m timeout=1m until=response.statusCode == 201\n",
+			serve:      overHTTP,
+			sent:       1,
+			repeatText: true,
+		},
+		{
+			name:       "retry wait",
+			script:     "# @retry count=1\n# @retry-when response.statusCode == 200\n# @retry-backoff exponential(1m, 1m)\n",
+			serve:      overHTTP,
+			sent:       1,
+			repeatText: true,
+		},
+	}
+	for _, c := range ctxs {
+		for _, st := range stages {
+			if st.cancelOnly && c.code == FailureTimeout {
+				continue
+			}
+			t.Run(c.name+"/"+st.name, func(t *testing.T) {
+				t.Parallel()
+				ctx, stop := c.ctx(t)
+				var sent atomic.Int32
+				arrive := func(ctx context.Context) {
+					sent.Add(1)
+					if st.block {
+						stop()
+						<-ctx.Done()
+						return
+					}
+					time.AfterFunc(pause, stop)
+				}
+
+				file := filepath.Join(t.TempDir(), "stop.http")
+				req, url := st.serve(t, arrive)
+				src := "# @name one\n" + st.script + req
+				if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+					t.Fatalf("write file: %v", err)
+				}
+				switch {
+				case st.before:
+					stop()
+					<-ctx.Done()
+				case st.timed:
+					time.AfterFunc(pause, stop)
+				}
+
+				rep, err := Run(ctx, Options{Source: Source{Path: file}})
+				if err != nil {
+					t.Fatalf("Run: %v", err)
+				}
+				res := rep.Results[0]
+				if res.Failure == nil {
+					t.Fatalf("result carries no failure: %+v", res)
+				}
+				if res.Failure.Code != c.code {
+					t.Fatalf("failure code = %q (%s), want %q", res.Failure.Code, res.Failure.Message, c.code)
+				}
+				if got := rep.ExitCode(ExitCodeDetailed); got != c.exit {
+					t.Fatalf("exit code = %d, want %d", got, c.exit)
+				}
+				want := c.err
+				switch {
+				case st.sendText:
+					want = fmt.Sprintf(c.sendText, url)
+				case st.repeatText:
+					want = c.repeatText
+				}
+				if res.Error != want {
+					t.Fatalf("error = %q, want %q", res.Error, want)
+				}
+				if got := sent.Load(); got != st.sent {
+					t.Fatalf("sent %d requests, want %d", got, st.sent)
+				}
+			})
+		}
 	}
 }
 

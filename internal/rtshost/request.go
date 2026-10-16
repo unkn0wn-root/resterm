@@ -14,15 +14,20 @@ import (
 type stateKey struct{}
 
 type evalState struct {
-	rt Runtime
+	rt    Runtime
+	ended bool
 }
 
-func withRuntime(ctx context.Context, rt Runtime) context.Context {
+// Call end on the returned state when the evaluation finishes.
+func withRuntime(ctx context.Context, rt Runtime) (context.Context, *evalState) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return context.WithValue(ctx, stateKey{}, &evalState{rt: rt})
+	st := &evalState{rt: rt}
+	return context.WithValue(ctx, stateKey{}, st), st
 }
+
+func (s *evalState) end() { s.ended = true }
 
 func runtimeState(ctx *rts.Ctx) *evalState {
 	if ctx == nil {
@@ -55,28 +60,28 @@ var requestFns = map[string]rts.Value{
 		},
 	).Value(),
 	"setMethod": mut1("request.setMethod", "request.setMethod(method)",
-		native.String, RequestMutator.SetMethod).Value(),
+		native.String, (*Mutator).SetMethod).Value(),
 	"setURL": mut1("request.setURL", "request.setURL(url)",
-		native.String, RequestMutator.SetURL).Value(),
+		native.String, (*Mutator).SetURL).Value(),
 	"setHeader": mut2("request.setHeader", "request.setHeader(name, value)",
-		headerName, native.String, RequestMutator.SetHeader).Value(),
+		headerName, native.String, (*Mutator).SetHeader).Value(),
 	"addHeader": mut2("request.addHeader", "request.addHeader(name, value)",
-		headerName, native.String, RequestMutator.AddHeader).Value(),
+		headerName, native.String, (*Mutator).AddHeader).Value(),
 	"removeHeader": mut1("request.removeHeader", "request.removeHeader(name)",
-		headerName, RequestMutator.DelHeader).Value(),
+		headerName, (*Mutator).DelHeader).Value(),
 	"setQueryParam": mut2("request.setQueryParam", "request.setQueryParam(name, value)",
-		native.String, native.String, RequestMutator.SetQuery).Value(),
+		native.String, native.String, (*Mutator).SetQuery).Value(),
 	"setBody": mut1("request.setBody", "request.setBody(body)",
-		native.String, RequestMutator.SetBody).Value(),
+		native.String, (*Mutator).SetBody).Value(),
 }
 
 func mut1[A any](
 	name, sig string,
 	a native.Decoder[A],
-	set func(RequestMutator, diag.Pos, A),
+	set func(*Mutator, diag.Pos, A),
 ) native.Def {
 	return native.Fn1(name, sig, a, func(call native.Call, av A) (rts.Value, error) {
-		mut, err := requestMutator(call)
+		mut, err := mutator(call, "request")
 		if err != nil {
 			return rts.Null(), err
 		}
@@ -88,10 +93,10 @@ func mut1[A any](
 func mut2[A, B any](
 	name, sig string,
 	a native.Decoder[A], b native.Decoder[B],
-	set func(RequestMutator, diag.Pos, A, B),
+	set func(*Mutator, diag.Pos, A, B),
 ) native.Def {
 	return native.Fn2(name, sig, a, b, func(call native.Call, av A, bv B) (rts.Value, error) {
-		mut, err := requestMutator(call)
+		mut, err := mutator(call, "request")
 		if err != nil {
 			return rts.Null(), err
 		}
@@ -155,10 +160,10 @@ func requestFrom(ctx *rts.Ctx) *Request {
 	return state.rt.Request
 }
 
-func requestMutator(call native.Call) (RequestMutator, error) {
+func mutator(call native.Call, obj string) (*Mutator, error) {
 	state := runtimeState(call.Ctx)
 	if state == nil || state.rt.Mutator == nil {
-		return nil, call.Errorf("request is read-only")
+		return nil, call.Errorf("%s is read-only", obj)
 	}
 	return state.rt.Mutator, nil
 }

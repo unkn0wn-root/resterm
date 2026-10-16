@@ -74,7 +74,7 @@ Available inputs are:
 - `{{path.name}}` for a route wildcard, including catch-all wildcards.
 - `{{query.name}}` for a query value. Repeated values use the first value.
 - `{{headers.Name}}` for a request header, including `{{headers.Host}}`. Header names are case-insensitive and repeated values use the first value.
-- `{{body.path.to.field}}` for a JSON body field. Array indexes and quoted keys use the same forms as `items[0].id` and `$["display.name"]`.
+- `{{body.path.to.field}}` for a JSON body field. Array indexes and quoted keys use the same forms as `items[0].id` and `$["display.name"]`. Use `items[-1]` for the last item.
 - Every [dynamic helper](variables.md#dynamic-helpers), such as `{{$uuid}}`, `{{$timestampISO8601 - 1h}}`, `{{$randomChoice("queued", "done")}}`, and `{{$fake.company}}`. A helper reference that names no helper, or one called the wrong way, fails when the mock set compiles.
 
 The placeholders above insert text as-is. Use them in response headers and in plain text or XML bodies. Strings read from a JSON request body are not quoted or escaped. Other JSON values such as numbers, booleans, `null`, arrays, and objects are written as compact JSON. Each occurrence is resolved separately.

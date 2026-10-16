@@ -19,6 +19,7 @@ type RequestResult struct {
 	Err            error
 	Tests          []scriptapi.TestResult
 	ScriptErr      error
+	Checked        bool
 	Executed       *restfile.Request
 	RequestText    string
 	RuntimeSecrets []string

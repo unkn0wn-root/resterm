@@ -2,9 +2,15 @@ package core
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/engine/request"
+	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -204,6 +210,60 @@ func TestRunPlanReportsCanceledRunContext(t *testing.T) {
 	}
 	if len(done) != 1 || done[0] != "First" {
 		t.Fatalf("finished steps = %v, want the canceled first step", done)
+	}
+	if !canceled {
+		t.Fatal("run was not reported as canceled")
+	}
+}
+
+type stopInspector struct{ cancel context.CancelFunc }
+
+func (i stopInspector) Count(ctx context.Context, _ mock.RequestPattern) (uint64, error) {
+	i.cancel()
+	<-ctx.Done()
+	return 0, ctx.Err()
+}
+
+func TestRunPlanCancelDuringChecksCancelsTheRun(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+	doc := failureDoc()
+	for _, req := range doc.Requests {
+		req.URL = srv.URL
+	}
+	doc.Requests[0].Metadata.Asserts = []restfile.AssertSpec{{Expression: `mock.count({path: "/x"}) == 0`}}
+	pl, err := PrepareWorkflow(doc, restfile.Workflow{
+		Name:             "demo",
+		DefaultOnFailure: restfile.WorkflowOnFailureStop,
+		Steps: []restfile.WorkflowStep{
+			{Kind: restfile.WorkflowStepKindRequest, Name: "First", Using: "first"},
+			nextStep(),
+		},
+	}, RunMeta{ID: "wf-1", Env: testEnvironment("dev")})
+	if err != nil {
+		t.Fatalf("PrepareWorkflow: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var outs []stepOutcome
+	canceled := false
+	sink := SinkFunc(func(_ context.Context, e Evt) error {
+		switch v := e.(type) {
+		case WfStepDone:
+			outs = append(outs, evalReq(restfile.WorkflowStep{}, v.Result))
+		case RunDone:
+			canceled = v.Canceled
+		}
+		return nil
+	})
+
+	dep := request.New(engine.Config{MockInspector: stopInspector{cancel}}, nil)
+	if err := RunPlan(ctx, dep, sink, pl); err != nil {
+		t.Fatalf("RunPlan: %v", err)
+	}
+	if !slices.Equal(outs, []stepOutcome{stepCanceled}) {
+		t.Fatalf("step outcomes = %v, want one canceled step", outs)
 	}
 	if !canceled {
 		t.Fatal("run was not reported as canceled")

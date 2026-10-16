@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func evalExpr(t *testing.T, src string) Value {
@@ -1157,16 +1158,43 @@ func TestIsAbortSeesWrappedAbort(t *testing.T) {
 	}
 }
 
-func TestCancelAbortNamesTheCause(t *testing.T) {
-	ctx, cancel := context.WithCancelCause(t.Context())
-	cancel(errors.New("checks timed out"))
-	if err := NewCtx(ctx, Limits{}).tick(Pos{}); err == nil || err.Error() != "canceled: checks timed out" {
-		t.Fatalf("error = %v, want the cause", err)
+func TestContextAbortNamesTheCause(t *testing.T) {
+	stopped := func(cause error) context.Context {
+		ctx, cancel := context.WithCancelCause(t.Context())
+		cancel(cause)
+		return ctx
 	}
-	ctx, stop := context.WithCancel(t.Context())
-	stop()
-	if err := NewCtx(ctx, Limits{}).tick(Pos{}); err == nil || err.Error() != "canceled: context canceled" {
-		t.Fatalf("error = %v, want the context error", err)
+	expired := func(cause error) context.Context {
+		ctx, cancel := context.WithDeadlineCause(t.Context(), time.Now(), cause)
+		t.Cleanup(cancel)
+		return ctx
+	}
+	timedOut := fmt.Errorf("checks timed out: %w", context.DeadlineExceeded)
+	tests := []struct {
+		name string
+		ctx  context.Context
+		kind AbortKind
+		msg  string
+	}{
+		{"cancel cause", stopped(errors.New("checks stopped")), AbortCanceled, "canceled: checks stopped"},
+		{"cancel", stopped(nil), AbortCanceled, "canceled: context canceled"},
+		{"deadline cause", expired(timedOut), AbortTimeout, "checks timed out: context deadline exceeded"},
+		{"deadline", expired(nil), AbortTimeout, "context deadline exceeded"},
+		{
+			"deadline with its own cause",
+			expired(errors.New("poll deadline exceeded")),
+			AbortTimeout,
+			"poll deadline exceeded",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := NewCtx(tt.ctx, Limits{}).tick(Pos{})
+			var abort *AbortError
+			if !errors.As(err, &abort) || abort.Kind != tt.kind || err.Error() != tt.msg {
+				t.Fatalf("error = %v, want a kind %d abort %q", err, tt.kind, tt.msg)
+			}
+		})
 	}
 }
 

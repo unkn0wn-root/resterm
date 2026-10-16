@@ -2,8 +2,10 @@ package mock
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -115,38 +117,122 @@ func TestRTSInspectorCountAndReceived(t *testing.T) {
 func TestRTSInspectorReportsUnavailableAndInvalidPatterns(t *testing.T) {
 	engine := rtshost.NewEngine(nil)
 	for _, test := range []struct {
-		name string
-		rt   rtshost.Runtime
-		expr string
+		name      string
+		inspector Inspector
+		expr      string
+		want      string
 	}{
 		{
-			name: "unavailable",
-			rt:   rtshost.Runtime{Extensions: rts.Extension("mock", RTSValue(unavailableInspector{}))},
-			expr: `mock.count({})`,
+			name:      "unavailable",
+			inspector: unavailableInspector{},
+			expr:      `mock.count({})`,
+			want:      "mock request inspector is unavailable",
 		},
 		{
-			name: "invalid header rule",
-			rt:   rtshost.Runtime{Extensions: rts.Extension("mock", RTSValue(&recordingInspector{}))},
-			expr: `mock.count({headers: {Authorization: {prefix: ""}}})`,
+			name:      "invalid header rule",
+			inspector: &recordingInspector{},
+			expr:      `mock.count({headers: {Authorization: {prefix: ""}}})`,
+			want:      "prefix matcher requires one non-empty value",
 		},
 		{
-			name: "unknown field",
-			rt:   rtshost.Runtime{Extensions: rts.Extension("mock", RTSValue(&recordingInspector{}))},
-			expr: `mock.count({verb: "GET"})`,
+			name:      "unknown field",
+			inspector: &recordingInspector{},
+			expr:      `mock.count({verb: "GET"})`,
+			want:      `json: unknown field "verb"`,
+		},
+		{
+			name:      "not a dict",
+			inspector: &recordingInspector{},
+			expr:      `mock.count("pattern")`,
+			want:      "pattern must be a dict",
+		},
+		{
+			name:      "function",
+			inspector: &recordingInspector{},
+			expr:      `mock.count({json: f})`,
+			want:      "cannot convert function to a data value",
+		},
+		{
+			name:      "native",
+			inspector: &recordingInspector{},
+			expr:      `mock.count({json: [mock.count]})`,
+			want:      "cannot convert native to a data value",
+		},
+		{
+			name:      "result",
+			inspector: &recordingInspector{},
+			expr:      `mock.count({json: {a: try 1}})`,
+			want:      "cannot convert result to a data value",
+		},
+		{
+			name:      "object",
+			inspector: &recordingInspector{},
+			expr:      `mock.count({json: mock})`,
+			want:      "cannot convert mock to a data value",
+		},
+		{
+			name:      "NaN",
+			inspector: &recordingInspector{},
+			expr:      `mock.count({json: [nan]})`,
+			want:      "pattern numbers must be finite",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := engine.Eval(context.Background(), test.rt, test.expr, rts.Pos{}); err == nil {
-				t.Fatal("expected RTS error")
+			rt := rtshost.Runtime{Extensions: rts.NewExtensions(map[string]rts.Value{
+				"mock": RTSValue(test.inspector),
+				"f":    rts.Fn(&rts.Func{Name: "f"}),
+				"nan":  rts.Num(math.NaN()),
+			})}
+			_, err := engine.Eval(context.Background(), rt, test.expr, rts.Pos{})
+			if err == nil || !strings.Contains(err.Error(), "mock.count(pattern): "+test.want) {
+				t.Fatalf("%s error = %v, want %q", test.expr, err, test.want)
 			}
 		})
 	}
+}
 
-	if _, err := requestPatternFromValue(rts.Str("pattern")); err == nil {
-		t.Fatal("expected non-dict pattern to be rejected")
+func TestRTSInspectorKeepsPatternJSON(t *testing.T) {
+	inspector := &recordingInspector{}
+	doc := rts.Dict(map[string]rts.Value{
+		"text": rts.Str("<&> é \u2028"),
+		"nums": rts.List([]rts.Value{rts.Num(2.5), rts.Num(-0.5), rts.Num(1e21), rts.Num(1e-7)}),
+	})
+	rt := rtshost.Runtime{Extensions: rts.NewExtensions(map[string]rts.Value{"mock": RTSValue(inspector), "doc": doc})}
+	if _, err := rtshost.NewEngine(nil).Eval(t.Context(), rt, "mock.count({json: doc})", rts.Pos{}); err != nil {
+		t.Fatal(err)
 	}
-	value := rts.Dict(map[string]rts.Value{"json": {K: rts.VNative}})
-	if _, err := requestPatternFromValue(value); err == nil {
-		t.Fatal("expected non-JSON RTS value to be rejected")
+	want := `{"nums":[2.5,-0.5,1e+21,1e-7],"text":"\u003c\u0026\u003e é \u2028"}`
+	if got := string(inspector.pattern.JSON); got != want {
+		t.Fatalf("JSON pattern = %s, want %s", got, want)
+	}
+}
+
+// A full expansion would produce 2^27 leaves; the size limit must stop it first.
+func TestRTSInspectorRejectsLargePatterns(t *testing.T) {
+	v := rts.List([]rts.Value{rts.Num(0)})
+	for range 27 {
+		v = rts.List([]rts.Value{v, v})
+	}
+	rt := rtshost.Runtime{Extensions: rts.NewExtensions(map[string]rts.Value{
+		"mock": RTSValue(&recordingInspector{}),
+		"v":    v,
+	})}
+	_, err := rtshost.NewEngine(nil).Eval(t.Context(), rt, "mock.count({json: v})", rts.Pos{})
+	if err == nil || !strings.Contains(err.Error(), "mock.count(pattern): pattern too large") {
+		t.Fatalf("mock.count error = %v, want pattern too large", err)
+	}
+
+	const text = `{"path":"/x"}`
+	inspector := &recordingInspector{}
+	o := &rtsInspector{inspector: inspector}
+	args := []rts.Value{rts.Dict(map[string]rts.Value{"path": rts.Str("/x")})}
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: len(text)})
+	if _, err := o.count(ctx, rts.Pos{}, args); err != nil || inspector.pattern.Path != "/x" {
+		t.Fatalf("pattern at the limit = %+v, %v, want path /x", inspector.pattern, err)
+	}
+	ctx = rts.NewCtx(t.Context(), rts.Limits{MaxStr: len(text) - 1})
+	_, err = o.count(ctx, rts.Pos{}, args)
+	if err == nil || !strings.Contains(err.Error(), "pattern too large") {
+		t.Fatalf("pattern past the limit: error = %v, want pattern too large", err)
 	}
 }

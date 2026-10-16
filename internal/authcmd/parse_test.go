@@ -205,6 +205,39 @@ func TestParseErrors(t *testing.T) {
 			want: "",
 		},
 		{
+			name: "invalid token path",
+			params: map[string]string{
+				"argv":       `["gh","auth","token"]`,
+				"format":     "json",
+				"token_path": "a[",
+			},
+			want: `invalid token_path "a[": missing closing bracket`,
+		},
+		{
+			name: "invalid type path",
+			params: map[string]string{
+				"argv":      `["gh","auth","token"]`,
+				"type_path": "$a",
+			},
+			want: `invalid type_path "$a": expected '.' or '[', got 'a'`,
+		},
+		{
+			name: "invalid expiry path",
+			params: map[string]string{
+				"argv":        `["gh","auth","token"]`,
+				"expiry_path": "a b",
+			},
+			want: `invalid expiry_path "a b": unquoted key "a b" has a space. Use ["a b"]`,
+		},
+		{
+			name: "invalid expires_in path on a cache only definition",
+			params: map[string]string{
+				"cache_key":       "github",
+				"expires_in_path": "items[*]",
+			},
+			want: `invalid expires_in_path "items[*]": invalid array index "*"`,
+		},
+		{
 			name: "ttl without cache key",
 			params: map[string]string{
 				"argv": `["gh","auth","token"]`,

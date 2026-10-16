@@ -3,6 +3,10 @@ package request
 import (
 	"context"
 	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -12,6 +16,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
+	xexec "github.com/unkn0wn-root/resterm/internal/exec"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -21,7 +27,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	testgrpc "google.golang.org/grpc/interop/grpc_testing"
+	"google.golang.org/grpc/reflection"
 )
 
 type testMockInspector struct{}
@@ -38,10 +47,6 @@ func (waitingInspector) Count(ctx context.Context, _ mock.RequestPattern) (uint6
 }
 
 func TestResponseChecksNameTheirTimeoutOnce(t *testing.T) {
-	type row struct {
-		name   string
-		passed bool
-	}
 	tests := []struct {
 		name  string
 		check string
@@ -72,16 +77,292 @@ func TestResponseChecksNameTheirTimeoutOnce(t *testing.T) {
 			if err != nil || res.Err != nil {
 				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
 			}
-			var rows []row
-			for _, r := range res.Tests {
-				rows = append(rows, row{r.Name, r.Passed})
+			if got := rows(res); !slices.Equal(got, tt.rows) {
+				t.Fatalf("tests = %+v, want %+v", got, tt.rows)
 			}
-			if !slices.Equal(rows, tt.rows) {
-				t.Fatalf("tests = %+v, want %+v", rows, tt.rows)
-			}
-			want := tt.at + ": canceled: response checks timed out after 50ms: context deadline exceeded"
+			want := tt.at + ": response checks timed out after 50ms: context deadline exceeded"
 			if res.ScriptErr == nil || res.ScriptErr.Error() != want {
 				t.Fatalf("script error = %q, want %q", res.ScriptErr, want)
+			}
+			if got := diag.ClassOf(res.ScriptErr); got != diag.ClassTimeout {
+				t.Fatalf("class = %s, want %s", got, diag.ClassTimeout)
+			}
+		})
+	}
+}
+
+var errStop = fmt.Errorf("stop pressed: %w", context.Canceled)
+
+type stopInspector struct{ cancel context.CancelCauseFunc }
+
+func (i stopInspector) Count(ctx context.Context, _ mock.RequestPattern) (uint64, error) {
+	i.cancel(errStop)
+	<-ctx.Done()
+	return 0, ctx.Err()
+}
+
+type stopFS struct{ cancel context.CancelCauseFunc }
+
+func (f stopFS) ReadFile(string) ([]byte, error) {
+	f.cancel(errStop)
+	return []byte("while (true) {}"), nil
+}
+
+type row struct {
+	name   string
+	passed bool
+}
+
+func rows(res engcfg.RequestResult) []row {
+	var out []row
+	for _, r := range res.Tests {
+		out = append(out, row{r.Name, r.Passed})
+	}
+	return out
+}
+
+func checkCanceled(t *testing.T, res engcfg.RequestResult, want []row) {
+	t.Helper()
+	if !errors.Is(res.Err, errStop) || !errors.Is(res.Err, context.Canceled) {
+		t.Fatalf("result error = %v, script error = %v, want the cancel cause", res.Err, res.ScriptErr)
+	}
+	if res.ScriptErr != nil {
+		t.Fatalf("script error = %v, want none", res.ScriptErr)
+	}
+	if !res.Checked {
+		t.Fatal("result is not marked checked, want the kept response marked final")
+	}
+	if got := rows(res); !slices.Equal(got, want) {
+		t.Fatalf("tests = %+v, want %+v", got, want)
+	}
+	if res.Explain.Status != xplain.StatusError || res.Explain.Decision != "Request canceled" {
+		t.Fatalf("explain = %s %q, want a canceled error", res.Explain.Status, res.Explain.Decision)
+	}
+}
+
+const mockCount = "mock.count({path: \"/x\"})"
+
+func TestResponseCheckCancelEndsTheRequest(t *testing.T) {
+	tests := []struct {
+		name  string
+		check string
+		want  []row
+	}{
+		{"assert", "# @assert true\n# @assert " + mockCount + " == 0\n", []row{{"true", true}}},
+		{
+			"rts test block",
+			"# @rts test first\n> let ok = true\n# @rts test second\n> let n = " + mockCount + "\n",
+			[]row{{"first", true}, {"second", false}},
+		},
+		{
+			"js test",
+			"# @script test\n> tests.assert(true, \"js\");\n# @script test\n> < ./slow.js\n",
+			[]row{{"js", true}},
+		},
+		{
+			"poll",
+			"# @poll every=10ms timeout=5s until=response.statusCode == 200\n# @assert true\n# @assert " +
+				mockCount + " == 0\n",
+			[]row{{"true", true}},
+		},
+		{"capture", "# @capture request n = " + mockCount + "\n", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			doc, req := parseDoc(t, "### one\n"+tt.check+"GET http://example.test\n")
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client(), MockInspector: stopInspector{cancel}}, nil)
+			eng.sc = scripts.NewRunner(stopFS{cancel})
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{Ctx: ctx})
+			if err != nil {
+				t.Fatalf("ExecuteWith() error = %v", err)
+			}
+			if res.Response == nil || res.Response.StatusCode != http.StatusOK {
+				t.Fatalf("response = %+v, want the response kept", res.Response)
+			}
+			checkCanceled(t, res, tt.want)
+		})
+	}
+}
+
+func TestPollWaitCancelKeepsTheLastAttempt(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	doc, req := parseDoc(t, "### one\n# @poll every=1m timeout=5m until=response.statusCode == 201\n"+
+		"# @assert true\nGET http://example.test\n")
+	st := &stubTransport{}
+	eng := New(engcfg.Config{Client: st.client()}, nil)
+	res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{
+		Ctx: ctx,
+		OnRepeat: func(p xexec.RepeatProgress) {
+			if p.Phase == xexec.RepeatPollWait {
+				cancel(errStop)
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if !errors.Is(res.Err, context.Canceled) || res.Response == nil || res.Response.StatusCode != http.StatusOK {
+		t.Fatalf("result error = %v, response = %+v, want the cancel and the last attempt", res.Err, res.Response)
+	}
+	if res.Checked || len(res.Tests) != 0 {
+		t.Fatalf("checked = %v, tests = %+v, want the checks not run", res.Checked, res.Tests)
+	}
+}
+
+type stopBody struct {
+	io.Reader
+	cancel context.CancelCauseFunc
+}
+
+func (b stopBody) Read(p []byte) (int, error) {
+	n, err := b.Reader.Read(p)
+	if err == io.EOF {
+		b.cancel(errStop)
+	}
+	return n, err
+}
+
+func TestStoppedSSEStreamKeepsItsTranscript(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	client := httpx.NewClientWithOptions(
+		httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
+			return &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					h := make(http.Header)
+					h.Set("Content-Type", "text/event-stream")
+					return &http.Response{
+						Status:     "200 OK",
+						StatusCode: http.StatusOK,
+						Header:     h,
+						Body:       io.NopCloser(stopBody{strings.NewReader("data: hello\n\n"), cancel}),
+						Request:    r,
+					}, nil
+				}),
+			}, nil
+		}),
+	)
+	doc, req := parseDoc(t, "### one\n# @sse\n# @capture request n = stream.summary().eventCount\n"+
+		"GET http://example.test/events\n")
+	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(doc, req, testEnv(""), ExecOptions{Ctx: ctx})
+	if err != nil {
+		t.Fatalf("ExecuteWith() error = %v", err)
+	}
+	if res.Stream == nil || res.Stream.Kind != "sse" || len(res.Transcript) == 0 {
+		t.Fatalf("stream = %+v, transcript = %d bytes, want the sse transcript kept", res.Stream, len(res.Transcript))
+	}
+	checkCanceled(t, res, nil)
+}
+
+type emptySvc struct {
+	testgrpc.UnimplementedTestServiceServer
+}
+
+func (emptySvc) EmptyCall(context.Context, *testgrpc.Empty) (*testgrpc.Empty, error) {
+	return &testgrpc.Empty{}, nil
+}
+
+func TestGRPCResponseCheckCancelEndsTheRequest(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	srv := grpc.NewServer()
+	testgrpc.RegisterTestServiceServer(srv, emptySvc{})
+	reflection.Register(srv)
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+
+	tests := []struct {
+		name  string
+		check string
+		want  []row
+	}{
+		{"assert", "# @assert true\n# @assert " + mockCount + " == 0\n", []row{{"true", true}}},
+		{"capture", "# @capture request n = " + mockCount + "\n", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			doc, req := parseDoc(t, "### one\n# @grpc grpc.testing.TestService/EmptyCall\n# @grpc-plaintext true\n"+
+				tt.check+"GRPC "+lis.Addr().String()+"\n\n{}\n")
+			eng := New(engcfg.Config{MockInspector: stopInspector{cancel}}, nil)
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{Ctx: ctx})
+			if err != nil {
+				t.Fatalf("ExecuteWith() error = %v", err)
+			}
+			if res.GRPC == nil || res.GRPC.StatusCode != codes.OK {
+				t.Fatalf("grpc response = %+v, want the response kept", res.GRPC)
+			}
+			checkCanceled(t, res, tt.want)
+		})
+	}
+}
+
+func TestCancelBeforeSendEndsTheRequest(t *testing.T) {
+	const (
+		rtsPre = "# @rts pre-request\n> "
+		jsPre  = "# @script pre-request\n> "
+	)
+	tests := []struct {
+		name  string
+		pre   string
+		stop  bool
+		class diag.Class
+		dec   string
+	}{
+		{
+			// Keep the dict outside the template: its closing brace would end the template.
+			"run var cancel",
+			"@pat = {\"path\": \"/x\"}\n# @run var n = {{= mock.count(json.parse(vars.get(\"pat\"))) }}",
+			true,
+			diag.ClassCanceled,
+			"Request canceled",
+		},
+		{
+			"run var error",
+			"# @run var n = {{= missing.value }}",
+			false,
+			diag.ClassScript,
+			"Run variable evaluation failed",
+		},
+		{"when cancel", "# @when " + mockCount + " == 0", true, diag.ClassCanceled, "Request canceled"},
+		{"when error", "# @when missing.value", false, diag.ClassScript, "Condition evaluation failed"},
+		{"apply cancel", "# @apply {url: str(" + mockCount + ")}", true, diag.ClassCanceled, "Request canceled"},
+		{"apply error", "# @apply {url: missing.value}", false, diag.ClassScript, "Apply failed"},
+		{"rts cancel", rtsPre + "let n = " + mockCount, true, diag.ClassCanceled, "Request canceled"},
+		{"rts error", rtsPre + "let n = missing.value", false, diag.ClassScript, "RTS pre-request failed"},
+		{"js cancel", jsPre + "< ./slow.js", true, diag.ClassCanceled, "Request canceled"},
+		{"js error", jsPre + "throw new Error(\"bad\");", false, diag.ClassScript, "JS pre-request failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			doc, req := parseDoc(t, "### one\n"+tt.pre+"\nGET http://example.test\n")
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client(), MockInspector: stopInspector{cancel}}, nil)
+			eng.sc = scripts.NewRunner(stopFS{cancel})
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{Ctx: ctx})
+			if err != nil {
+				t.Fatalf("ExecuteWith() error = %v", err)
+			}
+			if got := diag.ClassOf(res.Err); got != tt.class {
+				t.Fatalf("class = %s (%v), want %s", got, res.Err, tt.class)
+			}
+			if errors.Is(res.Err, errStop) != tt.stop {
+				t.Fatalf("error = %v, want the cancel cause only for a cancel", res.Err)
+			}
+			if res.Explain.Decision != tt.dec {
+				t.Fatalf("decision = %q, want %q", res.Explain.Decision, tt.dec)
+			}
+			if st.wire != nil {
+				t.Fatal("the request was sent")
 			}
 		})
 	}

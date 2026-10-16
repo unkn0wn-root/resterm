@@ -122,8 +122,9 @@ func scalarAt(doc any, path, name string) (string, bool, error) {
 		return "", false, nil
 	}
 
-	val, ok := jsonpath.Get(doc, path)
-	if !ok {
+	// @auth parsing already validated the path; only lookup failures remain.
+	val, err := jsonpath.Get(doc, path)
+	if err != nil {
 		return "", false, nil
 	}
 

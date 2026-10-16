@@ -50,6 +50,7 @@ func (m *Model) responseMsgFromRunState(res engine.RequestResult, done bool) res
 		err:            res.Err,
 		tests:          append([]scriptapi.TestResult(nil), res.Tests...),
 		scriptErr:      res.ScriptErr,
+		checked:        res.Checked,
 		executed:       res.Executed,
 		requestText:    res.RequestText,
 		runtimeSecrets: append([]string(nil), res.RuntimeSecrets...),

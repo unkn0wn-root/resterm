@@ -554,6 +554,96 @@ func TestRunCancelSkipsRemainingRequests(t *testing.T) {
 	}
 }
 
+type cancelBody struct {
+	io.Reader
+	cancel context.CancelFunc
+}
+
+func (b cancelBody) Close() error {
+	b.cancel()
+	return nil
+}
+
+func TestRunReportsACancelDuringChecksAsCanceled(t *testing.T) {
+	tests := []struct {
+		name string
+		meta string
+		send func(*http.Request, context.CancelFunc) (*http.Response, error)
+		code runfail.Code
+		exit int
+	}{
+		{
+			name: "during checks",
+			meta: "# @assert response.statusCode == 200",
+			send: func(req *http.Request, cancel context.CancelFunc) (*http.Response, error) {
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       cancelBody{strings.NewReader("{}"), cancel},
+					Request:    req,
+				}, nil
+			},
+			code: runfail.CodeCanceled,
+			exit: runfail.ExitCanceled,
+		},
+		{
+			name: "during the send",
+			meta: "# @assert response.statusCode == 200",
+			send: func(req *http.Request, cancel context.CancelFunc) (*http.Response, error) {
+				cancel()
+				return nil, req.Context().Err()
+			},
+			code: runfail.CodeCanceled,
+			exit: runfail.ExitCanceled,
+		},
+		{
+			name: "send timeout",
+			meta: "# @timeout 20ms",
+			send: func(req *http.Request, _ context.CancelFunc) (*http.Response, error) {
+				<-req.Context().Done()
+				return nil, req.Context().Err()
+			},
+			code: runfail.CodeTimeout,
+			exit: runfail.ExitTimeout,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := filepath.Join(dir, "cancel.http")
+			src := "### One\n# @name one\n" + tt.meta + "\nGET https://example.com/one\n"
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+				return &http.Client{
+					Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+						return tt.send(req, cancel)
+					}),
+				}, nil
+			})
+
+			rep, err := RunContext(ctx, Options{FilePath: file, WorkspaceRoot: dir, Client: client})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if got := rep.Results[0].Failure.Code; got != tt.code {
+				t.Fatalf("failure = %q (%s), want %q", got, rep.Results[0].Failure.Message, tt.code)
+			}
+			if got := ExitCode(rep, runfail.ExitDetailed); got != tt.exit {
+				t.Fatalf("exit code = %d, want %d", got, tt.exit)
+			}
+			if got, want := ReportModel(rep).FailureCodes(), []string{string(tt.code)}; !slices.Equal(got, want) {
+				t.Fatalf("failure codes = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestRunWorkflowFailBranchIsAnAssertion(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "workflow-fail.http")

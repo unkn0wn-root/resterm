@@ -61,12 +61,17 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.recordRunHistory(msg)
 		return cmd
 	}
+	canceled := errors.Is(msg.err, context.Canceled)
+	if canceled && msg.checked {
+		cmd := m.consumeHTTPResponse(msg)
+		m.recordRunHistory(msg)
+		return cmd
+	}
 
 	if msg.err != nil {
 		if errors.Is(msg.err, xexec.ErrPollTimeout) && msg.response != nil {
 			return m.consumePollTimeout(msg)
 		}
-		canceled := errors.Is(msg.err, context.Canceled)
 		if !canceled {
 			m.lastError = msg.err
 		} else {
@@ -408,6 +413,9 @@ func (m *Model) consumeHTTPResponse(msg responseMsg) tea.Cmd {
 	// status line so don't also pop the error modal - it would just duplicate it.
 	status := statusMsg{text: statusText, level: statusLevel, noModal: true}
 	status.testSummary, status.testLevel = responseTestStatusSummary(tests, scriptErr)
+	if errors.Is(msg.err, context.Canceled) {
+		status = requestErrorStatus(true)
+	}
 	m.setStatusMessage(status)
 
 	token := nextResponseRenderToken()
@@ -722,6 +730,9 @@ func (m *Model) consumeGRPCResponse(msg responseMsg) tea.Cmd {
 		status.level = statusWarn
 	}
 	status.testSummary, status.testLevel = responseTestStatusSummary(tests, scriptErr)
+	if errors.Is(msg.err, context.Canceled) {
+		status = requestErrorStatus(true)
+	}
 	m.setStatusMessage(status)
 
 	m.showSnapshot(m.responseTargetForMsg(msg), snapshot).resetScroll()

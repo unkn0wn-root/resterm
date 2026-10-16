@@ -225,9 +225,7 @@ func (r *requestBuilder) markHeadersDone() {
 		return
 	}
 	r.http.MarkHeadersDone()
-	if ct := r.http.MimeType(); restfile.IsMultipartMime(ct) {
-		r.multipart = newMultipartSpan(ct)
-	}
+	r.multipart = newMultipartSpan(r.http.MimeType())
 }
 
 // multipartSpan tracks the region between the first multipart delimiter and
@@ -241,6 +239,9 @@ type multipartSpan struct {
 }
 
 func newMultipartSpan(ct string) *multipartSpan {
+	if !restfile.IsMultipartMime(ct) {
+		return nil
+	}
 	return &multipartSpan{delimiter: "--" + boundaryParam(ct)}
 }
 

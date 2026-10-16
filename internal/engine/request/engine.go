@@ -248,6 +248,7 @@ func toResult(res xrunResult) engine.RequestResult {
 		Err:            res.Err,
 		Tests:          append([]scriptapi.TestResult(nil), res.Tests...),
 		ScriptErr:      res.ScriptErr,
+		Checked:        res.Checked,
 		Executed:       res.Executed,
 		RequestText:    res.RequestText,
 		RuntimeSecrets: append([]string(nil), res.RuntimeSecrets...),
@@ -417,8 +418,17 @@ func (x *execCtx) skip(reason string) *xrunResult {
 	return &res
 }
 
-func (x *execCtx) canceled(err error) *xrunResult {
-	return x.fail(err, "Request canceled")
+func (x *execCtx) canceled() *xrunResult {
+	return x.fail(x.withCtxErr(context.Cause(x.sendCtx)), "Request canceled")
+}
+
+// A custom cause need not wrap the context error. Add it so the error still
+// classifies as a cancel or a timeout and keeps its detail.
+func (x *execCtx) withCtxErr(err error) error {
+	if errors.Is(err, x.sendCtx.Err()) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", x.sendCtx.Err(), err)
 }
 
 func (x *execCtx) reqText() string { return renderRequestText(x.req) }
@@ -553,7 +563,7 @@ func (f flow) PendingCancel() *xexec.RequestResult {
 	}
 	select {
 	case <-f.ctx.sendCtx.Done():
-		return f.ctx.canceled(context.Canceled)
+		return f.ctx.canceled()
 	default:
 		return nil
 	}
@@ -574,6 +584,11 @@ func (f flow) EvaluateRunVars() *xexec.RequestResult {
 		return nil
 	}
 	vals, err := x.eng.evalRunVars(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.run, x.req.RunVars)
+	// Native calls may return plain context errors. Check cancellation before
+	// reporting a script failure.
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		x.exp.stage(
 			xplain.StageRunVars,
@@ -609,6 +624,9 @@ func (f flow) EvaluateCondition() *xexec.RequestResult {
 		x.evalScope(x.baseVars),
 		x.locals,
 	)
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		tag := x.req.Metadata.When.Directive().Tag()
 		x.exp.stage(
@@ -649,6 +667,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	// @for-each binds its item as a typed value, and @apply reads it the same way
 	// every other expression in the run does.
 	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, x.evalScope(vv), x.locals)
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		x.exp.stage(
 			xplain.StageApply,
@@ -685,6 +706,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		x.locals,
 		x.secrets,
 	)
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		x.exp.stage(
 			xplain.StageRTSPreRequest,
@@ -720,9 +744,6 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 			x.req,
 		)
 	}
-	if err := x.sendCtx.Err(); err != nil {
-		return x.canceled(err)
-	}
 
 	x.applyRuntimeGlobals(rtsOut.Globals)
 	x.addScriptVars(rtsOut.Variables)
@@ -743,6 +764,9 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		Secrets:   x.secrets,
 		Expand:    x.scriptExpand,
 	})
+	if x.sendCtx.Err() != nil {
+		return x.canceled()
+	}
 	if err != nil {
 		x.exp.stage(
 			xplain.StageJSPreRequest,
@@ -777,9 +801,6 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 			before,
 			x.req,
 		)
-	}
-	if err := x.sendCtx.Err(); err != nil {
-		return x.canceled(err)
 	}
 
 	x.applyRuntimeGlobals(jsOut.Globals)
@@ -1091,7 +1112,7 @@ func (x *execCtx) executeInteractiveWebSocket() xexec.RequestResult {
 	}
 
 	if !lt.detach() {
-		res := x.canceled(x.sendCtx.Err())
+		res := x.canceled()
 		res.RequestText = x.reqText()
 		return *res
 	}
@@ -1164,6 +1185,10 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		return res
 	}
 	if err != nil {
+		// A gRPC status error matches neither context error and drops the cause.
+		if x.sendCtx.Err() != nil {
+			err = x.withCtxErr(context.Cause(x.sendCtx))
+		}
 		x.exp.setPrepared(x.req)
 		res := x.base()
 		res.Err = err
@@ -1191,7 +1216,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 		secrets: x.secrets,
 		locals:  x.locals,
 		run:     x.run,
-	}); err != nil {
+	}); err != nil && x.sendCtx.Err() == nil {
 		x.exp.stage(
 			xplain.StageCaptures,
 			xplain.StageError,
@@ -1227,7 +1252,19 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	res.Tests = tests
 	res.ScriptErr = testErr
 	res.RequestText = x.reqText()
-	res.Explain = x.exp.finish(xplain.StatusReady, "gRPC request sent", nil)
+	return x.finishChecks(res, "gRPC request sent")
+}
+
+// Cancellation during checks takes precedence over script errors.
+func (x *execCtx) finishChecks(res xrunResult, dec string) xrunResult {
+	res.Checked = true
+	if x.sendCtx.Err() != nil {
+		res.Err = x.withCtxErr(context.Cause(x.sendCtx))
+		res.ScriptErr = nil
+		res.Explain = x.exp.finish(xplain.StatusError, "Request canceled", res.Err)
+		return res
+	}
+	res.Explain = x.exp.finish(xplain.StatusReady, dec, nil)
 	return res
 }
 
@@ -1285,9 +1322,9 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 				val, err := x.eng.evalRTSAssert(ctx, x.doc, rt, expr, pos)
 				if err != nil {
 					errs = append(errs, err)
-					// Avoid reporting the same cancellation again in RunTests.
+					// Skip RunTests after cancellation or timeout to avoid a duplicate error.
 					var abort *rts.AbortError
-					cut = errors.As(err, &abort) && abort.Kind == rts.AbortCanceled
+					cut = errors.As(err, &abort) && (abort.Kind == rts.AbortCanceled || abort.Kind == rts.AbortTimeout)
 					break
 				}
 				out = append(out, scriptapi.TestResult{
@@ -1367,7 +1404,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					locals:  in.Locals,
 					run:     x.run,
 				})
-				if err != nil {
+				if err != nil && x.sendCtx.Err() == nil {
 					return err
 				}
 				x.applyRuntimeGlobals(caps.globals)
@@ -1426,6 +1463,9 @@ func (x *execCtx) finishHTTP(res xexec.HTTPResult) xexec.RequestResult {
 		x.exp.sentHTTP(x.req, res.Response)
 	}
 	if res.Err != nil {
+		if x.sendCtx.Err() != nil {
+			res.Err = x.withCtxErr(res.Err)
+		}
 		if res.ErrStage == xexec.StageCaptures {
 			x.exp.stage(
 				xplain.StageCaptures,
@@ -1455,6 +1495,5 @@ func (x *execCtx) finishHTTP(res xexec.HTTPResult) xexec.RequestResult {
 	out.Tests = res.Tests
 	out.ScriptErr = res.ScriptErr
 	out.RequestText = x.reqText()
-	out.Explain = x.exp.finish(xplain.StatusReady, res.Decision, nil)
-	return out
+	return x.finishChecks(out, res.Decision)
 }
