@@ -20,13 +20,13 @@ type lexer struct {
 	eofSemi bool
 }
 
-// newLexer reads the whole text of f.
+// newLexer returns a lexer for the whole text of f.
 func newLexer(f *File) *lexer {
 	return newLexerAt(f.src, f.Start())
 }
 
-// newLexerAt reads src as a snippet that starts at the line and column of at.
-// Its positions are in at's file.
+// newLexerAt returns a lexer for src, a snippet that starts at the line and
+// column of at. Its positions are in at's file.
 func newLexerAt(src []byte, at Pos) *lexer {
 	ln := at.Line
 	if ln <= 0 {

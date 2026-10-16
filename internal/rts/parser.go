@@ -13,7 +13,7 @@ const (
 )
 
 // controlTarget is one lexically enclosing for or switch. label is empty for
-// unlabeled statements and pos points at the label that opened the target
+// unlabeled statements and pos points at the label that opened the target.
 type controlTarget struct {
 	kind  controlKind
 	label string
@@ -21,7 +21,7 @@ type controlTarget struct {
 }
 
 // stmtLabel is the optional name in front of a for or switch. The zero value
-// means the statement carries no label
+// means the statement carries no label.
 type stmtLabel struct {
 	name string
 	pos  Pos
@@ -294,7 +294,7 @@ func (p *parser) parseIf() Stmt {
 
 // parseLabeled reads "name:" in front of a for or switch. Labels live in their
 // own namespace and decorate nothing else, so there is no general labeled
-// statement and no goto
+// statement and no goto.
 func (p *parser) parseLabeled() Stmt {
 	tok := p.cur
 	if tok.Lit == "_" {
@@ -330,7 +330,7 @@ func (p *parser) popControl() {
 }
 
 // findControl looks up an active label. It is never called with an empty name,
-// which would match the unlabeled targets
+// which would match the unlabeled targets.
 func (p *parser) findControl(label string) *controlTarget {
 	for i := len(p.controls) - 1; i >= 0; i-- {
 		if p.controls[i].label == label {
@@ -350,7 +350,7 @@ func (p *parser) inLoop() bool {
 }
 
 // labelRef reads the optional target of a break or continue. The lexer inserts
-// a semicolon after both keywords, so a label only parses on the same line
+// a semicolon after both keywords, so a label only parses on the same line.
 func (p *parser) labelRef() (token, bool) {
 	if p.cur.K != tokIdent {
 		return token{}, false
@@ -361,7 +361,7 @@ func (p *parser) labelRef() (token, bool) {
 }
 
 // parseSwitch reads both switch forms. A brace right after the keyword means
-// the tagless form, mirroring Go: a dict literal tag has to be parenthesized
+// the tagless form, mirroring Go: a dict literal tag has to be parenthesized.
 func (p *parser) parseSwitch(lb stmtLabel) Stmt {
 	pos := p.expect(tokSwitch).P
 	var tag Expr
@@ -806,7 +806,7 @@ func mulOp(k tokKind) (BinOp, bool) {
 }
 
 // unaryOp maps the word and symbol forms onto the same operator, so not x and
-// !x parse to one node
+// !x parse to one node.
 func unaryOp(k tokKind) (UnOp, bool) {
 	switch k {
 	case tokNot, tokBang:
@@ -854,7 +854,7 @@ func (p *parser) parsePostfix() Expr {
 		case tokDot:
 			pos := p.cur.P
 			p.next()
-			// member access has no quoted spelling, so the fix here is an index
+			// member access has no quoted form, so the fix here is an index
 			if p.cur.K.isKeyword() {
 				p.fail(p.cur.P, fmt.Sprintf(
 					"field name cannot be the reserved word %s, use [%q] instead", p.cur.K, p.cur.K,
@@ -1065,8 +1065,8 @@ func (p *parser) fail(pos Pos, msg string) {
 	panic(&ParseError{Pos: pos, Msg: msg})
 }
 
-// failCur reports a parse error at the current token. A tokIllegal token already
-// carries the lexer's diagnostic (e.g. unexpected '&')
+// failCur reports a parse error at the current token. An illegal token already
+// carries the lexer's diagnostic, such as unexpected '&'.
 func (p *parser) failCur(fallback string) {
 	msg := fallback
 	if p.cur.K == tokIllegal {

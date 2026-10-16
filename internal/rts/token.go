@@ -1,5 +1,6 @@
 package rts
 
+// tokKind is the set of lexical tokens of RTS.
 type tokKind int
 
 const (
@@ -66,17 +67,19 @@ const (
 	tokAutoSemi
 )
 
+// A KeywordClass is a group of reserved words.
 type KeywordClass int
 
 const (
-	KeywordNone KeywordClass = iota
-	KeywordDefault
-	KeywordDecl
-	KeywordControl
-	KeywordLiteral
-	KeywordLogical
+	KeywordNone    KeywordClass = iota // not a reserved word
+	KeywordDefault                     // a reserved word in no other class
+	KeywordDecl                        // export, module, fn, let, const
+	KeywordControl                     // control flow, such as if, for and return
+	KeywordLiteral                     // true, false, null
+	KeywordLogical                     // and, or, not
 )
 
+// A token is a kind, literal and position from the lexer. For an illegal token, Lit is the error message.
 type token struct {
 	K   tokKind
 	Lit string
@@ -204,14 +207,14 @@ func (k tokKind) String() string {
 
 // isKeyword reports whether k is a reserved word. The keyword kinds are
 // contiguous in the enum, so a new one has to be declared between tokExport and
-// tokNot to be recognised here
+// tokNot to be recognized here.
 func (k tokKind) isKeyword() bool {
 	return k >= tokExport && k <= tokNot
 }
 
 // IsKeyword reports whether name is reserved. Hosts that turn user input into an
 // RTS binding check this first, because a reserved name passes an ordinary
-// identifier test but lexes as a keyword, leaving the binding unreferenceable
+// identifier test but lexes as a keyword, so no code could refer to the binding.
 func IsKeyword(name string) bool {
 	_, ok := kw[name]
 	return ok
@@ -243,7 +246,7 @@ var kw = map[string]tokKind{
 	"not":      tokNot,
 }
 
-// KeywordClassOf returns the keyword class for name, or KeywordNone.
+// KeywordClassOf returns the class of name, or KeywordNone when name is not reserved.
 func KeywordClassOf(name string) KeywordClass {
 	k, ok := kw[name]
 	if !ok {

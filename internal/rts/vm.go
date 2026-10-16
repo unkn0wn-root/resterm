@@ -46,7 +46,7 @@ type continueSig struct {
 func (c continueSig) Error() string { return "continue" }
 
 // targets reports whether a break or continue naming label should be consumed
-// by a for or switch named target. An unlabeled signal stops at the first one
+// by a for or switch named target. An unlabeled signal stops at the first one.
 func targets(label, target string) bool {
 	return label == "" || label == target
 }
@@ -203,7 +203,7 @@ func (vm *VM) execBlock(up *Env, exp map[string]Value, b *Block) error {
 
 // execSwitch evaluates the tag once, then walks clauses in source order and
 // runs the first match. The default clause is remembered rather than run in
-// place so it can sit anywhere between the cases
+// place so it can sit anywhere between the cases.
 func (vm *VM) execSwitch(up *Env, exp map[string]Value, s *SwitchStmt) error {
 	var tag Value
 	if s.Tag != nil {
@@ -253,7 +253,7 @@ func (vm *VM) matchCase(env *Env, tagged bool, tag Value, exprs []Expr) (bool, e
 
 // execClause runs a clause body and stops break at the switch. A break naming
 // some outer target keeps going, and so does everything else: continue, return,
-// aborts, and runtime errors
+// aborts, and runtime errors.
 func (vm *VM) execClause(up *Env, exp map[string]Value, label string, body *Block) error {
 	err := vm.execBlock(up, exp, body)
 	if b, ok := err.(breakSig); ok && targets(b.label, label) {
@@ -310,7 +310,7 @@ func (vm *VM) execFor(up *Env, exp map[string]Value, s *ForStmt) error {
 }
 
 // execLoopBlock runs one iteration. A signal aimed at an outer label is handed
-// back as an error so it keeps travelling up through the enclosing statements
+// back as an error so it keeps traveling up through the enclosing statements.
 func (vm *VM) execLoopBlock(
 	env *Env,
 	exp map[string]Value,

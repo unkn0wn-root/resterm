@@ -717,7 +717,7 @@ func TestParseDefaultIsReserved(t *testing.T) {
 	}
 }
 
-// reserving default only closes the bare-name spellings, so data keeps its
+// reserving default only closes the bare-name forms, so data keeps its
 // "default" key through the quoted forms
 func TestParseDefaultAsQuotedKey(t *testing.T) {
 	src := "let a = {\"default\": 1}\nlet b = a[\"default\"]\n"

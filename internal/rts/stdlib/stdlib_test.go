@@ -122,8 +122,8 @@ func TestContainsAndMembershipRejectSameContainer(t *testing.T) {
 	}
 }
 
-// the default(a, b) helper was removed in favour of ??. Dropping it from
-// coreSpec has to clear all three spellings at once, because the prelude and
+// the default(a, b) helper was removed in favor of ??. Dropping it from
+// coreSpec has to clear all three names at once, because the prelude and
 // both namespace objects are built from that one map
 func TestStdlibDoesNotExposeDefault(t *testing.T) {
 	env := New()

@@ -52,6 +52,7 @@ func (p Pos) Source() []byte {
 	return p.file.src
 }
 
+// String returns "path:line:col", or "line:col" when p has no path.
 func (p Pos) String() string {
 	path := p.Path()
 	if path == "" {
@@ -60,11 +61,13 @@ func (p Pos) String() string {
 	return fmt.Sprintf("%s:%d:%d", path, p.Line, p.Col)
 }
 
+// A ParseError is a syntax error at Pos.
 type ParseError struct {
 	Pos Pos
 	Msg string
 }
 
+// Error returns "Pos: Msg", or Msg alone when Pos has no line.
 func (e *ParseError) Error() string {
 	if e.Pos.Line == 0 {
 		return e.Msg
@@ -72,11 +75,13 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Pos.String(), e.Msg)
 }
 
+// A RuntimeError is an error raised at Pos while code runs.
 type RuntimeError struct {
 	Pos Pos
 	Msg string
 }
 
+// Error returns "Pos: Msg", or Msg alone when Pos has no line.
 func (e *RuntimeError) Error() string {
 	if e.Pos.Line == 0 {
 		return e.Msg
@@ -84,20 +89,23 @@ func (e *RuntimeError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Pos.String(), e.Msg)
 }
 
+// An AbortError is a RuntimeError that try cannot catch. Kind says why the run stopped.
 type AbortError struct {
 	*RuntimeError
 	Kind AbortKind
 }
 
+// An UndefinedNameError is the RuntimeError for reading a name that is not defined.
 type UndefinedNameError struct {
 	*RuntimeError
 	Name string
 }
 
+// An AbortKind says why an AbortError stopped the run.
 type AbortKind int
 
 const (
-	AbortScript AbortKind = iota
-	AbortTimeout
-	AbortCanceled
+	AbortScript   AbortKind = iota // the step limit, an unavailable host name, or a call to Abortf
+	AbortTimeout                   // the time limit or the context deadline
+	AbortCanceled                  // a canceled context
 )
