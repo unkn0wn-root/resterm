@@ -196,7 +196,9 @@ func Key(path, key string) string {
 	plain := key != ""
 	for i := 0; plain && i < len(key); i++ {
 		c := key[i]
-		plain = c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || i > 0 && '0' <= c && c <= '9'
+		letter := c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+		digit := '0' <= c && c <= '9'
+		plain = letter || i > 0 && digit
 	}
 	if plain {
 		return path + "." + key
