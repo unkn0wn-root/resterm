@@ -30,7 +30,7 @@ func (e *Engine) EvalRunVars(
 	}
 	env := ResolveEnvironment(src, doc, req)
 	vals, err := e.evalRunVars(ctx, doc, req, env, e.fileDir(doc), execVars{RunScope: sc}, decls)
-	return vals, e.withSource(err, doc)
+	return vals, withSource(err, doc)
 }
 
 // Declarations are evaluated top to bottom against values that are already

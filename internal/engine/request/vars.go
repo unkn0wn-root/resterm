@@ -133,10 +133,7 @@ func (e *Engine) rtsPosForLineCol(doc *restfile.Document, req *restfile.Request,
 // The doc text is attached only to an error that has no source yet. Wrapping
 // an error that already has it adds nothing and repeats the error under its
 // operation in the chain.
-func (e *Engine) withSource(err error, doc *restfile.Document) error {
-	if err == nil || !e.cfg.SourceDiagnostics {
-		return err
-	}
+func withSource(err error, doc *restfile.Document) error {
 	rep := diag.ReportOf(err)
 	if doc == nil || len(doc.Raw) == 0 || len(rep.Items) == 0 || len(rep.Source) > 0 {
 		return err

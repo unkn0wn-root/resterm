@@ -499,7 +499,7 @@ func TestRunRTSPreRequestRejectsResponse(t *testing.T) {
 }
 
 func TestEvalForEachErrorCarriesSource(t *testing.T) {
-	eng := New(engcfg.Config{SourceDiagnostics: true}, nil)
+	eng := New(engcfg.Config{}, nil)
 	src := `### Req
 # @for-each item in missing.value
 GET https://example.com
@@ -556,8 +556,7 @@ func TestRequestErrorShowsItsMessageOnce(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := parser.Parse("api.http", []byte(strings.Join(tt.lines, "\n")+"\n"))
-			st := &stubTransport{}
-			eng := New(engcfg.Config{Client: st.client(), SourceDiagnostics: true}, nil)
+			eng, _ := newStubEngine(t)
 			res, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
 			if err != nil {
 				t.Fatalf("ExecuteWith() error = %v", err)

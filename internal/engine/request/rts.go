@@ -377,7 +377,7 @@ func (e *Engine) evalRTSValue(
 	pos rts.Pos,
 ) (rts.Value, error) {
 	v, err := e.re.Eval(ctx, rt, expr, pos)
-	return v, e.withSource(err, doc)
+	return v, withSource(err, doc)
 }
 
 func (e *Engine) evalRTSAssert(
@@ -388,7 +388,7 @@ func (e *Engine) evalRTSAssert(
 	pos rts.Pos,
 ) (rts.Value, error) {
 	v, err := e.re.EvalAssertion(ctx, rt, expr, pos)
-	return v, e.withSource(err, doc)
+	return v, withSource(err, doc)
 }
 
 func (e *Engine) evalRTSString(
@@ -399,7 +399,7 @@ func (e *Engine) evalRTSString(
 	pos rts.Pos,
 ) (string, error) {
 	s, err := e.re.EvalStr(ctx, rt, expr, pos)
-	return s, e.withSource(err, doc)
+	return s, withSource(err, doc)
 }
 
 func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {

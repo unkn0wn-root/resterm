@@ -192,7 +192,7 @@ func (e *Engine) ExecuteWith(
 	res := xexec.RunRequest(flow{ctx: x})
 	end := time.Now()
 	res.Timing = requestTiming(start, end, res)
-	res.Err = e.withSource(res.Err, doc)
+	res.Err = withSource(res.Err, doc)
 	res = e.redactResult(res, doc, env)
 	if opt.Record {
 		e.record(doc, req, runResult{
@@ -1311,7 +1311,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 		if err == nil {
 			// Load the modules once, so a broken one is reported once.
 			at := x.eng.rtsPosForLine(x.doc, x.req, x.req.LineRange.Start)
-			lerr := x.eng.withSource(x.eng.re.Load(ctx, rt, at), x.doc)
+			lerr := withSource(x.eng.re.Load(ctx, rt, at), x.doc)
 			asserts := x.req.Metadata.Asserts
 			if lerr != nil {
 				asserts = nil

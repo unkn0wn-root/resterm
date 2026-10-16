@@ -1014,7 +1014,7 @@ GET http://example.test
 			}
 			doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(src))
 			st := &stubTransport{}
-			eng := New(engcfg.Config{Client: st.client(), SourceDiagnostics: true}, nil)
+			eng := New(engcfg.Config{Client: st.client()}, nil)
 			res, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
 			if err != nil || res.Err != nil {
 				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)

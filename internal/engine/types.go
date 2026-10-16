@@ -41,7 +41,6 @@ type Config struct {
 	Compare               CompareConfig
 	Registry              *registry.Index
 	Bindings              *bindings.Map
-	SourceDiagnostics     bool
 	MockInspector         mock.Inspector
 }
 

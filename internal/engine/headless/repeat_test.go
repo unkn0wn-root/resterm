@@ -132,7 +132,7 @@ func TestExecuteRequestRejectsNonBooleanPollPredicate(t *testing.T) {
 	if err := parser.Check(doc); err != nil {
 		t.Fatalf("parse request: %v", err)
 	}
-	result, err := New(engine.Config{Client: client, SourceDiagnostics: true}).ExecuteRequest(
+	result, err := New(engine.Config{Client: client}).ExecuteRequest(
 		doc,
 		doc.Requests[0],
 		testSelection(""),
