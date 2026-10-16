@@ -14,7 +14,7 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is a *code-first* API client built around plain `.http`/`.rest` files. You write requests, workflows and local mocks directly in those files instead of configuring everything through forms and dropdowns. The same files work in Resterm's terminal UI during development and with `resterm run` in scripts and CI.
+Resterm is a code-first API client built around plain `.http`/`.rest` files. A request is a few lines of text you can read, diff and keep in git, and the same goes for workflows and local mocks. You send them from the terminal UI while you work, and `resterm run` runs the same files in CI. If your API sits behind an SSH bastion or inside a Kubernetes cluster, Resterm opens the tunnel or port-forward for you.
 
 ## Why Resterm
 
@@ -24,11 +24,10 @@ Resterm is a *code-first* API client built around plain `.http`/`.rest` files. Y
 * **Run locally and in CI.** Use the terminal UI during development and `resterm run` for automation. Export JSON or JUnit reports.
 * **Work across protocols.** Send HTTP, GraphQL, and gRPC requests, and work with WebSocket and SSE streams.
 
-Built-in SSH tunnels and Kubernetes port-forwards let you reach APIs behind a bastion or inside a cluster.
+No account and no telemetry.
 
-No account, no telemetry.
-
-If you want your agent to understand Resterm, point it at the docs. Resterm has no MCP server or built-in AI features and probably never will.
+> [!NOTE]
+> Resterm has no MCP server or built-in AI features. If you want your LLM to understand Resterm, point it at the Markdown docs in [`docs/`](docs/) or at [resterm.app/docs](https://resterm.app/docs/).
 
 ## Screenshots
 
