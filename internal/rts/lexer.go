@@ -14,8 +14,8 @@ type lexer struct {
 	col     int
 	par     int
 	brk     int
-	last    Kind
-	pend    *Tok
+	last    tokKind
+	pend    *token
 	eof     bool
 	eofSemi bool
 }
@@ -41,8 +41,8 @@ func newLexerAt(src []byte, at Pos) *lexer {
 }
 
 // scan returns the next token. At the end of the text it inserts a semicolon
-// after a token that can end a statement, then returns EOF on every call.
-func (l *lexer) scan() Tok {
+// after a token that can end a statement, then returns tokEOF on every call.
+func (l *lexer) scan() token {
 	if l.pend != nil {
 		t := *l.pend
 		l.pend = nil
@@ -54,9 +54,9 @@ func (l *lexer) scan() Tok {
 		if l.eof {
 			if !l.eofSemi && semiOk(l.last) {
 				l.eofSemi = true
-				return Tok{K: AUTO_SEMI, P: l.pos()}
+				return token{K: tokAutoSemi, P: l.pos()}
 			}
-			return Tok{K: EOF, P: l.pos()}
+			return token{K: tokEOF, P: l.pos()}
 		}
 
 		ch := l.peek()
@@ -77,8 +77,8 @@ func (l *lexer) scan() Tok {
 				continue
 			}
 			if semiOk(l.last) {
-				l.last = AUTO_SEMI
-				return Tok{K: AUTO_SEMI, P: p}
+				l.last = tokAutoSemi
+				return token{K: tokAutoSemi, P: p}
 			}
 			continue
 		}
@@ -95,112 +95,112 @@ func (l *lexer) scan() Tok {
 		case '(':
 			l.read()
 			l.par++
-			return l.emit(LPAREN, "(", p)
+			return l.emit(tokLparen, "(", p)
 		case ')':
 			l.read()
 			if l.par > 0 {
 				l.par--
 			}
-			return l.emit(RPAREN, ")", p)
+			return l.emit(tokRparen, ")", p)
 		case '[':
 			l.read()
 			l.brk++
-			return l.emit(LBRACK, "[", p)
+			return l.emit(tokLbrack, "[", p)
 		case ']':
 			l.read()
 			if l.brk > 0 {
 				l.brk--
 			}
-			return l.emit(RBRACK, "]", p)
+			return l.emit(tokRbrack, "]", p)
 		case '{':
 			l.read()
-			return l.emit(LBRACE, "{", p)
+			return l.emit(tokLbrace, "{", p)
 		case '}':
 			l.read()
-			return l.emit(RBRACE, "}", p)
+			return l.emit(tokRbrace, "}", p)
 		case ',':
 			l.read()
-			return l.emit(COMMA, ",", p)
+			return l.emit(tokComma, ",", p)
 		case '.':
 			l.read()
-			return l.emit(DOT, ".", p)
+			return l.emit(tokDot, ".", p)
 		case ';':
 			l.read()
-			return l.emit(SEMI, ";", p)
+			return l.emit(tokSemi, ";", p)
 		case ':':
 			l.read()
-			return l.emit(COLON, ":", p)
+			return l.emit(tokColon, ":", p)
 		case '?':
 			l.read()
 			if l.peek() == '?' {
 				l.read()
-				return l.emit(COALESCE, "??", p)
+				return l.emit(tokCoalesce, "??", p)
 			}
-			return l.emit(QUESTION, "?", p)
+			return l.emit(tokQuestion, "?", p)
 		case '+':
 			l.read()
-			return l.emit(PLUS, "+", p)
+			return l.emit(tokPlus, "+", p)
 		case '-':
 			l.read()
-			return l.emit(MINUS, "-", p)
+			return l.emit(tokMinus, "-", p)
 		case '*':
 			l.read()
-			return l.emit(STAR, "*", p)
+			return l.emit(tokStar, "*", p)
 		case '/':
 			l.read()
-			return l.emit(SLASH, "/", p)
+			return l.emit(tokSlash, "/", p)
 		case '%':
 			l.read()
-			return l.emit(PERCENT, "%", p)
+			return l.emit(tokPercent, "%", p)
 		case '=':
 			l.read()
 			if l.peek() == '=' {
 				l.read()
-				return l.emit(EQ, "==", p)
+				return l.emit(tokEq, "==", p)
 			}
-			return l.emit(ASSIGN, "=", p)
+			return l.emit(tokAssign, "=", p)
 		case '!':
 			l.read()
 			if l.peek() == '=' {
 				l.read()
-				return l.emit(NE, "!=", p)
+				return l.emit(tokNe, "!=", p)
 			}
-			return l.emit(BANG, "!", p)
+			return l.emit(tokBang, "!", p)
 		// there are no bitwise operators, so a lone & or | is a mistyped && or ||
 		case '&':
 			l.read()
 			if l.peek() == '&' {
 				l.read()
-				return l.emit(ANDAND, "&&", p)
+				return l.emit(tokAndAnd, "&&", p)
 			}
 			return l.illegal(p, "unexpected '&'")
 		case '|':
 			l.read()
 			if l.peek() == '|' {
 				l.read()
-				return l.emit(OROR, "||", p)
+				return l.emit(tokOrOr, "||", p)
 			}
 			return l.illegal(p, "unexpected '|'")
 		case '<':
 			l.read()
 			if l.peek() == '=' {
 				l.read()
-				return l.emit(LE, "<=", p)
+				return l.emit(tokLe, "<=", p)
 			}
-			return l.emit(LT, "<", p)
+			return l.emit(tokLt, "<", p)
 		case '>':
 			l.read()
 			if l.peek() == '=' {
 				l.read()
-				return l.emit(GE, ">=", p)
+				return l.emit(tokGe, ">=", p)
 			}
-			return l.emit(GT, ">", p)
+			return l.emit(tokGt, ">", p)
 		case '"', '\'':
 			str, ok := l.scanString()
 			if !ok {
 				return l.illegal(p, "unterminated string")
 			}
-			return l.emit(STRING, str, p)
+			return l.emit(tokString, str, p)
 		}
 
 		if isIdentStart(ch) {
@@ -208,12 +208,12 @@ func (l *lexer) scan() Tok {
 			if k, ok := kw[name]; ok {
 				return l.emit(k, name, p)
 			}
-			return l.emit(IDENT, name, p)
+			return l.emit(tokIdent, name, p)
 		}
 
 		if isDigit(ch) {
 			num := l.scanNumber()
-			return l.emit(NUMBER, num, p)
+			return l.emit(tokNumber, num, p)
 		}
 
 		l.read()
@@ -225,14 +225,14 @@ func (l *lexer) pos() Pos {
 	return Pos{file: l.file, Line: l.line, Col: l.col}
 }
 
-func (l *lexer) emit(k Kind, lit string, p Pos) Tok {
+func (l *lexer) emit(k tokKind, lit string, p Pos) token {
 	l.last = k
-	return Tok{K: k, Lit: lit, P: p}
+	return token{K: k, Lit: lit, P: p}
 }
 
-func (l *lexer) illegal(p Pos, msg string) Tok {
-	l.last = ILLEGAL
-	return Tok{K: ILLEGAL, Lit: msg, P: p}
+func (l *lexer) illegal(p Pos, msg string) token {
+	l.last = tokIllegal
+	return token{K: tokIllegal, Lit: msg, P: p}
 }
 
 func (l *lexer) peek() byte {
@@ -350,20 +350,20 @@ func (l *lexer) scanString() (string, bool) {
 	return string(out), true
 }
 
-func semiOk(k Kind) bool {
+func semiOk(k tokKind) bool {
 	switch k {
-	case IDENT,
-		NUMBER,
-		STRING,
-		KW_TRUE,
-		KW_FALSE,
-		KW_NULL,
-		RPAREN,
-		RBRACK,
-		RBRACE,
-		KW_RETURN,
-		KW_BREAK,
-		KW_CONTINUE:
+	case tokIdent,
+		tokNumber,
+		tokString,
+		tokTrue,
+		tokFalse,
+		tokNull,
+		tokRparen,
+		tokRbrack,
+		tokRbrace,
+		tokReturn,
+		tokBreak,
+		tokContinue:
 		return true
 	default:
 		return false

@@ -1,69 +1,69 @@
 package rts
 
-type Kind int
+type tokKind int
 
 const (
-	EOF Kind = iota
-	ILLEGAL
+	tokEOF tokKind = iota
+	tokIllegal
 
-	IDENT
-	NUMBER
-	STRING
+	tokIdent
+	tokNumber
+	tokString
 
-	KW_EXPORT
-	KW_MODULE
-	KW_FN
-	KW_LET
-	KW_CONST
-	KW_IF
-	KW_ELIF
-	KW_ELSE
-	KW_SWITCH
-	KW_CASE
-	KW_DEFAULT
-	KW_RETURN
-	KW_FOR
-	KW_BREAK
-	KW_CONTINUE
-	KW_RANGE
-	KW_TRY
-	KW_TRUE
-	KW_FALSE
-	KW_NULL
-	KW_AND
-	KW_OR
-	KW_NOT
+	tokExport
+	tokModule
+	tokFn
+	tokLet
+	tokConst
+	tokIf
+	tokElif
+	tokElse
+	tokSwitch
+	tokCase
+	tokDefault
+	tokReturn
+	tokFor
+	tokBreak
+	tokContinue
+	tokRange
+	tokTry
+	tokTrue
+	tokFalse
+	tokNull
+	tokAnd
+	tokOr
+	tokNot
 
-	ASSIGN
-	EQ
-	NE
-	LT
-	LE
-	GT
-	GE
-	PLUS
-	MINUS
-	STAR
-	SLASH
-	PERCENT
+	tokAssign
+	tokEq
+	tokNe
+	tokLt
+	tokLe
+	tokGt
+	tokGe
+	tokPlus
+	tokMinus
+	tokStar
+	tokSlash
+	tokPercent
 	// symbol forms of not, and, or
-	BANG
-	ANDAND
-	OROR
-	COALESCE
-	QUESTION
-	COLON
+	tokBang
+	tokAndAnd
+	tokOrOr
+	tokCoalesce
+	tokQuestion
+	tokColon
 
-	LPAREN
-	RPAREN
-	LBRACK
-	RBRACK
-	LBRACE
-	RBRACE
-	COMMA
-	DOT
-	SEMI
-	AUTO_SEMI
+	tokLparen
+	tokRparen
+	tokLbrack
+	tokRbrack
+	tokLbrace
+	tokRbrace
+	tokComma
+	tokDot
+	tokSemi
+	tokAutoSemi
 )
 
 type KeywordClass int
@@ -77,125 +77,125 @@ const (
 	KeywordLogical
 )
 
-type Tok struct {
-	K   Kind
+type token struct {
+	K   tokKind
 	Lit string
 	P   Pos
 }
 
-func (k Kind) String() string {
+func (k tokKind) String() string {
 	switch k {
-	case EOF:
+	case tokEOF:
 		return "EOF"
-	case ILLEGAL:
+	case tokIllegal:
 		return "ILLEGAL"
-	case IDENT:
+	case tokIdent:
 		return "IDENT"
-	case NUMBER:
+	case tokNumber:
 		return "NUMBER"
-	case STRING:
+	case tokString:
 		return "STRING"
-	case KW_EXPORT:
+	case tokExport:
 		return "export"
-	case KW_MODULE:
+	case tokModule:
 		return "module"
-	case KW_FN:
+	case tokFn:
 		return "fn"
-	case KW_LET:
+	case tokLet:
 		return "let"
-	case KW_CONST:
+	case tokConst:
 		return "const"
-	case KW_IF:
+	case tokIf:
 		return "if"
-	case KW_ELIF:
+	case tokElif:
 		return "elif"
-	case KW_ELSE:
+	case tokElse:
 		return "else"
-	case KW_SWITCH:
+	case tokSwitch:
 		return "switch"
-	case KW_CASE:
+	case tokCase:
 		return "case"
-	case KW_DEFAULT:
+	case tokDefault:
 		return "default"
-	case KW_RETURN:
+	case tokReturn:
 		return "return"
-	case KW_FOR:
+	case tokFor:
 		return "for"
-	case KW_BREAK:
+	case tokBreak:
 		return "break"
-	case KW_CONTINUE:
+	case tokContinue:
 		return "continue"
-	case KW_RANGE:
+	case tokRange:
 		return "range"
-	case KW_TRY:
+	case tokTry:
 		return "try"
-	case KW_TRUE:
+	case tokTrue:
 		return "true"
-	case KW_FALSE:
+	case tokFalse:
 		return "false"
-	case KW_NULL:
+	case tokNull:
 		return "null"
-	case KW_AND:
+	case tokAnd:
 		return "and"
-	case KW_OR:
+	case tokOr:
 		return "or"
-	case KW_NOT:
+	case tokNot:
 		return "not"
-	case ASSIGN:
+	case tokAssign:
 		return "="
-	case EQ:
+	case tokEq:
 		return "=="
-	case NE:
+	case tokNe:
 		return "!="
-	case LT:
+	case tokLt:
 		return "<"
-	case LE:
+	case tokLe:
 		return "<="
-	case GT:
+	case tokGt:
 		return ">"
-	case GE:
+	case tokGe:
 		return ">="
-	case PLUS:
+	case tokPlus:
 		return "+"
-	case MINUS:
+	case tokMinus:
 		return "-"
-	case STAR:
+	case tokStar:
 		return "*"
-	case SLASH:
+	case tokSlash:
 		return "/"
-	case PERCENT:
+	case tokPercent:
 		return "%"
-	case BANG:
+	case tokBang:
 		return "!"
-	case ANDAND:
+	case tokAndAnd:
 		return "&&"
-	case OROR:
+	case tokOrOr:
 		return "||"
-	case COALESCE:
+	case tokCoalesce:
 		return "??"
-	case QUESTION:
+	case tokQuestion:
 		return "?"
-	case COLON:
+	case tokColon:
 		return ":"
-	case LPAREN:
+	case tokLparen:
 		return "("
-	case RPAREN:
+	case tokRparen:
 		return ")"
-	case LBRACK:
+	case tokLbrack:
 		return "["
-	case RBRACK:
+	case tokRbrack:
 		return "]"
-	case LBRACE:
+	case tokLbrace:
 		return "{"
-	case RBRACE:
+	case tokRbrace:
 		return "}"
-	case COMMA:
+	case tokComma:
 		return ","
-	case DOT:
+	case tokDot:
 		return "."
-	case SEMI:
+	case tokSemi:
 		return ";"
-	case AUTO_SEMI:
+	case tokAutoSemi:
 		return "<auto-semi>"
 	default:
 		return "?"
@@ -203,10 +203,10 @@ func (k Kind) String() string {
 }
 
 // isKeyword reports whether k is a reserved word. The keyword kinds are
-// contiguous in the enum, so a new one has to be declared between KW_EXPORT and
-// KW_NOT to be recognised here
-func (k Kind) isKeyword() bool {
-	return k >= KW_EXPORT && k <= KW_NOT
+// contiguous in the enum, so a new one has to be declared between tokExport and
+// tokNot to be recognised here
+func (k tokKind) isKeyword() bool {
+	return k >= tokExport && k <= tokNot
 }
 
 // IsKeyword reports whether name is reserved. Hosts that turn user input into an
@@ -217,30 +217,30 @@ func IsKeyword(name string) bool {
 	return ok
 }
 
-var kw = map[string]Kind{
-	"export":   KW_EXPORT,
-	"module":   KW_MODULE,
-	"fn":       KW_FN,
-	"let":      KW_LET,
-	"const":    KW_CONST,
-	"if":       KW_IF,
-	"elif":     KW_ELIF,
-	"else":     KW_ELSE,
-	"switch":   KW_SWITCH,
-	"case":     KW_CASE,
-	"default":  KW_DEFAULT,
-	"return":   KW_RETURN,
-	"for":      KW_FOR,
-	"break":    KW_BREAK,
-	"continue": KW_CONTINUE,
-	"range":    KW_RANGE,
-	"try":      KW_TRY,
-	"true":     KW_TRUE,
-	"false":    KW_FALSE,
-	"null":     KW_NULL,
-	"and":      KW_AND,
-	"or":       KW_OR,
-	"not":      KW_NOT,
+var kw = map[string]tokKind{
+	"export":   tokExport,
+	"module":   tokModule,
+	"fn":       tokFn,
+	"let":      tokLet,
+	"const":    tokConst,
+	"if":       tokIf,
+	"elif":     tokElif,
+	"else":     tokElse,
+	"switch":   tokSwitch,
+	"case":     tokCase,
+	"default":  tokDefault,
+	"return":   tokReturn,
+	"for":      tokFor,
+	"break":    tokBreak,
+	"continue": tokContinue,
+	"range":    tokRange,
+	"try":      tokTry,
+	"true":     tokTrue,
+	"false":    tokFalse,
+	"null":     tokNull,
+	"and":      tokAnd,
+	"or":       tokOr,
+	"not":      tokNot,
 }
 
 // KeywordClassOf returns the keyword class for name, or KeywordNone.
@@ -252,26 +252,26 @@ func KeywordClassOf(name string) KeywordClass {
 	return keywordClassForKind(k)
 }
 
-func keywordClassForKind(k Kind) KeywordClass {
+func keywordClassForKind(k tokKind) KeywordClass {
 	switch k {
-	case KW_EXPORT, KW_MODULE, KW_FN, KW_LET, KW_CONST:
+	case tokExport, tokModule, tokFn, tokLet, tokConst:
 		return KeywordDecl
-	case KW_IF,
-		KW_ELIF,
-		KW_ELSE,
-		KW_SWITCH,
-		KW_CASE,
-		KW_DEFAULT,
-		KW_RETURN,
-		KW_FOR,
-		KW_BREAK,
-		KW_CONTINUE,
-		KW_RANGE,
-		KW_TRY:
+	case tokIf,
+		tokElif,
+		tokElse,
+		tokSwitch,
+		tokCase,
+		tokDefault,
+		tokReturn,
+		tokFor,
+		tokBreak,
+		tokContinue,
+		tokRange,
+		tokTry:
 		return KeywordControl
-	case KW_TRUE, KW_FALSE, KW_NULL:
+	case tokTrue, tokFalse, tokNull:
 		return KeywordLiteral
-	case KW_AND, KW_OR, KW_NOT:
+	case tokAnd, tokOr, tokNot:
 		return KeywordLogical
 	default:
 		return KeywordDefault

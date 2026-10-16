@@ -4,13 +4,13 @@ import "slices"
 
 import "testing"
 
-func lexKinds(src string) []Kind {
+func lexKinds(src string) []tokKind {
 	lx := newLexer(NewFile("test", []byte(src)))
-	var out []Kind
+	var out []tokKind
 	for {
 		t := lx.scan()
 		out = append(out, t.K)
-		if t.K == EOF {
+		if t.K == tokEOF {
 			return out
 		}
 	}
@@ -19,7 +19,7 @@ func lexKinds(src string) []Kind {
 func TestLexerAutoSemi(t *testing.T) {
 	src := "let a = 1\nlet b = 2\n"
 	k := lexKinds(src)
-	seen := slices.Contains(k, AUTO_SEMI)
+	seen := slices.Contains(k, tokAutoSemi)
 	if !seen {
 		t.Fatalf("expected auto semi")
 	}
@@ -27,7 +27,7 @@ func TestLexerAutoSemi(t *testing.T) {
 
 func TestLexerSwitchKeywords(t *testing.T) {
 	got := lexKinds("switch case default")
-	want := []Kind{KW_SWITCH, KW_CASE, KW_DEFAULT, EOF}
+	want := []tokKind{tokSwitch, tokCase, tokDefault, tokEOF}
 	if !slices.Equal(got, want) {
 		t.Fatalf("kinds: got %v, want %v", got, want)
 	}
@@ -37,7 +37,7 @@ func TestLexerSwitchKeywords(t *testing.T) {
 func TestLexerNoSemiAfterDefault(t *testing.T) {
 	k := lexKinds("switch x {\ndefault:\n  y = 1\n}\n")
 	for i := 0; i < len(k)-1; i++ {
-		if k[i] == KW_DEFAULT && k[i+1] == AUTO_SEMI {
+		if k[i] == tokDefault && k[i+1] == tokAutoSemi {
 			t.Fatalf("unexpected auto semi after default")
 		}
 	}
@@ -61,11 +61,11 @@ func TestKeywordClassSwitchCase(t *testing.T) {
 
 func TestLexerKeepsInAsAnIdentifier(t *testing.T) {
 	got := lexKinds("in object.in {in: 1}")
-	want := []Kind{
-		IDENT,
-		IDENT, DOT, IDENT,
-		LBRACE, IDENT, COLON, NUMBER, RBRACE,
-		AUTO_SEMI, EOF,
+	want := []tokKind{
+		tokIdent,
+		tokIdent, tokDot, tokIdent,
+		tokLbrace, tokIdent, tokColon, tokNumber, tokRbrace,
+		tokAutoSemi, tokEOF,
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("kinds: got %v, want %v", got, want)
@@ -81,10 +81,10 @@ func TestLexerKeepsInAsAnIdentifier(t *testing.T) {
 func TestLexerNoSemiInCaseList(t *testing.T) {
 	k := lexKinds("switch x {\ncase 1,\n2:\n}\n")
 	for i := 0; i < len(k)-1; i++ {
-		if k[i] == COMMA && k[i+1] == AUTO_SEMI {
+		if k[i] == tokComma && k[i+1] == tokAutoSemi {
 			t.Fatalf("unexpected auto semi after case comma")
 		}
-		if k[i] == COLON && k[i+1] == AUTO_SEMI {
+		if k[i] == tokColon && k[i+1] == tokAutoSemi {
 			t.Fatalf("unexpected auto semi after case colon")
 		}
 	}
@@ -92,7 +92,7 @@ func TestLexerNoSemiInCaseList(t *testing.T) {
 
 func TestLexerLogicalSymbols(t *testing.T) {
 	got := lexKinds("!a && b || c")
-	want := []Kind{BANG, IDENT, ANDAND, IDENT, OROR, IDENT, AUTO_SEMI, EOF}
+	want := []tokKind{tokBang, tokIdent, tokAndAnd, tokIdent, tokOrOr, tokIdent, tokAutoSemi, tokEOF}
 	if !slices.Equal(got, want) {
 		t.Fatalf("kinds: got %v, want %v", got, want)
 	}
@@ -100,7 +100,7 @@ func TestLexerLogicalSymbols(t *testing.T) {
 
 func TestLexerBangKeepsNotEqual(t *testing.T) {
 	got := lexKinds("a != !b")
-	want := []Kind{IDENT, NE, BANG, IDENT, AUTO_SEMI, EOF}
+	want := []tokKind{tokIdent, tokNe, tokBang, tokIdent, tokAutoSemi, tokEOF}
 	if !slices.Equal(got, want) {
 		t.Fatalf("kinds: got %v, want %v", got, want)
 	}
@@ -119,7 +119,7 @@ func TestLexerLoneAmpersandOrPipeIsIllegal(t *testing.T) {
 			lx := newLexer(NewFile("test", []byte(tc.src)))
 			lx.scan()
 			tok := lx.scan()
-			if tok.K != ILLEGAL || tok.Lit != tc.msg {
+			if tok.K != tokIllegal || tok.Lit != tc.msg {
 				t.Fatalf("token: got %v %q, want ILLEGAL %q", tok.K, tok.Lit, tc.msg)
 			}
 			if tok.P.Line != 1 || tok.P.Col != 3 {
@@ -132,7 +132,7 @@ func TestLexerLoneAmpersandOrPipeIsIllegal(t *testing.T) {
 func TestLexerNoSemiAfterLogicalSymbol(t *testing.T) {
 	k := lexKinds("let a = b &&\nc ||\nd\n")
 	for i := 0; i < len(k)-1; i++ {
-		if (k[i] == ANDAND || k[i] == OROR) && k[i+1] == AUTO_SEMI {
+		if (k[i] == tokAndAnd || k[i] == tokOrOr) && k[i+1] == tokAutoSemi {
 			t.Fatalf("unexpected auto semi after %v", k[i])
 		}
 	}
@@ -142,7 +142,7 @@ func TestLexerNoSemiInParens(t *testing.T) {
 	src := "let a = (1\n+2)\n"
 	k := lexKinds(src)
 	for i := 0; i < len(k)-1; i++ {
-		if k[i] == NUMBER && k[i+1] == AUTO_SEMI {
+		if k[i] == tokNumber && k[i+1] == tokAutoSemi {
 			t.Fatalf("unexpected auto semi inside parens")
 		}
 	}

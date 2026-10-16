@@ -88,15 +88,15 @@ func modHead(f *File) (string, Pos, error) {
 	for {
 		tok := lx.scan()
 		switch tok.K {
-		case SEMI, AUTO_SEMI:
+		case tokSemi, tokAutoSemi:
 			continue
-		case EOF:
+		case tokEOF:
 			return "", f.Start(), nil
-		case ILLEGAL:
+		case tokIllegal:
 			return "", tok.P, &ParseError{Pos: tok.P, Msg: tok.Lit}
-		case KW_MODULE:
+		case tokModule:
 			nt := lx.scan()
-			if nt.K == ILLEGAL {
+			if nt.K == tokIllegal {
 				return "", nt.P, &ParseError{Pos: nt.P, Msg: nt.Lit}
 			}
 			if nt.K.isKeyword() {
@@ -105,7 +105,7 @@ func modHead(f *File) (string, Pos, error) {
 					Msg: fmt.Sprintf("module name cannot be the reserved word %s", nt.K),
 				}
 			}
-			if nt.K != IDENT {
+			if nt.K != tokIdent {
 				return "", nt.P, &ParseError{Pos: nt.P, Msg: "module requires a name"}
 			}
 			return nt.Lit, tok.P, nil
@@ -126,13 +126,13 @@ func scanMod(lx *lexer) (Pos, bool, error) {
 	for {
 		tok := lx.scan()
 		switch tok.K {
-		case SEMI, AUTO_SEMI:
+		case tokSemi, tokAutoSemi:
 			continue
-		case EOF:
+		case tokEOF:
 			return Pos{}, false, nil
-		case ILLEGAL:
+		case tokIllegal:
 			return tok.P, false, &ParseError{Pos: tok.P, Msg: tok.Lit}
-		case KW_MODULE:
+		case tokModule:
 			return tok.P, true, nil
 		}
 	}

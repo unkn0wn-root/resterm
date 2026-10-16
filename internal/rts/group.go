@@ -8,22 +8,22 @@ func OpenGroup(src string) (closer rune) {
 	var open []rune
 	for {
 		switch lx.scan().K {
-		case EOF:
+		case tokEOF:
 			if len(open) == 0 {
 				return 0
 			}
 			return open[len(open)-1]
-		case LPAREN:
+		case tokLparen:
 			open = append(open, ')')
-		case LBRACK:
+		case tokLbrack:
 			open = append(open, ']')
-		case LBRACE:
+		case tokLbrace:
 			open = append(open, '}')
-		case RPAREN:
+		case tokRparen:
 			open = popGroup(open, ')')
-		case RBRACK:
+		case tokRbrack:
 			open = popGroup(open, ']')
-		case RBRACE:
+		case tokRbrace:
 			open = popGroup(open, '}')
 		}
 	}
