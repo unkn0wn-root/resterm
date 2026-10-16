@@ -134,6 +134,7 @@ func TestRunRTSApplyUsesDocumentGlobalPatchProfiles(t *testing.T) {
 	if err := e.runRTSApply(
 		context.Background(),
 		doc,
+		e.RunDoc(doc).File,
 		req,
 		testEnv("").Resolve(),
 		"",

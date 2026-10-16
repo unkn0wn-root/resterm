@@ -2,6 +2,7 @@ package rts
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,6 +122,117 @@ func TestModCacheChecksARecentModuleByContent(t *testing.T) {
 	}
 }
 
+func TestOldCodeKeepsTheTextItWasReadFrom(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "mod.rts")
+	v1 := "export fn boom() {\n  return null.a\n}\n" +
+		"export fn maker() {\n  fn inner() {\n    return null.b\n  }\n  return inner\n}\n"
+	v2 := "export fn boom() {\n  return null.c\n}\n"
+	v3 := "export fn boom() {\n  return 1 +\n}\n"
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte(v1), mod: time.Unix(10, 0)}}}
+	c := NewCache(fs, testStdlib)
+	ctx := NewCtx(context.Background(), Limits{})
+
+	m1, _, err := c.Load(ctx, "", p)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	inner, err := CallValue(ctx, Pos{}, m1.Exp["maker"], nil)
+	if err != nil {
+		t.Fatalf("maker(): %v", err)
+	}
+	fs.files[p] = &memFile{data: []byte(v2), mod: time.Unix(20, 0)}
+	m2, _, err := c.Load(ctx, "", p)
+	if err != nil {
+		t.Fatalf("load2: %v", err)
+	}
+	fs.files[p] = &memFile{data: []byte(v3), mod: time.Unix(30, 0)}
+	_, _, broken := c.Load(ctx, "", p)
+
+	call := func(fn Value) error {
+		_, err := CallValue(ctx, Pos{}, fn, nil)
+		return err
+	}
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"function from before the edits", call(m1.Exp["boom"]), v1},
+		{"closure from before the edits", call(inner), v1},
+		{"function from after an edit", call(m2.Exp["boom"]), v2},
+		{"edit that does not parse", broken, v3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := string(errPos(t, tt.err).Source()); got != tt.want {
+				t.Fatalf("source = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadErrorsCarryTheModuleText(t *testing.T) {
+	dir := t.TempDir()
+	srcs := map[string]string{
+		"late.rts":  "let x = 1\nmodule late\n",
+		"bare.rts":  "export let x = 1\n",
+		"empty.rts": "",
+		"init.rts":  "module init\n\nlet cfg = null\nlet v = cfg.name\n",
+	}
+	fs := &memFS{files: map[string]*memFile{}}
+	for name, src := range srcs {
+		fs.files[filepath.Join(dir, name)] = &memFile{data: []byte(src), mod: time.Unix(10, 0)}
+	}
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
+	at := NewFile("test", nil).Pos(1, 1)
+	use := func(u Use) error {
+		_, err := e.Eval(t.Context(), EvalConfig{BaseDir: dir, Uses: []Use{u}}, "1", at)
+		return err
+	}
+
+	// Before the alias load below, which leaves bare.rts in the cache.
+	uncached := use(Use{Path: "bare.rts"})
+	if err := use(Use{Path: "bare.rts", Alias: "bare"}); err != nil {
+		t.Fatalf("load with an alias: %v", err)
+	}
+	tests := []struct {
+		name string
+		err  error
+		line int
+		col  int
+		file string
+	}{
+		{"module after a statement", use(Use{Path: "late.rts"}), 2, 1, "late.rts"},
+		{"missing name", uncached, 1, 1, "bare.rts"},
+		{"missing name of a cached module", use(Use{Path: "bare.rts"}), 1, 1, "bare.rts"},
+		{"missing name of an empty file", use(Use{Path: "empty.rts"}), 1, 1, "empty.rts"},
+		{"module setup", use(Use{Path: "init.rts"}), 4, 12, "init.rts"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := errPos(t, tt.err)
+			if p.Line != tt.line || p.Col != tt.col || string(p.Source()) != srcs[tt.file] {
+				t.Fatalf("error at %s with source %q, want %d:%d in %q", p, p.Source(), tt.line, tt.col, srcs[tt.file])
+			}
+		})
+	}
+}
+
+func errPos(t *testing.T, err error) Pos {
+	t.Helper()
+	var re *RuntimeError
+	if errors.As(err, &re) {
+		return re.Pos
+	}
+	var pe *ParseError
+	if errors.As(err, &pe) {
+		return pe.Pos
+	}
+	t.Fatalf("error = %v, want a script error", err)
+	return Pos{}
+}
+
 func TestUseReadsARecentModuleNameFromTheFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.rts")
@@ -128,7 +240,7 @@ func TestUseReadsARecentModuleNameFromTheFile(t *testing.T) {
 	e := NewEng(testStdlib)
 	e.C = NewCache(fs, e.modulePre)
 	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "a.rts"}}}
-	pos := Pos{Path: "test", Line: 1, Col: 1}
+	pos := NewFile("test", nil).Pos(1, 1)
 
 	if v, err := e.Eval(context.Background(), cfg, "abc.x", pos); err != nil || v.N != 1 {
 		t.Fatalf("abc.x = %v, %v, want 1", v.N, err)
@@ -159,7 +271,7 @@ func TestUseChecksAModuleOnceMoreAfterItSettles(t *testing.T) {
 			e := NewEng(testStdlib)
 			e.C = NewCache(fs, e.modulePre)
 			cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "a.rts"}}}
-			pos := Pos{Path: "test", Line: 1, Col: 1}
+			pos := NewFile("test", nil).Pos(1, 1)
 
 			if v, err := e.Eval(context.Background(), cfg, "abc.x", pos); err != nil || v.N != 1 {
 				t.Fatalf("abc.x = %v, %v, want 1", v.N, err)
@@ -197,9 +309,91 @@ func TestUseAliasCollisionBeforeParse(t *testing.T) {
 			{Path: "b.rts"},
 		},
 	}
-	_, err := e.Eval(context.Background(), cfg, "1", Pos{Path: "test", Line: 1, Col: 1})
+	_, err := e.Eval(context.Background(), cfg, "1", NewFile("test", nil).Pos(1, 1))
 	if err == nil || !strings.Contains(err.Error(), "alias already defined: mod") {
 		t.Fatalf("expected alias collision error, got %v", err)
+	}
+}
+
+func TestUseAliasErrorsPointAtTheUse(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "a.rts")
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte("module len\nexport let x = 1"), mod: time.Unix(10, 0)}}}
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
+	at := NewFile("api.http", nil).Pos(3, 1)
+	tests := []struct {
+		name string
+		use  Use
+		msg  string
+	}{
+		{"taken name", Use{Path: "a.rts", Pos: at}, "alias already defined: len"},
+		{"reserved word", Use{Path: "a.rts", Alias: "default", Pos: at}, "alias is a reserved word: default"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := EvalConfig{BaseDir: dir, Uses: []Use{tt.use}}
+			_, err := e.Eval(t.Context(), cfg, "1", NewFile("test", nil).Pos(9, 1))
+			var re *RuntimeError
+			if !errors.As(err, &re) || re.Msg != tt.msg || re.Pos != at {
+				t.Fatalf("error = %v, want %q at %s", err, tt.msg, at)
+			}
+		})
+	}
+}
+
+func TestLoadGivesTheErrorEvalWould(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "bad.rts")
+	src := "module bad\n\nexport fn ok(x) {\n  return x ==\n}\n"
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte(src), mod: time.Unix(10, 0)}}}
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
+	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "bad.rts"}}}
+	pos := NewFile("test", nil).Pos(1, 1)
+
+	err := e.Load(t.Context(), cfg, pos)
+	_, want := e.Eval(t.Context(), cfg, "1", pos)
+	var pe *ParseError
+	if !errors.As(err, &pe) || want == nil || err.Error() != want.Error() {
+		t.Fatalf("Load = %v, want the parse error Eval gives: %v", err, want)
+	}
+	if err := e.Load(t.Context(), EvalConfig{}, pos); err != nil {
+		t.Fatalf("Load with no modules = %v, want nil", err)
+	}
+}
+
+func TestLoadRunsModuleSetupOnce(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cnt.rts")
+	src := `module cnt
+let n = 0
+let inits = 0
+inits = inits + 1
+export fn bump() {
+  n = n + 1
+  return n
+}
+export fn seen() {
+  return inits
+}
+`
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte(src), mod: time.Unix(10, 0)}}}
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
+	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "cnt.rts"}}}
+	pos := NewFile("test", nil).Pos(1, 1)
+
+	if err := e.Load(t.Context(), cfg, pos); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, want := range []float64{1, 2} {
+		if v, err := e.Eval(t.Context(), cfg, "cnt.bump()", pos); err != nil || v.N != want {
+			t.Fatalf("cnt.bump() = %v, %v, want %v", v.N, err, want)
+		}
+	}
+	if v, err := e.Eval(t.Context(), cfg, "cnt.seen()", pos); err != nil || v.N != 1 {
+		t.Fatalf("setup ran %v times, %v, want once", v.N, err)
 	}
 }
 
@@ -246,7 +440,7 @@ func TestEngineRejectsReservedBindings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := NewEng(testStdlib)
 			e.C = NewCache(fs, e.modulePre)
-			_, err := e.Eval(context.Background(), tc.cfg, "1", Pos{Path: "test", Line: 1, Col: 1})
+			_, err := e.Eval(context.Background(), tc.cfg, "1", NewFile("test", nil).Pos(1, 1))
 			if err == nil || !strings.Contains(err.Error(), tc.msg) {
 				t.Fatalf("expected %q, got %v", tc.msg, err)
 			}

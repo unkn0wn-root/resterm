@@ -49,6 +49,17 @@ func JoinLines(s, sep string) string {
 	return strings.Join(out, sep)
 }
 
+// Indent adds prefix to each non-empty line of s.
+func Indent(s, prefix string) string {
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		if ln != "" {
+			lines[i] = prefix + ln
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func AllBlank(lines []string) bool {
 	for _, line := range lines {
 		if strings.TrimSpace(line) != "" {

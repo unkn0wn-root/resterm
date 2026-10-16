@@ -40,6 +40,7 @@ type captureRun struct {
 	ctx     context.Context
 	base    string
 	doc     *restfile.Document
+	file    *rts.File
 	req     *restfile.Request
 	res     *vars.Resolver
 	resp    *scripts.Response
@@ -63,6 +64,7 @@ type captureScope struct {
 	ctx  context.Context
 	base string
 	doc  *restfile.Document
+	file *rts.File
 	req  *restfile.Request
 	env  vars.ResolvedEnv
 	evalScope
@@ -122,6 +124,7 @@ func (e *Engine) applyCaptures(in captureRun) error {
 		ctx:    in.ctx,
 		base:   in.base,
 		doc:    in.doc,
+		file:   in.file,
 		req:    in.req,
 		env:    in.env,
 		locals: in.locals,
@@ -183,6 +186,7 @@ func (e *Engine) refreshCaptureScope(
 
 	ei := ExprInput{
 		Doc:      sc.doc,
+		file:     sc.file,
 		Req:      sc.req,
 		Env:      sc.env,
 		Base:     sc.base,
@@ -260,9 +264,10 @@ func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
 }
 
 func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
-	ps := e.rtsPosForLineCol(in.doc, in.req, in.spec.Line, in.spec.Col)
+	ps := rtsPosForLineCol(in.file, in.req, in.spec.Line, in.spec.Col)
 	rt, err := e.buildRT(rtIn{
 		doc:     in.doc,
+		file:    in.file,
 		req:     in.req,
 		env:     in.env,
 		base:    in.base,

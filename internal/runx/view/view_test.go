@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
@@ -75,6 +76,52 @@ func TestRenderPrettyAlignsTestMessageLines(t *testing.T) {
 		"                  api.http:11: Order 3 missing tracking (3ms)"
 	if !strings.Contains(out, want) {
 		t.Fatalf("output =\n%s\nwant it to contain\n%s", out, want)
+	}
+}
+
+func TestRenderPrettyLeavesBlankLinesEmpty(t *testing.T) {
+	rep := diag.Report{
+		Path:   "two.http",
+		Source: []byte(`# @assert fail("a") ` + "\n"),
+		Items: []diag.Diagnostic{
+			{
+				Class:   diag.ClassScript,
+				Message: "a",
+				Span:    diag.Span{Start: diag.Pos{Path: "two.http", Line: 1, Col: 11}},
+			},
+			{Class: diag.ClassScript, Message: "b"},
+		},
+	}
+	res := runner.Result{
+		Kind:      runner.ResultKindRequest,
+		Name:      "two",
+		Method:    "GET",
+		Target:    "https://example.com/two",
+		ScriptErr: diag.FromReport(rep, errors.New("a")),
+		Tests:     []scriptapi.TestResult{{Name: "t", Message: "a\n\nb"}},
+	}
+
+	out, err := Render(&runner.Report{Results: []runner.Result{res}}, Options{Mode: ModePretty})
+	if err != nil {
+		t.Fatalf("Render(...): %v", err)
+	}
+	want := "Errors:\n" +
+		"  Script error:\n" +
+		"    error[script]: a\n" +
+		"    --> two.http:1:11\n" +
+		"         |\n" +
+		`       1 | # @assert fail("a") ` + "\n" +
+		"         |           ^\n" +
+		"\n" +
+		"    error[script]: b\n" +
+		"    --> two.http\n" +
+		"\n" +
+		"Tests:\n" +
+		"  [FAIL] t - a\n" +
+		"\n" +
+		"             b"
+	if !strings.Contains(out, want) {
+		t.Fatalf("output =\n%q\nwant it to contain\n%q", out, want)
 	}
 }
 

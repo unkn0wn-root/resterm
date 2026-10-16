@@ -21,6 +21,9 @@ type Tests struct {
 	Scripts []restfile.ScriptBlock
 	// Leave Mutator nil so tests cannot change request state.
 	Runtime Runtime
+	// UsesFailed fails every block without running it. Set it when the
+	// caller could not load Runtime.Uses and has reported why.
+	UsesFailed bool
 }
 
 const testSteps = 100_000
@@ -58,6 +61,7 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			err = diag.WrapAsf(diag.ClassScript, err, "rts test script %d", nth)
 		case strings.TrimSpace(src.Text) == "":
 			continue
+		case in.UsesFailed:
 		default:
 			rt := in.Runtime
 			rt.Site = site
@@ -74,11 +78,11 @@ func RunTests(ctx context.Context, eng *Engine, in Tests) ([]scriptapi.TestResul
 			if errors.Is(err, rts.ErrHalt) {
 				err = nil
 			}
-			err = src.annotate(err)
+			err = src.annotate(diagnose(err))
 		}
 		out = append(out, scriptapi.TestResult{
 			Name:    name,
-			Passed:  err == nil && len(msgs) == 0,
+			Passed:  err == nil && len(msgs) == 0 && !in.UsesFailed,
 			Message: strings.Join(msgs, "\n"),
 			Elapsed: time.Since(start),
 		})
@@ -131,8 +135,8 @@ func (o *testObj) reportDef(name string, end error) native.Def {
 			return rts.Null(), err
 		}
 		msg := fmt.Sprintf("line %d", pos.Line)
-		if pos.Path != "" {
-			msg = fmt.Sprintf("%s:%d", filepath.Base(pos.Path), pos.Line)
+		if path := pos.Path(); path != "" {
+			msg = fmt.Sprintf("%s:%d", filepath.Base(path), pos.Line)
 		}
 		if text != "" {
 			msg += ": " + text

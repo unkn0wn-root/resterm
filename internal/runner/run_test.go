@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"cmp"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
@@ -1199,6 +1200,103 @@ func TestRunReportsRTSTestBlocks(t *testing.T) {
 			}
 			if !strings.Contains(res.ScriptError, tt.script) || (tt.script == "") != (res.ScriptError == "") {
 				t.Fatalf("scriptError = %q, want %q", res.ScriptError, tt.script)
+			}
+		})
+	}
+}
+
+func TestRunQuotesTheFailingLine(t *testing.T) {
+	const get = "GET https://example.com/items"
+	// at is the failing line in lines, or in mod when the request uses that module.
+	tests := []struct {
+		name  string
+		lines []string
+		mod   []string
+		at    int
+	}{
+		{
+			name:  "assert",
+			lines: []string{`# @assert len(json.get(response.json(), "items[*]")) == 3`, get},
+			at:    1,
+		},
+		{
+			name:  "capture",
+			lines: []string{`# @capture request first json.get(response.json(), "items[*]")`, get},
+			at:    1,
+		},
+		{name: "template", lines: []string{get + `?x={{= json.get(1, "a[*]") }}`}, at: 1},
+		{
+			name:  "javascript pre-request",
+			lines: []string{"# @script pre-request", "> {%", `> throw new Error("boom");`, "> %}", get},
+			at:    3,
+		},
+		{
+			name:  "rts test",
+			lines: []string{`# @rts test "items"`, `> let x = json.get(response.json(), "items[*]")`, get},
+			at:    2,
+		},
+		{
+			name:  "module",
+			lines: []string{"# @use ./bad.rts", "# @assert bad.get(response.json()) == 1", get},
+			mod:   []string{"module bad", "", "export fn get(v) {", `  return json.get(v, "a[*]")`, "}"},
+			at:    4,
+		},
+	}
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`{"items":[{"id":"a"}]}`)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			quoted := tt.lines
+			if tt.mod != nil {
+				quoted = tt.mod
+				mod := strings.Join(tt.mod, "\n") + "\n"
+				if err := os.WriteFile(filepath.Join(dir, "bad.rts"), []byte(mod), 0o644); err != nil {
+					t.Fatalf("write module: %v", err)
+				}
+			}
+			file := filepath.Join(dir, "items.http")
+			src := strings.Join(append([]string{"# @name items"}, tt.lines...), "\n") + "\n"
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if len(rep.Results) != 1 {
+				t.Fatalf("expected one result, got %+v", rep.Results)
+			}
+			res := rep.Results[0]
+			var text strings.Builder
+			if err := rep.WriteText(&text); err != nil {
+				t.Fatalf("WriteText: %v", err)
+			}
+			line := quoted[tt.at-1]
+			for form, out := range map[string]string{
+				"pretty": diag.Render(cmp.Or(res.Err, res.ScriptErr)),
+				"text":   text.String(),
+			} {
+				if !strings.Contains(out, " | "+line) {
+					t.Errorf("%s output does not quote %q:\n%s", form, line, out)
+				}
 			}
 		})
 	}

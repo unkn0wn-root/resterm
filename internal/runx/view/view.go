@@ -192,7 +192,7 @@ func requestIssues(res runner.Result, st styler) string {
 	}
 	errs := ""
 	if len(parts) > 0 {
-		errs = st.sectionWarn("Errors:") + "\n" + indent(strings.Join(parts, "\n"), "  ")
+		errs = st.sectionWarn("Errors:") + "\n" + str.Indent(strings.Join(parts, "\n"), "  ")
 	}
 
 	tests := testsText(res, st)
@@ -207,7 +207,7 @@ func diagnosticIssue(label string, err error, st styler) string {
 	if body == "" {
 		return st.label(label + ":")
 	}
-	return st.label(label+":") + "\n" + indent(st.value(body, toneWarn), "  ")
+	return st.label(label+":") + "\n" + str.Indent(st.value(body, toneWarn), "  ")
 }
 
 // Parse warnings share this section with the run's own warnings.
@@ -226,7 +226,7 @@ func requestWarnings(res runner.Result, warns []string, st styler) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	return st.sectionCaution("Warnings:") + "\n" + indent(strings.Join(lines, "\n"), "  ")
+	return st.sectionCaution("Warnings:") + "\n" + str.Indent(strings.Join(lines, "\n"), "  ")
 }
 
 func testsText(res runner.Result, st styler) string {
@@ -238,8 +238,12 @@ func testsText(res runner.Result, st styler) string {
 		}
 		if msg := strings.TrimSpace(test.Message); msg != "" {
 			line += " - "
-			pad := "\n" + strings.Repeat(" ", ansi.StringWidth(line))
-			line += st.value(strings.ReplaceAll(termtext.Block(msg), "\n", pad), toneMsg)
+			pad := strings.Repeat(" ", ansi.StringWidth(line))
+			first, rest, ok := strings.Cut(termtext.Block(msg), "\n")
+			if ok {
+				rest = "\n" + str.Indent(rest, pad)
+			}
+			line += st.value(first+rest, toneMsg)
 		}
 		if test.Elapsed > 0 {
 			line += " " + st.value(fmt.Sprintf("(%s)", durationRound(test.Elapsed)), toneDur)
@@ -249,7 +253,7 @@ func testsText(res runner.Result, st styler) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	return st.section("Tests:") + "\n" + indent(strings.Join(lines, "\n"), "  ")
+	return st.section("Tests:") + "\n" + str.Indent(strings.Join(lines, "\n"), "  ")
 }
 
 func testBadge(test scriptapi.TestResult) (string, bool) {

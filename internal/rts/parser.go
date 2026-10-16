@@ -37,19 +37,22 @@ type Parser struct {
 	controls []controlTarget
 }
 
-func NewParserAt(path string, src []byte, pos Pos) *Parser {
-	lx := NewLexerAt(path, src, pos)
+func NewParserAt(src []byte, at Pos) *Parser {
+	lx := NewLexerAt(src, at)
 	p := &Parser{lx: lx}
 	p.cur = lx.Next()
 	p.peek = lx.Next()
 	return p
 }
 
-func ParseModule(path string, src []byte) (m *Mod, err error) {
-	return ParseModuleAt(path, src, Pos{Line: 1, Col: 1})
+// ParseModule parses the whole text of f.
+func ParseModule(f *File) (m *Mod, err error) {
+	return ParseModuleAt(f.src, f.Pos(1, 1))
 }
 
-func ParseModuleAt(path string, src []byte, pos Pos) (m *Mod, err error) {
+// ParseModuleAt parses src as a snippet that starts at the line and column of
+// at. Its positions are in at's file.
+func ParseModuleAt(src []byte, at Pos) (m *Mod, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if pe, ok := r.(*ParseError); ok {
@@ -60,12 +63,14 @@ func ParseModuleAt(path string, src []byte, pos Pos) (m *Mod, err error) {
 			panic(r)
 		}
 	}()
-	p := NewParserAt(path, src, pos)
+	p := NewParserAt(src, at)
 	m = p.parseMod()
 	return m, err
 }
 
-func ParseExpr(path string, line, col int, src string) (ex Expr, err error) {
+// ParseExpr parses src as an expression that starts at the line and column of
+// at. Its positions are in at's file.
+func ParseExpr(src string, at Pos) (ex Expr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if pe, ok := r.(*ParseError); ok {
@@ -76,13 +81,13 @@ func ParseExpr(path string, line, col int, src string) (ex Expr, err error) {
 			panic(r)
 		}
 	}()
-	p := NewParserAt(path, []byte(src), Pos{Line: line, Col: col})
+	p := NewParserAt([]byte(src), at)
 	ex = p.parseExprOnly()
 	return ex, err
 }
 
 func (p *Parser) parseMod() *Mod {
-	m := &Mod{Path: p.lx.path}
+	m := &Mod{File: p.lx.file}
 	for p.cur.K != EOF {
 		if p.isSemi(p.cur.K) {
 			p.next()

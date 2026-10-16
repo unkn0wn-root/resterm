@@ -328,6 +328,50 @@ func TestRunTestsErrorEndsOnlyItsBlock(t *testing.T) {
 	}
 }
 
+func TestRunTestsFailsEachBlockUnrunWhenUsesFailed(t *testing.T) {
+	rt := testRuntime(t)
+	rt.BaseDir = t.TempDir()
+	writeModule(t, rt.BaseDir, "check.rts", `t.error("file ran")`)
+	run := func(blocks ...restfile.ScriptBlock) ([]scriptapi.TestResult, error) {
+		return RunTests(t.Context(), NewEngine(stdlib.New), Tests{
+			Doc:        &restfile.Document{Path: testDoc},
+			Scripts:    blocks,
+			Runtime:    rt,
+			UsesFailed: true,
+		})
+	}
+	file := func(name, path string) restfile.ScriptBlock {
+		return restfile.ScriptBlock{
+			Kind:     restfile.ScriptKindTest,
+			Lang:     restfile.ScriptLangRTS,
+			Name:     name,
+			FilePath: path,
+		}
+	}
+
+	got, err := run(
+		testBlock("one", 2, `t.error("ran")`),
+		testBlock("two", 3, "let x = missing.value"),
+		testBlock("blank", 4, "  "),
+		file("file", "check.rts"),
+	)
+	if err != nil {
+		t.Fatalf("RunTests: %v, want no error of its own", err)
+	}
+	want := []result{{"one", false, ""}, {"two", false, ""}, {"file", false, ""}}
+	if !slices.Equal(results(got), want) {
+		t.Fatalf("results = %+v, want %+v", results(got), want)
+	}
+
+	got, err = run(file("missing", "missing.rts"))
+	if want := []result{{"missing", false, ""}}; !slices.Equal(results(got), want) {
+		t.Fatalf("results = %+v, want %+v", results(got), want)
+	}
+	if err == nil || !strings.Contains(err.Error(), "rts test script 1:") {
+		t.Fatalf("error = %v, want the unreadable file", err)
+	}
+}
+
 func TestRunTestsBindsTOverLocals(t *testing.T) {
 	rt := testRuntime(t)
 	rt.Locals = rts.Local("t", rts.Str("item"))

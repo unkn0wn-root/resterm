@@ -1,7 +1,7 @@
 package rts
 
 type Mod struct {
-	Path    string
+	File    *File
 	Name    string
 	NamePos Pos
 	Stmts   []Stmt

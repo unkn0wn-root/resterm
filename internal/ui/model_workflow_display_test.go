@@ -50,6 +50,23 @@ func TestWorkflowReportIndentsEveryMessageLine(t *testing.T) {
 	}
 }
 
+func TestWorkflowReportLeavesBlankMessageLinesEmpty(t *testing.T) {
+	st := &workflowState{
+		workflow: restfile.Workflow{Name: "wf"},
+		steps:    []workflowStepRuntime{{step: restfile.WorkflowStep{Name: "Orders"}}},
+		results: []workflowStepResult{{
+			Step:    restfile.WorkflowStep{Name: "Orders"},
+			Message: "api.http:11: bad total \n\napi.http:12: next",
+		}},
+	}
+
+	got := (&Model{}).buildWorkflowReport(st)
+	want := "\n    api.http:11: bad total \n\n    api.http:12: next"
+	if !strings.HasSuffix(got, want) {
+		t.Fatalf("report =\n%q\nwant it to end with %q", got, want)
+	}
+}
+
 func TestWorkflowReportEscapesOnlyForDisplay(t *testing.T) {
 	store := histdb.New(filepath.Join(t.TempDir(), "history.db"))
 	m := New(Config{History: store})

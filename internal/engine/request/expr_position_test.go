@@ -18,7 +18,7 @@ func TestExecuteReportsExpressionErrorAtItsPlaceholder(t *testing.T) {
 			return nil, nil
 		}),
 	)
-	eng := New(engcfg.Config{Client: client, SourceDiagnostics: true}, nil)
+	eng := New(engcfg.Config{Client: client}, nil)
 	src := "### Users\n" +
 		"POST https://example.com/users\n" +
 		"\n" +

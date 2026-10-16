@@ -327,7 +327,7 @@ func TestSecretExcerptKeepsTheFailingLine(t *testing.T) {
 				"key-line-1" + eol + "key-line-2 " + leakedSecret + " {{missing}}" + eol
 			doc := parser.Parse("secrets.http", []byte(source))
 
-			eng := New(engine.Config{SourceDiagnostics: true}, nil)
+			eng := New(engine.Config{}, nil)
 			res, err := eng.ExecuteWith(doc, doc.Requests[0], env, ExecOptions{})
 			if err != nil {
 				t.Fatalf("ExecuteWith() error = %v", err)

@@ -164,7 +164,7 @@ func TestQueryHelpersRejectValuesOutsideCardinalityShape(t *testing.T) {
 
 func evalErr(t *testing.T, ctx *rts.Ctx, src string) error {
 	t.Helper()
-	mod, err := rts.ParseModule("test", []byte("export let __v = "+src))
+	mod, err := rts.ParseModule(rts.NewFile("test", []byte("export let __v = "+src)))
 	if err != nil {
 		t.Fatalf("parse %s: %v", src, err)
 	}

@@ -263,7 +263,7 @@ func (d *fakeDep) CollectVariables(
 // Number evaluations so tests can spot a value that was evaluated again.
 func (d *fakeDep) EvalRunVars(
 	ctx context.Context,
-	doc *restfile.Document,
+	doc request.RunDoc,
 	req *restfile.Request,
 	env vars.Environment,
 	sc request.RunScope,
@@ -321,7 +321,7 @@ func (d *fakeDep) ExecuteWith(
 
 func (d *fakeDep) EvalCondition(
 	ctx context.Context,
-	doc *restfile.Document,
+	doc request.RunDoc,
 	req *restfile.Request,
 	env vars.Environment,
 	base string,
@@ -344,7 +344,7 @@ func (d *fakeDep) EvalCondition(
 
 func (d *fakeDep) EvalForEachItems(
 	ctx context.Context,
-	doc *restfile.Document,
+	doc request.RunDoc,
 	req *restfile.Request,
 	env vars.Environment,
 	base string,
@@ -372,8 +372,8 @@ func (d *fakeDep) EvalValue(ctx context.Context, in request.EvalInput) (rts.Valu
 	}
 }
 
-func (d *fakeDep) PosForLine(doc *restfile.Document, req *restfile.Request, line int) rts.Pos {
-	return rts.Pos{Path: "test", Line: line, Col: 1}
+func (d *fakeDep) RunDoc(doc *restfile.Document) request.RunDoc {
+	return request.RunDoc{Doc: doc, File: rts.NewFile("test", nil)}
 }
 
 func (d *fakeDep) ValueString(ctx context.Context, pos rts.Pos, v rts.Value) (string, error) {

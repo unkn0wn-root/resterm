@@ -19,7 +19,7 @@ type RunScope struct {
 // EvalRunVars returns the new values alongside those already in sc.RunVars.
 func (e *Engine) EvalRunVars(
 	ctx context.Context,
-	doc *restfile.Document,
+	d RunDoc,
 	req *restfile.Request,
 	src vars.Environment,
 	sc RunScope,
@@ -28,9 +28,9 @@ func (e *Engine) EvalRunVars(
 	if len(decls) == 0 {
 		return sc.RunVars, nil
 	}
-	env := ResolveEnvironment(src, doc, req)
-	vals, err := e.evalRunVars(ctx, doc, req, env, e.fileDir(doc), execVars{RunScope: sc}, decls)
-	return vals, e.withSource(err, doc)
+	env := ResolveEnvironment(src, d.Doc, req)
+	vals, err := e.evalRunVars(ctx, d.Doc, d.File, req, env, e.fileDir(d.Doc), execVars{RunScope: sc}, decls)
+	return vals, withSource(err, d.Doc)
 }
 
 // Declarations are evaluated top to bottom against values that are already
@@ -39,6 +39,7 @@ func (e *Engine) EvalRunVars(
 func (e *Engine) evalRunVars(
 	ctx context.Context,
 	doc *restfile.Document,
+	file *rts.File,
 	req *restfile.Request,
 	env vars.ResolvedEnv,
 	base string,
@@ -49,7 +50,7 @@ func (e *Engine) evalRunVars(
 	out := run.RunVars.Clone()
 	for _, d := range decls {
 		run.RunVars = out
-		res := e.buildResolver(ctx, doc, req, env, base, globs, rts.Locals{}, run)
+		res := e.buildResolver(ctx, doc, file, req, env, base, globs, rts.Locals{}, run)
 		val, err := res.ExpandTemplatesAt(d.Value, vars.ExprPos{Path: e.filePath(doc), Line: d.Line, Col: d.Col})
 		if err != nil {
 			return vars.NameMap[string]{}, diag.WrapAs(diag.ClassScript, err, directive.RunVarTag+" "+d.Name)

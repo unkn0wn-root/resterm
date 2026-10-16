@@ -68,7 +68,10 @@ func (r responseRenderer) formatTestSummary(
 	builder.WriteString(r.stats.Heading.Render("Tests:") + "\n")
 	if scriptErr != nil {
 		for _, l := range diag.Lines(diag.ReportOf(scriptErr)) {
-			builder.WriteString("  " + r.errStyles.line(l) + "\n")
+			if l.Kind != diag.LineBlank {
+				builder.WriteString("  " + r.errStyles.line(l))
+			}
+			builder.WriteString("\n")
 		}
 	}
 	for _, result := range results {
@@ -88,10 +91,13 @@ func (r responseRenderer) formatTestSummary(
 		if msg := strings.TrimSpace(result.Message); msg != "" {
 			line.WriteString(" - ")
 			// Render each line separately to avoid lipgloss padding the whole block.
-			pad := "\n" + strings.Repeat(" ", lipgloss.Width(line.String()))
+			pad := strings.Repeat(" ", lipgloss.Width(line.String()))
 			for i, l := range strings.Split(termtext.Block(msg), "\n") {
 				if i > 0 {
-					line.WriteString(pad)
+					line.WriteString("\n")
+					if l != "" {
+						line.WriteString(pad)
+					}
 				}
 				line.WriteString(r.stats.Message.Render(l))
 			}

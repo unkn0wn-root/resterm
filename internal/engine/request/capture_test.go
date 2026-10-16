@@ -62,6 +62,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	resolver := eng.buildResolver(
 		context.Background(),
 		doc,
+		eng.RunDoc(doc).File,
 		req,
 		testEnv("dev").Resolve(),
 		"",
@@ -1015,6 +1016,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	resolver := eng.buildResolver(
 		context.Background(),
 		doc,
+		eng.RunDoc(doc).File,
 		req,
 		testEnv("dev").Resolve(),
 		"",

@@ -6,7 +6,7 @@ import (
 
 type Lexer struct {
 	src     []byte
-	path    string
+	file    *File
 	i       int
 	start   int // byte offset of the current token
 	line    int
@@ -19,21 +19,24 @@ type Lexer struct {
 	eofSemi bool
 }
 
-func NewLexer(path string, src []byte) *Lexer {
-	return NewLexerAt(path, src, Pos{Line: 1, Col: 1})
+// NewLexer reads the whole text of f.
+func NewLexer(f *File) *Lexer {
+	return NewLexerAt(f.src, f.Pos(1, 1))
 }
 
-func NewLexerAt(path string, src []byte, pos Pos) *Lexer {
-	ln := pos.Line
+// NewLexerAt reads src as a snippet that starts at the line and column of at.
+// Its positions are in at's file.
+func NewLexerAt(src []byte, at Pos) *Lexer {
+	ln := at.Line
 	if ln <= 0 {
 		ln = 1
 	}
 
-	cl := pos.Col
+	cl := at.Col
 	if cl <= 0 {
 		cl = 1
 	}
-	return &Lexer{src: src, path: path, line: ln, col: cl}
+	return &Lexer{src: src, file: at.file, line: ln, col: cl}
 }
 
 func (l *Lexer) Next() Tok {
@@ -216,7 +219,7 @@ func (l *Lexer) Next() Tok {
 }
 
 func (l *Lexer) pos() Pos {
-	return Pos{Path: l.path, Line: l.line, Col: l.col}
+	return Pos{file: l.file, Line: l.line, Col: l.col}
 }
 
 func (l *Lexer) emit(k Kind, lit string, p Pos) Tok {

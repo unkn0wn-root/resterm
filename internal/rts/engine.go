@@ -28,6 +28,7 @@ func defaultLimits() Limits {
 type Use struct {
 	Path  string
 	Alias string
+	Pos   Pos
 }
 
 // EvalConfig describes language-level inputs to one evaluation. Bindings are
@@ -96,7 +97,7 @@ func (e *Eng) Eval(ctx context.Context, cfg EvalConfig, src string, pos Pos) (Va
 		env.DefConst(k, v)
 	}
 
-	ex, err := ParseExpr(pos.Path, pos.Line, pos.Col, src)
+	ex, err := ParseExpr(src, pos)
 	if err != nil {
 		return Null(), err
 	}
@@ -112,6 +113,15 @@ func (e *Eng) Eval(ctx context.Context, cfg EvalConfig, src string, pos Pos) (Va
 		return Null(), err
 	}
 	return v, nil
+}
+
+// Load loads cfg.Uses as Eval would, without evaluating anything.
+func (e *Eng) Load(ctx context.Context, cfg EvalConfig, pos Pos) error {
+	if e == nil {
+		return fmt.Errorf("nil engine")
+	}
+	_, _, err := e.prepare(ctx, cfg, pos)
+	return err
 }
 
 func (e *Eng) EvalStr(ctx context.Context, cfg EvalConfig, src string, pos Pos) (string, error) {
@@ -131,7 +141,7 @@ func (e *Eng) ExecModule(ctx context.Context, cfg EvalConfig, src string, pos Po
 	if err != nil {
 		return nil, err
 	}
-	mod, err := ParseModuleAt(pos.Path, []byte(src), pos)
+	mod, err := ParseModuleAt([]byte(src), pos)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +201,7 @@ func (e *Eng) buildPre(cx *Ctx, cfg EvalConfig, pos Pos) (map[string]Value, erro
 			return nil, err
 		}
 	}
-	if err := e.addUses(cx, cfg, p, pos); err != nil {
+	if err := e.addUses(cx, cfg, p); err != nil {
 		return nil, err
 	}
 	if err := p.overlayLocals(cx, pos, cfg.Locals); err != nil {
@@ -203,8 +213,8 @@ func (e *Eng) buildPre(cx *Ctx, cfg EvalConfig, pos Pos) (map[string]Value, erro
 	return p.values, nil
 }
 
-func (e *Eng) addUses(cx *Ctx, cfg EvalConfig, p pre, pos Pos) error {
-	uses, err := e.resolveUses(cx, cfg, p.values, pos)
+func (e *Eng) addUses(cx *Ctx, cfg EvalConfig, p pre) error {
+	uses, err := e.resolveUses(cx, cfg, p.values)
 	if err != nil {
 		return err
 	}

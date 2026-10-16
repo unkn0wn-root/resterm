@@ -39,14 +39,14 @@ func (e *Engine) rtsReq(req *restfile.Request) (*rtshost.Request, error) {
 	return out, nil
 }
 
-func (e *Engine) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Use {
+func rtsUses(doc *restfile.Document, file *rts.File, req *restfile.Request) []rts.Use {
 	var out []rts.Use
 	if doc != nil {
 		for _, spec := range doc.Uses {
 			path := strings.TrimSpace(spec.Path)
 			alias := strings.TrimSpace(spec.Alias)
 			if path != "" {
-				out = append(out, rts.Use{Path: path, Alias: alias})
+				out = append(out, rts.Use{Path: path, Alias: alias, Pos: rtsPosForLine(file, req, spec.Line)})
 			}
 		}
 	}
@@ -55,7 +55,7 @@ func (e *Engine) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Us
 			path := strings.TrimSpace(spec.Path)
 			alias := strings.TrimSpace(spec.Alias)
 			if path != "" {
-				out = append(out, rts.Use{Path: path, Alias: alias})
+				out = append(out, rts.Use{Path: path, Alias: alias, Pos: rtsPosForLine(file, req, spec.Line)})
 			}
 		}
 	}
@@ -169,8 +169,9 @@ func (e *Engine) storedScope(
 }
 
 type rtIn struct {
-	doc *restfile.Document
-	req *restfile.Request
+	doc  *restfile.Document
+	file *rts.File
+	req  *restfile.Request
 	// buildRT uses env, globals, and secrets to prepare the scope.
 	// buildRTWithScope receives a prepared scope and ignores them.
 	env     vars.ResolvedEnv
@@ -251,7 +252,7 @@ func (e *Engine) buildRTWithScope(in rtIn, prep rtshost.PreparedScope) (rtshost.
 		BaseDir:     base,
 		AllowRandom: true,
 		Site:        in.site,
-		Uses:        e.rtsUses(in.doc, in.req),
+		Uses:        rtsUses(in.doc, in.file, in.req),
 		Extensions:  e.rtsExtensions(),
 		Locals:      in.locals,
 	}, nil
@@ -270,6 +271,7 @@ func (e *Engine) rtsExtensions() rts.Extensions {
 // ExprInput contains the request data available to a {{= expr }} expression.
 type ExprInput struct {
 	Doc      *restfile.Document
+	file     *rts.File
 	Req      *restfile.Request
 	Env      vars.ResolvedEnv
 	Base     string
@@ -284,7 +286,7 @@ type ExprInput struct {
 // EvalInput is one expression evaluation. Expr is the source to evaluate, Site
 // is the directive text it came from, used in diagnostics.
 type EvalInput struct {
-	Doc     *restfile.Document
+	RunDoc
 	Req     *restfile.Request
 	Env     vars.ResolvedEnv
 	Base    string
@@ -334,6 +336,7 @@ func (e *Engine) ExprEvalWithOptions(
 		}
 		rt, err := e.buildRTWithScope(rtIn{
 			doc:     in.Doc,
+			file:    in.file,
 			req:     in.Req,
 			base:    in.Base,
 			vars:    vv,
@@ -347,13 +350,11 @@ func (e *Engine) ExprEvalWithOptions(
 		if err != nil {
 			return "", err
 		}
-		return e.evalRTSString(
-			ctx,
-			in.Doc,
-			rt,
-			expr,
-			rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col},
-		)
+		at := in.file.Pos(pos.Line, pos.Col)
+		if at.Path() != pos.Path {
+			at = docFile(in.Doc, pos.Path).Pos(pos.Line, pos.Col)
+		}
+		return e.evalRTSString(ctx, in.Doc, rt, expr, at)
 	}
 }
 
@@ -377,7 +378,7 @@ func (e *Engine) evalRTSValue(
 	pos rts.Pos,
 ) (rts.Value, error) {
 	v, err := e.re.Eval(ctx, rt, expr, pos)
-	return v, e.withSource(err, doc)
+	return v, withSource(err, doc)
 }
 
 func (e *Engine) evalRTSAssert(
@@ -388,7 +389,7 @@ func (e *Engine) evalRTSAssert(
 	pos rts.Pos,
 ) (rts.Value, error) {
 	v, err := e.re.EvalAssertion(ctx, rt, expr, pos)
-	return v, e.withSource(err, doc)
+	return v, withSource(err, doc)
 }
 
 func (e *Engine) evalRTSString(
@@ -399,7 +400,7 @@ func (e *Engine) evalRTSString(
 	pos rts.Pos,
 ) (string, error) {
 	s, err := e.re.EvalStr(ctx, rt, expr, pos)
-	return s, e.withSource(err, doc)
+	return s, withSource(err, doc)
 }
 
 func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, error) {
@@ -409,6 +410,7 @@ func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, err
 	}
 	rt, err := e.buildRT(rtIn{
 		doc:     in.Doc,
+		file:    in.File,
 		req:     in.Req,
 		env:     in.Env,
 		base:    in.Base,
@@ -423,10 +425,6 @@ func (e *Engine) rtsEvalValue(ctx context.Context, in EvalInput) (rts.Value, err
 		return rts.Null(), err
 	}
 	return e.evalRTSValue(ctx, in.Doc, rt, in.Expr, in.Pos)
-}
-
-func (e *Engine) PosForLine(doc *restfile.Document, req *restfile.Request, line int) rts.Pos {
-	return e.rtsPosForLine(doc, req, line)
 }
 
 func (e *Engine) CollectVariables(
@@ -451,7 +449,7 @@ type ForEachSpec struct {
 
 func (e *Engine) EvalCondition(
 	ctx context.Context,
-	doc *restfile.Document,
+	d RunDoc,
 	req *restfile.Request,
 	src vars.Environment,
 	base string,
@@ -459,13 +457,14 @@ func (e *Engine) EvalCondition(
 	vv map[string]string,
 	locals rts.Locals,
 ) (bool, string, error) {
-	env := ResolveEnvironment(src, doc, req)
-	return e.evalCondition(ctx, doc, req, env, base, spec, e.storedScope(doc, env, vv), locals)
+	env := ResolveEnvironment(src, d.Doc, req)
+	return e.evalCondition(ctx, d.Doc, d.File, req, env, base, spec, e.storedScope(d.Doc, env, vv), locals)
 }
 
 func (e *Engine) evalCondition(
 	ctx context.Context,
 	doc *restfile.Document,
+	file *rts.File,
 	req *restfile.Request,
 	env vars.ResolvedEnv,
 	base string,
@@ -483,13 +482,13 @@ func (e *Engine) evalCondition(
 	tag := spec.Directive().Tag()
 	flat := str.FoldLines(expr)
 	val, err := e.rtsEvalValue(ctx, EvalInput{
-		Doc:     doc,
+		RunDoc:  RunDoc{Doc: doc, File: file},
 		Req:     req,
 		Env:     env,
 		Base:    base,
 		Expr:    expr,
 		Site:    tag + " " + flat,
-		Pos:     e.rtsPosForLineCol(doc, req, spec.Line, spec.Col),
+		Pos:     rtsPosForLineCol(file, req, spec.Line, spec.Col),
 		Vars:    sc.vars,
 		Locals:  locals,
 		globals: sc.globals,
@@ -507,7 +506,7 @@ func (e *Engine) evalCondition(
 
 func (e *Engine) EvalForEachItems(
 	ctx context.Context,
-	doc *restfile.Document,
+	d RunDoc,
 	req *restfile.Request,
 	src vars.Environment,
 	base string,
@@ -519,16 +518,16 @@ func (e *Engine) EvalForEachItems(
 	if expr == "" {
 		return nil, fmt.Errorf("@for-each expression missing")
 	}
-	env := ResolveEnvironment(src, doc, req)
-	sc := e.storedScope(doc, env, vv)
+	env := ResolveEnvironment(src, d.Doc, req)
+	sc := e.storedScope(d.Doc, env, vv)
 	val, err := e.rtsEvalValue(ctx, EvalInput{
-		Doc:     doc,
+		RunDoc:  d,
 		Req:     req,
 		Env:     env,
 		Base:    base,
 		Expr:    expr,
 		Site:    directive.ForEach.Tag() + " " + str.FoldLines(expr),
-		Pos:     e.rtsPosForLine(doc, req, spec.Line),
+		Pos:     d.At(req, spec.Line),
 		Vars:    sc.vars,
 		Locals:  locals,
 		globals: sc.globals,
@@ -550,6 +549,7 @@ func (e *Engine) ValueString(ctx context.Context, pos rts.Pos, v rts.Value) (str
 func (e *Engine) evaluateResponsePredicate(
 	ctx context.Context,
 	doc *restfile.Document,
+	file *rts.File,
 	req *restfile.Request,
 	env vars.ResolvedEnv,
 	base string,
@@ -564,6 +564,7 @@ func (e *Engine) evaluateResponsePredicate(
 	}
 	rt, err := e.buildRT(rtIn{
 		doc:     doc,
+		file:    file,
 		req:     req,
 		env:     env,
 		base:    base,
@@ -584,7 +585,7 @@ func (e *Engine) evaluateResponsePredicate(
 		doc,
 		rt,
 		predicate.Expression,
-		e.rtsPosForLineCol(doc, req, predicate.Line, predicate.Col),
+		rtsPosForLineCol(file, req, predicate.Line, predicate.Col),
 	)
 	if err != nil {
 		return false, err
@@ -606,12 +607,23 @@ func (e *Engine) RunPreRequest(
 	globals vars.Globals,
 ) (prerequest.Output, error) {
 	sc := newEvalScope(vv, globals)
-	return e.runRTSPreRequest(ctx, doc, req, ResolveEnvironment(env, doc, req), base, sc, locals, nil)
+	return e.runRTSPreRequest(
+		ctx,
+		doc,
+		e.RunDoc(doc).File,
+		req,
+		ResolveEnvironment(env, doc, req),
+		base,
+		sc,
+		locals,
+		nil,
+	)
 }
 
 func (e *Engine) runRTSPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,
+	file *rts.File,
 	req *restfile.Request,
 	env vars.ResolvedEnv,
 	base string,
@@ -635,6 +647,7 @@ func (e *Engine) runRTSPreRequest(
 	}
 	rt, err := e.buildRT(rtIn{
 		doc:     doc,
+		file:    file,
 		req:     req,
 		env:     env,
 		base:    base,
@@ -920,7 +933,7 @@ func (e *Engine) parseApplyAuth(
 	spec := &restfile.AuthSpec{
 		Type:       restfile.AuthKind(typ),
 		Params:     pm,
-		SourcePath: pos.Path,
+		SourcePath: pos.Path(),
 		Written:    true,
 	}
 	if bad := spec.UnknownParams(); len(bad) > 0 {
@@ -1047,6 +1060,7 @@ type applyExpr struct {
 
 func (e *Engine) applyExprs(
 	doc *restfile.Document,
+	file *rts.File,
 	req *restfile.Request,
 	sp restfile.ApplySpec,
 	idx int,
@@ -1062,9 +1076,9 @@ func (e *Engine) applyExprs(
 			if ex == "" {
 				return nil, fmt.Errorf("@apply use=%q has an empty expression", name)
 			}
-			ps := e.rtsPosForLineCol(doc, req, pf.Line, pf.Col)
-			if pf.SourcePath != "" {
-				ps.Path = pf.SourcePath
+			ps := rtsPosForLineCol(file, req, pf.Line, pf.Col)
+			if pf.SourcePath != "" && pf.SourcePath != ps.Path() {
+				ps = rtsPosForLineCol(docFile(doc, pf.SourcePath), req, pf.Line, pf.Col)
 			}
 			out = append(out, applyExpr{
 				ex: ex,
@@ -1078,7 +1092,7 @@ func (e *Engine) applyExprs(
 	if ex == "" {
 		return nil, nil
 	}
-	ps := e.rtsPosForLineCol(doc, req, sp.Line, sp.Col)
+	ps := rtsPosForLineCol(file, req, sp.Line, sp.Col)
 	return []applyExpr{{
 		ex: ex,
 		ps: ps,
@@ -1096,6 +1110,7 @@ func (e *Engine) findPatchProfile(
 func (e *Engine) runRTSApply(
 	ctx context.Context,
 	doc *restfile.Document,
+	file *rts.File,
 	req *restfile.Request,
 	env vars.ResolvedEnv,
 	base string,
@@ -1110,7 +1125,7 @@ func (e *Engine) runRTSApply(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		exprs, err := e.applyExprs(doc, req, spec, idx)
+		exprs, err := e.applyExprs(doc, file, req, spec, idx)
 		if err != nil {
 			return err
 		}
@@ -1119,7 +1134,7 @@ func (e *Engine) runRTSApply(
 				return err
 			}
 			val, err := e.rtsEvalValue(ctx, EvalInput{
-				Doc:     doc,
+				RunDoc:  RunDoc{Doc: doc, File: file},
 				Req:     req,
 				Env:     env,
 				Base:    base,
@@ -1156,5 +1171,5 @@ func (e *Engine) ApplyPatches(
 	locals rts.Locals,
 ) error {
 	env := ResolveEnvironment(src, doc, req)
-	return e.runRTSApply(ctx, doc, req, env, base, e.storedScope(doc, env, vv), locals)
+	return e.runRTSApply(ctx, doc, e.RunDoc(doc).File, req, env, base, e.storedScope(doc, env, vv), locals)
 }

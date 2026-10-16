@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var shadowPos = Pos{Path: "test", Line: 1, Col: 1}
+var shadowPos = NewFile("test", nil).Pos(1, 1)
 
 func TestLocalsShadowEveryEarlierBindingLayer(t *testing.T) {
 	e := NewEng(testStdlib)

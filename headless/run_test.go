@@ -151,6 +151,41 @@ func TestRunMasksSecretsInEffectiveTarget(t *testing.T) {
 	}
 }
 
+func TestRunMasksSecretsInTheQuotedLine(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"items":[{"id":"a"}]}`); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	src := "# @file-secret key file-secret-42\n# @name leak\n" +
+		"# @assert json.get(response.json(), \"items[*]\") == \"file-secret-42\"\nGET " + srv.URL + "\n"
+	rep, err := Run(t.Context(), Options{
+		Source: Source{Path: filepath.Join(t.TempDir(), "leak.http"), Content: []byte(src)},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if rep.Failed != 1 || len(rep.Results) != 1 {
+		t.Fatalf("report = %+v, want one failed request", rep)
+	}
+	want := `3 | # @assert json.get(response.json(), "items[*]") == "•••"`
+	if got := rep.Results[0].ScriptErrorDetail; !strings.Contains(got, want) {
+		t.Fatalf("script error detail does not quote %q:\n%s", want, got)
+	}
+
+	var out strings.Builder
+	for _, f := range []Format{Text, JSON, JUnit} {
+		if err := rep.Encode(&out, f); err != nil {
+			t.Fatalf("Encode(%v) error = %v", f, err)
+		}
+	}
+	if strings.Contains(out.String(), "file-secret-42") {
+		t.Fatalf("report contains the secret:\n%s", out.String())
+	}
+}
+
 func TestRunSendsSchemelessTargetThroughTheParser(t *testing.T) {
 	tests := []struct {
 		name string

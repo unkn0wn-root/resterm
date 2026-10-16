@@ -10,7 +10,7 @@ import (
 )
 
 func evalExpr(t *testing.T, src string) Value {
-	ex, err := ParseExpr("test", 1, 1, src)
+	ex, err := ParseExpr(src, NewFile("test", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("parse expr: %v", err)
 	}
@@ -28,7 +28,7 @@ func evalExpr(t *testing.T, src string) Value {
 }
 
 func execModule(t *testing.T, src string) *Comp {
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -45,7 +45,7 @@ func execModule(t *testing.T, src string) *Comp {
 
 func execModuleErr(t *testing.T, src string, lim Limits) error {
 	t.Helper()
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestEvalBasic(t *testing.T) {
 }
 
 func TestListIndexRequiresInteger(t *testing.T) {
-	ex, err := ParseExpr("test", 1, 1, "[10,20][1.2]")
+	ex, err := ParseExpr("[10,20][1.2]", NewFile("test", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("parse expr: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestListIndexRequiresInteger(t *testing.T) {
 }
 
 func TestDictLiteralChecksKeyStringLimit(t *testing.T) {
-	ex, err := ParseExpr("test", 1, 1, `{"ab": 1}`)
+	ex, err := ParseExpr(`{"ab": 1}`, NewFile("test", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("ParseExpr: %v", err)
 	}
@@ -413,7 +413,7 @@ let truthy = 0 ? 0 : 5
 
 func TestEvalFnCall(t *testing.T) {
 	src := "fn add(a, b){ return a + b }"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestEvalFnCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("exec: %v", err)
 	}
-	ex, err := ParseExpr("test", 1, 1, "add(1,2)")
+	ex, err := ParseExpr("add(1,2)", NewFile("test", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("parse expr: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestEvalFnCall(t *testing.T) {
 }
 
 func TestTryExprSwallowsError(t *testing.T) {
-	ex, err := ParseExpr("test", 1, 1, "try missing")
+	ex, err := ParseExpr("try missing", NewFile("test", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("parse expr: %v", err)
 	}
@@ -503,7 +503,7 @@ if try missing {
 }
 
 func TestTryExprDoesNotSwallowAbort(t *testing.T) {
-	ex, err := ParseExpr("test", 1, 1, "try (1 + 2)")
+	ex, err := ParseExpr("try (1 + 2)", NewFile("test", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("parse expr: %v", err)
 	}
@@ -523,7 +523,7 @@ fn dec(n) {
   return n
 }
 `
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -532,7 +532,7 @@ fn dec(n) {
 	if err != nil {
 		t.Fatalf("exec: %v", err)
 	}
-	ex, err := ParseExpr("test", 1, 1, "dec(5)")
+	ex, err := ParseExpr("dec(5)", NewFile("test", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("parse expr: %v", err)
 	}
@@ -1203,7 +1203,7 @@ func TestConstImmutable(t *testing.T) {
 const x = 1
 x = 2
 `
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -1218,7 +1218,7 @@ func TestBuiltinRedeclareRejected(t *testing.T) {
 	src := `
 let len = 1
 `
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -1233,7 +1233,7 @@ func TestPreludeRedeclareRejected(t *testing.T) {
 	src := `
 let env = 1
 `
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

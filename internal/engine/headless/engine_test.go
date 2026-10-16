@@ -230,7 +230,7 @@ func TestWorkflowScriptErr(t *testing.T) {
 	}
 }
 
-func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
+func TestRequestAssertParseErrorCarriesSourceSpan(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
 			t.Fatalf("write response: %v", err)
@@ -244,7 +244,6 @@ func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
 
-	// Default (headless / `resterm run`): the file column and no source attached.
 	res, err := New(engine.Config{}).ExecuteRequest(
 		doc,
 		doc.Requests[0],
@@ -260,29 +259,6 @@ func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
 	if len(rep.Items) == 0 {
 		t.Fatal("expected diagnostic items")
 	}
-	if len(rep.Source) != 0 {
-		t.Fatalf("expected no source attached without SourceDiagnostics, got %q", rep.Source)
-	}
-	if col := rep.Items[0].Span.Start.Col; col != 25 {
-		t.Fatalf("expected the file column 25, got %d", col)
-	}
-
-	// TUI (SourceDiagnostics): precise column at the '&' plus source for the caret.
-	res, err = New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(
-		doc,
-		doc.Requests[0],
-		testSelection(""),
-	)
-	if err != nil {
-		t.Fatalf("ExecuteRequest: %v", err)
-	}
-	if res.ScriptErr == nil {
-		t.Fatal("expected script error for malformed assert")
-	}
-	rep = diag.ReportOf(res.ScriptErr)
-	if len(rep.Items) == 0 {
-		t.Fatal("expected diagnostic items")
-	}
 	if !strings.Contains(string(rep.Source), "@assert") {
 		t.Fatalf("expected file source attached for caret rendering, got %q", rep.Source)
 	}
@@ -294,7 +270,7 @@ func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
 	}
 }
 
-func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
+func TestRequestCaptureParseErrorCarriesSourceSpan(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
 			t.Fatalf("write response: %v", err)
@@ -308,7 +284,6 @@ func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
 
-	// Default (headless / `resterm run`): the file column and no source attached.
 	res, err := New(engine.Config{}).ExecuteRequest(
 		doc,
 		doc.Requests[0],
@@ -321,29 +296,6 @@ func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
 		t.Fatal("expected request error for malformed capture")
 	}
 	rep := diag.ReportOf(res.Err)
-	if len(rep.Items) == 0 {
-		t.Fatal("expected diagnostic items")
-	}
-	if len(rep.Source) != 0 {
-		t.Fatalf("expected no source attached without SourceDiagnostics, got %q", rep.Source)
-	}
-	if col := rep.Items[0].Span.Start.Col; col != 30 {
-		t.Fatalf("expected the file column 30, got %d", col)
-	}
-
-	// TUI (SourceDiagnostics): precise column at the '&' plus source for the caret.
-	res, err = New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(
-		doc,
-		doc.Requests[0],
-		testSelection(""),
-	)
-	if err != nil {
-		t.Fatalf("ExecuteRequest: %v", err)
-	}
-	if res.Err == nil {
-		t.Fatal("expected request error for malformed capture")
-	}
-	rep = diag.ReportOf(res.Err)
 	if len(rep.Items) == 0 {
 		t.Fatal("expected diagnostic items")
 	}
@@ -786,7 +738,7 @@ func TestRequestAssertErrorPointsAtTheContinuationLine(t *testing.T) {
 		t.Fatalf("parse errors: %+v", doc.Errors)
 	}
 
-	res, err := New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(
+	res, err := New(engine.Config{}).ExecuteRequest(
 		doc,
 		doc.Requests[0],
 		testSelection(""),

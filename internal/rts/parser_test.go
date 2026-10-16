@@ -1,13 +1,14 @@
 package rts
 
 import (
+	"errors"
 	"slices"
 	"testing"
 )
 
 func TestParseFnIf(t *testing.T) {
 	src := "export fn f(a, b) {\nif a { return b } elif b { return a } else { return null }\n}\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -24,13 +25,13 @@ func TestParseFnIf(t *testing.T) {
 }
 
 func TestParseDuplicateParamRejected(t *testing.T) {
-	if _, err := ParseModule("test", []byte("fn f(a, a) { return a }\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("fn f(a, a) { return a }\n"))); err == nil {
 		t.Fatalf("expected duplicate parameter error")
 	}
 }
 
 func TestParseModuleAtUsesInitialPos(t *testing.T) {
-	_, err := ParseModuleAt("hook.rts", []byte("  fn f( {}\n"), Pos{Line: 10, Col: 1})
+	_, err := ParseModuleAt([]byte("  fn f( {}\n"), NewFile("hook.rts", nil).Pos(10, 1))
 	if err == nil {
 		t.Fatalf("expected parse error")
 	}
@@ -38,14 +39,64 @@ func TestParseModuleAtUsesInitialPos(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ParseError, got %T", err)
 	}
-	if parseErr.Pos.Path != "hook.rts" || parseErr.Pos.Line != 10 || parseErr.Pos.Col != 9 {
+	if parseErr.Pos.Path() != "hook.rts" || parseErr.Pos.Line != 10 || parseErr.Pos.Col != 9 {
 		t.Fatalf("unexpected parse position: %+v", parseErr.Pos)
+	}
+}
+
+func TestParseModuleGivesPositionsTheFileText(t *testing.T) {
+	src := "let x = 1\n"
+	m, err := ParseModule(NewFile("m.rts", []byte(src)))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := string(m.Stmts[0].Pos().Source()); got != src {
+		t.Fatalf("statement source = %q, want %q", got, src)
+	}
+	bad := "let x = 1\nlet y = (\n"
+	_, err = ParseModule(NewFile("m.rts", []byte(bad)))
+	var pe *ParseError
+	if !errors.As(err, &pe) || string(pe.Pos.Source()) != bad {
+		t.Fatalf("parse error = %v, want one with source %q", err, bad)
+	}
+}
+
+func TestSnippetPositionsTakeTheFileOfAt(t *testing.T) {
+	at := NewFile("api.http", nil).Pos(4, 3)
+	doc := "GET https://example.test\n# @assert 1 +\n"
+	held := NewFile("api.http", []byte(doc)).Pos(2, 11)
+	_, modErr := ParseModuleAt([]byte("let y = (\n"), at)
+	_, exprErr := ParseExpr("1 +", at)
+	_, heldErr := ParseExpr("1 +", held)
+	tests := []struct {
+		name string
+		pos  Pos
+		path string
+		src  string
+	}{
+		{"module text", errPos(t, modErr), "api.http", ""},
+		{"expression", errPos(t, exprErr), "api.http", ""},
+		{"expression in text the host holds", errPos(t, heldErr), "api.http", doc},
+		{"lexed snippet", NewLexerAt([]byte("x"), Pos{}).Next().P, "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.pos.Path() != tt.path || string(tt.pos.Source()) != tt.src {
+				t.Fatalf(
+					"position %s with source %q, want path %q and source %q",
+					tt.pos,
+					tt.pos.Source(),
+					tt.path,
+					tt.src,
+				)
+			}
+		})
 	}
 }
 
 func TestParseDict(t *testing.T) {
 	src := "let x = {\"a\": 1, b: 2}\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -63,7 +114,7 @@ func TestParseDict(t *testing.T) {
 
 func TestParseDictMultiline(t *testing.T) {
 	src := "let x = {\n  a: 1,\n  b: 2\n}\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -85,7 +136,7 @@ func TestParseDictMultiline(t *testing.T) {
 
 func TestParseListMultiline(t *testing.T) {
 	src := "let x = [\n  1,\n  2,\n  3\n]\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -107,7 +158,7 @@ func TestParseListMultiline(t *testing.T) {
 
 func TestParseConst(t *testing.T) {
 	src := "const x = 1\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -122,7 +173,7 @@ func TestParseConst(t *testing.T) {
 
 func TestParseTryExpr(t *testing.T) {
 	src := "let x = try missing\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -140,7 +191,7 @@ func TestParseTryExpr(t *testing.T) {
 
 func TestParseForClassic(t *testing.T) {
 	src := "for let i = 0; i < 3; i = i + 1 { let x = i }\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -158,7 +209,7 @@ func TestParseForClassic(t *testing.T) {
 
 func TestParseForCond(t *testing.T) {
 	src := "for 1 < 2 { let x = 1 }\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -176,7 +227,7 @@ func TestParseForCond(t *testing.T) {
 
 func TestParseForRange(t *testing.T) {
 	src := "for let i, v range items { return v }\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -200,31 +251,30 @@ func TestParseForRange(t *testing.T) {
 
 func TestParseForConstInitRejected(t *testing.T) {
 	if _, err := ParseModule(
-		"test",
-		[]byte("for const i = 0; i < 1; i = i + 1 { }\n"),
+		NewFile("test", []byte("for const i = 0; i < 1; i = i + 1 { }\n")),
 	); err == nil {
 		t.Fatalf("expected const in for init to error")
 	}
-	if _, err := ParseModule("test", []byte("for const i range items { }\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("for const i range items { }\n"))); err == nil {
 		t.Fatalf("expected const in range header to error")
 	}
 }
 
 func TestParseBreakContinueOutsideLoop(t *testing.T) {
-	if _, err := ParseModule("test", []byte("break\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("break\n"))); err == nil {
 		t.Fatalf("expected break outside loop error")
 	}
-	if _, err := ParseModule("test", []byte("continue\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("continue\n"))); err == nil {
 		t.Fatalf("expected continue outside loop error")
 	}
-	if _, err := ParseModule("test", []byte("fn f(){ break }\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("fn f(){ break }\n"))); err == nil {
 		t.Fatalf("expected break outside loop error in fn")
 	}
 }
 
 func parseSwitchStmt(t *testing.T, src string) *SwitchStmt {
 	t.Helper()
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -275,7 +325,7 @@ func TestParseSwitchTagless(t *testing.T) {
 }
 
 func TestParseSwitchBraceIsAlwaysTagless(t *testing.T) {
-	if _, err := ParseModule("test", []byte("switch {a: 1} {\ncase 1:\n}\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("switch {a: 1} {\ncase 1:\n}\n"))); err == nil {
 		t.Fatalf("expected a bare dict tag to be read as the tagless form")
 	}
 	sw := parseSwitchStmt(t, "switch ({a: 1}) {\ncase 1:\n}\n")
@@ -350,7 +400,7 @@ func TestParseSwitchClauseEndingInBlock(t *testing.T) {
 
 func TestParseSwitchPositions(t *testing.T) {
 	src := "let x = 1\nswitch x {\ncase 1:\n  x = 2\ndefault:\n  x = 3\n}\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -404,7 +454,7 @@ func TestParseSwitchMalformed(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ParseModule("test", []byte(tc.src))
+			_, err := ParseModule(NewFile("test", []byte(tc.src)))
 			pe, ok := err.(*ParseError)
 			if !ok {
 				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
@@ -423,7 +473,7 @@ func TestParseSwitchBreakAndContinue(t *testing.T) {
 		"for {\n  switch 1 {\n  case 1:\n    break\n  }\n  break\n}\n",
 	}
 	for _, src := range ok {
-		if _, err := ParseModule("test", []byte(src)); err != nil {
+		if _, err := ParseModule(NewFile("test", []byte(src))); err != nil {
 			t.Fatalf("parse %q: %v", src, err)
 		}
 	}
@@ -437,7 +487,7 @@ func TestParseSwitchBreakAndContinue(t *testing.T) {
 		{"break\n", "break outside loop or switch"},
 	}
 	for _, tc := range bad {
-		_, err := ParseModule("test", []byte(tc.src))
+		_, err := ParseModule(NewFile("test", []byte(tc.src)))
 		pe, ok := err.(*ParseError)
 		if !ok {
 			t.Fatalf("expected *ParseError for %q, got %T", tc.src, err)
@@ -450,7 +500,7 @@ func TestParseSwitchBreakAndContinue(t *testing.T) {
 
 func parseOneStmt(t *testing.T, src string) Stmt {
 	t.Helper()
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -544,7 +594,7 @@ func TestParseBreakLabelMustShareLine(t *testing.T) {
 
 func TestParseLabelReuseAfterStatementEnds(t *testing.T) {
 	src := "outer: for { break outer }\nouter: switch x {\ncase 1:\n  break outer\n}\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -589,7 +639,7 @@ func TestParseLabelErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ParseModule("test", []byte(tc.src))
+			_, err := ParseModule(NewFile("test", []byte(tc.src)))
 			pe, ok := err.(*ParseError)
 			if !ok {
 				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
@@ -625,7 +675,7 @@ func TestParseDefaultIsReserved(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ParseModule("test", []byte(tc.src))
+			_, err := ParseModule(NewFile("test", []byte(tc.src)))
 			pe, ok := err.(*ParseError)
 			if !ok {
 				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
@@ -641,7 +691,7 @@ func TestParseDefaultIsReserved(t *testing.T) {
 // "default" key through the quoted forms
 func TestParseDefaultAsQuotedKey(t *testing.T) {
 	src := "let a = {\"default\": 1}\nlet b = a[\"default\"]\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -652,7 +702,7 @@ func TestParseDefaultAsQuotedKey(t *testing.T) {
 
 func TestParseModuleDecl(t *testing.T) {
 	src := "module mod\nexport let x = 1\n"
-	m, err := ParseModule("test", []byte(src))
+	m, err := ParseModule(NewFile("test", []byte(src)))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -665,19 +715,19 @@ func TestParseModuleDecl(t *testing.T) {
 }
 
 func TestParseModuleDeclNotFirst(t *testing.T) {
-	if _, err := ParseModule("test", []byte("let x = 1\nmodule mod\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("let x = 1\nmodule mod\n"))); err == nil {
 		t.Fatalf("expected module not-first error")
 	}
 }
 
 func TestParseModuleDeclMissingName(t *testing.T) {
-	if _, err := ParseModule("test", []byte("module\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("module\n"))); err == nil {
 		t.Fatalf("expected module missing name error")
 	}
 }
 
 func TestParseModuleDeclDuplicate(t *testing.T) {
-	if _, err := ParseModule("test", []byte("module a\nmodule b\n")); err == nil {
+	if _, err := ParseModule(NewFile("test", []byte("module a\nmodule b\n"))); err == nil {
 		t.Fatalf("expected module duplicate error")
 	}
 }
@@ -696,7 +746,7 @@ func TestParseExprIllegalTokenMessage(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ParseExpr("t", 1, 1, tc.src)
+			_, err := ParseExpr(tc.src, NewFile("t", nil).Pos(1, 1))
 			pe, ok := err.(*ParseError)
 			if !ok {
 				t.Fatalf("expected *ParseError, got %T", err)
@@ -712,7 +762,7 @@ func TestParseExprIllegalTokenMessage(t *testing.T) {
 }
 
 func TestParseModuleIllegalTokenMessage(t *testing.T) {
-	_, err := ParseModule("t", []byte("let x = &\n"))
+	_, err := ParseModule(NewFile("t", []byte("let x = &\n")))
 	pe, ok := err.(*ParseError)
 	if !ok {
 		t.Fatalf("expected *ParseError, got %T", err)
@@ -730,7 +780,7 @@ func TestParseModuleIllegalTokenMessage(t *testing.T) {
 
 func mustParseExpr(t *testing.T, src string) Expr {
 	t.Helper()
-	ex, err := ParseExpr("t", 1, 1, src)
+	ex, err := ParseExpr(src, NewFile("t", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("parse %q: %v", src, err)
 	}
@@ -819,7 +869,7 @@ in = pick(in)
 let present = in in [in]
 let negated = not in
 `
-	if _, err := ParseModule("test", []byte(src)); err != nil {
+	if _, err := ParseModule(NewFile("test", []byte(src))); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 }
@@ -832,7 +882,7 @@ func TestParseMembershipContinuesAfterOperator(t *testing.T) {
 	}
 	for name, src := range tests {
 		t.Run(name, func(t *testing.T) {
-			mod, err := ParseModule("test", []byte(src))
+			mod, err := ParseModule(NewFile("test", []byte(src)))
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
@@ -844,7 +894,7 @@ func TestParseMembershipContinuesAfterOperator(t *testing.T) {
 }
 
 func TestParseMembershipDoesNotContinueAfterExplicitSemicolon(t *testing.T) {
-	_, err := ParseModule("test", []byte("let x = 1 in;\n  [1]\n"))
+	_, err := ParseModule(NewFile("test", []byte("let x = 1 in;\n  [1]\n")))
 	if err == nil {
 		t.Fatal("expected explicit semicolon after in to be rejected")
 	}
@@ -900,13 +950,13 @@ func TestParseLogicalSymbolPrecedence(t *testing.T) {
 // the brace after the condition must not be read as a dict literal
 func TestParseBangInConditions(t *testing.T) {
 	src := "fn f(ready, done) {\nif !ready { return 1 }\nfor !done { break }\nreturn 0\n}\n"
-	if _, err := ParseModule("t", []byte(src)); err != nil {
+	if _, err := ParseModule(NewFile("t", []byte(src))); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 }
 
 func TestParseLogicalSymbolContinuesLine(t *testing.T) {
-	m, err := ParseModule("t", []byte("let x = a &&\n  b ||\n  c\n"))
+	m, err := ParseModule(NewFile("t", []byte("let x = a &&\n  b ||\n  c\n")))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -916,7 +966,7 @@ func TestParseLogicalSymbolContinuesLine(t *testing.T) {
 }
 
 func TestInspectVisitsEveryNameInOrder(t *testing.T) {
-	ex, err := ParseExpr("t.rts", 1, 1, `a.b(c[d], {"k": e}) ?? (f ? g : -h) ?? try i`)
+	ex, err := ParseExpr(`a.b(c[d], {"k": e}) ?? (f ? g : -h) ?? try i`, NewFile("t.rts", nil).Pos(1, 1))
 	if err != nil {
 		t.Fatalf("ParseExpr: %v", err)
 	}

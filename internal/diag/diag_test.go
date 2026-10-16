@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/textproto"
 	"net/url"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -88,6 +89,87 @@ func TestRenderCaretFollowsWideCharactersAndTabs(t *testing.T) {
 			}},
 		}},
 	}, "{{missing}}")
+}
+
+func TestRenderQuotesEachItemFromItsOwnFile(t *testing.T) {
+	a := diag.Report{Path: "a.http", Source: []byte("one\ntwo\nthree\n")}
+	b := diag.Report{Path: "b.rts", Source: []byte("uno\ndos\ntres\n")}
+	// Attach the file the way script hosts do, so items without a path take it from the wrapper.
+	at := func(file diag.Report, d diag.Diagnostic) error {
+		d.Message = "boom"
+		err := diag.FromReport(diag.Report{Items: []diag.Diagnostic{d}}, nil)
+		return diag.Wrap(err, "", diag.WithSource(file.Path, file.Source))
+	}
+	line := func(n int) diag.Diagnostic {
+		return diag.Diagnostic{Span: diag.Span{Start: diag.Pos{Line: n, Col: 1}}}
+	}
+	elsewhere := diag.Diagnostic{Span: diag.Span{Start: diag.Pos{Path: "m.rts", Line: 2, Col: 1}}}
+	withText := elsewhere
+	withText.Source = []byte("x\ny\n")
+	tests := []struct {
+		name string
+		err  error
+		want []string
+	}{
+		{"own file", at(a, line(2)), []string{"--> a.http:2:1", "   2 | two"}},
+		{
+			"joined from two files",
+			errors.Join(at(a, line(2)), at(b, line(3))),
+			[]string{"--> a.http:2:1", "   2 | two", "--> b.rts:3:1", "   3 | tres"},
+		},
+		{
+			"joined in the other order",
+			errors.Join(at(b, line(3)), at(a, line(2))),
+			[]string{"--> b.rts:3:1", "   3 | tres", "--> a.http:2:1", "   2 | two"},
+		},
+		{
+			"joined from one file",
+			errors.Join(at(a, line(2)), at(a, line(3))),
+			[]string{"--> a.http:2:1", "   2 | two", "--> a.http:3:1", "   3 | three"},
+		},
+		{"another file with its own text", at(a, withText), []string{"--> m.rts:2:1", "   2 | y"}},
+		{"another file without text", at(a, elsewhere), []string{"--> m.rts:2:1"}},
+		{
+			"joined with another file without text",
+			errors.Join(at(b, line(3)), at(a, elsewhere)),
+			[]string{"--> b.rts:3:1", "   3 | tres", "--> m.rts:2:1"},
+		},
+		{
+			"joined after a file without text",
+			errors.Join(at(diag.Report{Path: "a.http"}, line(2)), at(b, line(3))),
+			[]string{"--> a.http:2:1", "--> b.rts:3:1", "   3 | tres"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []string
+			for _, l := range diag.Lines(diag.ReportOf(tt.err)) {
+				if l.Kind == diag.LineLoc || l.Kind == diag.LineSrc {
+					got = append(got, l.Text)
+				}
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("lines = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+type storedReport struct{ rep diag.Report }
+
+func (s storedReport) Error() string           { return "stored" }
+func (s storedReport) Diagnostic() diag.Report { return s.rep }
+
+func TestReportOfLeavesJoinedReportsUnchanged(t *testing.T) {
+	own := storedReport{diag.Report{
+		Path:   "a.http",
+		Source: []byte("one\n"),
+		Items:  []diag.Diagnostic{{Message: "boom", Span: diag.Span{Start: diag.Pos{Line: 1, Col: 1}}}},
+	}}
+	diag.ReportOf(errors.Join(own))
+	if src := own.rep.Items[0].Source; src != nil {
+		t.Fatalf("ReportOf wrote %q into the report of a joined error", src)
+	}
 }
 
 func TestFromReportPreparesDefaultsAndCopiesData(t *testing.T) {

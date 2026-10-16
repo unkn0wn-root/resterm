@@ -19,7 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-var testPos = rts.Pos{Path: "test", Line: 1, Col: 1}
+var testPos = rts.NewFile("test", nil).Pos(1, 1)
 
 func testRuntime(t *testing.T) Runtime {
 	t.Helper()
@@ -415,6 +415,22 @@ func TestCachedModuleRequestReadsAreEvaluationLocal(t *testing.T) {
 	close(errCh)
 	for err := range errCh {
 		t.Error(err)
+	}
+}
+
+func TestLoadRunsModuleSetupAgainstTheRuntime(t *testing.T) {
+	rt := keepRuntime(t, "module keep\nlet seen = request.method\nexport fn method() { return seen }\n")
+	eng := NewEngine(stdlib.New)
+	if err := eng.Load(t.Context(), rt, testPos); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	req, err := NewRequest("GET", "https://example.test", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.Request = req
+	if got, err := eng.EvalStr(t.Context(), rt, "keep.method()", testPos); err != nil || got != "POST" {
+		t.Fatalf("keep.method() = %q, %v, want the POST the module loaded with", got, err)
 	}
 }
 

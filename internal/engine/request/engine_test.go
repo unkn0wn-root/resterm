@@ -1,6 +1,7 @@
 package request
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -915,6 +916,18 @@ GET http://example.test
 			err:  "boom",
 		},
 		{
+			name: "after an assert error with a module",
+			src: `# @use ./checks.rts as checks
+### one
+# @assert fail("boom")
+# @rts test ran
+> t.error("ran", len(checks.orders([])))
+GET http://example.test
+`,
+			want: []string{"ran api.http:5: ran 0"},
+			err:  "boom",
+		},
+		{
 			name: "import named t",
 			src: `# @use ./checks.rts as t
 ### one
@@ -952,6 +965,167 @@ GET http://example.test
 				t.Fatalf("script error = %v, want %q", res.ScriptErr, tc.err)
 			}
 		})
+	}
+}
+
+func TestRTSModuleThatFailsToLoadIsReportedOnce(t *testing.T) {
+	const src = `### one
+# @use ./bad.rts
+# @assert response.statusCode == 200
+# @assert response.statusCode == 201
+# @rts test one
+> t.error("ran")
+# @rts test two
+> let x = missing.value
+# @rts test three
+> vars.set("a", "b")
+# @script test
+> tests.assert(true, "js");
+GET http://example.test
+`
+	tests := []struct {
+		name string
+		mod  string
+		msg  string
+		line string
+	}{
+		{
+			"syntax error",
+			"module bad\n\nexport fn ok(x) {\n  return x ==\n}\n",
+			"unexpected }",
+			"   5 | }\n     | ^",
+		},
+		{
+			"function named fail",
+			"module bad\n\nexport fn fail(x) {\n  return x\n}\n",
+			`name already defined: "fail"`,
+			"   3 | export fn fail(x) {\n     |        ^",
+		},
+		{"module named fail", "module fail\n", "alias already defined: fail", "   2 | # @use ./bad.rts\n     | ^"},
+		{"missing file", "", "bad.rts", "error[filesystem]: "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tt.mod != "" {
+				if err := os.WriteFile(filepath.Join(dir, "bad.rts"), []byte(tt.mod), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(src))
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client()}, nil)
+			res, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
+			if err != nil || res.Err != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+			}
+			want := []row{{"one", false}, {"two", false}, {"three", false}, {"js", true}}
+			if got := rows(res); !slices.Equal(got, want) {
+				t.Fatalf("tests = %+v, want %+v", got, want)
+			}
+			for _, tr := range res.Tests[:3] {
+				if tr.Message != "" {
+					t.Fatalf("test %q message = %q, want none", tr.Name, tr.Message)
+				}
+			}
+			rep := diag.ReportOf(res.ScriptErr)
+			if len(rep.Items) != 1 || strings.Count(res.ScriptErr.Error(), tt.msg) != 1 {
+				t.Fatalf("script error = %v, want %q once", res.ScriptErr, tt.msg)
+			}
+			if out := diag.Render(res.ScriptErr); strings.Count(out, tt.line) != 1 {
+				t.Fatalf("rendered error does not show %q once:\n%s", tt.line, out)
+			}
+		})
+	}
+}
+
+func TestRTSModuleStateLastsAcrossChecksAndRequests(t *testing.T) {
+	dir := t.TempDir()
+	mod := `module cnt
+let n = 0
+let inits = 0
+inits = inits + 1
+export fn bump() {
+  n = n + 1
+  return n
+}
+export fn seen() {
+  return inits
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "cnt.rts"), []byte(mod), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(`# @use ./cnt.rts
+### a
+# @rts pre-request
+> request.setHeader("X-N", str(cnt.bump()))
+# @assert cnt.bump() == 2
+# @rts test one
+> t.error(cnt.bump(), cnt.seen())
+# @rts test two
+> t.error(cnt.bump(), cnt.seen())
+GET http://example.test
+
+### b
+# @rts test three
+> t.error(cnt.bump(), cnt.seen())
+GET http://example.test
+`))
+	eng, st := newStubEngine(t)
+	var got []string
+	for _, req := range doc.Requests {
+		res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+		if err != nil || res.Err != nil || res.ScriptErr != nil {
+			t.Fatalf("ExecuteWith() error = %v, result error = %v, script error = %v", err, res.Err, res.ScriptErr)
+		}
+		if req == doc.Requests[0] && st.wire.Header.Get("X-N") != "1" {
+			t.Fatalf("X-N = %q, want 1 from the pre-request block", st.wire.Header.Get("X-N"))
+		}
+		for _, tr := range res.Tests {
+			got = append(got, fmt.Sprintf("%s %t %s", tr.Name, tr.Passed, tr.Message))
+		}
+	}
+	want := []string{
+		"cnt.bump() == 2 true ",
+		"one false api.http:7: 3 1",
+		"two false api.http:9: 4 1",
+		"three false api.http:14: 5 1",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("tests = %q, want %q", got, want)
+	}
+}
+
+func TestRTSModuleLoadTimeoutIsNamedOnce(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "slow.rts"), []byte("module slow\nfor {\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(`### one
+# @timeout 50ms
+# @use ./slow.rts
+# @rts test first
+> t.error("ran")
+# @script test
+> tests.assert(true, "js");
+GET http://example.test
+`))
+	eng, _ := newStubEngine(t)
+	eng.re.Core().Lim.MaxSteps = 0
+	res, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	if got, want := rows(res), []row{{"js", true}}; !slices.Equal(got, want) {
+		t.Fatalf("tests = %+v, want %+v", got, want)
+	}
+	const cause = "response checks timed out after 50ms: context deadline exceeded"
+	if res.ScriptErr == nil || strings.Count(res.ScriptErr.Error(), cause) != 1 {
+		t.Fatalf("script error = %v, want %q once", res.ScriptErr, cause)
+	}
+	if got := diag.ClassOf(res.ScriptErr); got != diag.ClassTimeout {
+		t.Fatalf("class = %s, want %s", got, diag.ClassTimeout)
 	}
 }
 

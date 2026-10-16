@@ -80,17 +80,20 @@ func baseReport(err error) diag.Report {
 	return errorReport(diag.ClassScript, err.Error(), rts.Pos{})
 }
 
+// errorReport quotes the text pos was read from, so code from an older
+// revision quotes that revision. A host that left the text out attaches its own.
 func errorReport(class diag.Class, message string, pos rts.Pos) diag.Report {
 	return diag.Report{Items: []diag.Diagnostic{{
 		Class:    class,
 		Severity: diag.SeverityError,
 		Message:  message,
 		Span:     diag.Span{Start: diagPos(pos)},
+		Source:   pos.Source(),
 	}}}
 }
 
 func diagPos(pos rts.Pos) diag.Pos {
-	return diag.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col}
+	return diag.Pos{Path: pos.Path(), Line: pos.Line, Col: pos.Col}
 }
 
 func diagFrames(frames []rts.Frame) []diag.StackFrame {

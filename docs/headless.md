@@ -143,7 +143,7 @@ for _, res := range rep.Results {
 }
 ```
 
-`EffectiveTarget` is the URL a request reached after variables were filled in and redirects followed, with secret values masked. `ErrorDetail` and `ScriptErrorDetail` show an error the way `resterm run` prints it, with the file, line and column where it happened.
+`EffectiveTarget` is the URL a request reached after variables were filled in and redirects followed, with secret values masked. `ErrorDetail` and `ScriptErrorDetail` show an error the way `resterm run` prints it, with the file, line and column where it happened and the failing line, with secret values masked.
 
 `rep.FailureCodes()` returns each failure code in the report once. `rep.Warnings` lists parse warnings from the request file, and `res.Warnings` lists warnings from that request's scripts. Warnings never fail a run.
 

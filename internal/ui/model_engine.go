@@ -38,7 +38,6 @@ func (m *Model) runCfg(opts httpx.Options) engine.Config {
 		Compare:               m.cfg.Compare.Clone(),
 		Registry:              m.registryIndex(),
 		Bindings:              m.bindingsMap,
-		SourceDiagnostics:     true,
 		MockInspector:         m.mockInspector(),
 	}
 }

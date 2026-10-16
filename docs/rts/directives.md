@@ -81,7 +81,7 @@ Each expression is evaluated, and a truthy result passes. Use `response` for the
 
 Use `@rts pre-request` to change the outgoing request and `@rts test` to check the response. `# @script pre-request lang=rts` and `# @script test lang=rts` are equivalent.
 
-A test name is optional. Quote names that contain spaces. Extra words and unknown options, such as `name=orders`, prevent the block from running. Unnamed blocks appear as `@rts test` in the results.
+A test name is optional. Quote names that contain spaces. Extra words, unknown options such as `name=orders`, and an unclosed quote are parse errors, not warnings as with `@script`. No request in the file runs until they are fixed. Unnamed blocks appear as `@rts test` in the results.
 
 Prefix each code line with `>`. A blank line or comment without `>` ends the block; later code starts another block with the same name and a new scope. Use `> #` for comments and `>` for blank lines within a block.
 
@@ -102,7 +102,7 @@ for let _, msg range validators.orders(orders) {
 
 One-line blocks also work: `> {% request.setHeader("X-Debug", "1") %}` in a pre-request block. To read code from a file, use `> < ./checks.rts` outside the `{% ... %}` block. The file contains plain code without `>` or `{% %}`.
 
-After captures, response checks run in this order: `@assert`, RTS test blocks in file order, then JavaScript tests. Failed assertions and script errors do not skip RTS test blocks. A timeout or cancellation skips blocks that have not started. This order applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
+After captures, response checks run in this order: `@assert`, RTS test blocks in file order, then JavaScript tests. Failed assertions and script errors do not skip RTS test blocks, but if a `@use` module fails to load, its error is shown once and every RTS test block fails. A timeout or cancellation skips blocks that have not started. This order applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
 
 Test blocks can read `response`, `last`, `stream`, `trace`, `env`, `vars`, `request`, imported modules, loop values, and captures. Calls to `vars.set`, `vars.global.set`, or request mutation helpers fail. Use `@capture` to save response values, including module results: `# @capture file token = auth.pick(response.json())`.
 
