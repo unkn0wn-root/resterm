@@ -4,26 +4,26 @@ package rts
 // Groups inside strings and comments are ignored.
 // A mismatched closer does not close a group.
 func OpenGroup(src string) (closer rune) {
-	lx := NewLexerAt([]byte(src), Pos{})
+	lx := newLexerAt([]byte(src), Pos{})
 	var open []rune
 	for {
-		switch lx.Next().K {
-		case EOF:
+		switch lx.scan().K {
+		case tokEOF:
 			if len(open) == 0 {
 				return 0
 			}
 			return open[len(open)-1]
-		case LPAREN:
+		case tokLparen:
 			open = append(open, ')')
-		case LBRACK:
+		case tokLbrack:
 			open = append(open, ']')
-		case LBRACE:
+		case tokLbrace:
 			open = append(open, '}')
-		case RPAREN:
+		case tokRparen:
 			open = popGroup(open, ')')
-		case RBRACK:
+		case tokRbrack:
 			open = popGroup(open, ']')
-		case RBRACE:
+		case tokRbrace:
 			open = popGroup(open, '}')
 		}
 	}

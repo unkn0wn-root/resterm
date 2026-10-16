@@ -8,16 +8,19 @@ type Mod struct {
 	Stmts   []Stmt // top-level statements
 }
 
+// Stmt is implemented by every statement node.
 type Stmt interface {
 	stmtNode()
-	Pos() Pos
+	Pos() Pos // position of the keyword after any export or label, or of the first token
 }
 
+// Expr is implemented by every expression node.
 type Expr interface {
 	exprNode()
-	Pos() Pos
+	Pos() Pos // position of the operator or opening bracket, or of the first token
 }
 
+// A LetStmt is a let or const declaration. Exported is set when it follows export.
 type LetStmt struct {
 	P        Pos
 	Exported bool
@@ -29,6 +32,7 @@ type LetStmt struct {
 func (*LetStmt) stmtNode()  {}
 func (s *LetStmt) Pos() Pos { return s.P }
 
+// An AssignStmt is an assignment of Val to Name.
 type AssignStmt struct {
 	P    Pos
 	Name string
@@ -38,6 +42,7 @@ type AssignStmt struct {
 func (*AssignStmt) stmtNode()  {}
 func (s *AssignStmt) Pos() Pos { return s.P }
 
+// A ReturnStmt is a return statement. Val is nil for a bare return.
 type ReturnStmt struct {
 	P   Pos
 	Val Expr
@@ -46,6 +51,7 @@ type ReturnStmt struct {
 func (*ReturnStmt) stmtNode()  {}
 func (s *ReturnStmt) Pos() Pos { return s.P }
 
+// An ExprStmt is an expression used as a statement.
 type ExprStmt struct {
 	P   Pos
 	Exp Expr
@@ -54,11 +60,13 @@ type ExprStmt struct {
 func (*ExprStmt) stmtNode()  {}
 func (s *ExprStmt) Pos() Pos { return s.P }
 
+// A Block is a list of statements. P is the position of "{", or of ":" in a case clause.
 type Block struct {
 	P     Pos
 	Stmts []Stmt
 }
 
+// A FnDef is a function declaration. Exported is set when it follows export.
 type FnDef struct {
 	P        Pos
 	Exported bool
@@ -70,11 +78,13 @@ type FnDef struct {
 func (*FnDef) stmtNode()  {}
 func (s *FnDef) Pos() Pos { return s.P }
 
+// An Elif is one elif clause of an IfStmt.
 type Elif struct {
 	Cond Expr
 	Body *Block
 }
 
+// An IfStmt is an if statement. Else is nil when there is no else.
 type IfStmt struct {
 	P     Pos
 	Cond  Expr
@@ -86,17 +96,14 @@ type IfStmt struct {
 func (*IfStmt) stmtNode()  {}
 func (s *IfStmt) Pos() Pos { return s.P }
 
-// CaseClause is one clause of a switch. Exprs is nil for the default clause
-// and holds at least one expression otherwise
+// A CaseClause is a case or default clause. Exprs is nil for default.
 type CaseClause struct {
 	P     Pos
 	Exprs []Expr
 	Body  *Block
 }
 
-// SwitchStmt keeps its clauses in source order because evaluation stops at the
-// first match. Tag is nil for the tagless form, which tests clauses for truth.
-// Label is the optional name a break can target and is empty when unlabeled
+// A SwitchStmt is a switch statement. Tag is nil for the tagless form.
 type SwitchStmt struct {
 	P        Pos
 	Label    string
@@ -108,6 +115,7 @@ type SwitchStmt struct {
 func (*SwitchStmt) stmtNode()  {}
 func (s *SwitchStmt) Pos() Pos { return s.P }
 
+// A ForStmt is a for statement. The range form sets Range and leaves Init, Cond and Post nil.
 type ForStmt struct {
 	P        Pos
 	Label    string
@@ -122,6 +130,7 @@ type ForStmt struct {
 func (*ForStmt) stmtNode()  {}
 func (s *ForStmt) Pos() Pos { return s.P }
 
+// A ForRange is the key, optional value and source of a range loop. Declare is set by let.
 type ForRange struct {
 	Key     string
 	Val     string
@@ -129,8 +138,7 @@ type ForRange struct {
 	Declare bool
 }
 
-// Label names the enclosing for or switch to leave. It is empty for the plain
-// form, which targets the nearest one
+// A BreakStmt is a break statement. An empty Label targets the nearest loop or switch.
 type BreakStmt struct {
 	P     Pos
 	Label string
@@ -139,8 +147,7 @@ type BreakStmt struct {
 func (*BreakStmt) stmtNode()  {}
 func (s *BreakStmt) Pos() Pos { return s.P }
 
-// Label names the enclosing loop to resume. It is empty for the plain form,
-// which targets the nearest one
+// A ContinueStmt is a continue statement. An empty Label targets the nearest loop.
 type ContinueStmt struct {
 	P     Pos
 	Label string
@@ -149,6 +156,7 @@ type ContinueStmt struct {
 func (*ContinueStmt) stmtNode()  {}
 func (s *ContinueStmt) Pos() Pos { return s.P }
 
+// An Ident is an identifier.
 type Ident struct {
 	P    Pos
 	Name string
@@ -157,6 +165,7 @@ type Ident struct {
 func (*Ident) exprNode()  {}
 func (e *Ident) Pos() Pos { return e.P }
 
+// A LitKind is the kind of a Literal.
 type LitKind int
 
 const (
@@ -166,6 +175,7 @@ const (
 	LitStr
 )
 
+// A Literal is a null, bool, number or string. Kind says which, and B, N or S holds the value unless it is null.
 type Literal struct {
 	P    Pos
 	Kind LitKind
@@ -177,34 +187,37 @@ type Literal struct {
 func (*Literal) exprNode()  {}
 func (e *Literal) Pos() Pos { return e.P }
 
+// A BinOp is the operator of a Binary.
 type BinOp int
 
 const (
-	OpAdd BinOp = iota
-	OpSub
-	OpMul
-	OpDiv
-	OpMod
-	OpEq
-	OpNe
-	OpLt
-	OpLe
-	OpGt
-	OpGe
-	OpIn
-	OpNotIn
-	OpAnd
-	OpOr
-	OpCoalesce
+	OpAdd      BinOp = iota // +
+	OpSub                   // -
+	OpMul                   // *
+	OpDiv                   // /
+	OpMod                   // %
+	OpEq                    // ==
+	OpNe                    // !=
+	OpLt                    // <
+	OpLe                    // <=
+	OpGt                    // >
+	OpGe                    // >=
+	OpIn                    // in
+	OpNotIn                 // not in
+	OpAnd                   // and, &&
+	OpOr                    // or, ||
+	OpCoalesce              // ??
 )
 
+// An UnOp is the operator of a Unary.
 type UnOp int
 
 const (
-	UnNot UnOp = iota
-	UnNeg
+	UnNot UnOp = iota // not, !
+	UnNeg             // -
 )
 
+// A Unary is a unary operation.
 type Unary struct {
 	P  Pos
 	Op UnOp
@@ -214,6 +227,7 @@ type Unary struct {
 func (*Unary) exprNode()  {}
 func (e *Unary) Pos() Pos { return e.P }
 
+// A Binary is a binary operation. P is the position of the operator.
 type Binary struct {
 	P     Pos
 	Op    BinOp
@@ -224,6 +238,7 @@ type Binary struct {
 func (*Binary) exprNode()  {}
 func (e *Binary) Pos() Pos { return e.P }
 
+// A Ternary is a conditional expression. P is the position of "?".
 type Ternary struct {
 	P    Pos
 	Cond Expr
@@ -234,6 +249,7 @@ type Ternary struct {
 func (*Ternary) exprNode()  {}
 func (e *Ternary) Pos() Pos { return e.P }
 
+// A TryExpr is a try expression.
 type TryExpr struct {
 	P Pos
 	X Expr
@@ -242,6 +258,7 @@ type TryExpr struct {
 func (*TryExpr) exprNode()  {}
 func (e *TryExpr) Pos() Pos { return e.P }
 
+// A Call is a function call. P is the position of "(".
 type Call struct {
 	P      Pos
 	Callee Expr
@@ -251,6 +268,7 @@ type Call struct {
 func (*Call) exprNode()  {}
 func (e *Call) Pos() Pos { return e.P }
 
+// An Index is an index expression. P is the position of "[".
 type Index struct {
 	P   Pos
 	X   Expr
@@ -260,6 +278,7 @@ type Index struct {
 func (*Index) exprNode()  {}
 func (e *Index) Pos() Pos { return e.P }
 
+// A Member is a member access. P is the position of ".".
 type Member struct {
 	P    Pos
 	X    Expr
@@ -269,6 +288,7 @@ type Member struct {
 func (*Member) exprNode()  {}
 func (e *Member) Pos() Pos { return e.P }
 
+// A ListLit is a list literal.
 type ListLit struct {
 	P     Pos
 	Elems []Expr
@@ -277,12 +297,14 @@ type ListLit struct {
 func (*ListLit) exprNode()  {}
 func (e *ListLit) Pos() Pos { return e.P }
 
+// A DictEntry is one key and value of a DictLit. P is the position of the key.
 type DictEntry struct {
 	P   Pos
 	Key string
 	Val Expr
 }
 
+// A DictLit is a dict literal.
 type DictLit struct {
 	P       Pos
 	Entries []DictEntry

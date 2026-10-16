@@ -141,7 +141,7 @@ func (e *Eng) ExecModule(ctx context.Context, cfg EvalConfig, src string, pos Po
 	if err != nil {
 		return nil, err
 	}
-	mod, err := ParseModuleAt([]byte(src), pos)
+	mod, err := parseModuleAt([]byte(src), pos)
 	if err != nil {
 		return nil, err
 	}

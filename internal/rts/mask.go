@@ -9,22 +9,22 @@ import (
 // Byte offsets stay the same, so callers can find top-level separators.
 func Mask(src string) string {
 	out := bytes.Repeat([]byte{' '}, len(src))
-	lx := NewLexerAt([]byte(src), Pos{})
+	lx := newLexerAt([]byte(src), Pos{})
 	var depth int
 	for {
-		tok := lx.Next()
-		if tok.K == EOF {
+		tok := lx.scan()
+		if tok.K == tokEOF {
 			return string(out)
 		}
 		var keep bool
 		switch tok.K {
-		case LPAREN, LBRACK, LBRACE:
+		case tokLparen, tokLbrack, tokLbrace:
 			keep = depth == 0
 			depth++
-		case RPAREN, RBRACK, RBRACE:
+		case tokRparen, tokRbrack, tokRbrace:
 			depth = max(depth-1, 0)
 			keep = depth == 0
-		case STRING, ILLEGAL, AUTO_SEMI:
+		case tokString, tokIllegal, tokAutoSemi:
 			continue
 		default:
 			keep = depth == 0
@@ -39,13 +39,13 @@ func Mask(src string) string {
 // It keeps code inside groups and preserves byte offsets.
 func MaskText(src string) string {
 	out := bytes.Repeat([]byte{' '}, len(src))
-	lx := NewLexerAt([]byte(src), Pos{})
+	lx := newLexerAt([]byte(src), Pos{})
 	for {
-		tok := lx.Next()
-		if tok.K == EOF {
+		tok := lx.scan()
+		if tok.K == tokEOF {
 			return string(out)
 		}
-		if tok.K == STRING || tok.K == ILLEGAL || tok.K == AUTO_SEMI {
+		if tok.K == tokString || tok.K == tokIllegal || tok.K == tokAutoSemi {
 			continue
 		}
 		copy(out[lx.start:lx.i], src[lx.start:lx.i])
@@ -61,33 +61,33 @@ func StringRanges(src, callee string) [][2]int {
 		depth int
 		skip  int // call depth, or zero outside the call
 	)
-	lx := NewLexerAt([]byte(src), Pos{})
+	lx := newLexerAt([]byte(src), Pos{})
 	for {
-		tok := lx.Next()
+		tok := lx.scan()
 		switch tok.K {
-		case EOF:
+		case tokEOF:
 			return out
-		case IDENT:
+		case tokIdent:
 			if !strings.HasSuffix(path, ".") {
 				path = ""
 			}
 			path += tok.Lit
 			continue
-		case DOT:
+		case tokDot:
 			// A leading dot keeps f().vars.interpolate from matching vars.interpolate.
 			path += "."
 			continue
-		case LPAREN, LBRACK, LBRACE:
+		case tokLparen, tokLbrack, tokLbrace:
 			depth++
-			if tok.K == LPAREN && skip == 0 && path == callee {
+			if tok.K == tokLparen && skip == 0 && path == callee {
 				skip = depth
 			}
-		case RPAREN, RBRACK, RBRACE:
+		case tokRparen, tokRbrack, tokRbrace:
 			if depth == skip {
 				skip = 0
 			}
 			depth = max(depth-1, 0)
-		case STRING:
+		case tokString:
 			if skip == 0 {
 				out = append(out, [2]int{lx.start, lx.i})
 			}

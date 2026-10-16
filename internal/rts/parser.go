@@ -13,7 +13,7 @@ const (
 )
 
 // controlTarget is one lexically enclosing for or switch. label is empty for
-// unlabeled statements and pos points at the label that opened the target
+// unlabeled statements and pos points at the label that opened the target.
 type controlTarget struct {
 	kind  controlKind
 	label string
@@ -21,42 +21,42 @@ type controlTarget struct {
 }
 
 // stmtLabel is the optional name in front of a for or switch. The zero value
-// means the statement carries no label
+// means the statement carries no label.
 type stmtLabel struct {
 	name string
 	pos  Pos
 }
 
-// Parser builds the syntax tree of RTS code from the tokens of a Lexer.
-type Parser struct {
-	lx    *Lexer
-	cur   Tok
-	peek  Tok
-	ahead []Tok
+// parser builds the syntax tree of RTS code from the tokens of a lexer.
+type parser struct {
+	lx    *lexer
+	cur   token
+	peek  token
+	ahead []token
 
 	// controls holds every for and switch that encloses the statement being
 	// parsed, innermost last, so break and continue can be checked against them.
 	controls []controlTarget
 }
 
-// NewParserAt returns a Parser for src, a snippet that starts at the line and
+// newParserAt returns a parser for src, a snippet that starts at the line and
 // column of at. Its positions are in at's file.
-func NewParserAt(src []byte, at Pos) *Parser {
-	lx := NewLexerAt(src, at)
-	p := &Parser{lx: lx}
-	p.cur = lx.Next()
-	p.peek = lx.Next()
+func newParserAt(src []byte, at Pos) *parser {
+	lx := newLexerAt(src, at)
+	p := &parser{lx: lx}
+	p.cur = lx.scan()
+	p.peek = lx.scan()
 	return p
 }
 
 // ParseModule parses the whole text of f.
 func ParseModule(f *File) (*Mod, error) {
-	return ParseModuleAt(f.src, f.Start())
+	return parseModuleAt(f.src, f.Start())
 }
 
-// ParseModuleAt parses src as a snippet that starts at the line and column of
+// parseModuleAt parses src as a snippet that starts at the line and column of
 // at. Its positions are in at's file.
-func ParseModuleAt(src []byte, at Pos) (m *Mod, err error) {
+func parseModuleAt(src []byte, at Pos) (m *Mod, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if pe, ok := r.(*ParseError); ok {
@@ -67,7 +67,7 @@ func ParseModuleAt(src []byte, at Pos) (m *Mod, err error) {
 			panic(r)
 		}
 	}()
-	p := NewParserAt(src, at)
+	p := newParserAt(src, at)
 	m = p.parseMod(at)
 	return m, err
 }
@@ -85,19 +85,19 @@ func ParseExpr(src string, at Pos) (ex Expr, err error) {
 			panic(r)
 		}
 	}()
-	p := NewParserAt([]byte(src), at)
+	p := newParserAt([]byte(src), at)
 	ex = p.parseExprOnly()
 	return ex, err
 }
 
-func (p *Parser) parseMod(start Pos) *Mod {
+func (p *parser) parseMod(start Pos) *Mod {
 	m := &Mod{Start: start}
-	for p.cur.K != EOF {
+	for p.cur.K != tokEOF {
 		if p.isSemi(p.cur.K) {
 			p.next()
 			continue
 		}
-		if p.cur.K == KW_MODULE {
+		if p.cur.K == tokModule {
 			if m.Name != "" || len(m.Stmts) > 0 {
 				p.fail(p.cur.P, "module must appear before statements")
 			}
@@ -114,13 +114,13 @@ func (p *Parser) parseMod(start Pos) *Mod {
 	return m
 }
 
-func (p *Parser) parseModDecl() (string, Pos) {
-	pos := p.expect(KW_MODULE).P
+func (p *parser) parseModDecl() (string, Pos) {
+	pos := p.expect(tokModule).P
 	// the module name becomes the binding when @use omits an alias
 	if p.cur.K.isKeyword() {
 		p.fail(p.cur.P, fmt.Sprintf("module name cannot be the reserved word %s", p.cur.K))
 	}
-	if p.cur.K != IDENT {
+	if p.cur.K != tokIdent {
 		p.fail(p.cur.P, "module requires a name")
 	}
 	nm := p.cur.Lit
@@ -128,62 +128,62 @@ func (p *Parser) parseModDecl() (string, Pos) {
 	return nm, pos
 }
 
-func (p *Parser) parseExprOnly() Expr {
+func (p *parser) parseExprOnly() Expr {
 	ex := p.parseExpr()
 	for p.isSemi(p.cur.K) {
 		p.next()
 	}
-	if p.cur.K != EOF {
+	if p.cur.K != tokEOF {
 		p.failCur(fmt.Sprintf("unexpected %s", p.cur.K))
 	}
 	return ex
 }
 
-func (p *Parser) parseStmt() Stmt {
+func (p *parser) parseStmt() Stmt {
 	switch p.cur.K {
-	case KW_EXPORT:
+	case tokExport:
 		return p.parseExport()
-	case KW_LET:
+	case tokLet:
 		return p.parseLet(false, false)
-	case KW_CONST:
+	case tokConst:
 		return p.parseLet(false, true)
-	case KW_FN:
+	case tokFn:
 		return p.parseFn(false)
-	case KW_IF:
+	case tokIf:
 		return p.parseIf()
-	case KW_SWITCH:
+	case tokSwitch:
 		return p.parseSwitch(stmtLabel{})
-	case KW_CASE:
+	case tokCase:
 		p.fail(p.cur.P, "case outside switch body")
-	case KW_DEFAULT:
+	case tokDefault:
 		p.fail(p.cur.P, "default outside switch body")
-	case KW_FOR:
+	case tokFor:
 		return p.parseFor(stmtLabel{})
-	case KW_BREAK:
+	case tokBreak:
 		return p.parseBreak()
-	case KW_CONTINUE:
+	case tokContinue:
 		return p.parseContinue()
-	case KW_RETURN:
+	case tokReturn:
 		return p.parseReturn()
-	case IDENT:
-		if p.peek.K == ASSIGN {
+	case tokIdent:
+		if p.peek.K == tokAssign {
 			return p.parseAssign()
 		}
-		if p.peek.K == COLON {
+		if p.peek.K == tokColon {
 			return p.parseLabeled()
 		}
 	}
 	return p.parseExprStmt()
 }
 
-func (p *Parser) parseExport() Stmt {
-	p.expect(KW_EXPORT)
+func (p *parser) parseExport() Stmt {
+	p.expect(tokExport)
 	switch p.cur.K {
-	case KW_LET:
+	case tokLet:
 		return p.parseLet(true, false)
-	case KW_CONST:
+	case tokConst:
 		return p.parseLet(true, true)
-	case KW_FN:
+	case tokFn:
 		return p.parseFn(true)
 	default:
 		p.fail(p.cur.P, "export must be followed by let, const, or fn")
@@ -191,50 +191,50 @@ func (p *Parser) parseExport() Stmt {
 	}
 }
 
-func (p *Parser) parseLet(exp bool, isConst bool) Stmt {
+func (p *parser) parseLet(exp bool, isConst bool) Stmt {
 	var pos Pos
 	if isConst {
-		pos = p.expect(KW_CONST).P
+		pos = p.expect(tokConst).P
 	} else {
-		pos = p.expect(KW_LET).P
+		pos = p.expect(tokLet).P
 	}
 
-	name := p.expect(IDENT).Lit
-	p.expect(ASSIGN)
+	name := p.expect(tokIdent).Lit
+	p.expect(tokAssign)
 	val := p.parseExpr()
 	return &LetStmt{P: pos, Exported: exp, Const: isConst, Name: name, Val: val}
 }
 
-func (p *Parser) parseAssign() Stmt {
-	tok := p.expect(IDENT)
+func (p *parser) parseAssign() Stmt {
+	tok := p.expect(tokIdent)
 	pos := tok.P
 	name := tok.Lit
-	p.expect(ASSIGN)
+	p.expect(tokAssign)
 	val := p.parseExpr()
 	return &AssignStmt{P: pos, Name: name, Val: val}
 }
 
-func (p *Parser) parseReturn() Stmt {
-	pos := p.expect(KW_RETURN).P
-	if p.cur.K == EOF || p.cur.K == RBRACE || p.isSemi(p.cur.K) {
+func (p *parser) parseReturn() Stmt {
+	pos := p.expect(tokReturn).P
+	if p.cur.K == tokEOF || p.cur.K == tokRbrace || p.isSemi(p.cur.K) {
 		return &ReturnStmt{P: pos}
 	}
 	val := p.parseExpr()
 	return &ReturnStmt{P: pos, Val: val}
 }
 
-func (p *Parser) parseExprStmt() Stmt {
+func (p *parser) parseExprStmt() Stmt {
 	pos := p.cur.P
 	ex := p.parseExpr()
 	return &ExprStmt{P: pos, Exp: ex}
 }
 
-func (p *Parser) parseFn(exp bool) Stmt {
-	pos := p.expect(KW_FN).P
-	name := p.expect(IDENT).Lit
-	p.expect(LPAREN)
+func (p *parser) parseFn(exp bool) Stmt {
+	pos := p.expect(tokFn).P
+	name := p.expect(tokIdent).Lit
+	p.expect(tokLparen)
 	params := p.parseParams()
-	p.expect(RPAREN)
+	p.expect(tokRparen)
 	saved := p.controls
 	p.controls = nil
 	body := p.parseBlock()
@@ -242,14 +242,14 @@ func (p *Parser) parseFn(exp bool) Stmt {
 	return &FnDef{P: pos, Exported: exp, Name: name, Params: params, Body: body}
 }
 
-func (p *Parser) parseParams() []string {
-	if p.cur.K == RPAREN {
+func (p *parser) parseParams() []string {
+	if p.cur.K == tokRparen {
 		return nil
 	}
 	var out []string
 	seen := map[string]struct{}{}
 	for {
-		if p.cur.K != IDENT {
+		if p.cur.K != tokIdent {
 			p.fail(p.cur.P, "expected parameter name")
 		}
 
@@ -260,9 +260,9 @@ func (p *Parser) parseParams() []string {
 		seen[name] = struct{}{}
 		out = append(out, name)
 		p.next()
-		if p.cur.K == COMMA {
+		if p.cur.K == tokComma {
 			p.next()
-			if p.cur.K == RPAREN {
+			if p.cur.K == tokRparen {
 				break
 			}
 			continue
@@ -272,12 +272,12 @@ func (p *Parser) parseParams() []string {
 	return out
 }
 
-func (p *Parser) parseIf() Stmt {
-	pos := p.expect(KW_IF).P
+func (p *parser) parseIf() Stmt {
+	pos := p.expect(tokIf).P
 	cond := p.parseExpr()
 	then := p.parseBlock()
 	var elifs []Elif
-	for p.cur.K == KW_ELIF {
+	for p.cur.K == tokElif {
 		p.next()
 		c := p.parseExpr()
 		b := p.parseBlock()
@@ -285,7 +285,7 @@ func (p *Parser) parseIf() Stmt {
 	}
 
 	var els *Block
-	if p.cur.K == KW_ELSE {
+	if p.cur.K == tokElse {
 		p.next()
 		els = p.parseBlock()
 	}
@@ -294,8 +294,8 @@ func (p *Parser) parseIf() Stmt {
 
 // parseLabeled reads "name:" in front of a for or switch. Labels live in their
 // own namespace and decorate nothing else, so there is no general labeled
-// statement and no goto
-func (p *Parser) parseLabeled() Stmt {
+// statement and no goto.
+func (p *parser) parseLabeled() Stmt {
 	tok := p.cur
 	if tok.Lit == "_" {
 		p.fail(tok.P, fmt.Sprintf("invalid label %q", tok.Lit))
@@ -311,9 +311,9 @@ func (p *Parser) parseLabeled() Stmt {
 
 	lb := stmtLabel{name: tok.Lit, pos: tok.P}
 	switch p.cur.K {
-	case KW_FOR:
+	case tokFor:
 		return p.parseFor(lb)
-	case KW_SWITCH:
+	case tokSwitch:
 		return p.parseSwitch(lb)
 	default:
 		p.failCur(fmt.Sprintf("label must be followed by for or switch, got %s", p.cur.K))
@@ -321,17 +321,17 @@ func (p *Parser) parseLabeled() Stmt {
 	}
 }
 
-func (p *Parser) pushControl(kind controlKind, lb stmtLabel) {
+func (p *parser) pushControl(kind controlKind, lb stmtLabel) {
 	p.controls = append(p.controls, controlTarget{kind: kind, label: lb.name, pos: lb.pos})
 }
 
-func (p *Parser) popControl() {
+func (p *parser) popControl() {
 	p.controls = p.controls[:len(p.controls)-1]
 }
 
 // findControl looks up an active label. It is never called with an empty name,
-// which would match the unlabeled targets
-func (p *Parser) findControl(label string) *controlTarget {
+// which would match the unlabeled targets.
+func (p *parser) findControl(label string) *controlTarget {
 	for i := len(p.controls) - 1; i >= 0; i-- {
 		if p.controls[i].label == label {
 			return &p.controls[i]
@@ -340,7 +340,7 @@ func (p *Parser) findControl(label string) *controlTarget {
 	return nil
 }
 
-func (p *Parser) inLoop() bool {
+func (p *parser) inLoop() bool {
 	for _, c := range p.controls {
 		if c.kind == controlLoop {
 			return true
@@ -350,10 +350,10 @@ func (p *Parser) inLoop() bool {
 }
 
 // labelRef reads the optional target of a break or continue. The lexer inserts
-// a semicolon after both keywords, so a label only parses on the same line
-func (p *Parser) labelRef() (Tok, bool) {
-	if p.cur.K != IDENT {
-		return Tok{}, false
+// a semicolon after both keywords, so a label only parses on the same line.
+func (p *parser) labelRef() (token, bool) {
+	if p.cur.K != tokIdent {
+		return token{}, false
 	}
 	tok := p.cur
 	p.next()
@@ -361,34 +361,34 @@ func (p *Parser) labelRef() (Tok, bool) {
 }
 
 // parseSwitch reads both switch forms. A brace right after the keyword means
-// the tagless form, mirroring Go: a dict literal tag has to be parenthesized
-func (p *Parser) parseSwitch(lb stmtLabel) Stmt {
-	pos := p.expect(KW_SWITCH).P
+// the tagless form, mirroring Go: a dict literal tag has to be parenthesized.
+func (p *parser) parseSwitch(lb stmtLabel) Stmt {
+	pos := p.expect(tokSwitch).P
 	var tag Expr
-	if p.cur.K != LBRACE {
+	if p.cur.K != tokLbrace {
 		tag = p.parseExpr()
 	}
-	p.expect(LBRACE)
+	p.expect(tokLbrace)
 	p.pushControl(controlSwitch, lb)
 	clauses := p.parseCaseClauses()
 	p.popControl()
-	p.expect(RBRACE)
+	p.expect(tokRbrace)
 	return &SwitchStmt{P: pos, Label: lb.name, LabelPos: lb.pos, Tag: tag, Clauses: clauses}
 }
 
-func (p *Parser) parseCaseClauses() []CaseClause {
+func (p *parser) parseCaseClauses() []CaseClause {
 	var out []CaseClause
 	seenDefault := false
 	for {
 		p.skipSemi()
 		switch p.cur.K {
-		case RBRACE:
+		case tokRbrace:
 			return out
-		case EOF:
+		case tokEOF:
 			p.fail(p.cur.P, "unterminated switch")
-		case KW_CASE:
+		case tokCase:
 			out = append(out, p.parseCase())
-		case KW_DEFAULT:
+		case tokDefault:
 			if seenDefault {
 				p.fail(p.cur.P, "duplicate default in switch")
 			}
@@ -400,50 +400,50 @@ func (p *Parser) parseCaseClauses() []CaseClause {
 	}
 }
 
-func (p *Parser) parseCase() CaseClause {
-	pos := p.expect(KW_CASE).P
+func (p *parser) parseCase() CaseClause {
+	pos := p.expect(tokCase).P
 	exprs := p.parseCaseExprs()
-	colon := p.expect(COLON).P
+	colon := p.expect(tokColon).P
 	return CaseClause{P: pos, Exprs: exprs, Body: p.parseClauseBody(colon)}
 }
 
-func (p *Parser) parseCaseExprs() []Expr {
+func (p *parser) parseCaseExprs() []Expr {
 	var out []Expr
 	for {
-		if p.cur.K == COLON {
+		if p.cur.K == tokColon {
 			p.fail(p.cur.P, "case requires an expression")
 		}
 		out = append(out, p.parseExpr())
-		if p.cur.K != COMMA {
+		if p.cur.K != tokComma {
 			return out
 		}
 		p.next()
 	}
 }
 
-func (p *Parser) parseDefault() CaseClause {
-	pos := p.expect(KW_DEFAULT).P
-	colon := p.expect(COLON).P
+func (p *parser) parseDefault() CaseClause {
+	pos := p.expect(tokDefault).P
+	colon := p.expect(tokColon).P
 	return CaseClause{P: pos, Body: p.parseClauseBody(colon)}
 }
 
-func (p *Parser) parseClauseBody(pos Pos) *Block {
+func (p *parser) parseClauseBody(pos Pos) *Block {
 	var out []Stmt
 	for {
 		p.skipSemi()
-		if p.cur.K == RBRACE || p.cur.K == KW_CASE || p.cur.K == KW_DEFAULT {
+		if p.cur.K == tokRbrace || p.cur.K == tokCase || p.cur.K == tokDefault {
 			return &Block{P: pos, Stmts: out}
 		}
-		if p.cur.K == EOF {
+		if p.cur.K == tokEOF {
 			p.fail(p.cur.P, "unterminated switch")
 		}
 		out = append(out, p.parseStmt())
 	}
 }
 
-func (p *Parser) parseFor(lb stmtLabel) Stmt {
-	pos := p.expect(KW_FOR).P
-	if p.cur.K == LBRACE {
+func (p *parser) parseFor(lb stmtLabel) Stmt {
+	pos := p.expect(tokFor).P
+	if p.cur.K == tokLbrace {
 		return p.parseForBody(pos, lb, nil, nil, nil, nil)
 	}
 	if p.isForRangeStart() {
@@ -474,42 +474,42 @@ func (p *Parser) parseFor(lb stmtLabel) Stmt {
 	return p.parseForBody(pos, lb, nil, exprStmt.Exp, nil, nil)
 }
 
-func (p *Parser) isForRangeStart() bool {
+func (p *parser) isForRangeStart() bool {
 	tok := p.cur
 	idx := 0
-	if tok.K == KW_LET {
+	if tok.K == tokLet {
 		tok = p.peekN(1)
-		if tok.K != IDENT {
+		if tok.K != tokIdent {
 			return false
 		}
 		idx = 1
-	} else if tok.K != IDENT {
+	} else if tok.K != tokIdent {
 		return false
 	}
 
 	next := p.peekN(idx + 1)
-	if next.K == COMMA {
-		if p.peekN(idx+2).K != IDENT {
+	if next.K == tokComma {
+		if p.peekN(idx+2).K != tokIdent {
 			return false
 		}
 		next = p.peekN(idx + 3)
 	}
-	return next.K == KW_RANGE
+	return next.K == tokRange
 }
 
-func (p *Parser) parseForRange(pos Pos, lb stmtLabel) Stmt {
+func (p *parser) parseForRange(pos Pos, lb stmtLabel) Stmt {
 	decl := false
-	if p.cur.K == KW_LET {
+	if p.cur.K == tokLet {
 		decl = true
 		p.next()
 	}
 
-	keyTok := p.expect(IDENT)
+	keyTok := p.expect(tokIdent)
 	key := keyTok.Lit
 	val := ""
-	if p.cur.K == COMMA {
+	if p.cur.K == tokComma {
 		p.next()
-		valTok := p.expect(IDENT)
+		valTok := p.expect(tokIdent)
 		val = valTok.Lit
 	}
 
@@ -517,50 +517,50 @@ func (p *Parser) parseForRange(pos Pos, lb stmtLabel) Stmt {
 		p.fail(keyTok.P, "range variables must be distinct")
 	}
 
-	p.expect(KW_RANGE)
+	p.expect(tokRange)
 	src := p.parseExpr()
 	rng := &ForRange{Key: key, Val: val, Expr: src, Declare: decl}
 	return p.parseForBody(pos, lb, nil, nil, nil, rng)
 }
 
-func (p *Parser) parseForCond() Expr {
+func (p *parser) parseForCond() Expr {
 	if p.isSemi(p.cur.K) {
 		return nil
 	}
 	return p.parseExpr()
 }
 
-func (p *Parser) parseForInit() Stmt {
+func (p *parser) parseForInit() Stmt {
 	return p.parseForClause(true, "init")
 }
 
-func (p *Parser) parseForPost() Stmt {
-	if p.cur.K == LBRACE {
+func (p *parser) parseForPost() Stmt {
+	if p.cur.K == tokLbrace {
 		return nil
 	}
 	return p.parseForClause(false, "post")
 }
 
-func (p *Parser) parseForClause(allowLet bool, label string) Stmt {
+func (p *parser) parseForClause(allowLet bool, label string) Stmt {
 	switch p.cur.K {
-	case KW_LET:
+	case tokLet:
 		if !allowLet {
 			p.fail(p.cur.P, fmt.Sprintf("for %s clause cannot use let", label))
 		}
 		return p.parseLet(false, false)
-	case KW_CONST:
+	case tokConst:
 		p.fail(p.cur.P, fmt.Sprintf("for %s clause cannot use const", label))
-	case KW_EXPORT, KW_FN, KW_IF, KW_SWITCH, KW_FOR, KW_RETURN, KW_BREAK, KW_CONTINUE, KW_RANGE:
+	case tokExport, tokFn, tokIf, tokSwitch, tokFor, tokReturn, tokBreak, tokContinue, tokRange:
 		p.fail(p.cur.P, fmt.Sprintf("invalid for %s clause", label))
-	case IDENT:
-		if p.peek.K == ASSIGN {
+	case tokIdent:
+		if p.peek.K == tokAssign {
 			return p.parseAssign()
 		}
 	}
 	return p.parseExprStmt()
 }
 
-func (p *Parser) parseForBody(
+func (p *parser) parseForBody(
 	pos Pos,
 	lb stmtLabel,
 	init Stmt,
@@ -583,8 +583,8 @@ func (p *Parser) parseForBody(
 	}
 }
 
-func (p *Parser) parseBreak() Stmt {
-	pos := p.expect(KW_BREAK).P
+func (p *parser) parseBreak() Stmt {
+	pos := p.expect(tokBreak).P
 	tok, ok := p.labelRef()
 	if !ok {
 		if len(p.controls) == 0 {
@@ -598,8 +598,8 @@ func (p *Parser) parseBreak() Stmt {
 	return &BreakStmt{P: pos, Label: tok.Lit}
 }
 
-func (p *Parser) parseContinue() Stmt {
-	pos := p.expect(KW_CONTINUE).P
+func (p *parser) parseContinue() Stmt {
+	pos := p.expect(tokContinue).P
 	tok, ok := p.labelRef()
 	if !ok {
 		if !p.inLoop() {
@@ -618,11 +618,11 @@ func (p *Parser) parseContinue() Stmt {
 	return &ContinueStmt{P: pos, Label: tok.Lit}
 }
 
-func (p *Parser) parseBlock() *Block {
-	pos := p.expect(LBRACE).P
+func (p *parser) parseBlock() *Block {
+	pos := p.expect(tokLbrace).P
 	var out []Stmt
-	for p.cur.K != RBRACE {
-		if p.cur.K == EOF {
+	for p.cur.K != tokRbrace {
+		if p.cur.K == tokEOF {
 			p.fail(p.cur.P, "unterminated block")
 		}
 
@@ -635,17 +635,17 @@ func (p *Parser) parseBlock() *Block {
 		out = append(out, st)
 		p.skipSemi()
 	}
-	p.expect(RBRACE)
+	p.expect(tokRbrace)
 	return &Block{P: pos, Stmts: out}
 }
 
-func (p *Parser) parseExpr() Expr {
+func (p *parser) parseExpr() Expr {
 	return p.parseTernary()
 }
 
-type binOpMatcher func(Kind) (BinOp, bool)
+type binOpMatcher func(tokKind) (BinOp, bool)
 
-func (p *Parser) parseBinary(next func() Expr, opOf binOpMatcher) Expr {
+func (p *parser) parseBinary(next func() Expr, opOf binOpMatcher) Expr {
 	left := next()
 	for {
 		op, ok := opOf(p.cur.K)
@@ -659,37 +659,37 @@ func (p *Parser) parseBinary(next func() Expr, opOf binOpMatcher) Expr {
 	}
 }
 
-func (p *Parser) parseTernary() Expr {
+func (p *parser) parseTernary() Expr {
 	cond := p.parseCoalesce()
-	if p.cur.K != QUESTION {
+	if p.cur.K != tokQuestion {
 		return cond
 	}
 
 	pos := p.cur.P
 	p.next()
 	then := p.parseExpr()
-	p.expect(COLON)
+	p.expect(tokColon)
 	els := p.parseExpr()
 	return &Ternary{P: pos, Cond: cond, Then: then, Else: els}
 }
 
-func (p *Parser) parseCoalesce() Expr {
+func (p *parser) parseCoalesce() Expr {
 	return p.parseBinary(p.parseOr, coalesceOp)
 }
 
-func (p *Parser) parseOr() Expr {
+func (p *parser) parseOr() Expr {
 	return p.parseBinary(p.parseAnd, orOp)
 }
 
-func (p *Parser) parseAnd() Expr {
+func (p *parser) parseAnd() Expr {
 	return p.parseBinary(p.parseEq, andOp)
 }
 
-func (p *Parser) parseEq() Expr {
+func (p *parser) parseEq() Expr {
 	return p.parseBinary(p.parseCmp, eqOp)
 }
 
-func (p *Parser) parseCmp() Expr {
+func (p *parser) parseCmp() Expr {
 	left := p.parseAdd()
 	for {
 		pos := p.cur.P
@@ -698,11 +698,11 @@ func (p *Parser) parseCmp() Expr {
 		switch {
 		case ok:
 			p.next()
-		case p.cur.K == IDENT && p.cur.Lit == "in":
+		case p.cur.K == tokIdent && p.cur.Lit == "in":
 			op = OpIn
 			membership = true
 			p.next()
-		case p.cur.K == KW_NOT && p.peek.K == IDENT && p.peek.Lit == "in":
+		case p.cur.K == tokNot && p.peek.K == tokIdent && p.peek.Lit == "in":
 			op = OpNotIn
 			membership = true
 			p.next()
@@ -714,7 +714,7 @@ func (p *Parser) parseCmp() Expr {
 		// in stays an identifier in the lexer, so it receives an automatic
 		// semicolon at a line boundary. Once the parser has identified it as
 		// an operator, that semicolon is continuation rather than punctuation.
-		if membership && p.cur.K == AUTO_SEMI {
+		if membership && p.cur.K == tokAutoSemi {
 			p.next()
 		}
 		right := p.parseAdd()
@@ -722,83 +722,83 @@ func (p *Parser) parseCmp() Expr {
 	}
 }
 
-func (p *Parser) parseAdd() Expr {
+func (p *parser) parseAdd() Expr {
 	return p.parseBinary(p.parseMul, addOp)
 }
 
-func (p *Parser) parseMul() Expr {
+func (p *parser) parseMul() Expr {
 	return p.parseBinary(p.parseUnary, mulOp)
 }
 
-func coalesceOp(k Kind) (BinOp, bool) {
-	if k == COALESCE {
+func coalesceOp(k tokKind) (BinOp, bool) {
+	if k == tokCoalesce {
 		return OpCoalesce, true
 	}
 	return 0, false
 }
 
-func orOp(k Kind) (BinOp, bool) {
+func orOp(k tokKind) (BinOp, bool) {
 	switch k {
-	case KW_OR, OROR:
+	case tokOr, tokOrOr:
 		return OpOr, true
 	default:
 		return 0, false
 	}
 }
 
-func andOp(k Kind) (BinOp, bool) {
+func andOp(k tokKind) (BinOp, bool) {
 	switch k {
-	case KW_AND, ANDAND:
+	case tokAnd, tokAndAnd:
 		return OpAnd, true
 	default:
 		return 0, false
 	}
 }
 
-func eqOp(k Kind) (BinOp, bool) {
+func eqOp(k tokKind) (BinOp, bool) {
 	switch k {
-	case EQ:
+	case tokEq:
 		return OpEq, true
-	case NE:
+	case tokNe:
 		return OpNe, true
 	default:
 		return 0, false
 	}
 }
 
-func cmpOp(k Kind) (BinOp, bool) {
+func cmpOp(k tokKind) (BinOp, bool) {
 	switch k {
-	case LT:
+	case tokLt:
 		return OpLt, true
-	case LE:
+	case tokLe:
 		return OpLe, true
-	case GT:
+	case tokGt:
 		return OpGt, true
-	case GE:
+	case tokGe:
 		return OpGe, true
 	default:
 		return 0, false
 	}
 }
 
-func addOp(k Kind) (BinOp, bool) {
+func addOp(k tokKind) (BinOp, bool) {
 	switch k {
-	case PLUS:
+	case tokPlus:
 		return OpAdd, true
-	case MINUS:
+	case tokMinus:
 		return OpSub, true
 	default:
 		return 0, false
 	}
 }
 
-func mulOp(k Kind) (BinOp, bool) {
+func mulOp(k tokKind) (BinOp, bool) {
 	switch k {
-	case STAR:
+	case tokStar:
 		return OpMul, true
-	case SLASH:
+	case tokSlash:
 		return OpDiv, true
-	case PERCENT:
+	case tokPercent:
 		return OpMod, true
 	default:
 		return 0, false
@@ -806,20 +806,20 @@ func mulOp(k Kind) (BinOp, bool) {
 }
 
 // unaryOp maps the word and symbol forms onto the same operator, so not x and
-// !x parse to one node
-func unaryOp(k Kind) (UnOp, bool) {
+// !x parse to one node.
+func unaryOp(k tokKind) (UnOp, bool) {
 	switch k {
-	case KW_NOT, BANG:
+	case tokNot, tokBang:
 		return UnNot, true
-	case MINUS:
+	case tokMinus:
 		return UnNeg, true
 	default:
 		return 0, false
 	}
 }
 
-func (p *Parser) parseUnary() Expr {
-	if p.cur.K == KW_TRY {
+func (p *parser) parseUnary() Expr {
+	if p.cur.K == tokTry {
 		pos := p.cur.P
 		p.next()
 		x := p.parseUnary()
@@ -835,32 +835,32 @@ func (p *Parser) parseUnary() Expr {
 	return p.parsePostfix()
 }
 
-func (p *Parser) parsePostfix() Expr {
+func (p *parser) parsePostfix() Expr {
 	left := p.parsePrimary()
 	for {
 		switch p.cur.K {
-		case LPAREN:
+		case tokLparen:
 			pos := p.cur.P
 			p.next()
 			args := p.parseArgs()
-			p.expect(RPAREN)
+			p.expect(tokRparen)
 			left = &Call{P: pos, Callee: left, Args: args}
-		case LBRACK:
+		case tokLbrack:
 			pos := p.cur.P
 			p.next()
 			idx := p.parseExpr()
-			p.expect(RBRACK)
+			p.expect(tokRbrack)
 			left = &Index{P: pos, X: left, Idx: idx}
-		case DOT:
+		case tokDot:
 			pos := p.cur.P
 			p.next()
-			// member access has no quoted spelling, so the fix here is an index
+			// member access has no quoted form, so the fix here is an index
 			if p.cur.K.isKeyword() {
 				p.fail(p.cur.P, fmt.Sprintf(
 					"field name cannot be the reserved word %s, use [%q] instead", p.cur.K, p.cur.K,
 				))
 			}
-			name := p.expect(IDENT).Lit
+			name := p.expect(tokIdent).Lit
 			left = &Member{P: pos, X: left, Name: name}
 		default:
 			return left
@@ -868,17 +868,17 @@ func (p *Parser) parsePostfix() Expr {
 	}
 }
 
-func (p *Parser) parseArgs() []Expr {
-	if p.cur.K == RPAREN {
+func (p *parser) parseArgs() []Expr {
+	if p.cur.K == tokRparen {
 		return nil
 	}
 
 	var out []Expr
 	for {
 		out = append(out, p.parseExpr())
-		if p.cur.K == COMMA {
+		if p.cur.K == tokComma {
 			p.next()
-			if p.cur.K == RPAREN {
+			if p.cur.K == tokRparen {
 				break
 			}
 			continue
@@ -888,14 +888,14 @@ func (p *Parser) parseArgs() []Expr {
 	return out
 }
 
-func (p *Parser) parsePrimary() Expr {
+func (p *parser) parsePrimary() Expr {
 	switch p.cur.K {
-	case IDENT:
+	case tokIdent:
 		pos := p.cur.P
 		name := p.cur.Lit
 		p.next()
 		return &Ident{P: pos, Name: name}
-	case NUMBER:
+	case tokNumber:
 		pos := p.cur.P
 		lit := p.cur.Lit
 		p.next()
@@ -904,41 +904,41 @@ func (p *Parser) parsePrimary() Expr {
 			p.fail(pos, "invalid number")
 		}
 		return &Literal{P: pos, Kind: LitNum, N: n}
-	case STRING:
+	case tokString:
 		pos := p.cur.P
 		lit := p.cur.Lit
 		p.next()
 		return &Literal{P: pos, Kind: LitStr, S: lit}
-	case KW_TRUE:
+	case tokTrue:
 		pos := p.cur.P
 		p.next()
 		return &Literal{P: pos, Kind: LitBool, B: true}
-	case KW_FALSE:
+	case tokFalse:
 		pos := p.cur.P
 		p.next()
 		return &Literal{P: pos, Kind: LitBool, B: false}
-	case KW_NULL:
+	case tokNull:
 		pos := p.cur.P
 		p.next()
 		return &Literal{P: pos, Kind: LitNull}
-	case LPAREN:
+	case tokLparen:
 		p.next()
 		ex := p.parseExpr()
-		p.expect(RPAREN)
+		p.expect(tokRparen)
 		return ex
-	case LBRACK:
+	case tokLbrack:
 		return p.parseList()
-	case LBRACE:
+	case tokLbrace:
 		return p.parseDict()
 	}
 	p.failCur(fmt.Sprintf("unexpected %s", p.cur.K))
 	return nil
 }
 
-func (p *Parser) parseList() Expr {
-	pos := p.expect(LBRACK).P
+func (p *parser) parseList() Expr {
+	pos := p.expect(tokLbrack).P
 	p.skipSemi()
-	if p.cur.K == RBRACK {
+	if p.cur.K == tokRbrack {
 		p.next()
 		return &ListLit{P: pos}
 	}
@@ -947,27 +947,27 @@ func (p *Parser) parseList() Expr {
 	for {
 		elems = append(elems, p.parseExpr())
 		p.skipSemi()
-		if p.cur.K == COMMA {
+		if p.cur.K == tokComma {
 			p.next()
 			p.skipSemi()
-			if p.cur.K == RBRACK {
+			if p.cur.K == tokRbrack {
 				break
 			}
 			continue
 		}
-		if p.cur.K == RBRACK {
+		if p.cur.K == tokRbrack {
 			break
 		}
 		break
 	}
-	p.expect(RBRACK)
+	p.expect(tokRbrack)
 	return &ListLit{P: pos, Elems: elems}
 }
 
-func (p *Parser) parseDict() Expr {
-	pos := p.expect(LBRACE).P
+func (p *parser) parseDict() Expr {
+	pos := p.expect(tokLbrace).P
 	p.skipSemi()
-	if p.cur.K == RBRACE {
+	if p.cur.K == tokRbrace {
 		p.next()
 		return &DictLit{P: pos}
 	}
@@ -977,10 +977,10 @@ func (p *Parser) parseDict() Expr {
 		var key string
 		kp := p.cur.P
 		switch p.cur.K {
-		case STRING:
+		case tokString:
 			key = p.cur.Lit
 			p.next()
-		case IDENT:
+		case tokIdent:
 			key = p.cur.Lit
 			p.next()
 		default:
@@ -991,55 +991,55 @@ func (p *Parser) parseDict() Expr {
 			}
 			p.fail(p.cur.P, "dict key must be string or ident")
 		}
-		p.expect(COLON)
+		p.expect(tokColon)
 		val := p.parseExpr()
 		entries = append(entries, DictEntry{P: kp, Key: key, Val: val})
 		p.skipSemi()
-		if p.cur.K == COMMA {
+		if p.cur.K == tokComma {
 			p.next()
 			p.skipSemi()
-			if p.cur.K == RBRACE {
+			if p.cur.K == tokRbrace {
 				break
 			}
 			continue
 		}
-		if p.cur.K == RBRACE {
+		if p.cur.K == tokRbrace {
 			break
 		}
 		break
 	}
-	p.expect(RBRACE)
+	p.expect(tokRbrace)
 	return &DictLit{P: pos, Entries: entries}
 }
 
-func (p *Parser) skipSemi() {
+func (p *parser) skipSemi() {
 	for p.isSemi(p.cur.K) {
 		p.next()
 	}
 }
 
-func (p *Parser) isSemi(k Kind) bool {
-	return k == SEMI || k == AUTO_SEMI
+func (p *parser) isSemi(k tokKind) bool {
+	return k == tokSemi || k == tokAutoSemi
 }
 
-func (p *Parser) expectSemi() {
+func (p *parser) expectSemi() {
 	if !p.isSemi(p.cur.K) {
-		p.failCur(fmt.Sprintf("expected %s, got %s", SEMI, p.cur.K))
+		p.failCur(fmt.Sprintf("expected %s, got %s", tokSemi, p.cur.K))
 	}
 	p.next()
 }
 
-func (p *Parser) next() {
+func (p *parser) next() {
 	p.cur = p.peek
 	if len(p.ahead) > 0 {
 		p.peek = p.ahead[0]
 		p.ahead = p.ahead[1:]
 		return
 	}
-	p.peek = p.lx.Next()
+	p.peek = p.lx.scan()
 }
 
-func (p *Parser) peekN(n int) Tok {
+func (p *parser) peekN(n int) token {
 	if n <= 0 {
 		return p.cur
 	}
@@ -1047,12 +1047,12 @@ func (p *Parser) peekN(n int) Tok {
 		return p.peek
 	}
 	for len(p.ahead) < n-1 {
-		p.ahead = append(p.ahead, p.lx.Next())
+		p.ahead = append(p.ahead, p.lx.scan())
 	}
 	return p.ahead[n-2]
 }
 
-func (p *Parser) expect(k Kind) Tok {
+func (p *parser) expect(k tokKind) token {
 	if p.cur.K != k {
 		p.failCur(fmt.Sprintf("expected %s, got %s", k, p.cur.K))
 	}
@@ -1061,15 +1061,15 @@ func (p *Parser) expect(k Kind) Tok {
 	return t
 }
 
-func (p *Parser) fail(pos Pos, msg string) {
+func (p *parser) fail(pos Pos, msg string) {
 	panic(&ParseError{Pos: pos, Msg: msg})
 }
 
-// failCur reports a parse error at the current token. An ILLEGAL token already
-// carries the lexer's diagnostic (e.g. unexpected '&')
-func (p *Parser) failCur(fallback string) {
+// failCur reports a parse error at the current token. An illegal token already
+// carries the lexer's diagnostic, such as unexpected '&'.
+func (p *parser) failCur(fallback string) {
 	msg := fallback
-	if p.cur.K == ILLEGAL {
+	if p.cur.K == tokIllegal {
 		msg = p.cur.Lit
 	}
 	p.fail(p.cur.P, msg)
