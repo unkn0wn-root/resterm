@@ -2,6 +2,59 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.15.0](https://github.com/unkn0wn-root/resterm/compare/v1.14.1...v1.15.0) (2026-10-16)
+
+
+### Features
+
+* **rts:** add json.equal and json.diff ([a8c60d3](https://github.com/unkn0wn-root/resterm/commit/a8c60d3a3fa1abf4c5c130d6230e69dd1015c35b))
+* **rts:** give rts blocks a larger step budget ([db436ff](https://github.com/unkn0wn-root/resterm/commit/db436ffbbe0ed60cbe269afbdd55fa9a4b40c292))
+* **rts:** run rts test blocks after the response ([95d083e](https://github.com/unkn0wn-root/resterm/commit/95d083e89a11ce7905e500b1908c173e259a3b9f))
+
+
+### Bug Fixes
+
+* **capture:** use the shared json path grammar ([393403f](https://github.com/unkn0wn-root/resterm/commit/393403f804c2c9ca1e66cd061958be5f01663462))
+* **diag:** quote each merged error from its own file ([a905bb1](https://github.com/unkn0wn-root/resterm/commit/a905bb1eb63603a3b7c3942f2e49e5599224f08a))
+* escape control characters in test text ([c6f1473](https://github.com/unkn0wn-root/resterm/commit/c6f1473a3f16fc03411eda50182fdb608014ec3a))
+* **headless:** indent every line of a workflow step message ([a136654](https://github.com/unkn0wn-root/resterm/commit/a1366546b440343040d9238c9d5766070e798e0d))
+* **intellisense:** offer only lang after a script kind ([4b26b0f](https://github.com/unkn0wn-root/resterm/commit/4b26b0fde7f7f6bd691e4fa61f24ab8e3b4558e2))
+* **jsonpath:** parse paths once with one grammar ([69263a1](https://github.com/unkn0wn-root/resterm/commit/69263a134deca6127e6be7e895a8b6678f9ae1d8))
+* keep workflow summaries on one line ([d92904e](https://github.com/unkn0wn-root/resterm/commit/d92904e1f57f66db47ea07781ec4666dbf74bead))
+* leave blank lines empty when indenting ([2314848](https://github.com/unkn0wn-root/resterm/commit/2314848dd450c7ad69fb96cef16c2737a33ea8db))
+* line up multi-line test messages ([7ed1c83](https://github.com/unkn0wn-root/resterm/commit/7ed1c832730a24402139dc2524e7599ad7d56213))
+* **mock:** bound mock patterns ([1916497](https://github.com/unkn0wn-root/resterm/commit/1916497a9d222ee059ddeaffdbb23f3952cdba24))
+* **parser:** accept one-line {% %} blocks in every script ([66545d4](https://github.com/unkn0wn-root/resterm/commit/66545d41fa4f15250f08ea1bfc11189490ba09f3))
+* **parser:** keep headers after a second method line ([f29b1ca](https://github.com/unkn0wn-root/resterm/commit/f29b1ca6dcbadd60c99b299d777428f9c1a102a5))
+* **parser:** reject unclosed quotes in rts test names ([fbac976](https://github.com/unkn0wn-root/resterm/commit/fbac976d1acb1a7004625a826c54b05d9c82133e))
+* **parser:** report unknown script options ([178044f](https://github.com/unkn0wn-root/resterm/commit/178044fd5d84008b264adc71fe1a031852abf0f8))
+* **parser:** skip spaced options when reading script words ([7d6f5f8](https://github.com/unkn0wn-root/resterm/commit/7d6f5f869a20bb3c7e28edd8d3577fd05f86261c))
+* **report:** fold profile failure reasons ([113b10e](https://github.com/unkn0wn-root/resterm/commit/113b10e8fc2f05c7292e5924ab2ef79d6e4bd197))
+* **request:** attach the request source once ([2982219](https://github.com/unkn0wn-root/resterm/commit/2982219a2daf098af5c4928e45a0c734b637d682))
+* **request:** give response tests their own timeout ([992fc58](https://github.com/unkn0wn-root/resterm/commit/992fc58edeebfc85ad01b99bf32f1de2e3d96603))
+* **request:** keep cancel and timeout errors when the context has a cause ([ff16c92](https://github.com/unkn0wn-root/resterm/commit/ff16c92dbe6ef0414c4847cca88ab9e8ce0cc5fb))
+* **request:** keep script error details when errors combine ([17e7aa7](https://github.com/unkn0wn-root/resterm/commit/17e7aa705b8d1ac7efcb6deb3ab0b29bb48ae16e))
+* **request:** load a request's modules once before its checks ([51a1506](https://github.com/unkn0wn-root/resterm/commit/51a15068937f56e02287fefca524fe95b0bf9639))
+* **request:** name the response check timeout ([557f227](https://github.com/unkn0wn-root/resterm/commit/557f227a4e3aee9a03580cb00a5ec8b8d43257c7))
+* **request:** report a cancel before the request is sent as canceled ([4dba8a8](https://github.com/unkn0wn-root/resterm/commit/4dba8a8be9a4a5358c0249de8b77576f4b523ed9))
+* **request:** report a cancel during response checks as canceled ([f48637e](https://github.com/unkn0wn-root/resterm/commit/f48637e15a695e5ef50af72ecdd8f0d66253d25d))
+* **rts:** bound json.equal and json.diff ([d25199c](https://github.com/unkn0wn-root/resterm/commit/d25199cfe8262d8487ab8c047bfa93bb9e0c9ec7))
+* **rtshost:** abort when a saved t runs after its block ([a2cb835](https://github.com/unkn0wn-root/resterm/commit/a2cb835cd562fc316d5eb9f26d96b9f648ed3f30))
+* **rtshost:** give only test blocks the larger step budget ([f526efa](https://github.com/unkn0wn-root/resterm/commit/f526efad338c02b71b43b1f5780abbb39c7f86c4))
+* **rtshost:** limit t messages ([cb9b9ea](https://github.com/unkn0wn-root/resterm/commit/cb9b9eadb1b483f227d2a36b908330132d122c64))
+* **rtshost:** show the module line in module errors ([258830f](https://github.com/unkn0wn-root/resterm/commit/258830f62bd417f4fc8ace6e871960c6b90f64d3))
+* **rtshost:** stop host objects after their evaluation ends ([1749098](https://github.com/unkn0wn-root/resterm/commit/17490983a21f0b5926f92d493a306522c3f3027e))
+* **rts:** label a deadline abort as a timeout ([16f488e](https://github.com/unkn0wn-root/resterm/commit/16f488e3f1067c7d9976524a802cabd50cb95088))
+* **rts:** let a halt pass through nested evaluations ([3bd0fae](https://github.com/unkn0wn-root/resterm/commit/3bd0faef04e8890f3a5e3ccd2e29a178068479a5))
+* **rts:** quote the text each position was read from ([ff7b7bc](https://github.com/unkn0wn-root/resterm/commit/ff7b7bc0ffc51c9c93b0c191b6efb277327e9ef9))
+* **rts:** read json.get and json.has paths through the value ([1e403a4](https://github.com/unkn0wn-root/resterm/commit/1e403a4e7c8da5ac77cdec00f2d88e304e4d526b))
+* **rts:** stop writing JSON text at the size limit ([86265e7](https://github.com/unkn0wn-root/resterm/commit/86265e77811f189c6f506d5eb5a07b1ec577f826))
+* **run:** quote the failing line in run and headless errors ([41227b1](https://github.com/unkn0wn-root/resterm/commit/41227b1a6a662c99e333aa624f331414bf9f9ba5))
+* **runview:** escape test names and messages ([77a7096](https://github.com/unkn0wn-root/resterm/commit/77a7096e7bcdda1acfd82a963ebb17c0e24b4775))
+* **ui:** trim test messages before rendering ([d92f438](https://github.com/unkn0wn-root/resterm/commit/d92f43891d438abe5a57f0905c27b760462ee204))
+* **ui:** wrap each workflow step message line on its own ([a882e43](https://github.com/unkn0wn-root/resterm/commit/a882e43447d73aac6544c63174ed41f0e119de0f))
+* **web:** make the tour text a bit smaller ([#475](https://github.com/unkn0wn-root/resterm/issues/475)) ([5306f9b](https://github.com/unkn0wn-root/resterm/commit/5306f9b45d3505fd5799b214eedb614ca21c23b6))
+
 ### [1.14.1](https://github.com/unkn0wn-root/resterm/compare/v1.14.0...v1.14.1) (2026-10-12)
 
 
