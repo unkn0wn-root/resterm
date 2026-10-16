@@ -1,17 +1,26 @@
 package rts
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"strconv"
 )
 
+// ToStr returns v as text. A string is returned as is and null is empty.
+// Bools, numbers, lists, dicts and objects with a JSON form are written as
+// JSON, and NaN and infinities as NaN, +Inf and -Inf. Other values are an
+// error.
 func ToStr(ctx *Ctx, pos Pos, v Value) (string, error) {
 	switch v.K {
 	case VStr:
 		return v.S, nil
 	case VNum:
+		if b, err := json.Marshal(v.N); err == nil {
+			return string(b), nil
+		}
+		// JSON has no NaN or infinities.
 		return strconv.FormatFloat(v.N, 'g', -1, 64), nil
 	case VBool:
 		if v.B {

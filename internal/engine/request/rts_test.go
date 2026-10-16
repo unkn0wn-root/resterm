@@ -971,3 +971,29 @@ func TestDirectiveErrorPointsAtTheFileColumn(t *testing.T) {
 		t.Fatalf("script error = %v, want the call at env_ref.http:3:23", res.ScriptErr)
 	}
 }
+
+func TestRTSWritesNumbersInFullIntoTheRequest(t *testing.T) {
+	doc, req := parseDoc(t, `### one
+# @apply {headers: {"X-Apply": 1000000}, query: {apply: 1234567.89}}
+# @rts pre-request
+> request.setHeader("X-Str", str(1792164490814))
+> request.setQueryParam("concat", "" + 1000000)
+GET http://example.test/{{= 1000000 }}
+X-Template: {{= 1000000 }}
+X-Small: {{= 42.5 }}
+`)
+	got := wireText(t, sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{}))
+	for _, want := range []string{
+		"path: /1000000",
+		"X-Apply: 1000000",
+		"apply: 1234567.89",
+		"X-Str: 1792164490814",
+		"concat: 1000000",
+		"X-Template: 1000000",
+		"X-Small: 42.5",
+	} {
+		if !strings.Contains(got, want+"\n") {
+			t.Fatalf("sent request does not contain %q:\n%s", want, got)
+		}
+	}
+}

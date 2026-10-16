@@ -140,6 +140,11 @@ export fn each(t, items) {
 			result{"@rts test", false, "api.http:2: got 2 want 3 [1] true"},
 		},
 		{
+			"numbers in full",
+			testBlock("", 2, `t.error("id", 1792164490814, 42.5, [1000000])`),
+			result{"@rts test", false, "api.http:2: id 1792164490814 42.5 [1000000]"},
+		},
+		{
 			"no arguments",
 			testBlock("", 2, "t.error()", "t.fatal()"),
 			result{"@rts test", false, "api.http:2\napi.http:3"},

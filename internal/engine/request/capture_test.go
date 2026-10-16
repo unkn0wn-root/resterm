@@ -227,6 +227,36 @@ func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 	}
 }
 
+func TestApplyCapturesRTSWritesNumbersInFull(t *testing.T) {
+	eng := newCaptureEngine("")
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"id":1792164490814}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{
+				{Scope: directive.ScopeRequest, Name: "rts", Expression: `response.json.id`},
+				{Scope: directive.ScopeRequest, Name: "template", Expression: `{{response.json.id}}`},
+			},
+		},
+	}
+
+	if err := eng.applyCaptures(captureRun{req: req, resp: resp}); err != nil {
+		t.Fatalf("applyCaptures: %v", err)
+	}
+	if len(req.Variables) != 2 {
+		t.Fatalf("expected two request captures, got %+v", req.Variables)
+	}
+	for _, v := range req.Variables {
+		if v.Value != "1792164490814" {
+			t.Errorf("capture %s = %q, want %q", v.Name, v.Value, "1792164490814")
+		}
+	}
+}
+
 func TestApplyCapturesRSTKeepsQuotedTemplateMarkersLiteral(t *testing.T) {
 	eng := newCaptureEngine("")
 	resp := &scripts.Response{

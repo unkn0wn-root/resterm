@@ -92,6 +92,23 @@ func TestEvalBasic(t *testing.T) {
 	}
 }
 
+func TestConcatWritesNumbersInFull(t *testing.T) {
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{`"id=" + 1000000`, "id=1000000"},
+		{`1792164490814 + "ms"`, "1792164490814ms"},
+		{`"v" + 42.5`, "v42.5"},
+	}
+	for _, tt := range tests {
+		v := evalExpr(t, tt.src)
+		if v.K != VStr || v.S != tt.want {
+			t.Errorf("%s = %+v, want %q", tt.src, v, tt.want)
+		}
+	}
+}
+
 func TestListIndexRequiresInteger(t *testing.T) {
 	ex, err := ParseExpr("[10,20][1.2]", NewFile("test", nil).Pos(1, 1))
 	if err != nil {
@@ -144,10 +161,12 @@ func TestEvalMembership(t *testing.T) {
 		{name: "string missing", src: `"world" in "hello"`, want: false},
 		{name: "string empty value", src: `"" in "hello"`, want: true},
 		{name: "string converts number", src: `23 in "1234"`, want: true},
+		{name: "string converts number in full", src: `1000000 in "id=1000000"`, want: true},
 		{name: "string converts collection", src: `[1] in "[1]"`, want: true},
 		{name: "dict key", src: `"a" in {a: 1}`, want: true},
 		{name: "dict key is exact", src: `"A" in {a: 1}`, want: false},
 		{name: "dict converts key", src: `1 in {"1": true}`, want: true},
+		{name: "dict converts key in full", src: `1000000 in {"1000000": 1}`, want: true},
 		{name: "not in", src: `2 not in [1, 3]`, want: true},
 	}
 	for _, tt := range tests {
