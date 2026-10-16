@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -549,7 +550,7 @@ func (c *captureContext) lookupStream(path string) (string, error) {
 	if err != nil {
 		return "", pathError(captureStreamRoot, captureStreamPrefix+path, err)
 	}
-	return formatCaptureValue(v)
+	return formatCaptureValue(v), nil
 }
 
 // Invalid paths must fail even when the response body is empty or not JSON.
@@ -583,7 +584,7 @@ func (c *captureContext) lookupJSON(path string) (string, error) {
 	v, err := p.Get(c.jsonValue)
 	switch {
 	case err == nil:
-		return stringifyJSONValue(v), nil
+		return formatCaptureValue(v), nil
 	case c.strict:
 		return "", pathError(captureJSONPrefix, captureJSONPrefix+path, err)
 	}
@@ -598,52 +599,24 @@ func pathError(root, path string, err error) error {
 	return fmt.Errorf("invalid %s path %q: %w", root, path, err)
 }
 
-func stringifyJSONValue(value any) string {
+// formatCaptureValue returns a captured value as text. Null is empty, a string
+// is returned as is, and a stream duration is written like 1.5s. Other values
+// are written as JSON, so numbers match json.stringify. NaN and
+// infinities, which JSON lacks, are written as NaN, +Inf and -Inf.
+func formatCaptureValue(value any) string {
 	switch v := value.(type) {
 	case nil:
 		return ""
 	case string:
 		return v
-	case bool:
-		return strconv.FormatBool(v)
-	case float64:
-		if float64(int64(v)) == v {
-			return strconv.FormatInt(int64(v), 10)
-		}
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	default:
-		data, err := json.Marshal(v)
-		if err != nil {
-			return fmt.Sprint(v)
-		}
-		return string(data)
+	case time.Duration:
+		return v.String()
 	}
-}
-
-func formatCaptureValue(value any) (string, error) {
-	if value == nil {
-		return "", nil
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprint(value)
 	}
-	switch v := value.(type) {
-	case string:
-		return v, nil
-	case fmt.Stringer:
-		return v.String(), nil
-	case bool:
-		return strconv.FormatBool(v), nil
-	case int, int8, int16, int32, int64:
-		return fmt.Sprintf("%d", v), nil
-	case uint, uint8, uint16, uint32, uint64:
-		return fmt.Sprintf("%d", v), nil
-	case float32, float64:
-		return fmt.Sprintf("%v", v), nil
-	default:
-		data, err := json.Marshal(v)
-		if err != nil {
-			return fmt.Sprint(v), nil
-		}
-		return string(data), nil
-	}
+	return string(data)
 }
 
 func upsertVariable(

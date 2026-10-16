@@ -2,9 +2,12 @@ package request
 
 import (
 	"context"
+	"encoding/json"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
@@ -227,33 +230,57 @@ func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 	}
 }
 
-func TestApplyCapturesRTSWritesNumbersInFull(t *testing.T) {
-	eng := newCaptureEngine("")
-	resp := &scripts.Response{
-		Kind:   scripts.ResponseKindHTTP,
-		Status: "200 OK",
-		Code:   200,
-		Body:   []byte(`{"id":1792164490814}`),
+func TestApplyCapturesWritesNumbersAsJSONDoes(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"42", "42"},
+		{"1000000", "1000000"},
+		{"42.5", "42.5"},
+		{"1792164490814", "1792164490814"},
+		{"1e21", "1e+21"},
+		{"0.0000001", "1e-7"},
+		{"1152921504606846976", "1152921504606847000"},
+		{"9223372036854775808", "9223372036854776000"},
+		{"-0", "-0"},
+		{"[1000000, 0.5]", "[1000000,0.5]"},
 	}
-	req := &restfile.Request{
-		Metadata: restfile.RequestMetadata{
-			Captures: []restfile.CaptureSpec{
-				{Scope: directive.ScopeRequest, Name: "rts", Expression: `response.json.id`},
-				{Scope: directive.ScopeRequest, Name: "template", Expression: `{{response.json.id}}`},
-			},
-		},
-	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			var payload any
+			if err := json.Unmarshal([]byte(tt.in), &payload); err != nil {
+				t.Fatal(err)
+			}
+			resp := &scripts.Response{
+				Kind:   scripts.ResponseKindHTTP,
+				Status: "200 OK",
+				Code:   200,
+				Body:   []byte(`{"v":` + tt.in + `}`),
+			}
+			st := &scripts.StreamInfo{Kind: "grpc", Events: []map[string]any{{"json": payload}}}
+			req := &restfile.Request{
+				Metadata: restfile.RequestMetadata{
+					Captures: []restfile.CaptureSpec{
+						{Scope: directive.ScopeRequest, Name: "rts", Expression: `response.json.v`},
+						{Scope: directive.ScopeRequest, Name: "template", Expression: `{{response.json.v}}`},
+						{Scope: directive.ScopeRequest, Name: "stream", Expression: `{{stream.events[0].json}}`},
+					},
+				},
+			}
 
-	if err := eng.applyCaptures(captureRun{req: req, resp: resp}); err != nil {
-		t.Fatalf("applyCaptures: %v", err)
-	}
-	if len(req.Variables) != 2 {
-		t.Fatalf("expected two request captures, got %+v", req.Variables)
-	}
-	for _, v := range req.Variables {
-		if v.Value != "1792164490814" {
-			t.Errorf("capture %s = %q, want %q", v.Name, v.Value, "1792164490814")
-		}
+			if err := newCaptureEngine("").applyCaptures(captureRun{req: req, resp: resp, stream: st}); err != nil {
+				t.Fatalf("applyCaptures: %v", err)
+			}
+			if len(req.Variables) != 3 {
+				t.Fatalf("expected three request captures, got %+v", req.Variables)
+			}
+			for _, v := range req.Variables {
+				if v.Value != tt.want {
+					t.Errorf("capture %s = %q, want %q", v.Name, v.Value, tt.want)
+				}
+			}
+		})
 	}
 }
 
@@ -786,8 +813,13 @@ func TestCaptureJSONPaths(t *testing.T) {
 
 func TestCaptureStreamPaths(t *testing.T) {
 	st := &scripts.StreamInfo{
-		Kind:    "grpc",
-		Summary: map[string]any{"sentCount": 1},
+		Kind: "grpc",
+		Summary: map[string]any{
+			"sentCount": 1,
+			"duration":  1500 * time.Millisecond,
+			"nan":       math.NaN(),
+			"inf":       math.Inf(-1),
+		},
 		Events: []map[string]any{
 			{"text": "a", "json": map[string]any{"id": 7.0, "tags": []any{"x", "y"}}},
 			{"text": "b"},
@@ -800,6 +832,9 @@ func TestCaptureStreamPaths(t *testing.T) {
 	}{
 		{path: "kind", want: "grpc"},
 		{path: "summary.sentCount", want: "1"},
+		{path: "summary.duration", want: "1.5s"},
+		{path: "summary.nan", want: "NaN"},
+		{path: "summary.inf", want: "-Inf"},
 		{path: "events[1].text", want: "b"},
 		{path: "events[-1].text", want: "b"},
 		{path: "events[ 0 ].text", want: "a"},
