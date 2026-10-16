@@ -16,13 +16,26 @@
 
 Resterm is a code-first API client built around plain `.http`/`.rest` files. A request is a few lines of text you can read, diff and keep in git, and the same goes for workflows and local mocks. You send them from the terminal UI while you work, and `resterm run` runs the same files in CI. If your API sits behind an SSH bastion or inside a Kubernetes cluster, Resterm opens the tunnel or port-forward for you.
 
-## Why Resterm
+## Features
 
-* **Test complete API flows.** Log in, capture a token, create a resource, and verify the response. Add assertions, loops, conditions, retries, and scripts directly in your request files.
-* **Turn real traffic into local mocks.** Record HTTP requests and responses, then save them as runnable requests or mock definitions. Keep mocks alongside the requests that use them.
-* **Compare responses and track changes.** Diff responses across environments or against previous runs, inspect timings, and profile repeated requests.
-* **Run locally and in CI.** Use the terminal UI during development and `resterm run` for automation. Export JSON or JUnit reports.
-* **Work across protocols.** Send HTTP, GraphQL, and gRPC requests, and work with WebSocket and SSE streams.
+- HTTP, GraphQL, gRPC (with reflection and streaming), WebSocket and SSE
+- environment files, grouped environments, dotenv files and OS variables
+- bearer tokens, OAuth 2.0 (client credentials, password, and authorization code with PKCE), and tokens from CLIs you already use, like `gh auth token`
+- TLS client certificates, custom root CAs, proxies, HTTP/2 and a cookie jar per environment
+- captures and checks with `@capture` and `@assert`, plus `@poll` and `@retry`
+- workflows that chain requests into steps, with `@if` and `@for-each`
+- RestermScript for logic and `@rts test` blocks
+- editor with Vim motions, syntax highlighting, completion for directives, headers, file paths, and inline diagnostics
+- `@compare` to send one request to several environments and diff the results
+- timeline tracing with per-phase budgets, and export to OpenTelemetry
+- `@profile` with latency stats, a histogram, P95 and P99
+- SSH tunnels and Kubernetes port-forwards that Resterm opens for the request
+- local mock servers from your `.http` files, and a recording proxy that turns real traffic into requests or mocks
+- `resterm run` for CI, with text, JSON or JUnit output and exit codes that tell a failed check from a TLS or tunnel error
+- headless Go API to run the same files from your own Go code
+- import from curl and OpenAPI, and share collections as bundles or zip files
+- custom key bindings and themes
+- open a file in `$EDITOR`, or a response body in your default app
 
 No account and no telemetry.
 
