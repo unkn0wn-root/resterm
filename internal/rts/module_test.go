@@ -175,7 +175,7 @@ func TestLoadErrorsCarryTheModuleText(t *testing.T) {
 	dir := t.TempDir()
 	srcs := map[string]string{
 		"late.rts":  "let x = 1\nmodule late\n",
-		"bare.rts":  "export let x = 1\n",
+		"bare.rts":  "\nexport let x = 1\n",
 		"empty.rts": "",
 		"init.rts":  "module init\n\nlet cfg = null\nlet v = cfg.name\n",
 	}
@@ -196,6 +196,11 @@ func TestLoadErrorsCarryTheModuleText(t *testing.T) {
 	if err := use(Use{Path: "bare.rts", Alias: "bare"}); err != nil {
 		t.Fatalf("load with an alias: %v", err)
 	}
+	reads := fs.reads
+	cached := use(Use{Path: "bare.rts"})
+	if fs.reads != reads {
+		t.Fatalf("read bare.rts %d more times, want the cached module", fs.reads-reads)
+	}
 	tests := []struct {
 		name string
 		err  error
@@ -205,7 +210,7 @@ func TestLoadErrorsCarryTheModuleText(t *testing.T) {
 	}{
 		{"module after a statement", use(Use{Path: "late.rts"}), 2, 1, "late.rts"},
 		{"missing name", uncached, 1, 1, "bare.rts"},
-		{"missing name of a cached module", use(Use{Path: "bare.rts"}), 1, 1, "bare.rts"},
+		{"missing name of a cached module", cached, 1, 1, "bare.rts"},
 		{"missing name of an empty file", use(Use{Path: "empty.rts"}), 1, 1, "empty.rts"},
 		{"module setup", use(Use{Path: "init.rts"}), 4, 12, "init.rts"},
 	}

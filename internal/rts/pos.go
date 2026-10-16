@@ -22,6 +22,11 @@ func (f *File) Pos(line, col int) Pos {
 	return Pos{file: f, Line: line, Col: col}
 }
 
+// Start returns the position of the first byte of f.
+func (f *File) Start() Pos {
+	return f.Pos(1, 1)
+}
+
 // Pos is a line and column in a File. The zero Pos is in no file, so it has
 // neither a path nor a text.
 type Pos struct {
