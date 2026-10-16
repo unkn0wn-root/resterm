@@ -23,3 +23,24 @@ func TestFoldLines(t *testing.T) {
 		})
 	}
 }
+
+func TestIndent(t *testing.T) {
+	tests := map[string]struct {
+		in   string
+		want string
+	}{
+		"each line":            {in: "a\nb", want: "  a\n  b"},
+		"blank line stays":     {in: "a\n\nb", want: "  a\n\n  b"},
+		"trailing space kept":  {in: "a \nb", want: "  a \n  b"},
+		"space-only line kept": {in: "a\n \nb", want: "  a\n   \n  b"},
+		"trailing newline":     {in: "a\n", want: "  a\n"},
+		"empty":                {},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := Indent(tt.in, "  "); got != tt.want {
+				t.Fatalf("Indent(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
 
@@ -163,7 +164,7 @@ func writeTextErrorDetail(
 		"%s%s\n%s\n",
 		indent,
 		st.detail(label, ""),
-		indentBlock(styleErrorDetailBlock(body, st), indent+"  "),
+		str.Indent(styleErrorDetailBlock(body, st), indent+"  "),
 	)
 	return err
 }
@@ -175,17 +176,6 @@ func styleErrorDetailBlock(text string, st textStyler) string {
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {
 		lines[i] = st.value(line)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func indentBlock(text, prefix string) string {
-	if text == "" || prefix == "" {
-		return text
-	}
-	lines := strings.Split(text, "\n")
-	for i := range lines {
-		lines[i] = prefix + lines[i]
 	}
 	return strings.Join(lines, "\n")
 }

@@ -297,7 +297,7 @@ func workflowReport(st *wfState) string {
 		b.WriteString(workflowLine(i, res))
 		b.WriteString("\n")
 		if msg := strings.TrimSpace(res.msg); msg != "" {
-			fmt.Fprintf(&b, "    %s\n", strings.ReplaceAll(msg, "\n", "\n    "))
+			b.WriteString(str.Indent(msg, "    ") + "\n")
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")

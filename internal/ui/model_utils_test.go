@@ -534,6 +534,40 @@ func TestFormatTestSummaryRendersDiagnostic(t *testing.T) {
 	}
 }
 
+func TestFormatTestSummaryLeavesBlankLinesEmpty(t *testing.T) {
+	rep := diag.Report{
+		Path:   "two.http",
+		Source: []byte(`# @assert fail("a") ` + "\n"),
+		Items: []diag.Diagnostic{
+			{
+				Class:   diag.ClassScript,
+				Message: "a",
+				Span:    diag.Span{Start: diag.Pos{Path: "two.http", Line: 1, Col: 11}},
+			},
+			{Class: diag.ClassScript, Message: "b"},
+		},
+	}
+	err := diag.FromReport(rep, errors.New("a"))
+	results := []scriptapi.TestResult{{Name: "t", Message: "a\n\nb"}}
+	output := stripANSIEscape(defaultResponseRenderer().formatTestSummary(results, err))
+
+	want := "Tests:\n" +
+		"  error[script]: a\n" +
+		"  --> two.http:1:11\n" +
+		"       |\n" +
+		`     1 | # @assert fail("a") ` + "\n" +
+		"       |           ^\n" +
+		"\n" +
+		"  error[script]: b\n" +
+		"  --> two.http\n" +
+		"  [FAIL] t - a\n" +
+		"\n" +
+		"             b"
+	if output != want {
+		t.Fatalf("output =\n%q\nwant\n%q", output, want)
+	}
+}
+
 func TestFormatTestSummaryColorsErrors(t *testing.T) {
 	err := errors.New("kaboom")
 	r := newResponseRenderer(defaultStatsPalette(), "monokai", eSty{title: statsWarnStyle})

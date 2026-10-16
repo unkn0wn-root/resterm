@@ -151,14 +151,3 @@ func httpTone(code int) tone {
 		return toneValue
 	}
 }
-
-func indent(text, prefix string) string {
-	if text == "" || prefix == "" {
-		return text
-	}
-	lines := strings.Split(text, "\n")
-	for i := range lines {
-		lines[i] = prefix + lines[i]
-	}
-	return strings.Join(lines, "\n")
-}

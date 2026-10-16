@@ -357,6 +357,31 @@ func TestErrorRowsStayOnOneLine(t *testing.T) {
 	}
 }
 
+func TestWriteTextLeavesBlankLinesEmpty(t *testing.T) {
+	rendered := "error[script]: a\n   1 | fail(\"a\") \n\nerror[script]: b"
+	rep := &Report{
+		Results: []Result{{
+			Kind:              "request",
+			Name:              "two",
+			Method:            "GET",
+			Status:            StatusFail,
+			ScriptErrorDetail: &ErrorDetail{Rendered: rendered},
+		}},
+	}
+	var out strings.Builder
+	if err := WriteText(&out, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+	want := "  Script Error:\n" +
+		"    error[script]: a\n" +
+		"       1 | fail(\"a\") \n" +
+		"\n" +
+		"    error[script]: b\n"
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("output =\n%q\nwant it to contain\n%q", out.String(), want)
+	}
+}
+
 func TestProfileFailureReasonStaysOnOneLine(t *testing.T) {
 	rep := &Report{
 		Results: []Result{{
