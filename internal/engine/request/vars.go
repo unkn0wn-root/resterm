@@ -130,24 +130,22 @@ func (e *Engine) rtsPosForLineCol(doc *restfile.Document, req *restfile.Request,
 	return ps
 }
 
+// The doc text is attached only to an error that has no source yet. Wrapping
+// an error that already has it adds nothing and repeats the error under its
+// operation in the chain.
 func (e *Engine) withSource(err error, doc *restfile.Document) error {
 	if err == nil || !e.cfg.SourceDiagnostics {
 		return err
 	}
 	rep := diag.ReportOf(err)
-	if !canAttachSource(rep, doc) {
+	if doc == nil || len(doc.Raw) == 0 || len(rep.Items) == 0 || len(rep.Source) > 0 {
 		return err
 	}
-	// empty operation preserves err.Error() (with position) and adds no chain entry
-	return diag.Wrap(err, "", diag.WithSource(doc.Path, doc.Raw))
-}
-
-func canAttachSource(rep diag.Report, doc *restfile.Document) bool {
-	if doc == nil || len(doc.Raw) == 0 || len(rep.Items) == 0 {
-		return false
-	}
 	start := rep.Items[0].Span.Start
-	return start.Line > 0 && (start.Path == "" || start.Path == doc.Path)
+	if start.Line <= 0 || (start.Path != "" && start.Path != doc.Path) {
+		return err
+	}
+	return diag.Wrap(err, "", diag.WithSource(doc.Path, doc.Raw))
 }
 
 func (e *Engine) rtsBase(doc *restfile.Document, base string) string {

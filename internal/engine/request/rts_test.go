@@ -537,6 +537,42 @@ GET https://example.com
 	}
 }
 
+func TestRequestErrorShowsItsMessageOnce(t *testing.T) {
+	const (
+		get = "GET https://example.com/items"
+		msg = `json.get(value[, path]) invalid path "a[*]": invalid array index "*"`
+	)
+	tests := []struct {
+		name  string
+		lines []string
+		at    int
+	}{
+		{"apply", []string{`# @apply {headers: {"X": json.get(1, "a[*]")}}`, get}, 1},
+		{"when", []string{`# @when json.get(1, "a[*]")`, get}, 1},
+		{"capture", []string{`# @capture request first json.get(1, "a[*]")`, get}, 1},
+		{"rts pre-request", []string{"# @rts pre-request", `> let x = json.get(1, "a[*]")`, get}, 2},
+		{"template", []string{get + `?x={{= json.get(1, "a[*]") }}`}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := parser.Parse("api.http", []byte(strings.Join(tt.lines, "\n")+"\n"))
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client(), SourceDiagnostics: true}, nil)
+			res, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
+			if err != nil {
+				t.Fatalf("ExecuteWith() error = %v", err)
+			}
+			if res.Err == nil {
+				t.Fatal("expected the request to fail")
+			}
+			out := diag.Render(res.Err)
+			if strings.Count(out, msg) != 1 || !strings.Contains(out, " | "+tt.lines[tt.at-1]) {
+				t.Fatalf("rendered error does not show the message once under its line:\n%s", out)
+			}
+		})
+	}
+}
+
 func TestRTSRequestHeadersReachTheRuntimeWithCardinalityShape(t *testing.T) {
 	e := New(engcfg.Config{}, nil)
 	pos := rts.Pos{Path: "test", Line: 1, Col: 1}
