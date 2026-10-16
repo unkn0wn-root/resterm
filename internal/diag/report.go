@@ -231,15 +231,16 @@ func reportOf(err error) Report {
 	if wrapped, ok := err.(errsUnwrapper); ok {
 		var out Report
 		for _, child := range wrapped.Unwrap() {
-			rep := reportOf(child)
+			rep := prepareReport(reportOf(child))
 			if len(rep.Items) == 0 {
 				continue
 			}
-			if out.Path == "" {
-				out.Path = rep.Path
+			// The merged report has one path and source, so each item keeps the text of its own file.
+			for i, it := range rep.Items {
+				rep.Items[i].Source = sourceFor(it, rep)
 			}
-			if len(out.Source) == 0 {
-				out.Source = rep.Source
+			if len(out.Items) == 0 {
+				out.Path, out.Source = rep.Path, rep.Source
 			}
 			out.Items = append(out.Items, rep.Items...)
 		}

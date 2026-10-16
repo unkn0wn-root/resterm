@@ -262,6 +262,7 @@ func TestErrorsShowTheLineOfTheFileTheyPointAt(t *testing.T) {
 	writeModule(t, dir, "bad.rts", "module bad\n\nexport fn f() {\n  return 1 +\n}\n")
 	writeModule(t, dir, "late.rts", "let x = 1\nmodule late\n")
 	writeModule(t, dir, "x.rts", "let a = 1\nlet b = null\nb.name\n")
+	writeModule(t, dir, "empty.rts", "")
 	doc := &restfile.Document{
 		Path: testDoc,
 		Raw: []byte(
@@ -305,6 +306,7 @@ func TestErrorsShowTheLineOfTheFileTheyPointAt(t *testing.T) {
 		{"module top level", pre, []string{"setup.rts"}, "1", "   4 | let v = cfg.name\n     |            ^"},
 		{"module parse error", pre, []string{"bad.rts"}, "1", "   5 | }\n     | ^"},
 		{"module header", pre, []string{"late.rts"}, "1", "   2 | module late\n     | ^"},
+		{"empty module", pre, []string{"empty.rts"}, "1", ""},
 		{"request block", pre, []string{"m.rts"}, "let y = null\ny.name", blockLine},
 		{"block read from a file", file, nil, "", "   3 | b.name\n     |  ^"},
 		{"test block calling a module", test, []string{"m.rts"}, "m.boom(null)", moduleLine},
@@ -323,8 +325,17 @@ func TestErrorsShowTheLineOfTheFileTheyPointAt(t *testing.T) {
 				SourcePath: testDoc,
 				Lines:      []restfile.ScriptLine{{Line: 4, Col: 3}, {Line: 5, Col: 3}},
 			})
-			if out := diag.Render(err); !strings.Contains(out, tt.want) {
-				t.Fatalf("rendered error has no\n%s\nin:\n%s", tt.want, out)
+			if err == nil {
+				t.Fatal("run succeeded, want an error")
+			}
+			var excerpt []string
+			for _, l := range diag.Lines(diag.ReportOf(err)) {
+				if l.Kind == diag.LineSrc || l.Kind == diag.LineMark {
+					excerpt = append(excerpt, l.Text)
+				}
+			}
+			if got := strings.Join(excerpt, "\n"); got != tt.want {
+				t.Fatalf("excerpt =\n%s\nwant\n%s\nin:\n%s", got, tt.want, diag.Render(err))
 			}
 		})
 	}

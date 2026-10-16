@@ -72,7 +72,7 @@ func itemLines(rep Report, it Diagnostic) []Line {
 		ls = append(ls, Line{Kind: LineLoc, Text: "--> " + loc})
 	}
 	at := excerptPos(it)
-	if src, ok := lineText(sourceFor(it, rep.Source), at.Line); ok {
+	if src, ok := lineText(sourceFor(it, rep), at.Line); ok {
 		width := max(len(strconv.Itoa(it.Span.Start.Line)), 4)
 		bar := strings.Repeat(" ", width) + " |"
 		ls = append(
@@ -199,11 +199,16 @@ func excerptPos(d Diagnostic) Pos {
 	}
 }
 
-func sourceFor(it Diagnostic, src []byte) []byte {
+// The report's source is the text of the report's path, and a span without a
+// path is in that file.
+func sourceFor(it Diagnostic, rep Report) []byte {
 	if len(it.Source) > 0 {
 		return it.Source
 	}
-	return src
+	if p := it.Span.Start.Path; p == "" || p == rep.Path {
+		return rep.Source
+	}
+	return nil
 }
 
 // col is a 1-based byte column. Measure the escaped prefix in display cells

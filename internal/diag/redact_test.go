@@ -1,6 +1,7 @@
 package diag_test
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -122,4 +123,20 @@ func FuzzRedactKeepsTheCaretUnderTheSpan(f *testing.F) {
 		}
 		assertCaretUnder(t, reportAt(source, want).Redact(mask), want)
 	})
+}
+
+func TestRedactMasksEachJoinedExcerptInItsOwnFile(t *testing.T) {
+	a := reportAt("GET /a\nalpha-secret {{missing}}\n", "{{missing}}")
+	b := reportAt("let x = 1\nlet y = 2\nbeta-secret {{other}}\n", "{{other}}")
+	b.Path = "b.rts"
+	joined := errors.Join(diag.FromReport(a, nil), diag.FromReport(b, nil))
+
+	rep := diag.ReportOf(joined).Redact(maskSecrets("alpha-secret", "beta-secret"))
+	if rendered := diag.RenderReport(rep); strings.Contains(rendered, "secret") {
+		t.Fatalf("report kept a secret:\n%s", rendered)
+	}
+	first, second := rep, rep
+	first.Items, second.Items = rep.Items[:1], rep.Items[1:]
+	assertCaretUnder(t, first, "{{missing}}")
+	assertCaretUnder(t, second, "{{other}}")
 }

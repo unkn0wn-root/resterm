@@ -512,6 +512,7 @@ func TestFormatTestSummaryAlignsMessageLines(t *testing.T) {
 
 func TestFormatTestSummaryRendersDiagnostic(t *testing.T) {
 	rep := diag.Report{
+		Path:   "basic.http",
 		Source: []byte("# @assert status == 200 & ok\n"),
 		Items: []diag.Diagnostic{{
 			Class:    diag.ClassScript,

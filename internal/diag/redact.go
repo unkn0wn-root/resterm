@@ -8,10 +8,10 @@ func (r Report) Redact(mask func(string) string) Report {
 	if mask == nil {
 		return r
 	}
-	src := r.Source
-	r.Source = redactSource(src, mask)
+	orig := r
+	r.Source = redactSource(r.Source, mask)
 	r.Items = redactEach(r.Items, func(d Diagnostic) Diagnostic {
-		d.SourceLine, d.SourceCol = maskedPos(sourceFor(d, src), excerptPos(d), mask)
+		d.SourceLine, d.SourceCol = maskedPos(sourceFor(d, orig), excerptPos(d), mask)
 		d.Message = mask(d.Message)
 		d.Source = redactSource(d.Source, mask)
 		d.Span = redactSpan(d.Span, mask)
