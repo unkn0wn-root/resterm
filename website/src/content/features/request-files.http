@@ -1,5 +1,5 @@
-# Plain .http and .rest files. Directives in # @ comments
-# add names, captures, asserts and settings.
+# Requests are plain text in .http or .rest files.
+# The # @ lines on top name the request, capture the token and check the status.
 
 ### Log in
 # @name login

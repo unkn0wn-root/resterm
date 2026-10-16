@@ -1,5 +1,4 @@
-# Timeline tracing, profiling and compare runs across
-# environments.
+# Trace one call against budgets, profile 50 runs, or compare it across environments.
 
 ### Trace with budgets
 # @trace dns<=40ms connect<=120ms ttfb<=300ms total<=600ms

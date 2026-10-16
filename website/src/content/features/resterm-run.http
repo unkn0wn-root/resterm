@@ -1,5 +1,4 @@
-# Run the same files headless in CI, with JSON and JUnit
-# output.
+# In CI, run the file headless. This picks the smoke requests and writes JUnit XML.
 # resterm run --tag smoke --format junit api.http > report.xml
 
 ### Health

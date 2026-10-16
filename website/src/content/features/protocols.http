@@ -1,5 +1,4 @@
-# HTTP, GraphQL, gRPC, WebSocket and SSE, all from the
-# same editor.
+# GraphQL, gRPC, WebSocket and SSE requests go in the file next to your HTTP ones.
 
 ### Generate report
 # @name GenerateReport

@@ -1,5 +1,4 @@
-# OAuth 2.0 with PKCE, or reuse tokens from CLIs you
-# already have, like gh auth token.
+# OAuth 2.0 with PKCE, or reuse a token from a CLI you're logged in to, like gh.
 # @auth file command cmd="gh auth token"
 
 ### GitHub user

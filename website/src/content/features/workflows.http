@@ -1,5 +1,5 @@
-# Chain requests into steps. Capture values, assert on
-# responses, branch with @if and loop with @for-each.
+# Run requests as steps. Each step can pass values on to the next one.
+# Use @if to pick a step and @for-each to repeat one over a list.
 
 # @workflow signup
 # @step Create using=CreateUser expect.statuscode=201

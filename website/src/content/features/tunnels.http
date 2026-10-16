@@ -1,5 +1,4 @@
-# The @ssh and @k8s directives send a request through a
-# bastion or a port-forward that Resterm opens and closes.
+# No ssh -L or kubectl port-forward first. Resterm opens the tunnel for the request.
 
 ### Through a bastion
 # @ssh request host=bastion.example.com user=ops key=~/.ssh/id_ed25519
