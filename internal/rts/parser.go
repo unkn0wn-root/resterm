@@ -27,16 +27,20 @@ type stmtLabel struct {
 	pos  Pos
 }
 
-// controls holds every for and switch enclosing the statement being parsed, so
-// break and continue can be checked against real targets instead of a depth
+// Parser builds the syntax tree of RTS code from the tokens of a Lexer.
 type Parser struct {
-	lx       *Lexer
-	cur      Tok
-	peek     Tok
-	ahead    []Tok
+	lx    *Lexer
+	cur   Tok
+	peek  Tok
+	ahead []Tok
+
+	// controls holds every for and switch that encloses the statement being
+	// parsed, innermost last, so break and continue can be checked against them.
 	controls []controlTarget
 }
 
+// NewParserAt returns a Parser for src, a snippet that starts at the line and
+// column of at. Its positions are in at's file.
 func NewParserAt(src []byte, at Pos) *Parser {
 	lx := NewLexerAt(src, at)
 	p := &Parser{lx: lx}
@@ -46,8 +50,8 @@ func NewParserAt(src []byte, at Pos) *Parser {
 }
 
 // ParseModule parses the whole text of f.
-func ParseModule(f *File) (m *Mod, err error) {
-	return ParseModuleAt(f.src, f.Pos(1, 1))
+func ParseModule(f *File) (*Mod, error) {
+	return ParseModuleAt(f.src, f.Start())
 }
 
 // ParseModuleAt parses src as a snippet that starts at the line and column of
@@ -64,7 +68,7 @@ func ParseModuleAt(src []byte, at Pos) (m *Mod, err error) {
 		}
 	}()
 	p := NewParserAt(src, at)
-	m = p.parseMod()
+	m = p.parseMod(at)
 	return m, err
 }
 
@@ -86,8 +90,8 @@ func ParseExpr(src string, at Pos) (ex Expr, err error) {
 	return ex, err
 }
 
-func (p *Parser) parseMod() *Mod {
-	m := &Mod{File: p.lx.file}
+func (p *Parser) parseMod(start Pos) *Mod {
+	m := &Mod{Start: start}
 	for p.cur.K != EOF {
 		if p.isSemi(p.cur.K) {
 			p.next()

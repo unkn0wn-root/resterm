@@ -35,7 +35,7 @@ func loadSource(doc *restfile.Document, block restfile.ScriptBlock, base string)
 		Text: string(data),
 		Path: path,
 		Raw:  data,
-		Pos:  rts.NewFile(path, data).Pos(1, 1),
+		Pos:  rts.NewFile(path, data).Start(),
 	}, nil
 }
 

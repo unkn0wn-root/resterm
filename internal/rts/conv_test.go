@@ -60,3 +60,38 @@ func TestToStrWritesResultsAndRejectsNaN(t *testing.T) {
 		t.Fatalf("ToStr([NaN]) error = %v, want json encode failed", err)
 	}
 }
+
+func TestToStrWritesNumbersAsJSONDoes(t *testing.T) {
+	tests := []struct {
+		n    float64
+		want string
+	}{
+		{0, "0"},
+		{math.Copysign(0, -1), "-0"},
+		{1, "1"},
+		{42.5, "42.5"},
+		{-3.25, "-3.25"},
+		{0.30000000000000004, "0.30000000000000004"},
+		{1e6, "1000000"},
+		{1234567, "1234567"},
+		{1234567.89, "1234567.89"},
+		{1792164490814, "1792164490814"},
+		{1 << 53, "9007199254740992"},
+		{1 << 60, "1152921504606847000"},
+		{1e20, "100000000000000000000"},
+		{1e21, "1e+21"},
+		{0.000001, "0.000001"},
+		{0.00001, "0.00001"},
+		{1e-7, "1e-7"},
+		{math.MaxFloat64, "1.7976931348623157e+308"},
+		{math.NaN(), "NaN"},
+		{math.Inf(1), "+Inf"},
+		{math.Inf(-1), "-Inf"},
+	}
+	for _, tt := range tests {
+		got, err := ToStr(nil, Pos{}, Num(tt.n))
+		if err != nil || got != tt.want {
+			t.Errorf("ToStr(%v) = %q, %v, want %q", tt.n, got, err, tt.want)
+		}
+	}
+}

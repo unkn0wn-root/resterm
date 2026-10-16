@@ -69,7 +69,7 @@ func (e *Eng) modHead(base, path string) (string, Pos, error) {
 	if ent, ok := e.C.get(p, fp); ok {
 		m := ent.comp.Mod
 		if m.Name == "" {
-			return "", m.File.Pos(1, 1), nil
+			return "", m.Start, nil
 		}
 		return m.Name, m.NamePos, nil
 	}
@@ -91,7 +91,7 @@ func modHead(f *File) (string, Pos, error) {
 		case SEMI, AUTO_SEMI:
 			continue
 		case EOF:
-			return "", f.Pos(1, 1), nil
+			return "", f.Start(), nil
 		case ILLEGAL:
 			return "", tok.P, &ParseError{Pos: tok.P, Msg: tok.Lit}
 		case KW_MODULE:
@@ -117,7 +117,7 @@ func modHead(f *File) (string, Pos, error) {
 			if ok {
 				return "", mp, &ParseError{Pos: mp, Msg: "module must appear before statements"}
 			}
-			return "", f.Pos(1, 1), nil
+			return "", f.Start(), nil
 		}
 	}
 }

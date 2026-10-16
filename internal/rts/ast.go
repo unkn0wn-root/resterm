@@ -1,10 +1,11 @@
 package rts
 
+// Mod is the syntax tree of one module or script block.
 type Mod struct {
-	File    *File
-	Name    string
-	NamePos Pos
-	Stmts   []Stmt
+	Start   Pos    // position of the first byte of the text
+	Name    string // declared module name, or ""
+	NamePos Pos    // position of the module keyword, or the zero Pos
+	Stmts   []Stmt // top-level statements
 }
 
 type Stmt interface {

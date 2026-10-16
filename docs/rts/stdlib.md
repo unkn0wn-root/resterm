@@ -12,7 +12,7 @@ Builtins and reserved words may be removed within a major version, but only afte
 - `rts.len(x)` returns the length of a string, list, or dict.
 - `rts.contains(container, value)` applies the same membership relation as `value in container`.
 - `rts.match(pattern, text)` applies a regular expression to text and returns true when it matches.
-- `rts.str(x)` converts a value to a string, using JSON for lists and dicts.
+- `rts.str(x)` converts a value to a string, writing numbers, lists, and dicts as `json.stringify` does, so `str(1000000)` is `"1000000"`.
 - `rts.num(x[, def])` converts a value to a number, or returns `def` when conversion fails.
 - `rts.int(x[, def])` converts a value to an integer, or returns `def` when conversion fails.
 - `rts.bool(x[, def])` converts a value to a bool, or returns `def` when conversion fails.

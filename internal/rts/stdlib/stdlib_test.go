@@ -213,6 +213,10 @@ func TestStdlibTypes(t *testing.T) {
 	if v.K != rts.VNum || v.N != 7 {
 		t.Fatalf("expected int 7")
 	}
+	v = evalExprCtx(t, ctx, "int(str(1000000))")
+	if v.K != rts.VNum || v.N != 1000000 {
+		t.Fatalf("expected int of str 1000000")
+	}
 	v = evalExprCtx(t, ctx, "int(3.2, 4)")
 	if v.K != rts.VNum || v.N != 4 {
 		t.Fatalf("expected int default")
@@ -255,6 +259,10 @@ func TestStdlibTimeExtras(t *testing.T) {
 	v = evalExprCtx(t, ctx, "\"\" + time.nowUnixString()")
 	if v.K != rts.VStr || v.S != "1704164645" {
 		t.Fatalf("expected nowUnixString concat")
+	}
+	v = evalExprCtx(t, ctx, "\"\" + time.nowUnix()")
+	if v.K != rts.VStr || v.S != "1704164645" {
+		t.Fatalf("expected nowUnix concat to match nowUnixString")
 	}
 	v = evalExprCtx(t, ctx, "time.nowUnixMs()")
 	ms := base.UnixNano() / int64(time.Millisecond)

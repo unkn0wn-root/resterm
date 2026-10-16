@@ -61,6 +61,36 @@ func TestParseModuleGivesPositionsTheFileText(t *testing.T) {
 	}
 }
 
+func TestModStartIsWhereTheTextBegins(t *testing.T) {
+	src := "\n  let x = 1\n"
+	f := NewFile("m.rts", []byte(src))
+	at := NewFile("api.http", nil).Pos(4, 3)
+	whole, err := ParseModule(f)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	snip, err := ParseModuleAt([]byte(src), at)
+	if err != nil {
+		t.Fatalf("parse at %s: %v", at, err)
+	}
+	tests := []struct {
+		name string
+		got  Pos
+		want Pos
+		src  string
+	}{
+		{"whole file", whole.Start, f.Pos(1, 1), src},
+		{"snippet", snip.Start, at, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want || string(tt.got.Source()) != tt.src {
+				t.Fatalf("Start = %s with source %q, want %s with source %q", tt.got, tt.got.Source(), tt.want, tt.src)
+			}
+		})
+	}
+}
+
 func TestSnippetPositionsTakeTheFileOfAt(t *testing.T) {
 	at := NewFile("api.http", nil).Pos(4, 3)
 	doc := "GET https://example.test\n# @assert 1 +\n"

@@ -4,6 +4,7 @@ import (
 	"fmt"
 )
 
+// Lexer splits RTS code into tokens, one per call to Next.
 type Lexer struct {
 	src     []byte
 	file    *File
@@ -21,7 +22,7 @@ type Lexer struct {
 
 // NewLexer reads the whole text of f.
 func NewLexer(f *File) *Lexer {
-	return NewLexerAt(f.src, f.Pos(1, 1))
+	return NewLexerAt(f.src, f.Start())
 }
 
 // NewLexerAt reads src as a snippet that starts at the line and column of at.
@@ -39,6 +40,8 @@ func NewLexerAt(src []byte, at Pos) *Lexer {
 	return &Lexer{src: src, file: at.file, line: ln, col: cl}
 }
 
+// Next returns the next token. At the end of the text it inserts a semicolon
+// after a token that can end a statement, then returns EOF on every call.
 func (l *Lexer) Next() Tok {
 	if l.pend != nil {
 		t := *l.pend
