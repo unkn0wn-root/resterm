@@ -26,13 +26,8 @@ Accept: application/json
 # @tag oauth2 reuse
 # @description Pulls the token from the global cache populated by the previous request.
 # @capture request oauth.manualAuthHeader {{response.json.headers.Authorization}}
-# @script test
-> client.test("manual token reused", function () {
->   var echoed = vars.get("oauth.manualAuthHeader");
->   var token = vars.get("oauth.manualToken");
->   tests.assert(typeof token === "string" && token.length > 0, "token should be available");
->   tests.assert(typeof echoed === "string" && echoed.includes(token), "Bearer header should include the captured token");
-> });
+# @assert vars.get("oauth.manualToken") => "token should be available"
+# @assert vars.get("oauth.manualToken") in vars.get("oauth.manualAuthHeader") => "Bearer header should include the captured token"
 GET {{base.url}}/anything/accounts
 Authorization: Bearer {{oauth.manualToken}}
 Accept: application/json
