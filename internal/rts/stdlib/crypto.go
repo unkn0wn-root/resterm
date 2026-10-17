@@ -16,7 +16,7 @@ const (
 	sigCryptoHMACSHA512 = "crypto.hmacSha512(key, text)"
 )
 
-var cryptoSpec = nsSpec{name: "crypto", top: true, fns: map[string]rts.NativeFunc{
+var cryptoSpec = nsSpec{name: "crypto", fns: map[string]rts.NativeFunc{
 	"sha256":     cryptoSHA256,
 	"hmacSha256": cryptoHMACSHA256,
 	"sha512":     cryptoSHA512,

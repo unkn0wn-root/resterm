@@ -26,7 +26,7 @@ const (
 	sigJSONDiff      = "json.diff(got, want)"
 )
 
-var jsonSpec = nsSpec{name: "json", top: true, fns: map[string]rts.NativeFunc{
+var jsonSpec = nsSpec{name: "json", fns: map[string]rts.NativeFunc{
 	"file":      jsonFile,
 	"parse":     jsonParse,
 	"stringify": jsonStringify,

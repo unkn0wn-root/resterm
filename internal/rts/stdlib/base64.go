@@ -11,7 +11,7 @@ const (
 	sigBase64Decode = "base64.decode(x)"
 )
 
-var base64Spec = nsSpec{name: "base64", top: true, fns: map[string]rts.NativeFunc{
+var base64Spec = nsSpec{name: "base64", fns: map[string]rts.NativeFunc{
 	"encode": base64Encode,
 	"decode": base64Decode,
 }}

@@ -1579,6 +1579,22 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 			wrongTag: "@when",
 		},
 		{
+			// list is a standard library namespace, so the condition reads the
+			// namespace and skips the step instead of naming the unset item.
+			name: "request loop variable named after a namespace",
+			lines: []string{
+				"# @workflow demo",
+				"# @when list.disabled",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @for-each ["a","b","c"] as list`,
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			skipped: 1,
+		},
+		{
 			name: "step loop condition fails",
 			lines: []string{
 				"# @workflow demo",

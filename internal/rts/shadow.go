@@ -9,17 +9,20 @@ import (
 // Extensions are host objects a caller adds to the base runtime, such as the
 // TUI's mock inspector.
 //
-// An evaluation's prelude is assembled one layer at a time and later layers
-// win:
+// The standard library lives in the universe, a scope every evaluation shares.
+// An evaluation's top-level scope sits inside it and is assembled one layer at
+// a time, with later layers winning:
 //
-//	standard library and host objects   the base runtime
-//	Extensions                          added, must not collide with the base
-//	@use aliases                        added, must not collide with either
+//	rts, stdlib and module bindings     the base runtime
+//	Extensions                          added, must not collide with the base or the standard library
+//	@use aliases                        added, must not collide with the base or Extensions
 //	Locals                              shadow everything before them
 //	assertion shorthands and test t     shadow locals in assertions and tests
 //
-// Extensions sit on the additive side of that rule, so a name the base runtime
-// already binds is a host bug rather than a shadow.
+// The script's own declarations join the same scope, so at the top level they
+// may shadow the standard library and nothing else. Extensions sit on the
+// additive side of that rule, so a name the standard library or the base runtime already binds
+// is a host bug rather than a shadow.
 type Extensions struct{ binds }
 
 // NewExtensions binds a copy of values as host extensions.
@@ -64,11 +67,7 @@ func (b binds) all() iter.Seq2[string, Value] {
 	}
 }
 
-// pre is a prelude under construction. Callers hold it by value and share the
-// map, so a layer applied to a copy is visible to the builder.
-type pre struct{ values map[string]Value }
-
-func (p pre) addExtensions(cx *Ctx, pos Pos, ext Extensions) error {
+func addExtensions(cx *Ctx, pos Pos, env *Env, ext Extensions) error {
 	for name, v := range ext.all() {
 		if name == "" {
 			continue
@@ -76,10 +75,10 @@ func (p pre) addExtensions(cx *Ctx, pos Pos, ext Extensions) error {
 		if IsKeyword(name) {
 			return Errf(cx, pos, "name is a reserved word: %s", name)
 		}
-		if _, ok := p.values[name]; ok {
+		if _, ok := env.Get(name); ok {
 			return Errf(cx, pos, "name already defined: %s", name)
 		}
-		p.values[name] = v
+		env.DefConst(name, v)
 	}
 	return nil
 }
@@ -87,7 +86,7 @@ func (p pre) addExtensions(cx *Ctx, pos Pos, ext Extensions) error {
 // overlayLocals binds lexical values last. The parser already rejects a
 // reserved word as a loop variable. Checking again here stops a host that
 // builds locals by hand from creating a binding no expression could name.
-func (p pre) overlayLocals(cx *Ctx, pos Pos, loc Locals) error {
+func overlayLocals(cx *Ctx, pos Pos, env *Env, loc Locals) error {
 	for name, v := range loc.all() {
 		if name == "" {
 			continue
@@ -95,7 +94,7 @@ func (p pre) overlayLocals(cx *Ctx, pos Pos, loc Locals) error {
 		if IsKeyword(name) {
 			return Errf(cx, pos, "name is a reserved word: %s", name)
 		}
-		p.values[name] = v
+		env.DefConst(name, v)
 	}
 	return nil
 }

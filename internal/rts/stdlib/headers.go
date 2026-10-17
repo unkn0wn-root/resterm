@@ -66,7 +66,7 @@ var (
 	)
 )
 
-var headersSpec = nsSpec{name: "headers", top: true, fns: map[string]rts.NativeFunc{
+var headersSpec = nsSpec{name: "headers", fns: map[string]rts.NativeFunc{
 	"get":       headersGetDef.Func(),
 	"has":       headersHasDef.Func(),
 	"set":       headersSetDef.Func(),

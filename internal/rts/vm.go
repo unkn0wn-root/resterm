@@ -51,6 +51,8 @@ func targets(label, target string) bool {
 	return label == "" || label == target
 }
 
+// Exec runs mod in a new top-level scope that predeclares the names in pre.
+// Hosts use Eng.ExecModule. Exec is for callers that build their own Ctx.
 func Exec(ctx *Ctx, mod *Mod, pre map[string]Value) (*Comp, error) {
 	if mod == nil {
 		return nil, fmt.Errorf("nil module")
@@ -58,11 +60,12 @@ func Exec(ctx *Ctx, mod *Mod, pre map[string]Value) (*Comp, error) {
 	if ctx == nil {
 		ctx = NewCtx(context.Background(), Limits{})
 	}
+	return exec(ctx, mod, newTopEnv(newUniverse(pre)))
+}
+
+// exec runs mod in env, the top-level scope its declarations go into.
+func exec(ctx *Ctx, mod *Mod, env *Env) (*Comp, error) {
 	vm := &VM{ctx: ctx}
-	env := NewEnv(nil)
-	for k, v := range pre {
-		env.DefConst(k, v)
-	}
 	exp := map[string]Value{}
 	for _, st := range mod.Stmts {
 		if err := vm.execStmt(env, exp, st); err != nil {

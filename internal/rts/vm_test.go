@@ -1233,33 +1233,12 @@ x = 2
 	}
 }
 
-func TestBuiltinRedeclareRejected(t *testing.T) {
-	src := `
-let len = 1
-`
-	m, err := ParseModule(NewFile("test", []byte(src)))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	ctx := NewCtx(context.Background(), Limits{})
-	_, err = Exec(ctx, m, testStdlib())
-	if err == nil || !strings.Contains(err.Error(), "name already defined") {
-		t.Fatalf("expected name already defined error, got %v", err)
-	}
-}
-
-func TestPreludeRedeclareRejected(t *testing.T) {
+func TestExtensionRedeclareRejected(t *testing.T) {
 	src := `
 let env = 1
 `
-	m, err := ParseModule(NewFile("test", []byte(src)))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	ctx := NewCtx(context.Background(), Limits{})
-	pre := testStdlib()
-	pre["env"] = Str("host binding")
-	_, err = Exec(ctx, m, pre)
+	cfg := EvalConfig{Bindings: []Extensions{Extension("env", Str("host binding"))}}
+	_, err := NewEng(testStdlib()).ExecModule(context.Background(), cfg, src, Pos{})
 	if err == nil || !strings.Contains(err.Error(), "name already defined") {
 		t.Fatalf("expected name already defined error, got %v", err)
 	}

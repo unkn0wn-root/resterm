@@ -122,28 +122,88 @@ func TestContainsAndMembershipRejectSameContainer(t *testing.T) {
 	}
 }
 
-// the default(a, b) helper was removed in favor of ??. Dropping it from
-// coreSpec has to clear all three names at once, because the prelude and
-// both namespace objects are built from that one map
+// the default(a, b) helper was removed in favor of ??. The top level, rts and
+// stdlib all read the same predeclared names, so dropping it from coreSpec
+// clears all three.
 func TestStdlibDoesNotExposeDefault(t *testing.T) {
-	env := New()
-	if _, ok := env["default"]; ok {
+	if _, ok := New()["default"]; ok {
 		t.Fatalf("default is still in the top level prelude")
 	}
+	ctx := testCtx()
 	for _, ns := range []string{"rts", "stdlib"} {
-		v, ok := env[ns]
-		if !ok {
-			t.Fatalf("missing %s namespace", ns)
+		if v := evalExprCtx(t, ctx, ns+`["default"]`); v.K != rts.VNull {
+			t.Fatalf("%s.default is still exposed: %+v", ns, v)
 		}
-		if v.K != rts.VObj {
-			t.Fatalf("%s: expected an object, got kind %v", ns, v.K)
-		}
-		if _, ok, err := v.O.Member(nil, rts.Pos{}, "default"); err != nil || ok {
-			t.Fatalf("%s.default is still exposed", ns)
-		}
-		if _, ok, err := v.O.Member(nil, rts.Pos{}, "str"); err != nil || !ok {
+		if v := evalExprCtx(t, ctx, ns+".str"); v.K != rts.VNative {
 			t.Fatalf("%s.str went missing, the namespace lookup is not proving anything", ns)
 		}
+	}
+}
+
+func TestEveryNamespaceIsTopLevel(t *testing.T) {
+	ctx := testCtx()
+	tests := map[string]string{
+		`str(list.append([1], 2))`:        "[1,2]",
+		`dict.keys({a: 1})[0]`:            "a",
+		`text.upper("a")`:                 "A",
+		`str(math.abs(-2))`:               "2",
+		`typeof(rts.list) + typeof(list)`: "listlist",
+	}
+	for src, want := range tests {
+		if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+			t.Errorf("%s = %+v, want %q", src, v, want)
+		}
+	}
+}
+
+func TestRTSReachesAShadowedName(t *testing.T) {
+	ctx := testCtx()
+	for _, ns := range []string{"rts", "stdlib"} {
+		v := evalExprMod(t, ctx, "let json = 1", ns+".json.stringify({a: json})")
+		if v.K != rts.VStr || v.S != `{"a":1}` {
+			t.Fatalf("%s.json after let json = %+v, want {\"a\":1}", ns, v)
+		}
+	}
+}
+
+// rts is an object, not a dict, so it has members and indexes but no keys,
+// no string form and no JSON form.
+func TestRTSIsAnObject(t *testing.T) {
+	ctx := testCtx()
+	values := map[string]string{
+		`typeof(rts)`:         "rts",
+		`typeof(stdlib)`:      "stdlib",
+		`typeof(rts.list)`:    "list",
+		`typeof(rts["list"])`: "list",
+		`typeof(rts.nope)`:    "null",
+		`typeof(rts["nope"])`: "null",
+	}
+	for src, want := range values {
+		if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+			t.Errorf("%s = %+v, want %q", src, v, want)
+		}
+	}
+	errs := map[string]string{
+		`"list" in rts`:       "membership container must be string, list, or dict",
+		`str(rts)`:            "cannot stringify",
+		`json.stringify(rts)`: "json stringify unsupported object",
+	}
+	for src, want := range errs {
+		if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: error = %v, want %q", src, err, want)
+		}
+	}
+	mod, err := rts.ParseModule(rts.NewFile("test", []byte("for let k range rts {\n}")))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, err := rts.Exec(
+		ctx,
+		mod,
+		New(),
+	); err == nil ||
+		!strings.Contains(err.Error(), "range over non-iterable value") {
+		t.Errorf("range over rts: error = %v", err)
 	}
 }
 
@@ -964,7 +1024,7 @@ func TestStdlibJSONEqualAndDiffFitResponseBudget(t *testing.T) {
 			rts.Extension("same", resp()),
 			rts.Extension("want", want),
 		}}
-		eng := rts.NewEng(New)
+		eng := rts.NewEng(New())
 		v, err := eng.Eval(t.Context(), cfg, "json.equal(got, same)", rts.Pos{})
 		if err != nil || v.K != rts.VBool || !v.B {
 			t.Fatalf("nested %t: json.equal = %+v, %v, want true", nested, v, err)

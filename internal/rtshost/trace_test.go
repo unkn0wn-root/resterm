@@ -11,7 +11,7 @@ import (
 )
 
 func TestTraceDisabled(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	rt.Trace = nil
 	tests := map[string]bool{
@@ -106,7 +106,7 @@ func TestTraceEnabled(t *testing.T) {
 	}
 	rt := testRuntime(t)
 	rt.Trace = &Trace{Report: nettrace.NewReport(tl, bud)}
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	tests := map[string]string{
 		`str(trace.enabled())`:                "true",
 		`str(len(trace.breaches()))`:          "2",
@@ -136,7 +136,7 @@ func TestGetPhaseIgnoresBlankNames(t *testing.T) {
 	}}}
 	rt := testRuntime(t)
 	rt.Trace = &Trace{Report: rep}
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	for _, src := range []string{`trace.getPhase("")`, `trace.getPhase("   ")`} {
 		v, err := eng.Eval(context.Background(), rt, src, testPos)
 		if err != nil {

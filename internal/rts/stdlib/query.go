@@ -52,7 +52,7 @@ var (
 	)
 )
 
-var querySpec = nsSpec{name: "query", top: true, fns: map[string]rts.NativeFunc{
+var querySpec = nsSpec{name: "query", fns: map[string]rts.NativeFunc{
 	"parse":   queryParseDef.Func(),
 	"fromURL": queryFromURLDef.Func(),
 	"encode":  queryEncodeDef.Func(),

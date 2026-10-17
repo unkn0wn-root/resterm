@@ -94,7 +94,7 @@ func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 		hc:  hc,
 		gc:  grpcx.NewClient(),
 		sc:  scripts.NewRunner(nil),
-		re:  rtshost.NewEngine(stdlib.New),
+		re:  rtshost.NewEngine(stdlib.New()),
 		rg:  cfg.Registry,
 	}
 }

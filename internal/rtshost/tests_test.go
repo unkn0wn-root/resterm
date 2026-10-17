@@ -34,7 +34,7 @@ func testBlock(name string, line int, body ...string) restfile.ScriptBlock {
 
 func runTests(t *testing.T, rt Runtime, blocks ...restfile.ScriptBlock) ([]scriptapi.TestResult, error) {
 	t.Helper()
-	return RunTests(t.Context(), NewEngine(stdlib.New), Tests{
+	return RunTests(t.Context(), NewEngine(stdlib.New()), Tests{
 		Doc:     &restfile.Document{Path: testDoc},
 		Scripts: blocks,
 		Runtime: rt,
@@ -166,7 +166,7 @@ export fn each(t, items) {
 func TestRunTestsNamesTheLineWithoutAPath(t *testing.T) {
 	block := testBlock("", 2, `t.error("x")`, "t.error()")
 	block.SourcePath = ""
-	got, err := RunTests(t.Context(), NewEngine(stdlib.New), Tests{
+	got, err := RunTests(t.Context(), NewEngine(stdlib.New()), Tests{
 		Scripts: []restfile.ScriptBlock{block},
 		Runtime: testRuntime(t),
 	})
@@ -197,7 +197,7 @@ func TestRunTestsLimitsMessages(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := NewEngine(stdlib.New)
+			eng := NewEngine(stdlib.New())
 			eng.Core().Lim.MaxStr = 8
 			eng.Core().Lim.MaxList = 2
 			got, err := RunTests(t.Context(), eng, Tests{
@@ -282,7 +282,7 @@ func TestRunTestsErrorEndsOnlyItsBlock(t *testing.T) {
 	}
 	rt := testRuntime(t)
 	rt.BaseDir = t.TempDir()
-	got, err := RunTests(t.Context(), NewEngine(stdlib.New), Tests{
+	got, err := RunTests(t.Context(), NewEngine(stdlib.New()), Tests{
 		Doc:     doc,
 		Scripts: blocks,
 		Runtime: rt,
@@ -338,7 +338,7 @@ func TestRunTestsFailsEachBlockUnrunWhenUsesFailed(t *testing.T) {
 	rt.BaseDir = t.TempDir()
 	writeModule(t, rt.BaseDir, "check.rts", `t.error("file ran")`)
 	run := func(blocks ...restfile.ScriptBlock) ([]scriptapi.TestResult, error) {
-		return RunTests(t.Context(), NewEngine(stdlib.New), Tests{
+		return RunTests(t.Context(), NewEngine(stdlib.New()), Tests{
 			Doc:        &restfile.Document{Path: testDoc},
 			Scripts:    blocks,
 			Runtime:    rt,
@@ -421,7 +421,7 @@ export fn tryError() {
 	const ended = "t belongs to an evaluation that has ended"
 	for _, use := range []string{"useT", "useFatal", "useError", "tryT", "tryFatal", "tryError"} {
 		t.Run(use, func(t *testing.T) {
-			eng := NewEngine(stdlib.New)
+			eng := NewEngine(stdlib.New())
 			rt := keepRuntime(t, keep)
 			got, err := RunTests(t.Context(), eng, Tests{
 				Doc: &restfile.Document{Path: testDoc},
@@ -448,7 +448,7 @@ export fn tryError() {
 }
 
 func TestRunTestsFatalStopsANestedEvaluation(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := keepRuntime(t, `module keep
 let saved = null
 export fn hold(t) {
@@ -484,7 +484,7 @@ export fn stop() {
 
 func TestPreRequestHasNoT(t *testing.T) {
 	run := func(body string) error {
-		return RunPreRequest(t.Context(), NewEngine(stdlib.New), PreRequest{
+		return RunPreRequest(t.Context(), NewEngine(stdlib.New()), PreRequest{
 			Scripts: []restfile.ScriptBlock{
 				{Kind: restfile.ScriptKindPreRequest, Lang: restfile.ScriptLangRTS, Body: body},
 			},
@@ -502,7 +502,7 @@ func TestPreRequestHasNoT(t *testing.T) {
 func TestRunTestsStopsOnCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	got, err := RunTests(ctx, NewEngine(stdlib.New), Tests{
+	got, err := RunTests(ctx, NewEngine(stdlib.New()), Tests{
 		Scripts: []restfile.ScriptBlock{testBlock("", 2, "let x = 1")},
 		Runtime: testRuntime(t),
 	})
@@ -534,7 +534,7 @@ func TestRunTestsReportsTheCancelCauseOnce(t *testing.T) {
 				}
 				return "", false, nil
 			}
-			got, err := RunTests(ctx, NewEngine(stdlib.New), Tests{
+			got, err := RunTests(ctx, NewEngine(stdlib.New()), Tests{
 				Doc: &restfile.Document{Path: testDoc},
 				Scripts: []restfile.ScriptBlock{
 					testBlock("first", 2, `let v = vars.get("stop")`, `t.error("after")`),
@@ -572,7 +572,7 @@ func TestOnlyTestBlocksGetTheLargerStepLimit(t *testing.T) {
 	const small, mid, big = "work.spin(1000)", "work.spin(6250)", "work.spin(18750)"
 
 	pre := func(body string) error {
-		return RunPreRequest(t.Context(), NewEngine(stdlib.New), PreRequest{
+		return RunPreRequest(t.Context(), NewEngine(stdlib.New()), PreRequest{
 			Scripts: []restfile.ScriptBlock{
 				{Kind: restfile.ScriptKindPreRequest, Lang: restfile.ScriptLangRTS, Body: body},
 			},
@@ -602,7 +602,7 @@ func TestOnlyTestBlocksGetTheLargerStepLimit(t *testing.T) {
 
 func TestExpressionsKeepEngineStepLimit(t *testing.T) {
 	rt := stepRuntime(t)
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	const spin = "work.spin(2500)"
 	if _, err := eng.EvalAssertion(t.Context(), rt, spin+" == null", testPos); err == nil ||
 		!strings.Contains(err.Error(), "step limit exceeded") {

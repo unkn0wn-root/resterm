@@ -10,15 +10,16 @@ The TUI also provides `mock` during request evaluation. Its helpers work while t
 
 Every evaluation binds its names in a fixed order, and a later layer wins:
 
-1. The standard library and the host objects below.
-2. Host extensions such as `mock`. These are additive and cannot reuse a name from the first layer.
-3. `@use` aliases. These cannot reuse a name from either layer above.
-4. Local values, currently the `@for-each` loop variable. These shadow every layer above, so `# @for-each [1,2] as json` makes `json` the loop item for that request and hides the `json` namespace.
-5. Response check bindings. Inside `@assert`, `status`, `statusCode`, `statusText`, `header(name)`, and `text()` refer to the current response, even if a loop variable has the same name. Inside `@rts test`, `t` takes precedence over the earlier layers.
+1. The standard library. A declaration, an `@use` alias, or a loop variable can reuse its names, such as `json`, and `rts.json` still reaches the original.
+2. `rts`, `stdlib`, and the host objects below.
+3. Host extensions such as `mock`. These are additive and cannot reuse a name from the first two layers.
+4. `@use` aliases. These cannot reuse a name from the second or third layer.
+5. Local values, currently the `@for-each` loop variable. These shadow every layer above, so `# @for-each [1,2] as json` makes `json` the loop item for that request and hides the `json` namespace.
+6. Response check bindings. Inside `@assert`, `status`, `statusCode`, `statusText`, `header(name)`, and `text()` refer to the current response, even if a loop variable has the same name. Use `rts.text` for the text helpers there. Inside `@rts test`, `t` takes precedence over the earlier layers.
 
 Reserved words cannot be used as names in any layer. Both the parser and the runtime reject them, including in `@for-each` and `@use`.
 
-Modules and `@rts` blocks cannot declare a name already in scope. For example, `let json = 1` conflicts with the standard library. A request with `# @for-each [1,2] as item` cannot declare `let item` in its pre-request block either. Rename the declaration or the loop variable.
+Modules and `@rts` blocks can declare a standard library name, such as `let json = 1`. The top level of an `@rts` block cannot declare `rts`, `stdlib`, a host object such as `env`, or the loop variable. For example, a request with `# @for-each [1,2] as item` cannot declare `let item` in its pre-request block. Rename the declaration or the loop variable.
 
 ## env
 

@@ -15,10 +15,11 @@ type Engine struct {
 	core *rts.Eng
 }
 
-// NewEngine creates a host evaluator using std as its standard library.
-func NewEngine(std func() map[string]rts.Value) *Engine {
+// NewEngine creates a host evaluator that predeclares the names in pre, such
+// as the standard library.
+func NewEngine(pre map[string]rts.Value) *Engine {
 	req := rts.Obj(&requestObj{})
-	core := rts.NewEng(std, rts.WithModuleBindings(rts.Extension("request", req)))
+	core := rts.NewEng(pre, rts.WithModuleBindings(rts.Extension("request", req)))
 	return &Engine{core: core}
 }
 

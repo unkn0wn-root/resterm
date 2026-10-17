@@ -7,7 +7,7 @@
 # @use ./rts/helpers.rts as helpers
 ```
 
-`@use` is valid at file or request scope. If you omit `as`, the module name declared with `module <name>` becomes the alias.
+`@use` is valid at file or request scope. If you omit `as`, the module name declared with `module <name>` becomes the alias. An alias can reuse a standard library name such as `json`, but not `rts` or a host object name such as `env`.
 
 ## @apply
 

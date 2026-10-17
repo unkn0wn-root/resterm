@@ -42,7 +42,7 @@ func TestHaltEndsEvaluation(t *testing.T) {
 				Uses:     []rts.Use{{Path: "m.rts"}},
 				BaseDir:  dir,
 			}
-			_, err := rts.NewEng(stdlib.New).ExecModule(t.Context(), cfg, tt.src, rts.NewFile("t.rts", nil).Pos(1, 1))
+			_, err := rts.NewEng(stdlib.New()).ExecModule(t.Context(), cfg, tt.src, rts.NewFile("t.rts", nil).Pos(1, 1))
 			if !errors.Is(err, rts.ErrHalt) {
 				t.Fatalf("err = %v, want the halt", err)
 			}
@@ -57,7 +57,7 @@ func TestHaltEndsEvaluation(t *testing.T) {
 }
 
 func TestAbortIsNotHalt(t *testing.T) {
-	eng := rts.NewEng(stdlib.New)
+	eng := rts.NewEng(stdlib.New())
 	eng.Lim.MaxSteps = 20
 	_, err := eng.ExecModule(t.Context(), rts.EvalConfig{}, "for {\n}", rts.NewFile("t.rts", nil).Pos(1, 1))
 	if !rts.IsAbort(err) || errors.Is(err, rts.ErrHalt) {

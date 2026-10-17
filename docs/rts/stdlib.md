@@ -2,7 +2,7 @@
 
 The standard library provides helpers for text, JSON, lists, time, crypto, and other request tasks. It is available as `rts`, and `stdlib` still works as a deprecated alias. The library does not allow file writes or network access.
 
-Core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also available at the top level. The `text`, `list`, `dict`, and `math` namespaces are available only under `rts`.
+Core helpers and every namespace (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`, `text`, `list`, `dict`, `math`) are also available at the top level. A script can reuse any of these names, such as `let json = 1`, and `rts.json` still reaches the namespace.
 
 Builtins and reserved words may be removed within a major version, but only after deprecation in a minor release. Removal happens no earlier than the next minor release. Until then, the builtin still works and the parser warns on each line that uses it (`WARN line <n>` in the status bar, with the full text in Explain). Release notes list each removal and its replacement. See [Compatibility](../compatibility.md) for the wider versioning policy.
 
