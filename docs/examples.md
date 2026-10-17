@@ -6,7 +6,8 @@ The `_examples/` directory has request files you can run right away:
 - `nested.http` - requests with nested JSON bodies and tags.
 - `service-groups.http` - requests grouped by tag, such as smoke checks and provisioning.
 - `scopes.http` - global, file, and request captures.
-- `scripts.http` - pre-request and test scripting patterns.
+- `scripts.http` - a RestermScript pre-request block that sets a token, headers, and body, then an `@assert` check.
+- `javascript.http` - JavaScript pre-request and test scripts, and a test that saves a response body to a file.
 - `xml.http` - XML bodies and explicit inline angle-prefixed text.
 - `transport.http` - timeout, proxy, and `@no-log` samples.
 - `auth_scopes.http` - default auth inheritance across global/file/request scopes plus `@auth none`.
@@ -15,8 +16,8 @@ The `_examples/` directory has request files you can run right away:
 - `graphql.http` - inline and file-based GraphQL requests, with queries and variables in `queries/`.
 - `grpc.http` - gRPC reflection and descriptor usage, with a descriptor set in `descriptors/`.
 - `streaming.http` - an SSE feed and a WebSocket chat in one file.
-- `sse_manual.http` and `sse_scripted.http` - an SSE feed to watch in the Stream tab, and one checked by captures and a test script.
-- `websocket_manual.http` and `websocket_scripted.http` - a WebSocket echo to drive from the console, and one driven by `@ws` steps and checked by a test script.
+- `sse_manual.http` and `sse_scripted.http` - an SSE feed to watch in the Stream tab, and one checked by captures and `@assert`.
+- `websocket_manual.http` and `websocket_scripted.http` - a WebSocket echo to drive from the console, and one driven by `@ws` steps and checked by `@assert` and an `@rts test` block.
 - `workflows.http` - a full workflow with captures, overrides, and expectations.
 - `polling-retries.http` - polling and retries against mock sequences in the same file.
 - `compare.http` - `@compare` directives and multi-environment sweeps started from the CLI.
@@ -33,6 +34,7 @@ Folders:
 
 - `grouped/` - grouped environments, with a mock backend that echoes what each request carried.
 - `rts/` - RestermScript modules, `@apply` profiles, loops, and pre-request and test blocks.
+- `js/` - the script that `javascript.http` includes to save a downloaded image.
 - `bindings/` - a sample `bindings.toml`. See [Key bindings](key-bindings.md).
 - `themes/` - the Aurora and Daybreak themes. See [Theming](theming.md).
 

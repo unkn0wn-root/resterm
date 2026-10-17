@@ -1,12 +1,12 @@
 # JavaScript hooks
 
-Use JavaScript hooks to prepare a request before sending it or test a response afterwards. Scripts use ES5.1 JavaScript. Each block stops after 30 seconds or when the run is canceled. Scripts are not restricted to the workspace. See [Security](security.md).
+Use JavaScript hooks to prepare a request or test its response when you already have the script in JavaScript or need something [RestermScript](rts/README.md) cannot do, such as saving a response body to a file. Scripts use ES5.1 JavaScript. Each block stops after 30 seconds or when the run is canceled. Scripts are not restricted to the workspace. See [Security](security.md).
 
 ## Script blocks (`@script`)
 
 Add `# @script pre-request` or `# @script test` followed by lines that start with `>`. A bare `# @script` keeps the kind and language of the previous `@script` in the same request, and starts a test script when there is none.
 
-Scripts default to JavaScript. Use `lang=rts` or [`@rts`](rts/directives.md#rts) for [RestermScript](rts/README.md). `language=` is an alias for `lang=`; `javascript` and `restermlang` are aliases for `js` and `rts`.
+`@script` blocks default to JavaScript. Use `lang=rts` or [`@rts`](rts/directives.md#rts) for [RestermScript](rts/README.md). `language=` is an alias for `lang=`, and `javascript` and `restermlang` are aliases for `js` and `rts`.
 
 Unknown kinds or languages (`# @script check`, `lang=python`) produce a warning and the block does not run. Extra words and unknown options, such as `python` in `# @script test python` or `name=orders`, produce a warning but are otherwise ignored.
 
@@ -30,7 +30,7 @@ client.test("status ok", function () {
 ```
 
 Lines inside the block don't need `>`. A leading `>` is still stripped if present.
-The `{% ... %}` block is only for inline script content. Script file includes must be written as their own `> < ./path.js` line outside the block.
+The `{% ... %}` block is only for inline script content. Script file includes must be written as their own `> < ./path.js` line outside the block, and each include runs as its own script, so other lines cannot call functions the file defines.
 
 Allowed example:
 
@@ -127,7 +127,7 @@ For RestermScript test blocks, see [`@rts`](rts/directives.md#rts). They run bef
 
 Objects:
 
-- `client.test(name, fn)` - registers a named test. Exceptions or manual failures mark the test as failed. `resterm.test(name, fn)` is the same function.
+- `client.test(name, fn)` - registers a named test, which fails only when `fn` throws. `tests.assert` and `tests.fail` inside it add their own results, and any failed result fails the request. `resterm.test(name, fn)` is the same function.
 - `tests.assert(condition, message)` - adds a pass/fail entry.
 - `tests.fail(message)` - explicit failure.
 - `response`
