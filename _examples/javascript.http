@@ -1,0 +1,40 @@
+# JavaScript still works, but RestermScript is the first choice for scripts.
+# Use JavaScript for scripts you already have, or for the few things
+# RestermScript does not do, such as saving a response body to a file.
+# scripts.http sets up the same token with RestermScript.
+#
+# Put JavaScript under `# @script pre-request` or `# @script test` and start
+# each line with `>`. A `> < ./js/save-body.js` line runs that file as its own script.
+
+### Bootstrap Session With JavaScript
+# @name JavaScriptBootstrap
+# @tag scripts javascript
+# @description Pre-request script seeds and reuses a global token while setting headers and body.
+# @script pre-request
+> var existing = vars.global.get("js.token");
+> var token = existing || `js-${Date.now()}`;
+> vars.global.set("js.token", token, {secret: true});
+> request.setHeader("Authorization", `Bearer ${token}`);
+> request.setHeader("X-Trace-ID", `trace-${Date.now()}`);
+> var payload = {
+>   correlationId: `corr-${Date.now()}`,
+>   scope: "reports",
+>   requestedAt: new Date().toISOString()
+> };
+> request.setBody(JSON.stringify(payload, null, 2));
+# @script test
+> var echoed = response.json().headers.Authorization;
+> tests.assert(echoed === `Bearer ${vars.global.get("js.token")}`, "Authorization should carry the global token");
+POST {{services.api.base}}/reports/sessions
+Content-Type: application/json
+Accept: application/json
+
+### Save A Downloaded Image
+# @name JavaScriptSaveImage
+# @tag scripts javascript
+# @description Runs js/save-body.js, which saves the image as resterm-example.png.
+# @description The image is written to the directory Resterm was started in, not next to this file.
+# @script test
+> < ./js/save-body.js
+GET {{base.url}}/image/png
+Accept: image/png
