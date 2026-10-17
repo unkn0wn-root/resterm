@@ -5,15 +5,12 @@ import (
 	"strings"
 )
 
-func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, pre map[string]Value) ([]Use, error) {
+func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, env *Env) ([]Use, error) {
 	if len(cfg.Uses) == 0 {
 		return nil, nil
 	}
 	out := make([]Use, 0, len(cfg.Uses))
-	seen := make(map[string]struct{}, len(pre)+len(cfg.Uses))
-	for k := range pre {
-		seen[k] = struct{}{}
-	}
+	seen := make(map[string]struct{}, len(cfg.Uses))
 	for _, u := range cfg.Uses {
 		u, ok := normUse(u)
 		if !ok {
@@ -34,7 +31,7 @@ func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, pre map[string]Value) ([]Use,
 		if IsKeyword(al) {
 			return nil, Errf(cx, u.Pos, "alias is a reserved word: %s", al)
 		}
-		if _, ok := seen[al]; ok {
+		if _, ok := seen[al]; ok || env.HasLocal(al) {
 			return nil, Errf(cx, u.Pos, "alias already defined: %s", al)
 		}
 		seen[al] = struct{}{}

@@ -11,7 +11,7 @@ import (
 var shadowPos = NewFile("test", nil).Pos(1, 1)
 
 func TestLocalsShadowEveryEarlierBindingLayer(t *testing.T) {
-	e := NewEng(testStdlib)
+	e := NewEng(testStdlib())
 	cfg := EvalConfig{
 		Bindings: []Extensions{
 			NewExtensions(map[string]Value{"host": Str("extension")}),
@@ -34,7 +34,7 @@ func TestLocalsShadowEveryEarlierBindingLayer(t *testing.T) {
 }
 
 func TestOverridesShadowLocals(t *testing.T) {
-	e := NewEng(testStdlib)
+	e := NewEng(testStdlib())
 	cfg := EvalConfig{
 		Locals:    Local("status", Num(11)),
 		Overrides: Local("status", Num(201)),
@@ -49,7 +49,7 @@ func TestOverridesShadowLocals(t *testing.T) {
 }
 
 func TestBindingLayersCannotReplaceExistingNames(t *testing.T) {
-	e := NewEng(testStdlib)
+	e := NewEng(testStdlib())
 	cases := []string{"len", "str"}
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -70,8 +70,8 @@ func TestLocalsShadowUseAliases(t *testing.T) {
 		p: {data: []byte("module users\nexport let x = 1\n"), mod: time.Unix(10, 0)},
 	}}
 
-	e := NewEng(testStdlib)
-	e.C = NewCache(fs, e.modulePre)
+	e := NewEng(testStdlib())
+	e.C = NewCache(fs, e.moduleEnv)
 	cfg := EvalConfig{
 		BaseDir: dir,
 		Uses:    []Use{{Path: "users.rts"}},

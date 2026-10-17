@@ -23,10 +23,10 @@ func (OSFS) Stat(path string) (os.FileInfo, error) { return os.Stat(path) }
 
 // ModCache compiles each .rts module once and recompiles it when the file changes.
 type ModCache struct {
-	fs  FS
-	mu  sync.RWMutex
-	ent map[string]*modEnt
-	std func() map[string]Value
+	fs     FS
+	mu     sync.RWMutex
+	ent    map[string]*modEnt
+	newEnv func() *Env
 }
 
 type modEnt struct {
@@ -43,22 +43,13 @@ type modFP struct {
 	size int64
 }
 
-// NewCache creates a module cache using fs and the provided compile-time prelude.
-func NewCache(fs FS, std func() map[string]Value) *ModCache {
+// NewCache creates a module cache that reads modules through fs. Each module
+// runs in a new top-level scope returned by newEnv.
+func NewCache(fs FS, newEnv func() *Env) *ModCache {
 	if fs == nil {
 		fs = OSFS{}
 	}
-	return &ModCache{fs: fs, ent: map[string]*modEnt{}, std: prelude(std)}
-}
-
-// SetStdlib installs the prelude used when compiling modules through the cache.
-func (c *ModCache) SetStdlib(fn func() map[string]Value) {
-	if fn == nil {
-		return
-	}
-	c.mu.Lock()
-	c.std = prelude(fn)
-	c.mu.Unlock()
+	return &ModCache{fs: fs, ent: map[string]*modEnt{}, newEnv: newEnv}
 }
 
 func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
@@ -100,7 +91,7 @@ func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
 	}
 
 	cx := ctx.CloneNoIO()
-	comp, err := Exec(cx, mod, c.std())
+	comp, err := exec(cx, mod, c.newEnv())
 	if err != nil {
 		return nil, p, err
 	}
@@ -128,15 +119,6 @@ func (c *ModCache) stat(path string) (modFP, error) {
 		return modFP{}, err
 	}
 	return modFP{mod: info.ModTime(), size: info.Size()}, nil
-}
-
-func prelude(fn func() map[string]Value) func() map[string]Value {
-	if fn != nil {
-		return fn
-	}
-	return func() map[string]Value {
-		return map[string]Value{}
-	}
 }
 
 func absPath(base, path string) (string, error) {

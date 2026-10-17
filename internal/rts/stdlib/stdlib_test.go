@@ -964,7 +964,7 @@ func TestStdlibJSONEqualAndDiffFitResponseBudget(t *testing.T) {
 			rts.Extension("same", resp()),
 			rts.Extension("want", want),
 		}}
-		eng := rts.NewEng(New)
+		eng := rts.NewEng(New())
 		v, err := eng.Eval(t.Context(), cfg, "json.equal(got, same)", rts.Pos{})
 		if err != nil || v.K != rts.VBool || !v.B {
 			t.Fatalf("nested %t: json.equal = %+v, %v, want true", nested, v, err)

@@ -76,7 +76,7 @@ func evalHost(t *testing.T, eng *Engine, rt Runtime, src string) rts.Value {
 }
 
 func TestRuntimeSeparatesValuesFromEnvironmentMetadata(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	tests := map[string]string{
 		`env.meta.name`:          "dev",
@@ -95,7 +95,7 @@ func TestRuntimeSeparatesValuesFromEnvironmentMetadata(t *testing.T) {
 }
 
 func TestEnvironmentMetadataGroupsAndRequire(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	tests := map[string]string{
 		`env.meta.groups.get("REGION")`:     "eu",
@@ -123,7 +123,7 @@ func TestEnvironmentMetadataGroupsAndRequire(t *testing.T) {
 }
 
 func TestScopeResolveSuppliesVarsValues(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	scope, err := NewScope(ScopeInput{}, map[string]string{"id": "{{$uuid}}", "token": "abc", "boom": "{{x}}"})
 	if err != nil {
@@ -163,7 +163,7 @@ func TestScopeResolveSuppliesVarsValues(t *testing.T) {
 }
 
 func TestRuntimeExposesCardinalityBasedHeadersAndQuery(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	tests := map[string]string{
 		`request.headers["x-test"][0]`:      "one",
@@ -208,7 +208,7 @@ func TestRuntimeExposesCardinalityBasedHeadersAndQuery(t *testing.T) {
 }
 
 func TestRuntimeResponseJSONPath(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	for _, name := range []string{"response", "last"} {
 		for path, want := range map[string]rts.Value{
@@ -250,7 +250,7 @@ func TestRuntimeRejectsAmbiguousNamesAtConstruction(t *testing.T) {
 }
 
 func TestRuntimeNativeFunctionsAreStrict(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	for _, src := range []string{
 		`request.header(1)`,
@@ -265,7 +265,7 @@ func TestRuntimeNativeFunctionsAreStrict(t *testing.T) {
 }
 
 func TestRuntimeResponseAndAssertionBindings(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	tests := map[string]string{
 		`str(response.statusCode)`:        "200",
@@ -308,7 +308,7 @@ func TestRuntimeResponseAndAssertionBindings(t *testing.T) {
 }
 
 func TestJSONMemberWithoutCallSuggestsACall(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 
 	_, err := eng.EvalAssertion(t.Context(), rt, `response.json.ok`, testPos)
@@ -322,7 +322,7 @@ func TestJSONMemberWithoutCallSuggestsACall(t *testing.T) {
 }
 
 func TestEnvironmentMetadataHonorsStringLimitsThroughEveryAccess(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	eng.Core().Lim.MaxStr = 2
 	rt := testRuntime(t)
 	for _, src := range []string{`env.meta.name`, `env.meta["name"]`} {
@@ -334,7 +334,7 @@ func TestEnvironmentMetadataHonorsStringLimitsThroughEveryAccess(t *testing.T) {
 }
 
 func TestRequestQueryReportsInvalidEscapingWhenRead(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	req, err := NewRequest("GET", "https://example.test/?bad=%zz", nil, nil)
 	if err != nil {
@@ -349,7 +349,7 @@ func TestRequestQueryReportsInvalidEscapingWhenRead(t *testing.T) {
 }
 
 func TestUnboundResponseRejectsReadsEvenBehindTry(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	rt.Response = nil
 	for _, src := range []string{
@@ -377,7 +377,7 @@ func TestCachedModuleRequestReadsAreEvaluationLocal(t *testing.T) {
 		t.Fatalf("write module: %v", err)
 	}
 
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	base := testRuntime(t)
 	base.BaseDir = dir
 	base.Uses = []rts.Use{{Path: "request_view.rts"}}
@@ -420,7 +420,7 @@ func TestCachedModuleRequestReadsAreEvaluationLocal(t *testing.T) {
 
 func TestLoadRunsModuleSetupAgainstTheRuntime(t *testing.T) {
 	rt := keepRuntime(t, "module keep\nlet seen = request.method\nexport fn method() { return seen }\n")
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	if err := eng.Load(t.Context(), rt, testPos); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -444,7 +444,7 @@ func (e *methodError) Error() string {
 }
 
 func TestReadOnlyRuntimeRefusesEveryWrite(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	if rt.Mutator != nil {
 		t.Fatal("testRuntime is not read-only")
@@ -556,7 +556,7 @@ func TestKeptVarsStopWhenTheirEvaluationEnds(t *testing.T) {
 		t.Run(use, func(t *testing.T) {
 			ended := obj + " belongs to an evaluation that has ended"
 			call := "keep." + use + "()"
-			eng := NewEngine(stdlib.New)
+			eng := NewEngine(stdlib.New())
 			rt := keepRuntime(t, keepVars)
 			pre := rt
 			var out prerequest.Output
@@ -603,7 +603,7 @@ func TestKeptVarsStopWhenTheirEvaluationEnds(t *testing.T) {
 }
 
 func TestKeptVarsAreReadOnlyInANestedEvaluation(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := keepRuntime(t, keepVars)
 	nested := rt
 	calls := map[string]string{"read": "keep.useGet()", "write": "keep.useSet()"}
@@ -629,7 +629,7 @@ vars.get("write")`)
 }
 
 func TestKeptReadersStopWhenTheirEvaluationEnds(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := keepRuntime(t, `module keep
 let e = null
 let m = null
@@ -796,7 +796,7 @@ func TestPreparedScopeValidatesLayersAndRebindsVars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareScope: %v", err)
 	}
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	for _, want := range []string{"first", "second"} {
 		scope, err := prep.BindVars(map[string]string{"token": want})
 		if err != nil {
@@ -816,7 +816,7 @@ func TestPreparedScopeValidatesLayersAndRebindsVars(t *testing.T) {
 // string limit the way response.statusText does when read: an eager check
 // would fail assertions that never mention statusText. This pins that choice.
 func TestAssertionShorthandBindsStatusTextAsGiven(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	eng.Core().Lim = rts.Limits{MaxStr: 2, MaxList: 100, MaxDict: 100, MaxSteps: 1000, MaxCall: 10}
 	resp, err := NewResponse("long", 200, nil, nil, "")
 	if err != nil {
@@ -846,7 +846,7 @@ func TestAssertionShorthandBindsStatusTextAsGiven(t *testing.T) {
 }
 
 func TestVarsInterpolate(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	scope, err := NewScope(ScopeInput{Env: map[string]string{"host": "env.test"}}, map[string]string{
 		"base":        "https://api.test",
@@ -893,7 +893,7 @@ func TestVarsInterpolate(t *testing.T) {
 }
 
 func TestVarsInterpolateSeesScriptWrites(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	var out prerequest.Output
 	rt.Mutator = NewMutator(&out, rt.Request, map[string]string{}, nil, nil)
@@ -912,7 +912,7 @@ func TestVarsInterpolateSeesScriptWrites(t *testing.T) {
 }
 
 func TestVarsInterpolateStopsAtStringLimit(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	eng.Core().Lim.MaxStr = 1024
 	rt := testRuntime(t)
 	scope, err := NewScope(ScopeInput{}, map[string]string{
@@ -940,7 +940,7 @@ func TestVarsInterpolateStopsAtStringLimit(t *testing.T) {
 }
 
 func TestVarsInterpolateStopsWhenCanceled(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	scope, err := NewScope(ScopeInput{}, map[string]string{"v": "x", "tpl": strings.Repeat("{{v}}", 128)})
 	if err != nil {
@@ -967,7 +967,7 @@ func TestVarsInterpolateStopsWhenCanceled(t *testing.T) {
 }
 
 func TestVarsInterpolateKeepsLookupAborts(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	abort := &rts.AbortError{RuntimeError: &rts.RuntimeError{Msg: "timeout exceeded"}, Kind: rts.AbortTimeout}
 	for _, stop := range []error{abort, rts.ErrHalt} {

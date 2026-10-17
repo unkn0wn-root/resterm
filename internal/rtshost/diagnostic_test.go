@@ -98,7 +98,7 @@ func TestDiagnoseWrappedAbort(t *testing.T) {
 }
 
 func TestEngineDiagnosesCoreErrors(t *testing.T) {
-	eng := NewEngine(func() map[string]rts.Value { return nil })
+	eng := NewEngine(nil)
 	pos := rts.NewFile("boundary.rts", nil).Pos(4, 6)
 	tests := []struct {
 		name string

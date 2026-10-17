@@ -624,7 +624,7 @@ func TestHandleResponseMsgRendersRTSStack(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	host := rtshost.NewEngine(stdlib.New)
+	host := rtshost.NewEngine(stdlib.New())
 	_, scriptErr := host.ExecModule(
 		context.Background(),
 		rtshost.Runtime{},

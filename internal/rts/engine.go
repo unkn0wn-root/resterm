@@ -61,25 +61,27 @@ func WithModuleBindings(values Extensions) EngOption {
 // Eng evaluates RTS expressions and modules. Evaluations are serialized because
 // cached module environments intentionally retain mutable top-level state.
 type Eng struct {
-	C      *ModCache
-	Lim    Limits
-	Stdlib func() map[string]Value
-	mod    []Extensions
-	mu     sync.Mutex
+	C   *ModCache
+	Lim Limits
+	// uni is the universe. It is never written once built, so every evaluation
+	// shares it.
+	uni *Env
+	mod []Extensions
+	mu  sync.Mutex
 }
 
-// NewEng creates an engine with the provided standard-library prelude.
-func NewEng(std func() map[string]Value, opts ...EngOption) *Eng {
+// NewEng creates an engine that predeclares the names in pre.
+func NewEng(pre map[string]Value, opts ...EngOption) *Eng {
 	e := &Eng{
-		Lim:    defaultLimits(),
-		Stdlib: prelude(std),
+		Lim: defaultLimits(),
+		uni: newUniverse(pre),
 	}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(e)
 		}
 	}
-	e.C = NewCache(nil, e.modulePre)
+	e.C = NewCache(nil, e.moduleEnv)
 	return e
 }
 
@@ -87,14 +89,9 @@ func (e *Eng) Eval(ctx context.Context, cfg EvalConfig, src string, pos Pos) (Va
 	if e == nil {
 		return Null(), fmt.Errorf("nil engine")
 	}
-	cx, pre, err := e.prepare(ctx, cfg, pos)
+	cx, env, err := e.prepare(ctx, cfg, pos)
 	if err != nil {
 		return Null(), err
-	}
-
-	env := NewEnv(nil)
-	for k, v := range pre {
-		env.DefConst(k, v)
 	}
 
 	ex, err := ParseExpr(src, pos)
@@ -137,7 +134,7 @@ func (e *Eng) ExecModule(ctx context.Context, cfg EvalConfig, src string, pos Po
 	if e == nil {
 		return nil, fmt.Errorf("nil engine")
 	}
-	cx, pre, err := e.prepare(ctx, cfg, pos)
+	cx, env, err := e.prepare(ctx, cfg, pos)
 	if err != nil {
 		return nil, err
 	}
@@ -149,34 +146,23 @@ func (e *Eng) ExecModule(ctx context.Context, cfg EvalConfig, src string, pos Po
 		cx.push(Frame{Kind: FrameExpr, Pos: pos, Name: cfg.Site})
 		defer cx.pop()
 	}
-	return Exec(cx, mod, pre)
+	return exec(cx, mod, env)
 }
 
 // prepare builds what one evaluation needs. Only this setup reads shared
 // engine state, so the lock is released before code runs. A host function can
 // then evaluate again without waiting on itself.
-func (e *Eng) prepare(ctx context.Context, cfg EvalConfig, pos Pos) (*Ctx, map[string]Value, error) {
+func (e *Eng) prepare(ctx context.Context, cfg EvalConfig, pos Pos) (*Ctx, *Env, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.ensure()
 	cx := e.newCtx(ctx, cfg)
-	pre, err := e.buildPre(cx, cfg, pos)
+	env, err := e.buildEnv(cx, cfg, pos)
 	// Keep module loading on the engine budget; its results are cached.
 	if cfg.MaxSteps > 0 {
 		cx.Lim.MaxSteps = cfg.MaxSteps
 	}
-	return cx, pre, err
-}
-
-func (e *Eng) ensure() {
-	if e.Stdlib == nil {
-		e.Stdlib = prelude(nil)
-	}
-	if e.C == nil {
-		e.C = NewCache(nil, e.modulePre)
-	}
-	e.C.SetStdlib(e.modulePre)
+	return cx, env, err
 }
 
 func (e *Eng) newCtx(ctx context.Context, cfg EvalConfig) *Ctx {
@@ -191,30 +177,30 @@ func (e *Eng) newCtx(ctx context.Context, cfg EvalConfig) *Ctx {
 	return cx
 }
 
-// buildPre assembles the bindings one evaluation sees. The prelude is the only
-// source of truth for what a local may shadow, so binding a new host object
-// here is all it takes to make it shadowable.
-func (e *Eng) buildPre(cx *Ctx, cfg EvalConfig, pos Pos) (map[string]Value, error) {
-	p := pre{values: e.modulePre()}
+// buildEnv assembles the top-level scope one evaluation runs in. That scope is
+// the only source of truth for what a local may shadow, so binding a new host
+// object here is all it takes to make it shadowable.
+func (e *Eng) buildEnv(cx *Ctx, cfg EvalConfig, pos Pos) (*Env, error) {
+	env := e.moduleEnv()
 	for _, bindings := range cfg.Bindings {
-		if err := p.addExtensions(cx, pos, bindings); err != nil {
+		if err := addExtensions(cx, pos, env, bindings); err != nil {
 			return nil, err
 		}
 	}
-	if err := e.addUses(cx, cfg, p); err != nil {
+	if err := e.addUses(cx, cfg, env); err != nil {
 		return nil, err
 	}
-	if err := p.overlayLocals(cx, pos, cfg.Locals); err != nil {
+	if err := overlayLocals(cx, pos, env, cfg.Locals); err != nil {
 		return nil, err
 	}
-	if err := p.overlayLocals(cx, pos, cfg.Overrides); err != nil {
+	if err := overlayLocals(cx, pos, env, cfg.Overrides); err != nil {
 		return nil, err
 	}
-	return p.values, nil
+	return env, nil
 }
 
-func (e *Eng) addUses(cx *Ctx, cfg EvalConfig, p pre) error {
-	uses, err := e.resolveUses(cx, cfg, p.values)
+func (e *Eng) addUses(cx *Ctx, cfg EvalConfig, env *Env) error {
+	uses, err := e.resolveUses(cx, cfg, env)
 	if err != nil {
 		return err
 	}
@@ -223,21 +209,21 @@ func (e *Eng) addUses(cx *Ctx, cfg EvalConfig, p pre) error {
 		if err != nil {
 			return err
 		}
-		// Not p.bind: a module reports itself as module:<name>, while the alias
-		// is the name the file wrote.
-		p.values[u.Alias] = Obj(NewModObj(u.Alias, cp.Exp))
+		env.DefConst(u.Alias, Obj(NewModObj(u.Alias, cp.Exp)))
 	}
 	return nil
 }
 
-func (e *Eng) modulePre() map[string]Value {
-	out := CloneDict(e.Stdlib())
+// moduleEnv returns a new top-level scope with the names every module sees:
+// the predeclared names and the module bindings.
+func (e *Eng) moduleEnv() *Env {
+	env := newTopEnv(e.uni)
 	for _, bindings := range e.mod {
 		for name, value := range bindings.all() {
 			if name != "" {
-				out[name] = value
+				env.DefConst(name, value)
 			}
 		}
 	}
-	return out
+	return env
 }

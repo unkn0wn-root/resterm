@@ -9,7 +9,7 @@ import (
 )
 
 func TestStreamDisabled(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	rt.Stream = nil
 
@@ -24,7 +24,7 @@ func TestStreamDisabled(t *testing.T) {
 }
 
 func TestStreamEnabled(t *testing.T) {
-	eng := NewEngine(stdlib.New)
+	eng := NewEngine(stdlib.New())
 	rt := testRuntime(t)
 	rt.Stream = &Stream{
 		Kind: "sse",

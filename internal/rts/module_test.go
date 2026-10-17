@@ -55,7 +55,7 @@ func TestModCacheReload(t *testing.T) {
 	fs := &memFS{files: map[string]*memFile{}}
 	fs.files[p] = &memFile{data: []byte("export let x = 1"), mod: time.Unix(10, 0)}
 
-	c := NewCache(fs, testStdlib)
+	c := NewCache(fs, testScope)
 	ctx := NewCtx(context.Background(), Limits{})
 
 	m1, p1, err := c.Load(ctx, "", p)
@@ -97,7 +97,7 @@ func TestModCacheReload(t *testing.T) {
 func TestModCacheChecksARecentModuleByContent(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "mod.rts")
 	fs := &memFS{files: map[string]*memFile{p: {data: []byte("export let x = 1"), mod: time.Now()}}}
-	c := NewCache(fs, testStdlib)
+	c := NewCache(fs, testScope)
 	ctx := NewCtx(context.Background(), Limits{})
 
 	m1, _, err := c.Load(ctx, "", p)
@@ -129,7 +129,7 @@ func TestOldCodeKeepsTheTextItWasReadFrom(t *testing.T) {
 	v2 := "export fn boom() {\n  return null.c\n}\n"
 	v3 := "export fn boom() {\n  return 1 +\n}\n"
 	fs := &memFS{files: map[string]*memFile{p: {data: []byte(v1), mod: time.Unix(10, 0)}}}
-	c := NewCache(fs, testStdlib)
+	c := NewCache(fs, testScope)
 	ctx := NewCtx(context.Background(), Limits{})
 
 	m1, _, err := c.Load(ctx, "", p)
@@ -183,8 +183,8 @@ func TestLoadErrorsCarryTheModuleText(t *testing.T) {
 	for name, src := range srcs {
 		fs.files[filepath.Join(dir, name)] = &memFile{data: []byte(src), mod: time.Unix(10, 0)}
 	}
-	e := NewEng(testStdlib)
-	e.C = NewCache(fs, e.modulePre)
+	e := NewEng(testStdlib())
+	e.C = NewCache(fs, e.moduleEnv)
 	at := NewFile("test", nil).Pos(1, 1)
 	use := func(u Use) error {
 		_, err := e.Eval(t.Context(), EvalConfig{BaseDir: dir, Uses: []Use{u}}, "1", at)
@@ -242,8 +242,8 @@ func TestUseReadsARecentModuleNameFromTheFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.rts")
 	fs := &memFS{files: map[string]*memFile{p: {data: []byte("module abc\nexport let x = 1"), mod: time.Now()}}}
-	e := NewEng(testStdlib)
-	e.C = NewCache(fs, e.modulePre)
+	e := NewEng(testStdlib())
+	e.C = NewCache(fs, e.moduleEnv)
 	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "a.rts"}}}
 	pos := NewFile("test", nil).Pos(1, 1)
 
@@ -273,8 +273,8 @@ func TestUseChecksAModuleOnceMoreAfterItSettles(t *testing.T) {
 			p := filepath.Join(dir, "a.rts")
 			mod := time.Now().Add(-time.Second)
 			fs := &memFS{files: map[string]*memFile{p: {data: []byte("module abc\nexport let x = 1"), mod: mod}}}
-			e := NewEng(testStdlib)
-			e.C = NewCache(fs, e.modulePre)
+			e := NewEng(testStdlib())
+			e.C = NewCache(fs, e.moduleEnv)
 			cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "a.rts"}}}
 			pos := NewFile("test", nil).Pos(1, 1)
 
@@ -304,8 +304,8 @@ func TestUseAliasCollisionBeforeParse(t *testing.T) {
 	fs.files[p1] = &memFile{data: []byte("module mod\nexport let x ="), mod: time.Unix(10, 0)}
 	fs.files[p2] = &memFile{data: []byte("module mod\nexport let y ="), mod: time.Unix(10, 0)}
 
-	e := NewEng(testStdlib)
-	e.C = NewCache(fs, e.modulePre)
+	e := NewEng(testStdlib())
+	e.C = NewCache(fs, e.moduleEnv)
 
 	cfg := EvalConfig{
 		BaseDir: dir,
@@ -324,8 +324,8 @@ func TestUseAliasErrorsPointAtTheUse(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.rts")
 	fs := &memFS{files: map[string]*memFile{p: {data: []byte("module len\nexport let x = 1"), mod: time.Unix(10, 0)}}}
-	e := NewEng(testStdlib)
-	e.C = NewCache(fs, e.modulePre)
+	e := NewEng(testStdlib())
+	e.C = NewCache(fs, e.moduleEnv)
 	at := NewFile("api.http", nil).Pos(3, 1)
 	tests := []struct {
 		name string
@@ -352,8 +352,8 @@ func TestLoadGivesTheErrorEvalWould(t *testing.T) {
 	p := filepath.Join(dir, "bad.rts")
 	src := "module bad\n\nexport fn ok(x) {\n  return x ==\n}\n"
 	fs := &memFS{files: map[string]*memFile{p: {data: []byte(src), mod: time.Unix(10, 0)}}}
-	e := NewEng(testStdlib)
-	e.C = NewCache(fs, e.modulePre)
+	e := NewEng(testStdlib())
+	e.C = NewCache(fs, e.moduleEnv)
 	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "bad.rts"}}}
 	pos := NewFile("test", nil).Pos(1, 1)
 
@@ -384,8 +384,8 @@ export fn seen() {
 }
 `
 	fs := &memFS{files: map[string]*memFile{p: {data: []byte(src), mod: time.Unix(10, 0)}}}
-	e := NewEng(testStdlib)
-	e.C = NewCache(fs, e.modulePre)
+	e := NewEng(testStdlib())
+	e.C = NewCache(fs, e.moduleEnv)
 	cfg := EvalConfig{BaseDir: dir, Uses: []Use{{Path: "cnt.rts"}}}
 	pos := NewFile("test", nil).Pos(1, 1)
 
@@ -443,8 +443,8 @@ func TestEngineRejectsReservedBindings(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			e := NewEng(testStdlib)
-			e.C = NewCache(fs, e.modulePre)
+			e := NewEng(testStdlib())
+			e.C = NewCache(fs, e.moduleEnv)
 			_, err := e.Eval(context.Background(), tc.cfg, "1", NewFile("test", nil).Pos(1, 1))
 			if err == nil || !strings.Contains(err.Error(), tc.msg) {
 				t.Fatalf("expected %q, got %v", tc.msg, err)

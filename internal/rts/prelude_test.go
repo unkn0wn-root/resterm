@@ -7,6 +7,8 @@ func testStdlib() map[string]Value {
 	}
 }
 
+func testScope() *Env { return newTopEnv(newUniverse(testStdlib())) }
+
 func testLen(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	na := NewArgs(ctx, pos, args, "len(x)")
 	if err := na.Count(1); err != nil {

@@ -13,7 +13,7 @@ import (
 // A host function may evaluate again while its caller runs, as a request
 // getter does when it renders a {{= }} expression.
 func TestEngHostFunctionCanEvaluateAgain(t *testing.T) {
-	e := rts.NewEng(stdlib.New)
+	e := rts.NewEng(stdlib.New())
 	nested := rts.NativeNamed("nested", func(cx *rts.Ctx, _ rts.Pos, _ []rts.Value) (rts.Value, error) {
 		return e.Eval(cx.Ctx, rts.EvalConfig{}, "1 + 2", rts.Pos{})
 	})
@@ -42,7 +42,7 @@ func TestEngHostFunctionCanEvaluateAgain(t *testing.T) {
 
 // Evaluations no longer hold the lock while they run, so they may overlap.
 func TestEngEvaluatesInParallel(t *testing.T) {
-	e := rts.NewEng(stdlib.New)
+	e := rts.NewEng(stdlib.New())
 	ctx := context.Background()
 	var wg sync.WaitGroup
 	for range 8 {
@@ -69,7 +69,7 @@ func TestEngEvaluatesInParallel(t *testing.T) {
 }
 
 func TestEngMaxStepsReplacesTheLimit(t *testing.T) {
-	e := rts.NewEng(stdlib.New)
+	e := rts.NewEng(stdlib.New())
 	e.Lim.MaxSteps = 100
 	loop := "for let i = 0; i < 50; i = i + 1 {\n}"
 	if _, err := e.ExecModule(t.Context(), rts.EvalConfig{}, loop, rts.Pos{}); err == nil {
