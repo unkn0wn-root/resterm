@@ -9,17 +9,20 @@ import (
 // Extensions are host objects a caller adds to the base runtime, such as the
 // TUI's mock inspector.
 //
-// An evaluation's top-level scope is assembled one layer at a time and later
-// layers win:
+// The standard library lives in the universe, a scope every evaluation shares.
+// An evaluation's top-level scope sits inside it and is assembled one layer at
+// a time, with later layers winning:
 //
-//	standard library and host objects   the base runtime
-//	Extensions                          added, must not collide with the base
-//	@use aliases                        added, must not collide with either
+//	rts, stdlib and module bindings     the base runtime
+//	Extensions                          added, must not collide with the base or the standard library
+//	@use aliases                        added, must not collide with the base or Extensions
 //	Locals                              shadow everything before them
 //	assertion shorthands and test t     shadow locals in assertions and tests
 //
-// Extensions sit on the additive side of that rule, so a name the base runtime
-// already binds is a host bug rather than a shadow.
+// The script's own declarations join the same scope, so at the top level they
+// may shadow the standard library and nothing else. Extensions sit on the
+// additive side of that rule, so a name the standard library or the base runtime already binds
+// is a host bug rather than a shadow.
 type Extensions struct{ binds }
 
 // NewExtensions binds a copy of values as host extensions.

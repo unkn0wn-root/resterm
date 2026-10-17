@@ -1,17 +1,11 @@
 package stdlib
 
-import (
-	"maps"
-
-	"github.com/unkn0wn-root/resterm/internal/rts"
-)
+import "github.com/unkn0wn-root/resterm/internal/rts"
 
 type nsSpec struct {
 	// name is the RTS namespace name, such as "crypto" or "json".
 	name string
-	// top exposes the namespace both as rts.name and as a top-level alias.
-	top bool
-	fns map[string]rts.NativeFunc
+	fns  map[string]rts.NativeFunc
 }
 
 var rtsNamespaces = []nsSpec{
@@ -53,10 +47,6 @@ func (o *objMap) Index(_ *rts.Ctx, pos rts.Pos, key rts.Value) (rts.Value, error
 	return v, nil
 }
 
-func addVals(dst, src map[string]rts.Value) {
-	maps.Copy(dst, src)
-}
-
 func mkFns(prefix string, fns map[string]rts.NativeFunc) map[string]rts.Value {
 	out := make(map[string]rts.Value, len(fns))
 	for k, f := range fns {
@@ -73,40 +63,13 @@ func mkObj(name string, fns map[string]rts.NativeFunc) *objMap {
 	return &objMap{name: name, m: mkFns(name, fns)}
 }
 
-// New builds a fresh RTS standard-library prelude.
+// New returns the predeclared names of the standard library: the core helpers,
+// such as len and str, and one object for each namespace, such as json.
 func New() map[string]rts.Value {
-	core := mkFns("", coreSpec)
-	specs := rtsNamespaces
-	rootExtra := 3
-
-	top := 0
-	for _, s := range specs {
-		if s.top {
-			top++
-		}
+	out := mkFns("", coreSpec)
+	for _, s := range rtsNamespaces {
+		out[s.name] = rts.Obj(mkObj(s.name, s.fns))
 	}
-
-	out := make(map[string]rts.Value, len(core)+top+rootExtra)
-	addVals(out, core)
-
-	rootMembers := make(map[string]rts.Value, len(core)+len(specs)+1)
-	addVals(rootMembers, core)
-	for _, s := range specs {
-		o := mkObj(s.name, s.fns)
-		if s.top {
-			out[s.name] = rts.Obj(o)
-		}
-		rootMembers[s.name] = rts.Obj(o)
-	}
-
-	enc := mkEncObj()
-	out["encoding"] = rts.Obj(enc)
-	rootMembers["encoding"] = rts.Obj(enc)
-
-	rtsRoot := &objMap{name: "rts", m: rootMembers}
-	stdlibRoot := &objMap{name: "stdlib", m: rootMembers}
-	out["rts"] = rts.Obj(rtsRoot)
-	out["stdlib"] = rts.Obj(stdlibRoot)
-
+	out["encoding"] = rts.Obj(mkEncObj())
 	return out
 }

@@ -7,7 +7,7 @@ let name = expr
 const name = expr
 ```
 
-Use `let` for a variable you can reassign and `const` for one you cannot. You cannot declare the same name twice in one scope, but an inner block can declare its own version of an outer name (shadowing). An assignment must refer to a name already declared in the current or an outer scope.
+Use `let` for a variable you can reassign and `const` for one you cannot. You cannot declare the same name twice in one scope, but an inner block can declare its own version of an outer name (shadowing), and any declaration can shadow a standard library name such as `len`. An assignment must refer to a name already declared in the current or an outer scope.
 
 ## Assignment
 

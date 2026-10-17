@@ -23,4 +23,4 @@ export fn authHeader(token) {
 Authorization: {{= helpers.authHeader(vars.get("auth.token")) }}
 ```
 
-Modules have access to `rts` and, when the host provides it, `request`. Pass other host objects (`env`, `vars`, `last`, `response`, `trace`, `stream`, or a test block's `t`) as function arguments. These objects expire when the block or expression passing them returns. `stdlib` is a deprecated alias for `rts`.
+Modules have access to `rts` and, when the host provides it, `request`. A module cannot declare these names or `stdlib`, but it can declare any other name, including a standard library name such as `json`. Pass other host objects (`env`, `vars`, `last`, `response`, `trace`, `stream`, or a test block's `t`) as function arguments. These objects expire when the block or expression passing them returns. `stdlib` is a deprecated alias for `rts`.

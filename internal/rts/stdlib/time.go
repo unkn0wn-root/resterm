@@ -23,7 +23,7 @@ const (
 	nsSec = int64(time.Second)
 )
 
-var timeSpec = nsSpec{name: "time", top: true, fns: map[string]rts.NativeFunc{
+var timeSpec = nsSpec{name: "time", fns: map[string]rts.NativeFunc{
 	"nowISO":        timeNowISO,
 	"nowUnix":       timeNowUnix,
 	"nowUnixString": timeNowUnixStr,

@@ -323,7 +323,7 @@ func TestUseAliasCollisionBeforeParse(t *testing.T) {
 func TestUseAliasErrorsPointAtTheUse(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.rts")
-	fs := &memFS{files: map[string]*memFile{p: {data: []byte("module len\nexport let x = 1"), mod: time.Unix(10, 0)}}}
+	fs := &memFS{files: map[string]*memFile{p: {data: []byte("module rts\nexport let x = 1"), mod: time.Unix(10, 0)}}}
 	e := NewEng(testStdlib())
 	e.C = NewCache(fs, e.moduleEnv)
 	at := NewFile("api.http", nil).Pos(3, 1)
@@ -332,7 +332,7 @@ func TestUseAliasErrorsPointAtTheUse(t *testing.T) {
 		use  Use
 		msg  string
 	}{
-		{"taken name", Use{Path: "a.rts", Pos: at}, "alias already defined: len"},
+		{"taken name", Use{Path: "a.rts", Pos: at}, "alias already defined: rts"},
 		{"reserved word", Use{Path: "a.rts", Alias: "default", Pos: at}, "alias is a reserved word: default"},
 	}
 	for _, tt := range tests {
@@ -344,6 +344,54 @@ func TestUseAliasErrorsPointAtTheUse(t *testing.T) {
 				t.Fatalf("error = %v, want %q at %s", err, tt.msg, at)
 			}
 		})
+	}
+}
+
+func TestUseAliasMayShadowAPredeclaredName(t *testing.T) {
+	dir := t.TempDir()
+	fs := &memFS{files: map[string]*memFile{
+		filepath.Join(dir, "len.rts"): {data: []byte("module len\nexport let x = 1"), mod: time.Unix(10, 0)},
+		filepath.Join(dir, "m.rts"):   {data: []byte("export let x = 2"), mod: time.Unix(10, 0)},
+	}}
+	e := NewEng(testStdlib())
+	e.C = NewCache(fs, e.moduleEnv)
+	tests := []struct {
+		name string
+		use  Use
+		src  string
+		want float64
+	}{
+		{"module name", Use{Path: "len.rts"}, "len.x", 1},
+		{"alias", Use{Path: "m.rts", Alias: "str"}, "str.x", 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := EvalConfig{BaseDir: dir, Uses: []Use{tt.use}}
+			v, err := e.Eval(t.Context(), cfg, tt.src, NewFile("test", nil).Pos(1, 1))
+			if err != nil || v.K != VNum || v.N != tt.want {
+				t.Fatalf("%s = %+v, %v, want %v", tt.src, v, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestModuleMayShadowOnlyPredeclaredNames(t *testing.T) {
+	dir := t.TempDir()
+	fs := &memFS{files: map[string]*memFile{
+		filepath.Join(dir, "len.rts"):     {data: []byte("module m\nexport let len = 1\n"), mod: time.Unix(10, 0)},
+		filepath.Join(dir, "request.rts"): {data: []byte("module m\nexport let request = 1\n"), mod: time.Unix(10, 0)},
+	}}
+	e := NewEng(testStdlib(), WithModuleBindings(Extension("request", Str("host"))))
+	e.C = NewCache(fs, e.moduleEnv)
+	pos := NewFile("test", nil).Pos(1, 1)
+
+	v, err := e.Eval(t.Context(), EvalConfig{BaseDir: dir, Uses: []Use{{Path: "len.rts"}}}, "m.len", pos)
+	if err != nil || v.K != VNum || v.N != 1 {
+		t.Fatalf("m.len = %+v, %v, want 1", v, err)
+	}
+	_, err = e.Eval(t.Context(), EvalConfig{BaseDir: dir, Uses: []Use{{Path: "request.rts"}}}, "m", pos)
+	if want := `name already defined: "request"`; err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %v, want %q", err, want)
 	}
 }
 

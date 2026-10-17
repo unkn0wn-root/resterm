@@ -11,7 +11,7 @@ const (
 	sigURLDecode = "url.decode(x)"
 )
 
-var urlSpec = nsSpec{name: "url", top: true, fns: map[string]rts.NativeFunc{
+var urlSpec = nsSpec{name: "url", fns: map[string]rts.NativeFunc{
 	"encode": urlEncode,
 	"decode": urlDecode,
 }}

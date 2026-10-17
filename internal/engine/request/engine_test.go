@@ -996,12 +996,12 @@ GET http://example.test
 			"   5 | }\n     | ^",
 		},
 		{
-			"function named fail",
-			"module bad\n\nexport fn fail(x) {\n  return x\n}\n",
-			`name already defined: "fail"`,
-			"   3 | export fn fail(x) {\n     |        ^",
+			"function named rts",
+			"module bad\n\nexport fn rts(x) {\n  return x\n}\n",
+			`name already defined: "rts"`,
+			"   3 | export fn rts(x) {\n     |        ^",
 		},
-		{"module named fail", "module fail\n", "alias already defined: fail", "   2 | # @use ./bad.rts\n     | ^"},
+		{"module named rts", "module rts\n", "alias already defined: rts", "   2 | # @use ./bad.rts\n     | ^"},
 		{"missing file", "", "bad.rts", "error[filesystem]: "},
 	}
 	for _, tt := range tests {
@@ -1034,6 +1034,56 @@ GET http://example.test
 			}
 			if out := diag.Render(res.ScriptErr); strings.Count(out, tt.line) != 1 {
 				t.Fatalf("rendered error does not show %q once:\n%s", tt.line, out)
+			}
+		})
+	}
+}
+
+func TestRTSScriptsShadowStandardLibraryNames(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []row
+	}{
+		{
+			"use alias",
+			`# @use ./m.rts as json
+# @assert json.v == 42
+# @assert text() == "ok"
+GET http://example.test
+`,
+			[]row{{"json.v == 42", true}, {`text() == "ok"`, true}},
+		},
+		{
+			"let",
+			`# @rts pre-request
+> let json = 1
+> vars.set("n", rts.json.stringify(json))
+# @assert vars.get("n") == "1"
+# @assert text() == "ok"
+# @rts test block
+> let json = response.text()
+> if json != "ok" { t.error(json) }
+GET http://example.test
+`,
+			[]row{{`vars.get("n") == "1"`, true}, {`text() == "ok"`, true}, {"block", true}},
+		},
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "m.rts"), []byte("export let v = 42\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(tt.src))
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client()}, nil)
+			res, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
+			if err != nil || res.Err != nil || res.ScriptErr != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v, script error = %v", err, res.Err, res.ScriptErr)
+			}
+			if got := rows(res); !slices.Equal(got, tt.want) {
+				t.Fatalf("tests = %+v, want %+v", got, tt.want)
 			}
 		})
 	}
