@@ -29,16 +29,9 @@ X-Job-ID: {{analytics.jobId}}
 # @description Reuses captured globals and file variables while showing request-scope captures.
 # @var request analytics.traceId {{$uuid}}
 # @capture request echoed.authorization {{response.json.headers.Authorization}}
-# @script test
-> client.test("captures reused session token", function () {
->   var echoed = vars.get("echoed.authorization");
->   var token = vars.get("analytics.sessionToken");
->   tests.assert(typeof token === "string" && token.length > 0, "captured session token is available");
->   tests.assert(typeof echoed === "string" && echoed.includes(token), "Authorization header includes captured token");
-> });
-> client.test("trace id propagated", function () {
->   tests.assert(vars.get("analytics.traceId"), "request-scope value should be visible to tests");
-> });
+# @assert vars.get("analytics.sessionToken") => "captured session token is available"
+# @assert vars.get("analytics.sessionToken") in vars.get("echoed.authorization") => "Authorization header includes captured token"
+# @assert vars.get("analytics.traceId") => "request-scope value should be visible to tests"
 GET {{analytics.baseUrl}}/jobs/{{analytics.lastJobId}}
 Authorization: Bearer {{analytics.sessionToken}}
 X-API-Key: {{analytics.apiKey}}

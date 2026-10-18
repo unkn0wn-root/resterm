@@ -6,19 +6,19 @@
 # @name ReportsBootstrap
 # @tag scripts pre-request
 # @description Pre-request script seeds and reuses a global token while mutating headers and body.
-# @script pre-request
-> var existing = vars.global.get("reporting.token");
-> var token = existing || `script-${Date.now()}`;
-> vars.global.set("reporting.token", token, {secret: true});
-> request.setHeader("Authorization", `Bearer ${token}`);
-> request.setHeader("X-Trace-ID", `trace-${Date.now()}`);
-> request.setHeader("X-API-Key", vars.get("reporting.apiKey"));
-> var payload = {
->   correlationId: `corr-${Date.now()}`,
+# @rts pre-request
+> let now = time.nowUnixMs()
+> let token = vars.global.get("reporting.token") ?? "script-" + now
+> vars.global.set("reporting.token", token, true)
+> request.setHeader("Authorization", "Bearer " + token)
+> request.setHeader("X-Trace-ID", "trace-" + now)
+> request.setHeader("X-API-Key", vars.get("reporting.apiKey"))
+> let payload = {
+>   correlationId: "corr-" + now,
 >   scope: "reports",
->   requestedAt: new Date().toISOString()
-> };
-> request.setBody(JSON.stringify(payload, null, 2));
+>   requestedAt: time.nowISO(),
+> }
+> request.setBody(json.stringify(payload, 2))
 POST {{services.api.base}}/reports/sessions
 Content-Type: application/json
 Accept: application/json
@@ -30,11 +30,7 @@ X-Shared-Secret: {{reporting.sharedSecret}}
 # @description Uses the global token populated by the pre-request script along with the top-level API key.
 # @auth bearer {{reporting.token}}
 # @capture request reporting.lastTrace {{response.json.headers.X-Trace-Id}}
-# @script test
-> client.test("script-created token is available", function () {
->   var token = vars.get("reporting.token");
->   tests.assert(typeof token === "string" && token.length > 0, "global token should exist");
-> });
+# @assert vars.get("reporting.token") => "global token should exist"
 GET {{services.api.base}}/reports
 Accept: application/json
 X-API-Key: {{reporting.apiKey}}

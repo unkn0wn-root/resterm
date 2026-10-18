@@ -87,6 +87,6 @@ Pre-request blocks, templates, and directives such as `@assert`, `@capture`, and
 
 ## Design constraints and why they exist
 
-RTS does not allow file writes or network calls. It can read files only through `json.file`, when enabled. Use JavaScript `@script` blocks when you need fuller scripting support or side effects.
+RTS does not allow file writes or network calls. It can read files only through `json.file`, when enabled. Use JavaScript `@script` blocks when you need fuller scripting support or side effects, such as saving a response body to a file.
 
-Other restrictions make request logic easier to follow. You cannot assign to an object member, which limits side effects and keeps the interpreter simple. Imports need an explicit alias or module name so names do not collide. Only pre-request blocks can change the request and variables. Test blocks are read-only; use `@capture` to save response values. Dict keys are sorted during `range`, so the same dict is visited in the same order on every run.
+Other restrictions make request logic easier to follow. You cannot assign to an object member, which limits side effects and keeps the interpreter simple. Imports need an explicit alias or module name so names do not collide. Only pre-request blocks can change the request and variables. Test blocks are read-only, so use `@capture` to save response values. Dict keys are sorted during `range`, so the same dict is visited in the same order on every run.

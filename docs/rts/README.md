@@ -1,6 +1,6 @@
 # RestermScript
 
-RestermScript (RTS) is the language used to calculate template values, check responses, and control which requests run. You can write expressions directly in request files or share functions through `.rts` modules. JavaScript hooks are also available through Goja.
+RestermScript (RTS) is the language used to calculate template values, check responses, and control which requests run. You can write expressions directly in request files or share functions through `.rts` modules. [JavaScript hooks](../scripting.md) are also available.
 
 ## Why this even exists
 
@@ -17,7 +17,7 @@ Use RestermScript for calculations, conditions, and checks that belong with a re
 - Use `@assert` for a single response check or `@rts test` for checks that need loops or several statements.
 - Reusable `.rts` modules imported with `@use` let you share logic across requests without bringing in JavaScript.
 
-Use JavaScript when you need its full language features or already have hooks you want to keep.
+Use JavaScript when you already have hooks you want to keep or need something RestermScript cannot do, such as saving a response body to a file.
 
 ## Where it runs
 

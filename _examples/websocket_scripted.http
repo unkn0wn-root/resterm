@@ -1,23 +1,34 @@
 ### Scripted WebSocket Echo
 # @name WebSocketScriptedEcho
 # @websocket timeout=10s idle=1s
-# @script test
-> client.test("echo reply received", function () {
->   var events = stream.events();
->   tests.assert(stream.enabled() === true, "stream should be enabled");
->   tests.assert(events.length >= 2, "should see both send and receive events");
->   var send = events[0];
->   var recv = null;
->   for (var i = 0; i < events.length; i++) {
->     if (events[i].direction === "receive") {
->       recv = events[i];
->       break;
->     }
->   }
->   tests.assert(send.text === "Hello from Resterm", "sent payload matches");
->   tests.assert(recv && recv.text === "Hello from Resterm", "echo payload matches");
-> });
-# @capture request lastEcho {{stream.events[1].text}}
+# @assert stream.enabled() => "stream should be enabled"
+# @rts test "echo reply received"
+> {%
+let events = stream.events()
+
+# The server may send other messages first, so match the echo by its text.
+let sent = null
+for let _, ev range events {
+  if ev.direction == "send" and ev.type == "text" {
+    sent = ev.text
+    break
+  }
+}
+if sent == null {
+  t.fatal("no text message was sent")
+}
+
+let echoed = false
+for let _, ev range events {
+  if ev.direction == "receive" and ev.text == sent {
+    echoed = true
+    break
+  }
+}
+if not echoed {
+  t.error("no reply matches the sent text:", sent)
+}
+%}
 # @ws send Hello from Resterm
 # @ws wait 1s
 # @ws close 1000 scripted close
