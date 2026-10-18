@@ -16,6 +16,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
@@ -797,7 +798,7 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 			return strings.Join(filterEmpty(parts), " ")
 		}
 		if formatted, ok := formatJSONForStream(evt.Payload); ok {
-			indented := indentMultiline(formatted, streamJSONIndent)
+			indented := str.Indent(formatted, streamJSONIndent)
 			block := nameStyled + "\n" + th.StreamData.Render(indented)
 			if comment != "" {
 				block += "\n" + th.StreamSummary.Render(
@@ -830,7 +831,7 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 			trimmed := strings.TrimSpace(string(evt.Payload))
 			if (typ == stream.WSJSON || typ == stream.WSText) && len(evt.Payload) > 0 {
 				if formatted, ok := formatJSONForStream(evt.Payload); ok {
-					indented := indentMultiline(formatted, streamJSONIndent)
+					indented := str.Indent(formatted, streamJSONIndent)
 					parts = append(parts, typeStyled+"\n"+th.StreamData.Render(indented))
 					break
 				}
@@ -921,7 +922,7 @@ func (m *Model) renderGRPCEvent(evt *stream.Event) string {
 	}
 	if formatted, ok := formatJSONForStream(evt.Payload); ok {
 		block := nameStyled + "\n" + th.StreamData.Render(
-			indentMultiline(formatted, streamJSONIndent),
+			str.Indent(formatted, streamJSONIndent),
 		)
 		parts = append(parts, block)
 		return strings.Join(filterEmpty(parts), " ")
@@ -1003,17 +1004,6 @@ func formatJSONForStream(raw []byte) (string, bool) {
 	}
 	formatted := strings.TrimRight(buf.String(), "\n")
 	return termtext.Block(formatted), true
-}
-
-func indentMultiline(value string, indent string) string {
-	if value == "" {
-		return indent
-	}
-	lines := strings.Split(value, "\n")
-	for i, line := range lines {
-		lines[i] = indent + line
-	}
-	return strings.Join(lines, "\n")
 }
 
 func truncatePreview(value string) string {

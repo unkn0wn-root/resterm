@@ -16,7 +16,7 @@ Core helpers are the general functions, such as `len`, `str`, and `append`. Help
 - `rts.min(values...)` returns the smallest value. Pass one list to compare its items, or two or more values to compare them with each other. An empty list or null gives null, so `min(xs) ?? 0` works. The values must be all numbers or all strings. Strings compare byte by byte, so ISO timestamps compare by time when they use the same time zone and the same number of digits.
 - `rts.max(values...)` works like `min` and returns the largest value.
 - `rts.contains(container, value)` applies the same membership relation as `value in container`.
-- `rts.match(pattern, text)` applies a regular expression to text and returns true when it matches.
+- `rts.match(pattern, text)` applies a regular expression to text and returns true when it matches. A null pattern is an error.
 - `rts.str(x)` converts a value to a string, writing numbers, lists, and dicts as `json.stringify` does, so `str(1000000)` is `"1000000"`.
 - `rts.num(x[, def])` converts a value to a number, or returns `def` when conversion fails.
 - `rts.int(x[, def])` converts a value to an integer, or returns `def` when conversion fails.
@@ -59,8 +59,8 @@ Core helpers are the general functions, such as `len`, `str`, and `append`. Help
 - `rts.json.file(path)` reads and parses JSON using the request base directory (only when file access is enabled).
 - `rts.json.parse(text)` parses a JSON string into RestermScript values.
 - `rts.json.stringify(value[, indent])` converts a value to JSON text. `indent` can be a string or a number (0-32).
-- `rts.json.get(value[, path])` returns the value at a dot or `[index]` path in a dict or list (optional leading `$`) and returns null when missing. Negative indexes count from the end; `items[-1]` reads the last item. Quote a key that contains dots or spaces, as in `$["display.name"]` or `['a b']`. Invalid paths such as `items[*]` return an error.
-- `rts.json.has(value, path)` returns true when a value exists at the path.
+- `rts.json.get(value[, path])` returns the value at a dot or `[index]` path in a dict or list (optional leading `$`) and returns null when missing. Negative indexes count from the end, so `items[-1]` reads the last item. Quote a key that contains dots or spaces, as in `$["display.name"]` or `['a b']`. A null path or an invalid path such as `items[*]` returns an error.
+- `rts.json.has(value, path)` returns true when a value exists at the path. A null path is an error.
 - `rts.json.equal(a, b)` returns true for matching JSON values, including the contents of lists and dicts.
 - `rts.json.diff(got, want)` returns a list with one message per difference, or an empty list for equal values. Messages include the path: `$.user.id: got 7, want 8`, `$.extra: unexpected true`, or `$.tags[1]: missing, want "b"`.
 
@@ -73,11 +73,11 @@ Both helpers reject functions, host objects, NaN, and infinite numbers. Each lis
 - `rts.text.lower(s)` returns a lowercased string.
 - `rts.text.upper(s)` returns an uppercased string.
 - `rts.text.trim(s)` trims leading and trailing whitespace.
-- `rts.text.split(s, sep)` splits a string into a list.
+- `rts.text.split(s, sep)` splits a string into a list. A null separator is an error.
 - `rts.text.join(list, sep)` joins list items with a separator (items may be strings, numbers, or bools).
-- `rts.text.replace(s, old, new)` replaces all occurrences of `old` with `new`.
-- `rts.text.startsWith(s, prefix)` returns true when a string starts with `prefix`.
-- `rts.text.endsWith(s, suffix)` returns true when a string ends with `suffix`.
+- `rts.text.replace(s, old, new)` replaces all occurrences of the substring `old` with `new`. A null substring is an error.
+- `rts.text.startsWith(s, prefix)` returns true when a string starts with `prefix`. A null prefix is an error.
+- `rts.text.endsWith(s, suffix)` returns true when a string ends with `suffix`. A null suffix is an error.
 
 ## List helpers
 

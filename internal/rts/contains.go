@@ -14,6 +14,9 @@ func ValueContains(ctx *Ctx, pos Pos, container, value Value) (bool, error) {
 			return ValueEqual(v, value)
 		}), nil
 	case VStr:
+		if value.K == VNull {
+			return false, Errf(ctx, pos, "cannot search a string for null")
+		}
 		s, err := ToStr(ctx, pos, value)
 		if err != nil {
 			return false, err

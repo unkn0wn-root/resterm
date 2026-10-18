@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 )
 
 type loopAction int
@@ -681,7 +682,8 @@ func (vm *VM) callVal(pos Pos, cal Value, args []Value) (Value, error) {
 			return Null(), Errf(vm.ctx, pos, "call on nil fn")
 		}
 		if len(args) != len(fn.Args) {
-			return Null(), Errf(vm.ctx, pos, "arg count mismatch")
+			return Null(), Errf(vm.ctx, pos, "%s(%s) expects %d argument%s, got %d",
+				fn.Name, strings.Join(fn.Args, ", "), len(fn.Args), plural(len(fn.Args)), len(args))
 		}
 		if vm.ctx != nil {
 			if vm.ctx.Lim.MaxCall > 0 && vm.ctx.depth >= vm.ctx.Lim.MaxCall {

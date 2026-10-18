@@ -46,7 +46,7 @@ func conv[T any](
 	mk func(T) rts.Value,
 ) (rts.Value, error) {
 	na := rts.NewArgs(ctx, pos, args, sig)
-	if err := na.CountRange(1, 2); err != nil {
+	if err := na.CountOptional(1); err != nil {
 		return rts.Null(), err
 	}
 	if v, ok := f(na.Arg(0)); ok {

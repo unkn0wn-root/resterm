@@ -55,11 +55,11 @@ func normUse(u Use) (Use, bool) {
 }
 
 func (e *Eng) modHead(base, path string) (string, Pos, error) {
-	p, err := absPath(base, path)
+	p, err := newModPath(base, path)
 	if err != nil {
 		return "", Pos{}, err
 	}
-	fp, err := e.C.stat(p)
+	fp, err := e.C.stat(p.name)
 	if err != nil {
 		return "", Pos{}, err
 	}
@@ -70,11 +70,11 @@ func (e *Eng) modHead(base, path string) (string, Pos, error) {
 		}
 		return m.Name, m.NamePos, nil
 	}
-	data, err := e.C.fs.ReadFile(p)
+	data, err := e.C.fs.ReadFile(p.name)
 	if err != nil {
 		return "", Pos{}, err
 	}
-	return modHead(NewFile(p, data))
+	return modHead(NewFile(p.name, data))
 }
 
 // modHead returns the module name declared at the top of f and where it is

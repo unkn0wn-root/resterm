@@ -152,13 +152,13 @@ func (h helper) arityError(n int) error {
 	case h.args.max == 0:
 		want = "no arguments"
 	case h.args.max < 0:
-		want = fmt.Sprintf("at least %s", plural(h.args.min))
+		want = fmt.Sprintf("at least %d argument%s", h.args.min, plural(h.args.min))
 	case h.args.min == 0:
-		want = fmt.Sprintf("at most %s", plural(h.args.max))
+		want = fmt.Sprintf("at most %d argument%s", h.args.max, plural(h.args.max))
 	case h.args.min == h.args.max:
-		want = plural(h.args.min)
+		want = fmt.Sprintf("%d argument%s", h.args.min, plural(h.args.min))
 	default:
-		want = fmt.Sprintf("%d to %s", h.args.min, plural(h.args.max))
+		want = fmt.Sprintf("%d to %d argument%s", h.args.min, h.args.max, plural(h.args.max))
 	}
 	if h.usage != "" {
 		return fmt.Errorf("%s takes %s, got %d: %s", h.name, want, n, h.usage)
@@ -168,9 +168,9 @@ func (h helper) arityError(n int) error {
 
 func plural(n int) string {
 	if n == 1 {
-		return "1 argument"
+		return ""
 	}
-	return fmt.Sprintf("%d arguments", n)
+	return "s"
 }
 
 // splitCall turns `$randomChoice("a", "b")` into "$randomChoice" and

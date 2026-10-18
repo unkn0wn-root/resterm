@@ -23,20 +23,6 @@ func NewArgs(ctx *Ctx, pos Pos, args []Value, sig string) Args {
 	return Args{ctx: ctx, pos: pos, args: args, sig: sig}
 }
 
-func argCount(ctx *Ctx, pos Pos, args []Value, want int, sig string) error {
-	if len(args) != want {
-		return Errf(ctx, pos, "%s expects %d args", sig, want)
-	}
-	return nil
-}
-
-func argCountRange(ctx *Ctx, pos Pos, args []Value, min, max int, sig string) error {
-	if len(args) < min || len(args) > max {
-		return Errf(ctx, pos, "%s expects %d-%d args", sig, min, max)
-	}
-	return nil
-}
-
 func strArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
 	s, err := ToStr(ctx, pos, v)
 	if err != nil {
@@ -81,22 +67,36 @@ func dictArg(ctx *Ctx, pos Pos, v Value, sig string) (map[string]Value, error) {
 }
 
 func (a Args) Count(want int) error {
-	return argCount(a.ctx, a.pos, a.args, want, a.sig)
+	if len(a.args) != want {
+		return Errf(a.ctx, a.pos, "%s expects %d argument%s, got %d", a.sig, want, plural(want), len(a.args))
+	}
+	return nil
 }
 
 func (a Args) None() error {
 	return a.Count(0)
 }
 
-func (a Args) CountRange(min, max int) error {
-	return argCountRange(a.ctx, a.pos, a.args, min, max, a.sig)
-}
-
-func (a Args) CountMin(min int) error {
-	if len(a.args) < min {
-		return Errf(a.ctx, a.pos, "%s expects at least %d args", a.sig, min)
+// CountOptional checks for n arguments followed by one optional argument.
+func (a Args) CountOptional(n int) error {
+	if got := len(a.args); got != n && got != n+1 {
+		return Errf(a.ctx, a.pos, "%s expects %d or %d argument%s, got %d", a.sig, n, n+1, plural(n+1), got)
 	}
 	return nil
+}
+
+func (a Args) CountMin(n int) error {
+	if len(a.args) < n {
+		return Errf(a.ctx, a.pos, "%s expects at least %d argument%s, got %d", a.sig, n, plural(n), len(a.args))
+	}
+	return nil
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func (a Args) Len() int {
@@ -113,6 +113,16 @@ func (a Args) Arg(i int) Value {
 
 func (a Args) Str(i int) (string, error) {
 	return strArg(a.ctx, a.pos, a.args[i], a.sig)
+}
+
+// SearchStr is like Str for an argument that is searched for, such as a
+// prefix or a pattern, but null is an error instead of the empty string.
+// name is the argument as the error calls it, for example "prefix".
+func (a Args) SearchStr(i int, name string) (string, error) {
+	if a.args[i].K == VNull {
+		return "", Errf(a.ctx, a.pos, "cannot search for a null %s", name)
+	}
+	return a.Str(i)
 }
 
 func (a Args) ToStr(i int) (string, error) {

@@ -1039,6 +1039,44 @@ GET http://example.test
 	}
 }
 
+func TestRTSModuleErrorsShowTheModuleLikeTheRequestFile(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if err := os.Mkdir("sub", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mod := "module bad\n\nexport fn boom() {\n  return null.a\n}\n"
+	if err := os.WriteFile(filepath.Join("sub", "bad.rts"), []byte(mod), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const src = "# @use ./bad.rts\n# @rts test\n> bad.boom()\nGET http://example.test\n"
+	abs := filepath.Join(root, "sub")
+	tests := []struct {
+		name string
+		path string
+		mod  string
+	}{
+		{"relative", "sub/api.http", "sub/bad.rts"},
+		{"absolute", filepath.Join(abs, "api.http"), filepath.Join(abs, "bad.rts")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := parser.Parse(tt.path, []byte(src))
+			eng, _ := newStubEngine(t)
+			res, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
+			if err != nil || res.Err != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+			}
+			out := diag.Render(res.ScriptErr)
+			for _, want := range []string{"--> " + tt.mod + ":4:", "at " + tt.path + ":3:"} {
+				if !strings.Contains(out, want) {
+					t.Fatalf("rendered error does not contain %q:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
+
 func TestRTSScriptsShadowStandardLibraryNames(t *testing.T) {
 	tests := []struct {
 		name string

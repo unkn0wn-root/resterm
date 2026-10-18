@@ -122,6 +122,84 @@ func TestContainsAndMembershipRejectSameContainer(t *testing.T) {
 	}
 }
 
+func TestContainsRejectsNullInString(t *testing.T) {
+	for _, expr := range []string{`contains("text", null)`, `rts.contains("text", null)`} {
+		t.Run(expr, func(t *testing.T) {
+			ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+			err := evalExprErrCtx(t, ctx, expr)
+			if !strings.Contains(err.Error(), "cannot search a string for null") {
+				t.Fatalf("error = %v, want null search error", err)
+			}
+		})
+	}
+}
+
+func TestSearchRejectsNull(t *testing.T) {
+	ctx := testCtx()
+	errs := map[string]string{
+		`text.startsWith("abc", null)`:   "cannot search for a null prefix",
+		`text.endsWith("abc", null)`:     "cannot search for a null suffix",
+		`text.split("abc", null)`:        "cannot search for a null separator",
+		`text.replace("abc", null, "x")`: "cannot search for a null substring",
+		`match(null, "abc")`:             "cannot search for a null pattern",
+		`json.has({a: 1}, null)`:         "cannot search for a null path",
+		`json.get({a: 1}, null)`:         "cannot search for a null path",
+	}
+	for src, want := range errs {
+		t.Run(src, func(t *testing.T) {
+			if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s: error = %v, want %q", src, err, want)
+			}
+			if v := evalExprCtx(t, ctx, "(try ("+src+")).error"); v.K != rts.VStr || !strings.Contains(v.S, want) {
+				t.Fatalf("%s: try error = %+v, want %q", src, v, want)
+			}
+		})
+	}
+	values := map[string]string{
+		`str(text.startsWith("abc", ""))`: "true",
+		`str(text.startsWith(null, "a"))`: "false",
+		`str(text.split("a,b", ""))`:      `["a",",","b"]`,
+		`text.replace("abc", "", "x")`:    "xaxbxcx",
+		`str(match("a", null))`:           "false",
+		`str(json.has(null, "a"))`:        "false",
+		`typeof(json.get(null, "a"))`:     "null",
+	}
+	for src, want := range values {
+		t.Run(src, func(t *testing.T) {
+			if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+				t.Fatalf("%s = %+v, want %q", src, v, want)
+			}
+		})
+	}
+}
+
+func TestMatchChecksPatternLength(t *testing.T) {
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 4})
+	err := evalExprErrCtx(t, ctx, `match(123456, "1")`)
+	if !strings.Contains(err.Error(), "test:1:23: string too long") {
+		t.Fatalf("error = %v, want test:1:23: string too long", err)
+	}
+}
+
+func TestArgCountErrors(t *testing.T) {
+	ctx := testCtx()
+	errs := map[string]string{
+		`len()`:             "len(x) expects 1 argument, got 0",
+		`uuid(1)`:           "uuid() expects 0 arguments, got 1",
+		`time.nowISO(1)`:    "time.nowISO() expects 0 arguments, got 1",
+		`json.get()`:        "json.get(value[, path]) expects 1 or 2 arguments, got 0",
+		`json.get(1, 2, 3)`: "json.get(value[, path]) expects 1 or 2 arguments, got 3",
+		`dict.get({})`:      "dict.get(dict, key[, def]) expects 2 or 3 arguments, got 1",
+	}
+	for src, want := range errs {
+		t.Run(src, func(t *testing.T) {
+			if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s: error = %v, want %q", src, err, want)
+			}
+		})
+	}
+}
+
 func TestAppend(t *testing.T) {
 	ctx := testCtx()
 	values := map[string]string{
@@ -143,10 +221,10 @@ func TestAppend(t *testing.T) {
 		})
 	}
 	errs := map[string]string{
-		`append()`:            "append(list, items...) expects at least 1 args",
+		`append()`:            "append(list, items...) expects at least 1 argument, got 0",
 		`append("x", 1)`:      "append(list, items...) expects list",
 		`append({a: 1}, 1)`:   "append(list, items...) expects list",
-		`list.append()`:       "list.append(list, items...) expects at least 1 args",
+		`list.append()`:       "list.append(list, items...) expects at least 1 argument, got 0",
 		`list.append("x", 1)`: "list.append(list, items...) expects list",
 	}
 	for src, want := range errs {
@@ -226,7 +304,7 @@ func TestMinMax(t *testing.T) {
 		})
 	}
 	errs := map[string]string{
-		`min()`:             "min(values...) expects at least 1 args",
+		`min()`:             "min(values...) expects at least 1 argument, got 0",
 		`max(5)`:            "max(values...) expects list",
 		`max("abc")`:        "max(values...) expects list",
 		`min(1, "a")`:       "min(values...) expects numbers or strings",
@@ -234,7 +312,7 @@ func TestMinMax(t *testing.T) {
 		`max([1], [2])`:     "max(values...) expects numbers or strings",
 		`min([true])`:       "min(values...) expects numbers or strings",
 		`min(null, null)`:   "min(values...) expects numbers or strings",
-		`math.min(1, 2, 3)`: "math.min(a, b) expects 2 args",
+		`math.min(1, 2, 3)`: "math.min(a, b) expects 2 arguments, got 3",
 	}
 	for src, want := range errs {
 		t.Run(src, func(t *testing.T) {
@@ -274,11 +352,36 @@ func TestListSortOrdersNumbersOrStrings(t *testing.T) {
 	if v := evalExprCtx(t, ctx, `str(list.sort([1, num("NaN"), 0])[0])`); v.K != rts.VStr || v.S != "NaN" {
 		t.Errorf("list.sort([1, NaN, 0])[0] = %+v, want NaN", v)
 	}
-	for _, src := range []string{`list.sort([1, "a"])`, `list.sort([true, false])`} {
-		err := evalExprErrCtx(t, ctx, src)
-		if !strings.Contains(err.Error(), "list.sort(list) expects numbers or strings") {
-			t.Errorf("%s: error = %v, want numbers or strings", src, err)
-		}
+	values := map[string]string{
+		`str(list.sort([]))`:    "[]",
+		`str(list.sort([5]))`:   "[5]",
+		`str(list.sort(["a"]))`: `["a"]`,
+		`str(list.sort(null))`:  "[]",
+	}
+	for src, want := range values {
+		t.Run(src, func(t *testing.T) {
+			if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+				t.Fatalf("%s = %+v, want %q", src, v, want)
+			}
+		})
+	}
+	if v := evalExprMod(t, ctx, "let xs = [3, 1, 2]\nlet s = list.sort(xs)", "str(xs)"); v.S != "[3,1,2]" {
+		t.Errorf("xs = %s after list.sort(xs), want [3,1,2]", v.S)
+	}
+	for _, src := range []string{
+		`list.sort([1, "a"])`,
+		`list.sort([true, false])`,
+		`list.sort([true])`,
+		`list.sort([null])`,
+		`list.sort([[1]])`,
+		`list.sort([{}])`,
+	} {
+		t.Run(src, func(t *testing.T) {
+			err := evalExprErrCtx(t, ctx, src)
+			if !strings.Contains(err.Error(), "list.sort(list) expects numbers or strings") {
+				t.Fatalf("%s: error = %v, want numbers or strings", src, err)
+			}
+		})
 	}
 }
 
@@ -863,7 +966,6 @@ func TestStdlibJSONGetPathArgs(t *testing.T) {
 	}{
 		{"json.get(d, 0)", rts.Str("zero")},
 		{"json.get(d, true)", rts.Str("yes")},
-		{"json.get(d, null)[\"true\"]", rts.Str("yes")},
 		{"json.get(d)[\"0\"]", rts.Str("zero")},
 		{"json.has(d, 0)", rts.Bool(true)},
 		{"json.has(d, false)", rts.Bool(false)},
@@ -1092,9 +1194,9 @@ func TestStdlibJSONEqualAndDiffRejectNonJSON(t *testing.T) {
 		{"json.equal({b: try 1, a: f}, 1)", "json.equal(a, b) cannot compare function"},
 		{"json.diff([try 1], [])", "json.diff(got, want) cannot compare result"},
 		{"json.diff({a: 1}, {b: f})", "json.diff(got, want) cannot compare function"},
-		{"json.equal(1)", "json.equal(a, b) expects 2 args"},
-		{"json.equal(1, 2, 3)", "json.equal(a, b) expects 2 args"},
-		{"json.diff()", "json.diff(got, want) expects 2 args"},
+		{"json.equal(1)", "json.equal(a, b) expects 2 arguments, got 1"},
+		{"json.equal(1, 2, 3)", "json.equal(a, b) expects 2 arguments, got 3"},
+		{"json.diff()", "json.diff(got, want) expects 2 arguments, got 0"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.src, func(t *testing.T) {
@@ -1497,8 +1599,8 @@ func TestMathSum(t *testing.T) {
 		`math.sum([1, [2]])`:  "math.sum(list) expects numbers",
 		`math.sum([1, null])`: "math.sum(list) expects numbers",
 		`math.sum(1)`:         "math.sum(list) expects list",
-		`math.sum()`:          "math.sum(list) expects 1 args",
-		`math.sum([1], [2])`:  "math.sum(list) expects 1 args",
+		`math.sum()`:          "math.sum(list) expects 1 argument, got 0",
+		`math.sum([1], [2])`:  "math.sum(list) expects 1 argument, got 2",
 	}
 	for src, want := range errs {
 		t.Run(src, func(t *testing.T) {
