@@ -134,6 +134,53 @@ func TestContainsRejectsNullInString(t *testing.T) {
 	}
 }
 
+func TestSearchRejectsNull(t *testing.T) {
+	ctx := testCtx()
+	errs := map[string]string{
+		`text.startsWith("abc", null)`:   "cannot search for a null prefix",
+		`text.endsWith("abc", null)`:     "cannot search for a null suffix",
+		`text.split("abc", null)`:        "cannot search for a null separator",
+		`text.replace("abc", null, "x")`: "cannot search for a null substring",
+		`match(null, "abc")`:             "cannot search for a null pattern",
+		`json.has({a: 1}, null)`:         "cannot search for a null path",
+		`json.get({a: 1}, null)`:         "cannot search for a null path",
+	}
+	for src, want := range errs {
+		t.Run(src, func(t *testing.T) {
+			if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s: error = %v, want %q", src, err, want)
+			}
+			if v := evalExprCtx(t, ctx, "(try ("+src+")).error"); v.K != rts.VStr || !strings.Contains(v.S, want) {
+				t.Fatalf("%s: try error = %+v, want %q", src, v, want)
+			}
+		})
+	}
+	values := map[string]string{
+		`str(text.startsWith("abc", ""))`: "true",
+		`str(text.startsWith(null, "a"))`: "false",
+		`str(text.split("a,b", ""))`:      `["a",",","b"]`,
+		`text.replace("abc", "", "x")`:    "xaxbxcx",
+		`str(match("a", null))`:           "false",
+		`str(json.has(null, "a"))`:        "false",
+		`typeof(json.get(null, "a"))`:     "null",
+	}
+	for src, want := range values {
+		t.Run(src, func(t *testing.T) {
+			if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+				t.Fatalf("%s = %+v, want %q", src, v, want)
+			}
+		})
+	}
+}
+
+func TestMatchChecksPatternLength(t *testing.T) {
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 4})
+	err := evalExprErrCtx(t, ctx, `match(123456, "1")`)
+	if !strings.Contains(err.Error(), "test:1:23: string too long") {
+		t.Fatalf("error = %v, want test:1:23: string too long", err)
+	}
+}
+
 func TestAppend(t *testing.T) {
 	ctx := testCtx()
 	values := map[string]string{
@@ -900,7 +947,6 @@ func TestStdlibJSONGetPathArgs(t *testing.T) {
 	}{
 		{"json.get(d, 0)", rts.Str("zero")},
 		{"json.get(d, true)", rts.Str("yes")},
-		{"json.get(d, null)[\"true\"]", rts.Str("yes")},
 		{"json.get(d)[\"0\"]", rts.Str("zero")},
 		{"json.has(d, 0)", rts.Bool(true)},
 		{"json.has(d, false)", rts.Bool(false)},

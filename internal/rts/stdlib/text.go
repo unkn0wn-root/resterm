@@ -93,7 +93,7 @@ func textSplit(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 
-	sep, err := na.Str(1)
+	sep, err := na.SearchStr(1, "separator")
 	if err != nil {
 		return rts.Null(), err
 	}
@@ -167,7 +167,7 @@ func textReplace(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error)
 		return rts.Null(), err
 	}
 
-	old, err := na.Str(1)
+	old, err := na.SearchStr(1, "substring")
 	if err != nil {
 		return rts.Null(), err
 	}
@@ -195,7 +195,7 @@ func textStartsWith(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, err
 		return rts.Null(), err
 	}
 
-	p, err := na.Str(1)
+	p, err := na.SearchStr(1, "prefix")
 	if err != nil {
 		return rts.Null(), err
 	}
@@ -213,7 +213,7 @@ func textEndsWith(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error
 		return rts.Null(), err
 	}
 
-	suf, err := na.Str(1)
+	suf, err := na.SearchStr(1, "suffix")
 	if err != nil {
 		return rts.Null(), err
 	}

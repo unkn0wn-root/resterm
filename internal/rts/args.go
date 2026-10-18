@@ -115,6 +115,16 @@ func (a Args) Str(i int) (string, error) {
 	return strArg(a.ctx, a.pos, a.args[i], a.sig)
 }
 
+// SearchStr is like Str for an argument that is searched for, such as a
+// prefix or a pattern, but null is an error instead of the empty string.
+// name is the argument as the error calls it, for example "prefix".
+func (a Args) SearchStr(i int, name string) (string, error) {
+	if a.args[i].K == VNull {
+		return "", Errf(a.ctx, a.pos, "cannot search for a null %s", name)
+	}
+	return a.Str(i)
+}
+
 func (a Args) ToStr(i int) (string, error) {
 	return ToStr(a.ctx, a.pos, a.args[i])
 }

@@ -143,7 +143,7 @@ func coreMatch(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 
-	pat, err := na.ToStr(0)
+	pat, err := na.SearchStr(0, "pattern")
 	if err != nil {
 		return rts.Null(), err
 	}
@@ -151,10 +151,6 @@ func coreMatch(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	txt, err := na.ToStr(1)
 	if err != nil {
 		return rts.Null(), err
-	}
-
-	if ctx != nil && ctx.Lim.MaxStr > 0 && len(pat) > ctx.Lim.MaxStr {
-		return rts.Null(), rts.Errf(ctx, pos, "pattern too long")
 	}
 
 	re, err := regexp.Compile(pat)

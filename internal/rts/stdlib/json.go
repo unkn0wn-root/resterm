@@ -149,7 +149,7 @@ func jsonGet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 
 	path := ""
 	if na.Has(1) {
-		p, err := na.Str(1)
+		p, err := na.SearchStr(1, "path")
 		if err != nil {
 			return rts.Null(), err
 		}
@@ -166,7 +166,7 @@ func jsonHas(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 
-	path, err := na.Str(1)
+	path, err := na.SearchStr(1, "path")
 	if err != nil {
 		return rts.Null(), err
 	}
