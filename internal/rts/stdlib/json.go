@@ -97,7 +97,7 @@ func jsonParse(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 
 func jsonStringify(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	na := rts.NewArgs(ctx, pos, args, sigJSONStringify)
-	if err := na.CountRange(1, 2); err != nil {
+	if err := na.CountOptional(1); err != nil {
 		return rts.Null(), err
 	}
 
@@ -143,7 +143,7 @@ func jsonStringify(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, erro
 
 func jsonGet(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	na := rts.NewArgs(ctx, pos, args, sigJSONGet)
-	if err := na.CountRange(1, 2); err != nil {
+	if err := na.CountOptional(1); err != nil {
 		return rts.Null(), err
 	}
 

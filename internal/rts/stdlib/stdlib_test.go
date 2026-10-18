@@ -181,6 +181,25 @@ func TestMatchChecksPatternLength(t *testing.T) {
 	}
 }
 
+func TestArgCountErrors(t *testing.T) {
+	ctx := testCtx()
+	errs := map[string]string{
+		`len()`:             "len(x) expects 1 argument, got 0",
+		`uuid(1)`:           "uuid() expects 0 arguments, got 1",
+		`time.nowISO(1)`:    "time.nowISO() expects 0 arguments, got 1",
+		`json.get()`:        "json.get(value[, path]) expects 1 or 2 arguments, got 0",
+		`json.get(1, 2, 3)`: "json.get(value[, path]) expects 1 or 2 arguments, got 3",
+		`dict.get({})`:      "dict.get(dict, key[, def]) expects 2 or 3 arguments, got 1",
+	}
+	for src, want := range errs {
+		t.Run(src, func(t *testing.T) {
+			if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s: error = %v, want %q", src, err, want)
+			}
+		})
+	}
+}
+
 func TestAppend(t *testing.T) {
 	ctx := testCtx()
 	values := map[string]string{
@@ -202,10 +221,10 @@ func TestAppend(t *testing.T) {
 		})
 	}
 	errs := map[string]string{
-		`append()`:            "append(list, items...) expects at least 1 args",
+		`append()`:            "append(list, items...) expects at least 1 argument, got 0",
 		`append("x", 1)`:      "append(list, items...) expects list",
 		`append({a: 1}, 1)`:   "append(list, items...) expects list",
-		`list.append()`:       "list.append(list, items...) expects at least 1 args",
+		`list.append()`:       "list.append(list, items...) expects at least 1 argument, got 0",
 		`list.append("x", 1)`: "list.append(list, items...) expects list",
 	}
 	for src, want := range errs {
@@ -285,7 +304,7 @@ func TestMinMax(t *testing.T) {
 		})
 	}
 	errs := map[string]string{
-		`min()`:             "min(values...) expects at least 1 args",
+		`min()`:             "min(values...) expects at least 1 argument, got 0",
 		`max(5)`:            "max(values...) expects list",
 		`max("abc")`:        "max(values...) expects list",
 		`min(1, "a")`:       "min(values...) expects numbers or strings",
@@ -293,7 +312,7 @@ func TestMinMax(t *testing.T) {
 		`max([1], [2])`:     "max(values...) expects numbers or strings",
 		`min([true])`:       "min(values...) expects numbers or strings",
 		`min(null, null)`:   "min(values...) expects numbers or strings",
-		`math.min(1, 2, 3)`: "math.min(a, b) expects 2 args",
+		`math.min(1, 2, 3)`: "math.min(a, b) expects 2 arguments, got 3",
 	}
 	for src, want := range errs {
 		t.Run(src, func(t *testing.T) {
@@ -1175,9 +1194,9 @@ func TestStdlibJSONEqualAndDiffRejectNonJSON(t *testing.T) {
 		{"json.equal({b: try 1, a: f}, 1)", "json.equal(a, b) cannot compare function"},
 		{"json.diff([try 1], [])", "json.diff(got, want) cannot compare result"},
 		{"json.diff({a: 1}, {b: f})", "json.diff(got, want) cannot compare function"},
-		{"json.equal(1)", "json.equal(a, b) expects 2 args"},
-		{"json.equal(1, 2, 3)", "json.equal(a, b) expects 2 args"},
-		{"json.diff()", "json.diff(got, want) expects 2 args"},
+		{"json.equal(1)", "json.equal(a, b) expects 2 arguments, got 1"},
+		{"json.equal(1, 2, 3)", "json.equal(a, b) expects 2 arguments, got 3"},
+		{"json.diff()", "json.diff(got, want) expects 2 arguments, got 0"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.src, func(t *testing.T) {
@@ -1580,8 +1599,8 @@ func TestMathSum(t *testing.T) {
 		`math.sum([1, [2]])`:  "math.sum(list) expects numbers",
 		`math.sum([1, null])`: "math.sum(list) expects numbers",
 		`math.sum(1)`:         "math.sum(list) expects list",
-		`math.sum()`:          "math.sum(list) expects 1 args",
-		`math.sum([1], [2])`:  "math.sum(list) expects 1 args",
+		`math.sum()`:          "math.sum(list) expects 1 argument, got 0",
+		`math.sum([1], [2])`:  "math.sum(list) expects 1 argument, got 2",
 	}
 	for src, want := range errs {
 		t.Run(src, func(t *testing.T) {

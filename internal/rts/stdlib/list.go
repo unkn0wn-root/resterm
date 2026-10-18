@@ -265,7 +265,7 @@ func listAll(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 
 func listSlice(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	na := rts.NewArgs(ctx, pos, args, sigListSlice)
-	if err := na.CountRange(2, 3); err != nil {
+	if err := na.CountOptional(2); err != nil {
 		return rts.Null(), err
 	}
 

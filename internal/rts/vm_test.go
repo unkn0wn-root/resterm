@@ -531,6 +531,35 @@ func TestEvalFnCall(t *testing.T) {
 	}
 }
 
+func TestCallChecksArgCount(t *testing.T) {
+	lim := Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 100}
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "too few",
+			src:  "fn add(a, b) { return a + b }\nlet v = add(1)\n",
+			want: "add(a, b) expects 2 arguments, got 1",
+		},
+		{name: "none for one", src: "fn id(x) { return x }\nlet v = id()\n", want: "id(x) expects 1 argument, got 0"},
+		{name: "one for none", src: "fn f() { return 1 }\nlet v = f(1)\n", want: "f() expects 0 arguments, got 1"},
+		{
+			name: "alias",
+			src:  "fn add(a, b) { return a + b }\nlet g = add\nlet v = g(1)\n",
+			want: "add(a, b) expects 2 arguments, got 1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := execModuleErr(t, tt.src, lim); !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestTryExprSwallowsError(t *testing.T) {
 	ex, err := ParseExpr("try missing", NewFile("test", nil).Pos(1, 1))
 	if err != nil {
