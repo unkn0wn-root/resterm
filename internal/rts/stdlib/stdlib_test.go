@@ -286,11 +286,36 @@ func TestListSortOrdersNumbersOrStrings(t *testing.T) {
 	if v := evalExprCtx(t, ctx, `str(list.sort([1, num("NaN"), 0])[0])`); v.K != rts.VStr || v.S != "NaN" {
 		t.Errorf("list.sort([1, NaN, 0])[0] = %+v, want NaN", v)
 	}
-	for _, src := range []string{`list.sort([1, "a"])`, `list.sort([true, false])`} {
-		err := evalExprErrCtx(t, ctx, src)
-		if !strings.Contains(err.Error(), "list.sort(list) expects numbers or strings") {
-			t.Errorf("%s: error = %v, want numbers or strings", src, err)
-		}
+	values := map[string]string{
+		`str(list.sort([]))`:    "[]",
+		`str(list.sort([5]))`:   "[5]",
+		`str(list.sort(["a"]))`: `["a"]`,
+		`str(list.sort(null))`:  "[]",
+	}
+	for src, want := range values {
+		t.Run(src, func(t *testing.T) {
+			if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+				t.Fatalf("%s = %+v, want %q", src, v, want)
+			}
+		})
+	}
+	if v := evalExprMod(t, ctx, "let xs = [3, 1, 2]\nlet s = list.sort(xs)", "str(xs)"); v.S != "[3,1,2]" {
+		t.Errorf("xs = %s after list.sort(xs), want [3,1,2]", v.S)
+	}
+	for _, src := range []string{
+		`list.sort([1, "a"])`,
+		`list.sort([true, false])`,
+		`list.sort([true])`,
+		`list.sort([null])`,
+		`list.sort([[1]])`,
+		`list.sort([{}])`,
+	} {
+		t.Run(src, func(t *testing.T) {
+			err := evalExprErrCtx(t, ctx, src)
+			if !strings.Contains(err.Error(), "list.sort(list) expects numbers or strings") {
+				t.Fatalf("%s: error = %v, want numbers or strings", src, err)
+			}
+		})
 	}
 }
 

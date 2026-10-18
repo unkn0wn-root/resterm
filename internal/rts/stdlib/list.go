@@ -95,13 +95,8 @@ func listSort(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	if err != nil {
 		return rts.Null(), err
 	}
-	if len(items) <= 1 {
-		if len(items) == 0 {
-			return rts.List(nil), nil
-		}
-		out := make([]rts.Value, 0, len(items))
-		out = append(out, items...)
-		return rts.List(out), nil
+	if len(items) == 0 {
+		return rts.List(nil), nil
 	}
 
 	if err := checkOrdered(ctx, pos, items, sigListSort); err != nil {
