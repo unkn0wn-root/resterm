@@ -3,6 +3,7 @@ package rts
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,19 +59,16 @@ func TestModCacheReload(t *testing.T) {
 	c := NewCache(fs, testScope)
 	ctx := NewCtx(context.Background(), Limits{})
 
-	m1, p1, err := c.Load(ctx, "", p)
+	m1, err := c.Load(ctx, "", p)
 	if err != nil {
 		t.Fatalf("load: %v", err)
-	}
-	if p1 != p {
-		t.Fatalf("unexpected path")
 	}
 	v := m1.Exp["x"]
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected x=1")
 	}
 
-	m2, _, err := c.Load(ctx, "", p)
+	m2, err := c.Load(ctx, "", p)
 	if err != nil {
 		t.Fatalf("load2: %v", err)
 	}
@@ -81,7 +79,7 @@ func TestModCacheReload(t *testing.T) {
 	fs.files[p].data = []byte("export let x = 2")
 	fs.files[p].mod = time.Unix(20, 0)
 
-	m3, _, err := c.Load(ctx, "", p)
+	m3, err := c.Load(ctx, "", p)
 	if err != nil {
 		t.Fatalf("load3: %v", err)
 	}
@@ -100,11 +98,11 @@ func TestModCacheChecksARecentModuleByContent(t *testing.T) {
 	c := NewCache(fs, testScope)
 	ctx := NewCtx(context.Background(), Limits{})
 
-	m1, _, err := c.Load(ctx, "", p)
+	m1, err := c.Load(ctx, "", p)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	m2, _, err := c.Load(ctx, "", p)
+	m2, err := c.Load(ctx, "", p)
 	if err != nil {
 		t.Fatalf("load2: %v", err)
 	}
@@ -113,7 +111,7 @@ func TestModCacheChecksARecentModuleByContent(t *testing.T) {
 	}
 
 	fs.files[p].data = []byte("export let x = 2")
-	m3, _, err := c.Load(ctx, "", p)
+	m3, err := c.Load(ctx, "", p)
 	if err != nil {
 		t.Fatalf("load3: %v", err)
 	}
@@ -132,7 +130,7 @@ func TestOldCodeKeepsTheTextItWasReadFrom(t *testing.T) {
 	c := NewCache(fs, testScope)
 	ctx := NewCtx(context.Background(), Limits{})
 
-	m1, _, err := c.Load(ctx, "", p)
+	m1, err := c.Load(ctx, "", p)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -141,12 +139,12 @@ func TestOldCodeKeepsTheTextItWasReadFrom(t *testing.T) {
 		t.Fatalf("maker(): %v", err)
 	}
 	fs.files[p] = &memFile{data: []byte(v2), mod: time.Unix(20, 0)}
-	m2, _, err := c.Load(ctx, "", p)
+	m2, err := c.Load(ctx, "", p)
 	if err != nil {
 		t.Fatalf("load2: %v", err)
 	}
 	fs.files[p] = &memFile{data: []byte(v3), mod: time.Unix(30, 0)}
-	_, _, broken := c.Load(ctx, "", p)
+	_, broken := c.Load(ctx, "", p)
 
 	call := func(fn Value) error {
 		_, err := CallValue(ctx, Pos{}, fn, nil)
@@ -236,6 +234,102 @@ func errPos(t *testing.T, err error) Pos {
 	}
 	t.Fatalf("error = %v, want a script error", err)
 	return Pos{}
+}
+
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, src := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestModuleErrorsShowTheModuleLikeTheUsingFile(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	mod := "module v\nexport fn boom() {\n  return null.a\n}\n"
+	writeFiles(t, root, map[string]string{
+		"sub/v.rts":    mod,
+		"sub/bare.rts": "export let x = 1\n",
+		"shared/x.rts": mod,
+	})
+	sub := filepath.Join(root, "sub")
+	at := NewFile("sub/api.http", nil).Pos(1, 1)
+	tests := []struct {
+		name string
+		base string
+		path string
+		want string
+	}{
+		{"relative base", "sub", "./v.rts", "sub/v.rts"},
+		{"path outside the base", "sub", "../shared/x.rts", "shared/x.rts"},
+		{"no base", "", "sub/v.rts", "sub/v.rts"},
+		{"missing module name", "sub", "bare.rts", "sub/bare.rts"},
+		{"absolute base", sub, "v.rts", filepath.Join(sub, "v.rts")},
+		{"absolute path", "other", sub + "/../sub/v.rts", filepath.Join(sub, "v.rts")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := EvalConfig{BaseDir: tt.base, Uses: []Use{{Path: tt.path}}}
+			_, err := NewEng(testStdlib()).Eval(t.Context(), cfg, "v.boom()", at)
+			if got := errPos(t, err).Path(); got != tt.want {
+				t.Fatalf("error in %s, want it in %s", got, tt.want)
+			}
+		})
+	}
+
+	missing := []struct {
+		name string
+		use  Use
+	}{
+		{"missing file", Use{Path: "nope.rts"}},
+		{"missing file with an alias", Use{Path: "nope.rts", Alias: "n"}},
+	}
+	for _, tt := range missing {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := EvalConfig{BaseDir: "sub", Uses: []Use{tt.use}}
+			_, err := NewEng(testStdlib()).Eval(t.Context(), cfg, "1", at)
+			var pe *fs.PathError
+			if !errors.As(err, &pe) || pe.Path != "sub/nope.rts" {
+				t.Fatalf("error = %v, want one for sub/nope.rts", err)
+			}
+		})
+	}
+}
+
+func TestPathsToOneModuleShareItsEntry(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	writeFiles(t, root, map[string]string{
+		"sub/v.rts": "module v\nlet n = 0\nexport fn bump() {\n  n = n + 1\n  return n\n}\n" +
+			"export fn boom() {\n  return null.a\n}\n",
+	})
+	e := NewEng(testStdlib())
+	at := NewFile("api.http", nil).Pos(1, 1)
+	uses := []struct{ base, path string }{
+		{"sub", "./v.rts"},
+		{"", "sub/v.rts"},
+		{"other", "../sub/v.rts"},
+	}
+	for i, u := range uses {
+		cfg := EvalConfig{BaseDir: u.base, Uses: []Use{{Path: u.path}}}
+		if v, err := e.Eval(t.Context(), cfg, "v.bump()", at); err != nil || v.N != float64(i+1) {
+			t.Fatalf("v.bump() through %s = %v, %v, want %d", u.path, v.N, err, i+1)
+		}
+		_, err := e.Eval(t.Context(), cfg, "v.boom()", at)
+		if got := errPos(t, err).Path(); got != "sub/v.rts" {
+			t.Fatalf("v.boom() through %s: error in %s, want it in sub/v.rts", u.path, got)
+		}
+	}
+	cfg := EvalConfig{BaseDir: filepath.Join(root, "sub"), Uses: []Use{{Path: "v.rts"}}}
+	if v, err := e.Eval(t.Context(), cfg, "v.bump()", at); err != nil || v.N != 4 {
+		t.Fatalf("v.bump() through an absolute path = %v, %v, want 4", v.N, err)
+	}
 }
 
 func TestUseReadsARecentModuleNameFromTheFile(t *testing.T) {

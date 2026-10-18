@@ -52,64 +52,64 @@ func NewCache(fs FS, newEnv func() *Env) *ModCache {
 	return &ModCache{fs: fs, ent: map[string]*modEnt{}, newEnv: newEnv}
 }
 
-func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
+func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, error) {
 	if path == "" {
-		return nil, "", fmt.Errorf("empty module path")
+		return nil, fmt.Errorf("empty module path")
 	}
 
-	p, err := absPath(base, path)
+	p, err := newModPath(base, path)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	fp, err := c.stat(p)
+	fp, err := c.stat(p.name)
 	if err != nil {
-		return nil, p, err
+		return nil, err
 	}
 
 	settled := watcher.Settled(fp.mod)
 	ent, ok := c.get(p, fp)
 	if ok {
-		return ent.comp, p, nil
+		return ent.comp, nil
 	}
 
-	data, err := c.fs.ReadFile(p)
+	data, err := c.fs.ReadFile(p.name)
 	if err != nil {
-		return nil, p, err
+		return nil, err
 	}
 	sum := sha256.Sum256(data)
 	if ent != nil && ent.fp == fp && ent.sum == sum {
 		if settled {
 			c.set(p, &modEnt{comp: ent.comp, fp: fp, sum: sum, settled: true})
 		}
-		return ent.comp, p, nil
+		return ent.comp, nil
 	}
 
-	mod, err := ParseModule(NewFile(p, data))
+	mod, err := ParseModule(NewFile(p.name, data))
 	if err != nil {
-		return nil, p, err
+		return nil, err
 	}
 
 	cx := ctx.CloneNoIO()
 	comp, err := exec(cx, mod, c.newEnv())
 	if err != nil {
-		return nil, p, err
+		return nil, err
 	}
 	c.set(p, &modEnt{comp: comp, fp: fp, sum: sum, settled: settled})
-	return comp, p, nil
+	return comp, nil
 }
 
 // get returns the cached entry and whether fp alone proves it current.
-func (c *ModCache) get(path string, fp modFP) (*modEnt, bool) {
+func (c *ModCache) get(p modPath, fp modFP) (*modEnt, bool) {
 	c.mu.RLock()
-	ent := c.ent[path]
+	ent := c.ent[p.key]
 	c.mu.RUnlock()
 	return ent, ent != nil && ent.settled && ent.fp == fp
 }
 
-func (c *ModCache) set(path string, ent *modEnt) {
+func (c *ModCache) set(p modPath, ent *modEnt) {
 	c.mu.Lock()
-	c.ent[path] = ent
+	c.ent[p.key] = ent
 	c.mu.Unlock()
 }
 
@@ -121,15 +121,24 @@ func (c *ModCache) stat(path string) (modFP, error) {
 	return modFP{mod: info.ModTime(), size: info.Size()}, nil
 }
 
-func absPath(base, path string) (string, error) {
-	p := path
-	if !filepath.IsAbs(p) && base != "" {
-		p = filepath.Join(base, p)
+// A modPath is a module path in two forms. name is the @use path joined to
+// the base directory, so the module is read and shown the way the file that
+// uses it is. key is the absolute form of name and keys the cache. A file used
+// through both a relative and an absolute path shares one entry and shows the
+// form it was last compiled under.
+type modPath struct {
+	name string
+	key  string
+}
+
+func newModPath(base, path string) (modPath, error) {
+	name := filepath.Clean(path)
+	if !filepath.IsAbs(name) {
+		name = filepath.Join(base, name)
 	}
-	p = filepath.Clean(p)
-	abs, err := filepath.Abs(p)
+	key, err := filepath.Abs(name)
 	if err != nil {
-		return "", err
+		return modPath{}, err
 	}
-	return abs, nil
+	return modPath{name: name, key: key}, nil
 }

@@ -205,7 +205,7 @@ func (e *Eng) addUses(cx *Ctx, cfg EvalConfig, env *Env) error {
 		return err
 	}
 	for _, u := range uses {
-		cp, _, err := e.C.Load(cx, cfg.BaseDir, u.Path)
+		cp, err := e.C.Load(cx, cfg.BaseDir, u.Path)
 		if err != nil {
 			return err
 		}
