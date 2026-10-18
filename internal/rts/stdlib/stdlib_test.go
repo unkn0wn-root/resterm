@@ -331,6 +331,10 @@ func TestRTSReachesAShadowedName(t *testing.T) {
 		if v.K != rts.VStr || v.S != "3" {
 			t.Fatalf("%s.max after let max = %+v, want 3", ns, v)
 		}
+		v = evalExprMod(t, ctx, "let math = 1", "str("+ns+".math.sum([math, 2]))")
+		if v.K != rts.VStr || v.S != "3" {
+			t.Fatalf("%s.math.sum after let math = %+v, want 3", ns, v)
+		}
 	}
 }
 
@@ -1469,5 +1473,56 @@ func TestStdlibMathHelpers(t *testing.T) {
 	v = evalExprCtx(t, ctx, "rts.math.round(1.5)")
 	if v.K != rts.VNum || v.N != 2 {
 		t.Fatalf("expected math.round 2")
+	}
+}
+
+func TestMathSum(t *testing.T) {
+	ctx := testCtx()
+	values := map[string]string{
+		`str(math.sum([1, 2, 3.5]))`: "6.5",
+		`str(math.sum([]))`:          "0",
+		`str(math.sum(null))`:        "0",
+		`str(math.sum([-1, 1]))`:     "0",
+	}
+	for src, want := range values {
+		t.Run(src, func(t *testing.T) {
+			if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+				t.Fatalf("%s = %+v, want %q", src, v, want)
+			}
+		})
+	}
+	errs := map[string]string{
+		`math.sum([1, "2"])`:  "math.sum(list) expects numbers",
+		`math.sum([true])`:    "math.sum(list) expects numbers",
+		`math.sum([1, [2]])`:  "math.sum(list) expects numbers",
+		`math.sum([1, null])`: "math.sum(list) expects numbers",
+		`math.sum(1)`:         "math.sum(list) expects list",
+		`math.sum()`:          "math.sum(list) expects 1 args",
+		`math.sum([1], [2])`:  "math.sum(list) expects 1 args",
+	}
+	for src, want := range errs {
+		t.Run(src, func(t *testing.T) {
+			if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s: error = %v, want %q", src, err, want)
+			}
+		})
+	}
+}
+
+func TestMathSumMatchesAddLoop(t *testing.T) {
+	ctx := testCtx()
+	const add = "fn add(xs) {\n  let s = 0\n  for let i, x range xs {\n    s = s + x\n  }\n  return s\n}"
+	for _, xs := range []string{
+		`[1, 2, 3.5]`,
+		`[0.1, 0.2, 0.3]`,
+		`[-0]`,
+		`[1, num("NaN")]`,
+		`[num("Inf"), 1]`,
+		`[num("Inf"), -num("Inf")]`,
+	} {
+		src := "str(math.sum(" + xs + ")) == str(add(" + xs + "))"
+		if v := evalExprMod(t, ctx, add, src); v.K != rts.VBool || !v.B {
+			t.Errorf("%s is false", src)
+		}
 	}
 }

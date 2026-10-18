@@ -136,3 +136,4 @@ Query helpers keep keys and values exactly as written, including empty keys and 
 - `rts.math.floor(x)` returns the largest integer <= x.
 - `rts.math.ceil(x)` returns the smallest integer >= x.
 - `rts.math.round(x)` rounds to the nearest integer (half away from zero).
+- `rts.math.sum(list)` adds a list of numbers from left to right, as a `+` loop does. An empty list or null gives 0.
