@@ -109,6 +109,60 @@ func TestConcatWritesNumbersInFull(t *testing.T) {
 	}
 }
 
+func TestAddRejectsTwoListsOrTwoDicts(t *testing.T) {
+	lim := Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 100}
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{`["x"] + ["a"]`, "cannot add two lists"},
+		{`[] + []`, "cannot add two lists"},
+		{`{a: 1} + {b: 2}`, "cannot add two dicts"},
+		{`{} + {}`, "cannot add two dicts"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.src, func(t *testing.T) {
+			if err := execModuleErr(t, "let v = "+tt.src+"\n", lim); !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+			if v := evalExpr(t, "(try ("+tt.src+")).error"); v.K != VStr || !strings.Contains(v.S, tt.want) {
+				t.Fatalf("try error = %+v, want %q", v, tt.want)
+			}
+		})
+	}
+
+	err := execModuleErr(t, "let v = [1] + [2]\n", lim)
+	if !strings.Contains(err.Error(), "test:1:13:") {
+		t.Fatalf("error = %v, want operator position test:1:13", err)
+	}
+}
+
+func TestAddJoinsOtherKindsAsText(t *testing.T) {
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{`[1, 2] + "x"`, `[1,2]x`},
+		{`"ids: " + [1, 2]`, `ids: [1,2]`},
+		{`{a: 1} + "x"`, `{"a":1}x`},
+		{`"d: " + {a: 1}`, `d: {"a":1}`},
+		{`[1] + 2`, `[1]2`},
+		{`2 + [1]`, `2[1]`},
+		{`[1] + null`, `[1]`},
+		{`null + [1]`, `[1]`},
+		{`{a: 1} + 2`, `{"a":1}2`},
+		{`[1] + {a: 1}`, `[1]{"a":1}`},
+		{`{a: 1} + [1]`, `{"a":1}[1]`},
+		{`true + false`, `truefalse`},
+		{`null + null`, ``},
+	}
+	for _, tt := range tests {
+		if v := evalExpr(t, tt.src); v.K != VStr || v.S != tt.want {
+			t.Errorf("%s = %+v, want %q", tt.src, v, tt.want)
+		}
+	}
+}
+
 func TestListIndexRequiresInteger(t *testing.T) {
 	ex, err := ParseExpr("[10,20][1.2]", NewFile("test", nil).Pos(1, 1))
 	if err != nil {
