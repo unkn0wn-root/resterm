@@ -210,6 +210,7 @@ func TestEvalMembership(t *testing.T) {
 		{name: "list missing", src: `4 in [1, 2, 3]`, want: false},
 		{name: "list kind mismatch", src: `"2" in [2]`, want: false},
 		{name: "list null", src: `null in [null]`, want: true},
+		{name: "list null is not the empty string", src: `null in [""]`, want: false},
 		{name: "list collections are not deeply equal", src: `[1] in [[1]]`, want: false},
 		{name: "string substring", src: `"ell" in "hello"`, want: true},
 		{name: "string missing", src: `"world" in "hello"`, want: false},
@@ -221,6 +222,7 @@ func TestEvalMembership(t *testing.T) {
 		{name: "dict key is exact", src: `"A" in {a: 1}`, want: false},
 		{name: "dict converts key", src: `1 in {"1": true}`, want: true},
 		{name: "dict converts key in full", src: `1000000 in {"1000000": 1}`, want: true},
+		{name: "dict converts null to the empty key", src: `null in {"": 1}`, want: true},
 		{name: "not in", src: `2 not in [1, 3]`, want: true},
 	}
 	for _, tt := range tests {
@@ -250,6 +252,26 @@ let value = f in "function"
 `, Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 100})
 	if !strings.Contains(err.Error(), "cannot stringify") {
 		t.Fatalf("error = %v, want string conversion failure", err)
+	}
+}
+
+func TestMembershipRejectsNullInString(t *testing.T) {
+	const want = "cannot search a string for null"
+	lim := Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 100}
+	for _, src := range []string{`null in "text"`, `null in ""`, `null not in "text"`} {
+		t.Run(src, func(t *testing.T) {
+			if err := execModuleErr(t, "let v = "+src+"\n", lim); !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want %q", err, want)
+			}
+			if v := evalExpr(t, "(try ("+src+")).error"); v.K != VStr || !strings.Contains(v.S, want) {
+				t.Fatalf("try error = %+v, want %q", v, want)
+			}
+		})
+	}
+
+	err := execModuleErr(t, "let v = null in \"text\"\n", lim)
+	if !strings.Contains(err.Error(), "test:1:14:") {
+		t.Fatalf("error = %v, want operator position test:1:14", err)
 	}
 }
 

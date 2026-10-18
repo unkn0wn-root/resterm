@@ -72,7 +72,7 @@ response.statusCode not in [400, 404, 500]
 The container determines how membership works:
 
 - A list compares each item to the value with RestermScript equality. Kinds must match, primitive values compare by value, and lists, dicts, functions, and objects are never deeply equal.
-- A string converts the value with `str()` and tests for a substring. The empty string is contained in every string.
+- A string converts the value with `str()` and tests for a substring. The empty string is contained in every string. A `null` value is an error, because it would convert to the empty string and always match.
 - A dict converts the value with `str()` and checks for an exact, case-sensitive key. `null` converts to the empty string, so `null in dict` asks for a `""` key.
 - Any other container is an evaluation error.
 

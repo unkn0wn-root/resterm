@@ -122,6 +122,18 @@ func TestContainsAndMembershipRejectSameContainer(t *testing.T) {
 	}
 }
 
+func TestContainsRejectsNullInString(t *testing.T) {
+	for _, expr := range []string{`contains("text", null)`, `rts.contains("text", null)`} {
+		t.Run(expr, func(t *testing.T) {
+			ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+			err := evalExprErrCtx(t, ctx, expr)
+			if !strings.Contains(err.Error(), "cannot search a string for null") {
+				t.Fatalf("error = %v, want null search error", err)
+			}
+		})
+	}
+}
+
 func TestAppend(t *testing.T) {
 	ctx := testCtx()
 	values := map[string]string{
