@@ -1,15 +1,16 @@
 package stdlib
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
 const (
-	sigListAppend = "list.append(list, item)"
+	sigListAppend = "list.append(list, items...)"
 	sigListConcat = "list.concat(a, b)"
 	sigListSort   = "list.sort(list)"
 	sigListMap    = "list.map(list, fn)"
@@ -38,8 +39,12 @@ var (
 )
 
 func listAppend(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigListAppend)
-	if err := na.Count(2); err != nil {
+	return appendList(ctx, pos, args, sigListAppend)
+}
+
+func appendList(ctx *rts.Ctx, pos rts.Pos, args []rts.Value, sig string) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sig)
+	if err := na.CountMin(1); err != nil {
 		return rts.Null(), err
 	}
 
@@ -48,9 +53,7 @@ func listAppend(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) 
 		return rts.Null(), err
 	}
 
-	out := make([]rts.Value, 0, len(items)+1)
-	out = append(out, items...)
-	out = append(out, na.Arg(1))
+	out := slices.Concat(items, args[1:])
 	if err := rts.CheckList(ctx, pos, len(out)); err != nil {
 		return rts.Null(), err
 	}
@@ -101,24 +104,34 @@ func listSort(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.List(out), nil
 	}
 
-	kind := items[0].K
-	for i := range items {
-		if items[i].K != kind {
-			return rts.Null(), rts.Errf(ctx, pos, "%s expects numbers or strings", sigListSort)
-		}
+	if err := checkOrdered(ctx, pos, items, sigListSort); err != nil {
+		return rts.Null(), err
 	}
 
 	out := make([]rts.Value, 0, len(items))
 	out = append(out, items...)
-	switch kind {
-	case rts.VNum:
-		sort.Slice(out, func(i, j int) bool { return out[i].N < out[j].N })
-	case rts.VStr:
-		sort.Slice(out, func(i, j int) bool { return out[i].S < out[j].S })
-	default:
-		return rts.Null(), rts.Errf(ctx, pos, "%s expects numbers or strings", sigListSort)
-	}
+	slices.SortFunc(out, compare)
 	return rts.List(out), nil
+}
+
+func checkOrdered(ctx *rts.Ctx, pos rts.Pos, vals []rts.Value, sig string) error {
+	k := vals[0].K
+	if k != rts.VNum && k != rts.VStr {
+		return rts.Errf(ctx, pos, "%s expects numbers or strings", sig)
+	}
+	if slices.ContainsFunc(vals, func(v rts.Value) bool { return v.K != k }) {
+		return rts.Errf(ctx, pos, "%s expects numbers or strings", sig)
+	}
+	return nil
+}
+
+// compare orders two numbers or two strings, the values checkOrdered accepts.
+// NaN orders before every other number.
+func compare(a, b rts.Value) int {
+	if a.K == rts.VStr {
+		return cmp.Compare(a.S, b.S)
+	}
+	return cmp.Compare(a.N, b.N)
 }
 
 func listMap(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {

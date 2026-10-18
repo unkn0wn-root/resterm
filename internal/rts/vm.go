@@ -779,8 +779,13 @@ func (vm *VM) evalBin(env *Env, e *Binary) (Value, error) {
 
 	switch e.Op {
 	case OpAdd:
-		if l.K == VNum && r.K == VNum {
+		switch {
+		case l.K == VNum && r.K == VNum:
 			return Num(l.N + r.N), nil
+		case l.K == VList && r.K == VList:
+			return Null(), Errf(vm.ctx, e.Pos(), "cannot add two lists")
+		case l.K == VDict && r.K == VDict:
+			return Null(), Errf(vm.ctx, e.Pos(), "cannot add two dicts")
 		}
 		ls, err := ToStr(vm.ctx, e.Pos(), l)
 		if err != nil {

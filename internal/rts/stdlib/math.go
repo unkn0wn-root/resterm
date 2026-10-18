@@ -14,6 +14,7 @@ const (
 	sigMathFloor = "math.floor(x)"
 	sigMathCeil  = "math.ceil(x)"
 	sigMathRound = "math.round(x)"
+	sigMathSum   = "math.sum(list)"
 )
 
 var mathSpec = nsSpec{name: "math", fns: map[string]rts.NativeFunc{
@@ -24,6 +25,7 @@ var mathSpec = nsSpec{name: "math", fns: map[string]rts.NativeFunc{
 	"floor": mathFloor,
 	"ceil":  mathCeil,
 	"round": mathRound,
+	"sum":   mathSum,
 }}
 
 func mathAbs(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
@@ -144,4 +146,25 @@ func mathRound(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 		return rts.Null(), err
 	}
 	return rts.Num(math.Round(n)), nil
+}
+
+func mathSum(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sigMathSum)
+	if err := na.Count(1); err != nil {
+		return rts.Null(), err
+	}
+
+	items, err := na.List(0)
+	if err != nil {
+		return rts.Null(), err
+	}
+
+	var n float64
+	for _, it := range items {
+		if it.K != rts.VNum {
+			return rts.Null(), rts.Errf(ctx, pos, "%s expects numbers", sigMathSum)
+		}
+		n += it.N
+	}
+	return rts.Num(n), nil
 }

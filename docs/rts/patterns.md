@@ -38,7 +38,7 @@ export fn orders(list) {
   for let i, o range list {
     let msg = order(o)
     if msg != null {
-      msgs = rts.list.append(msgs, "order " + str(i) + ": " + msg)
+      msgs = append(msgs, "order " + str(i) + ": " + msg)
     }
   }
   return msgs
