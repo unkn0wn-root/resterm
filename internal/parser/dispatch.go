@@ -237,7 +237,8 @@ func (b *documentBuilder) handleUseDirective(d parsedDirective) directiveOutcome
 	if err != nil {
 		return b.rejectError(d, err)
 	}
-	if b.inRequest && b.request != nil {
+	if b.inRequest || b.separated && b.workflow == nil {
+		b.ensureRequest(d.lines.Start)
 		b.request.metadata.Uses = append(b.request.metadata.Uses, spec)
 	} else {
 		b.file.uses = append(b.file.uses, spec)

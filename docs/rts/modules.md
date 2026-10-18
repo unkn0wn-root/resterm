@@ -4,7 +4,7 @@ Modules are `.rts` files that you import with `@use`.
 
 - `module <name>` declares the module name (required when importing without `as`, and it must be the first statement).
 - `export` exposes a name from a module.
-- `@use ./path.rts` or `@use ./path.rts as alias` imports a module into a request or file.
+- `@use ./path.rts` or `@use ./path.rts as alias` imports a module into its request, or into the whole file when it comes before the first `###` line.
 - If you omit `as`, the module name becomes the alias.
 - Modules are cached, so top-level mutable state can persist across runs.
 

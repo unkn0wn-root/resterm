@@ -104,14 +104,15 @@ func (s *SourceSyntax) Line(i int) SourceLine {
 }
 
 type sourceScan struct {
-	inBlock  bool
-	inScript bool
-	workflow bool
-	request  requestScan
-	mock     mockScan
-	reader   directiveReader
-	effects  map[directiveKey]directiveEffect
-	lines    []SourceLine
+	inBlock   bool
+	inScript  bool
+	separated bool
+	workflow  bool
+	request   requestScan
+	mock      mockScan
+	reader    directiveReader
+	effects   map[directiveKey]directiveEffect
+	lines     []SourceLine
 }
 
 type directiveKey struct {
@@ -119,6 +120,7 @@ type directiveKey struct {
 	spelling   directive.Name
 	args       string
 	inWorkflow bool
+	separated  bool
 }
 
 // clone prevents the cache from retaining the source buffer.
@@ -435,7 +437,7 @@ func (s *sourceScan) effectOf(call directive.Call, inWorkflow bool) directiveEff
 	}
 
 	if strings.Contains(call.Args, "\n") {
-		return probeEffect(call, inWorkflow)
+		return probeEffect(call, inWorkflow, s.separated)
 	}
 
 	key := directiveKey{
@@ -443,19 +445,20 @@ func (s *sourceScan) effectOf(call directive.Call, inWorkflow bool) directiveEff
 		spelling:   call.Spelling,
 		args:       call.Args,
 		inWorkflow: inWorkflow,
+		separated:  s.separated,
 	}
 	if effect, ok := s.effects[key]; ok {
 		return effect
 	}
 
-	effect := probeEffect(call, inWorkflow)
+	effect := probeEffect(call, inWorkflow, s.separated)
 	s.effects[key.clone()] = effect
 	return effect
 }
 
 // Run directives through the parser so classification follows the same rules.
-func probeEffect(call directive.Call, inWorkflow bool) directiveEffect {
-	probe := documentBuilder{doc: &restfile.Document{}}
+func probeEffect(call directive.Call, inWorkflow, separated bool) directiveEffect {
+	probe := documentBuilder{doc: &restfile.Document{}, separated: separated}
 	if inWorkflow {
 		probe.workflow = newWorkflowBuilder(1, "probe")
 	}
@@ -490,7 +493,7 @@ func (s *sourceScan) endHeaders() {
 
 // Keep cached directive results between sections.
 func (s *sourceScan) endSection() {
-	*s = sourceScan{effects: s.effects, lines: s.lines}
+	*s = sourceScan{effects: s.effects, lines: s.lines, separated: true}
 }
 
 type methodLineKind uint8

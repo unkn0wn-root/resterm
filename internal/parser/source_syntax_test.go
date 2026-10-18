@@ -294,9 +294,11 @@ func TestSourceSyntaxMockAgreesWithParser(t *testing.T) {
 		"@request value = 1",
 		"# @assert sum(",
 		"# @workflow flow\n# @step login using=Login",
+		"# @use value\n###\n# @use value",
 	}
 	for _, spec := range directive.Specs() {
-		prefixes = append(prefixes, "# "+spec.Name.Tag(), "# "+spec.Name.Tag()+" value")
+		tag := "# " + spec.Name.Tag()
+		prefixes = append(prefixes, tag, tag+" value", "###\n"+tag, "###\n"+tag+" value")
 	}
 
 	for no, prefix := range prefixes {
