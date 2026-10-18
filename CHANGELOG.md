@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.16.0](https://github.com/unkn0wn-root/resterm/compare/v1.15.0...v1.16.0) (2026-10-18)
+
+
+### Features
+
+* **rts:** add append ([64979c1](https://github.com/unkn0wn-root/resterm/commit/64979c17c0e194573a004c715e4491f5c2d5b4cf))
+* **rts:** add math.sum ([efe4624](https://github.com/unkn0wn-root/resterm/commit/efe4624be1e847e95424e39324b3dd810041dfe6))
+* **rts:** add min and max ([9ac82a1](https://github.com/unkn0wn-root/resterm/commit/9ac82a1f6a1e5332b5736cde6e0d29f4fd82b5cd))
+* **rts:** let scripts shadow standard library names ([5310225](https://github.com/unkn0wn-root/resterm/commit/5310225701f412b762e56fe79f46fb662f9aa99f))
+
+
+### Bug Fixes
+
+* **rts:** check one-item lists in list.sort ([32463f7](https://github.com/unkn0wn-root/resterm/commit/32463f7c624a7ee498383ef215848004f880232b))
+* **rts:** reject + on two lists and two dicts ([b270ce7](https://github.com/unkn0wn-root/resterm/commit/b270ce7285255cc36379cc372d8c384174495e21))
+* **rts:** reject null in string membership ([3b77379](https://github.com/unkn0wn-root/resterm/commit/3b773798dcc4b98a64897b96bdf12c0fa1381d98))
+* **rts:** reject null in text searches ([d06ed1c](https://github.com/unkn0wn-root/resterm/commit/d06ed1cb636141462fda938f5874799aea9056b0))
+* **rts:** show module paths like the request file path ([00aef2a](https://github.com/unkn0wn-root/resterm/commit/00aef2a8c44d545f3813dd1521cf99b567d704e0))
+* **rts:** word arity errors like the host helpers ([9228a34](https://github.com/unkn0wn-root/resterm/commit/9228a348b8bf14e58993e339205fda1a3b0065c5))
+
 ## [1.15.0](https://github.com/unkn0wn-root/resterm/compare/v1.14.1...v1.15.0) (2026-10-16)
 
 
