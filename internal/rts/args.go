@@ -92,6 +92,13 @@ func (a Args) CountRange(min, max int) error {
 	return argCountRange(a.ctx, a.pos, a.args, min, max, a.sig)
 }
 
+func (a Args) CountMin(min int) error {
+	if len(a.args) < min {
+		return Errf(a.ctx, a.pos, "%s expects at least %d args", a.sig, min)
+	}
+	return nil
+}
+
 func (a Args) Len() int {
 	return len(a.args)
 }

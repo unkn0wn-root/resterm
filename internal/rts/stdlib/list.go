@@ -2,6 +2,7 @@ package stdlib
 
 import (
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -9,7 +10,7 @@ import (
 )
 
 const (
-	sigListAppend = "list.append(list, item)"
+	sigListAppend = "list.append(list, items...)"
 	sigListConcat = "list.concat(a, b)"
 	sigListSort   = "list.sort(list)"
 	sigListMap    = "list.map(list, fn)"
@@ -38,8 +39,12 @@ var (
 )
 
 func listAppend(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
-	na := rts.NewArgs(ctx, pos, args, sigListAppend)
-	if err := na.Count(2); err != nil {
+	return appendList(ctx, pos, args, sigListAppend)
+}
+
+func appendList(ctx *rts.Ctx, pos rts.Pos, args []rts.Value, sig string) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sig)
+	if err := na.CountMin(1); err != nil {
 		return rts.Null(), err
 	}
 
@@ -48,9 +53,7 @@ func listAppend(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) 
 		return rts.Null(), err
 	}
 
-	out := make([]rts.Value, 0, len(items)+1)
-	out = append(out, items...)
-	out = append(out, na.Arg(1))
+	out := slices.Concat(items, args[1:])
 	if err := rts.CheckList(ctx, pos, len(out)); err != nil {
 		return rts.Null(), err
 	}

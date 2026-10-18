@@ -11,6 +11,7 @@ import (
 const (
 	sigFail     = "fail()"
 	sigLen      = "len(x)"
+	sigAppend   = "append(list, items...)"
 	sigContains = "contains(a, b)"
 	sigMatch    = "match(pattern, text)"
 	sigStr      = "str(x)"
@@ -20,6 +21,7 @@ const (
 var coreSpec = map[string]rts.NativeFunc{
 	"fail":     coreFail,
 	"len":      coreLen,
+	"append":   coreAppend,
 	"contains": coreContains,
 	"match":    coreMatch,
 	"str":      coreStr,
@@ -61,6 +63,10 @@ func coreLen(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	default:
 		return rts.Null(), rts.Errf(ctx, pos, "%s unsupported", sigLen)
 	}
+}
+
+func coreAppend(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return appendList(ctx, pos, args, sigAppend)
 }
 
 func coreContains(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {

@@ -122,6 +122,76 @@ func TestContainsAndMembershipRejectSameContainer(t *testing.T) {
 	}
 }
 
+func TestAppend(t *testing.T) {
+	ctx := testCtx()
+	values := map[string]string{
+		`str(append([1], 2, 3))`:      "[1,2,3]",
+		`str(append([1]))`:            "[1]",
+		`str(append(null, 1))`:        "[1]",
+		`str(append(null))`:           "[]",
+		`str(append([1], null))`:      "[1,null]",
+		`str(append([], [1]))`:        "[[1]]",
+		`str(list.append([1], 2))`:    "[1,2]",
+		`str(list.append([1], 2, 3))`: "[1,2,3]",
+		`str(list.append(null))`:      "[]",
+	}
+	for src, want := range values {
+		t.Run(src, func(t *testing.T) {
+			if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+				t.Fatalf("%s = %+v, want %q", src, v, want)
+			}
+		})
+	}
+	errs := map[string]string{
+		`append()`:            "append(list, items...) expects at least 1 args",
+		`append("x", 1)`:      "append(list, items...) expects list",
+		`append({a: 1}, 1)`:   "append(list, items...) expects list",
+		`list.append()`:       "list.append(list, items...) expects at least 1 args",
+		`list.append("x", 1)`: "list.append(list, items...) expects list",
+	}
+	for src, want := range errs {
+		t.Run(src, func(t *testing.T) {
+			if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s: error = %v, want %q", src, err, want)
+			}
+		})
+	}
+}
+
+func TestAppendStopsAtListLimit(t *testing.T) {
+	ctx := rts.NewCtx(t.Context(), rts.Limits{MaxStr: 1024, MaxList: 2, MaxDict: 1024})
+	for _, fn := range []string{"append", "list.append"} {
+		if v := evalExprCtx(t, ctx, "len("+fn+"([1], 2))"); v.K != rts.VNum || v.N != 2 {
+			t.Errorf("len(%s([1], 2)) = %+v, want 2", fn, v)
+		}
+		for _, src := range []string{fn + "([1, 2], 3)", fn + "([1], 2, 3)"} {
+			if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), "list too large") {
+				t.Errorf("%s: error = %v, want list too large", src, err)
+			}
+		}
+	}
+}
+
+// xs has room for more items. An append that wrote into it would change a
+// when the second call runs.
+func TestAppendDoesNotShareItsList(t *testing.T) {
+	ctx := testCtx()
+	xs := rts.List(make([]rts.Value, 1, 4))
+	want := rts.List([]rts.Value{rts.Null(), rts.Num(1)})
+	for sig, fn := range map[string]rts.NativeFunc{sigAppend: coreAppend, sigListAppend: listAppend} {
+		a, err := fn(ctx, rts.Pos{}, []rts.Value{xs, rts.Num(1)})
+		if err != nil {
+			t.Fatalf("%s: %v", sig, err)
+		}
+		if _, err := fn(ctx, rts.Pos{}, []rts.Value{xs, rts.Num(2)}); err != nil {
+			t.Fatalf("%s: %v", sig, err)
+		}
+		if !deepEqual(a, want) {
+			t.Fatalf("%s: first result = %+v after the second call, want %+v", sig, a, want)
+		}
+	}
+}
+
 // the default(a, b) helper was removed in favor of ??. The top level, rts and
 // stdlib all read the same predeclared names, so dropping it from coreSpec
 // clears all three.
@@ -162,6 +232,10 @@ func TestRTSReachesAShadowedName(t *testing.T) {
 		v := evalExprMod(t, ctx, "let json = 1", ns+".json.stringify({a: json})")
 		if v.K != rts.VStr || v.S != `{"a":1}` {
 			t.Fatalf("%s.json after let json = %+v, want {\"a\":1}", ns, v)
+		}
+		v = evalExprMod(t, ctx, "let append = 1", "str("+ns+".append([append], 2))")
+		if v.K != rts.VStr || v.S != "[1,2]" {
+			t.Fatalf("%s.append after let append = %+v, want [1,2]", ns, v)
 		}
 	}
 }
