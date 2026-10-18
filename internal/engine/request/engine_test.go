@@ -1185,6 +1185,84 @@ GET http://example.test
 	}
 }
 
+func TestRTSRequestsMayImportUnderTheSameAlias(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a", "b"} {
+		mod := "module " + name + "\n\nexport fn name() {\n  return \"" + name + "\"\n}\n"
+		if err := os.WriteFile(filepath.Join(dir, name+".rts"), []byte(mod), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(`### a
+# @use ./a.rts as v
+# @assert v.name() == "a"
+GET http://example.test/a
+
+### b
+# @use ./b.rts as v
+# @assert v.name() == "b"
+GET http://example.test/b
+`))
+	eng, _ := newStubEngine(t)
+	for _, req := range doc.Requests {
+		res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+		if err != nil || res.Err != nil || res.ScriptErr != nil {
+			t.Fatalf("%s: error = %v, result error = %v, script error = %v", req.URL, err, res.Err, res.ScriptErr)
+		}
+		if got := rows(res); len(got) != 1 || !got[0].passed {
+			t.Fatalf("%s: tests = %+v, want one passing assert", req.URL, got)
+		}
+	}
+}
+
+func TestRTSModuleImportStaysInItsRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		errs []string
+	}{
+		{
+			"leak",
+			"### one\n# @assert h.two() == 2\nGET http://example.test/one\n\n" +
+				"### two\n# @use ./h.rts\n# @assert h.two() == 2\nGET http://example.test/two\n",
+			[]string{`undefined name "h"`, ""},
+		},
+		{
+			"load error",
+			"### one\n# @use ./missing.rts\n# @assert true\nGET http://example.test/one\n\n" +
+				"### two\n# @assert true\nGET http://example.test/two\n",
+			[]string{"missing.rts", ""},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			mod := "module h\n\nexport fn two() {\n  return 2\n}\n"
+			if err := os.WriteFile(filepath.Join(dir, "h.rts"), []byte(mod), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(tt.src))
+			if len(doc.Requests) != len(tt.errs) {
+				t.Fatalf("got %d requests, want %d", len(doc.Requests), len(tt.errs))
+			}
+			eng, _ := newStubEngine(t)
+			for i, req := range doc.Requests {
+				res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+				if err != nil || res.Err != nil {
+					t.Fatalf("%s: error = %v, result error = %v", req.URL, err, res.Err)
+				}
+				var msg string
+				if res.ScriptErr != nil {
+					msg = res.ScriptErr.Error()
+				}
+				if want := tt.errs[i]; !strings.Contains(msg, want) || (want == "") != (res.ScriptErr == nil) {
+					t.Fatalf("%s: script error = %v, want %q", req.URL, res.ScriptErr, want)
+				}
+			}
+		})
+	}
+}
+
 func TestRTSModuleLoadTimeoutIsNamedOnce(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "slow.rts"), []byte("module slow\nfor {\n}\n"), 0o600); err != nil {

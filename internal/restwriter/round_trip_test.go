@@ -1,6 +1,7 @@
 package restwriter
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -372,5 +373,30 @@ func TestRenderRoundTripsAssertMessageWhitespace(t *testing.T) {
 	}
 	if again := mustRender(t, back); again != out {
 		t.Fatalf("render is not idempotent:\nfirst:\n%s\nsecond:\n%s", out, again)
+	}
+}
+
+// Settings are the first directive under ### for an unnamed request, so they
+// must stay with that request when the file is read back.
+func TestRenderRoundTripsSettingsOfUnnamedRequests(t *testing.T) {
+	doc := &restfile.Document{Requests: []*restfile.Request{
+		{Method: "GET", URL: "https://a.test/", Settings: map[string]string{"timeout": "1s"}},
+		{Method: "GET", URL: "https://b.test/", Settings: map[string]string{"http-insecure": "true"}},
+	}}
+	out := mustRender(t, doc)
+	back := parser.Parse("r.http", []byte(out))
+	if len(back.Errors) != 0 || len(back.Warnings) != 0 {
+		t.Fatalf("errors = %v, warnings = %v\n%s", back.Errors, back.Warnings, out)
+	}
+	if len(back.Settings) != 0 {
+		t.Fatalf("file settings = %v, want none\n%s", back.Settings, out)
+	}
+	if len(back.Requests) != len(doc.Requests) {
+		t.Fatalf("got %d requests, want %d\n%s", len(back.Requests), len(doc.Requests), out)
+	}
+	for i, req := range back.Requests {
+		if want := doc.Requests[i].Settings; !maps.Equal(req.Settings, want) {
+			t.Fatalf("%s settings = %v, want %v\n%s", req.URL, req.Settings, want, out)
+		}
 	}
 }

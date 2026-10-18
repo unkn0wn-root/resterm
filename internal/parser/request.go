@@ -23,6 +23,7 @@ type requestBuilder struct {
 	scriptBufferLines []restfile.ScriptLine
 	scriptBuffer      []string
 	settings          map[string]string
+	settingDirectives []parsedDirective
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
 	grpc              *grpcbuilder.Builder

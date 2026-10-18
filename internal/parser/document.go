@@ -19,6 +19,7 @@ import (
 type documentBuilder struct {
 	doc                  *restfile.Document
 	inRequest            bool
+	separated            bool // set at the first ### line, where file scope ends
 	request              *requestBuilder
 	mock                 *mockBuilder
 	workflow             *workflowBuilder
@@ -219,6 +220,7 @@ func (b *documentBuilder) handleSeparator(ln line) bool {
 	b.flushRequest(ln.no - 1)
 	b.file.flushSettings(b.doc)
 	b.pendingTitle = strings.TrimSpace(strings.TrimPrefix(ln.text, "###"))
+	b.separated = true
 	return true
 }
 
@@ -278,6 +280,19 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.lintProfile(req)
 	if req.Method != "" && req.URL != "" {
 		b.doc.Requests = append(b.doc.Requests, req)
+	} else if b.separated {
+		for _, u := range req.Metadata.Uses {
+			b.addWarning(
+				u.Line,
+				"@use in a block without a request was ignored. Move it above the first ### to share it",
+			)
+		}
+		for _, d := range b.request.settingDirectives {
+			b.warn(
+				d,
+				d.Spelling.Tag()+" in a block without a request was ignored. Move it above the first ### to share it",
+			)
+		}
 	}
 
 	b.inRequest = false
