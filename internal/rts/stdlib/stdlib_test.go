@@ -192,6 +192,96 @@ func TestAppendDoesNotShareItsList(t *testing.T) {
 	}
 }
 
+func TestMinMax(t *testing.T) {
+	ctx := testCtx()
+	const iso = `["2024-01-02T00:00:00Z", "2024-01-10T00:00:00Z", "2023-12-31T23:59:59Z"]`
+	values := map[string]string{
+		`str(min(3, 1, 2))`:       "1",
+		`str(max(3, 1, 2))`:       "3",
+		`str(min(2, 1))`:          "1",
+		`str(min([3, 1, 2]))`:     "1",
+		`str(max([3, 1, 2]))`:     "3",
+		`str(max([5]))`:           "5",
+		`min("b", "a")`:           "a",
+		`max("a", "b")`:           "b",
+		`min(` + iso + `)`:        "2023-12-31T23:59:59Z",
+		`max(` + iso + `)`:        "2024-01-10T00:00:00Z",
+		`typeof(min([]))`:         "null",
+		`typeof(max(null))`:       "null",
+		`str(max([]) ?? 0)`:       "0",
+		`str(max(1, num("NaN")))`: "NaN",
+		`str(max(num("NaN"), 1))`: "NaN",
+		`str(min(1, num("NaN")))`: "NaN",
+		`str(min(num("NaN"), 1))`: "NaN",
+		`str(min(0, -0))`:         "-0",
+		`str(min(-0, 0))`:         "-0",
+		`str(max(-0, 0))`:         "0",
+		`str(max(0, -0))`:         "0",
+	}
+	for src, want := range values {
+		t.Run(src, func(t *testing.T) {
+			if v := evalExprCtx(t, ctx, src); v.K != rts.VStr || v.S != want {
+				t.Fatalf("%s = %+v, want %q", src, v, want)
+			}
+		})
+	}
+	errs := map[string]string{
+		`min()`:             "min(values...) expects at least 1 args",
+		`max(5)`:            "max(values...) expects list",
+		`max("abc")`:        "max(values...) expects list",
+		`min(1, "a")`:       "min(values...) expects numbers or strings",
+		`max([1, "a"])`:     "max(values...) expects numbers or strings",
+		`max([1], [2])`:     "max(values...) expects numbers or strings",
+		`min([true])`:       "min(values...) expects numbers or strings",
+		`min(null, null)`:   "min(values...) expects numbers or strings",
+		`math.min(1, 2, 3)`: "math.min(a, b) expects 2 args",
+	}
+	for src, want := range errs {
+		t.Run(src, func(t *testing.T) {
+			if err := evalExprErrCtx(t, ctx, src); !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s: error = %v, want %q", src, err, want)
+			}
+		})
+	}
+}
+
+func TestMinMaxMatchSort(t *testing.T) {
+	ctx := testCtx()
+	for _, xs := range []string{`[3, 1, 2]`, `[2, -1.5, 2, 0]`, `["b", "", "a", "B"]`} {
+		mod := "let xs = " + xs + "\nlet s = list.sort(xs)"
+		got := evalExprMod(t, ctx, mod, "str([min(xs), max(xs)])")
+		want := evalExprMod(t, ctx, mod, "str([s[0], s[len(s) - 1]])")
+		if got.S != want.S {
+			t.Errorf("[min, max] of %s = %s, want %s", xs, got.S, want.S)
+		}
+	}
+}
+
+func TestMinMaxMatchMath(t *testing.T) {
+	ctx := testCtx()
+	for _, ab := range []string{`2, 1`, `1, num("NaN")`, `num("NaN"), 1`, `0, -0`, `-0, 0`, `num("Inf"), num("NaN")`} {
+		for _, fn := range []string{"min", "max"} {
+			src := "str(" + fn + "(" + ab + ")) == str(math." + fn + "(" + ab + "))"
+			if v := evalExprCtx(t, ctx, src); v.K != rts.VBool || !v.B {
+				t.Errorf("%s is false", src)
+			}
+		}
+	}
+}
+
+func TestListSortOrdersNumbersOrStrings(t *testing.T) {
+	ctx := testCtx()
+	if v := evalExprCtx(t, ctx, `str(list.sort([1, num("NaN"), 0])[0])`); v.K != rts.VStr || v.S != "NaN" {
+		t.Errorf("list.sort([1, NaN, 0])[0] = %+v, want NaN", v)
+	}
+	for _, src := range []string{`list.sort([1, "a"])`, `list.sort([true, false])`} {
+		err := evalExprErrCtx(t, ctx, src)
+		if !strings.Contains(err.Error(), "list.sort(list) expects numbers or strings") {
+			t.Errorf("%s: error = %v, want numbers or strings", src, err)
+		}
+	}
+}
+
 // the default(a, b) helper was removed in favor of ??. The top level, rts and
 // stdlib all read the same predeclared names, so dropping it from coreSpec
 // clears all three.
@@ -236,6 +326,10 @@ func TestRTSReachesAShadowedName(t *testing.T) {
 		v = evalExprMod(t, ctx, "let append = 1", "str("+ns+".append([append], 2))")
 		if v.K != rts.VStr || v.S != "[1,2]" {
 			t.Fatalf("%s.append after let append = %+v, want [1,2]", ns, v)
+		}
+		v = evalExprMod(t, ctx, "let max = 1", "str("+ns+".max([max, 3]))")
+		if v.K != rts.VStr || v.S != "3" {
+			t.Fatalf("%s.max after let max = %+v, want 3", ns, v)
 		}
 	}
 }

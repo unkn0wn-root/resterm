@@ -13,6 +13,8 @@ Core helpers are the general functions, such as `len`, `str`, and `append`. Help
 - `rts.fail(msg)` stops evaluation and returns an error message.
 - `rts.len(x)` returns the length of a string, list, or dict.
 - `rts.append(list, items...)` returns a new list with the items added to the end. A null list counts as empty. An item that is a list is added as one item, so `append([], [1])` is `[[1]]`. Use `list.concat` to join two lists.
+- `rts.min(values...)` returns the smallest value. Pass one list to compare its items, or two or more values to compare them with each other. An empty list or null gives null, so `min(xs) ?? 0` works. The values must be all numbers or all strings. Strings compare byte by byte, so ISO timestamps compare by time when they use the same time zone and the same number of digits.
+- `rts.max(values...)` works like `min` and returns the largest value.
 - `rts.contains(container, value)` applies the same membership relation as `value in container`.
 - `rts.match(pattern, text)` applies a regular expression to text and returns true when it matches.
 - `rts.str(x)` converts a value to a string, writing numbers, lists, and dicts as `json.stringify` does, so `str(1000000)` is `"1000000"`.

@@ -2,7 +2,9 @@ package stdlib
 
 import (
 	"fmt"
+	"math"
 	"regexp"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -12,6 +14,8 @@ const (
 	sigFail     = "fail()"
 	sigLen      = "len(x)"
 	sigAppend   = "append(list, items...)"
+	sigMin      = "min(values...)"
+	sigMax      = "max(values...)"
 	sigContains = "contains(a, b)"
 	sigMatch    = "match(pattern, text)"
 	sigStr      = "str(x)"
@@ -22,6 +26,8 @@ var coreSpec = map[string]rts.NativeFunc{
 	"fail":     coreFail,
 	"len":      coreLen,
 	"append":   coreAppend,
+	"min":      coreMin,
+	"max":      coreMax,
 	"contains": coreContains,
 	"match":    coreMatch,
 	"str":      coreStr,
@@ -67,6 +73,55 @@ func coreLen(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 
 func coreAppend(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	return appendList(ctx, pos, args, sigAppend)
+}
+
+func coreMin(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return minMax(ctx, pos, args, sigMin, math.Min, slices.MinFunc)
+}
+
+func coreMax(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
+	return minMax(ctx, pos, args, sigMax, math.Max, slices.MaxFunc)
+}
+
+func minMax(
+	ctx *rts.Ctx,
+	pos rts.Pos,
+	args []rts.Value,
+	sig string,
+	num func(x, y float64) float64,
+	pick func([]rts.Value, func(a, b rts.Value) int) rts.Value,
+) (rts.Value, error) {
+	na := rts.NewArgs(ctx, pos, args, sig)
+	if err := na.CountMin(1); err != nil {
+		return rts.Null(), err
+	}
+
+	vals := args
+	if na.Len() == 1 {
+		items, err := na.List(0)
+		if err != nil {
+			return rts.Null(), err
+		}
+		if len(items) == 0 {
+			return rts.Null(), nil
+		}
+		vals = items
+	}
+
+	if err := checkOrdered(ctx, pos, vals, sig); err != nil {
+		return rts.Null(), err
+	}
+	if vals[0].K == rts.VStr {
+		return pick(vals, compare), nil
+	}
+
+	// Numbers use math.Min and math.Max, as math.min and math.max do. compare
+	// would put NaN first and treat -0 as equal to 0.
+	n := vals[0].N
+	for _, v := range vals[1:] {
+		n = num(n, v.N)
+	}
+	return rts.Num(n), nil
 }
 
 func coreContains(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
