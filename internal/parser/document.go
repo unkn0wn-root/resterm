@@ -280,11 +280,17 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.lintProfile(req)
 	if req.Method != "" && req.URL != "" {
 		b.doc.Requests = append(b.doc.Requests, req)
-	} else {
+	} else if b.separated {
 		for _, u := range req.Metadata.Uses {
 			b.addWarning(
 				u.Line,
 				"@use in a block without a request was ignored. Move it above the first ### to share it",
+			)
+		}
+		for _, d := range b.request.settingDirectives {
+			b.warn(
+				d,
+				d.Spelling.Tag()+" in a block without a request was ignored. Move it above the first ### to share it",
 			)
 		}
 	}

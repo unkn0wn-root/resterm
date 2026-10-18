@@ -46,11 +46,13 @@ func (b *documentBuilder) handleRequestMetadataDirective(d parsedDirective) dire
 	case directive.Settings:
 		settings, err := applySettingsTokens(b.request.settings, rest, directive.Settings)
 		b.request.settings = settings
+		b.request.settingDirectives = append(b.request.settingDirectives, d)
 		b.report(d, err)
 		return directiveApplied
 	case directive.Setting:
 		settings, err := putSetting(b.request.settings, rest)
 		b.request.settings = settings
+		b.request.settingDirectives = append(b.request.settingDirectives, d)
 		b.report(d, err)
 		return directiveApplied
 	case directive.Timeout:

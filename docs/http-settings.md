@@ -15,7 +15,7 @@
 Set `base-url` to resolve shorter HTTP request targets without repeating a host:
 
 ```http
-# File default when declared before the first request
+# File default when declared above the first ### line
 # @setting base-url https://api.example.com/v1/
 
 ### List users
@@ -123,7 +123,7 @@ A template can also provide part of the URL. Both `GET http://{{host}}/users` an
 - Requests use an in-memory cookie jar per environment. Cookies are isolated between environments, and `@setting no-cookies true` disables cookies for a request without clearing the stored jar. Use `Ctrl+Shift+G` (or `g Shift+G`) to clear cookies for the current environment.
 - TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts lists separated by spaces, commas, or semicolons, and paths are relative). GraphQL, REST, WebSocket, and SSE requests all share these HTTP settings.
 - Custom root CAs replace system roots by default (strict). Set `http-root-mode append` or `grpc-root-mode append` if you want to keep system roots in addition to your own.
-- File-level defaults: place `# @setting key value` or `# @settings key1=val1 ...` before the first request to apply them to every request in that file. Request-level overrides still win.
+- File-level defaults: place `# @setting key value` or `# @settings key1=val1 ...` above the first `###` line to apply them to every request in that file. Request-level overrides still win.
 - HTTP, transport, and TLS settings include `base-url`, `http-*`, `grpc-*`, `timeout`, `proxy`, `followredirects`, `max-redirects`, `forward-credentials-on-redirect`, `max-response-size`, `sse-max-line-bytes`, `sse-max-event-bytes`, `ws-max-message-bytes`, `ws-compression`, `insecure`, and `no-cookies`. Resterm ignores unknown keys.
 - Boolean settings (`followredirects`, `insecure`, `no-cookies`, `ws-compression`, `http-insecure`, `grpc-insecure`) accept `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0`. A key written on its own is a flag meaning `true`, so `# @setting insecure`, `# @settings insecure`, and `# @setting insecure true` are the same thing. `@setting` also accepts the `key=value` form, so `# @setting insecure=false` means what `# @settings insecure=false` does.
 - Settings validate their values. A value the setting does not accept fails the request instead of falling back to a default, so a typo cannot silently leave TLS verification or redirects at the wrong setting. This covers booleans, `timeout` (a Go duration such as `30s`), `proxy` (a URL with a scheme and host, such as `http://host:8080`), `http-version`, and `http-root-mode`/`grpc-root-mode`. A non-empty `base-url` is resolved and validated only when a relative HTTP-family target needs it. Writing a key with an empty value (`# @settings insecure=`, or `"settings.insecure": ""` in an environment file) is reported as a missing value rather than treated as a flag.

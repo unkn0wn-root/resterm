@@ -237,7 +237,7 @@ func (b *documentBuilder) handleUseDirective(d parsedDirective) directiveOutcome
 	if err != nil {
 		return b.rejectError(d, err)
 	}
-	if b.inRequest || b.separated && b.workflow == nil {
+	if b.inRequestScope() {
 		b.ensureRequest(d.lines.Start)
 		b.request.metadata.Uses = append(b.request.metadata.Uses, spec)
 	} else {
@@ -316,8 +316,14 @@ func (b *documentBuilder) handlePatchDirective(d parsedDirective) directiveOutco
 	return directiveApplied
 }
 
+// inRequestScope reports whether @use and @setting belong to a request rather
+// than the file: inside a request, or below the first ### line outside a workflow.
+func (b *documentBuilder) inRequestScope() bool {
+	return b.inRequest || b.separated && b.workflow == nil
+}
+
 func (b *documentBuilder) handleFileSettingsDirective(d parsedDirective) directiveOutcome {
-	if b.inRequest {
+	if b.inRequestScope() {
 		return directiveIgnored
 	}
 	var (

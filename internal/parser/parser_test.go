@@ -4739,6 +4739,106 @@ func TestUseScope(t *testing.T) {
 	}
 }
 
+func TestSettingScope(t *testing.T) {
+	one := map[string]string{"timeout": "1s"}
+	tests := []struct {
+		name string
+		src  string
+		file map[string]string
+		req  map[string]string
+	}{
+		{"file top", "# @setting timeout 1s\n### one\nGET http://x\n", one, nil},
+		{"first after ###", "### one\n# @setting timeout 1s\nGET http://x\n", nil, one},
+		{"@settings first after ###", "### one\n# @settings timeout=1s\nGET http://x\n", nil, one},
+		{"after a comment", "### one\n# note\n# @setting timeout 1s\nGET http://x\n", nil, one},
+		{"after @name", "### one\n# @name one\n# @setting timeout 1s\nGET http://x\n", nil, one},
+		{
+			"workflow block",
+			"### one\nGET http://x\n\n### flow\n# @workflow flow\n# @setting timeout 1s\n# @step S using=one\n",
+			one,
+			nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("settings.http", []byte(tt.src))
+			if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+				t.Fatalf("errors = %v, warnings = %v, want none", doc.Errors, doc.Warnings)
+			}
+			if !maps.Equal(doc.Settings, tt.file) {
+				t.Fatalf("file settings = %v, want %v", doc.Settings, tt.file)
+			}
+			if len(doc.Requests) != 1 || !maps.Equal(doc.Requests[0].Settings, tt.req) {
+				t.Fatalf("requests = %+v, want one with settings %v", doc.Requests, tt.req)
+			}
+		})
+	}
+}
+
+// The relative URL example in docs/http-settings.md.
+func TestSettingsDocExample(t *testing.T) {
+	const src = `# File default when declared above the first ### line
+# @setting base-url https://api.example.com/v1/
+
+### List users
+GET users?page=2
+
+### Root-relative health check
+GET /health
+
+### One-request override
+# @setting base-url https://admin.example.com/api/
+GET status
+`
+	doc := Parse("settings.http", []byte(src))
+	if want := map[string]string{"base-url": "https://api.example.com/v1/"}; !maps.Equal(doc.Settings, want) {
+		t.Fatalf("file settings = %v, want %v", doc.Settings, want)
+	}
+	want := []map[string]string{nil, nil, {"base-url": "https://admin.example.com/api/"}}
+	if len(doc.Requests) != len(want) {
+		t.Fatalf("got %d requests, want %d", len(doc.Requests), len(want))
+	}
+	for i, req := range doc.Requests {
+		if !maps.Equal(req.Settings, want[i]) {
+			t.Fatalf("%s settings = %v, want %v", req.URL, req.Settings, want[i])
+		}
+	}
+}
+
+func TestSettingsInBlockWithoutRequestWarn(t *testing.T) {
+	const ignored = " in a block without a request was ignored. Move it above the first ### to share it"
+	tests := []struct {
+		name  string
+		src   string
+		tag   string
+		lines []int
+	}{
+		{"setting only", "### one\n# @setting timeout 1s\n", "@setting", []int{2}},
+		{"settings only", "### one\n# note\n# @settings timeout=1s insecure\n", "@settings", []int{3}},
+		{"after @name", "### one\n# @name one\n# @setting timeout 1s\n", "@setting", []int{3}},
+		{"setting and request", "### one\n# @setting timeout 1s\nGET http://x\n", "", nil},
+		{"preamble only", "# @setting timeout 1s\n", "", nil},
+		{"preamble after @name", "# @name pre\n# @setting timeout 1s\n### one\nGET http://x\n", "", nil},
+		{"timeout only", "### one\n# @timeout 5s\n", "", nil},
+		{"preamble timeout", "# @timeout 5s\n### one\nGET http://x\n", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("settings.http", []byte(tt.src))
+			var lines []int
+			for _, w := range doc.Warnings {
+				if want := tt.tag + ignored; w.Message != want {
+					t.Fatalf("warning = %q, want %q", w.Message, want)
+				}
+				lines = append(lines, w.Span.Start.Line)
+			}
+			if !slices.Equal(lines, tt.lines) {
+				t.Fatalf("warning lines = %v, want %v", lines, tt.lines)
+			}
+		})
+	}
+}
+
 func TestUseInBlockWithoutRequestWarns(t *testing.T) {
 	const want = "@use in a block without a request was ignored. Move it above the first ### to share it"
 	tests := []struct {
@@ -4749,6 +4849,7 @@ func TestUseInBlockWithoutRequestWarns(t *testing.T) {
 		{"use only", "### one\n# @use ./a.rts\n", []int{2}},
 		{"use and request", "### one\n# @use ./a.rts\nGET http://x\n", nil},
 		{"preamble only", "# @use ./a.rts\n", nil},
+		{"preamble after @name", "# @name pre\n# @use ./a.rts\n### one\nGET http://x\n", nil},
 		{
 			"before @workflow",
 			"### one\nGET http://x\n\n### flow\n# @use ./a.rts\n# @workflow flow\n# @step S using=one\n",
