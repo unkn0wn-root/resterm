@@ -1,6 +1,8 @@
 package restwriter
 
 import (
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -112,7 +114,7 @@ func (w workflowWriter) writeWorkflowOptions(wf restfile.Workflow) {
 	if wf.DefaultOnFailure == restfile.WorkflowOnFailureContinue {
 		w.option("on-failure", string(restfile.WorkflowOnFailureContinue))
 	}
-	for _, key := range sortedKeys(wf.Options) {
+	for _, key := range slices.Sorted(maps.Keys(wf.Options)) {
 		if strings.HasPrefix(key, "vars.") {
 			w.option(key, wf.Options[key])
 		}
@@ -120,7 +122,7 @@ func (w workflowWriter) writeWorkflowOptions(wf restfile.Workflow) {
 }
 
 func (w workflowWriter) writeOptions(prefix string, opts map[string]string) {
-	for _, key := range sortedKeys(opts) {
+	for _, key := range slices.Sorted(maps.Keys(opts)) {
 		w.option(prefix+key, opts[key])
 	}
 }

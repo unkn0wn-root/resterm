@@ -86,17 +86,13 @@ func (w *Watcher) Events() <-chan Event {
 
 func (w *Watcher) Start() {
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.started || w.closed {
-		w.mu.Unlock()
 		return
 	}
 	w.started = true
 	w.stop = make(chan struct{})
-	w.wg.Add(1)
-	w.mu.Unlock()
-
-	go func() {
-		defer w.wg.Done()
+	w.wg.Go(func() {
 		t := time.NewTicker(w.interval)
 		defer t.Stop()
 		for {
@@ -107,7 +103,7 @@ func (w *Watcher) Start() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 func (w *Watcher) Stop() {

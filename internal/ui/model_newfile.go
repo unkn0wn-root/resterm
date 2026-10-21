@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,7 +101,7 @@ func (m *Model) submitNewFile() tea.Cmd {
 	if _, err := os.Stat(finalPath); err == nil {
 		m.newFileError = "File already exists"
 		return nil
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		m.newFileError = fmt.Sprintf("check file: %v", err)
 		return nil
 	}

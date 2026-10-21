@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -201,6 +202,41 @@ func TestScanAfterStopDoesNotPanic(t *testing.T) {
 	w.Track(path, []byte("body"))
 	w.Stop()
 	w.Scan()
+}
+
+func TestStartAndStopAreIdempotent(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := New(Options{Interval: time.Hour})
+		w.Start()
+		// Wait for the loop to block on its stop channel. If the second Start
+		// replaced that channel, Stop would wait for the loop's next tick.
+		synctest.Wait()
+		w.Start()
+
+		start := time.Now()
+		w.Stop()
+		if got := time.Since(start); got != 0 {
+			t.Fatalf("expected Stop to return without a tick, took %s", got)
+		}
+		w.Stop()
+
+		if _, ok := <-w.Events(); ok {
+			t.Fatal("expected closed events channel")
+		}
+	})
+}
+
+// synctest.Test fails if Start leaves a loop running.
+func TestStartAfterStopDoesNothing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := New(Options{Interval: time.Hour})
+		w.Stop()
+		w.Start()
+
+		if _, ok := <-w.Events(); ok {
+			t.Fatal("expected closed events channel")
+		}
+	})
 }
 
 func write(t *testing.T, path string, data []byte) {
