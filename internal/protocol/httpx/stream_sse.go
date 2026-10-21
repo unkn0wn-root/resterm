@@ -209,12 +209,14 @@ func (c *Client) StartSSE(
 	session.MarkOpen()
 
 	go func() {
-		defer cancel()
-		// A canceled session must also stop a read that waits for data.
-		defer context.AfterFunc(session.Context(), cancel)()
 		defer func() {
+			// Cancel before closing so the transport drops the connection
+			// instead of draining a stream that may never end.
+			cancel()
 			_ = httpResp.Body.Close()
 		}()
+		// A canceled session must also stop a read that waits for data.
+		defer context.AfterFunc(session.Context(), cancel)()
 		runSSESession(streamCtx, session, httpResp.Body, streamOpts, limits, cancel)
 	}()
 

@@ -775,21 +775,27 @@ func (b *sseBody) Read(p []byte) (int, error) {
 
 func (b *sseBody) Close() error { return nil }
 
-func failingSSEClient(t *testing.T, data string, err error) *Client {
-	t.Helper()
+func sseClient(body func(*http.Request) io.ReadCloser) *Client {
 	return newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		rt := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			resp := &http.Response{
 				StatusCode: http.StatusOK,
 				Proto:      "HTTP/1.1",
 				Header:     make(http.Header),
-				Body:       &sseBody{data: []byte(data), err: err},
+				Body:       body(req),
 				Request:    req,
 			}
 			resp.Header.Set("Content-Type", "text/event-stream")
 			return resp, nil
 		})
 		return &http.Client{Transport: rt}, nil
+	})
+}
+
+func failingSSEClient(t *testing.T, data string, err error) *Client {
+	t.Helper()
+	return sseClient(func(*http.Request) io.ReadCloser {
+		return &sseBody{data: []byte(data), err: err}
 	})
 }
 
@@ -837,6 +843,37 @@ func TestSSEReadFailureKeepsItsClass(t *testing.T) {
 				t.Fatalf("Err() class = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// ctxErrBody reports its request's context error when it is closed.
+type ctxErrBody struct {
+	io.Reader
+	req    *http.Request
+	ctxErr chan<- error
+}
+
+func (b ctxErrBody) Close() error {
+	b.ctxErr <- b.req.Context().Err()
+	return nil
+}
+
+func TestSSECancelsTheRequestBeforeClosingTheBody(t *testing.T) {
+	ctxErr := make(chan error, 1)
+	client := sseClient(func(req *http.Request) io.ReadCloser {
+		return ctxErrBody{strings.NewReader("data: " + strings.Repeat("A", 4096)), req, ctxErr}
+	})
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/events",
+		SSE:    &restfile.SSERequest{Options: restfile.SSEOptions{MaxBytes: 1 << 10}},
+	}
+	if _, err := client.ExecuteSSE(t.Context(), req, nil, Options{}); err != nil {
+		t.Fatalf("ExecuteSSE: %v", err)
+	}
+	if err := <-ctxErr; err == nil {
+		t.Fatal("the body was closed while its request was still live")
 	}
 }
 
