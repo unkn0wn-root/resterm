@@ -3,6 +3,7 @@ package registry
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -478,9 +479,9 @@ func uniqueNames[T any](nm func(T) string, groups ...[]T) []string {
 }
 
 func findDefault[T any](xs []T, df func(T) bool) (T, bool) {
-	for i := len(xs) - 1; i >= 0; i-- {
-		if df(xs[i]) {
-			return xs[i], true
+	for _, x := range slices.Backward(xs) {
+		if df(x) {
+			return x, true
 		}
 	}
 	var z T

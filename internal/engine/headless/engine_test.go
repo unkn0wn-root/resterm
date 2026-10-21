@@ -759,9 +759,9 @@ func TestRequestAssertErrorPointsAtTheContinuationLine(t *testing.T) {
 }
 
 func TestRequestCaptureExpressionTemplateReadsTheCurrentResponse(t *testing.T) {
-	var n int32
+	var n atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, atomic.AddInt32(&n, 1)); err != nil {
+		if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, n.Add(1)); err != nil {
 			t.Errorf("write response: %v", err)
 		}
 	}))
@@ -806,9 +806,9 @@ func TestRequestCaptureExpressionTemplateReadsTheCurrentResponse(t *testing.T) {
 }
 
 func TestRequestPreRequestTemplateRejectsResponse(t *testing.T) {
-	var n int32
+	var n atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, atomic.AddInt32(&n, 1)); err != nil {
+		if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, n.Add(1)); err != nil {
 			t.Errorf("write response: %v", err)
 		}
 	}))
@@ -867,11 +867,11 @@ func TestRequestPreRequestTemplateRejectsResponse(t *testing.T) {
 	})
 
 	t.Run("last still reads the previous response", func(t *testing.T) {
-		var m int32
+		var m atomic.Int32
 		seen := make(chan string, 2)
 		rec := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen <- r.Header.Get("X-T")
-			if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, atomic.AddInt32(&m, 1)); err != nil {
+			if _, err := fmt.Fprintf(w, `{"token":"tok-%d"}`, m.Add(1)); err != nil {
 				t.Errorf("write response: %v", err)
 			}
 		}))

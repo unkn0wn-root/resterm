@@ -1927,8 +1927,8 @@ func lineIndexContaining(lines []string, needle string) int {
 }
 
 func lastNonBlankLineIndex(lines []string) int {
-	for idx := len(lines) - 1; idx >= 0; idx-- {
-		if strings.TrimSpace(lines[idx]) != "" {
+	for idx, line := range slices.Backward(lines) {
+		if strings.TrimSpace(line) != "" {
 			return idx
 		}
 	}
