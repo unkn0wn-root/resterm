@@ -22,7 +22,7 @@ iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps
 2. Make the binary executable (`chmod +x resterm` on Unix), then copy it into a directory on your `PATH`.
 3. Run `resterm --help` to check that it works.
 
-Prebuilt Linux binaries need glibc 2.32 or newer. On an older distro, build from source or upgrade glibc.
+The macOS binaries need macOS 13 Ventura or newer, and the Linux binaries need glibc 2.32 or newer. On an older system, [build from source](#build-from-source) or upgrade glibc if you are on Linux.
 
 The commands below do the same download from a terminal. The Unix version needs `curl` and `jq`.
 

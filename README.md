@@ -111,7 +111,7 @@ With Go 1.25 or newer:
 go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 ```
 
-Prebuilt binaries for macOS, Linux and Windows are on the [releases page](https://github.com/unkn0wn-root/resterm/releases). The Linux binaries need **glibc 2.32** or newer.
+Prebuilt binaries for macOS, Linux and Windows are on the [releases page](https://github.com/unkn0wn-root/resterm/releases). The macOS binaries need **macOS 13 Ventura** or newer, and the Linux binaries need **glibc 2.32** or newer.
 
 To update a Homebrew installation, run `brew upgrade resterm`. For release binaries or installations made with the scripts, run `resterm --update`. If you installed with Go, rerun the `go install` command above. More in the [install guide](https://resterm.app/docs/install/).
 

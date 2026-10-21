@@ -522,9 +522,9 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 }
 
 func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
-	var calls int32
+	var calls atomic.Int32
 	fakeClient := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			t.Fatalf("request should not be sent after parse error")
 			return nil, nil
@@ -553,7 +553,7 @@ func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	if got := atomic.LoadInt32(&calls); got != 0 {
+	if got := calls.Load(); got != 0 {
 		t.Fatalf("expected no HTTP client creation, got %d", got)
 	}
 	if model.statusMessage.text != "Request failed ✗" ||

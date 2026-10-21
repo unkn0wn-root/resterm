@@ -39,7 +39,7 @@ type SettingsHandle struct {
 	Format SettingsFormat
 }
 
-// tries loading TOML first, then JSON, then returns empty settings if neither exists.
+// tries loading TOML first, then JSON, then returns default settings and the TOML handle if neither exists.
 // parse errors fail immediately but missing files just skip to the next format.
 func LoadSettings() (Settings, SettingsHandle, error) {
 	dir := Dir()
@@ -78,12 +78,7 @@ func LoadSettings() (Settings, SettingsHandle, error) {
 		return Settings{}, SettingsHandle{}, accumulated
 	}
 
-	return Settings{
-			Layout: DefaultLayoutSettings(),
-		}, SettingsHandle{
-			Path:   candidates[0].Path,
-			Format: SettingsFormatTOML,
-		}, nil
+	return Settings{Layout: DefaultLayoutSettings()}, candidates[0], nil
 }
 
 func decodeSettings(data []byte, format SettingsFormat) (Settings, error) {

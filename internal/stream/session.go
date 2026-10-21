@@ -104,7 +104,7 @@ type Snapshot struct {
 	Evicted uint64
 }
 
-var sessionCounter uint64
+var sessionCounter atomic.Uint64
 
 // closedEvents is handed to subscribers that arrive after a session ended.
 var closedEvents = func() chan *Event {
@@ -142,7 +142,7 @@ func buildSessionID(kind Kind) string {
 	case KindGRPC:
 		prefix = "grpc"
 	}
-	seq := atomic.AddUint64(&sessionCounter, 1)
+	seq := sessionCounter.Add(1)
 	return prefix + "-" + time.Now().UTC().Format("20060102T150405.000000Z") + "-" + itoa(seq)
 }
 

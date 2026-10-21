@@ -1,9 +1,9 @@
 package ui
 
 import (
+	"maps"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
@@ -81,7 +81,7 @@ func buildCompletionScope(
 
 	// Environment keys fill in only where a declared variable did not.
 	if env, err := cat.Resolve(sel); err == nil {
-		for _, key := range sortedKeys(env.Values()) {
+		for _, key := range slices.Sorted(maps.Keys(env.Values())) {
 			add(key, "env", false)
 		}
 	}
@@ -109,13 +109,4 @@ func completionEnvironments(cat vars.Catalog) ([]string, map[string][]string) {
 		groups[group.Name] = group.ProfileNames()
 	}
 	return nil, groups
-}
-
-func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

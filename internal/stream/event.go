@@ -68,8 +68,8 @@ func (m SSEMetadata) size() int {
 	return len(m.Name) + len(m.ID) + len(m.Comment)
 }
 
-var seqCounter uint64
+var seqCounter atomic.Uint64
 
 func nextSequence() uint64 {
-	return atomic.AddUint64(&seqCounter, 1)
+	return seqCounter.Add(1)
 }

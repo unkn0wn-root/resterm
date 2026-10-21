@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -242,7 +244,7 @@ func responseBody(snap *responseSnapshot) binaryview.Body {
 
 func ensureUniquePath(path string) (string, error) {
 	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return path, nil
 		}
 		return "", err
@@ -252,7 +254,7 @@ func ensureUniquePath(path string) (string, error) {
 	ext := filepath.Ext(path)
 	for i := 1; i < 1000; i++ {
 		candidate := filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, i, ext))
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		if _, err := os.Stat(candidate); errors.Is(err, fs.ErrNotExist) {
 			return candidate, nil
 		}
 	}

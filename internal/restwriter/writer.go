@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -358,7 +359,7 @@ func authFormArgs(kind restfile.AuthKind, params map[string]string, order []stri
 }
 
 func renderSettings(w directiveWriter, set map[string]string) {
-	for _, key := range sortedKeys(set) {
+	for _, key := range slices.Sorted(maps.Keys(set)) {
 		if val := strings.TrimSpace(set[key]); val != "" {
 			w.line(directive.Setting, key+" "+val)
 		}
@@ -460,7 +461,7 @@ func renderHeaders(b *strings.Builder, hdr http.Header) {
 	if len(hdr) == 0 {
 		return
 	}
-	for _, name := range sortedKeys(hdr) {
+	for _, name := range slices.Sorted(maps.Keys(hdr)) {
 		for _, val := range hdr[name] {
 			b.WriteString(name)
 			b.WriteString(": ")
@@ -468,13 +469,4 @@ func renderHeaders(b *strings.Builder, hdr http.Header) {
 			b.WriteString("\n")
 		}
 	}
-}
-
-func sortedKeys[M ~map[string]V, V any](m M) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
