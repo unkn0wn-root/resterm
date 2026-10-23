@@ -24,7 +24,7 @@ These Markdown files also supply the pages at https://resterm.app/docs/. To edit
 ## Protocols
 
 - [GraphQL](graphql.md): Send GraphQL queries with operations and variables from request files.
-- [gRPC](grpc.md): Call gRPC methods with reflection or descriptors, including streaming calls.
+- [gRPC](grpc.md): Call gRPC methods with reflection, descriptors, or proto files, including streaming calls.
 - [WebSocket and SSE](streaming.md): Server-Sent Events and WebSocket sessions, transcripts and the live console.
 
 ## Testing and automation
