@@ -3,8 +3,10 @@ package grpcx
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -90,6 +92,13 @@ func (s protoSource) resolve() (protocompile.Resolver, []string, error) {
 	names := make([]string, 0, len(s.paths))
 next:
 	for _, p := range s.paths {
+		name := filepath.Clean(p)
+		if len(s.imports) > 0 && filepath.IsLocal(name) {
+			if _, err := s.rd.read(name, "grpc proto file"); errors.Is(err, fs.ErrNotExist) {
+				names = append(names, filepath.ToSlash(name))
+				continue
+			}
+		}
 		for i, root := range roots {
 			rel, err := filepath.Rel(abs(root), abs(p))
 			if err != nil || !filepath.IsLocal(rel) {
@@ -111,15 +120,11 @@ next:
 			names = append(names, filepath.ToSlash(rel))
 			continue next
 		}
-		name := filepath.Clean(p)
-		if _, err := s.rd.read(p, "grpc proto file"); err == nil || !filepath.IsLocal(name) {
-			return nil, nil, diag.New(
-				diag.ClassProtocol,
-				fmt.Sprintf("proto file %s does not reside in any import path", p),
-				grpcComponent,
-			)
-		}
-		names = append(names, filepath.ToSlash(name))
+		return nil, nil, diag.New(
+			diag.ClassProtocol,
+			fmt.Sprintf("proto file %s does not reside in any import path", p),
+			grpcComponent,
+		)
 	}
 
 	res := protocompile.WithStandardImports(&protocompile.SourceResolver{
@@ -132,6 +137,16 @@ next:
 			return io.NopCloser(bytes.NewReader(data)), nil
 		},
 	})
+	for i, name := range names {
+		if _, err := res.FindFileByPath(name); err != nil {
+			return nil, nil, diag.WrapAs(
+				diag.ClassFilesystem,
+				err,
+				fmt.Sprintf("proto file %s not found in any import path (%s)", s.paths[i], strings.Join(roots, ", ")),
+				grpcComponent,
+			)
+		}
+	}
 	return res, names, nil
 }
 
@@ -148,14 +163,8 @@ func ProtoSources(gr *restfile.GRPCRequest, opt Options) ([]string, error) {
 func ProtoFiles(gr *restfile.GRPCRequest, opt Options) ([]string, error) {
 	rec := &recordFS{read: make(map[string]struct{})}
 	src := protoSource{paths: gr.ProtoFiles, imports: gr.ImportPaths, rd: newReader(rec, opt)}
-	res, names, err := src.resolve()
-	if err != nil {
+	if _, _, err := src.resolve(); err != nil {
 		return nil, err
-	}
-	for _, name := range names {
-		if _, err := res.FindFileByPath(name); err != nil {
-			return nil, err
-		}
 	}
 	return rec.paths(), nil
 }

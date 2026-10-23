@@ -121,6 +121,27 @@ message X {}
 			want:    []string{"acme/v1/svc.proto", "acme/v1/types.proto"},
 		},
 		{
+			name:    "import name searched past an import path that holds its path",
+			fs:      acme,
+			paths:   []string{"acme/v1/svc.proto"},
+			imports: []string{".", "proto"},
+			want:    []string{"acme/v1/svc.proto", "acme/v1/types.proto"},
+		},
+		{
+			name:    "import name searched past an ancestor import path",
+			fs:      acme,
+			paths:   []string{"acme/v1/svc.proto"},
+			imports: []string{"..", "proto"},
+			want:    []string{"acme/v1/svc.proto", "acme/v1/types.proto"},
+		},
+		{
+			name:    "import name searched past an import path that prefixes it",
+			fs:      acme,
+			paths:   []string{"acme/v1/svc.proto"},
+			imports: []string{"acme", "proto"},
+			want:    []string{"acme/v1/svc.proto", "acme/v1/types.proto"},
+		},
+		{
 			name:    "absolute file under a relative import path",
 			fs:      acme,
 			paths:   []string{"/req/proto/acme/v1/svc.proto"},
@@ -180,6 +201,8 @@ message FromB {}
 		{paths: []string{"a/svc.proto"}, imports: []string{"./a", "./b"}, want: "pick.FromA", other: "pick.FromB"},
 		{paths: []string{"a/svc.proto"}, imports: []string{"./b", "./a"}, want: "pick.FromB", other: "pick.FromA"},
 		{paths: []string{"common.proto"}, imports: []string{"./b", "./a"}, want: "pick.FromB", other: "pick.FromA"},
+		{paths: []string{"common.proto"}, imports: []string{".", "a", "b"}, want: "pick.FromA", other: "pick.FromB"},
+		{paths: []string{"common.proto"}, imports: []string{".", "b", "a"}, want: "pick.FromB", other: "pick.FromA"},
 	}
 
 	for _, tt := range tests {
@@ -313,6 +336,22 @@ message M {
 			classes: []diag.Class{diag.ClassProtocol},
 		},
 		{
+			name:    "missing relative file outside every import path",
+			fs:      mapFS{},
+			paths:   []string{"../missing.proto"},
+			imports: []string{".", "proto"},
+			want:    "proto file ../missing.proto does not reside in any import path",
+			classes: []diag.Class{diag.ClassProtocol},
+		},
+		{
+			name:    "import name in no import path",
+			fs:      mapFS{"/req/proto/acme/svc.proto": []byte(`syntax = "proto3";`)},
+			paths:   []string{"acme/missing.proto"},
+			imports: []string{".", "proto"},
+			want:    "proto file acme/missing.proto not found in any import path (., proto)",
+			classes: []diag.Class{diag.ClassFilesystem},
+		},
+		{
 			name:    "absolute file outside every import path",
 			fs:      mapFS{"/elsewhere/svc.proto": []byte(`syntax = "proto3";`)},
 			paths:   []string{"/elsewhere/svc.proto"},
@@ -413,6 +452,20 @@ message Unused {}
 			want: []string{"proto/svc.proto", "vendor/google/protobuf/timestamp.proto"},
 		},
 		{
+			name: "import name searched past the request dir",
+			files: map[string]string{
+				"proto/acme/service.proto": `syntax = "proto3";
+import "acme/types.proto";
+`,
+				"proto/acme/types.proto": `syntax = "proto3";`,
+			},
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/service.proto"},
+				ImportPaths: []string{".", "proto"},
+			},
+			want: []string{"proto/acme/service.proto", "proto/acme/types.proto"},
+		},
+		{
 			name: "compile error",
 			files: map[string]string{
 				"proto/svc.proto": `syntax = "proto3";
@@ -511,6 +564,30 @@ import "acme/types.proto";
 			want: []string{"vendor/acme/svc.proto"},
 		},
 		{
+			name: "name found past an import path that holds its path",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/svc.proto"},
+				ImportPaths: []string{".", "proto"},
+			},
+			want: []string{"proto/acme/svc.proto"},
+		},
+		{
+			name: "vendor before proto after the request dir",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/svc.proto"},
+				ImportPaths: []string{".", "vendor", "proto"},
+			},
+			want: []string{"vendor/acme/svc.proto"},
+		},
+		{
+			name: "proto before vendor after the request dir",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/svc.proto"},
+				ImportPaths: []string{".", "proto", "vendor"},
+			},
+			want: []string{"proto/acme/svc.proto"},
+		},
+		{
 			name: "file that does not compile",
 			gr: restfile.GRPCRequest{
 				ProtoFiles:  []string{"acme/broken.proto"},
@@ -540,6 +617,14 @@ import "acme/types.proto";
 				ImportPaths: []string{"proto"},
 			},
 			wantErr: "acme/missing.proto",
+		},
+		{
+			name: "name in no import path",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/missing.proto"},
+				ImportPaths: []string{".", "proto"},
+			},
+			wantErr: "proto file acme/missing.proto not found in any import path (., proto)",
 		},
 		{
 			name: "shadowed path",

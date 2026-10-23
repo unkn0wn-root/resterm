@@ -946,6 +946,7 @@ func TestNavigatorIncludesReferencedAuxiliaryWorkspaceFiles(t *testing.T) {
 	scriptFile := filepath.Join(tmp, "pre.js")
 	protoFile := filepath.Join(tmp, "greeter.proto")
 	serviceFile := filepath.Join(tmp, "proto", "acme", "service.proto")
+	typesFile := filepath.Join(tmp, "proto", "acme", "types.proto")
 	orphanFile := filepath.Join(tmp, "orphan.json")
 
 	writeSampleFile(t, apiFile, `# @script pre-request
@@ -965,6 +966,13 @@ GRPC localhost:50051
 # @grpc-proto acme/service.proto
 # @grpc-import-path proto
 GRPC localhost:50051
+
+### Types
+# @grpc acme.Svc/Call
+# @grpc-proto acme/types.proto
+# @grpc-import-path .
+# @grpc-import-path proto
+GRPC localhost:50051
 `)
 	writeSampleFile(t, queryFile, "mutation AddNote { addNote { id } }\n")
 	writeSampleFile(t, varsFile, `{"id":"1"}`)
@@ -974,6 +982,7 @@ GRPC localhost:50051
 		t.Fatalf("mkdir %s: %v", serviceFile, err)
 	}
 	writeSampleFile(t, serviceFile, `syntax = "proto3";`)
+	writeSampleFile(t, typesFile, `syntax = "proto3";`)
 	writeSampleFile(t, orphanFile, `{}`)
 
 	model := New(Config{WorkspaceRoot: tmp})
@@ -988,6 +997,7 @@ GRPC localhost:50051
 		{path: scriptFile, kind: files.KindJavaScript},
 		{path: protoFile, kind: files.KindProto},
 		{path: serviceFile, kind: files.KindProto},
+		{path: typesFile, kind: files.KindProto},
 	}
 
 	for _, tt := range tests {
