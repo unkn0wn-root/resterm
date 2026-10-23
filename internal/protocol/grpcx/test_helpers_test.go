@@ -19,6 +19,13 @@ type testSvc struct {
 	testgrpc.UnimplementedTestServiceServer
 }
 
+func (s *testSvc) UnaryCall(
+	_ context.Context,
+	req *testgrpc.SimpleRequest,
+) (*testgrpc.SimpleResponse, error) {
+	return &testgrpc.SimpleResponse{Payload: req.GetPayload()}, nil
+}
+
 func (s *testSvc) StreamingOutputCall(
 	_ *testgrpc.StreamingOutputCallRequest,
 	stream testgrpc.TestService_StreamingOutputCallServer,

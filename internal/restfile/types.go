@@ -336,6 +336,8 @@ type GRPCRequest struct {
 	Method        string
 	FullMethod    string
 	DescriptorSet string
+	ProtoFiles    []string
+	ImportPaths   []string
 	UseReflection bool
 	Plaintext     Opt[bool]
 	Authority     string
