@@ -338,6 +338,22 @@ var specs = []Spec{
 		ValueRequired: true,
 		Topic:         "grpc",
 	},
+	{
+		Name:          GRPCProto,
+		Summary:       "Compile a gRPC schema from a .proto file (Repeatable)",
+		Args:          ArgText,
+		Repeat:        Many,
+		ValueRequired: true,
+		Topic:         "grpc",
+	},
+	{
+		Name:          GRPCImportPath,
+		Summary:       "Add a directory searched for .proto imports (Repeatable)",
+		Args:          ArgText,
+		Repeat:        Many,
+		ValueRequired: true,
+		Topic:         "grpc",
+	},
 	{Name: GRPCReflection, Summary: "Toggle gRPC reflection", Args: ArgToken, Repeat: Once, Topic: "grpc"},
 	{Name: GRPCPlaintext, Summary: "Force plaintext gRPC transport", Args: ArgToken, Repeat: Once, Topic: "grpc"},
 	{

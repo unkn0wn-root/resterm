@@ -4077,6 +4077,92 @@ GRPC localhost:50051
 	}
 }
 
+func TestParseGRPCProtoAndImportPathRepeatInOrder(t *testing.T) {
+	src := "# @grpc pkg.Svc/Call\n" +
+		"# @grpc-proto proto/b.proto\n" +
+		"# @grpc-import-path vendor\n" +
+		"# @grpc-proto proto/a.proto\n" +
+		"# @grpc-import-path proto\n" +
+		"GRPC localhost:50051\n{}"
+
+	doc := Parse("grpc.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+	grpc := firstRequest(t, doc).GRPC
+	if grpc == nil {
+		t.Fatal("request has no gRPC section")
+	}
+	if want := []string{"proto/b.proto", "proto/a.proto"}; !slices.Equal(grpc.ProtoFiles, want) {
+		t.Fatalf("proto files = %v, want %v", grpc.ProtoFiles, want)
+	}
+	if want := []string{"vendor", "proto"}; !slices.Equal(grpc.ImportPaths, want) {
+		t.Fatalf("import paths = %v, want %v", grpc.ImportPaths, want)
+	}
+}
+
+func TestParseGRPCProtoConflictsWithDescriptor(t *testing.T) {
+	tests := []struct {
+		name       string
+		lines      []string
+		want       string
+		descriptor string
+		protos     []string
+	}{
+		{
+			name:       "descriptor alone",
+			lines:      []string{"@grpc-descriptor svc.protoset"},
+			descriptor: "svc.protoset",
+		},
+		{
+			name:   "proto alone",
+			lines:  []string{"@grpc-proto svc.proto"},
+			protos: []string{"svc.proto"},
+		},
+		{
+			name:       "descriptor then proto",
+			lines:      []string{"@grpc-descriptor svc.protoset", "@grpc-proto svc.proto"},
+			want:       "@grpc-proto cannot be combined with @grpc-descriptor on the same request",
+			descriptor: "svc.protoset",
+		},
+		{
+			name:   "proto then descriptor",
+			lines:  []string{"@grpc-proto svc.proto", "@grpc-descriptor svc.protoset"},
+			want:   "@grpc-descriptor cannot be combined with @grpc-proto on the same request",
+			protos: []string{"svc.proto"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "GRPC localhost:9000\n# " + strings.Join(tt.lines, "\n# ") + "\n"
+			doc := Parse("conflict.http", []byte(src))
+			if tt.want == "" {
+				if len(doc.Errors) != 0 {
+					t.Fatalf("errors = %v, want none", doc.Errors)
+				}
+			} else {
+				if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
+					t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+				}
+				if got, want := doc.Errors[0].Span.Start.Line, len(tt.lines)+1; got != want {
+					t.Fatalf("error on line %d, want the second directive on line %d", got, want)
+				}
+			}
+			req := firstRequest(t, doc).GRPC
+			if req == nil {
+				t.Fatal("request has no gRPC section")
+			}
+			if req.DescriptorSet != tt.descriptor || !slices.Equal(req.ProtoFiles, tt.protos) {
+				t.Fatalf(
+					"descriptor = %q, proto files = %v, want %q and %v",
+					req.DescriptorSet, req.ProtoFiles, tt.descriptor, tt.protos,
+				)
+			}
+		})
+	}
+}
+
 func TestParseGRPCRequestDefaultsPlaintextToUnset(t *testing.T) {
 	src := `# @name DefaultPlaintext
 # @grpc my.pkg.UserService/GetUser
@@ -5135,6 +5221,16 @@ func TestParseDirectiveValueMissing(t *testing.T) {
 			want: "@grpc-descriptor value missing",
 		},
 		{
+			name: "grpc proto",
+			src:  "GRPC localhost:9000\n# @grpc-proto\n",
+			want: "@grpc-proto value missing",
+		},
+		{
+			name: "grpc import path",
+			src:  "GRPC localhost:9000\n# @grpc-import-path\n",
+			want: "@grpc-import-path value missing",
+		},
+		{
 			name: "grpc authority",
 			src:  "GRPC localhost:9000\n# @grpc-authority\n",
 			want: "@grpc-authority value missing",
@@ -5421,6 +5517,16 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 			name: "descriptor written bare",
 			line: "@grpc-descriptor",
 			want: "@grpc-descriptor value missing",
+		},
+		{
+			name: "proto written bare",
+			line: "@grpc-proto",
+			want: "@grpc-proto value missing",
+		},
+		{
+			name: "import path written bare",
+			line: "@grpc-import-path",
+			want: "@grpc-import-path value missing",
 		},
 		{
 			name: "authority written bare",

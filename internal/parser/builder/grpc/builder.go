@@ -66,7 +66,36 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, re
 		if rest == "" {
 			return true, false, nil
 		}
-		b.EnsureRequest().DescriptorSet = rest
+		req := b.EnsureRequest()
+		if len(req.ProtoFiles) > 0 {
+			return true, false, fmt.Errorf(
+				"%s cannot be combined with %s on the same request",
+				name.Tag(),
+				directive.GRPCProto.Tag(),
+			)
+		}
+		req.DescriptorSet = rest
+		return true, false, nil
+	case directive.GRPCProto:
+		if rest == "" {
+			return true, false, nil
+		}
+		req := b.EnsureRequest()
+		if req.DescriptorSet != "" {
+			return true, false, fmt.Errorf(
+				"%s cannot be combined with %s on the same request",
+				name.Tag(),
+				directive.GRPCDescriptor.Tag(),
+			)
+		}
+		req.ProtoFiles = append(req.ProtoFiles, rest)
+		return true, false, nil
+	case directive.GRPCImportPath:
+		if rest == "" {
+			return true, false, nil
+		}
+		req := b.EnsureRequest()
+		req.ImportPaths = append(req.ImportPaths, rest)
 		return true, false, nil
 	case directive.GRPCReflection:
 		on, err := parseSwitch(name, rest)

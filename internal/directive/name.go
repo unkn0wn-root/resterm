@@ -69,6 +69,8 @@ const (
 	GraphQLQuery        Name = "graphql-query"
 	GRPC                Name = "grpc"
 	GRPCDescriptor      Name = "grpc-descriptor"
+	GRPCProto           Name = "grpc-proto"
+	GRPCImportPath      Name = "grpc-import-path"
 	GRPCReflection      Name = "grpc-reflection"
 	GRPCPlaintext       Name = "grpc-plaintext"
 	GRPCAuthority       Name = "grpc-authority"
