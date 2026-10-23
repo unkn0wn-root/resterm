@@ -8,6 +8,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/collection"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func handleCollectionSubcommand(args []string) (bool, error) {
@@ -80,6 +82,9 @@ func runCollectionExport(args []string) error {
 		Name:      name,
 		Recursive: recursive,
 		Force:     force,
+		ProtoSources: func(gr *restfile.GRPCRequest, dir string) ([]string, error) {
+			return grpcx.ProtoSources(gr, grpcx.Options{BaseDir: dir, NoFallback: true})
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("collection export: %w", err)

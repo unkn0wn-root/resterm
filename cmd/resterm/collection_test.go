@@ -255,6 +255,35 @@ GET https://example.com
 	}
 }
 
+func TestRunCollectionExportIncludesProtoImports(t *testing.T) {
+	src := t.TempDir()
+	writeCollectionFile(t, src, "requests.http", `
+# @grpc acme.Svc/Call
+# @grpc-proto ./proto/svc.proto
+GRPC localhost:8080
+`)
+	writeCollectionFile(t, src, "proto/svc.proto", `syntax = "proto3";
+package acme;
+import "common.proto";
+service Svc { rpc Call(Common) returns (Common); }
+`)
+	writeCollectionFile(t, src, "proto/common.proto", "syntax = \"proto3\";\npackage acme;\nmessage Common {}\n")
+
+	bundle := filepath.Join(t.TempDir(), "bundle")
+	if err := runCollection([]string{
+		"export",
+		"--workspace", src,
+		"--out", bundle,
+	}); err != nil {
+		t.Fatalf("collection export: %v", err)
+	}
+	for _, rel := range []string{"proto/svc.proto", "proto/common.proto"} {
+		if _, err := os.Stat(filepath.Join(bundle, rel)); err != nil {
+			t.Fatalf("expected %s in bundle: %v", rel, err)
+		}
+	}
+}
+
 func TestRunCollectionImportDryRun(t *testing.T) {
 	src := t.TempDir()
 	writeCollectionFile(t, src, "requests.http", "GET https://example.com\n")

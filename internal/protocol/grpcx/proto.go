@@ -5,13 +5,17 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
@@ -122,4 +126,31 @@ next:
 		return nil, diag.WrapAs(diag.ClassProtocol, err, "compile proto files", grpcComponent)
 	}
 	return fds, nil
+}
+
+func ProtoSources(gr *restfile.GRPCRequest, opt Options) ([]string, error) {
+	rec := &recordFS{read: make(map[string]struct{})}
+	src := protoSource{paths: gr.ProtoFiles, imports: gr.ImportPaths, rd: newReader(rec, opt)}
+	if _, err := src.compile(context.Background()); err != nil {
+		return nil, err
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	return slices.Sorted(maps.Keys(rec.read)), nil
+}
+
+type recordFS struct {
+	mu   sync.Mutex
+	read map[string]struct{}
+}
+
+func (r *recordFS) ReadFile(name string) ([]byte, error) {
+	data, err := os.ReadFile(name)
+	if err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	r.read[name] = struct{}{}
+	r.mu.Unlock()
+	return data, nil
 }

@@ -3,6 +3,8 @@ package grpcx
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -373,6 +375,84 @@ package p2;
 			}
 			if got := diag.Classes(err); !slices.Equal(got, tt.classes) {
 				t.Fatalf("classes = %v, want %v", got, tt.classes)
+			}
+		})
+	}
+}
+
+func TestProtoSources(t *testing.T) {
+	tests := []struct {
+		name    string
+		files   map[string]string
+		gr      restfile.GRPCRequest
+		want    []string
+		wantErr string
+	}{
+		{
+			name: "vendored standard import",
+			files: map[string]string{
+				"proto/svc.proto": `syntax = "proto3";
+import "google/protobuf/timestamp.proto";
+message Event { google.protobuf.Timestamp at = 1; }
+`,
+				"vendor/google/protobuf/timestamp.proto": `syntax = "proto3";
+package google.protobuf;
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+`,
+				"vendor/unused.proto": `syntax = "proto3";
+message Unused {}
+`,
+			},
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"proto/svc.proto"},
+				ImportPaths: []string{"proto", "vendor"},
+			},
+			want: []string{"proto/svc.proto", "vendor/google/protobuf/timestamp.proto"},
+		},
+		{
+			name: "compile error",
+			files: map[string]string{
+				"proto/svc.proto": `syntax = "proto3";
+import "missing.proto";
+`,
+			},
+			gr:      restfile.GRPCRequest{ProtoFiles: []string{"proto/svc.proto"}},
+			wantErr: "svc.proto:2:8:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, data := range tt.files {
+				path := filepath.Join(dir, name)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatalf("mkdir for %s: %v", name, err)
+				}
+				if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+					t.Fatalf("write %s: %v", name, err)
+				}
+			}
+
+			got, err := ProtoSources(&tt.gr, Options{BaseDir: dir})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("proto sources = %q, err = %v, want %q", got, err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("proto sources: %v", err)
+			}
+			want := make([]string, len(tt.want))
+			for i, p := range tt.want {
+				want[i] = filepath.Join(dir, p)
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("proto sources = %q, want %q", got, want)
 			}
 		})
 	}

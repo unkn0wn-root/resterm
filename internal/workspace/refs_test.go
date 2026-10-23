@@ -28,6 +28,8 @@ func TestRefsCollectsStaticRequestRefs(t *testing.T) {
 				GRPC: &restfile.GRPCRequest{
 					MessageFile:   "./grpc.json",
 					DescriptorSet: "./desc.protoset",
+					ProtoFiles:    []string{"./proto/svc.proto", "./proto/types.proto"},
+					ImportPaths:   []string{"./proto"},
 				},
 				Metadata: restfile.RequestMetadata{
 					Scripts: []restfile.ScriptBlock{
@@ -105,6 +107,8 @@ func TestRefsCollectsStaticRequestRefs(t *testing.T) {
 		{kind: RefGraphQL, path: "./vars.json"},
 		{kind: RefGRPC, path: "./grpc.json"},
 		{kind: RefGRPC, path: "./desc.protoset"},
+		{kind: RefGRPC, path: "./proto/svc.proto"},
+		{kind: RefGRPC, path: "./proto/types.proto"},
 		{kind: RefScript, path: "./pre.js"},
 		{kind: RefRTSJSON, path: "./script-flags.json"},
 		{kind: RefUse, path: "./request.rts"},
@@ -124,7 +128,7 @@ func TestRefsCollectsStaticRequestRefs(t *testing.T) {
 		}
 	}
 
-	for _, path := range []string{"dynamic", "./template-capture.json"} {
+	for _, path := range []string{"dynamic", "./template-capture.json", "./proto"} {
 		if hasAnyRef(refs, path) {
 			t.Fatalf("did not expect %s in %+v", path, refs)
 		}

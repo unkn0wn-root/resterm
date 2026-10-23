@@ -2,10 +2,14 @@ package collection
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestExportBundleCollectsDepsAndEnvTemplate(t *testing.T) {
@@ -211,6 +215,94 @@ Content-Type: application/json
 	}
 }
 
+func TestExportBundleIncludesProtoSources(t *testing.T) {
+	ws := t.TempDir()
+	writeFile(t, ws, "requests.http", `
+# @grpc acme.Svc/Call
+# @grpc-proto ./proto/svc.proto
+GRPC localhost:8080
+`)
+	writeFile(t, ws, "proto/svc.proto", `syntax = "proto3";
+package acme;
+import "common.proto";
+import "google/protobuf/empty.proto";
+service Svc {
+  rpc Call(google.protobuf.Empty) returns (Common);
+}
+`)
+	writeFile(t, ws, "proto/common.proto", "syntax = \"proto3\";\npackage acme;\nmessage Common {}\n")
+	writeFile(t, ws, "proto/unused.proto", "syntax = \"proto3\";\npackage acme;\nmessage Unused {}\n")
+
+	out := filepath.Join(t.TempDir(), "bundle")
+	res, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
+	if err != nil {
+		t.Fatalf("export bundle: %v", err)
+	}
+	data, err := os.ReadFile(res.ManifestPath)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	mf, err := DecodeManifest(data)
+	if err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+
+	got := make(map[string]FileRole, len(mf.Files))
+	for _, f := range mf.Files {
+		got[f.Path] = f.Role
+	}
+	want := map[string]FileRole{
+		"requests.http":        RoleRequest,
+		"proto/svc.proto":      RoleAsset,
+		"proto/common.proto":   RoleAsset,
+		defaultEnvTemplateFile: RoleEnvTemplate,
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("bundle files = %v, want %v", got, want)
+	}
+}
+
+func TestExportBundleRejectsMissingProtoImport(t *testing.T) {
+	ws := t.TempDir()
+	writeFile(t, ws, "requests.http", `
+# @grpc acme.Svc/Call
+# @grpc-proto ./proto/svc.proto
+GRPC localhost:8080
+`)
+	writeFile(t, ws, "proto/svc.proto", "syntax = \"proto3\";\nimport \"missing.proto\";\n")
+
+	out := filepath.Join(t.TempDir(), "bundle")
+	_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
+	if err == nil {
+		t.Fatal("expected error for a missing proto import")
+	}
+	if !strings.Contains(err.Error(), "requests.http") || !strings.Contains(err.Error(), "missing.proto") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExportBundleIgnoresProtoImportsInTheWorkingDir(t *testing.T) {
+	ws := t.TempDir()
+	writeFile(t, ws, "requests.http", `
+# @grpc acme.Svc/Call
+# @grpc-proto ./proto/svc.proto
+GRPC localhost:8080
+`)
+	writeFile(t, ws, "proto/svc.proto", "syntax = \"proto3\";\nimport \"common.proto\";\n")
+	cwd := t.TempDir()
+	writeFile(t, cwd, "proto/common.proto", "syntax = \"proto3\";\n")
+	t.Chdir(cwd)
+
+	out := filepath.Join(t.TempDir(), "bundle")
+	_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
+	if err == nil {
+		t.Fatal("expected the import missing from the workspace to fail the export")
+	}
+	if !strings.Contains(err.Error(), "svc.proto:2:8:") || !strings.Contains(err.Error(), "common.proto") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestExportBundleForceOverwrite(t *testing.T) {
 	ws := t.TempDir()
 	writeFile(t, ws, "requests.http", "GET https://example.com\n")
@@ -228,6 +320,10 @@ func TestExportBundleForceOverwrite(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("force export should succeed: %v", err)
 	}
+}
+
+func protoSources(gr *restfile.GRPCRequest, dir string) ([]string, error) {
+	return grpcx.ProtoSources(gr, grpcx.Options{BaseDir: dir, NoFallback: true})
 }
 
 func writeFile(t *testing.T, root, rel, data string) {
