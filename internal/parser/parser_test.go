@@ -4163,6 +4163,105 @@ func TestParseGRPCProtoConflictsWithDescriptor(t *testing.T) {
 	}
 }
 
+func TestParseGRPCImportPathWithoutProtoWarns(t *testing.T) {
+	const (
+		want = "@grpc-import-path without @grpc-proto was ignored"
+		col  = 3
+	)
+	tests := []struct {
+		name    string
+		src     []string
+		err     string
+		warned  []int
+		imports []string
+	}{
+		{
+			name:   "import path alone",
+			src:    []string{"GRPC localhost:9000", "# @grpc-import-path vendor"},
+			warned: []int{2},
+		},
+		{
+			name:   "with descriptor",
+			src:    []string{"GRPC localhost:9000", "# @grpc-descriptor svc.protoset", "# @grpc-import-path vendor"},
+			warned: []int{3},
+		},
+		{
+			name:   "with reflection off",
+			src:    []string{"GRPC localhost:9000", "# @grpc-reflection false", "# @grpc-import-path vendor"},
+			warned: []int{3},
+		},
+		{
+			name:   "two import paths",
+			src:    []string{"GRPC localhost:9000", "# @grpc-import-path vendor", "# @grpc-import-path proto"},
+			warned: []int{2, 3},
+		},
+		{
+			name:    "proto before",
+			src:     []string{"GRPC localhost:9000", "# @grpc-proto svc.proto", "# @grpc-import-path vendor"},
+			imports: []string{"vendor"},
+		},
+		{
+			name:    "proto after",
+			src:     []string{"GRPC localhost:9000", "# @grpc-import-path vendor", "# @grpc-proto svc.proto"},
+			imports: []string{"vendor"},
+		},
+		{
+			name: "bare import path",
+			src:  []string{"GRPC localhost:9000", "# @grpc-import-path"},
+			err:  "@grpc-import-path value missing",
+		},
+		{
+			name: "quoted empty import path",
+			src:  []string{"GRPC localhost:9000", `# @grpc-import-path ""`},
+			err:  "@grpc-import-path value missing",
+		},
+		{
+			name:   "above the request line",
+			src:    []string{"# @grpc-import-path vendor", "GRPC localhost:9000"},
+			warned: []int{1},
+		},
+		{
+			name:    "proto above the request line",
+			src:     []string{"# @grpc-import-path vendor", "# @grpc-proto svc.proto", "GRPC localhost:9000"},
+			imports: []string{"vendor"},
+		},
+		{
+			name: "block without a request",
+			src:  []string{"### one", "# @grpc-import-path vendor", "### two", "GRPC localhost:9000"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("imports.http", []byte(strings.Join(tt.src, "\n")+"\n"))
+			if tt.err == "" {
+				if len(doc.Errors) != 0 {
+					t.Fatalf("errors = %v, want none", doc.Errors)
+				}
+			} else if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.err {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.err)
+			}
+			var warned []int
+			for _, w := range doc.Warnings {
+				if w.Message != want || w.Span.Start.Col != col {
+					t.Fatalf("warning %q at column %d, want %q at column %d", w.Message, w.Span.Start.Col, want, col)
+				}
+				warned = append(warned, w.Span.Start.Line)
+			}
+			if !slices.Equal(warned, tt.warned) {
+				t.Fatalf("warning lines = %v, want %v", warned, tt.warned)
+			}
+			req := firstRequest(t, doc).GRPC
+			if req == nil {
+				t.Fatal("request has no gRPC section")
+			}
+			if !slices.Equal(req.ImportPaths, tt.imports) {
+				t.Fatalf("import paths = %v, want %v", req.ImportPaths, tt.imports)
+			}
+		})
+	}
+}
+
 func TestParseGRPCRequestDefaultsPlaintextToUnset(t *testing.T) {
 	src := `# @name DefaultPlaintext
 # @grpc my.pkg.UserService/GetUser

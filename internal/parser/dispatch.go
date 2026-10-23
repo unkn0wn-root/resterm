@@ -177,7 +177,7 @@ func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOut
 }
 
 func (b *documentBuilder) applyRequestDirective(d parsedDirective) directiveOutcome {
-	if handled, err := b.request.protoDirective(d.Name, d.Args); handled {
+	if handled, err := b.request.protoDirective(d); handled {
 		b.report(d, err)
 		if fatalErr(err) {
 			return directiveRejected
