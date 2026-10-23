@@ -21,7 +21,7 @@ func TestZeroKindIsUnknown(t *testing.T) {
 }
 
 func TestClassifyRequestRejectsWorkspaceOnlyKinds(t *testing.T) {
-	for _, path := range []string{"resterm.env.json", "query.graphql", "payload.json", "pre.js"} {
+	for _, path := range []string{"resterm.env.json", "query.graphql", "payload.json", "pre.js", "greeter.proto"} {
 		if kind, ok := ClassifyRequest(path); ok {
 			t.Fatalf("ClassifyRequest(%q) = %v, true, want false", path, kind)
 		}
@@ -49,6 +49,7 @@ func TestKindString(t *testing.T) {
 		{name: "graphql", kind: KindGraphQL, want: "graphql"},
 		{name: "json", kind: KindJSON, want: "json"},
 		{name: "javascript", kind: KindJavaScript, want: "javascript"},
+		{name: "proto", kind: KindProto, want: "proto"},
 		{name: "zero", kind: KindUnknown, want: "unknown"},
 		{name: "out of range", kind: Kind(99), want: "unknown"},
 	}
@@ -74,6 +75,7 @@ func TestKindBadgeLabel(t *testing.T) {
 		{kind: KindGraphQL, want: ""},
 		{kind: KindJSON, want: ""},
 		{kind: KindJavaScript, want: ""},
+		{kind: KindProto, want: ""},
 		{kind: Kind(99), want: ""},
 	}
 
@@ -101,6 +103,8 @@ func TestClassifyWorkspacePrecedence(t *testing.T) {
 		{path: "pre.js", want: KindJavaScript, ok: true},
 		{path: "pre.mjs", want: KindJavaScript, ok: true},
 		{path: "pre.cjs", want: KindJavaScript, ok: true},
+		{path: "greeter.proto", want: KindProto, ok: true},
+		{path: "greeter.protoset", ok: false},
 		{path: "notes.txt", ok: false},
 	}
 

@@ -395,14 +395,40 @@ func TestRenderRowShowsGraphQLIcon(t *testing.T) {
 	}
 	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
-	if !strings.Contains(clean, iconGraphQL) {
-		t.Fatalf("expected graphql icon, got %q", clean)
+	if !strings.Contains(clean, iconSchema) {
+		t.Fatalf("expected schema icon, got %q", clean)
 	}
 	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
 		t.Fatalf("expected graphql row without caret, got %q", clean)
 	}
 	if strings.Contains(clean, "GQL") {
 		t.Fatalf("expected graphql row without extension badge, got %q", clean)
+	}
+}
+
+func TestRenderRowShowsProtoIcon(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:  KindFile,
+			Title: "greeter.proto",
+			Payload: Payload[any]{
+				FilePath: "/tmp/greeter.proto",
+				Data: files.Entry{
+					Name: "greeter.proto",
+					Path: "/tmp/greeter.proto",
+					Kind: files.KindProto,
+				},
+			},
+		},
+	}
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.Contains(clean, iconSchema) {
+		t.Fatalf("expected schema icon, got %q", clean)
+	}
+	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
+		t.Fatalf("expected proto row without caret, got %q", clean)
 	}
 }
 

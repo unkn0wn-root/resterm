@@ -63,6 +63,44 @@ export fn enabled() {
 	}
 }
 
+func TestListIncludesReferencedProtoFiles(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "api.http"), `### Proto
+# @grpc acme.v1.Greeter/SayHello
+# @grpc-proto ./proto/greeter.proto
+# @grpc-import-path ./vendor
+GRPC localhost:50051
+
+### Descriptor
+# @grpc acme.v1.Greeter/SayHello
+# @grpc-descriptor ./greeter.protoset
+GRPC localhost:50051
+`)
+	writeFile(t, filepath.Join(root, "proto", "greeter.proto"), `syntax = "proto3";`)
+	writeFile(t, filepath.Join(root, "proto", "unused.proto"), `syntax = "proto3";`)
+	writeFile(t, filepath.Join(root, "vendor", "google", "api", "annotations.proto"), `syntax = "proto3";`)
+	writeFile(t, filepath.Join(root, "greeter.protoset"), "")
+
+	entries, err := List(root, ListOptions{Recursive: true})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+
+	got := entryKinds(entries)
+	if got[filepath.Join("proto", "greeter.proto")] != files.KindProto {
+		t.Fatalf("expected the referenced proto file, got %+v", entries)
+	}
+	for _, name := range []string{
+		filepath.Join("proto", "unused.proto"),
+		filepath.Join("vendor", "google", "api", "annotations.proto"),
+		"greeter.protoset",
+	} {
+		if _, ok := got[name]; ok {
+			t.Fatalf("did not expect %s in entries: %+v", name, entries)
+		}
+	}
+}
+
 func TestListResolvesRTSModuleJSONRefsFromDocumentBase(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "api.http"), `# @use ./rts/helpers.rts

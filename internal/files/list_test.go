@@ -69,6 +69,8 @@ func TestListWorkspaceIncludesEnvJSON(t *testing.T) {
 		"pre.js",
 		"module.mjs",
 		"common.cjs",
+		"greeter.proto",
+		"greeter.protoset",
 		"notes.txt",
 	}
 	for _, name := range files {
@@ -113,6 +115,12 @@ func TestListWorkspaceIncludesEnvJSON(t *testing.T) {
 	}
 	if got["common.cjs"] != KindJavaScript {
 		t.Fatalf("expected common.cjs to be a javascript file, got %+v", entries)
+	}
+	if got["greeter.proto"] != KindProto {
+		t.Fatalf("expected greeter.proto to be a proto file, got %+v", entries)
+	}
+	if _, ok := got["greeter.protoset"]; ok {
+		t.Fatalf("did not expect greeter.protoset in workspace entries, got %+v", entries)
 	}
 	if _, ok := got["notes.txt"]; ok {
 		t.Fatalf("did not expect notes.txt in workspace entries, got %+v", entries)

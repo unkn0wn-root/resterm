@@ -944,6 +944,7 @@ func TestNavigatorIncludesReferencedAuxiliaryWorkspaceFiles(t *testing.T) {
 	queryFile := filepath.Join(tmp, "addNote.graphql")
 	varsFile := filepath.Join(tmp, "addNote.variables.json")
 	scriptFile := filepath.Join(tmp, "pre.js")
+	protoFile := filepath.Join(tmp, "greeter.proto")
 	orphanFile := filepath.Join(tmp, "orphan.json")
 
 	writeSampleFile(t, apiFile, `# @script pre-request
@@ -953,10 +954,15 @@ func TestNavigatorIncludesReferencedAuxiliaryWorkspaceFiles(t *testing.T) {
 # @variables < ./addNote.variables.json
 POST https://example.com/graphql
 Content-Type: application/json
+
+### Greeter
+# @grpc-proto ./greeter.proto
+GRPC localhost:50051
 `)
 	writeSampleFile(t, queryFile, "mutation AddNote { addNote { id } }\n")
 	writeSampleFile(t, varsFile, `{"id":"1"}`)
 	writeSampleFile(t, scriptFile, "request.setHeader('X-Test', '1');\n")
+	writeSampleFile(t, protoFile, `syntax = "proto3";`)
 	writeSampleFile(t, orphanFile, `{}`)
 
 	model := New(Config{WorkspaceRoot: tmp})
@@ -969,6 +975,7 @@ Content-Type: application/json
 		{path: queryFile, kind: files.KindGraphQL},
 		{path: varsFile, kind: files.KindJSON},
 		{path: scriptFile, kind: files.KindJavaScript},
+		{path: protoFile, kind: files.KindProto},
 	}
 
 	for _, tt := range tests {

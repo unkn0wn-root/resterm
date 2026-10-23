@@ -19,6 +19,7 @@ const (
 	KindGraphQL
 	KindJSON
 	KindJavaScript
+	KindProto
 )
 
 // Extensions split by the scope that recognizes them. Environment files match
@@ -38,6 +39,7 @@ var (
 		".js":      KindJavaScript,
 		".mjs":     KindJavaScript,
 		".cjs":     KindJavaScript,
+		".proto":   KindProto,
 	}
 )
 
@@ -55,6 +57,8 @@ func (k Kind) String() string {
 		return "json"
 	case KindJavaScript:
 		return "javascript"
+	case KindProto:
+		return "proto"
 	default:
 		return "unknown"
 	}

@@ -25,6 +25,8 @@ func TestPathFilter(t *testing.T) {
 		{"request rejects JSON", RequestPathFilter(), filepath.Join(dir, "data.json"), false},
 		{"workspace accepts request", WorkspacePathFilter(env), filepath.Join(dir, "request.rest"), true},
 		{"workspace accepts data", WorkspacePathFilter(env), filepath.Join(dir, "query.graphql"), true},
+		{"workspace accepts proto", WorkspacePathFilter(env), filepath.Join(dir, "greeter.proto"), true},
+		{"workspace rejects protoset", WorkspacePathFilter(env), filepath.Join(dir, "greeter.protoset"), false},
 		{"workspace accepts dotenv", WorkspacePathFilter(env), filepath.Join(dir, ".env.local"), true},
 		{"workspace accepts active env", WorkspacePathFilter(env), env, true},
 		{"workspace rejects unrelated", WorkspacePathFilter(env), filepath.Join(dir, "notes.txt"), false},

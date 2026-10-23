@@ -129,6 +129,7 @@ func TestSubmitOpenPathOpensAuxiliaryWorkspaceFiles(t *testing.T) {
 		{name: "js", file: "pre.js", body: "request.setHeader('X-Test', '1');"},
 		{name: "mjs", file: "pre.mjs", body: "export const value = 1;"},
 		{name: "cjs", file: "pre.cjs", body: "module.exports = {};"},
+		{name: "proto", file: "greeter.proto", body: `syntax = "proto3";`},
 	}
 
 	for _, tt := range tests {
