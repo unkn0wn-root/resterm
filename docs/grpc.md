@@ -7,7 +7,7 @@ Start a gRPC request with a line such as `GRPC host:port`. Use the directives be
 | `@grpc package.Service/Method` | Fully qualified method to call. |
 | `@grpc-descriptor path/to/file.protoset` | Use a compiled descriptor set instead of server reflection. |
 | `@grpc-proto path/to/service.proto` | Load the schema from a `.proto` file instead of server reflection (repeatable). See [Proto files](#proto-files). |
-| `@grpc-import-path path/to/dir` | Add a directory to search for imported `.proto` files (repeatable). |
+| `@grpc-import-path path/to/dir` | Add a directory to search for imports of `@grpc-proto` files (repeatable). |
 | `@grpc-reflection [true\|false]` | Toggle server reflection (default `true`). |
 | `@grpc-plaintext [true\|false]` | Force plaintext or TLS. |
 | `@grpc-authority value` | Override the HTTP/2 `:authority` header. |
