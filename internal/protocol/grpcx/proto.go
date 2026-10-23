@@ -56,6 +56,19 @@ func (s protoSource) files(ctx context.Context, _ methodID) (*protoregistry.File
 }
 
 func (s protoSource) compile(ctx context.Context) (linker.Files, error) {
+	res, names, err := s.resolve()
+	if err != nil {
+		return nil, err
+	}
+	c := protocompile.Compiler{Resolver: res}
+	fds, err := c.Compile(ctx, names...)
+	if err != nil {
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "compile proto files", grpcComponent)
+	}
+	return fds, nil
+}
+
+func (s protoSource) resolve() (protocompile.Resolver, []string, error) {
 	abs := func(path string) string {
 		if filepath.IsAbs(path) {
 			return path
@@ -85,7 +98,7 @@ next:
 			for _, r := range roots[:i] {
 				other := filepath.Join(r, rel)
 				if _, err := s.rd.read(other, "grpc proto file"); err == nil {
-					return nil, diag.New(
+					return nil, nil, diag.New(
 						diag.ClassProtocol,
 						fmt.Sprintf("proto file %s is shadowed by %s", p, other),
 						grpcComponent,
@@ -93,14 +106,14 @@ next:
 				}
 			}
 			if _, err := s.rd.read(filepath.Join(root, rel), "grpc proto file"); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			names = append(names, filepath.ToSlash(rel))
 			continue next
 		}
 		name := filepath.Clean(p)
 		if _, err := s.rd.read(p, "grpc proto file"); err == nil || !filepath.IsLocal(name) {
-			return nil, diag.New(
+			return nil, nil, diag.New(
 				diag.ClassProtocol,
 				fmt.Sprintf("proto file %s does not reside in any import path", p),
 				grpcComponent,
@@ -109,23 +122,17 @@ next:
 		names = append(names, filepath.ToSlash(name))
 	}
 
-	c := protocompile.Compiler{
-		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
-			ImportPaths: roots,
-			Accessor: func(path string) (io.ReadCloser, error) {
-				data, err := s.rd.read(path, "grpc proto file")
-				if err != nil {
-					return nil, err
-				}
-				return io.NopCloser(bytes.NewReader(data)), nil
-			},
-		}),
-	}
-	fds, err := c.Compile(ctx, names...)
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "compile proto files", grpcComponent)
-	}
-	return fds, nil
+	res := protocompile.WithStandardImports(&protocompile.SourceResolver{
+		ImportPaths: roots,
+		Accessor: func(path string) (io.ReadCloser, error) {
+			data, err := s.rd.read(path, "grpc proto file")
+			if err != nil {
+				return nil, err
+			}
+			return io.NopCloser(bytes.NewReader(data)), nil
+		},
+	})
+	return res, names, nil
 }
 
 func ProtoSources(gr *restfile.GRPCRequest, opt Options) ([]string, error) {
@@ -134,9 +141,23 @@ func ProtoSources(gr *restfile.GRPCRequest, opt Options) ([]string, error) {
 	if _, err := src.compile(context.Background()); err != nil {
 		return nil, err
 	}
-	rec.mu.Lock()
-	defer rec.mu.Unlock()
-	return slices.Sorted(maps.Keys(rec.read)), nil
+	return rec.paths(), nil
+}
+
+// ProtoFiles is like ProtoSources but compiles nothing, so imports are left out.
+func ProtoFiles(gr *restfile.GRPCRequest, opt Options) ([]string, error) {
+	rec := &recordFS{read: make(map[string]struct{})}
+	src := protoSource{paths: gr.ProtoFiles, imports: gr.ImportPaths, rd: newReader(rec, opt)}
+	res, names, err := src.resolve()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range names {
+		if _, err := res.FindFileByPath(name); err != nil {
+			return nil, err
+		}
+	}
+	return rec.paths(), nil
 }
 
 type recordFS struct {
@@ -153,4 +174,10 @@ func (r *recordFS) ReadFile(name string) ([]byte, error) {
 	r.read[name] = struct{}{}
 	r.mu.Unlock()
 	return data, nil
+}
+
+func (r *recordFS) paths() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Sorted(maps.Keys(r.read))
 }

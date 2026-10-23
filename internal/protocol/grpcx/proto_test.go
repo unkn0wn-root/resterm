@@ -458,6 +458,122 @@ import "missing.proto";
 	}
 }
 
+func TestProtoFiles(t *testing.T) {
+	dir := t.TempDir()
+	for name, data := range map[string]string{
+		"proto/acme/svc.proto": `syntax = "proto3";
+import "acme/types.proto";
+`,
+		"proto/acme/types.proto":             `syntax = "proto3";`,
+		"proto/acme/broken.proto":            `syntax = "proto3"; message {`,
+		"vendor/acme/svc.proto":              `syntax = "proto3";`,
+		"vendor/google/protobuf/empty.proto": `syntax = "proto3";`,
+		"p1/x.proto":                         `syntax = "proto3";`,
+		"p2/x.proto":                         `syntax = "proto3";`,
+	} {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir for %s: %v", name, err)
+		}
+		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	tests := []struct {
+		name    string
+		gr      restfile.GRPCRequest
+		want    []string
+		wantErr string
+	}{
+		{
+			name: "path inside an import path leaves its import out",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"proto/acme/svc.proto"},
+				ImportPaths: []string{"proto"},
+			},
+			want: []string{"proto/acme/svc.proto"},
+		},
+		{
+			name: "name found in an import path",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/svc.proto"},
+				ImportPaths: []string{"proto"},
+			},
+			want: []string{"proto/acme/svc.proto"},
+		},
+		{
+			name: "first import path that holds the name",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/svc.proto"},
+				ImportPaths: []string{"vendor", "proto"},
+			},
+			want: []string{"vendor/acme/svc.proto"},
+		},
+		{
+			name: "file that does not compile",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/broken.proto"},
+				ImportPaths: []string{"proto"},
+			},
+			want: []string{"proto/acme/broken.proto"},
+		},
+		{
+			name: "standard import",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"google/protobuf/empty.proto"},
+				ImportPaths: []string{"proto"},
+			},
+		},
+		{
+			name: "vendored standard import",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"google/protobuf/empty.proto"},
+				ImportPaths: []string{"vendor"},
+			},
+			want: []string{"vendor/google/protobuf/empty.proto"},
+		},
+		{
+			name: "missing name",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"acme/missing.proto"},
+				ImportPaths: []string{"proto"},
+			},
+			wantErr: "acme/missing.proto",
+		},
+		{
+			name: "shadowed path",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:  []string{"p2/x.proto"},
+				ImportPaths: []string{"p1", "p2"},
+			},
+			wantErr: "proto file p2/x.proto is shadowed by p1/x.proto",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ProtoFiles(&tt.gr, Options{BaseDir: dir})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("proto files = %q, err = %v, want %q", got, err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("proto files: %v", err)
+			}
+			want := make([]string, len(tt.want))
+			for i, p := range tt.want {
+				want[i] = filepath.Join(dir, p)
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("proto files = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestProtoSourceUsesLookupRoots(t *testing.T) {
 	fs := mapFS{"/fallback/proto/svc.proto": []byte(`syntax = "proto3";
 message M {}
