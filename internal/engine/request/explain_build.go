@@ -773,7 +773,7 @@ func explainGRPCDetails(gr *restfile.GRPCRequest) []xplain.Pair {
 	if gr == nil {
 		return nil
 	}
-	out := make([]xplain.Pair, 0, len(gr.Metadata)+4)
+	out := make([]xplain.Pair, 0, len(gr.Metadata)+len(gr.ProtoFiles)+len(gr.ImportPaths)+5)
 	if method := strings.TrimPrefix(strings.TrimSpace(gr.FullMethod), "/"); method != "" {
 		out = append(out, xplain.Pair{Key: "RPC", Value: method})
 	}
@@ -789,6 +789,12 @@ func explainGRPCDetails(gr *restfile.GRPCRequest) []xplain.Pair {
 	}
 	if desc := strings.TrimSpace(gr.DescriptorSet); desc != "" {
 		out = append(out, xplain.Pair{Key: "Descriptor Set", Value: desc})
+	}
+	for _, p := range gr.ProtoFiles {
+		out = append(out, xplain.Pair{Key: "Proto File", Value: p})
+	}
+	for _, p := range gr.ImportPaths {
+		out = append(out, xplain.Pair{Key: "Import Path", Value: p})
 	}
 	out = append(out, xplain.Pair{Key: "Reflection", Value: explainToggle(gr.UseReflection)})
 	for _, pair := range gr.Metadata {

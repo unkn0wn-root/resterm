@@ -98,6 +98,47 @@ func TestSetExplainPreparedCapturesGRPCDetails(t *testing.T) {
 	if got := explainPairValue(rep.Final.Details, "Metadata"); got != "x-trace-id: abc123" {
 		t.Fatalf("expected metadata detail, got %q", got)
 	}
+	if got := explainPairValue(rep.Final.Details, "Proto File"); got != "" {
+		t.Fatalf("expected no proto file detail for a descriptor set, got %q", got)
+	}
+}
+
+func TestSetExplainPreparedListsProtoSources(t *testing.T) {
+	t.Parallel()
+
+	rep := &xplain.Report{}
+	req := &restfile.Request{
+		Method: "POST",
+		GRPC: &restfile.GRPCRequest{
+			Target:      "grpc.example:8443",
+			FullMethod:  "/pkg.Service/Call",
+			ProtoFiles:  []string{"proto/svc.proto", "proto/types.proto"},
+			ImportPaths: []string{"proto", "vendor"},
+		},
+	}
+
+	setExplainPrepared(rep, req, nil, nil, nil)
+	if rep.Final == nil {
+		t.Fatal("expected final explain section")
+	}
+	var files, imports []string
+	for _, pair := range rep.Final.Details {
+		switch pair.Key {
+		case "Proto File":
+			files = append(files, pair.Value)
+		case "Import Path":
+			imports = append(imports, pair.Value)
+		}
+	}
+	if want := []string{"proto/svc.proto", "proto/types.proto"}; !slices.Equal(files, want) {
+		t.Fatalf("proto file details = %q, want %q", files, want)
+	}
+	if want := []string{"proto", "vendor"}; !slices.Equal(imports, want) {
+		t.Fatalf("import path details = %q, want %q", imports, want)
+	}
+	if got := explainPairValue(rep.Final.Details, "Descriptor Set"); got != "" {
+		t.Fatalf("expected no descriptor set detail, got %q", got)
+	}
 }
 
 func TestSetExplainPreparedCapturesWebSocketSteps(t *testing.T) {
