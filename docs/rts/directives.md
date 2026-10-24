@@ -110,7 +110,7 @@ Report failures with [`t.error` and `t.fatal`](host-objects.md#t). Runtime error
 
 ## @if, @elif, and @else
 
-Use these directives in workflows to choose a step based on a condition. Outside an active workflow, they are ignored and the parser shows a warning. Use `@when` or `@skip-if` to decide whether an ordinary request runs.
+Use these directives in workflows to choose a step based on a condition. Outside an active workflow, they are ignored and the parser shows a warning. After a line that ends a workflow by starting a request, such as plain text or `@name`, they are a parse error until the request line. Use `@when` or `@skip-if` to decide whether an ordinary request runs.
 
 ```http
 # @if last.statusCode == 200 run=StepOK

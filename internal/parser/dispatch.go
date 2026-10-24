@@ -103,22 +103,21 @@ func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 	if d.valueMissing() {
 		d.Args = ""
 	}
-	// Workflows and requests never overlap, so this directive opened the request.
-	inWorkflow := b.workflow != nil
+	prev := b.request
 	out := b.claimDirective(d)
-	if inWorkflow && b.inRequest {
-		end := d
-		b.request.workflowEnd = &end
+	if b.inRequest && b.request != prev {
+		b.request.opener = d.Spelling
 	}
 	if out == directiveIgnored {
 		switch d.Name {
 		case directive.Step, directive.If, directive.Elif, directive.Else,
 			directive.Switch, directive.Case, directive.Default:
-			if r := b.request; b.inRequest && r.workflowEnd != nil && !r.http.HasMethod() {
-				return b.reject(d, fmt.Sprintf(
-					"%s is outside the workflow because %s on line %d starts a request",
-					d.Spelling.Tag(), r.workflowEnd.Spelling.Tag(), r.workflowEnd.lines.Start,
-				))
+			if r := b.request; b.inRequest && r.endsWorkflow && !r.http.HasMethod() {
+				cause := fmt.Sprintf("line %d", r.startLine)
+				if r.opener != "" {
+					cause = r.opener.Tag() + " on " + cause
+				}
+				return b.reject(d, d.Spelling.Tag()+" is outside the workflow because "+cause+" starts a request")
 			}
 		}
 		b.warn(d, ignoredDirectiveWarning(d.Call))
@@ -197,9 +196,7 @@ func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOut
 		return out
 	}
 
-	b.flushWorkflow(d.lines.Start - 1)
-	b.inRequest = true
-	b.request = probe.request
+	b.openRequest(probe.request)
 	b.doc.Errors = append(b.doc.Errors, probe.doc.Errors...)
 	b.doc.Warnings = append(b.doc.Warnings, probe.doc.Warnings...)
 	return out

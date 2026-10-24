@@ -15,6 +15,8 @@ import (
 
 type requestBuilder struct {
 	startLine         int
+	opener            directive.Name
+	endsWorkflow      bool
 	sourcePath        string
 	metadata          restfile.RequestMetadata
 	variables         []restfile.Variable
@@ -30,7 +32,6 @@ type requestBuilder struct {
 	grpc              *grpcbuilder.Builder
 	grpcDirectives    []parsedDirective
 	protocols         []parsedDirective
-	workflowEnd       *parsedDirective
 	sse               *ssebuilder.Builder
 	websocket         *wsbuilder.Builder
 	bodyOptions       restfile.BodyOptions

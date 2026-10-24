@@ -121,11 +121,17 @@ GET https://example.com/last
 	}
 }
 
-func TestBuildRejectsStepAfterARequestDirectiveInWorkflow(t *testing.T) {
-	src := `# @workflow demo
+func TestBuildRejectsStepAfterALineThatStartsARequestInWorkflow(t *testing.T) {
+	tests := []struct{ name, lines, cause string }{
+		{"directive", "# @grpc-import-path protos\n", "@grpc-import-path on line 3"},
+		{"text", "Deploy notes\n", "line 3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := `# @workflow demo
 # @step First using=First
-# @grpc-import-path protos
-# @step Last using=Last
+` + tt.lines + `# @step Last using=Last
 
 ### First
 # @name First
@@ -135,17 +141,19 @@ GET https://example.com/first
 # @name Last
 GET https://example.com/last
 `
-	_, err := Build(Options{
-		FilePath:    "workflow.http",
-		FileContent: []byte(src),
-		Select:      Select{Workflow: "demo"},
-	})
-	if err == nil {
-		t.Fatal("Build succeeded, want the shortened workflow rejected before execution")
-	}
-	want := "@step is outside the workflow because @grpc-import-path on line 3 starts a request"
-	if !strings.Contains(err.Error(), want) {
-		t.Fatalf("Build error = %q, want %q", err, want)
+			_, err := Build(Options{
+				FilePath:    "workflow.http",
+				FileContent: []byte(src),
+				Select:      Select{Workflow: "demo"},
+			})
+			if err == nil {
+				t.Fatal("Build succeeded, want the shortened workflow rejected before execution")
+			}
+			want := "@step is outside the workflow because " + tt.cause + " starts a request"
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("Build error = %q, want %q", err, want)
+			}
+		})
 	}
 }
 

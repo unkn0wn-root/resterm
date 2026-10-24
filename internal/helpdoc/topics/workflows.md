@@ -20,6 +20,6 @@ Use `@run var` in a workflow to share one value across its steps. Put it on a re
 
 If a value fails to evaluate, Resterm does not send the affected request. It marks the step failed and follows its `on-failure` setting.
 
-Workflow names are required, and `on-failure` accepts `stop` or `continue`. An unknown directive between `@workflow` and the next request is a parse error, so a mistake such as `@stpe` cannot silently remove a step. Directives attached to requests remain request-scoped, even when the workflow runs those requests. A request directive such as `@name` or `@grpc-proto` starts the next request, so a later `@step`, `@if`, or `@switch` before the request line is a parse error. To write directive-looking prose, add another comment marker, for example `## @step ...`.
+Workflow names are required, and `on-failure` accepts `stop` or `continue`. An unknown directive between `@workflow` and the next request is a parse error, so a mistake such as `@stpe` cannot silently remove a step. Directives attached to requests remain request-scoped, even when the workflow runs those requests. A request directive such as `@name` or `@grpc-proto`, a `>` script line, or a line of plain text starts the next request, so a later `@step`, `@if`, or `@switch` before the request line is a parse error. Blank lines and plain comments keep the workflow open. To write directive-looking prose, add another comment marker, for example `## @step ...`.
 
 Related: `:help rts`, `:help variables`.

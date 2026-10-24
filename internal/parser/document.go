@@ -229,13 +229,7 @@ func (b *documentBuilder) ensureRequest(line int) {
 	if b.inRequest {
 		return
 	}
-
-	if b.workflow != nil {
-		b.flushWorkflow(line - 1)
-	}
-
-	b.inRequest = true
-	b.request = &requestBuilder{
+	b.openRequest(&requestBuilder{
 		startLine:  line,
 		sourcePath: b.doc.Path,
 		metadata:   restfile.RequestMetadata{Tags: []string{}},
@@ -246,7 +240,16 @@ func (b *documentBuilder) ensureRequest(line int) {
 		grpc:       grpcbuilder.New(),
 		sse:        ssebuilder.New(),
 		websocket:  wsbuilder.New(),
+	})
+}
+
+func (b *documentBuilder) openRequest(r *requestBuilder) {
+	if b.workflow != nil {
+		b.flushWorkflow(r.startLine - 1)
+		r.endsWorkflow = true
 	}
+	b.inRequest = true
+	b.request = r
 }
 
 // Record active request lines first so a failed continuation cannot shorten the
