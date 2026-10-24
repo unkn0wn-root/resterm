@@ -302,6 +302,89 @@ func TestKnownIgnoredDirectiveDoesNotCloseWorkflowBranch(t *testing.T) {
 	}
 }
 
+func TestWorkflowDirectiveAfterARequestDirectiveIsAnError(t *testing.T) {
+	closers := []struct{ tag, args string }{
+		{"@grpc-import-path", "protos"},
+		{"@grpc-proto", "svc.proto"},
+		{"@grpc-metadata", "k: v"},
+		{"@name", "Oops"},
+		{"@assert", "true"},
+		{"@var", "x = 1"},
+		{"@auth", "bearer t"},
+		{"@ssh", "host=h"},
+		{"@k8s", "pod=api port=8080"},
+	}
+
+	for _, c := range closers {
+		t.Run(c.tag, func(t *testing.T) {
+			doc := Parse("workflow.http", []byte("# @workflow deploy\n# @step Create using=Create\n"+
+				"# "+c.tag+" "+c.args+"\n# @step Verify using=Verify\n# @if true run=Verify\n"))
+			want := []string{
+				"4:3 @step is outside the workflow because " + c.tag + " on line 3 starts a request",
+				"5:3 @if is outside the workflow because " + c.tag + " on line 3 starts a request",
+			}
+			if got := findings(doc.Errors); !slices.Equal(got, want) {
+				t.Fatalf("errors = %q, want %q", got, want)
+			}
+			if len(doc.Warnings) != 0 {
+				t.Fatalf("warnings = %v, want none", doc.Warnings)
+			}
+			if len(doc.Workflows) != 1 || len(doc.Workflows[0].Steps) != 1 {
+				t.Fatalf("workflows = %+v, want one workflow with the step above the closer", doc.Workflows)
+			}
+		})
+	}
+}
+
+func TestStepAfterARequestDirectiveAloneIsAnError(t *testing.T) {
+	doc := Parse("workflow.http", []byte("# @workflow deploy\n# @name x\n# @step Create using=Create\n"))
+	want := []string{"3:3 @step is outside the workflow because @name on line 2 starts a request"}
+	if got := findings(doc.Errors); !slices.Equal(got, want) {
+		t.Fatalf("errors = %q, want %q", got, want)
+	}
+	if len(doc.Workflows) != 0 {
+		t.Fatalf("workflows = %+v, want none", doc.Workflows)
+	}
+}
+
+func TestWorkflowDirectiveAfterTheRequestLineStillWarns(t *testing.T) {
+	doc := Parse("workflow.http", []byte("# @workflow deploy\n# @step Create using=Create\n# @name x\n"+
+		"GET https://example.com\n# @step Verify using=Verify\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+	want := []string{"5:3 @step is not valid in the current context and was ignored"}
+	if got := findings(doc.Warnings); !slices.Equal(got, want) {
+		t.Fatalf("warnings = %q, want %q", got, want)
+	}
+}
+
+func TestStepAfterARequestDirectiveWithoutAWorkflowWarns(t *testing.T) {
+	doc := Parse("workflow.http", []byte("# @name x\n# @step Create using=Create\nGET https://example.com\n"))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", doc.Errors)
+	}
+	want := []string{"2:3 @step is not valid in the current context and was ignored"}
+	if got := findings(doc.Warnings); !slices.Equal(got, want) {
+		t.Fatalf("warnings = %q, want %q", got, want)
+	}
+}
+
+func TestGRPCDirectivesAfterAWorkflowApplyToTheirRequest(t *testing.T) {
+	doc := Parse("workflow.http", []byte("# @workflow deploy\n# @step Create using=Create\n"+
+		"# @grpc-proto svc.proto\n# @grpc a.B/C\nGRPC localhost:9000\n"))
+	if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+		t.Fatalf("errors = %v, warnings = %v, want none", doc.Errors, doc.Warnings)
+	}
+	if len(doc.Workflows) != 1 || len(doc.Workflows[0].Steps) != 1 {
+		t.Fatalf("workflows = %+v, want one workflow with one step", doc.Workflows)
+	}
+	req := firstRequest(t, doc)
+	if req.GRPC == nil || !slices.Equal(req.GRPC.ProtoFiles, []string{"svc.proto"}) {
+		t.Fatalf("gRPC = %+v, want the proto file on the request", req.GRPC)
+	}
+}
+
 func TestExtraCommentMarkerKeepsDirectiveTextInactive(t *testing.T) {
 	tests := []struct {
 		name         string

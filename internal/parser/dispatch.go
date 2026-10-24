@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -102,8 +103,24 @@ func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 	if d.valueMissing() {
 		d.Args = ""
 	}
+	// Workflows and requests never overlap, so this directive opened the request.
+	inWorkflow := b.workflow != nil
 	out := b.claimDirective(d)
+	if inWorkflow && b.inRequest {
+		end := d
+		b.request.workflowEnd = &end
+	}
 	if out == directiveIgnored {
+		switch d.Name {
+		case directive.Step, directive.If, directive.Elif, directive.Else,
+			directive.Switch, directive.Case, directive.Default:
+			if r := b.request; b.inRequest && r.workflowEnd != nil && !r.http.HasMethod() {
+				return b.reject(d, fmt.Sprintf(
+					"%s is outside the workflow because %s on line %d starts a request",
+					d.Spelling.Tag(), r.workflowEnd.Spelling.Tag(), r.workflowEnd.lines.Start,
+				))
+			}
+		}
 		b.warn(d, ignoredDirectiveWarning(d.Call))
 		return out
 	}

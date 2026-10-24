@@ -37,7 +37,7 @@ Key directives and tokens:
   If a step's list may be missing, make it optional with `((try json.file("_data/users.json")).value ?? [])`. An empty list skips the step. You cannot put a loop on both a step and the request it uses. [Directives](rts/directives.md) covers the expressions.
 - `@run var <name> = <value>` gives the steps one shared value. See [Run variables](#run-variables).
 - Unknown tokens on `@workflow` or `@step` are kept in `Options`, so custom scripts or future features can use them without changing the file format.
-- An unknown directive between `@workflow` and the next request is a parse error. Directives attached to requests remain request-scoped, even when the workflow runs those requests. Resterm continues parsing valid workflow steps to report other problems, but it will not run the file until the error is fixed.
+- An unknown directive between `@workflow` and the next request is a parse error. Directives attached to requests remain request-scoped, even when the workflow runs those requests. A request directive such as `@name` or `@grpc-proto` starts the next request, so a later `@step`, `@if`, or `@switch` before the request line is a parse error. Resterm continues parsing valid workflow steps to report other problems, but it will not run the file until the error is fixed.
 - `expect.status` supports quoted or escaped values, so you can write `expect.status="201 Created"` alongside `expect.statuscode=201`.
 - `expect.status` / `expect.statuscode` require non-empty values, and `expect.statuscode` must be numeric.
 
