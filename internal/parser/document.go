@@ -280,11 +280,30 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.lintProfile(req)
 	if req.Method != "" && req.URL != "" {
 		// Directives may come before the request line or @grpc-proto, so check here.
-		if !b.request.isGRPC() {
-			for _, d := range b.request.grpcDirectives {
-				b.pushError(d.diagnostic(d.Spelling.Tag()+" requires a GRPC request line", nil))
+		if b.request.isGRPC() {
+			for _, d := range b.request.protocols {
+				b.fail(d, d.Spelling.Tag()+" cannot be combined with a GRPC request line")
 			}
-		} else if gr := req.GRPC; gr != nil && len(gr.ProtoFiles) == 0 {
+		} else {
+			for _, d := range b.request.grpcDirectives {
+				b.fail(d, d.Spelling.Tag()+" requires a GRPC request line")
+			}
+			var on directive.Name
+			switch {
+			case req.WebSocket != nil:
+				on = directive.WebSocket
+			case req.SSE != nil:
+				on = directive.SSE
+			case req.Body.GraphQL != nil:
+				on = directive.GraphQL
+			}
+			for _, d := range b.request.protocols {
+				if protocolOf(d.Name) != on {
+					b.fail(d, d.Spelling.Tag()+" cannot be combined with "+on.Tag()+" on the same request")
+				}
+			}
+		}
+		if gr := req.GRPC; gr != nil && len(gr.ProtoFiles) == 0 {
 			for _, d := range b.request.grpcDirectives {
 				if d.Name == directive.GRPCImportPath {
 					b.warn(d, d.Spelling.Tag()+" without "+directive.GRPCProto.Tag()+" was ignored")

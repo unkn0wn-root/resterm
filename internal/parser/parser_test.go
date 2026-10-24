@@ -4610,6 +4610,9 @@ func TestParseWebSocketStepReportsMalformedInput(t *testing.T) {
 
 func TestParseStreamingDirectivesIgnoreUnknownOptions(t *testing.T) {
 	src := `# @sse future-sse-option=value
+GET https://example.com/events
+
+###
 # @websocket future-websocket-option=value
 GET wss://example.com/socket
 `
@@ -4618,8 +4621,8 @@ GET wss://example.com/socket
 	if len(doc.Errors) != 0 {
 		t.Fatalf("expected unknown options to remain forward-compatible, got %v", doc.Errors)
 	}
-	if len(doc.Requests) != 1 {
-		t.Fatalf("expected one request, got %d", len(doc.Requests))
+	if len(doc.Requests) != 2 || doc.Requests[0].SSE == nil || doc.Requests[1].WebSocket == nil {
+		t.Fatalf("requests = %+v, want an SSE and a WebSocket request", doc.Requests)
 	}
 }
 
@@ -5850,6 +5853,214 @@ func TestParseGRPCDirectiveInABlockWithoutARequestIsSilent(t *testing.T) {
 	doc := Parse("block.http", []byte(src))
 	if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
 		t.Fatalf("errors = %v, warnings = %v, want none", doc.Errors, doc.Warnings)
+	}
+}
+
+func TestParseRequestHasOneProtocol(t *testing.T) {
+	const (
+		grpc   = "GRPC localhost:9000"
+		body   = `{"id": 1}`
+		onGRPC = " cannot be combined with a GRPC request line"
+		col    = 3
+	)
+	tests := []struct {
+		name string
+		src  []string
+		want []string
+		kind string
+		body string
+	}{
+		{
+			name: "graphql below GRPC",
+			src:  []string{grpc, "# @graphql"},
+			want: []string{"2: @graphql" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "graphql above GRPC",
+			src:  []string{"# @graphql", grpc},
+			want: []string{"1: @graphql" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "graphql true",
+			src:  []string{grpc, "# @graphql true"},
+			want: []string{"2: @graphql" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "sse on GRPC",
+			src:  []string{grpc, "# @sse duration=1s"},
+			want: []string{"2: @sse" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "sse with an unknown option on GRPC",
+			src:  []string{grpc, "# @sse future=1"},
+			want: []string{"2: @sse" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "websocket with a bad option on GRPC",
+			src:  []string{grpc, "# @websocket timeout=bad"},
+			want: []string{`2: invalid @websocket timeout "bad": expected a non-negative duration`},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "websocket and a step on GRPC",
+			src:  []string{grpc, "# @websocket", "# @ws send hi"},
+			want: []string{"2: @websocket" + onGRPC, "3: @ws" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "step alone on GRPC",
+			src:  []string{grpc, "# @ws send hi"},
+			want: []string{"2: @ws" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "graphql then sse",
+			src:  []string{"POST http://x", "# @graphql", "# @sse"},
+			want: []string{"2: @graphql cannot be combined with @sse on the same request"},
+			kind: "sse",
+		},
+		{
+			name: "sse then graphql",
+			src:  []string{"POST http://x", "# @sse", "# @graphql"},
+			want: []string{"3: @graphql cannot be combined with @sse on the same request"},
+			kind: "sse",
+		},
+		{
+			name: "graphql and websocket",
+			src:  []string{"GET ws://x", "# @websocket", "# @graphql"},
+			want: []string{"3: @graphql cannot be combined with @websocket on the same request"},
+			kind: "websocket",
+		},
+		{
+			name: "sse and websocket",
+			src:  []string{"GET http://x", "# @sse", "# @websocket"},
+			want: []string{"2: @sse cannot be combined with @websocket on the same request"},
+			kind: "websocket",
+			body: body,
+		},
+		{
+			name: "sse and a step",
+			src:  []string{"GET http://x", "# @sse", "# @ws send hi"},
+			want: []string{"2: @sse cannot be combined with @websocket on the same request"},
+			kind: "websocket",
+			body: body,
+		},
+		{
+			name: "websocket with a bad option still beats sse",
+			src:  []string{"GET http://x", "# @websocket timeout=bad", "# @sse"},
+			want: []string{
+				`2: invalid @websocket timeout "bad": expected a non-negative duration`,
+				"3: @sse cannot be combined with @websocket on the same request",
+			},
+			kind: "websocket",
+			body: body,
+		},
+		{
+			name: "sse back on",
+			src:  []string{"GET http://x", "# @sse off", "# @sse", "# @websocket"},
+			want: []string{"3: @sse cannot be combined with @websocket on the same request"},
+			kind: "websocket",
+			body: body,
+		},
+		{
+			name: "all three",
+			src:  []string{"POST http://x", "# @graphql", "# @sse", "# @websocket"},
+			want: []string{
+				"2: @graphql cannot be combined with @websocket on the same request",
+				"3: @sse cannot be combined with @websocket on the same request",
+			},
+			kind: "websocket",
+		},
+		{
+			name: "every off value on GRPC",
+			src: []string{
+				grpc, "# @graphql false", "# @graphql f", "# @graphql 0", "# @sse no", "# @sse off",
+				"# @websocket disable", "# @websocket disabled",
+			},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "sse turned off",
+			src:  []string{grpc, "# @sse", "# @sse off"},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "graphql turned off",
+			src:  []string{grpc, "# @graphql", "# @graphql false"},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "websocket off takes the step back",
+			src:  []string{grpc, "# @ws send hi", "# @websocket off"},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "sse off before graphql",
+			src:  []string{"POST http://x", "# @sse", "# @sse off", "# @graphql"},
+			kind: "graphql",
+		},
+		{name: "GRPC alone", src: []string{grpc}, kind: "grpc", body: body},
+		{name: "graphql alone", src: []string{"POST http://x", "# @graphql"}, kind: "graphql"},
+		{name: "sse alone", src: []string{"GET http://x", "# @sse"}, kind: "sse", body: body},
+		{name: "websocket alone", src: []string{"GET ws://x", "# @websocket"}, kind: "websocket", body: body},
+		{name: "step alone", src: []string{"GET ws://x", "# @ws send hi"}, kind: "websocket", body: body},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("one.http", []byte(strings.Join(tt.src, "\n")+"\n\n"+body+"\n"))
+			var got []string
+			for _, e := range doc.Errors {
+				got = append(got, fmt.Sprintf("%d: %s", e.Span.Start.Line, e.Message))
+				if e.Span.Start.Col != col {
+					t.Fatalf("error %q at column %d, want %d", e.Message, e.Span.Start.Col, col)
+				}
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("errors = %q, want %q", got, tt.want)
+			}
+			req := firstRequest(t, doc)
+			var kinds []string
+			for _, k := range []struct {
+				name string
+				on   bool
+			}{
+				{"grpc", req.GRPC != nil},
+				{"graphql", req.Body.GraphQL != nil},
+				{"sse", req.SSE != nil},
+				{"websocket", req.WebSocket != nil},
+			} {
+				if k.on {
+					kinds = append(kinds, k.name)
+				}
+			}
+			if !slices.Equal(kinds, []string{tt.kind}) {
+				t.Fatalf("protocols = %v, want only %s", kinds, tt.kind)
+			}
+			if req.GRPC != nil && req.GRPC.Message != body {
+				t.Fatalf("gRPC message = %q, want %q", req.GRPC.Message, body)
+			}
+			if req.Body.Text != tt.body {
+				t.Fatalf("body = %q, want %q", req.Body.Text, tt.body)
+			}
+		})
 	}
 }
 

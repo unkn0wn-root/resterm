@@ -1,6 +1,6 @@
 # GraphQL
 
-Turn on GraphQL with `# @graphql`. It is off by default for every request. Resterm builds the GraphQL request based on the HTTP method:
+Turn on GraphQL with `# @graphql`. It is off by default for every request. GraphQL cannot be combined with `@sse`, `@websocket`, or a `GRPC` request line. Resterm builds the GraphQL request based on the HTTP method:
 
 - **POST**: body becomes `{ "query": ..., "variables": ..., "operationName": ... }`.
 - **GET**: the `query`, `variables`, and `operationName` query parameters are added.

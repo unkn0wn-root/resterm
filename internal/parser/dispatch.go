@@ -130,13 +130,17 @@ func (b *documentBuilder) claimDirective(d parsedDirective) directiveOutcome {
 }
 
 func (b *documentBuilder) reject(d parsedDirective, msg string) directiveOutcome {
-	b.pushError(d.diagnostic(msg, nil))
+	b.fail(d, msg)
 	return directiveRejected
 }
 
 func (b *documentBuilder) rejectError(d parsedDirective, err error) directiveOutcome {
 	b.reportStrict(d, err)
 	return directiveRejected
+}
+
+func (b *documentBuilder) fail(d parsedDirective, msg string) {
+	b.pushError(d.diagnostic(msg, nil))
 }
 
 func (b *documentBuilder) warn(d parsedDirective, msg string) {
