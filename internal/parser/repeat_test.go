@@ -102,6 +102,31 @@ func TestParseRepeatPolicyErrors(t *testing.T) {
 			want: "maximum must be at least",
 		},
 		{
+			name: "backoff without a call",
+			src:  "# @retry count=1\n# @retry-backoff 1s\nGET https://example.com\n",
+			want: `@retry-backoff must start with exponential(initial, max), got "1s"`,
+		},
+		{
+			name: "backoff with another word",
+			src:  "# @retry count=1\n# @retry-backoff linear\nGET https://example.com\n",
+			want: `@retry-backoff must start with exponential(initial, max), got "linear"`,
+		},
+		{
+			name: "backoff name without a call",
+			src:  "# @retry count=1\n# @retry-backoff exponential\nGET https://example.com\n",
+			want: `@retry-backoff must start with exponential(initial, max), got "exponential"`,
+		},
+		{
+			name: "backoff call with another name",
+			src:  "# @retry count=1\n# @retry-backoff linear(1s, 2s) jitter=5%\nGET https://example.com\n",
+			want: `@retry-backoff must start with exponential(initial, max), got "linear(1s, 2s) jitter=5%"`,
+		},
+		{
+			name: "unclosed backoff call",
+			src:  "# @retry count=1\n# @retry-backoff exponential(1s, 2s\nGET https://example.com\n",
+			want: `@retry-backoff is missing a closing ")"`,
+		},
+		{
 			name: "bad jitter",
 			src:  "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=101%\nGET https://example.com\n",
 			want: "between 0% and 100%",

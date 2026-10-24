@@ -215,16 +215,12 @@ func parseRetryBackoff(raw string) (*restfile.ExponentialBackoffSpec, error) {
 	if raw == "" {
 		return nil, errors.New("@retry-backoff requires exponential(initial, max)")
 	}
-	end := strings.IndexByte(raw, ')')
-	if end < 0 {
-		return nil, errors.New("@retry-backoff exponential is missing a closing parenthesis")
-	}
-	initial, maximum, err := parseExponentialCall(strings.TrimSpace(raw[:end+1]))
+	initial, maximum, rest, err := parseExponentialCall(raw)
 	if err != nil {
 		return nil, err
 	}
 
-	opts, optionErr := directive.ParseOptions(directive.RetryBackoff, raw[end+1:])
+	opts, optionErr := directive.ParseOptions(directive.RetryBackoff, rest)
 	errs := []error{optionErr}
 	jitter := float64(defaultRetryJitter)
 	if rawJitter, found := opts.PopAny("jitter"); found {
@@ -246,24 +242,26 @@ func parseRetryBackoff(raw string) (*restfile.ExponentialBackoffSpec, error) {
 	}, err
 }
 
-func parseExponentialCall(raw string) (time.Duration, time.Duration, error) {
-	name, args, ok := strings.Cut(raw, "(")
-	if !ok || !strings.EqualFold(strings.TrimSpace(name), exponentialBackoffToken) || !strings.HasSuffix(args, ")") {
-		return 0, 0, fmt.Errorf("@retry-backoff must start with exponential(initial, max), got %q", raw)
+// The reader rejects an unclosed "(", so a value without ")" has no call.
+func parseExponentialCall(raw string) (initial, maximum time.Duration, rest string, err error) {
+	name, tail, ok := strings.Cut(raw, "(")
+	args, rest, closed := strings.Cut(tail, ")")
+	if !ok || !closed || !strings.EqualFold(strings.TrimSpace(name), exponentialBackoffToken) {
+		return 0, 0, "", fmt.Errorf("@retry-backoff must start with exponential(initial, max), got %q", raw)
 	}
-	parts := strings.Split(strings.TrimSuffix(args, ")"), ",")
+	parts := strings.Split(args, ",")
 	if len(parts) != 2 {
-		return 0, 0, errors.New("@retry-backoff exponential requires initial and maximum delays")
+		return 0, 0, "", errors.New("@retry-backoff exponential requires initial and maximum delays")
 	}
-	initial, err := positiveDuration("@retry-backoff initial delay", parts[0])
+	initial, err = positiveDuration("@retry-backoff initial delay", parts[0])
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, "", err
 	}
-	maximum, err := positiveDuration("@retry-backoff maximum delay", parts[1])
+	maximum, err = positiveDuration("@retry-backoff maximum delay", parts[1])
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, "", err
 	}
-	return initial, maximum, nil
+	return initial, maximum, rest, nil
 }
 
 func parseJitterPercent(raw string) (float64, error) {
