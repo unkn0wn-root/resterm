@@ -1,6 +1,12 @@
 package parser
 
-import "testing"
+import (
+	"fmt"
+	"slices"
+	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+)
 
 func TestIgnoredWorkflowDirectivesWarnInRequest(t *testing.T) {
 	tests := []struct {
@@ -63,6 +69,74 @@ GET https://example.com
 	if len(doc.Requests) != 1 {
 		t.Fatalf("requests = %d, want one", len(doc.Requests))
 	}
+}
+
+func TestRequestEndFindingsReportInLineOrder(t *testing.T) {
+	doc := Parse("order.http", []byte(`GRPC localhost:9000
+# @grpc a.B/C
+# @grpc-import-path vendor
+# @nmae Typo
+# @retry-when true
+# @name a
+# @name b
+`))
+	wantWarnings := []string{
+		"3:3 @grpc-import-path without @grpc-proto was ignored",
+		"4:3 @nmae is not a known Resterm directive and was ignored",
+	}
+	if got := findings(doc.Warnings); !slices.Equal(got, wantWarnings) {
+		t.Errorf("warnings = %q, want %q", got, wantWarnings)
+	}
+	wantErrors := []string{
+		"5:0 @retry-when requires @retry",
+		"7:3 @name directive already defined for this request",
+	}
+	if got := findings(doc.Errors); !slices.Equal(got, wantErrors) {
+		t.Errorf("errors = %q, want %q", got, wantErrors)
+	}
+}
+
+func TestFindingsOnOneLineKeepTheirOrder(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			name: "options and a placeholder",
+			src:  "GET https://example.com\n# @sse max-event=1 {{x\n",
+			want: []string{
+				`2:8 unknown @sse option "max-event"`,
+				`2:20 unknown @sse option "{{x"`,
+				"2:20 placeholder {{x is not closed with }}",
+			},
+		},
+		{
+			name: "a request end finding after a placeholder",
+			src:  "GRPC localhost:9000\n# @grpc-import-path vendor {{x\n",
+			want: []string{
+				"2:28 placeholder {{x is not closed with }}",
+				"2:3 @grpc-import-path without @grpc-proto was ignored",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("order.http", []byte(tt.src))
+			if got := findings(doc.Warnings); !slices.Equal(got, tt.want) {
+				t.Fatalf("warnings = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func findings(list []restfile.ParseDiagnostic) []string {
+	out := make([]string, 0, len(list))
+	for _, d := range list {
+		out = append(out, fmt.Sprintf("%d:%d %s", d.Span.Start.Line, d.Span.Start.Col, d.Message))
+	}
+	return out
 }
 
 func TestUnknownDirectiveRejectsWithoutEndingWorkflow(t *testing.T) {

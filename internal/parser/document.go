@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"cmp"
 	"errors"
 	"maps"
 	"slices"
@@ -358,6 +359,13 @@ func (b *documentBuilder) finish() {
 	b.flushWorkflow(0)
 	b.file.flushSettings(b.doc)
 	b.file.apply(b.doc)
+
+	// Checks at the end of a request, workflow or mock add findings out of order.
+	byLine := func(x, y restfile.ParseDiagnostic) int {
+		return cmp.Compare(x.Span.Start.Line, y.Span.Start.Line)
+	}
+	slices.SortStableFunc(b.doc.Errors, byLine)
+	slices.SortStableFunc(b.doc.Warnings, byLine)
 }
 
 func (b *documentBuilder) startWorkflow(d parsedDirective) error {
