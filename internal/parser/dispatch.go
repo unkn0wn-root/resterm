@@ -98,6 +98,10 @@ func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 		b.warn(d, ignoredDirectiveWarning(d.Call))
 		return directiveIgnored
 	}
+	// Handlers see a value of only quotes, such as "", as the bare directive.
+	if d.valueMissing() {
+		d.Args = ""
+	}
 	out := b.claimDirective(d)
 	if out == directiveIgnored {
 		b.warn(d, ignoredDirectiveWarning(d.Call))

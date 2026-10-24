@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"cmp"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
@@ -5354,6 +5356,42 @@ func TestParseDirectiveValueMissing(t *testing.T) {
 	}
 }
 
+func TestParseValueOfOnlyQuotesIsMissing(t *testing.T) {
+	heads := map[string]string{
+		"graphql": "POST https://example.com\n# @graphql\n",
+		"grpc":    "GRPC localhost:9000\n# @grpc-proto svc.proto\n",
+	}
+	for _, spec := range directive.Specs() {
+		if !spec.ValueRequired {
+			continue
+		}
+		head := cmp.Or(heads[spec.Topic], "GET https://example.com\n")
+		for _, name := range append([]directive.Name{spec.Name}, spec.Aliases...) {
+			t.Run(name.Tag(), func(t *testing.T) {
+				bare := Parse("quotes.http", []byte(head+"# "+name.Tag()+"\n"))
+				if len(bare.Errors) == 0 {
+					t.Fatal("bare directive parsed without errors, want it claimed and rejected")
+				}
+				want := *firstRequest(t, bare)
+				want.OriginalText = ""
+				for _, quotes := range []string{`""`, `''`} {
+					doc := Parse("quotes.http", []byte(head+"# "+name.Tag()+" "+quotes+"\n"))
+					if !reflect.DeepEqual(doc.Errors, bare.Errors) {
+						t.Errorf("%s errors = %v, want %v as written bare", quotes, doc.Errors, bare.Errors)
+					}
+					req := *firstRequest(t, doc)
+					req.OriginalText = ""
+					if !reflect.DeepEqual(req, want) {
+						got, _ := json.Marshal(req)
+						exp, _ := json.Marshal(want)
+						t.Errorf("%s request = %s, want %s as written bare", quotes, got, exp)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestParseQuotedDirectiveValueKeepsItsSpaces(t *testing.T) {
 	doc := Parse("quoted.http", []byte("# @name \"  Spaced  \"\nGET https://example.com\n"))
 	if len(doc.Errors) != 0 {
@@ -5634,6 +5672,11 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 			name: "authority written bare",
 			line: "@grpc-authority",
 			want: "@grpc-authority value missing",
+		},
+		{
+			name: "metadata of only quotes",
+			line: `@grpc-metadata ""`,
+			want: "@grpc-metadata value missing",
 		},
 	}
 
@@ -6065,18 +6108,22 @@ func TestParseRequestHasOneProtocol(t *testing.T) {
 }
 
 func TestParseGraphQLDirectivesBeforeEnablingWarnAndAreIgnored(t *testing.T) {
-	src := "POST https://example.com/graphql\n# @operation\n# @graphql\n# @operation Used\n"
-	doc := Parse("graphql.http", []byte(src))
-	if len(doc.Errors) != 0 {
-		t.Fatalf("errors = %v, want none", doc.Errors)
-	}
-	wantWarning := "@operation is not valid in the current context and was ignored"
-	if len(doc.Warnings) != 1 || doc.Warnings[0].Message != wantWarning {
-		t.Fatalf("warnings = %v, want %q", doc.Warnings, wantWarning)
-	}
-	body := firstRequest(t, doc).Body
-	if body.GraphQL == nil || body.GraphQL.OperationName != "Used" {
-		t.Fatalf("graphql = %+v, want the operation declared after @graphql", body.GraphQL)
+	for _, line := range []string{"@operation", `@operation ""`} {
+		t.Run(line, func(t *testing.T) {
+			src := "POST https://example.com/graphql\n# " + line + "\n# @graphql\n# @operation Used\n"
+			doc := Parse("graphql.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("errors = %v, want none", doc.Errors)
+			}
+			wantWarning := "@operation is not valid in the current context and was ignored"
+			if len(doc.Warnings) != 1 || doc.Warnings[0].Message != wantWarning {
+				t.Fatalf("warnings = %v, want %q", doc.Warnings, wantWarning)
+			}
+			body := firstRequest(t, doc).Body
+			if body.GraphQL == nil || body.GraphQL.OperationName != "Used" {
+				t.Fatalf("graphql = %+v, want the operation declared after @graphql", body.GraphQL)
+			}
+		})
 	}
 }
 
