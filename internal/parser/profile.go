@@ -47,15 +47,15 @@ func parseProfileSpec(raw string, line int) (*restfile.ProfileSpec, error) {
 
 	opts, err := directive.ParseOptions(directive.Profile, raw)
 	errs := []error{err}
-	if opts.Has("count") {
+	if _, ok := opts.Lookup("count"); ok {
 		spec.Count, err = positiveInt("@profile count", opts.Pop("count"))
 		errs = append(errs, err)
 	}
-	if opts.Has("warmup") {
+	if _, ok := opts.Lookup("warmup"); ok {
 		spec.Warmup, err = nonNegativeInt("@profile warmup", opts.Pop("warmup"))
 		errs = append(errs, err)
 	}
-	if opts.Has("delay") {
+	if _, ok := opts.Lookup("delay"); ok {
 		spec.Delay, err = nonNegativeDuration("@profile delay", opts.Pop("delay"))
 		errs = append(errs, err)
 	}

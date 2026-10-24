@@ -182,9 +182,7 @@ func parseRetrySpec(raw string, line int) (*restfile.RetrySpec, error) {
 	opts, err := directive.ParseOptions(directive.Retry, raw)
 	errs := []error{err}
 	count := 0
-	if countRaw, found := opts.PopAny("count"); !found {
-		errs = append(errs, errors.New("@retry count is required"))
-	} else {
+	if countRaw, found := opts.PopAny("count"); found {
 		n, countErr := directive.ParseNonNegativeInt(countRaw)
 		switch {
 		case countErr != nil:
@@ -193,6 +191,8 @@ func parseRetrySpec(raw string, line int) (*restfile.RetrySpec, error) {
 			countErr = errors.New("@retry count must be greater than zero")
 		}
 		count, errs = n, append(errs, countErr)
+	} else if !opts.Bare("count") {
+		errs = append(errs, errors.New("@retry count is required"))
 	}
 	errs = append(errs, opts.Leftover(directive.Retry))
 	err = errors.Join(errs...)

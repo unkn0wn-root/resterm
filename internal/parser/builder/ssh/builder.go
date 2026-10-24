@@ -36,8 +36,7 @@ func ParseDirective(rest string) (res Directive, err error) {
 		return res, err
 	}
 	use := opts.Pop("use")
-	// Everything valid has been popped by now, so the leftovers are typos. They
-	// ride along with a usable result and the caller turns them into warnings.
+	// Everything valid has been popped by now, so Leftover reports only mistakes.
 	left := opts.Leftover(directive.SSH)
 
 	if scope == directive.ScopeRequest {

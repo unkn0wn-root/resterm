@@ -3,6 +3,7 @@ package parser
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"unicode"
@@ -67,7 +68,8 @@ func (b *workflowBuilder) applyOptions(opts directive.Options) error {
 	if opts.Len() == 0 {
 		return nil
 	}
-	hasFailureMode := opts.Has("on-failure") || opts.Has("onfailure")
+	hasFailureMode := opts.Has("on-failure") && !opts.Bare("on-failure") ||
+		opts.Has("onfailure") && !opts.Bare("onfailure")
 	val, _ := opts.PopAny("on-failure", "onfailure")
 	var modeErr error
 	if hasFailureMode {
@@ -77,7 +79,7 @@ func (b *workflowBuilder) applyOptions(opts directive.Options) error {
 			modeErr = workflowFailureModeError(directive.Workflow)
 		}
 	}
-	err := errors.Join(opts.Conflicts(directive.Workflow), modeErr)
+	err := errors.Join(opts.Conflicts(directive.Workflow), opts.Missing(directive.Workflow), modeErr)
 	if opts.Len() == 0 {
 		return err
 	}
@@ -405,12 +407,13 @@ func cutBranch(rest string) (expr, opts string) {
 
 // A spaced option keeps the branch in place, so the workflow keeps its shape.
 // Run or fail is reported missing only when the options parsed cleanly, since
-// the spaced option may be the one that looks missing. The workflow plan rejects
-// a branch left with neither.
+// a spaced or bare option may be the one that looks missing. The workflow plan
+// rejects a branch left with neither.
 func parseWorkflowRunOptions(name directive.Name, raw string) (run, fail string, err error) {
 	opts, err := directive.ParseOptions(name, raw)
 	run, _ = opts.First("run", "using")
 	fail = opts.Get("fail")
+	err = errors.Join(err, opts.Missing(name))
 	switch {
 	case run == "" && fail == "" && err == nil:
 		err = errors.New("missing a run= or fail= option")
@@ -433,7 +436,7 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 		return err
 	}
 	use, _ := opts.PopAny("using", "run")
-	if use == "" && err == nil {
+	if use == "" && err == nil && !opts.Bare("using") && !opts.Bare("run") {
 		return errors.New("@step missing using request")
 	}
 	step := restfile.WorkflowStep{
@@ -445,16 +448,17 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 	}
 	var modeErr error
 	if val, ok := opts.Lookup("on-failure"); ok {
-		opts.Pop("on-failure")
 		if mode, ok := parseWorkflowFailureMode(val); ok {
 			step.OnFailure = mode
 		} else {
 			modeErr = workflowFailureModeError(directive.Step)
 		}
 	}
+	opts.Pop("on-failure")
 	// A step with a bad expect option is still added so the workflow keeps
 	// its shape. The error is reported next to it.
-	expErr := errors.Join(err, modeErr, opts.Conflicts(directive.Step), applyStepOpts(&step, opts))
+	optErr := applyStepOpts(&step, opts)
+	expErr := errors.Join(err, modeErr, opts.Conflicts(directive.Step), optErr, opts.Missing(directive.Step))
 	b.applyPending(&step)
 	b.wf.Steps = append(b.wf.Steps, step)
 	b.touch(line)
@@ -485,10 +489,15 @@ func applyStepOpts(step *restfile.WorkflowStep, opts directive.Options) error {
 	}
 	var errs []error
 	var left map[string]string
+	// Expectations and vars take values. Other options keep a bare key as true.
+	raw := maps.Collect(opts.All())
 	for _, key := range opts.Keys() {
-		val := opts.Get(key)
 		switch {
 		case strings.HasPrefix(key, "expect."):
+			val, ok := opts.Lookup(key)
+			if !ok {
+				continue
+			}
 			switch suf := strings.TrimPrefix(key, "expect."); suf {
 			case "":
 			case "status":
@@ -516,6 +525,10 @@ func applyStepOpts(step *restfile.WorkflowStep, opts directive.Options) error {
 				step.Expect.Extra[suf] = val
 			}
 		case strings.HasPrefix(key, "vars."):
+			val, ok := opts.Lookup(key)
+			if !ok {
+				continue
+			}
 			key = strings.TrimSpace(key)
 			if key == "" {
 				continue
@@ -528,7 +541,7 @@ func applyStepOpts(step *restfile.WorkflowStep, opts directive.Options) error {
 			if left == nil {
 				left = make(map[string]string)
 			}
-			left[key] = val
+			left[key] = raw[key]
 		}
 	}
 	if len(left) > 0 {

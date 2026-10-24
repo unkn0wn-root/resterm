@@ -16,7 +16,7 @@ A `.http` or `.rest` file holds requests, with a method, URL, headers, and an op
 
   If Resterm cannot read a directive at all, such as an `@capture` with no usable scope, it drops the whole directive and reports the problem. Warnings never change the exit code.
 - An option may appear only once in a directive. Resterm reports duplicates instead of silently keeping the last value. Repeated `@match json` and `@match json-rules` declarations are merged as described in [Splitting a long matcher](mock-servers.md#splitting-a-long-matcher).
-- Write options as `key=value` without spaces around `=`. In most directives, a bare key means `true`. Resterm rejects `key = value`, `key =value`, `key= value`, and `=value` without setting the option. This keeps `persist = false` from enabling persistence by mistake.
+- Write options as `key=value` without spaces around `=`. In most directives, a bare key means `true`, but a bare key for an option that takes a value, such as `jitter`, is an error. Resterm rejects `key = value`, `key =value`, `key= value`, and `=value` without setting the option. This keeps `persist = false` from enabling persistence by mistake.
 - Use `=` for regular options: `timeout<=1s` is an error. `@trace` latency budgets also accept `<=`.
 - Quote only the value, as in `cmd="gh auth token"`. A quoted field such as `"timeout=1s"` is a plain word and does not set `timeout`. Directives that accept only options, such as `@settings`, warn about quoted options.
 - An empty value such as `strict_hostkey=` is allowed at the end of the line or before another `key=value` option.

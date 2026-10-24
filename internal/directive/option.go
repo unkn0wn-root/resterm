@@ -1,6 +1,7 @@
 package directive
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"iter"
@@ -14,10 +15,18 @@ import (
 type Options struct {
 	vals  map[string]string
 	clash map[string][]string
+	// A bare key is true for a switch and missing when read as a value.
+	bare    map[string]bool
+	missing map[string]bool
 }
 
 func newOptions(size int) Options {
-	return Options{vals: make(map[string]string, size), clash: map[string][]string{}}
+	return Options{
+		vals:    make(map[string]string, size),
+		clash:   map[string][]string{},
+		bare:    map[string]bool{},
+		missing: map[string]bool{},
+	}
 }
 
 // All writes go through put. Lookups assume keys are lowercase.
@@ -29,10 +38,17 @@ func (o Options) put(key, val string) (repeated string) {
 	_, seen := o.vals[key]
 	// Values are already decoded. Keep any quotes that belong to the value itself.
 	o.vals[key] = strings.TrimSpace(val)
+	delete(o.bare, key)
 	if !seen {
 		return ""
 	}
 	return key
+}
+
+func (o Options) putBare(key string) (repeated string) {
+	repeated = o.put(key, "true")
+	o.bare[strings.ToLower(strings.TrimSpace(key))] = true
+	return repeated
 }
 
 func (o Options) Len() int {
@@ -40,6 +56,14 @@ func (o Options) Len() int {
 }
 
 func (o Options) Lookup(key string) (string, bool) {
+	return o.read(key)
+}
+
+func (o Options) read(key string) (string, bool) {
+	if o.bare[key] {
+		o.missing[key] = true
+		return "", false
+	}
 	val, ok := o.vals[key]
 	return val, ok
 }
@@ -47,6 +71,11 @@ func (o Options) Lookup(key string) (string, bool) {
 func (o Options) Has(key string) bool {
 	_, ok := o.vals[key]
 	return ok
+}
+
+// Bare lets a caller skip an error that Missing already reports.
+func (o Options) Bare(key string) bool {
+	return o.bare[key]
 }
 
 func (o Options) Keys() []string {
@@ -62,18 +91,18 @@ func (o Options) CopyTo(dst map[string]string) {
 }
 
 func (o Options) Get(key string) string {
-	return o.vals[key]
+	val, _ := o.read(key)
+	return val
 }
 
 // First returns the first non-empty value in key order.
 func (o Options) First(keys ...string) (string, bool) {
-	o.given(keys)
-	for _, key := range keys {
-		if val := o.Get(key); val != "" {
-			return val, true
-		}
+	var val string
+	for _, key := range o.given(keys) {
+		v, _ := o.read(key)
+		val = cmp.Or(val, v)
 	}
-	return "", false
+	return val, val != ""
 }
 
 func (o Options) Aliases(keys ...string) {
@@ -81,7 +110,7 @@ func (o Options) Aliases(keys ...string) {
 }
 
 func (o Options) Pop(key string) string {
-	val := o.vals[key]
+	val, _ := o.read(key)
 	delete(o.vals, key)
 	return val
 }
@@ -98,7 +127,7 @@ func (o Options) PopAny(keys ...string) (string, bool) {
 func (o Options) PopKey(keys ...string) (string, string, bool) {
 	var outKey, outVal string
 	for _, key := range o.given(keys) {
-		if val := o.vals[key]; outKey == "" && val != "" {
+		if val, _ := o.read(key); outKey == "" && val != "" {
 			outKey, outVal = key, val
 		}
 		delete(o.vals, key)
@@ -131,13 +160,21 @@ func (o Options) PopBool(keys ...string) (val, ok bool, bad string) {
 	return false, false, ""
 }
 
+// Unknown leaves out bare keys read as values, since Missing reports them.
 func (o Options) Unknown(name Name) error {
-	return UnknownOption(name, o.Keys()...)
+	return UnknownOption(name, slices.DeleteFunc(o.Keys(), func(key string) bool { return o.missing[key] })...)
 }
 
-// Leftover reports alias conflicts and unconsumed options.
+// Leftover reports alias conflicts, bare keys read as values, and unconsumed options.
 func (o Options) Leftover(name Name) error {
-	return errors.Join(o.Conflicts(name), o.Unknown(name))
+	return errors.Join(o.Conflicts(name), o.Missing(name), o.Unknown(name))
+}
+
+func (o Options) Missing(name Name) error {
+	if len(o.missing) == 0 {
+		return nil
+	}
+	return &MissingValueError{Directive: name, Keys: slices.Sorted(maps.Keys(o.missing))}
 }
 
 func (o Options) Conflicts(name Name) error {
@@ -162,7 +199,7 @@ func (o Options) given(keys []string) []string {
 			continue
 		}
 		written = append(written, key)
-		if val != "" {
+		if val != "" && !o.bare[key] {
 			set = append(set, key)
 		}
 	}
@@ -216,16 +253,26 @@ func OptionFields(name Name, fields []Field) (Options, error) {
 
 // Every option is visited even after one fails, so a line with two mistakes
 // reports both.
-func ApplyOptions(name Name, raw string, aliases [][]string, apply func(key, val string) error) error {
+func ApplyOptions(
+	name Name,
+	raw string,
+	aliases [][]string,
+	valueKeys []string,
+	apply func(key, val string) error,
+) error {
 	opts, err := ParseOptions(name, raw)
 	errs := []error{err}
 	for _, group := range aliases {
 		opts.Aliases(group...)
 	}
 	for _, key := range opts.Keys() {
-		errs = append(errs, apply(key, opts.Get(key)))
+		if !slices.Contains(valueKeys, key) {
+			errs = append(errs, apply(key, opts.vals[key]))
+		} else if val, ok := opts.read(key); ok {
+			errs = append(errs, apply(key, val))
+		}
 	}
-	return errors.Join(append(errs, opts.Conflicts(name))...)
+	return errors.Join(append(errs, opts.Conflicts(name), opts.Missing(name))...)
 }
 
 // ProfileHeader holds [scope] [name] followed by options.
@@ -317,7 +364,7 @@ func collectOptions(name Name, fields []Field, bareIsTrue bool) (Options, error)
 				k, v, _ := strings.Cut(text, op.String())
 				bad = append(bad, &QuotedOptionError{Directive: name, Key: k, Value: v, Op: op})
 			} else {
-				rep.add(opts.put(f.Value, "true"))
+				rep.add(opts.putBare(f.Value))
 			}
 		}
 	}
@@ -497,6 +544,23 @@ func (e *AliasConflictError) Error() string {
 	return fmt.Sprintf("%s options %s are the same option", e.Directive.Tag(), quoteKeys(e.Keys))
 }
 
+type MissingValueError struct {
+	Directive Name
+	Keys      []string
+}
+
+func (e *MissingValueError) Error() string {
+	if len(e.Keys) == 1 {
+		return fmt.Sprintf(
+			"%s option %s needs a value. Write it as %s=value",
+			e.Directive.Tag(),
+			quoteKeys(e.Keys),
+			e.Keys[0],
+		)
+	}
+	return fmt.Sprintf("%s options %s need values. Write them as key=value", e.Directive.Tag(), quoteKeys(e.Keys))
+}
+
 // OptionKeys lists the option names an error reports, across joined errors.
 func OptionKeys(err error) []string {
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
@@ -513,6 +577,7 @@ func OptionKeys(err error) []string {
 	var unknown *UnknownOptionsError
 	var repeated *RepeatedOptionsError
 	var conflict *AliasConflictError
+	var missing *MissingValueError
 	var spaced *SpacedOptionsError
 	var op *OpOptionError
 	switch {
@@ -526,6 +591,8 @@ func OptionKeys(err error) []string {
 		return repeated.Keys
 	case errors.As(err, &conflict):
 		return conflict.Keys
+	case errors.As(err, &missing):
+		return missing.Keys
 	default:
 		return nil
 	}

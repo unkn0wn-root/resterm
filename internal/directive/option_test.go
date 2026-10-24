@@ -366,6 +366,129 @@ func TestPopAnySkipsEmptySpellingWithoutConflict(t *testing.T) {
 	}
 }
 
+func TestPopKeyBareValue(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions(RetryBackoff, "jitter persist")
+	if err != nil {
+		t.Fatalf("ParseOptions() error = %v", err)
+	}
+	if val, ok := opts.PopAny("jitter"); ok {
+		t.Fatalf("PopAny(jitter) = %q, want nothing", val)
+	}
+	if on, ok, bad := opts.PopBool("persist"); !on || !ok || bad != "" {
+		t.Fatalf("PopBool(persist) = (%t, %t, %q), want (true, true, \"\")", on, ok, bad)
+	}
+	err = opts.Leftover(RetryBackoff)
+	var missing *MissingValueError
+	if !errors.As(err, &missing) {
+		t.Fatalf("Leftover() = %v, want *MissingValueError", err)
+	}
+	if keys := OptionKeys(err); !slices.Equal(keys, []string{"jitter"}) {
+		t.Fatalf("OptionKeys() = %q, want [jitter]", keys)
+	}
+}
+
+func TestPopKeyValueAfterBareKey(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions(RetryBackoff, "jitter jitter=5%")
+	var repeated *RepeatedOptionsError
+	if !errors.As(err, &repeated) {
+		t.Fatalf("ParseOptions() error = %v, want *RepeatedOptionsError", err)
+	}
+	if val, ok := opts.PopAny("jitter"); !ok || val != "5%" {
+		t.Fatalf("PopAny(jitter) = (%q, %t), want (5%%, true)", val, ok)
+	}
+	if err := opts.Leftover(RetryBackoff); err != nil {
+		t.Fatalf("Leftover() = %v, want nil", err)
+	}
+}
+
+func TestValueReadersReportBareKey(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		read func(Options) (string, bool)
+	}{
+		{name: "Get", read: func(o Options) (string, bool) { v := o.Get("port"); return v, v != "" }},
+		{name: "Lookup", read: func(o Options) (string, bool) { return o.Lookup("port") }},
+		{name: "First", read: func(o Options) (string, bool) { return o.First("port") }},
+		{name: "Pop", read: func(o Options) (string, bool) { v := o.Pop("port"); return v, v != "" }},
+		{name: "PopAny", read: func(o Options) (string, bool) { return o.PopAny("port") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, _ := ParseOptions(SSH, "port host=h")
+			if val, ok := tt.read(opts); ok || val != "" {
+				t.Fatalf("%s(port) = (%q, %t), want nothing", tt.name, val, ok)
+			}
+			if got := opts.Get("host"); got != "h" {
+				t.Fatalf("Get(host) = %q, want h", got)
+			}
+			var missing *MissingValueError
+			if err := opts.Missing(SSH); !errors.As(err, &missing) || !slices.Equal(missing.Keys, []string{"port"}) {
+				t.Fatalf("Missing() = %v, want port", err)
+			}
+		})
+	}
+}
+
+func TestRawReadersKeepBareKey(t *testing.T) {
+	t.Parallel()
+
+	opts, _ := ParseOptions(SSH, "persist")
+	if !opts.Has("persist") || !maps.Equal(maps.Collect(opts.All()), map[string]string{"persist": "true"}) {
+		t.Fatalf("raw options = %v, want persist=true", maps.Collect(opts.All()))
+	}
+	if on, ok, _ := opts.PopBool("persist"); !on || !ok {
+		t.Fatalf("PopBool(persist) = (%t, %t), want on", on, ok)
+	}
+	if err := opts.Missing(SSH); err != nil {
+		t.Fatalf("Missing() = %v, want nil", err)
+	}
+}
+
+func TestOptionsBare(t *testing.T) {
+	t.Parallel()
+
+	opts, _ := ParseOptions(SSH, "port host=h user user=u")
+	opts.Pop("port")
+	for key, want := range map[string]bool{"port": true, "host": false, "user": false, "agent": false} {
+		if got := opts.Bare(key); got != want {
+			t.Errorf("Bare(%s) = %t, want %t", key, got, want)
+		}
+	}
+}
+
+func TestBareAliasConflicts(t *testing.T) {
+	t.Parallel()
+
+	opts, _ := ParseOptions(SSH, "password=x pass strict_hostkey strict-hostkey=false")
+	if val, ok := opts.PopAny("password", "pass"); !ok || val != "x" {
+		t.Fatalf("PopAny(password, pass) = (%q, %t), want (x, true)", val, ok)
+	}
+	opts.PopBool("strict_hostkey", "strict-hostkey")
+	want := `@ssh options "strict-hostkey", "strict_hostkey" are the same option`
+	if err := opts.Conflicts(SSH); err == nil || err.Error() != want {
+		t.Fatalf("Conflicts() = %v, want %q", err, want)
+	}
+}
+
+func TestFirstReportsBareAlias(t *testing.T) {
+	t.Parallel()
+
+	opts, _ := ParseOptions(If, "run=A using")
+	if val, ok := opts.First("run", "using"); !ok || val != "A" {
+		t.Fatalf("First(run, using) = (%q, %t), want (A, true)", val, ok)
+	}
+	if keys := OptionKeys(opts.Missing(If)); !slices.Equal(keys, []string{"using"}) {
+		t.Fatalf("Missing() keys = %q, want [using]", keys)
+	}
+}
+
 // Popping every spelling a directive knows leaves only the typos behind.
 func TestUnknownAfterPopping(t *testing.T) {
 	t.Parallel()
@@ -831,12 +954,35 @@ func TestApplyOptionsSkipsSpacedOptions(t *testing.T) {
 	t.Parallel()
 
 	var seen []string
-	err := ApplyOptions(SSE, "timeout=5s idle = 1s", nil, func(key, _ string) error {
+	err := ApplyOptions(SSE, "timeout=5s idle = 1s", nil, nil, func(key, _ string) error {
 		seen = append(seen, key)
 		return nil
 	})
 	var spaced *SpacedOptionsError
 	if !slices.Equal(seen, []string{"timeout"}) || !errors.As(err, &spaced) {
 		t.Fatalf("applied %v, err = %v, want timeout applied and idle reported", seen, err)
+	}
+}
+
+func TestApplyOptionsReportsBareValueKey(t *testing.T) {
+	t.Parallel()
+
+	got := map[string]string{}
+	err := ApplyOptions(
+		WebSocket,
+		"compression timeout idle=1s typo",
+		nil,
+		[]string{"timeout", "idle"},
+		func(key, val string) error {
+			got[key] = val
+			return nil
+		},
+	)
+	if want := map[string]string{"compression": "true", "idle": "1s", "typo": "true"}; !maps.Equal(got, want) {
+		t.Fatalf("applied %v, want %v", got, want)
+	}
+	var missing *MissingValueError
+	if !errors.As(err, &missing) || !slices.Equal(missing.Keys, []string{"timeout"}) {
+		t.Fatalf("ApplyOptions() = %v, want timeout reported as missing its value", err)
 	}
 }

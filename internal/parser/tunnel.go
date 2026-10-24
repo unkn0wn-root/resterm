@@ -56,8 +56,12 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 	b.report(d, err)
 	if fatalErr(err) {
 		var dirErr *k8sbuilder.DirectiveError
-		if errors.As(err, &dirErr) {
+		var missing *directive.MissingValueError
+		switch {
+		case errors.As(err, &dirErr):
 			b.addInvalidK8sProfile(d.lines.Start, dirErr.Profile, err.Error())
+		case errors.As(err, &missing):
+			b.addInvalidK8sProfile(d.lines.Start, res.Profile, missing.Error())
 		}
 		return directiveRejected
 	}

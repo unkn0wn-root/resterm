@@ -112,8 +112,8 @@ func (b *documentBuilder) startMock(d parsedDirective) {
 		},
 	}
 	b.pendingTitle = ""
-	b.checkMockRoute(d, m)
-	if vals.Has("sequence") && m.sequence == "" {
+	b.checkMockRoute(d, m, vals)
+	if raw, ok := vals.Lookup("sequence"); ok && raw == "" {
 		b.failMock(d, "@mock sequence name cannot be empty")
 	}
 	if raw, ok := vals.Lookup("sequence-key"); ok {
@@ -140,32 +140,37 @@ func (b *documentBuilder) startMock(d parsedDirective) {
 	if v, ok := b.mockBool(d, vals, "interpolate"); ok {
 		m.disableInterpolation = !v
 	}
+	if err := vals.Missing(directive.Mock); err != nil {
+		b.reportMock(d, err)
+	}
 	b.mock = m
 }
 
 func (b *documentBuilder) mockBool(d parsedDirective, vals directive.Options, key string) (bool, bool) {
-	raw, ok := vals.Lookup(key)
-	if !ok {
-		return false, false
-	}
-	v, ok := directive.ParseBool(raw)
-	if !ok {
+	v, ok, bad := vals.PopBool(key)
+	if bad != "" {
 		b.failMock(d, fmt.Sprintf("@mock %s must be true or false", key))
 		return false, false
 	}
-	return v, true
+	return v, ok
 }
 
-func (b *documentBuilder) checkMockRoute(d parsedDirective, m *mockBuilder) {
-	if m.method == "" {
+func (b *documentBuilder) checkMockRoute(d parsedDirective, m *mockBuilder, vals directive.Options) {
+	switch {
+	case vals.Bare("method"):
+	case m.method == "":
 		b.failMock(d, "@mock method is required")
-	} else if !httpguts.ValidHeaderFieldName(m.method) {
+	case !httpguts.ValidHeaderFieldName(m.method):
 		b.failMock(d, fmt.Sprintf("invalid @mock method %q", m.method))
 	}
-	if m.path == "" {
+	switch {
+	case vals.Bare("path"):
+	case m.path == "":
 		b.failMock(d, "@mock path is required")
-	} else if err := restfile.ValidateMockPath(m.path); err != nil {
-		b.reportMock(d, err)
+	default:
+		if err := restfile.ValidateMockPath(m.path); err != nil {
+			b.reportMock(d, err)
+		}
 	}
 	if m.name != "" && !restfile.ValidMockName(m.name) {
 		b.failMock(d, "@mock name may contain only letters, digits, '.', '_' and '-'")
@@ -283,6 +288,9 @@ func (m *mockBuilder) addMatch(b *documentBuilder, d parsedDirective) {
 		compact, err := compactJSONObject(raw)
 		b.setMockJSON(d, "json-rules", &m.match.JSONRules, compact, err)
 	}
+	if err := vals.Missing(directive.Match); err != nil {
+		b.reportMock(d, err)
+	}
 }
 
 func (b *documentBuilder) setMockJSON(d parsedDirective, opt string, dst *[]byte, compact []byte, err error) {
@@ -314,6 +322,10 @@ func (m *mockBuilder) addExpectation(b *documentBuilder, d parsedDirective) {
 		return
 	}
 	calls := vals.Get("calls")
+	if err := vals.Missing(directive.Expect); err != nil {
+		b.reportMock(d, err)
+		return
+	}
 	if calls == "" {
 		b.failMock(d, "@expect calls is required")
 		return

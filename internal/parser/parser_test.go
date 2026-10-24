@@ -3933,8 +3933,8 @@ func TestParseOptionTokensQuotedValues(t *testing.T) {
 	if got := opts.Get("message"); got != "He said \"hi\"" {
 		t.Fatalf("expected escaped quotes preserved, got %q", got)
 	}
-	if got := opts.Get("flag"); got != "true" {
-		t.Fatalf("expected bare flag to default to true, got %q", got)
+	if on, ok, _ := opts.PopBool("flag"); !on || !ok {
+		t.Fatalf("expected bare flag to read as a true switch, got (%t, %t)", on, ok)
 	}
 }
 

@@ -70,13 +70,15 @@ func (b *Builder) handleWebSocket(rest string) (reset bool, err error) {
 	}
 
 	b.on = true
-	return false, directive.ApplyOptions(directive.WebSocket, t, wsAliases, b.applyOption)
+	return false, directive.ApplyOptions(directive.WebSocket, t, wsAliases, wsValueKeys, b.applyOption)
 }
 
 var wsAliases = [][]string{
 	{wsOptIdle, wsOptIdleAlt},
 	{wsOptSub, wsOptSubs},
 }
+
+var wsValueKeys = []string{wsOptTimeout, wsOptIdle, wsOptIdleAlt, wsOptMaxMsg, wsOptSub, wsOptSubs}
 
 func (b *Builder) reset() {
 	b.on = false

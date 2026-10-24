@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"errors"
+	"fmt"
 	"maps"
 	"strings"
 	"testing"
@@ -151,6 +153,326 @@ func TestOptionAliasesConflictWithoutBeingUnknown(t *testing.T) {
 				t.Fatalf("errors = %v, want %q", doc.Errors, tt.want)
 			}
 		})
+	}
+}
+
+func TestBareValueOptionNeedsAValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		src   string
+		want  string
+		check func(*restfile.Document) error
+	}{
+		{
+			name: "poll every",
+			src:  "### r\n# @poll every until=true\nGET http://x\n",
+			want: `@poll option "every" needs a value. Write it as every=value`,
+		},
+		{
+			name: "retry-backoff jitter",
+			src:  "### r\n# @retry count=1\n# @retry-backoff exponential(1s, 2s) jitter\nGET http://x\n",
+			want: `@retry-backoff option "jitter" needs a value. Write it as jitter=value`,
+		},
+		{
+			name: "ssh port",
+			src:  "### r\n# @ssh host=h port\nGET http://x\n",
+			want: `@ssh option "port" needs a value. Write it as port=value`,
+		},
+		{
+			name: "k8s global namespace",
+			src:  "# @k8s global dev namespace pod=x port=80\n\n### r\nGET http://x\n",
+			want: `@k8s option "namespace" needs a value. Write it as namespace=value`,
+		},
+		{
+			name: "every bare key is named",
+			src:  "### r\n# @ssh host=h user port\nGET http://x\n",
+			want: `@ssh options "port", "user" need values. Write them as key=value`,
+		},
+		{
+			name: "bare key in capitals",
+			src:  "### r\n# @ssh host=h PORT\nGET http://x\n",
+			want: `@ssh option "port" needs a value. Write it as port=value`,
+		},
+		{
+			name: "ssh bare alias beside a value",
+			src:  "### r\n# @ssh host=h password=x pass\nGET http://x\n",
+			want: `@ssh option "pass" needs a value. Write it as pass=value`,
+		},
+		{
+			name: "k8s bare alias beside a value",
+			src:  "### r\n# @k8s target=pod/api port=80 namespace=dev ns\nGET http://x\n",
+			want: `@k8s option "ns" needs a value. Write it as ns=value`,
+		},
+		{
+			name: "sse bare alias beside a value",
+			src:  "### r\n# @sse idle=1s idle-timeout\nGET http://x\n",
+			want: `@sse option "idle-timeout" needs a value. Write it as idle-timeout=value`,
+		},
+		{
+			name: "ssh use",
+			src:  "### r\n# @ssh host=h use\nGET http://x\n",
+			want: `@ssh option "use" needs a value. Write it as use=value`,
+		},
+		{
+			name: "k8s use",
+			src:  "### r\n# @k8s target=pod/api port=80 use\nGET http://x\n",
+			want: `@k8s option "use" needs a value. Write it as use=value`,
+		},
+		{
+			name: "retry count",
+			src:  "### r\n# @retry count\nGET http://x\n",
+			want: `@retry option "count" needs a value. Write it as count=value`,
+		},
+		{
+			name: "profile delay",
+			src:  "### r\n# @profile count=5 delay\nGET http://x\n",
+			want: `@profile option "delay" needs a value. Write it as delay=value`,
+		},
+		{
+			name: "mock method",
+			src:  "# @mock method path=/x\nHTTP/1.1 200 OK\n",
+			want: `@mock option "method" needs a value. Write it as method=value`,
+		},
+		{
+			name: "mock path",
+			src:  "# @mock method=GET path\nHTTP/1.1 200 OK\n",
+			want: `@mock option "path" needs a value. Write it as path=value`,
+		},
+		{
+			name: "mock name",
+			src:  "# @mock method=GET path=/x name\nHTTP/1.1 200 OK\n",
+			want: `@mock option "name" needs a value. Write it as name=value`,
+		},
+		{
+			name: "mock sequence",
+			src:  "# @mock method=GET path=/x sequence\nHTTP/1.1 200 OK\n",
+			want: `@mock option "sequence" needs a value. Write it as sequence=value`,
+		},
+		{
+			name: "match json",
+			src:  "# @mock method=GET path=/x\n# @match json\nHTTP/1.1 200 OK\n",
+			want: `@match option "json" needs a value. Write it as json=value`,
+		},
+		{
+			name: "expect calls",
+			src:  "# @mock method=GET path=/x\n# @expect calls\nHTTP/1.1 200 OK\n",
+			want: `@expect option "calls" needs a value. Write it as calls=value`,
+		},
+		{
+			name: "workflow on-failure",
+			src:  "# @workflow w on-failure\n# @step A using=A\n",
+			want: `@workflow option "on-failure" needs a value. Write it as on-failure=value`,
+		},
+		{
+			name: "workflow onfailure",
+			src:  "# @workflow w onfailure\n# @step A using=A\n",
+			want: `@workflow option "onfailure" needs a value. Write it as onfailure=value`,
+		},
+		{
+			name: "workflow on-failure beside a bare alias",
+			src:  "# @workflow w on-failure=continue onfailure\n# @step A using=A\n",
+			want: `@workflow option "onfailure" needs a value. Write it as onfailure=value`,
+			check: func(doc *restfile.Document) error {
+				if got := doc.Workflows[0].DefaultOnFailure; got != restfile.WorkflowOnFailureContinue {
+					return fmt.Errorf("on-failure = %q, want continue", got)
+				}
+				return nil
+			},
+		},
+		{
+			name: "step using",
+			src:  "# @workflow w\n# @step A using\n",
+			want: `@step option "using" needs a value. Write it as using=value`,
+		},
+		{
+			name: "step run",
+			src:  "# @workflow w\n# @step A run\n",
+			want: `@step option "run" needs a value. Write it as run=value`,
+		},
+		{
+			name: "step name without using",
+			src:  "# @workflow w\n# @step A name\n",
+			want: "@step missing using request",
+		},
+		{
+			name: "step on-failure",
+			src:  "# @workflow w\n# @step A using=A on-failure\n",
+			want: `@step option "on-failure" needs a value. Write it as on-failure=value`,
+			check: func(doc *restfile.Document) error {
+				if opts := doc.Workflows[0].Steps[0].Options; len(opts) != 0 {
+					return fmt.Errorf("step options = %v, want none", opts)
+				}
+				return nil
+			},
+		},
+		{
+			name: "step expect.status",
+			src:  "# @workflow w\n# @step A using=A expect.status\n",
+			want: `@step option "expect.status" needs a value. Write it as expect.status=value`,
+		},
+		{
+			name: "branch fail",
+			src:  "# @workflow w\n# @step A using=A\n# @if last.status == 200 run=A fail\n",
+			want: `@if option "fail" needs a value. Write it as fail=value`,
+		},
+		{
+			name: "branch bare alias beside a value",
+			src:  "# @workflow w\n# @step A using=A\n# @if last.status == 200 run=A using\n",
+			want: `@if option "using" needs a value. Write it as using=value`,
+		},
+		{
+			name: "ssh switch",
+			src:  "### r\n# @ssh host=h agent\nGET http://x\n",
+		},
+		{
+			name: "k8s switch",
+			src:  "### r\n# @k8s target=pod/api port=80 persist\nGET http://x\n",
+		},
+		{
+			name: "websocket switch",
+			src:  "### r\n# @websocket compression\nWS wss://x\n",
+		},
+		{
+			name: "mock switches",
+			src:  "# @mock method=GET path=/x default interpolate\nHTTP/1.1 200 OK\n",
+		},
+		{
+			name: "empty mock default",
+			src:  "# @mock method=GET path=/x default=\nHTTP/1.1 200 OK\n",
+			check: func(doc *restfile.Document) error {
+				if !doc.Mocks[0].Default {
+					return errors.New("mock is not the default, want default= to turn it on")
+				}
+				return nil
+			},
+		},
+		{
+			name: "empty mock interpolate",
+			src:  "# @mock method=GET path=/x interpolate=\nHTTP/1.1 200 OK\n",
+			check: func(doc *restfile.Document) error {
+				if doc.Mocks[0].DisableInterpolation {
+					return errors.New("interpolation is off, want interpolate= to keep it on")
+				}
+				return nil
+			},
+		},
+		{
+			name: "setting flag",
+			src:  "### r\n# @setting timeout\nGET http://x\n",
+		},
+		{
+			name: "free-form step option",
+			src:  "# @workflow w\n# @step A using=A custom\n",
+		},
+		{
+			name: "free-form workflow option",
+			src:  "# @workflow w custom\n# @step A using=A\n",
+		},
+		{
+			name: "empty value",
+			src:  "### r\n# @retry count=1\n# @retry-backoff exponential(1s, 2s) jitter=\nGET http://x\n",
+		},
+		{
+			name: "empty retry count",
+			src:  "### r\n# @retry count=\nGET http://x\n",
+			want: "@retry count is required",
+		},
+		{
+			name: "empty mock method",
+			src:  "# @mock method= path=/x\nHTTP/1.1 200 OK\n",
+			want: "@mock method is required",
+		},
+		{
+			name: "empty mock sequence",
+			src:  "# @mock method=GET path=/x sequence=\nHTTP/1.1 200 OK\n",
+			want: "@mock sequence name cannot be empty",
+		},
+		{
+			name: "empty expect calls",
+			src:  "# @mock method=GET path=/x\n# @expect calls=\nHTTP/1.1 200 OK\n",
+			want: "@expect calls is required",
+		},
+		{
+			name: "empty step expect.status",
+			src:  "# @workflow w\n# @step A using=A expect.status=\n",
+			want: "expect.status requires a value",
+		},
+		{
+			name: "empty workflow on-failure",
+			src:  "# @workflow w on-failure=\n# @step A using=A\n",
+			want: "@workflow on-failure must be stop or continue",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("t.http", []byte(tt.src))
+			if hasParseMessage(doc.Warnings, "unknown") {
+				t.Fatalf("bare key reported as unknown: %v", doc.Warnings)
+			}
+			var msgs []string
+			for _, e := range doc.Errors {
+				msgs = append(msgs, e.Message)
+			}
+			if got := strings.Join(msgs, "\n"); got != tt.want {
+				t.Fatalf("errors = %q, want %q", got, tt.want)
+			}
+			if tt.check == nil {
+				return
+			}
+			if err := tt.check(doc); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestBareValueKeyRejectsSharedProfiles(t *testing.T) {
+	src := "# @ssh global prod host=h user\n# @k8s global dev namespace pod=x port=80\n"
+	doc := Parse("/ws/defs.http", []byte(src))
+	if len(doc.Errors) != 2 {
+		t.Fatalf("errors = %v, want one per line", doc.Errors)
+	}
+	if len(doc.SSH) != 0 {
+		t.Fatalf("ssh = %+v, want the profile rejected", doc.SSH)
+	}
+	want := `@k8s option "namespace" needs a value. Write it as namespace=value`
+	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid || doc.K8s[0].Error != want {
+		t.Fatalf("k8s = %+v, want the profile kept as invalid", doc.K8s)
+	}
+}
+
+func TestStreamValueOptionsNeedAValue(t *testing.T) {
+	tests := []struct {
+		tag  string
+		src  string
+		keys []string
+	}{
+		{
+			tag: "@sse",
+			src: "### r\n# @sse %s\nGET http://x\n",
+			keys: []string{
+				"duration", "timeout", "idle", "idle-timeout", "max-events", "max-bytes", "limit-bytes",
+				"max-line-bytes", "max-event-bytes",
+			},
+		},
+		{
+			tag:  "@websocket",
+			src:  "### r\n# @websocket %s\nWS wss://x\n",
+			keys: []string{"timeout", "idle", "idle-timeout", "max-message-bytes", "subprotocol", "subprotocols"},
+		},
+	}
+
+	for _, tt := range tests {
+		for _, key := range tt.keys {
+			t.Run(tt.tag+" "+key, func(t *testing.T) {
+				doc := Parse("t.http", []byte(fmt.Sprintf(tt.src, key)))
+				want := fmt.Sprintf("%s option %q needs a value. Write it as %s=value", tt.tag, key, key)
+				if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+					t.Fatalf("errors = %v, want %q", doc.Errors, want)
+				}
+			})
+		}
 	}
 }
 
