@@ -242,10 +242,11 @@ func parseRetryBackoff(raw string) (*restfile.ExponentialBackoffSpec, error) {
 	}, err
 }
 
-// The reader rejects an unclosed "(", so a value without ")" has no call.
+// The call ends at the first ")" outside strings, comments, and nested groups.
 func parseExponentialCall(raw string) (initial, maximum time.Duration, rest string, err error) {
-	name, tail, ok := strings.Cut(raw, "(")
-	args, rest, closed := strings.Cut(tail, ")")
+	head, tail, closed := strings.Cut(rts.Mask(raw), ")")
+	name, args, ok := strings.Cut(raw[:len(head)], "(")
+	rest = raw[len(raw)-len(tail):]
 	if !ok || !closed || !strings.EqualFold(strings.TrimSpace(name), exponentialBackoffToken) {
 		return 0, 0, "", fmt.Errorf("@retry-backoff must start with exponential(initial, max), got %q", raw)
 	}
