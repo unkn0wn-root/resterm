@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -439,6 +440,311 @@ func TestBareValueKeyRejectsSharedProfiles(t *testing.T) {
 	want := `@k8s option "namespace" needs a value. Write it as namespace=value`
 	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid || doc.K8s[0].Error != want {
 		t.Fatalf("k8s = %+v, want the profile kept as invalid", doc.K8s)
+	}
+}
+
+func TestTunnelErrorsKeepOptionFindings(t *testing.T) {
+	const (
+		sshReq    = "@ssh requires host or use="
+		sshGlobal = "@ssh global scope requires host"
+		sshFile   = "@ssh file scope requires host"
+		k8sReq    = "@k8s requires target and port or use="
+		k8sGlobal = "@k8s global scope requires target and port"
+		k8sFile   = "@k8s file scope requires target and port"
+	)
+	missing := func(dir, key string) string {
+		return fmt.Sprintf("%s option %q needs a value. Write it as %s=value", dir, key, key)
+	}
+	tests := []struct {
+		name    string
+		line    string
+		errs    []string
+		warns   []string
+		profile string
+	}{
+		{
+			name: "ssh bare option",
+			line: "@ssh prof port",
+			errs: []string{sshReq, missing("@ssh", "port")},
+		},
+		{
+			name: "ssh bare host",
+			line: "@ssh prof host",
+			errs: []string{missing("@ssh", "host")},
+		},
+		{
+			name: "ssh bare use",
+			line: "@ssh prof use",
+			errs: []string{missing("@ssh", "use")},
+		},
+		{
+			name: "ssh bare host after a value",
+			line: "@ssh host=h host",
+			errs: []string{`@ssh option "host" is repeated`, missing("@ssh", "host")},
+		},
+		{
+			name:  "ssh unknown option",
+			line:  "@ssh prof userr=x",
+			errs:  []string{sshReq},
+			warns: []string{`unknown @ssh option "userr"`},
+		},
+		{
+			name:  "ssh invalid options",
+			line:  "@ssh host=h agent=maybe persist=maybe userr=x",
+			errs:  []string{`invalid @ssh agent: "maybe"`, `invalid @ssh persist: "maybe"`},
+			warns: []string{`unknown @ssh option "userr"`},
+		},
+		{
+			name: "ssh valid",
+			line: "@ssh prof host=h",
+		},
+		{
+			name: "ssh global bare option",
+			line: "@ssh global prof port",
+			errs: []string{sshGlobal, missing("@ssh", "port")},
+		},
+		{
+			name: "ssh global bare host",
+			line: "@ssh global prof host",
+			errs: []string{missing("@ssh", "host")},
+		},
+		{
+			name: "ssh global bare use",
+			line: "@ssh global prof use",
+			errs: []string{sshGlobal, missing("@ssh", "use")},
+		},
+		{
+			name: "ssh global bare host after a value",
+			line: "@ssh global prof host=h host",
+			errs: []string{`@ssh option "host" is repeated`, missing("@ssh", "host")},
+		},
+		{
+			name:  "ssh global unknown option",
+			line:  "@ssh global prof userr=x",
+			errs:  []string{sshGlobal},
+			warns: []string{`unknown @ssh option "userr"`},
+		},
+		{
+			name: "ssh global alias conflict",
+			line: "@ssh global prof password=a pass=b",
+			errs: []string{sshGlobal, `@ssh options "pass", "password" are the same option`},
+		},
+		{
+			name: "ssh global invalid option",
+			line: "@ssh global prof host=h persist=maybe timeout",
+			errs: []string{`invalid @ssh persist: "maybe"`, missing("@ssh", "timeout")},
+		},
+		{
+			name: "ssh global valid",
+			line: "@ssh global prof host=h",
+		},
+		{
+			name: "ssh file bare option",
+			line: "@ssh file prof port",
+			errs: []string{sshFile, missing("@ssh", "port")},
+		},
+		{
+			name: "k8s bare option",
+			line: "@k8s pod=api namespace",
+			errs: []string{k8sReq, missing("@k8s", "namespace")},
+		},
+		{
+			name: "k8s bare port",
+			line: "@k8s pod=api port",
+			errs: []string{missing("@k8s", "port")},
+		},
+		{
+			name: "k8s bare port without a target",
+			line: "@k8s prof port",
+			errs: []string{k8sReq, missing("@k8s", "port")},
+		},
+		{
+			name: "k8s bare target",
+			line: "@k8s prof target port=80",
+			errs: []string{missing("@k8s", "target")},
+		},
+		{
+			name: "k8s bare pod",
+			line: "@k8s prof pod port=80",
+			errs: []string{missing("@k8s", "pod")},
+		},
+		{
+			name: "k8s bare service",
+			line: "@k8s prof svc port=80",
+			errs: []string{missing("@k8s", "svc")},
+		},
+		{
+			name: "k8s bare use",
+			line: "@k8s prof use",
+			errs: []string{missing("@k8s", "use")},
+		},
+		{
+			name:  "k8s unknown option",
+			line:  "@k8s pod=api userr=x",
+			errs:  []string{k8sReq},
+			warns: []string{`unknown @k8s option "userr"`},
+		},
+		{
+			name: "k8s alias conflict",
+			line: "@k8s pod=api namespace=a ns=b",
+			errs: []string{k8sReq, `@k8s options "namespace", "ns" are the same option`},
+		},
+		{
+			name: "k8s invalid options",
+			line: "@k8s pod=api port=99999 local_port=0 retries=-1 userr=x",
+			errs: []string{
+				`invalid @k8s port: "99999"`,
+				`invalid @k8s local_port: "0"`,
+				`invalid @k8s retries: "-1"`,
+			},
+			warns: []string{`unknown @k8s option "userr"`},
+		},
+		{
+			name: "k8s invalid option and alias conflict",
+			line: "@k8s pod=api port=80 persist=maybe namespace=a ns=b",
+			errs: []string{`invalid @k8s persist: "maybe"`, `@k8s options "namespace", "ns" are the same option`},
+		},
+		{
+			name: "k8s several targets",
+			line: "@k8s pod=a svc=b sts=c port=80",
+			errs: []string{"multiple @k8s targets specified"},
+		},
+		{
+			name: "k8s invalid target before a kind",
+			line: "@k8s target=bad/x svc=b port=80",
+			errs: []string{`invalid @k8s target: invalid target kind "bad"`},
+		},
+		{
+			name: "k8s valid",
+			line: "@k8s pod=api port=80",
+		},
+		{
+			name:    "k8s global bare option",
+			line:    "@k8s global prof pod=api namespace",
+			errs:    []string{k8sGlobal, missing("@k8s", "namespace")},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global bare port",
+			line:    "@k8s global prof pod=api port",
+			errs:    []string{missing("@k8s", "port")},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global bare port after a value",
+			line:    "@k8s global prof pod=api port=80 port",
+			errs:    []string{`@k8s option "port" is repeated`, missing("@k8s", "port")},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global bare target without a port",
+			line:    "@k8s global prof pod=api target",
+			errs:    []string{k8sGlobal, missing("@k8s", "target")},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global bare use",
+			line:    "@k8s global prof use",
+			errs:    []string{k8sGlobal, missing("@k8s", "use")},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global spaced port",
+			line:    "@k8s global prof pod=api port = 80",
+			errs:    []string{`@k8s option "port" has spaces around =. Write it as key=value`, k8sGlobal},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global quoted port",
+			line:    `@k8s global prof pod=api "port=80"`,
+			errs:    []string{k8sGlobal},
+			warns:   []string{`@k8s option "port=80" is quoted. Write it as port=80`},
+			profile: "prof",
+		},
+		{
+			name: "k8s global spaced and operator options",
+			line: "@k8s global prof pod=api port=80 persist = false retries<=3",
+			errs: []string{
+				`@k8s option "persist" has spaces around =. Write it as key=value`,
+				`@k8s option "retries" takes = instead of <=. Write it as retries=3`,
+			},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global unknown option",
+			line:    "@k8s global prof pod=api userr=x",
+			errs:    []string{k8sGlobal},
+			warns:   []string{`unknown @k8s option "userr"`},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global alias conflict",
+			line:    "@k8s global prof pod=api namespace=a ns=b",
+			errs:    []string{k8sGlobal, `@k8s options "namespace", "ns" are the same option`},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global repeated option",
+			line:    "@k8s global prof pod=api port=80 port=81",
+			errs:    []string{`@k8s option "port" is repeated`},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global alias conflict with a target and port",
+			line:    "@k8s global prof pod=api port=80 namespace=a ns=b",
+			errs:    []string{`@k8s options "namespace", "ns" are the same option`},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global invalid options",
+			line:    "@k8s global prof pod=api port=99999 local_port=0",
+			errs:    []string{`invalid @k8s port: "99999"`, `invalid @k8s local_port: "0"`},
+			profile: "prof",
+		},
+		{
+			name:    "k8s global valid",
+			line:    "@k8s global prof pod=api port=80",
+			profile: "prof",
+		},
+		{
+			name:    "k8s file bare option",
+			line:    "@k8s file prof pod=api namespace",
+			errs:    []string{k8sFile, missing("@k8s", "namespace")},
+			profile: "prof",
+		},
+	}
+
+	messages := func(list []restfile.ParseDiagnostic) []string {
+		var out []string
+		for _, d := range list {
+			out = append(out, d.Message)
+		}
+		return out
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("/ws/t.http", []byte("### r\n# "+tt.line+"\nGET http://x\n"))
+			if got := messages(doc.Errors); !slices.Equal(got, tt.errs) {
+				t.Fatalf("errors = %q, want %q", got, tt.errs)
+			}
+			if got := messages(doc.Warnings); !slices.Equal(got, tt.warns) {
+				t.Fatalf("warnings = %q, want %q", got, tt.warns)
+			}
+			if tt.profile == "" {
+				if len(doc.K8s) != 0 {
+					t.Fatalf("k8s = %+v, want no shared profile", doc.K8s)
+				}
+				return
+			}
+			want := strings.Join(tt.errs, "\n")
+			if len(doc.K8s) != 1 {
+				t.Fatalf("k8s = %+v, want one profile", doc.K8s)
+			}
+			if p := doc.K8s[0]; p.Name != tt.profile || p.Invalid != (want != "") || p.Error != want {
+				t.Fatalf("k8s profile %q invalid = %t error %q, want %q invalid = %t error %q",
+					p.Name, p.Invalid, p.Error, tt.profile, want != "", want)
+			}
+		})
 	}
 }
 

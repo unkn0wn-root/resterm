@@ -111,14 +111,32 @@ func (b *documentBuilder) report(d parsedDirective, err error) {
 		return
 	}
 	item := d.diagnostic(err.Error(), err)
-	var unknown *directive.UnknownOptionsError
-	var quoted *directive.QuotedOptionError
-	var script *scriptFieldError
-	if errors.As(err, &unknown) || errors.As(err, &quoted) || errors.As(err, &script) {
+	if isWarning(err) {
 		b.pushWarning(item)
 		return
 	}
 	b.pushError(item)
+}
+
+func isWarning(err error) bool {
+	var unknown *directive.UnknownOptionsError
+	var quoted *directive.QuotedOptionError
+	var script *scriptFieldError
+	return errors.As(err, &unknown) || errors.As(err, &quoted) || errors.As(err, &script)
+}
+
+func withoutWarnings(err error) error {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var errs []error
+		for _, item := range joined.Unwrap() {
+			errs = append(errs, withoutWarnings(item))
+		}
+		return errors.Join(errs...)
+	}
+	if isWarning(err) {
+		return nil
+	}
+	return err
 }
 
 // reportStrict treats unknown options as errors because they can change what runs.
