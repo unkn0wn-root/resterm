@@ -274,7 +274,8 @@ func parseJitterPercent(raw string) (float64, error) {
 	if err != nil || math.IsNaN(percent) || math.IsInf(percent, 0) || percent < 0 || percent > maxRetryJitterPercent {
 		return 0, fmt.Errorf("@retry-backoff jitter must be between 0%% and 100%%, got %q", raw)
 	}
-	return percent, nil
+	// -0% passes the range check. Abs keeps it from being stored as -0.
+	return math.Abs(percent), nil
 }
 
 func positiveDuration(field, raw string) (time.Duration, error) {

@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -147,6 +148,11 @@ func TestParseRepeatPolicyErrors(t *testing.T) {
 			want: "between 0% and 100%",
 		},
 		{
+			name: "negative jitter",
+			src:  "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=-1%\nGET https://example.com\n",
+			want: "between 0% and 100%",
+		},
+		{
 			name: "non-finite jitter",
 			src:  "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=NaN%\nGET https://example.com\n",
 			want: "between 0% and 100%",
@@ -233,5 +239,22 @@ func TestParseRetryBackoffOptionsRightAfterTheCall(t *testing.T) {
 	}
 	if got := doc.Requests[0].Metadata.Retry.Backoff.JitterPercent; got != 10 {
 		t.Fatalf("jitter = %v, want 10", got)
+	}
+}
+
+func TestParseRetryBackoffZeroJitterHasNoSign(t *testing.T) {
+	t.Parallel()
+	for _, jitter := range []string{"0%", "-0%", "-0.0%", "+0%"} {
+		t.Run(jitter, func(t *testing.T) {
+			t.Parallel()
+			src := "# @retry count=1\n# @retry-backoff exponential(1s, 2s) jitter=" + jitter + "\nGET https://example.com\n"
+			doc := Parse("jobs.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("Parse() errors = %+v", doc.Errors)
+			}
+			if got := doc.Requests[0].Metadata.Retry.Backoff.JitterPercent; got != 0 || math.Signbit(got) {
+				t.Fatalf("jitter = %v, want 0 without a sign", got)
+			}
+		})
 	}
 }
