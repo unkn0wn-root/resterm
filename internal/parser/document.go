@@ -279,10 +279,16 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.lintRequestPolicies(req)
 	b.lintProfile(req)
 	if req.Method != "" && req.URL != "" {
-		// @grpc-proto may follow the import path, so check once the request is built.
-		if gr := req.GRPC; gr != nil && len(gr.ProtoFiles) == 0 {
-			for _, d := range b.request.importDirectives {
-				b.warn(d, d.Spelling.Tag()+" without "+directive.GRPCProto.Tag()+" was ignored")
+		// Directives may come before the request line or @grpc-proto, so check here.
+		if !b.request.isGRPC() {
+			for _, d := range b.request.grpcDirectives {
+				b.pushError(d.diagnostic(d.Spelling.Tag()+" requires a GRPC request line", nil))
+			}
+		} else if gr := req.GRPC; gr != nil && len(gr.ProtoFiles) == 0 {
+			for _, d := range b.request.grpcDirectives {
+				if d.Name == directive.GRPCImportPath {
+					b.warn(d, d.Spelling.Tag()+" without "+directive.GRPCProto.Tag()+" was ignored")
+				}
 			}
 			gr.ImportPaths = nil
 		}

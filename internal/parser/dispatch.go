@@ -45,6 +45,10 @@ func (d parsedDirective) exprCol(expr string) int {
 	return d.argCol + off
 }
 
+func (d parsedDirective) valueMissing() bool {
+	return d.Name.ValueRequired() && !directive.HasValue(d.Args)
+}
+
 func (d parsedDirective) setExprCol(col *int, expr string) {
 	if c := d.exprCol(expr); c > 0 {
 		*col = c
@@ -102,7 +106,7 @@ func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 	if out == directiveApplied {
 		b.warnUnclosedArgs(d)
 	}
-	if out == directiveApplied && d.Name.ValueRequired() && !directive.HasValue(d.Args) {
+	if out == directiveApplied && d.valueMissing() {
 		return b.reject(d, d.Spelling.Tag()+" value missing")
 	}
 	return out

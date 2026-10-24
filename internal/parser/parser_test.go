@@ -5643,6 +5643,9 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
 				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
 			}
+			if len(doc.Warnings) != 0 {
+				t.Fatalf("warnings = %v, want none", doc.Warnings)
+			}
 			req := firstRequest(t, doc)
 			if req.GRPC != nil {
 				t.Fatalf("gRPC = %+v, want the request left alone", req.GRPC)
@@ -5651,6 +5654,202 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 				t.Fatalf("graphql = %+v, want the operation the author declared", req.Body.GraphQL)
 			}
 		})
+	}
+}
+
+func TestParseGRPCDirectiveNeedsAGRPCRequestLine(t *testing.T) {
+	const col = 3
+	tests := []struct {
+		name string
+		src  []string
+		errs []int
+		body string
+	}{
+		{
+			name: "method above GET",
+			src:  []string{"# @grpc pkg.Svc/Get", "GET https://example.com"},
+			errs: []int{1},
+		},
+		{
+			name: "method below POST",
+			src:  []string{"POST https://example.com", "# @grpc pkg.Svc/Create", "", `{"id": 1}`},
+			errs: []int{2},
+			body: `{"id": 1}`,
+		},
+		{
+			name: "bare method",
+			src:  []string{"GET https://example.com", "# @grpc"},
+			errs: []int{2},
+		},
+		{
+			name: "descriptor",
+			src:  []string{"# @grpc-descriptor svc.protoset", "POST https://example.com", "", `{"id": 1}`},
+			errs: []int{1},
+			body: `{"id": 1}`,
+		},
+		{
+			name: "proto and import path above PUT",
+			src: []string{
+				"# @grpc-proto svc.proto", "# @grpc-import-path vendor", "PUT https://example.com", "", `{"id": 1}`,
+			},
+			errs: []int{1, 2},
+			body: `{"id": 1}`,
+		},
+		{
+			name: "import path alone",
+			src:  []string{"GET https://example.com", "# @grpc-import-path vendor"},
+			errs: []int{2},
+		},
+		{
+			name: "metadata",
+			src:  []string{"GET https://example.com", "# @grpc-metadata x-id: 1"},
+			errs: []int{2},
+		},
+		{
+			name: "reflection off",
+			src:  []string{"GET https://example.com", "# @grpc-reflection false"},
+			errs: []int{2},
+		},
+		{
+			name: "bare plaintext",
+			src:  []string{"GET https://example.com", "# @grpc-plaintext"},
+			errs: []int{2},
+		},
+		{
+			name: "authority",
+			src:  []string{"GET https://example.com", "# @grpc-authority api.internal"},
+			errs: []int{2},
+		},
+		{
+			name: "websocket URL line",
+			src:  []string{"ws://example.com/socket", "# @grpc-descriptor svc.protoset"},
+			errs: []int{2},
+		},
+		{
+			name: "with profile",
+			src:  []string{"# @profile count=2", "# @grpc pkg.Svc/Get", "GET https://example.com"},
+			errs: []int{2},
+		},
+		{
+			name: "with retry",
+			src:  []string{"GET https://example.com", "# @retry count=2", "# @grpc-descriptor svc.protoset"},
+			errs: []int{3},
+		},
+		{
+			name: "above a GRPC line",
+			src:  []string{"# @grpc-descriptor svc.protoset", "GRPC localhost:9000"},
+		},
+		{
+			name: "below a GRPC line",
+			src:  []string{"GRPC localhost:9000", "# @grpc pkg.Svc/Get", "", `{"id": 1}`},
+			body: `{"id": 1}`,
+		},
+		{
+			name: "lowercase grpc line",
+			src:  []string{"grpc localhost:9000", "# @grpc pkg.Svc/Get"},
+		},
+		{
+			name: "GRPC line alone",
+			src:  []string{"GRPC localhost:9000"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("line.http", []byte(strings.Join(tt.src, "\n")+"\n"))
+			if len(doc.Warnings) != 0 {
+				t.Fatalf("warnings = %v, want none", doc.Warnings)
+			}
+			if len(doc.Errors) != len(tt.errs) {
+				t.Fatalf("errors = %v, want %d", doc.Errors, len(tt.errs))
+			}
+			for i, e := range doc.Errors {
+				line := tt.errs[i]
+				want := strings.Fields(tt.src[line-1])[1] + " requires a GRPC request line"
+				if e.Message != want || e.Span.Start.Line != line || e.Span.Start.Col != col {
+					t.Fatalf(
+						"error %q at %d:%d, want %q at %d:%d",
+						e.Message, e.Span.Start.Line, e.Span.Start.Col, want, line, col,
+					)
+				}
+			}
+			req := firstRequest(t, doc)
+			if want := len(tt.errs) == 0; (req.GRPC != nil) != want {
+				t.Fatalf("gRPC = %+v, want a gRPC section: %t", req.GRPC, want)
+			}
+			if req.Body.Text != tt.body {
+				t.Fatalf("body = %q, want %q", req.Body.Text, tt.body)
+			}
+		})
+	}
+}
+
+func TestParseGRPCDirectiveLeavesTheBodyToTheRequestLine(t *testing.T) {
+	tests := []struct {
+		name  string
+		src   []string
+		check func(*restfile.Request) error
+	}{
+		{
+			name: "GraphQL query",
+			src: []string{
+				"POST https://example.com/graphql", "# @graphql", "# @grpc-descriptor svc.protoset", "",
+				"query Used { id }",
+			},
+			check: func(req *restfile.Request) error {
+				if req.Body.GraphQL == nil || req.Body.GraphQL.Query != "query Used { id }" {
+					return fmt.Errorf("graphql = %+v, want the query", req.Body.GraphQL)
+				}
+				return nil
+			},
+		},
+		{
+			name: "SSE body",
+			src: []string{
+				"POST https://example.com/events", "# @sse", "# @grpc-descriptor svc.protoset", "", `{"id": 1}`,
+			},
+			check: func(req *restfile.Request) error {
+				if req.SSE == nil || req.Body.Text != `{"id": 1}` {
+					return fmt.Errorf("sse = %+v, body = %q, want SSE with the body", req.SSE, req.Body.Text)
+				}
+				return nil
+			},
+		},
+		{
+			name: "body lines around the directive",
+			src:  []string{"POST https://example.com", "", `{"a": 1,`, "# @grpc-descriptor svc.protoset", `"b": 2}`},
+			check: func(req *restfile.Request) error {
+				if want := "{\"a\": 1,\n\"b\": 2}"; req.Body.Text != want {
+					return fmt.Errorf("body = %q, want %q", req.Body.Text, want)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("body.http", []byte(strings.Join(tt.src, "\n")+"\n"))
+			req := firstRequest(t, doc)
+			if err := tt.check(req); err != nil {
+				t.Fatal(err)
+			}
+			if req.GRPC != nil {
+				t.Fatalf("gRPC = %+v, want none", req.GRPC)
+			}
+			want := "@grpc-descriptor requires a GRPC request line"
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, want)
+			}
+		})
+	}
+}
+
+func TestParseGRPCDirectiveInABlockWithoutARequestIsSilent(t *testing.T) {
+	src := "### one\n# @grpc pkg.Svc/Get\n# @grpc-descriptor svc.protoset\n### two\nGET https://example.com\n"
+	doc := Parse("block.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+		t.Fatalf("errors = %v, warnings = %v, want none", doc.Errors, doc.Warnings)
 	}
 }
 

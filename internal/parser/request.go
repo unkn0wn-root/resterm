@@ -27,7 +27,7 @@ type requestBuilder struct {
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
 	grpc              *grpcbuilder.Builder
-	importDirectives  []parsedDirective
+	grpcDirectives    []parsedDirective
 	sse               *ssebuilder.Builder
 	websocket         *wsbuilder.Builder
 	bodyOptions       restfile.BodyOptions
@@ -54,8 +54,9 @@ func (r *requestBuilder) protoDirective(d parsedDirective) (bool, error) {
 		if reset {
 			r.clearDeclared(d.Name)
 		}
-		if d.Name == directive.GRPCImportPath && directive.HasValue(d.Args) {
-			r.importDirectives = append(r.importDirectives, d)
+		// A rejected or bare directive already has its own error.
+		if feature == r.grpc && err == nil && !d.valueMissing() {
+			r.grpcDirectives = append(r.grpcDirectives, d)
 		}
 		return true, err
 	}
@@ -72,7 +73,11 @@ func (r *requestBuilder) protoBodyLine(raw string) bool {
 	if r.graphql.HandleBodyLine(raw, r.bodyOptions.ForceInline) {
 		return true
 	}
-	return r.grpc.HandleBodyLine(raw, r.bodyOptions.ForceInline)
+	return r.isGRPC() && r.grpc.HandleBodyLine(raw, r.bodyOptions.ForceInline)
+}
+
+func (r *requestBuilder) isGRPC() bool {
+	return r.http.Method() == "GRPC"
 }
 
 func (r *requestBuilder) applyReqSettings(req *restfile.Request) {
@@ -122,7 +127,7 @@ func (r *requestBuilder) build() *restfile.Request {
 	}
 
 	if req.WebSocket == nil && req.SSE == nil {
-		if grpcReq, body, mime, ok := r.grpc.Finalize(r.http.MimeType()); ok {
+		if grpcReq, body, mime, ok := r.grpc.Finalize(r.http.MimeType()); ok && r.isGRPC() {
 			req.GRPC = grpcReq
 			req.Body = body
 			if mime != "" {
