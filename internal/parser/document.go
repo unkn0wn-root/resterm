@@ -99,23 +99,31 @@ func lineDiagnostic(line int, msg string) restfile.ParseDiagnostic {
 	return restfile.ParseDiagnostic{Message: msg, Span: diag.Span{Start: diag.Pos{Line: line}}}
 }
 
-// Report each joined error separately so the editor can mark every problem.
-func (b *documentBuilder) report(d parsedDirective, err error) {
+// leaves flattens joined errors but keeps a single-error wrapper as one leaf.
+func leaves(err error) []error {
 	if err == nil {
-		return
+		return nil
 	}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		for _, item := range joined.Unwrap() {
-			b.report(d, item)
+		var errs []error
+		for _, err := range joined.Unwrap() {
+			errs = append(errs, leaves(err)...)
 		}
-		return
+		return errs
 	}
-	item := d.diagnostic(err.Error(), err)
-	if isWarning(err) {
-		b.pushWarning(item)
-		return
+	return []error{err}
+}
+
+// Report each joined error separately so the editor can mark every problem.
+func (b *documentBuilder) report(d parsedDirective, err error) {
+	for _, err := range leaves(err) {
+		item := d.diagnostic(err.Error(), err)
+		if isWarning(err) {
+			b.pushWarning(item)
+			continue
+		}
+		b.pushError(item)
 	}
-	b.pushError(item)
 }
 
 func isWarning(err error) bool {
@@ -126,48 +134,29 @@ func isWarning(err error) bool {
 }
 
 func withoutWarnings(err error) error {
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		var errs []error
-		for _, item := range joined.Unwrap() {
-			errs = append(errs, withoutWarnings(item))
-		}
-		return errors.Join(errs...)
-	}
-	if isWarning(err) {
-		return nil
-	}
-	return err
+	return errors.Join(slices.DeleteFunc(leaves(err), isWarning)...)
 }
 
 // reportStrict treats unknown options as errors because they can change what runs.
 func (b *documentBuilder) reportStrict(d parsedDirective, err error) {
-	if err == nil {
-		return
+	for _, err := range leaves(err) {
+		b.pushError(d.diagnostic(err.Error(), err))
 	}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		for _, item := range joined.Unwrap() {
-			b.reportStrict(d, item)
-		}
-		return
-	}
-	b.pushError(d.diagnostic(err.Error(), err))
 }
 
 // Keep valid options when the only errors are unknown keys, quoting, spacing,
 // or unsupported operators.
 func fatalErr(err error) bool {
-	if err == nil {
-		return false
+	for _, err := range leaves(err) {
+		var unknown *directive.UnknownOptionsError
+		var spaced *directive.SpacedOptionsError
+		var op *directive.OpOptionError
+		var quoted *directive.QuotedOptionError
+		if !errors.As(err, &unknown) && !errors.As(err, &spaced) && !errors.As(err, &op) && !errors.As(err, &quoted) {
+			return true
+		}
 	}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		return slices.ContainsFunc(joined.Unwrap(), fatalErr)
-	}
-	var unknown *directive.UnknownOptionsError
-	var spaced *directive.SpacedOptionsError
-	var op *directive.OpOptionError
-	var quoted *directive.QuotedOptionError
-	return !errors.As(err, &unknown) && !errors.As(err, &spaced) && !errors.As(err, &op) &&
-		!errors.As(err, &quoted)
+	return false
 }
 
 func (b *documentBuilder) processLine(no int, raw, term string) {
