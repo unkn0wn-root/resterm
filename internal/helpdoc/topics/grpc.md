@@ -1,6 +1,6 @@
 # gRPC
 
-Use `@grpc` with a fully qualified service method. Reflection is enabled unless a descriptor set is supplied with `@grpc-descriptor`, or `.proto` files with `@grpc-proto` and `@grpc-import-path` for their imports.
+Use `@grpc` with a fully qualified service method. Reflection is enabled unless a descriptor set is supplied with `@grpc-descriptor`, or `.proto` files with `@grpc-proto` and `@grpc-import-path` for their imports. Directives that start with `@grpc` need a `GRPC` request line and are an error on any other request line.
 
 ```http
 # @grpc inventory.ProjectService/Get

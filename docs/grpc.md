@@ -1,6 +1,6 @@
 # gRPC
 
-Start a gRPC request with a line such as `GRPC host:port`. Use the directives below to choose the method, provide service descriptors, and configure the connection.
+Start a gRPC request with a line such as `GRPC host:port`. Use the directives below to choose the method, provide service descriptors, and configure the connection. Directives that start with `@grpc` apply only to a `GRPC` request line and are a parse error on any other request line, such as `GET` or `POST`. On a `GRPC` request line, `@graphql`, `@sse`, `@websocket`, and `@ws` are parse errors, except when they turn a protocol off, as with `@sse off`.
 
 | Directive | Description |
 | --- | --- |

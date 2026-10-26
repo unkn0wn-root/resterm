@@ -38,13 +38,18 @@ func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, re
 	}
 
 	b.enabled = true
-	return true, false, directive.ApplyOptions(directive.SSE, rest, sseAliases, b.applyOption)
+	return true, false, directive.ApplyOptions(directive.SSE, rest, sseAliases, sseValueKeys, b.applyOption)
 }
 
 var sseAliases = [][]string{
 	{"duration", "timeout"},
 	{"idle", "idle-timeout"},
 	{"max-bytes", "limit-bytes"},
+}
+
+var sseValueKeys = []string{
+	"duration", "timeout", "idle", "idle-timeout", "max-events", "max-bytes", "limit-bytes", "max-line-bytes",
+	"max-event-bytes",
 }
 
 // ParseOptions lowercases keys, so name is already normalized.

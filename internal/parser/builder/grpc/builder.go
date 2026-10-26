@@ -44,9 +44,9 @@ func (b *Builder) SetTarget(target string) {
 	req.Target = strings.TrimSpace(target)
 }
 
-// HandleDirective applies a gRPC directive. A directive with a missing value is
-// left unclaimed because claiming it could make gRPC hide a body intended for
-// another protocol. gRPC has no reset directive, so reset is always false.
+// HandleDirective applies a gRPC directive. A directive whose required value is
+// missing is still claimed, so the router reports the value as missing. gRPC has
+// no reset directive, so reset is always false.
 func (b *Builder) HandleDirective(name directive.Name, rest string) (handled, reset bool, err error) {
 	switch name {
 	case directive.GRPC:

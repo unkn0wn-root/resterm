@@ -182,9 +182,7 @@ func parseRetrySpec(raw string, line int) (*restfile.RetrySpec, error) {
 	opts, err := directive.ParseOptions(directive.Retry, raw)
 	errs := []error{err}
 	count := 0
-	if countRaw, found := opts.PopAny("count"); !found {
-		errs = append(errs, errors.New("@retry count is required"))
-	} else {
+	if countRaw, found := opts.PopAny("count"); found {
 		n, countErr := directive.ParseNonNegativeInt(countRaw)
 		switch {
 		case countErr != nil:
@@ -193,6 +191,8 @@ func parseRetrySpec(raw string, line int) (*restfile.RetrySpec, error) {
 			countErr = errors.New("@retry count must be greater than zero")
 		}
 		count, errs = n, append(errs, countErr)
+	} else if !opts.Bare("count") {
+		errs = append(errs, errors.New("@retry count is required"))
 	}
 	errs = append(errs, opts.Leftover(directive.Retry))
 	err = errors.Join(errs...)
@@ -215,16 +215,12 @@ func parseRetryBackoff(raw string) (*restfile.ExponentialBackoffSpec, error) {
 	if raw == "" {
 		return nil, errors.New("@retry-backoff requires exponential(initial, max)")
 	}
-	end := strings.IndexByte(raw, ')')
-	if end < 0 {
-		return nil, errors.New("@retry-backoff exponential is missing a closing parenthesis")
-	}
-	initial, maximum, err := parseExponentialCall(strings.TrimSpace(raw[:end+1]))
+	initial, maximum, rest, err := parseExponentialCall(raw)
 	if err != nil {
 		return nil, err
 	}
 
-	opts, optionErr := directive.ParseOptions(directive.RetryBackoff, raw[end+1:])
+	opts, optionErr := directive.ParseOptions(directive.RetryBackoff, rest)
 	errs := []error{optionErr}
 	jitter := float64(defaultRetryJitter)
 	if rawJitter, found := opts.PopAny("jitter"); found {
@@ -246,24 +242,27 @@ func parseRetryBackoff(raw string) (*restfile.ExponentialBackoffSpec, error) {
 	}, err
 }
 
-func parseExponentialCall(raw string) (time.Duration, time.Duration, error) {
-	name, args, ok := strings.Cut(raw, "(")
-	if !ok || !strings.EqualFold(strings.TrimSpace(name), exponentialBackoffToken) || !strings.HasSuffix(args, ")") {
-		return 0, 0, fmt.Errorf("@retry-backoff must start with exponential(initial, max), got %q", raw)
+// The call ends at the first ")" outside strings, comments, and nested groups.
+func parseExponentialCall(raw string) (initial, maximum time.Duration, rest string, err error) {
+	head, tail, closed := strings.Cut(rts.Mask(raw), ")")
+	name, args, ok := strings.Cut(raw[:len(head)], "(")
+	rest = raw[len(raw)-len(tail):]
+	if !ok || !closed || !strings.EqualFold(strings.TrimSpace(name), exponentialBackoffToken) {
+		return 0, 0, "", fmt.Errorf("@retry-backoff must start with exponential(initial, max), got %q", raw)
 	}
-	parts := strings.Split(strings.TrimSuffix(args, ")"), ",")
+	parts := strings.Split(args, ",")
 	if len(parts) != 2 {
-		return 0, 0, errors.New("@retry-backoff exponential requires initial and maximum delays")
+		return 0, 0, "", errors.New("@retry-backoff exponential requires initial and maximum delays")
 	}
-	initial, err := positiveDuration("@retry-backoff initial delay", parts[0])
+	initial, err = positiveDuration("@retry-backoff initial delay", parts[0])
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, "", err
 	}
-	maximum, err := positiveDuration("@retry-backoff maximum delay", parts[1])
+	maximum, err = positiveDuration("@retry-backoff maximum delay", parts[1])
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, "", err
 	}
-	return initial, maximum, nil
+	return initial, maximum, rest, nil
 }
 
 func parseJitterPercent(raw string) (float64, error) {
@@ -275,7 +274,8 @@ func parseJitterPercent(raw string) (float64, error) {
 	if err != nil || math.IsNaN(percent) || math.IsInf(percent, 0) || percent < 0 || percent > maxRetryJitterPercent {
 		return 0, fmt.Errorf("@retry-backoff jitter must be between 0%% and 100%%, got %q", raw)
 	}
-	return percent, nil
+	// -0% passes the range check. Abs keeps it from being stored as -0.
+	return math.Abs(percent), nil
 }
 
 func positiveDuration(field, raw string) (time.Duration, error) {

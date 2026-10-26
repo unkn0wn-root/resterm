@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -102,8 +103,53 @@ func TestParseRepeatPolicyErrors(t *testing.T) {
 			want: "maximum must be at least",
 		},
 		{
+			name: "backoff without a call",
+			src:  "# @retry count=1\n# @retry-backoff 1s\nGET https://example.com\n",
+			want: `@retry-backoff must start with exponential(initial, max), got "1s"`,
+		},
+		{
+			name: "backoff with another word",
+			src:  "# @retry count=1\n# @retry-backoff linear\nGET https://example.com\n",
+			want: `@retry-backoff must start with exponential(initial, max), got "linear"`,
+		},
+		{
+			name: "backoff name without a call",
+			src:  "# @retry count=1\n# @retry-backoff exponential\nGET https://example.com\n",
+			want: `@retry-backoff must start with exponential(initial, max), got "exponential"`,
+		},
+		{
+			name: "backoff call with another name",
+			src:  "# @retry count=1\n# @retry-backoff linear(1s, 2s) jitter=5%\nGET https://example.com\n",
+			want: `@retry-backoff must start with exponential(initial, max), got "linear(1s, 2s) jitter=5%"`,
+		},
+		{
+			name: "unclosed backoff call",
+			src:  "# @retry count=1\n# @retry-backoff exponential(1s, 2s\nGET https://example.com\n",
+			want: `@retry-backoff is missing a closing ")"`,
+		},
+		{
+			name: "quoted paren in backoff call",
+			src:  "# @retry count=1\n# @retry-backoff exponential(1s, \"2s)\")\nGET https://example.com\n",
+			want: `@retry-backoff maximum delay must be a positive duration, got "\"2s)\""`,
+		},
+		{
+			name: "nested parens in backoff call",
+			src:  "# @retry count=1\n# @retry-backoff exponential((1s), 2s)\nGET https://example.com\n",
+			want: `@retry-backoff initial delay must be a positive duration, got "(1s)"`,
+		},
+		{
+			name: "quoted paren after backoff call",
+			src:  "# @retry count=1\n# @retry-backoff exponential(1s, 2s) jitter=\")\"\nGET https://example.com\n",
+			want: `@retry-backoff jitter must be a percentage, got ")"`,
+		},
+		{
 			name: "bad jitter",
 			src:  "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=101%\nGET https://example.com\n",
+			want: "between 0% and 100%",
+		},
+		{
+			name: "negative jitter",
+			src:  "# @retry count=1\n# @retry-backoff exponential(1ms, 1s) jitter=-1%\nGET https://example.com\n",
 			want: "between 0% and 100%",
 		},
 		{
@@ -179,5 +225,36 @@ GET https://example.com/jobs/123
 	backoff := doc.Requests[0].Metadata.Retry.Backoff
 	if backoff.Initial != 100*time.Millisecond || backoff.Max != 2*time.Second || backoff.JitterPercent != 10 {
 		t.Fatalf("@retry-backoff continuation = %+v", backoff)
+	}
+}
+
+func TestParseRetryBackoffOptionsRightAfterTheCall(t *testing.T) {
+	t.Parallel()
+	doc := Parse(
+		"jobs.http",
+		[]byte("# @retry count=1\n# @retry-backoff exponential(1s, 2s)jitter=10%\nGET https://example.com\n"),
+	)
+	if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+		t.Fatalf("errors = %v, warnings = %v, want none", doc.Errors, doc.Warnings)
+	}
+	if got := doc.Requests[0].Metadata.Retry.Backoff.JitterPercent; got != 10 {
+		t.Fatalf("jitter = %v, want 10", got)
+	}
+}
+
+func TestParseRetryBackoffZeroJitterHasNoSign(t *testing.T) {
+	t.Parallel()
+	for _, jitter := range []string{"0%", "-0%", "-0.0%", "+0%"} {
+		t.Run(jitter, func(t *testing.T) {
+			t.Parallel()
+			src := "# @retry count=1\n# @retry-backoff exponential(1s, 2s) jitter=" + jitter + "\nGET https://example.com\n"
+			doc := Parse("jobs.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("Parse() errors = %+v", doc.Errors)
+			}
+			if got := doc.Requests[0].Metadata.Retry.Backoff.JitterPercent; got != 0 || math.Signbit(got) {
+				t.Fatalf("jitter = %v, want 0 without a sign", got)
+			}
+		})
 	}
 }

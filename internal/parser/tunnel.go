@@ -55,10 +55,7 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 	res, err := k8sbuilder.ParseDirective(d.Args)
 	b.report(d, err)
 	if fatalErr(err) {
-		var dirErr *k8sbuilder.DirectiveError
-		if errors.As(err, &dirErr) {
-			b.addInvalidK8sProfile(d.lines.Start, dirErr.Profile, err.Error())
-		}
+		b.addInvalidK8sProfile(d.lines.Start, res.Profile, withoutWarnings(err).Error())
 		return directiveRejected
 	}
 
@@ -79,12 +76,8 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 		res.Profile.Scope = res.Scope
 		var spaced *directive.SpacedOptionsError
 		var op *directive.OpOptionError
-		switch {
-		case errors.As(err, &spaced):
-			b.addInvalidK8sProfile(d.lines.Start, res.Profile, spaced.Error())
-			return directiveRejected
-		case errors.As(err, &op):
-			b.addInvalidK8sProfile(d.lines.Start, res.Profile, op.Error())
+		if errors.As(err, &spaced) || errors.As(err, &op) {
+			b.addInvalidK8sProfile(d.lines.Start, res.Profile, withoutWarnings(err).Error())
 			return directiveRejected
 		}
 		res.Profile.Line = d.lines.Start

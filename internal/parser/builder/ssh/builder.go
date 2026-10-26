@@ -32,13 +32,13 @@ func ParseDirective(rest string) (res Directive, err error) {
 	}
 
 	prof := restfile.SSHProfile{Scope: scope, Name: name}
-	if err := applySSHOptions(&prof, opts); err != nil {
-		return res, err
-	}
+	optErr := applySSHOptions(&prof, opts)
 	use := opts.Pop("use")
-	// Everything valid has been popped by now, so the leftovers are typos. They
-	// ride along with a usable result and the caller turns them into warnings.
+	// Everything valid has been popped by now, so Leftover reports only mistakes.
 	left := opts.Leftover(directive.SSH)
+	if optErr != nil {
+		return res, errors.Join(optErr, left)
+	}
 
 	if scope == directive.ScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking tunnels.
@@ -47,8 +47,8 @@ func ParseDirective(rest string) (res Directive, err error) {
 	}
 
 	if scope != directive.ScopeRequest {
-		if strings.TrimSpace(prof.Host) == "" {
-			return res, fmt.Errorf("@ssh %s scope requires host", scope.String())
+		if strings.TrimSpace(prof.Host) == "" && !opts.Bare("host") {
+			return res, errors.Join(fmt.Errorf("@ssh %s scope requires host", scope.String()), left)
 		}
 		res.Scope = scope
 		res.Profile = prof
@@ -56,8 +56,8 @@ func ParseDirective(rest string) (res Directive, err error) {
 	}
 
 	inline := buildInlineSSH(prof)
-	if use == "" && inline == nil {
-		return res, fmt.Errorf("@ssh requires host or use=")
+	if use == "" && inline == nil && !opts.Bare("host") && !opts.Bare("use") {
+		return res, errors.Join(errors.New("@ssh requires host or use="), left)
 	}
 
 	res.Scope = scope
@@ -66,6 +66,7 @@ func ParseDirective(rest string) (res Directive, err error) {
 	return res, left
 }
 
+// Every option is read even after one fails, so two mistakes are both reported.
 func applySSHOptions(prof *restfile.SSHProfile, opts directive.Options) error {
 	if host, ok := opts.PopAny("host"); ok {
 		prof.Host = host
@@ -88,18 +89,8 @@ func applySSHOptions(prof *restfile.SSHProfile, opts directive.Options) error {
 	if kp, ok := opts.PopAny("passphrase"); ok {
 		prof.KeyPass = kp
 	}
-	if err := setBoolOption(&prof.Agent, opts, "agent"); err != nil {
-		return err
-	}
 	if kh, ok := opts.PopAny("known_hosts", "known-hosts"); ok {
 		prof.KnownHosts = kh
-	}
-	err := setBoolOption(&prof.Strict, opts, "strict_hostkey", "strict-hostkey", "strict_host_key")
-	if err != nil {
-		return err
-	}
-	if err := setBoolOption(&prof.Persist, opts, "persist"); err != nil {
-		return err
 	}
 
 	if raw, ok := opts.PopAny("timeout"); ok {
@@ -123,7 +114,11 @@ func applySSHOptions(prof *restfile.SSHProfile, opts directive.Options) error {
 			prof.Retries.Val = n
 		}
 	}
-	return nil
+	return errors.Join(
+		setBoolOption(&prof.Agent, opts, "agent"),
+		setBoolOption(&prof.Strict, opts, "strict_hostkey", "strict-hostkey", "strict_host_key"),
+		setBoolOption(&prof.Persist, opts, "persist"),
+	)
 }
 
 func setBoolOption(opt *restfile.Opt[bool], opts directive.Options, keys ...string) error {

@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"cmp"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
@@ -3931,8 +3933,8 @@ func TestParseOptionTokensQuotedValues(t *testing.T) {
 	if got := opts.Get("message"); got != "He said \"hi\"" {
 		t.Fatalf("expected escaped quotes preserved, got %q", got)
 	}
-	if got := opts.Get("flag"); got != "true" {
-		t.Fatalf("expected bare flag to default to true, got %q", got)
+	if on, ok, _ := opts.PopBool("flag"); !on || !ok {
+		t.Fatalf("expected bare flag to read as a true switch, got (%t, %t)", on, ok)
 	}
 }
 
@@ -4610,6 +4612,9 @@ func TestParseWebSocketStepReportsMalformedInput(t *testing.T) {
 
 func TestParseStreamingDirectivesIgnoreUnknownOptions(t *testing.T) {
 	src := `# @sse future-sse-option=value
+GET https://example.com/events
+
+###
 # @websocket future-websocket-option=value
 GET wss://example.com/socket
 `
@@ -4618,8 +4623,8 @@ GET wss://example.com/socket
 	if len(doc.Errors) != 0 {
 		t.Fatalf("expected unknown options to remain forward-compatible, got %v", doc.Errors)
 	}
-	if len(doc.Requests) != 1 {
-		t.Fatalf("expected one request, got %d", len(doc.Requests))
+	if len(doc.Requests) != 2 || doc.Requests[0].SSE == nil || doc.Requests[1].WebSocket == nil {
+		t.Fatalf("requests = %+v, want an SSE and a WebSocket request", doc.Requests)
 	}
 }
 
@@ -5351,6 +5356,42 @@ func TestParseDirectiveValueMissing(t *testing.T) {
 	}
 }
 
+func TestParseValueOfOnlyQuotesIsMissing(t *testing.T) {
+	heads := map[string]string{
+		"graphql": "POST https://example.com\n# @graphql\n",
+		"grpc":    "GRPC localhost:9000\n# @grpc-proto svc.proto\n",
+	}
+	for _, spec := range directive.Specs() {
+		if !spec.ValueRequired {
+			continue
+		}
+		head := cmp.Or(heads[spec.Topic], "GET https://example.com\n")
+		for _, name := range append([]directive.Name{spec.Name}, spec.Aliases...) {
+			t.Run(name.Tag(), func(t *testing.T) {
+				bare := Parse("quotes.http", []byte(head+"# "+name.Tag()+"\n"))
+				if len(bare.Errors) == 0 {
+					t.Fatal("bare directive parsed without errors, want it claimed and rejected")
+				}
+				want := *firstRequest(t, bare)
+				want.OriginalText = ""
+				for _, quotes := range []string{`""`, `''`} {
+					doc := Parse("quotes.http", []byte(head+"# "+name.Tag()+" "+quotes+"\n"))
+					if !reflect.DeepEqual(doc.Errors, bare.Errors) {
+						t.Errorf("%s errors = %v, want %v as written bare", quotes, doc.Errors, bare.Errors)
+					}
+					req := *firstRequest(t, doc)
+					req.OriginalText = ""
+					if !reflect.DeepEqual(req, want) {
+						got, _ := json.Marshal(req)
+						exp, _ := json.Marshal(want)
+						t.Errorf("%s request = %s, want %s as written bare", quotes, got, exp)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestParseQuotedDirectiveValueKeepsItsSpaces(t *testing.T) {
 	doc := Parse("quoted.http", []byte("# @name \"  Spaced  \"\nGET https://example.com\n"))
 	if len(doc.Errors) != 0 {
@@ -5632,6 +5673,11 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 			line: "@grpc-authority",
 			want: "@grpc-authority value missing",
 		},
+		{
+			name: "metadata of only quotes",
+			line: `@grpc-metadata ""`,
+			want: "@grpc-metadata value missing",
+		},
 	}
 
 	for _, tt := range tests {
@@ -5642,6 +5688,9 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 			doc := Parse("mixed.http", []byte(src))
 			if len(doc.Errors) != 1 || doc.Errors[0].Message != tt.want {
 				t.Fatalf("errors = %v, want exactly %q", doc.Errors, tt.want)
+			}
+			if len(doc.Warnings) != 0 {
+				t.Fatalf("warnings = %v, want none", doc.Warnings)
 			}
 			req := firstRequest(t, doc)
 			if req.GRPC != nil {
@@ -5654,19 +5703,427 @@ func TestParseRejectedGRPCDirectiveDoesNotClaimTheRequest(t *testing.T) {
 	}
 }
 
+func TestParseGRPCDirectiveNeedsAGRPCRequestLine(t *testing.T) {
+	const col = 3
+	tests := []struct {
+		name string
+		src  []string
+		errs []int
+		body string
+	}{
+		{
+			name: "method above GET",
+			src:  []string{"# @grpc pkg.Svc/Get", "GET https://example.com"},
+			errs: []int{1},
+		},
+		{
+			name: "method below POST",
+			src:  []string{"POST https://example.com", "# @grpc pkg.Svc/Create", "", `{"id": 1}`},
+			errs: []int{2},
+			body: `{"id": 1}`,
+		},
+		{
+			name: "bare method",
+			src:  []string{"GET https://example.com", "# @grpc"},
+			errs: []int{2},
+		},
+		{
+			name: "descriptor",
+			src:  []string{"# @grpc-descriptor svc.protoset", "POST https://example.com", "", `{"id": 1}`},
+			errs: []int{1},
+			body: `{"id": 1}`,
+		},
+		{
+			name: "proto and import path above PUT",
+			src: []string{
+				"# @grpc-proto svc.proto", "# @grpc-import-path vendor", "PUT https://example.com", "", `{"id": 1}`,
+			},
+			errs: []int{1, 2},
+			body: `{"id": 1}`,
+		},
+		{
+			name: "import path alone",
+			src:  []string{"GET https://example.com", "# @grpc-import-path vendor"},
+			errs: []int{2},
+		},
+		{
+			name: "metadata",
+			src:  []string{"GET https://example.com", "# @grpc-metadata x-id: 1"},
+			errs: []int{2},
+		},
+		{
+			name: "reflection off",
+			src:  []string{"GET https://example.com", "# @grpc-reflection false"},
+			errs: []int{2},
+		},
+		{
+			name: "bare plaintext",
+			src:  []string{"GET https://example.com", "# @grpc-plaintext"},
+			errs: []int{2},
+		},
+		{
+			name: "authority",
+			src:  []string{"GET https://example.com", "# @grpc-authority api.internal"},
+			errs: []int{2},
+		},
+		{
+			name: "websocket URL line",
+			src:  []string{"ws://example.com/socket", "# @grpc-descriptor svc.protoset"},
+			errs: []int{2},
+		},
+		{
+			name: "with profile",
+			src:  []string{"# @profile count=2", "# @grpc pkg.Svc/Get", "GET https://example.com"},
+			errs: []int{2},
+		},
+		{
+			name: "with retry",
+			src:  []string{"GET https://example.com", "# @retry count=2", "# @grpc-descriptor svc.protoset"},
+			errs: []int{3},
+		},
+		{
+			name: "above a GRPC line",
+			src:  []string{"# @grpc-descriptor svc.protoset", "GRPC localhost:9000"},
+		},
+		{
+			name: "below a GRPC line",
+			src:  []string{"GRPC localhost:9000", "# @grpc pkg.Svc/Get", "", `{"id": 1}`},
+			body: `{"id": 1}`,
+		},
+		{
+			name: "lowercase grpc line",
+			src:  []string{"grpc localhost:9000", "# @grpc pkg.Svc/Get"},
+		},
+		{
+			name: "GRPC line alone",
+			src:  []string{"GRPC localhost:9000"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("line.http", []byte(strings.Join(tt.src, "\n")+"\n"))
+			if len(doc.Warnings) != 0 {
+				t.Fatalf("warnings = %v, want none", doc.Warnings)
+			}
+			if len(doc.Errors) != len(tt.errs) {
+				t.Fatalf("errors = %v, want %d", doc.Errors, len(tt.errs))
+			}
+			for i, e := range doc.Errors {
+				line := tt.errs[i]
+				want := strings.Fields(tt.src[line-1])[1] + " requires a GRPC request line"
+				if e.Message != want || e.Span.Start.Line != line || e.Span.Start.Col != col {
+					t.Fatalf(
+						"error %q at %d:%d, want %q at %d:%d",
+						e.Message, e.Span.Start.Line, e.Span.Start.Col, want, line, col,
+					)
+				}
+			}
+			req := firstRequest(t, doc)
+			if want := len(tt.errs) == 0; (req.GRPC != nil) != want {
+				t.Fatalf("gRPC = %+v, want a gRPC section: %t", req.GRPC, want)
+			}
+			if req.Body.Text != tt.body {
+				t.Fatalf("body = %q, want %q", req.Body.Text, tt.body)
+			}
+		})
+	}
+}
+
+func TestParseGRPCDirectiveLeavesTheBodyToTheRequestLine(t *testing.T) {
+	tests := []struct {
+		name  string
+		src   []string
+		check func(*restfile.Request) error
+	}{
+		{
+			name: "GraphQL query",
+			src: []string{
+				"POST https://example.com/graphql", "# @graphql", "# @grpc-descriptor svc.protoset", "",
+				"query Used { id }",
+			},
+			check: func(req *restfile.Request) error {
+				if req.Body.GraphQL == nil || req.Body.GraphQL.Query != "query Used { id }" {
+					return fmt.Errorf("graphql = %+v, want the query", req.Body.GraphQL)
+				}
+				return nil
+			},
+		},
+		{
+			name: "SSE body",
+			src: []string{
+				"POST https://example.com/events", "# @sse", "# @grpc-descriptor svc.protoset", "", `{"id": 1}`,
+			},
+			check: func(req *restfile.Request) error {
+				if req.SSE == nil || req.Body.Text != `{"id": 1}` {
+					return fmt.Errorf("sse = %+v, body = %q, want SSE with the body", req.SSE, req.Body.Text)
+				}
+				return nil
+			},
+		},
+		{
+			name: "body lines around the directive",
+			src:  []string{"POST https://example.com", "", `{"a": 1,`, "# @grpc-descriptor svc.protoset", `"b": 2}`},
+			check: func(req *restfile.Request) error {
+				if want := "{\"a\": 1,\n\"b\": 2}"; req.Body.Text != want {
+					return fmt.Errorf("body = %q, want %q", req.Body.Text, want)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("body.http", []byte(strings.Join(tt.src, "\n")+"\n"))
+			req := firstRequest(t, doc)
+			if err := tt.check(req); err != nil {
+				t.Fatal(err)
+			}
+			if req.GRPC != nil {
+				t.Fatalf("gRPC = %+v, want none", req.GRPC)
+			}
+			want := "@grpc-descriptor requires a GRPC request line"
+			if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+				t.Fatalf("errors = %v, want exactly %q", doc.Errors, want)
+			}
+		})
+	}
+}
+
+func TestParseGRPCDirectiveInABlockWithoutARequestIsSilent(t *testing.T) {
+	src := "### one\n# @grpc pkg.Svc/Get\n# @grpc-descriptor svc.protoset\n### two\nGET https://example.com\n"
+	doc := Parse("block.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+		t.Fatalf("errors = %v, warnings = %v, want none", doc.Errors, doc.Warnings)
+	}
+}
+
+func TestParseRequestHasOneProtocol(t *testing.T) {
+	const (
+		grpc   = "GRPC localhost:9000"
+		body   = `{"id": 1}`
+		onGRPC = " cannot be combined with a GRPC request line"
+		col    = 3
+	)
+	tests := []struct {
+		name string
+		src  []string
+		want []string
+		kind string
+		body string
+	}{
+		{
+			name: "graphql below GRPC",
+			src:  []string{grpc, "# @graphql"},
+			want: []string{"2: @graphql" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "graphql above GRPC",
+			src:  []string{"# @graphql", grpc},
+			want: []string{"1: @graphql" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "graphql true",
+			src:  []string{grpc, "# @graphql true"},
+			want: []string{"2: @graphql" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "sse on GRPC",
+			src:  []string{grpc, "# @sse duration=1s"},
+			want: []string{"2: @sse" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "sse with an unknown option on GRPC",
+			src:  []string{grpc, "# @sse future=1"},
+			want: []string{"2: @sse" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "websocket with a bad option on GRPC",
+			src:  []string{grpc, "# @websocket timeout=bad"},
+			want: []string{`2: invalid @websocket timeout "bad": expected a non-negative duration`},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "websocket and a step on GRPC",
+			src:  []string{grpc, "# @websocket", "# @ws send hi"},
+			want: []string{"2: @websocket" + onGRPC, "3: @ws" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "step alone on GRPC",
+			src:  []string{grpc, "# @ws send hi"},
+			want: []string{"2: @ws" + onGRPC},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "graphql then sse",
+			src:  []string{"POST http://x", "# @graphql", "# @sse"},
+			want: []string{"2: @graphql cannot be combined with @sse on the same request"},
+			kind: "sse",
+		},
+		{
+			name: "sse then graphql",
+			src:  []string{"POST http://x", "# @sse", "# @graphql"},
+			want: []string{"3: @graphql cannot be combined with @sse on the same request"},
+			kind: "sse",
+		},
+		{
+			name: "graphql and websocket",
+			src:  []string{"GET ws://x", "# @websocket", "# @graphql"},
+			want: []string{"3: @graphql cannot be combined with @websocket on the same request"},
+			kind: "websocket",
+		},
+		{
+			name: "sse and websocket",
+			src:  []string{"GET http://x", "# @sse", "# @websocket"},
+			want: []string{"2: @sse cannot be combined with @websocket on the same request"},
+			kind: "websocket",
+			body: body,
+		},
+		{
+			name: "sse and a step",
+			src:  []string{"GET http://x", "# @sse", "# @ws send hi"},
+			want: []string{"2: @sse cannot be combined with @websocket on the same request"},
+			kind: "websocket",
+			body: body,
+		},
+		{
+			name: "websocket with a bad option still beats sse",
+			src:  []string{"GET http://x", "# @websocket timeout=bad", "# @sse"},
+			want: []string{
+				`2: invalid @websocket timeout "bad": expected a non-negative duration`,
+				"3: @sse cannot be combined with @websocket on the same request",
+			},
+			kind: "websocket",
+			body: body,
+		},
+		{
+			name: "sse back on",
+			src:  []string{"GET http://x", "# @sse off", "# @sse", "# @websocket"},
+			want: []string{"3: @sse cannot be combined with @websocket on the same request"},
+			kind: "websocket",
+			body: body,
+		},
+		{
+			name: "all three",
+			src:  []string{"POST http://x", "# @graphql", "# @sse", "# @websocket"},
+			want: []string{
+				"2: @graphql cannot be combined with @websocket on the same request",
+				"3: @sse cannot be combined with @websocket on the same request",
+			},
+			kind: "websocket",
+		},
+		{
+			name: "every off value on GRPC",
+			src: []string{
+				grpc, "# @graphql false", "# @graphql f", "# @graphql 0", "# @sse no", "# @sse off",
+				"# @websocket disable", "# @websocket disabled",
+			},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "sse turned off",
+			src:  []string{grpc, "# @sse", "# @sse off"},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "graphql turned off",
+			src:  []string{grpc, "# @graphql", "# @graphql false"},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "websocket off takes the step back",
+			src:  []string{grpc, "# @ws send hi", "# @websocket off"},
+			kind: "grpc",
+			body: body,
+		},
+		{
+			name: "sse off before graphql",
+			src:  []string{"POST http://x", "# @sse", "# @sse off", "# @graphql"},
+			kind: "graphql",
+		},
+		{name: "GRPC alone", src: []string{grpc}, kind: "grpc", body: body},
+		{name: "graphql alone", src: []string{"POST http://x", "# @graphql"}, kind: "graphql"},
+		{name: "sse alone", src: []string{"GET http://x", "# @sse"}, kind: "sse", body: body},
+		{name: "websocket alone", src: []string{"GET ws://x", "# @websocket"}, kind: "websocket", body: body},
+		{name: "step alone", src: []string{"GET ws://x", "# @ws send hi"}, kind: "websocket", body: body},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("one.http", []byte(strings.Join(tt.src, "\n")+"\n\n"+body+"\n"))
+			var got []string
+			for _, e := range doc.Errors {
+				got = append(got, fmt.Sprintf("%d: %s", e.Span.Start.Line, e.Message))
+				if e.Span.Start.Col != col {
+					t.Fatalf("error %q at column %d, want %d", e.Message, e.Span.Start.Col, col)
+				}
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("errors = %q, want %q", got, tt.want)
+			}
+			req := firstRequest(t, doc)
+			var kinds []string
+			for _, k := range []struct {
+				name string
+				on   bool
+			}{
+				{"grpc", req.GRPC != nil},
+				{"graphql", req.Body.GraphQL != nil},
+				{"sse", req.SSE != nil},
+				{"websocket", req.WebSocket != nil},
+			} {
+				if k.on {
+					kinds = append(kinds, k.name)
+				}
+			}
+			if !slices.Equal(kinds, []string{tt.kind}) {
+				t.Fatalf("protocols = %v, want only %s", kinds, tt.kind)
+			}
+			if req.GRPC != nil && req.GRPC.Message != body {
+				t.Fatalf("gRPC message = %q, want %q", req.GRPC.Message, body)
+			}
+			if req.Body.Text != tt.body {
+				t.Fatalf("body = %q, want %q", req.Body.Text, tt.body)
+			}
+		})
+	}
+}
+
 func TestParseGraphQLDirectivesBeforeEnablingWarnAndAreIgnored(t *testing.T) {
-	src := "POST https://example.com/graphql\n# @operation\n# @graphql\n# @operation Used\n"
-	doc := Parse("graphql.http", []byte(src))
-	if len(doc.Errors) != 0 {
-		t.Fatalf("errors = %v, want none", doc.Errors)
-	}
-	wantWarning := "@operation is not valid in the current context and was ignored"
-	if len(doc.Warnings) != 1 || doc.Warnings[0].Message != wantWarning {
-		t.Fatalf("warnings = %v, want %q", doc.Warnings, wantWarning)
-	}
-	body := firstRequest(t, doc).Body
-	if body.GraphQL == nil || body.GraphQL.OperationName != "Used" {
-		t.Fatalf("graphql = %+v, want the operation declared after @graphql", body.GraphQL)
+	for _, line := range []string{"@operation", `@operation ""`} {
+		t.Run(line, func(t *testing.T) {
+			src := "POST https://example.com/graphql\n# " + line + "\n# @graphql\n# @operation Used\n"
+			doc := Parse("graphql.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("errors = %v, want none", doc.Errors)
+			}
+			wantWarning := "@operation is not valid in the current context and was ignored"
+			if len(doc.Warnings) != 1 || doc.Warnings[0].Message != wantWarning {
+				t.Fatalf("warnings = %v, want %q", doc.Warnings, wantWarning)
+			}
+			body := firstRequest(t, doc).Body
+			if body.GraphQL == nil || body.GraphQL.OperationName != "Used" {
+				t.Fatalf("graphql = %+v, want the operation declared after @graphql", body.GraphQL)
+			}
+		})
 	}
 }
 

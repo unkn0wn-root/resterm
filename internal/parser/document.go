@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"cmp"
 	"errors"
 	"maps"
 	"slices"
@@ -110,14 +111,32 @@ func (b *documentBuilder) report(d parsedDirective, err error) {
 		return
 	}
 	item := d.diagnostic(err.Error(), err)
-	var unknown *directive.UnknownOptionsError
-	var quoted *directive.QuotedOptionError
-	var script *scriptFieldError
-	if errors.As(err, &unknown) || errors.As(err, &quoted) || errors.As(err, &script) {
+	if isWarning(err) {
 		b.pushWarning(item)
 		return
 	}
 	b.pushError(item)
+}
+
+func isWarning(err error) bool {
+	var unknown *directive.UnknownOptionsError
+	var quoted *directive.QuotedOptionError
+	var script *scriptFieldError
+	return errors.As(err, &unknown) || errors.As(err, &quoted) || errors.As(err, &script)
+}
+
+func withoutWarnings(err error) error {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var errs []error
+		for _, item := range joined.Unwrap() {
+			errs = append(errs, withoutWarnings(item))
+		}
+		return errors.Join(errs...)
+	}
+	if isWarning(err) {
+		return nil
+	}
+	return err
 }
 
 // reportStrict treats unknown options as errors because they can change what runs.
@@ -228,13 +247,7 @@ func (b *documentBuilder) ensureRequest(line int) {
 	if b.inRequest {
 		return
 	}
-
-	if b.workflow != nil {
-		b.flushWorkflow(line - 1)
-	}
-
-	b.inRequest = true
-	b.request = &requestBuilder{
+	b.openRequest(&requestBuilder{
 		startLine:  line,
 		sourcePath: b.doc.Path,
 		metadata:   restfile.RequestMetadata{Tags: []string{}},
@@ -245,7 +258,16 @@ func (b *documentBuilder) ensureRequest(line int) {
 		grpc:       grpcbuilder.New(),
 		sse:        ssebuilder.New(),
 		websocket:  wsbuilder.New(),
+	})
+}
+
+func (b *documentBuilder) openRequest(r *requestBuilder) {
+	if b.workflow != nil {
+		b.flushWorkflow(r.startLine - 1)
+		r.endsWorkflow = true
 	}
+	b.inRequest = true
+	b.request = r
 }
 
 // Record active request lines first so a failed continuation cannot shorten the
@@ -279,10 +301,35 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.lintRequestPolicies(req)
 	b.lintProfile(req)
 	if req.Method != "" && req.URL != "" {
-		// @grpc-proto may follow the import path, so check once the request is built.
+		// Directives may come before the request line or @grpc-proto, so check here.
+		if b.request.isGRPC() {
+			for _, d := range b.request.protocols {
+				b.fail(d, d.Spelling.Tag()+" cannot be combined with a GRPC request line")
+			}
+		} else {
+			for _, d := range b.request.grpcDirectives {
+				b.fail(d, d.Spelling.Tag()+" requires a GRPC request line")
+			}
+			var on directive.Name
+			switch {
+			case req.WebSocket != nil:
+				on = directive.WebSocket
+			case req.SSE != nil:
+				on = directive.SSE
+			case req.Body.GraphQL != nil:
+				on = directive.GraphQL
+			}
+			for _, d := range b.request.protocols {
+				if protocolOf(d.Name) != on {
+					b.fail(d, d.Spelling.Tag()+" cannot be combined with "+on.Tag()+" on the same request")
+				}
+			}
+		}
 		if gr := req.GRPC; gr != nil && len(gr.ProtoFiles) == 0 {
-			for _, d := range b.request.importDirectives {
-				b.warn(d, d.Spelling.Tag()+" without "+directive.GRPCProto.Tag()+" was ignored")
+			for _, d := range b.request.grpcDirectives {
+				if d.Name == directive.GRPCImportPath {
+					b.warn(d, d.Spelling.Tag()+" without "+directive.GRPCProto.Tag()+" was ignored")
+				}
 			}
 			gr.ImportPaths = nil
 		}
@@ -333,6 +380,13 @@ func (b *documentBuilder) finish() {
 	b.flushWorkflow(0)
 	b.file.flushSettings(b.doc)
 	b.file.apply(b.doc)
+
+	// Checks at the end of a request, workflow or mock add findings out of order.
+	byLine := func(x, y restfile.ParseDiagnostic) int {
+		return cmp.Compare(x.Span.Start.Line, y.Span.Start.Line)
+	}
+	slices.SortStableFunc(b.doc.Errors, byLine)
+	slices.SortStableFunc(b.doc.Warnings, byLine)
 }
 
 func (b *documentBuilder) startWorkflow(d parsedDirective) error {

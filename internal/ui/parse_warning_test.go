@@ -147,6 +147,11 @@ func TestStatusBarWarningLabelCountsTheRest(t *testing.T) {
 			src:  "### r\n# @websocket compresion=true\n# @ssh host=h userr=bob\nWS wss://x\n",
 			want: "WARN line 2 +1",
 		},
+		{
+			name: "a request end warning above a later one",
+			src:  "### r\nGRPC localhost:9000\n# @grpc a.B/C\n# @grpc-import-path vendor\n# @nmae typo\n",
+			want: "WARN line 4 +1",
+		},
 	}
 
 	for _, tt := range tests {

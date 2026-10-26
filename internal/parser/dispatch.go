@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -43,6 +44,10 @@ func (d parsedDirective) exprCol(expr string) int {
 		return 0
 	}
 	return d.argCol + off
+}
+
+func (d parsedDirective) valueMissing() bool {
+	return d.Name.ValueRequired() && !directive.HasValue(d.Args)
 }
 
 func (d parsedDirective) setExprCol(col *int, expr string) {
@@ -94,15 +99,34 @@ func (b *documentBuilder) routeDirective(d parsedDirective) directiveOutcome {
 		b.warn(d, ignoredDirectiveWarning(d.Call))
 		return directiveIgnored
 	}
+	// Handlers see a value of only quotes, such as "", as the bare directive.
+	if d.valueMissing() {
+		d.Args = ""
+	}
+	prev := b.request
 	out := b.claimDirective(d)
+	if b.inRequest && b.request != prev {
+		b.request.opener = d.Spelling
+	}
 	if out == directiveIgnored {
+		switch d.Name {
+		case directive.Step, directive.If, directive.Elif, directive.Else,
+			directive.Switch, directive.Case, directive.Default:
+			if r := b.request; b.inRequest && r.endsWorkflow && !r.http.HasMethod() {
+				cause := fmt.Sprintf("line %d", r.startLine)
+				if r.opener != "" {
+					cause = r.opener.Tag() + " on " + cause
+				}
+				return b.reject(d, d.Spelling.Tag()+" is outside the workflow because "+cause+" starts a request")
+			}
+		}
 		b.warn(d, ignoredDirectiveWarning(d.Call))
 		return out
 	}
 	if out == directiveApplied {
 		b.warnUnclosedArgs(d)
 	}
-	if out == directiveApplied && d.Name.ValueRequired() && !directive.HasValue(d.Args) {
+	if out == directiveApplied && d.valueMissing() {
 		return b.reject(d, d.Spelling.Tag()+" value missing")
 	}
 	return out
@@ -126,13 +150,17 @@ func (b *documentBuilder) claimDirective(d parsedDirective) directiveOutcome {
 }
 
 func (b *documentBuilder) reject(d parsedDirective, msg string) directiveOutcome {
-	b.pushError(d.diagnostic(msg, nil))
+	b.fail(d, msg)
 	return directiveRejected
 }
 
 func (b *documentBuilder) rejectError(d parsedDirective, err error) directiveOutcome {
 	b.reportStrict(d, err)
 	return directiveRejected
+}
+
+func (b *documentBuilder) fail(d parsedDirective, msg string) {
+	b.pushError(d.diagnostic(msg, nil))
 }
 
 func (b *documentBuilder) warn(d parsedDirective, msg string) {
@@ -168,9 +196,7 @@ func (b *documentBuilder) handleRequestDirective(d parsedDirective) directiveOut
 		return out
 	}
 
-	b.flushWorkflow(d.lines.Start - 1)
-	b.inRequest = true
-	b.request = probe.request
+	b.openRequest(probe.request)
 	b.doc.Errors = append(b.doc.Errors, probe.doc.Errors...)
 	b.doc.Warnings = append(b.doc.Warnings, probe.doc.Warnings...)
 	return out

@@ -43,6 +43,13 @@ func TestDiagnosticSourceSpans(t *testing.T) {
 		{"alias conflict", "# @sse idle=1s idle-timeout=2s\nGET http://x", "idle idle-timeout", 1, diag.SeverityError},
 		{"alias conflict reversed", "# @sse idle-timeout=2s idle=1s\nGET http://x", "idle-timeout idle", 1, diag.SeverityError},
 		{"repeated option", "# @sse idle=1s idle=2s\nGET http://x", "idle idle", 1, diag.SeverityError},
+		{
+			"bare value option",
+			"# @retry count=1\n# @retry-backoff exponential(1s, 2s) jitter\nGET http://x",
+			"jitter",
+			2,
+			diag.SeverityError,
+		},
 		{"workflow aliases", "# @workflow w\n# @step s run=A using=B", "run using", 2, diag.SeverityError},
 		{"field with no key", "# @sse duration=2m =X\nGET http://x", "=X", 1, diag.SeverityError},
 		{"spaced setting", "# @settings http-insecure = false\n\n### r\nGET http://x", "http-insecure", 1, diag.SeverityError},

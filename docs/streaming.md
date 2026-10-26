@@ -1,6 +1,6 @@
 # WebSocket and SSE
 
-Streaming sessions show up in the Stream response tab and are saved in history. Captures and scripts can read them too.
+Streaming sessions show up in the Stream response tab and are saved in history. Captures and scripts can read them too. A request can use only one of SSE, WebSocket, and GraphQL, and a `GRPC` request can use none of them.
 
 ## Server-Sent Events (`@sse`)
 
@@ -61,7 +61,7 @@ Use `# @websocket` to upgrade the connection, then script the session with `# @w
 GET wss://chat.example.com/room
 ```
 
-`@websocket off` turns WebSocket off again and clears the options and steps set so far. Other false values such as `false` or `disable` work too.
+A `@ws` step also turns WebSocket on. `@websocket off` turns WebSocket off again and clears the options and steps set so far. Other false values such as `false` or `disable` work too.
 
 Available WebSocket options:
 

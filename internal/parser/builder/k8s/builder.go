@@ -3,6 +3,7 @@ package k8s
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -20,25 +21,6 @@ type Directive struct {
 	PersistIgnored bool
 }
 
-type DirectiveError struct {
-	err     error
-	Profile restfile.K8sProfile
-}
-
-func (e *DirectiveError) Error() string {
-	if e == nil || e.err == nil {
-		return ""
-	}
-	return e.err.Error()
-}
-
-func (e *DirectiveError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.err
-}
-
 func ParseDirective(rest string) (res Directive, err error) {
 	head, ok, headErr := directive.ParseProfileHeader(directive.K8s, rest)
 	if !ok {
@@ -52,23 +34,20 @@ func ParseDirective(rest string) (res Directive, err error) {
 	}
 
 	prof := restfile.K8sProfile{Scope: scope, Name: name}
-	profileErr := func(err error) error {
-		if err == nil {
-			return nil
-		}
-		if scope != directive.ScopeGlobal && scope != directive.ScopeFile {
-			return err
-		}
-		prof.Scope = scope
-		return &DirectiveError{err: err, Profile: prof}
-	}
-	if err := applyK8sOptions(&prof, opts); err != nil {
-		return res, profileErr(err)
-	}
+	optErr := applyK8sOptions(&prof, opts)
 	use := opts.Pop("use")
-	// Everything valid has been popped by now, so the leftovers are typos. They
-	// ride along with a usable result and the caller turns them into warnings.
+	// Everything valid has been popped by now, so Leftover reports only mistakes.
 	left := opts.Leftover(directive.K8s)
+	if optErr != nil {
+		// The caller keeps a shared profile with an error as invalid.
+		res.Profile = prof
+		return res, errors.Join(optErr, left)
+	}
+	target := hasK8sTarget(prof) || opts.Bare("target")
+	for _, ta := range k8sTargetKinds {
+		target = target || slices.ContainsFunc(ta.keys, opts.Bare)
+	}
+	met := target && (strings.TrimSpace(prof.PortStr) != "" || opts.Bare("port"))
 
 	if scope == directive.ScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking forwarders.
@@ -78,18 +57,17 @@ func ParseDirective(rest string) (res Directive, err error) {
 		if strings.TrimSpace(prof.Namespace) == "" {
 			prof.Namespace = k8starget.DefaultNamespace
 		}
-		if err := requireK8sTarget(prof); err != nil {
-			err := fmt.Errorf("@k8s %s scope %w", scope.String(), err)
-			return res, profileErr(err)
-		}
 		res.Scope = scope
 		res.Profile = prof
+		if !met {
+			return res, errors.Join(fmt.Errorf("@k8s %s scope requires target and port", scope.String()), left)
+		}
 		return res, left
 	}
 
 	if use == "" {
-		if err := requireK8sTarget(prof); err != nil {
-			return res, fmt.Errorf("@k8s requires target and port or use=")
+		if !met && !opts.Bare("use") {
+			return res, errors.Join(errors.New("@k8s requires target and port or use="), left)
 		}
 		if strings.TrimSpace(prof.Namespace) == "" {
 			prof.Namespace = k8starget.DefaultNamespace
@@ -113,39 +91,39 @@ var k8sTargetKinds = []struct {
 	{kind: k8starget.StatefulSet, keys: []string{"statefulset", "sts"}},
 }
 
+// Every option is read even after one fails, so two mistakes are both reported.
 func applyK8sOptions(prof *restfile.K8sProfile, opts directive.Options) error {
 	if ns, ok := opts.PopAny("namespace", "ns"); ok {
 		prof.Namespace = ns
 	}
 
+	var targetErr error
 	if raw, ok := opts.PopAny("target"); ok {
 		k, n, err := k8starget.ParseRef(raw)
 		if err != nil {
-			return fmt.Errorf("invalid @k8s target: %w", err)
-		}
-		if err := setK8sTarget(prof, k, n); err != nil {
-			return err
+			targetErr = fmt.Errorf("invalid @k8s target: %w", err)
+		} else {
+			targetErr = setK8sTarget(prof, k, n)
 		}
 	}
 
 	for _, ta := range k8sTargetKinds {
-		if name, ok := opts.PopAny(ta.keys...); ok {
-			if err := setK8sTarget(prof, ta.kind, name); err != nil {
-				return err
-			}
+		if name, ok := opts.PopAny(ta.keys...); ok && targetErr == nil {
+			targetErr = setK8sTarget(prof, ta.kind, name)
 		}
 	}
+	errs := []error{targetErr}
 
 	if port, ok := opts.PopAny("port"); ok {
 		prof.PortStr = port
 		n, err := strconv.Atoi(port)
 		if err == nil {
 			if n <= 0 || n > 65535 {
-				return fmt.Errorf("invalid @k8s port: %q", port)
+				errs = append(errs, fmt.Errorf("invalid @k8s port: %q", port))
 			}
 			prof.Port = n
 		} else if !k8starget.IsValidPortName(port) {
-			return fmt.Errorf("invalid @k8s port: %q", port)
+			errs = append(errs, fmt.Errorf("invalid @k8s port: %q", port))
 		}
 	}
 
@@ -169,14 +147,14 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts directive.Options) error {
 		prof.LocalPortStr = raw
 		n, err := strconv.Atoi(raw)
 		if err != nil || n <= 0 || n > 65535 {
-			return fmt.Errorf("invalid @k8s %s: %q", key, raw)
+			errs = append(errs, fmt.Errorf("invalid @k8s %s: %q", key, raw))
 		}
 		prof.LocalPort = n
 	}
 
 	if value, ok, bad := opts.PopBool("persist"); ok {
 		if bad != "" {
-			return fmt.Errorf("invalid @k8s persist: %q", bad)
+			errs = append(errs, fmt.Errorf("invalid @k8s persist: %q", bad))
 		}
 		prof.Persist.Set = true
 		prof.Persist.Val = value
@@ -191,7 +169,7 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts directive.Options) error {
 		prof.PodWait.Set = true
 		d, ok := duration.Parse(raw)
 		if !ok || d < 0 {
-			return fmt.Errorf("invalid @k8s %s: %q", key, raw)
+			errs = append(errs, fmt.Errorf("invalid @k8s %s: %q", key, raw))
 		}
 		prof.PodWait.Val = d
 	}
@@ -201,12 +179,12 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts directive.Options) error {
 		prof.Retries.Set = true
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 0 {
-			return fmt.Errorf("invalid @k8s retries: %q", raw)
+			errs = append(errs, fmt.Errorf("invalid @k8s retries: %q", raw))
 		}
 		prof.Retries.Val = n
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func buildInlineK8s(prof restfile.K8sProfile) *restfile.K8sProfile {
@@ -231,13 +209,6 @@ func k8sInlineSet(prof restfile.K8sProfile) bool {
 		prof.Persist.Set ||
 		prof.PodWait.Set ||
 		prof.Retries.Set
-}
-
-func requireK8sTarget(prof restfile.K8sProfile) error {
-	if !hasK8sTarget(prof) || strings.TrimSpace(prof.PortStr) == "" {
-		return fmt.Errorf("requires target and port")
-	}
-	return nil
 }
 
 func hasK8sTarget(prof restfile.K8sProfile) bool {

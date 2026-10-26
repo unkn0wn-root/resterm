@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/directive"
@@ -14,6 +15,8 @@ import (
 
 type requestBuilder struct {
 	startLine         int
+	opener            directive.Name
+	endsWorkflow      bool
 	sourcePath        string
 	metadata          restfile.RequestMetadata
 	variables         []restfile.Variable
@@ -27,7 +30,8 @@ type requestBuilder struct {
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
 	grpc              *grpcbuilder.Builder
-	importDirectives  []parsedDirective
+	grpcDirectives    []parsedDirective
+	protocols         []parsedDirective
 	sse               *ssebuilder.Builder
 	websocket         *wsbuilder.Builder
 	bodyOptions       restfile.BodyOptions
@@ -53,13 +57,32 @@ func (r *requestBuilder) protoDirective(d parsedDirective) (bool, error) {
 		}
 		if reset {
 			r.clearDeclared(d.Name)
-		}
-		if d.Name == directive.GRPCImportPath && directive.HasValue(d.Args) {
-			r.importDirectives = append(r.importDirectives, d)
+			r.protocols = slices.DeleteFunc(
+				r.protocols,
+				func(s parsedDirective) bool { return protocolOf(s.Name) == d.Name },
+			)
+		} else if !fatalErr(err) && !d.valueMissing() {
+			// A rejected or bare directive already has its own error.
+			switch {
+			case feature == r.grpc:
+				r.grpcDirectives = append(r.grpcDirectives, d)
+			case d.Name == directive.WebSocket,
+				d.Name == directive.WS,
+				d.Name == directive.SSE,
+				d.Name == directive.GraphQL:
+				r.protocols = append(r.protocols, d)
+			}
 		}
 		return true, err
 	}
 	return false, nil
+}
+
+func protocolOf(name directive.Name) directive.Name {
+	if name == directive.WS {
+		return directive.WebSocket
+	}
+	return name
 }
 
 func (r *requestBuilder) clearDeclared(name directive.Name) {
@@ -69,10 +92,14 @@ func (r *requestBuilder) clearDeclared(name directive.Name) {
 }
 
 func (r *requestBuilder) protoBodyLine(raw string) bool {
-	if r.graphql.HandleBodyLine(raw, r.bodyOptions.ForceInline) {
-		return true
+	if r.isGRPC() {
+		return r.grpc.HandleBodyLine(raw, r.bodyOptions.ForceInline)
 	}
-	return r.grpc.HandleBodyLine(raw, r.bodyOptions.ForceInline)
+	return r.graphql.HandleBodyLine(raw, r.bodyOptions.ForceInline)
+}
+
+func (r *requestBuilder) isGRPC() bool {
+	return r.http.Method() == "GRPC"
 }
 
 func (r *requestBuilder) applyReqSettings(req *restfile.Request) {
@@ -113,40 +140,30 @@ func (r *requestBuilder) build() *restfile.Request {
 		HeaderLines:  r.http.HeaderLines(),
 	}
 
-	appliedBody := false
+	if grpcReq, body, mime, ok := r.grpc.Finalize(r.http.MimeType()); ok && r.isGRPC() {
+		req.GRPC = grpcReq
+		req.Body = body
+		if mime != "" {
+			req.Body.MimeType = mime
+		}
+		req.Body.Options = r.bodyOptions
+		r.applyReqSettings(req)
+		return req
+	}
+
 	if wsReq, ok := r.websocket.Finalize(); ok {
 		req.WebSocket = wsReq
-	}
-	if sseReq, ok := r.sse.Finalize(); ok {
+	} else if sseReq, ok := r.sse.Finalize(); ok {
 		req.SSE = sseReq
-	}
-
-	if req.WebSocket == nil && req.SSE == nil {
-		if grpcReq, body, mime, ok := r.grpc.Finalize(r.http.MimeType()); ok {
-			req.GRPC = grpcReq
-			req.Body = body
-			if mime != "" {
-				req.Body.MimeType = mime
-			}
-			req.Body.Options = r.bodyOptions
-			r.applyReqSettings(req)
-			return req
-		} else if gql, mime, ok := r.graphql.Finalize(r.http.MimeType()); ok {
-			req.Body.GraphQL = gql
-			if mime != "" {
-				req.Body.MimeType = mime
-			}
-		} else {
-			r.applyHTTPBody(req)
-			req.Body.Options = r.bodyOptions
-			appliedBody = true
+	} else if gql, mime, ok := r.graphql.Finalize(r.http.MimeType()); ok {
+		req.Body.GraphQL = gql
+		if mime != "" {
+			req.Body.MimeType = mime
 		}
+	} else {
+		req.Body.Options = r.bodyOptions
 	}
-
-	if !appliedBody {
-		r.applyHTTPBody(req)
-	}
+	r.applyHTTPBody(req)
 	r.applyReqSettings(req)
-
 	return req
 }

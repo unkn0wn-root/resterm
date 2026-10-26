@@ -1,6 +1,6 @@
 # Streaming
 
-Resterm records Server-Sent Events and WebSocket sessions in the Stream response tab.
+Resterm records Server-Sent Events and WebSocket sessions in the Stream response tab. A request can use only one of SSE, WebSocket, and GraphQL, and a `GRPC` request can use none of them.
 
 ```http
 # @sse duration=2m idle=15s

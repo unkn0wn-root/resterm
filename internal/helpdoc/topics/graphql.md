@@ -1,6 +1,6 @@
 # GraphQL
 
-Mark a request as GraphQL, optionally select an operation, and provide variables as JSON.
+Mark a request as GraphQL, optionally select an operation, and provide variables as JSON. GraphQL cannot be combined with `@sse`, `@websocket`, or a `GRPC` request line.
 
 ```http
 # @graphql
