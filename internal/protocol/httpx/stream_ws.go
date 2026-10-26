@@ -185,7 +185,9 @@ func (c *Client) StartWebSocket(
 	conn, resp, err := dial(handshakeCtx, httpReq.URL.String(), dialOpts)
 	if err != nil {
 		handshakeCancel()
-		if resp != nil {
+		// A 101 means the server upgraded with an invalid handshake, so there
+		// is no HTTP answer to show.
+		if resp != nil && resp.StatusCode != http.StatusSwitchingProtocols {
 			fallback, convErr := buildWebSocketFallback(resp, req, start, effectiveOpts)
 			if convErr != nil {
 				return nil, nil, convErr

@@ -727,6 +727,44 @@ func TestStartWebSocketHandshakeFallback(t *testing.T) {
 	}
 }
 
+func TestWebSocketFailsAnInvalidUpgrade(t *testing.T) {
+	refuse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(refuse.Close)
+	for _, tt := range []struct {
+		name string
+		url  string
+		want string
+	}{
+		{name: "a valid upgrade", url: startRawPeer(t, "", func(*rawPeer) {}), want: "a session"},
+		{
+			name: "an upgrade to a subprotocol nobody offered",
+			url:  startRawPeer(t, "chat", func(*rawPeer) {}),
+			want: "a protocol error",
+		},
+		{name: "a refusal", url: "ws" + strings.TrimPrefix(refuse.URL, "http"), want: "HTTP 403"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{Method: http.MethodGet, URL: tt.url, WebSocket: &restfile.WebSocketRequest{}}
+			handle, fallback, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+			var got string
+			switch {
+			case handle != nil:
+				handle.Session.Cancel()
+				got = "a session"
+			case fallback != nil:
+				got = fmt.Sprintf("HTTP %d", fallback.StatusCode)
+			default:
+				got = fmt.Sprintf("a %s error", diag.ClassOf(err))
+			}
+			if got != tt.want {
+				t.Fatalf("StartWebSocket gave %s (err %v), want %s", got, err, tt.want)
+			}
+		})
+	}
+}
+
 func TestStartWebSocketHandshakeTimeoutScope(t *testing.T) {
 	srv, cleanup := startEchoWebSocketServer(t)
 	defer cleanup()

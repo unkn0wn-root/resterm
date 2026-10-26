@@ -86,7 +86,7 @@ Supported `@ws` steps:
 | `@ws wait <duration>` | Pause for the given duration, for example `500ms`. |
 | `@ws close [code] [reason]` | Close the connection with an optional status code (defaults to `1000`). Quotes around the reason are optional. |
 
-When the handshake fails, Resterm shows the HTTP response to help you find the problem. During a successful session, events appear in the UI and history together with their direction, opcode, size, and close status. Pings and pongs from the server are listed as received frames and count toward `receivedCount`, as sent pings count toward `sentCount`. Resterm answers each ping. Templates and scripts can read `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped` from the summary. `closedBy` has one of these values:
+When the server refuses the upgrade, Resterm shows its HTTP response to help you find the problem. An upgrade with an invalid handshake, such as a subprotocol Resterm did not offer, fails the request. During a successful session, events appear in the UI and history together with their direction, opcode, size, and close status. Pings and pongs from the server are listed as received frames and count toward `receivedCount`, as sent pings count toward `sentCount`. Resterm answers each ping. Templates and scripts can read `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`, `errorClass`, and `dropped` from the summary. `closedBy` has one of these values:
 
 | Value | Meaning |
 | --- | --- |
