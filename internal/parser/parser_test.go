@@ -4996,29 +4996,44 @@ GET status
 }
 
 func TestSettingsInBlockWithoutRequestWarn(t *testing.T) {
-	const ignored = " in a block without a request was ignored. Move it above the first ### to share it"
+	const (
+		block    = " in a block without a request was ignored. Move it above the first ### to share it"
+		workflow = " above @workflow was ignored. Move it below @workflow to share it"
+	)
 	tests := []struct {
 		name  string
 		src   string
-		tag   string
+		want  string
 		lines []int
 	}{
-		{"setting only", "### one\n# @setting timeout 1s\n", "@setting", []int{2}},
-		{"settings only", "### one\n# note\n# @settings timeout=1s insecure\n", "@settings", []int{3}},
-		{"after @name", "### one\n# @name one\n# @setting timeout 1s\n", "@setting", []int{3}},
+		{"setting only", "### one\n# @setting timeout 1s\n", "@setting" + block, []int{2}},
+		{"settings only", "### one\n# note\n# @settings timeout=1s insecure\n", "@settings" + block, []int{3}},
+		{"after @name", "### one\n# @name one\n# @setting timeout 1s\n", "@setting" + block, []int{3}},
 		{"setting and request", "### one\n# @setting timeout 1s\nGET http://x\n", "", nil},
 		{"preamble only", "# @setting timeout 1s\n", "", nil},
 		{"preamble after @name", "# @name pre\n# @setting timeout 1s\n### one\nGET http://x\n", "", nil},
 		{"timeout only", "### one\n# @timeout 5s\n", "", nil},
 		{"preamble timeout", "# @timeout 5s\n### one\nGET http://x\n", "", nil},
+		{
+			"before @workflow",
+			"### flow\n# @setting timeout 1s\n# @workflow flow\n# @step S using=one\n",
+			"@setting" + workflow,
+			[]int{2},
+		},
+		{
+			"@settings after @name before @workflow",
+			"### flow\n# @name x\n# @settings timeout=1s\n# @workflow flow\n# @step S using=one\n",
+			"@settings" + workflow,
+			[]int{3},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := Parse("settings.http", []byte(tt.src))
 			var lines []int
 			for _, w := range doc.Warnings {
-				if want := tt.tag + ignored; w.Message != want {
-					t.Fatalf("warning = %q, want %q", w.Message, want)
+				if w.Message != tt.want {
+					t.Fatalf("warning = %q, want %q", w.Message, tt.want)
 				}
 				lines = append(lines, w.Span.Start.Line)
 			}
@@ -5030,29 +5045,35 @@ func TestSettingsInBlockWithoutRequestWarn(t *testing.T) {
 }
 
 func TestUseInBlockWithoutRequestWarns(t *testing.T) {
-	const want = "@use in a block without a request was ignored. Move it above the first ### to share it"
+	const (
+		block    = " in a block without a request was ignored. Move it above the first ### to share it"
+		workflow = " above @workflow was ignored. Move it below @workflow to share it"
+	)
 	tests := []struct {
 		name  string
 		src   string
+		want  string
 		lines []int
 	}{
-		{"use only", "### one\n# @use ./a.rts\n", []int{2}},
-		{"use and request", "### one\n# @use ./a.rts\nGET http://x\n", nil},
-		{"preamble only", "# @use ./a.rts\n", nil},
-		{"preamble after @name", "# @name pre\n# @use ./a.rts\n### one\nGET http://x\n", nil},
+		{"use only", "### one\n# @use ./a.rts\n", "@use" + block, []int{2}},
+		{"use and request", "### one\n# @use ./a.rts\nGET http://x\n", "", nil},
+		{"preamble only", "# @use ./a.rts\n", "", nil},
+		{"preamble after @name", "# @name pre\n# @use ./a.rts\n### one\nGET http://x\n", "", nil},
 		{
 			"before @workflow",
 			"### one\nGET http://x\n\n### flow\n# @use ./a.rts\n# @workflow flow\n# @step S using=one\n",
+			"@use" + workflow,
 			[]int{5},
 		},
+		{"below @workflow", "### flow\n# @workflow flow\n# @use ./a.rts\n# @step S using=one\n", "", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := Parse("use.http", []byte(tt.src))
 			var lines []int
 			for _, w := range doc.Warnings {
-				if w.Message != want {
-					t.Fatalf("warning = %q, want %q", w.Message, want)
+				if w.Message != tt.want {
+					t.Fatalf("warning = %q, want %q", w.Message, tt.want)
 				}
 				lines = append(lines, w.Span.Start.Line)
 			}

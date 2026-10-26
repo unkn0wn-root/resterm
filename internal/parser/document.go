@@ -225,7 +225,7 @@ func (b *documentBuilder) handleSeparator(ln line) bool {
 	if b.workflow != nil {
 		b.flushWorkflow(ln.no - 1)
 	}
-	b.flushRequest(ln.no - 1)
+	b.flushRequest("")
 	b.file.flushSettings(b.doc)
 	b.pendingTitle = strings.TrimSpace(strings.TrimPrefix(ln.text, "###"))
 	b.separated = true
@@ -271,7 +271,8 @@ func (b *documentBuilder) appendLine(raw string) {
 	}
 }
 
-func (b *documentBuilder) flushRequest(_ int) {
+// next is the directive that ends the block. It is empty at ### and at the end of the file.
+func (b *documentBuilder) flushRequest(next directive.Name) {
 	if !b.inRequest {
 		return
 	}
@@ -324,17 +325,15 @@ func (b *documentBuilder) flushRequest(_ int) {
 		}
 		b.doc.Requests = append(b.doc.Requests, req)
 	} else if b.separated {
+		msg := " in a block without a request was ignored. Move it above the first ### to share it"
+		if next == directive.Workflow {
+			msg = " above @workflow was ignored. Move it below @workflow to share it"
+		}
 		for _, u := range req.Metadata.Uses {
-			b.addWarning(
-				u.Line,
-				"@use in a block without a request was ignored. Move it above the first ### to share it",
-			)
+			b.addWarning(u.Line, directive.Use.Tag()+msg)
 		}
 		for _, d := range b.request.settingDirectives {
-			b.warn(
-				d,
-				d.Spelling.Tag()+" in a block without a request was ignored. Move it above the first ### to share it",
-			)
+			b.warn(d, d.Spelling.Tag()+msg)
 		}
 	}
 
@@ -365,7 +364,7 @@ func (b *documentBuilder) finish() {
 		b.failOpenDirective(cut)
 	}
 	b.flushMock()
-	b.flushRequest(0)
+	b.flushRequest("")
 	b.flushWorkflow(0)
 	b.file.flushSettings(b.doc)
 	b.file.apply(b.doc)
@@ -385,7 +384,7 @@ func (b *documentBuilder) startWorkflow(d parsedDirective) error {
 	}
 	line := d.lines.Start
 	if b.inRequest {
-		b.flushRequest(line - 1)
+		b.flushRequest(directive.Workflow)
 	}
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
