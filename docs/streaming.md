@@ -1,6 +1,6 @@
 # WebSocket and SSE
 
-Streaming sessions show up in the Stream response tab and are saved in history. Captures and scripts can read them too. A request can use only one of SSE, WebSocket, and GraphQL, and a `GRPC` request can use none of them.
+Streaming sessions show up in the Stream response tab and are saved in history. Captures and scripts can read them too. A request uses SSE or WebSocket, not both. GraphQL can run over either one, as [GraphQL subscriptions](graphql.md#subscriptions) describes, and a `GRPC` request can use none of them.
 
 ## Server-Sent Events (`@sse`)
 
@@ -31,6 +31,7 @@ If the server returns a non-2xx status or a content type other than `text/event-
 | Reason | Meaning |
 | --- | --- |
 | `eof` | The server closed the stream. |
+| `complete` | A GraphQL operation sent its `complete` event. |
 | `timeout:idle` | The stream went quiet for longer than `idle`. |
 | `timeout:total` | The stream ran for longer than `duration`. |
 | `limit:max_events` | `max-events` was reached. |
@@ -70,7 +71,7 @@ Available WebSocket options:
 | `timeout` | Handshake deadline (applies until the connection upgrades). |
 | `idle-timeout` / `idle` | Idle timeout once the socket is open. Resets on every frame Resterm sends and every message it receives. Pings and pongs from the server do not reset it. Set it to 0 for no limit. |
 | `max-message-bytes` | Largest inbound message allowed. The default is 32 KiB. |
-| `subprotocols` / `subprotocol` | Comma-separated list advertised during the handshake. |
+| `subprotocols` / `subprotocol` | Comma-separated list advertised during the handshake. A `@graphql` request offers `graphql-transport-ws`, and any other value is a parse error. |
 | `compression=<true\|false>` | Offer per-message compression to the server. The default is `true`, and `false` turns it off. To change the default for a whole file or an environment, use the `ws-compression` setting, for example `# @setting ws-compression false`. |
 
 Supported `@ws` steps:
@@ -90,7 +91,7 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
 | Value | Meaning |
 | --- | --- |
 | `server` | The server closed the connection. |
-| `client` | Resterm closed the connection through `@ws close` or after the last step. Resterm records what the server sends until it answers, for up to 5 seconds after the close is sent. A server that does not answer does not fail the request. |
+| `client` | Resterm closed the connection through `@ws close`, after the last step, or after a GraphQL operation ended. Resterm records what the server sends until it answers, for up to 5 seconds after the close is sent. A server that does not answer does not fail the request. |
 | `timeout` | The idle limit was reached, or the run's deadline expired. An idle timeout is a normal ending. An expired run deadline is a failure and sets `errorClass` to `timeout`. |
 | `canceled` | The run was canceled. |
 | `error` | The session failed. `closeReason` contains the error message and `errorClass` names what kind of failure it was. |
@@ -110,7 +111,7 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
   ```
 - Most events arrive as a single `data:` line, so the line limit is the one they reach first. Raise `max-line-bytes` along with `max-event-bytes` when a single line carries the whole payload. Base64 adds about a third to a payload, so a 3 MiB file needs roughly 4 MiB of headroom.
 - Resterm limits how much stream data it keeps in memory. An SSE session keeps up to 1024 events and 16 MiB, or twice `max-event-bytes` when that is larger. The size of an SSE event includes its data, comment, id, name, and other saved fields. A WebSocket session and its saved transcript each have an 8 MiB limit. The Stream pane keeps up to 5000 events or 16 MiB. If Resterm removes older events, the summary counts them in `dropped`. The Stream tab shows `Transcript incomplete` when its view is missing events.
-- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end. The saved data includes everything read before the limit was reached. Other problems fail the request. These include an expired run deadline, a read error, an SSE line or event that exceeds its limit, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a canceled run returns `130`. A stream error returns the code for the failure named in `summary.errorClass`: `20` for `timeout`, `21` for `network`, `22` for `tls`, `25` for `filesystem` such as an `@ws send-file` payload Resterm could not read, and `26` for `protocol`. A stream that failed for a reason Resterm cannot name reports `protocol`.
+- Reaching `max-events`, `max-bytes`, `idle`, or `duration` is a normal way for a stream to end, except that `idle` fails a GraphQL WebSocket that has not received `connection_ack`. The saved data includes everything read before the limit was reached. Other problems fail the request. These include an expired run deadline, a read error, an SSE line or event that exceeds its limit, a GraphQL message that breaks its protocol, and a WebSocket session that ends with `closedBy: error`. Resterm still saves and reports the transcript it collected. With detailed exit codes, a canceled run returns `130`. A stream error returns the code for the failure named in `summary.errorClass`: `20` for `timeout`, `21` for `network`, `22` for `tls`, `25` for `filesystem` such as an `@ws send-file` payload Resterm could not read, and `26` for `protocol`. A stream that failed for a reason Resterm cannot name reports `protocol`.
 
 ## Stream tab, history, and console
 
