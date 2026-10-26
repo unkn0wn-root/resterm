@@ -414,9 +414,11 @@ func TestPreviewGRPCUnresolvedVariablesStillPreviews(t *testing.T) {
 		URL:      "{{host}}:50051",
 		Settings: map[string]string{"base-url": "{{missingBase}}"},
 		GRPC: &restfile.GRPCRequest{
-			Target:     "{{host}}:50051",
-			FullMethod: "/pkg.Service/GetUser",
-			Message:    `{"id":"{{missing}}"}`,
+			Target:      "{{host}}:50051",
+			FullMethod:  "/pkg.Service/GetUser",
+			Message:     `{"id":"{{missing}}"}`,
+			ProtoFiles:  []string{"{{protoDir}}/svc.proto"},
+			ImportPaths: []string{"{{protoDir}}"},
 		},
 	}
 
@@ -432,6 +434,12 @@ func TestPreviewGRPCUnresolvedVariablesStillPreviews(t *testing.T) {
 	}
 	if got := res.Executed.GRPC.Message; got != `{"id":"{{missing}}"}` {
 		t.Fatalf("expected literal message placeholder, got %q", got)
+	}
+	if got := res.Executed.GRPC.ProtoFiles; !slices.Equal(got, []string{"{{protoDir}}/svc.proto"}) {
+		t.Fatalf("expected literal proto file placeholder, got %q", got)
+	}
+	if got := res.Executed.GRPC.ImportPaths; !slices.Equal(got, []string{"{{protoDir}}"}) {
+		t.Fatalf("expected literal import path placeholder, got %q", got)
 	}
 	if transportCalled() {
 		t.Fatalf("preview must not construct a transport")

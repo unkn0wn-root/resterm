@@ -3,6 +3,7 @@ package request
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -159,6 +160,90 @@ func TestPrepareGRPCRequestExpandsDescriptorSet(t *testing.T) {
 	}
 	if req.GRPC.DescriptorSet != "./testdata/example.protoset" {
 		t.Fatalf("expected descriptor set to be expanded, got %q", req.GRPC.DescriptorSet)
+	}
+}
+
+func TestPrepareGRPCRequestExpandsProtoPaths(t *testing.T) {
+	resolver := vars.NewResolver(
+		vars.NewMapProvider("doc", map[string]string{
+			"protoDir": " ./proto",
+			"vendor":   " ./third_party ",
+		}),
+	)
+	req := &restfile.Request{
+		Method: "GRPC",
+		GRPC: &restfile.GRPCRequest{
+			Target:      "localhost:50051",
+			FullMethod:  "/pkg.Svc/Call",
+			ProtoFiles:  []string{"{{protoDir}}/svc.proto", "shared/types.proto"},
+			ImportPaths: []string{"{{vendor}}", "proto"},
+		},
+	}
+
+	if err := prepareGRPCRequest(req, resolver, grpcx.Options{}); err != nil {
+		t.Fatalf("prepareGRPCRequest returned error: %v", err)
+	}
+	if want := []string{"./proto/svc.proto", "shared/types.proto"}; !slices.Equal(req.GRPC.ProtoFiles, want) {
+		t.Fatalf("proto files = %q, want %q", req.GRPC.ProtoFiles, want)
+	}
+	if want := []string{"./third_party", "proto"}; !slices.Equal(req.GRPC.ImportPaths, want) {
+		t.Fatalf("import paths = %q, want %q", req.GRPC.ImportPaths, want)
+	}
+}
+
+func TestPrepareGRPCRequestProtoPathsFailClosed(t *testing.T) {
+	resolver := vars.NewResolver(
+		vars.NewMapProvider("doc", map[string]string{"empty": "", "blank": " "}),
+	)
+	tests := []struct {
+		name string
+		gr   restfile.GRPCRequest
+		want string
+	}{
+		{
+			name: "proto file undefined",
+			gr:   restfile.GRPCRequest{ProtoFiles: []string{"{{missing}}/svc.proto"}},
+			want: "expand grpc proto file {{missing}}/svc.proto: undefined variable: missing",
+		},
+		{
+			name: "proto file empty",
+			gr:   restfile.GRPCRequest{ProtoFiles: []string{"{{empty}}"}},
+			want: "grpc proto file {{empty}} expands to an empty path",
+		},
+		{
+			name: "proto file blank",
+			gr:   restfile.GRPCRequest{ProtoFiles: []string{"{{blank}}"}},
+			want: "grpc proto file {{blank}} expands to an empty path",
+		},
+		{
+			name: "import path undefined",
+			gr:   restfile.GRPCRequest{ProtoFiles: []string{"svc.proto"}, ImportPaths: []string{"{{missing}}"}},
+			want: "expand grpc import path {{missing}}: undefined variable: missing",
+		},
+		{
+			name: "import path empty",
+			gr:   restfile.GRPCRequest{ProtoFiles: []string{"svc.proto"}, ImportPaths: []string{"{{empty}}"}},
+			want: "grpc import path {{empty}} expands to an empty path",
+		},
+		{
+			name: "import path blank",
+			gr:   restfile.GRPCRequest{ProtoFiles: []string{"svc.proto"}, ImportPaths: []string{"{{blank}}"}},
+			want: "grpc import path {{blank}} expands to an empty path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gr := tt.gr
+			gr.Target = "localhost:50051"
+			gr.FullMethod = "/pkg.Svc/Call"
+			req := &restfile.Request{Method: "GRPC", GRPC: &gr}
+
+			err := prepareGRPCRequest(req, resolver, grpcx.Options{})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

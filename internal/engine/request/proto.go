@@ -183,6 +183,28 @@ func prepareGRPCRequest(
 			}
 			grpcReq.DescriptorSet = strings.TrimSpace(out)
 		}
+		for i, p := range grpcReq.ProtoFiles {
+			out, err := res.ExpandTemplates(p)
+			if err != nil {
+				return diag.WrapAsf(diag.ClassProtocol, err, "expand grpc proto file %s", p)
+			}
+			out = strings.TrimSpace(out)
+			if out == "" {
+				return diag.Newf(diag.ClassProtocol, "grpc proto file %s expands to an empty path", p)
+			}
+			grpcReq.ProtoFiles[i] = out
+		}
+		for i, p := range grpcReq.ImportPaths {
+			out, err := res.ExpandTemplates(p)
+			if err != nil {
+				return diag.WrapAsf(diag.ClassProtocol, err, "expand grpc import path %s", p)
+			}
+			out = strings.TrimSpace(out)
+			if out == "" {
+				return diag.Newf(diag.ClassProtocol, "grpc import path %s expands to an empty path", p)
+			}
+			grpcReq.ImportPaths[i] = out
+		}
 		for k, vs := range req.Headers {
 			for i, v := range vs {
 				if req.Written.Header(k, v) {

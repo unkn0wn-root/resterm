@@ -23,7 +23,7 @@ const (
 	iconDirOpen     = "📂"
 	iconRTS         = "λ"
 	iconEnv         = "⚙"
-	iconGraphQL     = "◇"
+	iconSchema      = "◇"
 	iconJSON        = "▣"
 	iconJavaScript  = "JS"
 )
@@ -209,8 +209,8 @@ func rowIcon(n *Node[any]) string {
 			return iconRTS
 		case files.KindEnv:
 			return iconEnv
-		case files.KindGraphQL:
-			return iconGraphQL
+		case files.KindGraphQL, files.KindProto:
+			return iconSchema
 		case files.KindJSON:
 			return iconJSON
 		case files.KindJavaScript:

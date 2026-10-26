@@ -1,8 +1,10 @@
 package workspace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
@@ -60,6 +62,166 @@ export fn enabled() {
 	}
 	if _, ok := got["orphan.js"]; ok {
 		t.Fatalf("did not expect orphan javascript in entries: %+v", entries)
+	}
+}
+
+func TestListIncludesReferencedProtoFiles(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "api.http"), `### Proto
+# @grpc acme.v1.Greeter/SayHello
+# @grpc-proto ./proto/greeter.proto
+# @grpc-import-path ./vendor
+GRPC localhost:50051
+
+### Descriptor
+# @grpc acme.v1.Greeter/SayHello
+# @grpc-descriptor ./greeter.protoset
+GRPC localhost:50051
+`)
+	writeFile(t, filepath.Join(root, "proto", "greeter.proto"), `syntax = "proto3";`)
+	writeFile(t, filepath.Join(root, "proto", "unused.proto"), `syntax = "proto3";`)
+	writeFile(t, filepath.Join(root, "vendor", "google", "api", "annotations.proto"), `syntax = "proto3";`)
+	writeFile(t, filepath.Join(root, "greeter.protoset"), "")
+
+	entries, err := List(root, ListOptions{Recursive: true})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+
+	got := entryKinds(entries)
+	if got[filepath.Join("proto", "greeter.proto")] != files.KindProto {
+		t.Fatalf("expected the referenced proto file, got %+v", entries)
+	}
+	for _, name := range []string{
+		filepath.Join("proto", "unused.proto"),
+		filepath.Join("vendor", "google", "api", "annotations.proto"),
+		"greeter.protoset",
+	} {
+		if _, ok := got[name]; ok {
+			t.Fatalf("did not expect %s in entries: %+v", name, entries)
+		}
+	}
+}
+
+func TestListIncludesProtoFilesFoundThroughImportPaths(t *testing.T) {
+	const named = `# @grpc acme.Svc/Call
+# @grpc-proto acme/svc.proto
+# @grpc-import-path proto
+GRPC localhost:50051
+`
+	find := func(gr *restfile.GRPCRequest, dir string) ([]string, error) {
+		paths := make([]string, len(gr.ProtoFiles))
+		for i, p := range gr.ProtoFiles {
+			paths[i] = filepath.Join(dir, "proto", p)
+		}
+		return paths, nil
+	}
+	fail := func(gr *restfile.GRPCRequest, dir string) ([]string, error) {
+		paths, _ := find(gr, dir)
+		return paths, errors.New("proto file is shadowed")
+	}
+
+	tests := []struct {
+		name  string
+		src   string
+		find  func(*restfile.GRPCRequest, string) ([]string, error)
+		rel   bool
+		calls int
+		want  []string
+	}{
+		{
+			name:  "found files",
+			src:   named,
+			find:  find,
+			calls: 1,
+			want:  []string{filepath.Join("proto", "acme", "svc.proto")},
+		},
+		{
+			name: "templated import path",
+			src: `# @grpc acme.Svc/Call
+# @grpc-proto acme/svc.proto
+# @grpc-import-path proto
+# @grpc-import-path {{vendor}}
+GRPC localhost:50051
+`,
+			find: find,
+		},
+		{
+			name: "no proto files",
+			src: `GET https://example.com
+
+###
+# @grpc acme.Svc/Call
+# @grpc-descriptor ./svc.protoset
+GRPC localhost:50051
+`,
+			find: find,
+		},
+		{
+			name:  "error",
+			src:   named,
+			find:  fail,
+			calls: 1,
+		},
+		{
+			name: "no resolver",
+			src: named + `
+###
+# @grpc acme.Svc/Call
+# @grpc-proto ./local.proto
+GRPC localhost:50051
+`,
+			want: []string{"local.proto"},
+		},
+		{
+			name:  "relative root",
+			src:   named,
+			find:  find,
+			rel:   true,
+			calls: 1,
+			want:  []string{filepath.Join("proto", "acme", "svc.proto")},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			root := filepath.Join(tmp, "ws")
+			writeFile(t, filepath.Join(root, "api.http"), tt.src)
+			writeFile(t, filepath.Join(root, "local.proto"), `syntax = "proto3";`)
+			writeFile(t, filepath.Join(root, "proto", "acme", "svc.proto"), `syntax = "proto3";`)
+			writeFile(t, filepath.Join(root, "proto", "acme", "unused.proto"), `syntax = "proto3";`)
+			if tt.rel {
+				t.Chdir(tmp)
+				root = "ws"
+			}
+
+			var calls int
+			opt := ListOptions{Recursive: true}
+			if tt.find != nil {
+				opt.ProtoFiles = func(gr *restfile.GRPCRequest, dir string) ([]string, error) {
+					calls++
+					return tt.find(gr, dir)
+				}
+			}
+			entries, err := List(root, opt)
+			if err != nil {
+				t.Fatalf("List returned error: %v", err)
+			}
+
+			if calls != tt.calls {
+				t.Fatalf("resolver calls = %d, want %d", calls, tt.calls)
+			}
+			var got []string
+			for _, e := range entries {
+				if e.Kind == files.KindProto {
+					got = append(got, e.Name)
+				}
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("proto entries = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

@@ -27,6 +27,7 @@ type requestBuilder struct {
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
 	grpc              *grpcbuilder.Builder
+	importDirectives  []parsedDirective
 	sse               *ssebuilder.Builder
 	websocket         *wsbuilder.Builder
 	bodyOptions       restfile.BodyOptions
@@ -44,14 +45,17 @@ type featureBuilder interface {
 // protoDirective offers a directive to each protocol builder in turn. The
 // first builder that recognizes the key claims it, so the order decides
 // which protocol wins when a key is ambiguous.
-func (r *requestBuilder) protoDirective(name directive.Name, args string) (bool, error) {
+func (r *requestBuilder) protoDirective(d parsedDirective) (bool, error) {
 	for _, feature := range []featureBuilder{r.grpc, r.websocket, r.sse, r.graphql} {
-		handled, reset, err := feature.HandleDirective(name, args)
+		handled, reset, err := feature.HandleDirective(d.Name, d.Args)
 		if !handled {
 			continue
 		}
 		if reset {
-			r.clearDeclared(name)
+			r.clearDeclared(d.Name)
+		}
+		if d.Name == directive.GRPCImportPath && directive.HasValue(d.Args) {
+			r.importDirectives = append(r.importDirectives, d)
 		}
 		return true, err
 	}

@@ -25,7 +25,7 @@ func (m methodID) symbol() string {
 	return string(m.svc) + "." + string(m.method)
 }
 
-// descriptorSource loads method descriptors from a file or server reflection.
+// descriptorSource loads method descriptors from files or server reflection.
 type descriptorSource interface {
 	files(ctx context.Context, id methodID) (*protoregistry.Files, error)
 }
@@ -60,17 +60,19 @@ func descriptorSourceFor(
 	gr *restfile.GRPCRequest,
 	rd reader,
 ) (descriptorSource, error) {
-	if gr.DescriptorSet != "" {
+	switch {
+	case gr.DescriptorSet != "":
 		return fileDescriptorSource{path: gr.DescriptorSet, rd: rd}, nil
+	case len(gr.ProtoFiles) > 0:
+		return protoSource{paths: gr.ProtoFiles, imports: gr.ImportPaths, rd: rd}, nil
+	case gr.UseReflection:
+		return reflectionSource{conn: conn}, nil
 	}
-	if !gr.UseReflection {
-		return nil, diag.New(
-			diag.ClassProtocol,
-			"grpc reflection disabled and no descriptor provided",
-			grpcComponent,
-		)
-	}
-	return reflectionSource{conn: conn}, nil
+	return nil, diag.New(
+		diag.ClassProtocol,
+		"grpc reflection disabled and no descriptor or proto files provided",
+		grpcComponent,
+	)
 }
 
 // methodTarget keeps the method and codec on the same descriptor registry so

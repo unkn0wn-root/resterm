@@ -279,6 +279,13 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.lintRequestPolicies(req)
 	b.lintProfile(req)
 	if req.Method != "" && req.URL != "" {
+		// @grpc-proto may follow the import path, so check once the request is built.
+		if gr := req.GRPC; gr != nil && len(gr.ProtoFiles) == 0 {
+			for _, d := range b.request.importDirectives {
+				b.warn(d, d.Spelling.Tag()+" without "+directive.GRPCProto.Tag()+" was ignored")
+			}
+			gr.ImportPaths = nil
+		}
 		b.doc.Requests = append(b.doc.Requests, req)
 	} else if b.separated {
 		for _, u := range req.Metadata.Uses {

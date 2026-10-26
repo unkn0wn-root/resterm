@@ -3,6 +3,7 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -32,6 +33,7 @@ type ListOptions struct {
 	ExplicitEnvFile string
 	CurrentFile     string
 	CurrentDoc      *restfile.Document
+	ProtoFiles      func(gr *restfile.GRPCRequest, dir string) ([]string, error)
 }
 
 func List(root string, opt ListOptions) ([]files.Entry, error) {
@@ -112,6 +114,24 @@ func (l *lister) addDocumentRefs() {
 			continue
 		}
 		l.addRefs(e.Path, Refs(doc))
+		if l.opt.ProtoFiles == nil {
+			continue
+		}
+		dir := filepath.Dir(pathKey(e.Path))
+		for _, req := range doc.Requests {
+			gr := req.GRPC
+			// A templated import path is not expanded here and could shadow the file.
+			if gr == nil || len(gr.ProtoFiles) == 0 || slices.ContainsFunc(gr.ImportPaths, isDynamicRef) {
+				continue
+			}
+			paths, err := l.opt.ProtoFiles(gr, dir)
+			if err != nil {
+				continue
+			}
+			for _, p := range paths {
+				l.addRef(e.Path, Ref{Path: p, Kind: RefGRPC})
+			}
+		}
 	}
 }
 

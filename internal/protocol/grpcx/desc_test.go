@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -72,6 +73,67 @@ func TestParseFullMethod(t *testing.T) {
 			}
 			if string(got.method) != tt.wantMtd {
 				t.Fatalf("method = %q, want %q", got.method, tt.wantMtd)
+			}
+		})
+	}
+}
+
+func TestDescriptorSourceFor(t *testing.T) {
+	tests := []struct {
+		name    string
+		gr      restfile.GRPCRequest
+		want    descriptorSource
+		wantErr string
+	}{
+		{
+			name: "descriptor set",
+			gr:   restfile.GRPCRequest{DescriptorSet: "svc.protoset", UseReflection: true},
+			want: fileDescriptorSource{path: "svc.protoset"},
+		},
+		{
+			name: "proto files",
+			gr: restfile.GRPCRequest{
+				ProtoFiles:    []string{"svc.proto"},
+				ImportPaths:   []string{"proto"},
+				UseReflection: true,
+			},
+			want: protoSource{paths: []string{"svc.proto"}, imports: []string{"proto"}},
+		},
+		{
+			name: "descriptor set wins over proto files",
+			gr: restfile.GRPCRequest{
+				DescriptorSet: "svc.protoset",
+				ProtoFiles:    []string{"svc.proto"},
+				UseReflection: true,
+			},
+			want: fileDescriptorSource{path: "svc.protoset"},
+		},
+		{
+			name: "reflection",
+			gr:   restfile.GRPCRequest{UseReflection: true},
+			want: reflectionSource{},
+		},
+		{
+			name:    "nothing to load from",
+			gr:      restfile.GRPCRequest{},
+			wantErr: "no descriptor or proto files provided",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src, err := descriptorSourceFor(nil, &tt.gr, reader{})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("descriptor source: %v", err)
+			}
+			if !reflect.DeepEqual(src, tt.want) {
+				t.Fatalf("source = %#v, want %#v", src, tt.want)
 			}
 		})
 	}

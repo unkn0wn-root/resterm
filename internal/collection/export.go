@@ -10,6 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/files"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 const (
@@ -23,11 +24,12 @@ const (
 )
 
 type ExportOptions struct {
-	Workspace string
-	OutDir    string
-	Name      string
-	Recursive bool
-	Force     bool
+	Workspace    string
+	OutDir       string
+	Name         string
+	Recursive    bool
+	Force        bool
+	ProtoSources func(gr *restfile.GRPCRequest, dir string) ([]string, error)
 }
 
 type ExportResult struct {
@@ -58,7 +60,7 @@ func ExportBundle(o ExportOptions) (ExportResult, error) {
 	}
 
 	byPath := make(map[string]expFile)
-	if err := collectRequests(byPath, wsAbs, wsReal, o.Recursive); err != nil {
+	if err := collectRequests(byPath, wsAbs, wsReal, o); err != nil {
 		return ExportResult{}, err
 	}
 
@@ -87,8 +89,8 @@ func ExportBundle(o ExportOptions) (ExportResult, error) {
 	}, nil
 }
 
-func collectRequests(byPath map[string]expFile, rootAbs, rootReal string, rec bool) error {
-	ents, err := files.ListRequests(rootAbs, files.ListOptions{Recursive: rec})
+func collectRequests(byPath map[string]expFile, rootAbs, rootReal string, o ExportOptions) error {
+	ents, err := files.ListRequests(rootAbs, files.ListOptions{Recursive: o.Recursive})
 	if err != nil {
 		return fmt.Errorf("list request files: %w", err)
 	}
@@ -115,7 +117,20 @@ func collectRequests(byPath map[string]expFile, rootAbs, rootReal string, rec bo
 		}
 
 		baseDir := filepath.Dir(abs)
-		for _, r := range collectRefs(doc) {
+		refs := collectRefs(doc)
+		for _, req := range doc.Requests {
+			if req.GRPC == nil || len(req.GRPC.ProtoFiles) == 0 {
+				continue
+			}
+			paths, err := o.ProtoSources(req.GRPC, baseDir)
+			if err != nil {
+				return fmt.Errorf("collect proto files for %s: %w", rel, err)
+			}
+			for _, p := range paths {
+				refs = append(refs, ref{Path: p, Role: RoleAsset})
+			}
+		}
+		for _, r := range refs {
 			_, depRel, depData, depErr := readWorkspaceFile(rootAbs, rootReal, baseDir, r.Path)
 			if depErr != nil {
 				return depErr

@@ -2,7 +2,7 @@
 
 Export a collection bundle to share request files and their inputs with another developer, a CI job, or a support environment. You can commit the bundle to Git and import it into another workspace.
 
-A bundle contains your request files and the files they use: RTS modules, script includes, payloads, GraphQL queries and variables, gRPC descriptors and messages, and WebSocket `send-file` payloads. Its `manifest.json` records a checksum for each file. Import checks those checksums before writing anything to disk.
+A bundle contains your request files and the files they use: RTS modules, script includes, payloads, GraphQL queries and variables, gRPC descriptors and messages, proto files and the files they import, and WebSocket `send-file` payloads. Its `manifest.json` records a checksum for each file. Import checks those checksums before writing anything to disk.
 
 ## What happens to environment files
 

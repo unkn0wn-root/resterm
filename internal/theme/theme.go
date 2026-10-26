@@ -314,6 +314,8 @@ func DefaultTheme() Theme {
 				"graphql-query":     directiveAccent,
 				"grpc":              directiveAccent,
 				"grpc-descriptor":   directiveAccent,
+				"grpc-proto":        directiveAccent,
+				"grpc-import-path":  directiveAccent,
 				"grpc-reflection":   directiveAccent,
 				"grpc-plaintext":    directiveAccent,
 				"grpc-authority":    directiveAccent,

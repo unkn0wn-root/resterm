@@ -96,6 +96,12 @@ func (w *requestTextWriter) writeGRPCSection(grpc *restfile.GRPCRequest) {
 	if grpc.DescriptorSet != "" {
 		w.writeLine(directive.GRPCDescriptor.Comment() + " " + grpc.DescriptorSet)
 	}
+	for _, p := range grpc.ProtoFiles {
+		w.writeLine(directive.GRPCProto.Comment() + " " + p)
+	}
+	for _, p := range grpc.ImportPaths {
+		w.writeLine(directive.GRPCImportPath.Comment() + " " + p)
+	}
 	if !grpc.UseReflection {
 		w.writeLine(directive.GRPCReflection.Comment() + " false")
 	}

@@ -85,6 +85,9 @@ func (c *refCollector) collectGRPC(req *restfile.GRPCRequest, line int) {
 	}
 	c.add(RefGRPC, req.MessageFile, line)
 	c.add(RefGRPC, req.DescriptorSet, line)
+	for _, p := range req.ProtoFiles {
+		c.add(RefGRPC, p, line)
+	}
 }
 
 func (c *refCollector) collectScripts(scripts []restfile.ScriptBlock, line int) {

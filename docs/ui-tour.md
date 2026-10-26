@@ -61,7 +61,7 @@ active environment. It makes no network calls while you type.
 | `@compare` arguments | Environment names or profiles from the selected group. Baseline suggestions use the targets already chosen |
 | `use=` on `@apply` / `@ssh` / `@k8s` | Matching `@patch` / `@ssh` / `@k8s` profile names |
 | `using=` / `run=` on workflow steps and branches | Named requests from the current document |
-| File paths | Files and directories for `@use`, descriptors, GraphQL/JSON inputs, TLS/SSH/Kubernetes options, request bodies, and script or body includes |
+| File paths | Files and directories for `@use`, descriptors, proto files and import paths, GraphQL/JSON inputs, TLS/SSH/Kubernetes options, request bodies, and script or body includes |
 
 Press `Ctrl+N` to show all completions valid at the caret. If there are none, it does
 nothing. In editor insert mode this key always controls completion, regardless of
@@ -102,8 +102,8 @@ Variable completion adds any missing closing braces, so completing `{{ho`, `{{ho
 and `{{ho}}` with `host` produces `{{host}}` in each case. Inside `{{= ... }}`
 expressions and helper arguments, completion leaves the closing braces unchanged.
 
-Completion does not use gRPC reflection, descriptors, or GraphQL schemas to suggest
-service, method, or field names.
+Completion does not use gRPC reflection, descriptors, proto files, or GraphQL
+schemas to suggest service, method, or field names.
 
 ## Response panes
 

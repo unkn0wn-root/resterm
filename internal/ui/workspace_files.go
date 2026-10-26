@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/unkn0wn-root/resterm/internal/files"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	wsvc "github.com/unkn0wn-root/resterm/internal/workspace"
 )
@@ -20,6 +21,9 @@ func listWorkspaceEntries(
 		ExplicitEnvFile: envFile,
 		CurrentFile:     currentFile,
 		CurrentDoc:      doc,
+		ProtoFiles: func(gr *restfile.GRPCRequest, dir string) ([]string, error) {
+			return grpcx.ProtoFiles(gr, grpcx.Options{BaseDir: dir, NoFallback: true})
+		},
 	})
 }
 

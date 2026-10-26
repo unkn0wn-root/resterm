@@ -191,6 +191,8 @@ func cloneBodySource(src BodySource) BodySource {
 func cloneGRPCRequest(src *GRPCRequest) *GRPCRequest {
 	dst := clonePtr(src)
 	if dst != nil {
+		dst.ProtoFiles = slices.Clone(src.ProtoFiles)
+		dst.ImportPaths = slices.Clone(src.ImportPaths)
 		dst.Metadata = slices.Clone(src.Metadata)
 	}
 	return dst
