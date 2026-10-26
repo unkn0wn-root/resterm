@@ -9,10 +9,13 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestMatchesFilterSSE(t *testing.T) {
@@ -33,6 +36,74 @@ func TestMatchesFilterSSE(t *testing.T) {
 	}
 	if matchesFilter("bye", evt) {
 		t.Fatalf("did not expect filter to match")
+	}
+}
+
+func TestRenderStreamEventWebSocket(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	m := &Model{theme: theme.DefaultTheme()}
+	th := m.theme
+	for _, tt := range []struct {
+		name string
+		evt  stream.Event
+		want string
+	}{
+		{
+			name: "a failure",
+			evt: stream.Event{
+				Direction: stream.DirNA,
+				WS: stream.WSMetadata{
+					ClosedBy: stream.WSClosedByError,
+					Reason:   "server sent next without an object payload",
+				},
+			},
+			want: th.StreamError.Render("server sent next without an object payload"),
+		},
+		{
+			name: "an idle timeout",
+			evt: stream.Event{
+				Direction: stream.DirNA,
+				WS:        stream.WSMetadata{ClosedBy: stream.WSClosedByTimeout, Reason: "idle timeout after 1s"},
+			},
+			want: th.StreamSummary.Render("idle timeout after 1s"),
+		},
+		{
+			name: "a text frame",
+			evt:  stream.Event{Direction: stream.DirReceive, Payload: []byte("hi"), WS: stream.WSMetadata{Type: stream.WSText}},
+			want: th.StreamEventName.Render("text") + " " + th.StreamData.Render(`"hi"`),
+		},
+		{
+			name: "a binary frame",
+			evt: stream.Event{
+				Direction: stream.DirReceive,
+				Payload:   []byte("hi"),
+				WS:        stream.WSMetadata{Type: stream.WSBinary},
+			},
+			want: th.StreamEventName.Render("binary") + " " + th.StreamBinary.Render("2 bytes") + " " +
+				th.StreamBinary.Render("aGk="),
+		},
+		{
+			name: "a close frame",
+			evt: stream.Event{
+				Direction: stream.DirSend,
+				WS:        stream.WSMetadata{Type: stream.WSClose, Code: stream.WSCloseNormal, Reason: "bye"},
+			},
+			want: th.StreamSummary.Render("close 1000 bye"),
+		},
+		{
+			name: "a frame without a type",
+			evt:  stream.Event{Direction: stream.DirReceive, Payload: []byte("hi")},
+			want: th.StreamEventName.Render("unknown") + " " + th.StreamSummary.Render("(2 bytes)"),
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.evt.Kind = stream.KindWebSocket
+			if got := m.renderStreamEvent(&tt.evt); !strings.HasSuffix(got, " "+tt.want) {
+				t.Fatalf("renderStreamEvent() = %q, want it to end with %q", got, tt.want)
+			}
+		})
 	}
 }
 
