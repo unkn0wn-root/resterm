@@ -458,13 +458,20 @@ func TestEngineExecuteRequestRejectsInteractiveWebSocket(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		ws       *restfile.WebSocketRequest
+		gql      *restfile.GraphQLBody
 		rejected bool
 	}{
 		{name: "no steps", ws: &restfile.WebSocketRequest{}, rejected: true},
 		{name: "steps", ws: &restfile.WebSocketRequest{Steps: steps}},
+		{name: "graphql", ws: &restfile.WebSocketRequest{}, gql: &restfile.GraphQLBody{Query: "subscription { n }"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &restfile.Request{Method: "GET", URL: "ws" + strings.TrimPrefix(srv.URL, "http"), WebSocket: tt.ws}
+			req := &restfile.Request{
+				Method:    "GET",
+				URL:       "ws" + strings.TrimPrefix(srv.URL, "http"),
+				WebSocket: tt.ws,
+				Body:      restfile.BodySource{GraphQL: tt.gql},
+			}
 			doc := &restfile.Document{Path: "ws.http", Requests: []*restfile.Request{req}}
 			res, err := New(engine.Config{}).ExecuteRequest(doc, req, testSelection(""))
 			if got := errors.Is(err, errInteractiveWebSocket); got != tt.rejected {

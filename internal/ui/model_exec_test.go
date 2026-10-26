@@ -2162,6 +2162,7 @@ func TestSendActiveRequestRecordsAllButInteractiveWebSockets(t *testing.T) {
 	}{
 		{name: "websocket", src: line + "\n# @websocket\n"},
 		{name: "websocket with steps", src: line + "\n# @websocket\n# @ws send hi\n", rec: true},
+		{name: "graphql over websocket", src: line + "\n# @graphql\n# @websocket\n\nsubscription { n }\n", rec: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			model := New(Config{FilePath: "ws.http", InitialContent: tt.src})

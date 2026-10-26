@@ -40,6 +40,8 @@ type requestBuilder struct {
 	k8s               *restfile.K8sSpec
 	retry             *retryDraft
 	declared          map[directive.Name]bool
+	// subprotocols is the @websocket directive that last set the subprotocols.
+	subprotocols parsedDirective
 }
 
 type featureBuilder interface {
@@ -50,10 +52,14 @@ type featureBuilder interface {
 // first builder that recognizes the key claims it, so the order decides
 // which protocol wins when a key is ambiguous.
 func (r *requestBuilder) protoDirective(d parsedDirective) (bool, error) {
+	subs := r.websocket.Subprotocols()
 	for _, feature := range []featureBuilder{r.grpc, r.websocket, r.sse, r.graphql} {
 		handled, reset, err := feature.HandleDirective(d.Name, d.Args)
 		if !handled {
 			continue
+		}
+		if !slices.Equal(subs, r.websocket.Subprotocols()) {
+			r.subprotocols = d
 		}
 		if reset {
 			r.clearDeclared(d.Name)
@@ -157,12 +163,13 @@ func (r *requestBuilder) build() *restfile.Request {
 		req.WebSocket = wsReq
 	} else if sseReq, ok := r.sse.Finalize(); ok {
 		req.SSE = sseReq
-	} else if gql, mime, ok := r.graphql.Finalize(r.http.MimeType()); ok {
+	}
+	if gql, mime, ok := r.graphql.Finalize(r.http.MimeType()); ok {
 		req.Body.GraphQL = gql
 		if mime != "" {
 			req.Body.MimeType = mime
 		}
-	} else {
+	} else if req.WebSocket == nil && req.SSE == nil {
 		req.Body.Options = r.bodyOptions
 	}
 	r.applyHTTPBody(req)

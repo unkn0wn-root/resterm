@@ -125,3 +125,45 @@ func TestInteractiveWebSocketOutlivesTheRequest(t *testing.T) {
 		t.Fatalf("session context followed the canceled request: %v", err)
 	}
 }
+
+func TestGraphQLWebSocketRunsToCompletionWithAnAttachHook(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"graphql-transport-ws"}})
+		if err != nil {
+			return
+		}
+		ctx := r.Context()
+		_, _, _ = conn.Read(ctx)
+		_ = conn.Write(ctx, websocket.MessageText, []byte(`{"type":"connection_ack"}`))
+		_, _, _ = conn.Read(ctx)
+		_ = conn.Write(ctx, websocket.MessageText, []byte(`{"id":"1","type":"complete"}`))
+		_, _, _ = conn.Read(ctx)
+	}))
+	t.Cleanup(srv.Close)
+
+	eng := New(
+		engine.Config{FilePath: "/tmp/example.http", Client: httpx.NewClientWithOptions()},
+		rtrun.New(rtrun.Config{}),
+	)
+	req := &restfile.Request{
+		Method:    http.MethodGet,
+		URL:       strings.Replace(srv.URL, "http", "ws", 1),
+		WebSocket: &restfile.WebSocketRequest{},
+		Body:      restfile.BodySource{GraphQL: &restfile.GraphQLBody{Query: "subscription { n }"}},
+	}
+	attached := 0
+	res, err := eng.ExecuteWith(nil, req, testEnv("dev"), ExecOptions{
+		Ctx:      t.Context(),
+		AttachWS: func(*httpx.WebSocketHandle, *restfile.Request) { attached++ },
+	})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() = %v, %v", err, res.Err)
+	}
+	tr, err := httpx.DecodeWebSocketTranscript(res.Response.Body)
+	if err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
+	if attached != 1 || tr.Summary.CloseReason != "operation complete" {
+		t.Fatalf("attached %d, summary %+v, want one attach and a completed operation", attached, tr.Summary)
+	}
+}

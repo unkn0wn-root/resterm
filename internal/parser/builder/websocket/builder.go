@@ -279,6 +279,11 @@ func validWSCloseCode(code int) bool {
 		code >= wsCloseAppMin && code <= wsCloseAppMax
 }
 
+// Subprotocols returns the subprotocols the directives so far have set.
+func (b *Builder) Subprotocols() []string {
+	return b.opts.Subprotocols
+}
+
 func (b *Builder) Finalize() (*restfile.WebSocketRequest, bool) {
 	if !b.on {
 		return nil, false

@@ -305,13 +305,22 @@ func (b *documentBuilder) flushRequest(_ int) {
 				on = directive.WebSocket
 			case req.SSE != nil:
 				on = directive.SSE
-			case req.Body.GraphQL != nil:
-				on = directive.GraphQL
 			}
+			// GraphQL is a payload, so it rides on either transport.
 			for _, d := range b.request.protocols {
-				if protocolOf(d.Name) != on {
+				if d.Name != directive.GraphQL && protocolOf(d.Name) != on {
 					b.fail(d, d.Spelling.Tag()+" cannot be combined with "+on.Tag()+" on the same request")
 				}
+			}
+			// Over WebSocket, GraphQL speaks only graphql-transport-ws.
+			if ws := req.WebSocket; ws != nil && req.Body.GraphQL != nil && len(ws.Options.Subprotocols) > 0 &&
+				!slices.Equal(ws.Options.Subprotocols, []string{restfile.GraphQLWSProtocol}) {
+				d := b.request.subprotocols
+				b.fail(
+					d,
+					d.Spelling.Tag()+" subprotocols must be "+restfile.GraphQLWSProtocol+" on a "+
+						directive.GraphQL.Tag()+" request",
+				)
 			}
 		}
 		if gr := req.GRPC; gr != nil && len(gr.ProtoFiles) == 0 {

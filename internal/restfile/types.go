@@ -587,9 +587,9 @@ func (req *Request) RepeatUnsupported() string {
 }
 
 // InteractiveWebSocket reports whether the request opens a WebSocket for the
-// user to drive, because it has no steps to run.
+// user to drive, because it has no steps or GraphQL operation to run.
 func (req *Request) InteractiveWebSocket() bool {
-	return req.WebSocket != nil && len(req.WebSocket.Steps) == 0
+	return req.WebSocket != nil && len(req.WebSocket.Steps) == 0 && req.Body.GraphQL == nil
 }
 
 type SSERequest struct {

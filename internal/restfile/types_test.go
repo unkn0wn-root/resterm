@@ -36,6 +36,10 @@ func TestInteractiveWebSocket(t *testing.T) {
 		{name: "sse", req: Request{SSE: &SSERequest{}}},
 		{name: "websocket", req: Request{WebSocket: &WebSocketRequest{}}, want: true},
 		{name: "websocket with steps", req: Request{WebSocket: &WebSocketRequest{Steps: steps}}},
+		{
+			name: "graphql over websocket",
+			req:  Request{WebSocket: &WebSocketRequest{}, Body: BodySource{GraphQL: &GraphQLBody{}}},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
