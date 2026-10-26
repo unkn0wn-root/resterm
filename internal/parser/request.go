@@ -140,15 +140,17 @@ func (r *requestBuilder) build() *restfile.Request {
 		HeaderLines:  r.http.HeaderLines(),
 	}
 
-	if grpcReq, body, mime, ok := r.grpc.Finalize(r.http.MimeType()); ok && r.isGRPC() {
-		req.GRPC = grpcReq
-		req.Body = body
-		if mime != "" {
-			req.Body.MimeType = mime
+	if r.isGRPC() {
+		if grpcReq, body, mime, ok := r.grpc.Finalize(r.http.MimeType()); ok {
+			req.GRPC = grpcReq
+			req.Body = body
+			if mime != "" {
+				req.Body.MimeType = mime
+			}
+			req.Body.Options = r.bodyOptions
+			r.applyReqSettings(req)
+			return req
 		}
-		req.Body.Options = r.bodyOptions
-		r.applyReqSettings(req)
-		return req
 	}
 
 	if wsReq, ok := r.websocket.Finalize(); ok {
