@@ -586,6 +586,12 @@ func (req *Request) RepeatUnsupported() string {
 	return ""
 }
 
+// InteractiveWebSocket reports whether the request opens a WebSocket for the
+// user to drive, because it has no steps to run.
+func (req *Request) InteractiveWebSocket() bool {
+	return req.WebSocket != nil && len(req.WebSocket.Steps) == 0
+}
+
 type SSERequest struct {
 	Options SSEOptions
 }

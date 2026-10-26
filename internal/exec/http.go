@@ -139,7 +139,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 			Decision: "HTTP request failed",
 		}
 	}
-	if in.Req.WebSocket != nil && len(in.Req.WebSocket.Steps) == 0 {
+	if in.Req.InteractiveWebSocket() {
 		return HTTPResult{
 			Err: diag.New(
 				diag.ClassProtocol,

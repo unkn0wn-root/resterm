@@ -291,7 +291,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 
 	// A bare WebSocket request stays on the unrecorded pipeline. The stream
 	// records through its own session instead.
-	rec := st.req.WebSocket == nil || len(st.req.WebSocket.Steps) > 0
+	rec := !st.req.InteractiveWebSocket()
 	run, started := m.startRun(runSpec{
 		doc:    st.doc,
 		req:    st.req,

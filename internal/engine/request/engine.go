@@ -1082,9 +1082,7 @@ func (f flow) PreviewResult() xexec.RequestResult {
 func (f flow) UseGRPC() bool { return f.ctx != nil && f.ctx.useGRPC }
 
 func (f flow) IsInteractiveWebSocket() bool {
-	return f.ctx.req.WebSocket != nil &&
-		len(f.ctx.req.WebSocket.Steps) == 0 &&
-		f.ctx.onWS != nil
+	return f.ctx.req.InteractiveWebSocket() && f.ctx.onWS != nil
 }
 
 func (f flow) ExecuteInteractiveWebSocket() xexec.RequestResult {

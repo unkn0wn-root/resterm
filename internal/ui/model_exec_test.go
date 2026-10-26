@@ -2131,3 +2131,46 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 		t.Fatalf("expected no cookies to be sent, but got %q", respBodyString)
 	}
 }
+
+func TestSendActiveRequestRecordsAllButInteractiveWebSockets(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	line := "GET ws" + strings.TrimPrefix(srv.URL, "http")
+
+	var find func(tea.Cmd) tea.Msg
+	find = func(cmd tea.Cmd) tea.Msg {
+		if cmd == nil {
+			return nil
+		}
+		switch msg := cmd().(type) {
+		case runReqMsg, responseMsg:
+			return msg
+		case tea.BatchMsg:
+			for _, sub := range msg {
+				if got := find(sub); got != nil {
+					return got
+				}
+			}
+		}
+		return nil
+	}
+
+	for _, tt := range []struct {
+		name string
+		src  string
+		rec  bool
+	}{
+		{name: "websocket", src: line + "\n# @websocket\n"},
+		{name: "websocket with steps", src: line + "\n# @websocket\n# @ws send hi\n", rec: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			model := New(Config{FilePath: "ws.http", InitialContent: tt.src})
+			model.editor.SetCursor(0)
+			msg := find(model.sendActiveRequest())
+			_, rec := msg.(runReqMsg)
+			if msg == nil || rec != tt.rec {
+				t.Fatalf("message = %T, want recorded %v", msg, tt.rec)
+			}
+		})
+	}
+}

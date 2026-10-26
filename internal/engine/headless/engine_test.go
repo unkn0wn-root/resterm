@@ -2,6 +2,7 @@ package headless
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -446,6 +447,33 @@ func TestEngineExecuteRequestCapturesScriptedWebSocketTranscript(t *testing.T) {
 	got, ok := findReqVar(res.Executed, "ws.reply")
 	if !ok || got.Value != "pong:ping" {
 		t.Fatalf("unexpected captured ws reply: %+v %v", got, ok)
+	}
+}
+
+func TestEngineExecuteRequestRejectsInteractiveWebSocket(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+
+	steps := []restfile.WebSocketStep{{Type: restfile.WebSocketStepSendText, Value: "hi"}}
+	for _, tt := range []struct {
+		name     string
+		ws       *restfile.WebSocketRequest
+		rejected bool
+	}{
+		{name: "no steps", ws: &restfile.WebSocketRequest{}, rejected: true},
+		{name: "steps", ws: &restfile.WebSocketRequest{Steps: steps}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{Method: "GET", URL: "ws" + strings.TrimPrefix(srv.URL, "http"), WebSocket: tt.ws}
+			doc := &restfile.Document{Path: "ws.http", Requests: []*restfile.Request{req}}
+			res, err := New(engine.Config{}).ExecuteRequest(doc, req, testSelection(""))
+			if got := errors.Is(err, errInteractiveWebSocket); got != tt.rejected {
+				t.Fatalf("err = %v, want rejected %v", err, tt.rejected)
+			}
+			if !tt.rejected && (res.Response == nil || res.Response.StatusCode != http.StatusNotFound) {
+				t.Fatalf("response = %+v, want the 404 handshake reply", res.Response)
+			}
+		})
 	}
 }
 
