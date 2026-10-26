@@ -24,6 +24,10 @@ func (c *Client) prepareBody(
 	opts Options,
 ) (bodyPlan, error) {
 	if req.Body.GraphQL != nil {
+		// A WebSocket sends the operation in its subscribe message instead.
+		if req.WebSocket != nil {
+			return bodyPlan{}, nil
+		}
 		return c.prepareGraphQLBody(req, resolver, opts)
 	}
 

@@ -188,7 +188,7 @@ func (c *Client) buildHTTPRequest(
 	}
 	httpReq.Header.Del("Host")
 
-	if req.Body.GraphQL != nil && !strings.EqualFold(req.Method, "GET") {
+	if req.Body.GraphQL != nil && req.WebSocket == nil && !strings.EqualFold(req.Method, "GET") {
 		if httpReq.Header.Get("Content-Type") == "" {
 			httpReq.Header.Set("Content-Type", "application/json")
 		}

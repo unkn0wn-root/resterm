@@ -1694,7 +1694,7 @@ func TestWebSocketBoundsWhatItQueuesDuringASend(t *testing.T) {
 				t.Fatal("begin outbound")
 			}
 			for range tt.frames {
-				rt.receive(stream.WSBinary, make([]byte, 1<<20))
+				rt.receive(stream.WSBinary, make([]byte, 1<<20), nil)
 			}
 			if n := len(rt.q) - 1; n != tt.queued {
 				t.Fatalf("%d of %d frames wait for the send, want %d", n, tt.frames, tt.queued)
@@ -1729,7 +1729,7 @@ func TestWebSocketRecordsOverlappingWritesInOrder(t *testing.T) {
 		}
 		runtime.Gosched()
 	}
-	rt.receive(stream.WSText, []byte("reply"))
+	rt.receive(stream.WSText, []byte("reply"), nil)
 	if err := rt.writeAndPublish("send", func() error { return nil }, send("second")); err != nil {
 		t.Fatalf("second send: %v", err)
 	}

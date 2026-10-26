@@ -85,6 +85,7 @@ type WebSocketHandle struct {
 	Session *stream.Session
 	Meta    StreamMeta
 	Sender  *WebSocketSender
+	graphql *graphQLWS
 }
 
 type wsOutboundKind int
@@ -120,6 +121,15 @@ func (c *Client) StartWebSocket(
 	}
 
 	wsOpts := req.WebSocket.Options
+	var subscribe string
+	if req.Body.GraphQL != nil {
+		wsOpts.Subprotocols = []string{restfile.GraphQLWSProtocol}
+		msg, err := c.GraphQLSubscribeMessage(req.Body.GraphQL, resolver, effective)
+		if err != nil {
+			return nil, nil, err
+		}
+		subscribe = msg
+	}
 	handshakeCtx, handshakeCancel := ctxWithTimeout(ctx, wsOpts.HandshakeTimeout, nil)
 	defer handshakeCancel()
 
@@ -187,6 +197,10 @@ func (c *Client) StartWebSocket(
 		}
 		return nil, nil, diag.WrapAs(diag.ClassProtocol, err, "dial websocket")
 	}
+	if subscribe != "" && conn.Subprotocol() != restfile.GraphQLWSProtocol {
+		_ = conn.CloseNow()
+		return nil, nil, diag.New(diag.ClassProtocol, "the server did not accept the graphql-transport-ws subprotocol")
+	}
 	// Swap contexts now - handshake timeout shouldn't kill the active connection.
 	// The new context lets the session run until explicitly closed or parent cancels.
 	handshakeCancel()
@@ -215,6 +229,18 @@ func (c *Client) StartWebSocket(
 	runtime.touchActivity()
 	conn.SetReadLimit(runtime.limit)
 
+	sender := &WebSocketSender{runtime: runtime}
+	var gql *graphQLWS
+	if subscribe != "" {
+		gql = &graphQLWS{
+			sender:     sender,
+			subscribe:  subscribe,
+			subscribed: make(chan struct{}),
+			wake:       make(chan struct{}, 1),
+		}
+		runtime.check, runtime.observe, runtime.pending = gql.check, gql.receive, gql.pending
+	}
+
 	if wsOpts.IdleTimeout > 0 {
 		go runtime.idleWatch(wsOpts.IdleTimeout)
 	}
@@ -222,8 +248,7 @@ func (c *Client) StartWebSocket(
 	go runtime.readLoop()
 	go runtime.writeLoop()
 
-	sender := &WebSocketSender{runtime: runtime}
-	return &WebSocketHandle{Session: session, Meta: meta, Sender: sender}, nil, nil
+	return &WebSocketHandle{Session: session, Meta: meta, Sender: sender, graphql: gql}, nil, nil
 }
 
 func wsDialOptions(
@@ -302,8 +327,15 @@ func (c *Client) CompleteWebSocket(
 	if baseDir == "" {
 		baseDir = opts.BaseDir
 	}
-	// A session that already ended needs no close frame.
-	if !c.runWSSteps(session, sender, req, baseDir, opts) && session.Context().Err() == nil {
+	var operation <-chan struct{}
+	if handle.graphql != nil {
+		operation = handle.graphql.start(session)
+	}
+	closed := c.runWSSteps(session, sender, req, baseDir, opts)
+	// A GraphQL operation without steps runs until it ends. Otherwise resterm
+	// closes after the last step, unless a step closed already.
+	untilDone := operation != nil && len(req.WebSocket.Steps) == 0
+	if !closed && !untilDone && session.Context().Err() == nil {
 		_ = sender.Close(session.Context(), stream.WSCloseNormal, "resterm closed", "auto-close")
 	}
 
@@ -318,6 +350,9 @@ func (c *Client) CompleteWebSocket(
 		<-session.Done()
 	}
 
+	if operation != nil {
+		<-operation
+	}
 	<-eventsDone
 	// The listener's count is only final once it has drained.
 	lost += listener.Dropped()
@@ -334,7 +369,7 @@ func (c *Client) CompleteWebSocket(
 	rt.mu.Lock()
 	ending := rt.ending
 	rt.mu.Unlock()
-	if stateErr == nil {
+	if stateErr == nil || ending.ClosedBy == stream.WSClosedByError {
 		acc.summary.ClosedBy = ending.ClosedBy
 		acc.summary.CloseCode = int(ending.Code)
 		acc.summary.CloseReason = ending.Reason

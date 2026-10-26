@@ -25,6 +25,14 @@ type wsRuntime struct {
 	pulse   chan struct{}
 	// limit is the read limit, named in the error a larger message ends with.
 	limit int64
+	// check judges each data frame before the read loop records it, and
+	// observe acts on the frame after. A frame's error fails the session only
+	// if the frame is recorded, so the transcript and the outcome agree.
+	check   func(stream.WSType, []byte) (string, error)
+	observe func(context.Context, string, error)
+	// pending returns why a session fails when evt, a close from the peer or
+	// an idle timeout, ends it before its subprotocol has opened.
+	pending func(evt *stream.Event) error
 	// q keeps the transcript in the order things happened without holding mu
 	// during network I/O. A write holds its place in q while it is in flight,
 	// so whatever comes after it waits for its send event.
@@ -48,7 +56,9 @@ type wsRuntime struct {
 	cause error
 	// closeTimer gives up on the peer's answer to resterm's close.
 	closeTimer *time.Timer
-	once       sync.Once
+	// failure is why a recorded frame failed the session. Every ending reports it.
+	failure error
+	once    sync.Once
 	// closeStarted is claimed by whoever sends the first close frame, so the
 	// connection is never closed a second time.
 	closeStarted atomic.Bool
@@ -65,11 +75,14 @@ type wsQueued struct {
 // event. Past DefaultWebSocketTranscriptBytes everything but the writes goes
 // out first and later frames go out as they arrive, so a long write cannot
 // hold them all.
-func (rt *wsRuntime) publishReceive(evt *stream.Event) {
+func (rt *wsRuntime) publishReceive(evt *stream.Event, err error) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	if rt.done {
 		return
+	}
+	if err != nil && rt.failure == nil {
+		rt.failure = err
 	}
 	if rt.out > 0 && rt.qBytes < DefaultWebSocketTranscriptBytes {
 		rt.q = append(rt.q, &wsQueued{evt: evt})
@@ -146,6 +159,11 @@ func (rt *wsRuntime) finish(err error) {
 	if rt.idle != nil {
 		events = append(events, rt.idle)
 	}
+	// The operation never started if the peer closed first or idle passed
+	// before the subprotocol opened.
+	if rt.pending != nil && rt.failure == nil && (peer && !asked || rt.idle != nil) {
+		rt.failure = rt.pending(events[len(events)-1])
+	}
 	if rt.out > 0 {
 		for _, ev := range events {
 			rt.q = append(rt.q, &wsQueued{evt: ev})
@@ -157,10 +175,26 @@ func (rt *wsRuntime) finish(err error) {
 	for _, ev := range events {
 		rt.session.Publish(ev)
 	}
-	err = endCause(err, rt.writeErr)
+	err = rt.endWith(endCause(err, rt.writeErr))
 	rt.done = true
 	rt.mu.Unlock()
 	rt.session.Close(err)
+}
+
+// endWith returns the error the session ends with. A recorded failure wins and
+// is published last, so the transcript ends with it. Callers hold mu.
+func (rt *wsRuntime) endWith(err error) error {
+	if rt.failure == nil {
+		return err
+	}
+	rt.ending.ClosedBy, rt.ending.Reason = stream.WSClosedByError, rt.failure.Error()
+	rt.session.Publish(&stream.Event{
+		Kind:      stream.KindWebSocket,
+		Direction: stream.DirNA,
+		Timestamp: time.Now(),
+		WS:        stream.WSMetadata{ClosedBy: stream.WSClosedByError, Reason: rt.failure.Error()},
+	})
+	return rt.failure
 }
 
 // A read fails with net.ErrClosed when the connection closed under it, as it
@@ -277,7 +311,7 @@ func (rt *wsRuntime) finishOutbound(w *wsQueued, evt *stream.Event, err error) {
 		rt.q, rt.qBytes = nil, 0
 		if rt.end {
 			close = true
-			cause = endCause(rt.endErr, err)
+			cause = rt.endWith(endCause(rt.endErr, err))
 			rt.done = true
 		}
 	}
@@ -320,7 +354,15 @@ func (rt *wsRuntime) readLoop() {
 		if msgType == websocket.MessageText {
 			typ = stream.WSText
 		}
-		rt.receive(typ, data)
+		var t string
+		var verdict error
+		if rt.check != nil {
+			t, verdict = rt.check(typ, data)
+		}
+		rt.receive(typ, data, verdict)
+		if rt.observe != nil {
+			rt.observe(ctx, t, verdict)
+		}
 	}
 }
 
@@ -328,22 +370,22 @@ func (rt *wsRuntime) readLoop() {
 // so a keepalive cannot hold an idle session open. After resterm's close frame
 // coder must not answer a ping, because the pong would fail the read.
 func (rt *wsRuntime) pingReceived(_ context.Context, payload []byte) bool {
-	rt.receive(stream.WSPing, payload)
+	rt.receive(stream.WSPing, payload, nil)
 	return !rt.closeStarted.Load()
 }
 
 func (rt *wsRuntime) pongReceived(_ context.Context, payload []byte) {
-	rt.receive(stream.WSPong, payload)
+	rt.receive(stream.WSPong, payload, nil)
 }
 
-func (rt *wsRuntime) receive(typ stream.WSType, payload []byte) {
+func (rt *wsRuntime) receive(typ stream.WSType, payload []byte, err error) {
 	rt.publishReceive(&stream.Event{
 		Kind:      stream.KindWebSocket,
 		Direction: stream.DirReceive,
 		Timestamp: time.Now(),
 		Payload:   append([]byte(nil), payload...),
 		WS:        stream.WSMetadata{Type: typ},
-	})
+	}, err)
 }
 
 func (rt *wsRuntime) idleWatch(limit time.Duration) {

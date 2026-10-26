@@ -610,6 +610,9 @@ type WebSocketRequest struct {
 	Steps   []WebSocketStep
 }
 
+// GraphQLWSProtocol is the only WebSocket subprotocol a GraphQL request speaks.
+const GraphQLWSProtocol = "graphql-transport-ws"
+
 type WebSocketOptions struct {
 	HandshakeTimeout time.Duration
 	IdleTimeout      time.Duration
