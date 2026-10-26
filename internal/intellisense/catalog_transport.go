@@ -12,7 +12,7 @@ func addTransportArgs(c argumentCatalog) {
 		args{value: directiveValue(filePath("descriptor", "Descriptor set file", PathAny, pathLoad))},
 		directive.GRPCDescriptor,
 	)
-	c.add(args{value: directiveValue(filePath("proto", "Proto source file", PathAny, pathLoad))}, directive.GRPCProto)
+	c.add(args{value: directiveValue(filePath("proto", "Proto source file", PathProto, pathLoad))}, directive.GRPCProto)
 	c.add(
 		args{value: directiveValue(filePath("import-path", "Proto import directory", PathAny, pathLoad))},
 		directive.GRPCImportPath,

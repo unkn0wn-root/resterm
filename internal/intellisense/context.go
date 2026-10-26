@@ -36,6 +36,7 @@ const (
 	PathGraphQL
 	PathJSON
 	PathScript
+	PathProto
 )
 
 // PathContext describes the syntax allowed for a path completion.
