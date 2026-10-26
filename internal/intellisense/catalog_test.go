@@ -36,16 +36,24 @@ func TestStreamArgsMatchTheParser(t *testing.T) {
 	tests := []struct {
 		name directive.Name
 		src  string
+		keys []string
 	}{
-		{directive.SSE, "### r\n# @sse %s\nGET http://x\n"},
-		{directive.WebSocket, "### r\n# @websocket %s\nWS wss://x\n"},
+		{directive.SSE, "### r\n# @sse %s\nGET http://x\n", []string{
+			"duration", "idle", "idle-timeout", "limit-bytes", "max-bytes", "max-event-bytes", "max-events",
+			"max-line-bytes", "timeout",
+		}},
+		{directive.WebSocket, "### r\n# @websocket %s\nWS wss://x\n", []string{
+			"compression", "idle", "idle-timeout", "max-message-bytes", "subprotocol", "subprotocols", "timeout",
+		}},
 	}
 	for _, tt := range tests {
+		var keys []string
 		for _, arg := range argsFor(tt.name).named {
 			if arg.op != directive.OpEq {
 				continue
 			}
 			for _, key := range append([]string{arg.key}, arg.aliases...) {
+				keys = append(keys, key)
 				t.Run(tt.name.Tag()+" "+key, func(t *testing.T) {
 					doc := parser.Parse("t.http", []byte(fmt.Sprintf(tt.src, key)))
 					var want []string
@@ -66,6 +74,10 @@ func TestStreamArgsMatchTheParser(t *testing.T) {
 					}
 				})
 			}
+		}
+		slices.Sort(keys)
+		if !slices.Equal(keys, tt.keys) {
+			t.Errorf("%s options = %q, want the parser's %q", tt.name.Tag(), keys, tt.keys)
 		}
 	}
 }
