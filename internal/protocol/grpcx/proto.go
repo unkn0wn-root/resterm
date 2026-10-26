@@ -120,6 +120,9 @@ next:
 			names = append(names, filepath.ToSlash(rel))
 			continue next
 		}
+		if _, err := s.rd.read(p, "grpc proto file"); errors.Is(err, fs.ErrNotExist) {
+			return nil, nil, err
+		}
 		return nil, nil, diag.New(
 			diag.ClassProtocol,
 			fmt.Sprintf("proto file %s does not reside in any import path", p),

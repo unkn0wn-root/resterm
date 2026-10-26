@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/filelookup"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -258,13 +259,14 @@ service Clock {
 
 func TestProtoSourceErrors(t *testing.T) {
 	tests := []struct {
-		name    string
-		fs      mapFS
-		paths   []string
-		imports []string
-		want    string
-		absent  string
-		classes []diag.Class
+		name      string
+		fs        filelookup.FileSystem
+		paths     []string
+		imports   []string
+		fallbacks []string
+		want      string
+		absent    string
+		classes   []diag.Class
 	}{
 		{
 			name: "request dir is not an import path",
@@ -340,8 +342,25 @@ message M {
 			fs:      mapFS{},
 			paths:   []string{"../missing.proto"},
 			imports: []string{".", "proto"},
-			want:    "proto file ../missing.proto does not reside in any import path",
+			want:    "read grpc proto file ../missing.proto",
+			classes: []diag.Class{diag.ClassFilesystem},
+		},
+		{
+			name:    "unreadable relative file outside every import path",
+			fs:      &errFS{err: os.ErrPermission},
+			paths:   []string{"../outside.proto"},
+			imports: []string{"./proto"},
+			want:    "proto file ../outside.proto does not reside in any import path",
 			classes: []diag.Class{diag.ClassProtocol},
+		},
+		{
+			name:      "relative file outside every import path in a fallback folder",
+			fs:        mapFS{"/fb/x.proto": []byte(`syntax = "proto3";`)},
+			paths:     []string{"../x.proto"},
+			imports:   []string{"./proto"},
+			fallbacks: []string{"/fb/sub"},
+			want:      "proto file ../x.proto does not reside in any import path",
+			classes:   []diag.Class{diag.ClassProtocol},
 		},
 		{
 			name:    "import name in no import path",
@@ -358,6 +377,14 @@ message M {
 			imports: []string{"./proto"},
 			want:    "proto file /elsewhere/svc.proto does not reside in any import path",
 			classes: []diag.Class{diag.ClassProtocol},
+		},
+		{
+			name:    "missing absolute file outside every import path",
+			fs:      mapFS{},
+			paths:   []string{"/elsewhere/missing.proto"},
+			imports: []string{"./proto"},
+			want:    "read grpc proto file /elsewhere/missing.proto",
+			classes: []diag.Class{diag.ClassFilesystem},
 		},
 		{
 			name:    "file on disk outside every import path",
@@ -403,7 +430,7 @@ package p2;
 			src := protoSource{
 				paths:   tt.paths,
 				imports: tt.imports,
-				rd:      newReader(tt.fs, Options{BaseDir: "/req"}),
+				rd:      newReader(tt.fs, Options{BaseDir: "/req", FallbackBaseDirs: tt.fallbacks}),
 			}
 			_, err := src.files(context.Background(), methodID{})
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
