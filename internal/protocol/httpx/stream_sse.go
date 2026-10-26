@@ -40,6 +40,7 @@ const (
 	sseReasonTotal      = "timeout:total"
 	sseReasonCanceled   = "context_canceled"
 	sseReasonDeadline   = "context_deadline"
+	sseReasonComplete   = "complete"
 )
 
 const (
@@ -202,6 +203,10 @@ func (c *Client) StartSSE(
 
 	meta := buildStreamMeta(req, httpReq, httpResp, effectiveOpts.BaseDir, metaDefaults{})
 
+	var event func(SSEEvent) (bool, error)
+	if req.Body.GraphQL != nil {
+		event = graphQLSSEEvent
+	}
 	limits := sseLimitsFor(streamOpts, effectiveOpts)
 	session := stream.NewSession(streamCtx, stream.KindSSE, stream.Config{
 		MaxBytes: limits.sessionBytes(),
@@ -217,7 +222,7 @@ func (c *Client) StartSSE(
 		}()
 		// A canceled session must also stop a read that waits for data.
 		defer context.AfterFunc(session.Context(), cancel)()
-		runSSESession(streamCtx, session, httpResp.Body, streamOpts, limits, cancel)
+		runSSESession(streamCtx, session, httpResp.Body, streamOpts, limits, event, cancel)
 	}()
 
 	return &StreamHandle{Session: session, Meta: meta}, nil, nil
@@ -304,12 +309,14 @@ func runSSESession(
 	body io.ReadCloser,
 	opts restfile.SSEOptions,
 	limits sseLimits,
+	event func(SSEEvent) (bool, error),
 	stopRead context.CancelFunc,
 ) {
 	run := &sseRun{
 		session: session,
 		opts:    opts,
 		limits:  limits,
+		event:   event,
 		summary: SSESummary{Reason: sseReasonEOF},
 	}
 
@@ -329,6 +336,9 @@ type sseRun struct {
 	reader  sseReader
 	opts    restfile.SSEOptions
 	limits  sseLimits
+	// event sees each dispatched event and can end the stream or fail it,
+	// as graphql-sse does.
+	event   func(SSEEvent) (bool, error)
 	builder sseEventBuilder
 	summary SSESummary
 	failure error
@@ -369,8 +379,25 @@ func (r *sseRun) loop(ctx context.Context) error {
 			return diag.Wrap(err, "read sse stream")
 		}
 
+		// Only a block that a blank line ends is an event, so GraphQL drops one
+		// that EOF cuts off. Plain SSE keeps it.
+		if errors.Is(err, io.EOF) && r.event != nil {
+			return nil
+		}
+
 		if line == "" {
-			if r.flush() && r.opts.MaxEvents > 0 && r.events >= r.opts.MaxEvents {
+			evt, ok := r.flush()
+			if ok && r.event != nil {
+				end, eventErr := r.event(evt)
+				if eventErr != nil {
+					return eventErr
+				}
+				if end {
+					r.summary.Reason = sseReasonComplete
+					return nil
+				}
+			}
+			if ok && r.opts.MaxEvents > 0 && r.events >= r.opts.MaxEvents {
 				r.summary.Reason = sseReasonMaxEvents
 				return nil
 			}
@@ -424,16 +451,16 @@ func (r *sseRun) stop(reason string) {
 	}
 }
 
-func (r *sseRun) flush() bool {
+func (r *sseRun) flush() (SSEEvent, bool) {
 	r.block = 0
 	evt, ok := r.builder.finalize(r.index)
 	if !ok {
-		return false
+		return evt, false
 	}
 	publishSSEEvent(r.session, evt)
 	r.index++
 	r.events++
-	return true
+	return evt, true
 }
 
 // A failed run publishes its summary too, so the counts come from the run and

@@ -972,6 +972,7 @@ func BenchmarkSSERun(b *testing.B) {
 					io.NopCloser(strings.NewReader(bc.body)),
 					restfile.SSEOptions{},
 					limits,
+					nil,
 					func() {},
 				)
 			}
@@ -1011,5 +1012,304 @@ func TestSSESessionCancelStopsAWaitingRead(t *testing.T) {
 	}
 	if got := publishedReason(t, handle.Session); got != sseReasonCanceled {
 		t.Fatalf("reason = %q, want %q", got, sseReasonCanceled)
+	}
+}
+
+func TestSSEGraphQLSendsTheOperation(t *testing.T) {
+	for _, tt := range []struct {
+		method string
+		want   string
+	}{
+		{
+			method: http.MethodPost,
+			want:   `POST "" ct="application/json" accept="text/event-stream" body={"query":"subscription { n }","variables":{"a":1}}`,
+		},
+		{
+			method: http.MethodGet,
+			want:   `GET "query=subscription+%7B+n+%7D&variables=%7B%22a%22%3A1%7D" ct="" accept="text/event-stream" body=`,
+		},
+	} {
+		t.Run(tt.method, func(t *testing.T) {
+			seen := make(chan string, 1)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				seen <- fmt.Sprintf(
+					"%s %q ct=%q accept=%q body=%s",
+					r.Method,
+					r.URL.RawQuery,
+					r.Header.Get("Content-Type"),
+					r.Header.Get("Accept"),
+					body,
+				)
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, "event: complete\ndata:\n\n")
+			}))
+			t.Cleanup(srv.Close)
+
+			req := &restfile.Request{
+				Method: tt.method,
+				URL:    srv.URL,
+				SSE:    &restfile.SSERequest{},
+				Body: restfile.BodySource{GraphQL: &restfile.GraphQLBody{
+					Query:     "subscription { n }",
+					Variables: `{"a": 1}`,
+				}},
+			}
+			if _, err := NewClient(nil).ExecuteSSE(t.Context(), req, vars.NewResolver(), Options{}); err != nil {
+				t.Fatalf("ExecuteSSE: %v", err)
+			}
+			if got := <-seen; got != tt.want {
+				t.Fatalf("request = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSSEGraphQLEndsAtComplete(t *testing.T) {
+	const (
+		next     = "event: next\ndata: {\"data\":{\"n\":1}}\n\n"
+		complete = "event: complete\ndata:\n\n"
+	)
+	gql := &restfile.GraphQLBody{Query: "subscription { n }"}
+	for _, tt := range []struct {
+		name   string
+		gql    *restfile.GraphQLBody
+		stream string
+		hold   bool
+		max    int
+		reason string
+		events []string
+	}{
+		{
+			name:   "graphql ends at complete",
+			gql:    gql,
+			stream: next + complete,
+			hold:   true,
+			reason: sseReasonComplete,
+			events: []string{"next", "complete"},
+		},
+		{
+			name:   "graphql without complete reads to eof",
+			gql:    gql,
+			stream: next + next,
+			reason: sseReasonEOF,
+			events: []string{"next", "next"},
+		},
+		{
+			name:   "plain sse reads past complete",
+			stream: complete + next,
+			reason: sseReasonEOF,
+			events: []string{"complete", "next"},
+		},
+		{
+			name:   "complete wins a tie with max-events",
+			gql:    gql,
+			stream: next + complete,
+			hold:   true,
+			max:    2,
+			reason: sseReasonComplete,
+			events: []string{"next", "complete"},
+		},
+		{
+			name:   "max-events before complete",
+			gql:    gql,
+			stream: next + complete,
+			hold:   true,
+			max:    1,
+			reason: sseReasonMaxEvents,
+			events: []string{"next"},
+		},
+		{
+			name:   "an unfinished complete reads to eof",
+			gql:    gql,
+			stream: next + "event: complete\n",
+			reason: sseReasonEOF,
+			events: []string{"next"},
+		},
+		{
+			name:   "a next cut off by eof is not an event",
+			gql:    gql,
+			stream: next + "event: next\ndata: not-json\n",
+			reason: sseReasonEOF,
+			events: []string{"next"},
+		},
+		{
+			name:   "plain sse keeps a block cut off by eof",
+			stream: next + "event: next\ndata: not-json\n",
+			reason: sseReasonEOF,
+			events: []string{"next", "next"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, tt.stream)
+				w.(http.Flusher).Flush()
+				if tt.hold {
+					<-r.Context().Done()
+				}
+			}))
+			t.Cleanup(srv.Close)
+			req := &restfile.Request{
+				Method: http.MethodPost,
+				URL:    srv.URL,
+				SSE: &restfile.SSERequest{
+					Options: restfile.SSEOptions{TotalTimeout: 2 * time.Second, MaxEvents: tt.max},
+				},
+				Body: restfile.BodySource{GraphQL: tt.gql},
+			}
+			resp, err := NewClient(nil).ExecuteSSE(t.Context(), req, vars.NewResolver(), Options{})
+			if err != nil {
+				t.Fatalf("ExecuteSSE: %v", err)
+			}
+			tr, err := DecodeSSETranscript(resp.Body)
+			if err != nil {
+				t.Fatalf("decode transcript: %v", err)
+			}
+			var names []string
+			for _, evt := range tr.Events {
+				names = append(names, evt.Event)
+			}
+			if tr.Summary.Reason != tt.reason || !slices.Equal(names, tt.events) ||
+				tr.Summary.EventCount != len(tt.events) {
+				t.Fatalf(
+					"reason = %q, events = %q, count = %d, want %q, %q",
+					tr.Summary.Reason,
+					names,
+					tr.Summary.EventCount,
+					tt.reason,
+					tt.events,
+				)
+			}
+			if err := tr.Summary.Err(); err != nil {
+				t.Fatalf("Err() = %v, want a normal ending", err)
+			}
+		})
+	}
+}
+
+func TestSSEGraphQLChecksNextData(t *testing.T) {
+	const (
+		complete  = "event: complete\n\n"
+		notJSON   = "server sent a next event whose data is not valid JSON"
+		notObject = "server sent a next event whose data is not a JSON object"
+	)
+	gql := &restfile.GraphQLBody{Query: "subscription { n }"}
+	for _, tt := range []struct {
+		name   string
+		gql    *restfile.GraphQLBody
+		stream string
+		reason string
+		err    string
+	}{
+		{
+			name:   "data that is not json",
+			gql:    gql,
+			stream: "event: next\ndata: not-json\n\n" + complete,
+			reason: sseReasonErr,
+			err:    notJSON,
+		},
+		{
+			name:   "data nested too deep",
+			gql:    gql,
+			stream: "event: next\ndata: " + strings.Repeat("[", 10001) + strings.Repeat("]", 10001) + "\n\n" + complete,
+			reason: sseReasonErr,
+			err:    notJSON,
+		},
+		{
+			name:   "a number",
+			gql:    gql,
+			stream: "event: next\ndata: 42\n\n" + complete,
+			reason: sseReasonErr,
+			err:    notObject,
+		},
+		{name: "null", gql: gql, stream: "event: next\ndata: null\n\n" + complete, reason: sseReasonErr, err: notObject},
+		{name: "a list", gql: gql, stream: "event: next\ndata: []\n\n" + complete, reason: sseReasonErr, err: notObject},
+		{name: "no data", gql: gql, stream: "event: next\n\n" + complete, reason: sseReasonErr, err: notJSON},
+		{
+			name:   "an object with space around it",
+			gql:    gql,
+			stream: "event: next\ndata:   {\"data\":1}  \n\n" + complete,
+			reason: sseReasonComplete,
+		},
+		{
+			name:   "an object over two data lines",
+			gql:    gql,
+			stream: "event: next\ndata: {\"data\":\ndata: 1}\n\n" + complete,
+			reason: sseReasonComplete,
+		},
+		{
+			name:   "an unknown event",
+			gql:    gql,
+			stream: "event: hello\ndata: 42\n\n" + complete,
+			reason: sseReasonComplete,
+		},
+		{name: "an unnamed event", gql: gql, stream: "data: 42\n\n" + complete, reason: sseReasonComplete},
+		{name: "a comment", gql: gql, stream: ": ping\n\n" + complete, reason: sseReasonComplete},
+		{
+			name:   "complete with data",
+			gql:    gql,
+			stream: "event: complete\ndata: {\"id\":\"x\"}\n\n",
+			reason: sseReasonComplete,
+		},
+		{name: "plain sse keeps any next", stream: "event: next\ndata: 42\n\n", reason: sseReasonEOF},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, tt.stream)
+				w.(http.Flusher).Flush()
+				if tt.gql != nil {
+					<-r.Context().Done()
+				}
+			}))
+			t.Cleanup(srv.Close)
+			req := &restfile.Request{
+				Method: http.MethodPost,
+				URL:    srv.URL,
+				SSE:    &restfile.SSERequest{Options: restfile.SSEOptions{TotalTimeout: 2 * time.Second}},
+				Body:   restfile.BodySource{GraphQL: tt.gql},
+			}
+			resp, err := NewClient(nil).ExecuteSSE(t.Context(), req, vars.NewResolver(), Options{})
+			if err != nil {
+				t.Fatalf("ExecuteSSE: %v", err)
+			}
+			tr, err := DecodeSSETranscript(resp.Body)
+			if err != nil {
+				t.Fatalf("decode transcript: %v", err)
+			}
+			sum := tr.Summary
+			if sum.Reason != tt.reason || sum.Error != tt.err || tt.err != "" && sum.ErrorClass != diag.ClassProtocol {
+				t.Fatalf("summary = %q %q %s, want %q %q", sum.Reason, sum.Error, sum.ErrorClass, tt.reason, tt.err)
+			}
+		})
+	}
+}
+
+func TestSSEGraphQLFallsBackOnAJSONResponse(t *testing.T) {
+	const body = `{"errors":[{"message":"subscriptions are not supported"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+
+	req := &restfile.Request{
+		Method: http.MethodPost,
+		URL:    srv.URL,
+		SSE:    &restfile.SSERequest{},
+		Body:   restfile.BodySource{GraphQL: &restfile.GraphQLBody{Query: "subscription { n }"}},
+	}
+	resp, err := NewClient(nil).ExecuteSSE(t.Context(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatalf("ExecuteSSE: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK || resp.Headers.Get(StreamHeaderType) != "" || string(resp.Body) != body {
+		t.Fatalf(
+			"response = %d %q %s, want the plain JSON reply",
+			resp.StatusCode,
+			resp.Headers.Get(StreamHeaderType),
+			resp.Body,
+		)
 	}
 }
