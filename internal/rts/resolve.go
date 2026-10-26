@@ -1,7 +1,9 @@
 package rts
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 )
 
@@ -20,6 +22,10 @@ func (e *Eng) resolveUses(cx *Ctx, cfg EvalConfig, env *Env) ([]Use, error) {
 		if al == "" {
 			nm, mp, err := e.modHead(cfg.BaseDir, u.Path)
 			if err != nil {
+				var pe *fs.PathError
+				if errors.As(err, &pe) && errors.Is(err, fs.ErrNotExist) {
+					return nil, Errf(cx, u.Pos, "module %s not found", pe.Path)
+				}
 				return nil, err
 			}
 			if nm == "" {

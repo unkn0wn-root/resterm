@@ -1010,7 +1010,7 @@ GET http://example.test
 			"   3 | export fn rts(x) {\n     |        ^",
 		},
 		{"module named rts", "module rts\n", "alias already defined: rts", "   2 | # @use ./bad.rts\n     | ^"},
-		{"missing file", "", "bad.rts", "error[filesystem]: "},
+		{"missing file", "", "bad.rts not found", "   2 | # @use ./bad.rts\n     | ^"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1044,6 +1044,30 @@ GET http://example.test
 				t.Fatalf("rendered error does not show %q once:\n%s", tt.line, out)
 			}
 		})
+	}
+}
+
+func TestMissingModuleIsReportedAtItsUseLine(t *testing.T) {
+	dir := t.TempDir()
+	src := "### one\n# @use ./bad.rts\n# @rts test one\n> t.error(\"ran\")\nGET http://example.test\n"
+	doc := parser.Parse(filepath.Join(dir, "api.http"), []byte(src))
+	st := &stubTransport{}
+	eng := New(engcfg.Config{Client: st.client()}, nil)
+	res, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+	}
+	out := diag.Render(res.ScriptErr)
+	for _, want := range []string{
+		"error[script]: module " + filepath.Join(dir, "bad.rts") + " not found",
+		"   2 | # @use ./bad.rts\n     | ^",
+	} {
+		if strings.Count(out, want) != 1 {
+			t.Fatalf("rendered error does not show %q once:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "stat ") {
+		t.Fatalf("rendered error names the stat call:\n%s", out)
 	}
 }
 
