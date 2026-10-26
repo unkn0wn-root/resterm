@@ -145,6 +145,28 @@ func TestRequestEditorKeepsBrowsingAcrossSpacesInPaths(t *testing.T) {
 	}
 }
 
+func TestRequestEditorCompletesProtoFiles(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "vendor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"api.proto", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(root, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	editor := newTestEditor("# @grpc-proto ")
+	editor.moveCursorTo(0, len([]rune(editor.Value())))
+	editor.SetCompletionRoot(root)
+	editor.SetCompletionEnabled(true)
+	deliverEditorPathRead(t, &editor, editor.openCompletions())
+
+	if got, want := editorCompletionLabels(editor), []string{"vendor/", "api.proto"}; !slices.Equal(got, want) {
+		t.Fatalf("labels = %q, want %q", got, want)
+	}
+}
+
 func TestContextualCtrlNInEditorInsertMode(t *testing.T) {
 	m := New(Config{WorkspaceRoot: t.TempDir()})
 	m.focus = focusEditor

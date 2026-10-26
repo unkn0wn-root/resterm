@@ -63,6 +63,8 @@ func editorPathSpec(root string, ctx intellisense.PathContext) prompt.PathSpec {
 		filter, summary = files.KindPathFilter(files.KindJSON), "JSON file"
 	case intellisense.PathScript:
 		filter, summary = files.KindPathFilter(files.KindScript, files.KindJavaScript), "script file"
+	case intellisense.PathProto:
+		filter, summary = files.KindPathFilter(files.KindProto), "proto file"
 	}
 	separators := prompt.SeparatorNone
 	if ctx.List {

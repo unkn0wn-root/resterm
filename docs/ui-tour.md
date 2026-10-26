@@ -81,11 +81,12 @@ and `baseline=`. You can repeat `@apply use=`, but profiles already selected are
 omitted.
 
 File suggestions use the request file's directory, or the workspace for temporary
-documents. They are filtered by file type where needed: `.rts` for `@use`, GraphQL
-for `@query`, JSON for `@variables`, and script files for script includes. Directory
-listings are cached while browsing. In directives that split arguments on spaces,
-paths with spaces are quoted. File references that use the rest of the line stay
-unquoted. Only SSH and Kubernetes path options expand `~` to the home directory.
+documents. They are filtered by file type where needed: `.rts` for `@use`, `.proto`
+for `@grpc-proto`, GraphQL for `@query`, JSON for `@variables`, and script files for
+script includes. Directory listings are cached while browsing. In directives that
+split arguments on spaces, paths with spaces are quoted. File references that use
+the rest of the line stay unquoted. Only SSH and Kubernetes path options expand `~`
+to the home directory.
 
 Accepting a directive typed without a comment marker adds `# ` automatically. For
 example, completing `@na` produces `# @name `. The marker is added only when you

@@ -216,7 +216,7 @@ func TestAnalyzeFilesystemContexts(t *testing.T) {
 		{line: "# @setting http-client-key certs/k", kind: PathAny, quote: true},
 		{line: "# @use ./rts/help", kind: PathRTS, quote: true, continues: true},
 		{line: "# @grpc-descriptor ./proto/api", kind: PathAny},
-		{line: "# @grpc-proto ./proto/api", kind: PathAny},
+		{line: "# @grpc-proto ./proto/api", kind: PathProto},
 		{line: "# @grpc-import-path ./proto/vendor", kind: PathAny},
 		{line: "# @ws send-file < fixtures/data", kind: PathAny},
 		{line: "# @query < queries/main", kind: PathGraphQL},
