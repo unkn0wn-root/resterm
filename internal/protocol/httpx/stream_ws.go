@@ -25,6 +25,10 @@ const webSocketSwitchingProtocolsStatus = "101 Switching Protocols"
 
 const websocketControlMaxPayload = 125
 
+// websocketCloseTimeout is how long the peer has to answer resterm's close
+// frame once it is sent, as coder's Close allows.
+const websocketCloseTimeout = 5 * time.Second
+
 type WebSocketEvent struct {
 	Step      string        `json:"step,omitempty"`
 	Direction string        `json:"direction"`
@@ -87,7 +91,6 @@ type wsOutboundKind int
 
 const (
 	wsOutboundMessage wsOutboundKind = iota
-	wsOutboundClose
 	wsOutboundPing
 	wsOutboundPong
 )
@@ -97,8 +100,6 @@ type wsOutbound struct {
 	kind    wsOutboundKind
 	typ     stream.WSType
 	payload []byte
-	code    stream.WSCloseCode
-	reason  string
 	step    string
 	result  chan error
 }
@@ -295,6 +296,7 @@ func (c *Client) CompleteWebSocket(
 	}()
 
 	sender := handle.Sender
+	rt := sender.runtime
 
 	baseDir := handle.Meta.BaseDir
 	if baseDir == "" {
@@ -308,6 +310,10 @@ func (c *Client) CompleteWebSocket(
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
+		// The session can see this cancel before the deadline that caused it.
+		rt.mu.Lock()
+		rt.cause = ctx.Err()
+		rt.mu.Unlock()
 		session.Cancel()
 		<-session.Done()
 	}
@@ -323,6 +329,15 @@ func (c *Client) CompleteWebSocket(
 		acc.summary.Duration = stats.EndedAt.Sub(stats.StartedAt)
 	} else {
 		acc.summary.Duration = time.Since(handle.Meta.ConnectedAt)
+	}
+	// The ending comes from the runtime, so a listener that fell behind cannot change it.
+	rt.mu.Lock()
+	ending := rt.ending
+	rt.mu.Unlock()
+	if stateErr == nil {
+		acc.summary.ClosedBy = ending.ClosedBy
+		acc.summary.CloseCode = int(ending.Code)
+		acc.summary.CloseReason = ending.Reason
 	}
 	applyWebSocketSummaryDefaults(&acc.summary, state, stateErr)
 

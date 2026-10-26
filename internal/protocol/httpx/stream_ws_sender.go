@@ -26,7 +26,7 @@ func (s *WebSocketSender) fail(err error) {
 	if s == nil || s.runtime == nil {
 		return
 	}
-	s.runtime.closeTerminalNow(nil, err)
+	s.runtime.stop(nil, err)
 }
 
 // Multiple contexts race here: per-message timeout, session lifetime, and write
@@ -54,9 +54,6 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) error {
 					case err := <-msg.result:
 						return err
 					default:
-						if msg.kind == wsOutboundClose {
-							return nil
-						}
 						return msg.ctx.Err()
 					}
 				case <-s.runtime.session.Context().Done():
@@ -64,9 +61,6 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) error {
 					case err := <-msg.result:
 						return err
 					default:
-						if msg.kind == wsOutboundClose {
-							return nil
-						}
 						return diag.New(diag.ClassProtocol, "websocket session closed")
 					}
 				}
@@ -79,9 +73,6 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) error {
 			case err := <-msg.result:
 				return err
 			default:
-				if msg.kind == wsOutboundClose {
-					return nil
-				}
 			}
 		}
 		return msg.ctx.Err()
@@ -157,13 +148,9 @@ func (s *WebSocketSender) control(
 }
 
 func (s *WebSocketSender) Close(ctx context.Context, code stream.WSCloseCode, reason, step string) error {
-	return s.enqueue(wsOutbound{
-		ctx:    ctx,
-		kind:   wsOutboundClose,
-		typ:    stream.WSClose,
-		code:   code,
-		reason: reason,
-		step:   step,
-		result: make(chan error, 1),
-	})
+	// The close code takes two bytes of the control payload.
+	if len(reason) > websocketControlMaxPayload-2 {
+		return diag.Newf(diag.ClassProtocol, "websocket close reason exceeds %d bytes", websocketControlMaxPayload-2)
+	}
+	return s.runtime.sendClose(ctx, code, reason, step)
 }

@@ -1,13 +1,19 @@
 package httpx
 
 import (
+	"bufio"
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -209,38 +215,6 @@ func TestWebSocketShutdownDoesNotRepeatAStartedClose(t *testing.T) {
 }
 
 // Both sides send a close frame. Only the first one says who ended the session.
-func TestAccumulatorKeepsTheFirstCloseFrame(t *testing.T) {
-	acc := newWSAccumulator()
-	acc.consume(&stream.Event{
-		Kind:      stream.KindWebSocket,
-		Direction: stream.DirSend,
-		WS: stream.WSMetadata{
-			Type:     stream.WSClose,
-			ClosedBy: stream.WSClosedByClient,
-			Code:     1000,
-			Reason:   "resterm closed",
-		},
-	})
-	acc.consume(&stream.Event{
-		Kind:      stream.KindWebSocket,
-		Direction: stream.DirReceive,
-		WS: stream.WSMetadata{
-			Type:     stream.WSClose,
-			ClosedBy: stream.WSClosedByServer,
-			Code:     1001,
-			Reason:   "server going away",
-		},
-	})
-
-	if acc.summary.ClosedBy != stream.WSClosedByClient {
-		t.Fatalf("closedBy = %q, want the side that closed first", acc.summary.ClosedBy)
-	}
-	if acc.summary.CloseCode != 1000 || acc.summary.CloseReason != "resterm closed" {
-		t.Fatalf("close = %d %q, want the first frame kept",
-			acc.summary.CloseCode, acc.summary.CloseReason)
-	}
-}
-
 func TestWebSocketAutoCloseIsAttributedToTheClient(t *testing.T) {
 	server, cleanup := startEchoWebSocketServer(t)
 	defer cleanup()
@@ -292,7 +266,8 @@ func TestWebSocketServerCloseIsAttributedToTheServer(t *testing.T) {
 		URL:       strings.Replace(server.URL, "http", "ws", 1) + "/ws",
 		WebSocket: &restfile.WebSocketRequest{},
 	}
-	handle, fallback, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+	client := NewClient(nil)
+	handle, fallback, err := client.StartWebSocket(t.Context(), req, nil, Options{})
 	if err != nil {
 		t.Fatalf("StartWebSocket: %v", err)
 	}
@@ -307,18 +282,16 @@ func TestWebSocketServerCloseIsAttributedToTheServer(t *testing.T) {
 		t.Fatal("the session did not end after the server closed it")
 	}
 
-	acc := newWSAccumulator()
-	for _, evt := range handle.Session.EventsSnapshot() {
-		acc.consume(evt)
+	resp, err := client.CompleteWebSocket(t.Context(), handle, req, Options{})
+	if err != nil {
+		t.Fatalf("CompleteWebSocket: %v", err)
 	}
-	state, stateErr := handle.Session.State()
-	applyWebSocketSummaryDefaults(&acc.summary, state, stateErr)
-
-	if acc.summary.ClosedBy != stream.WSClosedByServer {
-		t.Fatalf("closedBy = %q, want %q", acc.summary.ClosedBy, stream.WSClosedByServer)
+	sum := wsTranscript(t, resp).Summary
+	if sum.ClosedBy != stream.WSClosedByServer {
+		t.Fatalf("closedBy = %q, want %q", sum.ClosedBy, stream.WSClosedByServer)
 	}
-	if acc.summary.CloseReason != "server going away" {
-		t.Fatalf("closeReason = %q, want the reason the server sent", acc.summary.CloseReason)
+	if sum.CloseReason != "server going away" {
+		t.Fatalf("closeReason = %q, want the reason the server sent", sum.CloseReason)
 	}
 }
 
@@ -366,12 +339,13 @@ func TestWebSocketServerCloseDuringOutboundPublication(t *testing.T) {
 		cancel:  session.Cancel,
 	}
 
-	if !runtime.beginOutbound() {
+	w := runtime.beginOutbound()
+	if w == nil {
 		t.Fatal("begin outbound publication")
 	}
 	closeNow <- struct{}{}
 	runtime.readLoop()
-	runtime.finishOutbound(nil, nil)
+	runtime.finishOutbound(w, nil, nil)
 
 	state, stateErr := session.State()
 	if stateErr != nil {
@@ -599,17 +573,15 @@ func TestWebSocketIdleTimeout(t *testing.T) {
 		t.Fatal("websocket session did not close after idle timeout")
 	}
 
-	acc := newWSAccumulator()
-	for _, evt := range session.EventsSnapshot() {
-		acc.consume(evt)
+	resp, err := client.CompleteWebSocket(ctx, handle, req, Options{})
+	if err != nil {
+		t.Fatalf("CompleteWebSocket: %v", err)
 	}
-	state, stateErr := session.State()
-	applyWebSocketSummaryDefaults(&acc.summary, state, stateErr)
-
-	if acc.summary.ClosedBy != "timeout" {
-		t.Fatalf("expected closedBy to be timeout, got %q", acc.summary.ClosedBy)
+	sum := wsTranscript(t, resp).Summary
+	if sum.ClosedBy != "timeout" {
+		t.Fatalf("expected closedBy to be timeout, got %q", sum.ClosedBy)
 	}
-	if reason := acc.summary.CloseReason; !strings.Contains(reason, "idle timeout") {
+	if reason := sum.CloseReason; !strings.Contains(reason, "idle timeout") {
 		t.Fatalf("expected idle timeout reason, got %q", reason)
 	}
 }
@@ -1517,5 +1489,393 @@ func TestWebSocketCanceledSendKeepsTheWriterRunning(t *testing.T) {
 		}
 		handle.Session.Cancel()
 		<-handle.Session.Done()
+	}
+}
+
+type rawPeer struct {
+	conn net.Conn
+	r    *bufio.Reader
+}
+
+func startRawPeer(t *testing.T, protocol string, serve func(*rawPeer)) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := sha1.Sum([]byte(r.Header.Get("Sec-WebSocket-Key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+		conn, buf, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		_, _ = fmt.Fprintf(
+			buf,
+			"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n",
+			base64.StdEncoding.EncodeToString(key[:]),
+		)
+		if protocol != "" {
+			_, _ = fmt.Fprintf(buf, "Sec-WebSocket-Protocol: %s\r\n", protocol)
+		}
+		_, _ = buf.WriteString("\r\n")
+		_ = buf.Flush()
+		serve(&rawPeer{conn: conn, r: buf.Reader})
+	}))
+	t.Cleanup(srv.Close)
+	return "ws" + strings.TrimPrefix(srv.URL, "http")
+}
+
+func (p *rawPeer) read() (byte, []byte) {
+	var h [2]byte
+	if _, err := io.ReadFull(p.r, h[:]); err != nil {
+		return 0, nil
+	}
+	n := uint64(h[1] & 0x7f)
+	switch n {
+	case 126:
+		var b [2]byte
+		_, _ = io.ReadFull(p.r, b[:])
+		n = uint64(binary.BigEndian.Uint16(b[:]))
+	case 127:
+		var b [8]byte
+		_, _ = io.ReadFull(p.r, b[:])
+		n = binary.BigEndian.Uint64(b[:])
+	}
+	var mask [4]byte
+	_, _ = io.ReadFull(p.r, mask[:])
+	payload := make([]byte, n)
+	_, _ = io.ReadFull(p.r, payload)
+	for i := range payload {
+		payload[i] ^= mask[i%4]
+	}
+	return h[0] & 0x0f, payload
+}
+
+func (p *rawPeer) readClose() {
+	for op, _ := p.read(); op != 0x8 && op != 0; op, _ = p.read() {
+	}
+}
+
+func (p *rawPeer) write(op byte, payload []byte) {
+	h := []byte{0x80 | op}
+	switch n := len(payload); {
+	case n < 126:
+		h = append(h, byte(n))
+	case n <= 0xffff:
+		h = binary.BigEndian.AppendUint16(append(h, 126), uint16(n))
+	default:
+		h = binary.BigEndian.AppendUint64(append(h, 127), uint64(n))
+	}
+	_, _ = p.conn.Write(append(h, payload...))
+}
+
+func (p *rawPeer) close(code uint16, reason string) {
+	p.write(0x8, append(binary.BigEndian.AppendUint16(nil, code), reason...))
+}
+
+func wsExec(t *testing.T, ctx context.Context, url string, ws restfile.WebSocketRequest) WebSocketTranscript {
+	t.Helper()
+	req := &restfile.Request{Method: http.MethodGet, URL: url, WebSocket: &ws}
+	resp, err := NewClient(nil).ExecuteWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatalf("ExecuteWebSocket: %v", err)
+	}
+	return wsTranscript(t, resp)
+}
+
+func TestWebSocketWaitsForTheAnswerToItsClose(t *testing.T) {
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		p.readClose()
+		p.read()
+	})
+	steps := []restfile.WebSocketStep{{Type: restfile.WebSocketStepClose, Code: 1000, Reason: "done"}}
+	start := time.Now()
+	sum := wsExec(t, t.Context(), url, restfile.WebSocketRequest{Steps: steps}).Summary
+	took := time.Since(start)
+	if sum.ClosedBy != stream.WSClosedByClient || sum.CloseCode != 1000 || sum.CloseReason != "done" ||
+		sum.Err() != nil ||
+		took < 4*time.Second ||
+		took > 7*time.Second {
+		t.Fatalf("summary = %+v after %s, want a clean client close 1000 done after about 5s", sum, took)
+	}
+}
+
+func TestWebSocketNamesItselfWhenItClosesFirst(t *testing.T) {
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		p.readClose()
+		p.close(1001, "going away")
+		p.read()
+	})
+	tr := wsExec(t, t.Context(), url, restfile.WebSocketRequest{})
+	answered := slices.ContainsFunc(tr.Events, func(e WebSocketEvent) bool {
+		return e.Direction == "receive" && e.Type == stream.WSClose && e.Code == 1001
+	})
+	sum := tr.Summary
+	if !answered || sum.ClosedBy != stream.WSClosedByClient || sum.CloseCode != 1000 ||
+		sum.CloseReason != "resterm closed" || sum.Err() != nil {
+		t.Fatalf("answer recorded %v, summary = %+v, want resterm's own close 1000", answered, sum)
+	}
+}
+
+func TestWebSocketIdleCutsAnUnansweredClose(t *testing.T) {
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		p.readClose()
+		p.read()
+	})
+	ws := restfile.WebSocketRequest{Options: restfile.WebSocketOptions{IdleTimeout: 300 * time.Millisecond}}
+	start := time.Now()
+	sum := wsExec(t, t.Context(), url, ws).Summary
+	if took := time.Since(start); sum.ClosedBy != stream.WSClosedByClient || sum.CloseCode != 1000 ||
+		sum.Err() != nil || took > time.Second {
+		t.Fatalf("summary = %+v after %s, want resterm's close 1000 cut by idle", sum, took)
+	}
+}
+
+func TestWebSocketReadsTheAnswerPastAPing(t *testing.T) {
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		p.readClose()
+		p.write(0x9, []byte("hi"))
+		p.close(1000, "")
+		p.read()
+	})
+	tr := wsExec(t, t.Context(), url, restfile.WebSocketRequest{})
+	var got []string
+	for _, e := range tr.Events {
+		got = append(got, fmt.Sprintf("%s %s %s", e.Direction, e.Type, e.Text))
+	}
+	want := []string{"send close ", "receive ping hi", "receive close "}
+	if !slices.Equal(got, want) || tr.Summary.ClosedBy != stream.WSClosedByClient || tr.Summary.Err() != nil {
+		t.Fatalf("events = %q, summary = %+v, want %q and a clean client close", got, tr.Summary, want)
+	}
+}
+
+func TestWebSocketSummaryOutlivesDroppedEvents(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		if _, _, err := conn.Read(r.Context()); err != nil {
+			return
+		}
+		for range 5000 {
+			if conn.Write(r.Context(), websocket.MessageText, []byte("burst")) != nil {
+				return
+			}
+		}
+		_ = conn.Close(4000, "done")
+	}))
+	t.Cleanup(srv.Close)
+	steps := []restfile.WebSocketStep{
+		{Type: restfile.WebSocketStepSendText, Value: "go"},
+		{Type: restfile.WebSocketStepWait, Duration: 2 * time.Second},
+	}
+	ws := restfile.WebSocketRequest{
+		Steps:   steps,
+		Options: restfile.WebSocketOptions{Compression: restfile.OptOf(false)},
+	}
+	sum := wsExec(t, t.Context(), "ws"+strings.TrimPrefix(srv.URL, "http"), ws).Summary
+	if sum.ClosedBy != stream.WSClosedByServer || sum.CloseCode != 4000 || sum.CloseReason != "done" {
+		t.Fatalf("summary = %+v, want the server's close 4000 done", sum)
+	}
+}
+
+func TestWebSocketBoundsWhatItQueuesDuringASend(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		frames int
+		queued int
+	}{
+		{name: "a burst under the bound waits for the send", frames: 4, queued: 4},
+		{name: "a burst past the bound goes out as it arrives", frames: 16, queued: 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			session := stream.NewSession(t.Context(), stream.KindWebSocket, stream.Config{})
+			session.MarkOpen()
+			rt := &wsRuntime{session: session}
+			if rt.beginOutbound() == nil {
+				t.Fatal("begin outbound")
+			}
+			for range tt.frames {
+				rt.receive(stream.WSBinary, make([]byte, 1<<20))
+			}
+			if n := len(rt.q) - 1; n != tt.queued {
+				t.Fatalf("%d of %d frames wait for the send, want %d", n, tt.frames, tt.queued)
+			}
+		})
+	}
+}
+
+func TestWebSocketRecordsOverlappingWritesInOrder(t *testing.T) {
+	session := stream.NewSession(t.Context(), stream.KindWebSocket, stream.Config{})
+	session.MarkOpen()
+	rt := &wsRuntime{session: session}
+	send := func(text string) *stream.Event {
+		return &stream.Event{
+			Kind:      stream.KindWebSocket,
+			Direction: stream.DirSend,
+			Payload:   []byte(text),
+			WS:        stream.WSMetadata{Type: stream.WSText},
+		}
+	}
+	release := make(chan struct{})
+	first := make(chan error, 1)
+	go func() {
+		first <- rt.writeAndPublish("send", func() error { <-release; return nil }, send("first"))
+	}()
+	for {
+		rt.mu.Lock()
+		out := rt.out
+		rt.mu.Unlock()
+		if out > 0 {
+			break
+		}
+		runtime.Gosched()
+	}
+	rt.receive(stream.WSText, []byte("reply"))
+	if err := rt.writeAndPublish("send", func() error { return nil }, send("second")); err != nil {
+		t.Fatalf("second send: %v", err)
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatalf("first send: %v", err)
+	}
+	var got []string
+	for _, evt := range session.EventsSnapshot() {
+		got = append(got, directionToString(evt.Direction)+" "+string(evt.Payload))
+	}
+	want := []string{"send first", "receive reply", "send second"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("events = %q, want %q", got, want)
+	}
+}
+
+func TestWebSocketRecordsAFrameReadBeforeItsClose(t *testing.T) {
+	release := make(chan struct{})
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		<-release
+		p.write(0x2, make([]byte, 3<<20))
+		p.readClose()
+		p.close(1000, "")
+		p.read()
+	})
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	req := &restfile.Request{
+		Method:    http.MethodGet,
+		URL:       url,
+		WebSocket: &restfile.WebSocketRequest{Options: restfile.WebSocketOptions{MaxMessageBytes: 8 << 20}},
+	}
+	client := NewClient(nil)
+	handle, _, err := client.StartWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatalf("StartWebSocket: %v", err)
+	}
+	rt := handle.Sender.runtime
+	select {
+	case <-rt.pulse:
+	default:
+	}
+	close(release)
+	for len(rt.pulse) == 0 {
+		runtime.Gosched()
+	}
+	if err := handle.Sender.Close(ctx, stream.WSCloseNormal, "done", "test"); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	resp, err := client.CompleteWebSocket(ctx, handle, req, Options{})
+	if err != nil {
+		t.Fatalf("CompleteWebSocket: %v", err)
+	}
+	tr := wsTranscript(t, resp)
+	recorded := slices.ContainsFunc(tr.Events, func(e WebSocketEvent) bool { return e.Size == 3<<20 })
+	if !recorded || tr.Summary.ClosedBy != stream.WSClosedByClient || tr.Summary.Err() != nil {
+		t.Fatalf("frame recorded %v, summary = %+v, want the frame and a clean client close", recorded, tr.Summary)
+	}
+}
+
+func TestWebSocketRecordsWhatArrivesDuringItsClose(t *testing.T) {
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		p.readClose()
+		p.write(0x2, make([]byte, 4<<20))
+		p.close(1000, "")
+		p.read()
+	})
+	ws := restfile.WebSocketRequest{Options: restfile.WebSocketOptions{MaxMessageBytes: 8 << 20}}
+	tr := wsExec(t, t.Context(), url, ws)
+	recorded := slices.ContainsFunc(tr.Events, func(e WebSocketEvent) bool { return e.Size == 4<<20 })
+	if !recorded || tr.Summary.ClosedBy != stream.WSClosedByClient || tr.Summary.Err() != nil {
+		t.Fatalf("frame recorded %v, summary = %+v, want the frame and a clean client close", recorded, tr.Summary)
+	}
+}
+
+func TestWebSocketCloseGivesUpBehindAStuckSend(t *testing.T) {
+	sending, quiet := make(chan struct{}), make(chan struct{})
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		_, _ = p.r.Peek(1)
+		close(sending)
+		<-quiet
+	})
+	t.Cleanup(func() { close(quiet) })
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	steps := []restfile.WebSocketStep{{Type: restfile.WebSocketStepSendText, Value: strings.Repeat("y", 64<<20)}}
+	req := &restfile.Request{Method: http.MethodGet, URL: url, WebSocket: &restfile.WebSocketRequest{Steps: steps}}
+	client := NewClient(nil)
+	handle, _, err := client.StartWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatalf("StartWebSocket: %v", err)
+	}
+	result := make(chan *Response, 1)
+	go func() {
+		resp, _ := client.CompleteWebSocket(ctx, handle, req, Options{})
+		result <- resp
+	}()
+	<-sending
+	start := time.Now()
+	go func() { _ = handle.Sender.Close(ctx, stream.WSCloseNormal, "interactive close", "console") }()
+	sum := wsTranscript(t, <-result).Summary
+	if took := time.Since(start); sum.ClosedBy != stream.WSClosedByClient || sum.CloseCode != 0 || sum.Err() != nil ||
+		took > 11*time.Second {
+		t.Fatalf("summary = %+v after %s, want a clean client ending within 11s", sum, took)
+	}
+}
+
+func TestWebSocketCancelDuringItsCloseIsACancel(t *testing.T) {
+	closing := make(chan struct{})
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		p.readClose()
+		close(closing)
+		p.read()
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() {
+		<-closing
+		cancel()
+	}()
+	sum := wsExec(t, ctx, url, restfile.WebSocketRequest{}).Summary
+	if sum.ClosedBy != stream.WSClosedByCanceled || !slices.Contains(diag.Classes(sum.Err()), diag.ClassCanceled) {
+		t.Fatalf("summary = %+v, want a canceled run", sum)
+	}
+}
+
+func TestWebSocketDeadlineOutlivesTheCancelItCauses(t *testing.T) {
+	url := startRawPeer(t, "", func(p *rawPeer) {
+		p.readClose()
+		p.read()
+	})
+	req := &restfile.Request{Method: http.MethodGet, URL: url, WebSocket: &restfile.WebSocketRequest{}}
+	client := NewClient(nil)
+	handle, _, err := client.StartWebSocket(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("StartWebSocket: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	resp, err := client.CompleteWebSocket(ctx, handle, req, Options{})
+	if err != nil {
+		t.Fatalf("CompleteWebSocket: %v", err)
+	}
+	sum := wsTranscript(t, resp).Summary
+	if sum.ClosedBy != stream.WSClosedByTimeout || !slices.Contains(diag.Classes(sum.Err()), diag.ClassTimeout) {
+		t.Fatalf("summary = %+v, want a timeout", sum)
 	}
 }

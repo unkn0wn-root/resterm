@@ -481,26 +481,3 @@ func TestWebSocketAccumulatorStopsKeepingPayloadAtItsBudget(t *testing.T) {
 		t.Fatalf("Dropped = %d, want 4", acc.summary.Dropped)
 	}
 }
-
-func TestWebSocketAccumulatorKeepsTheCloseEvent(t *testing.T) {
-	acc := newWSAccumulator()
-	acc.limit = 16
-
-	acc.consume(&stream.Event{
-		Direction: stream.DirReceive,
-		Payload:   []byte(strings.Repeat("A", 64)),
-		WS:        stream.WSMetadata{Type: stream.WSText},
-	})
-	acc.consume(&stream.Event{
-		Direction: stream.DirReceive,
-		WS: stream.WSMetadata{
-			Type:     stream.WSClose,
-			ClosedBy: stream.WSClosedByServer,
-			Reason:   "bye",
-		},
-	})
-
-	if acc.summary.ClosedBy != "server" || acc.summary.CloseReason != "bye" {
-		t.Fatalf("summary lost the close details: %+v", acc.summary)
-	}
-}

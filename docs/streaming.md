@@ -90,7 +90,7 @@ When the handshake fails, Resterm shows the HTTP response to help you find the p
 | Value | Meaning |
 | --- | --- |
 | `server` | The server closed the connection. |
-| `client` | Resterm closed the connection through `@ws close` or after the last step. |
+| `client` | Resterm closed the connection through `@ws close` or after the last step. Resterm records what the server sends until it answers, for up to 5 seconds after the close is sent. A server that does not answer does not fail the request. |
 | `timeout` | The idle limit was reached, or the run's deadline expired. An idle timeout is a normal ending. An expired run deadline is a failure and sets `errorClass` to `timeout`. |
 | `canceled` | The run was canceled. |
 | `error` | The session failed. `closeReason` contains the error message and `errorClass` names what kind of failure it was. |
