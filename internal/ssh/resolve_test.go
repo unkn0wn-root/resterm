@@ -26,6 +26,23 @@ func TestResolveUseMissingWithInline(t *testing.T) {
 	}
 }
 
+func TestResolveUseInvalidProfileReportsDefinitionError(t *testing.T) {
+	spec := &restfile.SSHSpec{Use: "jump"}
+	globalProfiles := []restfile.SSHProfile{{
+		Scope:   directive.ScopeGlobal,
+		Name:    "jump",
+		Line:    3,
+		Invalid: true,
+		Error:   "@ssh global scope requires host",
+	}}
+
+	_, err := Resolve(spec, nil, globalProfiles, nil, "")
+	want := `ssh profile "jump" is invalid: line 3: @ssh global scope requires host`
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+}
+
 func TestResolveUseWithInlineOverrides(t *testing.T) {
 	spec := &restfile.SSHSpec{
 		Use: "edge",

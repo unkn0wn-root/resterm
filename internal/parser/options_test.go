@@ -434,10 +434,11 @@ func TestBareValueKeyRejectsSharedProfiles(t *testing.T) {
 	if len(doc.Errors) != 2 {
 		t.Fatalf("errors = %v, want one per line", doc.Errors)
 	}
-	if len(doc.SSH) != 0 {
-		t.Fatalf("ssh = %+v, want the profile rejected", doc.SSH)
+	want := `@ssh option "user" needs a value. Write it as user=value`
+	if len(doc.SSH) != 1 || !doc.SSH[0].Invalid || doc.SSH[0].Error != want {
+		t.Fatalf("ssh = %+v, want the profile kept as invalid", doc.SSH)
 	}
-	want := `@k8s option "namespace" needs a value. Write it as namespace=value`
+	want = `@k8s option "namespace" needs a value. Write it as namespace=value`
 	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid || doc.K8s[0].Error != want {
 		t.Fatalf("k8s = %+v, want the profile kept as invalid", doc.K8s)
 	}
@@ -499,49 +500,64 @@ func TestTunnelErrorsKeepOptionFindings(t *testing.T) {
 			line: "@ssh prof host=h",
 		},
 		{
-			name: "ssh global bare option",
-			line: "@ssh global prof port",
-			errs: []string{sshGlobal, missing("@ssh", "port")},
+			name:    "ssh global bare option",
+			line:    "@ssh global prof port",
+			errs:    []string{sshGlobal, missing("@ssh", "port")},
+			profile: "prof",
 		},
 		{
-			name: "ssh global bare host",
-			line: "@ssh global prof host",
-			errs: []string{missing("@ssh", "host")},
+			name:    "ssh global bare host",
+			line:    "@ssh global prof host",
+			errs:    []string{missing("@ssh", "host")},
+			profile: "prof",
 		},
 		{
-			name: "ssh global bare use",
-			line: "@ssh global prof use",
-			errs: []string{sshGlobal, missing("@ssh", "use")},
+			name:    "ssh global bare use",
+			line:    "@ssh global prof use",
+			errs:    []string{sshGlobal, missing("@ssh", "use")},
+			profile: "prof",
 		},
 		{
-			name: "ssh global bare host after a value",
-			line: "@ssh global prof host=h host",
-			errs: []string{`@ssh option "host" is repeated`, missing("@ssh", "host")},
+			name:    "ssh global bare host after a value",
+			line:    "@ssh global prof host=h host",
+			errs:    []string{`@ssh option "host" is repeated`, missing("@ssh", "host")},
+			profile: "prof",
 		},
 		{
-			name:  "ssh global unknown option",
-			line:  "@ssh global prof userr=x",
-			errs:  []string{sshGlobal},
-			warns: []string{`unknown @ssh option "userr"`},
+			name:    "ssh global unknown option",
+			line:    "@ssh global prof userr=x",
+			errs:    []string{sshGlobal},
+			warns:   []string{`unknown @ssh option "userr"`},
+			profile: "prof",
 		},
 		{
-			name: "ssh global alias conflict",
-			line: "@ssh global prof password=a pass=b",
-			errs: []string{sshGlobal, `@ssh options "pass", "password" are the same option`},
+			name:    "ssh global alias conflict",
+			line:    "@ssh global prof password=a pass=b",
+			errs:    []string{sshGlobal, `@ssh options "pass", "password" are the same option`},
+			profile: "prof",
 		},
 		{
-			name: "ssh global invalid option",
-			line: "@ssh global prof host=h persist=maybe timeout",
-			errs: []string{`invalid @ssh persist: "maybe"`, missing("@ssh", "timeout")},
+			name:    "ssh global invalid option",
+			line:    "@ssh global prof host=h persist=maybe timeout",
+			errs:    []string{`invalid @ssh persist: "maybe"`, missing("@ssh", "timeout")},
+			profile: "prof",
 		},
 		{
-			name: "ssh global valid",
-			line: "@ssh global prof host=h",
+			name:    "ssh global unknown option with a host",
+			line:    "@ssh global prof host=h userr=x",
+			warns:   []string{`unknown @ssh option "userr"`},
+			profile: "prof",
 		},
 		{
-			name: "ssh file bare option",
-			line: "@ssh file prof port",
-			errs: []string{sshFile, missing("@ssh", "port")},
+			name:    "ssh global valid",
+			line:    "@ssh global prof host=h",
+			profile: "prof",
+		},
+		{
+			name:    "ssh file bare option",
+			line:    "@ssh file prof port",
+			errs:    []string{sshFile, missing("@ssh", "port")},
+			profile: "prof",
 		},
 		{
 			name: "k8s bare option",
@@ -721,6 +737,9 @@ func TestTunnelErrorsKeepOptionFindings(t *testing.T) {
 		}
 		return out
 	}
+	shared := func(name string, line int, invalid bool, msg string) string {
+		return fmt.Sprintf("%s line %d invalid=%t error=%q", name, line, invalid, msg)
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := Parse("/ws/t.http", []byte("### r\n# "+tt.line+"\nGET http://x\n"))
@@ -730,19 +749,19 @@ func TestTunnelErrorsKeepOptionFindings(t *testing.T) {
 			if got := messages(doc.Warnings); !slices.Equal(got, tt.warns) {
 				t.Fatalf("warnings = %q, want %q", got, tt.warns)
 			}
-			if tt.profile == "" {
-				if len(doc.K8s) != 0 {
-					t.Fatalf("k8s = %+v, want no shared profile", doc.K8s)
-				}
-				return
+			var got, want []string
+			for _, p := range doc.SSH {
+				got = append(got, shared(p.Name, p.Line, p.Invalid, p.Error))
 			}
-			want := strings.Join(tt.errs, "\n")
-			if len(doc.K8s) != 1 {
-				t.Fatalf("k8s = %+v, want one profile", doc.K8s)
+			for _, p := range doc.K8s {
+				got = append(got, shared(p.Name, p.Line, p.Invalid, p.Error))
 			}
-			if p := doc.K8s[0]; p.Name != tt.profile || p.Invalid != (want != "") || p.Error != want {
-				t.Fatalf("k8s profile %q invalid = %t error %q, want %q invalid = %t error %q",
-					p.Name, p.Invalid, p.Error, tt.profile, want != "", want)
+			if tt.profile != "" {
+				msg := strings.Join(tt.errs, "\n")
+				want = []string{shared(tt.profile, 2, msg != "", msg)}
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("shared profiles = %q, want %q", got, want)
 			}
 		})
 	}
@@ -1006,8 +1025,8 @@ func TestOptionWrittenWithLessOrEqualIsAnError(t *testing.T) {
 	if want := map[string]string{"timeout": "2s"}; !maps.Equal(doc.Settings, want) {
 		t.Fatalf("settings = %v, want %v", doc.Settings, want)
 	}
-	if len(doc.SSH) != 0 {
-		t.Fatalf("ssh = %+v, want the profile rejected", doc.SSH)
+	if len(doc.SSH) != 1 || !doc.SSH[0].Invalid || doc.SSH[0].Error != want[1].msg {
+		t.Fatalf("ssh = %+v, want the profile kept as invalid", doc.SSH)
 	}
 	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid || doc.K8s[0].Error != want[2].msg {
 		t.Fatalf("k8s = %+v, want the profile kept as invalid", doc.K8s)

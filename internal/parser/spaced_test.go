@@ -69,8 +69,9 @@ func TestSpacedSharedProfilesAreRejected(t *testing.T) {
 	if len(doc.Errors) != 2 {
 		t.Fatalf("errors = %v, want one per line", doc.Errors)
 	}
-	if len(doc.SSH) != 0 {
-		t.Fatalf("ssh = %+v, want the profile rejected", doc.SSH)
+	want := `@ssh option "persist" has spaces around =. Write it as key=value`
+	if len(doc.SSH) != 1 || !doc.SSH[0].Invalid || doc.SSH[0].Error != want {
+		t.Fatalf("ssh = %+v, want the profile kept as invalid with the spacing error", doc.SSH)
 	}
 	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid ||
 		!strings.Contains(doc.K8s[0].Error, `"persist" has spaces around =`) {

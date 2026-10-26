@@ -271,6 +271,7 @@ type K8sOpt[T any] = Opt[T]
 type SSHProfile struct {
 	Scope        directive.Scope
 	Name         string
+	Line         int
 	Host         string
 	Port         int
 	PortStr      string
@@ -288,6 +289,8 @@ type SSHProfile struct {
 	KeepAliveStr string
 	Retries      Opt[int]
 	RetriesStr   string
+	Invalid      bool
+	Error        string
 }
 
 type SSHSpec struct {
