@@ -2,7 +2,9 @@ package rts
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sync"
 )
@@ -207,6 +209,10 @@ func (e *Eng) addUses(cx *Ctx, cfg EvalConfig, env *Env) error {
 	for _, u := range uses {
 		cp, err := e.C.Load(cx, cfg.BaseDir, u.Path)
 		if err != nil {
+			var pe *fs.PathError
+			if errors.As(err, &pe) && errors.Is(err, fs.ErrNotExist) {
+				return Errf(cx, u.Pos, "module %s not found", pe.Path)
+			}
 			return err
 		}
 		env.DefConst(u.Alias, Obj(NewModObj(u.Alias, cp.Exp)))

@@ -20,6 +20,22 @@ func (b *documentBuilder) handleVariableLine(ln line) bool {
 	if matches == nil {
 		return false
 	}
+	// A workflow reads these names as directives, so a variable here would silently drop one.
+	if b.workflow != nil && matches[1] == "" {
+		spelling := directive.Name(strings.ToLower(matches[2]))
+		if name := spelling.Canonical(); name == directive.Step || isWorkflowDirective(name) {
+			tag, col := spelling.Tag(), ln.indent+1
+			b.pushError(restfile.ParseDiagnostic{
+				Message: tag + " has no comment marker. Write it as " + spelling.Comment(),
+				Span: diag.Span{
+					Start: diag.Pos{Line: ln.no, Col: col},
+					End:   diag.Pos{Line: ln.no, Col: col + len(tag)},
+				},
+			})
+			b.appendLine(ln.raw)
+			return true
+		}
+	}
 	name := matches[2]
 	valueCandidate := matches[3]
 	if valueCandidate == "" {

@@ -452,6 +452,68 @@ func TestLinesThatDoNotStartARequestKeepTheWorkflowOpen(t *testing.T) {
 	}
 }
 
+func TestWorkflowDirectiveWithoutACommentMarkerIsAnError(t *testing.T) {
+	tests := []struct{ name, line, want string }{
+		{"step", "@step Verify using=Verify", "3:1 @step has no comment marker. Write it as # @step"},
+		{"indented step", "  @step Verify using=Verify", "3:3 @step has no comment marker. Write it as # @step"},
+		{"step with equals", "@step = Verify", "3:1 @step has no comment marker. Write it as # @step"},
+		{"step with a tight equals", "@step=Verify", "3:1 @step has no comment marker. Write it as # @step"},
+		{
+			"step with a tight equals and options",
+			"@step=x using=Verify",
+			"3:1 @step has no comment marker. Write it as # @step",
+		},
+		{"if with a tight equals", "@if=true", "3:1 @if has no comment marker. Write it as # @if"},
+		{"skip-if", "@skip-if true", "3:1 @skip-if has no comment marker. Write it as # @skip-if"},
+		{"description", "@description Deploys", "3:1 @description has no comment marker. Write it as # @description"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("workflow.http", []byte("# @workflow deploy\n# @step Create using=Create\n"+
+				tt.line+"\n# @step Verify using=Verify\n"))
+			if got := findings(doc.Errors); !slices.Equal(got, []string{tt.want}) {
+				t.Fatalf("errors = %q, want %q", got, tt.want)
+			}
+			if len(doc.Variables) != 0 {
+				t.Fatalf("variables = %+v, want none", doc.Variables)
+			}
+			if len(doc.Workflows) != 1 || len(doc.Workflows[0].Steps) != 2 {
+				t.Fatalf("workflows = %+v, want one workflow with two steps", doc.Workflows)
+			}
+		})
+	}
+}
+
+func TestDirectiveNamedVariablesOutsideAWorkflowStayVariables(t *testing.T) {
+	tests := []struct{ name, src string }{
+		{"file top", "@step Verify using=Verify\nGET https://example.com\n"},
+		{
+			"after the workflow block",
+			"# @workflow deploy\n# @step Create using=Create\n### Create\n@step Verify using=Verify\nGET https://example.com\n",
+		},
+		{"scoped in a workflow", "# @workflow deploy\n# @file step = Verify\n# @step Create using=Create\n"},
+		{"scope prefix in a workflow", "# @workflow deploy\n@file step Verify\n# @step Create using=Create\n"},
+		{"global scope in a workflow", "# @workflow deploy\n@global step x\n# @step Create using=Create\n"},
+		{
+			"scope prefix with a tight equals in a workflow",
+			"# @workflow deploy\n@file step=x\n# @step Create using=Create\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("vars.http", []byte(tt.src))
+			if len(doc.Errors) != 0 || len(doc.Warnings) != 0 {
+				t.Fatalf("errors = %v, warnings = %v, want none", doc.Errors, doc.Warnings)
+			}
+			if vars := slices.Concat(doc.Variables, doc.Globals); len(vars) != 1 || vars[0].Name != "step" {
+				t.Fatalf("variables = %+v, want step", vars)
+			}
+		})
+	}
+}
+
 func TestStepErrorNamesTheLineThatEndedTheWorkflow(t *testing.T) {
 	tests := []struct{ name, lines, want string }{
 		{

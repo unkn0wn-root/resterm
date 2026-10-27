@@ -17,6 +17,7 @@ func (b *documentBuilder) handleSSHDirective(d parsedDirective) directiveOutcome
 	res, err := sshbuilder.ParseDirective(d.Args)
 	b.report(d, err)
 	if fatalErr(err) {
+		b.addInvalidSSHProfile(d.lines.Start, res.Profile, withoutWarnings(err).Error())
 		return directiveRejected
 	}
 
@@ -34,14 +35,15 @@ func (b *documentBuilder) handleSSHDirective(d parsedDirective) directiveOutcome
 		}
 		b.request.ssh = res.Spec
 	case directive.ScopeGlobal, directive.ScopeFile:
-		// Do not share a malformed profile: requests in other files cannot see
-		// this file's diagnostics and need to fail when they resolve the profile.
+		// Share a broken profile as invalid, so requests in other files fail with its error.
+		res.Profile.Scope = res.Scope
 		var spaced *directive.SpacedOptionsError
 		var op *directive.OpOptionError
 		if errors.As(err, &spaced) || errors.As(err, &op) {
+			b.addInvalidSSHProfile(d.lines.Start, res.Profile, withoutWarnings(err).Error())
 			return directiveRejected
 		}
-		res.Profile.Scope = res.Scope
+		res.Profile.Line = d.lines.Start
 		b.file.ssh = append(b.file.ssh, res.Profile)
 	}
 	return directiveApplied
@@ -98,4 +100,18 @@ func (b *documentBuilder) addInvalidK8sProfile(
 	prof.Invalid = true
 	prof.Error = message
 	b.file.k8s = append(b.file.k8s, prof)
+}
+
+func (b *documentBuilder) addInvalidSSHProfile(
+	line int,
+	prof restfile.SSHProfile,
+	message string,
+) {
+	if prof.Scope != directive.ScopeGlobal && prof.Scope != directive.ScopeFile {
+		return
+	}
+	prof.Line = line
+	prof.Invalid = true
+	prof.Error = message
+	b.file.ssh = append(b.file.ssh, prof)
 }

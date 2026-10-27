@@ -38,7 +38,7 @@ var webSocketArgs = []argument{
 	opt("timeout", "Handshake deadline", "10s"),
 	opt("idle-timeout", "Idle timeout (resets on any activity)", "5s").alias("idle"),
 	opt("max-message-bytes", "Max inbound frame size", "1mb"),
-	opt("subprotocols", "Comma-separated subprotocols", "chat,json"),
+	opt("subprotocols", "Comma-separated subprotocols", "chat,json").alias("subprotocol"),
 	flag("compression", "Toggle WebSocket compression"),
 }
 

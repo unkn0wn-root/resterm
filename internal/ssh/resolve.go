@@ -56,6 +56,9 @@ func resolveProfileSpec(
 	if !ok {
 		return restfile.SSHProfile{}, fmt.Errorf("ssh profile %q not found", use)
 	}
+	if base.Invalid {
+		return restfile.SSHProfile{}, fmt.Errorf("ssh profile %q is invalid: line %d: %s", use, base.Line, base.Error)
+	}
 	base.Name = use
 
 	if spec.Inline == nil {

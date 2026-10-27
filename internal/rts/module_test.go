@@ -287,16 +287,35 @@ func TestModuleErrorsShowTheModuleLikeTheUsingFile(t *testing.T) {
 		name string
 		use  Use
 	}{
-		{"missing file", Use{Path: "nope.rts"}},
-		{"missing file with an alias", Use{Path: "nope.rts", Alias: "n"}},
+		{"missing file", Use{Path: "nope.rts", Pos: at}},
+		{"missing file with an alias", Use{Path: "nope.rts", Alias: "n", Pos: at}},
 	}
 	for _, tt := range missing {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := EvalConfig{BaseDir: "sub", Uses: []Use{tt.use}}
-			_, err := NewEng(testStdlib()).Eval(t.Context(), cfg, "1", at)
+			_, err := NewEng(testStdlib()).Eval(t.Context(), cfg, "1", NewFile("sub/api.http", nil).Pos(5, 1))
+			const want = "module sub/nope.rts not found"
+			var re *RuntimeError
+			if !errors.As(err, &re) || re.Msg != want || re.Pos != at {
+				t.Fatalf("error = %v, want %q at %s", err, want, at)
+			}
+		})
+	}
+
+	dirs := []struct {
+		name string
+		use  Use
+	}{
+		{"directory", Use{Path: "../shared", Pos: at}},
+		{"directory with an alias", Use{Path: "../shared", Alias: "s", Pos: at}},
+	}
+	for _, tt := range dirs {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := EvalConfig{BaseDir: "sub", Uses: []Use{tt.use}}
+			_, err := NewEng(testStdlib()).Eval(t.Context(), cfg, "1", NewFile("sub/api.http", nil).Pos(5, 1))
 			var pe *fs.PathError
-			if !errors.As(err, &pe) || pe.Path != "sub/nope.rts" {
-				t.Fatalf("error = %v, want one for sub/nope.rts", err)
+			if !errors.As(err, &pe) || pe.Path != "shared" {
+				t.Fatalf("error = %v, want the read error for shared", err)
 			}
 		})
 	}

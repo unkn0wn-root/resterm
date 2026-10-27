@@ -65,6 +65,22 @@ func TestResolveSSHUsesDocumentGlobalProfiles(t *testing.T) {
 	}
 }
 
+func TestBrokenSharedSSHProfileReportsItsCause(t *testing.T) {
+	rig := newNamedAuthRig(t, map[string]string{
+		"defs.http": "# @ssh global jump port=22\n",
+		"api.http":  "# @ssh use=jump\nGET https://example.test/user\n",
+	})
+	doc := rig.doc(t, "api.http")
+	res := rig.run(t, doc, 0, "dev", ExecModeSend)
+	want := `resolve ssh: ssh profile "jump" is invalid: line 1: @ssh global scope requires host`
+	if res.Err == nil || res.Err.Error() != want {
+		t.Fatalf("error = %v, want %q", res.Err, want)
+	}
+	if rig.sent != nil {
+		t.Fatal("a broken profile must not send the request")
+	}
+}
+
 func TestResolveK8sUsesDocumentGlobalProfiles(t *testing.T) {
 	t.Parallel()
 

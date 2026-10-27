@@ -37,6 +37,8 @@ func ParseDirective(rest string) (res Directive, err error) {
 	// Everything valid has been popped by now, so Leftover reports only mistakes.
 	left := opts.Leftover(directive.SSH)
 	if optErr != nil {
+		// The caller keeps a shared profile with an error as invalid.
+		res.Profile = prof
 		return res, errors.Join(optErr, left)
 	}
 
@@ -47,11 +49,11 @@ func ParseDirective(rest string) (res Directive, err error) {
 	}
 
 	if scope != directive.ScopeRequest {
+		res.Scope = scope
+		res.Profile = prof
 		if strings.TrimSpace(prof.Host) == "" && !opts.Bare("host") {
 			return res, errors.Join(fmt.Errorf("@ssh %s scope requires host", scope.String()), left)
 		}
-		res.Scope = scope
-		res.Profile = prof
 		return res, left
 	}
 
