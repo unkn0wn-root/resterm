@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.17.0](https://github.com/unkn0wn-root/resterm/compare/v1.16.1...v1.17.0) (2026-10-27)
+
+
+### Features
+
+* **httpx:** end GraphQL event streams at complete ([5e8e2e4](https://github.com/unkn0wn-root/resterm/commit/5e8e2e47e2e697a6744f20d50f85cfc5b4c79072))
+* **httpx:** run GraphQL over WebSocket with graphql-transport-ws ([9fc9e6c](https://github.com/unkn0wn-root/resterm/commit/9fc9e6c74964339fad9be1625b45ff3ace3a747c))
+* **parser:** allow GraphQL over SSE and WebSocket ([0bc8bfc](https://github.com/unkn0wn-root/resterm/commit/0bc8bfc0a5b3aec9e252ace6b0f11862f7dea018))
+* **request:** explain GraphQL on SSE and WebSocket requests ([f5ecdc8](https://github.com/unkn0wn-root/resterm/commit/f5ecdc8143eb7c984e1fe6bfb973f9355df5d130))
+
+
+### Bug Fixes
+
+* **grpc:** report a missing proto file as not found ([98e146f](https://github.com/unkn0wn-root/resterm/commit/98e146f351cb352b6b9bf726a2450d247297bd55))
+* **httpx:** end websocket sessions from the read loop ([bb189c8](https://github.com/unkn0wn-root/resterm/commit/bb189c825b312f1ab92ebd05e950ce1c120e130a))
+* **httpx:** fail a websocket upgrade with an invalid handshake ([3eb3981](https://github.com/unkn0wn-root/resterm/commit/3eb398125449a46ae4ebf4c6d571e9906cb20290))
+* **intellisense:** offer the websocket subprotocol alias ([40fd2a7](https://github.com/unkn0wn-root/resterm/commit/40fd2a7b08990b1b5fc72d2b41e3c9386fa9a715))
+* **parser:** reject workflow directives without a comment marker ([967684a](https://github.com/unkn0wn-root/resterm/commit/967684afe5a1a08b6fc04901ba7d0e6e563ab638))
+* **parser:** suggest moving use and setting below workflow ([1744235](https://github.com/unkn0wn-root/resterm/commit/17442354bf30a623c1884af307aee1d4aead0e07))
+* **rts:** report a missing module at its use line ([6ebc7e3](https://github.com/unkn0wn-root/resterm/commit/6ebc7e3e1f99ffdf11117a4f5c0a23251659d454))
+* **ssh:** report why a shared profile is invalid ([da7b599](https://github.com/unkn0wn-root/resterm/commit/da7b599ceca8de0606c1f9ecd6e5d5a7fda01704))
+* **ui:** show why a websocket session ended ([ee88b2c](https://github.com/unkn0wn-root/resterm/commit/ee88b2c8fbddce73e3b306e96742be5e758900d2))
+
 ### [1.16.1](https://github.com/unkn0wn-root/resterm/compare/v1.16.0...v1.16.1) (2026-10-22)
 
 ## [1.16.0](https://github.com/unkn0wn-root/resterm/compare/v1.15.0...v1.16.0) (2026-10-18)
