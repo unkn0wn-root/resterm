@@ -16,7 +16,6 @@ type wsAccumulator struct {
 	summary WebSocketSummary
 	bytes   int64
 	limit   int64
-	closed  bool
 }
 
 func newWSAccumulator() *wsAccumulator {
@@ -66,21 +65,6 @@ func (a *wsAccumulator) consume(evt *stream.Event) {
 		} else {
 			a.summary.ReceivedCount++
 		}
-		// Both sides send a close frame, so only the first one names who ended
-		// the session. A close resterm sends is published before the reply it
-		// gets back, and a close it never managed to send is not published at
-		// all, which leaves the peer's frame first.
-		if ws.Type == stream.WSClose && !a.closed {
-			a.closed = true
-			a.summary.ClosedBy = ws.ClosedBy
-			a.summary.CloseCode = int(ws.Code)
-			if ws.Reason != "" {
-				a.summary.CloseReason = ws.Reason
-			}
-		}
-	case stream.DirNA:
-		a.summary.ClosedBy = ws.ClosedBy
-		a.summary.CloseReason = ws.Reason
 	}
 }
 

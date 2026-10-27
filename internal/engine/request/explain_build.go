@@ -659,6 +659,8 @@ func explainBuiltBody(req *restfile.Request, body []byte) (string, string, bool)
 
 	note := ""
 	switch {
+	case req != nil && req.Body.GraphQL != nil && req.WebSocket != nil:
+		note = restfile.GraphQLWSProtocol + " subscribe message"
 	case req != nil && req.Body.GraphQL != nil:
 		note = "graphql payload"
 	case req != nil && strings.TrimSpace(req.Body.FilePath) != "":
@@ -737,11 +739,11 @@ func explainProtocolDetails(req *restfile.Request) []xplain.Pair {
 	case req.GRPC != nil:
 		return explainGRPCDetails(req.GRPC)
 	case req.WebSocket != nil:
-		return explainWebSocketDetails(req.WebSocket)
+		return append(explainWebSocketDetails(req), explainGraphQLDetails(req)...)
 	case req.SSE != nil:
-		return explainSSEDetails(req.SSE)
+		return append(explainSSEDetails(req.SSE), explainGraphQLDetails(req)...)
 	default:
-		return explainHTTPDetails(req)
+		return explainGraphQLDetails(req)
 	}
 }
 
@@ -758,7 +760,7 @@ func explainProtocolSteps(req *restfile.Request) []string {
 	return out
 }
 
-func explainHTTPDetails(req *restfile.Request) []xplain.Pair {
+func explainGraphQLDetails(req *restfile.Request) []xplain.Pair {
 	if req == nil || req.Body.GraphQL == nil {
 		return nil
 	}
@@ -810,11 +812,8 @@ func explainGRPCDetails(gr *restfile.GRPCRequest) []xplain.Pair {
 	return out
 }
 
-func explainWebSocketDetails(ws *restfile.WebSocketRequest) []xplain.Pair {
-	if ws == nil {
-		return nil
-	}
-	opts := ws.Options
+func explainWebSocketDetails(req *restfile.Request) []xplain.Pair {
+	opts := req.WebSocket.Options
 	out := make([]xplain.Pair, 0, 5)
 	if opts.HandshakeTimeout > 0 {
 		out = append(
@@ -831,11 +830,12 @@ func explainWebSocketDetails(ws *restfile.WebSocketRequest) []xplain.Pair {
 			xplain.Pair{Key: "Max Message Bytes", Value: fmt.Sprintf("%d", opts.MaxMessageBytes)},
 		)
 	}
-	if len(opts.Subprotocols) > 0 {
-		out = append(
-			out,
-			xplain.Pair{Key: "Subprotocols", Value: strings.Join(opts.Subprotocols, ", ")},
-		)
+	protocols := opts.Subprotocols
+	if len(protocols) == 0 && req.Body.GraphQL != nil {
+		protocols = []string{restfile.GraphQLWSProtocol}
+	}
+	if len(protocols) > 0 {
+		out = append(out, xplain.Pair{Key: "Subprotocols", Value: strings.Join(protocols, ", ")})
 	}
 	if v, ok := opts.Compression.Get(); ok {
 		out = append(out, xplain.Pair{Key: "Compression", Value: explainToggle(v)})
@@ -1254,12 +1254,21 @@ func (e *Engine) prepareExplainHTTPPreview(
 	if rep == nil || req == nil || e.hc == nil {
 		return nil
 	}
-	httpReq, _, body, err := e.hc.BuildHTTPRequest(ctx, req, res.Lenient(), opts)
+	res = res.Lenient()
+	httpReq, _, body, err := e.hc.BuildHTTPRequest(ctx, req, res, opts)
 	if err != nil {
 		return err
 	}
 	if req.SSE != nil && httpReq.Header.Get("Accept") == "" {
 		httpReq.Header.Set("Accept", "text/event-stream")
+	}
+	if req.WebSocket != nil && req.Body.GraphQL != nil {
+		// The operation goes in the subscribe message, not the handshake.
+		msg, err := e.hc.GraphQLSubscribeMessage(req.Body.GraphQL, res, opts)
+		if err != nil {
+			return err
+		}
+		body = []byte(msg)
 	}
 	addExplainPreparedHTTPStage(rep, req, httpReq, body)
 	setExplainHTTPPrepared(rep, req, httpReq, body)

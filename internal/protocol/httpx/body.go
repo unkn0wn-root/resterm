@@ -24,6 +24,10 @@ func (c *Client) prepareBody(
 	opts Options,
 ) (bodyPlan, error) {
 	if req.Body.GraphQL != nil {
+		// A WebSocket sends the operation in its subscribe message instead.
+		if req.WebSocket != nil {
+			return bodyPlan{}, nil
+		}
 		return c.prepareGraphQLBody(req, resolver, opts)
 	}
 
@@ -100,6 +104,38 @@ func isMultipartRequest(req *restfile.Request) bool {
 	return restfile.IsMultipartMime(ct)
 }
 
+type graphQLOperation struct {
+	query string
+	name  string
+	vars  map[string]any
+	// varsJSON tells a null value from no variables, which vars cannot.
+	varsJSON string
+}
+
+func (c *Client) prepareGraphQLOperation(
+	gql *restfile.GraphQLBody,
+	resolver *vars.Resolver,
+	opts Options,
+) (graphQLOperation, error) {
+	lookup := newFileLookup(opts.BaseDir, opts)
+
+	query, err := c.gqlQuery(gql, resolver, lookup)
+	if err != nil {
+		return graphQLOperation{}, err
+	}
+
+	name, err := gqlOpName(gql, resolver)
+	if err != nil {
+		return graphQLOperation{}, err
+	}
+
+	varsMap, varsJSON, err := c.gqlVars(gql, resolver, lookup)
+	if err != nil {
+		return graphQLOperation{}, err
+	}
+	return graphQLOperation{query: query, name: name, vars: varsMap, varsJSON: varsJSON}, nil
+}
+
 // GET requests put everything in query params, POST uses JSON body.
 // Variables need special handling since they must be valid JSON in both cases.
 func (c *Client) prepareGraphQLBody(
@@ -107,20 +143,7 @@ func (c *Client) prepareGraphQLBody(
 	resolver *vars.Resolver,
 	opts Options,
 ) (bodyPlan, error) {
-	gql := req.Body.GraphQL
-	lookup := newFileLookup(opts.BaseDir, opts)
-
-	query, err := c.gqlQuery(gql, resolver, lookup)
-	if err != nil {
-		return bodyPlan{}, err
-	}
-
-	op, err := gqlOpName(gql, resolver)
-	if err != nil {
-		return bodyPlan{}, err
-	}
-
-	varsMap, varsJSON, err := c.gqlVars(gql, resolver, lookup)
+	op, err := c.prepareGraphQLOperation(req.Body.GraphQL, resolver, opts)
 	if err != nil {
 		return bodyPlan{}, err
 	}
@@ -130,7 +153,7 @@ func (c *Client) prepareGraphQLBody(
 		if req.Written.URL {
 			urlRes = nil
 		}
-		url, err := buildGraphQLURL(req.URL, urlRes, query, op, varsJSON)
+		url, err := buildGraphQLURL(req.URL, urlRes, op)
 		if err != nil {
 			return bodyPlan{}, err
 		}
@@ -140,11 +163,11 @@ func (c *Client) prepareGraphQLBody(
 		return bodyPlan{url: url}, nil
 	}
 
-	reader, err := buildGraphQLPayload(query, op, varsMap)
+	body, err := buildGraphQLPayload(op)
 	if err != nil {
 		return bodyPlan{}, err
 	}
-	return bodyPlan{rd: reader}, nil
+	return bodyPlan{rd: bytes.NewReader(body)}, nil
 }
 
 func (c *Client) gqlQuery(
@@ -230,11 +253,7 @@ func (c *Client) gqlVars(
 	return parsed, string(normalised), nil
 }
 
-func buildGraphQLURL(
-	rawURL string,
-	resolver *vars.Resolver,
-	query, op, varsJSON string,
-) (string, error) {
+func buildGraphQLURL(rawURL string, resolver *vars.Resolver, op graphQLOperation) (string, error) {
 	expandedURL := rawURL
 	if resolver != nil {
 		if expanded, expandErr := resolver.ExpandTemplates(expandedURL); expandErr == nil {
@@ -253,15 +272,15 @@ func buildGraphQLURL(
 	}
 
 	values := parsedURL.Query()
-	values.Set("query", query)
-	if op != "" {
-		values.Set("operationName", op)
+	values.Set("query", op.query)
+	if op.name != "" {
+		values.Set("operationName", op.name)
 	} else {
 		values.Del("operationName")
 	}
 
-	if varsJSON != "" {
-		values.Set("variables", varsJSON)
+	if op.varsJSON != "" {
+		values.Set("variables", op.varsJSON)
 	} else {
 		values.Del("variables")
 	}
@@ -270,27 +289,24 @@ func buildGraphQLURL(
 	return parsedURL.String(), nil
 }
 
-func buildGraphQLPayload(
-	query, op string,
-	vars map[string]any,
-) (io.Reader, error) {
+func buildGraphQLPayload(op graphQLOperation) ([]byte, error) {
 	payload := map[string]any{
-		"query": query,
+		"query": op.query,
 	}
 
-	if op != "" {
-		payload["operationName"] = op
+	if op.name != "" {
+		payload["operationName"] = op.name
 	}
 
-	if vars != nil {
-		payload["variables"] = vars
+	if op.vars != nil {
+		payload["variables"] = op.vars
 	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, diag.WrapAs(diag.ClassProtocol, err, "encode graphql payload")
 	}
-	return bytes.NewReader(body), nil
+	return body, nil
 }
 
 func (c *Client) graphQLSectionContent(

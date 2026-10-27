@@ -821,6 +821,15 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 		return strings.Join(filterEmpty(parts), " ")
 	case stream.KindWebSocket:
 		ws := evt.WS
+		// An event without a frame says why the session ended.
+		if evt.Direction == stream.DirNA && ws.Type == "" {
+			style := th.StreamSummary
+			if ws.ClosedBy == stream.WSClosedByError {
+				style = th.StreamError
+			}
+			parts = append(parts, style.Render(truncatePreview(ws.Reason)))
+			break
+		}
 		typ := cmp.Or(ws.Type, "unknown")
 		if step := strings.TrimSpace(ws.Step); step != "" {
 			parts = append(parts, th.StreamSummary.Render(fmt.Sprintf("[%s]", step)))

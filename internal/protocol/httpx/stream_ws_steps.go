@@ -38,13 +38,12 @@ func (c *Client) runWSSteps(
 	ctx := session.Context()
 	recvWindow := wsRecvWindow(wsReq.Options)
 	lookup := newFileLookup(baseDir, opts)
-	closedByScript := false
 
 	for idx, step := range wsReq.Steps {
 		sender.touch()
 
 		if ctx.Err() != nil {
-			return closedByScript
+			return false
 		}
 
 		label := fmt.Sprintf("%d:%s", idx+1, string(step.Type))
@@ -71,8 +70,9 @@ func (c *Client) runWSSteps(
 			err = waitForDuration(ctx, step.Duration)
 		case restfile.WebSocketStepClose:
 			code := cmp.Or(stream.WSCloseCode(step.Code), stream.WSCloseNormal)
-			err = sender.Close(ctx, code, step.Reason, label)
-			closedByScript = err == nil
+			if err = sender.Close(ctx, code, step.Reason, label); err == nil {
+				return true
+			}
 		}
 
 		if err != nil {
@@ -80,7 +80,7 @@ func (c *Client) runWSSteps(
 				// The session is still open, so the step itself failed.
 				sender.fail(diag.Wrap(err, "websocket step "+label))
 			}
-			return closedByScript
+			return false
 		}
 
 		if wsStepSettles(step.Type) {
@@ -88,7 +88,7 @@ func (c *Client) runWSSteps(
 		}
 	}
 
-	return closedByScript
+	return false
 }
 
 // A step that sent a frame pauses for the answer. Wait and close have their own timing.

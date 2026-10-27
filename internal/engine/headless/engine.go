@@ -95,7 +95,7 @@ func (e *Engine) ExecuteRequestContext(
 	if req == nil {
 		return engine.RequestResult{}, errNilRequest
 	}
-	if req.WebSocket != nil && len(req.WebSocket.Steps) == 0 {
+	if req.InteractiveWebSocket() {
 		return engine.RequestResult{}, errInteractiveWebSocket
 	}
 	env, err := e.environment(sel)

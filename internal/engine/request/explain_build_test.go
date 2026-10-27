@@ -1,9 +1,15 @@
 package request
 
 import (
+	"bytes"
+	"cmp"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -206,5 +212,167 @@ func TestPreviewShowsTheHostHeader(t *testing.T) {
 	}
 	if got := previewHeaders(res.Explain.Final.Headers).Values("Host"); !slices.Equal(got, []string{"api.internal"}) {
 		t.Fatalf("preview Host = %q, want api.internal once", got)
+	}
+}
+
+func TestPreviewExplainsGraphQLOnEveryTransport(t *testing.T) {
+	gql := restfile.GraphQLBody{Query: "subscription { n }", OperationName: "N"}
+	for _, tt := range []struct {
+		name     string
+		req      restfile.Request
+		gql      *restfile.GraphQLBody
+		env      map[string]string
+		protocol string
+		url      string
+		body     string
+		note     string
+		details  []xplain.Pair
+	}{
+		{
+			name:     "http get",
+			req:      restfile.Request{Method: http.MethodGet, URL: "http://example.test/graphql"},
+			protocol: "HTTP",
+			url:      "http://example.test/graphql?operationName=N&query=subscription+%7B+n+%7D",
+			note:     "graphql query encoded in URL",
+			details:  []xplain.Pair{{Key: "GraphQL Operation", Value: "N"}},
+		},
+		{
+			name:     "http post",
+			req:      restfile.Request{Method: http.MethodPost, URL: "http://example.test/graphql"},
+			protocol: "HTTP",
+			url:      "http://example.test/graphql",
+			body:     `{"operationName":"N","query":"subscription { n }"}`,
+			note:     "graphql payload",
+			details:  []xplain.Pair{{Key: "GraphQL Operation", Value: "N"}},
+		},
+		{
+			name: "sse",
+			req: restfile.Request{
+				Method: http.MethodPost,
+				URL:    "http://example.test/graphql",
+				SSE:    &restfile.SSERequest{Options: restfile.SSEOptions{IdleTimeout: time.Second}},
+			},
+			protocol: "SSE",
+			url:      "http://example.test/graphql",
+			body:     `{"operationName":"N","query":"subscription { n }"}`,
+			note:     "graphql payload",
+			details:  []xplain.Pair{{Key: "Idle Timeout", Value: "1s"}, {Key: "GraphQL Operation", Value: "N"}},
+		},
+		{
+			name: "websocket",
+			req: restfile.Request{
+				Method: http.MethodGet,
+				URL:    "ws://example.test/graphql",
+				WebSocket: &restfile.WebSocketRequest{
+					Options: restfile.WebSocketOptions{IdleTimeout: time.Second},
+				},
+			},
+			protocol: "WebSocket",
+			url:      "ws://example.test/graphql",
+			body:     `{"id":"1","type":"subscribe","payload":{"operationName":"N","query":"subscription { n }"}}`,
+			note:     "graphql-transport-ws subscribe message",
+			details: []xplain.Pair{
+				{Key: "Idle Timeout", Value: "1s"},
+				{Key: "Subprotocols", Value: "graphql-transport-ws"},
+				{Key: "GraphQL Operation", Value: "N"},
+			},
+		},
+		{
+			name: "websocket with variables",
+			req: restfile.Request{
+				Method:    http.MethodGet,
+				URL:       "ws://example.test/graphql",
+				WebSocket: &restfile.WebSocketRequest{},
+			},
+			gql: &restfile.GraphQLBody{
+				Query:     "subscription($from: Int) { n(from: $from) }",
+				Variables: `{"from": {{from}}}`,
+			},
+			env:      map[string]string{"from": "3"},
+			protocol: "WebSocket",
+			url:      "ws://example.test/graphql",
+			body:     `{"id":"1","type":"subscribe","payload":{"query":"subscription($from: Int) { n(from: $from) }","variables":{"from":3}}}`,
+			note:     "graphql-transport-ws subscribe message",
+			details:  []xplain.Pair{{Key: "Subprotocols", Value: "graphql-transport-ws"}},
+		},
+		{
+			name: "websocket with a secret",
+			req: restfile.Request{
+				Method:    http.MethodGet,
+				URL:       "ws://example.test/graphql",
+				WebSocket: &restfile.WebSocketRequest{},
+				Variables: []restfile.Variable{{Name: "token", Value: "top-secret", Secret: true}},
+			},
+			gql:      &restfile.GraphQLBody{Query: "subscription { n }", Variables: `{"token": "{{token}}"}`},
+			protocol: "WebSocket",
+			url:      "ws://example.test/graphql",
+			body:     `{"id":"1","type":"subscribe","payload":{"query":"subscription { n }","variables":{"token":"•••"}}}`,
+			note:     "graphql-transport-ws subscribe message",
+			details:  []xplain.Pair{{Key: "Subprotocols", Value: "graphql-transport-ws"}},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := tt.req
+			req.Body.GraphQL = cmp.Or(tt.gql, &gql)
+			res, err := New(engcfg.Config{}, nil).ExecuteWith(
+				nil,
+				&req,
+				envWith(t, "dev", tt.env),
+				ExecOptions{Mode: ExecModePreview},
+			)
+			if err != nil || res.Err != nil {
+				t.Fatalf("ExecuteWith() = %v, %v", err, res.Err)
+			}
+			if out, _ := json.Marshal(res.Explain); bytes.Contains(out, []byte("top-secret")) {
+				t.Fatalf("explain report shows a secret: %s", out)
+			}
+			final := res.Explain.Final
+			got := fmt.Sprintf("%s %s body=%s note=%q", final.Protocol, final.URL, final.Body, final.BodyNote)
+			want := fmt.Sprintf("%s %s body=%s note=%q", tt.protocol, tt.url, tt.body, tt.note)
+			if got != want {
+				t.Fatalf("final = %s, want %s", got, want)
+			}
+			if !slices.Equal(final.Details, tt.details) {
+				t.Fatalf("details = %v, want %v", final.Details, tt.details)
+			}
+			var changes []xplain.Change
+			for _, st := range res.Explain.Stages {
+				if st.Name != xplain.StageHTTPPrepare {
+					continue
+				}
+				for _, c := range st.Changes {
+					if c.Field == "body" || c.Field == "body.note" {
+						changes = append(changes, c)
+					}
+				}
+			}
+			if len(changes) == 0 {
+				t.Fatal("http prepare stage shows no body change, want the built body")
+			}
+		})
+	}
+}
+
+func TestPreviewDoesNotDialAGraphQLWebSocket(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
+	t.Cleanup(srv.Close)
+	req := restfile.Request{
+		Method:    http.MethodGet,
+		URL:       "ws" + strings.TrimPrefix(srv.URL, "http"),
+		WebSocket: &restfile.WebSocketRequest{},
+		Body:      restfile.BodySource{GraphQL: &restfile.GraphQLBody{Query: "subscription { n }"}},
+	}
+	res, err := New(engcfg.Config{}, nil).ExecuteWith(
+		nil,
+		&req,
+		envWith(t, "dev", nil),
+		ExecOptions{Mode: ExecModePreview},
+	)
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() = %v, %v", err, res.Err)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Fatalf("preview reached the server %d times, want none", n)
 	}
 }

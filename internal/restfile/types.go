@@ -586,6 +586,12 @@ func (req *Request) RepeatUnsupported() string {
 	return ""
 }
 
+// InteractiveWebSocket reports whether the request opens a WebSocket for the
+// user to drive, because it has no steps or GraphQL operation to run.
+func (req *Request) InteractiveWebSocket() bool {
+	return req.WebSocket != nil && len(req.WebSocket.Steps) == 0 && req.Body.GraphQL == nil
+}
+
 type SSERequest struct {
 	Options SSEOptions
 }
@@ -603,6 +609,9 @@ type WebSocketRequest struct {
 	Options WebSocketOptions
 	Steps   []WebSocketStep
 }
+
+// GraphQLWSProtocol is the only WebSocket subprotocol a GraphQL request speaks.
+const GraphQLWSProtocol = "graphql-transport-ws"
 
 type WebSocketOptions struct {
 	HandshakeTimeout time.Duration

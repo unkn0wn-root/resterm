@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -24,67 +25,176 @@ type wsRuntime struct {
 	pulse   chan struct{}
 	// limit is the read limit, named in the error a larger message ends with.
 	limit int64
-	// Keep transcript publication ordered around writes without holding this
-	// mutex during network I/O. Data frames received while an outbound frame is
-	// in flight are replayed after the send event is recorded.
+	// check judges each data frame before the read loop records it, and
+	// observe acts on the frame after. A frame's error fails the session only
+	// if the frame is recorded, so the transcript and the outcome agree.
+	check   func(stream.WSType, []byte) (string, error)
+	observe func(context.Context, string, error)
+	// pending returns why a session fails when evt, a close from the peer or
+	// an idle timeout, ends it before its subprotocol has opened.
+	pending func(evt *stream.Event) error
+	// q keeps the transcript in the order things happened without holding mu
+	// during network I/O. A write holds its place in q while it is in flight,
+	// so whatever comes after it waits for its send event.
 	mu       sync.Mutex
-	out      bool
-	q        []*stream.Event
+	out      int
+	q        []*wsQueued
+	qBytes   int64
 	end      bool
 	endErr   error
 	writeErr error
 	done     bool
-	once     sync.Once
+	// ending is how the session ends. The first ending asked for sets it, and
+	// the read loop applies it once Read returns.
+	ending stream.WSMetadata
+	// idle is the event an idle timeout publishes when it ends the session.
+	idle *stream.Event
+	// stopErr is the failure a step or the caller ended the session with.
+	stopErr error
+	// cause is why CompleteWebSocket canceled the session. The session's
+	// context only says it was canceled.
+	cause error
+	// closeTimer gives up on the peer's answer to resterm's close.
+	closeTimer *time.Timer
+	// failure is why a recorded frame failed the session. Every ending reports it.
+	failure error
+	once    sync.Once
 	// closeStarted is claimed by whoever sends the first close frame, so the
 	// connection is never closed a second time.
 	closeStarted atomic.Bool
 }
 
-func (rt *wsRuntime) publishReceive(evt *stream.Event) {
-	if evt == nil {
-		return
-	}
+// wsQueued is a transcript event waiting for the writes that started before
+// it. A write's entry gets its send event when the write succeeds.
+type wsQueued struct {
+	evt     *stream.Event
+	writing bool
+}
+
+// A frame received while a write is in flight waits for the write's send
+// event. Past DefaultWebSocketTranscriptBytes everything but the writes goes
+// out first and later frames go out as they arrive, so a long write cannot
+// hold them all.
+func (rt *wsRuntime) publishReceive(evt *stream.Event, err error) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	if rt.done {
 		return
 	}
-	if rt.out {
-		rt.q = append(rt.q, evt)
+	if err != nil && rt.failure == nil {
+		rt.failure = err
+	}
+	if rt.out > 0 && rt.qBytes < DefaultWebSocketTranscriptBytes {
+		rt.q = append(rt.q, &wsQueued{evt: evt})
+		rt.qBytes += evt.Size()
 		return
 	}
+	writes := rt.q[:0]
+	for _, e := range rt.q {
+		if e.writing {
+			writes = append(writes, e)
+		} else if e.evt != nil {
+			rt.session.Publish(e.evt)
+		}
+	}
+	rt.q = writes
 	rt.session.Publish(evt)
 }
 
-func (rt *wsRuntime) publishTerminal(evt *stream.Event, err error) {
-	if evt == nil && err == nil {
-		return
+// finish ends the session once Read has returned err. Only the read loop calls
+// it, so every frame Read returned is recorded before the session is done.
+func (rt *wsRuntime) finish(err error) {
+	var ce websocket.CloseError
+	peer := errors.As(err, &ce)
+	var events []*stream.Event
+	if peer {
+		events = append(events, &stream.Event{
+			Kind:      stream.KindWebSocket,
+			Direction: stream.DirReceive,
+			Timestamp: time.Now(),
+			WS: stream.WSMetadata{
+				Type:     stream.WSClose,
+				ClosedBy: stream.WSClosedByServer,
+				Code:     stream.WSCloseCode(ce.Code),
+				Reason:   ce.Reason,
+			},
+		})
+	} else {
+		// A write in flight may hold the real cause. Closing keeps it from blocking.
+		_ = rt.conn.CloseNow()
 	}
-	close := false
+	ctx := rt.session.Context()
+
 	rt.mu.Lock()
-	if rt.done {
-		rt.mu.Unlock()
-		return
-	}
-	if rt.out {
-		if evt != nil {
-			rt.q = append(rt.q, evt)
+	asked := rt.ending.ClosedBy != "" || rt.stopErr != nil
+	switch {
+	case peer && !asked:
+		rt.ending = events[0].WS
+		// Read completes the close handshake before returning a close error.
+		// Do not let shutdown try to close the connection again.
+		rt.closeStarted.Store(true)
+		err = nil
+	case rt.stopErr != nil:
+		err = rt.stopErr
+	case peer:
+		// The answer to resterm's close, or a close that crossed idle.
+		err = nil
+	case ctx.Err() != nil:
+		err = ctx.Err()
+		if rt.cause != nil {
+			err = rt.cause
 		}
-		rt.end = true
-		rt.endErr = err
+	case asked:
+		// Resterm's close or idle closed the connection under Read.
+		err = nil
+	case errors.Is(err, websocket.ErrMessageTooBig):
+		err = diag.Newf(
+			diag.ClassProtocol,
+			"websocket message exceeds %d bytes, raise it with @websocket max-message-bytes",
+			rt.limit,
+		)
+	default:
+		err = diag.Wrap(err, "read websocket message")
+	}
+	if rt.idle != nil {
+		events = append(events, rt.idle)
+	}
+	// The operation never started if the peer closed first or idle passed
+	// before the subprotocol opened.
+	if rt.pending != nil && rt.failure == nil && (peer && !asked || rt.idle != nil) {
+		rt.failure = rt.pending(events[len(events)-1])
+	}
+	if rt.out > 0 {
+		for _, ev := range events {
+			rt.q = append(rt.q, &wsQueued{evt: ev})
+		}
+		rt.end, rt.endErr = true, err
 		rt.mu.Unlock()
 		return
 	}
-	if evt != nil {
-		rt.session.Publish(evt)
+	for _, ev := range events {
+		rt.session.Publish(ev)
 	}
-	err = endCause(err, rt.writeErr)
+	err = rt.endWith(endCause(err, rt.writeErr))
 	rt.done = true
-	close = true
 	rt.mu.Unlock()
-	if close {
-		rt.session.Close(err)
+	rt.session.Close(err)
+}
+
+// endWith returns the error the session ends with. A recorded failure wins and
+// is published last, so the transcript ends with it. Callers hold mu.
+func (rt *wsRuntime) endWith(err error) error {
+	if rt.failure == nil {
+		return err
 	}
+	rt.ending.ClosedBy, rt.ending.Reason = stream.WSClosedByError, rt.failure.Error()
+	rt.session.Publish(&stream.Event{
+		Kind:      stream.KindWebSocket,
+		Direction: stream.DirNA,
+		Timestamp: time.Now(),
+		WS:        stream.WSMetadata{ClosedBy: stream.WSClosedByError, Reason: rt.failure.Error()},
+	})
+	return rt.failure
 }
 
 // A read fails with net.ErrClosed when the connection closed under it, as it
@@ -96,65 +206,115 @@ func endCause(read, write error) error {
 	return read
 }
 
-func (rt *wsRuntime) closeTerminalNow(evt *stream.Event, err error) {
-	close := false
+// stop asks the read loop to end the session, as idle with the idle event or
+// as a failure with err. The first ending asked for wins, but idle still cuts
+// a close the peer has not answered.
+func (rt *wsRuntime) stop(idle *stream.Event, err error) {
 	rt.mu.Lock()
-	if !rt.done {
-		for _, ev := range rt.q {
-			rt.session.Publish(ev)
-		}
-		rt.q = nil
-		rt.end = false
-		rt.endErr = nil
-		rt.out = false
-		if evt != nil {
-			rt.session.Publish(evt)
-		}
-		rt.done = true
-		close = true
+	first := !rt.done && rt.ending.ClosedBy == "" && rt.stopErr == nil
+	if first && idle != nil {
+		rt.ending, rt.idle = idle.WS, idle
+	} else if first {
+		rt.stopErr = err
 	}
 	rt.mu.Unlock()
-	if close {
-		rt.session.Close(err)
+	if first || idle != nil {
+		_ = rt.conn.CloseNow()
 	}
 }
 
-func (rt *wsRuntime) beginOutbound() bool {
+// sendClose sends resterm's close frame unless the session already has an
+// ending. coder marks the frame as sent, so Read returns the peer's answer
+// and the read loop ends the session.
+func (rt *wsRuntime) sendClose(ctx context.Context, code stream.WSCloseCode, reason, step string) error {
+	rt.mu.Lock()
+	if rt.done {
+		rt.mu.Unlock()
+		return diag.New(diag.ClassProtocol, "websocket session closed")
+	}
+	first := rt.ending.ClosedBy == "" && rt.stopErr == nil
+	if first {
+		rt.ending.ClosedBy = stream.WSClosedByClient
+		rt.closeStarted.Store(true)
+	}
+	rt.mu.Unlock()
+	if !first {
+		return nil
+	}
+	rt.session.MarkClosing()
+	evt := &stream.Event{
+		Kind:      stream.KindWebSocket,
+		Direction: stream.DirSend,
+		Timestamp: time.Now(),
+		WS: stream.WSMetadata{
+			Type:     stream.WSClose,
+			Step:     step,
+			ClosedBy: stream.WSClosedByClient,
+			Code:     code,
+			Reason:   reason,
+		},
+	}
+	payload := append(binary.BigEndian.AppendUint16(nil, uint16(code)), reason...)
+	if err := rt.writeAndPublish("close websocket", func() error {
+		return wsWriteControl(rt.conn, ctx, wsOpcodeClose, payload)
+	}, evt); err != nil {
+		_ = rt.conn.CloseNow()
+		return err
+	}
+	rt.mu.Lock()
+	if !rt.done {
+		// Like coder's Close, the peer gets websocketCloseTimeout to answer.
+		rt.closeTimer = time.AfterFunc(websocketCloseTimeout, func() { _ = rt.conn.CloseNow() })
+	}
+	rt.mu.Unlock()
+	return nil
+}
+
+// beginOutbound returns the write's place in the transcript, or nil once the
+// session is done.
+func (rt *wsRuntime) beginOutbound() *wsQueued {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	if rt.done {
-		return false
+		return nil
 	}
-	rt.out = true
-	return true
+	rt.out++
+	w := &wsQueued{writing: true}
+	rt.q = append(rt.q, w)
+	return w
 }
 
-func (rt *wsRuntime) finishOutbound(evt *stream.Event, err error) {
+func (rt *wsRuntime) finishOutbound(w *wsQueued, evt *stream.Event, err error) {
 	close := false
 	var cause error
 
 	rt.mu.Lock()
-	if !rt.done {
-		rt.out = false
-		if err == nil && evt != nil {
-			rt.session.Publish(evt)
+	rt.out--
+	w.writing = false
+	if err == nil && evt != nil {
+		w.evt = evt
+		if evt.WS.Type == stream.WSClose {
+			rt.ending.Code, rt.ending.Reason = evt.WS.Code, evt.WS.Reason
 		}
-		for _, ev := range rt.q {
-			rt.session.Publish(ev)
+	}
+	if err != nil && !errors.Is(err, net.ErrClosed) {
+		rt.writeErr = err
+	}
+	i := 0
+	for ; i < len(rt.q) && !rt.q[i].writing; i++ {
+		if e := rt.q[i]; e.evt != nil {
+			rt.session.Publish(e.evt)
 		}
-		if err != nil && !errors.Is(err, net.ErrClosed) {
-			rt.writeErr = err
-		}
+	}
+	rt.q = rt.q[i:]
+	if rt.out == 0 {
+		rt.q, rt.qBytes = nil, 0
 		if rt.end {
 			close = true
-			cause = endCause(rt.endErr, err)
+			cause = rt.endWith(endCause(rt.endErr, err))
 			rt.done = true
 		}
 	}
-	rt.out = false
-	rt.q = nil
-	rt.end = false
-	rt.endErr = nil
 	rt.mu.Unlock()
 	if close {
 		rt.session.Close(cause)
@@ -162,16 +322,17 @@ func (rt *wsRuntime) finishOutbound(evt *stream.Event, err error) {
 }
 
 func (rt *wsRuntime) writeAndPublish(op string, write func() error, evt *stream.Event) error {
-	if !rt.beginOutbound() {
+	w := rt.beginOutbound()
+	if w == nil {
 		return diag.Wrap(diag.New(diag.ClassProtocol, "websocket session closed"), op)
 	}
 	if err := write(); err != nil {
 		err = diag.Wrap(err, op)
-		rt.finishOutbound(nil, err)
+		rt.finishOutbound(w, nil, err)
 		return err
 	}
 	rt.touchActivity()
-	rt.finishOutbound(evt, nil)
+	rt.finishOutbound(w, evt, nil)
 	return nil
 }
 
@@ -183,40 +344,7 @@ func (rt *wsRuntime) readLoop() {
 	for {
 		msgType, data, err := rt.conn.Read(ctx)
 		if err != nil {
-			var ce websocket.CloseError
-			if errors.As(err, &ce) {
-				// Read completes the close handshake before returning a close error.
-				// Do not let shutdown try to close the connection again.
-				rt.closeStarted.Store(true)
-				rt.publishTerminal(&stream.Event{
-					Kind:      stream.KindWebSocket,
-					Direction: stream.DirReceive,
-					Timestamp: time.Now(),
-					WS: stream.WSMetadata{
-						Type:     stream.WSClose,
-						ClosedBy: stream.WSClosedByServer,
-						Code:     stream.WSCloseCode(ce.Code),
-						Reason:   ce.Reason,
-					},
-				}, nil)
-				return
-			}
-			if ctx.Err() != nil {
-				rt.closeTerminalNow(nil, ctx.Err())
-				return
-			}
-			if errors.Is(err, websocket.ErrMessageTooBig) {
-				err = diag.Newf(
-					diag.ClassProtocol,
-					"websocket message exceeds %d bytes, raise it with @websocket max-message-bytes",
-					rt.limit,
-				)
-			} else {
-				err = diag.Wrap(err, "read websocket message")
-			}
-			// A write in flight may hold the real cause. Closing keeps it from blocking.
-			_ = rt.conn.CloseNow()
-			rt.publishTerminal(nil, err)
+			rt.finish(err)
 			return
 		}
 
@@ -226,29 +354,38 @@ func (rt *wsRuntime) readLoop() {
 		if msgType == websocket.MessageText {
 			typ = stream.WSText
 		}
-		rt.receive(typ, data)
+		var t string
+		var verdict error
+		if rt.check != nil {
+			t, verdict = rt.check(typ, data)
+		}
+		rt.receive(typ, data, verdict)
+		if rt.observe != nil {
+			rt.observe(ctx, t, verdict)
+		}
 	}
 }
 
 // Pings and pongs from the peer go into the transcript. They are not activity,
-// so a keepalive cannot hold an idle session open.
+// so a keepalive cannot hold an idle session open. After resterm's close frame
+// coder must not answer a ping, because the pong would fail the read.
 func (rt *wsRuntime) pingReceived(_ context.Context, payload []byte) bool {
-	rt.receive(stream.WSPing, payload)
-	return true
+	rt.receive(stream.WSPing, payload, nil)
+	return !rt.closeStarted.Load()
 }
 
 func (rt *wsRuntime) pongReceived(_ context.Context, payload []byte) {
-	rt.receive(stream.WSPong, payload)
+	rt.receive(stream.WSPong, payload, nil)
 }
 
-func (rt *wsRuntime) receive(typ stream.WSType, payload []byte) {
+func (rt *wsRuntime) receive(typ stream.WSType, payload []byte, err error) {
 	rt.publishReceive(&stream.Event{
 		Kind:      stream.KindWebSocket,
 		Direction: stream.DirReceive,
 		Timestamp: time.Now(),
 		Payload:   append([]byte(nil), payload...),
 		WS:        stream.WSMetadata{Type: typ},
-	})
+	}, err)
 }
 
 func (rt *wsRuntime) idleWatch(limit time.Duration) {
@@ -263,7 +400,7 @@ func (rt *wsRuntime) idleWatch(limit time.Duration) {
 		case <-rt.session.Context().Done():
 			return
 		case <-timer.C:
-			rt.closeTerminalNow(&stream.Event{
+			rt.stop(&stream.Event{
 				Kind:      stream.KindWebSocket,
 				Direction: stream.DirNA,
 				Timestamp: time.Now(),
@@ -305,9 +442,6 @@ func (rt *wsRuntime) writeLoop() {
 			if msg.result != nil {
 				msg.result <- err
 			}
-			if msg.kind == wsOutboundClose {
-				return
-			}
 		}
 	}
 }
@@ -343,21 +477,6 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		return rt.writeAndPublish("send websocket pong", func() error {
 			return wsWriteControl(rt.conn, ctx, wsOpcodePong, msg.payload)
 		}, evt)
-	case wsOutboundClose:
-		if !rt.closeStarted.CompareAndSwap(false, true) {
-			return nil
-		}
-		session.MarkClosing()
-		evt.WS.ClosedBy = stream.WSClosedByClient
-		evt.WS.Code = msg.code
-		evt.WS.Reason = msg.reason
-		if err := rt.writeAndPublish("close websocket", func() error {
-			return rt.conn.Close(websocket.StatusCode(msg.code), msg.reason)
-		}, evt); err != nil {
-			return err
-		}
-		rt.closeTerminalNow(nil, nil)
-		return nil
 	default:
 		return nil
 	}
@@ -365,6 +484,11 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 
 func (rt *wsRuntime) shutdown() {
 	rt.once.Do(func() {
+		rt.mu.Lock()
+		if rt.closeTimer != nil {
+			rt.closeTimer.Stop()
+		}
+		rt.mu.Unlock()
 		if rt.cancel != nil {
 			rt.cancel()
 		}

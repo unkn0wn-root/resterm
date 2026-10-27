@@ -25,6 +25,10 @@ const webSocketSwitchingProtocolsStatus = "101 Switching Protocols"
 
 const websocketControlMaxPayload = 125
 
+// websocketCloseTimeout is how long the peer has to answer resterm's close
+// frame once it is sent, as coder's Close allows.
+const websocketCloseTimeout = 5 * time.Second
+
 type WebSocketEvent struct {
 	Step      string        `json:"step,omitempty"`
 	Direction string        `json:"direction"`
@@ -81,13 +85,13 @@ type WebSocketHandle struct {
 	Session *stream.Session
 	Meta    StreamMeta
 	Sender  *WebSocketSender
+	graphql *graphQLWS
 }
 
 type wsOutboundKind int
 
 const (
 	wsOutboundMessage wsOutboundKind = iota
-	wsOutboundClose
 	wsOutboundPing
 	wsOutboundPong
 )
@@ -97,8 +101,6 @@ type wsOutbound struct {
 	kind    wsOutboundKind
 	typ     stream.WSType
 	payload []byte
-	code    stream.WSCloseCode
-	reason  string
 	step    string
 	result  chan error
 }
@@ -119,6 +121,15 @@ func (c *Client) StartWebSocket(
 	}
 
 	wsOpts := req.WebSocket.Options
+	var subscribe string
+	if req.Body.GraphQL != nil {
+		wsOpts.Subprotocols = []string{restfile.GraphQLWSProtocol}
+		msg, err := c.GraphQLSubscribeMessage(req.Body.GraphQL, resolver, effective)
+		if err != nil {
+			return nil, nil, err
+		}
+		subscribe = msg
+	}
 	handshakeCtx, handshakeCancel := ctxWithTimeout(ctx, wsOpts.HandshakeTimeout, nil)
 	defer handshakeCancel()
 
@@ -174,7 +185,9 @@ func (c *Client) StartWebSocket(
 	conn, resp, err := dial(handshakeCtx, httpReq.URL.String(), dialOpts)
 	if err != nil {
 		handshakeCancel()
-		if resp != nil {
+		// A 101 means the server upgraded with an invalid handshake, so there
+		// is no HTTP answer to show.
+		if resp != nil && resp.StatusCode != http.StatusSwitchingProtocols {
 			fallback, convErr := buildWebSocketFallback(resp, req, start, effectiveOpts)
 			if convErr != nil {
 				return nil, nil, convErr
@@ -185,6 +198,10 @@ func (c *Client) StartWebSocket(
 			err = k8s.AnnotateRequestError(err, start, k8sDiag)
 		}
 		return nil, nil, diag.WrapAs(diag.ClassProtocol, err, "dial websocket")
+	}
+	if subscribe != "" && conn.Subprotocol() != restfile.GraphQLWSProtocol {
+		_ = conn.CloseNow()
+		return nil, nil, diag.New(diag.ClassProtocol, "the server did not accept the graphql-transport-ws subprotocol")
 	}
 	// Swap contexts now - handshake timeout shouldn't kill the active connection.
 	// The new context lets the session run until explicitly closed or parent cancels.
@@ -214,6 +231,18 @@ func (c *Client) StartWebSocket(
 	runtime.touchActivity()
 	conn.SetReadLimit(runtime.limit)
 
+	sender := &WebSocketSender{runtime: runtime}
+	var gql *graphQLWS
+	if subscribe != "" {
+		gql = &graphQLWS{
+			sender:     sender,
+			subscribe:  subscribe,
+			subscribed: make(chan struct{}),
+			wake:       make(chan struct{}, 1),
+		}
+		runtime.check, runtime.observe, runtime.pending = gql.check, gql.receive, gql.pending
+	}
+
 	if wsOpts.IdleTimeout > 0 {
 		go runtime.idleWatch(wsOpts.IdleTimeout)
 	}
@@ -221,8 +250,7 @@ func (c *Client) StartWebSocket(
 	go runtime.readLoop()
 	go runtime.writeLoop()
 
-	sender := &WebSocketSender{runtime: runtime}
-	return &WebSocketHandle{Session: session, Meta: meta, Sender: sender}, nil, nil
+	return &WebSocketHandle{Session: session, Meta: meta, Sender: sender, graphql: gql}, nil, nil
 }
 
 func wsDialOptions(
@@ -295,23 +323,38 @@ func (c *Client) CompleteWebSocket(
 	}()
 
 	sender := handle.Sender
+	rt := sender.runtime
 
 	baseDir := handle.Meta.BaseDir
 	if baseDir == "" {
 		baseDir = opts.BaseDir
 	}
-	// A session that already ended needs no close frame.
-	if !c.runWSSteps(session, sender, req, baseDir, opts) && session.Context().Err() == nil {
+	var operation <-chan struct{}
+	if handle.graphql != nil {
+		operation = handle.graphql.start(session)
+	}
+	closed := c.runWSSteps(session, sender, req, baseDir, opts)
+	// A GraphQL operation without steps runs until it ends. Otherwise resterm
+	// closes after the last step, unless a step closed already.
+	untilDone := operation != nil && len(req.WebSocket.Steps) == 0
+	if !closed && !untilDone && session.Context().Err() == nil {
 		_ = sender.Close(session.Context(), stream.WSCloseNormal, "resterm closed", "auto-close")
 	}
 
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
+		// The session can see this cancel before the deadline that caused it.
+		rt.mu.Lock()
+		rt.cause = ctx.Err()
+		rt.mu.Unlock()
 		session.Cancel()
 		<-session.Done()
 	}
 
+	if operation != nil {
+		<-operation
+	}
 	<-eventsDone
 	// The listener's count is only final once it has drained.
 	lost += listener.Dropped()
@@ -323,6 +366,15 @@ func (c *Client) CompleteWebSocket(
 		acc.summary.Duration = stats.EndedAt.Sub(stats.StartedAt)
 	} else {
 		acc.summary.Duration = time.Since(handle.Meta.ConnectedAt)
+	}
+	// The ending comes from the runtime, so a listener that fell behind cannot change it.
+	rt.mu.Lock()
+	ending := rt.ending
+	rt.mu.Unlock()
+	if stateErr == nil || ending.ClosedBy == stream.WSClosedByError {
+		acc.summary.ClosedBy = ending.ClosedBy
+		acc.summary.CloseCode = int(ending.Code)
+		acc.summary.CloseReason = ending.Reason
 	}
 	applyWebSocketSummaryDefaults(&acc.summary, state, stateErr)
 
