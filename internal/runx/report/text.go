@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rivo/uniseg"
+
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/termtext"
 )
@@ -93,6 +95,9 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 		); err != nil {
 			return err
 		}
+		if err := writeTextTests(w, "  ", res.Tests, st); err != nil {
+			return err
+		}
 		for i, step := range res.Steps {
 			if _, err := fmt.Fprintf(
 				w,
@@ -121,6 +126,9 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 			); err != nil {
 				return err
 			}
+			if err := writeTextTests(w, "    ", step.Tests, st); err != nil {
+				return err
+			}
 		}
 	}
 	_, err := fmt.Fprintf(
@@ -142,20 +150,35 @@ func writeTextErrorDetails(
 	scriptDetail *ErrorDetail,
 	st textStyler,
 ) error {
-	if err := writeTextErrorDetail(w, indent, "Error", errDetail, st); err != nil {
+	if err := writeTextDetail(w, indent, "Error", errorDetailText(errDetail, ""), st); err != nil {
 		return err
 	}
-	return writeTextErrorDetail(w, indent, "Script Error", scriptDetail, st)
+	return writeTextDetail(w, indent, "Script Error", errorDetailText(scriptDetail, ""), st)
 }
 
-func writeTextErrorDetail(
-	w io.Writer,
-	indent string,
-	label string,
-	detail *ErrorDetail,
-	st textStyler,
-) error {
-	body := errorDetailText(detail, "")
+func writeTextTests(w io.Writer, indent string, tests []Test, st textStyler) error {
+	var lines []string
+	for _, test := range failedTests(tests) {
+		line := termtext.Row(test.Name)
+		if test.Message != "" {
+			if line != "" {
+				line += " - "
+			}
+			first, rest, ok := strings.Cut(termtext.Block(test.Message), "\n")
+			if ok {
+				rest = "\n" + str.Indent(rest, strings.Repeat(" ", uniseg.StringWidth(line)))
+			}
+			line += first + rest
+		}
+		if line == "" {
+			line = "test failed"
+		}
+		lines = append(lines, line)
+	}
+	return writeTextDetail(w, indent, "Failed Tests", strings.Join(lines, "\n"), st)
+}
+
+func writeTextDetail(w io.Writer, indent, label, body string, st textStyler) error {
 	if body == "" {
 		return nil
 	}
@@ -164,12 +187,12 @@ func writeTextErrorDetail(
 		"%s%s\n%s\n",
 		indent,
 		st.detail(label, ""),
-		str.Indent(styleErrorDetailBlock(body, st), indent+"  "),
+		str.Indent(styleDetailBlock(body, st), indent+"  "),
 	)
 	return err
 }
 
-func styleErrorDetailBlock(text string, st textStyler) string {
+func styleDetailBlock(text string, st textStyler) string {
 	if text == "" {
 		return ""
 	}
