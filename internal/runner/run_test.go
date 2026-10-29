@@ -1117,6 +1117,80 @@ func TestRunCountsFailedAsserts(t *testing.T) {
 	}
 }
 
+func TestRunNamesAFailedTestOnce(t *testing.T) {
+	tests := []struct {
+		name string
+		body []string
+		want string
+	}{
+		{
+			name: "javascript assert",
+			body: []string{"# @script test", `> tests.assert(false, "body should be binary");`},
+			want: "body should be binary",
+		},
+		{
+			name: "assert with a message",
+			body: []string{`# @assert response.statusCode == 201 => "status should be 201"`},
+			want: "response.statusCode == 201: status should be 201",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := filepath.Join(dir, "check.http")
+			lines := append([]string{
+				"### flow",
+				"# @workflow flow",
+				"# @step one using=check",
+				"",
+				"###",
+				"# @name check",
+			}, tt.body...)
+			src := strings.Join(append(lines, "GET https://example.com/check", ""), "\n")
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+			var calls int
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        countingClient(&calls),
+				Select:        Select{Request: "check"},
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if got := rep.Results[0].Failure.Message; got != tt.want {
+				t.Fatalf("failure message = %q, want %q", got, tt.want)
+			}
+			var out strings.Builder
+			if err := rep.WriteJUnit(&out); err != nil {
+				t.Fatalf("WriteJUnit: %v", err)
+			}
+			want := `<failure message="` + tt.want + `"`
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("junit = %s, want %s", out.String(), want)
+			}
+			rep, err = RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        countingClient(&calls),
+				Select:        Select{Workflow: "flow"},
+			})
+			if err != nil {
+				t.Fatalf("Run workflow: %v", err)
+			}
+			out.Reset()
+			if err := rep.WriteJUnit(&out); err != nil {
+				t.Fatalf("WriteJUnit: %v", err)
+			}
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("workflow junit = %s, want %s", out.String(), want)
+			}
+		})
+	}
+}
+
 func TestRunReportsRTSTestBlocks(t *testing.T) {
 	tests := []struct {
 		name   string

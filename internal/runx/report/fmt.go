@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
@@ -360,7 +361,7 @@ func resultFailureMessage(res Result) string {
 		return res.ScriptError
 	}
 	if failed := failedTests(res.Tests); len(failed) > 0 {
-		return testFailureMessage(failed)
+		return runfail.TestFailureMessage(failed[0].Name, failed[0].Message)
 	}
 	if msg := traceFailureText(res.Trace); msg != "" && res.Status == StatusFail {
 		return msg
@@ -387,7 +388,7 @@ func stepFailureMessage(step Step) string {
 		return "canceled"
 	}
 	if failed := failedTests(step.Tests); len(failed) > 0 {
-		return testFailureMessage(failed)
+		return runfail.TestFailureMessage(failed[0].Name, failed[0].Message)
 	}
 	if msg := traceFailureText(step.Trace); msg != "" && step.Status == StatusFail {
 		return msg
@@ -399,23 +400,6 @@ func stepFailureMessage(step Step) string {
 		return status
 	}
 	return ""
-}
-
-func testFailureMessage(tests []Test) string {
-	if len(tests) == 0 {
-		return ""
-	}
-	first := tests[0]
-	switch {
-	case first.Name != "" && first.Message != "":
-		return first.Name + ": " + first.Message
-	case first.Name != "":
-		return first.Name
-	case first.Message != "":
-		return first.Message
-	default:
-		return "test failed"
-	}
 }
 
 func skipMessage(parts ...string) string {

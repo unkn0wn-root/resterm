@@ -880,32 +880,11 @@ func (api *testAPI) globalChanges() vars.Globals {
 }
 
 func (api *testAPI) assert(condition bool, message string) {
-	name := message
-	if name == "" {
-		name = "assert"
-	}
-
-	result := scriptapi.TestResult{
-		Name:   name,
-		Passed: condition,
-	}
-
-	if !condition && message != "" {
-		result.Message = message
-	}
-	api.cases = append(api.cases, result)
+	api.cases = append(api.cases, scriptapi.TestResult{Name: cmp.Or(message, "assert"), Passed: condition})
 }
 
 func (api *testAPI) fail(message string) {
-	if message == "" {
-		message = "fail"
-	}
-
-	api.cases = append(api.cases, scriptapi.TestResult{
-		Name:    message,
-		Message: message,
-		Passed:  false,
-	})
+	api.cases = append(api.cases, scriptapi.TestResult{Name: cmp.Or(message, "fail")})
 }
 
 func (api *testAPI) namedTest(name string, callable goja.Callable) {

@@ -128,8 +128,8 @@ For RestermScript test blocks, see [`@rts`](rts/directives.md#rts). They run bef
 Objects:
 
 - `client.test(name, fn)` - registers a named test, which fails only when `fn` throws. `tests.assert` and `tests.fail` inside it add their own results, and any failed result fails the request. `resterm.test(name, fn)` is the same function.
-- `tests.assert(condition, message)` - adds a pass/fail entry.
-- `tests.fail(message)` - explicit failure.
+- `tests.assert(condition, message)` - adds a pass/fail entry named after `message`, or `assert` when there is none.
+- `tests.fail(message)` - adds a failed entry named after `message`, or `fail` when there is none.
 - `response`
   - `kind` (`"http"` or `"grpc"`), `status`, `statusCode`, `url`, `duration`
   - `contentType`, `isBinary`
