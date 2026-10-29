@@ -158,7 +158,10 @@ func writeTextErrorDetails(
 
 func writeTextTests(w io.Writer, indent string, tests []Test, st textStyler) error {
 	var lines []string
-	for _, test := range failedTests(tests) {
+	for _, test := range tests {
+		if test.Passed {
+			continue
+		}
 		line := termtext.Row(test.Name)
 		if test.Message != "" {
 			if line != "" {
