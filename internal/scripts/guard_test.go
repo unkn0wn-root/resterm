@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dop251/goja"
+
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -65,6 +67,35 @@ func TestRunTestsStopsWhenTheCallerCancels(t *testing.T) {
 	}
 }
 
+func TestRunTestsReportsTheStopCause(t *testing.T) {
+	why := errors.New("response checks timed out")
+	expired, cancel := context.WithDeadlineCause(t.Context(), time.Now(), why)
+	defer cancel()
+	test := []restfile.ScriptBlock{{Kind: "test", Lang: "js", Body: "1 + 1;"}}
+	others := []restfile.ScriptBlock{
+		{Kind: "pre-request", Lang: "js", Body: "1 + 1;"},
+		{Kind: "test", Lang: "rts", Body: "1"},
+	}
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		scripts []restfile.ScriptBlock
+		want    error
+	}{
+		{"expired", expired, test, why},
+		{"expired without a JavaScript test", expired, others, nil},
+		{"live", t.Context(), test, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, _, err := NewRunner(nil).RunTests(tt.ctx, tt.scripts, TestInput{Response: &Response{}})
+			if !errors.Is(err, tt.want) || len(results) != 0 {
+				t.Fatalf("RunTests() = %+v, %v, want no results and %v", results, err, tt.want)
+			}
+		})
+	}
+}
+
 func TestPreRequestStopsAtTheScriptTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -88,6 +119,36 @@ func TestPreRequestStopsAtTheScriptTimeout(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("RunPreRequest did not stop at its time limit")
+	}
+}
+
+func TestGuardReportsWhatStoppedTheScript(t *testing.T) {
+	why := errors.New("response checks timed out")
+	soon, cancel := context.WithTimeoutCause(t.Context(), 20*time.Millisecond, why)
+	defer cancel()
+	late, cancelLate := context.WithTimeoutCause(t.Context(), time.Minute, why)
+	defer cancelLate()
+	stopped, stop := context.WithCancelCause(t.Context())
+	stop(why)
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want string
+	}{
+		{"context deadline first", soon, "response checks timed out"},
+		{"budget first", late, "script exceeded the 20ms time limit"},
+		{"canceled context", stopped, "response checks timed out"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vm := goja.New()
+			release := guardVM(tt.ctx, vm, 20*time.Millisecond)
+			defer release()
+			_, err := vm.RunString("while (true) {}")
+			if got := stopReason(tt.ctx, err); got == nil || got.Error() != tt.want {
+				t.Fatalf("stopReason() = %v, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

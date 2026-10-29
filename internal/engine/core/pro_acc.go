@@ -277,7 +277,7 @@ func iterFailure(it IterMeta, res engine.RequestResult) (engine.ProfileFailure, 
 	case f.StatusCode >= 400:
 		f.Failure = runfail.Assertion(httpReason(f.Status, f.StatusCode), profileSource)
 	case res.ScriptErr != nil:
-		f.Failure, f.Err = runfail.Script(res.ScriptErr.Error(), profileSource), res.ScriptErr
+		f.Failure, f.Err = runfail.Script(res.ScriptErr, profileSource), res.ScriptErr
 	case test >= 0:
 		t := res.Tests[test]
 		f.Failure = runfail.Assertion(testReason(t.Name, t.Message), profileSource)

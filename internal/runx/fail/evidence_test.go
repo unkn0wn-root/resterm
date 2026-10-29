@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 func TestFromEvidenceChecksInOrder(t *testing.T) {
@@ -54,5 +56,29 @@ func TestFromEvidenceChecksInOrder(t *testing.T) {
 	e.MarkedFailed = false
 	if got, _ := FromEvidence(e); got.Code != "" {
 		t.Fatalf("evidence without failure gave %+v", got)
+	}
+}
+
+func TestFromEvidenceKeepsAScriptTimeoutATimeout(t *testing.T) {
+	limit := diag.New(diag.ClassTimeout, "script exceeded the 30s time limit")
+	tests := []struct {
+		name string
+		err  error
+		code Code
+		exit int
+	}{
+		{"timeout", diag.WrapAs(diag.ClassScript, limit, "test script 1"), CodeTimeout, ExitTimeout},
+		{"script error", diag.WrapAs(diag.ClassScript, errors.New("boom"), "test script 1"), CodeScript, ExitScript},
+		{"timeout text in a script error", diag.New(diag.ClassScript, "request timed out"), CodeScript, ExitScript},
+		{"timeout text without a class", errors.New("request timed out"), CodeScript, ExitScript},
+		{"protocol text without a class", errors.New("malformed HTTP response"), CodeScript, ExitScript},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _ := FromEvidence(Evidence{ScriptErr: tt.err})
+			if got.Code != tt.code || got.ExitCode != tt.exit || got.Source != "scriptError" {
+				t.Fatalf("failure = %+v, want %s exit %d from scriptError", got, tt.code, tt.exit)
+			}
+		})
 	}
 }

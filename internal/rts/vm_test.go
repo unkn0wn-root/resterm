@@ -1322,6 +1322,40 @@ func TestContextAbortNamesTheCause(t *testing.T) {
 	}
 }
 
+func TestAbortErrorsMatchTheirContextError(t *testing.T) {
+	expired, cancel := context.WithDeadline(t.Context(), time.Now())
+	defer cancel()
+	canceled, stop := context.WithCancel(t.Context())
+	stop()
+	m, err := ParseModule(NewFile("test", []byte("for {\n}\n")))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	tests := []struct {
+		name string
+		ctx  context.Context
+		lim  Limits
+		want error
+	}{
+		{"deadline", expired, Limits{}, context.DeadlineExceeded},
+		{"cancel", canceled, Limits{}, context.Canceled},
+		{"step limit", t.Context(), Limits{MaxSteps: 10}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Exec(NewCtx(tt.ctx, tt.lim), m, testStdlib())
+			if !IsAbort(err) {
+				t.Fatalf("Exec() = %v, want an abort", err)
+			}
+			for _, target := range []error{context.DeadlineExceeded, context.Canceled} {
+				if got := errors.Is(err, target); got != (target == tt.want) {
+					t.Errorf("errors.Is(%v, %v) = %t", err, target, got)
+				}
+			}
+		})
+	}
+}
+
 func TestConstImmutable(t *testing.T) {
 	src := `
 const x = 1

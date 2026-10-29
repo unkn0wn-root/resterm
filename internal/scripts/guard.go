@@ -13,20 +13,15 @@ import (
 const DefaultScriptTimeout = 30 * time.Second
 
 func guardVM(ctx context.Context, vm *goja.Runtime, budget time.Duration) func() {
-	timer := time.AfterFunc(budget, func() {
-		vm.Interrupt(diag.Newf(
-			diag.ClassTimeout,
-			"script exceeded the %s time limit",
-			budget,
-		))
-	})
-	stop := context.AfterFunc(ctx, func() {
-		vm.Interrupt(context.Cause(ctx))
-	})
-
+	ctx, cancel := context.WithTimeoutCause(
+		ctx,
+		budget,
+		diag.Newf(diag.ClassTimeout, "script exceeded the %s time limit", budget),
+	)
+	stop := context.AfterFunc(ctx, func() { vm.Interrupt(context.Cause(ctx)) })
 	return func() {
-		timer.Stop()
 		stop()
+		cancel()
 	}
 }
 

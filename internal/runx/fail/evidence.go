@@ -36,7 +36,7 @@ func FromEvidence(e Evidence) (Failure, Origin) {
 	case e.Err != nil:
 		return FromErrorSource(e.Err, "error"), OriginSelf
 	case e.ScriptErr != nil:
-		return Script(e.ScriptErr.Error(), "scriptError"), OriginSelf
+		return Script(e.ScriptErr, "scriptError"), OriginSelf
 	case e.StreamErr != nil:
 		return FromErrorSource(e.StreamErr, "stream"), OriginSelf
 	}

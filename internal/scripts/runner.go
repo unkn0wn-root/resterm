@@ -108,11 +108,11 @@ func (r *Runner) RunTests(
 	var changes vars.Globals
 
 	for idx, block := range scripts {
-		if err := ctx.Err(); err != nil {
-			return aggregated, changes, err
-		}
 		if !block.Is(restfile.ScriptKindTest, restfile.ScriptLangJS) {
 			continue
+		}
+		if ctx.Err() != nil {
+			return aggregated, changes, context.Cause(ctx)
 		}
 
 		src, err := r.loadScript(block, input.BaseDir)

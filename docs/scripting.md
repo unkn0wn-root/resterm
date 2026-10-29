@@ -1,6 +1,6 @@
 # JavaScript hooks
 
-Use JavaScript hooks to prepare a request or test its response when you already have the script in JavaScript or need something [RestermScript](rts/README.md) cannot do, such as saving a response body to a file. Scripts use modern JavaScript, such as `let`, arrow functions, classes, and template literals, but not `import` or timers such as `setTimeout`. Each block stops after 30 seconds or when the run is canceled. Scripts are not restricted to the workspace. See [Security](security.md).
+Use JavaScript hooks to prepare a request or test its response when you already have the script in JavaScript or need something [RestermScript](rts/README.md) cannot do, such as saving a response body to a file. Scripts use modern JavaScript, such as `let`, arrow functions, classes, and template literals, but not `import` or timers such as `setTimeout`. Each block stops after 30 seconds or when the run is canceled, and a test block also stops when the [response checks](rts/directives.md#rts) reach the request timeout. Scripts are not restricted to the workspace. See [Security](security.md).
 
 ## Script blocks (`@script`)
 

@@ -1191,6 +1191,51 @@ func TestRunNamesAFailedTestOnce(t *testing.T) {
 	}
 }
 
+func TestRunExitsWithTimeoutWhenChecksTimeOut(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		exit int
+	}{
+		{"endless javascript test", "> while (true) {}", runfail.ExitTimeout},
+		{"javascript test throws", `> throw new Error("boom");`, runfail.ExitScript},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := filepath.Join(dir, "check.http")
+			src := strings.Join([]string{"# @name check", "# @timeout 50ms", "# @script test", tt.body,
+				"GET https://example.com/check", ""}, "\n")
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+			var calls int
+			var rep *Report
+			var err error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				rep, err = RunContext(context.Background(), Options{
+					FilePath:      file,
+					WorkspaceRoot: dir,
+					Client:        countingClient(&calls),
+				})
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the JavaScript test ran past the response check timeout")
+			}
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if got := ExitCode(rep, runfail.ExitDetailed); got != tt.exit {
+				t.Fatalf("exit code = %d, want %d", got, tt.exit)
+			}
+		})
+	}
+}
+
 func TestRunReportsRTSTestBlocks(t *testing.T) {
 	tests := []struct {
 		name   string

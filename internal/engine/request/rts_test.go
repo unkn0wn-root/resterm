@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
@@ -57,13 +58,13 @@ func TestResponseChecksNameTheirTimeoutOnce(t *testing.T) {
 			"test block",
 			"# @rts test first\n> let n = mock.count({path: \"/x\"})\n> t.error(\"after\")\n",
 			"env_ref.http:5:3",
-			[]row{{"first", false}, {"js", true}},
+			[]row{{"first", false}},
 		},
 		{
 			"assert",
 			"# @assert mock.count({path: \"/x\"}) + 1 == 1\n",
 			"env_ref.http:3:38",
-			[]row{{"js", true}},
+			nil,
 		},
 	}
 	for _, tt := range tests {
@@ -86,6 +87,123 @@ func TestResponseChecksNameTheirTimeoutOnce(t *testing.T) {
 			}
 			if got := diag.ClassOf(res.ScriptErr); got != diag.ClassTimeout {
 				t.Fatalf("class = %s, want %s", got, diag.ClassTimeout)
+			}
+		})
+	}
+}
+
+func TestJSTestsShareTheCheckTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			"endless",
+			"while (true) {}",
+			"test script 1: response checks timed out after 50ms: context deadline exceeded",
+		},
+		{"quick", `tests.assert(true, "ok");`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, req := parseDoc(t, "### one\n# @timeout 50ms\n# @script test\n> "+tt.body+"\n"+
+				"GET http://example.test\n")
+			eng, _ := newStubEngine(t)
+			var res engcfg.RequestResult
+			var err error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				res, err = eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the JS test ran past the response check timeout")
+			}
+			if err != nil || res.Err != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+			}
+			if got := errText(res.ScriptErr); got != tt.want {
+				t.Fatalf("script error = %q, want %q", got, tt.want)
+			}
+			if tt.want == "" {
+				return
+			}
+			if !errors.Is(res.ScriptErr, context.DeadlineExceeded) {
+				t.Fatalf("script error = %v, want it to match context.DeadlineExceeded", res.ScriptErr)
+			}
+			if got := diag.ReportOf(res.ScriptErr).Items[0].Class; got != diag.ClassTimeout {
+				t.Fatalf("class = %s, want %s", got, diag.ClassTimeout)
+			}
+		})
+	}
+}
+
+type downInspector struct{ wait bool }
+
+func (i downInspector) Count(ctx context.Context, _ mock.RequestPattern) (uint64, error) {
+	if i.wait {
+		<-ctx.Done()
+	}
+	return 0, errors.New("inspector down")
+}
+
+func TestChecksReportTheDeadlineAfterAScriptError(t *testing.T) {
+	const (
+		block  = "# @rts test first\n> let n = " + mockCount + "\n# @script test\n> tests.assert(true, \"js\");\n"
+		assert = "# @assert " + mockCount + " == 0\n"
+		pre    = "# @script pre-request\n> var a = 1;\n"
+		down   = "mock.count(pattern): inspector down"
+	)
+	tests := []struct {
+		name     string
+		checks   string
+		wait     bool
+		rows     []row
+		want     string
+		deadline bool
+	}{
+		{
+			name:     "deadline after the error",
+			checks:   block,
+			wait:     true,
+			rows:     []row{{"first", false}},
+			want:     "env_ref.http:4:21: " + down + "\nresponse checks timed out after 50ms: context deadline exceeded",
+			deadline: true,
+		},
+		{
+			name:   "error before the deadline",
+			checks: block,
+			rows:   []row{{"first", false}, {"js", true}},
+			want:   "env_ref.http:4:21: " + down,
+		},
+		{name: "assert error after the deadline", checks: assert, wait: true, want: "env_ref.http:3:21: " + down},
+		{
+			name:   "assert error after the deadline next to a pre-request block",
+			checks: assert + pre,
+			wait:   true,
+			want:   "env_ref.http:3:21: " + down,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, req := parseDoc(t, "### one\n# @timeout 50ms\n"+tt.checks+"GET http://example.test\n")
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client(), MockInspector: downInspector{tt.wait}}, nil)
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+			if err != nil || res.Err != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
+			}
+			if got := rows(res); !slices.Equal(got, tt.rows) {
+				t.Fatalf("tests = %+v, want %+v", got, tt.rows)
+			}
+			if got := errText(res.ScriptErr); got != tt.want {
+				t.Fatalf("script error = %q, want %q", got, tt.want)
+			}
+			if got := errors.Is(res.ScriptErr, context.DeadlineExceeded); got != tt.deadline {
+				t.Fatalf("errors.Is(script error, context.DeadlineExceeded) = %t, want %t", got, tt.deadline)
 			}
 		})
 	}
