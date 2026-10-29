@@ -168,6 +168,12 @@ Inside the TUI, `:help <topic>` opens the built-in manual and `:docs <topic>` op
 
 To run request files from your own Go code, see the [`headless`](./headless) package.
 
+## Contributing
+
+To suggest a feature, start a discussion in the [Ideas](https://github.com/unkn0wn-root/resterm/discussions/categories/ideas) category. To report a bug, [open an issue](https://github.com/unkn0wn-root/resterm/issues). To contribute code, open a [pull request](https://github.com/unkn0wn-root/resterm/pulls).
+
+Reporting bugs and suggesting features helps just as much as code.
+
 ## Sponsor
 
 Resterm is and always will be free and open source. If you like my work, you can [sponsor it on GitHub](https://github.com/sponsors/unkn0wn-root).
