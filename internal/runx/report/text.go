@@ -98,11 +98,14 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 		if err := writeTextTests(w, "  ", res.Tests, st); err != nil {
 			return err
 		}
+		// Step text starts after "  ", the padded index and a space.
+		wid := len(strconv.Itoa(len(res.Steps)))
+		ind := strings.Repeat(" ", wid+4)
 		for i, step := range res.Steps {
 			if _, err := fmt.Fprintf(
 				w,
 				"  %s %s %s\n",
-				st.index(i+1),
+				st.index(i+1, wid),
 				st.stepLabel(stepLabel(step)),
 				st.stepLine(termtext.Row(stepLine(step))),
 			); err != nil {
@@ -110,7 +113,7 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 			}
 			if err := writeTextTargetDetails(
 				w,
-				"    ",
+				ind,
 				step.Target,
 				step.EffectiveTarget,
 				st,
@@ -119,14 +122,14 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 			}
 			if err := writeTextErrorDetails(
 				w,
-				"    ",
+				ind,
 				step.ErrorDetail,
 				step.ScriptErrorDetail,
 				st,
 			); err != nil {
 				return err
 			}
-			if err := writeTextTests(w, "    ", step.Tests, st); err != nil {
+			if err := writeTextTests(w, ind, step.Tests, st); err != nil {
 				return err
 			}
 		}
@@ -283,8 +286,8 @@ func (s textStyler) detailValue(label, value string, bold bool) string {
 	return key + " " + s.paint(value, s.pal.Value, bold)
 }
 
-func (s textStyler) index(n int) string {
-	return s.paint(strconv.Itoa(n)+".", s.pal.Heading, false)
+func (s textStyler) index(n, wid int) string {
+	return s.paint(fmt.Sprintf("%*d.", wid, n), s.pal.Heading, false)
 }
 
 func (s textStyler) totalCount(n int) string {
