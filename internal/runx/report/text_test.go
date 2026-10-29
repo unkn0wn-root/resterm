@@ -1,6 +1,7 @@
 package runfmt
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -438,5 +439,318 @@ func TestTextRowsEscapeControlCharacters(t *testing.T) {
 	}
 	if strings.Contains(junit.String(), `\u001b`) {
 		t.Fatalf("junit output escapes for the terminal: %q", junit.String())
+	}
+}
+
+func TestWriteTextListsFailedTests(t *testing.T) {
+	orders := "api.http:10: order 1: total -5 is negative\napi.http:10: order 3: no items"
+	tests := []struct {
+		name string
+		rep  *Report
+		want string
+	}{
+		{
+			name: "results",
+			rep: &Report{
+				FilePath: "users.http",
+				Results: []Result{
+					{Kind: "request", Name: "one", Method: "GET", Status: StatusPass, Tests: []Test{
+						{Name: "status is 200", Passed: true},
+					}},
+					{Kind: "request", Name: "two", Method: "GET", Status: StatusFail, Tests: []Test{
+						{Name: "status is 200", Passed: true},
+						{Name: "response.statusCode == 200"},
+						{Name: "user has an id", Message: "two.http:9: no id"},
+					}},
+					{
+						Kind:              "request",
+						Name:              "three",
+						Method:            "GET",
+						Status:            StatusFail,
+						ScriptError:       "three.http:4: boom",
+						ScriptErrorDetail: &ErrorDetail{Rendered: "error[script]: boom\n --> three.http:4"},
+						Tests:             []Test{{Name: "body has items"}},
+					},
+				},
+				Total:  3,
+				Passed: 1,
+				Failed: 2,
+			},
+			want: "Running 3 request(s) from users.http with env <default>\n" +
+				"PASS GET one\n" +
+				"FAIL GET two [2 test(s) failed]\n" +
+				"  Failed Tests:\n" +
+				"    response.statusCode == 200\n" +
+				"    user has an id - two.http:9: no id\n" +
+				"FAIL GET three [three.http:4: boom]\n" +
+				"  Script Error:\n" +
+				"    error[script]: boom\n" +
+				"     --> three.http:4\n" +
+				"  Failed Tests:\n" +
+				"    body has items\n" +
+				"Summary: total=3 passed=1 failed=2 skipped=0\n",
+		},
+		{
+			name: "for-each",
+			rep: &Report{
+				FilePath: "users.http",
+				EnvName:  "dev",
+				Results: []Result{{
+					Kind:   "for-each",
+					Name:   "POST users",
+					Method: "FOR-EACH",
+					Status: StatusFail,
+					Steps: []Step{
+						{
+							Name:            "POST users (1/2)",
+							Target:          "users",
+							EffectiveTarget: "http://127.0.0.1:18765/v1/users",
+							Status:          StatusPass,
+							HTTP:            &HTTP{Status: "201 Created", StatusCode: 201},
+							Tests:           []Test{{Name: "user has an id", Passed: true}},
+						},
+						{
+							Name:            "POST users (2/2)",
+							Target:          "users",
+							EffectiveTarget: "http://127.0.0.1:18765/v1/users",
+							Status:          StatusFail,
+							HTTP:            &HTTP{Status: "201 Created", StatusCode: 201},
+							Tests:           []Test{{Name: "user has an id", Message: "users.http:10: no id for tom"}},
+						},
+					},
+				}},
+				Total:  1,
+				Failed: 1,
+			},
+			want: "Running 1 target(s) from users.http with env dev\n" +
+				"FAIL FOR-EACH POST users [1 passed, 1 failed, 0 skipped]\n" +
+				"  1. PASS POST users (1/2) [201 Created]\n" +
+				"    Source Target: users\n" +
+				"    Effective Target: http://127.0.0.1:18765/v1/users\n" +
+				"  2. FAIL POST users (2/2) [1 test(s) failed]\n" +
+				"    Source Target: users\n" +
+				"    Effective Target: http://127.0.0.1:18765/v1/users\n" +
+				"    Failed Tests:\n" +
+				"      user has an id - users.http:10: no id for tom\n" +
+				"Summary: total=1 passed=0 failed=1 skipped=0\n",
+		},
+		{
+			name: "workflow",
+			rep: &Report{
+				FilePath: "api.http",
+				Results: []Result{{
+					Kind:   "workflow",
+					Name:   "orders",
+					Method: "WORKFLOW",
+					Status: StatusFail,
+					Steps: []Step{{
+						Name:   "check",
+						Status: StatusFail,
+						Tests:  []Test{{Name: "orders are valid", Message: orders}},
+					}},
+				}},
+				Total:  1,
+				Failed: 1,
+			},
+			want: "Running 1 target(s) from api.http with env <default>\n" +
+				"FAIL WORKFLOW orders [0 passed, 1 failed, 0 skipped]\n" +
+				"  1. FAIL check [1 test(s) failed]\n" +
+				"    Failed Tests:\n" +
+				"      orders are valid - api.http:10: order 1: total -5 is negative\n" +
+				"                         api.http:10: order 3: no items\n" +
+				"Summary: total=1 passed=0 failed=1 skipped=0\n",
+		},
+		{
+			name: "compare",
+			rep: &Report{
+				FilePath: "users.http",
+				Results: []Result{{
+					Kind:    "compare",
+					Name:    "users",
+					Method:  "COMPARE",
+					Status:  StatusFail,
+					Compare: &Compare{Baseline: "dev"},
+					Steps: []Step{
+						{
+							Name:   "dev",
+							Status: StatusPass,
+							HTTP:   &HTTP{Status: "200 OK", StatusCode: 200},
+							Tests:  []Test{{Name: "status is 200", Passed: true}},
+						},
+						{
+							Name:   "prod",
+							Status: StatusFail,
+							HTTP:   &HTTP{Status: "500 Internal Server Error", StatusCode: 500},
+							Tests:  []Test{{Name: "status is 200", Message: "users.http:5: got 500"}},
+						},
+					},
+				}},
+				Total:  1,
+				Failed: 1,
+			},
+			want: "Running 1 target(s) from users.http with env <default>\n" +
+				"FAIL COMPARE users [baseline: dev, 1 passed, 1 failed, 0 skipped]\n" +
+				"  1. PASS dev [200 OK]\n" +
+				"  2. FAIL prod [1 test(s) failed]\n" +
+				"    Failed Tests:\n" +
+				"      status is 200 - users.http:5: got 500\n" +
+				"Summary: total=1 passed=0 failed=1 skipped=0\n",
+		},
+		{
+			name: "escape",
+			rep: &Report{
+				FilePath: "esc.http",
+				Results: []Result{{
+					Kind:   "request",
+					Name:   "esc",
+					Method: "GET",
+					Status: StatusFail,
+					Tests:  []Test{{Name: "café\x1b[2J", Message: "x\r\ny\a"}},
+				}},
+				Total:  1,
+				Failed: 1,
+			},
+			want: "Running 1 request(s) from esc.http with env <default>\n" +
+				"FAIL GET esc [1 test(s) failed]\n" +
+				"  Failed Tests:\n" +
+				`    café\u001b[2J - x` + "\n" +
+				`                    y\u0007` + "\n" +
+				"Summary: total=1 passed=0 failed=1 skipped=0\n",
+		},
+		{
+			name: "blank line",
+			rep: &Report{
+				FilePath: "api.http",
+				Results: []Result{{
+					Kind:   "request",
+					Name:   "blank",
+					Method: "GET",
+					Status: StatusFail,
+					Tests:  []Test{{Name: "t", Message: "a\n\nb"}},
+				}},
+				Total:  1,
+				Failed: 1,
+			},
+			want: "Running 1 request(s) from api.http with env <default>\n" +
+				"FAIL GET blank [1 test(s) failed]\n" +
+				"  Failed Tests:\n" +
+				"    t - a\n" +
+				"\n" +
+				"        b\n" +
+				"Summary: total=1 passed=0 failed=1 skipped=0\n",
+		},
+		{
+			name: "wide",
+			rep: &Report{
+				FilePath: "api.http",
+				Results: []Result{{
+					Kind:   "request",
+					Name:   "wide",
+					Method: "GET",
+					Status: StatusFail,
+					Tests:  []Test{{Name: "注文 🚀", Message: "a\nb"}},
+				}},
+				Total:  1,
+				Failed: 1,
+			},
+			want: "Running 1 request(s) from api.http with env <default>\n" +
+				"FAIL GET wide [1 test(s) failed]\n" +
+				"  Failed Tests:\n" +
+				"    注文 🚀 - a\n" +
+				"              b\n" +
+				"Summary: total=1 passed=0 failed=1 skipped=0\n",
+		},
+		{
+			name: "no name",
+			rep: &Report{
+				FilePath: "api.http",
+				Results: []Result{{
+					Kind:   "request",
+					Name:   "anon",
+					Method: "GET",
+					Status: StatusFail,
+					Tests:  []Test{{Message: "a\nb"}, {}},
+				}},
+				Total:  1,
+				Failed: 1,
+			},
+			want: "Running 1 request(s) from api.http with env <default>\n" +
+				"FAIL GET anon [2 test(s) failed]\n" +
+				"  Failed Tests:\n" +
+				"    a\n" +
+				"    b\n" +
+				"    test failed\n" +
+				"Summary: total=1 passed=0 failed=1 skipped=0\n",
+		},
+		{
+			name: "passing",
+			rep: &Report{
+				FilePath: "api.http",
+				Results: []Result{{
+					Kind:   "workflow",
+					Name:   "orders",
+					Method: "WORKFLOW",
+					Status: StatusPass,
+					Steps: []Step{{
+						Name:   "check",
+						Status: StatusPass,
+						HTTP:   &HTTP{Status: "200 OK", StatusCode: 200},
+						Tests:  []Test{{Name: "orders are valid", Passed: true}},
+					}},
+				}},
+				Total:  1,
+				Passed: 1,
+			},
+			want: "Running 1 target(s) from api.http with env <default>\n" +
+				"PASS WORKFLOW orders [1 passed, 0 failed, 0 skipped]\n" +
+				"  1. PASS check [200 OK]\n" +
+				"Summary: total=1 passed=1 failed=0 skipped=0\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out strings.Builder
+			if err := WriteText(&out, tt.rep); err != nil {
+				t.Fatalf("WriteText(...): %v", err)
+			}
+			if got := out.String(); got != tt.want {
+				t.Fatalf("output =\n%s\nwant\n%s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWriteTextStyledFailedTests(t *testing.T) {
+	rep := &Report{
+		FilePath: "api.http",
+		Results: []Result{{
+			Kind:   "workflow",
+			Name:   "orders",
+			Method: "WORKFLOW",
+			Status: StatusFail,
+			Steps: []Step{{
+				Name:   "check",
+				Status: StatusFail,
+				Tests: []Test{{
+					Name:    "orders are valid",
+					Message: "api.http:10: order 1: total -5 is negative\napi.http:10: order 3: no items",
+				}},
+			}},
+		}},
+		Total:  1,
+		Failed: 1,
+	}
+	paint := TextPaintFunc(func(s, fg string, bold bool) string {
+		return fmt.Sprintf("<%s %t>%s</>", fg, bold, s)
+	})
+	var out strings.Builder
+	if err := WriteTextStyled(&out, rep, paint); err != nil {
+		t.Fatalf("WriteTextStyled(...): %v", err)
+	}
+	want := "    <#A6A1BB false>Failed Tests:</>\n" +
+		"      <#E8E9F0 false>orders are valid - api.http:10: order 1: total -5 is negative</>\n" +
+		"      <#E8E9F0 false>                   api.http:10: order 3: no items</>\n"
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("output =\n%s\nwant it to contain\n%s", out.String(), want)
 	}
 }

@@ -54,7 +54,7 @@ Environment selection rules:
 | Format | Behavior |
 | --- | --- |
 | `auto` | For exactly one request result, show a request view similar to the TUI. Otherwise, use the text report. |
-| `text` | Stable human-readable summary for requests, workflows, compare runs, and profiles. |
+| `text` | Stable human-readable summary for requests, workflows, compare runs, and profiles, with the name and message of each failed test. |
 | `json` | Machine-readable JSON report. |
 | `junit` | JUnit XML report for CI systems. |
 | `pretty` | Force the single-request Pretty view. Requires exactly one request result. |

@@ -20,6 +20,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/runner"
+	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
 
@@ -1005,6 +1006,109 @@ func TestRunCmdAutoFallsBackToTextForMultiResult(t *testing.T) {
 	got := out.String()
 	if !strings.Contains(got, "Running 2 request(s)") {
 		t.Fatalf("expected text report fallback, got %q", got)
+	}
+}
+
+func TestRunCmdTextReportListsFailedTests(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "users.http")
+	src := strings.Join([]string{
+		"# @name users",
+		"POST https://example.com/users",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	created := scriptapi.TestResult{Name: "status is 201", Passed: true}
+	noID := scriptapi.TestResult{Name: "user has an id", Message: "users.http:10: no id for tom"}
+	ann := runner.Result{
+		Kind:   runner.ResultKindRequest,
+		Name:   "ann",
+		Method: "POST",
+		Tests:  []scriptapi.TestResult{created},
+		Passed: true,
+	}
+	tom := runner.Result{
+		Kind:   runner.ResultKindRequest,
+		Name:   "tom",
+		Method: "POST",
+		Tests:  []scriptapi.TestResult{created, noID},
+	}
+	tests := []struct {
+		name string
+		args []string
+		rep  *runner.Report
+		want string
+	}{
+		{
+			name: "all",
+			args: []string{"--all", file},
+			rep:  &runner.Report{Results: []runner.Result{ann, tom}, Total: 2, Passed: 1, Failed: 1},
+			want: "PASS POST ann\n" +
+				"FAIL POST tom [1 test(s) failed]\n" +
+				"  Failed Tests:\n" +
+				"    user has an id - users.http:10: no id for tom\n" +
+				"Summary:",
+		},
+		{
+			name: "text",
+			args: []string{"-f", "text", file},
+			rep:  &runner.Report{Results: []runner.Result{tom}, Total: 1, Failed: 1},
+			want: "FAIL POST tom [1 test(s) failed]\n" +
+				"  Failed Tests:\n" +
+				"    user has an id - users.http:10: no id for tom\n" +
+				"Summary:",
+		},
+		{
+			name: "auto for-each",
+			args: []string{file},
+			rep: &runner.Report{
+				Results: []runner.Result{{
+					Kind:   runner.ResultKindForEach,
+					Name:   "POST users",
+					Method: "FOR-EACH",
+					Steps: []runner.StepResult{
+						{Name: "POST users (1/2)", Tests: []scriptapi.TestResult{created}, Passed: true},
+						{Name: "POST users (2/2)", Tests: []scriptapi.TestResult{created, noID}},
+					},
+				}},
+				Total:  1,
+				Failed: 1,
+			},
+			want: "  1. PASS POST users (1/2)\n" +
+				"  2. FAIL POST users (2/2) [1 test(s) failed]\n" +
+				"    Failed Tests:\n" +
+				"      user has an id - users.http:10: no id for tom\n" +
+				"Summary:",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			cmd := newRunCmd()
+			cmd.out = &out
+			cmd.stdoutTTY = false
+			cmd.newClient = stubRunClient
+			cmd.runFn = func(context.Context, runner.Options) (*runner.Report, error) {
+				return tt.rep, nil
+			}
+			if err := cmd.parse(tt.args); err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			err := cmd.run()
+			if code := cli.ExitCode(err); code != 1 {
+				t.Fatalf("expected exit code 1, got %d (err=%v)", code, err)
+			}
+			got := out.String()
+			if !strings.Contains(got, tt.want) {
+				t.Fatalf("output =\n%s\nwant it to contain\n%s", got, tt.want)
+			}
+			if strings.Contains(got, created.Name) {
+				t.Fatalf("output lists the passed test %q:\n%s", created.Name, got)
+			}
+		})
 	}
 }
 

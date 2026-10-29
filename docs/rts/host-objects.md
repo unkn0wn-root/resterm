@@ -130,6 +130,8 @@ Each block reports one result. It passes if no failures or runtime errors occur.
                           api.http:10: order 3: no items (2ms)
 ```
 
+The text report lists them under Failed Tests, without `[FAIL]` or the duration.
+
 Pass `t` to module functions that need to report failures:
 
 ```rts
