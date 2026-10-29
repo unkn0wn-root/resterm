@@ -36,13 +36,20 @@ func Extension(name string, value Value) Extensions { return Extensions{oneBind(
 // so a loop variable named json refers to the item and not to the namespace.
 // Being a distinct type from Extensions is what keeps a caller from handing
 // lexical values to the layer that refuses to shadow.
-type Locals struct{ binds }
+type Locals struct {
+	binds
+	unset []string
+}
 
 // NewLocals binds a copy of values as lexical locals.
-func NewLocals(values map[string]Value) Locals { return Locals{newBinds(values)} }
+func NewLocals(values map[string]Value) Locals { return Locals{binds: newBinds(values)} }
 
 // Local binds a single lexical local.
-func Local(name string, value Value) Locals { return Locals{oneBind(name, value)} }
+func Local(name string, value Value) Locals { return Locals{binds: oneBind(name, value)} }
+
+// Unset binds name as a local with no value yet, such as a loop variable before
+// its loop starts. Reading it fails as an undefined name.
+func Unset(name string) Locals { return Locals{unset: []string{name}} }
 
 // binds is the storage shared by every binding layer. A constructor copies the
 // caller's values and nothing writes to the layer afterwards.
@@ -95,6 +102,9 @@ func overlayLocals(cx *Ctx, pos Pos, env *Env, loc Locals) error {
 			return Errf(cx, pos, "name is a reserved word: %s", name)
 		}
 		env.DefConst(name, v)
+	}
+	for _, name := range loc.unset {
+		env.DefUnset(name)
 	}
 	return nil
 }

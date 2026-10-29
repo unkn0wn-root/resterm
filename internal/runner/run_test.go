@@ -1646,6 +1646,7 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		lines   []string
+		mod     []string
 		sent    string
 		skipped int
 		help    string
@@ -1698,8 +1699,6 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 			wrongTag: "@when",
 		},
 		{
-			// list is a standard library namespace, so the condition reads the
-			// namespace and skips the step instead of naming the unset item.
 			name: "request loop variable named after a namespace",
 			lines: []string{
 				"# @workflow demo",
@@ -1711,7 +1710,41 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 				`# @for-each ["a","b","c"] as list`,
 				"GET https://example.com/items/{{vars.request.list}}",
 			},
-			skipped: 1,
+			help: `help: @when is checked before the @for-each of request "each" starts, ` +
+				`so "list" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@skip-if",
+		},
+		{
+			name: "request loop variable named json",
+			lines: []string{
+				"# @workflow demo",
+				"# @when json.disabled",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @for-each ["a","b","c"] as json`,
+				"GET https://example.com/items/{{vars.request.json}}",
+			},
+			help: `help: @when is checked before the @for-each of request "each" starts, ` +
+				`so "json" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@skip-if",
+		},
+		{
+			name: "request loop variable read whole",
+			lines: []string{
+				"# @workflow demo",
+				"# @skip-if list",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @for-each ["a","b","c"] as list`,
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			help: `help: @skip-if is checked before the @for-each of request "each" starts, ` +
+				`so "list" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@when",
 		},
 		{
 			name: "step loop condition fails",
@@ -1739,7 +1772,85 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 				"# @for-each [1, 2] as len",
 				"GET https://example.com/items/{{vars.request.len}}",
 			},
+			help: `help: @when is checked before the @for-each of request "each" starts, ` +
+				`so "len" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@skip-if",
+		},
+		{
+			name: "request loop variable with another name",
+			lines: []string{
+				"# @workflow demo",
+				"# @when len([1]) > 0",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"# @for-each [1, 2] as n",
+				"GET https://example.com/items/{{vars.request.n}}",
+			},
 			sent: "/items/1,/items/2",
+		},
+		{
+			name: "request loop variable shadows a builtin that rts still reaches",
+			lines: []string{
+				"# @workflow demo",
+				"# @when len(rts.list.concat([1], [2])) == 2",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"# @for-each [1, 2] as list",
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			sent: "/items/1,/items/2",
+		},
+		{
+			name: "request loop variable shadows a module alias",
+			lines: []string{
+				"# @workflow demo",
+				"# @when n.flag",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"# @use ./m.rts as n",
+				"# @for-each [1, 2] as n",
+				"GET https://example.com/items/{{vars.request.n}}",
+			},
+			mod: []string{"module m", "", "export let flag = true"},
+			help: `help: @when is checked before the @for-each of request "each" starts, ` +
+				`so "n" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@skip-if",
+		},
+		{
+			name: "step loop variable named after a namespace",
+			lines: []string{
+				"# @workflow demo",
+				`# @when list != "b"`,
+				`# @for-each ["a","b","c"] as list`,
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			sent:    "/items/a,/items/c",
+			skipped: 1,
+		},
+		{
+			name: "request loop and condition named after a namespace",
+			lines: []string{
+				"# @workflow demo",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @when list != "b"`,
+				`# @for-each ["a","b","c"] as list`,
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			sent:    "/items/a,/items/c",
+			skipped: 1,
 		},
 		{
 			name: "request loop checked once",
@@ -1766,6 +1877,12 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 			file := filepath.Join(dir, "wf.http")
 			if err := os.WriteFile(file, []byte(strings.Join(tt.lines, "\n")+"\n"), 0o644); err != nil {
 				t.Fatalf("write file: %v", err)
+			}
+			if tt.mod != nil {
+				mod := strings.Join(tt.mod, "\n") + "\n"
+				if err := os.WriteFile(filepath.Join(dir, "m.rts"), []byte(mod), 0o644); err != nil {
+					t.Fatalf("write module: %v", err)
+				}
 			}
 
 			var seen []string

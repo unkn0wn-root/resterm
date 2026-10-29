@@ -122,6 +122,7 @@ type Env struct {
 type Binding struct {
 	V     Value
 	Const bool
+	Unset bool
 }
 
 func NewEnv(up *Env) *Env {
@@ -138,6 +139,12 @@ func (e *Env) DefConst(name string, v Value) {
 
 func (e *Env) DefWith(name string, v Value, isConst bool) {
 	e.Vars[name] = Binding{V: v, Const: isConst}
+}
+
+// DefUnset declares name with no value yet. Get reports it as undefined and stops
+// there, so the name does not reach an outer scope.
+func (e *Env) DefUnset(name string) {
+	e.Vars[name] = Binding{Const: true, Unset: true}
 }
 
 func (e *Env) HasLocal(name string) bool {
@@ -163,8 +170,8 @@ func (e *Env) Set(name string, v Value) (bool, bool) {
 
 func (e *Env) Get(name string) (Value, bool) {
 	for cur := e; cur != nil; cur = cur.Up {
-		if v, ok := cur.Vars[name]; ok {
-			return v.V, true
+		if b, ok := cur.Vars[name]; ok {
+			return b.V, !b.Unset
 		}
 	}
 	return Null(), false
