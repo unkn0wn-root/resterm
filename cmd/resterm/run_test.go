@@ -1079,8 +1079,8 @@ func TestRunCmdTextReportListsFailedTests(t *testing.T) {
 			},
 			want: "  1. PASS POST users (1/2)\n" +
 				"  2. FAIL POST users (2/2) [1 test(s) failed]\n" +
-				"    Failed Tests:\n" +
-				"      user has an id - users.http:10: no id for tom\n" +
+				"     Failed Tests:\n" +
+				"       user has an id - users.http:10: no id for tom\n" +
 				"Summary:",
 		},
 	}

@@ -444,6 +444,25 @@ func TestTextRowsEscapeControlCharacters(t *testing.T) {
 
 func TestWriteTextListsFailedTests(t *testing.T) {
 	orders := "api.http:10: order 1: total -5 is negative\napi.http:10: order 3: no items"
+	ten := make([]Step, 10)
+	for i := range ten {
+		ten[i] = Step{Name: fmt.Sprintf("step %d", i+1), Status: StatusPass}
+	}
+	ten[1] = Step{
+		Name:              "step 2",
+		Target:            "users",
+		EffectiveTarget:   "http://127.0.0.1:18765/v1/users",
+		Status:            StatusFail,
+		ErrorDetail:       &ErrorDetail{Rendered: "boom"},
+		ScriptErrorDetail: &ErrorDetail{Rendered: "a\n\nb"},
+		Tests:             []Test{{Name: "orders are valid", Message: orders}},
+	}
+	ten[9] = Step{
+		Name:        "step 10",
+		Status:      StatusFail,
+		ErrorDetail: &ErrorDetail{Rendered: "boom"},
+		Tests:       []Test{{Name: "status is 200"}},
+	}
 	tests := []struct {
 		name string
 		rep  *Report
@@ -525,13 +544,13 @@ func TestWriteTextListsFailedTests(t *testing.T) {
 			want: "Running 1 target(s) from users.http with env dev\n" +
 				"FAIL FOR-EACH POST users [1 passed, 1 failed, 0 skipped]\n" +
 				"  1. PASS POST users (1/2) [201 Created]\n" +
-				"    Source Target: users\n" +
-				"    Effective Target: http://127.0.0.1:18765/v1/users\n" +
+				"     Source Target: users\n" +
+				"     Effective Target: http://127.0.0.1:18765/v1/users\n" +
 				"  2. FAIL POST users (2/2) [1 test(s) failed]\n" +
-				"    Source Target: users\n" +
-				"    Effective Target: http://127.0.0.1:18765/v1/users\n" +
-				"    Failed Tests:\n" +
-				"      user has an id - users.http:10: no id for tom\n" +
+				"     Source Target: users\n" +
+				"     Effective Target: http://127.0.0.1:18765/v1/users\n" +
+				"     Failed Tests:\n" +
+				"       user has an id - users.http:10: no id for tom\n" +
 				"Summary: total=1 passed=0 failed=1 skipped=0\n",
 		},
 		{
@@ -555,9 +574,9 @@ func TestWriteTextListsFailedTests(t *testing.T) {
 			want: "Running 1 target(s) from api.http with env <default>\n" +
 				"FAIL WORKFLOW orders [0 passed, 1 failed, 0 skipped]\n" +
 				"  1. FAIL check [1 test(s) failed]\n" +
-				"    Failed Tests:\n" +
-				"      orders are valid - api.http:10: order 1: total -5 is negative\n" +
-				"                         api.http:10: order 3: no items\n" +
+				"     Failed Tests:\n" +
+				"       orders are valid - api.http:10: order 1: total -5 is negative\n" +
+				"                          api.http:10: order 3: no items\n" +
 				"Summary: total=1 passed=0 failed=1 skipped=0\n",
 		},
 		{
@@ -592,9 +611,68 @@ func TestWriteTextListsFailedTests(t *testing.T) {
 				"FAIL COMPARE users [baseline: dev, 1 passed, 1 failed, 0 skipped]\n" +
 				"  1. PASS dev [200 OK]\n" +
 				"  2. FAIL prod [1 test(s) failed]\n" +
-				"    Failed Tests:\n" +
-				"      status is 200 - users.http:5: got 500\n" +
+				"     Failed Tests:\n" +
+				"       status is 200 - users.http:5: got 500\n" +
 				"Summary: total=1 passed=0 failed=1 skipped=0\n",
+		},
+		{
+			name: "ten steps",
+			rep: &Report{
+				FilePath: "api.http",
+				Results: []Result{
+					{Kind: "workflow", Name: "flow", Method: "WORKFLOW", Status: StatusFail, Steps: ten},
+					{
+						Kind:    "compare",
+						Name:    "users",
+						Method:  "COMPARE",
+						Status:  StatusFail,
+						Compare: &Compare{Baseline: "dev"},
+						Steps: []Step{
+							{Name: "dev", Status: StatusPass},
+							{
+								Name:   "prod",
+								Status: StatusFail,
+								Tests:  []Test{{Name: "status is 200", Message: "got 500"}},
+							},
+						},
+					},
+				},
+				Total:  2,
+				Failed: 2,
+			},
+			want: "Running 2 target(s) from api.http with env <default>\n" +
+				"FAIL WORKFLOW flow [8 passed, 2 failed, 0 skipped]\n" +
+				"   1. PASS step 1\n" +
+				"   2. FAIL step 2 [1 test(s) failed]\n" +
+				"      Source Target: users\n" +
+				"      Effective Target: http://127.0.0.1:18765/v1/users\n" +
+				"      Error:\n" +
+				"        boom\n" +
+				"      Script Error:\n" +
+				"        a\n" +
+				"\n" +
+				"        b\n" +
+				"      Failed Tests:\n" +
+				"        orders are valid - api.http:10: order 1: total -5 is negative\n" +
+				"                           api.http:10: order 3: no items\n" +
+				"   3. PASS step 3\n" +
+				"   4. PASS step 4\n" +
+				"   5. PASS step 5\n" +
+				"   6. PASS step 6\n" +
+				"   7. PASS step 7\n" +
+				"   8. PASS step 8\n" +
+				"   9. PASS step 9\n" +
+				"  10. FAIL step 10 [1 test(s) failed]\n" +
+				"      Error:\n" +
+				"        boom\n" +
+				"      Failed Tests:\n" +
+				"        status is 200\n" +
+				"FAIL COMPARE users [baseline: dev, 1 passed, 1 failed, 0 skipped]\n" +
+				"  1. PASS dev\n" +
+				"  2. FAIL prod [1 test(s) failed]\n" +
+				"     Failed Tests:\n" +
+				"       status is 200 - got 500\n" +
+				"Summary: total=2 passed=0 failed=2 skipped=0\n",
 		},
 		{
 			name: "escape",
@@ -716,6 +794,13 @@ func TestWriteTextListsFailedTests(t *testing.T) {
 			if got := out.String(); got != tt.want {
 				t.Fatalf("output =\n%s\nwant\n%s", got, tt.want)
 			}
+			var styled strings.Builder
+			if err := WriteTextStyled(&styled, tt.rep, ansiTextPainter()); err != nil {
+				t.Fatalf("WriteTextStyled(...): %v", err)
+			}
+			if got := stripANSI(styled.String()); got != tt.want {
+				t.Fatalf("styled output without ANSI =\n%s\nwant\n%s", got, tt.want)
+			}
 		})
 	}
 }
@@ -747,9 +832,9 @@ func TestWriteTextStyledFailedTests(t *testing.T) {
 	if err := WriteTextStyled(&out, rep, paint); err != nil {
 		t.Fatalf("WriteTextStyled(...): %v", err)
 	}
-	want := "    <#A6A1BB false>Failed Tests:</>\n" +
-		"      <#E8E9F0 false>orders are valid - api.http:10: order 1: total -5 is negative</>\n" +
-		"      <#E8E9F0 false>                   api.http:10: order 3: no items</>\n"
+	want := "     <#A6A1BB false>Failed Tests:</>\n" +
+		"       <#E8E9F0 false>orders are valid - api.http:10: order 1: total -5 is negative</>\n" +
+		"       <#E8E9F0 false>                   api.http:10: order 3: no items</>\n"
 	if !strings.Contains(out.String(), want) {
 		t.Fatalf("output =\n%s\nwant it to contain\n%s", out.String(), want)
 	}
