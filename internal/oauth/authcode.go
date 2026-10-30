@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/http/serve"
 	"github.com/unkn0wn-root/resterm/internal/launch"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 )
@@ -271,7 +271,7 @@ type codeServer struct {
 	state  string
 	codeCh chan string
 	errCh  chan error
-	srv    *http.Server
+	srv    *serve.Server
 	once   sync.Once
 }
 
@@ -293,13 +293,14 @@ func (s *codeServer) serve(ln net.Listener) {
 	handler.HandleFunc("/", s.handle)
 	handler.HandleFunc(s.path, s.handle)
 
-	s.srv = &http.Server{
+	s.srv = serve.Start(&http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
-	}
+	}, ln)
 
 	go func() {
-		if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		<-s.srv.Done()
+		if err := s.srv.Err(); err != nil {
 			s.errCh <- err
 		}
 	}()

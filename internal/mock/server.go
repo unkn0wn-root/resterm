@@ -3,22 +3,21 @@ package mock
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/http/serve"
 )
 
 type Server struct {
 	opts    Options
 	handler atomic.Pointer[Handler]
-	srv     *http.Server
+	srv     *serve.Server
 	addr    string
-	done    chan struct{}
-	err     error
 
 	logs    ring
 	calls   atomic.Uint64
@@ -68,13 +67,12 @@ func Start(addr string, handler *Handler, opts Options) (*Server, error) {
 	s := &Server{
 		opts:    opts,
 		addr:    ln.Addr().String(),
-		done:    make(chan struct{}),
 		logs:    ring{limit: n, events: make([]Event, 0, n)},
 		journal: journal,
 	}
 	handler.setSequenceKeyLimit(opts.SequenceKeyLimit)
 	s.handler.Store(handler)
-	s.srv = &http.Server{
+	srv := &http.Server{
 		Addr:              s.addr,
 		Handler:           s,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -83,27 +81,17 @@ func Start(addr string, handler *Handler, opts Options) (*Server, error) {
 		MaxHeaderBytes:    1 << 20,
 	}
 
-	serve := s.srv.Serve
+	start := serve.Start
 	if opts.TLSCert != "" || opts.TLSKey != "" {
 		cert, err := tls.LoadX509KeyPair(opts.TLSCert, opts.TLSKey)
 		if err != nil {
 			_ = ln.Close()
 			return nil, fmt.Errorf("load TLS key pair: %w", err)
 		}
-		s.srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
-		serve = func(ln net.Listener) error {
-			return s.srv.ServeTLS(ln, "", "")
-		}
+		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
+		start = serve.StartTLS
 	}
-
-	go func() {
-		err := serve(ln)
-		if errors.Is(err, http.ErrServerClosed) {
-			err = nil
-		}
-		s.err = err
-		close(s.done)
-	}()
+	s.srv = start(srv, ln)
 	return s, nil
 }
 
@@ -129,13 +117,7 @@ func (s *Server) RecordReload(err error) {
 	s.record(event)
 }
 
-func (s *Server) Close(ctx context.Context) error {
-	if err := s.srv.Shutdown(ctx); err != nil {
-		_ = s.srv.Close()
-		return err
-	}
-	return nil
-}
+func (s *Server) Close(ctx context.Context) error { return s.srv.Shutdown(ctx) }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.opts.EnableControl && s.handleControl(w, r) {
@@ -206,11 +188,9 @@ func (s *Server) JournalStats() JournalStats {
 	return s.journal.stats()
 }
 
-func (s *Server) Done() <-chan struct{} { return s.done }
+func (s *Server) Done() <-chan struct{} { return s.srv.Done() }
 
-func (s *Server) Err() error {
-	return s.err
-}
+func (s *Server) Err() error { return s.srv.Err() }
 
 func (s *Server) Addr() string { return s.addr }
 

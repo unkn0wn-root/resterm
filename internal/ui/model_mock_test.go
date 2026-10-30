@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -98,6 +99,39 @@ func TestTUIStartsReloadsAndStopsMockServer(t *testing.T) {
 	}
 	if closed, ok := stop().(mockServerClosedMsg); !ok || closed.err != nil {
 		t.Fatalf("stop result = %+v", closed)
+	}
+}
+
+// A client may hold a connection that never sends a request, such as a browser
+// preconnect. Restart must not stall on it or report a failed stop.
+func TestMockRestartDoesNotWaitForAConnectionWithoutARequest(t *testing.T) {
+	model := newMockTestModel(t, mockTestDocument)
+	_ = model.startMockServer(mockStartSpec{addr: "127.0.0.1:0"})
+	server := model.activeMockServer()
+	if server == nil {
+		t.Fatal("mock server was not started")
+	}
+	idle, err := net.Dial("tcp", server.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idle.Close() }()
+	// Accept is FIFO, so once a later connection is served, idle was accepted.
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	res, err := client.Get("http://" + server.Addr() + "/users/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	_ = res.Body.Close()
+
+	closed, ok := model.executeMockCommand([]string{"restart"})().(mockServerClosedMsg)
+	if !ok || closed.err != nil {
+		t.Fatalf("restart close ok = %t, err = %v, want no error", ok, closed.err)
+	}
+	_ = model.handleMockServerClosed(closed)
+	if model.activeMockServer() == nil {
+		t.Fatal("mock server did not restart")
 	}
 }
 

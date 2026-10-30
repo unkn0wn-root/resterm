@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -126,6 +127,37 @@ func TestForcedShutdownPublishesBeforeDone(t *testing.T) {
 	entries := s.Snapshot(0)
 	if len(entries) != 1 || entries[0].Response.Issue == "" || s.Stats().ActiveCaptures != 0 {
 		t.Fatalf("incomplete shutdown: %+v %+v", entries, s.Stats())
+	}
+}
+
+// A client may hold a connection that never sends a request, such as a browser
+// preconnect. Close must not wait for it or report a failed stop.
+func TestCloseDoesNotWaitForAConnectionWithoutARequest(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer up.Close()
+	s := startTest(t, up.URL, nil)
+	idle, err := net.Dial("tcp", s.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idle.Close() }()
+	// Accept is FIFO, so once a later connection is served, idle was accepted.
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	res, err := client.Get("http://" + s.Addr() + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	_ = res.Body.Close()
+
+	// Fixed, whatever ShutdownTimeout is, and under the five seconds net/http
+	// lets a new connection sit before http.Server.Shutdown treats it as idle.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.Close(ctx); err != nil || ctx.Err() != nil {
+		t.Fatalf("Close = %v, ctx = %v, want both nil", err, ctx.Err())
 	}
 }
 
