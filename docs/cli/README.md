@@ -42,7 +42,7 @@ These flags are shared by `resterm` and `resterm run` when request execution is 
 | `--env <name>` | `-e <name>` | Select an environment explicitly. |
 | `--env-group <group=profile>` |  | Select one group profile. Repeat for multiple groups. |
 | `--env-file <path>` | `-E <path>` | Use an explicit environment file, either JSON or dotenv. |
-| `--timeout <duration>` | `-t <duration>` | Default HTTP timeout. The default is `30s`. |
+| `--timeout <duration>` | `-t <duration>` | Default request timeout, which also limits the response checks. The default is `30s`. |
 | `--insecure` | `-k` | Skip TLS certificate verification. |
 | `--follow` | `-L` | Follow redirects. Pass `--follow=false` or `-L=false` to disable it. |
 | `--max-redirects <n>` | | Maximum redirects to follow. The default is 10. Use `0` to disable redirects. |

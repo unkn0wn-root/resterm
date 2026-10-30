@@ -1,6 +1,9 @@
 package rts
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 // File is one text that RTS code is read from, such as a module or the
 // document that holds a script block. Every position read from the text points
@@ -93,6 +96,18 @@ func (e *RuntimeError) Error() string {
 type AbortError struct {
 	*RuntimeError
 	Kind AbortKind
+}
+
+// Unwrap reports a timeout as context.DeadlineExceeded and a cancel as
+// context.Canceled, so errors.Is matches the context error that stopped the run.
+func (e *AbortError) Unwrap() error {
+	switch e.Kind {
+	case AbortTimeout:
+		return context.DeadlineExceeded
+	case AbortCanceled:
+		return context.Canceled
+	}
+	return nil
 }
 
 // An UndefinedNameError is the RuntimeError for reading a name that is not defined.

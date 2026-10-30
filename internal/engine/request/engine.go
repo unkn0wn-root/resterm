@@ -1286,12 +1286,14 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 	ctx, cancel := context.WithTimeoutCause(
 		in.ctx,
 		x.timeout,
-		fmt.Errorf("response checks timed out after %s: %w", x.timeout, context.DeadlineExceeded),
+		diag.WrapAsf(diag.ClassTimeout, context.DeadlineExceeded, "response checks timed out after %s", x.timeout),
 	)
 	defer cancel()
 	sc := x.sentScope(x.captureVariables())
 	var out []scriptapi.TestResult
 	errs := []error{in.rrErr}
+	// A check that stops on the deadline or a cancel reports it, and later checks do not start.
+	stopped := func() bool { return ctx.Err() != nil && errors.Is(errors.Join(errs...), ctx.Err()) }
 	blocks := slices.ContainsFunc(x.req.Metadata.Scripts, func(b restfile.ScriptBlock) bool {
 		return b.Is(restfile.ScriptKindTest, restfile.ScriptLangRTS)
 	})
@@ -1344,10 +1346,7 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 				})
 			}
 			errs = append(errs, stop)
-			// Skip RunTests after cancellation or timeout to avoid a duplicate error.
-			var abort *rts.AbortError
-			cut := errors.As(stop, &abort) && (abort.Kind == rts.AbortCanceled || abort.Kind == rts.AbortTimeout)
-			if !cut {
+			if !stopped() {
 				tests, err := rtshost.RunTests(ctx, x.eng.re, rtshost.Tests{
 					Doc:        x.doc,
 					Scripts:    x.req.Metadata.Scripts,
@@ -1359,8 +1358,11 @@ func (x *execCtx) runTests(in testRun) ([]scriptapi.TestResult, error) {
 			}
 		}
 	}
+	if stopped() {
+		return out, errors.Join(errs...)
+	}
 	tests, changes, err := x.eng.sc.RunTests(
-		x.sendCtx,
+		ctx,
 		x.req.Metadata.Scripts,
 		scripts.TestInput{
 			Response:  in.resp,

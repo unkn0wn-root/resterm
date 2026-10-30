@@ -1002,6 +1002,42 @@ func TestTestCaseErrorHidesGoFrames(t *testing.T) {
 	}
 }
 
+func TestAssertAndFailNameTheResultOnce(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want scriptapi.TestResult
+	}{
+		{"failed assert", `tests.assert(false, "status 200");`, scriptapi.TestResult{Name: "status 200"}},
+		{"passed assert", `tests.assert(true, "status 200");`, scriptapi.TestResult{Name: "status 200", Passed: true}},
+		{"assert without text", `tests.assert(false);`, scriptapi.TestResult{Name: "assert"}},
+		{"fail", `tests.fail("never reach this");`, scriptapi.TestResult{Name: "never reach this"}},
+		{"fail without text", `tests.fail();`, scriptapi.TestResult{Name: "fail"}},
+		{
+			"named test keeps its error",
+			`client.test("named", function () { throw new Error("boom"); });`,
+			scriptapi.TestResult{Name: "named", Message: "Error: boom"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scripts := []restfile.ScriptBlock{{Kind: "test", Body: tt.body}}
+			results, _, err := NewRunner(nil).RunTests(t.Context(), scripts, TestInput{Response: &Response{}})
+			if err != nil {
+				t.Fatalf("RunTests: %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("results = %+v, want one", results)
+			}
+			got := results[0]
+			got.Elapsed = 0
+			if got != tt.want {
+				t.Fatalf("result = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTestScriptVarsInterpolate(t *testing.T) {
 	scripts := []restfile.ScriptBlock{{
 		Kind: "test",

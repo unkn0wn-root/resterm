@@ -1,6 +1,6 @@
 # JavaScript hooks
 
-Use JavaScript hooks to prepare a request or test its response when you already have the script in JavaScript or need something [RestermScript](rts/README.md) cannot do, such as saving a response body to a file. Scripts use ES5.1 JavaScript. Each block stops after 30 seconds or when the run is canceled. Scripts are not restricted to the workspace. See [Security](security.md).
+Use JavaScript hooks to prepare a request or test its response when you already have the script in JavaScript or need something [RestermScript](rts/README.md) cannot do, such as saving a response body to a file. Scripts use modern JavaScript, such as `let`, arrow functions, classes, and template literals, but not `import` or timers such as `setTimeout`. Each block stops after 30 seconds or when the run is canceled, and a test block also stops when the [response checks](rts/directives.md#rts) reach the request timeout. Scripts are not restricted to the workspace. See [Security](security.md).
 
 ## Script blocks (`@script`)
 
@@ -128,8 +128,8 @@ For RestermScript test blocks, see [`@rts`](rts/directives.md#rts). They run bef
 Objects:
 
 - `client.test(name, fn)` - registers a named test, which fails only when `fn` throws. `tests.assert` and `tests.fail` inside it add their own results, and any failed result fails the request. `resterm.test(name, fn)` is the same function.
-- `tests.assert(condition, message)` - adds a pass/fail entry.
-- `tests.fail(message)` - explicit failure.
+- `tests.assert(condition, message)` - adds a pass/fail entry named after `message`, or `assert` when there is none.
+- `tests.fail(message)` - adds a failed entry named after `message`, or `fail` when there is none.
 - `response`
   - `kind` (`"http"` or `"grpc"`), `status`, `statusCode`, `url`, `duration`
   - `contentType`, `isBinary`

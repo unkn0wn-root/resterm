@@ -32,7 +32,7 @@ func coreTypeof(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) 
 	if err := na.Count(1); err != nil {
 		return rts.Null(), err
 	}
-	return rts.Str(typeName(na.Arg(0))), nil
+	return rts.Str(na.Arg(0).TypeName()), nil
 }
 
 type cfn[T any] func(rts.Value) (T, bool)
@@ -151,37 +151,5 @@ func boolTry(v rts.Value) (bool, bool) {
 		return false, false
 	default:
 		return false, false
-	}
-}
-
-func typeName(v rts.Value) string {
-	switch v.K {
-	case rts.VNull:
-		return "null"
-	case rts.VBool:
-		return "bool"
-	case rts.VNum:
-		return "number"
-	case rts.VStr:
-		return "string"
-	case rts.VList:
-		return "list"
-	case rts.VDict:
-		return "dict"
-	case rts.VFunc:
-		return "function"
-	case rts.VNative:
-		return "native"
-	case rts.VObj:
-		if v.O == nil {
-			return "object"
-		}
-		name := v.O.TypeName()
-		if strings.TrimSpace(name) == "" {
-			return "object"
-		}
-		return name
-	default:
-		return "unknown"
 	}
 }

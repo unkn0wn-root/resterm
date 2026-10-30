@@ -1117,6 +1117,125 @@ func TestRunCountsFailedAsserts(t *testing.T) {
 	}
 }
 
+func TestRunNamesAFailedTestOnce(t *testing.T) {
+	tests := []struct {
+		name string
+		body []string
+		want string
+	}{
+		{
+			name: "javascript assert",
+			body: []string{"# @script test", `> tests.assert(false, "body should be binary");`},
+			want: "body should be binary",
+		},
+		{
+			name: "assert with a message",
+			body: []string{`# @assert response.statusCode == 201 => "status should be 201"`},
+			want: "response.statusCode == 201: status should be 201",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := filepath.Join(dir, "check.http")
+			lines := append([]string{
+				"### flow",
+				"# @workflow flow",
+				"# @step one using=check",
+				"",
+				"###",
+				"# @name check",
+			}, tt.body...)
+			src := strings.Join(append(lines, "GET https://example.com/check", ""), "\n")
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+			var calls int
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        countingClient(&calls),
+				Select:        Select{Request: "check"},
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if got := rep.Results[0].Failure.Message; got != tt.want {
+				t.Fatalf("failure message = %q, want %q", got, tt.want)
+			}
+			var out strings.Builder
+			if err := rep.WriteJUnit(&out); err != nil {
+				t.Fatalf("WriteJUnit: %v", err)
+			}
+			want := `<failure message="` + tt.want + `"`
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("junit = %s, want %s", out.String(), want)
+			}
+			rep, err = RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        countingClient(&calls),
+				Select:        Select{Workflow: "flow"},
+			})
+			if err != nil {
+				t.Fatalf("Run workflow: %v", err)
+			}
+			out.Reset()
+			if err := rep.WriteJUnit(&out); err != nil {
+				t.Fatalf("WriteJUnit: %v", err)
+			}
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("workflow junit = %s, want %s", out.String(), want)
+			}
+		})
+	}
+}
+
+func TestRunExitsWithTimeoutWhenChecksTimeOut(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		exit int
+	}{
+		{"endless javascript test", "> while (true) {}", runfail.ExitTimeout},
+		{"javascript test throws", `> throw new Error("boom");`, runfail.ExitScript},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := filepath.Join(dir, "check.http")
+			src := strings.Join([]string{"# @name check", "# @timeout 50ms", "# @script test", tt.body,
+				"GET https://example.com/check", ""}, "\n")
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+			var calls int
+			var rep *Report
+			var err error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				rep, err = RunContext(context.Background(), Options{
+					FilePath:      file,
+					WorkspaceRoot: dir,
+					Client:        countingClient(&calls),
+				})
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the JavaScript test ran past the response check timeout")
+			}
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if got := ExitCode(rep, runfail.ExitDetailed); got != tt.exit {
+				t.Fatalf("exit code = %d, want %d", got, tt.exit)
+			}
+		})
+	}
+}
+
 func TestRunReportsRTSTestBlocks(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -1527,6 +1646,7 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		lines   []string
+		mod     []string
 		sent    string
 		skipped int
 		help    string
@@ -1579,8 +1699,6 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 			wrongTag: "@when",
 		},
 		{
-			// list is a standard library namespace, so the condition reads the
-			// namespace and skips the step instead of naming the unset item.
 			name: "request loop variable named after a namespace",
 			lines: []string{
 				"# @workflow demo",
@@ -1592,7 +1710,41 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 				`# @for-each ["a","b","c"] as list`,
 				"GET https://example.com/items/{{vars.request.list}}",
 			},
-			skipped: 1,
+			help: `help: @when is checked before the @for-each of request "each" starts, ` +
+				`so "list" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@skip-if",
+		},
+		{
+			name: "request loop variable named json",
+			lines: []string{
+				"# @workflow demo",
+				"# @when json.disabled",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @for-each ["a","b","c"] as json`,
+				"GET https://example.com/items/{{vars.request.json}}",
+			},
+			help: `help: @when is checked before the @for-each of request "each" starts, ` +
+				`so "json" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@skip-if",
+		},
+		{
+			name: "request loop variable read whole",
+			lines: []string{
+				"# @workflow demo",
+				"# @skip-if list",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @for-each ["a","b","c"] as list`,
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			help: `help: @skip-if is checked before the @for-each of request "each" starts, ` +
+				`so "list" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@when",
 		},
 		{
 			name: "step loop condition fails",
@@ -1620,7 +1772,85 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 				"# @for-each [1, 2] as len",
 				"GET https://example.com/items/{{vars.request.len}}",
 			},
+			help: `help: @when is checked before the @for-each of request "each" starts, ` +
+				`so "len" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@skip-if",
+		},
+		{
+			name: "request loop variable with another name",
+			lines: []string{
+				"# @workflow demo",
+				"# @when len([1]) > 0",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"# @for-each [1, 2] as n",
+				"GET https://example.com/items/{{vars.request.n}}",
+			},
 			sent: "/items/1,/items/2",
+		},
+		{
+			name: "request loop variable shadows a builtin that rts still reaches",
+			lines: []string{
+				"# @workflow demo",
+				"# @when len(rts.list.concat([1], [2])) == 2",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"# @for-each [1, 2] as list",
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			sent: "/items/1,/items/2",
+		},
+		{
+			name: "request loop variable shadows a module alias",
+			lines: []string{
+				"# @workflow demo",
+				"# @when n.flag",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"# @use ./m.rts as n",
+				"# @for-each [1, 2] as n",
+				"GET https://example.com/items/{{vars.request.n}}",
+			},
+			mod: []string{"module m", "", "export let flag = true"},
+			help: `help: @when is checked before the @for-each of request "each" starts, ` +
+				`so "n" is not set. Put the condition on the request to check each item`,
+			wrongTag: "@skip-if",
+		},
+		{
+			name: "step loop variable named after a namespace",
+			lines: []string{
+				"# @workflow demo",
+				`# @when list != "b"`,
+				`# @for-each ["a","b","c"] as list`,
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			sent:    "/items/a,/items/c",
+			skipped: 1,
+		},
+		{
+			name: "request loop and condition named after a namespace",
+			lines: []string{
+				"# @workflow demo",
+				"# @step Each using=each",
+				"",
+				"### Each",
+				"# @name each",
+				`# @when list != "b"`,
+				`# @for-each ["a","b","c"] as list`,
+				"GET https://example.com/items/{{vars.request.list}}",
+			},
+			sent:    "/items/a,/items/c",
+			skipped: 1,
 		},
 		{
 			name: "request loop checked once",
@@ -1647,6 +1877,12 @@ func TestRunWorkflowStepConditionLevel(t *testing.T) {
 			file := filepath.Join(dir, "wf.http")
 			if err := os.WriteFile(file, []byte(strings.Join(tt.lines, "\n")+"\n"), 0o644); err != nil {
 				t.Fatalf("write file: %v", err)
+			}
+			if tt.mod != nil {
+				mod := strings.Join(tt.mod, "\n") + "\n"
+				if err := os.WriteFile(filepath.Join(dir, "m.rts"), []byte(mod), 0o644); err != nil {
+					t.Fatalf("write module: %v", err)
+				}
 			}
 
 			var seen []string

@@ -160,11 +160,13 @@ func TraceBudget(message string) Failure {
 	return New(CodeTraceBudget, message, "trace")
 }
 
-func Script(message, source string) Failure {
-	if source == "" {
-		source = "scriptError"
+// Script keeps a cause that outranks a script error, such as a timeout.
+func Script(err error, source string) Failure {
+	msg := err.Error()
+	if f, ok := classifyDiag(err, msg, source); ok && rankOf(f.Code) < rankOf(CodeScript) {
+		return f
 	}
-	return New(CodeScript, message, source)
+	return New(CodeScript, msg, source)
 }
 
 func Canceled(message, source string) Failure {

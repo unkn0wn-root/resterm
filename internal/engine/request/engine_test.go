@@ -1315,8 +1315,8 @@ GET http://example.test
 	if err != nil || res.Err != nil {
 		t.Fatalf("ExecuteWith() error = %v, result error = %v", err, res.Err)
 	}
-	if got, want := rows(res), []row{{"js", true}}; !slices.Equal(got, want) {
-		t.Fatalf("tests = %+v, want %+v", got, want)
+	if got := rows(res); len(got) != 0 {
+		t.Fatalf("tests = %+v, want none", got)
 	}
 	const cause = "response checks timed out after 50ms: context deadline exceeded"
 	if res.ScriptErr == nil || strings.Count(res.ScriptErr.Error(), cause) != 1 {

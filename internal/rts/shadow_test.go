@@ -2,6 +2,7 @@ package rts
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -48,6 +49,58 @@ func TestOverridesShadowLocals(t *testing.T) {
 	}
 	if v.K != VNum || v.N != 201 {
 		t.Fatalf("status = %+v, want override", v)
+	}
+}
+
+func TestUnsetLocalsReadAsUndefined(t *testing.T) {
+	e := NewEng(testStdlib())
+	tests := []struct {
+		src   string
+		undef bool
+	}{
+		{"len([1])", true},
+		{"len", true},
+		{"(try len).ok", false},
+		{"rts.len([1])", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.src, func(t *testing.T) {
+			_, err := e.Eval(t.Context(), EvalConfig{Locals: Unset("len")}, tt.src, shadowPos)
+			var undef *UndefinedNameError
+			switch {
+			case tt.undef && (!errors.As(err, &undef) || undef.Name != "len"):
+				t.Fatalf("Eval() error = %v, want undefined name len", err)
+			case !tt.undef && err != nil:
+				t.Fatalf("Eval() error = %v, want none", err)
+			}
+		})
+	}
+}
+
+func TestUnsetLocalsInModules(t *testing.T) {
+	e := NewEng(testStdlib())
+	tests := []struct {
+		name string
+		over Locals
+		src  string
+		want string
+	}{
+		{"assign", Locals{}, "len = 1", `assign to const name "len"`},
+		{"declare", Locals{}, "let len = 1", `name already defined: "len"`},
+		{"closure", Locals{}, "fn f() {\n  return len([1])\n}\nlet v = f()", `undefined name "len"`},
+		{"override wins", Local("len", Num(3)), "let v = len + 1", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := EvalConfig{Locals: Unset("len"), Overrides: tt.over}
+			_, err := e.ExecModule(t.Context(), cfg, tt.src, shadowPos)
+			switch {
+			case tt.want == "" && err != nil:
+				t.Fatalf("ExecModule() error = %v, want none", err)
+			case tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)):
+				t.Fatalf("ExecModule() error = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

@@ -102,11 +102,11 @@ for let _, msg range validators.orders(orders) {
 
 One-line blocks also work: `> {% request.setHeader("X-Debug", "1") %}` in a pre-request block. To read code from a file, use `> < ./checks.rts` outside the `{% ... %}` block. The file contains plain code without `>` or `{% %}`.
 
-After captures, response checks run in this order: `@assert`, RTS test blocks in file order, then JavaScript tests. Failed assertions and script errors do not skip RTS test blocks, but if a `@use` module fails to load, its error is shown once and every RTS test block fails. A timeout or cancellation skips blocks that have not started. This order applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
+After captures, response checks run in this order: `@assert`, RTS test blocks in file order, then JavaScript tests. Failed assertions and script errors do not skip RTS test blocks, but if a `@use` module fails to load, its error is shown once and every RTS test block fails. The checks share the request timeout, which starts after captures, and a timeout or cancellation skips checks that have not started, including JavaScript tests. This order applies to HTTP, gRPC, SSE, and WebSocket requests with `@ws` steps.
 
 Test blocks can read `response`, `last`, `stream`, `trace`, `env`, `vars`, `request`, imported modules, loop values, and captures. Calls to `vars.set`, `vars.global.set`, or request mutation helpers fail. Use `@capture` to save response values, including module results: `# @capture file token = auth.pick(response.json())`.
 
-Report failures with [`t.error` and `t.fatal`](host-objects.md#t). Runtime errors, including `fail()`, also fail the block and include the file and line. Earlier failures are kept, and later blocks still run. `resterm run` exits with code 1 for test failures or 24 for script errors. See [Exit codes](../cli/run.md#exit-codes).
+Report failures with [`t.error` and `t.fatal`](host-objects.md#t). Runtime errors, including `fail()`, also fail the block and include the file and line. Earlier failures are kept, and later blocks still run. `resterm run` exits with code 1 for test failures, 20 when the checks time out, or 24 for other script errors. See [Exit codes](../cli/run.md#exit-codes).
 
 ## @if, @elif, and @else
 

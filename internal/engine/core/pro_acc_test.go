@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	runfail "github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
 
 var proT0 = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -277,6 +279,28 @@ func TestProfileAccumulatorRunningHasStats(t *testing.T) {
 	}
 	if snap.Progress.Count != restfile.DefaultProfileCount || snap.Progress.Elapsed != time.Second {
 		t.Fatalf("running progress = %+v", snap.Progress)
+	}
+}
+
+func TestIterFailureKeepsAScriptTimeout(t *testing.T) {
+	limit := diag.New(diag.ClassTimeout, "script exceeded the 30s time limit")
+	tests := []struct {
+		name string
+		err  error
+		code runfail.Code
+	}{
+		{"timeout", diag.WrapAs(diag.ClassScript, limit, "test script 1"), runfail.CodeTimeout},
+		{"script error", diag.New(diag.ClassScript, "boom"), runfail.CodeScript},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := proOK(10 * time.Millisecond)
+			res.ScriptErr = tt.err
+			f, ok := iterFailure(IterMeta{}, res)
+			if !ok || f.Failure.Code != tt.code || f.Reason != tt.err.Error() {
+				t.Fatalf("failure = %+v, want %s with reason %q", f, tt.code, tt.err)
+			}
+		})
 	}
 }
 

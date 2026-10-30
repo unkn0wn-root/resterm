@@ -261,7 +261,7 @@ func checkJSON(ctx *rts.Ctx, pos rts.Pos, sig string, v rts.Value) error {
 			}
 		}
 	case rts.VFunc, rts.VNative, rts.VObj:
-		return rts.Errf(ctx, pos, "%s cannot compare %s", sig, typeName(v))
+		return rts.Errf(ctx, pos, "%s cannot compare %s", sig, v.TypeName())
 	}
 	return nil
 }

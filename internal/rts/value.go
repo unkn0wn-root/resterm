@@ -1,5 +1,7 @@
 package rts
 
+import "strings"
+
 type VKind int
 
 const (
@@ -93,6 +95,38 @@ func (v Value) IsTruthy() bool {
 	}
 }
 
+func (v Value) TypeName() string {
+	switch v.K {
+	case VNull:
+		return "null"
+	case VBool:
+		return "bool"
+	case VNum:
+		return "number"
+	case VStr:
+		return "string"
+	case VList:
+		return "list"
+	case VDict:
+		return "dict"
+	case VFunc:
+		return "function"
+	case VNative:
+		return "native"
+	case VObj:
+		if v.O == nil {
+			return "object"
+		}
+		name := v.O.TypeName()
+		if strings.TrimSpace(name) == "" {
+			return "object"
+		}
+		return name
+	default:
+		return "unknown"
+	}
+}
+
 // ValueEqual is the one equality relation in the language. It backs ==, !=,
 // switch case matching, workflow @switch, and the collection helpers: kinds
 // must match, primitives compare by value, and collections are never equal.
@@ -122,6 +156,7 @@ type Env struct {
 type Binding struct {
 	V     Value
 	Const bool
+	Unset bool
 }
 
 func NewEnv(up *Env) *Env {
@@ -138,6 +173,12 @@ func (e *Env) DefConst(name string, v Value) {
 
 func (e *Env) DefWith(name string, v Value, isConst bool) {
 	e.Vars[name] = Binding{V: v, Const: isConst}
+}
+
+// DefUnset declares name with no value yet. Get reports it as undefined and stops
+// there, so the name does not reach an outer scope.
+func (e *Env) DefUnset(name string) {
+	e.Vars[name] = Binding{Const: true, Unset: true}
 }
 
 func (e *Env) HasLocal(name string) bool {
@@ -163,8 +204,8 @@ func (e *Env) Set(name string, v Value) (bool, bool) {
 
 func (e *Env) Get(name string) (Value, bool) {
 	for cur := e; cur != nil; cur = cur.Up {
-		if v, ok := cur.Vars[name]; ok {
-			return v.V, true
+		if b, ok := cur.Vars[name]; ok {
+			return b.V, !b.Unset
 		}
 	}
 	return Null(), false

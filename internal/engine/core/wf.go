@@ -227,6 +227,11 @@ func (r *wfRun) runReqStep(
 
 	perItem := step.ConditionPerItem()
 	if step.When != nil && !perItem {
+		each := req.Metadata.ForEach
+		var loc rts.Locals
+		if each != nil {
+			loc = rts.Unset(each.Var)
+		}
 		ok, reason, err := r.dep.EvalCondition(
 			ctx,
 			r.doc,
@@ -235,13 +240,13 @@ func (r *wfRun) runReqStep(
 			baseDir(r.pl.Doc),
 			step.When,
 			vv,
-			rts.Locals{},
+			loc,
 		)
 		if err != nil {
 			tag := step.When.Directive().Tag()
 			var help diag.Option
 			var undef *rts.UndefinedNameError
-			if each := req.Metadata.ForEach; each != nil && errors.As(err, &undef) && undef.Name == each.Var {
+			if each != nil && errors.As(err, &undef) && undef.Name == each.Var {
 				help = diag.WithHelp(fmt.Sprintf(
 					"%s is checked before the @for-each of request %q starts, so %q is not set. "+
 						"Put the condition on the request to check each item",
