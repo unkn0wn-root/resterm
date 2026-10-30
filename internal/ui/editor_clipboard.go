@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 
-	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/unkn0wn-root/resterm/internal/clipboard"
 )
 
 const (
@@ -12,6 +14,11 @@ const (
 	pasteSourceRegisterEmpty = "register-empty"
 	pasteSourceRegisterError = "register-error"
 )
+
+type systemClipboard interface {
+	Write(text string) (sent bool, err error)
+	Read() (string, error)
+}
 
 func (e *requestEditor) writeClipboardWithFallback(
 	text string,
@@ -23,11 +30,20 @@ func (e *requestEditor) writeClipboardWithFallback(
 		return statusMsg{text: success, level: statusInfo}
 	}
 
-	if err := clipboard.WriteAll(trimmed); err != nil {
+	sent, err := e.clip.Write(trimmed)
+	switch {
+	case errors.Is(err, clipboard.ErrTooLarge):
+		return statusMsg{
+			level: statusWarn,
+			text:  "Too large for OSC 52. Saved in editor register",
+		}
+	case err != nil:
 		return statusMsg{
 			level: statusWarn,
 			text:  "Clipboard unavailable; saved in editor register",
 		}
+	case sent && success != "":
+		return statusMsg{text: success + ". Sent via OSC 52", level: statusInfo}
 	}
 	return statusMsg{text: success, level: statusInfo}
 }
@@ -38,7 +54,7 @@ func (e *requestEditor) resolvePasteBuffer() (
 	bool,
 	*statusMsg,
 ) {
-	text, err := clipboard.ReadAll()
+	text, err := e.clip.Read()
 	if err == nil {
 		if text != "" {
 			normalized := normalizeClipboardText(text)

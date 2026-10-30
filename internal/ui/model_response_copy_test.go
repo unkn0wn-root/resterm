@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -209,6 +211,30 @@ func TestCopyResponseTabWritesClipboard(t *testing.T) {
 	}
 	if got != body {
 		t.Fatalf("expected clipboard %q, got %q", body, got)
+	}
+}
+
+func TestCopyResponseTabSentViaOSC52(t *testing.T) {
+	body := withTrailingNewline("Status: 200 OK\n\n{}")
+	snap := &responseSnapshot{
+		pretty: body,
+		raw:    withTrailingNewline("raw-body"),
+		ready:  true,
+	}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	clip := &recordingClipboard{sent: true}
+	model.editor.clip = clip
+
+	event, ok := model.copyResponseTab()().(editorEvent)
+	if !ok {
+		t.Fatal("expected editorEvent")
+	}
+	want := fmt.Sprintf("Copied Pretty tab (%s). Sent via OSC 52", formatByteSize(int64(len(body))))
+	if event.status == nil || event.status.level != statusInfo || event.status.text != want {
+		t.Fatalf("status = %+v, want %q", event.status, want)
+	}
+	if !slices.Equal(clip.writes, []string{body}) {
+		t.Fatalf("clipboard writes = %q, want [%q]", clip.writes, body)
 	}
 }
 
