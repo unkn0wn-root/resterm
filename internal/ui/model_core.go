@@ -505,7 +505,7 @@ func New(cfg Config) Model {
 	}
 
 	editor := newRequestEditor()
-	editor.clip = clipboard.New(cfg.Terminal)
+	editor.clip = clipboard.New(cfg.Terminal, cfg.Settings.Clipboard.OSC52LimitBytes())
 	editor.setStyler(selectEditorRuneStyler(cfg.FilePath, th.EditorMetadata), th)
 	editor.Placeholder = "Write API requests here..."
 	editor.SetValue(cfg.InitialContent)

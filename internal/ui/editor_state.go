@@ -142,7 +142,7 @@ func newRequestEditor() requestEditor {
 		Model:          ta,
 		motionsEnabled: true,
 		engine:         intellisense.New(),
-		clip:           clipboard.New(nil),
+		clip:           clipboard.New(nil, 0),
 	}
 }
 

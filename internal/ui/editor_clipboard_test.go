@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/clipboard"
+	"github.com/unkn0wn-root/resterm/internal/config"
 )
 
 type recordingClipboard struct {
@@ -53,6 +54,23 @@ func TestNewSendsYankToTerminal(t *testing.T) {
 	if status == nil || status.level != statusWarn || status.text != clipboardFallbackStatus {
 		t.Fatalf("status without a terminal = %+v, want %q", status, clipboardFallbackStatus)
 	}
+
+	var limit config.ByteSize
+	if err := limit.UnmarshalText([]byte("8")); err != nil {
+		t.Fatal(err)
+	}
+	term.Reset()
+	status = yank(Config{
+		Terminal: &term,
+		Settings: config.Settings{Clipboard: config.ClipboardSettings{OSC52Limit: &limit}},
+	})
+	want = "Too large for OSC 52 (limit 8 B). Saved in editor register"
+	if status == nil || status.level != statusWarn || status.text != want {
+		t.Fatalf("status over the limit = %+v, want %q", status, want)
+	}
+	if term.Len() != 0 {
+		t.Fatalf("terminal got %q over the limit, want nothing", term.String())
+	}
 }
 
 func TestYankSelectionClipboardStatus(t *testing.T) {
@@ -71,9 +89,15 @@ func TestYankSelectionClipboardStatus(t *testing.T) {
 		},
 		{
 			name:  "too large",
-			clip:  &recordingClipboard{err: clipboard.ErrTooLarge},
+			clip:  &recordingClipboard{err: &clipboard.TooLargeError{Limit: 1 << 20}},
 			level: statusWarn,
-			want:  "Too large for OSC 52. Saved in editor register",
+			want:  "Too large for OSC 52 (limit 1 MiB). Saved in editor register",
+		},
+		{
+			name:  "too large for a raised limit",
+			clip:  &recordingClipboard{err: &clipboard.TooLargeError{Limit: 8 << 20}},
+			level: statusWarn,
+			want:  "Too large for OSC 52 (limit 8 MiB). Saved in editor register",
 		},
 		{
 			name:  "unavailable",

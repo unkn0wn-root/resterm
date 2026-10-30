@@ -31,11 +31,12 @@ func (e *requestEditor) writeClipboardWithFallback(
 	}
 
 	sent, err := e.clip.Write(trimmed)
+	var tooLarge *clipboard.TooLargeError
 	switch {
-	case errors.Is(err, clipboard.ErrTooLarge):
+	case errors.As(err, &tooLarge):
 		return statusMsg{
 			level: statusWarn,
-			text:  "Too large for OSC 52. Saved in editor register",
+			text:  "Too large for OSC 52 (limit " + formatByteSize(tooLarge.Limit) + "). Saved in editor register",
 		}
 	case err != nil:
 		return statusMsg{

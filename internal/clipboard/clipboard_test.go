@@ -31,7 +31,7 @@ func (w *termWriter) Write(p []byte) (int, error) {
 
 func TestNewSendsToTerm(t *testing.T) {
 	term := &termWriter{}
-	c := New(term)
+	c := New(term, 0)
 	c.write = noTool
 	sent, err := c.Write("a")
 	if !sent || err != nil {
@@ -39,6 +39,20 @@ func TestNewSendsToTerm(t *testing.T) {
 	}
 	if len(term.writes) != 1 || term.writes[0] != "\x1b]52;c;YQ==\x07" {
 		t.Fatalf("term got %q, want one write of %q", term.writes, "\x1b]52;c;YQ==\x07")
+	}
+}
+
+func TestNewKeepsLimit(t *testing.T) {
+	term := &termWriter{}
+	c := New(term, 11)
+	c.write = noTool
+	sent, err := c.Write("abc")
+	var tooLarge *TooLargeError
+	if sent || !errors.As(err, &tooLarge) || tooLarge.Limit != 11 {
+		t.Fatalf("Write() = %v, %v, want false, a TooLargeError with limit 11", sent, err)
+	}
+	if len(term.writes) != 0 {
+		t.Fatalf("term got %q, want no writes", term.writes)
 	}
 }
 
@@ -121,26 +135,41 @@ func TestWriteWithoutTermReturnsToolError(t *testing.T) {
 }
 
 func TestWriteCapsSequence(t *testing.T) {
-	limit := (1<<20 - len("\x1b]52;c;\x07")) / 4 * 3
-
-	term := &termWriter{}
-	c := Clipboard{term: term, write: noTool}
-	sent, err := c.Write(strings.Repeat("a", limit))
-	if !sent || err != nil {
-		t.Fatalf("Write() at the cap = %v, %v, want true, nil", sent, err)
-	}
-	if len(term.writes) != 1 || len(term.writes[0]) != 1<<20 {
-		t.Fatalf("term got %d writes, want one write of %d bytes", len(term.writes), 1<<20)
+	tests := []struct {
+		name  string
+		limit int64
+		want  int64
+	}{
+		{name: "default", want: 1 << 20},
+		{name: "16 KiB", limit: 16 << 10, want: 16 << 10},
+		{name: "8 MiB", limit: 8 << 20, want: 8 << 20},
 	}
 
-	term = &termWriter{}
-	c = Clipboard{term: term, write: noTool}
-	sent, err = c.Write(strings.Repeat("a", limit+1))
-	if sent || !errors.Is(err, ErrTooLarge) {
-		t.Fatalf("Write() over the cap = %v, %v, want false, %v", sent, err, ErrTooLarge)
-	}
-	if len(term.writes) != 0 {
-		t.Fatalf("term got %d writes over the cap, want none", len(term.writes))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fits := (int(tt.want) - len("\x1b]52;c;\x07")) / 4 * 3
+
+			term := &termWriter{}
+			c := Clipboard{term: term, limit: tt.limit, write: noTool}
+			sent, err := c.Write(strings.Repeat("a", fits))
+			if !sent || err != nil {
+				t.Fatalf("Write() at the limit = %v, %v, want true, nil", sent, err)
+			}
+			if len(term.writes) != 1 || int64(len(term.writes[0])) != tt.want {
+				t.Fatalf("term got %d writes, want one write of %d bytes", len(term.writes), tt.want)
+			}
+
+			term = &termWriter{}
+			c = Clipboard{term: term, limit: tt.limit, write: noTool}
+			sent, err = c.Write(strings.Repeat("a", fits+1))
+			var tooLarge *TooLargeError
+			if sent || !errors.As(err, &tooLarge) || tooLarge.Limit != tt.want {
+				t.Fatalf("Write() over the limit = %v, %v, want false, TooLargeError{%d}", sent, err, tt.want)
+			}
+			if len(term.writes) != 0 {
+				t.Fatalf("term got %d writes over the limit, want none", len(term.writes))
+			}
+		})
 	}
 }
 

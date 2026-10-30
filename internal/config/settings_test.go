@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -118,6 +119,72 @@ func TestEditorDiagnosticsSettings(t *testing.T) {
 	}
 }
 
+func TestClipboardSettings(t *testing.T) {
+	for _, tt := range []struct {
+		format SettingsFormat
+		source string
+		text   string
+		want   int64
+	}{
+		{SettingsFormatJSON, `{}`, "", 0},
+		{SettingsFormatJSON, `{"clipboard":{"osc52_limit":"8MiB"}}`, "8MiB", 8 << 20},
+		{SettingsFormatJSON, `{"clipboard":{"osc52_limit":"16 KiB"}}`, "16 KiB", 16 << 10},
+		{SettingsFormatTOML, "", "", 0},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = '8MiB'", "8MiB", 8 << 20},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = '16 KiB'", "16 KiB", 16 << 10},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = 1", "1", 1},
+	} {
+		settings, err := decodeSettings([]byte(tt.source), tt.format)
+		if err != nil || settings.Clipboard.OSC52LimitBytes() != tt.want {
+			t.Fatalf("decode %q: %+v %v", tt.source, settings, err)
+		}
+		settings.DefaultTheme = "oceanic"
+		path := filepath.Join(t.TempDir(), "settings."+string(tt.format))
+		if err := SaveSettings(settings, SettingsHandle{Path: path, Format: tt.format}); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tt.text == "" && strings.Contains(string(data), "clipboard") {
+			t.Fatalf("saved %q, want no clipboard", data)
+		}
+		if !strings.Contains(string(data), tt.text) {
+			t.Fatalf("saved %q, want %q", data, tt.text)
+		}
+		got, err := decodeSettings(data, tt.format)
+		if err != nil || got.Clipboard.OSC52LimitBytes() != tt.want || got.DefaultTheme != "oceanic" {
+			t.Fatalf("round trip: %+v %v", got, err)
+		}
+	}
+}
+
+func TestClipboardSettingsRejectInvalidLimit(t *testing.T) {
+	for _, tt := range []struct {
+		format SettingsFormat
+		source string
+	}{
+		{SettingsFormatJSON, `{"clipboard":{"osc52_limit":""}}`},
+		{SettingsFormatJSON, `{"clipboard":{"osc52_limit":"0"}}`},
+		{SettingsFormatJSON, `{"clipboard":{"osc52_limit":"0KiB"}}`},
+		{SettingsFormatJSON, `{"clipboard":{"osc52_limit":"-1"}}`},
+		{SettingsFormatJSON, `{"clipboard":{"osc52_limit":"8MiBs"}}`},
+		{SettingsFormatJSON, `{"clipboard":{"osc52_limit":1024}}`},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = ''"},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = '0'"},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = 0"},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = '0KiB'"},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = '-1'"},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = -1"},
+		{SettingsFormatTOML, "[clipboard]\nosc52_limit = '8MiBs'"},
+	} {
+		if settings, err := decodeSettings([]byte(tt.source), tt.format); err == nil {
+			t.Fatalf("decode %q = %+v, want an error", tt.source, settings)
+		}
+	}
+}
+
 func TestSaveSettingsRefusesAfterLoadError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -173,8 +240,8 @@ func TestSaveSettingsThroughLoadedHandle(t *testing.T) {
 		file string
 		data string
 	}{
-		{file: "settings.toml", data: "default_theme = 'sunset'"},
-		{file: "settings.json", data: `{"default_theme":"sunset"}`},
+		{file: "settings.toml", data: "default_theme = 'sunset'\n\n[clipboard]\nosc52_limit = '8MiB'"},
+		{file: "settings.json", data: `{"default_theme":"sunset","clipboard":{"osc52_limit":"8MiB"}}`},
 	}
 
 	for _, tt := range tests {
@@ -195,8 +262,8 @@ func TestSaveSettingsThroughLoadedHandle(t *testing.T) {
 			}
 
 			got, _, err := LoadSettings()
-			if err != nil || got.DefaultTheme != "oceanic" {
-				t.Fatalf("reload = %+v, %v, want theme oceanic", got, err)
+			if err != nil || got.DefaultTheme != "oceanic" || got.Clipboard.OSC52LimitBytes() != 8<<20 {
+				t.Fatalf("reload = %+v, %v, want theme oceanic and limit %d", got, err, 8<<20)
 			}
 			entries, err := os.ReadDir(dir)
 			if err != nil || len(entries) != 1 || entries[0].Name() != tt.file {

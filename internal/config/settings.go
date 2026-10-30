@@ -11,6 +11,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/fsx"
 )
 
@@ -20,9 +21,10 @@ const (
 )
 
 type Settings struct {
-	DefaultTheme string         `json:"default_theme"   toml:"default_theme"`
-	Layout       LayoutSettings `json:"layout"          toml:"layout"`
-	Editor       EditorSettings `json:"editor,omitzero" toml:"editor,omitempty"`
+	DefaultTheme string            `json:"default_theme"      toml:"default_theme"`
+	Layout       LayoutSettings    `json:"layout"             toml:"layout"`
+	Editor       EditorSettings    `json:"editor,omitzero"    toml:"editor,omitempty"`
+	Clipboard    ClipboardSettings `json:"clipboard,omitzero" toml:"clipboard,omitempty"`
 }
 
 type EditorSettings struct {
@@ -31,6 +33,39 @@ type EditorSettings struct {
 
 func (s EditorSettings) DiagnosticsEnabled() bool {
 	return s.Diagnostics == nil || *s.Diagnostics
+}
+
+type ClipboardSettings struct {
+	OSC52Limit *ByteSize `json:"osc52_limit,omitempty" toml:"osc52_limit,omitempty"`
+}
+
+func (s ClipboardSettings) OSC52LimitBytes() int64 {
+	if s.OSC52Limit == nil {
+		return 0
+	}
+	return s.OSC52Limit.n
+}
+
+// ByteSize keeps the text it was parsed from, so a save writes back what the user typed.
+type ByteSize struct {
+	text string
+	n    int64
+}
+
+func (b ByteSize) MarshalText() ([]byte, error) {
+	return []byte(b.text), nil
+}
+
+func (b *ByteSize) UnmarshalText(text []byte) error {
+	n, err := bytesize.Parse(string(text))
+	if err != nil {
+		return err
+	}
+	if n <= 0 {
+		return fmt.Errorf("invalid size %q: must be greater than zero", text)
+	}
+	*b = ByteSize{text: string(text), n: n}
+	return nil
 }
 
 type SettingsFormat string
