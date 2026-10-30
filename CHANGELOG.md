@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.17.1](https://github.com/unkn0wn-root/resterm/compare/v1.17.0...v1.17.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **engine:** treat a request loop variable as unset in step conditions ([c1a64bf](https://github.com/unkn0wn-root/resterm/commit/c1a64bfb841d3c5e792a19365e4fb8443624b3da))
+* **report:** align step details under the step text ([#498](https://github.com/unkn0wn-root/resterm/issues/498)) ([ccbcd33](https://github.com/unkn0wn-root/resterm/commit/ccbcd33e0a6718cce74dd95fa6b19a2e4c638a61))
+* **request:** time out JavaScript tests with the response checks ([be8bc1e](https://github.com/unkn0wn-root/resterm/commit/be8bc1e80b764f09eb652706f05c3e12bcef639e))
+* **rts:** add with + only when one side is a string ([1556003](https://github.com/unkn0wn-root/resterm/commit/1556003a8735a5f46794ccb0dd72dcd723fa866e))
+* **run:** list failed tests in the text report ([#497](https://github.com/unkn0wn-root/resterm/issues/497)) ([66b43ab](https://github.com/unkn0wn-root/resterm/commit/66b43abb422008c917150eddf4e0350bd728c9db))
+* **scripts:** name a failed assert once ([413e5e0](https://github.com/unkn0wn-root/resterm/commit/413e5e07b517753b7d5b313237e8ce2c391c6ca9))
+
 ## [1.17.0](https://github.com/unkn0wn-root/resterm/compare/v1.16.1...v1.17.0) (2026-10-27)
 
 
