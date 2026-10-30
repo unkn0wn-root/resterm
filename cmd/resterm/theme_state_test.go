@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/unkn0wn-root/resterm/internal/config"
 )
 
 func TestLoadThemeStateResolvesConfiguredTheme(t *testing.T) {
@@ -63,5 +65,27 @@ background = "#bfdbfe"
 			"daybreak",
 			st.settings.DefaultTheme,
 		)
+	}
+}
+
+func TestLoadThemeStateKeepsBrokenSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("RESTERM_CONFIG_DIR", dir)
+	path := filepath.Join(dir, "settings.toml")
+	data := "default_theme = ["
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	st, err := loadThemeState()
+	if err == nil {
+		t.Fatal("loadThemeState() error = nil, want a settings error")
+	}
+	if err := config.SaveSettings(st.settings, st.handle); err == nil {
+		t.Fatal("SaveSettings() error = nil, want a refusal")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != data {
+		t.Fatalf("settings.toml = %q, %v, want %q", got, err, data)
 	}
 }

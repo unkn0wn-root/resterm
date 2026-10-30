@@ -37,6 +37,7 @@ type SettingsFormat string
 type SettingsHandle struct {
 	Path   string
 	Format SettingsFormat
+	err    error
 }
 
 // tries loading TOML first, then JSON, then returns default settings and the TOML handle if neither exists.
@@ -64,18 +65,15 @@ func LoadSettings() (Settings, SettingsHandle, error) {
 
 		settings, err := decodeSettings(data, candidate.Format)
 		if err != nil {
-			return Settings{}, SettingsHandle{}, fmt.Errorf(
-				"parse settings %q: %w",
-				candidate.Path,
-				err,
-			)
+			err = fmt.Errorf("parse settings %q: %w", candidate.Path, err)
+			return Settings{}, SettingsHandle{err: err}, err
 		}
 		settings.Layout = NormaliseLayoutSettings(settings.Layout)
 		return settings, candidate, nil
 	}
 
 	if accumulated != nil {
-		return Settings{}, SettingsHandle{}, accumulated
+		return Settings{}, SettingsHandle{err: accumulated}, accumulated
 	}
 
 	return Settings{Layout: DefaultLayoutSettings()}, candidates[0], nil
@@ -101,6 +99,9 @@ func decodeSettings(data []byte, format SettingsFormat) (Settings, error) {
 }
 
 func SaveSettings(settings Settings, handle SettingsHandle) error {
+	if handle.err != nil {
+		return fmt.Errorf("settings not saved: %w", handle.err)
+	}
 	settings.Layout = NormaliseLayoutSettings(settings.Layout)
 	path := handle.Path
 	format := handle.Format

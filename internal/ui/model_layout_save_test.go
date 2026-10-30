@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	toml "github.com/pelletier/go-toml/v2"
@@ -114,5 +115,30 @@ func TestSaveLayoutSettingsErrorClosesModal(t *testing.T) {
 		t.Fatalf("expected settings file not to be created on error")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected missing file, got %v", err)
+	}
+}
+
+func TestSaveLayoutSettingsKeepsBrokenFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("RESTERM_CONFIG_DIR", dir)
+	path := filepath.Join(dir, "settings.toml")
+	data := "default_theme = ["
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+	_, handle, err := config.LoadSettings()
+	if err == nil {
+		t.Fatal("LoadSettings() error = nil, want a parse error")
+	}
+	model := New(Config{WorkspaceRoot: t.TempDir(), SettingsHandle: handle})
+	model.openLayoutSaveModal()
+
+	status, ok := model.saveLayoutSettings()().(statusMsg)
+	if !ok || status.level != statusError || !strings.Contains(status.text, "settings not saved") {
+		t.Fatalf("status = %+v, want an error that says settings not saved", status)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != data {
+		t.Fatalf("settings.toml = %q, %v, want %q", got, err, data)
 	}
 }
