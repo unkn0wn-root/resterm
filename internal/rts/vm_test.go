@@ -109,7 +109,7 @@ func TestConcatWritesNumbersInFull(t *testing.T) {
 	}
 }
 
-func TestAddRejectsTwoListsOrTwoDicts(t *testing.T) {
+func TestAddRejectsPairsWithoutAString(t *testing.T) {
 	lim := Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 100}
 	tests := []struct {
 		src  string
@@ -119,6 +119,19 @@ func TestAddRejectsTwoListsOrTwoDicts(t *testing.T) {
 		{`[] + []`, "cannot add two lists"},
 		{`{a: 1} + {b: 2}`, "cannot add two dicts"},
 		{`{} + {}`, "cannot add two dicts"},
+		{`1 + true`, "cannot add number and bool"},
+		{`[1] + 2`, "cannot add list and number"},
+		{`2 + [1]`, "cannot add number and list"},
+		{`{a: 1} + 2`, "cannot add dict and number"},
+		{`[1] + {a: 1}`, "cannot add list and dict"},
+		{`{a: 1} + [1]`, "cannot add dict and list"},
+		{`true + false`, "cannot add bool and bool"},
+		{`"a" + null`, "cannot add string and null"},
+		{`null + "a"`, "cannot add null and string"},
+		{`null + 1`, "cannot add null and number"},
+		{`[1] + null`, "cannot add list and null"},
+		{`null + [1]`, "cannot add null and list"},
+		{`null + null`, "cannot add null and null"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.src, func(t *testing.T) {
@@ -137,7 +150,7 @@ func TestAddRejectsTwoListsOrTwoDicts(t *testing.T) {
 	}
 }
 
-func TestAddJoinsOtherKindsAsText(t *testing.T) {
+func TestAddJoinsAStringWithAnyKind(t *testing.T) {
 	tests := []struct {
 		src  string
 		want string
@@ -146,15 +159,8 @@ func TestAddJoinsOtherKindsAsText(t *testing.T) {
 		{`"ids: " + [1, 2]`, `ids: [1,2]`},
 		{`{a: 1} + "x"`, `{"a":1}x`},
 		{`"d: " + {a: 1}`, `d: {"a":1}`},
-		{`[1] + 2`, `[1]2`},
-		{`2 + [1]`, `2[1]`},
-		{`[1] + null`, `[1]`},
-		{`null + [1]`, `[1]`},
-		{`{a: 1} + 2`, `{"a":1}2`},
-		{`[1] + {a: 1}`, `[1]{"a":1}`},
-		{`{a: 1} + [1]`, `{"a":1}[1]`},
-		{`true + false`, `truefalse`},
-		{`null + null`, ``},
+		{`"a" + true`, `atrue`},
+		{`"a" + ""`, `a`},
 	}
 	for _, tt := range tests {
 		if v := evalExpr(t, tt.src); v.K != VStr || v.S != tt.want {

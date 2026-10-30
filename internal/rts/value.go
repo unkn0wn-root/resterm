@@ -1,5 +1,7 @@
 package rts
 
+import "strings"
+
 type VKind int
 
 const (
@@ -90,6 +92,38 @@ func (v Value) IsTruthy() bool {
 		return true
 	default:
 		return true
+	}
+}
+
+func (v Value) TypeName() string {
+	switch v.K {
+	case VNull:
+		return "null"
+	case VBool:
+		return "bool"
+	case VNum:
+		return "number"
+	case VStr:
+		return "string"
+	case VList:
+		return "list"
+	case VDict:
+		return "dict"
+	case VFunc:
+		return "function"
+	case VNative:
+		return "native"
+	case VObj:
+		if v.O == nil {
+			return "object"
+		}
+		name := v.O.TypeName()
+		if strings.TrimSpace(name) == "" {
+			return "object"
+		}
+		return name
+	default:
+		return "unknown"
 	}
 }
 

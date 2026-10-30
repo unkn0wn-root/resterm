@@ -56,7 +56,7 @@ Listed from tightest to loosest. Each level binds more tightly than the one belo
 
 `??` sits near the bottom, so it binds looser than arithmetic, comparison, and both logical operators. `a ?? b + c` means `a ?? (b + c)`, and `a ?? b or c` means `a ?? (b or c)`. Add parentheses when you want the other grouping.
 
-`+` adds two numbers and is an error for two lists or two dicts. Otherwise it converts both sides with `str()` and joins them, so `"id=" + 1000000` is `"id=1000000"`. Use `list.concat` to join lists, `append` to add items, and `dict.merge` to combine dicts. Ordering comparisons only work for numbers or strings, and equality only works for primitive types. Use `json.equal` to compare lists and dicts by their contents.
+`+` adds two numbers and joins text when one side is a string, converting the other side with `str()`, so `"id=" + 1000000` is `"id=1000000"`. Every other pair is an error, including `null` on either side, so use `??` to give a missing value a fallback. Use `list.concat` to join lists, `append` to add items, and `dict.merge` to combine dicts. Ordering comparisons only work for numbers or strings, and equality only works for primitive types. Use `json.equal` to compare lists and dicts by their contents.
 
 ## Membership operators
 
