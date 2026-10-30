@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.17.2](https://github.com/unkn0wn-root/resterm/compare/v1.17.1...v1.17.2) (2026-10-30)
+
+
+### Features
+
+* **config:** make the OSC 52 limit configurable ([524f1e1](https://github.com/unkn0wn-root/resterm/commit/524f1e16ea298d5aff4692db7f12a068987aea13))
+* **ui:** send copies over OSC 52 when no clipboard tool works ([7b0f94c](https://github.com/unkn0wn-root/resterm/commit/7b0f94c0ed7f4c6c66f8c49cf5a1f7fa02e8572c))
+
+
+### Bug Fixes
+
+* **config:** keep a settings file that failed to load ([c1941f4](https://github.com/unkn0wn-root/resterm/commit/c1941f414ec763131a722aedfecd99f039e09a73))
+* **mock:** stop without waiting for connections that sent nothing ([f54e30b](https://github.com/unkn0wn-root/resterm/commit/f54e30bf5c480ef2b19a61144d182472cd2c5a47))
+* **oauth:** finish login without waiting for idle browser connections ([ae86448](https://github.com/unkn0wn-root/resterm/commit/ae86448a25c23613a53e71f2f3f7e6e6214aebd6))
+* **recorder:** stop without waiting for connections that sent nothing ([5886912](https://github.com/unkn0wn-root/resterm/commit/5886912be250e30f3659440130069e89bee11def))
+
 ### [1.17.1](https://github.com/unkn0wn-root/resterm/compare/v1.17.0...v1.17.1) (2026-10-30)
 
 
