@@ -67,7 +67,7 @@ These Markdown files also supply the pages at https://resterm.app/docs/. To edit
 
 ## Reference
 
-- [Configuration](configuration.md): Where Resterm keeps settings, history and themes, plus editor diagnostics.
+- [Configuration](configuration.md): Where Resterm keeps settings, history and themes, plus editor diagnostics and the OSC 52 clipboard limit.
 - [Theming](theming.md): Write and test your own color theme.
 - [Collection sharing](collections.md): Package a workspace as a bundle you can commit and import elsewhere.
 - [Security](security.md): What request files can run, the safety limits, and telemetry.

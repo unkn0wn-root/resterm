@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unkn0wn-root/resterm/internal/clipboard"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/parser"
@@ -107,6 +108,7 @@ type requestEditor struct {
 	redoStack         []editorSnapshot
 	undoCoalescing    bool
 	registerText      string
+	clip              systemClipboard
 	completion        completionState
 	completionEnabled bool
 	placeholderExit   int
@@ -140,6 +142,7 @@ func newRequestEditor() requestEditor {
 		Model:          ta,
 		motionsEnabled: true,
 		engine:         intellisense.New(),
+		clip:           clipboard.New(nil, 0),
 	}
 }
 
@@ -841,10 +844,7 @@ func (e requestEditor) DeleteSelection() (requestEditor, tea.Cmd) {
 	}
 
 	if _, removed := (&e).removeSelection(); removed {
-		status := (&e).writeClipboardWithFallback(text, "Deleted selection")
-		if status.level == statusInfo && status.text == "Deleted selection" {
-			status.text = "Selection deleted"
-		}
+		status := (&e).writeClipboardWithFallback(text, "Selection deleted")
 		return e, toEditorEventCmd(editorEvent{status: &status})
 	}
 	return e, nil

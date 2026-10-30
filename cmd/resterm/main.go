@@ -387,6 +387,7 @@ func run(a []string) error {
 		UpdateCmd:      ucmd,
 		Compare:        cfg.Compare,
 		Bindings:       bindingMap,
+		Terminal:       os.Stdout,
 	})
 	program := tea.NewProgram(
 		model,

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -21,23 +20,19 @@ type themeState struct {
 func loadThemeState() (themeState, error) {
 	st := themeState{
 		settings: config.Settings{},
-		handle: config.SettingsHandle{
-			Path:   filepath.Join(config.Dir(), "settings.toml"),
-			Format: config.SettingsFormatTOML,
-		},
-		catalog: theme.Catalog{},
-		def:     theme.DefaultDefinition(),
-		active:  "default",
+		catalog:  theme.Catalog{},
+		def:      theme.DefaultDefinition(),
+		active:   "default",
 	}
 
 	var errs []error
 
 	cfg, h, cfgErr := config.LoadSettings()
+	st.handle = h
 	if cfgErr != nil {
 		errs = append(errs, fmt.Errorf("settings load error: %w", cfgErr))
 	} else {
 		st.settings = cfg
-		st.handle = h
 	}
 
 	cat, catErr := theme.LoadCatalog([]string{config.ThemeDir()})

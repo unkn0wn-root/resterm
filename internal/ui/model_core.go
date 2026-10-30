@@ -3,6 +3,7 @@ package ui
 import (
 	"cmp"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/clipboard"
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
@@ -175,6 +177,7 @@ type Config struct {
 	Runtime        *rtrun.Runtime
 	StatusUser     string
 	StatusHost     string
+	Terminal       io.Writer
 }
 
 type operatorState struct {
@@ -502,6 +505,7 @@ func New(cfg Config) Model {
 	}
 
 	editor := newRequestEditor()
+	editor.clip = clipboard.New(cfg.Terminal, cfg.Settings.Clipboard.OSC52LimitBytes())
 	editor.setStyler(selectEditorRuneStyler(cfg.FilePath, th.EditorMetadata), th)
 	editor.Placeholder = "Write API requests here..."
 	editor.SetValue(cfg.InitialContent)
