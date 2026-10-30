@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/http/serve"
 )
 
 type Session struct {
@@ -23,7 +25,7 @@ type Session struct {
 	store  *store
 
 	addr      string
-	srv       *http.Server
+	srv       *serve.Server
 	transport *http.Transport
 	proxy     *httputil.ReverseProxy
 
@@ -69,14 +71,14 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 		done:      make(chan struct{}),
 	}
 	s.proxy = s.newProxy(upstream)
-	s.srv = &http.Server{
+	s.srv = serve.Start(&http.Server{
 		Handler:           s,
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 		MaxHeaderBytes:    maxMetadataBytes,
-	}
+	}, ln)
 
-	go s.serve(ln)
+	go s.serve()
 	go s.watch(ctx)
 	return s, nil
 }
@@ -110,9 +112,9 @@ func (s *Session) newProxy(upstream *url.URL) *httputil.ReverseProxy {
 	}
 }
 
-func (s *Session) serve(ln net.Listener) {
-	err := s.srv.Serve(ln)
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+func (s *Session) serve() {
+	<-s.srv.Done()
+	if s.srv.Err() != nil {
 		s.fail(errors.New("recorder listener failed"))
 	}
 	s.closeAfter(ShutdownTimeout)
@@ -189,9 +191,6 @@ func (s *Session) Close(ctx context.Context) error {
 	s.closeOnce.Do(func() {
 		s.store.stop()
 		err := s.srv.Shutdown(ctx)
-		if err != nil {
-			_ = s.srv.Close()
-		}
 		s.store.drain()
 		s.transport.CloseIdleConnections()
 		s.fail(err)
