@@ -36,9 +36,19 @@ func (m *Manager) requestAuthCodeToken(
 	cfg Config,
 	opts httpx.Options,
 ) (Token, error) {
-	authURL := cfg.AuthURL
-	if authURL == "" {
+	if cfg.AuthURL == "" {
 		return Token{}, diag.New(diag.ClassAuth, "authorization_code requires auth_url")
+	}
+	auth, err := url.Parse(cfg.AuthURL)
+	if err != nil {
+		return Token{}, diag.WrapAs(diag.ClassAuth, err, "parse auth_url")
+	}
+	// The link goes to the system opener, which would launch any app or file.
+	switch {
+	case auth.Scheme != "http" && auth.Scheme != "https":
+		return Token{}, diag.New(diag.ClassAuth, "auth_url must use http or https")
+	case auth.Hostname() == "":
+		return Token{}, diag.New(diag.ClassAuth, "auth_url must contain a host")
 	}
 
 	ver, err := pickVerifier(cfg.CodeVerifier)
@@ -69,11 +79,7 @@ func (m *Manager) requestAuthCodeToken(
 	srv.serve(ln)
 	defer srv.shutdown(context.Background())
 
-	link, err := buildAuthURL(authURL, redirect.String(), cfg, state, challenge, method)
-	if err != nil {
-		return Token{}, err
-	}
-
+	link := buildAuthURL(auth, redirect.String(), cfg, state, challenge, method)
 	if err = launchBrowser(link); err != nil {
 		fmt.Fprintf(os.Stderr, "Open this URL to complete OAuth: %s\n", link)
 	}
@@ -140,15 +146,11 @@ func buildChallenge(verifier, method string) (string, error) {
 }
 
 func buildAuthURL(
-	base, redirect string,
+	u *url.URL,
+	redirect string,
 	cfg Config,
 	state, challenge, method string,
-) (string, error) {
-	u, err := url.Parse(base)
-	if err != nil {
-		return "", diag.WrapAs(diag.ClassAuth, err, "parse auth_url")
-	}
-
+) string {
 	q := u.Query()
 	q.Set("response_type", "code")
 	if cfg.ClientID != "" {
@@ -181,7 +183,7 @@ func buildAuthURL(
 		}
 	}
 	u.RawQuery = q.Encode()
-	return u.String(), nil
+	return u.String()
 }
 
 func prepareRedirect(raw string) (*url.URL, net.Listener, error) {
