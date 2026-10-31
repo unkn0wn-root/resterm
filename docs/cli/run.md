@@ -67,6 +67,7 @@ Related flags:
 | `--format <mode>` | `-f <mode>` | One of `auto`, `text`, `json`, `junit`, `pretty`, or `raw`. |
 | `--body` | `-b` | Print only the response body for exactly one request result. |
 | `--headers` | `-H` | Include request and response headers when a single-request view is rendered. |
+| `--response` | | Add each response's headers, body, and captured values to `--format json` output. |
 | `--color <mode>` | `-c <mode>` | Pretty-output color mode: `auto`, `always`, `never`. |
 
 Output rules:
@@ -74,6 +75,7 @@ Output rules:
 - `--body` only works with `--format auto`, `--format pretty`, or `--format raw`
 - `--body` keeps the exit status, so a failing run can print only the body and still exit `1`
 - `--format pretty`, `--format raw`, and `--body` all require exactly one request result
+- `--response` only works with `--format json`
 - `--color auto` enables ANSI output only when stdout is a TTY and the terminal supports color
 - `--color always` forces pretty color even when output is piped
 
@@ -85,6 +87,8 @@ Output rules:
 | `--exit-code-mode <mode>` | `-m <mode>` | `detailed` returns a code for the kind of failure. `summary` keeps the old `0`/`1`/`2` codes. |
 
 JSON output includes a top-level `schemaVersion`, `summary.exitCode`, and `summary.failureCodes`. Each failed result has a `failure` object. For workflows and compare runs, the same object appears on failed steps; for profiles, it appears on failed iterations. When a gRPC server returns status details, `grpc.statusDetails` contains those messages as JSON.
+
+With `--response`, each request result, and each workflow, for-each, and compare step, has a `response` object. It holds the response `headers`, the `body`, `bodySize`, and the `captures` the request saved. `bodySize` is the size of the body as it was received. A gzip body is decoded before it is masked, and its headers then have no `Content-Encoding` or `Content-Length`. A body with any other content encoding, an invalid gzip body, or a gzip body that decodes to more than 32 MiB, whatever `--max-response-size` is set to, has no `body`. A body that is not valid UTF-8 is base64-encoded and has `"bodyEncoding": "base64"`. Secret values, `-secret` captures, `Set-Cookie` headers, and sensitive headers such as `Authorization` and `X-API-Key` show as `•••`. Masking uses every secret the run knew, so a value that a later request captures as a secret is masked in earlier responses too. If the masked body is larger than 1 MiB, only its first 1 MiB is kept and `"bodyTruncated": true` is set. The cut never splits a character, so up to 3 bytes fewer can be kept. Profile runs, skipped requests, requests that failed before a response arrived, and requests whose captures failed have no `response` object.
 
 ## Artifacts And Persisted State
 
@@ -168,6 +172,12 @@ resterm run \
   --compare-group api \
   --compare-base dev \
   ./requests.http
+```
+
+Get the status, headers, body, and captured values of one request as JSON:
+
+```bash
+resterm run --request login --format json --response ./requests.http
 ```
 
 Print only the raw response body from one request:
