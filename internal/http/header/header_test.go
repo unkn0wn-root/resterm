@@ -156,3 +156,16 @@ func TestIsCookie(t *testing.T) {
 		}
 	}
 }
+
+func TestCarriesCookie(t *testing.T) {
+	for _, name := range []string{"Cookie", "COOKIE2", "Set-Cookie", " set-cookie2 "} {
+		if !CarriesCookie(name) {
+			t.Errorf("CarriesCookie(%q) = false", name)
+		}
+	}
+	for _, name := range []string{"Authorization", "X-Set-Cookie", ""} {
+		if CarriesCookie(name) {
+			t.Errorf("CarriesCookie(%q) = true", name)
+		}
+	}
+}

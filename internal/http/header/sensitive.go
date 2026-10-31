@@ -57,6 +57,16 @@ var cookies = Set{
 	"cookie2": {},
 }
 
+var setCookies = Set{
+	"set-cookie":  {},
+	"set-cookie2": {},
+}
+
 func Sensitive(name string) bool { return sensitive.Has(name) }
 
 func IsCookie(name string) bool { return cookies.Has(name) }
+
+// CarriesCookie reports whether the named header carries cookies in a request
+// or a response. Unlike IsCookie, which matches only the request headers that
+// redirects strip, it also matches Set-Cookie and Set-Cookie2.
+func CarriesCookie(name string) bool { return cookies.Has(name) || setCookies.Has(name) }

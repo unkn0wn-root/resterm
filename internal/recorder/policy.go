@@ -35,9 +35,6 @@ var defaultSecretFields = []string{
 	"token",
 }
 
-// Drop whole cookies to avoid retaining secrets in their attributes.
-var cookieHeaders = header.NewSet("Cookie", "Cookie2", "Set-Cookie", "Set-Cookie2")
-
 // Drop connection headers and values that must be rebuilt on replay.
 var hopHeaders = header.NewSet(
 	"Connection",
@@ -86,7 +83,7 @@ func (p policy) secretField(name string) bool { return p.fields[fieldName(name)]
 
 func (p policy) secretHeader(name string) bool {
 	return header.Sensitive(name) || p.headers.Has(name) ||
-		p.secretField(name) || cookieHeaders.Has(name)
+		p.secretField(name) || header.CarriesCookie(name)
 }
 
 func fieldName(name string) string {
