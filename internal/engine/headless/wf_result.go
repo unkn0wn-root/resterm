@@ -72,6 +72,7 @@ type wfStepRes struct {
 	sErr    error
 	err     error
 	secrets []string
+	caps    []restfile.Variable
 	execReq *restfile.Request
 	reqText string
 }
@@ -123,6 +124,7 @@ func makeStepRes(
 		sErr:    out.ScriptErr,
 		err:     out.Err,
 		secrets: out.RuntimeSecrets,
+		caps:    out.Captures,
 		execReq: request.CloneRequest(out.Executed),
 		reqText: out.RequestText,
 		msg:     strings.TrimSpace(out.SkipReason),
@@ -285,5 +287,6 @@ func toWorkflowStep(res wfStepRes) engine.WorkflowStep {
 		Duration:   res.dur,
 
 		RuntimeSecrets: slices.Clone(res.secrets),
+		Captures:       slices.Clone(res.caps),
 	}
 }

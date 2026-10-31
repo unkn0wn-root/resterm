@@ -1,6 +1,9 @@
 package headless
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 // Kind identifies the executed result type.
 type Kind string
@@ -111,6 +114,7 @@ type Result struct {
 	HTTP                 *HTTP
 	GRPC                 *GRPC
 	Stream               *Stream
+	Response             *Response
 	Trace                *Trace
 	Tests                []Test
 	Compare              *Compare
@@ -148,6 +152,7 @@ type Step struct {
 	HTTP                 *HTTP
 	GRPC                 *GRPC
 	Stream               *Stream
+	Response             *Response
 	Trace                *Trace
 	Tests                []Test
 }
@@ -242,6 +247,30 @@ type Stream struct {
 	Summary        map[string]any
 	TranscriptPath string
 	Error          string
+}
+
+// Response contains the headers and body of a response and the values its
+// captures saved. It is set when Options.Response.Enabled is true, a response
+// arrived and its captures succeeded. Secret values are masked using every
+// secret the run knew, and sensitive header values are masked in full. A gzip
+// body is decoded before it is masked, and Headers then have no
+// Content-Encoding or Content-Length. A body with any other content encoding,
+// or one that cannot be decoded, is left out. Body holds at most the first MiB
+// of the masked body. BodySize is the size of the body as received.
+type Response struct {
+	Headers       http.Header
+	Body          []byte
+	BodySize      int64
+	BodyTruncated bool
+	Captures      []Capture
+}
+
+// Capture contains one value saved by @capture.
+type Capture struct {
+	Scope  string `json:"scope"`
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Secret bool   `json:"secret,omitempty"`
 }
 
 // Trace contains trace summary metadata.

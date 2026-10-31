@@ -35,6 +35,7 @@ type captureResult struct {
 	requestVars vars.NameMap[restfile.Variable]
 	fileVars    vars.NameMap[restfile.Variable]
 	globals     vars.Globals
+	saved       []restfile.Variable
 }
 
 type captureRun struct {
@@ -156,6 +157,7 @@ func (e *Engine) applyCaptures(in captureRun) error {
 		case directive.ScopeGlobal:
 			work.globals.Set(c.Name, vars.GlobalMutation{Name: c.Name, Value: val, Secret: c.Secret})
 		}
+		work.saved = append(work.saved, restfile.Variable{Name: c.Name, Value: val, Scope: c.Scope, Secret: c.Secret})
 	}
 
 	e.commitCaptures(in, work)

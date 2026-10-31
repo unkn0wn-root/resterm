@@ -94,6 +94,7 @@ func buildOptions(o Options) (runner.Options, error) {
 		EnvironmentFile: env.file,
 		Compare:         cmp,
 		Profile:         o.Profile.Enabled,
+		Response:        o.Response.Enabled,
 		HTTPOptions:     httpOpts,
 		GRPCOptions:     grpcx.Options{DefaultPlaintext: restfile.OptOf(boolOr(o.GRPC.Plaintext, true))},
 		Select:          sel,

@@ -39,6 +39,7 @@ type Options struct {
 	Environment   EnvironmentOptions `json:"environment,omitempty"`
 	Compare       CompareOptions     `json:"compare,omitempty"`
 	Profile       ProfileOptions     `json:"profile,omitempty"`
+	Response      ResponseOptions    `json:"response,omitempty"`
 	HTTP          HTTPOptions        `json:"http,omitempty"`
 	GRPC          GRPCOptions        `json:"grpc,omitempty"`
 	Selection     Selection          `json:"selection,omitempty"`
@@ -71,6 +72,11 @@ type CompareOptions struct {
 
 // ProfileOptions configures profile runs.
 type ProfileOptions struct {
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+// ResponseOptions controls whether results include the response.
+type ResponseOptions struct {
 	Enabled bool `json:"enabled,omitempty"`
 }
 

@@ -59,6 +59,7 @@ func newResult(m runfmt.Result) Result {
 		HTTP:                 (*HTTP)(m.HTTP),
 		GRPC:                 (*GRPC)(m.GRPC),
 		Stream:               ptr(m.Stream, newStream),
+		Response:             ptr(m.Response, newResponse),
 		Trace:                ptr(m.Trace, newTrace),
 		Tests:                convert(m.Tests, newTest),
 		Compare:              (*Compare)(m.Compare),
@@ -92,6 +93,7 @@ func newStep(m runfmt.Step) Step {
 		HTTP:                 (*HTTP)(m.HTTP),
 		GRPC:                 (*GRPC)(m.GRPC),
 		Stream:               ptr(m.Stream, newStream),
+		Response:             ptr(m.Response, newResponse),
 		Trace:                ptr(m.Trace, newTrace),
 		Tests:                convert(m.Tests, newTest),
 	}
@@ -146,6 +148,18 @@ func newTrace(m runfmt.Trace) Trace {
 		ArtifactPath: m.ArtifactPath,
 	}
 }
+
+func newResponse(m runfmt.Response) Response {
+	return Response{
+		Headers:       m.Headers,
+		Body:          m.Body,
+		BodySize:      m.BodySize,
+		BodyTruncated: m.BodyTruncated,
+		Captures:      convert(m.Captures, newCapture),
+	}
+}
+
+func newCapture(m runfmt.Capture) Capture { return Capture(m) }
 
 func newTest(m runfmt.Test) Test { return Test(m) }
 
@@ -209,6 +223,7 @@ func (r Result) model() runfmt.Result {
 		HTTP:                 (*runfmt.HTTP)(r.HTTP),
 		GRPC:                 (*runfmt.GRPC)(r.GRPC),
 		Stream:               r.Stream.model(),
+		Response:             r.Response.model(),
 		Trace:                r.Trace.model(),
 		Tests:                convert(r.Tests, Test.model),
 		Compare:              (*runfmt.Compare)(r.Compare),
@@ -243,6 +258,7 @@ func (s Step) model() runfmt.Step {
 		HTTP:                 (*runfmt.HTTP)(s.HTTP),
 		GRPC:                 (*runfmt.GRPC)(s.GRPC),
 		Stream:               s.Stream.model(),
+		Response:             s.Response.model(),
 		Trace:                s.Trace.model(),
 		Tests:                convert(s.Tests, Test.model),
 	}
@@ -309,6 +325,21 @@ func (t *Trace) model() *runfmt.Trace {
 		ArtifactPath: t.ArtifactPath,
 	}
 }
+
+func (r *Response) model() *runfmt.Response {
+	if r == nil {
+		return nil
+	}
+	return &runfmt.Response{
+		Headers:       r.Headers,
+		Body:          r.Body,
+		BodySize:      r.BodySize,
+		BodyTruncated: r.BodyTruncated,
+		Captures:      convert(r.Captures, Capture.model),
+	}
+}
+
+func (c Capture) model() runfmt.Capture { return runfmt.Capture(c) }
 
 func (t Test) model() runfmt.Test { return runfmt.Test(t) }
 

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1319,6 +1320,65 @@ func TestRunCmdBodyRejectsTextFormat(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--body can only be combined") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunCmdJSONWithoutResponseFlagUnchanged(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+	file := filepath.Join(t.TempDir(), "one.http")
+	if err := os.WriteFile(file, []byte("# @name one\nGET "+srv.URL+"\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	for _, tt := range []struct {
+		args []string
+		want bool
+	}{
+		{args: []string{"--format", "json", file}},
+		{args: []string{"--response", "--format", "json", file}, want: true},
+	} {
+		var out bytes.Buffer
+		cmd := newRunCmd()
+		cmd.out = &out
+		cmd.newClient = stubRunClient
+		if err := cmd.parse(tt.args); err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if err := cmd.run(); err != nil {
+			t.Fatalf("run %v: %v", tt.args, err)
+		}
+		if got := strings.Contains(out.String(), `"response"`); got != tt.want {
+			t.Fatalf("run %v: response present %t, want %t:\n%s", tt.args, got, tt.want, out.String())
+		}
+	}
+}
+
+func TestRunCmdResponseRejectsNonJSONFormat(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "one.http")
+	if err := os.WriteFile(file, []byte("# @name one\nGET https://example.com/one\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	for _, format := range []string{"auto", "text", "junit", "pretty", "raw"} {
+		t.Run(format, func(t *testing.T) {
+			cmd := newRunCmd()
+			cmd.runFn = func(context.Context, runner.Options) (*runner.Report, error) {
+				t.Fatal("a request ran")
+				return nil, nil
+			}
+			if err := cmd.parse([]string{"--response", "--format", format, file}); err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			err := cmd.run()
+			if code := cli.ExitCode(err); code != 2 {
+				t.Fatalf("exit code = %d, want 2 (err=%v)", code, err)
+			}
+			if !strings.Contains(err.Error(), "--response can only be combined with --format json") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 

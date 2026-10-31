@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	runfail "github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 const (
@@ -73,8 +74,10 @@ type ProfileSnapshot struct {
 	// StatusCodes counts measured requests by HTTP status. Code 0 means no response.
 	StatusCodes map[int]int
 	Failures    []engine.ProfileFailure
-	SkipReason  string
-	Err         error
+	// Secrets holds the secret values the iterations exposed.
+	Secrets    []string
+	SkipReason string
+	Err        error
 	// Legacy identifies history records saved before failure details were kept.
 	Legacy bool
 }
@@ -128,6 +131,7 @@ type ProfileAccumulator struct {
 	ok       []time.Duration
 	codes    map[int]int
 	fails    []engine.ProfileFailure
+	secrets  vars.Secrets
 	canceled bool
 	skipped  bool
 	skipMsg  string
@@ -189,6 +193,7 @@ func (a *ProfileAccumulator) Snapshot() ProfileSnapshot {
 		Stats:       a.stats,
 		StatusCodes: maps.Clone(a.codes),
 		Failures:    slices.Clone(a.fails),
+		Secrets:     a.secrets.Values(),
 		SkipReason:  a.skipMsg,
 		Err:         a.err,
 	}
@@ -200,9 +205,11 @@ func (a *ProfileAccumulator) Snapshot() ProfileSnapshot {
 	return s
 }
 
-// A canceled or skipped iteration never finished, so it is not counted.
+// A canceled or skipped iteration never finished, so it is not counted. Its
+// secrets are kept, since it may have exposed them before it stopped.
 func (a *ProfileAccumulator) addIter(e ProIterDone) {
 	res := e.Result
+	a.secrets.Add(res.RuntimeSecrets...)
 	switch {
 	case errors.Is(res.Err, context.Canceled):
 		a.canceled = true

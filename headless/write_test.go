@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -715,6 +716,7 @@ func TestReportPartsMarshalLikeTheReport(t *testing.T) {
 
 	whole := obj(first(obj(decode(&Report{Results: []Result{res}}))["results"]))
 	failure, trace, prof := obj(whole["failure"]), obj(whole["trace"]), obj(whole["profile"])
+	resp := obj(whole["response"])
 	cases := []struct {
 		part any
 		want any
@@ -723,6 +725,8 @@ func TestReportPartsMarshalLikeTheReport(t *testing.T) {
 		{res.Failure, failure},
 		{res.Failure.Frames[0], first(failure["frames"])},
 		{res.Stream, whole["stream"]},
+		{res.Response, resp},
+		{res.Response.Captures[0], first(resp["captures"])},
 		{res.Trace, trace},
 		{res.Trace.Budget, trace["budgets"]},
 		{res.Trace.Breaches[0], first(trace["breaches"])},
@@ -747,6 +751,13 @@ func partsResult() Result {
 		Status:  StatusFail,
 		Failure: &Failure{Code: FailureTimeout, Message: "slow", Frames: []FailureFrame{{Name: "check"}}},
 		Stream:  &Stream{Kind: "sse", EventCount: 2, Summary: map[string]any{"wait": 5 * ms}},
+		Response: &Response{
+			Headers:       http.Header{"Content-Type": {"application/octet-stream"}},
+			Body:          []byte{0, 0xff, 'a'},
+			BodySize:      4,
+			BodyTruncated: true,
+			Captures:      []Capture{{Scope: "request", Name: "tok", Value: "•••", Secret: true}},
+		},
 		Trace: &Trace{
 			Duration: 30 * ms,
 			Budget:   &TraceBudget{Total: 20 * ms, Tolerance: ms, Phases: map[string]time.Duration{"dns": ms}},
@@ -790,7 +801,8 @@ func TestReportJSONRoundTrip(t *testing.T) {
 func TestReportPartsRoundTrip(t *testing.T) {
 	res := partsResult()
 	parts := []any{
-		&res.Tests[0], res.Failure, res.Stream, res.Trace, res.Trace.Budget, &res.Trace.Breaches[0],
+		&res.Tests[0], res.Failure, res.Stream, res.Response, &res.Response.Captures[0], res.Trace, res.Trace.Budget,
+		&res.Trace.Breaches[0],
 		res.Profile, res.Profile.Latency, &res.Profile.Percentiles[0], &res.Profile.Histogram[0],
 		&res.Profile.Failures[0],
 	}

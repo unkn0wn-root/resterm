@@ -50,6 +50,7 @@ type Options struct {
 	EnvironmentFile string
 	Compare         engine.CompareConfig
 	Profile         bool
+	Response        bool
 	HTTPOptions     httpx.Options
 	GRPCOptions     grpcx.Options
 	Client          *httpx.Client
@@ -118,6 +119,9 @@ type Result struct {
 	Failure                   runfail.Failure
 	failureFrom               runfail.Origin
 	transcript                []byte
+	secrets                   []string
+	captures                  []restfile.Variable
+	report                    *runfmt.Response
 	unresolvedTemplateVars    []string
 	unresolvedTemplateVarsSet bool
 }
@@ -199,6 +203,9 @@ type StepResult struct {
 	Trace                *TraceInfo
 	Failure              runfail.Failure
 	transcript           []byte
+	secrets              []string
+	captures             []restfile.Variable
+	report               *runfmt.Response
 }
 
 func RunContext(ctx context.Context, opts Options) (*Report, error) {
@@ -342,6 +349,8 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		Stream:               streamResult(res.Stream),
 		Trace:                traceResult(res.Response),
 		transcript:           bytes.Clone(res.Transcript),
+		secrets:              res.RuntimeSecrets,
+		captures:             res.Captures,
 	}
 	if res.Explain != nil {
 		item.SetUnresolvedTemplateVars(explainMissingTemplateVars(res.Explain))
@@ -436,6 +445,8 @@ func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult 
 		Stream:               streamResult(row.Stream),
 		Trace:                traceResult(row.Response),
 		transcript:           bytes.Clone(row.Transcript),
+		secrets:              row.RuntimeSecrets,
+		captures:             row.Captures,
 	}
 	step.Failure = stepFailure(step)
 	return step
@@ -463,6 +474,7 @@ func profileRunResult(req *restfile.Request, res engine.ProfileResult, fallbackE
 			Results:  cloneProfileResults(res.Results),
 			Failures: profileFailures(res.Failures),
 		},
+		secrets: res.RuntimeSecrets,
 	}
 	item.Failure, item.failureFrom = resultFailure(item)
 	return item
@@ -563,6 +575,8 @@ func workflowStepResult(step engine.WorkflowStep) StepResult {
 		Stream:               streamResult(step.Stream),
 		Trace:                traceResult(step.Response),
 		transcript:           bytes.Clone(step.Transcript),
+		secrets:              step.RuntimeSecrets,
+		captures:             step.Captures,
 	}
 	out.Failure = stepFailure(out)
 	return out

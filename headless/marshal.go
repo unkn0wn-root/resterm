@@ -115,6 +115,16 @@ func (s *Stream) UnmarshalJSON(b []byte) error {
 	return unmarshal(b, s, newStream)
 }
 
+// MarshalJSON writes the response the way it appears in the report JSON.
+func (r Response) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.model())
+}
+
+// UnmarshalJSON reads the response the way it appears in the report JSON.
+func (r *Response) UnmarshalJSON(b []byte) error {
+	return unmarshal(b, r, newResponse)
+}
+
 // MarshalJSON writes the trace the way it appears in the report JSON.
 func (t Trace) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.model())

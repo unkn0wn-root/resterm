@@ -64,6 +64,8 @@ func profileResult(
 		Canceled:    st == core.ProfileCanceled,
 		Results:     res,
 		Failures:    snap.Failures,
+
+		RuntimeSecrets: snap.Secrets,
 	}
 }
 

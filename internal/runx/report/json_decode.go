@@ -2,7 +2,9 @@ package runfmt
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
@@ -35,6 +37,8 @@ func (fail *ProfileFailure) UnmarshalJSON(b []byte) error {
 }
 
 func (stream *Stream) UnmarshalJSON(b []byte) error { return decode(b, stream, jsonStream.model) }
+
+func (resp *Response) UnmarshalJSON(b []byte) error { return decode(b, resp, jsonResponse.model) }
 
 func (trace *Trace) UnmarshalJSON(b []byte) error { return decode(b, trace, jsonTrace.model) }
 
@@ -85,6 +89,7 @@ func (j jsonResult) model() Result {
 		HTTP:                 modelOf(j.HTTP, jsonHTTP.model),
 		GRPC:                 modelOf(j.GRPC, jsonGRPC.model),
 		Stream:               modelOf(j.Stream, jsonStream.model),
+		Response:             modelOf(j.Response, jsonResponse.model),
 		Trace:                modelOf(j.Trace, jsonTrace.model),
 		Tests:                convert(j.Tests, jsonTest.model),
 		Compare:              modelOf(j.Compare, jsonCompare.model),
@@ -115,6 +120,7 @@ func (j jsonStep) model() Step {
 		HTTP:                 modelOf(j.HTTP, jsonHTTP.model),
 		GRPC:                 modelOf(j.GRPC, jsonGRPC.model),
 		Stream:               modelOf(j.Stream, jsonStream.model),
+		Response:             modelOf(j.Response, jsonResponse.model),
 		Trace:                modelOf(j.Trace, jsonTrace.model),
 		Tests:                convert(j.Tests, jsonTest.model),
 	}
@@ -208,6 +214,40 @@ func (j jsonProfileFailure) model() ProfileFailure {
 }
 
 func (j jsonStream) model() Stream { return Stream(j) }
+
+// UnmarshalJSON decodes a base64 body in place, so Body holds the bytes. Any
+// other bodyEncoding is an error.
+func (j *jsonResponse) UnmarshalJSON(b []byte) error {
+	type plain jsonResponse
+	if err := json.Unmarshal(b, (*plain)(j)); err != nil {
+		return err
+	}
+	switch j.BodyEncoding {
+	case "":
+		return nil
+	case bodyBase64:
+	default:
+		return fmt.Errorf("unknown bodyEncoding %q", j.BodyEncoding)
+	}
+	body, err := base64.StdEncoding.DecodeString(j.Body)
+	if err != nil {
+		return err
+	}
+	j.Body = string(body)
+	return nil
+}
+
+func (j jsonResponse) model() Response {
+	return Response{
+		Headers:       j.Headers,
+		Body:          []byte(j.Body),
+		BodySize:      j.BodySize,
+		BodyTruncated: j.BodyTruncated,
+		Captures:      convert(j.Captures, jsonCapture.model),
+	}
+}
+
+func (j jsonCapture) model() Capture { return Capture(j) }
 
 func (j jsonTrace) model() Trace {
 	return Trace{
