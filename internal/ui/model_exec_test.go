@@ -25,8 +25,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -2336,6 +2338,218 @@ func TestStaleRunMsgKeepsAggregateRun(t *testing.T) {
 			m = next.(Model)
 			if m.sendCancel == nil {
 				t.Fatal("stale message cleared the new run's cancel")
+			}
+		})
+	}
+}
+
+const aggregateSrc = `# @name a
+GET https://example.com/a
+
+###
+# @profile count=2
+GET https://example.com/b
+
+###
+# @for-each ["x","y"] as item
+GET https://example.com/c
+
+###
+# @compare dev stage
+GET https://example.com/d
+
+# @workflow flow
+# @step One using=a
+# @step Two using=a
+`
+
+type aggregateRun struct {
+	name  string
+	mode  core.Mode
+	start func(*Model) tea.Cmd
+	// flight puts a request in flight. idle then ends it, so the run sits
+	// between steps.
+	flight, idle []core.Evt
+}
+
+// aggregateRuns lists the runs that clear the send state when they end.
+func aggregateRuns() []aggregateRun {
+	req := &restfile.Request{Method: "GET", URL: "https://example.com/x"}
+	res := engine.RequestResult{
+		Response: testHTTPResp(req.URL, 200, "{}", time.Millisecond),
+		Executed: req,
+	}
+	steps := func(mode core.Mode) (flight, idle []core.Evt) {
+		meta := core.NewMeta(core.RunMeta{Mode: mode}, time.Unix(1, 0))
+		step := core.StepMeta{Name: "One", Kind: restfile.WorkflowStepKindRequest}
+		rm := core.ReqMeta{Index: 1, Label: "One"}
+		flight = []core.Evt{
+			core.WfStepStart{Meta: meta, Step: step, Request: req},
+			core.ReqStart{Meta: meta, Req: rm, Request: req},
+		}
+		idle = []core.Evt{
+			core.ReqDone{Meta: meta, Req: rm, Result: res},
+			core.WfStepDone{Meta: meta, Step: step, Result: res},
+		}
+		return flight, idle
+	}
+	wf, wfIdle := steps(core.ModeWorkflow)
+	each, eachIdle := steps(core.ModeForEach)
+	cm := core.NewMeta(core.RunMeta{Mode: core.ModeCompare}, time.Unix(1, 0))
+	row := core.RowMeta{Env: "dev", Base: true, Total: 2}
+	pm := core.NewMeta(core.RunMeta{Mode: core.ModeProfile}, time.Unix(1, 0))
+	it := core.IterMeta{Total: 2, RunIndex: 1, RunTotal: 2}
+	return []aggregateRun{
+		{
+			name: "workflow",
+			mode: core.ModeWorkflow,
+			start: func(m *Model) tea.Cmd {
+				return m.startWorkflowRun(m.doc, m.doc.Workflows[0], httpx.Options{})
+			},
+			flight: wf,
+			idle:   wfIdle,
+		},
+		{
+			name: "for-each",
+			mode: core.ModeForEach,
+			start: func(m *Model) tea.Cmd {
+				return m.startForEachRun(m.doc, m.doc.Requests[2], httpx.Options{})
+			},
+			flight: each,
+			idle:   eachIdle,
+		},
+		{
+			name: "compare",
+			mode: core.ModeCompare,
+			start: func(m *Model) tea.Cmd {
+				req := m.doc.Requests[3]
+				return m.startCompareRun(m.doc, req, req.Metadata.Compare, httpx.Options{})
+			},
+			flight: []core.Evt{core.CmpRowStart{Meta: cm, Row: row, Request: req}},
+			idle:   []core.Evt{core.CmpRowDone{Meta: cm, Row: row, Result: res}},
+		},
+		{
+			name: "profile",
+			mode: core.ModeProfile,
+			start: func(m *Model) tea.Cmd {
+				return m.startProfileRun(m.doc, m.doc.Requests[1], httpx.Options{})
+			},
+			flight: []core.Evt{core.ProIterStart{Meta: pm, Iter: it, Request: req}},
+			idle:   []core.Evt{core.ProIterDone{Meta: pm, Iter: it, Result: res}},
+		},
+	}
+}
+
+func aggregateState(m *Model) (live, canceled bool) {
+	switch {
+	case m.profileRun != nil:
+		return true, m.profileRun.canceled
+	case m.workflowRun != nil:
+		return true, m.workflowRun.canceled
+	case m.compareRun != nil:
+		return true, m.compareRun.canceled
+	}
+	return false, false
+}
+
+// A send during a workflow, compare or profile run only cancels it. The run
+// clears the send state when it ends, which would also end a run started now.
+func TestSendWaitsForCanceledAggregate(t *testing.T) {
+	presses := []struct {
+		name string
+		fn   func(*Model) tea.Cmd
+	}{
+		{"send", (*Model).sendActiveRequest},
+		{"explain", (*Model).explainActiveRequest},
+		{"history", func(m *Model) tea.Cmd {
+			// A finished run syncs history, which drops the selection.
+			m.historyEntries = []history.Entry{{ID: "h", RequestText: "GET https://example.com/h\n"}}
+			m.historyList.SetItems(makeHistoryItems(m.historyEntries, m.historyScope))
+			m.historyList.Select(0)
+			return m.replayHistorySelection()
+		}},
+	}
+	for _, run := range aggregateRuns() {
+		for _, phase := range []string{"in flight", "between"} {
+			for _, press := range presses {
+				t.Run(run.name+"/"+phase+"/"+press.name, func(t *testing.T) {
+					m := New(Config{FilePath: "a.http", InitialContent: aggregateSrc})
+					m.editor.SetCursor(0)
+					run.start(&m)
+					if live, _ := aggregateState(&m); !live {
+						t.Fatal("run did not start")
+					}
+					seq := m.sendSeq
+					var n int
+					m.sendCancel = func() { n++ }
+					meta := core.NewMeta(core.RunMeta{Mode: run.mode}, time.Unix(1, 0))
+					evts := append([]core.Evt{core.RunStart{Meta: meta}}, run.flight...)
+					if phase == "between" {
+						evts = append(evts, run.idle...)
+					}
+					for _, evt := range evts {
+						applyRunEvt(t, &m, evt)
+					}
+					req, want := m.currentRequest, m.cancelStatus()
+
+					press.fn(&m)
+					if n != 1 || m.sending || m.sendSeq != seq {
+						t.Fatalf("cancels=%d sending=%v seq+%d, want a cancel only", n, m.sending, m.sendSeq-seq)
+					}
+					if m.currentRequest != req {
+						t.Error("refused press replaced the current request")
+					}
+					if live, canceled := aggregateState(&m); live && !canceled || !live && phase != "between" {
+						t.Errorf("after the press: live=%v canceled=%v", live, canceled)
+					}
+					if m.statusMessage.text != want {
+						t.Errorf("status = %q, want %q", m.statusMessage.text, want)
+					}
+
+					applyRunEvt(t, &m, core.RunDone{Meta: meta, Canceled: true})
+					press.fn(&m)
+					if !m.sending || m.sendSeq != seq+1 {
+						t.Fatalf("press after RunDone: sending=%v seq+%d, want a run", m.sending, m.sendSeq-seq)
+					}
+					next, _ := m.Update(runWorkerDoneMsg{seq: seq})
+					m = next.(Model)
+					if m.sendCancel == nil {
+						t.Fatal("the canceled run's worker cleared the new run's cancel")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestRunWorkerDoneClearsOwnCancel(t *testing.T) {
+	m := New(Config{})
+	m.startRunWorker("run", func(context.Context) error { return nil })()
+	next, _ := m.Update(<-m.runMsgChan)
+	m = next.(Model)
+	if m.sendCancel != nil {
+		t.Fatal("the worker's done message left its cancel set")
+	}
+}
+
+// Ctrl+C marks the run canceled and waits for its RunDone, so the result has
+// final counts.
+func TestCancelRunKeepsAggregate(t *testing.T) {
+	for _, run := range aggregateRuns() {
+		t.Run(run.name, func(t *testing.T) {
+			m := New(Config{FilePath: "a.http", InitialContent: aggregateSrc})
+			run.start(&m)
+			seq := m.sendSeq
+			meta := core.NewMeta(core.RunMeta{Mode: run.mode}, time.Unix(1, 0))
+			for _, evt := range append([]core.Evt{core.RunStart{Meta: meta}}, run.flight...) {
+				applyRunEvt(t, &m, evt)
+			}
+
+			if cmd := m.cancelActiveRuns(); cmd != nil {
+				t.Fatal("cancel returned a command")
+			}
+			if live, canceled := aggregateState(&m); !live || !canceled || m.sendSeq != seq {
+				t.Fatalf("live=%v canceled=%v seq+%d", live, canceled, m.sendSeq-seq)
 			}
 		})
 	}

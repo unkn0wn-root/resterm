@@ -1883,9 +1883,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				// handled above
 			default:
 				if m.shouldSendEditorRequest(msg, false) {
-					if cmd := m.cancelActiveRuns(); cmd != nil {
-						return combine(cmd)
-					}
 					return combine(m.replayHistorySelection())
 				}
 			}

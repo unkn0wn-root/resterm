@@ -251,6 +251,9 @@ func (m *Model) handleRunEvt(msg runEvtMsg) tea.Cmd {
 }
 
 func (m *Model) handleRunWorkerDone(msg runWorkerDoneMsg) tea.Cmd {
+	if msg.seq != m.sendSeq {
+		return nil
+	}
 	var id string
 	var canceled bool
 	switch {

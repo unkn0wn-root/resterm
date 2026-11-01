@@ -1843,6 +1843,9 @@ func (m *Model) selectNewestHistoryEntry() {
 }
 
 func (m *Model) replayHistorySelection() tea.Cmd {
+	if cmd, ok := m.cancelForSend(); !ok {
+		return cmd
+	}
 	return m.loadHistorySelection(true)
 }
 

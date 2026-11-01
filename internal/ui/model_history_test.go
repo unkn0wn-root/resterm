@@ -1162,3 +1162,34 @@ func TestRecordHeaderTelemetryDropsPreResetSamples(t *testing.T) {
 		t.Fatalf("expected current-generation status 201, got %q", got)
 	}
 }
+
+// The r key replays without going through the send key, so replay cancels the
+// running request itself.
+func TestReplayHistoryCancelsActiveRun(t *testing.T) {
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		})}, nil
+	})
+	m := New(Config{FilePath: "a.http", InitialContent: "GET https://example.com/a\n", Client: client})
+	m.editor.SetCursor(0)
+	first := m.sendActiveRequest()
+	a := make(chan tea.Msg, 1)
+	go func() { a <- findRunMsg(first) }()
+	m.historyEntries = []history.Entry{{ID: "h", RequestText: "GET https://example.com/h\n"}}
+	m.historyList.SetItems(makeHistoryItems(m.historyEntries, m.historyScope))
+	m.historyList.Select(0)
+	seq := m.sendSeq
+
+	m.replayHistorySelection()
+	t.Cleanup(m.sendCancel)
+	select {
+	case <-a:
+	case <-time.After(2 * time.Second):
+		t.Fatal("replay did not cancel the running request")
+	}
+	if m.sendSeq != seq+1 {
+		t.Fatalf("seq = %d, want %d", m.sendSeq, seq+1)
+	}
+}

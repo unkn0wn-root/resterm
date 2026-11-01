@@ -183,6 +183,7 @@ type runEvtMsg struct {
 
 type runWorkerDoneMsg struct {
 	runID string
+	seq   int
 	err   error
 }
 
