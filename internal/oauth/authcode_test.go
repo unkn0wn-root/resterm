@@ -62,7 +62,7 @@ func TestAuthCodeDoesNotWaitForAConnectionWithoutARequest(t *testing.T) {
 	// http.Server.Shutdown treats it as idle.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}, true)
 	if err != nil || ctx.Err() != nil {
 		t.Fatalf("Token = %v, ctx = %v, want both nil", err, ctx.Err())
 	}
@@ -114,7 +114,7 @@ func TestAuthCodeOpensOnlyHTTPAuthURLs(t *testing.T) {
 				// Fails later, so the error shows auth_url is checked first.
 				cfg.RedirectURL = "http://example.com/cb"
 			}
-			_, err := NewManager(nil).Token(ctx, "dev", cfg, httpx.Options{})
+			_, err := NewManager(nil).Token(ctx, "dev", cfg, httpx.Options{}, true)
 			if opened != (tt.err == "") {
 				t.Fatalf("opened = %v, want %v (err %v)", opened, tt.err == "", err)
 			}

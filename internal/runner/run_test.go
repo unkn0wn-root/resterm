@@ -22,6 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
+	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
@@ -3090,6 +3091,82 @@ func TestRunRejectsUnseededHeadlessOAuthAuthorizationCode(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("expected request to stop before network call, got %d calls", calls)
+	}
+}
+
+func TestRunReportsFailedRefreshForHeadlessOAuthAuthorizationCode(t *testing.T) {
+	const (
+		refresh = "refresh-SEKRIT"
+		secret  = "client-SEKRIT"
+	)
+	var grants []string
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			calls++
+			_, _ = io.WriteString(w, `{"ok":true}`)
+			return
+		}
+		_ = r.ParseForm()
+		grants = append(grants, r.PostForm.Get("grant_type"))
+		_, pass, _ := r.BasicAuth()
+		// Echo the secrets, so a report that quotes the body leaks them.
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":"invalid_grant","refresh_token":"`+
+			r.PostForm.Get("refresh_token")+`","client_secret":"`+pass+`"}`)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	state := filepath.Join(dir, "state")
+	// The client secret exists only in the cache.
+	err := writeAuthState(filepath.Join(state, "auth.json"), engine.AuthState{OAuth: []oauth.SnapshotEntry{{
+		Key: "3:f1:6:ci-api",
+		Env: "f1:",
+		Config: oauth.Config{
+			TokenURL:     srv.URL + "/token",
+			ClientID:     "ci",
+			ClientSecret: secret,
+			GrantType:    oauth.GrantAuthorizationCode,
+			CacheKey:     "ci-api",
+		},
+		Token: oauth.Token{AccessToken: "stale", RefreshToken: refresh, Expiry: time.Now().Add(-time.Hour)},
+	}}})
+	if err != nil {
+		t.Fatalf("write auth state: %v", err)
+	}
+	file := filepath.Join(dir, "authcode.http")
+	src := "# @name authcode\n# @auth oauth2 grant=authorization_code cache_key=ci-api\nGET " + srv.URL + "/api\n"
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		StateDir:      state,
+		PersistAuth:   true,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := ExitCode(rep, runfail.ExitDetailed); got != runfail.ExitAuth {
+		t.Fatalf("exit = %d, want %d: %+v", got, runfail.ExitAuth, rep.Results)
+	}
+	if !slices.Equal(grants, []string{"refresh_token"}) || calls != 0 {
+		t.Fatalf("token grants = %v, api calls = %d, want one refresh and no api call", grants, calls)
+	}
+	var out strings.Builder
+	if err := rep.WriteText(&out); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	if !strings.Contains(out.String(), "oauth token refresh failed: 400 Bad Request") {
+		t.Fatalf("report does not name the refresh failure:\n%s", out.String())
+	}
+	for _, s := range []string{refresh, secret} {
+		if strings.Contains(out.String(), s) {
+			t.Fatalf("report leaks %q:\n%s", s, out.String())
+		}
 	}
 }
 

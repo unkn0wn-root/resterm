@@ -400,7 +400,7 @@ func (e *Engine) EnsureOAuth(
 	ctx, cancel := context.WithTimeout(ctx, tmo)
 	defer cancel()
 
-	tok, err := oa.Token(ctx, env.Scope(), cfg, opts)
+	tok, err := oa.Token(ctx, env.Scope(), cfg, opts, e.allowInteractiveOAuth())
 	if err != nil {
 		return "", diag.WrapAs(diag.ClassAuth, err, "fetch oauth token")
 	}
