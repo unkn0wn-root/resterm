@@ -249,10 +249,10 @@ func (m *Model) startRun(sp runSpec) (tea.Cmd, bool) {
 
 	env, err := m.environment(sp.sel)
 	if err != nil {
-		return responseErrCmd(err, sp.req, ""), false
+		return responseErrCmd(err, sp.req, "", m.sendSeq), false
 	}
 	if err := docErr(sp.doc); err != nil {
-		return responseErrCmd(err, sp.req, env.Label()), false
+		return responseErrCmd(err, sp.req, env.Label(), m.sendSeq), false
 	}
 
 	svc := m.requestSvc(sp.opts)
@@ -265,6 +265,8 @@ func (m *Model) startRun(sp runSpec) (tea.Cmd, bool) {
 	}
 	target := paneRunTarget(m.responseTargetPane())
 	gen := m.latencySeries.generation()
+	m.sendSeq++
+	seq := m.sendSeq
 	return m.runMsg(func(ctx context.Context) tea.Msg {
 		res, err := rq.ExecuteWith(sp.doc, sp.req, env, rqeng.ExecOptions{
 			Record: sp.record,
@@ -272,29 +274,32 @@ func (m *Model) startRun(sp runSpec) (tea.Cmd, bool) {
 			Mode:   sp.mode,
 		})
 		if sp.record {
-			return runReqMsg{res: res, err: err, latGen: gen, target: target}
+			return runReqMsg{res: res, err: err, latGen: gen, seq: seq, target: target}
 		}
 		if err != nil {
 			return responseMsg{
 				err:         err,
 				executed:    sp.req.Clone(),
 				environment: env.Label(),
+				seq:         seq,
 				target:      target,
 			}
 		}
 		msg := m.responseMsgFromRunState(res, false)
 		msg.latGen = gen
+		msg.seq = seq
 		msg.target = target
 		return msg
 	}), true
 }
 
-func responseErrCmd(err error, req *restfile.Request, env string) tea.Cmd {
+func responseErrCmd(err error, req *restfile.Request, env string, seq int) tea.Cmd {
 	return func() tea.Msg {
 		return responseMsg{
 			err:         err,
 			executed:    req.Clone(),
 			environment: env,
+			seq:         seq,
 		}
 	}
 }

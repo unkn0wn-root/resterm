@@ -377,6 +377,7 @@ type Model struct {
 	sending                bool
 	sendingOverlayBase     string
 	sendCancel             context.CancelFunc
+	sendSeq                int
 	suppressEditorKey      bool
 	editorInsertMode       bool
 	editorWriteKeyMap      textarea.KeyMap

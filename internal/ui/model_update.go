@@ -93,6 +93,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	case responseMsg:
+		if typed.seq != m.sendSeq {
+			break
+		}
 		m.stopSending()
 		m.sendCancel = nil
 		if cmd := m.handleResponseMessage(typed); cmd != nil {
@@ -100,6 +103,12 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		}
 		m.stopStatusPulseIfIdle()
 	case runReqMsg:
+		// Send cancels a run and starts the next at once, so the canceled run
+		// can report after it. The engine has already written its history.
+		if typed.seq != m.sendSeq {
+			m.syncHistory()
+			break
+		}
 		m.stopSending()
 		m.sendCancel = nil
 		if cmd := m.handleRunReqMsg(typed); cmd != nil {
