@@ -1959,7 +1959,6 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	m.scriptError = nil
 
 	if !send {
-		m.stopSending()
 		label := strings.TrimSpace(m.statusRequestTitle(doc, req))
 		if label == "" {
 			label = "history request"
