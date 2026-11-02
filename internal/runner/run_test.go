@@ -3170,6 +3170,62 @@ func TestRunReportsFailedRefreshForHeadlessOAuthAuthorizationCode(t *testing.T) 
 	}
 }
 
+// The token endpoint never sends a new refresh token, so each run must
+// refresh with the seeded one.
+func TestRunKeepsRefreshTokenAcrossHeadlessRuns(t *testing.T) {
+	var sent []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/token" {
+			_ = r.ParseForm()
+			sent = append(sent, r.PostForm.Get("refresh_token"))
+			_, _ = io.WriteString(w, `{"access_token":"fresh","token_type":"Bearer","expires_in":1}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	state := filepath.Join(dir, "state")
+	err := writeAuthState(filepath.Join(state, "auth.json"), engine.AuthState{OAuth: []oauth.SnapshotEntry{{
+		Key: "3:f1:6:ci-api",
+		Env: "f1:",
+		Config: oauth.Config{
+			TokenURL:  srv.URL + "/token",
+			ClientID:  "ci",
+			GrantType: oauth.GrantAuthorizationCode,
+			CacheKey:  "ci-api",
+		},
+		Token: oauth.Token{AccessToken: "stale", RefreshToken: "refresh-1", Expiry: time.Now().Add(-time.Hour)},
+	}}})
+	if err != nil {
+		t.Fatalf("write auth state: %v", err)
+	}
+	file := filepath.Join(dir, "authcode.http")
+	src := "# @name authcode\n# @auth oauth2 grant=authorization_code cache_key=ci-api\nGET " + srv.URL + "/api\n"
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	for i := range 2 {
+		rep, err := RunContext(context.Background(), Options{
+			FilePath:      file,
+			WorkspaceRoot: dir,
+			StateDir:      state,
+			PersistAuth:   true,
+		})
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if !rep.Success() {
+			t.Fatalf("run %d failed: %+v", i+1, rep.Results)
+		}
+	}
+	if want := []string{"refresh-1", "refresh-1"}; !slices.Equal(sent, want) {
+		t.Fatalf("refresh tokens sent = %q, want %q", sent, want)
+	}
+}
+
 func TestRunFailsOnTruncatedStreamAndKeepsTheTranscript(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "stream.http")

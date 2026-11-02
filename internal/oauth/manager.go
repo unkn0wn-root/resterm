@@ -659,6 +659,8 @@ func (m *Manager) refreshToken(
 	if err != nil {
 		return Token{}, err
 	}
+	// Without a new refresh token the old one stays valid (RFC 6749 section 6).
+	token.RefreshToken = cmp.Or(token.RefreshToken, refresh)
 	return token, nil
 }
 

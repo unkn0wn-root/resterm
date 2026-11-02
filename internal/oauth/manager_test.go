@@ -476,7 +476,7 @@ func TestManagerRefreshToken(t *testing.T) {
 					Status:     "200 OK",
 					StatusCode: 200,
 					Body: []byte(
-						`{"access_token":"token-refreshed","token_type":"Bearer","expires_in":3600}`,
+						`{"access_token":"token-refreshed","token_type":"Bearer","expires_in":1}`,
 					),
 					Headers: http.Header{},
 				}, nil
@@ -517,9 +517,66 @@ func TestManagerRefreshToken(t *testing.T) {
 	if token2.AccessToken != "token-refreshed" {
 		t.Fatalf("expected refreshed token, got %q", token2.AccessToken)
 	}
+	if _, err := mgr.Token(ctx2, "stage", cfg, httpx.Options{}, false); err != nil {
+		t.Fatalf("token3: %v", err)
+	}
 
-	if len(grants) != 2 || grants[0] != "client_credentials" || grants[1] != "refresh_token" {
+	if !slices.Equal(grants, []string{"client_credentials", "refresh_token", "refresh_token"}) {
 		t.Fatalf("unexpected grants sequence %v", grants)
+	}
+}
+
+func TestManagerRefreshKeepsRefreshTokenUntilReplaced(t *testing.T) {
+	cfg := Config{
+		TokenURL:  "https://auth.local/token",
+		AuthURL:   "https://auth.local/auth",
+		ClientID:  "cli",
+		GrantType: GrantAuthorizationCode,
+	}
+	// expires_in=1 is inside the expiry slack, so every Token call refreshes.
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"json without refresh_token", `{"access_token":"a","expires_in":1}`, "r1"},
+		{"form without refresh_token", "access_token=a&expires_in=1", "r1"},
+		{"json empty refresh_token", `{"access_token":"a","refresh_token":"","expires_in":1}`, "r1"},
+		{"form empty refresh_token", "access_token=a&refresh_token=&expires_in=1", "r1"},
+		{"json new refresh_token", `{"access_token":"a","refresh_token":"r2","expires_in":1}`, "r2"},
+		{"form new refresh_token", "access_token=a&refresh_token=r2&expires_in=1", "r2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sent []string
+			mgr := NewManager(nil)
+			mgr.SetRequestFunc(
+				func(_ context.Context, req *restfile.Request, _ httpx.Options) (*httpx.Response, error) {
+					form, err := url.ParseQuery(req.Body.Text)
+					if err != nil {
+						t.Fatalf("parse form: %v", err)
+					}
+					sent = append(sent, form.Get("refresh_token"))
+					return &httpx.Response{Status: "200 OK", StatusCode: 200, Body: []byte(tt.body)}, nil
+				},
+			)
+			mgr.storeToken(mgr.cacheKey("dev", cfg), "dev", cfg, Token{
+				AccessToken:  "stale",
+				RefreshToken: "r1",
+				Expiry:       time.Now().Add(-time.Hour),
+			})
+
+			var tok Token
+			for range 2 {
+				var err error
+				if tok, err = mgr.Token(t.Context(), "dev", cfg, httpx.Options{}, false); err != nil {
+					t.Fatalf("Token: %v (sent %q)", err, sent)
+				}
+			}
+			if want := []string{"r1", tt.want}; !slices.Equal(sent, want) || tok.RefreshToken != tt.want {
+				t.Fatalf("sent %q and kept %q, want %q and %q", sent, tok.RefreshToken, want, tt.want)
+			}
+		})
 	}
 }
 
@@ -646,6 +703,9 @@ func TestAuthCodeBrowserFallback(t *testing.T) {
 			}
 			if err == nil || err.Error() != tt.err || diag.ClassOf(err) != diag.ClassAuth {
 				t.Fatalf("err = %v (class %s), want auth error %q", err, diag.ClassOf(err), tt.err)
+			}
+			if got := mgr.Snapshot()[0].Token; got.AccessToken != "stale" || got.RefreshToken != tt.refresh {
+				t.Fatalf("cache = %q, %q, want it unchanged", got.AccessToken, got.RefreshToken)
 			}
 			// The cause keeps its class, which picks the run's exit code.
 			if tt.rerr != nil &&
