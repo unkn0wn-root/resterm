@@ -39,7 +39,7 @@ func TestTokenExchangeIgnoresTheRequestRedirectTrust(t *testing.T) {
 	}, httpx.Options{
 		FollowRedirects:    true,
 		ForwardCredentials: forward,
-	})
+	}, false)
 
 	if err == nil {
 		t.Fatal("the token exchange followed a redirect off its origin")

@@ -89,6 +89,8 @@ With `grant=authorization_code`, Resterm runs the whole flow for you:
 3. Exchanges the authorization code for tokens at `token_url` and sends the PKCE verifier with it.
 4. Caches the token and adds it to your request.
 
+`resterm run` and the headless package never open a browser. They use a cached token or refresh it, and otherwise fail the request with the reason.
+
 #### Redirect URI behavior
 
 The `redirect_uri` controls where the authorization server sends the user after login:
@@ -132,7 +134,7 @@ GET {{api.url}}/userinfo
 
 #### Timeout behavior
 
-The authorization code flow has a 2-minute timeout by default, which gives you time to log in from the browser. If you need longer, set `@timeout` on the request. Resterm uses it when it is longer than 2 minutes.
+The browser login has a 2-minute timeout by default, which gives you time to log in. If you need longer, set `@timeout` on the request. Resterm uses it when it is longer than 2 minutes.
 
 ### Custom token header
 
@@ -288,8 +290,8 @@ Any other `key=value` pairs are sent as extra form parameters to both the author
 Resterm caches tokens per environment and `cache_key`. When a request needs a token:
 
 1. If a valid cached token exists (not expired, with a 30-second safety margin), Resterm reuses it.
-2. If the cached token is expired and has a `refresh_token`, Resterm tries to refresh it.
-3. If the refresh fails or there is no token, Resterm fetches a new one from the token endpoint.
+2. If the cached token is expired and has a `refresh_token`, Resterm tries to refresh it and keeps that `refresh_token` unless the server sends a new one.
+3. If the refresh fails or there is no token, Resterm fetches a new one from the token endpoint. For `grant=authorization_code` that takes a browser login, which only the TUI does, so `resterm run` and the headless package fail the request with the reason instead.
 
 For grouped environments, "per environment" means the full group selection. Changing just the credentials profile gives you a separate OAuth and command-auth cache. An explicit `cache_key` is also tied to that selection.
 

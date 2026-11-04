@@ -633,6 +633,51 @@ func TestEnsureOAuthWithoutOverrideStillRequiresTokenURL(t *testing.T) {
 	}
 }
 
+// The cached token has expired but holds a refresh token. There is no
+// auth_url, so a browser login fails before it opens anything.
+func TestEnsureOAuthFallsBackToBrowserOnlyWhenInteractive(t *testing.T) {
+	env := testEnv("")
+	tests := []struct {
+		interactive bool
+		err         string
+	}{
+		{false, "fetch oauth token: cannot fall back to browser login: oauth token refresh failed: 400 Bad Request"},
+		{true, "fetch oauth token: authorization_code requires auth_url"},
+	}
+	for _, tt := range tests {
+		eng := New(engine.Config{AllowInteractiveOAuth: tt.interactive}, rtrun.New(rtrun.Config{}))
+		oa := eng.rt.OAuth()
+		oa.Restore([]oauth.SnapshotEntry{{
+			Key: "3:f1:2:ci",
+			Env: env.Scope(),
+			Config: oauth.Config{
+				TokenURL:  "https://auth.local/token",
+				ClientID:  "ci",
+				GrantType: oauth.GrantAuthorizationCode,
+				CacheKey:  "ci",
+			},
+			Token: oauth.Token{AccessToken: "stale", RefreshToken: "refresh", Expiry: time.Now().Add(-time.Hour)},
+		}})
+		oa.SetRequestFunc(func(context.Context, *restfile.Request, httpx.Options) (*httpx.Response, error) {
+			return &httpx.Response{Status: "400 Bad Request", StatusCode: http.StatusBadRequest}, nil
+		})
+		req := &restfile.Request{Metadata: restfile.RequestMetadata{
+			Auth: oauthSpec(map[string]string{"grant": "authorization_code", "cache_key": "ci"}),
+		}}
+		_, err := eng.EnsureOAuth(
+			context.Background(),
+			req,
+			vars.NewResolver(),
+			httpx.Options{},
+			env.Resolve(),
+			time.Second,
+		)
+		if err == nil || err.Error() != tt.err {
+			t.Errorf("interactive=%v: err = %v, want %q", tt.interactive, err, tt.err)
+		}
+	}
+}
+
 func TestEnsureCommandAuthSkipsBrokenArgvWhenMetadataPresent(t *testing.T) {
 	called := int32(0)
 

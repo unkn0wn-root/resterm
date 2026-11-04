@@ -3,14 +3,17 @@ package oauth
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -54,7 +57,7 @@ func TestManagerClientCredentialsBasic(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -78,7 +81,7 @@ func TestManagerClientCredentialsBasic(t *testing.T) {
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second)
 	defer cancel2()
-	if _, err := mgr.Token(ctx2, "dev", cfg, httpx.Options{}); err != nil {
+	if _, err := mgr.Token(ctx2, "dev", cfg, httpx.Options{}, false); err != nil {
 		t.Fatalf("second token request: %v", err)
 	}
 	if callCount != 1 {
@@ -120,7 +123,7 @@ func TestManagerClientCredentialsBodyAuth(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token, err := mgr.Token(ctx, "prod", cfg, httpx.Options{})
+	token, err := mgr.Token(ctx, "prod", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -158,7 +161,7 @@ func TestManagerBasicAuthSendsCredentialsUnchanged(t *testing.T) {
 
 	cfg := Config{TokenURL: "https://auth.local/token", ClientID: id, ClientSecret: secret}
 	for range 2 {
-		if _, err := mgr.Token(t.Context(), "dev", cfg, httpx.Options{}); err != nil {
+		if _, err := mgr.Token(t.Context(), "dev", cfg, httpx.Options{}, false); err != nil {
 			t.Fatalf("token: %v", err)
 		}
 	}
@@ -199,7 +202,7 @@ func TestManagerClientCredentialsExplicitBasicWithEmptySecret(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -245,7 +248,7 @@ func TestManagerTokenFormEncodedResponse(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -322,15 +325,15 @@ func TestManagerExplicitCacheKeyIsScoped(t *testing.T) {
 		CacheKey:  "shared",
 	}
 
-	personal, err := mgr.Token(context.Background(), "scope-personal", cfg, httpx.Options{})
+	personal, err := mgr.Token(context.Background(), "scope-personal", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("personal token: %v", err)
 	}
-	ci, err := mgr.Token(context.Background(), "scope-ci", cfg, httpx.Options{})
+	ci, err := mgr.Token(context.Background(), "scope-ci", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("ci token: %v", err)
 	}
-	again, err := mgr.Token(context.Background(), "scope-personal", cfg, httpx.Options{})
+	again, err := mgr.Token(context.Background(), "scope-personal", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("cached personal token: %v", err)
 	}
@@ -431,7 +434,7 @@ func TestManagerNormalizesDefaultGrantForCacheReuse(t *testing.T) {
 		ClientID:     "client",
 		ClientSecret: "secret",
 		GrantType:    GrantClientCredentials,
-	}, httpx.Options{})
+	}, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -473,7 +476,7 @@ func TestManagerRefreshToken(t *testing.T) {
 					Status:     "200 OK",
 					StatusCode: 200,
 					Body: []byte(
-						`{"access_token":"token-refreshed","token_type":"Bearer","expires_in":3600}`,
+						`{"access_token":"token-refreshed","token_type":"Bearer","expires_in":1}`,
 					),
 					Headers: http.Header{},
 				}, nil
@@ -497,7 +500,7 @@ func TestManagerRefreshToken(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	token1, err := mgr.Token(ctx, "stage", cfg, httpx.Options{})
+	token1, err := mgr.Token(ctx, "stage", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("token1: %v", err)
 	}
@@ -507,16 +510,73 @@ func TestManagerRefreshToken(t *testing.T) {
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second)
 	defer cancel2()
-	token2, err := mgr.Token(ctx2, "stage", cfg, httpx.Options{})
+	token2, err := mgr.Token(ctx2, "stage", cfg, httpx.Options{}, false)
 	if err != nil {
 		t.Fatalf("token2: %v", err)
 	}
 	if token2.AccessToken != "token-refreshed" {
 		t.Fatalf("expected refreshed token, got %q", token2.AccessToken)
 	}
+	if _, err := mgr.Token(ctx2, "stage", cfg, httpx.Options{}, false); err != nil {
+		t.Fatalf("token3: %v", err)
+	}
 
-	if len(grants) != 2 || grants[0] != "client_credentials" || grants[1] != "refresh_token" {
+	if !slices.Equal(grants, []string{"client_credentials", "refresh_token", "refresh_token"}) {
 		t.Fatalf("unexpected grants sequence %v", grants)
+	}
+}
+
+func TestManagerRefreshKeepsRefreshTokenUntilReplaced(t *testing.T) {
+	cfg := Config{
+		TokenURL:  "https://auth.local/token",
+		AuthURL:   "https://auth.local/auth",
+		ClientID:  "cli",
+		GrantType: GrantAuthorizationCode,
+	}
+	// expires_in=1 is inside the expiry slack, so every Token call refreshes.
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"json without refresh_token", `{"access_token":"a","expires_in":1}`, "r1"},
+		{"form without refresh_token", "access_token=a&expires_in=1", "r1"},
+		{"json empty refresh_token", `{"access_token":"a","refresh_token":"","expires_in":1}`, "r1"},
+		{"form empty refresh_token", "access_token=a&refresh_token=&expires_in=1", "r1"},
+		{"json new refresh_token", `{"access_token":"a","refresh_token":"r2","expires_in":1}`, "r2"},
+		{"form new refresh_token", "access_token=a&refresh_token=r2&expires_in=1", "r2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sent []string
+			mgr := NewManager(nil)
+			mgr.SetRequestFunc(
+				func(_ context.Context, req *restfile.Request, _ httpx.Options) (*httpx.Response, error) {
+					form, err := url.ParseQuery(req.Body.Text)
+					if err != nil {
+						t.Fatalf("parse form: %v", err)
+					}
+					sent = append(sent, form.Get("refresh_token"))
+					return &httpx.Response{Status: "200 OK", StatusCode: 200, Body: []byte(tt.body)}, nil
+				},
+			)
+			mgr.storeToken(mgr.cacheKey("dev", cfg), "dev", cfg, Token{
+				AccessToken:  "stale",
+				RefreshToken: "r1",
+				Expiry:       time.Now().Add(-time.Hour),
+			})
+
+			var tok Token
+			for range 2 {
+				var err error
+				if tok, err = mgr.Token(t.Context(), "dev", cfg, httpx.Options{}, false); err != nil {
+					t.Fatalf("Token: %v (sent %q)", err, sent)
+				}
+			}
+			if want := []string{"r1", tt.want}; !slices.Equal(sent, want) || tok.RefreshToken != tt.want {
+				t.Fatalf("sent %q and kept %q, want %q and %q", sent, tok.RefreshToken, want, tt.want)
+			}
+		})
 	}
 }
 
@@ -551,6 +611,113 @@ func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
 	if merged.TokenURL != cfg.TokenURL || merged.AuthURL != cfg.AuthURL ||
 		merged.ClientID != cfg.ClientID {
 		t.Fatalf("expected restored config to merge, got %#v", merged)
+	}
+}
+
+func TestAuthCodeBrowserFallback(t *testing.T) {
+	const (
+		refresh = "refresh-SEKRIT"
+		secret  = "client-SEKRIT"
+		// Echoes the secrets, so an error that quotes the body leaks them.
+		body = `{"access_token":"fresh","refresh_token":"` + refresh + `","client_secret":"` + secret + `"}`
+	)
+	cfg := Config{
+		TokenURL:     "https://auth.local/token",
+		AuthURL:      "https://auth.local/auth",
+		ClientID:     "cli",
+		ClientSecret: secret,
+		GrantType:    GrantAuthorizationCode,
+	}
+	errDial := diag.New(diag.ClassNetwork, "dial refused")
+	tests := []struct {
+		name        string
+		interactive bool
+		refresh     string
+		status      int
+		rerr        error // returned by the token endpoint when set
+		opens       int
+		err         string // empty when the refreshed token comes back
+	}{
+		{
+			name:    "headless refresh fails",
+			refresh: refresh,
+			status:  400,
+			err:     "cannot fall back to browser login: oauth token refresh failed: 400 Bad Request",
+		},
+		{
+			name:    "headless refresh unreachable",
+			refresh: refresh,
+			rerr:    errDial,
+			err:     "cannot fall back to browser login: dial refused",
+		},
+		{name: "headless refresh works", refresh: refresh, status: 200},
+		{name: "headless without refresh token", status: 200, err: "authorization_code needs a browser login"},
+		{
+			name:        "interactive refresh fails",
+			interactive: true,
+			refresh:     refresh,
+			status:      400,
+			opens:       1,
+			err:         "waiting for oauth authorization: context canceled",
+		},
+		{name: "interactive refresh works", interactive: true, refresh: refresh, status: 200},
+	}
+	t.Cleanup(func() { launchBrowser = openBrowser })
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mgr := NewManager(nil)
+			mgr.SetRequestFunc(func(context.Context, *restfile.Request, httpx.Options) (*httpx.Response, error) {
+				if tt.rerr != nil {
+					return nil, tt.rerr
+				}
+				return &httpx.Response{
+					Status:     fmt.Sprintf("%d %s", tt.status, http.StatusText(tt.status)),
+					StatusCode: tt.status,
+					Body:       []byte(body),
+				}, nil
+			})
+			mgr.storeToken(mgr.cacheKey("dev", cfg), "dev", cfg, Token{
+				AccessToken:  "stale",
+				RefreshToken: tt.refresh,
+				Expiry:       time.Now().Add(-time.Hour),
+			})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			opens := 0
+			// Cancel so an opened login ends without a callback.
+			launchBrowser = func(string) error {
+				opens++
+				cancel()
+				return nil
+			}
+
+			tok, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}, tt.interactive)
+			if opens != tt.opens {
+				t.Fatalf("browser opened %d times, want %d (err %v)", opens, tt.opens, err)
+			}
+			if tt.err == "" {
+				if err != nil || tok.AccessToken != "fresh" {
+					t.Fatalf("Token = %q, %v, want the refreshed token", tok.AccessToken, err)
+				}
+				return
+			}
+			if err == nil || err.Error() != tt.err || diag.ClassOf(err) != diag.ClassAuth {
+				t.Fatalf("err = %v (class %s), want auth error %q", err, diag.ClassOf(err), tt.err)
+			}
+			if got := mgr.Snapshot()[0].Token; got.AccessToken != "stale" || got.RefreshToken != tt.refresh {
+				t.Fatalf("cache = %q, %q, want it unchanged", got.AccessToken, got.RefreshToken)
+			}
+			// The cause keeps its class, which picks the run's exit code.
+			if tt.rerr != nil &&
+				(!errors.Is(err, tt.rerr) || !slices.Contains(diag.Classes(err), diag.ClassOf(tt.rerr))) {
+				t.Fatalf("err = %v (classes %v), want it to wrap %v", err, diag.Classes(err), tt.rerr)
+			}
+			for _, s := range []string{refresh, secret} {
+				if strings.Contains(err.Error(), s) {
+					t.Fatalf("err %q leaks %q", err, s)
+				}
+			}
+		})
 	}
 }
 
@@ -649,7 +816,7 @@ func TestManagerRefreshUsesTheFetchClientAuth(t *testing.T) {
 				Password:     "pass",
 			}
 			for range 2 {
-				if _, err := mgr.Token(context.Background(), "dev", cfg, httpx.Options{}); err != nil {
+				if _, err := mgr.Token(context.Background(), "dev", cfg, httpx.Options{}, false); err != nil {
 					t.Fatalf("token: %v", err)
 				}
 			}
@@ -789,7 +956,7 @@ func TestManagerAuthorizationCodePKCE(t *testing.T) {
 		launchBrowser = openBrowser
 	})
 
-	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{})
+	token, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}, true)
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -850,7 +1017,7 @@ func TestManagerAuthorizationCodeStateMismatch(t *testing.T) {
 		launchBrowser = openBrowser
 	})
 
-	if _, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}); err == nil {
+	if _, err := mgr.Token(ctx, "dev", cfg, httpx.Options{}, true); err == nil {
 		t.Fatalf("expected state mismatch error")
 	}
 }

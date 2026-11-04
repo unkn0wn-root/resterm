@@ -106,11 +106,13 @@ func NewManager(client *httpx.Client) *Manager {
 // Deduplicates concurrent token requests for the same config.
 // If another goroutine is already fetching, we wait on their done channel
 // instead of hitting the auth server twice.
+// It never opens a browser unless interactive is true.
 func (m *Manager) Token(
 	ctx context.Context,
 	env string,
 	cfg Config,
 	opts httpx.Options,
+	interactive bool,
 ) (Token, error) {
 	// A 307 or 308 redirect can resend the client secret in the request body.
 	opts.ConfineToOrigin = true
@@ -143,7 +145,7 @@ func (m *Manager) Token(
 	m.inflight[key] = pending
 	m.mu.Unlock()
 
-	token, err := m.obtainToken(ctx, env, key, fallback, cfg, opts)
+	token, err := m.obtainToken(ctx, env, key, fallback, cfg, opts, interactive)
 	pending.token = token
 	pending.err = err
 	close(pending.done)
@@ -261,20 +263,18 @@ func (m *Manager) obtainToken(
 	fallback string,
 	cfg Config,
 	opts httpx.Options,
+	interactive bool,
 ) (Token, error) {
 	if token, ok, usedKey := m.cachedToken(key, fallback); ok && token.valid() {
 		m.promoteCacheKey(key, usedKey)
 		return token, nil
 	}
 
+	var rerr error
 	entry, usedKey := m.cacheEntry(key, fallback)
 	if entry != nil && entry.token.RefreshToken != "" {
-		if refreshed, err := m.refreshToken(
-			ctx,
-			entry.cfg,
-			entry.token.RefreshToken,
-			opts,
-		); err == nil {
+		refreshed, err := m.refreshToken(ctx, entry.cfg, entry.token.RefreshToken, opts)
+		if err == nil {
 			m.storeToken(key, env, cfg, refreshed)
 			m.dropCacheKey(fallback)
 			if usedKey != "" && usedKey != key {
@@ -282,10 +282,18 @@ func (m *Manager) obtainToken(
 			}
 			return refreshed, nil
 		}
+		rerr = err
 	}
 
 	if cfg.GrantType == GrantAuthorizationCode {
-		return m.requestAuthCodeToken(ctx, env, key, cfg, opts)
+		switch {
+		case interactive:
+			return m.requestAuthCodeToken(ctx, env, key, cfg, opts)
+		case rerr != nil:
+			return Token{}, diag.WrapAs(diag.ClassAuth, rerr, "cannot fall back to browser login")
+		default:
+			return Token{}, diag.New(diag.ClassAuth, "authorization_code needs a browser login")
+		}
 	}
 
 	fetched, err := m.requestToken(ctx, cfg, opts)
@@ -651,6 +659,8 @@ func (m *Manager) refreshToken(
 	if err != nil {
 		return Token{}, err
 	}
+	// Without a new refresh token the old one stays valid (RFC 6749 section 6).
+	token.RefreshToken = cmp.Or(token.RefreshToken, refresh)
 	return token, nil
 }
 
