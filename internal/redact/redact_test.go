@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"net/url"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +18,16 @@ var hard = []string{
 	`q"x1`, `b\x2`, `t3\`, "n\nx4", `l<x5>`, `a&x6`, `p+x7`, `s x8`, `c%x9`, `sl/x10`, `e=x11`,
 	"üñï12", "u" + string(rune(0x2028)) + "x13", "t\tx14", "c" + string(rune(1)) + "x15", "😀x16", `m(k)!*'x17`,
 }
+
+const localeUnit = `c.defineLocale("en-xx",{` +
+	`months:"January_February_March_April_May_June_July_August_September_October_November_December".split("_"),` +
+	`weekdaysShort:"Sun_Mon_Tue_Wed_Thu_Fri_Sat".split("_"),` +
+	`longDateFormat:{LT:"HH:mm",L:"DD/MM/YYYY",LLL:"D MMMM YYYY HH:mm"},` +
+	`calendar:{sameDay:"[Today at] LT",lastDay:"[Yesterday at] LT"},` +
+	`relativeTime:{future:"in %s",past:"%s ago",s:"a few seconds",ss:"%d seconds",m:"a minute",mm:"%d minutes",` +
+	`h:"an hour",hh:"%d hours",dd:"%d days",MM:"%d months",yy:"%d years"},` +
+	`dayOfMonthOrdinalParse:/\d{1,2}(st|nd|rd|th)/,` +
+	`ordinal:function(e){var a=e%10;return e+(1==~~(e%100/10)?"th":1==a?"st":2==a?"nd":3==a?"rd":"th")}}),`
 
 func TestNewKeepsEachSecretOnce(t *testing.T) {
 	tests := []struct {
@@ -273,6 +284,98 @@ func TestTextHTMLJSONURL(t *testing.T) {
 	want := "<pre>{&#34;next&#34;:&#34;/cb?k=•••&amp;n=1&#34;}</pre>"
 	if got := New("a/b9").Text(page); got != want {
 		t.Fatalf("Text(%q) = %q, want %q", page, got, want)
+	}
+}
+
+func TestTextClusterEdges(t *testing.T) {
+	const sec = "s3cr3tpw77"
+	b64 := base64.StdEncoding.EncodeToString
+	pct := func(v string) string { return fmt.Sprintf("%%%02X", v[0]) + v[1:] }
+	wrap := b64([]byte(strings.Repeat("x", 120) + sec))
+	pad := b64([]byte(strings.Repeat("x", 120) + sec + strings.Repeat("y", 108)))
+	ref := "&#" + strings.Repeat("0", 28) + "38;"
+	tests := []struct {
+		secs []string
+		in   string
+		want string
+	}{
+		{[]string{"zz", ".abc/"}, "z.abc%2F", "z•••"},
+		{[]string{"zz", "abcdefghij/"}, "abcdefghij%2F tail", "••• tail"},
+		{[]string{"AA"}, "%41%41A", "•••"},
+		{[]string{"ab.c/d"}, "%41" + strings.Repeat("y", 130) + "ab.c%2Fd", "%41" + strings.Repeat("y", 130) + "•••"},
+		{
+			[]string{"zz", ".abc/"},
+			"%41" + strings.Repeat("y", 131) + ".abc%2F",
+			"%41" + strings.Repeat("y", 131) + "•••",
+		},
+		{[]string{sec}, pct(wrap[:168]) + "\n" + wrap[168:], "•••"},
+		{[]string{sec}, pct(wrap[:168]) + "\r\n" + wrap[168:], "•••"},
+		{[]string{sec}, pct(wrap[:168]) + "\n    " + wrap[168:], "•••"},
+		{[]string{sec}, pct(wrap[:168]) + "\r " + wrap[168:], "•••"},
+		{[]string{sec}, pad[:166] + pct(pad[166:]) + " x", "••• x"},
+		{[]string{"&s3cr.."}, ref + strings.Repeat(ref[1:], 3) + "s3cr.. end", "••• end"},
+		{[]string{"k9"}, "az" + ref + strings.Repeat(ref[1:], 2) + ref[1:30] + "10; k", "•••"},
+		{[]string{"x"}, "e" + ref + strings.Repeat(ref[1:], 2) + ref[1:30] + "10; A", "•••"},
+		{[]string{"x"}, "%65" + ref + strings.Repeat(ref[1:], 2) + ref[1:30] + "10; A", "•••"},
+		{
+			[]string{`t3\`},
+			"\n  t&#x33;\\u005c&#92;%5c\"t3\\\\\"\\u00\\x74&#51;\\x5CdDNc,+.%FC",
+			"\n  •••\"•••\"\\u00•••,+.%FC",
+		},
+		{[]string{"s x8"}, "d=" + b64([]byte("k=s+x8")), "d=•••"},
+		{[]string{"s x8"}, "d=" + b64([]byte("\xff\xfek=s+x8")), "d=•••"},
+		{[]string{"s x8"}, "d=" + b64([]byte("k=s+x8\xff\xfe")), "d=•••"},
+		{[]string{"s x8"}, "<a href=\"/x?k=s+x8\">caf\xe9</a>", "<a href=\"/x?k=•••\">caf\xe9</a>"},
+	}
+	for _, tt := range tests {
+		if got := New(tt.secs...).Text(tt.in); got != tt.want {
+			t.Errorf("Text(%q) with %q = %q, want %q", tt.in, tt.secs, got, tt.want)
+		}
+	}
+}
+
+func TestTextBudget(t *testing.T) {
+	const unit = `%2525&amp;amp;\\\\+%5C `
+	dense := strings.Repeat(unit, 1<<11)
+	b64 := base64.StdEncoding.EncodeToString
+	run := b64([]byte(strings.Repeat(unit, 256))) + " "
+	page := `<a href="/q?u=a%2520b&amp;c=1">x</a> <script>var s="{\"a\":\"b\\\"c+d\"}"</script> `
+	page = strings.Repeat(page+strings.Repeat("plain log line with words\n", 20), 40)
+	loc := html.EscapeString(string(goJSON(strings.Repeat(localeUnit, 64<<10/len(localeUnit)), true)))
+	tests := []struct {
+		sec  string
+		in   string
+		want string
+	}{
+		{"a%41&b", "plain text here " + dense + "a%41&amp;b " + dense, "plain text •••"},
+		{
+			"s3cr3tpw77",
+			"plain " + b64([]byte(dense)) + " " + b64([]byte("s3cr3tpw77")) + " plain",
+			"plain ••• ••• plain",
+		},
+		{"s3cr3tpw77", strings.Repeat(run, 4) + "plain", strings.Repeat(run, 3) + "••• plain"},
+		{"a%41&b", page + "a%41&amp;b", page + Mask},
+		{"s3cr3tpw77", loc + " k=s3cr3tpw77", loc + " k=" + Mask},
+	}
+	for _, tt := range tests {
+		if got := New(tt.sec).Text(tt.in); got != tt.want {
+			t.Errorf("Text of %d bytes with %q = %d bytes ending %q, want %d bytes",
+				len(tt.in), tt.sec, len(got), got[max(0, len(got)-40):], len(tt.want))
+		}
+	}
+}
+
+func TestTextSnippetAllocs(t *testing.T) {
+	s := New("s3cr3tpw77")
+	for _, snip := range snippets {
+		in := withSnippet(snip)
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		s.Text(in)
+		runtime.ReadMemStats(&after)
+		if n := after.TotalAlloc - before.TotalAlloc; n > uint64(len(in)) {
+			t.Errorf("Text of %d bytes with %q allocates %d bytes, want at most %d", len(in), snip, n, len(in))
+		}
 	}
 }
 

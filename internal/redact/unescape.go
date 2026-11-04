@@ -11,18 +11,22 @@ import (
 // Decoded bytes [d, d+dn) came from the escape at source bytes [s, s+sn).
 type piece struct{ d, dn, s, sn int }
 
-type layer []piece
+// A layer decodes the cluster that starts at off in the text above.
+type layer struct {
+	pieces []piece
+	off    int
+}
 
 func (l layer) at(d int) (int, int) {
-	k := sort.Search(len(l), func(k int) bool { return l[k].d > d }) - 1
+	k := sort.Search(len(l.pieces), func(k int) bool { return l.pieces[k].d > d }) - 1
 	if k < 0 {
-		return d, d + 1
+		return l.off + d, l.off + d + 1
 	}
-	p := l[k]
+	p := l.pieces[k]
 	if d < p.d+p.dn {
-		return p.s, p.s + p.sn
+		return l.off + p.s, l.off + p.s + p.sn
 	}
-	s := p.s + p.sn + d - p.d - p.dn
+	s := l.off + p.s + p.sn + d - p.d - p.dn
 	return s, s + 1
 }
 
@@ -41,10 +45,10 @@ const (
 	refChars   = "#ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 )
 
-// A nil layer means v holds no escape of the given kinds.
-func unescape(v string, kinds int) (string, layer) {
+// Nil pieces mean v holds no escape of the given kinds.
+func unescape(v string, kinds int) (string, []piece) {
 	var out strings.Builder
-	var l layer
+	var l []piece
 	last := 0
 	// A "+" is too common to stop at when it is not decoded.
 	chars := `\%&`

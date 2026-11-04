@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"math/rand/v2"
 	"strings"
 	"testing"
@@ -104,6 +105,58 @@ func BenchmarkTextMixed(b *testing.B) {
 				s.Text(body)
 			}
 		})
+	}
+}
+
+var snippets = map[string]string{
+	"three": `%41\x41&#65; `,
+	"real":  `{"next":"https://h/?q=a%2520b&amp;r=\\\"x\\\"+y"} `,
+	"deep":  `%2525&amp;amp;\\\\+%5C `,
+}
+
+func withSnippet(snip string) string {
+	plain := strings.Repeat("plain log line with words and numbers 12345\n", 1<<20/44)
+	return plain[:len(plain)/2] + snip + plain[len(plain)/2:]
+}
+
+func BenchmarkTextSnippet(b *testing.B) {
+	s := New(benchSecrets()...)
+	for name, snip := range snippets {
+		body := withSnippet(snip)
+		b.Run(name, func(b *testing.B) {
+			b.SetBytes(int64(len(body)))
+			for b.Loop() {
+				s.Text(body)
+			}
+		})
+	}
+}
+
+func BenchmarkJSONPage(b *testing.B) {
+	s := New(benchSecrets()...)
+	page := withSnippet(`<a href="/q?u=a%2520b&amp;c=1">x</a> <script>var s="{\"a\":\"b\\\"c+d\"}"</script>`)
+	body, _ := json.Marshal(map[string]string{"html": page})
+	b.SetBytes(int64(len(body)))
+	for b.Loop() {
+		s.JSON(body)
+	}
+}
+
+func BenchmarkTextLocaleState(b *testing.B) {
+	s := New(benchSecrets()...)
+	body := html.EscapeString(string(goJSON(strings.Repeat(localeUnit, 1<<20/len(localeUnit)), true)))
+	b.SetBytes(int64(len(body)))
+	for b.Loop() {
+		s.Text(body)
+	}
+}
+
+func BenchmarkText32MiB(b *testing.B) {
+	s := New(benchSecrets()...)
+	body := []byte(strings.Repeat(withSnippet(snippets["real"]), 32))
+	b.SetBytes(int64(len(body)))
+	for b.Loop() {
+		s.JSON(body)
 	}
 }
 

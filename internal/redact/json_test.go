@@ -195,6 +195,14 @@ func TestBase64Values(t *testing.T) {
 	}
 }
 
+func TestJSONBudget(t *testing.T) {
+	d := `"` + strings.Repeat(`%2525&amp;amp;\\\\\\\\+%5C `, 64) + `",`
+	body := "[" + strings.Repeat(d, 3) + d[:len(d)-1] + "]"
+	if got, want := string(New("s3cr3tpw77").JSON([]byte(body))), "["+strings.Repeat(d, 3)+`"•••"]`; got != want {
+		t.Errorf("JSON of four dense strings ends %q, want the last one masked", got[len(got)-12:])
+	}
+}
+
 func FuzzJSON(f *testing.F) {
 	for _, sec := range hard {
 		for _, e := range encoders {
