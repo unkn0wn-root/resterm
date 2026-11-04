@@ -102,6 +102,7 @@ func TestTextForms(t *testing.T) {
 		{"€uro", "k=%u20ACuro&n=1", "k=•••&n=1"},
 		{"€uro", "k=%u20acuro", "k=•••"},
 		{"üñï12", "k=%FC%F1%EF12", "k=•••"},
+		{"\u0080ÿ1", "k=%80%FF1", "k=•••"},
 		{"üñï12", "k=%fc%f1%ef12&n=1", "k=•••&n=1"},
 		{"ü€x", "k=%FC%u20ACx", "k=•••"},
 		{"s ü", "k=s+%FC&n=1", "k=•••&n=1"},

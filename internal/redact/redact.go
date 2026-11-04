@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -16,6 +17,12 @@ const maxDepth = 4
 
 // budget bounds the bytes decoded per input byte. Escapes and base64 it cannot finish searching are masked whole.
 const budget = 128
+
+// Every value is budgeted as if it were this many bytes longer, so a short one can finish a few nested escapes.
+const budgetFloor = 1 << 10
+
+// Base64 writes every 3 bytes as 4 characters.
+const quantum = 4
 
 const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_"
 
@@ -43,11 +50,11 @@ func New(secrets ...string) Set {
 		}
 		out = append(out, s)
 		// Latin-1 forms, such as JavaScript's escape(), write U+0080 to U+00FF as one byte.
-		if strings.ContainsFunc(s, func(r rune) bool { return 0x80 <= r && r <= 0xff }) {
+		if strings.ContainsFunc(s, func(r rune) bool { return utf8.RuneSelf <= r && r <= unicode.MaxLatin1 }) {
 			b := make([]byte, 0, len(s))
 			for i := 0; i < len(s); {
 				r, n := utf8.DecodeRuneInString(s[i:])
-				if 0x80 <= r && r <= 0xff {
+				if utf8.RuneSelf <= r && r <= unicode.MaxLatin1 {
 					b = append(b, byte(r))
 				} else {
 					b = append(b, s[i:i+n]...)
@@ -79,7 +86,7 @@ func (s Set) Text(v string) string {
 	if len(s.needles) == 0 {
 		return v
 	}
-	x := search{set: s, left: budget * (len(v) + 1<<10)}
+	x := search{set: s, left: budget * (len(v) + budgetFloor)}
 	return x.mask(v)
 }
 
@@ -151,7 +158,7 @@ func (s *search) find(text string, layers []layer, spans []span) []span {
 			// MIME, PEM, XML and YAML wrap base64, so one line break and its indent may sit in a run.
 			k := j
 			if strings.HasPrefix(text[k:], "\r\n") {
-				k += 2
+				k += len("\r\n")
 			} else if k < len(text) && (text[k] == '\n' || text[k] == '\r') {
 				k++
 			}
@@ -165,7 +172,7 @@ func (s *search) find(text string, layers []layer, spans []span) []span {
 			j = k
 		}
 		end := j
-		for end < len(text) && end-j < 2 && text[end] == '=' {
+		for end < len(text) && end-j < len("==") && text[end] == '=' {
 			end++
 		}
 		if j-i < long {
@@ -180,7 +187,7 @@ func (s *search) find(text string, layers []layer, spans []span) []span {
 				continue
 			}
 		}
-		if s.left -= 4 * (j - i); s.left < 0 {
+		if s.left -= quantum * (j - i); s.left < 0 {
 			add(i, end)
 			i = end
 			continue
@@ -193,7 +200,7 @@ func (s *search) find(text string, layers []layer, spans []span) []span {
 		src := slices.DeleteFunc([]byte(run), func(c byte) bool { return !isBase64[c] })
 		buf := make([]byte, enc.DecodedLen(len(src)))
 		// Text can glue a prefix to the data, so each start offset is tried.
-		for off := range min(4, len(src)) {
+		for off := range min(quantum, len(src)) {
 			// Decode keeps the bytes before a partial last quantum.
 			n, _ := enc.Decode(buf, src[off:])
 			if d := string(buf[:n]); s.mask(d) != d {
@@ -301,7 +308,7 @@ func (s Set) JSON(b []byte) []byte {
 		return b
 	}
 	src := string(b)
-	x := search{set: s, left: budget * (len(b) + 1<<10)}
+	x := search{set: s, left: budget * (len(b) + budgetFloor)}
 	// Unmarshal turns invalid UTF-8 into U+FFFD, which would hide a secret.
 	if !utf8.Valid(b) || !json.Valid(b) {
 		if m := x.mask(src); m != src {
