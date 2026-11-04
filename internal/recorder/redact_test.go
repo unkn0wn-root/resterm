@@ -105,3 +105,35 @@ func TestGzipAndLimits(t *testing.T) {
 		t.Fatalf("stats %+v", stats)
 	}
 }
+
+func TestDecodeBodyReportsCodingIssues(t *testing.T) {
+	var zipped bytes.Buffer
+	z := gzip.NewWriter(&zipped)
+	if _, err := z.Write([]byte("hello")); err != nil || z.Close() != nil {
+		t.Fatalf("gzip: %v", err)
+	}
+	gz := zipped.Bytes()
+	tests := []struct {
+		name    string
+		enc     string
+		data    []byte
+		limit   int64
+		want    Issue
+		decoded bool
+	}{
+		{name: "identity", enc: "identity", data: []byte("hello"), limit: 64},
+		{name: "gzip", enc: " GZIP ", data: gz, limit: 64, decoded: true},
+		{name: "unsupported", enc: "br", data: gz, limit: 64, want: issueEncoding},
+		{name: "not gzip", enc: "gzip", data: []byte("hello"), limit: 64, want: issueGzip},
+		{name: "truncated gzip", enc: "gzip", data: gz[:len(gz)-4], limit: 64, want: issueDecodedBody},
+		{name: "over the limit", enc: "gzip", data: gz, limit: 4, want: issueDecodedBody},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := decodeBody(Message{Headers: http.Header{"Content-Encoding": {tt.enc}}, Body: tt.data}, tt.limit)
+			if b.issue != tt.want || b.decoded != tt.decoded {
+				t.Fatalf("issue %q, decoded %t, want %q, %t", b.issue, b.decoded, tt.want, tt.decoded)
+			}
+		})
+	}
+}

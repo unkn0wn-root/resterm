@@ -101,6 +101,7 @@ type RequestResult struct {
 	Executed       *restfile.Request
 	RequestText    string
 	RuntimeSecrets []string
+	Captures       []restfile.Variable
 	Environment    string
 	Selection      vars.Selection
 	Skipped        bool
@@ -165,6 +166,7 @@ type CompareRow struct {
 	ScriptErr   error
 	// RuntimeSecrets contains the values exposed while this row ran.
 	RuntimeSecrets []string
+	Captures       []restfile.Variable
 	Skipped        bool
 	SkipReason     string
 	Canceled       bool
@@ -189,6 +191,8 @@ type ProfileResult struct {
 	Canceled    bool
 	Results     *history.ProfileResults
 	Failures    []ProfileFailure
+	// RuntimeSecrets contains the values exposed while the profile ran.
+	RuntimeSecrets []string
 }
 
 type ProfileFailure struct {
@@ -242,6 +246,7 @@ type WorkflowStep struct {
 	Duration   time.Duration
 
 	RuntimeSecrets []string
+	Captures       []restfile.Variable
 }
 
 type RuntimeState struct {

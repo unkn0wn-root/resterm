@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -297,6 +299,405 @@ func TestRunMasksSecretsInEffectiveTargets(t *testing.T) {
 				if target != "" && !strings.Contains(target, "•••") {
 					t.Fatalf("expected a masked effective target, got %q", target)
 				}
+			}
+		})
+	}
+}
+
+func TestRunMasksSecretsInResponses(t *testing.T) {
+	const (
+		secret = "s3cr3t-tok"
+		apiKey = "resp-key-123"
+		cookie = "cookie-val"
+		body   = `{"token":"` + secret + `","id":42}`
+	)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "resp.http")
+	src := strings.Join([]string{
+		"# @workflow flow",
+		"# @step Login using=login",
+		"",
+		"### Login",
+		"# @name login",
+		"# @capture request-secret tok {{response.json.token}}",
+		"# @capture file plainId {{response.json.id}}",
+		"GET https://api.example.com/login",
+		"",
+		"### Each",
+		"# @name each",
+		"# @for-each item in [\"a\", \"b\"]",
+		"# @capture request-secret tok {{response.json.token}}",
+		"# @capture file plainId {{response.json.id}}",
+		"GET https://api.example.com/items/{{vars.request.item}}",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header: http.Header{
+						"Content-Type": {"application/json"},
+						"X-Api-Key":    {apiKey},
+						"Set-Cookie":   {"sid=" + cookie + "; Path=/"},
+						"X-Request-Id": {"req-1"},
+					},
+					Body:    io.NopCloser(strings.NewReader(body)),
+					Request: req,
+				}, nil
+			}),
+		}, nil
+	})
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "stage": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+
+	type capture struct {
+		Scope  string `json:"scope"`
+		Name   string `json:"name"`
+		Value  string `json:"value"`
+		Secret bool   `json:"secret"`
+	}
+	type response struct {
+		Headers  http.Header `json:"headers"`
+		Body     string      `json:"body"`
+		BodySize int         `json:"bodySize"`
+		Captures []capture   `json:"captures"`
+	}
+	wantCaps := []capture{
+		{Scope: "request", Name: "tok", Value: "•••", Secret: true},
+		{Scope: "file", Name: "plainId", Value: "42"},
+	}
+	tests := []struct {
+		name    string
+		sel     Select
+		cmp     engine.CompareConfig
+		profile bool
+		off     bool
+		top     bool
+		want    int
+	}{
+		{name: "request", sel: Select{Request: "login"}, top: true, want: 1},
+		{name: "for-each", sel: Select{Request: "each"}, want: 2},
+		{name: "workflow", sel: Select{Workflow: "flow"}, want: 1},
+		{
+			name: "compare",
+			sel:  Select{Request: "login"},
+			cmp:  engine.CompareConfig{Targets: []string{"dev", "stage"}},
+			want: 2,
+		},
+		{name: "profile", sel: Select{Request: "login"}, profile: true},
+		{name: "flag off", sel: Select{Request: "login"}, off: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+				Catalog:       cat,
+				Selection:     cat.DefaultSelection(),
+				Select:        tt.sel,
+				Compare:       tt.cmp,
+				Profile:       tt.profile,
+				Response:      !tt.off,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if rep.Failed > 0 {
+				t.Fatalf("run failed: %+v", rep.Results)
+			}
+
+			var out strings.Builder
+			for _, write := range []func(io.Writer) error{rep.WriteJSON, rep.WriteJUnit, rep.WriteText} {
+				if err := write(&out); err != nil {
+					t.Fatalf("write report: %v", err)
+				}
+			}
+			for _, leak := range []string{secret, apiKey, cookie} {
+				if strings.Contains(out.String(), leak) {
+					t.Fatalf("report contains %q:\n%s", leak, out.String())
+				}
+			}
+
+			var got struct {
+				Results []struct {
+					Response *response `json:"response"`
+					Steps    []struct {
+						Response *response `json:"response"`
+					} `json:"steps"`
+				} `json:"results"`
+			}
+			// The JSON report is written first, so decode only that value.
+			if err := json.NewDecoder(strings.NewReader(out.String())).Decode(&got); err != nil {
+				t.Fatalf("decode report: %v", err)
+			}
+			if len(got.Results) != 1 {
+				t.Fatalf("results = %+v, want one", got.Results)
+			}
+			res := got.Results[0]
+			if (res.Response != nil) != tt.top {
+				t.Fatalf("result response = %+v, want present %t", res.Response, tt.top)
+			}
+			var all []*response
+			if res.Response != nil {
+				all = append(all, res.Response)
+			}
+			for _, step := range res.Steps {
+				if step.Response != nil {
+					all = append(all, step.Response)
+				}
+			}
+			if len(all) != tt.want {
+				t.Fatalf("got %d responses, want %d:\n%s", len(all), tt.want, out.String())
+			}
+			for _, resp := range all {
+				if resp.Body != `{"token":"•••","id":42}` || resp.BodySize != len(body) {
+					t.Fatalf(
+						"body = %q (%d bytes), want the masked body of %d bytes",
+						resp.Body,
+						resp.BodySize,
+						len(body),
+					)
+				}
+				want := http.Header{
+					"Content-Type": {"application/json"},
+					"X-Api-Key":    {"•••"},
+					"Set-Cookie":   {"•••"},
+					"X-Request-Id": {"req-1"},
+				}
+				if !reflect.DeepEqual(resp.Headers, want) {
+					t.Fatalf("headers = %v, want %v", resp.Headers, want)
+				}
+				if !reflect.DeepEqual(resp.Captures, wantCaps) {
+					t.Fatalf("captures = %+v, want %+v", resp.Captures, wantCaps)
+				}
+			}
+		})
+	}
+}
+
+func TestRunMasksResponsesWithEveryRunSecret(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "later.http")
+	src := strings.Join([]string{
+		"# @workflow flow",
+		"# @step Show using=show",
+		"# @step Login using=login",
+		"",
+		"### Show",
+		"# @name show",
+		"# @tag pair",
+		"# @capture request-secret short {{response.json.short}}",
+		"GET https://api.example.com/show",
+		"",
+		"### Login",
+		"# @name login",
+		"# @tag pair",
+		"# @capture file-secret tok {{response.json.token}}",
+		"GET https://api.example.com/login",
+		"",
+		"### Cmp",
+		"# @name cmp",
+		"# @capture request-secret tok {{response.json.token}}",
+		"GET https://{{host}}/cmp",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	// show reveals s3cr3t-tok before login captures it as a secret. show's own
+	// secret s3cr3t is a prefix of it, so the longer one must be masked first.
+	bodies := map[string]string{
+		"api.example.com/show":  `{"note":"s3cr3t-tok","short":"s3cr3t"}`,
+		"api.example.com/login": `{"token":"s3cr3t-tok"}`,
+		"dev.example.com/cmp":   `{"token":"public","note":"s3cr3t-tok"}`,
+		"stage.example.com/cmp": `{"token":"s3cr3t-tok"}`,
+	}
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     http.Header{"Content-Type": {"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(bodies[req.URL.Host+req.URL.Path])),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{
+		"dev":   {"host": "dev.example.com"},
+		"stage": {"host": "stage.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+
+	show, login := `{"note":"•••","short":"•••"}`, `{"token":"•••"}`
+	tests := []struct {
+		name string
+		sel  Select
+		cmp  engine.CompareConfig
+		want []string
+	}{
+		{name: "workflow", sel: Select{Workflow: "flow"}, want: []string{show, login}},
+		{name: "two results", sel: Select{Tag: "pair"}, want: []string{show, login}},
+		{
+			name: "compare",
+			sel:  Select{Request: "cmp"},
+			cmp:  engine.CompareConfig{Targets: []string{"dev", "stage"}},
+			want: []string{`{"token":"•••","note":"•••"}`, login},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+				Catalog:       cat,
+				Selection:     cat.DefaultSelection(),
+				Select:        tt.sel,
+				Compare:       tt.cmp,
+				Response:      true,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			var got []string
+			for _, res := range ReportModel(rep).Results {
+				if res.Response != nil {
+					got = append(got, string(res.Response.Body))
+				}
+				for _, step := range res.Steps {
+					if step.Response != nil {
+						got = append(got, string(step.Response.Body))
+					}
+				}
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("bodies = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunMasksResponsesWithProfileSecrets(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prof.http")
+	src := strings.Join([]string{
+		"### Show",
+		"# @name show",
+		"GET https://api.example.com/json",
+		"",
+		"### Prof",
+		"# @name prof",
+		"# @profile 2",
+		"# @capture request-secret tok = response.json.token",
+		"GET https://api.example.com/json",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     http.Header{"Content-Type": {"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"token":"s3cr3t-tok"}`)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        Select{All: true},
+		Response:      true,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	res := ReportModel(rep).Results
+	if len(res) != 2 || res[0].Response == nil || res[1].Kind != string(ResultKindProfile) {
+		t.Fatalf("results = %+v, want show then a profile", res)
+	}
+	if got := string(res[0].Response.Body); got != `{"token":"•••"}` {
+		t.Fatalf("show body = %q, want the token the profile captured masked", got)
+	}
+}
+
+func TestRunReportsNoResponseForDialErrors(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close listener: %v", err)
+	}
+	dir := t.TempDir()
+	proto := "syntax = \"proto3\";\npackage demo;\nmessage E {}\nservice S { rpc Call(E) returns (E); }\n"
+	if err := os.WriteFile(filepath.Join(dir, "s.proto"), []byte(proto), 0o644); err != nil {
+		t.Fatalf("write proto: %v", err)
+	}
+	file := filepath.Join(dir, "dial.http")
+	src := strings.Join([]string{
+		"### HTTP",
+		"# @name http",
+		"GET http://" + addr + "/nothing",
+		"",
+		"### GRPC",
+		"# @name grpc",
+		"# @grpc demo.S/Call",
+		"# @grpc-plaintext true",
+		"# @grpc-proto ./s.proto",
+		"GRPC " + addr,
+		"",
+		"{}",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	for _, name := range []string{"http", "grpc"} {
+		t.Run(name, func(t *testing.T) {
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Select:        Select{Request: name},
+				Response:      true,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if len(rep.Results) != 1 || rep.Results[0].Failure.Category != runfail.CategoryNetwork {
+				t.Fatalf("results = %+v, want one network failure", rep.Results)
+			}
+			var out strings.Builder
+			if err := rep.WriteJSON(&out); err != nil {
+				t.Fatalf("WriteJSON: %v", err)
+			}
+			if strings.Contains(out.String(), `"response"`) {
+				t.Fatalf("a request with no response has a response object:\n%s", out.String())
 			}
 		})
 	}

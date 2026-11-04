@@ -3,6 +3,7 @@ package runfmt
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"testing"
 	"time"
 
@@ -49,6 +50,16 @@ func TestJSONRoundTrip(t *testing.T) {
 				HTTP:            &HTTP{Status: "200 OK", StatusCode: 200, Protocol: "HTTP/1.1"},
 				Tests:           []Test{{Name: "status", Passed: true, Elapsed: 2 * ms}},
 				Stream:          &Stream{Kind: "sse", EventCount: 2, Summary: map[string]any{"wait": 5 * ms, "n": 2}},
+				Response: &Response{
+					Headers:       http.Header{"Content-Type": {"application/octet-stream"}},
+					Body:          []byte{0, 0xff, 'a'},
+					BodySize:      4,
+					BodyTruncated: true,
+					Captures: []Capture{
+						{Scope: "request", Name: "tok", Value: "•••", Secret: true},
+						{Scope: "file", Name: "id", Value: "42"},
+					},
+				},
 				Trace: &Trace{
 					Duration: 25 * ms,
 					Budget: &TraceBudget{
@@ -76,6 +87,7 @@ func TestJSONRoundTrip(t *testing.T) {
 					Total:     2,
 					Status:    StatusFail,
 					Failure:   fail,
+					Response:  &Response{Body: []byte("ok"), BodySize: 2},
 					GRPC: &GRPC{
 						Code:          "Unavailable",
 						StatusCode:    14,
@@ -122,6 +134,9 @@ func TestJSONRoundTrip(t *testing.T) {
 	if !bytes.Equal(first, second) {
 		t.Fatalf("round trip changed the JSON\nfirst:  %s\nsecond: %s", first, second)
 	}
+	if got := back.Results[0].Response; got == nil || !bytes.Equal(got.Body, []byte{0, 0xff, 'a'}) {
+		t.Fatalf("decoded response = %+v, want the binary body back", got)
+	}
 }
 
 func TestUnmarshalNullKeepsValue(t *testing.T) {
@@ -131,5 +146,25 @@ func TestUnmarshalNullKeepsValue(t *testing.T) {
 	}
 	if test.Name != "status" || !test.Passed {
 		t.Fatalf("null changed the value to %+v", test)
+	}
+}
+
+func TestUnmarshalResponseRejectsBadBase64(t *testing.T) {
+	var resp Response
+	if err := json.Unmarshal([]byte(`{"body":"not base64!","bodyEncoding":"base64","bodySize":3}`), &resp); err == nil {
+		t.Fatalf("unmarshal accepted a bad base64 body: %+v", resp)
+	}
+	if err := json.Unmarshal([]byte(`{"body":"AP9h","bodyEncoding":"base64","bodySize":3}`), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !bytes.Equal(resp.Body, []byte{0, 0xff, 'a'}) {
+		t.Fatalf("Body = %v, want the decoded bytes", resp.Body)
+	}
+}
+
+func TestUnmarshalResponseRejectsUnknownBodyEncoding(t *testing.T) {
+	var resp Response
+	if err := json.Unmarshal([]byte(`{"body":"eJw=","bodyEncoding":"zlib","bodySize":2}`), &resp); err == nil {
+		t.Fatalf("unmarshal accepted bodyEncoding zlib: %+v", resp)
 	}
 }

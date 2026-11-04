@@ -2,7 +2,6 @@ package recorder
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/unkn0wn-root/resterm/internal/http/coding"
 )
 
 // Limit nesting to prevent stack exhaustion.
@@ -46,9 +47,16 @@ func decodeBody(m Message, limit int64) body {
 		return b
 	}
 
-	data, issue := decompress(b.data, m.Headers.Get("Content-Encoding"), limit)
-	if !issue.ok() {
-		b.issue = issue
+	data, err := coding.Decode(b.data, m.Headers.Get("Content-Encoding"), limit)
+	switch {
+	case errors.Is(err, coding.ErrUnsupported):
+		b.issue = issueEncoding
+		return b
+	case errors.Is(err, coding.ErrHeader):
+		b.issue = issueGzip
+		return b
+	case err != nil:
+		b.issue = issueDecodedBody
 		return b
 	}
 	if data != nil {
@@ -61,28 +69,6 @@ func decodeBody(m Message, limit int64) body {
 
 	b.kind, b.value, b.issue = classify(b.data, m.Headers.Get("Content-Type"))
 	return b
-}
-
-// decompress returns nil for unencoded bodies. limit applies after decoding.
-func decompress(data []byte, encoding string, limit int64) ([]byte, Issue) {
-	switch strings.ToLower(strings.TrimSpace(encoding)) {
-	case "", "identity":
-		return nil, ""
-	case "gzip":
-	default:
-		return nil, issueEncoding
-	}
-
-	r, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, issueGzip
-	}
-	out, err := io.ReadAll(io.LimitReader(r, limit+1))
-	closeErr := r.Close()
-	if err != nil || closeErr != nil || int64(len(out)) > limit {
-		return nil, issueDecodedBody
-	}
-	return out, ""
 }
 
 func classify(data []byte, contentType string) (bodyKind, any, Issue) {

@@ -119,6 +119,7 @@ type runCmd struct {
 	all            bool
 	body           bool
 	headers        bool
+	response       bool
 	profile        bool
 	persistGlobals bool
 	persistAuth    bool
@@ -160,6 +161,7 @@ func (c *runCmd) bind() {
 	c.fs.StringVarAliases(&c.color, c.color, "Color for pretty output: auto, always, never", "color", "c")
 	c.fs.BoolVarAliases(&c.body, false, "Print only the response body for a single request result", "body", "b")
 	c.fs.BoolVarAliases(&c.headers, false, "Include request and response headers in output", "headers", "H")
+	c.fs.BoolVarAliases(&c.response, false, "Include response headers, body and captures in JSON output", "response")
 	c.fs.BoolVarAliases(&c.profile, false, "Force profile mode for the selected request", "profile", "p")
 	c.fs.BoolVarAliases(&c.failFast, false, "Stop after the first failed result", "fail-fast", "ff")
 	c.fs.StringVarAliases(&c.artifactDir, "", "Directory to write run artifacts", "artifact-dir", "A")
@@ -400,6 +402,7 @@ func (c *runCmd) runOptions(
 		EnvironmentFile: cfg.Env.File,
 		Compare:         cfg.Compare,
 		Profile:         c.profile,
+		Response:        c.response,
 		HTTPOptions:     cfg.HTTPOpts,
 		GRPCOptions:     cfg.GRPCOpts,
 		Client:          client,
@@ -527,6 +530,9 @@ func (c *runCmd) validateFormat() error {
 		default:
 			return errors.New("--body can only be combined with --format auto, pretty, or raw")
 		}
+	}
+	if c.response && format != runFmtJSON {
+		return errors.New("--response can only be combined with --format json")
 	}
 	return nil
 }

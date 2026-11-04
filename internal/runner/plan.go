@@ -13,12 +13,14 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	engheadless "github.com/unkn0wn-root/resterm/internal/engine/headless"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 // Plan stores prepared runner inputs that can be executed multiple times.
@@ -230,6 +232,27 @@ func finishRun(
 	}
 	rep.EndedAt = time.Now()
 	rep.Duration = rep.EndedAt.Sub(rep.StartedAt)
+	if opt.Response {
+		// A later request can capture as a secret a value an earlier response
+		// showed, so every response is masked with every secret the run knew.
+		var all vars.Secrets
+		for _, r := range rep.Results {
+			all.Add(r.secrets...)
+			for _, s := range r.Steps {
+				all.Add(s.secrets...)
+			}
+		}
+		secs := all.Values()
+		rqeng.SortSecrets(secs)
+		for i := range rep.Results {
+			r := &rep.Results[i]
+			r.report = rqeng.ReportResponse(r.Response, r.GRPC, r.captures, secs)
+			for j := range r.Steps {
+				s := &r.Steps[j]
+				s.report = rqeng.ReportResponse(s.Response, s.GRPC, s.captures, secs)
+			}
+		}
+	}
 	if err := saveRunnerState(exec, st, opt); err != nil {
 		return nil, fmt.Errorf("save runner state: %w", err)
 	}

@@ -210,6 +210,7 @@ func (e *Engine) ExecuteWith(
 	e.store(res)
 	out := toResult(res)
 	out.Warnings = x.warnings
+	out.Captures = x.caps
 	return out, nil
 }
 
@@ -296,6 +297,7 @@ type execCtx struct {
 	trace     *vars.Trace
 	exp       *explainBuilder
 	warnings  []string
+	caps      []restfile.Variable
 	onWarning func(Warning)
 	onRepeat  func(xexec.RepeatProgress)
 	onSSE     func(*httpx.StreamHandle, *restfile.Request)
@@ -1238,6 +1240,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	}
 
 	x.applyRuntimeGlobals(caps.globals)
+	x.caps = caps.saved
 	rr, rrErr := rtsGRPC(resp)
 	tests, testErr := x.runTests(testRun{
 		ctx:    x.sendCtx,
@@ -1425,6 +1428,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 					return err
 				}
 				x.applyRuntimeGlobals(caps.globals)
+				x.caps = caps.saved
 				return nil
 			},
 			CollectVariables: func(

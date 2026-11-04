@@ -43,8 +43,14 @@ func (s SecretSources) Secrets() []string {
 	out.Add(s.Extra...)
 
 	vals := out.Values()
-	slices.SortStableFunc(vals, func(a, b string) int { return len(b) - len(a) })
+	SortSecrets(vals)
 	return vals
+}
+
+// SortSecrets sorts secs longest first, so RedactSecrets masks a secret before
+// any shorter secret inside it.
+func SortSecrets(secs []string) {
+	slices.SortStableFunc(secs, func(a, b string) int { return len(b) - len(a) })
 }
 
 func addSecretDecls(out *vars.Secrets, xs []restfile.Variable) {

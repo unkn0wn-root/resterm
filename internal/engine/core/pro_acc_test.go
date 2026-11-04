@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -308,5 +309,35 @@ func TestPrepareProfileRejectsGRPC(t *testing.T) {
 	req := &restfile.Request{GRPC: &restfile.GRPCRequest{}}
 	if _, err := PrepareProfile(nil, req, RunMeta{}); err == nil {
 		t.Fatal("PrepareProfile() error = nil")
+	}
+}
+
+func TestProfileAccumulatorKeepsSecretsFromEveryIteration(t *testing.T) {
+	spec := restfile.ProfileSpec{Count: 3, Warmup: 1}
+	req := &restfile.Request{
+		Method:   "GET",
+		URL:      "https://example.com",
+		Metadata: restfile.RequestMetadata{Profile: &spec},
+	}
+	pl, err := PrepareProfile(nil, req, RunMeta{ID: "acc"})
+	if err != nil {
+		t.Fatalf("PrepareProfile: %v", err)
+	}
+	acc := NewProfileAccumulator(pl)
+	ok := proOK(10 * time.Millisecond)
+	warmup, measured := ok, ok
+	warmup.RuntimeSecrets = []string{"warmup-sec"}
+	measured.RuntimeSecrets = []string{"measured-sec"}
+	for _, e := range []ProIterDone{
+		{Iter: IterMeta{Index: 0, Warmup: true}, Result: warmup},
+		{Iter: IterMeta{Index: 1}, Result: measured},
+		{Iter: IterMeta{Index: 2}, Result: engine.RequestResult{Err: context.Canceled, RuntimeSecrets: []string{"canceled-sec"}}},
+		{Iter: IterMeta{Index: 3}, Result: engine.RequestResult{Skipped: true, RuntimeSecrets: []string{"skipped-sec"}}},
+	} {
+		acc.Apply(e)
+	}
+	want := []string{"warmup-sec", "measured-sec", "canceled-sec", "skipped-sec"}
+	if got := acc.Snapshot().Secrets; !slices.Equal(got, want) {
+		t.Fatalf("Secrets = %q, want %q", got, want)
 	}
 }

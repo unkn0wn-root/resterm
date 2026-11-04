@@ -66,6 +66,7 @@ rep, err := headless.Run(ctx, headless.Options{
 | `Environment` | `--env`, `--env-group`, `--env-file` | Which environment to use. See [Environments](#environments). |
 | `Compare` | `--compare`, `--compare-base`, `--compare-group` | Run against several environments. See [Compare runs](compare-runs.md). |
 | `Profile.Enabled` | `--profile` | Run the selected request in profile mode. See [Profiling](profiling.md). |
+| `Response.Enabled` | `--response` | Add the response headers, body, and captured values to each request result and step. |
 | `FailFast` | `--fail-fast` | Stop after the first failed result and mark the rest as skipped. |
 | `HTTP` | see below | Default HTTP client settings. |
 | `GRPC.Plaintext` | none | Use plaintext for gRPC requests that do not set `@grpc-plaintext` or any TLS setting. Defaults to `true`. |
@@ -145,6 +146,8 @@ for _, res := range rep.Results {
 
 `EffectiveTarget` is the URL a request reached after variables were filled in and redirects followed, with secret values masked. `ErrorDetail` and `ScriptErrorDetail` show an error the way `resterm run` prints it, with the file, line and column where it happened and the failing line, with secret values masked.
 
+With `Response.Enabled`, `res.Response` holds the response `Headers`, the `Body`, and the values the request's captures saved in `Captures`. Workflow, for-each, and compare steps have their own `Response`. A gzip body is decoded before it is masked, and its `Headers` then have no `Content-Encoding` or `Content-Length`. `Body` is nil for a body with any other content encoding, an invalid gzip body, or a gzip body that decodes to more than 32 MiB, whatever `HTTP.MaxResponseBytes` is set to. `Body` holds at most the first MiB of the masked body. `BodySize` is the size of the body as it was received, and `BodyTruncated` is true when the body was cut. `Response` is nil when no response arrived or a capture failed. Secret values are masked using every secret the run knew, and cookies and sensitive headers are masked in full, as in `resterm run --response`.
+
 `rep.FailureCodes()` returns each failure code in the report once. `rep.Warnings` lists parse warnings from the request file, and `res.Warnings` lists warnings from that request's scripts. Warnings never fail a run.
 
 ## Output and exit codes
@@ -155,7 +158,7 @@ for _, res := range rep.Results {
 - `headless.JSON` for scripts and other tools
 - `headless.JUnit` for CI systems
 
-`ParseFormat` turns a name like `"junit"` into a `Format`, which helps when the format comes from a flag or a config file. `json.Marshal(rep)` gives the same JSON as `Encode`, without indentation. Each part of a report, such as a `Test`, `Trace` or `Failure`, marshals the way it appears in that JSON, so durations are in milliseconds. `json.Unmarshal` reads that JSON back into a `Report`, including JSON from `resterm run --format json`. Durations come back in whole milliseconds, and `ErrorDetail` and `ScriptErrorDetail` stay empty because the JSON does not include them.
+`ParseFormat` turns a name like `"junit"` into a `Format`, which helps when the format comes from a flag or a config file. `json.Marshal(rep)` gives the same JSON as `Encode`, without indentation. Each part of a report, such as a `Test`, `Trace` or `Failure`, marshals the way it appears in that JSON, so durations are in milliseconds. `json.Unmarshal` reads that JSON back into a `Report`, including JSON from `resterm run --format json`. Durations come back in whole milliseconds, and `ErrorDetail` and `ScriptErrorDetail` stay empty because the JSON does not include them. In JSON, a body that is not valid UTF-8 is base64-encoded.
 
 `rep.ExitCode(headless.ExitCodeDetailed)` returns the code `resterm run` would exit with. The [exit code table](cli/run.md#exit-codes) lists them, and each one has a constant such as `headless.ExitTimeout`. Pass `headless.ExitCodeSummary` to get only `0` or `1`. Both modes return `0` for the same reports. `rep.HasFailures()` is true when they return anything else.
 

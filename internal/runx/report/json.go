@@ -1,10 +1,13 @@
 package runfmt
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net/http"
 	"sort"
 	"time"
+	"unicode/utf8"
 )
 
 type jsonReport struct {
@@ -51,6 +54,7 @@ type jsonResult struct {
 	HTTP                 *jsonHTTP         `json:"http,omitempty"`
 	GRPC                 *jsonGRPC         `json:"grpc,omitempty"`
 	Stream               *jsonStream       `json:"stream,omitempty"`
+	Response             *jsonResponse     `json:"response,omitempty"`
 	Trace                *jsonTrace        `json:"trace,omitempty"`
 	Tests                []jsonTest        `json:"tests,omitempty"`
 	Compare              *jsonCompare      `json:"compare,omitempty"`
@@ -164,6 +168,25 @@ type jsonStream struct {
 	Error          string         `json:"error,omitempty"`
 }
 
+// A body that is not valid UTF-8 is written in base64.
+const bodyBase64 = "base64"
+
+type jsonResponse struct {
+	Headers       http.Header   `json:"headers,omitempty"`
+	Body          string        `json:"body,omitempty"`
+	BodyEncoding  string        `json:"bodyEncoding,omitempty"`
+	BodySize      int64         `json:"bodySize"`
+	BodyTruncated bool          `json:"bodyTruncated,omitempty"`
+	Captures      []jsonCapture `json:"captures,omitempty"`
+}
+
+type jsonCapture struct {
+	Scope  string `json:"scope"`
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Secret bool   `json:"secret,omitempty"`
+}
+
 type jsonTrace struct {
 	DurationMs   int64             `json:"durationMs,omitempty"`
 	Error        string            `json:"error,omitempty"`
@@ -206,6 +229,7 @@ type jsonStep struct {
 	HTTP                 *jsonHTTP         `json:"http,omitempty"`
 	GRPC                 *jsonGRPC         `json:"grpc,omitempty"`
 	Stream               *jsonStream       `json:"stream,omitempty"`
+	Response             *jsonResponse     `json:"response,omitempty"`
 	Trace                *jsonTrace        `json:"trace,omitempty"`
 	Tests                []jsonTest        `json:"tests,omitempty"`
 }
@@ -273,6 +297,7 @@ func (res Result) json() jsonResult {
 		HTTP:                 res.HTTP.json(),
 		GRPC:                 res.GRPC.json(),
 		Stream:               res.Stream.json(),
+		Response:             res.Response.json(),
 		Trace:                res.Trace.json(),
 		Compare:              res.Compare.json(),
 		Profile:              res.Profile.json(),
@@ -318,6 +343,7 @@ func (step Step) json() jsonStep {
 		HTTP:                 step.HTTP.json(),
 		GRPC:                 step.GRPC.json(),
 		Stream:               step.Stream.json(),
+		Response:             step.Response.json(),
 		Trace:                step.Trace.json(),
 	}
 	if len(step.Tests) > 0 {
@@ -559,6 +585,33 @@ func (stream *Stream) json() *jsonStream {
 	}
 	if len(stream.Summary) > 0 {
 		out.Summary = jsonAnyMap(stream.Summary)
+	}
+	return out
+}
+
+func (resp Response) MarshalJSON() ([]byte, error) {
+	return json.Marshal(resp.json())
+}
+
+func (resp *Response) json() *jsonResponse {
+	if resp == nil {
+		return nil
+	}
+	out := &jsonResponse{
+		Headers:       resp.Headers,
+		Body:          string(resp.Body),
+		BodySize:      resp.BodySize,
+		BodyTruncated: resp.BodyTruncated,
+	}
+	if !utf8.Valid(resp.Body) {
+		out.Body = base64.StdEncoding.EncodeToString(resp.Body)
+		out.BodyEncoding = bodyBase64
+	}
+	if len(resp.Captures) > 0 {
+		out.Captures = make([]jsonCapture, 0, len(resp.Captures))
+		for _, c := range resp.Captures {
+			out.Captures = append(out.Captures, jsonCapture(c))
+		}
 	}
 	return out
 }

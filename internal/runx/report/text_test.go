@@ -2,6 +2,7 @@ package runfmt
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"testing"
@@ -837,5 +838,38 @@ func TestWriteTextStyledFailedTests(t *testing.T) {
 		"       <#E8E9F0 false>                   api.http:10: order 3: no items</>\n"
 	if !strings.Contains(out.String(), want) {
 		t.Fatalf("output =\n%s\nwant it to contain\n%s", out.String(), want)
+	}
+}
+
+func TestWriteTextIgnoresResponse(t *testing.T) {
+	report := func(resp *Response) *Report {
+		return &Report{
+			FilePath: "api.http",
+			Results: []Result{
+				{Kind: "request", Name: "one", Method: "GET", Status: StatusPass, Response: resp},
+				{
+					Kind:   "workflow",
+					Name:   "wf",
+					Method: "WORKFLOW",
+					Status: StatusPass,
+					Steps:  []Step{{Name: "a", Status: StatusPass, Response: resp}},
+				},
+			},
+			Total:  2,
+			Passed: 2,
+		}
+	}
+	resp := &Response{Body: []byte("secret body"), BodySize: 11, Captures: []Capture{{Name: "tok", Value: "v"}}}
+	for name, write := range map[string]func(io.Writer, *Report) error{"text": WriteText, "junit": WriteJUnit} {
+		var want, got strings.Builder
+		if err := write(&want, report(nil)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := write(&got, report(resp)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got.String() != want.String() {
+			t.Fatalf("%s output changed with a response\nwant:\n%s\ngot:\n%s", name, want.String(), got.String())
+		}
 	}
 }

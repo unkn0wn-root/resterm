@@ -631,6 +631,22 @@ func TestBuildOptionsProfileEnabled(t *testing.T) {
 	}
 }
 
+func TestBuildOptionsResponseEnabled(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "one.http")
+	for _, on := range []bool{false, true} {
+		got, err := buildOptions(Options{
+			Source:   Source{Path: file},
+			Response: ResponseOptions{Enabled: on},
+		})
+		if err != nil {
+			t.Fatalf("buildOptions: %v", err)
+		}
+		if got.Response != on {
+			t.Fatalf("Response = %t, want %t", got.Response, on)
+		}
+	}
+}
+
 func TestBuildOptionsRespectExplicitBoolOptions(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")

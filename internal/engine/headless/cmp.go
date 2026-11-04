@@ -104,6 +104,7 @@ func compareRow(meta core.RowMeta, out engine.RequestResult) engine.CompareRow {
 		Tests:          slices.Clone(out.Tests),
 		ScriptErr:      out.ScriptErr,
 		RuntimeSecrets: slices.Clone(out.RuntimeSecrets),
+		Captures:       slices.Clone(out.Captures),
 		Skipped:        out.Skipped,
 		SkipReason:     strings.TrimSpace(out.SkipReason),
 		Canceled:       canceled,

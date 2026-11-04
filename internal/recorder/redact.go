@@ -183,7 +183,8 @@ func (r *redactor) headers(src http.Header) http.Header {
 		if hopHeaders.Has(name) || listed.Has(name) {
 			continue
 		}
-		if cookieHeaders.Has(name) {
+		// Drop whole cookies to avoid retaining secrets in their attributes.
+		if header.CarriesCookie(name) {
 			r.count += len(values)
 			continue
 		}

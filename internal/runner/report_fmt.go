@@ -88,6 +88,7 @@ func toFormatResult(res Result) runfmt.Result {
 		HTTP:                 formatHTTP(res.Response),
 		GRPC:                 formatGRPC(res.GRPC),
 		Stream:               formatStream(res.Stream),
+		Response:             res.report,
 		Trace:                formatTrace(res.Trace),
 		Tests:                formatTests(res.Tests),
 		Compare:              formatCompare(res.Compare),
@@ -121,6 +122,7 @@ func toFormatStep(step StepResult) runfmt.Step {
 		HTTP:                 formatHTTP(step.Response),
 		GRPC:                 formatGRPC(step.GRPC),
 		Stream:               formatStream(step.Stream),
+		Response:             step.report,
 		Trace:                formatTrace(step.Trace),
 		Tests:                formatTests(step.Tests),
 	}

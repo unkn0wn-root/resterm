@@ -1,6 +1,7 @@
 package runfmt
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
@@ -54,6 +55,7 @@ type Result struct {
 	HTTP                 *HTTP
 	GRPC                 *GRPC
 	Stream               *Stream
+	Response             *Response
 	Trace                *Trace
 	Tests                []Test
 	Compare              *Compare
@@ -84,6 +86,7 @@ type Step struct {
 	HTTP                 *HTTP
 	GRPC                 *GRPC
 	Stream               *Stream
+	Response             *Response
 	Trace                *Trace
 	Tests                []Test
 }
@@ -206,6 +209,26 @@ type Stream struct {
 	Summary        map[string]any
 	TranscriptPath string
 	Error          string
+}
+
+// MaxBodyBytes is the largest body, in bytes, that a Response holds.
+const MaxBodyBytes = 1 << 20
+
+// Response holds a masked response. BodySize is the size of the body as
+// received, before masking and the MaxBodyBytes cut.
+type Response struct {
+	Headers       http.Header
+	Body          []byte
+	BodySize      int64
+	BodyTruncated bool
+	Captures      []Capture
+}
+
+type Capture struct {
+	Scope  string
+	Name   string
+	Value  string
+	Secret bool
 }
 
 type Trace struct {

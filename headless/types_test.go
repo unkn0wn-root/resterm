@@ -55,7 +55,7 @@ func TestBadArgumentsAreUsageErrors(t *testing.T) {
 
 func TestZeroValues(t *testing.T) {
 	var opt Options
-	if opt.Source.Path != "" || opt.Environment.Name != "" || opt.Profile.Enabled {
+	if opt.Source.Path != "" || opt.Environment.Name != "" || opt.Profile.Enabled || opt.Response.Enabled {
 		t.Fatalf("unexpected options zero value: %+v", opt)
 	}
 	if opt.Source.Content != nil {
@@ -80,6 +80,11 @@ func TestZeroValues(t *testing.T) {
 	if tr.Budget != nil || tr.Breaches != nil {
 		t.Fatalf("unexpected zero trace value: %+v", tr)
 	}
+
+	var res Result
+	if res.Response != nil {
+		t.Fatalf("unexpected zero result response: %+v", res.Response)
+	}
 }
 
 func TestJSONTags(t *testing.T) {
@@ -98,6 +103,8 @@ func TestJSONTags(t *testing.T) {
 		{typ: reflect.TypeFor[EnvironmentOptions](), name: "FilePath", tag: "filePath,omitempty"},
 		{typ: reflect.TypeFor[CompareOptions](), name: "Targets", tag: "targets,omitempty"},
 		{typ: reflect.TypeFor[ProfileOptions](), name: "Enabled", tag: "enabled,omitempty"},
+		{typ: reflect.TypeFor[Options](), name: "Response", tag: "response,omitempty"},
+		{typ: reflect.TypeFor[ResponseOptions](), name: "Enabled", tag: "enabled,omitempty"},
 		{
 			typ:  reflect.TypeFor[HTTPOptions](),
 			name: "FollowRedirects",
@@ -137,6 +144,14 @@ func TestJSONTags(t *testing.T) {
 		{typ: reflect.TypeFor[FailureFrame](), name: "Pos", tag: "pos,omitempty"},
 		{typ: reflect.TypeFor[FailurePos](), name: "Line", tag: "line,omitempty"},
 		{typ: reflect.TypeFor[Stream](), name: "TranscriptPath", tag: ""},
+		{typ: reflect.TypeFor[Result](), name: "Response", tag: ""},
+		{typ: reflect.TypeFor[Step](), name: "Response", tag: ""},
+		{typ: reflect.TypeFor[Response](), name: "Body", tag: ""},
+		{typ: reflect.TypeFor[Response](), name: "BodySize", tag: ""},
+		{typ: reflect.TypeFor[Capture](), name: "Scope", tag: "scope"},
+		{typ: reflect.TypeFor[Capture](), name: "Name", tag: "name"},
+		{typ: reflect.TypeFor[Capture](), name: "Value", tag: "value"},
+		{typ: reflect.TypeFor[Capture](), name: "Secret", tag: "secret,omitempty"},
 		{typ: reflect.TypeFor[Trace](), name: "ArtifactPath", tag: ""},
 		{typ: reflect.TypeFor[TraceBudget](), name: "Phases", tag: ""},
 	}
