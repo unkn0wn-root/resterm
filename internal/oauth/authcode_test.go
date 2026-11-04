@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -67,6 +68,60 @@ func TestAuthCodeDoesNotWaitForAConnectionWithoutARequest(t *testing.T) {
 	}
 	if token.AccessToken != "code-token" {
 		t.Fatalf("access token = %q", token.AccessToken)
+	}
+}
+
+func TestAuthCodeOpensOnlyHTTPAuthURLs(t *testing.T) {
+	const (
+		scheme = "auth_url must use http or https"
+		host   = "auth_url must contain a host"
+	)
+	tests := []struct {
+		url string
+		err string // empty when the browser opens
+	}{
+		{"https://idp.example/auth", ""},
+		{"http://127.0.0.1:9000/auth", ""},
+		{"HTTPS://Idp.Example/auth", ""},
+		{"file:///etc/passwd", scheme},
+		{"file://localhost/etc/passwd", scheme},
+		{"javascript:alert(1)", scheme},
+		{"myapp://x", scheme},
+		{"ftp://h/x", scheme},
+		{"/auth", scheme},
+		{"idp.example/auth", scheme},
+		{"https:///auth", host},
+		{"https://:443/auth", host},
+	}
+	t.Cleanup(func() { launchBrowser = openBrowser })
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			opened := false
+			// Cancel so an opened login ends without a callback.
+			launchBrowser = func(string) error {
+				opened = true
+				cancel()
+				return nil
+			}
+			cfg := Config{
+				TokenURL:  "http://127.0.0.1:1/token",
+				AuthURL:   tt.url,
+				GrantType: GrantAuthorizationCode,
+			}
+			if tt.err != "" {
+				// Fails later, so the error shows auth_url is checked first.
+				cfg.RedirectURL = "http://example.com/cb"
+			}
+			_, err := NewManager(nil).Token(ctx, "dev", cfg, httpx.Options{})
+			if opened != (tt.err == "") {
+				t.Fatalf("opened = %v, want %v (err %v)", opened, tt.err == "", err)
+			}
+			if tt.err != "" && (diag.ClassOf(err) != diag.ClassAuth || err.Error() != tt.err) {
+				t.Fatalf("err = %v (class %s), want auth error %q", err, diag.ClassOf(err), tt.err)
+			}
+		})
 	}
 }
 

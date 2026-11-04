@@ -84,7 +84,7 @@ GET https://api.example.com/me
 
 With `grant=authorization_code`, Resterm runs the whole flow for you:
 
-1. Opens your system browser at `auth_url` with the authorization request.
+1. Opens your system browser at `auth_url`, which must be a full `http://` or `https://` URL, with the authorization request.
 2. Starts a temporary HTTP server on localhost to catch the redirect.
 3. Exchanges the authorization code for tokens at `token_url` and sends the PKCE verifier with it.
 4. Caches the token and adds it to your request.
