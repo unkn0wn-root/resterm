@@ -193,7 +193,7 @@ func (e *Engine) ExecuteWith(
 	end := time.Now()
 	res.Timing = requestTiming(start, end, res)
 	res.Err = withSource(res.Err, doc)
-	res = e.redactResult(res, doc, env)
+	res.RuntimeSecrets = e.secretValues(doc, res.Executed, env, res.RuntimeSecrets...)
 	if opt.Record {
 		e.record(doc, req, runResult{
 			Response:       res.Response,
@@ -211,7 +211,7 @@ func (e *Engine) ExecuteWith(
 	out := toResult(res)
 	out.Warnings = x.warnings
 	out.Captures = x.caps
-	return out, nil
+	return redactResult(out), nil
 }
 
 func (e *Engine) store(res xrunResult) {

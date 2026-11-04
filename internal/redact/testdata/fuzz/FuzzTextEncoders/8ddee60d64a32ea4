@@ -1,0 +1,6 @@
+go test fuzz v1
+string("000")
+byte(';')
+byte('\x12')
+string("0")
+string("0")

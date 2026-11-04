@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
@@ -25,9 +26,10 @@ func (r *Report) writeArtifacts(dir string) error {
 			streamsDir,
 			i+1,
 			0,
-			resultName(*item),
+			resultName(*item, r.secrets),
 			item.Stream,
 			item.transcript,
+			r.secrets,
 		); err != nil {
 			return err
 		} else if item.Stream != nil {
@@ -37,8 +39,9 @@ func (r *Report) writeArtifacts(dir string) error {
 			tracesDir,
 			i+1,
 			0,
-			resultName(*item),
+			resultName(*item, r.secrets),
 			item.Trace,
+			r.secrets,
 		); err != nil {
 			return err
 		} else if item.Trace != nil {
@@ -50,9 +53,10 @@ func (r *Report) writeArtifacts(dir string) error {
 				streamsDir,
 				i+1,
 				j+1,
-				stepName(*step),
+				stepName(*step, r.secrets),
 				step.Stream,
 				step.transcript,
+				r.secrets,
 			); err != nil {
 				return err
 			} else if step.Stream != nil {
@@ -62,8 +66,9 @@ func (r *Report) writeArtifacts(dir string) error {
 				tracesDir,
 				i+1,
 				j+1,
-				stepName(*step),
+				stepName(*step, r.secrets),
 				step.Trace,
+				r.secrets,
 			); err != nil {
 				return err
 			} else if step.Trace != nil {
@@ -81,6 +86,7 @@ func writeStreamArtifact(
 	name string,
 	stream *StreamInfo,
 	transcript []byte,
+	sec redact.Set,
 ) (string, error) {
 	if stream == nil || len(transcript) == 0 {
 		return "", nil
@@ -99,7 +105,7 @@ func writeStreamArtifact(
 		file += "-" + kind
 	}
 	path := filepath.Join(base, file+".json")
-	if err := os.WriteFile(path, transcript, 0o644); err != nil {
+	if err := os.WriteFile(path, sec.JSON(transcript), 0o644); err != nil {
 		return "", fmt.Errorf("write stream artifact: %w", err)
 	}
 	return path, nil
@@ -111,6 +117,7 @@ func writeTraceArtifact(
 	stepIndex int,
 	name string,
 	trace *TraceInfo,
+	sec redact.Set,
 ) (string, error) {
 	if trace == nil || trace.Summary == nil {
 		return "", nil
@@ -130,7 +137,7 @@ func writeTraceArtifact(
 	if err != nil {
 		return "", fmt.Errorf("marshal trace artifact: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, sec.JSON(data), 0o644); err != nil {
 		return "", fmt.Errorf("write trace artifact: %w", err)
 	}
 	return path, nil
@@ -159,12 +166,13 @@ func streamArtifactSlug(name string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-func resultName(item Result) string {
-	name := item.Name
+// Mask before the cut, so no part of a secret reaches a file name.
+func resultName(item Result, sec redact.Set) string {
+	name := sec.Text(item.Name)
 	if name != "" {
 		return name
 	}
-	target := item.Target
+	target := sec.Text(item.Target)
 	if target == "" {
 		return "<unnamed>"
 	}
@@ -174,15 +182,15 @@ func resultName(item Result) string {
 	return target
 }
 
-func stepName(step StepResult) string {
-	name := step.Name
+func stepName(step StepResult, sec redact.Set) string {
+	name := sec.Text(step.Name)
 	if name != "" {
 		return name
 	}
 	if env := step.Environment; env != "" {
 		return env
 	}
-	target := step.Target
+	target := sec.Text(step.Target)
 	if target != "" {
 		return target
 	}

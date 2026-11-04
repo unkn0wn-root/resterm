@@ -670,6 +670,24 @@ type Document struct {
 	Raw       []byte
 }
 
+// SecretValues are unresolved, as written in the file.
+func (d *Document) SecretValues() []string {
+	var out []string
+	add := func(vs []Variable) {
+		for _, v := range vs {
+			if v.Secret {
+				out = append(out, v.Value)
+			}
+		}
+	}
+	add(d.Variables)
+	add(d.Globals)
+	for _, req := range d.Requests {
+		add(req.Variables)
+	}
+	return out
+}
+
 type WorkflowFailureMode string
 
 const (

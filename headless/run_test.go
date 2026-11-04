@@ -1231,3 +1231,82 @@ func TestRunKeepsAWebSocketStepFailureClass(t *testing.T) {
 			res.Stream.Summary["sentCount"])
 	}
 }
+
+func TestRunMasksReport(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"echo":"%s"}`, strings.ReplaceAll(r.URL.Query().Get("k"), "/", `\/`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "mask.http")
+	src := "### Echo\n# @request-secret tok hl/s3c\n# @script test\n> tests.assert(false, \"saw hl/s3c\");\n" +
+		"GET " + srv.URL + "/echo?k=hl/s3c\n"
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	rep, err := Run(t.Context(), Options{Source: Source{Path: file}, Response: ResponseOptions{Enabled: true}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(rep.Results) != 1 || len(rep.Results[0].Tests) != 1 || rep.Results[0].Response == nil {
+		t.Fatalf("report = %+v, want one request with a test and a response", rep)
+	}
+	res := rep.Results[0]
+	shown := map[string]string{
+		"name":            res.Name,
+		"target":          res.Target,
+		"effectiveTarget": res.EffectiveTarget,
+		"test":            res.Tests[0].Name,
+		"failure":         res.Failure.Message,
+		"body":            string(res.Response.Body),
+	}
+	for field, text := range shown {
+		if strings.Contains(text, "hl/s3c") || strings.Contains(text, `hl\/s3c`) || !strings.Contains(text, "•••") {
+			t.Errorf("%s = %q, want the secret masked", field, text)
+		}
+	}
+	for _, f := range []Format{Text, JSON, JUnit} {
+		var out strings.Builder
+		if err := rep.Encode(&out, f); err != nil {
+			t.Fatalf("Encode(%v): %v", f, err)
+		}
+		if strings.Contains(out.String(), "hl/s3c") || strings.Contains(out.String(), "hl%2Fs3c") {
+			t.Errorf("%v report shows the secret:\n%s", f, out.String())
+		}
+	}
+
+	path, err := filepath.Abs(file)
+	if err != nil {
+		t.Fatalf("abs file: %v", err)
+	}
+	want, err := runner.RunContext(t.Context(), runner.Options{
+		FilePath:      path,
+		WorkspaceRoot: dir,
+		HTTPOptions:   httpx.Options{Timeout: DefaultHTTPTimeout, FollowRedirects: true},
+	})
+	if err != nil {
+		t.Fatalf("runner RunContext: %v", err)
+	}
+	for _, mode := range []ExitCodeMode{ExitCodeDetailed, ExitCodeSummary} {
+		if got, want := rep.ExitCode(mode), runner.ExitCode(want, runfail.ExitMode(mode)); got != want {
+			t.Errorf("ExitCode(%v) = %d, want %d", mode, got, want)
+		}
+	}
+
+	cmp := "### C\n# @request-secret tok hl/s3c\n# @compare dev nope\nGET " + srv.URL + "/c?k=hl/s3c\n"
+	_, err = Run(t.Context(), Options{
+		Source:      Source{Path: filepath.Join(dir, "cmp.http"), Content: []byte(cmp)},
+		Environment: EnvironmentOptions{Set: EnvironmentSet{"dev": {}, "stage": {}}, Name: "dev"},
+	})
+	if !IsUsageError(err) {
+		t.Fatalf("Run error = %v, want a usage error", err)
+	}
+	if text := err.Error() + "\n" + diag.Render(
+		err,
+	); strings.Contains(text, "hl/s3c") ||
+		!strings.Contains(text, "•••") {
+		t.Errorf("RunPlan error shows the secret:\n%s", text)
+	}
+}

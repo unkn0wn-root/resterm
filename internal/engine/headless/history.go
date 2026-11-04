@@ -3,6 +3,7 @@ package headless
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -10,6 +11,25 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
+
+// Secrets returns the secrets of every request of doc, run or not, and the stores.
+func (e *Engine) Secrets(doc *restfile.Document, env vars.Environment) []string {
+	var out []string
+	for _, req := range doc.Requests {
+		envs := []vars.Environment{env}
+		if spec := core.NormalizeCompareSpec(e.compareSpec(req)); spec != nil {
+			// CheckCompare reports a target that does not resolve.
+			ts, _ := e.cfg.Catalog.CompareTargets(env.Selection(), spec.Group, spec.Baseline, spec.Environments)
+			for _, t := range ts {
+				envs = append(envs, t.Env)
+			}
+		}
+		for _, v := range envs {
+			out = append(out, e.secretValues(doc, req, v)...)
+		}
+	}
+	return out
+}
 
 func (e *Engine) secretValues(
 	doc *restfile.Document,

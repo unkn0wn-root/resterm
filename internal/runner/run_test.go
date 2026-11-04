@@ -4,9 +4,11 @@ import (
 	"cmp"
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,16 +18,21 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -289,7 +296,7 @@ func TestRunMasksSecretsInEffectiveTargets(t *testing.T) {
 			}
 
 			var targets []string
-			for _, res := range rep.Results {
+			for _, res := range ReportModel(rep).Results {
 				targets = append(targets, res.EffectiveTarget)
 				for _, step := range res.Steps {
 					targets = append(targets, step.EffectiveTarget)
@@ -304,12 +311,795 @@ func TestRunMasksSecretsInEffectiveTargets(t *testing.T) {
 	}
 }
 
+func lowerHex(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '%' && i+2 < len(s) {
+			b.WriteString(strings.ToLower(s[i : i+3]))
+			i += 2
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+func jsonU(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' {
+			b.WriteRune(r)
+			continue
+		}
+		fmt.Fprintf(&b, `\u%04x`, r)
+	}
+	return b.String()
+}
+
+func secretForms(sec string) []string {
+	q := url.QueryEscape(sec)
+	return []string{
+		sec,
+		q,
+		lowerHex(q),
+		(&url.URL{Path: sec}).EscapedPath(),
+		strings.ReplaceAll(q, "+", "%20"),
+		jsonU(sec),
+	}
+}
+
+func reportOutputs(t *testing.T, rep *Report) map[string]string {
+	t.Helper()
+	out := make(map[string]string)
+	for format, write := range map[string]func(io.Writer) error{
+		"json":  rep.WriteJSON,
+		"junit": rep.WriteJUnit,
+		"text":  rep.WriteText,
+	} {
+		var b strings.Builder
+		if err := write(&b); err != nil {
+			t.Fatalf("write %s: %v", format, err)
+		}
+		out[format] = b.String()
+	}
+	return out
+}
+
+func assertMasked(t *testing.T, outs map[string]string, secs []string, keep ...string) {
+	t.Helper()
+	for format, text := range outs {
+		var shown, lost []string
+		for _, sec := range secs {
+			for _, form := range secretForms(sec) {
+				if strings.Contains(text, form) {
+					shown = append(shown, form)
+				}
+			}
+		}
+		for _, k := range append(keep, "•••") {
+			if !strings.Contains(text, k) {
+				lost = append(lost, k)
+			}
+		}
+		if len(shown) > 0 || len(lost) > 0 {
+			t.Errorf("%s shows %q and lost %q:\n%s", format, shown, lost, text)
+		}
+	}
+}
+
+func TestRunMasksSecretsInStatusText(t *testing.T) {
+	const (
+		secret     = "s3 cr+t/v=l"
+		fileSecret = "f1l3-s3cr3t"
+	)
+	t.Setenv("RST441_SKIP_TOK", secret)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "status.http")
+	src := strings.Join([]string{
+		"# @file-secret fs " + fileSecret,
+		"# @workflow flow",
+		"# @step Echo using=echo expect.statuscode=401",
+		"",
+		"### Echo",
+		"# @name echo",
+		"# @request-secret tok " + secret,
+		"# @apply {query: {k: vars.get(\"tok\"), p: \"p1a1n\"}}",
+		"GET https://api.example.com/echo",
+		"",
+		"### Bare",
+		"# @request-secret tok " + secret,
+		"# @apply {query: {k: vars.get(\"tok\"), p: \"p1a1n\"}}",
+		"GET https://api.example.com/bare",
+		"",
+		"### Prof",
+		"# @name prof",
+		"# @profile 1",
+		"# @request-secret tok " + secret,
+		"# @apply {query: {k: vars.get(\"tok\"), p: \"p1a1n\"}}",
+		"GET https://api.example.com/prof",
+		"",
+		"### Profile literal",
+		"# @profile 1",
+		"# @request-secret tok " + secret,
+		"GET https://api.example.com/plit?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### Compare literal",
+		"# @tag lit",
+		"# @request-secret tok " + secret,
+		"GET https://api.example.com/clit?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### URI component",
+		"# @request-secret tok " + secret,
+		"# @script pre-request",
+		"> request.setURL(\"https://api.example.com/uri?k=\" + encodeURIComponent(vars.get(\"tok\")) + \"&p=p1a1n\");",
+		"GET https://api.example.com/uri",
+		"",
+		"### Each literal",
+		"# @tag each",
+		"# @request-secret tok " + secret,
+		"# @for-each item in [\"a\"]",
+		"GET https://api.example.com/each?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### Each empty",
+		"# @tag empty",
+		"# @request-secret tok " + secret,
+		"# @for-each item in []",
+		"GET https://api.example.com/empty?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### Trace down",
+		"# @tag tr",
+		"# @trace total<=5s",
+		"# @request-secret tok " + secret,
+		"GET https://api.example.com/down?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### FF down",
+		"# @tag ff fff ffe",
+		"GET https://api.example.com/down",
+		"",
+		"### FF literal",
+		"# @tag ff",
+		"# @request-secret tok " + secret,
+		"GET https://api.example.com/fflit?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### FF file literal",
+		"# @tag fff",
+		"GET https://api.example.com/ffflit?f=" + fileSecret + "&p=p1a1n",
+		"",
+		"### FF env literal",
+		"# @tag ffe",
+		"# @request tok env:RST441_SKIP_TOK",
+		"GET https://api.example.com/ffelit?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### FF earlier",
+		"# @tag ffx",
+		"# @script pre-request",
+		"> vars.global.set(\"late\", \"" + secret + "\", {secret: true});",
+		"GET https://api.example.com/down",
+		"",
+		"### FF later",
+		"# @tag ffx",
+		"GET https://api.example.com/fflate?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### FF each",
+		"# @tag ffs",
+		"# @for-each item in [\"a\"]",
+		"# @script pre-request",
+		"> vars.global.set(\"step\", \"" + secret + "\", {secret: true});",
+		"GET https://api.example.com/ffeach",
+		"",
+		"### FF after each",
+		"# @tag ffs",
+		"GET https://api.example.com/ffafter?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### Uses literal",
+		"# @tag use",
+		"GET https://api.example.com/use?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+		"### CX stop",
+		"# @tag cx",
+		"GET https://api.example.com/stop",
+		"",
+		"### CX literal",
+		"# @tag cx",
+		"# @request-secret tok " + secret,
+		"GET https://api.example.com/cxlit?k=" + url.QueryEscape(secret) + "&p=p1a1n",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	var stop context.CancelFunc
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				switch req.URL.Path {
+				case "/down":
+					return nil, errors.New("connection refused")
+				case "/stop":
+					stop()
+					return nil, req.Context().Err()
+				}
+				q := req.URL.Query()
+				k := q.Get("k")
+				return &http.Response{
+					Status: "401 token " + k + " " + lowerHex(
+						url.QueryEscape(k),
+					) + " " + jsonU(
+						k,
+					) + " " + q.Get(
+						"p",
+					),
+					StatusCode: http.StatusUnauthorized,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "stage": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		sel     Select
+		cmp     engine.CompareConfig
+		ff      bool
+		skipped int
+	}{
+		{name: "requests and profile", sel: Select{All: true}, skipped: 2},
+		{name: "workflow", sel: Select{Workflow: "flow"}},
+		{name: "compare", sel: Select{Request: "echo"}, cmp: engine.CompareConfig{Targets: []string{"dev", "stage"}}},
+		{
+			name: "compare literal",
+			sel:  Select{Tag: "lit"},
+			cmp:  engine.CompareConfig{Targets: []string{"dev", "stage"}},
+		},
+		{name: "for-each", sel: Select{Tag: "each"}},
+		{name: "empty for-each", sel: Select{Tag: "empty"}, skipped: 1},
+		{name: "trace error", sel: Select{Tag: "tr"}},
+		{name: "fail-fast", sel: Select{Tag: "ff"}, ff: true, skipped: 1},
+		{name: "fail-fast file secret", sel: Select{Tag: "fff"}, ff: true, skipped: 1},
+		{name: "fail-fast env secret", sel: Select{Tag: "ffe"}, ff: true, skipped: 1},
+		{name: "fail-fast earlier secret", sel: Select{Tag: "ffx"}, ff: true, skipped: 1},
+		{name: "fail-fast step secret", sel: Select{Tag: "ffs"}, ff: true, skipped: 1},
+		{name: "cancel", sel: Select{Tag: "cx"}, skipped: 1},
+		{name: "declared by another request", sel: Select{Tag: "use"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			stop = cancel
+			rep, err := RunContext(ctx, Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+				Catalog:       cat,
+				Selection:     cat.DefaultSelection(),
+				Select:        tt.sel,
+				Compare:       tt.cmp,
+				FailFast:      tt.ff,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if rep.Skipped != tt.skipped {
+				t.Fatalf("skipped %d results, want %d", rep.Skipped, tt.skipped)
+			}
+			assertMasked(t, reportOutputs(t, rep), []string{secret, fileSecret}, "p1a1n")
+		})
+	}
+}
+
+func TestRunMasksForEachWithoutItems(t *testing.T) {
+	const (
+		reqSecret  = "r3q-s3c"
+		fileSecret = "f1l3-d0c-s3c"
+	)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "each.http")
+	src := strings.Join([]string{
+		"# @file-secret fs " + fileSecret,
+		"",
+		"### Empty each",
+		"# @tag empty",
+		"# @request-secret tok " + reqSecret,
+		"# @for-each item in []",
+		"GET https://api.example.com/status200?r=" + reqSecret + "&p=p1a1n",
+		"",
+		"### Missing each",
+		"# @tag missing",
+		"# @request-secret tok " + reqSecret,
+		"# @for-each item in vars.get(\"nope\")",
+		"GET https://api.example.com/status200?k=" + fileSecret + "&r=" + reqSecret + "&p=p1a1n",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	var calls int
+	for _, tag := range []string{"empty", "missing"} {
+		t.Run(tag, func(t *testing.T) {
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        countingClient(&calls),
+				Select:        Select{Tag: tag},
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			assertMasked(t, reportOutputs(t, rep), []string{reqSecret, fileSecret}, "p1a1n")
+		})
+	}
+}
+
+func TestRunMasksWorkflowCondition(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "when.http")
+	src := strings.Join([]string{
+		"# @workflow wf on-failure=continue",
+		"# @step First using=ok",
+		"# @when vars.get(\"tok\") == \"wf-sec-88dd-no\"",
+		"# @step Second using=ok",
+		"",
+		"### Ok",
+		"# @name ok",
+		"# @script pre-request",
+		"> vars.global.set(\"tok\", \"wf-sec-88dd\", {secret: true});",
+		"GET https://api.example.com/ok",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	var calls int
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        countingClient(&calls),
+		Select:        Select{Workflow: "wf"},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(rep.Results) != 1 || len(rep.Results[0].Steps) != 2 || !rep.Results[0].Steps[1].Skipped {
+		t.Fatalf("results = %+v, want the second step skipped", rep.Results)
+	}
+	assertMasked(t, reportOutputs(t, rep), []string{"wf-sec-88dd"}, "•••-no")
+}
+
+func TestRunMasksLaterCapturedSecret(t *testing.T) {
+	const secret = "later-cap-5a4b"
+	dir := t.TempDir()
+	file := filepath.Join(dir, "later.http")
+	src := strings.Join([]string{
+		"# @workflow wf",
+		"# @step Seen using=seen",
+		"# @step Login using=login",
+		"",
+		"### Seen",
+		"# @name seen",
+		"# @tag pair",
+		"GET https://api.example.com/seen",
+		"",
+		"### Login",
+		"# @name login",
+		"# @tag pair",
+		"# @capture file-secret tok {{response.json.token}}",
+		"GET https://api.example.com/cap",
+		"",
+		"### Each",
+		"# @name each",
+		"# @for-each item in [\"a\", \"b\"]",
+		"# @capture request-secret tok {{response.json.token}}",
+		"GET https://api.example.com/each/{{vars.request.item}}",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	replies := map[string][2]string{
+		"/seen":   {"200 saw " + secret, "{}"},
+		"/cap":    {"200 OK", `{"token":"` + secret + `"}`},
+		"/each/a": {"200 saw " + secret, `{"token":"public-a"}`},
+		"/each/b": {"200 OK", `{"token":"` + secret + `"}`},
+	}
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				r := replies[req.URL.Path]
+				code, _, _ := strings.Cut(r[0], " ")
+				status, _ := strconv.Atoi(code)
+				return &http.Response{
+					Status:     r[0],
+					StatusCode: status,
+					Proto:      "HTTP/1.1",
+					Header:     http.Header{"Content-Type": {"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(r[1])),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+	for name, sel := range map[string]Select{
+		"requests": {Tag: "pair"},
+		"workflow": {Workflow: "wf"},
+		"for-each": {Request: "each"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+				Select:        sel,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			assertMasked(t, reportOutputs(t, rep), []string{secret}, "saw •••")
+		})
+	}
+}
+
+func TestRunMasksArtifacts(t *testing.T) {
+	const secret = "ws/s3c77"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		k := r.URL.Query().Get("k")
+		typ, data, err := conn.Read(r.Context())
+		if err != nil {
+			return
+		}
+		_ = conn.Write(r.Context(), typ, data)
+		_ = conn.Write(r.Context(), websocket.MessageBinary, []byte("bin-"+k))
+		reason, _ := json.Marshal(map[string]string{"t": k})
+		_ = conn.Close(websocket.StatusNormalClosure, "denied "+strings.ReplaceAll(string(reason), "/", `\/`))
+	}))
+	defer srv.Close()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	closed := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close listener: %v", err)
+	}
+
+	ws := strings.Replace(srv.URL, "http", "ws", 1)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "art.http")
+	artifacts := filepath.Join(dir, "artifacts")
+	src := strings.Join([]string{
+		"### Unnamed",
+		"# @request-secret tok " + secret,
+		"# @websocket timeout=5s",
+		"# @ws send hello {{tok}}",
+		"GET " + ws + "/ws?k=" + secret,
+		"",
+		"### Named",
+		"# @name wsnamed",
+		"# @websocket timeout=5s",
+		"# @ws send plain",
+		"GET " + ws + "/ws",
+		"",
+		"### Trace",
+		"# @name tracedown",
+		"# @trace total<=5s",
+		"# @request-secret tok " + secret,
+		"GET http://" + closed + "/x?k=" + secret,
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		ArtifactDir:   artifacts,
+		Select:        Select{All: true},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(rep.Results) != 3 {
+		t.Fatalf("results = %+v, want three", rep.Results)
+	}
+
+	var names []string
+	err = filepath.WalkDir(artifacts, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		names = append(names, d.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !json.Valid(data) {
+			t.Errorf("%s is not JSON:\n%s", d.Name(), data)
+		}
+		if leak := jsonLeak(data, secret); leak != "" {
+			t.Errorf("%s shows the secret in %q", d.Name(), leak)
+		}
+		for _, form := range append(secretForms(secret), `ws\/s3c77`) {
+			if strings.Contains(string(data), form) {
+				t.Errorf("%s shows %q:\n%s", d.Name(), form, data)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk artifacts: %v", err)
+	}
+	if len(names) != 3 {
+		t.Fatalf("artifacts = %q, want two transcripts and a trace", names)
+	}
+	for _, name := range names {
+		if strings.Contains(name, "s3c77") {
+			t.Errorf("artifact name %q shows the secret", name)
+		}
+	}
+	if !slices.ContainsFunc(names, func(n string) bool { return strings.Contains(n, "-wsnamed-") }) ||
+		!slices.ContainsFunc(names, func(n string) bool { return strings.Contains(n, "-tracedown-") }) {
+		t.Errorf("artifact names = %q, want the named slugs kept", names)
+	}
+
+	named, err := os.ReadFile(rep.Results[1].Stream.TranscriptPath)
+	if err != nil {
+		t.Fatalf("read named transcript: %v", err)
+	}
+	if !slices.Equal(named, rep.Results[1].Transcript()) {
+		t.Errorf("transcript without a secret changed:\n%s\n%s", named, rep.Results[1].Transcript())
+	}
+	data, err := os.ReadFile(rep.Results[2].Trace.ArtifactPath)
+	if err != nil {
+		t.Fatalf("read trace: %v", err)
+	}
+	var got history.TraceSummary
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("decode trace: %v", err)
+	}
+	want := rep.Results[2].Trace.Summary
+	if got.Error == "" || got.Duration != want.Duration || len(got.Phases) != len(want.Phases) {
+		t.Fatalf("trace = %+v, want the phases and durations of %+v", got, want)
+	}
+	for i := range got.Phases {
+		if got.Phases[i].Kind != want.Phases[i].Kind || got.Phases[i].Duration != want.Phases[i].Duration {
+			t.Errorf("phase %d = %+v, want %+v", i, got.Phases[i], want.Phases[i])
+		}
+	}
+}
+
+func TestArtifactNameMasksBeforeTheCut(t *testing.T) {
+	const sec = "lng-s3cr3t-value"
+	target := "https://api.example.com/" + strings.Repeat("a", 42) + "?k=" + sec + "&p=p1a1n"
+	got := streamArtifactSlug(resultName(Result{Target: target}, redact.New(sec)))
+	if strings.Contains(got, "s3cr") || !strings.HasPrefix(got, "https-api-example-com-aaa") {
+		t.Fatalf("slug %q of %q, want the secret masked before the cut", got, target)
+	}
+	if got := streamArtifactSlug(resultName(Result{Name: "named"}, redact.New(sec))); got != "named" {
+		t.Fatalf("slug = %q, want named", got)
+	}
+}
+
+func jsonLeak(data []byte, sec string) string {
+	var walk func(v any) string
+	walk = func(v any) string {
+		switch v := v.(type) {
+		case map[string]any:
+			for k, e := range v {
+				if l := walk(k); l != "" {
+					return l
+				}
+				if l := walk(e); l != "" {
+					return l
+				}
+			}
+		case []any:
+			for _, e := range v {
+				if l := walk(e); l != "" {
+					return l
+				}
+			}
+		case string:
+			if strings.Contains(v, sec) {
+				return v
+			}
+			if b, err := base64.StdEncoding.DecodeString(v); err == nil && strings.Contains(string(b), sec) {
+				return v
+			}
+			var inner any
+			if json.Unmarshal([]byte(v), &inner) == nil {
+				return walk(inner)
+			}
+		}
+		return ""
+	}
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return ""
+	}
+	return walk(v)
+}
+
+func TestRunMasksReturnedError(t *testing.T) {
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "stage": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+	other, err := vars.NewCatalog(vars.EnvironmentSet{"elsewhere": {}})
+	if err != nil {
+		t.Fatalf("other catalog: %v", err)
+	}
+	away, err := other.Select("elsewhere", nil)
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	tests := []struct {
+		name   string
+		src    string
+		sel    vars.Selection
+		masked bool
+		usage  bool
+	}{
+		{
+			name:   "compare literal",
+			src:    "### C\n# @request-secret tok cmp-s3c\n# @compare dev nope\nGET https://api.example.com/c?k=cmp-s3c\n",
+			sel:    cat.DefaultSelection(),
+			masked: true,
+			usage:  true,
+		},
+		{
+			name:  "no secret",
+			src:   "### C\n# @compare dev nope\nGET https://api.example.com/c?k=plain\n",
+			sel:   cat.DefaultSelection(),
+			usage: true,
+		},
+		{
+			name: "environment",
+			src:  "### C\n# @request-secret tok cmp-s3c\nGET https://api.example.com/c?k=cmp-s3c\n",
+			sel:  away,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := filepath.Join(dir, "err.http")
+			if err := os.WriteFile(file, []byte(tt.src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+			var calls int
+			_, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        countingClient(&calls),
+				Catalog:       cat,
+				Selection:     tt.sel,
+				Select:        Select{All: true},
+			})
+			if err == nil {
+				t.Fatal("Run returned no error")
+			}
+			if IsUsageError(err) != tt.usage {
+				t.Fatalf("IsUsageError(%v) = %t, want %t", err, !tt.usage, tt.usage)
+			}
+			shown := err.Error() + "\n" + diag.Render(err)
+			if !tt.masked {
+				if _, ok := err.(UsageError); tt.usage && !ok {
+					t.Errorf("error %T was wrapped, want it returned as is", err)
+				}
+				if strings.Contains(shown, "•••") {
+					t.Errorf("error without a secret was masked:\n%s", shown)
+				}
+				return
+			}
+			if strings.Contains(shown, "cmp-s3c") || !strings.Contains(shown, "•••") {
+				t.Errorf("error shows the secret:\n%s", shown)
+			}
+			var ue UsageError
+			if !errors.As(err, &ue) || !strings.Contains(ue.Error(), "cmp-s3c") {
+				t.Errorf("masked error does not reach its cause: %v", err)
+			}
+		})
+	}
+}
+
+func TestRunWarnsAboutShortSecrets(t *testing.T) {
+	t.Setenv("RST441_CODE", "c5")
+	t.Setenv("RST441_LONG", "long-env-value")
+	t.Setenv("RST441_REF", "r9")
+	t.Setenv("RST441_FS", "f8")
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {
+		"code":  "env:RST441_CODE",
+		"long":  "env:RST441_LONG",
+		"plain": "ab",
+	}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+	sel, err := cat.Select("dev", nil)
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	dir := t.TempDir()
+	file := filepath.Join(dir, "short.http")
+	src := strings.Join([]string{
+		"# @file-secret pin q7",
+		"# @file-secret data a",
+		"# @file-secret wide abcd",
+		"# @file-secret multi ü€x",
+		"# @file-secret fromenv env:RST441_FS",
+		"# @global-secret gl ab3",
+		"# @file ref env:RST441_REF",
+		"# @file open xy",
+		"",
+		"### A",
+		"# @request-secret tok xyz",
+		"GET https://api.example.com/a",
+		"",
+		"### B",
+		"# @request-secret tok xyz",
+		"GET https://api.example.com/b",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	var calls int
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        countingClient(&calls),
+		Catalog:       cat,
+		Selection:     sel,
+		Select:        Select{All: true},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	var want []string
+	for _, name := range []string{"code", "d•••t•••", "fromenv", "gl", "multi", "pin", "ref", "tok"} {
+		want = append(want, fmt.Sprintf(
+			"secret %q is shorter than 4 characters, so reports may also mask unrelated text that contains it",
+			name,
+		))
+	}
+	if got := ReportModel(rep).Warnings; !slices.Equal(got, want) {
+		t.Errorf("warnings = %q, want %q", got, want)
+	}
+	outs := reportOutputs(t, rep)
+	var lost []string
+	for _, w := range want {
+		if !strings.Contains(outs["text"], "WARN "+w) {
+			lost = append(lost, w)
+		}
+	}
+	if len(lost) > 0 {
+		t.Errorf("text report lacks %q:\n%s", lost, outs["text"])
+	}
+	var got struct{ Warnings []string }
+	if err := json.Unmarshal([]byte(outs["json"]), &got); err != nil {
+		t.Fatalf("decode JSON report: %v", err)
+	}
+	if !slices.Equal(got.Warnings, want) {
+		t.Errorf("JSON warnings = %q, want %q", got.Warnings, want)
+	}
+}
+
 func TestRunMasksSecretsInResponses(t *testing.T) {
 	const (
-		secret = "s3cr3t-tok"
+		secret = `s3cr3t-tok\`
 		apiKey = "resp-key-123"
 		cookie = "cookie-val"
-		body   = `{"token":"` + secret + `","id":42}`
+		body   = `{"token":"s3cr3t-tok\\","id":42}`
 	)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "resp.http")
@@ -509,6 +1299,33 @@ func TestRunMasksResponsesWithEveryRunSecret(t *testing.T) {
 		"# @capture request-secret tok {{response.json.token}}",
 		"GET https://{{host}}/cmp",
 		"",
+		"### Shows",
+		"# @tag ffr",
+		"# @assert response.statusCode == 500",
+		"GET https://api.example.com/shows",
+		"",
+		"### Declares",
+		"# @tag ffr",
+		"# @request-secret tok s3cr3t-ff",
+		"GET https://api.example.com/declares",
+		"",
+		"### Enc login",
+		"# @tag enc",
+		"# @capture file-secret enc {{response.json.token}}",
+		"GET https://api.example.com/enclogin",
+		"",
+		"### Php",
+		"# @tag enc",
+		"GET https://api.example.com/php",
+		"",
+		"### Python",
+		"# @tag enc",
+		"GET https://api.example.com/python",
+		"",
+		"### Dotnet",
+		"# @tag enc",
+		"GET https://api.example.com/dotnet",
+		"",
 	}, "\n")
 	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
@@ -516,10 +1333,15 @@ func TestRunMasksResponsesWithEveryRunSecret(t *testing.T) {
 	// show reveals s3cr3t-tok before login captures it as a secret. show's own
 	// secret s3cr3t is a prefix of it, so the longer one must be masked first.
 	bodies := map[string]string{
-		"api.example.com/show":  `{"note":"s3cr3t-tok","short":"s3cr3t"}`,
-		"api.example.com/login": `{"token":"s3cr3t-tok"}`,
-		"dev.example.com/cmp":   `{"token":"public","note":"s3cr3t-tok"}`,
-		"stage.example.com/cmp": `{"token":"s3cr3t-tok"}`,
+		"api.example.com/show":     `{"note":"s3cr3t-tok","short":"s3cr3t"}`,
+		"api.example.com/login":    `{"token":"s3cr3t-tok"}`,
+		"dev.example.com/cmp":      `{"token":"public","note":"s3cr3t-tok"}`,
+		"stage.example.com/cmp":    `{"token":"s3cr3t-tok"}`,
+		"api.example.com/shows":    `{"token":"s3cr3t-ff"}`,
+		"api.example.com/enclogin": `{"token":"tök/s3c<7>"}`,
+		"api.example.com/php":      `{"note":"t\u00f6k\/s3c<7>"}`,
+		"api.example.com/python":   `{"note": "t\u00f6k/s3c<7>"}`,
+		"api.example.com/dotnet":   `{"note":"t\u00F6k/s3c\u003C7\u003E"}`,
 	}
 	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
 		return &http.Client{
@@ -548,6 +1370,7 @@ func TestRunMasksResponsesWithEveryRunSecret(t *testing.T) {
 		name string
 		sel  Select
 		cmp  engine.CompareConfig
+		ff   bool
 		want []string
 	}{
 		{name: "workflow", sel: Select{Workflow: "flow"}, want: []string{show, login}},
@@ -557,6 +1380,12 @@ func TestRunMasksResponsesWithEveryRunSecret(t *testing.T) {
 			sel:  Select{Request: "cmp"},
 			cmp:  engine.CompareConfig{Targets: []string{"dev", "stage"}},
 			want: []string{`{"token":"•••","note":"•••"}`, login},
+		},
+		{name: "fail-fast", sel: Select{Tag: "ffr"}, ff: true, want: []string{login}},
+		{
+			name: "encoders",
+			sel:  Select{Tag: "enc"},
+			want: []string{login, `{"note":"•••"}`, `{"note": "•••"}`, `{"note":"•••"}`},
 		},
 	}
 	for _, tt := range tests {
@@ -569,6 +1398,7 @@ func TestRunMasksResponsesWithEveryRunSecret(t *testing.T) {
 				Selection:     cat.DefaultSelection(),
 				Select:        tt.sel,
 				Compare:       tt.cmp,
+				FailFast:      tt.ff,
 				Response:      true,
 			})
 			if err != nil {

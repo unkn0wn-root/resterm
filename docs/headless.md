@@ -144,11 +144,11 @@ for _, res := range rep.Results {
 }
 ```
 
-`EffectiveTarget` is the URL a request reached after variables were filled in and redirects followed, with secret values masked. `ErrorDetail` and `ScriptErrorDetail` show an error the way `resterm run` prints it, with the file, line and column where it happened and the failing line, with secret values masked.
+`EffectiveTarget` is the URL a request reached after variables were filled in and redirects followed. Every text field of the report shows secret values as `•••`, as `resterm run` does, and so does an error from `Run` or `RunPlan`. `ErrorDetail` and `ScriptErrorDetail` show an error the way `resterm run` prints it, with the file, line and column where it happened and the failing line.
 
 With `Response.Enabled`, `res.Response` holds the response `Headers`, the `Body`, and the values the request's captures saved in `Captures`. Workflow, for-each, and compare steps have their own `Response`. A gzip body is decoded before it is masked, and its `Headers` then have no `Content-Encoding` or `Content-Length`. `Body` is nil for a body with any other content encoding, an invalid gzip body, or a gzip body that decodes to more than 32 MiB, whatever `HTTP.MaxResponseBytes` is set to. `Body` holds at most the first MiB of the masked body. `BodySize` is the size of the body as it was received, and `BodyTruncated` is true when the body was cut. `Response` is nil when no response arrived or a capture failed. Secret values are masked using every secret the run knew, and cookies and sensitive headers are masked in full, as in `resterm run --response`.
 
-`rep.FailureCodes()` returns each failure code in the report once. `rep.Warnings` lists parse warnings from the request file, and `res.Warnings` lists warnings from that request's scripts. Warnings never fail a run.
+`rep.FailureCodes()` returns each failure code in the report once. `rep.Warnings` lists parse warnings from the request file and warnings about declared secrets shorter than 4 characters, and `res.Warnings` lists warnings from that request's scripts. Warnings never fail a run.
 
 ## Output and exit codes
 

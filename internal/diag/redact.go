@@ -2,6 +2,37 @@ package diag
 
 import "strings"
 
+// The mask reports whether it replaced anything, so the decision to redact and
+// the redaction itself read the same fields. Testing rendered text instead would
+// miss a secret that display escaping has rewritten.
+func Redact(err error, mask func(string) string) error {
+	if err == nil {
+		return nil
+	}
+	found := false
+	m := func(s string) string {
+		out := mask(s)
+		found = found || out != s
+		return out
+	}
+	text := m(err.Error())
+	rep := ReportOf(err).Redact(m)
+	if !found {
+		return err
+	}
+	return &redactedError{err: err, text: text, rep: rep}
+}
+
+type redactedError struct {
+	err  error
+	text string
+	rep  Report
+}
+
+func (e *redactedError) Error() string      { return e.text }
+func (e *redactedError) Unwrap() error      { return e.err }
+func (e *redactedError) Diagnostic() Report { return e.rep }
+
 // Redact masks diagnostic text and source excerpts in a copy of the report.
 // Source lines may contain secrets outside the failing span.
 func (r Report) Redact(mask func(string) string) Report {

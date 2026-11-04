@@ -1043,20 +1043,19 @@ func AuthSecretValues(auth *restfile.AuthSpec, res *vars.Resolver) []string {
 	if auth == nil || len(auth.Params) == 0 {
 		return nil
 	}
-	expand := func(key string) string {
-		val := strings.TrimSpace(auth.Params[key])
-		if val == "" {
-			return ""
-		}
-		if res == nil || auth.Written {
+	// raw expands a param as httpx.ResolveAuth does, without trimming.
+	raw := func(key string) string {
+		val := auth.Params[key]
+		if val == "" || res == nil || auth.Written {
 			return val
 		}
 		out, err := res.ExpandTemplates(val)
 		if err != nil {
 			return val
 		}
-		return strings.TrimSpace(out)
+		return out
 	}
+	expand := func(key string) string { return strings.TrimSpace(raw(key)) }
 
 	vals := make(map[string]struct{})
 	add := func(val string) {
@@ -1067,7 +1066,13 @@ func AuthSecretValues(auth *restfile.AuthSpec, res *vars.Resolver) []string {
 	}
 
 	switch auth.Kind() {
-	case restfile.AuthBasic, restfile.AuthDigest:
+	case restfile.AuthBasic:
+		// Servers echo the credential the header sends, so it is a secret too.
+		if pass := raw("password"); strings.TrimSpace(pass) != "" {
+			add(strings.TrimSpace(pass))
+			add(httpx.BasicCredential(raw("username"), pass))
+		}
+	case restfile.AuthDigest:
 		add(expand("password"))
 	case restfile.AuthBearer:
 		add(expand("token"))

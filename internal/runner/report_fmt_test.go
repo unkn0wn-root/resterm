@@ -2,10 +2,13 @@ package runner
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
@@ -270,11 +274,11 @@ func TestReportModelUsesResponseDuration(t *testing.T) {
 }
 
 func TestFormatStreamCarriesTheFailure(t *testing.T) {
-	got := formatStream(&StreamInfo{Kind: "sse", Err: errors.New("sse line exceeds 16 bytes")})
+	got := formatStream(&StreamInfo{Kind: "sse", Err: errors.New("sse line exceeds 16 bytes")}, redact.Set{})
 	if got.Error != "sse line exceeds 16 bytes" {
 		t.Fatalf("Error = %q, want the stream failure", got.Error)
 	}
-	if plain := formatStream(&StreamInfo{Kind: "sse"}); plain.Error != "" {
+	if plain := formatStream(&StreamInfo{Kind: "sse"}, redact.Set{}); plain.Error != "" {
 		t.Fatalf("Error = %q, want a complete transcript to report none", plain.Error)
 	}
 }
@@ -458,5 +462,200 @@ func TestReportModelKeepsInheritedFailureDetails(t *testing.T) {
 				t.Fatalf("stored=%v result %d failure = %+v, want the child's %+v", stored, i, got, child)
 			}
 		}
+	}
+}
+
+func TestReportModelMasksEveryField(t *testing.T) {
+	for typ, want := range map[reflect.Type]int{
+		reflect.TypeFor[Result]():         32,
+		reflect.TypeFor[StepResult]():     27,
+		reflect.TypeFor[ProfileFailure](): 8,
+		reflect.TypeFor[runfmt.Result]():  27,
+		reflect.TypeFor[runfmt.Step]():    25,
+		reflect.TypeFor[runfmt.Report]():  15,
+	} {
+		if got := typ.NumField(); got != want {
+			t.Fatalf("%v has %d fields, want %d: give the new field a secret below and mask it", typ, got, want)
+		}
+	}
+
+	const sec = `tök/s3c"7`
+	esc := func(s string) string { return strings.Trim(strconv.Quote(s), `"`) }
+	q := url.QueryEscape(sec)
+	srcErr := diag.FromReport(diag.Report{
+		Path:   "mask.http",
+		Source: []byte("GET https://h/x\n# @assert vars.get(\"t\") == \"" + sec + "\"\n"),
+		Items: []diag.Diagnostic{{
+			Class:    diag.ClassScript,
+			Severity: diag.SeverityError,
+			Message:  "assert failed for " + sec + " p1a1n",
+			Span:     diag.Span{Start: diag.Pos{Line: 2, Col: 3}},
+			Chain:    []diag.ChainEntry{{Message: "cause " + q}},
+			Frames:   []diag.StackFrame{{Name: "fn " + sec}},
+		}},
+	}, errors.New("assert failed"))
+	step := func(name string) StepResult {
+		return StepResult{
+			Name:            name + " " + sec,
+			Method:          "GET " + sec,
+			Target:          "https://h/s?k=" + q + "&p=p1a1n",
+			EffectiveTarget: "https://h/s?k=" + strings.ToLower(q),
+			Environment:     "dev",
+			Branch:          "when " + esc(sec),
+			Summary:         "summary " + sec + " p1a1n",
+			SkipReason:      "skip " + sec,
+			Response:        &httpx.Response{Status: "401 " + sec + " p1a1n", StatusCode: 401, Proto: "HTTP/1.1"},
+			Err:             srcErr,
+			ScriptErr:       errors.New("script " + strconv.Quote(sec)),
+			Tests:           []scriptapi.TestResult{{Name: "t " + sec, Message: "m " + sec + " p1a1n"}},
+			Stream: &StreamInfo{
+				Kind:    "websocket",
+				Summary: map[string]any{"closeReason": "denied " + esc(sec)},
+			},
+			Trace: &TraceInfo{Summary: &history.TraceSummary{Error: "Get https://h/?k=" + q}},
+		}
+	}
+	grpcResult := Result{
+		Kind: ResultKindRequest,
+		Name: "rpc",
+		GRPC: &grpcx.Response{
+			StatusCode:    codes.Unauthenticated,
+			StatusMessage: "denied " + sec,
+			StatusDetails: []string{`{"reason":"` + esc(sec) + `","plain":"p1a1n"}`},
+		},
+		Stream: &StreamInfo{Kind: "grpc", Err: errors.New("stream " + sec)},
+	}
+	request := Result{
+		Kind:            ResultKindRequest,
+		Name:            "login " + sec + " p1a1n",
+		Method:          "GET",
+		Target:          "https://h/x?k=" + q + "&p=p1a1n",
+		EffectiveTarget: "https://h/final?k=" + esc(sec),
+		Environment:     "dev",
+		Summary:         "summary " + sec,
+		Response:        &httpx.Response{Status: "401 " + sec, StatusCode: 401, Proto: "HTTP/1.1"},
+		Err:             srcErr,
+		ScriptErr:       errors.New("script " + sec),
+		Tests:           []scriptapi.TestResult{{Name: "t " + sec, Message: "m " + sec}},
+		Warnings:        []string{"warn " + sec + " p1a1n"},
+		Stream:          &StreamInfo{Kind: "sse", Summary: map[string]any{"lastEvent": sec, "eventCount": 2}},
+		Trace:           &TraceInfo{Summary: &history.TraceSummary{Error: "Get https://h/?k=" + q}},
+	}
+	workflow := Result{
+		Kind:    ResultKindWorkflow,
+		Name:    "flow " + sec,
+		Method:  "WORKFLOW",
+		Summary: "flow failed at " + sec,
+		Steps:   []StepResult{step("one"), step("two")},
+	}
+	forEach := workflow
+	forEach.Kind, forEach.Name = ResultKindForEach, "GET https://h/each?k="+q
+	compare := Result{
+		Kind:    ResultKindCompare,
+		Name:    "cmp " + sec,
+		Target:  "https://h/c?k=" + q,
+		Compare: &CompareInfo{Baseline: "dev", Group: "region"},
+		Steps:   []StepResult{step("dev"), step("stage")},
+	}
+	profile := Result{
+		Kind:   ResultKindProfile,
+		Name:   "prof " + sec,
+		Target: "https://h/p?k=" + q,
+		Profile: &ProfileInfo{Count: 1, Failures: []ProfileFailure{{
+			Iteration: 1,
+			Reason:    "HTTP 401 " + sec,
+			Status:    "401 " + sec,
+			Err:       srcErr,
+			Failure:   runfail.New(runfail.CodeAssertion, "HTTP 401 "+sec, "profile "+sec),
+		}}},
+	}
+	skipped := Result{
+		Kind:       ResultKindRequest,
+		Name:       "skipped " + sec,
+		Target:     "https://h/k?k=" + q,
+		Skipped:    true,
+		SkipReason: "skipped after --fail-fast " + sec,
+	}
+	rep := &Report{Warnings: []string{"mask.http:3: @capture scope \"" + sec + "\""}, secrets: redact.New(sec)}
+	for _, res := range []Result{request, grpcResult, workflow, forEach, compare, profile, skipped} {
+		rep.add(res)
+	}
+
+	var shown []string
+	var walk func(v reflect.Value)
+	walk = func(v reflect.Value) {
+		switch v.Kind() {
+		case reflect.String:
+			shown = append(shown, v.String())
+		case reflect.Pointer, reflect.Interface:
+			if !v.IsNil() {
+				walk(v.Elem())
+			}
+		case reflect.Struct:
+			for i := range v.NumField() {
+				walk(v.Field(i))
+			}
+		case reflect.Slice:
+			if v.Type().Elem().Kind() == reflect.Uint8 {
+				shown = append(shown, string(v.Bytes()))
+				return
+			}
+			for i := range v.Len() {
+				walk(v.Index(i))
+			}
+		case reflect.Map:
+			for _, k := range v.MapKeys() {
+				walk(k)
+				walk(v.MapIndex(k))
+			}
+		}
+	}
+	walk(reflect.ValueOf(ReportModel(rep)))
+	var outs strings.Builder
+	for _, write := range []func(io.Writer) error{rep.WriteJSON, rep.WriteJUnit, rep.WriteText} {
+		if err := write(&outs); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+	shown = append(shown, outs.String())
+
+	plain := 0
+	for _, s := range shown {
+		for _, form := range []string{sec, q, strings.ToLower(q), esc(sec), "s3c"} {
+			if strings.Contains(s, form) {
+				t.Errorf("report shows %q in %q", form, s)
+			}
+		}
+		if strings.Contains(s, "p1a1n") {
+			plain++
+		}
+	}
+	if plain < 10 {
+		t.Errorf("only %d report strings keep p1a1n, want the text around each secret kept", plain)
+	}
+	if rep.Results[0].Name != request.Name || rep.Results[0].Err != srcErr {
+		t.Errorf("ReportModel changed the report: %q %v", rep.Results[0].Name, rep.Results[0].Err)
+	}
+}
+
+func BenchmarkReportModel(b *testing.B) {
+	var secs []string
+	for i := range 20 {
+		secs = append(secs, fmt.Sprintf("s3cr3t-%02d-%x", i, i*7919))
+	}
+	rep := &Report{secrets: redact.New(secs...)}
+	for i := range 1000 {
+		rep.add(Result{
+			Kind:            ResultKindRequest,
+			Name:            fmt.Sprintf("request %d", i),
+			Method:          "GET",
+			Target:          fmt.Sprintf("https://api.example.test/v1/items/%d?key={{key}}", i),
+			EffectiveTarget: fmt.Sprintf("https://api.example.test/v1/items/%d?key=%s", i, secs[i%20]),
+			Response:        &httpx.Response{Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.1"},
+			Tests:           []scriptapi.TestResult{{Name: "status is 200", Passed: true}},
+		})
+	}
+	for b.Loop() {
+		ReportModel(rep)
 	}
 }

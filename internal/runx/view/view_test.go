@@ -1,13 +1,22 @@
 package runview
 
 import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/coder/websocket"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -471,5 +480,329 @@ func TestRenderHTTPPrettyIncludesResultWarnings(t *testing.T) {
 	}
 	if !strings.Contains(out, "Script sends {{token}} in header X-Id as written.") {
 		t.Fatalf("expected the result warning, got %q", out)
+	}
+}
+
+type reply struct {
+	status string
+	header http.Header
+	body   string
+	err    error
+}
+
+func runReport(t *testing.T, src string, sel runner.Select, replies map[string]reply) *runner.Report {
+	t.Helper()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "view.http")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	client := httpx.NewClientWithOptions(httpx.WithHTTPFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: roundTrip(func(req *http.Request) (*http.Response, error) {
+				r := replies[req.URL.Path]
+				if r.err != nil {
+					return nil, r.err
+				}
+				code, _, _ := strings.Cut(r.status, " ")
+				status, _ := strconv.Atoi(code)
+				hdr := r.header.Clone()
+				if hdr == nil {
+					hdr = make(http.Header)
+				}
+				return &http.Response{
+					Status:     r.status,
+					StatusCode: status,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body:       io.NopCloser(strings.NewReader(r.body)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	}))
+	rep, err := runner.RunContext(context.Background(), runner.Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        sel,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return rep
+}
+
+type roundTrip func(*http.Request) (*http.Response, error)
+
+func (f roundTrip) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+const viewSource = `### A
+# @name login rv-s3c
+# @capture rv-s3c token $.token
+# @script pre-request
+> request.setHeader("X-Note", "{{rv-s3c}}");
+# @script test
+> tests.assert(false, "saw rv-s3c");
+# @script test
+> throw new Error("bad rv-s3c");
+GET https://api.example.com/start?k=rv-s3c
+Authorization: Bearer rv-s3c
+X-Custom: rv-s3c
+
+### B
+# @name other
+# @request-secret tok rv-s3c
+GET https://api.example.com/other
+`
+
+func TestRenderRequestMasksRequestData(t *testing.T) {
+	rep := runReport(t, viewSource, runner.Select{Request: "login rv-s3c"}, map[string]reply{
+		"/start": {status: "302 Found", header: http.Header{"Location": {"/final?k=rv-s3c"}}},
+		"/final": {status: "200 OK", header: http.Header{"Content-Type": {"application/json"}}, body: "{}"},
+	})
+	for _, mode := range []Mode{ModePretty, ModeRaw} {
+		out, err := Render(rep, Options{Mode: mode, Headers: true})
+		if err != nil {
+			t.Fatalf("Render(%s): %v", mode, err)
+		}
+		var lost []string
+		for _, want := range []string{
+			"Name: login •••",
+			"Request: GET https://api.example.com/final?k=•••",
+			"Source Target: https://api.example.com/start?k=•••",
+			"Authorization: •••",
+			"X-Custom: •••",
+			"Referer: https://api.example.com/start?k=•••",
+			"bad •••",
+			"saw •••",
+			`@capture scope "•••"`,
+			"{{•••}}",
+		} {
+			if !strings.Contains(out, want) {
+				lost = append(lost, want)
+			}
+		}
+		if strings.Contains(out, "rv-s3c") || len(lost) > 0 {
+			t.Errorf("%s view shows the secret or lacks %q:\n%s", mode, lost, out)
+		}
+	}
+}
+
+func TestRenderRequestKeepsResponse(t *testing.T) {
+	const body = `{"token":"rv-s3c"}`
+	rep := runReport(t, viewSource, runner.Select{Request: "login rv-s3c"}, map[string]reply{
+		"/start": {
+			status: "200 rv-s3c",
+			header: http.Header{"Content-Type": {"application/json"}, "X-Echo": {"rv-s3c"}},
+			body:   body,
+		},
+	})
+	for _, mode := range []Mode{ModePretty, ModeRaw} {
+		out, err := Render(rep, Options{Mode: mode, Headers: true})
+		if err != nil {
+			t.Fatalf("Render(%s): %v", mode, err)
+		}
+		for _, want := range []string{"Status: 200 rv-s3c", "X-Echo: rv-s3c", "rv-s3c\""} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s view lacks %q:\n%s", mode, want, out)
+			}
+		}
+	}
+}
+
+func TestRenderBodyKeepsResponse(t *testing.T) {
+	const body = `{"token":"rv-s3c","note":"rv\/s3c"}`
+	rep := runReport(t, viewSource, runner.Select{Request: "login rv-s3c"}, map[string]reply{
+		"/start": {status: "200 OK", header: http.Header{"Content-Type": {"text/plain"}}, body: body},
+	})
+	out, err := RenderBody(rep, BodyOptions{Mode: ModeRaw})
+	if err != nil {
+		t.Fatalf("RenderBody: %v", err)
+	}
+	if out != body {
+		t.Errorf("--body = %q, want the response %q", out, body)
+	}
+}
+
+var errDenied = errors.New("denied later-x9")
+
+func TestReportWritersKeepReportRaw(t *testing.T) {
+	src := `### R1
+# @name r1
+# @request-secret tok later-x9
+GET https://api.example.com/one?k=later-x9
+
+### R2
+# @name r2
+GET https://api.example.com/two
+
+### R3
+# @name r3
+# @capture file-secret tok {{response.json.token}}
+GET https://api.example.com/three
+`
+	replies := map[string]reply{
+		"/one": {status: "200 OK", body: "{}"},
+		"/two": {err: errDenied},
+		"/three": {
+			status: "200 OK",
+			header: http.Header{"Content-Type": {"application/json"}},
+			body:   `{"token":"later-x9"}`,
+		},
+	}
+	for name, sel := range map[string]runner.Select{"all": {All: true}, "single": {Request: "r2"}} {
+		t.Run(name, func(t *testing.T) {
+			rep := runReport(t, src, sel, replies)
+			errs := make([]error, len(rep.Results))
+			for i, res := range rep.Results {
+				errs[i] = res.Err
+			}
+			var outs []string
+			for _, write := range []func(io.Writer) error{rep.WriteJSON, rep.WriteJUnit, rep.WriteText} {
+				var b strings.Builder
+				if err := write(&b); err != nil {
+					t.Fatalf("write: %v", err)
+				}
+				outs = append(outs, b.String())
+			}
+			if CanRenderRequest(rep) {
+				view, err := Render(rep, Options{Mode: ModePretty, Headers: true})
+				if err != nil {
+					t.Fatalf("Render: %v", err)
+				}
+				outs = append(outs, view)
+			}
+			for _, out := range outs {
+				if strings.Contains(out, "later-x9") {
+					t.Errorf("output shows the secret:\n%s", out)
+				}
+			}
+			for i, res := range rep.Results {
+				if res.Err != errs[i] {
+					t.Errorf("result %d error changed to %v", i, res.Err)
+				}
+			}
+			for _, res := range rep.Results {
+				switch res.Name {
+				case "r1":
+					if !strings.Contains(res.EffectiveTarget, "later-x9") || !strings.Contains(res.Target, "later-x9") {
+						t.Errorf("r1 targets %q and %q, want them raw", res.Target, res.EffectiveTarget)
+					}
+				case "r2":
+					if !errors.Is(res.Err, errDenied) || !strings.Contains(res.Err.Error(), "later-x9") {
+						t.Errorf("r2 error = %v, want the raw cause", res.Err)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestRenderRequestMasksSentFrames(t *testing.T) {
+	const sec = "ws-s3nt-77"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		for range 2 {
+			typ, data, err := conn.Read(r.Context())
+			if err != nil {
+				return
+			}
+			_ = conn.Write(r.Context(), typ, append([]byte("echo "), data...))
+		}
+		_ = conn.Close(websocket.StatusNormalClosure, "bye")
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "ws.http")
+	src := "### ws\n# @name ws\n# @request-secret tok " + sec + "\n# @websocket timeout=5s\n" +
+		"# @ws send {\"auth\":\"{{tok}}\"}\n" +
+		"# @ws send-base64 " + base64.StdEncoding.EncodeToString([]byte("bin "+sec)) + "\n" +
+		"GET " + strings.Replace(srv.URL, "http", "ws", 1) + "/ws\n"
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	rep, err := runner.RunContext(context.Background(), runner.Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Select:        runner.Select{Request: "ws"},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	frames := func(t *testing.T, body string) map[string][]string {
+		t.Helper()
+		var tr httpx.WebSocketTranscript
+		if err := json.Unmarshal([]byte(body), &tr); err != nil {
+			t.Fatalf("body is not a transcript: %v\n%s", err, body)
+		}
+		out := make(map[string][]string)
+		for _, ev := range tr.Events {
+			if ev.Text == "" && ev.Base64 == "" {
+				continue
+			}
+			frame := ev.Text
+			if b, err := base64.StdEncoding.DecodeString(ev.Base64); err == nil && ev.Base64 != "" {
+				frame = string(b)
+			}
+			out[ev.Direction] = append(out[ev.Direction], frame+" "+ev.Base64)
+		}
+		return out
+	}
+	out, err := Render(rep, Options{Mode: ModeRaw})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	_, body, _ := strings.Cut(out, "Raw Body:\n")
+	got := frames(t, body)
+	if len(got["send"]) != 2 || len(got["receive"]) != 2 {
+		t.Fatalf("frames = %q, want two sent and two received", got)
+	}
+	for _, f := range got["send"] {
+		if strings.Contains(f, sec) || !strings.Contains(f, "•••") {
+			t.Errorf("raw view shows the sent frame %q", f)
+		}
+	}
+	for _, f := range got["receive"] {
+		if !strings.Contains(f, "echo ") || !strings.Contains(f, sec) {
+			t.Errorf("raw view changed the received frame %q", f)
+		}
+	}
+	out, err = Render(rep, Options{Mode: ModePretty})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	echo := base64.StdEncoding.EncodeToString([]byte("echo bin " + sec))
+	if strings.Count(out, sec) != 1 || !strings.Contains(out, `echo {\"auth\":\"`+sec) ||
+		!strings.Contains(out, echo) ||
+		strings.Contains(out, base64.StdEncoding.EncodeToString([]byte("bin "+sec))) {
+		t.Errorf("pretty view shows a sent frame or changed a received one:\n%s", out)
+	}
+	raw, err := RenderBody(rep, BodyOptions{Mode: ModeRaw})
+	if err != nil {
+		t.Fatalf("RenderBody: %v", err)
+	}
+	for _, f := range frames(t, raw)["send"] {
+		if !strings.Contains(f, sec) {
+			t.Errorf("--body changed the sent frame %q", f)
+		}
+	}
+}
+
+func TestRenderRequestShowsShortSecretWarning(t *testing.T) {
+	src := "# @file-secret data a\n\n### A\nGET https://api.example.com/x\n"
+	rep := runReport(t, src, runner.Select{All: true}, map[string]reply{"/x": {status: "200 OK", body: "{}"}})
+	const want = `secret "d•••t•••" is shorter than 4 characters, so reports may also mask unrelated text that contains it`
+	for _, mode := range []Mode{ModePretty, ModeRaw} {
+		out, err := Render(rep, Options{Mode: mode})
+		if err != nil {
+			t.Fatalf("Render(%s): %v", mode, err)
+		}
+		if !strings.Contains(out, want) {
+			t.Errorf("%s view lacks %q:\n%s", mode, want, out)
+		}
 	}
 }

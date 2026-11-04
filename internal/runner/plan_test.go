@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -335,4 +336,24 @@ func parityRunnerTests(src []scriptapi.TestResult) []scriptapi.TestResult {
 		out[i].Elapsed = 0
 	}
 	return out
+}
+
+func TestBuildMasksDeclaredSecrets(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "d4.http")
+	src := "### A\n# @apply {query: {k: \"d4-s3c\"}\nGET https://api.example.com/x\n\n" +
+		"### B\n# @request-secret tok d4-s3c\nGET https://api.example.com/y\n"
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	_, err := Build(Options{FilePath: file})
+	if !IsUsageError(err) {
+		t.Fatalf("Build error = %v, want a usage error", err)
+	}
+	if shown := err.Error() + "\n" + diag.Render(
+		err,
+	); strings.Contains(shown, "d4-s3c") ||
+		!strings.Contains(shown, "•••") {
+		t.Errorf("parse error shows the secret:\n%s", shown)
+	}
 }

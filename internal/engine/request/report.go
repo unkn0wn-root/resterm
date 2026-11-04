@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
@@ -24,7 +25,7 @@ func ReportResponse(
 	resp *httpx.Response,
 	grpc *grpcx.Response,
 	caps []restfile.Variable,
-	secs []string,
+	sec redact.Set,
 ) *runfmt.Response {
 	// A transport error leaves an HTTP response with no status. grpc-go records
 	// the response content-type in the header metadata, or in the trailer
@@ -52,9 +53,9 @@ func ReportResponse(
 		mask := header.Sensitive(name) || header.CarriesCookie(name)
 		for _, v := range vals {
 			if mask {
-				v = secretMask
+				v = redact.Mask
 			} else {
-				v = RedactSecrets(v, secs)
+				v = sec.Text(v)
 			}
 			out.Headers[name] = append(out.Headers[name], v)
 		}
@@ -63,7 +64,7 @@ func ReportResponse(
 		out.Captures = append(out.Captures, runfmt.Capture{
 			Scope:  c.Scope.String(),
 			Name:   c.Name,
-			Value:  RedactSecrets(c.Value, secs),
+			Value:  sec.Text(c.Value),
 			Secret: c.Secret,
 		})
 	}
@@ -79,7 +80,7 @@ func ReportResponse(
 		body = data
 	}
 
-	b := []byte(RedactSecrets(string(body), secs))
+	b := sec.JSON(body)
 	if len(b) > runfmt.MaxBodyBytes {
 		n := runfmt.MaxBodyBytes
 		// Back up to the start of a rune the cut would split. A rune has at
@@ -91,6 +92,10 @@ func ReportResponse(
 			}
 		}
 		b, out.BodyTruncated = bytes.Clone(b[:n]), true
+	}
+	// A body that arrived is never nil, so nil still means it was left out.
+	if b == nil {
+		b = []byte{}
 	}
 	out.Body = b
 	return out

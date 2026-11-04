@@ -44,6 +44,10 @@ func (p *AuthPlan) query(name, value string) {
 	p.Values = append(p.Values, AuthValue{Placement: AuthInQuery, Name: name, Value: value})
 }
 
+func BasicCredential(user, pass string) string {
+	return base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
+}
+
 func ResolveAuth(
 	auth *restfile.AuthSpec,
 	resolver *vars.Resolver,
@@ -97,8 +101,7 @@ func ResolveAuth(
 		if kind == restfile.AuthDigest {
 			plan.Digest = &digest.Credentials{Username: user, Password: pass}
 		} else {
-			encoded := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
-			plan.header(authorizationHeader, basicPrefix+encoded)
+			plan.header(authorizationHeader, basicPrefix+BasicCredential(user, pass))
 		}
 
 	case restfile.AuthBearer:

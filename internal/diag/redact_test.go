@@ -140,3 +140,55 @@ func TestRedactMasksEachJoinedExcerptInItsOwnFile(t *testing.T) {
 	assertCaretUnder(t, first, "{{missing}}")
 	assertCaretUnder(t, second, "{{other}}")
 }
+
+func TestRedactError(t *testing.T) {
+	const secret = "s3cr3t-value"
+	sourceOnly := func(sec string) error {
+		return diag.FromReport(diag.Report{
+			Path:   "secret.http",
+			Source: []byte("GET http://example.test\n\n" + sec + " trailing\n"),
+			Items: []diag.Diagnostic{{
+				Class:    diag.ClassScript,
+				Severity: diag.SeverityError,
+				Message:  "undefined variable: missing",
+				Span:     diag.Span{Start: diag.Pos{Line: 3, Col: 1}, End: diag.Pos{Line: 3, Col: 1}},
+			}},
+		}, errors.New("undefined variable: missing"))
+	}
+	for _, sec := range []string{
+		secret,
+		secret + "\tmore",
+		secret + string(rune(0xad)) + "more",
+		secret + string(rune(0x200b)) + "more",
+		secret + string(rune(0xfeff)) + "more",
+		secret + string(rune(0xe0001)) + "more",
+	} {
+		err := sourceOnly(sec)
+		out := diag.Redact(err, maskSecrets(sec))
+		if got := diag.Render(out); strings.Contains(got, secret) {
+			t.Errorf("rendered diagnostic shows %q:\n%s", sec, got)
+		}
+		if src := diag.ReportOf(out).Source; strings.Contains(string(src), secret) {
+			t.Errorf("report source keeps %q: %q", sec, src)
+		}
+		if !errors.Is(out, err) {
+			t.Errorf("Redact(%v) does not unwrap to the error", err)
+		}
+	}
+
+	cause := errors.New("dial " + secret)
+	wrapped := fmt.Errorf("perform request: %w", cause)
+	if out := diag.Redact(
+		wrapped,
+		maskSecrets(secret),
+	); out.Error() != "perform request: dial •••" ||
+		!errors.Is(out, cause) {
+		t.Errorf("Redact(%v) = %v, want the text masked and the cause kept", wrapped, out)
+	}
+	if out := diag.Redact(wrapped, maskSecrets("other")); out != wrapped {
+		t.Errorf("Redact without a secret = %#v, want the error itself", out)
+	}
+	if out := diag.Redact(nil, maskSecrets(secret)); out != nil {
+		t.Errorf("Redact(nil) = %v", out)
+	}
+}

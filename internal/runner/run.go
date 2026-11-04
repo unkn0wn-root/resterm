@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
@@ -78,7 +78,9 @@ type Report struct {
 	Skipped              int
 	StopReason           string
 	// Warnings holds parse warnings. They never affect the exit code.
-	Warnings []string
+	Warnings     []string
+	secrets      redact.Set
+	shortSecrets []string
 }
 
 type ResultKind string
@@ -236,6 +238,10 @@ func (r *Report) Success() bool {
 	return r.Failed == 0
 }
 
+func (r *Report) Secrets() redact.Set {
+	return r.secrets
+}
+
 func (r *Report) WriteText(w io.Writer) error {
 	if w == nil {
 		return ErrNilWriter
@@ -286,14 +292,14 @@ func requestSourceTarget(req *restfile.Request) string {
 	return strings.TrimSpace(req.URL)
 }
 
-func requestTarget(req *restfile.Request, resp *httpx.Response, secs []string) string {
-	return effectiveURL(resp, requestSourceTarget(req), secs)
+func requestTarget(req *restfile.Request, resp *httpx.Response) string {
+	return effectiveURL(resp, requestSourceTarget(req))
 }
 
-func effectiveURL(resp *httpx.Response, fallback string, secs []string) string {
+func effectiveURL(resp *httpx.Response, fallback string) string {
 	if resp != nil {
 		if target := strings.TrimSpace(resp.EffectiveURL); target != "" {
-			return rqeng.RedactSecrets(target, secs)
+			return target
 		}
 	}
 	return fallback
@@ -334,7 +340,7 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		Name:                 requestName(runReq),
 		Method:               requestMethod(runReq),
 		Target:               requestSourceTarget(runReq),
-		EffectiveTarget:      requestTarget(runReq, res.Response, res.RuntimeSecrets),
+		EffectiveTarget:      requestTarget(runReq, res.Response),
 		Environment:          envName,
 		EnvironmentSelection: res.Selection.Groups(),
 		Duration:             res.Timing.Total,
@@ -428,7 +434,7 @@ func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult 
 		Name:                 strings.TrimSpace(row.Environment),
 		Method:               requestMethod(req),
 		Target:               requestSourceTarget(req),
-		EffectiveTarget:      requestTarget(req, row.Response, row.RuntimeSecrets),
+		EffectiveTarget:      requestTarget(req, row.Response),
 		Environment:          strings.TrimSpace(row.Environment),
 		EnvironmentSelection: row.Selection.Groups(),
 		Summary:              strings.TrimSpace(row.Summary),
@@ -556,7 +562,7 @@ func workflowStepResult(step engine.WorkflowStep) StepResult {
 		Name:                 strings.TrimSpace(step.Name),
 		Method:               strings.TrimSpace(step.Method),
 		Target:               target,
-		EffectiveTarget:      effectiveURL(step.Response, target, step.RuntimeSecrets),
+		EffectiveTarget:      effectiveURL(step.Response, target),
 		Branch:               strings.TrimSpace(step.Branch),
 		Iteration:            step.Iteration,
 		Total:                step.Total,

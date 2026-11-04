@@ -3,7 +3,9 @@ package cli
 import (
 	"path/filepath"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -25,7 +27,7 @@ func StdinRunPath(workspace string) string {
 func ParseRunDoc(src RunSource) (*restfile.Document, error) {
 	doc := parser.Parse(src.Path, src.Data)
 	if err := parser.Check(doc); err != nil {
-		return nil, err
+		return nil, diag.Redact(err, redact.New(doc.SecretValues()...).Text)
 	}
 	return doc, nil
 }

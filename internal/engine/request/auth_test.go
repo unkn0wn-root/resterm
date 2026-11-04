@@ -2,9 +2,11 @@ package request
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -780,4 +782,49 @@ func newTestEngine() *Engine {
 		},
 		rtrun.New(rtrun.Config{}),
 	)
+}
+
+func TestAuthSecretValuesBasicCredential(t *testing.T) {
+	cred := func(user, pass string) string { return base64.StdEncoding.EncodeToString([]byte(user + ":" + pass)) }
+	res := vars.NewResolver(vars.NewMapProvider("test", map[string]string{"pw": " s3cr3t pw ", "user": "alice"}))
+	tests := []struct {
+		name   string
+		kind   restfile.AuthKind
+		params map[string]string
+		want   []string
+	}{
+		{
+			name:   "basic",
+			kind:   restfile.AuthBasic,
+			params: map[string]string{"username": "alice", "password": "s3cr3tpw"},
+			want:   []string{"s3cr3tpw", cred("alice", "s3cr3tpw")},
+		},
+		{
+			name:   "password with spaces",
+			kind:   restfile.AuthBasic,
+			params: map[string]string{"username": "{{user}}", "password": "{{pw}}"},
+			want:   []string{"s3cr3t pw", cred("alice", " s3cr3t pw ")},
+		},
+		{
+			name:   "empty password",
+			kind:   restfile.AuthBasic,
+			params: map[string]string{"username": "alice", "password": ""},
+		},
+		{
+			name:   "digest",
+			kind:   restfile.AuthDigest,
+			params: map[string]string{"username": "alice", "password": "s3cr3tpw"},
+			want:   []string{"s3cr3tpw"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := AuthSecretValues(&restfile.AuthSpec{Type: tt.kind, Params: tt.params}, res)
+			slices.Sort(got)
+			slices.Sort(tt.want)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("AuthSecretValues() = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }
