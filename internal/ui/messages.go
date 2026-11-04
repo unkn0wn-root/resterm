@@ -63,6 +63,7 @@ type responseMsg struct {
 	explain        *xplain.Report
 	historyDone    bool
 	latGen         int
+	seq            int
 	target         runTarget
 	elapsed        time.Duration
 }
@@ -172,6 +173,7 @@ type runReqMsg struct {
 	res    engine.RequestResult
 	err    error
 	latGen int
+	seq    int
 	target runTarget
 }
 
@@ -181,6 +183,7 @@ type runEvtMsg struct {
 
 type runWorkerDoneMsg struct {
 	runID string
+	seq   int
 	err   error
 }
 

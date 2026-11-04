@@ -1843,6 +1843,9 @@ func (m *Model) selectNewestHistoryEntry() {
 }
 
 func (m *Model) replayHistorySelection() tea.Cmd {
+	if cmd, ok := m.cancelForSend(); !ok {
+		return cmd
+	}
 	return m.loadHistorySelection(true)
 }
 
@@ -1956,7 +1959,6 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	m.scriptError = nil
 
 	if !send {
-		m.stopSending()
 		label := strings.TrimSpace(m.statusRequestTitle(doc, req))
 		if label == "" {
 			label = "history request"

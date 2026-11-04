@@ -41,11 +41,13 @@ func (m *Model) startRunWorker(id string, fn func(context.Context) error) tea.Cm
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.sendCancel = cancel
+	m.sendSeq++
+	seq := m.sendSeq
 	ch := m.runMsgChan
 	return func() tea.Msg {
 		go func() {
 			defer cancel()
-			emitQueuedMsg(ch, runWorkerDoneMsg{runID: id, err: fn(ctx)})
+			emitQueuedMsg(ch, runWorkerDoneMsg{runID: id, seq: seq, err: fn(ctx)})
 		}()
 		return nil
 	}

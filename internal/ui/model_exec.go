@@ -82,6 +82,14 @@ func (m *Model) cancelActiveRuns() tea.Cmd {
 	return m.cancelRuns(m.cancelStatus())
 }
 
+// A workflow, compare or profile run clears the send state when it ends,
+// so a send waits for its RunDone.
+func (m *Model) cancelForSend() (tea.Cmd, bool) {
+	busy := m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil
+	cmd := m.cancelActiveRuns()
+	return cmd, cmd == nil && !busy
+}
+
 func (m *Model) cancelRuns(status string) tea.Cmd {
 	status = strings.TrimSpace(status)
 	if status == "" {
@@ -235,7 +243,7 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 }
 
 func (m *Model) sendActiveRequest() tea.Cmd {
-	if cmd := m.cancelActiveRuns(); cmd != nil {
+	if cmd, ok := m.cancelForSend(); !ok {
 		return cmd
 	}
 	st, cmd := m.prepareActiveRequestExec()
@@ -310,7 +318,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 }
 
 func (m *Model) explainActiveRequest() tea.Cmd {
-	if cmd := m.cancelActiveRuns(); cmd != nil {
+	if cmd, ok := m.cancelForSend(); !ok {
 		return cmd
 	}
 

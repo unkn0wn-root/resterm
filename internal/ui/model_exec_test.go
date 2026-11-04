@@ -25,8 +25,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
@@ -2132,28 +2134,29 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 	}
 }
 
+// findRunMsg runs cmd and its batches in order until one yields the run's
+// result, so the progress ticks queued after the run never fire.
+func findRunMsg(cmd tea.Cmd) tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	switch msg := cmd().(type) {
+	case runReqMsg, responseMsg:
+		return msg
+	case tea.BatchMsg:
+		for _, sub := range msg {
+			if got := findRunMsg(sub); got != nil {
+				return got
+			}
+		}
+	}
+	return nil
+}
+
 func TestSendActiveRequestRecordsAllButInteractiveWebSockets(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
 	line := "GET ws" + strings.TrimPrefix(srv.URL, "http")
-
-	var find func(tea.Cmd) tea.Msg
-	find = func(cmd tea.Cmd) tea.Msg {
-		if cmd == nil {
-			return nil
-		}
-		switch msg := cmd().(type) {
-		case runReqMsg, responseMsg:
-			return msg
-		case tea.BatchMsg:
-			for _, sub := range msg {
-				if got := find(sub); got != nil {
-					return got
-				}
-			}
-		}
-		return nil
-	}
 
 	for _, tt := range []struct {
 		name string
@@ -2167,10 +2170,386 @@ func TestSendActiveRequestRecordsAllButInteractiveWebSockets(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			model := New(Config{FilePath: "ws.http", InitialContent: tt.src})
 			model.editor.SetCursor(0)
-			msg := find(model.sendActiveRequest())
+			msg := findRunMsg(model.sendActiveRequest())
 			_, rec := msg.(runReqMsg)
 			if msg == nil || rec != tt.rec {
 				t.Fatalf("message = %T, want recorded %v", msg, tt.rec)
+			}
+		})
+	}
+}
+
+// Pressing send during a run cancels it and starts the next one at once, so the
+// canceled run's result arrives while the new run is in flight.
+func TestStaleRunMsgKeepsNewRun(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		explain  bool
+		finished bool
+		entries  int
+	}{
+		{name: "canceled in flight"},
+		{name: "finished before the send", finished: true, entries: 1},
+		{name: "explain preview", explain: true, finished: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var block atomic.Bool
+			block.Store(!tt.finished)
+			client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+				return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					if !block.Load() {
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Header:     http.Header{},
+							Body:       io.NopCloser(strings.NewReader("a")),
+							Request:    r,
+						}, nil
+					}
+					<-r.Context().Done()
+					return nil, r.Context().Err()
+				})}, nil
+			})
+			store := histdb.New(filepath.Join(t.TempDir(), "history.db"))
+			t.Cleanup(func() { _ = store.Close() })
+			m := New(Config{
+				FilePath:       "a.http",
+				InitialContent: "GET https://example.com\n",
+				Client:         client,
+				History:        store,
+			})
+			m.editor.SetCursor(0)
+
+			start := m.sendActiveRequest
+			if tt.explain {
+				start = m.explainActiveRequest
+			}
+			first := start()
+			a := make(chan tea.Msg, 1)
+			if tt.finished {
+				a <- findRunMsg(first)
+				block.Store(true)
+			} else {
+				go func() { a <- findRunMsg(first) }()
+			}
+			second := m.sendActiveRequest()
+			if !m.sending || m.sendCancel == nil {
+				t.Fatal("second send did not start a run")
+			}
+			t.Cleanup(m.sendCancel)
+			if len(m.historyEntries) != 0 {
+				t.Fatalf("history synced before the stale message: %d entries", len(m.historyEntries))
+			}
+			pane, status := m.responseLatest, m.statusMessage
+
+			var stale tea.Msg
+			select {
+			case stale = <-a:
+			case <-time.After(5 * time.Second):
+				t.Fatal("first run did not end")
+			}
+			next, _ := m.Update(stale)
+			m = next.(Model)
+
+			if !m.sending || !m.tabSpinOn || !m.statusPulseOn {
+				t.Errorf(
+					"stale message stopped the new run: sending=%v spin=%v pulse=%v",
+					m.sending, m.tabSpinOn, m.statusPulseOn,
+				)
+			}
+			if m.responseLatest != pane || m.statusMessage != status {
+				t.Errorf("stale message replaced the new run's pane or status: %q", m.statusMessage.text)
+			}
+			if got := len(m.historyEntries); got != tt.entries {
+				t.Errorf("history entries = %d, want %d", got, tt.entries)
+			}
+			if m.sendCancel == nil {
+				t.Fatal("stale message cleared the new run's cancel")
+			}
+
+			b := make(chan tea.Msg, 1)
+			go func() { b <- findRunMsg(second) }()
+			m.sendCancel()
+			var cur tea.Msg
+			select {
+			case cur = <-b:
+			case <-time.After(5 * time.Second):
+				t.Fatal("sendCancel did not cancel the new run")
+			}
+			next, _ = m.Update(cur)
+			m = next.(Model)
+			if m.sending || m.sendCancel != nil || m.statusPulseOn {
+				t.Fatalf(
+					"new run's message did not end it: sending=%v cancel=%v pulse=%v",
+					m.sending, m.sendCancel != nil, m.statusPulseOn,
+				)
+			}
+		})
+	}
+}
+
+// A profile or for-each run takes over the send state the same way, so the
+// canceled request's result must leave its cancel alone too.
+func TestStaleRunMsgKeepsAggregateRun(t *testing.T) {
+	src := strings.Join([]string{
+		"GET https://example.com/a",
+		"",
+		"###",
+		"# @profile count=2",
+		"GET https://example.com/b",
+		"",
+		"###",
+		`# @for-each ["x","y"] as item`,
+		"GET https://example.com/c",
+		"",
+	}, "\n")
+	for _, tt := range []struct {
+		name string
+		line int
+	}{
+		{name: "profile", line: 4},
+		{name: "for-each", line: 8},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+				return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					<-r.Context().Done()
+					return nil, r.Context().Err()
+				})}, nil
+			})
+			m := New(Config{FilePath: "a.http", InitialContent: src, Client: client})
+			m.editor.SetCursor(0)
+
+			first := m.sendActiveRequest()
+			a := make(chan tea.Msg, 1)
+			go func() { a <- findRunMsg(first) }()
+			m.moveCursorToLine(tt.line)
+			m.sendActiveRequest()
+			if m.profileRun == nil && m.workflowRun == nil {
+				t.Fatal("second send did not start the run")
+			}
+
+			var stale tea.Msg
+			select {
+			case stale = <-a:
+			case <-time.After(5 * time.Second):
+				t.Fatal("first run did not end")
+			}
+			next, _ := m.Update(stale)
+			m = next.(Model)
+			if m.sendCancel == nil {
+				t.Fatal("stale message cleared the new run's cancel")
+			}
+		})
+	}
+}
+
+const aggregateSrc = `# @name a
+GET https://example.com/a
+
+###
+# @profile count=2
+GET https://example.com/b
+
+###
+# @for-each ["x","y"] as item
+GET https://example.com/c
+
+###
+# @compare dev stage
+GET https://example.com/d
+
+# @workflow flow
+# @step One using=a
+# @step Two using=a
+`
+
+type aggregateRun struct {
+	name  string
+	mode  core.Mode
+	start func(*Model) tea.Cmd
+	// flight puts a request in flight. idle then ends it, so the run sits
+	// between steps.
+	flight, idle []core.Evt
+}
+
+// aggregateRuns lists the runs that clear the send state when they end.
+func aggregateRuns() []aggregateRun {
+	req := &restfile.Request{Method: "GET", URL: "https://example.com/x"}
+	res := engine.RequestResult{
+		Response: testHTTPResp(req.URL, 200, "{}", time.Millisecond),
+		Executed: req,
+	}
+	steps := func(mode core.Mode) (flight, idle []core.Evt) {
+		meta := core.NewMeta(core.RunMeta{Mode: mode}, time.Unix(1, 0))
+		step := core.StepMeta{Name: "One", Kind: restfile.WorkflowStepKindRequest}
+		rm := core.ReqMeta{Index: 1, Label: "One"}
+		flight = []core.Evt{
+			core.WfStepStart{Meta: meta, Step: step, Request: req},
+			core.ReqStart{Meta: meta, Req: rm, Request: req},
+		}
+		idle = []core.Evt{
+			core.ReqDone{Meta: meta, Req: rm, Result: res},
+			core.WfStepDone{Meta: meta, Step: step, Result: res},
+		}
+		return flight, idle
+	}
+	wf, wfIdle := steps(core.ModeWorkflow)
+	each, eachIdle := steps(core.ModeForEach)
+	cm := core.NewMeta(core.RunMeta{Mode: core.ModeCompare}, time.Unix(1, 0))
+	row := core.RowMeta{Env: "dev", Base: true, Total: 2}
+	pm := core.NewMeta(core.RunMeta{Mode: core.ModeProfile}, time.Unix(1, 0))
+	it := core.IterMeta{Total: 2, RunIndex: 1, RunTotal: 2}
+	return []aggregateRun{
+		{
+			name: "workflow",
+			mode: core.ModeWorkflow,
+			start: func(m *Model) tea.Cmd {
+				return m.startWorkflowRun(m.doc, m.doc.Workflows[0], httpx.Options{})
+			},
+			flight: wf,
+			idle:   wfIdle,
+		},
+		{
+			name: "for-each",
+			mode: core.ModeForEach,
+			start: func(m *Model) tea.Cmd {
+				return m.startForEachRun(m.doc, m.doc.Requests[2], httpx.Options{})
+			},
+			flight: each,
+			idle:   eachIdle,
+		},
+		{
+			name: "compare",
+			mode: core.ModeCompare,
+			start: func(m *Model) tea.Cmd {
+				req := m.doc.Requests[3]
+				return m.startCompareRun(m.doc, req, req.Metadata.Compare, httpx.Options{})
+			},
+			flight: []core.Evt{core.CmpRowStart{Meta: cm, Row: row, Request: req}},
+			idle:   []core.Evt{core.CmpRowDone{Meta: cm, Row: row, Result: res}},
+		},
+		{
+			name: "profile",
+			mode: core.ModeProfile,
+			start: func(m *Model) tea.Cmd {
+				return m.startProfileRun(m.doc, m.doc.Requests[1], httpx.Options{})
+			},
+			flight: []core.Evt{core.ProIterStart{Meta: pm, Iter: it, Request: req}},
+			idle:   []core.Evt{core.ProIterDone{Meta: pm, Iter: it, Result: res}},
+		},
+	}
+}
+
+func aggregateState(m *Model) (live, canceled bool) {
+	switch {
+	case m.profileRun != nil:
+		return true, m.profileRun.canceled
+	case m.workflowRun != nil:
+		return true, m.workflowRun.canceled
+	case m.compareRun != nil:
+		return true, m.compareRun.canceled
+	}
+	return false, false
+}
+
+// A send during a workflow, compare or profile run only cancels it. The run
+// clears the send state when it ends, which would also end a run started now.
+func TestSendWaitsForCanceledAggregate(t *testing.T) {
+	presses := []struct {
+		name string
+		fn   func(*Model) tea.Cmd
+	}{
+		{"send", (*Model).sendActiveRequest},
+		{"explain", (*Model).explainActiveRequest},
+		{"history", func(m *Model) tea.Cmd {
+			// A finished run syncs history, which drops the selection.
+			m.historyEntries = []history.Entry{{ID: "h", RequestText: "GET https://example.com/h\n"}}
+			m.historyList.SetItems(makeHistoryItems(m.historyEntries, m.historyScope))
+			m.historyList.Select(0)
+			return m.replayHistorySelection()
+		}},
+	}
+	for _, run := range aggregateRuns() {
+		for _, phase := range []string{"in flight", "between"} {
+			for _, press := range presses {
+				t.Run(run.name+"/"+phase+"/"+press.name, func(t *testing.T) {
+					m := New(Config{FilePath: "a.http", InitialContent: aggregateSrc})
+					m.editor.SetCursor(0)
+					run.start(&m)
+					if live, _ := aggregateState(&m); !live {
+						t.Fatal("run did not start")
+					}
+					seq := m.sendSeq
+					var n int
+					m.sendCancel = func() { n++ }
+					meta := core.NewMeta(core.RunMeta{Mode: run.mode}, time.Unix(1, 0))
+					evts := append([]core.Evt{core.RunStart{Meta: meta}}, run.flight...)
+					if phase == "between" {
+						evts = append(evts, run.idle...)
+					}
+					for _, evt := range evts {
+						applyRunEvt(t, &m, evt)
+					}
+					req, want := m.currentRequest, m.cancelStatus()
+
+					press.fn(&m)
+					if n != 1 || m.sending || m.sendSeq != seq {
+						t.Fatalf("cancels=%d sending=%v seq+%d, want a cancel only", n, m.sending, m.sendSeq-seq)
+					}
+					if m.currentRequest != req {
+						t.Error("refused press replaced the current request")
+					}
+					if live, canceled := aggregateState(&m); live && !canceled || !live && phase != "between" {
+						t.Errorf("after the press: live=%v canceled=%v", live, canceled)
+					}
+					if m.statusMessage.text != want {
+						t.Errorf("status = %q, want %q", m.statusMessage.text, want)
+					}
+
+					applyRunEvt(t, &m, core.RunDone{Meta: meta, Canceled: true})
+					press.fn(&m)
+					if !m.sending || m.sendSeq != seq+1 {
+						t.Fatalf("press after RunDone: sending=%v seq+%d, want a run", m.sending, m.sendSeq-seq)
+					}
+					next, _ := m.Update(runWorkerDoneMsg{seq: seq})
+					m = next.(Model)
+					if m.sendCancel == nil {
+						t.Fatal("the canceled run's worker cleared the new run's cancel")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestRunWorkerDoneClearsOwnCancel(t *testing.T) {
+	m := New(Config{})
+	m.startRunWorker("run", func(context.Context) error { return nil })()
+	next, _ := m.Update(<-m.runMsgChan)
+	m = next.(Model)
+	if m.sendCancel != nil {
+		t.Fatal("the worker's done message left its cancel set")
+	}
+}
+
+// Ctrl+C marks the run canceled and waits for its RunDone, so the result has
+// final counts.
+func TestCancelRunKeepsAggregate(t *testing.T) {
+	for _, run := range aggregateRuns() {
+		t.Run(run.name, func(t *testing.T) {
+			m := New(Config{FilePath: "a.http", InitialContent: aggregateSrc})
+			run.start(&m)
+			seq := m.sendSeq
+			meta := core.NewMeta(core.RunMeta{Mode: run.mode}, time.Unix(1, 0))
+			for _, evt := range append([]core.Evt{core.RunStart{Meta: meta}}, run.flight...) {
+				applyRunEvt(t, &m, evt)
+			}
+
+			if cmd := m.cancelActiveRuns(); cmd != nil {
+				t.Fatal("cancel returned a command")
+			}
+			if live, canceled := aggregateState(&m); !live || !canceled || m.sendSeq != seq {
+				t.Fatalf("live=%v canceled=%v seq+%d", live, canceled, m.sendSeq-seq)
 			}
 		})
 	}
