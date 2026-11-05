@@ -180,6 +180,11 @@ func (e *Engine) secretValues(
 	}.Secrets()
 }
 
+// Secrets returns the values a send of req under env masks.
+func (e *Engine) Secrets(doc *restfile.Document, req *restfile.Request, env vars.Environment) []string {
+	return e.secretValues(doc, req, ResolveEnvironment(env, doc, req))
+}
+
 // HistoryText masks sensitive header values in a request's text, unless the request logs them with
 // @log-sensitive-headers.
 func HistoryText(req *restfile.Request, text string) string {

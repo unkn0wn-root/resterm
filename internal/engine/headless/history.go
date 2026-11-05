@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
-	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -25,14 +24,7 @@ func (e *Engine) Secrets(doc *restfile.Document, env vars.Environment) []string 
 			}
 		}
 		for _, v := range envs {
-			out = append(out, request.SecretSources{
-				Doc:      doc,
-				Req:      req,
-				Env:      request.ResolveEnvironment(v, doc, req),
-				FilePath: e.filePath(doc),
-				Files:    e.rt.Files(),
-				Globals:  e.rt.Globals(),
-			}.Secrets()...)
+			out = append(out, e.rq.Secrets(doc, req, v)...)
 		}
 	}
 	return out

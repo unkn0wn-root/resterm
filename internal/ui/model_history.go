@@ -1132,9 +1132,9 @@ func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 	}
 }
 
-// historySecrets learns the document's declared secrets first, so a key matches entries an earlier session stored.
+// historySecrets learns what a send of the current request masks, so a key matches entries an earlier session stored.
 func (m *Model) historySecrets() redact.Set {
-	m.hist.Learn(rqeng.SecretSources{Doc: m.doc, Req: m.currentRequest}.Secrets()...)
+	m.hist.Learn(m.requestSvc(httpx.Options{}).Secrets(m.doc, m.currentRequest, m.ws.active)...)
 	return m.hist.Secrets()
 }
 
