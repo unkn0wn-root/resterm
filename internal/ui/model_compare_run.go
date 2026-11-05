@@ -452,8 +452,7 @@ func (m *Model) storeCompareSnapshot(env string) {
 }
 
 func (m *Model) recordCompareHistory(state *compareState) {
-	hs := m.historyStore()
-	if hs == nil || state == nil || len(state.results) == 0 {
+	if state == nil || len(state.results) == 0 {
 		return
 	}
 
@@ -480,7 +479,7 @@ func (m *Model) recordCompareHistory(state *compareState) {
 		Description: strings.TrimSpace(baseReq.Metadata.Description),
 		Tags:        normalizedTags(baseReq.Metadata.Tags),
 		Status:      state.progressSummary(),
-		RequestText: rqeng.RenderRequestText(baseReq),
+		RequestText: rqeng.HistoryText(baseReq, rqeng.RenderRequestText(baseReq)),
 		Compare:     &history.CompareEntry{},
 	}
 	entry.Environment = m.ws.active.Label()
@@ -498,7 +497,7 @@ func (m *Model) recordCompareHistory(state *compareState) {
 	var totalDur time.Duration
 	results := make([]history.CompareResult, 0, len(state.results))
 	for _, res := range state.results {
-		item := m.buildCompareHistoryResult(res)
+		item := buildCompareHistoryResult(res)
 		if item.Duration > 0 {
 			totalDur += item.Duration
 		}
@@ -509,18 +508,10 @@ func (m *Model) recordCompareHistory(state *compareState) {
 	if entry.Status == "" {
 		entry.Status = fmt.Sprintf("Compare %d env", len(results))
 	}
-
-	if err := hs.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
-		return
-	}
-	m.historySelectedID = entry.ID
-	m.syncHistory()
+	m.appendHistory(entry)
 }
 
-func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareResult {
+func buildCompareHistoryResult(result compareResult) history.CompareResult {
 	env := strings.TrimSpace(result.Environment)
 	status, _ := compareRowStatus(&result)
 
@@ -538,9 +529,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		entry.RequestText = rqeng.RenderRequestText(req)
 	}
 	if req != nil {
-		secrets := m.secretValuesForSelection(result.Selection, req, result.RuntimeSecrets...)
-		maskHeaders := !req.Metadata.AllowSensitiveHeaders
-		entry.RequestText = redactHistoryText(entry.RequestText, secrets, maskHeaders)
+		entry.RequestText = rqeng.HistoryText(req, entry.RequestText)
 	}
 
 	switch {
@@ -558,54 +547,37 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		entry.Error = result.Err.Error()
 		entry.BodySnippet = entry.Error
 	case result.Response != nil:
-		entry.BodySnippet = m.compareHTTPSnippet(result.Response, req, result)
+		entry.BodySnippet = compareHTTPSnippet(result.Response, req)
 		entry.StatusCode = result.Response.StatusCode
 	case result.GRPC != nil:
-		entry.BodySnippet = m.compareGRPCSnippet(result.GRPC, req, result)
+		entry.BodySnippet = compareGRPCSnippet(result.GRPC, req)
 		entry.StatusCode = int(result.GRPC.StatusCode)
 	case result.Stream != nil || len(result.Transcript) > 0:
 		entry.BodySnippet = streamSummaryText(result.Stream)
 	default:
 		entry.BodySnippet = "No response captured"
 	}
-
-	const limit = 2000
-	if len(entry.BodySnippet) > limit {
-		entry.BodySnippet = entry.BodySnippet[:limit]
-	}
 	return entry
 }
 
-func (m *Model) compareHTTPSnippet(
-	resp *httpx.Response,
-	req *restfile.Request,
-	row compareResult,
-) string {
+func compareHTTPSnippet(resp *httpx.Response, req *restfile.Request) string {
 	if resp == nil {
 		return ""
 	}
 	if req != nil && req.Metadata.NoLog {
-		return "<body suppressed>"
+		return history.BodySuppressed
 	}
-	return redactHistoryText(string(resp.Body), m.compareRowSecrets(row, req), false)
+	return string(resp.Body)
 }
 
-func (m *Model) compareGRPCSnippet(
-	resp *grpcx.Response,
-	req *restfile.Request,
-	row compareResult,
-) string {
+func compareGRPCSnippet(resp *grpcx.Response, req *restfile.Request) string {
 	if resp == nil {
 		return ""
 	}
 	if req != nil && req.Metadata.NoLog {
-		return "<body suppressed>"
+		return history.BodySuppressed
 	}
-	return redactHistoryText(resp.Message, m.compareRowSecrets(row, req), false)
-}
-
-func (m *Model) compareRowSecrets(row compareResult, req *restfile.Request) []string {
-	return m.secretValuesForSelection(row.Selection, req, row.RuntimeSecrets...)
+	return resp.Message
 }
 
 func (s *compareState) progressSummary() string {

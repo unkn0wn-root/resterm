@@ -327,7 +327,7 @@ func (e *Engine) recordWorkflow(st *wfState, out *engine.WorkflowResult) {
 		Status:      out.Summary,
 		Duration:    out.Duration,
 		BodySnippet: out.Report,
-		RequestText: redactText(workflowDefinition(st), e.secretValues(st.doc, nil, st.env), true),
+		RequestText: workflowDefinition(st),
 		Description: strings.TrimSpace(st.wf.Description),
 		Tags:        engine.Tags(st.wf.Tags),
 	}

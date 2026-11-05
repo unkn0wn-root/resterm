@@ -114,7 +114,7 @@ Behavior:
 - persisted globals and auth are keyed by environment scope. A scope includes the environment file it came from, so two projects that both define a `dev` environment never read each other's globals or OAuth tokens, even with the same `--state-dir`
 - `--persist-globals` writes `runtime.json`
 - `--persist-auth` writes `auth.json`
-- `--history` writes `history.db`
+- `--history` writes `history.db` when the run ends, with secret values masked as in the report
 - JSON output includes artifact paths such as `transcriptPath` and `artifactPath` when those files are written
 
 ## Exit Codes

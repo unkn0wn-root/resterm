@@ -138,6 +138,10 @@ func (e *uiRequestEngine) ExecuteWith(
 		streamID = e.attach(session, req, nil, "")
 	}
 	res, err := e.Engine.ExecuteWith(doc, req, env, opt)
+	if hist := e.model.hist; hist != nil {
+		// Write what the engine recorded, masked with the secrets this call revealed.
+		_ = hist.Flush(res.RuntimeSecrets...)
+	}
 	res.StreamID = streamID
 	return res, err
 }

@@ -1,6 +1,6 @@
 # History and diffing
 
-- Every successful request saves its request text, method, status, duration, and a body snippet to history. `@no-log` omits the body snippet. Values from `-secret` captures and sensitive headers on Resterm's list (such as Authorization, Proxy-Authorization, `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, and `X-Amz-Security-Token`) are masked unless you opt in with `@log-sensitive-headers`.
+- Every successful request saves its request text, method, status, duration, and a body snippet to history. `@no-log` omits the body snippet. Secret values show as `•••`. Sensitive headers on Resterm's list (such as Authorization, Proxy-Authorization, `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, and `X-Amz-Security-Token`) are masked too unless you opt in with `@log-sensitive-headers`. If a later request reveals a new secret, for example through a `-secret` capture, Resterm masks it in the entries saved earlier in the same session. When those responses add up to more than 16 MiB, it masks the oldest body snippets whole instead, along with any single one over 16 MiB.
 - History entries remember their environment, and switching environments filters the list. Grouped entries save both the display label and the individual group selections. Replaying an entry restores those selections if they still exist.
 
   If a group or profile has been removed, Resterm keeps the current selection, shows a warning, and blocks the immediate resend. This prevents a replay from silently using different credentials.

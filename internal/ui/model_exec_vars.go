@@ -6,16 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
-
-func (m *Model) documentRuntimePath(doc *restfile.Document) string {
-	if doc != nil && strings.TrimSpace(doc.Path) != "" {
-		return doc.Path
-	}
-	return m.currentFile
-}
 
 func (m *Model) showGlobalSummary() tea.Cmd {
 	text := m.buildGlobalSummary()

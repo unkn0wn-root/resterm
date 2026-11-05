@@ -20,52 +20,11 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
-
-func TestRedactHistoryTextMasksSecrets(t *testing.T) {
-	mask := maskSecret("", true)
-	secrets := []string{"oauth-token", "oauth-refresh"}
-	text := "access=oauth-token&refresh=oauth-refresh"
-	redacted := redactHistoryText(text, secrets, false)
-	expected := "access=" + mask + "&refresh=" + mask
-	if redacted != expected {
-		t.Fatalf("expected %q, got %q", expected, redacted)
-	}
-}
-
-func TestRedactHistoryTextSkipsWhenNoSecrets(t *testing.T) {
-	text := "plain text"
-	if got := redactHistoryText(text, nil, true); got != text {
-		t.Fatalf("expected unchanged text when no secrets, got %q", got)
-	}
-
-	if got := redactHistoryText("", []string{"secret"}, true); got != "" {
-		t.Fatalf("expected empty text to remain empty, got %q", got)
-	}
-}
-
-func TestRedactHistoryTextMasksSensitiveHeaders(t *testing.T) {
-	mask := maskSecret("", true)
-	input := "Authorization: Bearer 123\nX-API-Key: abc"
-	got := redactHistoryText(input, nil, true)
-	if !strings.Contains(got, "Authorization: "+mask) {
-		t.Fatalf("expected authorization header to be masked, got %q", got)
-	}
-	if !strings.Contains(got, "X-API-Key: "+mask) {
-		t.Fatalf("expected api key header to be masked, got %q", got)
-	}
-}
-
-func TestRedactHistoryTextHonorsSensitiveHeaderOverride(t *testing.T) {
-	input := "Authorization: Bearer 123"
-	got := redactHistoryText(input, nil, false)
-	if got != input {
-		t.Fatalf("expected header to remain when masking disabled, got %q", got)
-	}
-}
 
 func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 	tmp := t.TempDir()
@@ -75,7 +34,7 @@ func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 	req := &restfile.Request{
 		Method:  "GET",
 		URL:     "https://example.com/registry",
-		Headers: http.Header{"X-Registry-Token": {"Token token-123"}},
+		Headers: http.Header{"X-Registry-Token": {"Token registry-token-123"}},
 		Metadata: restfile.RequestMetadata{
 			AllowSensitiveHeaders: true,
 		},
@@ -90,11 +49,11 @@ func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 	model.recordHTTPHistory(
 		resp,
 		req,
-		"GET https://example.com/registry\nX-Registry-Token: Token token-123\n\n",
+		"GET https://example.com/registry\nX-Registry-Token: Token registry-token-123\n\n",
 		"dev",
 		vars.Selection{},
-		"token-123",
-		"Token token-123",
+		"registry-token-123",
+		"Token registry-token-123",
 	)
 
 	entries, err := store.Entries()
@@ -105,11 +64,10 @@ func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
 
-	mask := maskSecret("", true)
-	if strings.Contains(entries[0].RequestText, "token-123") {
+	if strings.Contains(entries[0].RequestText, "registry-token-123") {
 		t.Fatalf("expected runtime token to be redacted, got %q", entries[0].RequestText)
 	}
-	if !strings.Contains(entries[0].RequestText, "X-Registry-Token: "+mask) {
+	if !strings.Contains(entries[0].RequestText, "X-Registry-Token: "+redact.Mask) {
 		t.Fatalf("expected custom header value to be masked, got %q", entries[0].RequestText)
 	}
 }

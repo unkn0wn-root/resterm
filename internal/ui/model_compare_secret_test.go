@@ -3,36 +3,33 @@ package ui
 import (
 	"strings"
 	"testing"
-
-	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
-	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestCompareHistoryResultMasksRuntimeSecrets(t *testing.T) {
 	const secret = "ui-compare-runtime-secret"
 
-	model := newTestModelWithDoc("### probe\n# @name probe\nGET http://example.test\n")
-	req := &restfile.Request{
-		Method:   "GET",
-		URL:      "http://example.test",
-		Metadata: restfile.RequestMetadata{Name: "probe"},
-	}
-	result := compareResult{
-		Environment:    "dev",
-		Request:        req,
-		RequestText:    "GET http://example.test\nX-Token: " + secret,
-		RuntimeSecrets: []string{secret},
-		Response: &httpx.Response{
-			StatusCode: 200,
-			Body:       []byte(`{"echo":"` + secret + `"}`),
-		},
-	}
+	srv := remaskServer(t)
+	m, store := newRemaskModel(t, `### probe
+# @name probe
+# @compare dev stage
+# @script pre-request
+> vars.global.set("token", "`+secret+`", {secret: true});
+> request.setHeader("X-Trace", vars.global.get("token"));
+GET `+srv.URL+`/seen?v=`+secret+`
+`)
+	req := m.doc.Requests[0]
+	runToEnd(t, m, m.startCompareRun(m.doc, req, req.Metadata.Compare, m.runOptions()))
 
-	entry := model.buildCompareHistoryResult(result)
-	for field, text := range map[string]string{
-		"request text": entry.RequestText,
-		"body snippet": entry.BodySnippet,
-	} {
+	es, err := store.Entries()
+	if err != nil || len(es) != 1 || es[0].Compare == nil {
+		t.Fatalf("entries = %+v, %v, want one compare entry", es, err)
+	}
+	texts := map[string]string{"URL": es[0].URL, "request text": es[0].RequestText}
+	for _, res := range es[0].Compare.Results {
+		texts[res.Environment+" request text"] = res.RequestText
+		texts[res.Environment+" body snippet"] = res.BodySnippet
+	}
+	for field, text := range texts {
 		if strings.Contains(text, secret) {
 			t.Fatalf("%s contains the plaintext secret: %s", field, text)
 		}

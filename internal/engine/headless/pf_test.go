@@ -12,10 +12,22 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
+
+type memHistory struct{ entries []history.Entry }
+
+func (s *memHistory) Load() error                                { return nil }
+func (s *memHistory) Append(e history.Entry) error               { s.entries = append(s.entries, e); return nil }
+func (s *memHistory) Entries() ([]history.Entry, error)          { return s.entries, nil }
+func (s *memHistory) ByRequest(string) ([]history.Entry, error)  { return s.entries, nil }
+func (s *memHistory) ByWorkflow(string) ([]history.Entry, error) { return s.entries, nil }
+func (s *memHistory) ByFile(string) ([]history.Entry, error)     { return s.entries, nil }
+func (s *memHistory) Delete(string) (bool, error)                { return false, nil }
+func (s *memHistory) Close() error                               { return nil }
 
 func TestExecuteProfilePreservesWarmupStatsAndFailures(t *testing.T) {
 	var (

@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	engheadless "github.com/unkn0wn-root/resterm/internal/engine/headless"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -131,6 +132,11 @@ func RunPlan(ctx context.Context, pl *Plan) (_ *Report, err error) {
 	opt := pl.opt
 	start := time.Now()
 	hist := openHistoryStore(pl.state, opt)
+	var hs history.Store
+	// A nil *Buffer in the interface would pass every nil check.
+	if hist != nil {
+		hs = hist
+	}
 
 	exec := engheadless.New(engine.Config{
 		FilePath:        opt.FilePath,
@@ -143,7 +149,7 @@ func RunPlan(ctx context.Context, pl *Plan) (_ *Report, err error) {
 		GRPCOptions:     cloneGRPCOptions(opt.GRPCOptions),
 		WorkspaceRoot:   opt.WorkspaceRoot,
 		Recursive:       opt.Recursive,
-		History:         hist,
+		History:         hs,
 	})
 
 	defer func() { _ = exec.Close() }()
@@ -167,7 +173,11 @@ func RunPlan(ctx context.Context, pl *Plan) (_ *Report, err error) {
 	}
 	defer func() {
 		if err != nil {
-			err = diag.Redact(err, rep.seal(exec, doc, env).Text)
+			secs := rep.seal(exec, doc, env)
+			if hist != nil {
+				_ = hist.Flush(secs...)
+			}
+			err = diag.Redact(err, rep.secrets.Text)
 		}
 	}()
 
@@ -188,7 +198,7 @@ func RunPlan(ctx context.Context, pl *Plan) (_ *Report, err error) {
 			return nil, err
 		}
 		rep.add(workflowRunResult(*out, envName))
-		return finishRun(rep, exec, doc, env, pl.state, opt)
+		return finishRun(rep, exec, hist, doc, env, pl.state, opt)
 	}
 
 	rep.Results = make([]Result, 0, len(tg.requests))
@@ -228,11 +238,11 @@ func RunPlan(ctx context.Context, pl *Plan) (_ *Report, err error) {
 		}
 		break
 	}
-	return finishRun(rep, exec, doc, env, pl.state, opt)
+	return finishRun(rep, exec, hist, doc, env, pl.state, opt)
 }
 
 // seal runs once the last result is in, so a later secret masks earlier text.
-func (r *Report) seal(exec *engheadless.Engine, doc *restfile.Document, env vars.Environment) redact.Set {
+func (r *Report) seal(exec *engheadless.Engine, doc *restfile.Document, env vars.Environment) []string {
 	secs := exec.Secrets(doc, env)
 	for _, res := range r.Results {
 		secs = append(secs, res.secrets...)
@@ -241,12 +251,13 @@ func (r *Report) seal(exec *engheadless.Engine, doc *restfile.Document, env vars
 		}
 	}
 	r.secrets = redact.New(secs...)
-	return r.secrets
+	return secs
 }
 
 func finishRun(
 	rep *Report,
 	exec *engheadless.Engine,
+	hist *history.Buffer,
 	doc *restfile.Document,
 	env vars.Environment,
 	st statePaths,
@@ -257,14 +268,17 @@ func finishRun(
 	}
 	rep.EndedAt = time.Now()
 	rep.Duration = rep.EndedAt.Sub(rep.StartedAt)
-	sec := rep.seal(exec, doc, env)
+	secs := rep.seal(exec, doc, env)
+	if hist != nil {
+		_ = hist.Flush(secs...)
+	}
 	if opt.Response {
 		for i := range rep.Results {
 			r := &rep.Results[i]
-			r.report = rqeng.ReportResponse(r.Response, r.GRPC, r.captures, sec)
+			r.report = rqeng.ReportResponse(r.Response, r.GRPC, r.captures, rep.secrets)
 			for j := range r.Steps {
 				s := &r.Steps[j]
-				s.report = rqeng.ReportResponse(s.Response, s.GRPC, s.captures, sec)
+				s.report = rqeng.ReportResponse(s.Response, s.GRPC, s.captures, rep.secrets)
 			}
 		}
 	}

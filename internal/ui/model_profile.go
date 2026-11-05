@@ -211,20 +211,7 @@ func profileStatusLevel(snap core.ProfileSnapshot) statusLevel {
 
 // @no-log does not skip profile history because profile entries store no body.
 func (m *Model) recordProfileHistory(st *profileState, snap core.ProfileSnapshot) {
-	hs := m.historyStore()
-	if hs == nil {
-		return
-	}
-	secrets := m.secretValuesForRedaction(st.req)
-	ent := snap.HistoryEntry(st.req, st.env, m.historyFilePath(), func(text string, mask bool) string {
-		return redactHistoryText(text, secrets, mask)
-	})
-	if err := hs.Append(ent); err != nil {
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
-		return
-	}
-	m.historySelectedID = ent.ID
-	m.syncHistory()
+	m.appendHistory(snap.HistoryEntry(st.req, st.env, m.historyFilePath()))
 }
 
 // Wait for RunDone after cancellation so the result has final counts.
@@ -249,6 +236,9 @@ func (m *Model) profileBaseline(k core.ProfileKey, before time.Time) *core.Profi
 	if hs == nil {
 		return nil
 	}
+	// Entries hold names and URLs masked, so the key is masked the same way.
+	sec := m.hist.Secrets()
+	k.Request, k.URL = sec.Text(k.Request), sec.Text(k.URL)
 	entries, err := hs.ByRequest(k.Request)
 	if err != nil {
 		return nil

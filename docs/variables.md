@@ -295,4 +295,4 @@ Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stor
 
 Secret values are masked in errors, script failures, and failed test output before those messages reach the response pane, workflow summaries, or workflow history. A value remains masked for the rest of the run if it is deleted, replaced with a public value, or produced by a script or capture that later fails.
 
-Their source excerpts show the request file with secret values masked. `resterm run` also masks the secret values a file declares in parse errors and in the list of requests it prints. Response bodies are also stored as received unless the request uses `@no-log` or the payload is redacted before it is returned.
+Their source excerpts show the request file with secret values masked. `resterm run` also masks the secret values a file declares in parse errors and in the list of requests it prints. History stores a snippet of each response body with secret values masked, and `@no-log` leaves it out.

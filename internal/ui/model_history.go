@@ -17,7 +17,6 @@ import (
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
@@ -746,17 +745,13 @@ func (m *Model) recordHTTPHistory(
 	requestText string,
 	environment string,
 	sel vars.Selection,
-	extraSecrets ...string,
+	secrets ...string,
 ) {
-	hs := m.historyStore()
-	if hs == nil || resp == nil || req == nil {
+	if resp == nil || req == nil {
 		return
 	}
 
-	secrets := m.secretValuesForRedaction(req, extraSecrets...)
-	maskHeaders := !req.Metadata.AllowSensitiveHeaders
-
-	snippet := "<body suppressed>"
+	snippet := history.BodySuppressed
 	if !req.Metadata.NoLog {
 		ct := ""
 		if resp.Headers != nil {
@@ -766,16 +761,11 @@ func (m *Model) recordHTTPHistory(
 		if meta.Kind == binaryview.KindBinary || !meta.Printable {
 			snippet = formatBinaryHistorySnippet(meta, len(resp.Body))
 		} else {
-			snippet = redactHistoryText(string(resp.Body), secrets, false)
-			if len(snippet) > 2000 {
-				snippet = snippet[:2000]
-			}
+			snippet = string(resp.Body)
 		}
 	}
 	desc := strings.TrimSpace(req.Metadata.Description)
 	tags := normalizedTags(req.Metadata.Tags)
-
-	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
 	entry := history.Entry{
 		ID:          history.NewID(),
@@ -792,28 +782,21 @@ func (m *Model) recordHTTPHistory(
 		StatusCode:  resp.StatusCode,
 		Duration:    resp.Duration,
 		BodySnippet: snippet,
-		RequestText: redacted,
+		RequestText: rqeng.HistoryText(req, requestText),
 		Description: desc,
 		Tags:        tags,
 	}
 	entry.Trace = history.NewTraceSummary(resp.Timeline, resp.TraceReport)
-	if err := hs.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
-	}
-	m.historySelectedID = entry.ID
-	m.syncHistory()
+	m.appendHistory(entry, secrets...)
 }
 
 func (m *Model) recordSkippedHistory(
 	req *restfile.Request,
 	requestText, environment, reason string,
 	sel vars.Selection,
-	extraSecrets ...string,
+	secrets ...string,
 ) {
-	hs := m.historyStore()
-	if hs == nil || req == nil {
+	if req == nil {
 		return
 	}
 
@@ -821,16 +804,9 @@ func (m *Model) recordSkippedHistory(
 		requestText = rqeng.RenderRequestText(req)
 	}
 
-	secrets := m.secretValuesForRedaction(req, extraSecrets...)
-	maskHeaders := !req.Metadata.AllowSensitiveHeaders
-	redacted := redactHistoryText(requestText, secrets, maskHeaders)
-
 	snippet := strings.TrimSpace(reason)
 	if snippet == "" {
-		snippet = "<skipped>"
-	}
-	if len(snippet) > 2000 {
-		snippet = snippet[:2000]
+		snippet = history.BodySkipped
 	}
 
 	desc := strings.TrimSpace(req.Metadata.Description)
@@ -851,17 +827,11 @@ func (m *Model) recordSkippedHistory(
 		StatusCode:  0,
 		Duration:    0,
 		BodySnippet: snippet,
-		RequestText: redacted,
+		RequestText: rqeng.HistoryText(req, requestText),
 		Description: desc,
 		Tags:        tags,
 	}
-	if err := hs.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
-	}
-	m.historySelectedID = entry.ID
-	m.syncHistory()
+	m.appendHistory(entry, secrets...)
 }
 
 func formatBinaryHistorySnippet(meta binaryview.Meta, size int) string {
@@ -879,29 +849,18 @@ func (m *Model) recordGRPCHistory(
 	requestText string,
 	environment string,
 	sel vars.Selection,
-	extraSecrets ...string,
+	secrets ...string,
 ) {
-	hs := m.historyStore()
-	if hs == nil || resp == nil || req == nil {
+	if resp == nil || req == nil {
 		return
 	}
 
-	secrets := m.secretValuesForRedaction(req, extraSecrets...)
-	maskHeaders := !req.Metadata.AllowSensitiveHeaders
-
 	snippet := resp.Message
 	if req.Metadata.NoLog {
-		snippet = "<body suppressed>"
-	} else {
-		snippet = redactHistoryText(snippet, secrets, false)
-		if len(snippet) > 2000 {
-			snippet = snippet[:2000]
-		}
+		snippet = history.BodySuppressed
 	}
 	desc := strings.TrimSpace(req.Metadata.Description)
 	tags := normalizedTags(req.Metadata.Tags)
-
-	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
 	entry := history.Entry{
 		ID:          history.NewID(),
@@ -918,102 +877,23 @@ func (m *Model) recordGRPCHistory(
 		StatusCode:  int(resp.StatusCode),
 		Duration:    resp.Duration,
 		BodySnippet: snippet,
-		RequestText: redacted,
+		RequestText: rqeng.HistoryText(req, requestText),
 		Description: desc,
 		Tags:        tags,
 	}
+	m.appendHistory(entry, secrets...)
+}
 
-	if err := hs.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
+// appendHistory writes e through the history buffer, masked with every secret the session knows, and selects it.
+func (m *Model) appendHistory(e history.Entry, secrets ...string) {
+	if m.hist == nil {
+		return
 	}
-	m.historySelectedID = entry.ID
+	if err := errors.Join(m.hist.Append(e), m.hist.Flush(secrets...)); err != nil {
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
+	}
+	m.historySelectedID = e.ID
 	m.syncHistory()
-}
-
-func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...string) []string {
-	return m.secretValuesForEnv(m.ws.active, req, extraSecrets...)
-}
-
-func (m *Model) secretValuesForEnv(
-	env vars.Environment,
-	req *restfile.Request,
-	extraSecrets ...string,
-) []string {
-	return rqeng.SecretSources{
-		Doc:      m.doc,
-		Req:      req,
-		Env:      rqeng.ResolveEnvironment(env, m.doc, req),
-		FilePath: m.documentRuntimePath(m.doc),
-		Files:    m.fileStore(),
-		Globals:  m.globalsStore(),
-		Extra:    extraSecrets,
-	}.Secrets()
-}
-
-func (m *Model) secretValuesForSelection(
-	sel vars.Selection,
-	req *restfile.Request,
-	extraSecrets ...string,
-) []string {
-	env, err := m.environment(sel)
-	if err != nil {
-		return m.secretValuesForRedaction(req, extraSecrets...)
-	}
-	return m.secretValuesForEnv(env, req, extraSecrets...)
-}
-
-func redactHistoryText(text string, secrets []string, maskHeaders bool) string {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" && len(secrets) == 0 {
-		return text
-	}
-
-	redacted := text
-	if len(secrets) > 0 {
-		mask := maskSecret("", true)
-		for _, value := range secrets {
-			if value == "" || !strings.Contains(redacted, value) {
-				continue
-			}
-			redacted = strings.ReplaceAll(redacted, value, mask)
-		}
-	}
-
-	if maskHeaders {
-		redacted = redactSensitiveHeaders(redacted)
-	}
-
-	return redacted
-}
-
-func redactSensitiveHeaders(text string) string {
-	lines := strings.Split(text, "\n")
-	mask := maskSecret("", true)
-	changed := false
-	for idx, line := range lines {
-		colon := strings.Index(line, ":")
-		if colon <= 0 {
-			continue
-		}
-		if !header.Sensitive(line[:colon]) {
-			continue
-		}
-		rest := line[colon+1:]
-		leadingSpaces := len(rest) - len(strings.TrimLeft(rest, " \t"))
-		prefix := line[:colon+1]
-		pad := ""
-		if leadingSpaces > 0 {
-			pad = rest[:leadingSpaces]
-		}
-		lines[idx] = prefix + pad + mask
-		changed = true
-	}
-	if !changed {
-		return text
-	}
-	return strings.Join(lines, "\n")
 }
 
 // Prefer failures and then the recorded baseline so reopening a history entry
@@ -1224,13 +1104,15 @@ func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 	if hs == nil {
 		return nil, nil
 	}
+	// Entries hold names and URLs masked, so the keys are masked the same way.
+	sec := m.hist.Secrets()
 	switch m.historyScope {
 	case historyScopeWorkflow:
 		name := strings.TrimSpace(m.historyWorkflowName)
 		if name == "" {
 			return nil, nil
 		}
-		return hs.ByWorkflow(name)
+		return hs.ByWorkflow(sec.Text(name))
 	case historyScopeRequest:
 		if m.currentRequest == nil {
 			return nil, nil
@@ -1239,7 +1121,7 @@ func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 		if identifier == "" {
 			return nil, nil
 		}
-		return hs.ByRequest(identifier)
+		return hs.ByRequest(sec.Text(identifier))
 	case historyScopeFile:
 		return m.historyEntriesForFileScope()
 	default:

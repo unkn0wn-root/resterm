@@ -20,7 +20,6 @@ type SecretSources struct {
 	Extra    []string
 }
 
-// Secrets returns values longest first so overlapping secrets are fully masked.
 func (s SecretSources) Secrets() []string {
 	var out vars.Secrets
 	out.Add(s.Env.Secrets()...)
@@ -42,10 +41,7 @@ func (s SecretSources) Secrets() []string {
 		}
 	}
 	out.Add(s.Extra...)
-
-	vals := out.Values()
-	slices.SortStableFunc(vals, func(a, b string) int { return len(b) - len(a) })
-	return vals
+	return out.Values()
 }
 
 // ShortSecrets returns names, never values, sorted.

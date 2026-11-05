@@ -428,10 +428,3 @@ func TestExecuteWithMasksWarningsAndSkipReason(t *testing.T) {
 		}
 	}
 }
-
-func TestSecretSourcesSecretsLongestFirst(t *testing.T) {
-	got := SecretSources{Extra: []string{"ab", "abcd", "abc"}}.Secrets()
-	if want := []string{"abcd", "abc", "ab"}; !slices.Equal(got, want) {
-		t.Errorf("Secrets() = %q, want %q", got, want)
-	}
-}
