@@ -4,6 +4,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/redact"
 )
 
 func TestValid(t *testing.T) {
@@ -167,5 +169,31 @@ func TestCarriesCookie(t *testing.T) {
 		if CarriesCookie(name) {
 			t.Errorf("CarriesCookie(%q) = true", name)
 		}
+	}
+}
+
+func TestRedactLines(t *testing.T) {
+	m := redact.Mask
+	for _, tt := range []struct{ in, want string }{
+		{"Authorization: Bearer x", "Authorization: " + m},
+		{"aUtHoRiZaTiOn:\tx", "aUtHoRiZaTiOn:\t" + m},
+		{"X-API-Key:x", "X-API-Key:" + m},
+		{"Cookie: a=b\r\nAccept: */*\r\n", "Cookie: " + m + "\r\nAccept: */*\r\n"},
+		{
+			"GET http://h/x?a:b\nAuthorization: Bearer x\nX-Other: x\n\n{\"authorization\": \"x\"}",
+			"GET http://h/x?a:b\nAuthorization: " + m + "\nX-Other: x\n\n{\"authorization\": \"x\"}",
+		},
+		{"X-Other: x", "X-Other: x"},
+		{"GET http://h/x?a:b", "GET http://h/x?a:b"},
+		{`{"authorization": "x"}`, `{"authorization": "x"}`},
+		{"", ""},
+	} {
+		if got := RedactLines(tt.in); got != tt.want {
+			t.Errorf("RedactLines(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+	plain := "GET /x\naccept: */*\n\nbody: text\n"
+	if n := testing.AllocsPerRun(10, func() { RedactLines(plain) }); n != 0 {
+		t.Errorf("RedactLines allocates %v times for text with no sensitive header", n)
 	}
 }
