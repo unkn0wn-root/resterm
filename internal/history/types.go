@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+// Markers writers store in place of a body.
+const (
+	BodySuppressed = "<body suppressed>"
+	BodySkipped    = "<skipped>"
+)
+
 type Entry struct {
 	ID                   string               `json:"id"`
 	ExecutedAt           time.Time            `json:"executedAt"`
