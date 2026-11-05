@@ -67,7 +67,7 @@ func (e *Engine) executeCompare(
 		return nil, err
 	}
 	out := e.buildCompareResult(req, spec, env, cl.rows)
-	e.recordCompare(doc, req, out, env)
+	e.recordCompare(doc, req, out)
 	return out, nil
 }
 
@@ -221,26 +221,7 @@ func compareReport(rows []engine.CompareRow, spec *restfile.CompareSpec) string 
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// rowEnvironment resolves the environment a compare row ran under. Rows carry
-// their own selection, so history does not depend on rows and compare targets
-// staying index aligned.
-func (e *Engine) rowEnvironment(row engine.CompareRow, fallback vars.Environment) vars.Environment {
-	if row.Selection.Empty() {
-		return fallback
-	}
-	env, err := e.cfg.Catalog.Resolve(row.Selection)
-	if err != nil {
-		return fallback
-	}
-	return env
-}
-
-func (e *Engine) recordCompare(
-	doc *restfile.Document,
-	req *restfile.Request,
-	out *engine.CompareResult,
-	env vars.Environment,
-) {
+func (e *Engine) recordCompare(doc *restfile.Document, req *restfile.Request, out *engine.CompareResult) {
 	hs := e.history()
 	if hs == nil || req == nil || out == nil || len(out.Rows) == 0 {
 		return
@@ -259,11 +240,7 @@ func (e *Engine) recordCompare(
 		URL:         req.URL,
 		Status:      out.Summary,
 		Duration:    compareDuration(out.Rows),
-		RequestText: redactText(
-			request.RenderRequestText(req),
-			e.secretValues(doc, req, env, rowSecrets(out.Rows)...),
-			!req.Metadata.AllowSensitiveHeaders,
-		),
+		RequestText: request.HistoryText(req, request.RenderRequestText(req)),
 		Description: strings.TrimSpace(req.Metadata.Description),
 		Tags:        engine.Tags(req.Metadata.Tags),
 		Compare: &history.CompareEntry{
@@ -273,7 +250,6 @@ func (e *Engine) recordCompare(
 		},
 	}
 	for _, row := range out.Rows {
-		secs := e.secretValues(doc, req, e.rowEnvironment(row, env), row.RuntimeSecrets...)
 		item := history.CompareResult{
 			Environment: row.Environment,
 			Profile:     row.Profile,
@@ -299,27 +275,16 @@ func (e *Engine) recordCompare(
 			item.BodySnippet = item.Error
 		case row.Response != nil:
 			item.StatusCode = row.Response.StatusCode
-			item.BodySnippet = snippetHTTP(row.Response, req, secs)
+			item.BodySnippet = snippetHTTP(row.Response, req)
 		case row.GRPC != nil:
 			item.StatusCode = int(row.GRPC.StatusCode)
-			item.BodySnippet = snippetGRPC(row.GRPC, req, secs)
+			item.BodySnippet = snippetGRPC(row.GRPC, req)
 		default:
 			item.BodySnippet = "No response captured"
-		}
-		if len(item.BodySnippet) > 2000 {
-			item.BodySnippet = item.BodySnippet[:2000]
 		}
 		ent.Compare.Results = append(ent.Compare.Results, item)
 	}
 	_ = hs.Append(ent)
-}
-
-func rowSecrets(rows []engine.CompareRow) []string {
-	var out []string
-	for _, row := range rows {
-		out = append(out, row.RuntimeSecrets...)
-	}
-	return out
 }
 
 func compareDuration(rows []engine.CompareRow) time.Duration {

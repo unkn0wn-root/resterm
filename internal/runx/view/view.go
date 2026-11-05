@@ -3,10 +3,10 @@ package runview
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,8 +15,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/str"
@@ -83,7 +85,7 @@ func Render(rep *runner.Report, opt Options) (string, error) {
 	if res.Kind != runner.ResultKindRequest {
 		return reportText(rep)
 	}
-	return renderRequest(*res, rep.Warnings, Options{
+	return renderRequest(*res, rep.WarningTexts(), rep.Secrets(), Options{
 		Mode:    mode,
 		Headers: opt.Headers,
 		Color:   opt.Color,
@@ -103,7 +105,7 @@ func RenderBody(rep *runner.Report, opt BodyOptions) (string, error) {
 	if res.Kind != runner.ResultKindRequest {
 		return "", errors.New("runview: body output requires exactly one request result")
 	}
-	return requestBodyText(*res, mode, opt.Color, opt.Theme, bodyfmt.Original), nil
+	return requestBodyText(resolveBodyInput(*res), mode, opt.Color, opt.Theme, bodyfmt.Original), nil
 }
 
 func CanRenderRequest(rep *runner.Report) bool {
@@ -140,13 +142,14 @@ func reportText(rep *runner.Report) (string, error) {
 	return bodyfmt.TrimSection(buf.String()), nil
 }
 
-func renderRequest(res runner.Result, warns []string, opt Options) string {
+// The view masks what was sent and keeps the response as it arrived.
+func renderRequest(res runner.Result, warns []string, sec redact.Set, opt Options) string {
 	st := newStyler(opt.Color, opt.Theme)
-	summary := requestSummary(res, st)
-	issues := requestIssues(res, st)
-	warnings := requestWarnings(res, warns, st)
-	headers := requestHeadersText(res, opt.Headers, st)
-	body := requestBody(res, opt.Mode, opt.Color, opt.Theme, st)
+	summary := requestSummary(res, sec, st)
+	issues := requestIssues(res, sec, st)
+	warnings := requestWarnings(res, warns, sec, st)
+	headers := requestHeadersText(res, opt.Headers, sec, st)
+	body := requestBody(res, sec, opt.Mode, opt.Color, opt.Theme, st)
 	return bodyfmt.JoinSections(summary, issues, warnings, headers, body)
 }
 
@@ -156,13 +159,13 @@ type summaryField struct {
 	tone  tone
 }
 
-func requestSummary(res runner.Result, st styler) string {
+func requestSummary(res runner.Result, sec redact.Set, st styler) string {
 	fields := []summaryField{
-		{"Name", strings.TrimSpace(res.Name), toneValue},
-		{"Request", requestLine(res), toneValue},
+		{"Name", sec.Text(strings.TrimSpace(res.Name)), toneValue},
+		{"Request", sec.Text(requestLine(res)), toneValue},
 	}
 	if sourceTarget := requestSourceTargetText(res); sourceTarget != "" {
-		fields = append(fields, summaryField{"Source Target", sourceTarget, toneValue})
+		fields = append(fields, summaryField{"Source Target", sec.Text(sourceTarget), toneValue})
 	}
 	fields = append(fields,
 		summaryField{"Environment", strings.TrimSpace(res.Environment), toneValue},
@@ -179,13 +182,13 @@ func requestSummary(res runner.Result, st styler) string {
 	return strings.Join(lines, "\n")
 }
 
-func requestIssues(res runner.Result, st styler) string {
+func requestIssues(res runner.Result, sec redact.Set, st styler) string {
 	var parts []string
 	if res.Err != nil {
-		parts = append(parts, diagnosticIssue("Request error", res.Err, st))
+		parts = append(parts, diagnosticIssue("Request error", diag.Redact(res.Err, sec.Text), st))
 	}
 	if res.ScriptErr != nil {
-		parts = append(parts, diagnosticIssue("Script error", res.ScriptErr, st))
+		parts = append(parts, diagnosticIssue("Script error", diag.Redact(res.ScriptErr, sec.Text), st))
 	}
 	if msg := traceFailureText(res.Trace); msg != "" {
 		parts = append(parts, st.pair("Trace", msg, toneWarn))
@@ -195,7 +198,7 @@ func requestIssues(res runner.Result, st styler) string {
 		errs = st.sectionWarn("Errors:") + "\n" + str.Indent(strings.Join(parts, "\n"), "  ")
 	}
 
-	tests := testsText(res, st)
+	tests := testsText(res, sec, st)
 	return bodyfmt.JoinSections(errs, tests)
 }
 
@@ -211,10 +214,13 @@ func diagnosticIssue(label string, err error, st styler) string {
 }
 
 // Parse warnings share this section with the run's own warnings.
-func requestWarnings(res runner.Result, warns []string, st styler) string {
+func requestWarnings(res runner.Result, warns []string, sec redact.Set, st styler) string {
 	lines := make([]string, 0, len(warns)+len(res.Warnings)+1)
-	for _, warn := range slices.Concat(warns, res.Warnings) {
+	for _, warn := range warns {
 		lines = append(lines, st.value(warn, toneCaution))
+	}
+	for _, warn := range res.Warnings {
+		lines = append(lines, st.value(sec.Text(warn), toneCaution))
 	}
 	if items, _ := res.UnresolvedTemplateVars(); len(items) > 0 {
 		lines = append(lines, st.pair(
@@ -229,14 +235,14 @@ func requestWarnings(res runner.Result, warns []string, st styler) string {
 	return st.sectionCaution("Warnings:") + "\n" + str.Indent(strings.Join(lines, "\n"), "  ")
 }
 
-func testsText(res runner.Result, st styler) string {
+func testsText(res runner.Result, sec redact.Set, st styler) string {
 	var lines []string
 	for _, test := range res.Tests {
 		line := st.badge(testBadge(test))
-		if name := strings.TrimSpace(test.Name); name != "" {
+		if name := sec.Text(strings.TrimSpace(test.Name)); name != "" {
 			line += " " + st.value(termtext.Row(name), toneValue)
 		}
-		if msg := strings.TrimSpace(test.Message); msg != "" {
+		if msg := sec.Text(strings.TrimSpace(test.Message)); msg != "" {
 			line += " - "
 			pad := strings.Repeat(" ", ansi.StringWidth(line))
 			first, rest, ok := strings.Cut(termtext.Block(msg), "\n")
@@ -263,7 +269,7 @@ func testBadge(test scriptapi.TestResult) (string, bool) {
 	return "[FAIL]", false
 }
 
-func requestHeadersText(res runner.Result, show bool, st styler) string {
+func requestHeadersText(res runner.Result, show bool, sec redact.Set, st styler) string {
 	if !show {
 		return ""
 	}
@@ -271,6 +277,16 @@ func requestHeadersText(res runner.Result, show bool, st styler) string {
 	respText := ""
 	if resp := res.Response; resp != nil {
 		if reqHeaders := resp.SentHeaders(); len(reqHeaders) > 0 {
+			for name, vals := range reqHeaders {
+				mask := header.Sensitive(name) || header.CarriesCookie(name)
+				for i, v := range vals {
+					if mask {
+						vals[i] = redact.Mask
+					} else {
+						vals[i] = sec.Text(v)
+					}
+				}
+			}
 			reqText = st.section("Request Headers:") + "\n" + formatHeaders(reqHeaders, st)
 		}
 		if len(resp.Headers) > 0 {
@@ -287,6 +303,7 @@ func requestHeadersText(res runner.Result, show bool, st styler) string {
 
 func requestBody(
 	res runner.Result,
+	sec redact.Set,
 	mode Mode,
 	color termcolor.Config,
 	def *theme.Definition,
@@ -296,7 +313,12 @@ func requestBody(
 	if mode == ModeRaw {
 		heading = "Raw Body:"
 	}
-	body := requestBodyText(res, mode, color, def, bodyfmt.Display)
+	input := resolveBodyInput(res)
+	if res.Stream != nil {
+		// A stream body is its transcript, and the frames it sent are request data.
+		input.Body, input.ViewBody = maskSent(input.Body, sec), maskSent(input.ViewBody, sec)
+	}
+	body := requestBodyText(input, mode, color, def, bodyfmt.Display)
 	if body == "" {
 		body = "<empty>"
 	}
@@ -304,13 +326,12 @@ func requestBody(
 }
 
 func requestBodyText(
-	res runner.Result,
+	input bodyfmt.BuildInput,
 	mode Mode,
 	color termcolor.Config,
 	def *theme.Definition,
 	form bodyfmt.TextForm,
 ) string {
-	input := resolveBodyInput(res)
 	if bodyInputEmpty(input) {
 		return ""
 	}
@@ -320,6 +341,32 @@ func requestBodyText(
 		input.Style = theme.SyntaxHighlightStyle(theme.OrDefault(def))
 	}
 	return selectBody(bodyfmt.Build(context.Background(), input), mode)
+}
+
+// maskSent returns transcript itself when nothing changed.
+func maskSent(transcript []byte, sec redact.Set) []byte {
+	var t map[string]json.RawMessage
+	var events []json.RawMessage
+	if json.Unmarshal(transcript, &t) != nil || json.Unmarshal(t["events"], &events) != nil {
+		return transcript
+	}
+	masked := false
+	for i, ev := range events {
+		var e struct{ Direction string }
+		if json.Unmarshal(ev, &e) != nil || e.Direction != "send" {
+			continue
+		}
+		if m := sec.JSON(ev); !bytes.Equal(m, ev) {
+			events[i], masked = m, true
+		}
+	}
+	if !masked {
+		return transcript
+	}
+	// Both are indented JSON with sorted keys, so other bytes stay as they were.
+	t["events"], _ = json.Marshal(events)
+	out, _ := json.MarshalIndent(t, "", "  ")
+	return out
 }
 
 func resolveBodyInput(res runner.Result) bodyfmt.BuildInput {

@@ -20,6 +20,10 @@ func (e *Engine) record(doc *restfile.Document, req *restfile.Request, res runRe
 	if hs == nil || req == nil {
 		return
 	}
+	// First, so a Flush on another goroutine never writes the entry without them.
+	if l, ok := hs.(history.Learner); ok {
+		l.Learn(res.RuntimeSecrets...)
+	}
 	runReq := res.Executed
 	if runReq == nil {
 		runReq = req
@@ -46,9 +50,7 @@ func (e *Engine) recordHTTP(
 		return
 	}
 
-	secs := e.secretValues(doc, req, res.Env, res.RuntimeSecrets...)
-	mask := !req.Metadata.AllowSensitiveHeaders
-	snip := "<body suppressed>"
+	snip := history.BodySuppressed
 	if !req.Metadata.NoLog {
 		ct := ""
 		if resp.Headers != nil {
@@ -58,14 +60,10 @@ func (e *Engine) recordHTTP(
 		if meta.Kind == binaryview.KindBinary || !meta.Printable {
 			snip = fmtBinary(meta, len(resp.Body))
 		} else {
-			snip = redactText(string(resp.Body), secs, false)
-			if len(snip) > 2000 {
-				snip = snip[:2000]
-			}
+			snip = string(resp.Body)
 		}
 	}
 
-	txt := redactText(res.RequestText, secs, mask)
 	now := time.Now()
 	ent := history.Entry{
 		ID:          history.NewID(),
@@ -82,7 +80,7 @@ func (e *Engine) recordHTTP(
 		StatusCode:  resp.StatusCode,
 		Duration:    res.Elapsed,
 		BodySnippet: snip,
-		RequestText: txt,
+		RequestText: HistoryText(req, res.RequestText),
 		Description: strings.TrimSpace(req.Metadata.Description),
 		Tags:        engine.Tags(req.Metadata.Tags),
 	}
@@ -103,15 +101,9 @@ func (e *Engine) recordSkipped(
 	if strings.TrimSpace(txt) == "" {
 		txt = renderRequestText(req)
 	}
-	secs := e.secretValues(doc, req, res.Env, res.RuntimeSecrets...)
-	mask := !req.Metadata.AllowSensitiveHeaders
-	txt = redactText(txt, secs, mask)
 	snip := strings.TrimSpace(res.SkipReason)
 	if snip == "" {
-		snip = "<skipped>"
-	}
-	if len(snip) > 2000 {
-		snip = snip[:2000]
+		snip = history.BodySkipped
 	}
 	now := time.Now()
 	ent := history.Entry{
@@ -127,7 +119,7 @@ func (e *Engine) recordSkipped(
 		URL:         req.URL,
 		Status:      "SKIPPED",
 		BodySnippet: snip,
-		RequestText: txt,
+		RequestText: HistoryText(req, txt),
 		Description: strings.TrimSpace(req.Metadata.Description),
 		Tags:        engine.Tags(req.Metadata.Tags),
 	}
@@ -144,16 +136,9 @@ func (e *Engine) recordGRPC(
 	if hs == nil || req == nil || resp == nil {
 		return
 	}
-	secs := e.secretValues(doc, req, res.Env, res.RuntimeSecrets...)
-	mask := !req.Metadata.AllowSensitiveHeaders
 	snip := resp.Message
 	if req.Metadata.NoLog {
-		snip = "<body suppressed>"
-	} else {
-		snip = redactText(snip, secs, false)
-		if len(snip) > 2000 {
-			snip = snip[:2000]
-		}
+		snip = history.BodySuppressed
 	}
 	now := time.Now()
 	ent := history.Entry{
@@ -171,7 +156,7 @@ func (e *Engine) recordGRPC(
 		StatusCode:  int(resp.StatusCode),
 		Duration:    res.Elapsed,
 		BodySnippet: snip,
-		RequestText: redactText(res.RequestText, secs, mask),
+		RequestText: HistoryText(req, res.RequestText),
 		Description: strings.TrimSpace(req.Metadata.Description),
 		Tags:        engine.Tags(req.Metadata.Tags),
 	}
@@ -195,46 +180,18 @@ func (e *Engine) secretValues(
 	}.Secrets()
 }
 
-func redactText(text string, secs []string, maskHdr bool) string {
-	trim := strings.TrimSpace(text)
-	if trim == "" && len(secs) == 0 {
+// Secrets returns the values a send of req under env masks.
+func (e *Engine) Secrets(doc *restfile.Document, req *restfile.Request, env vars.Environment) []string {
+	return e.secretValues(doc, req, ResolveEnvironment(env, doc, req))
+}
+
+// HistoryText masks sensitive header values in a request's text, unless the request logs them with
+// @log-sensitive-headers.
+func HistoryText(req *restfile.Request, text string) string {
+	if req.Metadata.AllowSensitiveHeaders {
 		return text
 	}
-	out := text
-	if len(secs) > 0 {
-		for _, sec := range secs {
-			if sec == "" || !strings.Contains(out, sec) {
-				continue
-			}
-			out = strings.ReplaceAll(out, sec, "***")
-		}
-	}
-	if !maskHdr {
-		return out
-	}
-	ls := strings.Split(out, "\n")
-	changed := false
-	for i, ln := range ls {
-		colon := strings.Index(ln, ":")
-		if colon <= 0 {
-			continue
-		}
-		if !header.Sensitive(ln[:colon]) {
-			continue
-		}
-		rest := ln[colon+1:]
-		padN := len(rest) - len(strings.TrimLeft(rest, " \t"))
-		pad := ""
-		if padN > 0 {
-			pad = rest[:padN]
-		}
-		ls[i] = ln[:colon+1] + pad + "***"
-		changed = true
-	}
-	if !changed {
-		return out
-	}
-	return strings.Join(ls, "\n")
+	return header.RedactLines(text)
 }
 
 func fmtBinary(meta binaryview.Meta, n int) string {

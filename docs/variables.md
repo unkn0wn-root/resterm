@@ -76,7 +76,7 @@ Authorization: Bearer {{token}}
 
 If the OS variable is missing, the declared value stays undefined. Resterm does not fall back to another source with the same name. It first tries the OS variable's name as written, then its uppercase form.
 
-Values loaded through `env:NAME` are secrets. Resterm hides them from previews and redacts them from results, explain output, and history. References are resolved once, so an OS value that contains `env:OTHER` stays unchanged. Only declarations are interpreted as references. Values from captures, workflows, and scripts are plain data.
+Values loaded through `env:NAME` are secrets. Resterm hides them from previews and redacts them from results, explain output, and history. An OS value read another way, with `{{env.NAME}}`, through the fallback for a plain `{{NAME}}`, or by `${NAME}` in a dotenv file, is not a secret. Output masks secrets by value, so a value that is also loaded through `env:NAME` is masked there too. References are resolved once, so an OS value that contains `env:OTHER` stays unchanged. Only declarations are interpreted as references. Values from captures, workflows, and scripts are plain data.
 
 An empty `env:` reference is an error. In a request file, Resterm reports the line where it appears. In an environment file, it stops `resterm run`. The TUI still starts so you can fix the file, but it blocks all requests until the file loads successfully.
 
@@ -295,4 +295,4 @@ Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stor
 
 Secret values are masked in errors, script failures, and failed test output before those messages reach the response pane, workflow summaries, or workflow history. A value remains masked for the rest of the run if it is deleted, replaced with a public value, or produced by a script or capture that later fails.
 
-Diagnostic source excerpts show the request file as written. Avoid placing literal secrets in script source. Response bodies are also stored as received unless the request uses `@no-log` or the payload is redacted before it is returned.
+Their source excerpts show the request file with secret values masked. `resterm run` also masks the secret values a file declares in parse errors and in the list of requests it prints. History stores a snippet of each response body with secret values masked, and `@no-log` leaves it out.

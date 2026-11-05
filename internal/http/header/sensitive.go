@@ -1,6 +1,10 @@
 package header
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/redact"
+)
 
 type Set map[string]struct{}
 
@@ -63,6 +67,35 @@ var setCookies = Set{
 }
 
 func Sensitive(name string) bool { return sensitive.Has(name) }
+
+// RedactLines masks the value of each line of text that names a sensitive header.
+// It keeps the whitespace before the value and the line break after it.
+func RedactLines(text string) string {
+	var b strings.Builder
+	done, end := 0, 0
+	for line := range strings.Lines(text) {
+		start := end
+		end += len(line)
+		name, value, ok := strings.Cut(line, ":")
+		if !ok || !Sensitive(name) {
+			continue
+		}
+		if b.Len() == 0 {
+			b.Grow(len(text))
+		}
+		value = strings.TrimRight(value, "\r\n")
+		pad := len(value) - len(strings.TrimLeft(value, " \t"))
+		at := start + len(name) + 1
+		b.WriteString(text[done : at+pad])
+		b.WriteString(redact.Mask)
+		done = at + len(value)
+	}
+	if b.Len() == 0 {
+		return text
+	}
+	b.WriteString(text[done:])
+	return b.String()
+}
 
 func IsCookie(name string) bool { return cookies.Has(name) }
 

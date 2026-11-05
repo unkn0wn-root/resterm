@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -69,11 +70,11 @@ func TestRedactExplainReportMasksSecretsAndSensitiveHeaders(t *testing.T) {
 	}
 	// The authorization header is masked because of its name, X-Trace because
 	// its value matches a secret variable.
-	if got.Final.Headers[0].Value != secretMask {
-		t.Fatalf("authorization header = %q, want %q", got.Final.Headers[0].Value, secretMask)
+	if got.Final.Headers[0].Value != redact.Mask {
+		t.Fatalf("authorization header = %q, want %q", got.Final.Headers[0].Value, redact.Mask)
 	}
-	if got.Final.Headers[1].Value != secretMask {
-		t.Fatalf("secret header value = %q, want %q", got.Final.Headers[1].Value, secretMask)
+	if got.Final.Headers[1].Value != redact.Mask {
+		t.Fatalf("secret header value = %q, want %q", got.Final.Headers[1].Value, redact.Mask)
 	}
 
 	for _, field := range []string{
@@ -87,6 +88,25 @@ func TestRedactExplainReportMasksSecretsAndSensitiveHeaders(t *testing.T) {
 	} {
 		if strings.Contains(field, "top-secret") {
 			t.Fatalf("secret survived redaction in %q", field)
+		}
+	}
+}
+
+func TestRedactExplainReportMasksJSONBody(t *testing.T) {
+	req := &restfile.Request{Variables: []restfile.Variable{{Name: "token", Value: "a/b9", Secret: true}}}
+	tests := []struct {
+		body string
+		want string
+	}{
+		{`{"token":"a\/b9","note":"keep / this"}`, `{"token":"•••","note":"keep / this"}`},
+		{`{"token":"other","n":1}`, `{"token":"other","n":1}`},
+		{"token=a%2Fb9&n=1", "token=•••&n=1"},
+	}
+	for _, tt := range tests {
+		rep := &xplain.Report{Final: &xplain.Final{Body: tt.body}}
+		got := newTestEngine().redactExplainReport(rep, nil, req, testEnv("").Resolve(), vars.Globals{})
+		if got.Final.Body != tt.want {
+			t.Errorf("body %q = %q, want %q", tt.body, got.Final.Body, tt.want)
 		}
 	}
 }

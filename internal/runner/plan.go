@@ -11,12 +11,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	engheadless "github.com/unkn0wn-root/resterm/internal/engine/headless"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
@@ -53,7 +56,7 @@ func Build(opts Options) (*Plan, error) {
 
 	doc := parser.Parse(path, data)
 	if err := parser.Check(doc); err != nil {
-		return nil, UsageError{err: err}
+		return nil, UsageError{err: diag.Redact(err, redact.New(doc.SecretValues()...).Text)}
 	}
 	warns := parser.WarningTexts(doc)
 
@@ -105,7 +108,10 @@ func Build(opts Options) (*Plan, error) {
 	}, nil
 }
 
-func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
+// Masking a secret this short also hides the same word in unrelated text, so a run warns about it.
+const shortSecret = 4
+
+func RunPlan(ctx context.Context, pl *Plan) (_ *Report, err error) {
 	if ctx == nil {
 		return nil, ErrNilContext
 	}
@@ -126,6 +132,11 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 	opt := pl.opt
 	start := time.Now()
 	hist := openHistoryStore(pl.state, opt)
+	var hs history.Store
+	// A nil *Buffer in the interface would pass every nil check.
+	if hist != nil {
+		hs = hist
+	}
 
 	exec := engheadless.New(engine.Config{
 		FilePath:        opt.FilePath,
@@ -138,7 +149,7 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		GRPCOptions:     cloneGRPCOptions(opt.GRPCOptions),
 		WorkspaceRoot:   opt.WorkspaceRoot,
 		Recursive:       opt.Recursive,
-		History:         hist,
+		History:         hs,
 	})
 
 	defer func() { _ = exec.Close() }()
@@ -148,6 +159,27 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		return nil, err
 	}
 	envName := env.Label()
+	rep := &Report{
+		Version:              opt.Version,
+		SchemaVersion:        runfmt.ReportSchemaVersion,
+		FilePath:             opt.FilePath,
+		EnvName:              envName,
+		EnvironmentSelection: env.Selection().Groups(),
+		StartedAt:            start,
+		// A Plan is reusable and safe for concurrent RunPlan calls, so each
+		// report gets its own copy rather than aliasing the plan's.
+		Warnings:     slices.Clone(pl.warns),
+		shortSecrets: rqeng.ShortSecrets(doc, env, shortSecret),
+	}
+	defer func() {
+		if err != nil {
+			secs := rep.seal(exec, doc, env)
+			if hist != nil {
+				_ = hist.Flush(secs...)
+			}
+			err = diag.Redact(err, rep.secrets.Text)
+		}
+	}()
 
 	for _, req := range tg.requests {
 		if err := exec.CheckCompare(req, opt.Selection); err != nil {
@@ -159,18 +191,6 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		return nil, fmt.Errorf("load runner state: %w", err)
 	}
 
-	rep := &Report{
-		Version:              opt.Version,
-		SchemaVersion:        runfmt.ReportSchemaVersion,
-		FilePath:             opt.FilePath,
-		EnvName:              envName,
-		EnvironmentSelection: env.Selection().Groups(),
-		StartedAt:            start,
-		// A Plan is reusable and safe for concurrent RunPlan calls, so each
-		// report gets its own copy rather than aliasing the plan's.
-		Warnings: slices.Clone(pl.warns),
-	}
-
 	if tg.workflow != nil {
 		rep.Results = make([]Result, 0, 1)
 		out, err := exec.ExecuteWorkflowContext(ctx, doc, tg.workflow, opt.Selection)
@@ -178,7 +198,7 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 			return nil, err
 		}
 		rep.add(workflowRunResult(*out, envName))
-		return finishRun(rep, exec, pl.state, opt)
+		return finishRun(rep, exec, hist, doc, env, pl.state, opt)
 	}
 
 	rep.Results = make([]Result, 0, len(tg.requests))
@@ -218,12 +238,28 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		}
 		break
 	}
-	return finishRun(rep, exec, pl.state, opt)
+	return finishRun(rep, exec, hist, doc, env, pl.state, opt)
+}
+
+// seal runs once the last result is in, so a later secret masks earlier text.
+func (r *Report) seal(exec *engheadless.Engine, doc *restfile.Document, env vars.Environment) []string {
+	secs := exec.Secrets(doc, env)
+	for _, res := range r.Results {
+		secs = append(secs, res.secrets...)
+		for _, st := range res.Steps {
+			secs = append(secs, st.secrets...)
+		}
+	}
+	r.secrets = redact.New(secs...)
+	return secs
 }
 
 func finishRun(
 	rep *Report,
-	exec engine.Executor,
+	exec *engheadless.Engine,
+	hist *history.Buffer,
+	doc *restfile.Document,
+	env vars.Environment,
 	st statePaths,
 	opt Options,
 ) (*Report, error) {
@@ -232,24 +268,17 @@ func finishRun(
 	}
 	rep.EndedAt = time.Now()
 	rep.Duration = rep.EndedAt.Sub(rep.StartedAt)
+	secs := rep.seal(exec, doc, env)
+	if hist != nil {
+		_ = hist.Flush(secs...)
+	}
 	if opt.Response {
-		// A later request can capture as a secret a value an earlier response
-		// showed, so every response is masked with every secret the run knew.
-		var all vars.Secrets
-		for _, r := range rep.Results {
-			all.Add(r.secrets...)
-			for _, s := range r.Steps {
-				all.Add(s.secrets...)
-			}
-		}
-		secs := all.Values()
-		rqeng.SortSecrets(secs)
 		for i := range rep.Results {
 			r := &rep.Results[i]
-			r.report = rqeng.ReportResponse(r.Response, r.GRPC, r.captures, secs)
+			r.report = rqeng.ReportResponse(r.Response, r.GRPC, r.captures, rep.secrets)
 			for j := range r.Steps {
 				s := &r.Steps[j]
-				s.report = rqeng.ReportResponse(s.Response, s.GRPC, s.captures, secs)
+				s.report = rqeng.ReportResponse(s.Response, s.GRPC, s.captures, rep.secrets)
 			}
 		}
 	}

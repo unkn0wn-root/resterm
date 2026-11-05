@@ -82,8 +82,8 @@ type Report struct {
 	Failed               int
 	Skipped              int
 	StopReason           StopReason
-	// Warnings holds parse warnings with their source location. They never
-	// affect HasFailures or the exit code.
+	// Warnings holds parse warnings with their source location and short-secret
+	// warnings. They never affect HasFailures or the exit code.
 	Warnings []string
 }
 

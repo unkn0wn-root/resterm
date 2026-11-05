@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/history"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -22,20 +24,14 @@ func TestProfileHistoryRoundTrip(t *testing.T) {
 		proOK(30 * time.Millisecond),
 	}
 	snap := feedProfile(t, restfile.ProfileSpec{Count: 3, Warmup: 1}, iters, false, RunDone{}).Snapshot()
-	var masked int
-	redact := func(s string, mask bool) string {
-		if mask {
-			masked++
-		}
-		return strings.ReplaceAll(s, "secret-host", "***")
-	}
 	req := &restfile.Request{
 		Method:   "GET",
 		URL:      "https://example.com",
+		Headers:  http.Header{"Authorization": {"Bearer t"}},
 		Metadata: restfile.RequestMetadata{Name: "prof"},
 	}
 
-	raw, err := json.Marshal(snap.HistoryEntry(req, testEnvironment("dev"), "prof.http", redact))
+	raw, err := json.Marshal(snap.HistoryEntry(req, testEnvironment("dev"), "prof.http"))
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
@@ -43,15 +39,18 @@ func TestProfileHistoryRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &ent); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if ent.Status != "FAIL 2/3" || ent.RequestName != "prof" || ent.Duration != snap.Progress.Elapsed || masked != 1 {
-		t.Fatalf("entry = %+v, masked = %d", ent, masked)
+	if ent.Status != "FAIL 2/3" || ent.RequestName != "prof" || ent.Duration != snap.Progress.Elapsed {
+		t.Fatalf("entry = %+v", ent)
+	}
+	if !strings.Contains(ent.RequestText, "Authorization: "+redact.Mask) {
+		t.Fatalf("request text = %q, want the sensitive header masked", ent.RequestText)
 	}
 	rec := ent.ProfileResults
 	if rec.FailedRuns != 1 || rec.WarmupFailedRuns != 1 || rec.Status != "fail" || rec.Count != 3 {
 		t.Fatalf("record = %+v", rec)
 	}
-	if got := rec.Failures[0].Reason; strings.Contains(got, "secret-host") || !rec.Failures[0].Warmup {
-		t.Fatalf("warmup failure = %+v, want redacted", rec.Failures[0])
+	if got := rec.Failures[0].Reason; !strings.Contains(got, "secret-host") || !rec.Failures[0].Warmup {
+		t.Fatalf("warmup failure = %+v, want the reason as it happened", rec.Failures[0])
 	}
 
 	got := ProfileSnapshotFromHistory(ent)
@@ -83,7 +82,7 @@ func TestProfileHistoryCapsFailures(t *testing.T) {
 		iters[i] = proHTTP500()
 	}
 	snap := feedProfile(t, restfile.ProfileSpec{Count: 30}, iters, false, RunDone{}).Snapshot()
-	rec := snap.historyResults(func(s string) string { return s })
+	rec := snap.historyResults()
 	if rec.FailedRuns != 30 || len(rec.Failures) != maxProfileHistoryFailures {
 		t.Fatalf("failed = %d, stored = %d", rec.FailedRuns, len(rec.Failures))
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -33,6 +34,8 @@ func BuildRunRequestChoices(doc *restfile.Document) []RunRequestChoice {
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil
 	}
+	// The list shows the file as written, so mask what it declares secret.
+	sec := redact.New(doc.SecretValues()...)
 	out := make([]RunRequestChoice, 0, len(doc.Requests))
 	for _, req := range doc.Requests {
 		if req == nil {
@@ -42,9 +45,9 @@ func BuildRunRequestChoices(doc *restfile.Document) []RunRequestChoice {
 		out = append(out, RunRequestChoice{
 			Line:   reqLine(req),
 			Method: info.method,
-			Name:   info.name,
-			Target: info.target,
-			Label:  info.label,
+			Name:   sec.Text(info.name),
+			Target: sec.Text(info.target),
+			Label:  sec.Text(info.label),
 		})
 	}
 	return out

@@ -28,10 +28,7 @@ func (e *Engine) executeProfile(
 	acc := core.NewProfileAccumulator(pl)
 	err = core.RunProfile(ctx, e.rq, acc, pl)
 	snap := acc.Snapshot()
-	secs := e.secretValues(doc, req, env)
-	ent := snap.HistoryEntry(req, env, e.filePath(doc), func(text string, mask bool) string {
-		return redactText(text, secs, mask)
-	})
+	ent := snap.HistoryEntry(req, env, e.filePath(doc))
 	if hs := e.history(); hs != nil {
 		_ = hs.Append(ent)
 	}

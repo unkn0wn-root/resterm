@@ -192,3 +192,14 @@ type runWorkerDoneMsg struct {
 type runWarningMsg struct {
 	text string
 }
+
+// A history Flush finished off the UI goroutine.
+type historyFlushedMsg struct {
+	err error
+}
+
+// A history delete finished off the UI goroutine.
+type historyDeletedMsg struct {
+	asked, deleted, failed int
+	err                    error
+}

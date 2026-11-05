@@ -174,7 +174,6 @@ type Config struct {
 	UpdateCmd      string
 	Compare        engine.CompareConfig
 	Bindings       *bindings.Map
-	Runtime        *rtrun.Runtime
 	StatusUser     string
 	StatusHost     string
 	Terminal       io.Writer
@@ -195,6 +194,7 @@ type Model struct {
 	cfg          Config
 	ws           workspace
 	run          *rtrun.Runtime
+	hist         *history.Buffer
 	rq           *rqeng.Engine
 	bindingsMap  *bindings.Map
 	launcher     opener
@@ -615,15 +615,19 @@ func New(cfg Config) Model {
 	rg := registry.New()
 	rg.Load(ws.root, ws.recursive)
 
-	run := cfg.Runtime
-	if run == nil {
-		run = newRuntime(rtrun.Config{
-			Client:     client,
-			History:    cfg.History,
-			SSHManager: sshMgr,
-			K8sManager: k8sMgr,
-		})
+	hs := cfg.History
+	var hist *history.Buffer
+	// A nil *Buffer in the interface would pass every nil check.
+	if hs != nil {
+		hist = &history.Buffer{Store: hs}
+		hs = hist
 	}
+	run := newRuntime(rtrun.Config{
+		Client:     client,
+		History:    hs,
+		SSHManager: sshMgr,
+		K8sManager: k8sMgr,
+	})
 
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateCmd := strings.TrimSpace(cfg.UpdateCmd)
@@ -638,6 +642,7 @@ func New(cfg Config) Model {
 		cfg:                    cfg,
 		ws:                     ws,
 		run:                    run,
+		hist:                   hist,
 		bindingsMap:            bindingMap,
 		launcher:               launch.New(),
 		spool:                  launch.NewSpool(""),

@@ -84,6 +84,8 @@ type uiRequestEngine struct {
 	pane    responsePaneID
 	gen     uint64
 	baseDir string
+	// One history flush at a time per run, so a fast for-each cannot queue raw bodies without bound.
+	flushing chan struct{}
 }
 
 func (e *uiRequestEngine) ExecuteWith(
@@ -92,6 +94,10 @@ func (e *uiRequestEngine) ExecuteWith(
 	env vars.Environment,
 	opt rqeng.ExecOptions,
 ) (engine.RequestResult, error) {
+	// A nil Ctx means context.Background, as the engine reads it.
+	if opt.Ctx == nil {
+		opt.Ctx = context.Background()
+	}
 	nextWarning := opt.OnWarning
 	opt.OnWarning = func(warning rqeng.Warning) {
 		if nextWarning != nil {
@@ -138,6 +144,22 @@ func (e *uiRequestEngine) ExecuteWith(
 		streamID = e.attach(session, req, nil, "")
 	}
 	res, err := e.Engine.ExecuteWith(doc, req, env, opt)
+	if hist, ch := e.model.hist, e.model.runMsgChan; hist != nil {
+		hist.Learn(res.RuntimeSecrets...)
+		// Only a recorded entry needs writing now, and in the background, since masking a large body takes seconds.
+		if opt.Record {
+			select {
+			case e.flushing <- struct{}{}:
+				go func() {
+					flushHistory(hist, ch)
+					<-e.flushing
+				}()
+			case <-opt.Ctx.Done():
+				// A canceled run ends here, so its last entry is written without waiting its turn.
+				go flushHistory(hist, ch)
+			}
+		}
+	}
 	res.StreamID = streamID
 	return res, err
 }
@@ -188,11 +210,12 @@ func (e *uiRequestEngine) queueWarning(text string) {
 // under. Both are read here, on the update loop, and never again afterwards.
 func (m *Model) newUIRequestEngine(rq *rqeng.Engine, baseDir string) *uiRequestEngine {
 	return &uiRequestEngine{
-		Engine:  rq,
-		model:   m,
-		pane:    m.responseTargetPane(),
-		gen:     m.streamGen,
-		baseDir: baseDir,
+		Engine:   rq,
+		model:    m,
+		pane:     m.responseTargetPane(),
+		gen:      m.streamGen,
+		baseDir:  baseDir,
+		flushing: make(chan struct{}, 1),
 	}
 }
 

@@ -177,7 +177,13 @@ func TestHistoryMultiSelectDelete(t *testing.T) {
 		selected[id] = struct{}{}
 	}
 
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model = updated.(Model)
+	deleted, ok := findMsg[historyDeletedMsg](cmd)
+	if !ok {
+		t.Fatal("d returned no history delete")
+	}
+	updated, _ = model.Update(deleted)
 	model = updated.(Model)
 
 	remaining := map[string]struct{}{}

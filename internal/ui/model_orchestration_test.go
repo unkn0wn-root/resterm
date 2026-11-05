@@ -2,7 +2,7 @@ package ui
 
 import (
 	"context"
-	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -12,10 +12,8 @@ import (
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
@@ -1082,155 +1080,12 @@ func TestCompareRunInteractiveWebSocketUsesCorePath(t *testing.T) {
 }
 
 func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
-	store := histdb.New(filepath.Join(t.TempDir(), "history.db"))
-	t.Cleanup(func() { _ = store.Close() })
-
-	m := newOrchTestModel(t, Config{History: store, Env: vars.Config{Selection: testSelection("dev")}})
-	doc := &restfile.Document{
-		Variables: []restfile.Variable{{
-			Name:  "items",
-			Value: `["a","b"]`,
-		}},
-		Requests: []*restfile.Request{
-			{
-				Method: "GET",
-				URL:    "https://example.com/items/{{vars.request.item}}",
-				Metadata: restfile.RequestMetadata{
-					Name: "each",
-					ForEach: &restfile.ForEachSpec{
-						Expression: `json.parse(vars.require("items"))`,
-						Var:        "item",
-					},
-				},
-			},
-		},
-	}
-	req := doc.Requests[0]
-	m.doc = doc
-	pl, err := core.PrepareForEach(doc, req, core.RunMeta{ID: "each-1", Env: testEnv("dev")})
-	if err != nil {
-		t.Fatalf("PrepareForEach: %v", err)
-	}
-	m.workflowRun = workflowStateFromPlan(pl)
-	at := time.Unix(30, 0)
-
-	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(pl.Run, at)})
-	applyRunEvt(t, &m, core.WfStepStart{
-		Meta: core.NewMeta(pl.Run, at),
-		Step: core.StepMeta{
-			Index: 0,
-			Name:  pl.Workflow.Name,
-			Kind:  restfile.WorkflowStepKindRequest,
-			Iter:  1,
-			Total: 2,
-		},
-		Doc:     doc,
-		Request: req,
-	})
-	applyRunEvt(t, &m, core.ReqStart{
-		Meta: core.NewMeta(pl.Run, at),
-		Req: core.ReqMeta{
-			Index: 1,
-			Label: "GET each (1/2)",
-			Env:   "dev",
-		},
-		Doc:     doc,
-		Request: req,
-	})
-	if m.workflowRun == nil || m.workflowRun.current == nil {
-		t.Fatal("expected first for-each iteration to start")
-	}
-
-	first := engine.RequestResult{
-		Response: testHTTPResp(
-			"https://example.com/items/a",
-			200,
-			`{"item":"a"}`,
-			7*time.Millisecond,
-		),
-		Executed:    req.Clone(),
-		RequestText: "GET https://example.com/items/a\n",
-		Environment: "dev",
-	}
-	applyRunEvt(t, &m, core.ReqDone{
-		Meta:   core.NewMeta(pl.Run, at.Add(7*time.Millisecond)),
-		Req:    core.ReqMeta{Index: 1, Label: "GET each (1/2)", Env: "dev"},
-		Result: first,
-	})
-	applyRunEvt(t, &m, core.WfStepDone{
-		Meta: core.NewMeta(pl.Run, at.Add(7*time.Millisecond)),
-		Step: core.StepMeta{
-			Index: 0,
-			Name:  pl.Workflow.Name,
-			Kind:  restfile.WorkflowStepKindRequest,
-			Iter:  1,
-			Total: 2,
-		},
-		Result: first,
-	})
-	applyRunEvt(t, &m, core.WfStepStart{
-		Meta: core.NewMeta(pl.Run, at.Add(8*time.Millisecond)),
-		Step: core.StepMeta{
-			Index: 0,
-			Name:  pl.Workflow.Name,
-			Kind:  restfile.WorkflowStepKindRequest,
-			Iter:  2,
-			Total: 2,
-		},
-		Doc:     doc,
-		Request: req,
-	})
-	applyRunEvt(t, &m, core.ReqStart{
-		Meta: core.NewMeta(pl.Run, at.Add(8*time.Millisecond)),
-		Req: core.ReqMeta{
-			Index: 2,
-			Label: "GET each (2/2)",
-			Env:   "dev",
-		},
-		Doc:     doc,
-		Request: req,
-	})
-
-	if m.workflowRun == nil || m.workflowRun.current == nil {
-		t.Fatal("expected second for-each iteration to start")
-	}
-
-	second := engine.RequestResult{
-		Response: testHTTPResp(
-			"https://example.com/items/b",
-			200,
-			`{"item":"b"}`,
-			9*time.Millisecond,
-		),
-		Executed:    req.Clone(),
-		RequestText: "GET https://example.com/items/b\n",
-		Environment: "dev",
-	}
-	applyRunEvt(t, &m, core.ReqDone{
-		Meta:   core.NewMeta(pl.Run, at.Add(17*time.Millisecond)),
-		Req:    core.ReqMeta{Index: 2, Label: "GET each (2/2)", Env: "dev"},
-		Result: second,
-	})
-	applyRunEvt(t, &m, core.WfStepDone{
-		Meta: core.NewMeta(pl.Run, at.Add(17*time.Millisecond)),
-		Step: core.StepMeta{
-			Index: 0,
-			Name:  pl.Workflow.Name,
-			Kind:  restfile.WorkflowStepKindRequest,
-			Iter:  2,
-			Total: 2,
-		},
-		Result: second,
-	})
-	applyRunEvt(t, &m, core.RunDone{
-		Meta:    core.NewMeta(pl.Run, at.Add(18*time.Millisecond)),
-		Success: true,
-	})
-
-	if m.workflowRun != nil {
-		t.Fatal("expected for-each run to finalize")
-	}
-
+	srv := remaskServer(t)
+	m, store := newRemaskModel(
+		t,
+		"# @name each\n# @for-each [\"a\",\"b\"] as item\nGET "+srv.URL+"/seen?v={{= item}}\n",
+	)
+	runToEnd(t, m, m.startForEachRun(m.doc, m.doc.Requests[0], m.runOptions()))
 	es, err := store.Entries()
 	if err != nil {
 		t.Fatalf("entries: %v", err)
@@ -1244,8 +1099,10 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 	if hasHistoryMethod(es, restfile.HistoryMethodCompare) {
 		t.Fatalf("did not expect compare history entry, got %+v", es)
 	}
-	if !hasRequestText(es, "/items/a") || !hasRequestText(es, "/items/b") {
-		t.Fatalf("expected per-item request text in history, got %+v", es)
+	for _, item := range []string{"a", "b"} {
+		if !slices.ContainsFunc(es, func(e history.Entry) bool { return e.BodySnippet == `{"saw":"`+item+`"}` }) {
+			t.Fatalf("expected an entry for item %s, got %+v", item, es)
+		}
 	}
 }
 
@@ -1292,15 +1149,6 @@ func httpStatus(code int) string {
 func hasHistoryMethod(es []history.Entry, method string) bool {
 	for _, e := range es {
 		if e.Method == method {
-			return true
-		}
-	}
-	return false
-}
-
-func hasRequestText(es []history.Entry, want string) bool {
-	for _, e := range es {
-		if strings.Contains(e.RequestText, want) {
 			return true
 		}
 	}

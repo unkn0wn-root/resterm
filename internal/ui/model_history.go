@@ -17,10 +17,10 @@ import (
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
-	"github.com/unkn0wn-root/resterm/internal/http/header"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -51,21 +51,18 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.testResults = nil
 		m.scriptError = nil
 		cmd := m.consumeSkippedRequest(msg)
-		m.recordRunHistory(msg)
-		return cmd
+		return batchCommands(cmd, m.recordRunHistory(msg))
 	}
 
 	if msg.grpc != nil {
 		m.lastError = msg.err
 		cmd := m.consumeGRPCResponse(msg)
-		m.recordRunHistory(msg)
-		return cmd
+		return batchCommands(cmd, m.recordRunHistory(msg))
 	}
 	canceled := errors.Is(msg.err, context.Canceled)
 	if canceled && msg.checked {
 		cmd := m.consumeHTTPResponse(msg)
-		m.recordRunHistory(msg)
-		return cmd
+		return batchCommands(cmd, m.recordRunHistory(msg))
 	}
 
 	if msg.err != nil {
@@ -86,8 +83,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	}
 
 	cmd := m.consumeHTTPResponse(msg)
-	m.recordRunHistory(msg)
-	return cmd
+	return batchCommands(cmd, m.recordRunHistory(msg))
 }
 
 // Show the last response from a timed-out poll without exposing it as `last`.
@@ -101,19 +97,18 @@ func (m *Model) consumePollTimeout(msg responseMsg) tea.Cmd {
 		level:   statusError,
 		noModal: true,
 	})
-	m.recordRunHistory(msg)
-	return cmd
+	return batchCommands(cmd, m.recordRunHistory(msg))
 }
 
 // Write history unless the request engine already did.
-func (m *Model) recordRunHistory(msg responseMsg) {
+func (m *Model) recordRunHistory(msg responseMsg) tea.Cmd {
 	if msg.historyDone {
 		m.syncRecordedHistory()
-		return
+		return nil
 	}
 	switch {
 	case msg.skipped:
-		m.recordSkippedHistory(
+		return m.recordSkippedHistory(
 			msg.executed,
 			msg.requestText,
 			msg.environment,
@@ -122,7 +117,7 @@ func (m *Model) recordRunHistory(msg responseMsg) {
 			msg.runtimeSecrets...,
 		)
 	case msg.grpc != nil:
-		m.recordGRPCHistory(
+		return m.recordGRPCHistory(
 			msg.grpc,
 			msg.executed,
 			msg.requestText,
@@ -131,7 +126,7 @@ func (m *Model) recordRunHistory(msg responseMsg) {
 			msg.runtimeSecrets...,
 		)
 	default:
-		m.recordHTTPHistory(
+		return m.recordHTTPHistory(
 			msg.response,
 			msg.executed,
 			msg.requestText,
@@ -746,17 +741,13 @@ func (m *Model) recordHTTPHistory(
 	requestText string,
 	environment string,
 	sel vars.Selection,
-	extraSecrets ...string,
-) {
-	hs := m.historyStore()
-	if hs == nil || resp == nil || req == nil {
-		return
+	secrets ...string,
+) tea.Cmd {
+	if resp == nil || req == nil {
+		return nil
 	}
 
-	secrets := m.secretValuesForRedaction(req, extraSecrets...)
-	maskHeaders := !req.Metadata.AllowSensitiveHeaders
-
-	snippet := "<body suppressed>"
+	snippet := history.BodySuppressed
 	if !req.Metadata.NoLog {
 		ct := ""
 		if resp.Headers != nil {
@@ -766,16 +757,11 @@ func (m *Model) recordHTTPHistory(
 		if meta.Kind == binaryview.KindBinary || !meta.Printable {
 			snippet = formatBinaryHistorySnippet(meta, len(resp.Body))
 		} else {
-			snippet = redactHistoryText(string(resp.Body), secrets, false)
-			if len(snippet) > 2000 {
-				snippet = snippet[:2000]
-			}
+			snippet = string(resp.Body)
 		}
 	}
 	desc := strings.TrimSpace(req.Metadata.Description)
 	tags := normalizedTags(req.Metadata.Tags)
-
-	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
 	entry := history.Entry{
 		ID:          history.NewID(),
@@ -792,45 +778,31 @@ func (m *Model) recordHTTPHistory(
 		StatusCode:  resp.StatusCode,
 		Duration:    resp.Duration,
 		BodySnippet: snippet,
-		RequestText: redacted,
+		RequestText: rqeng.HistoryText(req, requestText),
 		Description: desc,
 		Tags:        tags,
 	}
 	entry.Trace = history.NewTraceSummary(resp.Timeline, resp.TraceReport)
-	if err := hs.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
-	}
-	m.historySelectedID = entry.ID
-	m.syncHistory()
+	return m.appendHistory(entry, secrets...)
 }
 
 func (m *Model) recordSkippedHistory(
 	req *restfile.Request,
 	requestText, environment, reason string,
 	sel vars.Selection,
-	extraSecrets ...string,
-) {
-	hs := m.historyStore()
-	if hs == nil || req == nil {
-		return
+	secrets ...string,
+) tea.Cmd {
+	if req == nil {
+		return nil
 	}
 
 	if strings.TrimSpace(requestText) == "" {
 		requestText = rqeng.RenderRequestText(req)
 	}
 
-	secrets := m.secretValuesForRedaction(req, extraSecrets...)
-	maskHeaders := !req.Metadata.AllowSensitiveHeaders
-	redacted := redactHistoryText(requestText, secrets, maskHeaders)
-
 	snippet := strings.TrimSpace(reason)
 	if snippet == "" {
-		snippet = "<skipped>"
-	}
-	if len(snippet) > 2000 {
-		snippet = snippet[:2000]
+		snippet = history.BodySkipped
 	}
 
 	desc := strings.TrimSpace(req.Metadata.Description)
@@ -851,17 +823,11 @@ func (m *Model) recordSkippedHistory(
 		StatusCode:  0,
 		Duration:    0,
 		BodySnippet: snippet,
-		RequestText: redacted,
+		RequestText: rqeng.HistoryText(req, requestText),
 		Description: desc,
 		Tags:        tags,
 	}
-	if err := hs.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
-	}
-	m.historySelectedID = entry.ID
-	m.syncHistory()
+	return m.appendHistory(entry, secrets...)
 }
 
 func formatBinaryHistorySnippet(meta binaryview.Meta, size int) string {
@@ -879,29 +845,18 @@ func (m *Model) recordGRPCHistory(
 	requestText string,
 	environment string,
 	sel vars.Selection,
-	extraSecrets ...string,
-) {
-	hs := m.historyStore()
-	if hs == nil || resp == nil || req == nil {
-		return
+	secrets ...string,
+) tea.Cmd {
+	if resp == nil || req == nil {
+		return nil
 	}
-
-	secrets := m.secretValuesForRedaction(req, extraSecrets...)
-	maskHeaders := !req.Metadata.AllowSensitiveHeaders
 
 	snippet := resp.Message
 	if req.Metadata.NoLog {
-		snippet = "<body suppressed>"
-	} else {
-		snippet = redactHistoryText(snippet, secrets, false)
-		if len(snippet) > 2000 {
-			snippet = snippet[:2000]
-		}
+		snippet = history.BodySuppressed
 	}
 	desc := strings.TrimSpace(req.Metadata.Description)
 	tags := normalizedTags(req.Metadata.Tags)
-
-	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
 	entry := history.Entry{
 		ID:          history.NewID(),
@@ -918,102 +873,31 @@ func (m *Model) recordGRPCHistory(
 		StatusCode:  int(resp.StatusCode),
 		Duration:    resp.Duration,
 		BodySnippet: snippet,
-		RequestText: redacted,
+		RequestText: rqeng.HistoryText(req, requestText),
 		Description: desc,
 		Tags:        tags,
 	}
-
-	if err := hs.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
-	}
-	m.historySelectedID = entry.ID
-	m.syncHistory()
+	return m.appendHistory(entry, secrets...)
 }
 
-func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...string) []string {
-	return m.secretValuesForEnv(m.ws.active, req, extraSecrets...)
+// appendHistory buffers e and returns the Cmd that writes it. It selects the newest entry, so the list follows to e.
+func (m *Model) appendHistory(e history.Entry, secrets ...string) tea.Cmd {
+	if m.hist == nil {
+		return nil
+	}
+	m.hist.Learn(secrets...)
+	_ = m.hist.Append(e)
+	m.selectNewestHistoryEntry()
+	hist, ch := m.hist, m.runMsgChan
+	return func() tea.Msg {
+		flushHistory(hist, ch)
+		return nil
+	}
 }
 
-func (m *Model) secretValuesForEnv(
-	env vars.Environment,
-	req *restfile.Request,
-	extraSecrets ...string,
-) []string {
-	return rqeng.SecretSources{
-		Doc:      m.doc,
-		Req:      req,
-		Env:      rqeng.ResolveEnvironment(env, m.doc, req),
-		FilePath: m.documentRuntimePath(m.doc),
-		Files:    m.fileStore(),
-		Globals:  m.globalsStore(),
-		Extra:    extraSecrets,
-	}.Secrets()
-}
-
-func (m *Model) secretValuesForSelection(
-	sel vars.Selection,
-	req *restfile.Request,
-	extraSecrets ...string,
-) []string {
-	env, err := m.environment(sel)
-	if err != nil {
-		return m.secretValuesForRedaction(req, extraSecrets...)
-	}
-	return m.secretValuesForEnv(env, req, extraSecrets...)
-}
-
-func redactHistoryText(text string, secrets []string, maskHeaders bool) string {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" && len(secrets) == 0 {
-		return text
-	}
-
-	redacted := text
-	if len(secrets) > 0 {
-		mask := maskSecret("", true)
-		for _, value := range secrets {
-			if value == "" || !strings.Contains(redacted, value) {
-				continue
-			}
-			redacted = strings.ReplaceAll(redacted, value, mask)
-		}
-	}
-
-	if maskHeaders {
-		redacted = redactSensitiveHeaders(redacted)
-	}
-
-	return redacted
-}
-
-func redactSensitiveHeaders(text string) string {
-	lines := strings.Split(text, "\n")
-	mask := maskSecret("", true)
-	changed := false
-	for idx, line := range lines {
-		colon := strings.Index(line, ":")
-		if colon <= 0 {
-			continue
-		}
-		if !header.Sensitive(line[:colon]) {
-			continue
-		}
-		rest := line[colon+1:]
-		leadingSpaces := len(rest) - len(strings.TrimLeft(rest, " \t"))
-		prefix := line[:colon+1]
-		pad := ""
-		if leadingSpaces > 0 {
-			pad = rest[:leadingSpaces]
-		}
-		lines[idx] = prefix + pad + mask
-		changed = true
-	}
-	if !changed {
-		return text
-	}
-	return strings.Join(lines, "\n")
+// flushHistory writes what hist buffers and reports on ch, the run message channel Update listens on.
+func flushHistory(hist *history.Buffer, ch chan tea.Msg) {
+	emitQueuedMsg(ch, historyFlushedMsg{err: hist.Flush()})
 }
 
 // Prefer failures and then the recorded baseline so reopening a history entry
@@ -1224,13 +1108,14 @@ func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 	if hs == nil {
 		return nil, nil
 	}
+	// Entries hold names and URLs masked, so the keys are masked the same way.
 	switch m.historyScope {
 	case historyScopeWorkflow:
 		name := strings.TrimSpace(m.historyWorkflowName)
 		if name == "" {
 			return nil, nil
 		}
-		return hs.ByWorkflow(name)
+		return hs.ByWorkflow(m.historySecrets().Text(name))
 	case historyScopeRequest:
 		if m.currentRequest == nil {
 			return nil, nil
@@ -1239,12 +1124,18 @@ func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 		if identifier == "" {
 			return nil, nil
 		}
-		return hs.ByRequest(identifier)
+		return hs.ByRequest(m.historySecrets().Text(identifier))
 	case historyScopeFile:
 		return m.historyEntriesForFileScope()
 	default:
 		return hs.Entries()
 	}
+}
+
+// historySecrets learns what a send of the current request masks, so a key matches entries an earlier session stored.
+func (m *Model) historySecrets() redact.Set {
+	m.hist.Learn(m.requestSvc(httpx.Options{}).Secrets(m.doc, m.currentRequest, m.ws.active)...)
+	return m.hist.Secrets()
 }
 
 func (m *Model) historyHeaderHeight() int {
@@ -1392,34 +1283,6 @@ func (m *Model) clearHistorySelections() {
 	for id := range m.historySelected {
 		delete(m.historySelected, id)
 	}
-}
-
-func (m *Model) deleteSelectedHistoryEntries() (int, int, error) {
-	hs := m.historyStore()
-	if hs == nil || len(m.historySelected) == 0 {
-		return 0, 0, nil
-	}
-	ids := make([]string, 0, len(m.historySelected))
-	for id := range m.historySelected {
-		ids = append(ids, id)
-	}
-	deleted := 0
-	failed := 0
-	var firstErr error
-	for _, id := range ids {
-		ok, err := hs.Delete(id)
-		if err != nil {
-			failed++
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		if ok {
-			deleted++
-		}
-	}
-	return deleted, failed, firstErr
 }
 
 func (m *Model) handleHistoryFilterKey(msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -1829,17 +1692,39 @@ func (m *Model) restoreHistorySelection() {
 }
 
 func (m *Model) selectNewestHistoryEntry() {
-	if len(m.historyEntries) == 0 {
+	idx := m.newestHistoryIndex()
+	if idx < 0 {
 		m.historySelectedID = ""
 		m.historyList.Select(-1)
 		return
 	}
-	idx := 0
-	if m.historySort == historySortOldest {
-		idx = len(m.historyEntries) - 1
-	}
 	m.historyList.Select(idx)
 	m.historySelectedID = m.historyEntries[idx].ID
+}
+
+// newestHistoryIndex returns the list index of the newest entry, or -1 when the list is empty.
+func (m *Model) newestHistoryIndex() int {
+	switch {
+	case len(m.historyEntries) == 0:
+		return -1
+	case m.historySort == historySortOldest:
+		return len(m.historyEntries) - 1
+	default:
+		return 0
+	}
+}
+
+func (m *Model) handleHistoryFlushed(msg historyFlushedMsg) {
+	if msg.err != nil {
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", msg.err), level: statusWarn})
+	}
+	// A selection on the newest entry stays there, so the entry a run just recorded is selected once written.
+	idx := m.newestHistoryIndex()
+	follow := idx < 0 || m.historyEntries[idx].ID == m.historySelectedID
+	m.syncHistory()
+	if follow {
+		m.selectNewestHistoryEntry()
+	}
 }
 
 func (m *Model) replayHistorySelection() tea.Cmd {
@@ -1849,25 +1734,57 @@ func (m *Model) replayHistorySelection() tea.Cmd {
 	return m.loadHistorySelection(true)
 }
 
-func (m *Model) deleteHistoryEntry(id string) (bool, error) {
-	if id == "" {
-		return false, nil
-	}
+// deleteHistoryCmd deletes ids off the update goroutine, since Buffer.Delete waits for a running flush.
+func (m *Model) deleteHistoryCmd(ids ...string) tea.Cmd {
 	hs := m.historyStore()
-	if hs == nil {
-		return false, nil
+	return func() tea.Msg {
+		msg := historyDeletedMsg{asked: len(ids)}
+		for _, id := range ids {
+			ok, err := hs.Delete(id)
+			switch {
+			case err != nil:
+				msg.failed++
+				if msg.err == nil {
+					msg.err = err
+				}
+			case ok:
+				msg.deleted++
+			}
+		}
+		return msg
 	}
-	deleted, err := hs.Delete(id)
-	if err != nil || !deleted {
-		return deleted, err
-	}
-	if m.historySelectedID == id {
-		m.historySelectedID = ""
-	}
-	if m.showHistoryPreview {
+}
+
+func (m *Model) handleHistoryDeleted(msg historyDeletedMsg) {
+	m.syncHistory()
+	if msg.deleted > 0 && m.showHistoryPreview {
 		m.closeHistoryPreview()
 	}
-	return true, nil
+	switch {
+	case msg.asked == 1 && msg.err != nil:
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history delete error: %v", msg.err), level: statusError})
+	case msg.asked == 1 && msg.deleted == 1:
+		m.setStatusMessage(statusMsg{text: "History entry deleted", level: statusInfo})
+	case msg.asked == 1:
+		m.setStatusMessage(statusMsg{text: "History entry not found", level: statusWarn})
+	case msg.err != nil:
+		level := statusError
+		if msg.deleted > 0 {
+			level = statusWarn
+		}
+		m.setStatusMessage(statusMsg{
+			text:  fmt.Sprintf("Deleted %d history entries, failed %d: %v", msg.deleted, msg.failed, msg.err),
+			level: level,
+		})
+	case msg.deleted == 0:
+		m.setStatusMessage(statusMsg{text: "History entries not found", level: statusWarn})
+	default:
+		label := "entries"
+		if msg.deleted == 1 {
+			label = "entry"
+		}
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Deleted %d history %s", msg.deleted, label), level: statusInfo})
+	}
 }
 
 func traceSpecFromRequest(req *restfile.Request) *restfile.TraceSpec {

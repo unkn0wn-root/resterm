@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -36,7 +35,7 @@ func (r repo[T]) Restore(v T) {
 }
 
 type Engine struct {
-	rq  core.Dep
+	rq  *request.Engine
 	cfg engine.Config
 	rt  *rtrun.Runtime
 	rs  repo[engine.RuntimeState]
@@ -55,7 +54,7 @@ func New(cfg engine.Config) *Engine {
 	return newWithDeps(rq, rt, cfg)
 }
 
-func newWithDeps(rq core.Dep, rt *rtrun.Runtime, cfg engine.Config) *Engine {
+func newWithDeps(rq *request.Engine, rt *rtrun.Runtime, cfg engine.Config) *Engine {
 	if rq == nil || rt == nil {
 		return &Engine{}
 	}

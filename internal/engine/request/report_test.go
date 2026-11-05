@@ -5,6 +5,7 @@ import (
 	"compress/flate"
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"io"
 	"net"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
@@ -51,7 +53,7 @@ func TestReportResponseCutsBodyAtLimit(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ReportResponse(&httpx.Response{StatusCode: 200, Body: []byte(tt.body)}, nil, nil, nil)
+			got := ReportResponse(&httpx.Response{StatusCode: 200, Body: []byte(tt.body)}, nil, nil, redact.Set{})
 			if len(got.Body) != tt.want || got.BodyTruncated != tt.cut {
 				t.Fatalf("body is %d bytes, truncated %t, want %d bytes, truncated %t",
 					len(got.Body), got.BodyTruncated, tt.want, tt.cut)
@@ -71,8 +73,8 @@ func TestReportResponseCutsBodyAtLimit(t *testing.T) {
 
 func TestReportResponseMasksBeforeCut(t *testing.T) {
 	const secret = "s3cr3t-tok"
-	body := strings.Repeat("a", runfmt.MaxBodyBytes-3) + secret + strings.Repeat("b", 10)
-	got := ReportResponse(&httpx.Response{StatusCode: 200, Body: []byte(body)}, nil, nil, []string{secret})
+	body := strings.Repeat("a", runfmt.MaxBodyBytes-4) + " " + secret + " " + strings.Repeat("b", 9)
+	got := ReportResponse(&httpx.Response{StatusCode: 200, Body: []byte(body)}, nil, nil, redact.New(secret))
 	if !got.BodyTruncated || got.BodySize != int64(len(body)) {
 		t.Fatalf("truncated %t, BodySize %d, want a cut body of %d bytes", got.BodyTruncated, got.BodySize, len(body))
 	}
@@ -105,7 +107,7 @@ func TestReportResponseMasksSensitiveHeaders(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resp := &httpx.Response{StatusCode: 200, Headers: http.Header{tt.key: tt.vals}}
-			got := ReportResponse(resp, nil, nil, []string{secret})
+			got := ReportResponse(resp, nil, nil, redact.New(secret))
 			want := http.Header{tt.key: tt.want}
 			if !reflect.DeepEqual(got.Headers, want) {
 				t.Fatalf("Headers = %v, want %v", got.Headers, want)
@@ -121,7 +123,7 @@ func TestReportResponseMasksCaptures(t *testing.T) {
 		{Name: "id", Value: "42", Scope: directive.ScopeFile},
 		{Name: "next", Value: "/next?token=" + secret, Scope: directive.ScopeGlobal},
 	}
-	got := ReportResponse(&httpx.Response{StatusCode: 204}, nil, caps, []string{secret})
+	got := ReportResponse(&httpx.Response{StatusCode: 204}, nil, caps, redact.New(secret))
 	want := []runfmt.Capture{
 		{Scope: "request", Name: "tok", Value: "•••", Secret: true},
 		{Scope: "file", Name: "id", Value: "42"},
@@ -143,12 +145,31 @@ func TestReportResponseStreamBody(t *testing.T) {
 		},
 		Body: []byte(raw),
 	}
-	got := ReportResponse(resp, nil, nil, nil)
+	got := ReportResponse(resp, nil, nil, redact.Set{})
 	if string(got.Body) != raw {
 		t.Fatalf("body = %q, want the transcript %q", got.Body, raw)
 	}
 	if !reflect.DeepEqual(got.Headers, resp.Headers) {
 		t.Fatalf("Headers = %v, want the stream headers kept", got.Headers)
+	}
+}
+
+func TestReportResponseBodyIsNeverNil(t *testing.T) {
+	for _, body := range [][]byte{nil, {}} {
+		for _, sec := range []redact.Set{{}, redact.New("tok-s3c")} {
+			got := ReportResponse(&httpx.Response{StatusCode: 204, Body: body}, nil, nil, sec)
+			if got.Body == nil || len(got.Body) != 0 {
+				t.Errorf("body %#v gives %#v, want an empty body that is not nil", body, got.Body)
+			}
+		}
+	}
+}
+
+func TestReportResponseSharesAnUnmaskedBody(t *testing.T) {
+	body := []byte(`{"token":"other"}`)
+	got := ReportResponse(&httpx.Response{StatusCode: 200, Body: body}, nil, nil, redact.New("tok-s3c"))
+	if len(got.Body) != len(body) || &got.Body[0] != &body[0] {
+		t.Fatalf("body %q was copied, want the response body itself", got.Body)
 	}
 }
 
@@ -164,7 +185,7 @@ func TestReportResponseNilWhenNothingArrived(t *testing.T) {
 	caps := []restfile.Variable{{Name: "id", Value: "42"}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ReportResponse(tt.resp, nil, caps, nil); got != nil {
+			if got := ReportResponse(tt.resp, nil, caps, redact.Set{}); got != nil {
 				t.Fatalf("ReportResponse(...) = %+v, want nil", got)
 			}
 		})
@@ -275,7 +296,7 @@ func TestReportResponseDecodesContentCoding(t *testing.T) {
 				},
 				Body: tt.body,
 			}
-			got := ReportResponse(resp, nil, caps, []string{secret})
+			got := ReportResponse(resp, nil, caps, redact.New(secret))
 			if string(got.Body) != tt.want {
 				t.Fatalf("body = %.80q, want %q", got.Body, tt.want)
 			}
@@ -299,13 +320,13 @@ func TestReportResponseDecodesContentCoding(t *testing.T) {
 
 func TestReportResponseMasksGzipBeforeCut(t *testing.T) {
 	const secret = "s3cr3t-tok"
-	plain := strings.Repeat("a", runfmt.MaxBodyBytes-3) + secret + strings.Repeat("b", 10)
+	plain := strings.Repeat("a", runfmt.MaxBodyBytes-4) + " " + secret + " " + strings.Repeat("b", 9)
 	resp := &httpx.Response{
 		StatusCode: 200,
 		Headers:    http.Header{"Content-Encoding": {"gzip"}},
 		Body:       gzipBytes(t, []byte(plain)),
 	}
-	got := ReportResponse(resp, nil, nil, []string{secret})
+	got := ReportResponse(resp, nil, nil, redact.New(secret))
 	if !got.BodyTruncated || len(got.Body) != runfmt.MaxBodyBytes {
 		t.Fatalf("body is %d bytes, truncated %t, want the decoded body cut to %d bytes",
 			len(got.Body), got.BodyTruncated, runfmt.MaxBodyBytes)
@@ -320,7 +341,7 @@ func TestReportResponseMasksGzipBeforeCut(t *testing.T) {
 func TestReportResponseMasksBinaryBody(t *testing.T) {
 	const secret = "s3cr3t-tok"
 	resp := &httpx.Response{StatusCode: 200, Body: []byte("\xff\xfe" + secret + "\x00\x01")}
-	got := ReportResponse(resp, nil, nil, []string{secret})
+	got := ReportResponse(resp, nil, nil, redact.New(secret))
 	if want := "\xff\xfe•••\x00\x01"; string(got.Body) != want {
 		t.Fatalf("body = %q, want %q", got.Body, want)
 	}
@@ -465,10 +486,66 @@ func TestReportResponseGRPC(t *testing.T) {
 					Captures: tt.caps,
 				}
 			}
-			got := ReportResponse(nil, res.GRPC, res.Captures, res.RuntimeSecrets)
+			got := ReportResponse(nil, res.GRPC, res.Captures, redact.New(res.RuntimeSecrets...))
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("ReportResponse(...) = %+v\nwant %+v", got, want)
 			}
 		})
+	}
+}
+
+func TestReportResponseMasksJSONBodies(t *testing.T) {
+	const sec = "tök/s3c<7>"
+	tests := []struct {
+		name string
+		sec  string
+		body string
+		want string
+	}{
+		{"go", sec, `{"token":"tök/s3c\u003c7\u003e","id":42}`, `{"token":"•••","id":42}`},
+		{"php", sec, `{"token":"t\u00f6k\/s3c<7>","id":42}`, `{"token":"•••","id":42}`},
+		{"python", sec, `{"token": "t\u00f6k/s3c<7>", "id": 42}`, `{"token": "•••", "id": 42}`},
+		{"dotnet", sec, `{"token":"t\u00F6k/s3c\u003C7\u003E","id":42}`, `{"token":"•••","id":42}`},
+		{"key", sec, `{"t\u00f6k\/s3c<7>":true,"id":42}`, `{"•••":true,"id":42}`},
+		{"nested", sec, `{"msg":"{\"t\":\"t\\u00f6k\\/s3c<7>\"}","id":42}`, `{"msg":"{\"t\":\"•••\"}","id":42}`},
+		{"number", "7314159", `{"pin":7314159,"id":42}`, `{"pin":"•••","id":42}`},
+		{"plain", sec, `{"token":"other","id":42}`, `{"token":"other","id":42}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &httpx.Response{
+				StatusCode: 200,
+				Headers:    http.Header{"Content-Type": {"application/json"}},
+				Body:       []byte(tt.body),
+			}
+			got := ReportResponse(resp, nil, nil, redact.New(tt.sec))
+			if string(got.Body) != tt.want {
+				t.Errorf("body = %s, want %s", got.Body, tt.want)
+			}
+		})
+	}
+}
+
+func TestReportResponseMasksBinaryValues(t *testing.T) {
+	const sec = "binsec77"
+	frame := base64.StdEncoding.EncodeToString([]byte("bin-send-" + sec))
+	plain := base64.StdEncoding.EncodeToString([]byte("plain"))
+	resp := &httpx.Response{
+		StatusCode: 200,
+		Headers: http.Header{
+			"Content-Type": {"application/json"},
+			"X-Trace-Bin":  {base64.RawURLEncoding.EncodeToString([]byte("id:" + sec + "?"))},
+			"X-Plain-Bin":  {plain},
+		},
+		Body: []byte(`{"events":[{"type":"binary","base64":"` + frame + `"},{"type":"text","text":"hello"}]}`),
+	}
+	got := ReportResponse(resp, nil, nil, redact.New(sec))
+	if want := `{"events":[{"type":"binary","base64":"•••"},{"type":"text","text":"hello"}]}`; string(
+		got.Body,
+	) != want {
+		t.Errorf("body = %s, want %s", got.Body, want)
+	}
+	if got.Headers.Get("X-Trace-Bin") != "•••" || got.Headers.Get("X-Plain-Bin") != plain {
+		t.Errorf("headers = %v, want X-Trace-Bin masked and X-Plain-Bin kept", got.Headers)
 	}
 }

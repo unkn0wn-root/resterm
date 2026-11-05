@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -262,7 +263,7 @@ fail(vars.global.get("token"))`,
 	if err != nil {
 		t.Fatalf("ExecuteWith() error = %v", err)
 	}
-	if len(res.Tests) != 1 || res.Tests[0].Passed || !strings.Contains(res.Tests[0].Message, "token "+secretMask) {
+	if len(res.Tests) != 1 || res.Tests[0].Passed || !strings.Contains(res.Tests[0].Message, "token "+redact.Mask) {
 		t.Fatalf("Tests = %#v, want one failed test that read the secret", res.Tests)
 	}
 	if res.ScriptErr == nil {
@@ -399,47 +400,31 @@ func sourceOnlySecretErr(secret string) error {
 	}
 }
 
-func TestRedactSourceOnlySecretSurvivesDisplayEscaping(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		secret string
-	}{
-		{"plain", leakedSecret},
-		{"tab", leakedSecret + "\tmore"},
-		{"soft hyphen", leakedSecret + "\u00admore"},
-		{"zero width space", leakedSecret + "\u200bmore"},
-		{"byte order mark", leakedSecret + "\ufeffmore"},
-		{"language tag", leakedSecret + "\U000e0001more"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			out := redactErr(sourceOnlySecretErr(tc.secret), []string{tc.secret})
-			if got := diag.Render(out); strings.Contains(got, leakedSecret) {
-				t.Errorf("rendered diagnostic discloses the secret:\n%s", got)
+func TestExecuteWithMasksWarningsAndSkipReason(t *testing.T) {
+	for _, val := range []string{"plain", leakedSecret} {
+		src := fmt.Sprintf("### one\n# @name one\n# @request-secret tok %s\n# @request val %s\n"+
+			"# @script pre-request\n> request.setHeader(\"X-Note\", \"{{\" + vars.get(\"val\") + \"}}\");\n"+
+			"GET http://example.test\n\n"+
+			"### two\n# @name two\n# @request-secret tok %s\n# @when \"%s\" == \"other\"\nGET http://example.test\n",
+			leakedSecret, val, leakedSecret, val)
+		doc := parser.Parse("mask.http", []byte(src))
+		eng, _ := newStubEngine(t)
+		warn, err := eng.ExecuteWith(doc, doc.Requests[0], testEnv(""), ExecOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		skip, err := eng.ExecuteWith(doc, doc.Requests[1], testEnv(""), ExecOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		shown := map[string]string{"warnings": strings.Join(warn.Warnings, "\n"), "skip reason": skip.SkipReason}
+		for field, text := range shown {
+			if val == leakedSecret && (strings.Contains(text, leakedSecret) || !strings.Contains(text, "•••")) {
+				t.Errorf("%s shows the secret: %q", field, text)
 			}
-			if src := diag.ReportOf(out).Source; strings.Contains(string(src), leakedSecret) {
-				t.Errorf("report source retains the secret: %q", src)
+			if val != leakedSecret && (!strings.Contains(text, val) || strings.Contains(text, "•••")) {
+				t.Errorf("%s = %q, want %q unmasked", field, text, val)
 			}
-		})
-	}
-}
-
-func TestRedactSecretsMasksURLEscapedForms(t *testing.T) {
-	const secret = "s3 cr+t/v=l;x"
-	for _, tc := range []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"raw", "token=s3 cr+t/v=l;x", "token=•••"},
-		{"query", "https://h/x?k=s3+cr%2Bt%2Fv%3Dl%3Bx&y=1", "https://h/x?k=•••&y=1"},
-		{"path", "https://h/hooks/s3%20cr+t/v=l;x", "https://h/hooks/•••"},
-		{"error", `Get "https://h/x?k=s3+cr%2Bt%2Fv%3Dl%3Bx": refused`, `Get "https://h/x?k=•••": refused`},
-		{"other", "https://h/x?k=other", "https://h/x?k=other"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := RedactSecrets(tc.in, []string{secret}); got != tc.want {
-				t.Errorf("RedactSecrets(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
+		}
 	}
 }

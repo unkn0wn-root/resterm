@@ -1,15 +1,19 @@
 package runner
 
 import (
+	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 
 	"io"
 	"sort"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
 	"github.com/unkn0wn-root/resterm/internal/scriptapi"
@@ -57,85 +61,118 @@ func ReportModel(rep *Report) runfmt.Report {
 		Failed:               rep.Failed,
 		Skipped:              rep.Skipped,
 		StopReason:           rep.StopReason,
-		Warnings:             rep.Warnings,
+		Warnings:             rep.WarningTexts(),
 	}
 	for _, res := range rep.Results {
-		out.Results = append(out.Results, toFormatResult(res))
+		out.Results = append(out.Results, toFormatResult(res, rep.secrets))
 	}
 	return out
 }
 
-func toFormatResult(res Result) runfmt.Result {
+// WarningTexts adds one warning per short secret, with secret values masked.
+func (r *Report) WarningTexts() []string {
+	out := maskEach(r.secrets, r.Warnings)
+	for _, name := range r.shortSecrets {
+		out = append(out, fmt.Sprintf(
+			"secret %q is shorter than %d characters, so reports may also mask the same word in unrelated text",
+			r.secrets.Text(name),
+			shortSecret,
+		))
+	}
+	return out
+}
+
+func toFormatResult(res Result, sec redact.Set) runfmt.Result {
+	err, scriptErr := diag.Redact(res.Err, sec.Text), diag.Redact(res.ScriptErr, sec.Text)
 	out := runfmt.Result{
 		Kind:                 string(res.Kind),
-		Name:                 strings.TrimSpace(res.Name),
-		Method:               strings.TrimSpace(res.Method),
-		Target:               strings.TrimSpace(res.Target),
-		EffectiveTarget:      strings.TrimSpace(res.EffectiveTarget),
+		Name:                 sec.Text(strings.TrimSpace(res.Name)),
+		Method:               sec.Text(strings.TrimSpace(res.Method)),
+		Target:               sec.Text(strings.TrimSpace(res.Target)),
+		EffectiveTarget:      sec.Text(strings.TrimSpace(res.EffectiveTarget)),
 		Environment:          strings.TrimSpace(res.Environment),
 		EnvironmentSelection: res.EnvironmentSelection,
 		Status:               resultStatusOf(res),
-		Summary:              strings.TrimSpace(res.Summary),
+		Summary:              sec.Text(strings.TrimSpace(res.Summary)),
 		Duration:             resultDuration(res),
 		Canceled:             res.Canceled,
-		SkipReason:           strings.TrimSpace(res.SkipReason),
-		Warnings:             res.Warnings,
-		Error:                errText(res.Err),
-		ErrorDetail:          runfmt.ErrorDetailFromError(res.Err),
-		ScriptError:          errText(res.ScriptErr),
-		ScriptErrorDetail:    runfmt.ErrorDetailFromError(res.ScriptErr),
-		Failure:              formatResultFailure(res),
-		HTTP:                 formatHTTP(res.Response),
-		GRPC:                 formatGRPC(res.GRPC),
-		Stream:               formatStream(res.Stream),
+		SkipReason:           sec.Text(strings.TrimSpace(res.SkipReason)),
+		Warnings:             maskEach(sec, res.Warnings),
+		Error:                errText(err),
+		ErrorDetail:          runfmt.ErrorDetailFromError(err),
+		ScriptError:          errText(scriptErr),
+		ScriptErrorDetail:    runfmt.ErrorDetailFromError(scriptErr),
+		HTTP:                 formatHTTP(res.Response, sec),
+		GRPC:                 formatGRPC(res.GRPC, sec),
+		Stream:               formatStream(res.Stream, sec),
 		Response:             res.report,
-		Trace:                formatTrace(res.Trace),
-		Tests:                formatTests(res.Tests),
+		Trace:                formatTrace(res.Trace, sec),
+		Tests:                formatTests(res.Tests, sec),
 		Compare:              formatCompare(res.Compare),
-		Profile:              formatProfile(res.Profile),
-		Steps:                formatSteps(res.Steps),
+		Profile:              formatProfile(res.Profile, sec),
+		Steps:                formatSteps(res.Steps, sec),
+	}
+	// Step and profile failures arrive masked.
+	switch f, from := resultFailure(res); from {
+	case runfail.OriginProfile:
+		i := slices.IndexFunc(out.Profile.Failures, func(f runfmt.ProfileFailure) bool { return !f.Warmup })
+		out.Failure = out.Profile.Failures[i].Failure
+	case runfail.OriginStep:
+		i := slices.IndexFunc(out.Steps, func(s runfmt.Step) bool { return s.Failure != nil })
+		out.Failure = out.Steps[i].Failure
+	default:
+		out.Failure = formatRunFailure(f, cmp.Or(out.ErrorDetail, out.ScriptErrorDetail), sec)
 	}
 	return out
 }
 
-func toFormatStep(step StepResult) runfmt.Step {
+func toFormatStep(step StepResult, sec redact.Set) runfmt.Step {
+	err, scriptErr := diag.Redact(step.Err, sec.Text), diag.Redact(step.ScriptErr, sec.Text)
 	out := runfmt.Step{
-		Name:                 strings.TrimSpace(step.Name),
-		Method:               strings.TrimSpace(step.Method),
-		Target:               strings.TrimSpace(step.Target),
-		EffectiveTarget:      strings.TrimSpace(step.EffectiveTarget),
+		Name:                 sec.Text(strings.TrimSpace(step.Name)),
+		Method:               sec.Text(strings.TrimSpace(step.Method)),
+		Target:               sec.Text(strings.TrimSpace(step.Target)),
+		EffectiveTarget:      sec.Text(strings.TrimSpace(step.EffectiveTarget)),
 		Environment:          strings.TrimSpace(step.Environment),
 		EnvironmentSelection: step.EnvironmentSelection,
-		Branch:               strings.TrimSpace(step.Branch),
+		Branch:               sec.Text(strings.TrimSpace(step.Branch)),
 		Iteration:            step.Iteration,
 		Total:                step.Total,
 		Status:               stepStatusOf(step),
-		Summary:              strings.TrimSpace(step.Summary),
+		Summary:              sec.Text(strings.TrimSpace(step.Summary)),
 		Duration:             step.Duration,
 		Canceled:             step.Canceled,
-		SkipReason:           strings.TrimSpace(step.SkipReason),
-		Error:                errText(step.Err),
-		ErrorDetail:          runfmt.ErrorDetailFromError(step.Err),
-		ScriptError:          errText(step.ScriptErr),
-		ScriptErrorDetail:    runfmt.ErrorDetailFromError(step.ScriptErr),
-		Failure:              formatStepFailure(step),
-		HTTP:                 formatHTTP(step.Response),
-		GRPC:                 formatGRPC(step.GRPC),
-		Stream:               formatStream(step.Stream),
+		SkipReason:           sec.Text(strings.TrimSpace(step.SkipReason)),
+		Error:                errText(err),
+		ErrorDetail:          runfmt.ErrorDetailFromError(err),
+		ScriptError:          errText(scriptErr),
+		ScriptErrorDetail:    runfmt.ErrorDetailFromError(scriptErr),
+		HTTP:                 formatHTTP(step.Response, sec),
+		GRPC:                 formatGRPC(step.GRPC, sec),
+		Stream:               formatStream(step.Stream, sec),
 		Response:             step.report,
-		Trace:                formatTrace(step.Trace),
-		Tests:                formatTests(step.Tests),
+		Trace:                formatTrace(step.Trace, sec),
+		Tests:                formatTests(step.Tests, sec),
 	}
+	out.Failure = formatRunFailure(stepFailure(step), cmp.Or(out.ErrorDetail, out.ScriptErrorDetail), sec)
 	return out
 }
 
-func formatSteps(src []StepResult) []runfmt.Step {
+func formatSteps(src []StepResult, sec redact.Set) []runfmt.Step {
 	if len(src) == 0 {
 		return nil
 	}
 	out := make([]runfmt.Step, 0, len(src))
 	for _, step := range src {
-		out = append(out, toFormatStep(step))
+		out = append(out, toFormatStep(step, sec))
+	}
+	return out
+}
+
+func maskEach(sec redact.Set, src []string) []string {
+	out := slices.Clone(src)
+	for i := range out {
+		out[i] = sec.Text(out[i])
 	}
 	return out
 }
@@ -167,38 +204,42 @@ func errText(err error) string {
 	return err.Error()
 }
 
-func formatHTTP(resp *httpx.Response) *runfmt.HTTP {
+func formatHTTP(resp *httpx.Response, sec redact.Set) *runfmt.HTTP {
 	if resp == nil {
 		return nil
 	}
 	return &runfmt.HTTP{
-		Status:     strings.TrimSpace(resp.Status),
+		Status:     sec.Text(strings.TrimSpace(resp.Status)),
 		StatusCode: resp.StatusCode,
 		Protocol:   strings.TrimSpace(resp.Proto),
 	}
 }
 
-func formatGRPC(resp *grpcx.Response) *runfmt.GRPC {
+func formatGRPC(resp *grpcx.Response, sec redact.Set) *runfmt.GRPC {
 	if resp == nil {
 		return nil
 	}
-	return &runfmt.GRPC{
+	out := &runfmt.GRPC{
 		Code:          resp.StatusCode.String(),
 		StatusCode:    int(resp.StatusCode),
-		StatusMessage: strings.TrimSpace(resp.StatusMessage),
+		StatusMessage: sec.Text(strings.TrimSpace(resp.StatusMessage)),
 		StatusDetails: slices.Clone(resp.StatusDetails),
 	}
+	for i, d := range out.StatusDetails {
+		out.StatusDetails[i] = string(sec.JSON([]byte(d)))
+	}
+	return out
 }
 
-func formatTests(src []scriptapi.TestResult) []runfmt.Test {
+func formatTests(src []scriptapi.TestResult, sec redact.Set) []runfmt.Test {
 	if len(src) == 0 {
 		return nil
 	}
 	out := make([]runfmt.Test, 0, len(src))
 	for _, test := range src {
 		out = append(out, runfmt.Test{
-			Name:    strings.TrimSpace(test.Name),
-			Message: strings.TrimSpace(test.Message),
+			Name:    sec.Text(strings.TrimSpace(test.Name)),
+			Message: sec.Text(strings.TrimSpace(test.Message)),
 			Passed:  test.Passed,
 			Elapsed: test.Elapsed,
 		})
@@ -216,7 +257,7 @@ func formatCompare(info *CompareInfo) *runfmt.Compare {
 	}
 }
 
-func formatProfile(prof *ProfileInfo) *runfmt.Profile {
+func formatProfile(prof *ProfileInfo, sec redact.Set) *runfmt.Profile {
 	if prof == nil {
 		return nil
 	}
@@ -240,68 +281,30 @@ func formatProfile(prof *ProfileInfo) *runfmt.Profile {
 			out.Failures = append(out.Failures, runfmt.ProfileFailure{
 				Iteration:  fail.Iteration,
 				Warmup:     fail.Warmup,
-				Reason:     strings.TrimSpace(fail.Reason),
-				Status:     strings.TrimSpace(fail.Status),
+				Reason:     sec.Text(strings.TrimSpace(fail.Reason)),
+				Status:     sec.Text(strings.TrimSpace(fail.Status)),
 				StatusCode: fail.StatusCode,
 				Duration:   fail.Duration,
-				Failure:    formatProfileFailure(fail),
+				Failure: formatRunFailure(
+					fail.Failure,
+					runfmt.ErrorDetailFromError(diag.Redact(fail.Err, sec.Text)),
+					sec,
+				),
 			})
 		}
 	}
 	return out
 }
 
-func formatResultFailure(res Result) *runfmt.Failure {
-	f, from := resultFailure(res)
-	switch from {
-	case runfail.OriginProfile:
-		pf, _ := res.Profile.measuredFailure()
-		return formatProfileFailure(pf)
-	case runfail.OriginStep:
-		step, _ := firstFailedStep(res.Steps)
-		return formatStepFailure(step)
-	default:
-		return formatRunFailure(f, resultErrorDetail(res))
-	}
-}
-
-func formatStepFailure(step StepResult) *runfmt.Failure {
-	return formatRunFailure(stepFailure(step), stepErrorDetail(step))
-}
-
-func formatProfileFailure(fail ProfileFailure) *runfmt.Failure {
-	return formatRunFailure(fail.Failure, runfmt.ErrorDetailFromError(fail.Err))
-}
-
-func formatRunFailure(failure runfail.Failure, detail *runfmt.ErrorDetail) *runfmt.Failure {
+func formatRunFailure(failure runfail.Failure, detail *runfmt.ErrorDetail, sec redact.Set) *runfmt.Failure {
 	if failure.Code == "" {
 		return nil
 	}
 	return runfmt.AttachErrorDetail(runfmt.FromFailure(runfail.New(
 		failure.Code,
-		strings.TrimSpace(failure.Message),
-		strings.TrimSpace(failure.Source),
+		sec.Text(strings.TrimSpace(failure.Message)),
+		sec.Text(strings.TrimSpace(failure.Source)),
 	)), detail)
-}
-
-func resultErrorDetail(res Result) *runfmt.ErrorDetail {
-	if res.Err != nil {
-		return runfmt.ErrorDetailFromError(res.Err)
-	}
-	if res.ScriptErr != nil {
-		return runfmt.ErrorDetailFromError(res.ScriptErr)
-	}
-	return nil
-}
-
-func stepErrorDetail(step StepResult) *runfmt.ErrorDetail {
-	if step.Err != nil {
-		return runfmt.ErrorDetailFromError(step.Err)
-	}
-	if step.ScriptErr != nil {
-		return runfmt.ErrorDetailFromError(step.ScriptErr)
-	}
-	return nil
 }
 
 func formatLatency(lat *history.ProfileLatency) *runfmt.Latency {
@@ -349,7 +352,7 @@ func formatHistogram(src []history.ProfileHistogramBin) []runfmt.HistBin {
 	return out
 }
 
-func formatStream(info *StreamInfo) *runfmt.Stream {
+func formatStream(info *StreamInfo, sec redact.Set) *runfmt.Stream {
 	if info == nil {
 		return nil
 	}
@@ -359,21 +362,26 @@ func formatStream(info *StreamInfo) *runfmt.Stream {
 		TranscriptPath: strings.TrimSpace(info.TranscriptPath),
 	}
 	if info.Err != nil {
-		out.Error = info.Err.Error()
+		out.Error = sec.Text(info.Err.Error())
 	}
 	if len(info.Summary) > 0 {
 		out.Summary = runfmt.CloneAnyMap(info.Summary)
+		for k, v := range out.Summary {
+			if s, ok := v.(string); ok {
+				out.Summary[k] = sec.Text(s)
+			}
+		}
 	}
 	return out
 }
 
-func formatTrace(info *TraceInfo) *runfmt.Trace {
+func formatTrace(info *TraceInfo, sec redact.Set) *runfmt.Trace {
 	if info == nil || info.Summary == nil {
 		return nil
 	}
 	out := &runfmt.Trace{
 		Duration:     info.Summary.Duration,
-		Error:        strings.TrimSpace(info.Summary.Error),
+		Error:        sec.Text(strings.TrimSpace(info.Summary.Error)),
 		ArtifactPath: strings.TrimSpace(info.ArtifactPath),
 	}
 	if bud := info.Summary.Budgets; bud != nil {

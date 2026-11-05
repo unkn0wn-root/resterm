@@ -19,14 +19,8 @@ import (
 // History keeps exact counts but stores details for only the first 20 failures.
 const maxProfileHistoryFailures = 20
 
-// HistoryEntry builds a record without samples or response bodies. The redact
-// function removes secrets and, when mask is true, sensitive headers.
-func (s ProfileSnapshot) HistoryEntry(
-	req *restfile.Request,
-	env vars.Environment,
-	path string,
-	redact func(text string, mask bool) string,
-) history.Entry {
+// HistoryEntry builds a record without samples or response bodies.
+func (s ProfileSnapshot) HistoryEntry(req *restfile.Request, env vars.Environment, path string) history.Entry {
 	now := time.Now()
 	return history.Entry{
 		ID:                   history.NewID(),
@@ -40,10 +34,10 @@ func (s ProfileSnapshot) HistoryEntry(
 		Status:               s.historyStatus(),
 		Duration:             s.Progress.Elapsed,
 		BodySnippet:          "<profile run - see profileResults>",
-		RequestText:          redact(request.RenderRequestText(req), !req.Metadata.AllowSensitiveHeaders),
+		RequestText:          request.HistoryText(req, request.RenderRequestText(req)),
 		Description:          strings.TrimSpace(req.Metadata.Description),
 		Tags:                 engine.Tags(req.Metadata.Tags),
-		ProfileResults:       s.historyResults(func(text string) string { return redact(text, false) }),
+		ProfileResults:       s.historyResults(),
 	}
 }
 
@@ -58,7 +52,7 @@ func (s ProfileSnapshot) historyStatus() string {
 	}
 }
 
-func (s ProfileSnapshot) historyResults(redact func(string) string) *history.ProfileResults {
+func (s ProfileSnapshot) historyResults() *history.ProfileResults {
 	p := s.Progress
 	out := &history.ProfileResults{
 		TotalRuns:        p.Done,
@@ -77,13 +71,13 @@ func (s ProfileSnapshot) historyResults(redact func(string) string) *history.Pro
 		StatusCodes:      historyStatusCodes(s.StatusCodes),
 	}
 	if s.Err != nil {
-		out.Error = redact(s.Err.Error())
+		out.Error = s.Err.Error()
 	}
 	for _, f := range s.Failures[:min(len(s.Failures), maxProfileHistoryFailures)] {
 		out.Failures = append(out.Failures, history.ProfileFailure{
 			Iteration:  f.Iteration,
 			Warmup:     f.Warmup,
-			Reason:     redact(f.Reason),
+			Reason:     f.Reason,
 			StatusCode: f.StatusCode,
 			Duration:   f.Duration,
 		})

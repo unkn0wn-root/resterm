@@ -83,11 +83,11 @@ func usesStateDir(opts Options) bool {
 	return opts.History || opts.PersistGlobals || opts.PersistAuth
 }
 
-func openHistoryStore(paths statePaths, opts Options) history.Store {
+func openHistoryStore(paths statePaths, opts Options) *history.Buffer {
 	if !opts.History || strings.TrimSpace(paths.History) == "" {
 		return nil
 	}
-	return histdb.New(paths.History)
+	return &history.Buffer{Store: histdb.New(paths.History)}
 }
 
 func loadRunnerState(h engine.Executor, paths statePaths, opts Options) error {

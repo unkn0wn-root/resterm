@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -104,9 +106,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.stopStatusPulseIfIdle()
 	case runReqMsg:
 		// Send cancels a run and starts the next at once, so the canceled run
-		// can report after it. The engine has already written its history.
+		// can report after it. Its history shows when its flush finishes.
 		if typed.seq != m.sendSeq {
-			m.syncHistory()
 			break
 		}
 		m.stopSending()
@@ -128,6 +129,11 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case runWarningMsg:
 		m.setStatusMessage(statusMsg{text: typed.text, level: statusWarn})
 		cmds = append(cmds, m.nextRunMsgCmd())
+	case historyFlushedMsg:
+		m.handleHistoryFlushed(typed)
+		cmds = append(cmds, m.nextRunMsgCmd())
+	case historyDeletedMsg:
+		m.handleHistoryDeleted(typed)
 	case repeatProgressMsg:
 		m.setStatusMessage(repeatProgressStatus(typed.progress))
 		cmds = append(cmds, m.nextRunMsgCmd())
@@ -1812,70 +1818,16 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(nil)
 			case "d":
 				if len(m.historySelected) > 0 {
-					deleted, failed, err := m.deleteSelectedHistoryEntries()
+					ids := slices.Collect(maps.Keys(m.historySelected))
 					m.clearHistorySelections()
-					if deleted > 0 || failed > 0 {
-						m.syncHistory()
-					}
-					if err != nil {
-						level := statusError
-						if deleted > 0 {
-							level = statusWarn
-						}
-						m.setStatusMessage(
-							statusMsg{
-								text: fmt.Sprintf(
-									"Deleted %d history entries, failed %d: %v",
-									deleted,
-									failed,
-									err,
-								),
-								level: level,
-							},
-						)
-						return combine(nil)
-					}
-					if deleted == 0 {
-						m.setStatusMessage(
-							statusMsg{text: "History entries not found", level: statusWarn},
-						)
-						return combine(nil)
-					}
-					label := "entries"
-					if deleted == 1 {
-						label = "entry"
-					}
-					m.setStatusMessage(
-						statusMsg{
-							text:  fmt.Sprintf("Deleted %d history %s", deleted, label),
-							level: statusInfo,
-						},
-					)
-					return combine(nil)
+					return combine(m.deleteHistoryCmd(ids...))
 				}
 				if entry, ok := m.selectedHistoryEntry(); ok {
-					if deleted, err := m.deleteHistoryEntry(entry.ID); err != nil {
-						m.setStatusMessage(
-							statusMsg{
-								text:  fmt.Sprintf("history delete error: %v", err),
-								level: statusError,
-							},
-						)
-					} else if deleted {
-						m.syncHistory()
-						m.setStatusMessage(
-							statusMsg{text: "History entry deleted", level: statusInfo},
-						)
-					} else {
-						m.setStatusMessage(
-							statusMsg{text: "History entry not found", level: statusWarn},
-						)
-					}
-				} else {
-					m.setStatusMessage(
-						statusMsg{text: "No history entry selected", level: statusWarn},
-					)
+					return combine(m.deleteHistoryCmd(entry.ID))
 				}
+				m.setStatusMessage(
+					statusMsg{text: "No history entry selected", level: statusWarn},
+				)
 				return combine(nil)
 			case "r", "R", "ctrl+r", "ctrl+R":
 				return combine(m.replayHistorySelection())

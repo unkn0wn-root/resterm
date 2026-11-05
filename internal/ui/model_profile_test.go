@@ -340,6 +340,7 @@ func TestProfileHistoryReopensDashboard(t *testing.T) {
 		Response: testHTTPResp("https://example.com/profile", 500, `{}`, 10*time.Millisecond),
 	})
 	r.finish(core.RunDone{})
+	settleHistory(t, &m)
 
 	entries, err := store.Entries()
 	if err != nil || len(entries) != 1 {
@@ -379,6 +380,7 @@ func TestProfileRunComparesWithPreviousRun(t *testing.T) {
 		r.start(0)
 		r.done(0, engine.RequestResult{Response: testHTTPResp("https://example.com/profile", 200, `{}`, d)})
 		r.finish(core.RunDone{Success: true})
+		settleHistory(t, &m)
 	}
 	content, _ := m.paneContentBase(responsePanePrimary, responseTabStats, 100)
 	if plain := ansi.Strip(content); !strings.Contains(plain, "vs run at") || !strings.Contains(plain, "+10ms") {

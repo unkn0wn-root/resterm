@@ -17,6 +17,11 @@ type Store interface {
 	Close() error
 }
 
+// Learner is implemented by a Store that masks what it writes, so a writer hands it an entry's secrets first.
+type Learner interface {
+	Learn(secrets ...string)
+}
+
 // NormPath returns the key that ByFile matches on.
 // The sqlite store saves it with every row, so changing this breaks lookups of older history.
 func NormPath(p string) string {

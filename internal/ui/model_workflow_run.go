@@ -553,56 +553,11 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 		}
 	}
 
+	// The engine records each for-each item.
 	if st != nil && st.origin == workflowOriginForEach {
-		if msg.historyDone {
-			prev := workflowHistoryCount(m.historyStore())
-			m.syncRecordedHistory()
-			if workflowHistoryCount(m.historyStore()) > prev {
-				return cmds
-			}
-		}
-		switch {
-		case msg.skipped:
-			m.recordSkippedHistory(
-				msg.executed,
-				msg.requestText,
-				msg.environment,
-				msg.skipReason,
-				msg.selection,
-				msg.runtimeSecrets...,
-			)
-		case msg.response != nil:
-			m.recordHTTPHistory(
-				msg.response,
-				msg.executed,
-				msg.requestText,
-				msg.environment,
-				msg.selection,
-				msg.runtimeSecrets...,
-			)
-		case msg.grpc != nil:
-			m.recordGRPCHistory(
-				msg.grpc,
-				msg.executed,
-				msg.requestText,
-				msg.environment,
-				msg.selection,
-				msg.runtimeSecrets...,
-			)
-		}
+		m.syncRecordedHistory()
 	}
 	return cmds
-}
-
-func workflowHistoryCount(hs history.Store) int {
-	if hs == nil {
-		return 0
-	}
-	es, err := hs.Entries()
-	if err != nil {
-		return 0
-	}
-	return len(es)
 }
 
 func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
@@ -620,8 +575,9 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	m.setStatusMessage(
 		statusMsg{text: state.statusSummary(), level: state.statusLevel(), noModal: true},
 	)
+	var hist tea.Cmd
 	if state == nil || state.origin != workflowOriginForEach {
-		m.recordWorkflowHistory(state, summary, report)
+		hist = m.recordWorkflowHistory(state, summary, report)
 	}
 
 	shown := termtext.Block(report)
@@ -653,7 +609,7 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 		m.invalidateStatsCaches(m.responseLatest)
 		cmd = m.activateWorkflowStatsView(m.responseLatest)
 	}
-	return cmd
+	return batchCommands(cmd, hist)
 }
 
 func (state *workflowState) summary() string {
@@ -779,10 +735,9 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func (m *Model) recordWorkflowHistory(state *workflowState, summary, report string) {
-	hs := m.historyStore()
-	if hs == nil || state == nil {
-		return
+func (m *Model) recordWorkflowHistory(state *workflowState, summary, report string) tea.Cmd {
+	if state == nil {
+		return nil
 	}
 	workflowName := strings.TrimSpace(state.workflow.Name)
 	entry := history.Entry{
@@ -806,14 +761,9 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 	if entry.RequestName == "" {
 		entry.RequestName = "Workflow"
 	}
-	if err := hs.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
-		return
-	}
-	m.historySelectedID = entry.ID
+	cmd := m.appendHistory(entry)
 	m.setHistoryWorkflow(workflowName)
+	return cmd
 }
 
 func (state *workflowState) definition() string {

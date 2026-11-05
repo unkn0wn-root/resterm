@@ -1,0 +1,6 @@
+go test fuzz v1
+string("0")
+byte('\x06')
+byte('T')
+string("00")
+string("0")
