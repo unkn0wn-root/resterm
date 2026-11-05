@@ -15,22 +15,23 @@ import (
 
 const Mask = "•••"
 
-// maxDepth bounds the escape layers Text decodes, so hostile nesting stays linear.
-const maxDepth = 4
-
-// budget bounds the bytes decoded per input byte. Escapes and base64 it cannot finish searching are masked whole.
-const budget = 128
-
-// Every value is budgeted as if it were this many bytes longer, so a short one can finish a few nested escapes.
-const budgetFloor = 1 << 10
-
-// Base64 writes every 3 bytes as 4 characters.
-const quantum = 4
+const (
+	// maxDepth bounds the escape layers Text decodes, so hostile nesting stays linear.
+	maxDepth = 4
+	// budget bounds the bytes decoded per input byte. Escapes and base64 it cannot finish searching are masked whole.
+	budget = 128
+	// Every value is budgeted as if it were this many bytes longer, so a short one can finish a few nested escapes.
+	budgetFloor = 1 << 10
+)
 
 // A secret shorter than this many characters is masked only as a whole word, so masking does not cut other words.
 const wordLen = 16
 
-const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_"
+const (
+	// Base64 writes every 3 bytes as 4 characters.
+	quantum     = 4
+	base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_"
+)
 
 var urlAlphabet = strings.NewReplacer("+", "-", "/", "_")
 
@@ -78,6 +79,7 @@ func New(secrets ...string) Set {
 			out = append(out, needle{string(b), chars})
 		}
 	}
+
 	// A form two secrets share follows the longer secret.
 	slices.SortFunc(out, func(a, b needle) int {
 		return cmp.Or(strings.Compare(a.v, b.v), cmp.Compare(b.chars, a.chars))
@@ -107,6 +109,67 @@ func (s Set) Text(v string) string {
 	return x.mask(v)
 }
 
+// JSON masks each scalar or key holding a secret and keeps every other byte.
+func (s Set) JSON(b []byte) []byte {
+	if len(s.needles) == 0 {
+		return b
+	}
+	src := string(b)
+	x := search{set: s, left: budget * (len(b) + budgetFloor)}
+	// Unmarshal turns invalid UTF-8 into U+FFFD, which would hide a secret.
+	if !utf8.Valid(b) || !json.Valid(b) {
+		if m := x.mask(src); m != src {
+			return []byte(m)
+		}
+		return b
+	}
+
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	// A report is not HTML, so "&", "<" and ">" stay as they are.
+	enc.SetEscapeHTML(false)
+	last := 0
+	for i := 0; i < len(src); i++ {
+		var v string
+		j := i + 1
+		switch c := src[i]; {
+		case c == '"':
+			for ; src[j] != '"'; j++ {
+				if src[j] == '\\' {
+					j++
+				}
+			}
+			j++
+			v = src[i+1 : j-1]
+			if strings.IndexByte(v, '\\') >= 0 {
+				var d string
+				_ = json.Unmarshal(b[i:j], &d)
+				v = d
+			}
+		case c == '-' || '0' <= c && c <= '9' || c == 't' || c == 'f' || c == 'n':
+			for j < len(src) && strings.IndexByte(",:]} \t\r\n", src[j]) < 0 {
+				j++
+			}
+			v = src[i:j]
+		default:
+			continue
+		}
+		if m := x.mask(v); m != v {
+			out.WriteString(src[last:i])
+			_ = enc.Encode(m)
+			// Encode ends each value with a newline.
+			out.Truncate(out.Len() - 1)
+			last = j
+		}
+		i = j - 1
+	}
+	if out.Len() == 0 {
+		return b
+	}
+	out.WriteString(src[last:])
+	return out.Bytes()
+}
+
 func (s *search) mask(v string) string {
 	spans := s.descend(v, nil, nil)
 	if spans == nil {
@@ -132,10 +195,12 @@ func (s *search) mask(v string) string {
 
 func (s *search) find(text string, layers []layer, spans []span) []span {
 	add := func(a, b int) { spans = append(spans, source(layers, a, b)) }
+
 	// A short secret is likely part of a longer word when an ASCII letter, digit or "_" at its edge touches another.
 	inWord := func(p int) bool {
 		return 0 < p && p < len(text) && syntax.IsWordChar(rune(text[p-1])) && syntax.IsWordChar(rune(text[p]))
 	}
+
 	// A match that neither holds nor starts right after a byte this layer decoded was found in the layer above.
 	top := []piece{{dn: len(text)}}
 	if len(layers) > 0 {
@@ -194,10 +259,12 @@ func (s *search) find(text string, layers []layer, spans []span) []span {
 			}
 			j = k
 		}
+
 		end := j
 		for end < len(text) && end-j < len("==") && text[end] == '=' {
 			end++
 		}
+
 		if j-i < long {
 			i = end
 			continue
@@ -329,65 +396,4 @@ func (s *search) passes(text string, off int, layers []layer, spans []span) []sp
 		}
 	}
 	return spans
-}
-
-// JSON masks each scalar or key holding a secret and keeps every other byte.
-func (s Set) JSON(b []byte) []byte {
-	if len(s.needles) == 0 {
-		return b
-	}
-	src := string(b)
-	x := search{set: s, left: budget * (len(b) + budgetFloor)}
-	// Unmarshal turns invalid UTF-8 into U+FFFD, which would hide a secret.
-	if !utf8.Valid(b) || !json.Valid(b) {
-		if m := x.mask(src); m != src {
-			return []byte(m)
-		}
-		return b
-	}
-
-	var out bytes.Buffer
-	enc := json.NewEncoder(&out)
-	// A report is not HTML, so "&", "<" and ">" stay as they are.
-	enc.SetEscapeHTML(false)
-	last := 0
-	for i := 0; i < len(src); i++ {
-		var v string
-		j := i + 1
-		switch c := src[i]; {
-		case c == '"':
-			for ; src[j] != '"'; j++ {
-				if src[j] == '\\' {
-					j++
-				}
-			}
-			j++
-			v = src[i+1 : j-1]
-			if strings.IndexByte(v, '\\') >= 0 {
-				var d string
-				_ = json.Unmarshal(b[i:j], &d)
-				v = d
-			}
-		case c == '-' || '0' <= c && c <= '9' || c == 't' || c == 'f' || c == 'n':
-			for j < len(src) && strings.IndexByte(",:]} \t\r\n", src[j]) < 0 {
-				j++
-			}
-			v = src[i:j]
-		default:
-			continue
-		}
-		if m := x.mask(v); m != v {
-			out.WriteString(src[last:i])
-			_ = enc.Encode(m)
-			// Encode ends each value with a newline.
-			out.Truncate(out.Len() - 1)
-			last = j
-		}
-		i = j - 1
-	}
-	if out.Len() == 0 {
-		return b
-	}
-	out.WriteString(src[last:])
-	return out.Bytes()
 }
