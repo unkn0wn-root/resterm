@@ -795,7 +795,7 @@ func TestRenderRequestMasksSentFrames(t *testing.T) {
 func TestRenderRequestShowsShortSecretWarning(t *testing.T) {
 	src := "# @file-secret data a\n\n### A\nGET https://api.example.com/x\n"
 	rep := runReport(t, src, runner.Select{All: true}, map[string]reply{"/x": {status: "200 OK", body: "{}"}})
-	const want = `secret "d•••t•••" is shorter than 4 characters, so reports may also mask unrelated text that contains it`
+	const want = `secret "data" is shorter than 4 characters, so reports may also mask the same word in unrelated text`
 	for _, mode := range []Mode{ModePretty, ModeRaw} {
 		out, err := Render(rep, Options{Mode: mode})
 		if err != nil {

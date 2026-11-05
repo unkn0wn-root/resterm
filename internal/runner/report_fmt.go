@@ -74,7 +74,7 @@ func (r *Report) WarningTexts() []string {
 	out := maskEach(r.secrets, r.Warnings)
 	for _, name := range r.shortSecrets {
 		out = append(out, fmt.Sprintf(
-			"secret %q is shorter than %d characters, so reports may also mask unrelated text that contains it",
+			"secret %q is shorter than %d characters, so reports may also mask the same word in unrelated text",
 			r.secrets.Text(name),
 			shortSecret,
 		))

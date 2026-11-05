@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp/syntax"
 	"strconv"
 	"strings"
 	"testing"
@@ -134,8 +135,15 @@ func TestJSONNested(t *testing.T) {
 }
 
 func TestJSONNumberKeyLiteral(t *testing.T) {
-	got := New("123456", "true").JSON([]byte(`{"pin":123456,"ok":true,"123456":null,"n":-1234567e3}`))
-	if want := `{"pin":"•••","ok":"•••","•••":null,"n":"-•••7e3"}`; string(got) != want {
+	got := New("123456", "true").JSON([]byte(`{"pin":123456,"ok":true,"123456":null,"n":-123456.5,"m":-1234567e3}`))
+	if want := `{"pin":"•••","ok":"•••","•••":null,"n":"-•••.5","m":-1234567e3}`; string(got) != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+func TestJSONKeepsHTML(t *testing.T) {
+	got := New("test").JSON([]byte(`{"a":"<b>test</b> & co","b":"latest","c":"test\u2028x"}`))
+	if want := `{"a":"<b>•••</b> & co","b":"latest","c":"•••\u2028x"}`; string(got) != want {
 		t.Fatalf("got %s, want %s", got, want)
 	}
 }
@@ -214,8 +222,26 @@ func FuzzJSON(f *testing.F) {
 			t.Skip()
 		}
 		got := New(sec).JSON(doc)
+		short := utf8.RuneCountInString(sec) < wordLen
+		keeps := func(v string) bool {
+			if short && strings.ContainsAny(v, `\%&+`) {
+				return false
+			}
+			inWord := func(p int) bool {
+				return 0 < p && p < len(v) && syntax.IsWordChar(rune(v[p-1])) && syntax.IsWordChar(rune(v[p]))
+			}
+			for i := 0; ; i++ {
+				j := strings.Index(v[i:], sec)
+				if j < 0 {
+					return false
+				}
+				if i += j; !short || !inWord(i) && !inWord(i+len(sec)) {
+					return true
+				}
+			}
+		}
 		if !utf8.Valid(doc) || !json.Valid(doc) {
-			if bytes.Contains(got, []byte(sec)) {
+			if keeps(string(got)) {
 				t.Fatalf("JSON(%q) = %q keeps the secret %q", doc, got, sec)
 			}
 			return
@@ -240,7 +266,7 @@ func FuzzJSON(f *testing.F) {
 			case nil:
 				text = "null"
 			}
-			if strings.Contains(text, sec) {
+			if keeps(text) {
 				t.Fatalf("JSON(%s) = %s keeps the secret %q in %q", doc, got, sec, text)
 			}
 		}

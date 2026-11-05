@@ -73,7 +73,7 @@ func TestReportResponseCutsBodyAtLimit(t *testing.T) {
 
 func TestReportResponseMasksBeforeCut(t *testing.T) {
 	const secret = "s3cr3t-tok"
-	body := strings.Repeat("a", runfmt.MaxBodyBytes-3) + secret + strings.Repeat("b", 10)
+	body := strings.Repeat("a", runfmt.MaxBodyBytes-4) + " " + secret + " " + strings.Repeat("b", 9)
 	got := ReportResponse(&httpx.Response{StatusCode: 200, Body: []byte(body)}, nil, nil, redact.New(secret))
 	if !got.BodyTruncated || got.BodySize != int64(len(body)) {
 		t.Fatalf("truncated %t, BodySize %d, want a cut body of %d bytes", got.BodyTruncated, got.BodySize, len(body))
@@ -320,7 +320,7 @@ func TestReportResponseDecodesContentCoding(t *testing.T) {
 
 func TestReportResponseMasksGzipBeforeCut(t *testing.T) {
 	const secret = "s3cr3t-tok"
-	plain := strings.Repeat("a", runfmt.MaxBodyBytes-3) + secret + strings.Repeat("b", 10)
+	plain := strings.Repeat("a", runfmt.MaxBodyBytes-4) + " " + secret + " " + strings.Repeat("b", 9)
 	resp := &httpx.Response{
 		StatusCode: 200,
 		Headers:    http.Header{"Content-Encoding": {"gzip"}},

@@ -107,7 +107,7 @@ func Build(opts Options) (*Plan, error) {
 	}, nil
 }
 
-// Masking a secret this short also hides unrelated text, so a run warns about it.
+// Masking a secret this short also hides the same word in unrelated text, so a run warns about it.
 const shortSecret = 4
 
 func RunPlan(ctx context.Context, pl *Plan) (_ *Report, err error) {

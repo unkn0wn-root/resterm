@@ -30,20 +30,22 @@ const localeUnit = `c.defineLocale("en-xx",{` +
 	`ordinal:function(e){var a=e%10;return e+(1==~~(e%100/10)?"th":1==a?"st":2==a?"nd":3==a?"rd":"th")}}),`
 
 func TestNewKeepsEachSecretOnce(t *testing.T) {
+	tail := strings.Repeat("a", 14)
 	tests := []struct {
 		secs []string
-		want []string
+		want []needle
 	}{
 		{nil, nil},
 		{[]string{""}, nil},
-		{[]string{"tok", "tok"}, []string{"tok"}},
-		{[]string{"a b"}, []string{"a b"}},
-		{[]string{"ü b"}, []string{"ü b", "\xfc b"}},
-		{[]string{"bcd", "abc"}, []string{"abc", "bcd"}},
+		{[]string{"tok", "tok"}, []needle{{"tok", 3}}},
+		{[]string{"a b"}, []needle{{"a b", 3}}},
+		{[]string{"ü b"}, []needle{{"ü b", 3}, {"\xfc b", 3}}},
+		{[]string{"bcd", "abc"}, []needle{{"abc", 3}, {"bcd", 3}}},
+		{[]string{"©" + tail, "Â©" + tail}, []needle{{"\xa9" + tail, 15}, {"©" + tail, 16}, {"Â©" + tail, 16}}},
 	}
 	for _, tt := range tests {
 		if got := New(tt.secs...).needles; !slices.Equal(got, tt.want) {
-			t.Errorf("New(%q) needles = %q, want %q", tt.secs, got, tt.want)
+			t.Errorf("New(%q) needles = %#v, want %#v", tt.secs, got, tt.want)
 		}
 	}
 }
@@ -147,20 +149,83 @@ func TestTextKeepsOtherText(t *testing.T) {
 }
 
 func TestTextOverlap(t *testing.T) {
+	tail := strings.Repeat("a", 14)
 	tests := []struct {
 		secs []string
 		in   string
 		want string
 	}{
-		{[]string{"xab", "abcdef"}, "1xabcdef2", "1•••2"},
-		{[]string{"abcdef", "xab"}, "1xabcdef2", "1•••2"},
-		{[]string{"aa"}, "aaaa", "•••"},
-		{[]string{"ab", "cd"}, "xabcdy", "x•••y"},
+		{[]string{"xab", "abcdef"}, "1 xab-abcdef 2", "1 •••-••• 2"},
+		{[]string{"abcdef", "xab"}, "1xabcdef2", "1xabcdef2"},
+		{[]string{"x-ab", "ab-cd"}, "1 x-ab-cd 2", "1 ••• 2"},
+		{[]string{"aa"}, "aaaa", "aaaa"},
+		{[]string{"ab", "cd"}, "xabcdy", "xabcdy"},
+		{[]string{"ab", "cd"}, "x ab cd y", "x ••• ••• y"},
 		{[]string{"ab"}, "ab-ab", "•••-•••"},
+		{[]string{"©" + tail, "Â©" + tail}, "x©" + tail + "y", "x•••y"},
+		{[]string{"©" + tail}, "x©" + tail + "y", "x©" + tail + "y"},
 	}
 	for _, tt := range tests {
 		if got := New(tt.secs...).Text(tt.in); got != tt.want {
 			t.Errorf("Text(%q) with %q = %q, want %q", tt.in, tt.secs, got, tt.want)
+		}
+	}
+}
+
+func TestTextWords(t *testing.T) {
+	b64 := base64.StdEncoding.EncodeToString
+	tests := []struct {
+		sec  string
+		in   string
+		want string
+	}{
+		{"test", "latest test failed", "latest ••• failed"},
+		{"test", "?pw=test&x=1", "?pw=•••&x=1"},
+		{"test", "test", "•••"},
+		{"test", "attest tests test_ _test test9 9test", "attest tests test_ _test test9 9test"},
+		{"1234", "pin1234 pin 1234", "pin1234 pin •••"},
+		{"a", "a", "•••"},
+		{"a", "ab a ba,a", "ab ••• ba,•••"},
+		{"ab", "ab", "•••"},
+		{"s3cr3t-pw-77-x1", "xs3cr3t-pw-77-x1y", "xs3cr3t-pw-77-x1y"},
+		{"s3cr3t-pw-77-x1", "x s3cr3t-pw-77-x1 y", "x ••• y"},
+		{"s3cr3t-pw-77-x16", "xs3cr3t-pw-77-x16y", "x•••y"},
+		{"s3cr3t-pw-77-x17!", "xs3cr3t-pw-77-x17!y", "x•••y"},
+		{"üñï12", "xüñï12y", "xüñï12y"},
+		{"ü1234", "xü1234", "x•••"},
+		{"üüüüüüüü1", "xüüüüüüüü1y", "xüüüüüüüü1y"},
+		{"ü1234567890ñ1234", "xü1234567890ñ1234y", "x•••y"},
+		{"p/ss!", "xp/ss!", "xp/ss!"},
+		{"p/ss!", "x p/ss!y", "x •••y"},
+		{"!!", "a!!b", "a•••b"},
+		{"-tok", "x-tok", "x•••"},
+		{"-tok", "-toky", "-toky"},
+		{"test", "日本test", "日本•••"},
+		{"latest", "latestä", "•••ä"},
+		{"t", "tést", "•••ést"},
+		{"test", "\xfftest\xfe", "\xff•••\xfe"},
+		{"test", `\ntest`, `\n•••`},
+		{"test", "%2Ftest", "%2F•••"},
+		{"test", "%252Ftest", "%252F•••"},
+		{"test", "&#47;test", "&#47;•••"},
+		{"test", "%41test", "%41test"},
+		{"test", "%2541test", "%2541test"},
+		{"test", `\x41test`, `\x41test`},
+		{"test", "test%41", "•••%41"},
+		{"st", "t%C3%A9st", "t%C3%A9•••"},
+		{"test", "k=a+test+b", "k=a+•••+b"},
+		{"test", b64([]byte("latest")), b64([]byte("latest"))},
+		{"test", b64([]byte("a test")), "•••"},
+		{"test", "Basic+" + b64([]byte("test")), "•••"},
+		{"l<x5>", `\U0001F600` + b64([]byte("l<x5>")), `\U0001F600•••`},
+		{`q"x1`, "%uD83D%uDE00\n" + b64([]byte(`q"x1`)), "%uD83D%uDE00\n•••"},
+		{"l<x5>", "\\U0001F600\r\n\t" + b64([]byte("l<x5>")), "\\U0001F600\r\n\t•••"},
+		{"a日本日本日本日本日本日本日本", `\U0001F600` + b64([]byte("a日本日本日本日本日本日本日本")), `\U0001F600•••`},
+		{"abc", "YWJjY+", "•••+"},
+	}
+	for _, tt := range tests {
+		if got := New(tt.sec).Text(tt.in); got != tt.want {
+			t.Errorf("Text(%q) with %q = %q, want %q", tt.in, tt.sec, got, tt.want)
 		}
 	}
 }
@@ -207,13 +272,14 @@ func TestTextBase64(t *testing.T) {
 
 func TestTextBase64InText(t *testing.T) {
 	b64 := base64.StdEncoding.EncodeToString
-	pem := b64([]byte(strings.Repeat("x", 53) + "s3cr3tpw77" + strings.Repeat("y", 30)))
+	pem := b64([]byte(strings.Repeat("x", 52) + " s3cr3tpw77 " + strings.Repeat("y", 29)))
 	tests := []struct {
 		sec  string
 		in   string
 		want string
 	}{
 		{"binsec77", "not base64 YmluLXNlbmQtYmluc2VjNzc=", "not base64 •••"},
+		{"s3cr3t-pw-77-x18a?", "k=" + url.QueryEscape(b64([]byte("s3cr3t-pw-77-x18a?"))) + "&n=1", "k=•••&n=1"},
 		{
 			"s3cr3t-b64",
 			`{"data":"data:application/octet-stream;base64,` + b64([]byte("\x00\x01s3cr3t-b64\xff")) + `"}`,
@@ -292,8 +358,8 @@ func TestTextClusterEdges(t *testing.T) {
 	const sec = "s3cr3tpw77"
 	b64 := base64.StdEncoding.EncodeToString
 	pct := func(v string) string { return fmt.Sprintf("%%%02X", v[0]) + v[1:] }
-	wrap := b64([]byte(strings.Repeat("x", 120) + sec))
-	pad := b64([]byte(strings.Repeat("x", 120) + sec + strings.Repeat("y", 108)))
+	wrap := b64([]byte(strings.Repeat("x", 119) + "-" + sec))
+	pad := b64([]byte(strings.Repeat("x", 119) + "-" + sec + "-" + strings.Repeat("y", 107)))
 	ref := "&#" + strings.Repeat("0", 28) + "38;"
 	tests := []struct {
 		secs []string
@@ -302,8 +368,11 @@ func TestTextClusterEdges(t *testing.T) {
 	}{
 		{[]string{"zz", ".abc/"}, "z.abc%2F", "z•••"},
 		{[]string{"zz", "abcdefghij/"}, "abcdefghij%2F tail", "••• tail"},
-		{[]string{"AA"}, "%41%41A", "•••"},
-		{[]string{"ab.c/d"}, "%41" + strings.Repeat("y", 130) + "ab.c%2Fd", "%41" + strings.Repeat("y", 130) + "•••"},
+		{[]string{"AA"}, "%41A", "•••"},
+		{[]string{"AA"}, "%41%41A", "%41%41A"},
+		{[]string{"b"}, "a%62", "a%62"},
+		{[]string{"b"}, ".%62", ".•••"},
+		{[]string{"ab.c/d"}, "%41" + strings.Repeat("y", 129) + "-ab.c%2Fd", "%41" + strings.Repeat("y", 129) + "-•••"},
 		{
 			[]string{"zz", ".abc/"},
 			"%41" + strings.Repeat("y", 131) + ".abc%2F",
@@ -321,7 +390,7 @@ func TestTextClusterEdges(t *testing.T) {
 		{
 			[]string{`t3\`},
 			"\n  t&#x33;\\u005c&#92;%5c\"t3\\\\\"\\u00\\x74&#51;\\x5CdDNc,+.%FC",
-			"\n  •••\"•••\"\\u00•••,+.%FC",
+			"\n  •••\"•••\"\\u00\\x74&#51;\\•••,+.%FC",
 		},
 		{[]string{"s x8"}, "d=" + b64([]byte("k=s+x8")), "d=•••"},
 		{[]string{"s x8"}, "d=" + b64([]byte("\xff\xfek=s+x8")), "d=•••"},
@@ -343,6 +412,8 @@ func TestTextBudget(t *testing.T) {
 	page := `<a href="/q?u=a%2520b&amp;c=1">x</a> <script>var s="{\"a\":\"b\\\"c+d\"}"</script> `
 	page = strings.Repeat(page+strings.Repeat("plain log line with words\n", 20), 40)
 	loc := html.EscapeString(string(goJSON(strings.Repeat(localeUnit, 64<<10/len(localeUnit)), true)))
+	near := `%25252541` + strings.Repeat("YWJj", 8) + `+&amp; plain log words here and more of them. `
+	near = strings.Repeat(near, 16<<10/len(near))
 	tests := []struct {
 		sec  string
 		in   string
@@ -357,6 +428,8 @@ func TestTextBudget(t *testing.T) {
 		{"s3cr3tpw77", strings.Repeat(run, 4) + "plain", strings.Repeat(run, 3) + "••• plain"},
 		{"a%41&b", page + "a%41&amp;b", page + Mask},
 		{"s3cr3tpw77", loc + " k=s3cr3tpw77", loc + " k=" + Mask},
+		{"s3cr3t-pw-77-x16", near + "k=s3cr3t-pw-77-x16", near + "k=" + Mask},
+		{"s3cr3tpw77", near + "k=s3cr3tpw77", Mask},
 	}
 	for _, tt := range tests {
 		if got := New(tt.sec).Text(tt.in); got != tt.want {
@@ -487,10 +560,10 @@ func FuzzText(f *testing.F) {
 
 		v := prefix + suffix
 		if strings.ContainsAny(v, `\%+&`) ||
-			slices.ContainsFunc(s.needles, func(n string) bool { return strings.Contains(v, n) }) {
+			slices.ContainsFunc(s.needles, func(n needle) bool { return strings.Contains(v, n.v) }) {
 			return
 		}
-		short := len(slices.MinFunc(s.needles, func(a, b string) int { return len(a) - len(b) }))
+		short := len(slices.MinFunc(s.needles, func(a, b needle) int { return len(a.v) - len(b.v) }).v)
 		for _, run := range strings.FieldsFunc(v, func(r rune) bool { return !strings.ContainsRune(base64Chars+"\r\n", r) }) {
 			if base64.RawStdEncoding.DecodedLen(len(run)) >= short {
 				return
@@ -535,8 +608,8 @@ func FuzzTextEncoders(f *testing.F) {
 		if i := int(second) % (len(stdEncoders) + 1); i < len(stdEncoders) {
 			enc = stdEncoders[i](enc)
 		}
-		in := prefix + " " + enc + " " + suffix
-		if got := New(sec).Text(in); strings.Contains(got, enc) {
+		in := prefix + ". " + enc + " ." + suffix
+		if got := New(sec).Text(in); strings.Contains(got, " "+enc+" ") {
 			t.Fatalf("Text(%q) = %q keeps %q, the secret %q", in, got, enc, sec)
 		}
 	})

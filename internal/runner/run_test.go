@@ -1034,6 +1034,7 @@ func TestRunWarnsAboutShortSecrets(t *testing.T) {
 	src := strings.Join([]string{
 		"# @file-secret pin q7",
 		"# @file-secret data a",
+		"# @file-secret ab.q7 zz",
 		"# @file-secret wide abcd",
 		"# @file-secret multi ü€x",
 		"# @file-secret fromenv env:RST441_FS",
@@ -1066,9 +1067,9 @@ func TestRunWarnsAboutShortSecrets(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	var want []string
-	for _, name := range []string{"code", "d•••t•••", "fromenv", "gl", "multi", "pin", "ref", "tok"} {
+	for _, name := range []string{"ab.•••", "code", "data", "fromenv", "gl", "multi", "pin", "ref", "tok"} {
 		want = append(want, fmt.Sprintf(
-			"secret %q is shorter than 4 characters, so reports may also mask unrelated text that contains it",
+			"secret %q is shorter than 4 characters, so reports may also mask the same word in unrelated text",
 			name,
 		))
 	}

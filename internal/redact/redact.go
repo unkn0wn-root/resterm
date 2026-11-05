@@ -1,8 +1,11 @@
 package redact
 
 import (
+	"bytes"
+	"cmp"
 	"encoding/base64"
 	"encoding/json"
+	"regexp/syntax"
 	"slices"
 	"sort"
 	"strings"
@@ -24,6 +27,9 @@ const budgetFloor = 1 << 10
 // Base64 writes every 3 bytes as 4 characters.
 const quantum = 4
 
+// A secret shorter than this many characters is masked only as a whole word, so masking does not cut other words.
+const wordLen = 16
+
 const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_"
 
 var urlAlphabet = strings.NewReplacer("+", "-", "/", "_")
@@ -37,18 +43,26 @@ var isBase64 = func() (t [256]bool) {
 
 // The zero Set masks nothing.
 type Set struct {
-	needles []string
+	needles []needle
 	short   int
 	longest int
+	words   bool
+}
+
+type needle struct {
+	v string
+	// chars counts the secret's characters, so every form of a secret follows the same rule.
+	chars int
 }
 
 func New(secrets ...string) Set {
-	out := make([]string, 0, 2*len(secrets))
+	out := make([]needle, 0, 2*len(secrets))
 	for _, s := range secrets {
 		if s == "" {
 			continue
 		}
-		out = append(out, s)
+		chars := utf8.RuneCountInString(s)
+		out = append(out, needle{s, chars})
 		// Latin-1 forms, such as JavaScript's escape(), write U+0080 to U+00FF as one byte.
 		if strings.ContainsFunc(s, func(r rune) bool { return utf8.RuneSelf <= r && r <= unicode.MaxLatin1 }) {
 			b := make([]byte, 0, len(s))
@@ -61,15 +75,18 @@ func New(secrets ...string) Set {
 				}
 				i += n
 			}
-			out = append(out, string(b))
+			out = append(out, needle{string(b), chars})
 		}
 	}
-	slices.Sort(out)
-	out = slices.Compact(out)
-	set := Set{needles: out}
+	// A form two secrets share follows the longer secret.
+	slices.SortFunc(out, func(a, b needle) int {
+		return cmp.Or(strings.Compare(a.v, b.v), cmp.Compare(b.chars, a.chars))
+	})
+	out = slices.CompactFunc(out, func(a, b needle) bool { return a.v == b.v })
+	set := Set{needles: out, words: slices.ContainsFunc(out, func(n needle) bool { return n.chars < wordLen })}
 	if len(out) > 0 {
-		set.short = len(slices.MinFunc(out, func(a, b string) int { return len(a) - len(b) }))
-		set.longest = len(slices.MaxFunc(out, func(a, b string) int { return len(a) - len(b) }))
+		set.short = len(slices.MinFunc(out, func(a, b needle) int { return len(a.v) - len(b.v) }).v)
+		set.longest = len(slices.MaxFunc(out, func(a, b needle) int { return len(a.v) - len(b.v) }).v)
 	}
 	return set
 }
@@ -115,25 +132,31 @@ func (s *search) mask(v string) string {
 
 func (s *search) find(text string, layers []layer, spans []span) []span {
 	add := func(a, b int) { spans = append(spans, source(layers, a, b)) }
-	// A match that holds no byte this layer decoded was found in the layer above.
+	// A short secret is likely part of a longer word when an ASCII letter, digit or "_" at its edge touches another.
+	inWord := func(p int) bool {
+		return 0 < p && p < len(text) && syntax.IsWordChar(rune(text[p-1])) && syntax.IsWordChar(rune(text[p]))
+	}
+	// A match that neither holds nor starts right after a byte this layer decoded was found in the layer above.
 	top := []piece{{dn: len(text)}}
 	if len(layers) > 0 {
 		top = layers[len(layers)-1].pieces
 	}
 	for k := 0; k < len(top); {
-		a, b := max(0, top[k].d-s.set.longest+1), top[k].d+top[k].dn+s.set.longest-1
+		a, b := max(0, top[k].d-s.set.longest+1), top[k].d+top[k].dn+s.set.longest
 		for k++; k < len(top) && top[k].d-s.set.longest+1 < b; k++ {
-			b = top[k].d + top[k].dn + s.set.longest - 1
+			b = top[k].d + top[k].dn + s.set.longest
 		}
 		w := text[a:min(b, len(text))]
 		for _, n := range s.set.needles {
 			for i := 0; ; i++ {
-				j := strings.Index(w[i:], n)
+				j := strings.Index(w[i:], n.v)
 				if j < 0 {
 					break
 				}
 				i += j
-				add(a+i, a+i+len(n))
+				if p := a + i; n.chars >= wordLen || !inWord(p) && !inWord(p+len(n.v)) {
+					add(p, p+len(n.v))
+				}
 			}
 		}
 	}
@@ -181,8 +204,14 @@ func (s *search) find(text string, layers []layer, spans []span) []span {
 		}
 		if len(layers) > 0 {
 			// A run that holds no byte this layer decoded was tried in the layer above.
+			lo, hi := i, end-1
+			if s.set.words {
+				// The layer above may have joined the run to an escape next to it, gluing bytes to a short secret.
+				lo = len(strings.TrimRight(text[:i], " \t\r\n")) - 1
+				hi = len(text) - len(strings.TrimLeft(text[end:], " \t\r\n"))
+			}
 			l := layers[len(layers)-1].pieces
-			if k := sort.Search(len(l), func(k int) bool { return l[k].d+l[k].dn > i }); k == len(l) || l[k].d >= end {
+			if k := sort.Search(len(l), func(k int) bool { return l[k].d+l[k].dn > lo }); k == len(l) || l[k].d > hi {
 				i = end
 				continue
 			}
@@ -317,7 +346,10 @@ func (s Set) JSON(b []byte) []byte {
 		return b
 	}
 
-	var out []byte
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	// A report is not HTML, so "&", "<" and ">" stay as they are.
+	enc.SetEscapeHTML(false)
 	last := 0
 	for i := 0; i < len(src); i++ {
 		var v string
@@ -345,14 +377,17 @@ func (s Set) JSON(b []byte) []byte {
 			continue
 		}
 		if m := x.mask(v); m != v {
-			q, _ := json.Marshal(m)
-			out = append(append(out, src[last:i]...), q...)
+			out.WriteString(src[last:i])
+			_ = enc.Encode(m)
+			// Encode ends each value with a newline.
+			out.Truncate(out.Len() - 1)
 			last = j
 		}
 		i = j - 1
 	}
-	if out == nil {
+	if out.Len() == 0 {
 		return b
 	}
-	return append(out, src[last:]...)
+	out.WriteString(src[last:])
+	return out.Bytes()
 }
