@@ -1,11 +1,8 @@
 package redact
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"html"
-	"math/rand/v2"
 	"strings"
 	"testing"
 )
@@ -91,23 +88,6 @@ func BenchmarkTextHostile(b *testing.B) {
 	}
 }
 
-func BenchmarkTextMixed(b *testing.B) {
-	s := New(benchSecrets()...)
-	for name, unit := range map[string]string{
-		"html-url": `<a href="/x?a=1&amp;b=%2F">x</a> `,
-		"two":      `a%2Fb \"q\" `,
-		"three":    `%41\x41&#65; `,
-	} {
-		body := strings.Repeat(unit, 1<<20/len(unit))
-		b.Run(name, func(b *testing.B) {
-			b.SetBytes(int64(len(body)))
-			for b.Loop() {
-				s.Text(body)
-			}
-		})
-	}
-}
-
 var snippets = map[string]string{
 	"three": `%41\x41&#65; `,
 	"real":  `{"next":"https://h/?q=a%2520b&amp;r=\\\"x\\\"+y"} `,
@@ -129,58 +109,5 @@ func BenchmarkTextSnippet(b *testing.B) {
 				s.Text(body)
 			}
 		})
-	}
-}
-
-func BenchmarkJSONPage(b *testing.B) {
-	s := New(benchSecrets()...)
-	page := withSnippet(`<a href="/q?u=a%2520b&amp;c=1">x</a> <script>var s="{\"a\":\"b\\\"c+d\"}"</script>`)
-	body, _ := json.Marshal(map[string]string{"html": page})
-	b.SetBytes(int64(len(body)))
-	for b.Loop() {
-		s.JSON(body)
-	}
-}
-
-func BenchmarkTextLocaleState(b *testing.B) {
-	s := New(benchSecrets()...)
-	body := html.EscapeString(string(goJSON(strings.Repeat(localeUnit, 1<<20/len(localeUnit)), true)))
-	b.SetBytes(int64(len(body)))
-	for b.Loop() {
-		s.Text(body)
-	}
-}
-
-func BenchmarkText32MiB(b *testing.B) {
-	s := New(benchSecrets()...)
-	body := []byte(strings.Repeat(withSnippet(snippets["real"]), 32))
-	b.SetBytes(int64(len(body)))
-	for b.Loop() {
-		s.JSON(body)
-	}
-}
-
-func BenchmarkJSONBase64(b *testing.B) {
-	s := New(benchSecrets()...)
-	raw := make([]byte, 3<<18)
-	_, _ = rand.NewChaCha8([32]byte{}).Read(raw)
-	body := []byte(`{"name":"photo.png","data":"` + base64.StdEncoding.EncodeToString(raw) + `"}`)
-	b.SetBytes(int64(len(body)))
-	for b.Loop() {
-		s.JSON(body)
-	}
-}
-
-func BenchmarkTextShort(b *testing.B) {
-	s := New(benchSecrets()...)
-	for b.Loop() {
-		s.Text("GET https://api.example.test/v1/users/42?key=abc%2Fdef")
-	}
-}
-
-func BenchmarkNew(b *testing.B) {
-	secs := benchSecrets()
-	for b.Loop() {
-		New(secs...)
 	}
 }
