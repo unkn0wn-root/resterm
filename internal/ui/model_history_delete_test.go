@@ -40,7 +40,13 @@ func TestDeleteHistoryEntryRemovesFromStore(t *testing.T) {
 	model.historyList.Select(0)
 
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
-	updated, _ := model.Update(msg)
+	updated, cmd := model.Update(msg)
+	model = updated.(Model)
+	deleted, ok := findMsg[historyDeletedMsg](cmd)
+	if !ok {
+		t.Fatal("d returned no history delete")
+	}
+	updated, _ = model.Update(deleted)
 	model = updated.(Model)
 
 	entries, err := store.Entries()

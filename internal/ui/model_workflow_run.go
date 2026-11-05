@@ -575,8 +575,9 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	m.setStatusMessage(
 		statusMsg{text: state.statusSummary(), level: state.statusLevel(), noModal: true},
 	)
+	var hist tea.Cmd
 	if state == nil || state.origin != workflowOriginForEach {
-		m.recordWorkflowHistory(state, summary, report)
+		hist = m.recordWorkflowHistory(state, summary, report)
 	}
 
 	shown := termtext.Block(report)
@@ -608,7 +609,7 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 		m.invalidateStatsCaches(m.responseLatest)
 		cmd = m.activateWorkflowStatsView(m.responseLatest)
 	}
-	return cmd
+	return batchCommands(cmd, hist)
 }
 
 func (state *workflowState) summary() string {
@@ -734,9 +735,9 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func (m *Model) recordWorkflowHistory(state *workflowState, summary, report string) {
+func (m *Model) recordWorkflowHistory(state *workflowState, summary, report string) tea.Cmd {
 	if state == nil {
-		return
+		return nil
 	}
 	workflowName := strings.TrimSpace(state.workflow.Name)
 	entry := history.Entry{
@@ -760,8 +761,9 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 	if entry.RequestName == "" {
 		entry.RequestName = "Workflow"
 	}
-	m.appendHistory(entry)
+	cmd := m.appendHistory(entry)
 	m.setHistoryWorkflow(workflowName)
+	return cmd
 }
 
 func (state *workflowState) definition() string {

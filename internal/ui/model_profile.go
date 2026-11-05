@@ -153,9 +153,9 @@ func (m *Model) finalizeProfileRun(st *profileState) tea.Cmd {
 		}
 	}
 
-	m.recordProfileHistory(st, snap)
+	hist := m.recordProfileHistory(st, snap)
 	m.setStatusMessage(statusMsg{text: snap.Summary(), level: profileStatusLevel(snap), noModal: true})
-	return batchCmds([]tea.Cmd{cmd, m.syncResponsePanes()})
+	return batchCmds([]tea.Cmd{cmd, m.syncResponsePanes(), hist})
 }
 
 func (m *Model) showProfileResponse(st *profileState) tea.Cmd {
@@ -210,8 +210,8 @@ func profileStatusLevel(snap core.ProfileSnapshot) statusLevel {
 }
 
 // @no-log does not skip profile history because profile entries store no body.
-func (m *Model) recordProfileHistory(st *profileState, snap core.ProfileSnapshot) {
-	m.appendHistory(snap.HistoryEntry(st.req, st.env, m.historyFilePath()))
+func (m *Model) recordProfileHistory(st *profileState, snap core.ProfileSnapshot) tea.Cmd {
+	return m.appendHistory(snap.HistoryEntry(st.req, st.env, m.historyFilePath()))
 }
 
 // Wait for RunDone after cancellation so the result has final counts.
@@ -237,7 +237,7 @@ func (m *Model) profileBaseline(k core.ProfileKey, before time.Time) *core.Profi
 		return nil
 	}
 	// Entries hold names and URLs masked, so the key is masked the same way.
-	sec := m.hist.Secrets()
+	sec := m.historySecrets()
 	k.Request, k.URL = sec.Text(k.Request), sec.Text(k.URL)
 	entries, err := hs.ByRequest(k.Request)
 	if err != nil {

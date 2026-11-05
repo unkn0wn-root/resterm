@@ -81,6 +81,14 @@ func sendRequest(t *testing.T, m *Model, req *restfile.Request) {
 	}
 	next, _ := m.Update(msg)
 	*m = next.(Model)
+	settleHistory(t, m)
+}
+
+func settleHistory(t *testing.T, m *Model) {
+	t.Helper()
+	if err := m.hist.Flush(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func runToEnd(t *testing.T, m *Model, cmd tea.Cmd) {
@@ -113,6 +121,7 @@ func runToEnd(t *testing.T, m *Model, cmd tea.Cmd) {
 		next, _ := m.Update(msg)
 		*m = next.(Model)
 	}
+	settleHistory(t, m)
 }
 
 func storedText(e history.Entry) string {
@@ -205,7 +214,7 @@ func TestHistoryRemasksSessionEntries(t *testing.T) {
 	} {
 		req := &restfile.Request{Method: "GET", URL: url, Metadata: restfile.RequestMetadata{Name: tt.name}}
 		resp := &httpx.Response{Status: "200 OK", StatusCode: http.StatusOK, Body: []byte(tt.body)}
-		m.recordHTTPHistory(resp, req, "GET "+url+"\n", "dev", vars.Selection{})
+		collectMsgs(m.recordHTTPHistory(resp, req, "GET "+url+"\n", "dev", vars.Selection{}))
 	}
 
 	es, err := store.Entries()

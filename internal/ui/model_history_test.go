@@ -46,7 +46,7 @@ func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 		Body:       []byte(`{"ok":true}`),
 	}
 
-	model.recordHTTPHistory(
+	collectMsgs(model.recordHTTPHistory(
 		resp,
 		req,
 		"GET https://example.com/registry\nX-Registry-Token: Token registry-token-123\n\n",
@@ -54,7 +54,7 @@ func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 		vars.Selection{},
 		"registry-token-123",
 		"Token registry-token-123",
-	)
+	))
 
 	entries, err := store.Entries()
 	if err != nil {

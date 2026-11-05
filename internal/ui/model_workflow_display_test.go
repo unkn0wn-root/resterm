@@ -79,6 +79,7 @@ func TestWorkflowReportEscapesOnlyForDisplay(t *testing.T) {
 		}},
 	}
 	m.finalizeWorkflowRun(st)
+	settleHistory(t, &m)
 
 	snap := m.responseLatest
 	want := "\n    api.http:11: bad \\u001b]0;pwn\\u0007 body\n    api.http:12: next"

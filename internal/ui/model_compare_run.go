@@ -413,8 +413,7 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 			noModal: true,
 		},
 	)
-	m.recordCompareHistory(state)
-	return nil
+	return m.recordCompareHistory(state)
 }
 
 func (m *Model) pinCompareReferencePane(state *compareState) {
@@ -451,9 +450,9 @@ func (m *Model) storeCompareSnapshot(env string) {
 	m.setCompareSnapshot(env, snap)
 }
 
-func (m *Model) recordCompareHistory(state *compareState) {
+func (m *Model) recordCompareHistory(state *compareState) tea.Cmd {
 	if state == nil || len(state.results) == 0 {
-		return
+		return nil
 	}
 
 	baseReq := state.base
@@ -466,7 +465,7 @@ func (m *Model) recordCompareHistory(state *compareState) {
 		}
 	}
 	if baseReq == nil {
-		return
+		return nil
 	}
 
 	entry := history.Entry{
@@ -508,7 +507,7 @@ func (m *Model) recordCompareHistory(state *compareState) {
 	if entry.Status == "" {
 		entry.Status = fmt.Sprintf("Compare %d env", len(results))
 	}
-	m.appendHistory(entry)
+	return m.appendHistory(entry)
 }
 
 func buildCompareHistoryResult(result compareResult) history.CompareResult {

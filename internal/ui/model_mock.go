@@ -334,6 +334,10 @@ func (m *Model) detachMockServer(server *mock.Server) {
 
 func (m *Model) Close() error {
 	err := errors.Join(m.closeRecorder(), m.spool.Close())
+	if m.hist != nil {
+		// A flush may still be queued or running at quit, and the caller closes the store next.
+		err = errors.Join(err, m.hist.Flush())
+	}
 	server := m.mock.server
 	if server == nil {
 		return err

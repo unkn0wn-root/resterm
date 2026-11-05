@@ -2218,6 +2218,7 @@ func TestStaleRunMsgKeepsNewRun(t *testing.T) {
 				History:        store,
 			})
 			m.editor.SetCursor(0)
+			m.historyScope = historyScopeGlobal
 
 			start := m.sendActiveRequest
 			if tt.explain {
@@ -2258,6 +2259,9 @@ func TestStaleRunMsgKeepsNewRun(t *testing.T) {
 			}
 			if m.responseLatest != pane || m.statusMessage != status {
 				t.Errorf("stale message replaced the new run's pane or status: %q", m.statusMessage.text)
+			}
+			if !tt.explain {
+				awaitHistoryFlush(t, &m)
 			}
 			if got := len(m.historyEntries); got != tt.entries {
 				t.Errorf("history entries = %d, want %d", got, tt.entries)

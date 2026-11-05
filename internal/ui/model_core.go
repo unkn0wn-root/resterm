@@ -174,7 +174,6 @@ type Config struct {
 	UpdateCmd      string
 	Compare        engine.CompareConfig
 	Bindings       *bindings.Map
-	Runtime        *rtrun.Runtime
 	StatusUser     string
 	StatusHost     string
 	Terminal       io.Writer
@@ -623,15 +622,12 @@ func New(cfg Config) Model {
 		hist = &history.Buffer{Store: hs}
 		hs = hist
 	}
-	run := cfg.Runtime
-	if run == nil {
-		run = newRuntime(rtrun.Config{
-			Client:     client,
-			History:    hs,
-			SSHManager: sshMgr,
-			K8sManager: k8sMgr,
-		})
-	}
+	run := newRuntime(rtrun.Config{
+		Client:     client,
+		History:    hs,
+		SSHManager: sshMgr,
+		K8sManager: k8sMgr,
+	})
 
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateCmd := strings.TrimSpace(cfg.UpdateCmd)
