@@ -494,7 +494,7 @@ func authName(v restfile.AuthProfile) string { return v.Name }
 // part of what is broken. A request that could have inherited it fails instead
 // of going out without auth.
 func authDefault(v restfile.AuthProfile) bool {
-	return nameKey(v.Name) == "" || v.Spec.Rejected != ""
+	return nameKey(v.Name) == "" || v.Spec.Err != nil
 }
 
 func patchName(v restfile.PatchProfile) string { return v.Name }

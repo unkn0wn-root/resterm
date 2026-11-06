@@ -56,20 +56,16 @@ func resolveProfileSpec(
 	if !ok {
 		return restfile.K8sProfile{}, fmt.Errorf("profile %q not found", use)
 	}
-	if base.Invalid {
-		msg := strings.TrimSpace(base.Error)
-		if msg == "" {
-			msg = "invalid definition"
-		}
+	if base.Err != nil {
 		if base.Line > 0 {
 			return restfile.K8sProfile{}, fmt.Errorf(
-				"profile %q is invalid: line %d: %s",
+				"profile %q is invalid: line %d: %w",
 				use,
 				base.Line,
-				msg,
+				base.Err,
 			)
 		}
-		return restfile.K8sProfile{}, fmt.Errorf("profile %q is invalid: %s", use, msg)
+		return restfile.K8sProfile{}, fmt.Errorf("profile %q is invalid: %w", use, base.Err)
 	}
 	base.Name = use
 

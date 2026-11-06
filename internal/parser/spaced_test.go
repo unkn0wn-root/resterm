@@ -1,11 +1,13 @@
 package parser
 
 import (
+	"errors"
 	"maps"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -70,11 +72,11 @@ func TestSpacedSharedProfilesAreRejected(t *testing.T) {
 		t.Fatalf("errors = %v, want one per line", doc.Errors)
 	}
 	want := `@ssh option "persist" has spaces around =. Write it as key=value`
-	if len(doc.SSH) != 1 || !doc.SSH[0].Invalid || doc.SSH[0].Error != want {
+	if len(doc.SSH) != 1 || doc.SSH[0].Err == nil || doc.SSH[0].Err.Error() != want {
 		t.Fatalf("ssh = %+v, want the profile kept as invalid with the spacing error", doc.SSH)
 	}
-	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid ||
-		!strings.Contains(doc.K8s[0].Error, `"persist" has spaces around =`) {
+	if len(doc.K8s) != 1 || doc.K8s[0].Err == nil ||
+		!strings.Contains(doc.K8s[0].Err.Error(), `"persist" has spaces around =`) {
 		t.Fatalf("k8s = %+v, want the profile kept as invalid with the spacing error", doc.K8s)
 	}
 }
@@ -194,20 +196,37 @@ func TestSpacedOptionFieldsReadQuotesFromSource(t *testing.T) {
 		t.Fatalf("error lines = %v, want %v", lines, want)
 	}
 	for i := range 3 {
-		if a := doc.Requests[i].Metadata; a.Auth != nil && a.Auth.Rejected == "" {
+		if a := doc.Requests[i].Metadata; a.Auth != nil && a.Auth.Err == nil {
 			t.Fatalf("request %d auth = %+v, want it rejected", i, a.Auth)
 		}
 	}
 }
 
 func TestAuthUseWithSpacedLessOrEqualIsRejected(t *testing.T) {
-	doc := Parse("/ws/api.http", []byte("# @auth use <= prod\nGET https://example.com\n"))
-	want := `@auth option "use" has spaces around =. Write it as key=value`
-	if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
+	doc := Parse("/ws/api.http", []byte("# @auth use <= prod ttl<=5m\nGET https://example.com\n"))
+	want := []string{
+		`@auth option "use" has spaces around =. Write it as key=value`,
+		`@auth option "ttl" takes = instead of <=. Write it as ttl=5m`,
+	}
+	var got []string
+	for _, e := range doc.Errors {
+		got = append(got, e.Message)
+	}
+	if !slices.Equal(got, want) {
 		t.Fatalf("errors = %v, want %q", doc.Errors, want)
 	}
-	if a := doc.Requests[0].Metadata.Auth; a == nil || a.Rejected == "" || a.Type != "" {
+	a := doc.Requests[0].Metadata.Auth
+	if a == nil || a.Type != "" {
 		t.Fatalf("auth = %+v, want it rejected instead of read as a header", a)
+	}
+	var spaced *directive.SpacedOptionsError
+	var op *directive.OpOptionError
+	if !errors.As(a.Err, &spaced) || !errors.As(a.Err, &op) || a.Err.Error() != strings.Join(want, "\n") {
+		t.Fatalf("auth error = %#v, want both problems kept", a.Err)
+	}
+	doc = Parse("/ws/api.http", []byte("# @auth use=prod\nGET https://example.com\n"))
+	if err := doc.Requests[0].Metadata.Auth.Err; err != nil {
+		t.Fatalf("valid line error = %v", err)
 	}
 }
 

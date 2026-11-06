@@ -16,7 +16,7 @@ func Redact(err error, mask func(string) string) error {
 		return out
 	}
 	text := m(err.Error())
-	rep := ReportOf(err).Redact(m)
+	rep := maskedReport(err, m)
 	if !found {
 		return err
 	}

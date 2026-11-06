@@ -56,7 +56,7 @@ resterm collection import \
   --dry-run
 ```
 
-If files already exist in the destination and you want to replace them, add `--force`.
+If files already exist in the destination and you want to replace them, add `--force`. If `Ctrl+C` or `SIGTERM` stops an import, the files it wrote so far stay complete and the other files are left as they were. The error says how many files were imported. Run the same command again with `--force` to finish.
 
 ## Pack a bundle into a zip archive
 
@@ -86,4 +86,4 @@ Unpack checks archive paths and rejects unsafe entries, such as traversal paths 
 
 Export, import, pack, and unpack all check paths and file integrity. Resterm rejects references that point outside the workspace, traversal paths in manifests and archives, and symlinks that escape. An operation fails if a file's size or checksum does not match the manifest.
 
-Export, pack, and unpack refuse to write to an output path that already exists. Add `--force` to replace it. Resterm builds the new bundle or archive first and only then deletes the old output. For export and unpack that is the whole directory, so point `--out` at a directory that holds nothing but the bundle.
+Export, pack, and unpack refuse to write to an output path that already exists. Add `--force` to replace it. Export and unpack replace only a directory that holds a bundle `manifest.json`, and files you added to that directory are removed with the old bundle. Pack replaces only a file. If Resterm cannot write the new output, the old output stays as it was, or the error says where Resterm kept it. `Ctrl+C` or `SIGTERM` leaves either the old output as it was or the complete new one.

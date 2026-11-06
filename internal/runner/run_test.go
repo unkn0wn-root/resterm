@@ -2253,6 +2253,48 @@ func TestRunUsesWorkspaceGlobalInheritedAuth(t *testing.T) {
 	}
 }
 
+func TestRunMasksRejectedAuthProblems(t *testing.T) {
+	const secret = "s3cr3t-value-long-enough"
+	for name, masked := range map[string]bool{"secret": true, "no secret": false} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			defs := "# @auth global oauth2 token_url=http://127.0.0.1:1/t client_secret<=" + secret + " scope = read\n"
+			if err := os.WriteFile(filepath.Join(dir, "defs.http"), []byte(defs), 0o644); err != nil {
+				t.Fatalf("write defs: %v", err)
+			}
+			src := "### one\nGET http://127.0.0.1:1/a\n"
+			if masked {
+				src = "# @file-secret cs " + secret + "\n\n" + src
+			}
+			file := filepath.Join(dir, "run.http")
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+
+			rep, err := RunContext(context.Background(), Options{FilePath: file, WorkspaceRoot: dir})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if got := ExitCode(rep, runfail.ExitDetailed); got != runfail.ExitAuth {
+				t.Fatalf("exit = %d, want %d", got, runfail.ExitAuth)
+			}
+			if chain := ReportModel(rep).Results[0].Failure.Chain; len(chain) != 1 || len(chain[0].Children) != 2 {
+				t.Fatalf("chain = %+v, want one operation with two problems", chain)
+			}
+			outs := reportOutputs(t, rep)
+			if masked {
+				assertMasked(t, outs, []string{secret})
+				return
+			}
+			for format, text := range outs {
+				if !strings.Contains(text, secret) || strings.Contains(text, "•••") {
+					t.Errorf("%s masks a line with no secret:\n%s", format, text)
+				}
+			}
+		})
+	}
+}
+
 func TestRunRejectsMultipleRequestsWithoutSelector(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "many.http")

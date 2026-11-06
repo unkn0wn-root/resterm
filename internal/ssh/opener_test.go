@@ -13,13 +13,30 @@ import (
 
 func TestSessionOpenerReportsRouteFailures(t *testing.T) {
 	refused := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}
-	o := newSessionOpener(func(context.Context, execConfig) (sshClient, error) {
-		return nil, refused
-	}, 1)
+	closed := &net.OpError{Op: "close", Net: "unix", Err: errors.New("broken pipe")}
+	tests := []struct {
+		cause error
+		want  string
+	}{
+		{refused, "error[route]: open ssh tunnel to bastion:22: dial tcp: connection refused"},
+		{
+			errors.Join(errors.New("ssh: handshake failed: EOF"), closed),
+			"error[route]: open ssh tunnel to bastion:22: ssh: handshake failed: EOF; close unix: broken pipe",
+		},
+		{errors.New("ssh: banner\nsecond"), `error[route]: open ssh tunnel to bastion:22: ssh: banner\nsecond`},
+	}
+	for _, tt := range tests {
+		o := newSessionOpener(func(context.Context, execConfig) (sshClient, error) {
+			return nil, tt.cause
+		}, 1)
 
-	_, err := o.open(context.Background(), execConfig{Config: Config{Host: "bastion", Port: 22}}, false)
-	if got := diag.Classes(err); !slices.Equal(got, []diag.Class{diag.ClassRoute}) {
-		t.Fatalf("classes = %v, want only route: %v", got, err)
+		_, err := o.open(context.Background(), execConfig{Config: Config{Host: "bastion", Port: 22}}, false)
+		if got := diag.Classes(err); !slices.Equal(got, []diag.Class{diag.ClassRoute}) {
+			t.Errorf("classes = %v, want only route: %v", got, err)
+		}
+		if got := diag.Render(err); got != tt.want {
+			t.Errorf("Render() = %q, want %q", got, tt.want)
+		}
 	}
 }
 

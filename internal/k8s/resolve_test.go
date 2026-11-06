@@ -4,7 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -26,27 +28,43 @@ func TestResolveUseMissingWithInline(t *testing.T) {
 }
 
 func TestResolveUseInvalidProfileReportsDefinitionError(t *testing.T) {
-	spec := &restfile.K8sSpec{Use: "cluster-api"}
-	globalProfiles := []restfile.K8sProfile{{
-		Scope:   directive.ScopeGlobal,
-		Name:    "cluster-api",
-		Line:    1,
-		Invalid: true,
-		Error:   "@k8s global scope requires target and port",
-	}}
-
-	_, err := Resolve(spec, nil, globalProfiles, nil, "")
-	if err == nil {
-		t.Fatal("expected error for invalid profile")
+	tests := []struct {
+		src    string
+		want   string
+		render []string
+	}{
+		{
+			src:  "# @k8s global cluster-api\n",
+			want: `profile "cluster-api" is invalid: line 1: @k8s global scope requires target and port`,
+			render: []string{
+				`error[unknown]: profile "cluster-api" is invalid: line 1: @k8s global scope requires target and port`,
+				`profile "cluster-api" is invalid: line 1`,
+				"╰─> @k8s global scope requires target and port",
+			},
+		},
+		{
+			src:  "# @k8s global cluster-api pod=api port=0 persist=sure\n",
+			want: "profile \"cluster-api\" is invalid: line 1: invalid @k8s port: \"0\"\ninvalid @k8s persist: \"sure\"",
+			render: []string{
+				`error[unknown]: profile "cluster-api" is invalid: line 1: invalid @k8s port: "0"; invalid @k8s persist: "sure"`,
+				`profile "cluster-api" is invalid: line 1`,
+				`├─> invalid @k8s port: "0"`,
+				`╰─> invalid @k8s persist: "sure"`,
+			},
+		},
 	}
-	msg := err.Error()
-	for _, want := range []string{
-		`profile "cluster-api" is invalid`,
-		"line 1",
-		"@k8s global scope requires target and port",
-	} {
-		if !strings.Contains(msg, want) {
-			t.Fatalf("expected %q in error %q", want, msg)
+	for _, tt := range tests {
+		doc := parser.Parse("defs.http", []byte(tt.src))
+		inline := &restfile.K8sSpec{Use: "cluster-api", Inline: &restfile.K8sProfile{Namespace: "n"}}
+		if _, err := Resolve(inline, nil, doc.K8s, nil, ""); err == nil || err.Error() != tt.want {
+			t.Fatalf("with inline options: err = %v, want %q", err, tt.want)
+		}
+		_, err := Resolve(&restfile.K8sSpec{Use: "cluster-api"}, nil, doc.K8s, nil, "")
+		if err == nil || err.Error() != tt.want {
+			t.Fatalf("err = %v, want %q", err, tt.want)
+		}
+		if got, want := diag.Render(err), strings.Join(tt.render, "\n"); got != want {
+			t.Errorf("Render() = %q, want %q", got, want)
 		}
 	}
 }

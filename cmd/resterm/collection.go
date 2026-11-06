@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/collection"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
 
 func handleCollectionSubcommand(args []string) (bool, error) {
@@ -23,12 +27,15 @@ func handleCollectionSubcommand(args []string) (bool, error) {
 			"pass a subcommand like `resterm collection export --workspace . --out ./bundle`",
 		)
 	}
-	return true, runCollection(args[1:])
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return true, runCollection(ctx, args[1:])
 }
 
-func runCollection(args []string) error {
+func runCollection(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return cli.UsageError(errors.New(collectionUsageText()))
+		_ = writeln(os.Stderr, collectionUsageText())
+		return cli.UsageError(errors.New("collection: subcommand is required"))
 	}
 	if cli.IsHelpArg(args[0]) {
 		if err := writeln(os.Stdout, collectionUsageText()); err != nil {
@@ -37,21 +44,27 @@ func runCollection(args []string) error {
 		return nil
 	}
 	op := strings.TrimSpace(strings.ToLower(args[0]))
+	var err error
 	switch op {
 	case "export":
-		return runCollectionExport(args[1:])
+		err = runCollectionExport(ctx, args[1:])
 	case "import":
-		return runCollectionImport(args[1:])
+		err = runCollectionImport(ctx, args[1:])
 	case "pack":
-		return runCollectionPack(args[1:])
+		err = runCollectionPack(ctx, args[1:])
 	case "unpack":
-		return runCollectionUnpack(args[1:])
+		err = runCollectionUnpack(ctx, args[1:])
 	default:
-		return cli.UsageError(fmt.Errorf("collection: unknown subcommand %q\n\n%s", op, collectionUsageText()))
+		_ = writeln(os.Stderr, collectionUsageText())
+		return cli.UsageError(fmt.Errorf("collection: unknown subcommand %q", op))
 	}
+	if errors.Is(err, context.Canceled) {
+		return cli.ExitErr{Err: err, Code: runfail.ExitCanceled}
+	}
+	return err
 }
 
-func runCollectionExport(args []string) error {
+func runCollectionExport(ctx context.Context, args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "collection export", os.Stderr)
 	var workspace string
 	var out string
@@ -63,7 +76,7 @@ func runCollectionExport(args []string) error {
 	fs.StringVar(&out, "out", "", "Output bundle directory path")
 	fs.StringVar(&name, "name", "", "Optional bundle name")
 	fs.BoolVar(&recursive, "recursive", false, "Recursively scan workspace for request files")
-	fs.BoolVar(&force, "force", false, "Overwrite existing output directory")
+	fs.BoolVar(&force, "force", false, "Replace an existing bundle")
 
 	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
@@ -76,7 +89,7 @@ func runCollectionExport(args []string) error {
 		return cli.UsageError(errors.New("collection export: --out is required"))
 	}
 
-	res, err := collection.ExportBundle(collection.ExportOptions{
+	res, err := collection.ExportBundle(ctx, collection.ExportOptions{
 		Workspace: workspace,
 		OutDir:    out,
 		Name:      name,
@@ -108,7 +121,7 @@ func runCollectionExport(args []string) error {
 	return nil
 }
 
-func runCollectionImport(args []string) error {
+func runCollectionImport(ctx context.Context, args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "collection import", os.Stderr)
 	var in string
 	var workspace string
@@ -131,7 +144,7 @@ func runCollectionImport(args []string) error {
 		return cli.UsageError(errors.New("collection import: --workspace is required"))
 	}
 
-	res, err := collection.ImportBundle(collection.ImportOptions{
+	res, err := collection.ImportBundle(ctx, collection.ImportOptions{
 		BundleDir: in,
 		Workspace: workspace,
 		Force:     force,
@@ -166,7 +179,7 @@ func runCollectionImport(args []string) error {
 	return nil
 }
 
-func runCollectionPack(args []string) error {
+func runCollectionPack(ctx context.Context, args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "collection pack", os.Stderr)
 	var in string
 	var out string
@@ -174,7 +187,7 @@ func runCollectionPack(args []string) error {
 
 	fs.StringVar(&in, "in", "", "Input bundle directory path")
 	fs.StringVar(&out, "out", "", "Output archive (.zip) path")
-	fs.BoolVar(&force, "force", false, "Overwrite existing archive file")
+	fs.BoolVar(&force, "force", false, "Replace an existing file")
 
 	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
@@ -187,7 +200,7 @@ func runCollectionPack(args []string) error {
 		return cli.UsageError(errors.New("collection pack: --out is required"))
 	}
 
-	res, err := collection.PackBundle(collection.PackOptions{
+	res, err := collection.PackBundle(ctx, collection.PackOptions{
 		BundleDir: in,
 		OutFile:   out,
 		Force:     force,
@@ -207,7 +220,7 @@ func runCollectionPack(args []string) error {
 	return nil
 }
 
-func runCollectionUnpack(args []string) error {
+func runCollectionUnpack(ctx context.Context, args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "collection unpack", os.Stderr)
 	var in string
 	var out string
@@ -215,7 +228,7 @@ func runCollectionUnpack(args []string) error {
 
 	fs.StringVar(&in, "in", "", "Input archive (.zip) path")
 	fs.StringVar(&out, "out", "", "Output bundle directory path")
-	fs.BoolVar(&force, "force", false, "Overwrite existing output directory")
+	fs.BoolVar(&force, "force", false, "Replace an existing bundle")
 
 	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
@@ -228,7 +241,7 @@ func runCollectionUnpack(args []string) error {
 		return cli.UsageError(errors.New("collection unpack: --out is required"))
 	}
 
-	res, err := collection.UnpackBundle(collection.UnpackOptions{
+	res, err := collection.UnpackBundle(ctx, collection.UnpackOptions{
 		InFile: in,
 		OutDir: out,
 		Force:  force,

@@ -210,7 +210,7 @@ func TestIndexDefaultAuthCountsRejectedDefinitions(t *testing.T) {
 	ix.Sync(parser.Parse("/tmp/fail/defs.http", []byte("# @auth global command gh name=other cmd=x\n")))
 
 	plain := parser.Parse("/tmp/fail/plain.http", []byte("GET https://example.com\n"))
-	if pf, ok := ix.DefaultAuth(plain); !ok || pf.Name != "other" || pf.Spec.Rejected == "" {
+	if pf, ok := ix.DefaultAuth(plain); !ok || pf.Name != "other" || pf.Spec.Err == nil {
 		t.Fatalf("default = %+v, want the rejected global", pf)
 	}
 

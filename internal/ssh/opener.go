@@ -45,7 +45,7 @@ func (o sessionOpener) open(
 		// read as if the target failed. Timeouts and local causes keep their class.
 		switch diag.ClassOf(err) {
 		case diag.ClassNetwork, diag.ClassUnknown:
-			return nil, diag.Newf(diag.ClassRoute, "open ssh tunnel to %s: %v", cfg.addr(), err)
+			return nil, diag.Newf(diag.ClassRoute, "open ssh tunnel to %s: %s", cfg.addr(), diag.Headline(err))
 		}
 		return nil, err
 	}

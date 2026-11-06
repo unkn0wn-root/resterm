@@ -2,6 +2,7 @@ package collection
 
 import (
 	"archive/zip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ type UnpackResult struct {
 	FileCount int
 }
 
-func PackBundle(o PackOptions) (PackResult, error) {
+func PackBundle(ctx context.Context, o PackOptions) (PackResult, error) {
 	inAbs, inReal, err := resolveDir(o.BundleDir, "bundle")
 	if err != nil {
 		return PackResult{}, err
@@ -76,11 +77,16 @@ func PackBundle(o PackOptions) (PackResult, error) {
 	}
 	outReal := filepath.Join(parReal, filepath.Base(outAbs))
 
-	if !o.Force {
-		if _, err := os.Stat(outReal); err == nil {
+	fi, err := os.Lstat(outReal)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return PackResult{}, fmt.Errorf("stat output path: %w", err)
+	}
+	if err == nil {
+		switch {
+		case !o.Force:
 			return PackResult{}, fmt.Errorf("output path already exists: %s", outAbs)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return PackResult{}, fmt.Errorf("stat output path: %w", err)
+		case !fi.Mode().IsRegular():
+			return PackResult{}, fmt.Errorf("%s exists and is not a file. Remove it or choose another path", outAbs)
 		}
 	}
 
@@ -89,11 +95,9 @@ func PackBundle(o PackOptions) (PackResult, error) {
 		return PackResult{}, fmt.Errorf("create temp archive: %w", err)
 	}
 	tmpPath := tmp.Name()
-	ok := false
 	defer func() {
-		if !ok {
-			_ = os.Remove(tmpPath)
-		}
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
 	}()
 
 	zw := zip.NewWriter(tmp)
@@ -102,6 +106,10 @@ func PackBundle(o PackOptions) (PackResult, error) {
 		return PackResult{}, err
 	}
 	for i, f := range mf.Files {
+		if err := ctx.Err(); err != nil {
+			_ = zw.Close()
+			return PackResult{}, err
+		}
 		if err := addZipFile(zw, f.Path, raw[i]); err != nil {
 			_ = zw.Close()
 			return PackResult{}, err
@@ -110,19 +118,18 @@ func PackBundle(o PackOptions) (PackResult, error) {
 	if err := zw.Close(); err != nil {
 		return PackResult{}, fmt.Errorf("finalize archive: %w", err)
 	}
+	if err := tmp.Sync(); err != nil {
+		return PackResult{}, fmt.Errorf("sync archive: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return PackResult{}, fmt.Errorf("close archive: %w", err)
 	}
-
-	if o.Force {
-		if err := os.RemoveAll(outReal); err != nil {
-			return PackResult{}, fmt.Errorf("remove previous output: %w", err)
-		}
+	if err := ctx.Err(); err != nil {
+		return PackResult{}, err
 	}
 	if err := os.Rename(tmpPath, outReal); err != nil {
 		return PackResult{}, fmt.Errorf("move archive into place: %w", err)
 	}
-	ok = true
 
 	return PackResult{
 		BundleDir: inAbs,
@@ -131,7 +138,7 @@ func PackBundle(o PackOptions) (PackResult, error) {
 	}, nil
 }
 
-func UnpackBundle(o UnpackOptions) (UnpackResult, error) {
+func UnpackBundle(ctx context.Context, o UnpackOptions) (UnpackResult, error) {
 	inAbs, err := cleanAbsPath(o.InFile, "archive")
 	if err != nil {
 		return UnpackResult{}, err
@@ -148,69 +155,44 @@ func UnpackBundle(o UnpackOptions) (UnpackResult, error) {
 	if err != nil {
 		return UnpackResult{}, err
 	}
-	par := filepath.Dir(outAbs)
-	if err := os.MkdirAll(par, 0o755); err != nil {
-		return UnpackResult{}, fmt.Errorf("create output parent dir: %w", err)
-	}
-	parReal := par
-	if p, pErr := filepath.EvalSymlinks(par); pErr == nil {
-		parReal = p
-	}
-	outReal := filepath.Join(parReal, filepath.Base(outAbs))
 
-	if !o.Force {
-		if _, err := os.Stat(outReal); err == nil {
-			return UnpackResult{}, fmt.Errorf("output path already exists: %s", outAbs)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return UnpackResult{}, fmt.Errorf("stat output path: %w", err)
+	var mf Manifest
+	err = replaceDir(ctx, outAbs, o.Force, func(dir string) error {
+		seen, err := unpackZipToDir(ctx, inAbs, dir)
+		if err != nil {
+			return err
 		}
-	}
 
-	tmp, err := os.MkdirTemp(parReal, ".resterm-collection-unpack-*")
-	if err != nil {
-		return UnpackResult{}, fmt.Errorf("create temp bundle dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmp) }()
+		dirReal := dir
+		if p, pErr := filepath.EvalSymlinks(dir); pErr == nil {
+			dirReal = p
+		}
 
-	seen, err := unpackZipToDir(inAbs, tmp)
+		mf, err = readBundleManifest(dir)
+		if err != nil {
+			return err
+		}
+
+		want := make(map[string]struct{}, len(mf.Files)+1)
+		want[ManifestFile] = struct{}{}
+		for _, f := range mf.Files {
+			want[f.Path] = struct{}{}
+			if _, ok := seen[f.Path]; !ok {
+				return fmt.Errorf("bundle file not found: %s", f.Path)
+			}
+			if _, err := readBundlePayload(dir, dirReal, f); err != nil {
+				return err
+			}
+		}
+		for p := range seen {
+			if _, ok := want[p]; !ok {
+				return fmt.Errorf("unexpected archive entry: %s", p)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return UnpackResult{}, err
-	}
-
-	tmpReal := tmp
-	if p, pErr := filepath.EvalSymlinks(tmp); pErr == nil {
-		tmpReal = p
-	}
-
-	mf, err := readBundleManifest(tmp)
-	if err != nil {
-		return UnpackResult{}, err
-	}
-
-	want := make(map[string]struct{}, len(mf.Files)+1)
-	want[ManifestFile] = struct{}{}
-	for _, f := range mf.Files {
-		want[f.Path] = struct{}{}
-		if _, ok := seen[f.Path]; !ok {
-			return UnpackResult{}, fmt.Errorf("bundle file not found: %s", f.Path)
-		}
-		if _, err := readBundlePayload(tmp, tmpReal, f); err != nil {
-			return UnpackResult{}, err
-		}
-	}
-	for p := range seen {
-		if _, ok := want[p]; !ok {
-			return UnpackResult{}, fmt.Errorf("unexpected archive entry: %s", p)
-		}
-	}
-
-	if o.Force {
-		if err := os.RemoveAll(outReal); err != nil {
-			return UnpackResult{}, fmt.Errorf("remove previous output: %w", err)
-		}
-	}
-	if err := os.Rename(tmp, outReal); err != nil {
-		return UnpackResult{}, fmt.Errorf("move bundle into place: %w", err)
 	}
 
 	return UnpackResult{
@@ -239,7 +221,7 @@ func addZipFile(zw *zip.Writer, name string, data []byte) error {
 	return nil
 }
 
-func unpackZipToDir(inAbs, outDir string) (map[string]struct{}, error) {
+func unpackZipToDir(ctx context.Context, inAbs, outDir string) (map[string]struct{}, error) {
 	zr, err := zip.OpenReader(inAbs)
 	if err != nil {
 		return nil, fmt.Errorf("open archive: %w", err)
@@ -248,6 +230,9 @@ func unpackZipToDir(inAbs, outDir string) (map[string]struct{}, error) {
 
 	seen := make(map[string]struct{}, len(zr.File))
 	for _, f := range zr.File {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if f.FileInfo().IsDir() {
 			continue
 		}

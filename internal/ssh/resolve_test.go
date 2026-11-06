@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -27,19 +29,44 @@ func TestResolveUseMissingWithInline(t *testing.T) {
 }
 
 func TestResolveUseInvalidProfileReportsDefinitionError(t *testing.T) {
-	spec := &restfile.SSHSpec{Use: "jump"}
-	globalProfiles := []restfile.SSHProfile{{
-		Scope:   directive.ScopeGlobal,
-		Name:    "jump",
-		Line:    3,
-		Invalid: true,
-		Error:   "@ssh global scope requires host",
-	}}
-
-	_, err := Resolve(spec, nil, globalProfiles, nil, "")
-	want := `ssh profile "jump" is invalid: line 3: @ssh global scope requires host`
-	if err == nil || err.Error() != want {
-		t.Fatalf("err = %v, want %q", err, want)
+	tests := []struct {
+		src    string
+		want   string
+		render []string
+	}{
+		{
+			src:  "\n\n# @ssh global jump\n",
+			want: `ssh profile "jump" is invalid: line 3: @ssh global scope requires host`,
+			render: []string{
+				`error[unknown]: ssh profile "jump" is invalid: line 3: @ssh global scope requires host`,
+				`ssh profile "jump" is invalid: line 3`,
+				"╰─> @ssh global scope requires host",
+			},
+		},
+		{
+			src:  "# @ssh global jump host=h agent=maybe persist=sure\n",
+			want: "ssh profile \"jump\" is invalid: line 1: invalid @ssh agent: \"maybe\"\ninvalid @ssh persist: \"sure\"",
+			render: []string{
+				`error[unknown]: ssh profile "jump" is invalid: line 1: invalid @ssh agent: "maybe"; invalid @ssh persist: "sure"`,
+				`ssh profile "jump" is invalid: line 1`,
+				`├─> invalid @ssh agent: "maybe"`,
+				`╰─> invalid @ssh persist: "sure"`,
+			},
+		},
+	}
+	for _, tt := range tests {
+		doc := parser.Parse("defs.http", []byte(tt.src))
+		inline := &restfile.SSHSpec{Use: "jump", Inline: &restfile.SSHProfile{User: "u"}}
+		if _, err := Resolve(inline, nil, doc.SSH, nil, ""); err == nil || err.Error() != tt.want {
+			t.Fatalf("with inline options: err = %v, want %q", err, tt.want)
+		}
+		_, err := Resolve(&restfile.SSHSpec{Use: "jump"}, nil, doc.SSH, nil, "")
+		if err == nil || err.Error() != tt.want {
+			t.Fatalf("err = %v, want %q", err, tt.want)
+		}
+		if got, want := diag.Render(err), strings.Join(tt.render, "\n"); got != want {
+			t.Errorf("Render() = %q, want %q", got, want)
+		}
 	}
 }
 

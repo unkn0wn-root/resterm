@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -48,7 +49,7 @@ type bundleFile struct {
 	Data []byte
 }
 
-func ExportBundle(o ExportOptions) (ExportResult, error) {
+func ExportBundle(ctx context.Context, o ExportOptions) (ExportResult, error) {
 	wsAbs, wsReal, err := resolveDir(o.Workspace, "workspace")
 	if err != nil {
 		return ExportResult{}, err
@@ -78,7 +79,7 @@ func ExportBundle(o ExportOptions) (ExportResult, error) {
 	}
 
 	mf, fs := buildManifest(name, byPath)
-	if err := writeBundleDir(outAbs, fs, mf, o.Force); err != nil {
+	if err := writeBundleDir(ctx, outAbs, fs, mf, o.Force); err != nil {
 		return ExportResult{}, err
 	}
 
@@ -204,7 +205,37 @@ func buildManifest(name string, byPath map[string]expFile) (Manifest, []bundleFi
 	return NewManifest(name, files), out
 }
 
-func writeBundleDir(outAbs string, files []bundleFile, m Manifest, force bool) error {
+func writeBundleDir(ctx context.Context, outAbs string, files []bundleFile, m Manifest, force bool) error {
+	return replaceDir(ctx, outAbs, force, func(dir string) error {
+		for _, f := range files {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			dst, err := SafeJoin(dir, f.Path)
+			if err != nil {
+				return fmt.Errorf("prepare bundle path %s: %w", f.Path, err)
+			}
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				return fmt.Errorf("create bundle dir for %s: %w", f.Path, err)
+			}
+			if err := os.WriteFile(dst, f.Data, 0o644); err != nil {
+				return fmt.Errorf("write bundle file %s: %w", f.Path, err)
+			}
+		}
+
+		manData, err := EncodeManifest(m)
+		if err != nil {
+			return err
+		}
+		manPath := filepath.Join(dir, ManifestFile)
+		if err := os.WriteFile(manPath, manData, 0o644); err != nil {
+			return fmt.Errorf("write manifest: %w", err)
+		}
+		return nil
+	})
+}
+
+func replaceDir(ctx context.Context, outAbs string, force bool, fill func(dir string) error) error {
 	parent := filepath.Dir(outAbs)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return fmt.Errorf("create output parent dir: %w", err)
@@ -215,49 +246,73 @@ func writeBundleDir(outAbs string, files []bundleFile, m Manifest, force bool) e
 	}
 	outReal := filepath.Join(parentReal, filepath.Base(outAbs))
 
-	if !force {
-		if _, err := os.Stat(outReal); err == nil {
+	fi, err := os.Lstat(outReal)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stat output path: %w", err)
+	}
+
+	exists := err == nil
+	if exists {
+		switch {
+		case !force:
 			return fmt.Errorf("output path already exists: %s", outAbs)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("stat output path: %w", err)
+		case fi.Mode()&os.ModeSymlink != 0:
+			return fmt.Errorf("%s is a link. Remove the link or choose another path", outAbs)
+		case !fi.IsDir() || !isBundle(outReal):
+			return fmt.Errorf("%s exists and is not a resterm bundle. Remove it or choose another path", outAbs)
 		}
 	}
 
-	tmp, err := os.MkdirTemp(parentReal, ".resterm-collection-*")
+	// The stage sits next to outAbs so both renames stay on one file system.
+	stage, err := os.MkdirTemp(parentReal, ".resterm-collection-*")
 	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+
+	keep := false
+	defer func() {
+		if !keep {
+			_ = os.RemoveAll(stage)
+		}
+	}()
+
+	// The old bundle moves into the stage during the swap, so the new one gets its own folder.
+	src := filepath.Join(stage, "bundle")
+	if err := os.Mkdir(src, 0o700); err != nil {
 		return fmt.Errorf("create temp bundle dir: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(tmp) }()
-
-	for _, f := range files {
-		dst, err := SafeJoin(tmp, f.Path)
-		if err != nil {
-			return fmt.Errorf("prepare bundle path %s: %w", f.Path, err)
-		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return fmt.Errorf("create bundle dir for %s: %w", f.Path, err)
-		}
-		if err := os.WriteFile(dst, f.Data, 0o644); err != nil {
-			return fmt.Errorf("write bundle file %s: %w", f.Path, err)
-		}
-	}
-
-	manData, err := EncodeManifest(m)
-	if err != nil {
+	if err := fill(src); err != nil {
 		return err
 	}
-	manPath := filepath.Join(tmp, ManifestFile)
-	if err := os.WriteFile(manPath, manData, 0o644); err != nil {
-		return fmt.Errorf("write manifest: %w", err)
+	// A cancel is honored up to here. The swap itself is never cut short.
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
-	if force {
-		if err := os.RemoveAll(outReal); err != nil {
-			return fmt.Errorf("remove previous output: %w", err)
+	old := filepath.Join(stage, "old")
+	if exists {
+		if err := os.Rename(outReal, old); err != nil {
+			return fmt.Errorf("move old bundle aside: %w", err)
 		}
 	}
-	if err := os.Rename(tmp, outReal); err != nil {
-		return fmt.Errorf("move bundle into place: %w", err)
+	if err := os.Rename(src, outReal); err != nil {
+		err = fmt.Errorf("move bundle into place: %w", err)
+		if !exists {
+			return err
+		}
+		if rerr := os.Rename(old, outReal); rerr != nil {
+			keep = true
+			return errors.Join(err, fmt.Errorf("%w. The old bundle is in %s", rerr, old))
+		}
+		return err
 	}
 	return nil
+}
+
+func isBundle(dir string) bool {
+	if fi, err := os.Lstat(filepath.Join(dir, ManifestFile)); err != nil || !fi.Mode().IsRegular() {
+		return false
+	}
+	_, err := readBundleManifest(dir)
+	return err == nil
 }

@@ -30,7 +30,8 @@ func handleHistorySubcommand(args []string) (bool, error) {
 
 func runHistory(args []string) error {
 	if len(args) == 0 {
-		return cli.UsageError(errors.New(historyUsageText()))
+		_ = writeln(os.Stderr, historyUsageText())
+		return cli.UsageError(errors.New("history: subcommand is required"))
 	}
 	if cli.IsHelpArg(args[0]) {
 		if err := writeln(os.Stdout, historyUsageText()); err != nil {
@@ -53,7 +54,8 @@ func runHistory(args []string) error {
 	case "check":
 		return runHistoryCheck(args[1:])
 	default:
-		return cli.UsageError(fmt.Errorf("history: unknown subcommand %q\n\n%s", op, historyUsageText()))
+		_ = writeln(os.Stderr, historyUsageText())
+		return cli.UsageError(fmt.Errorf("history: unknown subcommand %q", op))
 	}
 }
 

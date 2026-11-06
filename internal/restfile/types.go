@@ -54,8 +54,8 @@ type AuthSpec struct {
 	Use string
 	// Profile names the definition used to resolve this request's auth.
 	Profile string
-	// Rejected holds the parse error so invalid auth blocks the request.
-	Rejected string
+	// Err holds the parse error so invalid auth blocks the request.
+	Err error
 	// SourcePath and Line locate errors. SourcePath also sets the command's
 	// working directory to the definition's directory.
 	SourcePath string
@@ -289,8 +289,7 @@ type SSHProfile struct {
 	KeepAliveStr string
 	Retries      Opt[int]
 	RetriesStr   string
-	Invalid      bool
-	Error        string
+	Err          error
 }
 
 type SSHSpec struct {
@@ -318,8 +317,7 @@ type K8sProfile struct {
 	PodWaitStr   string
 	Retries      Opt[int]
 	RetriesStr   string
-	Invalid      bool
-	Error        string
+	Err          error
 }
 
 type K8sSpec struct {

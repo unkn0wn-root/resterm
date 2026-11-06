@@ -515,6 +515,112 @@ func TestRenderJoinedErrorsAsBranches(t *testing.T) {
 	})
 }
 
+func TestRenderJoinedErrorHeaderOnOneLine(t *testing.T) {
+	a, b, c := errors.New("alpha failed"), errors.New("beta failed"), errors.New("gamma failed")
+	join := errors.Join(a, b)
+	var none error
+	tests := []struct {
+		name string
+		err  error
+		want []string
+	}{
+		{"join", join, []string{"error[unknown]: alpha failed; beta failed", "├─> alpha failed", "╰─> beta failed"}},
+		{
+			"wrapped join",
+			fmt.Errorf("skill: %w", join),
+			[]string{
+				"error[unknown]: skill: alpha failed; beta failed",
+				"skill",
+				"├─> alpha failed",
+				"╰─> beta failed",
+			},
+		},
+		{
+			"bare wrap",
+			fmt.Errorf("%w", join),
+			[]string{"error[unknown]: alpha failed; beta failed", "├─> alpha failed", "╰─> beta failed"},
+		},
+		{"other prefix", fmt.Errorf("skill - %w", join), []string{"error[unknown]: skill - alpha failed; beta failed"}},
+		{
+			"nested join",
+			errors.Join(a, errors.Join(b, c)),
+			[]string{
+				"error[unknown]: alpha failed; beta failed; gamma failed",
+				"├─> alpha failed",
+				"├─> beta failed",
+				"╰─> gamma failed",
+			},
+		},
+		{
+			"join in a wrap in a join",
+			errors.Join(a, fmt.Errorf("w: %w", errors.Join(b, c))),
+			[]string{
+				"error[unknown]: alpha failed; w: beta failed; gamma failed",
+				"├─> alpha failed",
+				"╰─> w",
+				"    ├─> beta failed",
+				"    ╰─> gamma failed",
+			},
+		},
+		{
+			"newline in a member",
+			errors.Join(errors.New("server said\nhello"), b),
+			[]string{`error[unknown]: server said\nhello; beta failed`, `├─> server said\nhello`, "╰─> beta failed"},
+		},
+		{
+			"control in a member",
+			errors.Join(errors.New("srv \x1b[2Jclear"), b),
+			[]string{`error[unknown]: srv \u001b[2Jclear; beta failed`, `├─> srv \u001b[2Jclear`, "╰─> beta failed"},
+		},
+		{"newline in one message", errors.New("line1\nline2"), []string{`error[unknown]: line1\nline2`}},
+		{"empty message", errors.New(""), []string{"error[unknown]: unknown"}},
+		{"text after the cause", fmt.Errorf("x (%w)", join), []string{`error[unknown]: x (alpha failed\nbeta failed)`}},
+		{
+			"several %w",
+			fmt.Errorf("x: %w\nand %w", a, b),
+			[]string{`error[unknown]: x: alpha failed\nand beta failed`, "├─> alpha failed", "╰─> beta failed"},
+		},
+		{"nil cause", fmt.Errorf("x: %w", none), []string{"error[unknown]: x: %!w(<nil>)"}},
+		{
+			"joined reports",
+			errors.Join(diag.New(diag.ClassParse, "p1"), diag.New(diag.ClassNetwork, "n1")),
+			[]string{"error[parse]: p1", "", "error[network]: n1"},
+		},
+		{
+			"reporter in a classed join",
+			diag.Wrap(
+				errors.Join(diag.Redact(errors.Join(a, errors.New("token s3cr3t")), maskSecrets("s3cr3t")), c),
+				"op",
+			),
+			[]string{"error[unknown]: op", "├─> alpha failed; token •••", "╰─> gamma failed"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, want := diag.Render(tt.err), strings.Join(tt.want, "\n"); got != want {
+				t.Fatalf("Render() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestHeadline(t *testing.T) {
+	join := errors.Join(errors.New("alpha failed"), errors.New("beta failed"))
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("x: %w", join), "x: alpha failed; beta failed"},
+		{errors.New("line1\nline2"), "line1\nline2"},
+		{fmt.Errorf("x (%w)", join), "x (alpha failed\nbeta failed)"},
+	}
+	for _, tt := range tests {
+		if got := diag.Headline(tt.err); got != tt.want {
+			t.Errorf("Headline(%q) = %q, want %q", tt.err, got, tt.want)
+		}
+	}
+}
+
 func TestRenderHTTPTransportFailureUsesCauseClass(t *testing.T) {
 	dnsErr := &net.DNSError{Err: "no such host", Name: "api.local"}
 	err := diag.Wrap(

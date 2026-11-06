@@ -1684,14 +1684,14 @@ GET http://example.com
 		t.Fatalf("expected invalid k8s profile marker, got %d", len(doc.K8s))
 	}
 	prof := doc.K8s[0]
-	if !prof.Invalid {
+	if prof.Err == nil {
 		t.Fatalf("expected invalid k8s profile marker")
 	}
 	if prof.Name != "api" || prof.Scope != directive.ScopeGlobal || prof.Line != 1 {
 		t.Fatalf("unexpected invalid profile marker: %+v", prof)
 	}
-	if !strings.Contains(prof.Error, "@k8s global scope requires target and port") {
-		t.Fatalf("unexpected invalid profile error: %q", prof.Error)
+	if !strings.Contains(prof.Err.Error(), "@k8s global scope requires target and port") {
+		t.Fatalf("unexpected invalid profile error: %v", prof.Err)
 	}
 }
 

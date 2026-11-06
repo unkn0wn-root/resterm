@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -45,7 +46,7 @@ type impFile struct {
 	raw []byte
 }
 
-func ImportBundle(o ImportOptions) (ImportResult, error) {
+func ImportBundle(ctx context.Context, o ImportOptions) (ImportResult, error) {
 	bundleAbs, bundleReal, err := resolveDir(o.BundleDir, "bundle")
 	if err != nil {
 		return ImportResult{}, err
@@ -65,7 +66,7 @@ func ImportBundle(o ImportOptions) (ImportResult, error) {
 	}
 
 	if !o.DryRun {
-		if err := applyImportPlan(plan, wsAbs, wsReal); err != nil {
+		if err := applyImportPlan(ctx, plan, wsAbs, wsReal); err != nil {
 			return ImportResult{}, err
 		}
 	}
@@ -249,8 +250,11 @@ func importAction(dst string, force bool) (ImportAction, error) {
 	return ImportOverwrite, nil
 }
 
-func applyImportPlan(plan []impFile, wsAbs, wsReal string) error {
-	for _, f := range plan {
+func applyImportPlan(ctx context.Context, plan []impFile, wsAbs, wsReal string) error {
+	for i, f := range plan {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("imported %d of %d files: %w", i, len(plan), err)
+		}
 		if err := checkNoSymlinkEscape(wsAbs, wsReal, f.dst); err != nil {
 			return fmt.Errorf("destination %s: %w", f.op.Path, err)
 		}

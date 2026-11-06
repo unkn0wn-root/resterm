@@ -282,7 +282,7 @@ func (b *documentBuilder) handleAuthDirective(d parsedDirective) directiveOutcom
 		err = errors.New("@auth " + dir.Scope.String() + " scope must be declared outside a request")
 	}
 	if err != nil {
-		dir.Spec = &restfile.AuthSpec{Rejected: err.Error()}
+		dir.Spec = &restfile.AuthSpec{Err: err}
 		dir.Disable = false
 		b.setAuth(d, dir)
 		return b.rejectError(d, err)

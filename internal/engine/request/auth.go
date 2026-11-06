@@ -28,6 +28,7 @@ const (
 	errOAuthNotInitialized       = "oauth support is not initialised"
 	errMissingCommandAuthSpec    = "missing command auth spec"
 	errMissingOAuthSpec          = "missing oauth spec"
+	errAuthRejected              = "@auth line was rejected"
 	errOAuthTokenURLRequired     = "@auth oauth2 requires token_url (include it once per cache_key to seed the cache)"
 	errOAuthHeadlessSeedRequired = "headless oauth authorization_code requires a cached or refreshable token. Seed it outside CI or use a non-interactive grant"
 
@@ -86,8 +87,8 @@ func (e *Engine) resolveAuth(doc *restfile.Document, req *restfile.Request) erro
 		auth = auth.Resolve(*pf)
 		req.Metadata.Auth = auth
 	}
-	if auth.Rejected != "" {
-		return diag.New(diag.ClassAuth, withOrigin(auth.Rejected, auth))
+	if auth.Err != nil {
+		return diag.WrapAs(diag.ClassAuth, auth.Err, withOrigin(errAuthRejected, auth))
 	}
 	return nil
 }

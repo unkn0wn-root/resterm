@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-const maxChainDepth = 32
+const (
+	maxChainDepth = 32
+	joinSep       = "; "
+)
 
 type chainState struct {
 	seen map[error]struct{}
@@ -203,6 +206,49 @@ func chainOfError(err error, skip ...string) []ChainEntry {
 		}
 	}
 	return prepareChain(st.entries(err, 0))
+}
+
+// Headline returns err's text as a plain error's report header shows it, before masking and escaping.
+func Headline(err error) string {
+	return headline(err, 0, nil)
+}
+
+func headline(err error, depth int, mask func(string) string) string {
+	if mask == nil {
+		mask = func(s string) string { return s }
+	}
+	msg := err.Error()
+	whole := mask(msg)
+	if depth >= maxChainDepth {
+		return whole
+	}
+	switch err := err.(type) {
+	case errsUnwrapper:
+		errs := err.Unwrap()
+		msgs := make([]string, len(errs))
+		for i, e := range errs {
+			msgs[i] = mask(e.Error())
+		}
+		// errors.Join writes each error's text on its own line. A secret split across two of them is masked only in
+		// the whole text.
+		if whole != strings.Join(msgs, "\n") {
+			return whole
+		}
+		for i, e := range errs {
+			msgs[i] = headline(e, depth+1, mask)
+		}
+		return strings.Join(msgs, joinSep)
+	case errUnwrapper:
+		if cause := err.Unwrap(); cause != nil {
+			text := cause.Error()
+			if prefix, ok := strings.CutSuffix(msg, text); ok {
+				if p := mask(prefix); whole == p+mask(text) {
+					return p + headline(cause, depth+1, mask)
+				}
+			}
+		}
+	}
+	return whole
 }
 
 func leafChain(err error, st *chainState) []ChainEntry {

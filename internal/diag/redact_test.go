@@ -1,12 +1,14 @@
 package diag_test
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/redact"
 )
 
 func maskSecrets(secrets ...string) func(string) string {
@@ -190,5 +192,98 @@ func TestRedactError(t *testing.T) {
 	}
 	if out := diag.Redact(nil, maskSecrets(secret)); out != nil {
 		t.Errorf("Redact(nil) = %v", out)
+	}
+}
+
+func TestRedactJoinedError(t *testing.T) {
+	const secret = "s3cr3t-value-long-enough"
+	enc := base64.StdEncoding.EncodeToString([]byte(secret))
+	a, b := errors.New("alpha failed"), errors.New("beta failed")
+	token := errors.New("token " + secret)
+	tests := []struct {
+		name   string
+		err    error
+		secret string
+		want   []string
+	}{
+		{
+			"secret in one member",
+			fmt.Errorf("skill: %w", errors.Join(a, token)),
+			secret,
+			[]string{"error[unknown]: skill: alpha failed; token •••", "skill", "├─> alpha failed", "╰─> token •••"},
+		},
+		{
+			"secret in a nested member",
+			errors.Join(a, fmt.Errorf("w: %w", errors.Join(b, token))),
+			secret,
+			[]string{
+				"error[unknown]: alpha failed; w: beta failed; token •••",
+				"├─> alpha failed",
+				"╰─> w",
+				"    ├─> beta failed",
+				"    ╰─> token •••",
+			},
+		},
+		{
+			"base64 split across members",
+			fmt.Errorf("skill - %w", errors.Join(errors.New("token "+enc[:16]), errors.New(enc[16:]+" rest"))),
+			secret,
+			[]string{"error[unknown]: skill - token ••• rest"},
+		},
+		{
+			"secret split across members",
+			fmt.Errorf("skill - %w", errors.Join(errors.New("x abc"), errors.New("def y"))),
+			"abc\ndef",
+			[]string{"error[unknown]: skill - x ••• y"},
+		},
+		{
+			"secret split across joined errors",
+			errors.Join(errors.New("x abc"), errors.New("def y")),
+			"abc\ndef",
+			[]string{"error[unknown]: x ••• y", "├─> x abc", "╰─> def y"},
+		},
+		{
+			"separator completes a secret",
+			errors.Join(errors.New("x abc"), errors.New("def y")),
+			"abc; def",
+			[]string{`error[unknown]: x abc\ndef y`, "├─> x abc", "╰─> def y"},
+		},
+		{
+			"secret split across a prefix and its cause",
+			fmt.Errorf("token s3cr3t-value-%w", errors.Join(errors.New("long-enough rest"), b)),
+			secret,
+			[]string{`error[unknown]: token ••• rest\nbeta failed`},
+		},
+		{
+			"no secret",
+			fmt.Errorf("skill: %w", errors.Join(a, b)),
+			secret,
+			[]string{
+				"error[unknown]: skill: alpha failed; beta failed",
+				"skill",
+				"├─> alpha failed",
+				"╰─> beta failed",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mask := redact.New(tt.secret).Text
+			out := diag.Redact(tt.err, mask)
+			if got, want := out.Error(), mask(tt.err.Error()); got != want {
+				t.Errorf("Error() = %q, want %q", got, want)
+			}
+			if got, want := diag.Render(out), strings.Join(tt.want, "\n"); got != want {
+				t.Errorf("Render() = %q, want %q", got, want)
+			}
+		})
+	}
+
+	deep := errors.Join(token, b)
+	for range 32 {
+		deep = fmt.Errorf("w: %w", deep)
+	}
+	if got := diag.Render(diag.Redact(deep, redact.New(secret).Text)); strings.Contains(got, secret) {
+		t.Errorf("Render() past the depth bound shows the secret:\n%s", got)
 	}
 }
