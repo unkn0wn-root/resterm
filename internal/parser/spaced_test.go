@@ -70,11 +70,11 @@ func TestSpacedSharedProfilesAreRejected(t *testing.T) {
 		t.Fatalf("errors = %v, want one per line", doc.Errors)
 	}
 	want := `@ssh option "persist" has spaces around =. Write it as key=value`
-	if len(doc.SSH) != 1 || !doc.SSH[0].Invalid || doc.SSH[0].Error != want {
+	if len(doc.SSH) != 1 || doc.SSH[0].Err == nil || doc.SSH[0].Err.Error() != want {
 		t.Fatalf("ssh = %+v, want the profile kept as invalid with the spacing error", doc.SSH)
 	}
-	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid ||
-		!strings.Contains(doc.K8s[0].Error, `"persist" has spaces around =`) {
+	if len(doc.K8s) != 1 || doc.K8s[0].Err == nil ||
+		!strings.Contains(doc.K8s[0].Err.Error(), `"persist" has spaces around =`) {
 		t.Fatalf("k8s = %+v, want the profile kept as invalid with the spacing error", doc.K8s)
 	}
 }

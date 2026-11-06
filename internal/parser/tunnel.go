@@ -17,7 +17,7 @@ func (b *documentBuilder) handleSSHDirective(d parsedDirective) directiveOutcome
 	res, err := sshbuilder.ParseDirective(d.Args)
 	b.report(d, err)
 	if fatalErr(err) {
-		b.addInvalidSSHProfile(d.lines.Start, res.Profile, withoutWarnings(err).Error())
+		b.addInvalidSSHProfile(d.lines.Start, res.Profile, withoutWarnings(err))
 		return directiveRejected
 	}
 
@@ -40,7 +40,7 @@ func (b *documentBuilder) handleSSHDirective(d parsedDirective) directiveOutcome
 		var spaced *directive.SpacedOptionsError
 		var op *directive.OpOptionError
 		if errors.As(err, &spaced) || errors.As(err, &op) {
-			b.addInvalidSSHProfile(d.lines.Start, res.Profile, withoutWarnings(err).Error())
+			b.addInvalidSSHProfile(d.lines.Start, res.Profile, withoutWarnings(err))
 			return directiveRejected
 		}
 		res.Profile.Line = d.lines.Start
@@ -57,7 +57,7 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 	res, err := k8sbuilder.ParseDirective(d.Args)
 	b.report(d, err)
 	if fatalErr(err) {
-		b.addInvalidK8sProfile(d.lines.Start, res.Profile, withoutWarnings(err).Error())
+		b.addInvalidK8sProfile(d.lines.Start, res.Profile, withoutWarnings(err))
 		return directiveRejected
 	}
 
@@ -79,7 +79,7 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 		var spaced *directive.SpacedOptionsError
 		var op *directive.OpOptionError
 		if errors.As(err, &spaced) || errors.As(err, &op) {
-			b.addInvalidK8sProfile(d.lines.Start, res.Profile, withoutWarnings(err).Error())
+			b.addInvalidK8sProfile(d.lines.Start, res.Profile, withoutWarnings(err))
 			return directiveRejected
 		}
 		res.Profile.Line = d.lines.Start
@@ -91,27 +91,25 @@ func (b *documentBuilder) handleK8sDirective(d parsedDirective) directiveOutcome
 func (b *documentBuilder) addInvalidK8sProfile(
 	line int,
 	prof restfile.K8sProfile,
-	message string,
+	err error,
 ) {
 	if prof.Scope != directive.ScopeGlobal && prof.Scope != directive.ScopeFile {
 		return
 	}
 	prof.Line = line
-	prof.Invalid = true
-	prof.Error = message
+	prof.Err = err
 	b.file.k8s = append(b.file.k8s, prof)
 }
 
 func (b *documentBuilder) addInvalidSSHProfile(
 	line int,
 	prof restfile.SSHProfile,
-	message string,
+	err error,
 ) {
 	if prof.Scope != directive.ScopeGlobal && prof.Scope != directive.ScopeFile {
 		return
 	}
 	prof.Line = line
-	prof.Invalid = true
-	prof.Error = message
+	prof.Err = err
 	b.file.ssh = append(b.file.ssh, prof)
 }

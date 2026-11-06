@@ -289,8 +289,7 @@ type SSHProfile struct {
 	KeepAliveStr string
 	Retries      Opt[int]
 	RetriesStr   string
-	Invalid      bool
-	Error        string
+	Err          error
 }
 
 type SSHSpec struct {
@@ -318,8 +317,7 @@ type K8sProfile struct {
 	PodWaitStr   string
 	Retries      Opt[int]
 	RetriesStr   string
-	Invalid      bool
-	Error        string
+	Err          error
 }
 
 type K8sSpec struct {

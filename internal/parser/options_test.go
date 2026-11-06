@@ -435,11 +435,11 @@ func TestBareValueKeyRejectsSharedProfiles(t *testing.T) {
 		t.Fatalf("errors = %v, want one per line", doc.Errors)
 	}
 	want := `@ssh option "user" needs a value. Write it as user=value`
-	if len(doc.SSH) != 1 || !doc.SSH[0].Invalid || doc.SSH[0].Error != want {
+	if len(doc.SSH) != 1 || doc.SSH[0].Err == nil || doc.SSH[0].Err.Error() != want {
 		t.Fatalf("ssh = %+v, want the profile kept as invalid", doc.SSH)
 	}
 	want = `@k8s option "namespace" needs a value. Write it as namespace=value`
-	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid || doc.K8s[0].Error != want {
+	if len(doc.K8s) != 1 || doc.K8s[0].Err == nil || doc.K8s[0].Err.Error() != want {
 		t.Fatalf("k8s = %+v, want the profile kept as invalid", doc.K8s)
 	}
 }
@@ -737,8 +737,15 @@ func TestTunnelErrorsKeepOptionFindings(t *testing.T) {
 		}
 		return out
 	}
-	shared := func(name string, line int, invalid bool, msg string) string {
-		return fmt.Sprintf("%s line %d invalid=%t error=%q", name, line, invalid, msg)
+	texts := func(err error) []string {
+		var out []string
+		for _, err := range leaves(err) {
+			out = append(out, err.Error())
+		}
+		return out
+	}
+	shared := func(name string, line int, errs []string) string {
+		return fmt.Sprintf("%s line %d errors=%q", name, line, errs)
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -751,14 +758,13 @@ func TestTunnelErrorsKeepOptionFindings(t *testing.T) {
 			}
 			var got, want []string
 			for _, p := range doc.SSH {
-				got = append(got, shared(p.Name, p.Line, p.Invalid, p.Error))
+				got = append(got, shared(p.Name, p.Line, texts(p.Err)))
 			}
 			for _, p := range doc.K8s {
-				got = append(got, shared(p.Name, p.Line, p.Invalid, p.Error))
+				got = append(got, shared(p.Name, p.Line, texts(p.Err)))
 			}
 			if tt.profile != "" {
-				msg := strings.Join(tt.errs, "\n")
-				want = []string{shared(tt.profile, 2, msg != "", msg)}
+				want = []string{shared(tt.profile, 2, tt.errs)}
 			}
 			if !slices.Equal(got, want) {
 				t.Fatalf("shared profiles = %q, want %q", got, want)
@@ -1025,10 +1031,10 @@ func TestOptionWrittenWithLessOrEqualIsAnError(t *testing.T) {
 	if want := map[string]string{"timeout": "2s"}; !maps.Equal(doc.Settings, want) {
 		t.Fatalf("settings = %v, want %v", doc.Settings, want)
 	}
-	if len(doc.SSH) != 1 || !doc.SSH[0].Invalid || doc.SSH[0].Error != want[1].msg {
+	if len(doc.SSH) != 1 || doc.SSH[0].Err == nil || doc.SSH[0].Err.Error() != want[1].msg {
 		t.Fatalf("ssh = %+v, want the profile kept as invalid", doc.SSH)
 	}
-	if len(doc.K8s) != 1 || !doc.K8s[0].Invalid || doc.K8s[0].Error != want[2].msg {
+	if len(doc.K8s) != 1 || doc.K8s[0].Err == nil || doc.K8s[0].Err.Error() != want[2].msg {
 		t.Fatalf("k8s = %+v, want the profile kept as invalid", doc.K8s)
 	}
 }
