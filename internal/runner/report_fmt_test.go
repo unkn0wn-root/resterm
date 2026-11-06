@@ -257,6 +257,19 @@ func TestReportModelIncludesErrorDetails(t *testing.T) {
 	}
 }
 
+func TestReportModelKeepsJoinedErrorText(t *testing.T) {
+	err := fmt.Errorf("perform request: %w", errors.Join(errors.New("dial a"), errors.New("close b")))
+	res := ReportModel(&Report{Results: []Result{{Name: "r", Err: err}}}).Results[0]
+	const want = "perform request: dial a\nclose b"
+	if res.Error != want || res.Failure.Message != want {
+		t.Fatalf("Error = %q, Failure.Message = %q, want %q", res.Error, res.Failure.Message, want)
+	}
+	const head = "error[unknown]: perform request: dial a; close b\n"
+	if got := res.ErrorDetail.Rendered; !strings.HasPrefix(got, head) {
+		t.Fatalf("Rendered = %q, want it to start with %q", got, head)
+	}
+}
+
 func TestReportModelUsesResponseDuration(t *testing.T) {
 	rep := &Report{
 		Results: []Result{{

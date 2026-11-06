@@ -131,7 +131,7 @@ func noteLine(note Note) Line {
 	}
 }
 
-func chainLines(headline string, entries []ChainEntry) []Line {
+func chainLines(head string, entries []ChainEntry) []Line {
 	entries = prepareChain(entries)
 	if len(entries) == 0 {
 		return nil
@@ -140,7 +140,7 @@ func chainLines(headline string, entries []ChainEntry) []Line {
 		root := entries[0]
 		var out []Line
 		// an operation root that repeats the headline adds nothing, so render only its causes
-		if root.Kind != ChainOperation || root.Message != headline {
+		if root.Kind != ChainOperation || root.Message != head {
 			out = append(out, Line{Kind: LineChain, Text: root.Message})
 		}
 		appendTreeChainLines(&out, "", root.Children)

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/skills"
 )
@@ -182,6 +183,12 @@ func TestSkillInstall(t *testing.T) {
 				for _, dst := range tt.blocked {
 					if p := filepath.Join(home, dst); !strings.Contains(err.Error(), p) {
 						t.Fatalf("runSkill(%q) = %v, want an error for %s", args, err, p)
+					}
+				}
+				if len(tt.blocked) > 0 {
+					head, _, _ := strings.Cut(diag.Render(err), "\n")
+					if line := "error[unknown]: " + strings.ReplaceAll(err.Error(), "\n", "; "); head != line {
+						t.Fatalf("header = %q, want %q", head, line)
 					}
 				}
 				if out != want {

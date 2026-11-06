@@ -1,6 +1,7 @@
 package diag
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 )
@@ -114,13 +115,32 @@ type Reporter interface {
 
 // ReportOf converts err into a structured report.
 func ReportOf(err error) Report {
+	return maskedReport(err, nil)
+}
+
+// maskedReport is ReportOf(err).Redact(mask), except that a plain error's header is built from masked text.
+func maskedReport(err error, mask func(string) string) Report {
 	if err == nil {
 		return Report{}
 	}
 	if rep := reportOf(err); len(rep.Items) > 0 {
-		return prepareReport(rep)
+		return prepareReport(rep).Redact(mask)
 	}
-	return prepareReport(Report{Items: []Diagnostic{plainDiagnostic(err)}})
+	d := plainDiagnostic(err)
+	rep := prepareReport(Report{Items: []Diagnostic{d}}).Redact(mask)
+	head := headline(err, 0, nil)
+	if mask != nil {
+		msg := err.Error()
+		// Only a join printed on one line needs its parts masked. Any other header is the masked text.
+		if head == msg {
+			head = mask(msg)
+		} else if head = headline(err, 0, mask); mask(head) != head {
+			// "; " can complete a secret that the line break kept apart.
+			head = mask(msg)
+		}
+	}
+	rep.Items[0].Message = cmp.Or(head, string(d.Class))
+	return rep
 }
 
 // ClassOf returns the dominant diagnostic class found in err.
@@ -350,18 +370,10 @@ func opChain(e *diagnosticError, msg string) []ChainEntry {
 
 func plainDiagnostic(err error) Diagnostic {
 	class := classify(err)
-	msg := ""
-	if err != nil {
-		msg = err.Error()
-	}
-	if msg == "" {
-		msg = string(class)
-	}
 	return Diagnostic{
 		Class:    class,
 		Severity: SeverityError,
-		Message:  msg,
-		Chain:    chainOfError(err, msg),
+		Chain:    chainOfError(err, cmp.Or(err.Error(), string(class))),
 	}
 }
 
