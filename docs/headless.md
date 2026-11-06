@@ -6,7 +6,7 @@ The `headless` package runs request files from Go code. It uses the same engine 
 go get github.com/unkn0wn-root/resterm
 ```
 
-`headless` is Resterm's only public Go package. The [compatibility promise](compatibility.md) covers it, so code written against it keeps working through v1. Every type and field is listed on [pkg.go.dev](https://pkg.go.dev/github.com/unkn0wn-root/resterm/headless).
+`headless` is Resterm's Go API. The [compatibility promise](compatibility.md) covers it, so code written against it keeps working through v1. Every type and field is listed on [pkg.go.dev](https://pkg.go.dev/github.com/unkn0wn-root/resterm/headless).
 
 Request files can run commands and scripts, and they can write files. Only run files you trust. [Security](security.md) lists what a file can do.
 
