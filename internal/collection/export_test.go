@@ -2,9 +2,14 @@ package collection
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -303,22 +308,213 @@ GRPC localhost:8080
 	}
 }
 
-func TestExportBundleForceOverwrite(t *testing.T) {
+func TestExportBundleForce(t *testing.T) {
+	ws := t.TempDir()
+	writeFile(t, ws, "requests.http", "POST https://example.com\n\n< ./payloads/body.json\n")
+	writeFile(t, ws, "payloads/body.json", `{"a":1}`)
+	bundle := filepath.Join(t.TempDir(), "bundle")
+	if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: bundle}); err != nil {
+		t.Fatal(err)
+	}
+	want := slices.Sorted(maps.Keys(readTree(t, os.DirFS(bundle))))
+
+	tests := []struct {
+		name   string
+		bundle bool
+		files  map[string]string
+		links  map[string]string
+		force  bool
+		err    string
+	}{
+		{name: "new folder"},
+		{name: "new folder with force", force: true},
+		{name: "bundle", bundle: true, files: map[string]string{"out/old.txt": "old"}, force: true},
+		{name: "bundle without force", bundle: true, err: "already exists"},
+		{name: "file without force", files: map[string]string{"out": "notes"}, err: "already exists"},
+		{name: "file", files: map[string]string{"out": "notes"}, force: true, err: "is not a resterm bundle"},
+		{
+			name:  "folder that is not a bundle",
+			files: map[string]string{"out/todo.txt": "keep", "out/.git/HEAD": "ref"},
+			force: true,
+			err:   "is not a resterm bundle",
+		},
+		{
+			name:  "web manifest",
+			files: map[string]string{"out/manifest.json": `{"name":"app","start_url":"/"}`, "out/index.html": "<p>"},
+			force: true,
+			err:   "is not a resterm bundle",
+		},
+		{
+			name:  "manifest link",
+			files: map[string]string{"out/todo.txt": "keep"},
+			links: map[string]string{"out/manifest.json": filepath.Join(bundle, ManifestFile)},
+			force: true,
+			err:   "is not a resterm bundle",
+		},
+		{name: "link without force", links: map[string]string{"out": bundle}, err: "already exists"},
+		{name: "link to a bundle", links: map[string]string{"out": bundle}, force: true, err: "is a link"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			out := filepath.Join(dir, "out")
+			if tt.bundle {
+				if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for name, data := range tt.files {
+				writeFile(t, dir, name, data)
+			}
+			for name, target := range tt.links {
+				if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
+					t.Skipf("cannot create a link: %v", err)
+				}
+			}
+			before := readTree(t, os.DirFS(dir))
+
+			_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, Force: tt.force})
+			if entries, err := os.ReadDir(dir); err != nil || len(entries) != 1 {
+				t.Fatalf("ReadDir(%s) = %v, %v, want only out", dir, entries, err)
+			}
+			if tt.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.err) {
+					t.Fatalf("ExportBundle = %v, want an error with %q", err, tt.err)
+				}
+				if got := readTree(t, os.DirFS(dir)); !maps.Equal(got, before) {
+					t.Fatalf("files changed to %v, want %v", got, before)
+				}
+				for name, target := range tt.links {
+					if got, err := os.Readlink(filepath.Join(dir, name)); err != nil || got != target {
+						t.Fatalf("Readlink(%s) = %q, %v, want %q", name, got, err, target)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := slices.Sorted(maps.Keys(readTree(t, os.DirFS(out)))); !slices.Equal(got, want) {
+				t.Fatalf("bundle files %v, want %v", got, want)
+			}
+			if got := fileMode(t, out).Perm(); runtime.GOOS != "windows" && got != 0o700 {
+				t.Fatalf("bundle mode = %v, want 0700", got)
+			}
+			for _, name := range []string{"payloads", "payloads/body.json"} {
+				got, want := fileMode(t, filepath.Join(out, name)), fileMode(t, filepath.Join(ws, name))
+				if got != want {
+					t.Fatalf("%s mode = %v, want %v like the workspace", name, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestExportBundleReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("read-only folders do not stop root or Windows")
+	}
+	ws := t.TempDir()
+	writeFile(t, ws, "requests.http", "POST https://example.com\n\n< ./payloads/body.json\n")
+	writeFile(t, ws, "payloads/body.json", `{"a":1}`)
+
+	tests := []struct {
+		name string
+		lock string
+		err  string
+		ok   bool
+	}{
+		{name: "parent", lock: ".", err: "create temp dir"},
+		{name: "bundle", lock: "out", err: "move old bundle aside"},
+		{name: "folder in the bundle", lock: "out/payloads", ok: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			out := filepath.Join(dir, "out")
+			if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out}); err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, out, "old.txt", "old")
+			if err := os.Chmod(filepath.Join(dir, tt.lock), 0o555); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+					if err == nil && d.IsDir() {
+						_ = os.Chmod(p, 0o755)
+					}
+					return nil
+				})
+			})
+			before := readTree(t, os.DirFS(out))
+
+			_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, Force: true})
+			if tt.ok {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := os.Stat(filepath.Join(out, "old.txt")); !errors.Is(err, fs.ErrNotExist) {
+					t.Fatalf("Stat(old.txt) = %v, want it gone with the old bundle", err)
+				}
+				return
+			}
+			if !errors.Is(err, fs.ErrPermission) || !strings.Contains(err.Error(), tt.err) {
+				t.Fatalf("ExportBundle = %v, want a permission error at %s", err, tt.err)
+			}
+			if got := readTree(t, os.DirFS(out)); !maps.Equal(got, before) {
+				t.Fatalf("files changed to %v, want %v", got, before)
+			}
+			if entries, err := os.ReadDir(dir); err != nil || len(entries) != 1 {
+				t.Fatalf("ReadDir(%s) = %v, %v, want only out", dir, entries, err)
+			}
+		})
+	}
+}
+
+func TestReplaceDirRestoresBundle(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("read-only folders do not stop root or Windows")
+	}
 	ws := t.TempDir()
 	writeFile(t, ws, "requests.http", "GET https://example.com\n")
 
-	out := filepath.Join(t.TempDir(), "bundle")
-	writeFile(t, filepath.Dir(out), filepath.Base(out), "old")
-
-	if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out}); err == nil {
-		t.Fatalf("expected error when output already exists")
+	readOnly := func(dir string) error { return os.Chmod(dir, 0o555) }
+	tests := []struct {
+		name   string
+		bundle bool
+		fill   func(dir string) error
+		err    error
+	}{
+		{name: "fill fails", bundle: true, fill: func(string) error { return io.ErrShortWrite }, err: io.ErrShortWrite},
+		{name: "move fails", bundle: true, fill: readOnly, err: fs.ErrPermission},
+		{name: "move to a new path fails", fill: readOnly, err: fs.ErrPermission},
 	}
-	if _, err := ExportBundle(ExportOptions{
-		Workspace: ws,
-		OutDir:    out,
-		Force:     true,
-	}); err != nil {
-		t.Fatalf("force export should succeed: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			out := filepath.Join(dir, "out")
+			if tt.bundle {
+				if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files := readTree(t, os.DirFS(dir))
+
+			if err := replaceDir(out, true, tt.fill); !errors.Is(err, tt.err) {
+				t.Fatalf("replaceDir = %v, want %v", err, tt.err)
+			}
+			if got := readTree(t, os.DirFS(dir)); !maps.Equal(got, files) {
+				t.Fatalf("files changed to %v, want %v", got, files)
+			}
+			if got, err := os.ReadDir(dir); err != nil || len(got) != len(entries) {
+				t.Fatalf("ReadDir(%s) = %v, %v, want %v", dir, got, err, entries)
+			}
+		})
 	}
 }
 
@@ -335,6 +531,32 @@ func writeFile(t *testing.T, root, rel, data string) {
 	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
 		t.Fatalf("write %s: %v", rel, err)
 	}
+}
+
+func fileMode(t *testing.T, path string) fs.FileMode {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fi.Mode()
+}
+
+func readTree(t *testing.T, fsys fs.FS) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	err := fs.WalkDir(fsys, ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || !d.Type().IsRegular() {
+			return err
+		}
+		data, err := fs.ReadFile(fsys, name)
+		files[name] = string(data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }
 
 func assertRedactedLeaves(t *testing.T, v any) {

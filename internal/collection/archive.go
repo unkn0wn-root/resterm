@@ -148,69 +148,44 @@ func UnpackBundle(o UnpackOptions) (UnpackResult, error) {
 	if err != nil {
 		return UnpackResult{}, err
 	}
-	par := filepath.Dir(outAbs)
-	if err := os.MkdirAll(par, 0o755); err != nil {
-		return UnpackResult{}, fmt.Errorf("create output parent dir: %w", err)
-	}
-	parReal := par
-	if p, pErr := filepath.EvalSymlinks(par); pErr == nil {
-		parReal = p
-	}
-	outReal := filepath.Join(parReal, filepath.Base(outAbs))
 
-	if !o.Force {
-		if _, err := os.Stat(outReal); err == nil {
-			return UnpackResult{}, fmt.Errorf("output path already exists: %s", outAbs)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return UnpackResult{}, fmt.Errorf("stat output path: %w", err)
+	var mf Manifest
+	err = replaceDir(outAbs, o.Force, func(dir string) error {
+		seen, err := unpackZipToDir(inAbs, dir)
+		if err != nil {
+			return err
 		}
-	}
 
-	tmp, err := os.MkdirTemp(parReal, ".resterm-collection-unpack-*")
-	if err != nil {
-		return UnpackResult{}, fmt.Errorf("create temp bundle dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmp) }()
+		dirReal := dir
+		if p, pErr := filepath.EvalSymlinks(dir); pErr == nil {
+			dirReal = p
+		}
 
-	seen, err := unpackZipToDir(inAbs, tmp)
+		mf, err = readBundleManifest(dir)
+		if err != nil {
+			return err
+		}
+
+		want := make(map[string]struct{}, len(mf.Files)+1)
+		want[ManifestFile] = struct{}{}
+		for _, f := range mf.Files {
+			want[f.Path] = struct{}{}
+			if _, ok := seen[f.Path]; !ok {
+				return fmt.Errorf("bundle file not found: %s", f.Path)
+			}
+			if _, err := readBundlePayload(dir, dirReal, f); err != nil {
+				return err
+			}
+		}
+		for p := range seen {
+			if _, ok := want[p]; !ok {
+				return fmt.Errorf("unexpected archive entry: %s", p)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return UnpackResult{}, err
-	}
-
-	tmpReal := tmp
-	if p, pErr := filepath.EvalSymlinks(tmp); pErr == nil {
-		tmpReal = p
-	}
-
-	mf, err := readBundleManifest(tmp)
-	if err != nil {
-		return UnpackResult{}, err
-	}
-
-	want := make(map[string]struct{}, len(mf.Files)+1)
-	want[ManifestFile] = struct{}{}
-	for _, f := range mf.Files {
-		want[f.Path] = struct{}{}
-		if _, ok := seen[f.Path]; !ok {
-			return UnpackResult{}, fmt.Errorf("bundle file not found: %s", f.Path)
-		}
-		if _, err := readBundlePayload(tmp, tmpReal, f); err != nil {
-			return UnpackResult{}, err
-		}
-	}
-	for p := range seen {
-		if _, ok := want[p]; !ok {
-			return UnpackResult{}, fmt.Errorf("unexpected archive entry: %s", p)
-		}
-	}
-
-	if o.Force {
-		if err := os.RemoveAll(outReal); err != nil {
-			return UnpackResult{}, fmt.Errorf("remove previous output: %w", err)
-		}
-	}
-	if err := os.Rename(tmp, outReal); err != nil {
-		return UnpackResult{}, fmt.Errorf("move bundle into place: %w", err)
 	}
 
 	return UnpackResult{

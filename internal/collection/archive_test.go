@@ -2,8 +2,10 @@ package collection
 
 import (
 	"archive/zip"
+	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -37,12 +39,32 @@ func TestPackUnpackBundleRoundTrip(t *testing.T) {
 		t.Fatalf("unpacked count=%d want %d", un.FileCount, exp.FileCount)
 	}
 
-	if _, err := os.Stat(filepath.Join(out, ManifestFile)); err != nil {
-		t.Fatalf("expected manifest in unpacked bundle: %v", err)
+	if got := fileMode(t, out).Perm(); runtime.GOOS != "windows" && got != 0o700 {
+		t.Fatalf("unpacked bundle mode = %v, want 0700", got)
+	}
+	got, want := fileMode(t, filepath.Join(out, ManifestFile)), fileMode(t, filepath.Join(bund, ManifestFile))
+	if got != want {
+		t.Fatalf("unpacked manifest mode = %v, want %v like the exported one", got, want)
 	}
 
 	if _, err := ImportBundle(ImportOptions{BundleDir: out, Workspace: t.TempDir()}); err != nil {
 		t.Fatalf("import unpacked bundle: %v", err)
+	}
+
+	if _, err := UnpackBundle(UnpackOptions{InFile: arc, OutDir: out, Force: true}); err != nil {
+		t.Fatalf("force unpack over a bundle: %v", err)
+	}
+	if got := fileMode(t, out).Perm(); runtime.GOOS != "windows" && got != 0o700 {
+		t.Fatalf("force unpacked bundle mode = %v, want 0700", got)
+	}
+	notes := t.TempDir()
+	writeFile(t, notes, "todo.txt", "keep")
+	_, err = UnpackBundle(UnpackOptions{InFile: arc, OutDir: notes, Force: true})
+	if err == nil || !strings.Contains(err.Error(), "is not a resterm bundle") {
+		t.Fatalf("force unpack over notes = %v, want an error with %q", err, "is not a resterm bundle")
+	}
+	if got := readTree(t, os.DirFS(notes)); !maps.Equal(got, map[string]string{"todo.txt": "keep"}) {
+		t.Fatalf("notes changed to %v", got)
 	}
 }
 

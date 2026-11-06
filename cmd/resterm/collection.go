@@ -63,7 +63,7 @@ func runCollectionExport(args []string) error {
 	fs.StringVar(&out, "out", "", "Output bundle directory path")
 	fs.StringVar(&name, "name", "", "Optional bundle name")
 	fs.BoolVar(&recursive, "recursive", false, "Recursively scan workspace for request files")
-	fs.BoolVar(&force, "force", false, "Overwrite existing output directory")
+	fs.BoolVar(&force, "force", false, "Replace an existing bundle")
 
 	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
@@ -215,7 +215,7 @@ func runCollectionUnpack(args []string) error {
 
 	fs.StringVar(&in, "in", "", "Input archive (.zip) path")
 	fs.StringVar(&out, "out", "", "Output bundle directory path")
-	fs.BoolVar(&force, "force", false, "Overwrite existing output directory")
+	fs.BoolVar(&force, "force", false, "Replace an existing bundle")
 
 	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
