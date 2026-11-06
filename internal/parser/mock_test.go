@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -922,6 +923,20 @@ func TestParseMockDiagnostics(t *testing.T) {
 	doc := Parse("bad.http", []byte(src))
 	if len(doc.Errors) == 0 || len(doc.Requests) != 0 || len(doc.Mocks) != 1 {
 		t.Fatalf("errors=%+v requests=%d mocks=%d", doc.Errors, len(doc.Requests), len(doc.Mocks))
+	}
+
+	doc = Parse("m.http", []byte("# @mock method = GET path=/a delay<=1s\nHTTP/1.1 200 OK\n"))
+	var got []string
+	for _, e := range doc.Errors {
+		got = append(got, fmt.Sprintf("%d:%d mock=%t %s", e.Span.Start.Line, e.Span.Start.Col, e.Mock, e.Message))
+	}
+	want := []string{
+		`1:9 mock=true @mock option "method" has spaces around =. Write it as key=value`,
+		`1:30 mock=true @mock option "delay" takes = instead of <=. Write it as delay=1s`,
+		"1:3 mock=true @mock method is required",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("errors = %q, want %q", got, want)
 	}
 }
 

@@ -26,7 +26,9 @@ func (b *documentBuilder) failMock(d parsedDirective, msg string) {
 }
 
 func (b *documentBuilder) reportMock(d parsedDirective, err error) {
-	b.pushMockError(d.diagnostic(err.Error(), err))
+	for _, err := range leaves(err) {
+		b.pushMockError(d.diagnostic(err.Error(), err))
+	}
 }
 
 func (b *documentBuilder) pushMockError(item restfile.ParseDiagnostic) {
