@@ -38,8 +38,8 @@ An unquoted marker in a script comment switches the capture to text mode. Rester
 # @capture request x response.statusCode # mention "{{token}}"
 ```
 
-Set `# @setting capture.strict true` to make capture-path misses fail instead of silently resolving to an empty string. Invalid paths, such as `{{response.json.items[*]}}`, always fail.
+Set `# @setting capture.strict true` to make a template capture such as `{{response.json.token}}` fail when its path is missing, instead of saving an empty string. It does not change RTS captures such as `response.json.token`, which still save an empty string, so check those values with `@assert`, as in `# @assert response.json().token != null`. Invalid paths, such as `{{response.json.items[*]}}`, always fail.
 
 Do not mix unquoted template markers and RTS call syntax in the same capture expression (for example `contains({{name}}, "x")`). Use pure RTS (`contains(vars.get("name") ?? "", "x")`) or a template expression (`{{= contains(...) }}`).
 
-Use `capture.strict` in new files. The older spellings `capture-strict` and `capture_strict` still work. If more than one spelling is present, Resterm checks them in this order: `capture.strict` > `capture-strict` > `capture_strict`.
+Use `capture.strict` in new files. The older names `capture-strict` and `capture_strict` still work. If more than one is present, Resterm checks them in this order: `capture.strict` > `capture-strict` > `capture_strict`.
