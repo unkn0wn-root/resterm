@@ -10,12 +10,15 @@ Use a `@workflow` block to run existing requests in order, such as logging in, c
 # @step FetchProfile using=GetUser
 
 ### AuthLogin
+# @name AuthLogin
 POST https://example.com/auth
 
 ### CreateUser
+# @name CreateUser
 POST https://example.com/users
 
 ### GetUser
+# @name GetUser
 GET https://example.com/users/{{vars.workflow.userId}}
 ```
 

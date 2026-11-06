@@ -110,11 +110,11 @@ Report failures with [`t.error` and `t.fatal`](host-objects.md#t). Runtime error
 
 ## @if, @elif, and @else
 
-Use these directives in workflows to choose a step based on a condition. Outside an active workflow, they are ignored and the parser shows a warning. After a line that ends a workflow by starting a request, such as plain text or `@name`, they are a parse error until the request line. Use `@when` or `@skip-if` to decide whether an ordinary request runs.
+Use these directives in workflows to choose which request runs based on a condition. `run=` names a request by its `@name`. Outside an active workflow, they are ignored and the parser shows a warning. After a line that ends a workflow by starting a request, such as plain text or `@name`, they are a parse error until the request line. Use `@when` or `@skip-if` to decide whether an ordinary request runs.
 
 ```http
-# @if last.statusCode == 200 run=StepOK
-# @elif last.statusCode == 401 run=StepRefresh
+# @if last.statusCode == 200 run=GetProfile
+# @elif last.statusCode == 401 run=RefreshToken
 # @else fail="unexpected status"
 ```
 
@@ -122,12 +122,12 @@ Use these directives in workflows to choose a step based on a condition. Outside
 
 ```http
 # @switch last.statusCode
-# @case 200 run=StepOK
-# @case 401 run=StepRefresh
+# @case 200 run=GetProfile
+# @case 401 run=RefreshToken
 # @default fail="unexpected status"
 ```
 
-These directives route workflow steps and are not the `switch` statement. They use the same equality rules, but each `@case` names a step to run instead of holding a statement list.
+These directives route workflow steps and are not the `switch` statement. They use the same equality rules, but each `@case` names a request to run instead of holding a statement list.
 
 ## @for-each
 
