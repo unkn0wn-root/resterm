@@ -110,12 +110,14 @@ func TestRecordUsageErrorsAndHelp(t *testing.T) {
 			t.Fatal("usage error leaked upstream credentials")
 		}
 	}
-	var help bytes.Buffer
-	if err := runRecord(t.Context(), []string{"--help"}, &help, &help); err != nil {
+	var out, help bytes.Buffer
+	if err := runRecord(t.Context(), []string{"--help"}, &out, &help); err != nil {
 		t.Fatal(err)
 	}
-	if help.Len() == 0 {
-		t.Fatal("help is empty")
+	got := help.String()
+	if out.Len() != 0 ||
+		!strings.HasPrefix(got, "Usage: resterm record [flags]\n") || strings.Count(got, "Usage:") != 1 {
+		t.Fatalf("stdout = %q, stderr = %q, want the record usage once on stderr", out.String(), got)
 	}
 }
 

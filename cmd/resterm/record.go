@@ -44,18 +44,16 @@ func runRecord(ctx context.Context, args []string, out, errOut io.Writer) error 
 
 // parseRecordArgs returns nil, nil after printing help.
 func parseRecordArgs(args []string, errOut io.Writer) (*recordArgs, error) {
-	fs := cli.NewFlagSet("record")
+	fs := cli.NewSubcommandFlagSet("resterm", "record", errOut)
 	flags := cli.NewRecordFlags()
 	flags.Bind(fs)
 
 	var path, mode string
 	fs.StringVarAliases(&path, "", "New .http/.rest output file (required)", "out", "o")
 	fs.StringVarAliases(&mode, string(recorder.Requests), "Output: requests, mocks, or both", "mode")
-	fs.Usage = func() { cli.PrintFlagSetUsage(errOut, "resterm record", fs) }
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, cli.ErrHelp) {
-			fs.Usage()
 			return nil, nil
 		}
 		return nil, cli.UsageError(err)
