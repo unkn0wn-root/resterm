@@ -73,7 +73,7 @@ func TestParseBareWordDefinitionStaysLoud(t *testing.T) {
 	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, want) {
 		t.Fatalf("errors = %+v, want one containing %q", doc.Errors, want)
 	}
-	if len(doc.Auth) != 1 || doc.Auth[0].Name != "" || doc.Auth[0].Spec.Rejected == "" {
+	if len(doc.Auth) != 1 || doc.Auth[0].Name != "" || doc.Auth[0].Spec.Err == nil {
 		t.Fatalf("profiles = %+v, want an unnamed rejected default", doc.Auth)
 	}
 }
@@ -96,7 +96,7 @@ func TestParseAuthQuotedOptionIsAValue(t *testing.T) {
 	if len(doc.Errors) != 1 || doc.Errors[0].Message != want {
 		t.Fatalf("errors = %v, want %q", doc.Errors, want)
 	}
-	if len(doc.Auth) != 1 || doc.Auth[0].Name != "" || doc.Auth[0].Spec.Rejected == "" {
+	if len(doc.Auth) != 1 || doc.Auth[0].Name != "" || doc.Auth[0].Spec.Err == nil {
 		t.Fatalf("profiles = %+v, want an unnamed rejected profile", doc.Auth)
 	}
 }
@@ -308,15 +308,17 @@ GET https://example.com/a
 	}
 
 	named := doc.Auth[1]
-	if named.Name != "gh" || named.Spec.Line != 2 || !strings.Contains(named.Spec.Rejected, "requires cmd or argv") {
+	if named.Name != "gh" || named.Spec.Line != 2 || named.Spec.Err == nil ||
+		!strings.Contains(named.Spec.Err.Error(), "requires cmd or argv") {
 		t.Fatalf("named profile = %+v, want gh kept as rejected", named)
 	}
 	global := doc.Auth[2]
-	if global.Scope != directive.ScopeGlobal || global.Name != "" || global.Spec.Rejected == "" {
+	if global.Scope != directive.ScopeGlobal || global.Name != "" || global.Spec.Err == nil {
 		t.Fatalf("global profile = %+v, want an unnamed rejected default", global)
 	}
 	own := doc.Requests[0].Metadata.Auth
-	if own == nil || own.Line != 6 || !strings.Contains(own.Rejected, "Set ttl on the definition") {
+	if own == nil || own.Line != 6 || own.Err == nil ||
+		!strings.Contains(own.Err.Error(), "Set ttl on the definition") {
 		t.Fatalf("request auth = %+v, want its rejected line", own)
 	}
 }
@@ -339,7 +341,7 @@ func TestParseUnclosedNamedDefinitionKeepsItsName(t *testing.T) {
 	if len(doc.Errors) != 1 || len(doc.Auth) != 1 {
 		t.Fatalf("errors = %v, profiles = %+v", doc.Errors, doc.Auth)
 	}
-	if p := doc.Auth[0]; p.Name != "gh" || p.Spec.Rejected == "" {
+	if p := doc.Auth[0]; p.Name != "gh" || p.Spec.Err == nil {
 		t.Fatalf("profile = %+v, want gh kept as rejected", p)
 	}
 }
@@ -374,12 +376,12 @@ func TestParseSpacedAuthKeepsItsPlace(t *testing.T) {
 		"# @auth global command format =x":                     "",
 	} {
 		doc := Parse("/ws/defs.http", []byte(line+"\n"))
-		if len(doc.Auth) != 1 || doc.Auth[0].Name != name || doc.Auth[0].Spec.Rejected == "" {
+		if len(doc.Auth) != 1 || doc.Auth[0].Name != name || doc.Auth[0].Spec.Err == nil {
 			t.Fatalf("%s: profiles = %+v, want %q kept as rejected", line, doc.Auth, name)
 		}
 	}
 	doc := Parse("/ws/api.http", []byte("### r\n# @auth use = gh\nGET https://example.com\n"))
-	if a := doc.Requests[0].Metadata.Auth; a == nil || a.Rejected == "" || a.Kind() == restfile.AuthHeader {
+	if a := doc.Requests[0].Metadata.Auth; a == nil || a.Err == nil || a.Kind() == restfile.AuthHeader {
 		t.Fatalf("auth = %+v, want the line rejected, not read as a header named use", a)
 	}
 }
@@ -390,7 +392,7 @@ func TestParseRejectsDigestAsCustomHeader(t *testing.T) {
 	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, "requires a valid auth spec") {
 		t.Fatalf("errors = %v, want the Digest header line rejected", doc.Errors)
 	}
-	if h := doc.Requests[0].Metadata.Auth; h == nil || h.Rejected == "" {
+	if h := doc.Requests[0].Metadata.Auth; h == nil || h.Err == nil {
 		t.Fatalf("Digest header line = %+v, want rejected", h)
 	}
 }

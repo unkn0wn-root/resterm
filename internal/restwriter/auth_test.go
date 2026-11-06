@@ -1,6 +1,7 @@
 package restwriter
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -183,6 +184,14 @@ func TestRenderRejectsAuthItCannotWrite(t *testing.T) {
 			name: "use= option that belongs on the definition",
 			auth: restfile.AuthSpec{Use: "gh", Params: map[string]string{"ttl": "5m"}},
 		},
+		{
+			name: "line the parser rejected",
+			auth: restfile.AuthSpec{
+				Type:   restfile.AuthBearer,
+				Params: map[string]string{"token": "t"},
+				Err:    errors.New(`@auth option "token" has spaces around =. Write it as key=value`),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -198,6 +207,9 @@ func TestRenderRejectsAuthItCannotWrite(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "@auth") {
 				t.Fatalf("error = %v, want it to name @auth", err)
+			}
+			if tt.auth.Err != nil && !errors.Is(err, tt.auth.Err) {
+				t.Fatalf("error = %v, want it to wrap %v", err, tt.auth.Err)
 			}
 		})
 	}

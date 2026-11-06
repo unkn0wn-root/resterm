@@ -301,8 +301,8 @@ func renderAuthProfiles(w directiveWriter, profs []restfile.AuthProfile) error {
 // dropped, because dropping it would send the request unauthenticated.
 func authArgs(auth restfile.AuthSpec) ([]string, error) {
 	p := auth.Params
-	if auth.Rejected != "" {
-		return nil, fmt.Errorf("writer: @auth line was rejected: %s", auth.Rejected)
+	if auth.Err != nil {
+		return nil, fmt.Errorf("writer: @auth line was rejected: %w", auth.Err)
 	}
 	if bad := auth.UnknownParams(); len(bad) > 0 {
 		return nil, fmt.Errorf("writer: @auth cannot write unknown option %s", strings.Join(bad, ", "))

@@ -54,8 +54,8 @@ type AuthSpec struct {
 	Use string
 	// Profile names the definition used to resolve this request's auth.
 	Profile string
-	// Rejected holds the parse error so invalid auth blocks the request.
-	Rejected string
+	// Err holds the parse error so invalid auth blocks the request.
+	Err error
 	// SourcePath and Line locate errors. SourcePath also sets the command's
 	// working directory to the definition's directory.
 	SourcePath string

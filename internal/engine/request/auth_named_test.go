@@ -13,12 +13,14 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
 
 type namedAuthRig struct {
@@ -285,8 +287,13 @@ GET https://example.test/none
 		req  int
 		want string
 	}{
-		{"own line", api, 0, "Set ttl on the definition (" + filepath.Join(rig.ws, "api.http") + ":4)"},
-		{"named definition", api, 1, "@auth command gh requires cmd or argv (" + defs + ":1)"},
+		{
+			"own line",
+			api,
+			0,
+			"@auth line was rejected (" + filepath.Join(rig.ws, "api.http") + ":4): @auth use= accepts only",
+		},
+		{"named definition", api, 1, "@auth line was rejected (" + defs + ":1): @auth command gh requires cmd or argv"},
 		{"inherited file line", broken, 0, `got "write"`},
 	}
 	for _, tt := range refused {
@@ -316,12 +323,20 @@ GET https://example.test/none
 }
 
 func TestRejectedGlobalAuthBlocksInheritance(t *testing.T) {
-	for def, want := range map[string]string{
-		"# @auth global bearer 'unclosed\n": `@auth is missing a closing "'"`,
+	for def, problems := range map[string][]string{
+		"# @auth global bearer 'unclosed\n": {`╰─> @auth is missing a closing "'"`},
 		// A default written before 1.10, when the bare word was ignored.
-		"# @auth global command gh argv=[\"gh\",\"auth\",\"token\"]\n": "Write name=gh to name a definition",
+		"# @auth global command gh argv=[\"gh\",\"auth\",\"token\"]\n": {
+			`╰─> @auth expects key=value options but got "gh". Write name=gh to name a definition`,
+		},
 		// A rejected line keeps its name, but it may still have been meant as the default.
-		"# @auth global command gh name=other argv=[\"gh\",\"auth\",\"token\"]\n": `@auth expects key=value options but got "gh"`,
+		"# @auth global command gh name=other argv=[\"gh\",\"auth\",\"token\"]\n": {
+			`╰─> @auth expects key=value options but got "gh". Quote a value that has spaces`,
+		},
+		"# @auth global oauth2 token_url = http://x/t client_id<=y\n": {
+			`├─> @auth option "token_url" has spaces around =. Write it as key=value`,
+			`╰─> @auth option "client_id" takes = instead of <=. Write it as client_id=y`,
+		},
 	} {
 		rig := newNamedAuthRig(t, map[string]string{
 			"defs.http":  def,
@@ -329,8 +344,16 @@ func TestRejectedGlobalAuthBlocksInheritance(t *testing.T) {
 		})
 		doc := rig.doc(t, "plain.http")
 		res := rig.run(t, doc, 0, "dev", ExecModeSend)
-		if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
-			t.Fatalf("%q: error = %v, want the rejected global line", def, res.Err)
+		head := "error[auth]: @auth line was rejected (" + filepath.Join(rig.ws, "defs.http") + ":1)"
+		want := strings.Join(append([]string{head}, problems...), "\n")
+		if got := diag.Render(res.Err); got != want {
+			t.Fatalf("%q: error =\n%s\nwant\n%s", def, got, want)
+		}
+		if got := diag.Classes(res.Err); !slices.Equal(got, []diag.Class{diag.ClassAuth}) {
+			t.Fatalf("%q: classes = %v, want [auth]", def, got)
+		}
+		if got := runfail.FromError(res.Err).ExitCode; got != runfail.ExitAuth {
+			t.Fatalf("%q: exit = %d, want %d", def, got, runfail.ExitAuth)
 		}
 		if rig.sent != nil {
 			t.Fatalf("%q: request was sent", def)
@@ -341,9 +364,15 @@ func TestRejectedGlobalAuthBlocksInheritance(t *testing.T) {
 // A rejected named definition fails its users and every request that could have
 // inherited it. A request with its own auth is not affected.
 func TestRejectedNamedDefinitionFailsClosed(t *testing.T) {
-	for def, want := range map[string]string{
-		"# @auth global command name=gh cmd=\"unterminated\n": `@auth is missing a closing "\""`,
-		"# @auth global command name=gh =x\n":                 `@auth option "=x" has spaces around =`,
+	for def, problems := range map[string][]string{
+		"# @auth global command name=gh cmd=\"unterminated\n": {`╰─> @auth is missing a closing "\""`},
+		"# @auth global command name=gh =x\n": {
+			`╰─> @auth option "=x" has spaces around =. Write it as key=value`,
+		},
+		"# @auth global command name=gh cmd = x ttl<=5m\n": {
+			`├─> @auth option "cmd" has spaces around =. Write it as key=value`,
+			`╰─> @auth option "ttl" takes = instead of <=. Write it as ttl=5m`,
+		},
 	} {
 		rig := newNamedAuthRig(t, map[string]string{
 			"defs.http": def,
@@ -352,10 +381,12 @@ func TestRejectedNamedDefinitionFailsClosed(t *testing.T) {
 				"### Own\n# @auth bearer own-token\nGET https://example.test/own\n",
 		})
 		doc := rig.doc(t, "api.http")
+		head := "error[auth]: @auth line was rejected (" + filepath.Join(rig.ws, "defs.http") + ":1)"
+		want := strings.Join(append([]string{head}, problems...), "\n")
 		for i, name := range []string{"inheriting", "use=gh"} {
 			res := rig.run(t, doc, i, "dev", ExecModeSend)
-			if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
-				t.Fatalf("%q: %s error = %v, want the rejected definition", def, name, res.Err)
+			if got := diag.Render(res.Err); got != want {
+				t.Fatalf("%q: %s error =\n%s\nwant\n%s", def, name, got, want)
 			}
 			if rig.sent != nil {
 				t.Fatalf("%q: %s request was sent", def, name)
