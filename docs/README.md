@@ -63,6 +63,7 @@ These Markdown files also supply the pages at https://resterm.app/docs/. To edit
 - [resterm init](cli/init.md): Create a new workspace with starter files.
 - [resterm collection](cli/collection.md): Export, import, pack and unpack request bundles.
 - [resterm history](cli/history.md): Export, import, inspect and compact stored history.
+- [resterm skill](cli/skill.md): Print or install the skill that helps coding agents use Resterm.
 - [Import curl and OpenAPI](cli/import.md): Turn curl commands and OpenAPI documents into request files.
 
 ## Reference

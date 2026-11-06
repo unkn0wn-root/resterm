@@ -6,7 +6,7 @@ Starting with v1.0.0, Resterm follows semantic versioning. The compatibility pro
 
 The following interfaces remain compatible across all v1 releases:
 
-- Every exported identifier in the `headless` package. This is Resterm's only public Go package. Packages under `internal/` are private and may change in any release.
+- Every exported identifier in the `headless` package. This is Resterm's Go API. The `skills` package only holds the files that `resterm skill` prints and installs, and they change with each release. Packages under `internal/` are private and may change in any release.
 - The names, arguments, and behavior of request file directives, including `@name`, `@profile`, `@compare`, `@for-each`, `@expect`, and `@setting`.
 - Existing CLI flags and their behavior.
 - Machine-readable headless output, including JSON field names, JUnit structure, and exit codes.

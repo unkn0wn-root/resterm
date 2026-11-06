@@ -69,6 +69,9 @@ func run(a []string) error {
 	if ok, err := handleRunSubcommand(a); ok {
 		return err
 	}
+	if ok, err := handleSkillSubcommand(a); ok {
+		return err
+	}
 
 	var (
 		filePath                 string
@@ -432,6 +435,9 @@ func printMainUsage(w io.Writer, fs *cli.FlagSet) {
 		return
 	}
 	if _, err := fmt.Fprintln(w, "  history     Manage persisted history"); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, "  skill       Print or install the skill for coding agents"); err != nil {
 		return
 	}
 	if _, err := fmt.Fprintln(w); err != nil {

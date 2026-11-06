@@ -23,6 +23,7 @@ Use this guide for command-line behavior. For request syntax, directives, workfl
 | `resterm init [dir]` | Create a new Resterm workspace. |
 | `resterm collection ...` | Export, import, pack, and unpack portable request bundles. |
 | `resterm history ...` | Export, import, inspect, compact, and verify persisted history. |
+| `resterm skill [flags]` | Print the skill for coding agents, or install it for an agent or in a skills directory. |
 | `resterm --from-curl ...` | Convert curl commands into `.http` files. |
 | `resterm --from-openapi ...` | Generate `.http` collections from OpenAPI documents. |
 | `resterm --check-update`, `resterm --update`, `resterm --version` | Inspect or update the installed binary. |
