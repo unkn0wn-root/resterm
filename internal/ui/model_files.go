@@ -109,7 +109,7 @@ func (m *Model) saveFileWithOutcome() (saveFileOutcome, tea.Cmd) {
 		return saveFileOutcomePending, nil
 	}
 	content := []byte(m.editor.Value())
-	if err := os.WriteFile(m.currentFile, content, 0o644); err != nil {
+	if err := fsx.WriteInPlace(m.currentFile, content, 0o644); err != nil {
 		// Track what the failed write left, so the watcher does not report it as an outside change.
 		disk, _ := os.ReadFile(m.currentFile)
 		m.watchFile(m.currentFile, disk)

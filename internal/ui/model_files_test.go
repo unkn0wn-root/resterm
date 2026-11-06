@@ -190,12 +190,23 @@ func TestSaveFileIsNotAnOutsideChange(t *testing.T) {
 	m := &model
 	m.editor.SetValue(local)
 	m.markDirty()
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if status, _ := statusMsgFromCmd(m.saveFile()); status.text != "Saved req.http" {
 		t.Fatalf("status = %q, want Saved req.http", status.text)
 	}
 	if m.dirty {
 		t.Error("buffer is still dirty after the save")
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) {
+		t.Error("save replaced the file")
 	}
 	if msg, ok := scanFileWatch(m); ok {
 		t.Errorf("watcher reported kind %v for our own save", msg.kind)

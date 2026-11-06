@@ -30,7 +30,7 @@ func TestSaveFileFailureKeepsBuffer(t *testing.T) {
 		dirty           bool
 	}{
 		{"dirty buffer grows past the limit", small, small, big, 250, true},
-		{"clean buffer over the limit", big, big, big, 16, true},
+		{"clean buffer over the limit", big, big, big, 16, false},
 		{"clean buffer after an outside write", small, outside, small, 16, true},
 	}
 	for _, tt := range tests {
@@ -68,6 +68,13 @@ func TestSaveFileFailureKeepsBuffer(t *testing.T) {
 
 			if status.level != statusError || !strings.HasPrefix(status.text, "save failed: ") {
 				t.Fatalf("status = %q (level %v), want a save error", status.text, status.level)
+			}
+			disk, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(disk) != tt.disk {
+				t.Errorf("disk = %.30q (%d bytes), want %.30q (%d bytes)", disk, len(disk), tt.disk, len(tt.disk))
 			}
 			if got := m.editor.Value(); got != tt.buf {
 				t.Errorf("buffer = %q, want %q", got, tt.buf)
