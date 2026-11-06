@@ -19,7 +19,7 @@ GET https://example.com
 	writeFile(t, src, "resterm.env.example.json", `{"dev":{"token":"SAFE"}}`+"\n")
 
 	bundle := filepath.Join(t.TempDir(), "bundle")
-	if _, err := ExportBundle(ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
+	if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
 		t.Fatalf("export bundle: %v", err)
 	}
 
@@ -74,7 +74,7 @@ func TestImportBundleDryRun(t *testing.T) {
 	writeFile(t, src, "requests.http", "GET https://example.com\n")
 
 	bundle := filepath.Join(t.TempDir(), "bundle")
-	if _, err := ExportBundle(ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
+	if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
 		t.Fatalf("export bundle: %v", err)
 	}
 
@@ -100,7 +100,7 @@ func TestImportBundleConflictAndForce(t *testing.T) {
 	writeFile(t, src, "requests.http", "GET https://example.com\n")
 
 	bundle := filepath.Join(t.TempDir(), "bundle")
-	if _, err := ExportBundle(ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
+	if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
 		t.Fatalf("export bundle: %v", err)
 	}
 
@@ -141,7 +141,7 @@ func TestImportBundleRejectsChecksumMismatch(t *testing.T) {
 	writeFile(t, src, "requests.http", "GET https://example.com\n")
 
 	bundle := filepath.Join(t.TempDir(), "bundle")
-	if _, err := ExportBundle(ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
+	if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
 		t.Fatalf("export bundle: %v", err)
 	}
 

@@ -79,7 +79,7 @@ HTTP/1.1 200 OK
 `)
 
 	out := filepath.Join(t.TempDir(), "bundle")
-	res, err := ExportBundle(ExportOptions{
+	res, err := ExportBundle(t.Context(), ExportOptions{
 		Workspace: ws,
 		OutDir:    out,
 		Recursive: true,
@@ -163,7 +163,7 @@ func TestExportBundlePrefersExistingEnvExample(t *testing.T) {
 	writeFile(t, ws, defaultEnvTemplateFile, `{"dev":{"token":"SAFE"}}`+"\n")
 
 	out := filepath.Join(t.TempDir(), "bundle")
-	if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out}); err != nil {
+	if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out}); err != nil {
 		t.Fatalf("export bundle: %v", err)
 	}
 
@@ -192,7 +192,7 @@ Content-Type: application/json
 `)
 
 	out := filepath.Join(t.TempDir(), "bundle")
-	_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out})
+	_, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out})
 	if err == nil {
 		t.Fatalf("expected error for outside dependency")
 	}
@@ -211,7 +211,7 @@ Content-Type: application/json
 `)
 
 	out := filepath.Join(t.TempDir(), "bundle")
-	_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out})
+	_, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out})
 	if err == nil {
 		t.Fatalf("expected error for missing dependency")
 	}
@@ -239,7 +239,7 @@ service Svc {
 	writeFile(t, ws, "proto/unused.proto", "syntax = \"proto3\";\npackage acme;\nmessage Unused {}\n")
 
 	out := filepath.Join(t.TempDir(), "bundle")
-	res, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
+	res, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
 	if err != nil {
 		t.Fatalf("export bundle: %v", err)
 	}
@@ -277,7 +277,7 @@ GRPC localhost:8080
 	writeFile(t, ws, "proto/svc.proto", "syntax = \"proto3\";\nimport \"missing.proto\";\n")
 
 	out := filepath.Join(t.TempDir(), "bundle")
-	_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
+	_, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
 	if err == nil {
 		t.Fatal("expected error for a missing proto import")
 	}
@@ -299,7 +299,7 @@ GRPC localhost:8080
 	t.Chdir(cwd)
 
 	out := filepath.Join(t.TempDir(), "bundle")
-	_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
+	_, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out, ProtoSources: protoSources})
 	if err == nil {
 		t.Fatal("expected the import missing from the workspace to fail the export")
 	}
@@ -313,7 +313,7 @@ func TestExportBundleForce(t *testing.T) {
 	writeFile(t, ws, "requests.http", "POST https://example.com\n\n< ./payloads/body.json\n")
 	writeFile(t, ws, "payloads/body.json", `{"a":1}`)
 	bundle := filepath.Join(t.TempDir(), "bundle")
-	if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: bundle}); err != nil {
+	if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: bundle}); err != nil {
 		t.Fatal(err)
 	}
 	want := slices.Sorted(maps.Keys(readTree(t, os.DirFS(bundle))))
@@ -359,7 +359,7 @@ func TestExportBundleForce(t *testing.T) {
 			dir := t.TempDir()
 			out := filepath.Join(dir, "out")
 			if tt.bundle {
-				if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out}); err != nil {
+				if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -373,7 +373,7 @@ func TestExportBundleForce(t *testing.T) {
 			}
 			before := readTree(t, os.DirFS(dir))
 
-			_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, Force: tt.force})
+			_, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out, Force: tt.force})
 			if entries, err := os.ReadDir(dir); err != nil || len(entries) != 1 {
 				t.Fatalf("ReadDir(%s) = %v, %v, want only out", dir, entries, err)
 			}
@@ -432,7 +432,7 @@ func TestExportBundleReadOnly(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			out := filepath.Join(dir, "out")
-			if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out}); err != nil {
+			if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out}); err != nil {
 				t.Fatal(err)
 			}
 			writeFile(t, out, "old.txt", "old")
@@ -449,7 +449,7 @@ func TestExportBundleReadOnly(t *testing.T) {
 			})
 			before := readTree(t, os.DirFS(out))
 
-			_, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out, Force: true})
+			_, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out, Force: true})
 			if tt.ok {
 				if err != nil {
 					t.Fatal(err)
@@ -495,7 +495,7 @@ func TestReplaceDirRestoresBundle(t *testing.T) {
 			dir := t.TempDir()
 			out := filepath.Join(dir, "out")
 			if tt.bundle {
-				if _, err := ExportBundle(ExportOptions{Workspace: ws, OutDir: out}); err != nil {
+				if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: ws, OutDir: out}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -505,7 +505,7 @@ func TestReplaceDirRestoresBundle(t *testing.T) {
 			}
 			files := readTree(t, os.DirFS(dir))
 
-			if err := replaceDir(out, true, tt.fill); !errors.Is(err, tt.err) {
+			if err := replaceDir(t.Context(), out, true, tt.fill); !errors.Is(err, tt.err) {
 				t.Fatalf("replaceDir = %v, want %v", err, tt.err)
 			}
 			if got := readTree(t, os.DirFS(dir)); !maps.Equal(got, files) {

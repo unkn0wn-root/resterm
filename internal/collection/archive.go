@@ -2,6 +2,7 @@ package collection
 
 import (
 	"archive/zip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ type UnpackResult struct {
 	FileCount int
 }
 
-func PackBundle(o PackOptions) (PackResult, error) {
+func PackBundle(ctx context.Context, o PackOptions) (PackResult, error) {
 	inAbs, inReal, err := resolveDir(o.BundleDir, "bundle")
 	if err != nil {
 		return PackResult{}, err
@@ -105,6 +106,10 @@ func PackBundle(o PackOptions) (PackResult, error) {
 		return PackResult{}, err
 	}
 	for i, f := range mf.Files {
+		if err := ctx.Err(); err != nil {
+			_ = zw.Close()
+			return PackResult{}, err
+		}
 		if err := addZipFile(zw, f.Path, raw[i]); err != nil {
 			_ = zw.Close()
 			return PackResult{}, err
@@ -119,6 +124,9 @@ func PackBundle(o PackOptions) (PackResult, error) {
 	if err := tmp.Close(); err != nil {
 		return PackResult{}, fmt.Errorf("close archive: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return PackResult{}, err
+	}
 	if err := os.Rename(tmpPath, outReal); err != nil {
 		return PackResult{}, fmt.Errorf("move archive into place: %w", err)
 	}
@@ -130,7 +138,7 @@ func PackBundle(o PackOptions) (PackResult, error) {
 	}, nil
 }
 
-func UnpackBundle(o UnpackOptions) (UnpackResult, error) {
+func UnpackBundle(ctx context.Context, o UnpackOptions) (UnpackResult, error) {
 	inAbs, err := cleanAbsPath(o.InFile, "archive")
 	if err != nil {
 		return UnpackResult{}, err
@@ -149,8 +157,8 @@ func UnpackBundle(o UnpackOptions) (UnpackResult, error) {
 	}
 
 	var mf Manifest
-	err = replaceDir(outAbs, o.Force, func(dir string) error {
-		seen, err := unpackZipToDir(inAbs, dir)
+	err = replaceDir(ctx, outAbs, o.Force, func(dir string) error {
+		seen, err := unpackZipToDir(ctx, inAbs, dir)
 		if err != nil {
 			return err
 		}
@@ -213,7 +221,7 @@ func addZipFile(zw *zip.Writer, name string, data []byte) error {
 	return nil
 }
 
-func unpackZipToDir(inAbs, outDir string) (map[string]struct{}, error) {
+func unpackZipToDir(ctx context.Context, inAbs, outDir string) (map[string]struct{}, error) {
 	zr, err := zip.OpenReader(inAbs)
 	if err != nil {
 		return nil, fmt.Errorf("open archive: %w", err)
@@ -222,6 +230,9 @@ func unpackZipToDir(inAbs, outDir string) (map[string]struct{}, error) {
 
 	seen := make(map[string]struct{}, len(zr.File))
 	for _, f := range zr.File {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if f.FileInfo().IsDir() {
 			continue
 		}

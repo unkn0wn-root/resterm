@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -48,7 +49,7 @@ type bundleFile struct {
 	Data []byte
 }
 
-func ExportBundle(o ExportOptions) (ExportResult, error) {
+func ExportBundle(ctx context.Context, o ExportOptions) (ExportResult, error) {
 	wsAbs, wsReal, err := resolveDir(o.Workspace, "workspace")
 	if err != nil {
 		return ExportResult{}, err
@@ -78,7 +79,7 @@ func ExportBundle(o ExportOptions) (ExportResult, error) {
 	}
 
 	mf, fs := buildManifest(name, byPath)
-	if err := writeBundleDir(outAbs, fs, mf, o.Force); err != nil {
+	if err := writeBundleDir(ctx, outAbs, fs, mf, o.Force); err != nil {
 		return ExportResult{}, err
 	}
 
@@ -204,9 +205,12 @@ func buildManifest(name string, byPath map[string]expFile) (Manifest, []bundleFi
 	return NewManifest(name, files), out
 }
 
-func writeBundleDir(outAbs string, files []bundleFile, m Manifest, force bool) error {
-	return replaceDir(outAbs, force, func(dir string) error {
+func writeBundleDir(ctx context.Context, outAbs string, files []bundleFile, m Manifest, force bool) error {
+	return replaceDir(ctx, outAbs, force, func(dir string) error {
 		for _, f := range files {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			dst, err := SafeJoin(dir, f.Path)
 			if err != nil {
 				return fmt.Errorf("prepare bundle path %s: %w", f.Path, err)
@@ -231,7 +235,7 @@ func writeBundleDir(outAbs string, files []bundleFile, m Manifest, force bool) e
 	})
 }
 
-func replaceDir(outAbs string, force bool, fill func(dir string) error) error {
+func replaceDir(ctx context.Context, outAbs string, force bool, fill func(dir string) error) error {
 	parent := filepath.Dir(outAbs)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return fmt.Errorf("create output parent dir: %w", err)
@@ -278,6 +282,10 @@ func replaceDir(outAbs string, force bool, fill func(dir string) error) error {
 		return fmt.Errorf("create temp bundle dir: %w", err)
 	}
 	if err := fill(src); err != nil {
+		return err
+	}
+	// A cancel is honored up to here. The swap itself is never cut short.
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -54,7 +56,7 @@ func TestRunCollectionNeedsAKnownSubcommand(t *testing.T) {
 		{[]string{"unknown"}, `collection: unknown subcommand "unknown"`},
 	}
 	for _, tt := range tests {
-		stdout, stderr, err := captureCollectionIO(t, func() error { return runCollection(tt.args) })
+		stdout, stderr, err := captureCollectionIO(t, func() error { return runCollection(t.Context(), tt.args) })
 		if cli.ExitCode(err) != cli.ExitUsage || err.Error() != tt.want {
 			t.Errorf("args %q: err = %v, want usage error %q", tt.args, err, tt.want)
 		}
@@ -67,7 +69,7 @@ func TestRunCollectionNeedsAKnownSubcommand(t *testing.T) {
 
 func TestRunCollectionHelpFlagShowsUsage(t *testing.T) {
 	stdout, stderr, err := captureCollectionIO(t, func() error {
-		return runCollection([]string{"-h"})
+		return runCollection(t.Context(), []string{"-h"})
 	})
 	if err != nil {
 		t.Fatalf("help flag: %v", err)
@@ -92,7 +94,7 @@ func TestRunCollectionFlagErrorsHaveCommandPrefix(t *testing.T) {
 		{args: []string{"export", "--workspace", ".", "--out", "x", "extra"}, want: "collection export:"},
 	}
 	for _, tc := range cases {
-		err := runCollection(tc.args)
+		err := runCollection(t.Context(), tc.args)
 		if cli.ExitCode(err) != 2 {
 			t.Fatalf("%v: err = %v, want a usage error", tc.args, err)
 		}
@@ -141,7 +143,7 @@ func TestRunCollectionLibraryErrorsHaveCommandPrefix(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		err := runCollection(tc.args)
+		err := runCollection(t.Context(), tc.args)
 		if cli.ExitCode(err) != 1 {
 			t.Fatalf("%v: err = %v, want exit code 1", tc.args, err)
 		}
@@ -178,7 +180,7 @@ func TestRunCollectionRequiresFlags(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		err := runCollection(tc.args)
+		err := runCollection(t.Context(), tc.args)
 		if cli.ExitCode(err) != 2 {
 			t.Fatalf("%v: err = %v, want a usage error", tc.args, err)
 		}
@@ -190,7 +192,7 @@ func TestRunCollectionRequiresFlags(t *testing.T) {
 
 func TestRunCollectionSubcommandHelpShowsUsage(t *testing.T) {
 	stdout, stderr, err := captureCollectionIO(t, func() error {
-		return runCollection([]string{"export", "-h"})
+		return runCollection(t.Context(), []string{"export", "-h"})
 	})
 	if err != nil {
 		t.Fatalf("export -h: %v", err)
@@ -217,7 +219,7 @@ GET https://example.com
 
 	bundle := filepath.Join(t.TempDir(), "bundle")
 	stdout, stderr, err := captureCollectionIO(t, func() error {
-		return runCollection([]string{
+		return runCollection(t.Context(), []string{
 			"export",
 			"--workspace", src,
 			"--out", bundle,
@@ -235,7 +237,7 @@ GET https://example.com
 
 	dst := t.TempDir()
 	stdout, stderr, err = captureCollectionIO(t, func() error {
-		return runCollection([]string{
+		return runCollection(t.Context(), []string{
 			"import",
 			"--in", bundle,
 			"--workspace", dst,
@@ -277,7 +279,7 @@ service Svc { rpc Call(Common) returns (Common); }
 	writeCollectionFile(t, src, "proto/common.proto", "syntax = \"proto3\";\npackage acme;\nmessage Common {}\n")
 
 	bundle := filepath.Join(t.TempDir(), "bundle")
-	if err := runCollection([]string{
+	if err := runCollection(t.Context(), []string{
 		"export",
 		"--workspace", src,
 		"--out", bundle,
@@ -296,7 +298,7 @@ func TestRunCollectionImportDryRun(t *testing.T) {
 	writeCollectionFile(t, src, "requests.http", "GET https://example.com\n")
 
 	bundle := filepath.Join(t.TempDir(), "bundle")
-	if err := runCollection([]string{
+	if err := runCollection(t.Context(), []string{
 		"export",
 		"--workspace", src,
 		"--out", bundle,
@@ -306,7 +308,7 @@ func TestRunCollectionImportDryRun(t *testing.T) {
 
 	dst := filepath.Join(t.TempDir(), "workspace")
 	stdout, stderr, err := captureCollectionIO(t, func() error {
-		return runCollection([]string{
+		return runCollection(t.Context(), []string{
 			"import",
 			"--in", bundle,
 			"--workspace", dst,
@@ -332,7 +334,7 @@ func TestRunCollectionPackUnpackE2E(t *testing.T) {
 	writeCollectionFile(t, src, "requests.http", "GET https://example.com\n")
 
 	bund := filepath.Join(t.TempDir(), "bundle")
-	if err := runCollection([]string{
+	if err := runCollection(t.Context(), []string{
 		"export",
 		"--workspace", src,
 		"--out", bund,
@@ -342,7 +344,7 @@ func TestRunCollectionPackUnpackE2E(t *testing.T) {
 
 	arc := filepath.Join(t.TempDir(), "bundle.zip")
 	stdout, stderr, err := captureCollectionIO(t, func() error {
-		return runCollection([]string{
+		return runCollection(t.Context(), []string{
 			"pack",
 			"--in", bund,
 			"--out", arc,
@@ -360,7 +362,7 @@ func TestRunCollectionPackUnpackE2E(t *testing.T) {
 
 	out := filepath.Join(t.TempDir(), "bundle-unpacked")
 	stdout, stderr, err = captureCollectionIO(t, func() error {
-		return runCollection([]string{
+		return runCollection(t.Context(), []string{
 			"unpack",
 			"--in", arc,
 			"--out", out,
@@ -381,6 +383,20 @@ func TestRunCollectionPackUnpackE2E(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(out, "requests.http")); err != nil {
 		t.Fatalf("expected requests.http in unpacked bundle: %v", err)
+	}
+
+	ctx, cancel := context.WithCancelCause(t.Context())
+	cancel(errors.New("interrupt signal received"))
+	for _, args := range [][]string{
+		{"export", "--workspace", src, "--out", bund, "--force"},
+		{"pack", "--in", bund, "--out", arc, "--force"},
+		{"unpack", "--in", arc, "--out", out, "--force"},
+	} {
+		err := runCollection(ctx, args)
+		want := args[0] + ": context canceled"
+		if code := cli.ExitCode(err); code != 130 || !strings.Contains(err.Error(), want) {
+			t.Fatalf("canceled %s = %v, exit %d, want exit 130 and an error with %q", args[0], err, code, want)
+		}
 	}
 }
 
