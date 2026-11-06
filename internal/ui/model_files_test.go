@@ -3,7 +3,9 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -30,6 +32,16 @@ func statusMsgFromCmd(cmd tea.Cmd) (statusMsg, bool) {
 		}
 	}
 	return statusMsg{}, false
+}
+
+func scanFileWatch(m *Model) (fileChangedMsg, bool) {
+	m.fileWatcher.Scan()
+	select {
+	case msg := <-m.fileWatchChan:
+		return msg.(fileChangedMsg), true
+	case <-time.After(250 * time.Millisecond):
+		return fileChangedMsg{}, false
+	}
 }
 
 func TestSaveFileWithoutSelectionAndEmptyEditorWarns(t *testing.T) {
@@ -160,6 +172,77 @@ func TestSaveFileReportsParseErrors(t *testing.T) {
 				t.Fatalf("status = %q (level %v), want %q (level %v)", msg.text, msg.level, tt.want, tt.level)
 			}
 		})
+	}
+}
+
+func TestSaveFileIsNotAnOutsideChange(t *testing.T) {
+	const (
+		old     = "GET https://old.example\n"
+		local   = "GET https://local.example/longer\n"
+		outside = "GET https://outside.example\n"
+	)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "req.http")
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	model := New(Config{WorkspaceRoot: dir, FilePath: path, InitialContent: old})
+	m := &model
+	m.editor.SetValue(local)
+	m.markDirty()
+
+	if status, _ := statusMsgFromCmd(m.saveFile()); status.text != "Saved req.http" {
+		t.Fatalf("status = %q, want Saved req.http", status.text)
+	}
+	if m.dirty {
+		t.Error("buffer is still dirty after the save")
+	}
+	if msg, ok := scanFileWatch(m); ok {
+		t.Errorf("watcher reported kind %v for our own save", msg.kind)
+	}
+
+	if err := os.WriteFile(path, []byte(outside), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	msg, ok := scanFileWatch(m)
+	if !ok {
+		t.Fatal("watcher missed an outside write after the save")
+	}
+	m.handleFileChangeEvent(msg)
+	if got := m.editor.Value(); got != outside {
+		t.Errorf("buffer = %q, want the outside write %q", got, outside)
+	}
+}
+
+func TestSaveFileToRemovedFolderKeepsBuffer(t *testing.T) {
+	const content = "GET https://old.example\n"
+	root := t.TempDir()
+	dir := filepath.Join(root, "sub")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "req.http")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	model := New(Config{WorkspaceRoot: root, FilePath: path, InitialContent: content})
+	m := &model
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	status, _ := statusMsgFromCmd(m.saveFile())
+	if status.level != statusError || !strings.HasPrefix(status.text, "save failed: ") {
+		t.Fatalf("status = %q (level %v), want a save error", status.text, status.level)
+	}
+	if got := m.editor.Value(); got != content {
+		t.Errorf("buffer = %q, want %q", got, content)
+	}
+	if !m.dirty {
+		t.Error("buffer is clean after a save that left nothing on disk")
+	}
+	if msg, ok := scanFileWatch(m); !ok || msg.kind != watcher.EventMissing {
+		t.Errorf("watcher reported kind %v (event %v), want the file missing", msg.kind, ok)
 	}
 }
 

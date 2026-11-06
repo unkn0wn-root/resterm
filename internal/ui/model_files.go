@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,6 +110,12 @@ func (m *Model) saveFileWithOutcome() (saveFileOutcome, tea.Cmd) {
 	}
 	content := []byte(m.editor.Value())
 	if err := os.WriteFile(m.currentFile, content, 0o644); err != nil {
+		// Track what the failed write left, so the watcher does not report it as an outside change.
+		disk, _ := os.ReadFile(m.currentFile)
+		m.watchFile(m.currentFile, disk)
+		if !bytes.Equal(disk, content) {
+			m.markDirty()
+		}
 		return saveFileOutcomeFailed, statusCmd(statusError, fmt.Sprintf("save failed: %v", err))
 	}
 	m.watchFile(m.currentFile, content)
