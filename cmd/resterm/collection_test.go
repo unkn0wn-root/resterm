@@ -45,16 +45,23 @@ func TestHandleCollectionSubcommandAmbiguousFile(t *testing.T) {
 	}
 }
 
-func TestRunCollectionRequiresSubcommand(t *testing.T) {
-	if err := runCollection(nil); cli.ExitCode(err) != 2 {
-		t.Fatalf("missing subcommand: err = %v, want a usage error", err)
+func TestRunCollectionNeedsAKnownSubcommand(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{nil, "collection: subcommand is required"},
+		{[]string{"unknown"}, `collection: unknown subcommand "unknown"`},
 	}
-}
-
-func TestRunCollectionUnknownSubcommand(t *testing.T) {
-	err := runCollection([]string{"unknown"})
-	if cli.ExitCode(err) != 2 {
-		t.Fatalf("unknown subcommand: err = %v, want a usage error", err)
+	for _, tt := range tests {
+		stdout, stderr, err := captureCollectionIO(t, func() error { return runCollection(tt.args) })
+		if cli.ExitCode(err) != cli.ExitUsage || err.Error() != tt.want {
+			t.Errorf("args %q: err = %v, want usage error %q", tt.args, err, tt.want)
+		}
+		if stdout != "" ||
+			!strings.HasPrefix(stderr, "Usage: resterm collection <export|import|pack|unpack> [flags]\n") {
+			t.Errorf("args %q: stdout = %q, stderr = %q, want the usage on stderr", tt.args, stdout, stderr)
+		}
 	}
 }
 

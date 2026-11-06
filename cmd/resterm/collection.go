@@ -28,7 +28,8 @@ func handleCollectionSubcommand(args []string) (bool, error) {
 
 func runCollection(args []string) error {
 	if len(args) == 0 {
-		return cli.UsageError(errors.New(collectionUsageText()))
+		_ = writeln(os.Stderr, collectionUsageText())
+		return cli.UsageError(errors.New("collection: subcommand is required"))
 	}
 	if cli.IsHelpArg(args[0]) {
 		if err := writeln(os.Stdout, collectionUsageText()); err != nil {
@@ -47,7 +48,8 @@ func runCollection(args []string) error {
 	case "unpack":
 		return runCollectionUnpack(args[1:])
 	default:
-		return cli.UsageError(fmt.Errorf("collection: unknown subcommand %q\n\n%s", op, collectionUsageText()))
+		_ = writeln(os.Stderr, collectionUsageText())
+		return cli.UsageError(fmt.Errorf("collection: unknown subcommand %q", op))
 	}
 }
 

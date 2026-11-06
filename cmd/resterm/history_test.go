@@ -24,17 +24,23 @@ func TestHandleHistorySubcommandNotMatched(t *testing.T) {
 	}
 }
 
-func TestRunHistoryRequiresSubcommand(t *testing.T) {
-	err := runHistory(nil)
-	if cli.ExitCode(err) != 2 {
-		t.Fatalf("missing subcommand: err = %v, want a usage error", err)
+func TestRunHistoryNeedsAKnownSubcommand(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{nil, "history: subcommand is required"},
+		{[]string{"unknown"}, `history: unknown subcommand "unknown"`},
 	}
-}
-
-func TestRunHistoryUnknownSubcommand(t *testing.T) {
-	err := runHistory([]string{"unknown"})
-	if cli.ExitCode(err) != 2 {
-		t.Fatalf("unknown subcommand: err = %v, want a usage error", err)
+	for _, tt := range tests {
+		stdout, stderr, err := captureHistoryIO(t, func() error { return runHistory(tt.args) })
+		if cli.ExitCode(err) != cli.ExitUsage || err.Error() != tt.want {
+			t.Errorf("args %q: err = %v, want usage error %q", tt.args, err, tt.want)
+		}
+		if stdout != "" ||
+			!strings.HasPrefix(stderr, "Usage: resterm history <export|import|backup|stats|check|compact> [flags]\n") {
+			t.Errorf("args %q: stdout = %q, stderr = %q, want the usage on stderr", tt.args, stdout, stderr)
+		}
 	}
 }
 
