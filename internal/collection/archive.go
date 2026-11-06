@@ -76,11 +76,16 @@ func PackBundle(o PackOptions) (PackResult, error) {
 	}
 	outReal := filepath.Join(parReal, filepath.Base(outAbs))
 
-	if !o.Force {
-		if _, err := os.Stat(outReal); err == nil {
+	fi, err := os.Lstat(outReal)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return PackResult{}, fmt.Errorf("stat output path: %w", err)
+	}
+	if err == nil {
+		switch {
+		case !o.Force:
 			return PackResult{}, fmt.Errorf("output path already exists: %s", outAbs)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return PackResult{}, fmt.Errorf("stat output path: %w", err)
+		case !fi.Mode().IsRegular():
+			return PackResult{}, fmt.Errorf("%s exists and is not a file. Remove it or choose another path", outAbs)
 		}
 	}
 
@@ -89,11 +94,9 @@ func PackBundle(o PackOptions) (PackResult, error) {
 		return PackResult{}, fmt.Errorf("create temp archive: %w", err)
 	}
 	tmpPath := tmp.Name()
-	ok := false
 	defer func() {
-		if !ok {
-			_ = os.Remove(tmpPath)
-		}
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
 	}()
 
 	zw := zip.NewWriter(tmp)
@@ -110,19 +113,15 @@ func PackBundle(o PackOptions) (PackResult, error) {
 	if err := zw.Close(); err != nil {
 		return PackResult{}, fmt.Errorf("finalize archive: %w", err)
 	}
+	if err := tmp.Sync(); err != nil {
+		return PackResult{}, fmt.Errorf("sync archive: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return PackResult{}, fmt.Errorf("close archive: %w", err)
-	}
-
-	if o.Force {
-		if err := os.RemoveAll(outReal); err != nil {
-			return PackResult{}, fmt.Errorf("remove previous output: %w", err)
-		}
 	}
 	if err := os.Rename(tmpPath, outReal); err != nil {
 		return PackResult{}, fmt.Errorf("move archive into place: %w", err)
 	}
-	ok = true
 
 	return PackResult{
 		BundleDir: inAbs,

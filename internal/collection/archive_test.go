@@ -2,6 +2,9 @@ package collection
 
 import (
 	"archive/zip"
+	"bytes"
+	"errors"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -78,15 +81,91 @@ func TestPackBundleForce(t *testing.T) {
 	}
 
 	arc := filepath.Join(t.TempDir(), "bundle.zip")
-	if err := os.WriteFile(arc, []byte("old"), 0o644); err != nil {
+	if err := os.WriteFile(arc, []byte("old"), 0o600); err != nil {
 		t.Fatalf("write old archive: %v", err)
 	}
 
 	if _, err := PackBundle(PackOptions{BundleDir: bund, OutFile: arc}); err == nil {
 		t.Fatalf("expected conflict without force")
 	}
+	f, err := os.Open(arc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := f.Stat()
+	_ = f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := PackBundle(PackOptions{BundleDir: bund, OutFile: arc, Force: true}); err != nil {
 		t.Fatalf("force pack bundle: %v", err)
+	}
+	got, err := os.Stat(arc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if os.SameFile(got, old) {
+		t.Fatal("force pack rewrote the old archive in place, want a new file moved over it")
+	}
+	if runtime.GOOS != "windows" && got.Mode().Perm() != 0o600 {
+		t.Fatalf("archive mode = %v, want 0600", got.Mode().Perm())
+	}
+	zr, err := zip.OpenReader(arc)
+	if err != nil {
+		t.Fatalf("open forced archive: %v", err)
+	}
+	if err := zr.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if entries, err := os.ReadDir(filepath.Dir(arc)); err != nil || len(entries) != 1 {
+		t.Fatalf("ReadDir = %v, %v, want only the archive", entries, err)
+	}
+
+	t.Run("read-only parent", func(t *testing.T) {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			t.Skip("read-only folders do not stop root or Windows")
+		}
+		data, err := os.ReadFile(arc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(filepath.Dir(arc), 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(filepath.Dir(arc), 0o755) })
+
+		_, err = PackBundle(PackOptions{BundleDir: bund, OutFile: arc, Force: true})
+		if !errors.Is(err, fs.ErrPermission) || !strings.Contains(err.Error(), "create temp archive") {
+			t.Fatalf("force pack in a read-only folder = %v, want a permission error at create temp archive", err)
+		}
+		if got, err := os.ReadFile(arc); err != nil || !bytes.Equal(got, data) {
+			t.Fatalf("archive changed after a failed pack: %v", err)
+		}
+	})
+
+	dir := t.TempDir()
+	writeFile(t, dir, "docs/notes.txt", "keep")
+	if err := os.Symlink(arc, filepath.Join(dir, "link")); err != nil {
+		t.Skipf("cannot create a link: %v", err)
+	}
+	for _, name := range []string{"docs", "link"} {
+		o := PackOptions{BundleDir: bund, OutFile: filepath.Join(dir, name)}
+		if _, err := PackBundle(o); err == nil || !strings.Contains(err.Error(), "already exists") {
+			t.Fatalf("pack over %s = %v, want an error with %q", name, err, "already exists")
+		}
+		o.Force = true
+		if _, err := PackBundle(o); err == nil || !strings.Contains(err.Error(), "is not a file") {
+			t.Fatalf("force pack over %s = %v, want an error with %q", name, err, "is not a file")
+		}
+	}
+	if got := readTree(t, os.DirFS(dir)); !maps.Equal(got, map[string]string{"docs/notes.txt": "keep"}) {
+		t.Fatalf("files changed to %v", got)
+	}
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 2 {
+		t.Fatalf("ReadDir(%s) = %v, %v, want only docs and link", dir, entries, err)
+	}
+	if got, err := os.Readlink(filepath.Join(dir, "link")); err != nil || got != arc {
+		t.Fatalf("Readlink(link) = %q, %v, want %q", got, err, arc)
 	}
 }
 

@@ -174,7 +174,7 @@ func runCollectionPack(args []string) error {
 
 	fs.StringVar(&in, "in", "", "Input bundle directory path")
 	fs.StringVar(&out, "out", "", "Output archive (.zip) path")
-	fs.BoolVar(&force, "force", false, "Overwrite existing archive file")
+	fs.BoolVar(&force, "force", false, "Replace an existing file")
 
 	if done, err := parseSubcommand(fs, args); done || err != nil {
 		return err
