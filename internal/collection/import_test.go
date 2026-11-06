@@ -1,7 +1,11 @@
 package collection
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,7 +28,7 @@ GET https://example.com
 	}
 
 	dst := filepath.Join(t.TempDir(), "workspace")
-	res, err := ImportBundle(ImportOptions{BundleDir: bundle, Workspace: dst})
+	res, err := ImportBundle(t.Context(), ImportOptions{BundleDir: bundle, Workspace: dst})
 	if err != nil {
 		t.Fatalf("import bundle: %v", err)
 	}
@@ -79,7 +83,9 @@ func TestImportBundleDryRun(t *testing.T) {
 	}
 
 	dst := filepath.Join(t.TempDir(), "workspace")
-	res, err := ImportBundle(ImportOptions{
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	res, err := ImportBundle(ctx, ImportOptions{
 		BundleDir: bundle,
 		Workspace: dst,
 		DryRun:    true,
@@ -107,7 +113,7 @@ func TestImportBundleConflictAndForce(t *testing.T) {
 	dst := t.TempDir()
 	writeFile(t, dst, "requests.http", "OLD")
 
-	_, err := ImportBundle(ImportOptions{BundleDir: bundle, Workspace: dst})
+	_, err := ImportBundle(t.Context(), ImportOptions{BundleDir: bundle, Workspace: dst})
 	if err == nil {
 		t.Fatalf("expected conflict error")
 	}
@@ -115,7 +121,7 @@ func TestImportBundleConflictAndForce(t *testing.T) {
 		t.Fatalf("unexpected conflict error: %v", err)
 	}
 
-	res, err := ImportBundle(ImportOptions{
+	res, err := ImportBundle(t.Context(), ImportOptions{
 		BundleDir: bundle,
 		Workspace: dst,
 		Force:     true,
@@ -133,6 +139,63 @@ func TestImportBundleConflictAndForce(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "https://example.com") {
 		t.Fatalf("destination file was not overwritten")
+	}
+}
+
+func TestImportBundleCancelKeepsWrittenFiles(t *testing.T) {
+	src := t.TempDir()
+	writeFile(t, src, "requests.http", "POST https://example.com\n\n< ./payloads/body.json\n")
+	writeFile(t, src, "payloads/body.json", `{"a":1}`)
+	bundle := filepath.Join(t.TempDir(), "bundle")
+	if _, err := ExportBundle(t.Context(), ExportOptions{Workspace: src, OutDir: bundle}); err != nil {
+		t.Fatal(err)
+	}
+	mf, err := readBundleManifest(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := readTree(t, os.DirFS(bundle))
+
+	for _, force := range []bool{false, true} {
+		t.Run(fmt.Sprintf("force=%t", force), func(t *testing.T) {
+			for n := range len(mf.Files) + 1 {
+				ws := t.TempDir()
+				want := map[string]string{}
+				if force {
+					writeFile(t, ws, "notes.txt", "keep")
+					want["notes.txt"] = "keep"
+					for _, f := range mf.Files {
+						writeFile(t, ws, f.Path, "old")
+						want[f.Path] = "old"
+					}
+				}
+				for _, f := range mf.Files[:n] {
+					want[f.Path] = files[f.Path]
+				}
+
+				ctx, cancel := context.WithCancel(t.Context())
+				_, err := ImportBundle(&cancelAfter{Context: ctx, cancel: cancel, n: n}, ImportOptions{
+					BundleDir: bundle,
+					Workspace: ws,
+					Force:     force,
+				})
+				cancel()
+				if n < len(mf.Files) {
+					msg := fmt.Sprintf("imported %d of %d files: context canceled", n, len(mf.Files))
+					if !errors.Is(err, context.Canceled) || err.Error() != msg {
+						t.Fatalf("cancel at check %d = %v, want %q", n, err, msg)
+					}
+				} else if err != nil {
+					t.Fatalf("no cancel before the last write: %v", err)
+				}
+				if got := readTree(t, os.DirFS(ws)); !maps.Equal(got, want) {
+					t.Fatalf("cancel at check %d: files = %v, want %v", n, got, want)
+				}
+				if _, err := os.Stat(filepath.Join(ws, "payloads")); (err == nil) != (force || n > 0) {
+					t.Fatalf("cancel at check %d: payloads folder exists = %t", n, err == nil)
+				}
+			}
+		})
 	}
 }
 
@@ -162,7 +225,7 @@ func TestImportBundleRejectsChecksumMismatch(t *testing.T) {
 		t.Fatalf("tamper bundle file: %v", err)
 	}
 
-	_, err = ImportBundle(ImportOptions{
+	_, err = ImportBundle(t.Context(), ImportOptions{
 		BundleDir: bundle,
 		Workspace: t.TempDir(),
 	})
@@ -199,7 +262,7 @@ func TestImportBundleRejectsTraversalManifest(t *testing.T) {
 		t.Fatalf("write manifest: %v", err)
 	}
 
-	_, err = ImportBundle(ImportOptions{
+	_, err = ImportBundle(t.Context(), ImportOptions{
 		BundleDir: bundle,
 		Workspace: t.TempDir(),
 	})
@@ -245,7 +308,7 @@ func TestImportBundleRejectsNestedPathConflict(t *testing.T) {
 		t.Fatalf("write manifest: %v", err)
 	}
 
-	_, err = ImportBundle(ImportOptions{
+	_, err = ImportBundle(t.Context(), ImportOptions{
 		BundleDir: bundle,
 		Workspace: t.TempDir(),
 	})
@@ -294,7 +357,7 @@ func TestImportBundleRejectsSymlinkEscapeInBundle(t *testing.T) {
 		t.Fatalf("write manifest: %v", err)
 	}
 
-	_, err = ImportBundle(ImportOptions{
+	_, err = ImportBundle(t.Context(), ImportOptions{
 		BundleDir: bundle,
 		Workspace: t.TempDir(),
 	})

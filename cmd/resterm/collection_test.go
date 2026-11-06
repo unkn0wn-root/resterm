@@ -398,6 +398,11 @@ func TestRunCollectionPackUnpackE2E(t *testing.T) {
 			t.Fatalf("canceled %s = %v, exit %d, want exit 130 and an error with %q", args[0], err, code, want)
 		}
 	}
+	err = runCollection(ctx, []string{"import", "--in", bund, "--workspace", t.TempDir()})
+	want := "collection import: imported 0 of 2 files: context canceled"
+	if code := cli.ExitCode(err); code != 130 || err.Error() != want {
+		t.Fatalf("canceled import = %v, exit %d, want exit 130 and %q", err, code, want)
+	}
 }
 
 func writeCollectionFile(t *testing.T, root, rel, data string) {

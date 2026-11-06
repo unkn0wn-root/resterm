@@ -56,7 +56,7 @@ resterm collection import \
   --dry-run
 ```
 
-If files already exist in the destination and you want to replace them, add `--force`.
+If files already exist in the destination and you want to replace them, add `--force`. If `Ctrl+C` or `SIGTERM` stops an import, the files it wrote so far stay complete and the other files are left as they were. The error says how many files were imported. Run the same command again with `--force` to finish.
 
 ## Pack a bundle into a zip archive
 

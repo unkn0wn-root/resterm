@@ -27,7 +27,9 @@ func handleCollectionSubcommand(args []string) (bool, error) {
 			"pass a subcommand like `resterm collection export --workspace . --out ./bundle`",
 		)
 	}
-	return true, runCollection(context.Background(), args[1:])
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return true, runCollection(ctx, args[1:])
 }
 
 func runCollection(ctx context.Context, args []string) error {
@@ -47,7 +49,7 @@ func runCollection(ctx context.Context, args []string) error {
 	case "export":
 		err = runCollectionExport(ctx, args[1:])
 	case "import":
-		err = runCollectionImport(args[1:])
+		err = runCollectionImport(ctx, args[1:])
 	case "pack":
 		err = runCollectionPack(ctx, args[1:])
 	case "unpack":
@@ -87,8 +89,6 @@ func runCollectionExport(ctx context.Context, args []string) error {
 		return cli.UsageError(errors.New("collection export: --out is required"))
 	}
 
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	res, err := collection.ExportBundle(ctx, collection.ExportOptions{
 		Workspace: workspace,
 		OutDir:    out,
@@ -121,7 +121,7 @@ func runCollectionExport(ctx context.Context, args []string) error {
 	return nil
 }
 
-func runCollectionImport(args []string) error {
+func runCollectionImport(ctx context.Context, args []string) error {
 	fs := cli.NewSubcommandFlagSet("resterm", "collection import", os.Stderr)
 	var in string
 	var workspace string
@@ -144,7 +144,7 @@ func runCollectionImport(args []string) error {
 		return cli.UsageError(errors.New("collection import: --workspace is required"))
 	}
 
-	res, err := collection.ImportBundle(collection.ImportOptions{
+	res, err := collection.ImportBundle(ctx, collection.ImportOptions{
 		BundleDir: in,
 		Workspace: workspace,
 		Force:     force,
@@ -200,8 +200,6 @@ func runCollectionPack(ctx context.Context, args []string) error {
 		return cli.UsageError(errors.New("collection pack: --out is required"))
 	}
 
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	res, err := collection.PackBundle(ctx, collection.PackOptions{
 		BundleDir: in,
 		OutFile:   out,
@@ -243,8 +241,6 @@ func runCollectionUnpack(ctx context.Context, args []string) error {
 		return cli.UsageError(errors.New("collection unpack: --out is required"))
 	}
 
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	res, err := collection.UnpackBundle(ctx, collection.UnpackOptions{
 		InFile: in,
 		OutDir: out,

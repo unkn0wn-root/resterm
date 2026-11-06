@@ -51,7 +51,7 @@ func TestPackUnpackBundleRoundTrip(t *testing.T) {
 		t.Fatalf("unpacked manifest mode = %v, want %v like the exported one", got, want)
 	}
 
-	if _, err := ImportBundle(ImportOptions{BundleDir: out, Workspace: t.TempDir()}); err != nil {
+	if _, err := ImportBundle(t.Context(), ImportOptions{BundleDir: out, Workspace: t.TempDir()}); err != nil {
 		t.Fatalf("import unpacked bundle: %v", err)
 	}
 

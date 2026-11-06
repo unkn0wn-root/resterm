@@ -11,6 +11,6 @@ Use the collection commands to bundle a workspace's request files and inputs, th
 
 `export`, `pack`, and `unpack` stop when the output path already exists. Pass `--force` to replace it. `export` and `unpack` replace only a directory that holds a bundle, and `pack` replaces only a file. `import` takes `--force` to replace existing files and `--dry-run` to preview the changes.
 
-These commands exit `0` on success, `2` for a missing or unknown flag, extra arguments, or an unknown subcommand, `130` when `Ctrl+C` or `SIGTERM` stops `export`, `pack`, or `unpack`, and `1` for any other error.
+These commands exit `0` on success, `2` for a missing or unknown flag, extra arguments, or an unknown subcommand, `130` when `Ctrl+C` or `SIGTERM` stops them, and `1` for any other error.
 
 See [Collection sharing](../collections.md) for the bundle layout, environment files, and safety checks.
