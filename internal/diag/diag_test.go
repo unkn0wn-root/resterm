@@ -604,6 +604,23 @@ func TestRenderJoinedErrorHeaderOnOneLine(t *testing.T) {
 	}
 }
 
+func TestHeadline(t *testing.T) {
+	join := errors.Join(errors.New("alpha failed"), errors.New("beta failed"))
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("x: %w", join), "x: alpha failed; beta failed"},
+		{errors.New("line1\nline2"), "line1\nline2"},
+		{fmt.Errorf("x (%w)", join), "x (alpha failed\nbeta failed)"},
+	}
+	for _, tt := range tests {
+		if got := diag.Headline(tt.err); got != tt.want {
+			t.Errorf("Headline(%q) = %q, want %q", tt.err, got, tt.want)
+		}
+	}
+}
+
 func TestRenderHTTPTransportFailureUsesCauseClass(t *testing.T) {
 	dnsErr := &net.DNSError{Err: "no such host", Name: "api.local"}
 	err := diag.Wrap(

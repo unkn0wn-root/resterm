@@ -208,6 +208,11 @@ func chainOfError(err error, skip ...string) []ChainEntry {
 	return prepareChain(st.entries(err, 0))
 }
 
+// Headline returns err's text as a plain error's report header shows it, before masking and escaping.
+func Headline(err error) string {
+	return headline(err, 0, nil)
+}
+
 func headline(err error, depth int, mask func(string) string) string {
 	if mask == nil {
 		mask = func(s string) string { return s }
