@@ -40,7 +40,7 @@ Resterm is a code-first API client built around plain `.http`/`.rest` files. A r
 No account and no telemetry.
 
 > [!NOTE]
-> Resterm has no MCP server or built-in AI features. If you want your LLM to understand Resterm, install its skill with `resterm skill --agent claude` for Claude Code or `--agent codex` for Codex ([other agents](https://resterm.app/docs/cli/skill/)), or point it at the Markdown docs in [`docs/`](docs/) or at [resterm.app/docs](https://resterm.app/docs/).
+> Resterm has no MCP server or built-in AI features. To help your LLM use Resterm, install the skill with `resterm skill --agent claude` or `resterm skill --agent codex`. See the [skill docs](https://resterm.app/docs/cli/skill/) for other agents. You can also point your agent at [`docs/`](docs/) or [resterm.app/docs](https://resterm.app/docs/).
 
 ## Screenshots
 
