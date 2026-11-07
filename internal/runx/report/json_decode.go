@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -216,7 +217,7 @@ func (j jsonProfileFailure) model() ProfileFailure {
 func (j jsonStream) model() Stream { return Stream(j) }
 
 // UnmarshalJSON decodes a base64 body in place, so Body holds the bytes. Any
-// other bodyEncoding is an error.
+// other bodyEncoding is an error, and so is a bodyEncoding without a body.
 func (j *jsonResponse) UnmarshalJSON(b []byte) error {
 	type plain jsonResponse
 	if err := json.Unmarshal(b, (*plain)(j)); err != nil {
@@ -229,18 +230,25 @@ func (j *jsonResponse) UnmarshalJSON(b []byte) error {
 	default:
 		return fmt.Errorf("unknown bodyEncoding %q", j.BodyEncoding)
 	}
-	body, err := base64.StdEncoding.DecodeString(j.Body)
+	if j.Body == nil {
+		return errors.New("bodyEncoding without body")
+	}
+	body, err := base64.StdEncoding.DecodeString(*j.Body)
 	if err != nil {
 		return err
 	}
-	j.Body = string(body)
+	*j.Body = string(body)
 	return nil
 }
 
 func (j jsonResponse) model() Response {
+	var body []byte
+	if j.Body != nil {
+		body = []byte(*j.Body)
+	}
 	return Response{
 		Headers:       j.Headers,
-		Body:          []byte(j.Body),
+		Body:          body,
 		BodySize:      j.BodySize,
 		BodyTruncated: j.BodyTruncated,
 		Captures:      convert(j.Captures, jsonCapture.model),

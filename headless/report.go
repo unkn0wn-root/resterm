@@ -255,8 +255,10 @@ type Stream struct {
 // secret the run knew, and sensitive header values are masked in full. A gzip
 // body is decoded before it is masked, and Headers then have no
 // Content-Encoding or Content-Length. A body with any other content encoding,
-// or one that cannot be decoded, is left out. Body holds at most the first MiB
-// of the masked body. BodySize is the size of the body as received.
+// or one that cannot be decoded, is left out and Body is nil. For an empty
+// body, Body is empty but not nil and Headers stay as received. Body holds at
+// most the first MiB of the masked body. BodySize is the size of the body as
+// received.
 type Response struct {
 	Headers       http.Header
 	Body          []byte

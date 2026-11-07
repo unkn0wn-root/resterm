@@ -16,10 +16,11 @@ import (
 )
 
 // ReportResponse returns the response of an HTTP or gRPC result for a run
-// report, or nil when no response arrived. A gzip body is decoded before it is
-// masked and loses its Content-Encoding and Content-Length headers. A body with
-// any other content coding, or one that cannot be decoded, is left out.
-// Secrets, sensitive headers and cookies are masked before the body is cut to
+// report, or nil when no response arrived. A non-empty gzip body is decoded
+// before it is masked and loses its Content-Encoding and Content-Length
+// headers. A non-empty body with any other content coding, or one that cannot
+// be decoded, is left out. An empty body keeps its headers. Secrets,
+// sensitive headers and cookies are masked before the body is cut to
 // runfmt.MaxBodyBytes, so the cut cannot leave part of a secret behind.
 func ReportResponse(
 	resp *httpx.Response,

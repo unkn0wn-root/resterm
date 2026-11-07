@@ -173,7 +173,7 @@ const bodyBase64 = "base64"
 
 type jsonResponse struct {
 	Headers       http.Header   `json:"headers,omitempty"`
-	Body          string        `json:"body,omitempty"`
+	Body          *string       `json:"body,omitempty"`
 	BodyEncoding  string        `json:"bodyEncoding,omitempty"`
 	BodySize      int64         `json:"bodySize"`
 	BodyTruncated bool          `json:"bodyTruncated,omitempty"`
@@ -599,13 +599,18 @@ func (resp *Response) json() *jsonResponse {
 	}
 	out := &jsonResponse{
 		Headers:       resp.Headers,
-		Body:          string(resp.Body),
 		BodySize:      resp.BodySize,
 		BodyTruncated: resp.BodyTruncated,
 	}
-	if !utf8.Valid(resp.Body) {
-		out.Body = base64.StdEncoding.EncodeToString(resp.Body)
-		out.BodyEncoding = bodyBase64
+	if resp.Body != nil {
+		var body string
+		if utf8.Valid(resp.Body) {
+			body = string(resp.Body)
+		} else {
+			body = base64.StdEncoding.EncodeToString(resp.Body)
+			out.BodyEncoding = bodyBase64
+		}
+		out.Body = &body
 	}
 	if len(resp.Captures) > 0 {
 		out.Captures = make([]jsonCapture, 0, len(resp.Captures))
