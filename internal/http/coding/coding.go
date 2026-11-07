@@ -21,10 +21,14 @@ var (
 )
 
 // Decode undoes the content coding enc, matched without regard to case. It
-// returns nil and no error when enc is empty or identity, so the caller keeps
-// data as it is. Only gzip is decoded. A decoded body over limit bytes returns
-// ErrTooLarge, and gzip data that breaks off returns the compress/gzip error.
+// returns nil and no error when data is empty, or when enc is empty or
+// identity, so the caller keeps data as it is. Only gzip is decoded. A decoded
+// body over limit bytes returns ErrTooLarge, and gzip data that breaks off
+// returns the compress/gzip error.
 func Decode(data []byte, enc string, limit int64) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
 	switch strings.ToLower(strings.TrimSpace(enc)) {
 	case "", "identity":
 		return nil, nil

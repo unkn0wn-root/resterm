@@ -66,9 +66,15 @@ func (b *Buffer) Learn(secrets ...string) {
 	}
 }
 
-// Delete also forgets the entry, so no later Flush writes it again.
+// Delete forgets the entry only after the store deletes its row. When the delete fails, the row stays on disk and
+// later secrets must still mask it. Delete holds mu across the store call, so no Flush writes the row back in between.
 func (b *Buffer) Delete(id string) (bool, error) {
 	b.mu.Lock()
+	defer b.mu.Unlock()
+	ok, err := b.Store.Delete(id)
+	if err != nil {
+		return false, err
+	}
 	if i := slices.IndexFunc(b.entries, func(h held) bool { return h.ID == id }); i >= 0 {
 		b.total -= b.entries[i].size
 		b.entries = slices.Delete(b.entries, i, i+1)
@@ -79,8 +85,7 @@ func (b *Buffer) Delete(id string) (bool, error) {
 	b.smu.Lock()
 	b.queue = slices.DeleteFunc(b.queue, func(e Entry) bool { return e.ID == id })
 	b.smu.Unlock()
-	b.mu.Unlock()
-	return b.Store.Delete(id)
+	return ok, nil
 }
 
 // Flush learns secrets, then writes the buffered entries masked with every secret learned so far.

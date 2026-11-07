@@ -32,6 +32,9 @@ func TestDecode(t *testing.T) {
 		{name: "not gzip", enc: "gzip", data: []byte("hello"), limit: 5, err: ErrHeader},
 		{name: "truncated", enc: "gzip", data: gz[:len(gz)-4], limit: 5, err: io.ErrUnexpectedEOF},
 		{name: "over the limit", enc: "gzip", data: gz, limit: 4, err: ErrTooLarge},
+		{name: "empty gzip", enc: "gzip", data: []byte{}, limit: 5},
+		{name: "empty br", enc: "br", data: []byte{}, limit: 5},
+		{name: "nil gzip", enc: "gzip", limit: 5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

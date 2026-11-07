@@ -270,17 +270,20 @@ func TestReportResponseDecodesContentCoding(t *testing.T) {
 		name    string
 		enc     []string
 		body    []byte
-		want    string
+		want    []byte
 		decoded bool
 	}{
-		{"gzip", []string{"gzip"}, gzipBytes(t, plain), masked, true},
-		{"gzip in capitals", []string{"GZIP"}, gzipBytes(t, plain), masked, true},
-		{"identity", []string{"identity"}, plain, masked, false},
-		{"deflate", []string{"deflate"}, deflated.Bytes(), "", false},
-		{"br", []string{"br"}, append([]byte{0x8b, 0x02, 0x80}, plain...), "", false},
-		{"invalid gzip", []string{"gzip"}, plain, "", false},
-		{"gzip over the decode limit", []string{"gzip"}, bomb, "", false},
-		{"identity then gzip", []string{"identity", "gzip"}, gzipBytes(t, plain), "", false},
+		{"gzip", []string{"gzip"}, gzipBytes(t, plain), []byte(masked), true},
+		{"gzip in capitals", []string{"GZIP"}, gzipBytes(t, plain), []byte(masked), true},
+		{"gzip of nothing", []string{"gzip"}, gzipBytes(t, nil), []byte{}, true},
+		{"identity", []string{"identity"}, plain, []byte(masked), false},
+		{"empty gzip", []string{"gzip"}, nil, []byte{}, false},
+		{"empty br", []string{"br"}, []byte{}, []byte{}, false},
+		{"deflate", []string{"deflate"}, deflated.Bytes(), nil, false},
+		{"br", []string{"br"}, append([]byte{0x8b, 0x02, 0x80}, plain...), nil, false},
+		{"invalid gzip", []string{"gzip"}, plain, nil, false},
+		{"gzip over the decode limit", []string{"gzip"}, bomb, nil, false},
+		{"identity then gzip", []string{"identity", "gzip"}, gzipBytes(t, plain), nil, false},
 	}
 	caps := []restfile.Variable{{Name: "tok", Value: secret, Secret: true, Scope: directive.ScopeRequest}}
 	wantCaps := []runfmt.Capture{{Scope: "request", Name: "tok", Value: "•••", Secret: true}}
@@ -297,8 +300,8 @@ func TestReportResponseDecodesContentCoding(t *testing.T) {
 				Body: tt.body,
 			}
 			got := ReportResponse(resp, nil, caps, redact.New(secret))
-			if string(got.Body) != tt.want {
-				t.Fatalf("body = %.80q, want %q", got.Body, tt.want)
+			if (got.Body == nil) != (tt.want == nil) || !bytes.Equal(got.Body, tt.want) {
+				t.Fatalf("body = %#v, want %#v", got.Body, tt.want)
 			}
 			if got.BodySize != int64(len(tt.body)) {
 				t.Fatalf("BodySize = %d, want the received size %d", got.BodySize, len(tt.body))

@@ -1534,6 +1534,119 @@ func TestRunReportsNoResponseForDialErrors(t *testing.T) {
 	}
 }
 
+func TestRunResponseBodyPresence(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "body.http")
+	src := strings.Join([]string{
+		"# @workflow flow",
+		"# @step Empty using=empty",
+		"# @step Br using=br",
+		"",
+		"### Empty",
+		"# @name empty",
+		"GET https://api.example.com/empty",
+		"",
+		"### Br",
+		"# @name br",
+		"GET https://api.example.com/br",
+		"",
+		"### Each",
+		"# @name each",
+		"# @for-each p in [\"empty\", \"br\"]",
+		"GET https://api.example.com/{{vars.request.p}}",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	client := newHTTPClientWithFactory(func(httpx.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				h, body := http.Header{}, ""
+				if req.URL.Path == "/br" {
+					h.Set("Content-Encoding", "br")
+					body = "\x8b\x02\x80"
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     h,
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "stage": {}})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
+	tests := []struct {
+		name string
+		sel  Select
+		cmp  engine.CompareConfig
+		want []any
+	}{
+		{name: "request", sel: Select{Request: "empty"}, want: []any{""}},
+		{name: "left out", sel: Select{Request: "br"}, want: []any{nil}},
+		{name: "workflow", sel: Select{Workflow: "flow"}, want: []any{"", nil}},
+		{name: "for-each", sel: Select{Request: "each"}, want: []any{"", nil}},
+		{
+			name: "compare",
+			sel:  Select{Request: "br"},
+			cmp:  engine.CompareConfig{Targets: []string{"dev", "stage"}},
+			want: []any{nil, nil},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rep, err := RunContext(context.Background(), Options{
+				FilePath:      file,
+				WorkspaceRoot: dir,
+				Client:        client,
+				Catalog:       cat,
+				Selection:     cat.DefaultSelection(),
+				Select:        tt.sel,
+				Compare:       tt.cmp,
+				Response:      true,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			var out strings.Builder
+			if err := rep.WriteJSON(&out); err != nil {
+				t.Fatalf("WriteJSON: %v", err)
+			}
+			var got struct {
+				Results []struct {
+					Response map[string]any `json:"response"`
+					Steps    []struct {
+						Response map[string]any `json:"response"`
+					} `json:"steps"`
+				} `json:"results"`
+			}
+			if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+				t.Fatalf("unmarshal json: %v", err)
+			}
+			var bodies []any
+			for _, res := range got.Results {
+				if res.Response != nil {
+					bodies = append(bodies, res.Response["body"])
+				}
+				for _, step := range res.Steps {
+					if step.Response != nil {
+						bodies = append(bodies, step.Response["body"])
+					}
+				}
+			}
+			if !reflect.DeepEqual(bodies, tt.want) {
+				t.Fatalf("bodies = %#v, want %#v in\n%s", bodies, tt.want, out.String())
+			}
+		})
+	}
+}
+
 func TestRunSelectRequestByName(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "many.http")

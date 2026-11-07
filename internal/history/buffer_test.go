@@ -14,14 +14,18 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/redact"
 )
 
-var errDisk = errors.New("disk I/O error")
+var (
+	errDisk   = errors.New("disk I/O error")
+	errLocked = errors.New("database is locked")
+)
 
 type memStore struct {
-	mu     sync.Mutex
-	rows   map[string]Entry
-	order  []string
-	writes map[string]int
-	fail   int
+	mu      sync.Mutex
+	rows    map[string]Entry
+	order   []string
+	writes  map[string]int
+	fail    int
+	delFail int
 }
 
 func (m *memStore) Load() error { return nil }
@@ -63,6 +67,10 @@ func (m *memStore) ByFile(string) ([]Entry, error)     { return nil, nil }
 func (m *memStore) Delete(id string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.delFail > 0 {
+		m.delFail--
+		return false, errLocked
+	}
 	_, ok := m.rows[id]
 	delete(m.rows, id)
 	return ok, nil
@@ -353,6 +361,43 @@ func TestBufferDeleteForgets(t *testing.T) {
 	}
 }
 
+func TestBufferFailedDeleteKeepsMasking(t *testing.T) {
+	const later = "later-cap-88dd-eeff"
+	for name, flush := range map[string]bool{"written": true, "pending": false} {
+		t.Run(name, func(t *testing.T) {
+			ms := &memStore{delFail: 1}
+			b := &Buffer{Store: ms}
+			if err := b.Append(Entry{ID: "a", BodySnippet: `{"t":"` + secret + `","u":"` + later + `"}`}); err != nil {
+				t.Fatal(err)
+			}
+			if flush {
+				if err := b.Flush(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if ok, err := b.Delete("a"); ok || !errors.Is(err, errLocked) {
+				t.Fatalf("Delete with a locked store = %v, %v, want false, %v", ok, err, errLocked)
+			}
+			if err := b.Flush(secret); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := ms.row("a").BodySnippet, `{"t":"`+redact.Mask+`","u":"`+later+`"}`; got != want {
+				t.Fatalf("row after the failed delete = %q, want %q", got, want)
+			}
+			if ok, err := b.Delete("a"); !ok || err != nil {
+				t.Fatalf("Delete again = %v, %v, want true, nil", ok, err)
+			}
+			if err := b.Flush(later); err != nil {
+				t.Fatal(err)
+			}
+			if es, _ := ms.Entries(); len(es) != 0 || len(b.entries) != 0 || b.total != 0 {
+				t.Fatalf("store holds %v, buffer holds %d entries and %d bytes, want the entry gone",
+					es, len(b.entries), b.total)
+			}
+		})
+	}
+}
+
 func TestBufferRetriesFailedRewrite(t *testing.T) {
 	for name, e := range map[string]Entry{
 		"probe hit": {ID: "a", URL: "https://api.test/x?k=" + secret, BodySnippet: `{"t":"` + secret + `"}`},
@@ -474,6 +519,63 @@ func TestBufferDoesNotWaitForFlush(t *testing.T) {
 	release()
 	if err := <-flushed; err != nil {
 		t.Fatal(err)
+	}
+}
+
+type gateDelete struct {
+	*memStore
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (g gateDelete) Delete(id string) (bool, error) {
+	ok, err := g.memStore.Delete(id)
+	g.entered <- struct{}{}
+	<-g.release
+	return ok, err
+}
+
+func TestBufferDeleteRacingFlush(t *testing.T) {
+	g := gateDelete{memStore: &memStore{}, entered: make(chan struct{}), release: make(chan struct{})}
+	release := sync.OnceFunc(func() { close(g.release) })
+	defer release()
+	b := &Buffer{Store: g}
+	if err := b.Append(Entry{ID: "a", BodySnippet: `{"t":"` + secret + `"}`}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	deleted := make(chan error, 1)
+	go func() {
+		_, err := b.Delete("a")
+		deleted <- err
+	}()
+	<-g.entered
+	done := make(chan struct{})
+	go func() {
+		b.Learn("other-secret-0001-abcd")
+		_ = b.Append(Entry{ID: "b"})
+		_ = b.Secrets()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Learn, Append and Secrets waited for a delete blocked in the store")
+	}
+	flushed := make(chan error, 1)
+	go func() { flushed <- b.Flush(secret) }()
+	time.Sleep(50 * time.Millisecond)
+	release()
+	if err := <-flushed; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-deleted; err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := g.rows["a"]; ok || g.writes["a"] != 1 {
+		t.Fatalf("store holds row a after %d writes, want it gone", g.writes["a"])
 	}
 }
 

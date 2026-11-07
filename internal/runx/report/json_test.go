@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -141,15 +142,23 @@ func TestWriteJSONResponseBinaryBody(t *testing.T) {
 	}
 }
 
-func TestWriteJSONResponseEmptyBody(t *testing.T) {
-	got := responseJSON(t, &Response{})
-	if size, ok := got["bodySize"]; !ok || size != 0.0 {
-		t.Fatalf("response = %v, want bodySize 0", got)
+func TestWriteJSONResponseBody(t *testing.T) {
+	caps := []any{map[string]any{"scope": "request", "name": "id", "value": "7"}}
+	tests := []struct {
+		name string
+		body []byte
+		want map[string]any
+	}{
+		{name: "left out", want: map[string]any{"bodySize": 0.0, "captures": caps}},
+		{name: "empty", body: []byte{}, want: map[string]any{"body": "", "bodySize": 0.0, "captures": caps}},
 	}
-	for _, key := range []string{"body", "bodyEncoding", "headers", "captures"} {
-		if _, ok := got[key]; ok {
-			t.Fatalf("an empty response has %q: %v", key, got)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &Response{Body: tt.body, Captures: []Capture{{Scope: "request", Name: "id", Value: "7"}}}
+			if got := responseJSON(t, resp); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("response = %#v, want %#v", got, tt.want)
+			}
+		})
 	}
 }
 

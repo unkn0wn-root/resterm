@@ -845,3 +845,32 @@ func TestReportJSONKeepsWholeMilliseconds(t *testing.T) {
 		t.Fatalf("Elapsed = %v, want 12ms", test.Elapsed)
 	}
 }
+
+func TestReportJSONKeepsLeftOutBody(t *testing.T) {
+	bodies := [][]byte{nil, {}, []byte("ok"), {0xff}}
+	var rep Report
+	for _, b := range bodies {
+		rep.Results = append(rep.Results, Result{
+			Kind:     KindRequest,
+			Status:   StatusPass,
+			Response: &Response{Body: b},
+			Steps:    []Step{{Status: StatusPass, Response: &Response{Body: b}}},
+		})
+	}
+	first, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back Report
+	if err := json.Unmarshal(first, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for i, want := range bodies {
+		res := back.Results[i]
+		for _, got := range [][]byte{res.Response.Body, res.Steps[0].Response.Body} {
+			if (got == nil) != (want == nil) || !bytes.Equal(got, want) {
+				t.Errorf("body %#v comes back as %#v", want, got)
+			}
+		}
+	}
+}
