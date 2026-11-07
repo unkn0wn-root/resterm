@@ -108,7 +108,7 @@ func TestReportResponseMasksSensitiveHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resp := &httpx.Response{StatusCode: 200, Headers: http.Header{tt.key: tt.vals}}
 			got := ReportResponse(resp, nil, nil, redact.New(secret))
-			want := http.Header{tt.key: tt.want}
+			want := http.Header{http.CanonicalHeaderKey(tt.key): tt.want}
 			if !reflect.DeepEqual(got.Headers, want) {
 				t.Fatalf("Headers = %v, want %v", got.Headers, want)
 			}
@@ -433,16 +433,16 @@ func TestReportResponseGRPC(t *testing.T) {
 		{
 			name: "ok without metadata",
 			src:  call("grpc.testing.TestService/EmptyCall", "", "{}"),
-			hdr:  http.Header{"content-type": {"application/grpc"}},
+			hdr:  http.Header{"Content-Type": {"application/grpc"}},
 		},
 		{
 			name: "metadata and a secret",
 			src: call("grpc.testing.TestService/UnaryCall",
 				"# @capture request-secret user {{response.json.username}}\n", "{}"),
 			hdr: http.Header{
-				"content-type":        {"application/grpc"},
-				"x-api-key":           {"•••"},
-				"Grpc-Trailer-x-done": {"yes"},
+				"Content-Type":        {"application/grpc"},
+				"X-Api-Key":           {"•••"},
+				"Grpc-Trailer-X-Done": {"yes"},
 			},
 			caps: []runfmt.Capture{{Scope: "request", Name: "user", Value: "•••", Secret: true}},
 		},
@@ -450,14 +450,14 @@ func TestReportResponseGRPC(t *testing.T) {
 			name: "error status",
 			src:  call("grpc.testing.TestService/UnaryCall", "", `{"responseStatus":{"code":7,"message":"no"}}`),
 			hdr: http.Header{
-				"Grpc-Trailer-content-type": {"application/grpc"},
+				"Grpc-Trailer-Content-Type": {"application/grpc"},
 				"Content-Type":              {"application/json"},
 			},
 		},
 		{
 			name: "stream",
 			src:  call("grpc.testing.TestService/StreamingOutputCall", "", "{}"),
-			hdr:  http.Header{"content-type": {"application/grpc"}},
+			hdr:  http.Header{"Content-Type": {"application/grpc"}},
 		},
 		{
 			name: "dial error",
