@@ -58,7 +58,7 @@ func ReportResponse(
 			} else {
 				v = sec.Text(v)
 			}
-			out.Headers[name] = append(out.Headers[name], v)
+			out.Headers.Add(name, v)
 		}
 	}
 	for _, c := range caps {
