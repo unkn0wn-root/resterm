@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.18.0](https://github.com/unkn0wn-root/resterm/compare/v1.17.2...v1.18.0) (2026-11-07)
+
+
+### Features
+
+* **cli:** add resterm skill command ([15d22c3](https://github.com/unkn0wn-root/resterm/commit/15d22c3ded070ecf62607762752a1f9c86afd759))
+* **header:** mask sensitive header lines in text ([8c1c5b1](https://github.com/unkn0wn-root/resterm/commit/8c1c5b10ff8c5060cd917c63ac3a4c4764b2a2ae))
+* **history:** add a buffer that masks entries before writing ([975fa17](https://github.com/unkn0wn-root/resterm/commit/975fa173f8e1bd74f52f371950d62114ea3c67a6))
+* **run:** add --response for masked responses in json ([620586d](https://github.com/unkn0wn-root/resterm/commit/620586d174008afbb4416e2a70053b9132997822))
+* **skills:** embed the resterm agent skill ([49bc5a7](https://github.com/unkn0wn-root/resterm/commit/49bc5a7ca2915f6949fe7adb00f4f2cf8015fc18))
+
+
+### Bug Fixes
+
+* **auth:** keep each problem of a rejected [@auth](https://github.com/auth) line ([dad0e8c](https://github.com/unkn0wn-root/resterm/commit/dad0e8ca178b4f2867dc2b9a981e6c776ad739e8))
+* **cli:** name the record command once in its usage ([df4025a](https://github.com/unkn0wn-root/resterm/commit/df4025aede6f54489fffec29890b6c2b2891f54b))
+* **cli:** print collection and history usage before the error ([8c381cd](https://github.com/unkn0wn-root/resterm/commit/8c381cd0229ebd0159789cfc618142303eefdd3f))
+* **collection:** clean up when Ctrl-C stops export, pack or unpack ([675abc4](https://github.com/unkn0wn-root/resterm/commit/675abc4183b0398cec05e8418dceb5d21a381a79))
+* **collection:** replace a bundle only after the new one is in place ([f6a4954](https://github.com/unkn0wn-root/resterm/commit/f6a495430ab11d9d2c7236d26aa32c6f7095a142))
+* **collection:** stop import cleanly on Ctrl-C ([f922547](https://github.com/unkn0wn-root/resterm/commit/f9225470fb92f55a39f55960ef1f5cb5d6da1e5e))
+* **collection:** stop pack from deleting a folder ([5f63c53](https://github.com/unkn0wn-root/resterm/commit/5f63c533e7148e4f4faae0a6b17c44943bd206b0))
+* **diag:** print joined errors on one header line ([589ed38](https://github.com/unkn0wn-root/resterm/commit/589ed38b840467b39e0140b59c4cf29ccb11f612))
+* **fsx:** save files in place without truncating first ([483c473](https://github.com/unkn0wn-root/resterm/commit/483c47333b342612623576cc6c643b83d16d361c))
+* **history:** keep masking an entry whose delete failed ([161fc1d](https://github.com/unkn0wn-root/resterm/commit/161fc1d569ce88630f1a9ef0c40bdba0c33f967b))
+* **history:** mask secrets before history is written ([9362621](https://github.com/unkn0wn-root/resterm/commit/93626210b7533713a80f89227c9b55e8db59c81b))
+* **oauth:** keep the refresh token when a refresh sends none ([38338e9](https://github.com/unkn0wn-root/resterm/commit/38338e9c68707450bfb7ed2b504be3b688c8fa63))
+* **oauth:** never open a browser from headless runs ([d9d6471](https://github.com/unkn0wn-root/resterm/commit/d9d647125959fb7683ff0668115e5227650320f5))
+* **oauth:** open only http and https auth urls ([e4f77e5](https://github.com/unkn0wn-root/resterm/commit/e4f77e55c68e1fbcb222a9bbbdcc20e669690b49))
+* **parser:** keep ssh and k8s profile errors as errors ([550cea5](https://github.com/unkn0wn-root/resterm/commit/550cea54ab612acefb5018f3fd81123f51a01f35))
+* **parser:** report each [@mock](https://github.com/mock) option error on its own ([c7c7536](https://github.com/unkn0wn-root/resterm/commit/c7c75369dad138af2dd2534f7f47d4453a48e7cf))
+* **redact:** mask short secrets only as whole words ([f58051a](https://github.com/unkn0wn-root/resterm/commit/f58051af4ce267ef74865eb6ef489f2aa750ada2))
+* **run:** keep empty response bodies in --response json ([a1ee2dc](https://github.com/unkn0wn-root/resterm/commit/a1ee2dc208b06d90b835225fb6d1507a17428071))
+* **run:** mask secrets in everything resterm run writes ([9be6b73](https://github.com/unkn0wn-root/resterm/commit/9be6b73d7a99a9e4743977ed4fc1e0087d78695d))
+* **ssh:** print a joined tunnel error on one line ([7bc5a8e](https://github.com/unkn0wn-root/resterm/commit/7bc5a8e8eea9c4b259d949558e681b26406e9bf6))
+* **ui:** find masked history entries after a restart ([bfb84ff](https://github.com/unkn0wn-root/resterm/commit/bfb84ffcefa230f23b7e64b39449b1bfafa0a148))
+* **ui:** ignore late messages from a canceled request ([27ab119](https://github.com/unkn0wn-root/resterm/commit/27ab119a34fec41acc75af7d15d1791e381a6fb2))
+* **ui:** keep a running request cancelable after loading history ([c82f893](https://github.com/unkn0wn-root/resterm/commit/c82f8933d1e8a05364c7e5be06cfb2a49edfa6f2))
+* **ui:** keep the buffer when a save fails ([91ef38b](https://github.com/unkn0wn-root/resterm/commit/91ef38bb54f86c275d1fb133885d519d68f61852))
+* **ui:** save history in the background ([b05afda](https://github.com/unkn0wn-root/resterm/commit/b05afda4e201635b4fde015e11acde45fb15a8de))
+* **ui:** wait for a canceled workflow, compare or profile run ([2b2d125](https://github.com/unkn0wn-root/resterm/commit/2b2d125b55c47a633898e32bd991047050433f43))
+
 ### [1.17.2](https://github.com/unkn0wn-root/resterm/compare/v1.17.1...v1.17.2) (2026-10-30)
 
 
