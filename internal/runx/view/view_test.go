@@ -1,6 +1,7 @@
 package runview
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -608,6 +609,32 @@ func TestRenderRequestKeepsResponse(t *testing.T) {
 				t.Errorf("%s view lacks %q:\n%s", mode, want, out)
 			}
 		}
+	}
+}
+
+func TestRenderRequestShowsTheDecodedGzipLength(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		zw := gzip.NewWriter(w)
+		_, _ = io.WriteString(zw, `{"zip":"decoded"}`)
+		_ = zw.Close()
+	}))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "gzip.http")
+	if err := os.WriteFile(file, []byte("GET "+srv.URL+"\nAccept-Encoding: gzip\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	rep, err := runner.RunContext(context.Background(), runner.Options{FilePath: file, WorkspaceRoot: dir})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	out, err := Render(rep, Options{Mode: ModePretty})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, "Content-Length: 17 bytes") {
+		t.Fatalf("view lacks the decoded length:\n%s", out)
 	}
 }
 

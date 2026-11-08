@@ -341,6 +341,65 @@ func TestRunHistoryUsesRunSecrets(t *testing.T) {
 	}
 }
 
+func TestRunHistoryMasksDecodedGzip(t *testing.T) {
+	const secret = "gz-later-55-abcdefgh"
+	srv := gzipServer(t, "application/json", `{"saw":"`+secret+`"}`)
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {}, "stage": {}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sel, err := cat.Select("dev", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	file := filepath.Join(dir, "gzip.http")
+	src := strings.ReplaceAll(`### Seen
+# @name Seen
+GET BASE/seen
+Accept-Encoding: gzip
+
+### Cmp
+# @name Cmp
+# @compare dev stage
+GET BASE/cmp
+Accept-Encoding: gzip
+
+### Login
+# @name Login
+# @capture file-secret cap {{response.json.saw}}
+GET BASE/login
+Accept-Encoding: gzip
+`, "BASE", srv.URL)
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		StateDir:      stateDir,
+		History:       true,
+		Catalog:       cat,
+		Selection:     sel,
+		Select:        Select{All: true},
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	byName := map[string]history.Entry{}
+	for _, e := range readHistory(t, stateDir) {
+		byName[e.RequestName] = e
+	}
+	want := `{"saw":"` + redact.Mask + `"}`
+	if got := byName["Seen"].BodySnippet; got != want {
+		t.Errorf("Seen snippet = %q, want %q", got, want)
+	}
+	if c := byName["Cmp"].Compare; c == nil || len(c.Results) != 2 || c.Results[0].BodySnippet != want {
+		t.Errorf("Cmp compare = %+v, want rows holding %q", c, want)
+	}
+}
+
 func TestRunHistoryOnEngineError(t *testing.T) {
 	srv := historyServer(t)
 	dir := t.TempDir()

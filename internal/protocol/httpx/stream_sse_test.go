@@ -1,6 +1,8 @@
 package httpx
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,11 +13,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/http/coding"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -1311,5 +1315,226 @@ func TestSSEGraphQLFallsBackOnAJSONResponse(t *testing.T) {
 			resp.Headers.Get(StreamHeaderType),
 			resp.Body,
 		)
+	}
+}
+
+func askGzip(url string, opts restfile.SSEOptions) *restfile.Request {
+	return &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     url,
+		Headers: http.Header{"Accept-Encoding": {"gzip"}},
+		SSE:     &restfile.SSERequest{Options: opts},
+	}
+}
+
+func codedSSE(t *testing.T, enc string, body []byte) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Content-Encoding", enc)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func heldGzipSSE(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func gzipTranscript(t *testing.T, req *restfile.Request) *SSETranscript {
+	t.Helper()
+	resp, err := NewClient(nil).ExecuteSSE(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("ExecuteSSE: %v", err)
+	}
+	transcript, err := DecodeSSETranscript(resp.Body)
+	if err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
+	return transcript
+}
+
+func TestSSEDecodesGzipTheRequestAskedFor(t *testing.T) {
+	const events = "data: one\n\ndata: two\n\n"
+	url := codedSSE(t, "gzip", gzipBytes(t, []byte(events)))
+
+	handle, fallback, err := NewClient(nil).StartSSE(t.Context(), askGzip(url, restfile.SSEOptions{}), nil, Options{})
+	if err != nil || fallback != nil {
+		t.Fatalf("StartSSE() = %v, %v, want a stream", fallback, err)
+	}
+	if ce := handle.Meta.Headers.Get("Content-Encoding"); ce != "" {
+		t.Fatalf("stream headers carry Content-Encoding %q, want none once decoded", ce)
+	}
+	resp, err := CompleteSSE(handle)
+	if err != nil {
+		t.Fatalf("CompleteSSE: %v", err)
+	}
+	transcript, err := DecodeSSETranscript(resp.Body)
+	if err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
+	if sum := transcript.Summary; sum.Reason != sseReasonEOF || sum.EventCount != 2 ||
+		sum.ByteCount != int64(len(events)) {
+		t.Fatalf("summary = %+v, want 2 events and %d decoded bytes", sum, len(events))
+	}
+	if len(transcript.Events) != 2 || transcript.Events[1].Data != "two" {
+		t.Fatalf("events = %+v, want both decoded events", transcript.Events)
+	}
+}
+
+func TestSSEGzipErrorsFailTheStream(t *testing.T) {
+	var cut bytes.Buffer
+	zw := gzip.NewWriter(&cut)
+	if _, err := zw.Write([]byte("data: one\n\n")); err != nil || zw.Flush() != nil {
+		t.Fatalf("gzip: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		body   []byte
+		events int
+		err    string
+	}{
+		{
+			name: "invalid",
+			body: []byte("data: plain\n\n"),
+			err:  "read sse stream: invalid gzip header: gzip: invalid header",
+		},
+		{
+			name: "short",
+			body: gzipBytes(t, []byte("data: one\n\n"))[:4],
+			err:  "read sse stream: invalid gzip header: unexpected EOF",
+		},
+		{name: "truncated", body: cut.Bytes(), events: 1, err: "read sse stream: unexpected EOF"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sum := gzipTranscript(t, askGzip(codedSSE(t, "gzip", tt.body), restfile.SSEOptions{})).Summary
+			if sum.Reason != sseReasonErr || sum.Error != tt.err || sum.EventCount != tt.events {
+				t.Fatalf("summary = %+v, want %d events and error %q", sum, tt.events, tt.err)
+			}
+			if got := diag.ClassOf(sum.Err()); got != diag.ClassProtocol {
+				t.Fatalf("Err() class = %q, want %q", got, diag.ClassProtocol)
+			}
+		})
+	}
+}
+
+func TestSSEGzipHandleReturnsBeforeTheFirstByte(t *testing.T) {
+	url := heldGzipSSE(t)
+	var handle *StreamHandle
+	started := make(chan error, 1)
+	go func() {
+		var err error
+		handle, _, err = NewClient(nil).StartSSE(t.Context(), askGzip(url, restfile.SSEOptions{}), nil, Options{})
+		started <- err
+	}()
+	select {
+	case err := <-started:
+		if err != nil {
+			t.Fatalf("StartSSE: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("StartSSE waited for the first byte of the body")
+	}
+
+	handle.Session.Cancel()
+	select {
+	case <-handle.Session.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceling the session did not stop the wait for the gzip header")
+	}
+	if got := publishedReason(t, handle.Session); got != sseReasonCanceled {
+		t.Fatalf("reason = %q, want %q", got, sseReasonCanceled)
+	}
+}
+
+func TestSSEGzipIdleCoversTheHeader(t *testing.T) {
+	opts := restfile.SSEOptions{IdleTimeout: 200 * time.Millisecond, TotalTimeout: 5 * time.Second}
+	sum := gzipTranscript(t, askGzip(heldGzipSSE(t), opts)).Summary
+	if sum.Reason != sseReasonIdle || sum.EventCount != 0 {
+		t.Fatalf("summary = %+v, want the idle timeout and no events", sum)
+	}
+}
+
+func TestSSEGzipMaxBytesCountsDecodedBytes(t *testing.T) {
+	events := strings.Repeat("data: "+strings.Repeat("A", 256)+"\n\n", 64)
+	url := codedSSE(t, "gzip", gzipBytes(t, []byte(events)))
+
+	sum := gzipTranscript(t, askGzip(url, restfile.SSEOptions{MaxBytes: 1024})).Summary
+	if sum.Reason != sseReasonMaxBytes || sum.EventCount != 3 {
+		t.Fatalf("summary = %+v, want the 3 events that fit in 1024 decoded bytes", sum)
+	}
+}
+
+func TestSSEStreamInAnotherCodingFails(t *testing.T) {
+	const event = "data: one\n\n"
+	tests := []struct {
+		name   string
+		status int
+		enc    string
+		body   []byte
+		events int
+		err    error
+	}{
+		{name: "br", status: http.StatusOK, enc: "br", body: []byte(event), err: coding.ErrUnsupported},
+		{
+			name:   "partial gzip",
+			status: http.StatusPartialContent,
+			enc:    "gzip",
+			body:   gzipBytes(t, []byte(event)),
+			err:    errCodedRange,
+		},
+		{name: "partial identity", status: http.StatusPartialContent, enc: "identity", body: []byte(event), events: 1},
+		{name: "none", status: http.StatusOK, enc: "none", body: []byte(event), events: 1},
+		{name: "empty br", status: http.StatusOK, enc: "br"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Content-Encoding", tt.enc)
+				w.Header().Set("Content-Length", strconv.Itoa(len(tt.body)))
+				w.WriteHeader(tt.status)
+				_, _ = w.Write(tt.body)
+			}))
+			t.Cleanup(srv.Close)
+			req := askGzip(srv.URL, restfile.SSEOptions{})
+			if tt.err == nil {
+				if sum := gzipTranscript(t, req).Summary; sum.Reason != sseReasonEOF || sum.EventCount != tt.events {
+					t.Fatalf("summary = %+v, want %d events and the end of the stream", sum, tt.events)
+				}
+				return
+			}
+			resp, err := NewClient(nil).ExecuteSSE(t.Context(), req, nil, Options{})
+			if resp != nil || !errors.Is(err, tt.err) || diag.ClassOf(err) != diag.ClassProtocol {
+				t.Fatalf("ExecuteSSE() = %v, %v, want a protocol error matching %v", resp, err, tt.err)
+			}
+		})
+	}
+}
+
+func TestSSEFallbackKeepsABodyInAnotherCoding(t *testing.T) {
+	const body = `{"error":"boom"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "br")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+
+	resp, err := NewClient(nil).ExecuteSSE(t.Context(), askGzip(srv.URL, restfile.SSEOptions{}), nil, Options{})
+	if err != nil || resp == nil || string(resp.Body) != body || resp.Headers.Get("Content-Encoding") != "br" {
+		t.Fatalf("ExecuteSSE() = %v, %v, want the br response as sent", resp, err)
 	}
 }

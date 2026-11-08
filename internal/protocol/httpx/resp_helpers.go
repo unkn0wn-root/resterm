@@ -1,14 +1,41 @@
 package httpx
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/http/coding"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
+
+var errCodedRange = errors.New("partial content cannot be decoded")
+
+func uncompress(req *http.Request, resp *http.Response) error {
+	if req.Method == http.MethodHead || resp.ContentLength == 0 {
+		return nil
+	}
+	r, err := coding.NewReader(resp.Body, strings.Join(resp.Header.Values("Content-Encoding"), ","))
+	if err != nil || r == nil {
+		return err
+	}
+	// A range counts encoded bytes, so a 206 body stays coded.
+	if resp.StatusCode == http.StatusPartialContent {
+		return errCodedRange
+	}
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{r, resp.Body}
+	resp.Header.Del("Content-Encoding")
+	resp.Header.Del("Content-Length")
+	return nil
+}
 
 func effURL(req *http.Request, resp *http.Response) string {
 	if resp != nil && resp.Request != nil && resp.Request.URL != nil {

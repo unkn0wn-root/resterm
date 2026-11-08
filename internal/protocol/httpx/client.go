@@ -269,6 +269,8 @@ func (c *Client) executeHTTPRequest(
 		_ = httpResp.Body.Close()
 		return partialResp(req, duration, timeline, traceReport), verErr
 	}
+	// A body in a coding Resterm cannot undo stays as sent.
+	_ = uncompress(httpReq, httpResp)
 
 	defer func() {
 		if closeErr := httpResp.Body.Close(); closeErr != nil && err == nil {

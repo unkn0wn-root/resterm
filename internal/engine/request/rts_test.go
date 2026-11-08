@@ -923,6 +923,50 @@ GET https://example.com
 	}
 }
 
+func TestChecksAndCapturesReadDecodedGzip(t *testing.T) {
+	gz := gzipBytes(t, []byte(`{"zip":"decoded"}`))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write(gz)
+	}))
+	t.Cleanup(srv.Close)
+
+	tests := []struct {
+		name  string
+		check string
+		tests []row
+		caps  int
+	}{
+		{
+			name:  "assert",
+			check: "# @assert response.json().zip == \"decoded\"\n",
+			tests: []row{{`response.json().zip == "decoded"`, true}},
+		},
+		{
+			name:  "strict capture",
+			check: "# @setting capture.strict true\n# @capture request zip {{response.json.zip}}\n",
+			caps:  1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, req := parseDoc(t, "### one\n"+tt.check+"GET "+srv.URL+"\nAccept-Encoding: gzip\n")
+			eng := New(engcfg.Config{Client: httpx.NewClient(nil)}, nil)
+			res, err := eng.ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+			if err != nil || res.Err != nil || res.ScriptErr != nil {
+				t.Fatalf("ExecuteWith() error = %v, result error = %v, script error = %v", err, res.Err, res.ScriptErr)
+			}
+			if got := rows(res); !slices.Equal(got, tt.tests) {
+				t.Fatalf("tests = %+v, want %+v", got, tt.tests)
+			}
+			if len(res.Captures) != tt.caps || tt.caps > 0 && res.Captures[0].Value != "decoded" {
+				t.Fatalf("captures = %+v, want %d holding the decoded value", res.Captures, tt.caps)
+			}
+		})
+	}
+}
+
 func TestRTSGRPCExposesEncodedTrailers(t *testing.T) {
 	raw := string([]byte{0x00, 0x01, 0xff})
 	resp := &grpcx.Response{
