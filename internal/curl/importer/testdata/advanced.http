@@ -50,7 +50,7 @@
 # @setting proxy http://proxy.local
 # @setting timeout 2.5s
 GET https://api.example.com/search?existing=1&q=hello&note=hello+world
-Accept-Encoding: gzip, deflate, br
+Accept-Encoding: gzip
 Cookie: a=b
 Referer: https://ref.example.com
 User-Agent: resterm-agent

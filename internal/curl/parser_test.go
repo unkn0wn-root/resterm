@@ -1,6 +1,7 @@
 package curl
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -86,13 +87,13 @@ func TestParseCommandDataBinaryFile(t *testing.T) {
 	}
 }
 
-func TestParseCommandCompressedAddsHeader(t *testing.T) {
+func TestParseCommandCompressedAsksForGzip(t *testing.T) {
 	req, err := ParseCommand("curl --compressed https://example.com")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if req.Headers.Get("Accept-Encoding") == "" {
-		t.Fatalf("expected accept-encoding header to be set")
+	if got := req.Headers.Values("Accept-Encoding"); !slices.Equal(got, []string{"gzip"}) {
+		t.Fatalf("Accept-Encoding = %q, want only the gzip Resterm decodes", got)
 	}
 }
 

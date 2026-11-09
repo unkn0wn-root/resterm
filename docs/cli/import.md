@@ -20,7 +20,7 @@ Most curl flags have a direct equivalent:
 | `-T <file>` | Sends the file as the body. The method becomes PUT unless `-X` sets one. |
 | `-u user:pass` | `@auth basic`. |
 | `-A`, `-e`, `-b` | `User-Agent`, `Referer`, and `Cookie` headers. |
-| `--compressed` | An `Accept-Encoding` header. |
+| `--compressed` | An `Accept-Encoding: gzip` header. |
 | `-k`, `-x`, `-L`, `-m` | The `http-insecure`, `proxy`, `followredirects`, and `timeout` settings. |
 | `--cacert`, `--cert`, `--key` | The `http-root-cas`, `http-client-cert`, and `http-client-key` settings. |
 
