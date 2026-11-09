@@ -2,6 +2,7 @@ package runner
 
 import (
 	"cmp"
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"encoding/base64"
@@ -1644,6 +1645,80 @@ func TestRunResponseBodyPresence(t *testing.T) {
 				t.Fatalf("bodies = %#v, want %#v in\n%s", bodies, tt.want, out.String())
 			}
 		})
+	}
+}
+
+func gzipServer(t *testing.T, contentType, body string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Encoding", "gzip")
+		zw := gzip.NewWriter(w)
+		_, _ = io.WriteString(zw, body)
+		_ = zw.Close()
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+type gzipResponse struct {
+	Headers  http.Header `json:"headers"`
+	Body     *string     `json:"body"`
+	BodySize int         `json:"bodySize"`
+}
+
+func runGzip(t *testing.T, src string) gzipResponse {
+	t.Helper()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "gzip.http")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	rep, err := RunContext(context.Background(), Options{FilePath: file, WorkspaceRoot: dir, Response: true})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	var out strings.Builder
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+	var got struct {
+		Results []struct {
+			Response gzipResponse `json:"response"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil || len(got.Results) != 1 {
+		t.Fatalf("decode report (%v):\n%s", err, out.String())
+	}
+	return got.Results[0].Response
+}
+
+func TestRunResponseDecodesGzipTheRequestAskedFor(t *testing.T) {
+	const body = `{"zip":"decoded"}`
+	srv := gzipServer(t, "application/json", body)
+
+	resp := runGzip(t, "GET "+srv.URL+"\nAccept-Encoding: gzip\n")
+	if resp.Body == nil || *resp.Body != body || resp.BodySize != len(body) {
+		t.Fatalf("response = %+v, want the %d byte decoded body", resp, len(body))
+	}
+	if ce, cl := resp.Headers.Get("Content-Encoding"), resp.Headers.Get("Content-Length"); ce != "" || cl != "" {
+		t.Fatalf("headers = %v, want no Content-Encoding or Content-Length", resp.Headers)
+	}
+}
+
+func TestRunSSEResponseDecodesGzip(t *testing.T) {
+	srv := gzipServer(t, "text/event-stream", "data: one\n\ndata: two\n\n")
+
+	resp := runGzip(t, "# @sse\nGET "+srv.URL+"\nAccept-Encoding: gzip\n")
+	if resp.Body == nil {
+		t.Fatalf("response = %+v, want the transcript", resp)
+	}
+	transcript, err := httpx.DecodeSSETranscript([]byte(*resp.Body))
+	if err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
+	if len(transcript.Events) != 2 || transcript.Events[1].Data != "two" {
+		t.Fatalf("events = %+v, want both decoded events", transcript.Events)
 	}
 }
 

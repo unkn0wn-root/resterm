@@ -122,7 +122,7 @@ With `--format json`, read these fields:
 With `--response`, each result also has a `response` object:
 
 - `headers` and `body`, which is `""` for an empty body and missing for a body Resterm cannot decode, such as a `br` body. A body that is not valid UTF-8 is base64 with `"bodyEncoding": "base64"`.
-- `bodySize` is the size as received. Bodies over 1 MiB are cut, with `"bodyTruncated": true`.
+- `bodySize` is the size as received, after gzip decoding. Bodies over 1 MiB are cut, with `"bodyTruncated": true`.
 - `captures` lists the values the request saved, with secrets shown as `•••`.
 
 ## Exit codes

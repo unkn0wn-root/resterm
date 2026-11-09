@@ -277,6 +277,7 @@ func TestReportResponseDecodesContentCoding(t *testing.T) {
 		{"gzip in capitals", []string{"GZIP"}, gzipBytes(t, plain), []byte(masked), true},
 		{"gzip of nothing", []string{"gzip"}, gzipBytes(t, nil), []byte{}, true},
 		{"identity", []string{"identity"}, plain, []byte(masked), false},
+		{"none", []string{"none"}, plain, []byte(masked), false},
 		{"empty gzip", []string{"gzip"}, nil, []byte{}, false},
 		{"empty br", []string{"br"}, []byte{}, []byte{}, false},
 		{"deflate", []string{"deflate"}, deflated.Bytes(), nil, false},

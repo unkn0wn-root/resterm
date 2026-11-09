@@ -25,7 +25,7 @@ const (
 	mimeFormURLEncoded    = "application/x-www-form-urlencoded"
 	mimeMultipartForm     = "multipart/form-data"
 	mimeOctetStream       = "application/octet-stream"
-	acceptEncodingDefault = "gzip, deflate, br"
+	acceptEncodingDefault = "gzip"
 )
 
 const (

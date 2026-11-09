@@ -1,23 +1,54 @@
 package httpx
 
 import (
+	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"math"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/bytesize"
+	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/http/coding"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
+
+func gzipBytes(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	z := gzip.NewWriter(&b)
+	if _, err := z.Write(data); err != nil || z.Close() != nil {
+		t.Fatalf("gzip: %v", err)
+	}
+	return b.Bytes()
+}
+
+func serveGzip(t *testing.T, status int, contentType string, body []byte) *httptest.Server {
+	t.Helper()
+	gz := gzipBytes(t, body)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(status)
+		_, _ = w.Write(gz)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
 
 func serveBytes(t *testing.T, contentType string, size int) *httptest.Server {
 	t.Helper()
@@ -88,27 +119,176 @@ func TestResponseBodyAcceptsTheLargestLimit(t *testing.T) {
 }
 
 func TestResponseLimitCountsDecompressedBytes(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Content-Type", "text/plain")
-		zw := gzip.NewWriter(w)
-		defer func() { _ = zw.Close() }()
-		chunk := make([]byte, 1<<16)
-		for sent := 0; sent < 8<<20; sent += len(chunk) {
-			if _, err := zw.Write(chunk); err != nil {
+	const limit = 1 << 20
+	noise := make([]byte, limit)
+	_, _ = rand.NewChaCha8([32]byte{}).Read(noise)
+	if n := len(gzipBytes(t, noise)); n <= limit {
+		t.Fatalf("gzip of the noise is %d bytes, want more than the %d byte limit", n, limit)
+	}
+
+	zeros := make([]byte, 8<<20)
+	tests := []struct {
+		name     string
+		ask      bool
+		body     []byte
+		tooLarge bool
+	}{
+		{name: "transport asked", body: zeros, tooLarge: true},
+		{name: "request asked", ask: true, body: zeros, tooLarge: true},
+		{name: "near limit", ask: true, body: noise},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Encoding", "gzip")
+				w.Header().Set("Content-Type", "text/plain")
+				zw := gzip.NewWriter(w)
+				_, _ = zw.Write(tt.body)
+				_ = zw.Close()
+			}))
+			defer srv.Close()
+
+			req := &restfile.Request{Method: "GET", URL: srv.URL}
+			if tt.ask {
+				req.Headers = http.Header{"Accept-Encoding": {"gzip"}}
+			}
+			resp, err := NewClient(nil).Execute(
+				t.Context(),
+				req,
+				nil,
+				Options{MaxResponseBytes: bytesize.Of(limit), Timeout: 30 * time.Second},
+			)
+			if tt.tooLarge {
+				if got := tooLarge(t, err); got != limit {
+					t.Fatalf("Limit = %d, want %d", got, limit)
+				}
 				return
 			}
-		}
-	}))
-	defer srv.Close()
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if !bytes.Equal(resp.Body, tt.body) {
+				t.Fatalf("len(Body) = %d, want the %d decoded bytes", len(resp.Body), len(tt.body))
+			}
+		})
+	}
+}
 
-	_, err := NewClient(nil).Execute(
-		t.Context(),
-		&restfile.Request{Method: "GET", URL: srv.URL},
-		nil,
-		Options{MaxResponseBytes: bytesize.Of(1 << 20), Timeout: 30 * time.Second},
-	)
-	tooLarge(t, err)
+func TestResponseBodyDecodesWithoutALimit(t *testing.T) {
+	srv := serveGzip(t, http.StatusOK, "text/plain", []byte("hello"))
+	tests := []struct {
+		name  string
+		limit bytesize.Budget
+	}{
+		{name: "unlimited", limit: bytesize.Unlimited()},
+		{name: "largest limit", limit: bytesize.Of(math.MaxInt64)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := NewClient(nil).Execute(
+				t.Context(),
+				&restfile.Request{Method: "GET", URL: srv.URL, Headers: http.Header{"Accept-Encoding": {"gzip"}}},
+				nil,
+				Options{MaxResponseBytes: tt.limit, Timeout: 30 * time.Second},
+			)
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if string(resp.Body) != "hello" {
+				t.Fatalf("Body = %q, want the decoded body", resp.Body)
+			}
+		})
+	}
+}
+
+func TestResponseBodyDecodesGzipTheRequestAskedFor(t *testing.T) {
+	gz := gzipBytes(t, []byte("hello"))
+	tests := []struct {
+		name     string
+		method   string
+		status   int
+		enc      []string
+		body     []byte
+		flush    bool
+		noHeader bool
+		want     string
+		decoded  bool
+		err      error
+	}{
+		{name: "gzip", enc: []string{"gzip"}, body: gz, want: "hello", decoded: true},
+		{name: "gzip in capitals", enc: []string{"GZIP"}, body: gz, want: "hello", decoded: true},
+		{
+			name:    "two members",
+			enc:     []string{"gzip"},
+			body:    slices.Concat(gzipBytes(t, []byte("hel")), gzipBytes(t, []byte("lo"))),
+			want:    "hello",
+			decoded: true,
+		},
+		{name: "chunked empty", enc: []string{"gzip"}, flush: true, decoded: true},
+		{name: "transport asked", enc: []string{"gzip"}, body: gz, noHeader: true, want: "hello", decoded: true},
+		{name: "invalid", enc: []string{"gzip"}, body: []byte("hello"), err: coding.ErrHeader},
+		{name: "truncated", enc: []string{"gzip"}, body: gz[:len(gz)-4], err: io.ErrUnexpectedEOF},
+		{
+			name: "trailing garbage",
+			enc:  []string{"gzip"},
+			body: slices.Concat(gz, []byte("not a gzip member")),
+			err:  gzip.ErrHeader,
+		},
+		{name: "identity", enc: []string{"identity"}, body: []byte("hello"), want: "hello"},
+		{name: "none", enc: []string{"none"}, body: []byte("hello"), want: "hello"},
+		{name: "br", enc: []string{"br"}, body: gz, want: string(gz)},
+		{name: "deflate", enc: []string{"deflate"}, body: gz, want: string(gz)},
+		{name: "zstd", enc: []string{"zstd"}, body: gz, want: string(gz)},
+		{name: "x-gzip", enc: []string{"x-gzip"}, body: gz, want: string(gz)},
+		{name: "gzip twice in one line", enc: []string{"gzip, gzip"}, body: gz, want: string(gz)},
+		{name: "gzip on two lines", enc: []string{"gzip", "gzip"}, body: gz, want: string(gz)},
+		{name: "identity then gzip", enc: []string{"identity", "gzip"}, body: gz, want: string(gz)},
+		{name: "partial content", status: http.StatusPartialContent, enc: []string{"gzip"}, body: gz, want: string(gz)},
+		{name: "head", method: http.MethodHead, enc: []string{"gzip"}},
+		{name: "no content", status: http.StatusNoContent, enc: []string{"gzip"}},
+		{name: "not modified", status: http.StatusNotModified, enc: []string{"gzip"}},
+		{name: "zero length", enc: []string{"gzip"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header()["Content-Encoding"] = tt.enc
+				w.WriteHeader(cmp.Or(tt.status, http.StatusOK))
+				if tt.flush {
+					w.(http.Flusher).Flush()
+				}
+				_, _ = w.Write(tt.body)
+			}))
+			defer srv.Close()
+
+			req := &restfile.Request{Method: cmp.Or(tt.method, http.MethodGet), URL: srv.URL}
+			if !tt.noHeader {
+				req.Headers = http.Header{"Accept-Encoding": {"gzip"}}
+			}
+			resp, err := NewClient(nil).Execute(t.Context(), req, nil, Options{Timeout: 30 * time.Second})
+			if tt.err != nil {
+				if !errors.Is(err, tt.err) || diag.ClassOf(err) != diag.ClassProtocol {
+					t.Fatalf("Execute() error = %v, want a protocol error matching %v", err, tt.err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if string(resp.Body) != tt.want {
+				t.Fatalf("Body = %q, want %q", resp.Body, tt.want)
+			}
+			ce, cl := resp.Headers.Values("Content-Encoding"), resp.Headers.Get("Content-Length")
+			switch {
+			case tt.decoded && (ce != nil || cl != ""):
+				t.Fatalf("headers = %v, want no Content-Encoding or Content-Length once decoded", resp.Headers)
+			case !tt.decoded && !slices.Equal(ce, tt.enc):
+				t.Fatalf("Content-Encoding = %q, want %q as sent", ce, tt.enc)
+			case !tt.decoded && len(tt.body) > 0 && cl != strconv.Itoa(len(tt.body)):
+				t.Fatalf("Content-Length = %q, want %d as sent", cl, len(tt.body))
+			}
+		})
+	}
 }
 
 func TestResponseLimitDefaultsAndOverrides(t *testing.T) {
@@ -164,6 +344,27 @@ func TestSSEFallbackBodyStopsAtTheLimit(t *testing.T) {
 	}
 	_, err := NewClient(nil).ExecuteSSE(t.Context(), req, nil, Options{MaxResponseBytes: bytesize.Of(1 << 20)})
 	tooLarge(t, err)
+}
+
+func TestSSEFallbackDecodesGzip(t *testing.T) {
+	srv := serveGzip(t, http.StatusOK, "application/json", []byte(`{"ok":true}`))
+	req := &restfile.Request{
+		Method:  "GET",
+		URL:     srv.URL,
+		Headers: http.Header{"Accept-Encoding": {"gzip"}},
+		SSE:     &restfile.SSERequest{Options: restfile.SSEOptions{TotalTimeout: 30 * time.Second}},
+	}
+	resp, err := NewClient(nil).ExecuteSSE(t.Context(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("ExecuteSSE: %v", err)
+	}
+	if string(resp.Body) != `{"ok":true}` || resp.Headers.Get("Content-Encoding") != "" {
+		t.Fatalf(
+			"fallback = %q with headers %v, want the decoded body without Content-Encoding",
+			resp.Body,
+			resp.Headers,
+		)
+	}
 }
 
 // countingConn records how much the client pulls off the socket. Counting what

@@ -186,6 +186,7 @@ func (c *Client) StartSSE(
 		cancel()
 		return nil, nil, verErr
 	}
+	codingErr := uncompress(httpReq, httpResp)
 
 	contentType := strings.ToLower(httpResp.Header.Get("Content-Type"))
 	if httpResp.StatusCode >= 400 || !strings.Contains(contentType, "text/event-stream") {
@@ -199,6 +200,11 @@ func (c *Client) StartSSE(
 			return nil, nil, diag.WrapAs(diag.ClassProtocol, closeErr, "close response body")
 		}
 		return nil, respFromHTTP(httpReq, httpResp, req, body, time.Since(start)), nil
+	}
+	if codingErr != nil {
+		cancel()
+		_ = httpResp.Body.Close()
+		return nil, nil, diag.WrapAs(diag.ClassProtocol, codingErr, "read sse stream")
 	}
 
 	meta := buildStreamMeta(req, httpReq, httpResp, effectiveOpts.BaseDir, metaDefaults{})

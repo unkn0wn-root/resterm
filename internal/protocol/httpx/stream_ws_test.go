@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/base64"
@@ -724,6 +725,26 @@ func TestStartWebSocketHandshakeFallback(t *testing.T) {
 	}
 	if got := fallback.Headers.Get("X-Denied"); got != "true" {
 		t.Fatalf("expected X-Denied header, got %q", got)
+	}
+}
+
+func TestWebSocketFallbackKeepsTheBodyAsSent(t *testing.T) {
+	srv := serveGzip(t, http.StatusForbidden, "text/plain", []byte("handshake rejected"))
+	req := &restfile.Request{
+		Method:    http.MethodGet,
+		URL:       "ws" + strings.TrimPrefix(srv.URL, "http"),
+		Headers:   http.Header{"Accept-Encoding": {"gzip"}},
+		WebSocket: &restfile.WebSocketRequest{},
+	}
+	handle, fallback, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+	if err != nil || handle != nil || fallback == nil {
+		t.Fatalf("StartWebSocket() = %v, %v, %v, want the handshake response", handle, fallback, err)
+	}
+	if want := gzipBytes(t, []byte("handshake rejected")); !bytes.Equal(fallback.Body, want) {
+		t.Fatalf("Body = %q, want the gzip body as sent", fallback.Body)
+	}
+	if got := fallback.Headers.Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want gzip as sent", got)
 	}
 }
 
