@@ -342,7 +342,7 @@ func (s *search) descend(text string, layers []layer, spans []span) []span {
 		return true
 	}
 	for i := 0; ; {
-		k := strings.IndexAny(text[i:], `\%&+`)
+		k := indexEscape(text[i:])
 		if k < 0 {
 			return spans
 		}
@@ -356,7 +356,7 @@ func (s *search) descend(text string, layers []layer, spans []span) []span {
 			for !cut(b) {
 				b++
 			}
-			n := strings.IndexAny(text[last+1:min(len(text), b+s.set.longest-1)], `\%&+`)
+			n := indexEscape(text[last+1 : min(len(text), b+s.set.longest-1)])
 			if n < 0 {
 				break
 			}
