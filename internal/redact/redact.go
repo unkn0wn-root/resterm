@@ -80,15 +80,16 @@ func New(secrets ...string) Set {
 		}
 	}
 
+	// Shortest first. A search stops at the first secret that does not fit.
 	// A form two secrets share follows the longer secret.
 	slices.SortFunc(out, func(a, b needle) int {
-		return cmp.Or(strings.Compare(a.v, b.v), cmp.Compare(b.chars, a.chars))
+		return cmp.Or(cmp.Compare(len(a.v), len(b.v)), strings.Compare(a.v, b.v), cmp.Compare(b.chars, a.chars))
 	})
 	out = slices.CompactFunc(out, func(a, b needle) bool { return a.v == b.v })
 	set := Set{needles: out, words: slices.ContainsFunc(out, func(n needle) bool { return n.chars < wordLen })}
 	if len(out) > 0 {
-		set.short = len(slices.MinFunc(out, func(a, b needle) int { return len(a.v) - len(b.v) }).v)
-		set.longest = len(slices.MaxFunc(out, func(a, b needle) int { return len(a.v) - len(b.v) }).v)
+		set.short = len(out[0].v)
+		set.longest = len(out[len(out)-1].v)
 	}
 	return set
 }
@@ -217,6 +218,10 @@ func (s *search) find(text string, layers []layer, spans []span) []span {
 		}
 		w := text[a:min(b, len(text))]
 		for _, n := range s.set.needles {
+			// Secrets are sorted by length, so the rest do not fit either.
+			if len(n.v) > len(w) {
+				break
+			}
 			for i := 0; ; i++ {
 				j := strings.Index(w[i:], n.v)
 				if j < 0 {
