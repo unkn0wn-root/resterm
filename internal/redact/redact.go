@@ -194,6 +194,10 @@ func (s *search) mask(v string) string {
 }
 
 func (s *search) find(text string, layers []layer, spans []span) []span {
+	// No secret fits in a text shorter than the shortest one, and base64 only makes a secret longer.
+	if len(text) < s.set.short {
+		return spans
+	}
 	add := func(a, b int) { spans = append(spans, source(layers, a, b)) }
 
 	// A short secret is likely part of a longer word when an ASCII letter, digit or "_" at its edge touches another.
