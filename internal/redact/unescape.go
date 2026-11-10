@@ -38,6 +38,18 @@ const (
 	allKinds = backslash | percent | reference
 )
 
+var isEscape = [256]bool{'\\': true, '%': true, '&': true, '+': true}
+
+// Not strings.IndexAny, which builds its byte set on every call, or calls IndexRune per rune for 8 bytes or less.
+func indexEscape(v string) int {
+	for i := range len(v) {
+		if isEscape[v[i]] {
+			return i
+		}
+	}
+	return -1
+}
+
 const (
 	shortNames = `"\/'bfnrtav`
 	shortBytes = "\"\\/'\b\f\n\r\t\a\v"

@@ -39,7 +39,7 @@ func TestNewKeepsEachSecretOnce(t *testing.T) {
 		{[]string{""}, nil},
 		{[]string{"tok", "tok"}, []needle{{"tok", 3}}},
 		{[]string{"a b"}, []needle{{"a b", 3}}},
-		{[]string{"ü b"}, []needle{{"ü b", 3}, {"\xfc b", 3}}},
+		{[]string{"ü b"}, []needle{{"\xfc b", 3}, {"ü b", 3}}},
 		{[]string{"bcd", "abc"}, []needle{{"abc", 3}, {"bcd", 3}}},
 		{[]string{"©" + tail, "Â©" + tail}, []needle{{"\xa9" + tail, 15}, {"©" + tail, 16}, {"Â©" + tail, 16}}},
 	}
@@ -164,6 +164,7 @@ func TestTextOverlap(t *testing.T) {
 		{[]string{"ab"}, "ab-ab", "•••-•••"},
 		{[]string{"©" + tail, "Â©" + tail}, "x©" + tail + "y", "x•••y"},
 		{[]string{"©" + tail}, "x©" + tail + "y", "x©" + tail + "y"},
+		{[]string{"abc", "x" + tail}, "YWJj", "•••"},
 	}
 	for _, tt := range tests {
 		if got := New(tt.secs...).Text(tt.in); got != tt.want {

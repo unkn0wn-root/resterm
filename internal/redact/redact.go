@@ -80,15 +80,16 @@ func New(secrets ...string) Set {
 		}
 	}
 
+	// Shortest first. A search stops at the first secret that does not fit.
 	// A form two secrets share follows the longer secret.
 	slices.SortFunc(out, func(a, b needle) int {
-		return cmp.Or(strings.Compare(a.v, b.v), cmp.Compare(b.chars, a.chars))
+		return cmp.Or(cmp.Compare(len(a.v), len(b.v)), strings.Compare(a.v, b.v), cmp.Compare(b.chars, a.chars))
 	})
 	out = slices.CompactFunc(out, func(a, b needle) bool { return a.v == b.v })
 	set := Set{needles: out, words: slices.ContainsFunc(out, func(n needle) bool { return n.chars < wordLen })}
 	if len(out) > 0 {
-		set.short = len(slices.MinFunc(out, func(a, b needle) int { return len(a.v) - len(b.v) }).v)
-		set.longest = len(slices.MaxFunc(out, func(a, b needle) int { return len(a.v) - len(b.v) }).v)
+		set.short = len(out[0].v)
+		set.longest = len(out[len(out)-1].v)
 	}
 	return set
 }
@@ -194,6 +195,10 @@ func (s *search) mask(v string) string {
 }
 
 func (s *search) find(text string, layers []layer, spans []span) []span {
+	// No secret fits in a text shorter than the shortest one, and base64 only makes a secret longer.
+	if len(text) < s.set.short {
+		return spans
+	}
 	add := func(a, b int) { spans = append(spans, source(layers, a, b)) }
 
 	// A short secret is likely part of a longer word when an ASCII letter, digit or "_" at its edge touches another.
@@ -213,6 +218,10 @@ func (s *search) find(text string, layers []layer, spans []span) []span {
 		}
 		w := text[a:min(b, len(text))]
 		for _, n := range s.set.needles {
+			// Secrets are sorted by length, so the rest do not fit either.
+			if len(n.v) > len(w) {
+				break
+			}
 			for i := 0; ; i++ {
 				j := strings.Index(w[i:], n.v)
 				if j < 0 {
@@ -338,7 +347,7 @@ func (s *search) descend(text string, layers []layer, spans []span) []span {
 		return true
 	}
 	for i := 0; ; {
-		k := strings.IndexAny(text[i:], `\%&+`)
+		k := indexEscape(text[i:])
 		if k < 0 {
 			return spans
 		}
@@ -352,7 +361,7 @@ func (s *search) descend(text string, layers []layer, spans []span) []span {
 			for !cut(b) {
 				b++
 			}
-			n := strings.IndexAny(text[last+1:min(len(text), b+s.set.longest-1)], `\%&+`)
+			n := indexEscape(text[last+1 : min(len(text), b+s.set.longest-1)])
 			if n < 0 {
 				break
 			}
