@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.18.1](https://github.com/unkn0wn-root/resterm/compare/v1.18.0...v1.18.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **coding:** read gzip lazily and decode without a limit ([763a0f5](https://github.com/unkn0wn-root/resterm/commit/763a0f55a91a29ae10b688608d8e0228f8ab316d))
+* **curl:** send Accept-Encoding: gzip for --compressed ([d522eec](https://github.com/unkn0wn-root/resterm/commit/d522eecd26b172bdc57dc98ac37818d0aa799446))
+* **http:** decode gzip when the request sets its own Accept-Encoding ([2fec774](https://github.com/unkn0wn-root/resterm/commit/2fec774f10a8d102951f7e39d36cb3ce0eb02f24))
+
 ## [1.18.0](https://github.com/unkn0wn-root/resterm/compare/v1.17.2...v1.18.0) (2026-11-07)
 
 
