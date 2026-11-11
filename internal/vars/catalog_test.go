@@ -1,6 +1,7 @@
 package vars
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -457,17 +458,45 @@ func TestResolveCollapsesEquivalentNames(t *testing.T) {
 
 // Group layers merge the same way: a later layer wins, and two forms of one
 // name inside a layer resolve without depending on map order.
-func TestMergeValuesIsDeterministic(t *testing.T) {
+func TestResolveMergesGroupLayersInOrder(t *testing.T) {
 	shared := map[string]string{"Region": "eu", "region": "us"}
-	over := map[string]string{" REGION ": "apac"}
-
 	for range 16 {
-		got := mergeValues(shared, nil)
-		if len(got) != 1 || got["region"] != "us" {
-			t.Fatalf("mergeValues(shared) = %#v, want region=us on every run", got)
+		for _, tt := range []struct {
+			profile map[string]string
+			want    map[string]string
+		}{
+			{map[string]string{"x": "1"}, map[string]string{"region": "us", "x": "1"}},
+			{map[string]string{" REGION ": "apac"}, map[string]string{"REGION": "apac"}},
+		} {
+			cat, err := NewGroupedCatalog(shared, []Group{{Name: "api", Profiles: EnvironmentSet{"dev": tt.profile}}})
+			if err != nil {
+				t.Fatalf("catalog: %v", err)
+			}
+			env, err := cat.Resolve(cat.DefaultSelection())
+			if err != nil {
+				t.Fatalf("resolve: %v", err)
+			}
+			if got := env.Values(); !maps.Equal(got, tt.want) {
+				t.Fatalf("Values() = %#v, want %#v on every run", got, tt.want)
+			}
 		}
-		if got := mergeValues(shared, over); len(got) != 1 || got["REGION"] != "apac" {
-			t.Fatalf("mergeValues(shared, over) = %#v, want the later layer to win", got)
-		}
+	}
+}
+
+func TestNewCatalogCopiesValues(t *testing.T) {
+	set := EnvironmentSet{SharedEnvKey: {"s": "1"}, "dev": {"a": "1"}}
+	cat, err := NewCatalog(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set[SharedEnvKey]["s"] = "2"
+	set["dev"]["a"] = "2"
+
+	env, err := cat.Resolve(cat.DefaultSelection())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := env.Values(); got["s"] != "1" || got["a"] != "1" {
+		t.Fatalf("Values() = %v, want the values NewCatalog was given", got)
 	}
 }

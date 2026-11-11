@@ -1,8 +1,12 @@
 package settings
 
 import (
+	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -11,8 +15,10 @@ type Matcher func(string) bool
 type ApplyFunc func(key, val string) error
 
 type Handler struct {
-	Match Matcher
-	Apply ApplyFunc
+	// Component labels errors about the keys Match accepts.
+	Component diag.Component
+	Match     Matcher
+	Apply     ApplyFunc
 }
 
 type Applier struct {
@@ -23,30 +29,33 @@ func New(handlers ...Handler) Applier {
 	return Applier{handlers: handlers}
 }
 
+// ApplyAll applies each setting through the first handler that matches its key
+// and returns the settings no handler matched. settings must come from Merge, so
+// its keys are canonical and both names of one option are left only when one
+// scope wrote both. That fails the request.
 func (a Applier) ApplyAll(settings map[string]string) (map[string]string, error) {
 	if len(settings) == 0 || len(a.handlers) == 0 {
 		return settings, nil
 	}
 	left := make(map[string]string)
-	for k, v := range settings {
-		key := str.LowerTrim(k)
-		if key == "" {
+	for _, key := range slices.Sorted(maps.Keys(settings)) {
+		val := settings[key]
+		i := slices.IndexFunc(a.handlers, func(h Handler) bool { return h.Match != nil && h.Match(key) })
+		if i < 0 {
+			left[key] = val
 			continue
 		}
-		applied := false
-		for _, h := range a.handlers {
-			if h.Match != nil && h.Match(key) {
-				if h.Apply != nil {
-					if err := h.Apply(key, v); err != nil {
-						return nil, err
-					}
-				}
-				applied = true
-				break
+		h := a.handlers[i]
+		if other, ok := sameOption[key]; ok {
+			if _, dup := settings[other]; dup {
+				msg := fmt.Sprintf("%s and %s are the same setting. Use one of them.", key, other)
+				return nil, diag.New(diag.ClassProtocol, msg, diag.WithComponent(h.Component))
 			}
 		}
-		if !applied {
-			left[key] = v
+		if h.Apply != nil {
+			if err := h.Apply(key, val); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return left, nil

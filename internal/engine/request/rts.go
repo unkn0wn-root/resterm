@@ -18,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/str"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -951,8 +952,10 @@ func (e *Engine) parseApplySettings(
 		return nil, applyErr("settings", "expects dict")
 	}
 	out := make(map[string]*string)
-	for k, val := range v.M {
-		key := strings.ToLower(strings.TrimSpace(k))
+	// Sorted, so two forms of one key resolve the same way on every run.
+	for _, k := range slices.Sorted(maps.Keys(v.M)) {
+		val := v.M[k]
+		key := applyKey(k)
 		if key == "" {
 			return nil, applyErr("settings", "expects non-empty key")
 		}
@@ -1007,7 +1010,9 @@ func applyPatchToRequest(req *restfile.Request, vv map[string]string, p applyPat
 		return err
 	}
 	applyPatchAuth(req, p.auth, p.authSet)
-	applyPatchSettings(req, p.settings)
+	if len(p.settings) > 0 {
+		req.Settings = settings.Patch(req.Settings, p.settings)
+	}
 	if vv != nil {
 		vars.MergeInto(vv, p.out.Variables)
 	}
@@ -1025,22 +1030,6 @@ func applyPatchAuth(req *restfile.Request, auth *restfile.AuthSpec, set bool) {
 	}
 	req.Metadata.Auth = auth.Clone()
 	req.Metadata.AuthDisabled = false
-}
-
-func applyPatchSettings(req *restfile.Request, in map[string]*string) {
-	if req == nil || len(in) == 0 {
-		return
-	}
-	if req.Settings == nil {
-		req.Settings = make(map[string]string, len(in))
-	}
-	for k, v := range in {
-		if v == nil {
-			delete(req.Settings, k)
-			continue
-		}
-		req.Settings[k] = *v
-	}
 }
 
 func applyKey(key string) string { return strings.ToLower(strings.TrimSpace(key)) }

@@ -462,13 +462,15 @@ func (x *execCtx) configureGRPC() {
 func (x *execCtx) applySettings() *xrunResult {
 	x.configureGRPC()
 
-	gset := settings.FromValues(x.env.Values())
-	fset := map[string]string{}
-	if x.doc != nil && x.doc.Settings != nil {
-		fset = x.doc.Settings
+	var scopes []map[string]string
+	for _, l := range x.env.Layers() {
+		scopes = append(scopes, settings.FromValues(l))
+	}
+	if x.doc != nil {
+		scopes = append(scopes, x.doc.Settings)
 	}
 	before := CloneRequest(x.req)
-	x.mset = settings.Merge(gset, fset, x.req.Settings)
+	x.mset = settings.Merge(append(scopes, x.req.Settings)...)
 	x.req.Settings = x.mset
 	x.exp.setSettings(x.mset)
 	x.exp.stage(
