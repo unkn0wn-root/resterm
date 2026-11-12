@@ -1,13 +1,19 @@
 package httpx
 
 import (
-	"net/http/cookiejar"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/unkn0wn-root/resterm/internal/http/version"
 )
+
+func optionsFrom(t *testing.T, settings map[string]string) Options {
+	t.Helper()
+	var opts Options
+	if err := ApplyOptionSettings(&opts, settings); err != nil {
+		t.Fatalf("ApplyOptionSettings(%v) error = %v", settings, err)
+	}
+	return opts
+}
 
 func TestApplyOptionSettingsRejectsInvalidValues(t *testing.T) {
 	for _, tc := range []struct {
@@ -144,46 +150,6 @@ func TestApplyOptionSettingsAcceptsBooleanSpellings(t *testing.T) {
 	}
 	if opts.FollowRedirects {
 		t.Fatal("expected followredirects=off to disable redirects")
-	}
-}
-
-// The send path re-reads settings that were already validated. An unreadable
-// value must not stop the readable ones behind it from being applied.
-func TestApplyRequestSettingsSkipsUnreadableValues(t *testing.T) {
-	jar, _ := cookiejar.New(nil)
-	opts := Options{
-		Timeout:     time.Second,
-		BaseURL:     "https://default.example/",
-		HTTPVersion: version.V11,
-		CookieJar:   jar,
-	}
-
-	got := applyRequestSettings(opts, map[string]string{
-		"http-version":    "unsupported",
-		"timeout":         "5sec",
-		"followredirects": "maybe",
-		"insecure":        "true",
-		"no-cookies":      "true",
-		"base-url":        "{{api.base}}",
-	})
-
-	if got.HTTPVersion != version.V11 {
-		t.Fatalf("HTTPVersion = %v, want it unchanged", got.HTTPVersion)
-	}
-	if got.Timeout != time.Second {
-		t.Fatalf("Timeout = %v, want it unchanged", got.Timeout)
-	}
-	if got.FollowRedirects {
-		t.Fatal("FollowRedirects should stay at its current value")
-	}
-	if !got.InsecureSkipVerify {
-		t.Fatal("insecure=true follows an unreadable value and still has to apply")
-	}
-	if got.CookieJar != nil {
-		t.Fatal("no-cookies=true follows an unreadable value and still has to apply")
-	}
-	if got.BaseURL != "{{api.base}}" {
-		t.Fatalf("BaseURL = %q, want raw request setting", got.BaseURL)
 	}
 }
 

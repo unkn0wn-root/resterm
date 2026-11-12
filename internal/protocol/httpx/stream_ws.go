@@ -115,8 +115,7 @@ func (c *Client) StartWebSocket(
 		return nil, nil, diag.New(diag.ClassProtocol, "websocket metadata missing")
 	}
 
-	effective := applyRequestSettings(opts, req.Settings)
-	if verErr := checkWebSocketHTTPVersion(effective.HTTPVersion); verErr != nil {
+	if verErr := checkWebSocketHTTPVersion(opts.HTTPVersion); verErr != nil {
 		return nil, nil, verErr
 	}
 
@@ -124,7 +123,7 @@ func (c *Client) StartWebSocket(
 	var subscribe string
 	if req.Body.GraphQL != nil {
 		wsOpts.Subprotocols = []string{restfile.GraphQLWSProtocol}
-		msg, err := c.GraphQLSubscribeMessage(req.Body.GraphQL, resolver, effective)
+		msg, err := c.GraphQLSubscribeMessage(req.Body.GraphQL, resolver, opts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -133,12 +132,7 @@ func (c *Client) StartWebSocket(
 	handshakeCtx, handshakeCancel := ctxWithTimeout(ctx, wsOpts.HandshakeTimeout, nil)
 	defer handshakeCancel()
 
-	httpReq, effectiveOpts, err := c.prepareHTTPRequestWithOpts(
-		handshakeCtx,
-		req,
-		resolver,
-		effective,
-	)
+	httpReq, effectiveOpts, err := c.prepareHTTPRequest(handshakeCtx, req, resolver, opts)
 	if err != nil {
 		handshakeCancel()
 		return nil, nil, err

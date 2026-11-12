@@ -30,28 +30,6 @@ func (c *Client) prepareHTTPRequest(
 	resolver *vars.Resolver,
 	opts Options,
 ) (*http.Request, Options, error) {
-	if req == nil {
-		return nil, opts, diag.New(
-			diag.ClassProtocol,
-			"request is nil",
-			diag.WithComponent(diag.ComponentHTTP),
-		)
-	}
-
-	effective := applyRequestSettings(opts, req.Settings)
-	prepared, err := c.prepareRequest(ctx, req, resolver, effective, false)
-	if err != nil {
-		return nil, effective, err
-	}
-	return prepared.request, prepared.options, nil
-}
-
-func (c *Client) prepareHTTPRequestWithOpts(
-	ctx context.Context,
-	req *restfile.Request,
-	resolver *vars.Resolver,
-	opts Options,
-) (*http.Request, Options, error) {
 	prepared, err := c.prepareRequest(ctx, req, resolver, opts, false)
 	if err != nil {
 		return nil, opts, err
@@ -134,14 +112,6 @@ func captureReqMeta(sent *http.Request, resp *http.Response) reqMeta {
 	}
 
 	return reqMeta{headers: h, method: method, host: host, length: length, te: te}
-}
-
-// The settings were validated when they were applied, so re-reading them here
-// takes what it can and leaves anything unreadable at its current value.
-func applyRequestSettings(opts Options, settings map[string]string) Options {
-	effective := opts
-	_ = applyOptionSettings(&effective, settings, false)
-	return effective
 }
 
 func normalizeSettings(settings map[string]string) map[string]string {

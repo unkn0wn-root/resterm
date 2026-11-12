@@ -53,13 +53,6 @@ func invalidBool(key optionSettingKey, val string) error {
 // ApplyOptionSettings applies the generic HTTP settings recognized by the client
 // and reports the first value it cannot read.
 func ApplyOptionSettings(opts *Options, settings map[string]string) error {
-	return applyOptionSettings(opts, settings, true)
-}
-
-// A value that does not parse is an error only while the settings are being
-// applied. The send path re-reads values that were validated then, so outside
-// strict mode it keeps what it can read and leaves the rest alone.
-func applyOptionSettings(opts *Options, settings map[string]string, strict bool) error {
 	if opts == nil || len(settings) == 0 {
 		return nil
 	}
@@ -70,105 +63,95 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 	}
 
 	if val, ok := settingValue(norm, version.Key); ok {
-		switch v, valid := version.ParseValue(val); {
-		case valid:
-			opts.HTTPVersion = v
-		case strict:
+		v, valid := version.ParseValue(val)
+		if !valid {
 			return invalidSetting(version.Key, val, "1.1, 2 or HTTP/1.1, HTTP/2")
 		}
+		opts.HTTPVersion = v
 	}
 
 	if val, ok := settingValue(norm, optionSettingTimeout); ok {
-		switch dur, err := time.ParseDuration(val); {
-		case err == nil:
-			opts.Timeout = dur
-		case strict:
+		dur, err := time.ParseDuration(val)
+		if err != nil {
 			return invalidSetting(optionSettingTimeout, val, "a duration such as 30s")
 		}
+		opts.Timeout = dur
 	}
 
 	// A base URL may hold templates and an absolute request target ignores it
 	// entirely, so the raw value is kept here and only the request builder
 	// expands and validates it, once a relative target needs it.
 	if val, ok := settingValue(norm, optionSettingBaseURL); ok {
-		switch base := strings.TrimSpace(val); {
-		case base != "":
-			opts.BaseURL = base
-		case strict:
+		base := strings.TrimSpace(val)
+		if base == "" {
 			return invalidSetting(
 				optionSettingBaseURL,
 				val,
 				"an absolute HTTP URL such as https://api.example.com/v1/",
 			)
 		}
+		opts.BaseURL = base
 	}
 
 	// An empty proxy reads as "not set". Anything else has to be a URL the
 	// transport can dial, or it fails much later with a bare dial error.
 	if val, ok := settingValue(norm, optionSettingProxy); ok && strings.TrimSpace(val) != "" {
-		switch u, err := url.Parse(val); {
-		case err == nil && u.Scheme != "" && u.Host != "":
-			opts.ProxyURL = val
-		case strict:
+		if u, err := url.Parse(val); err != nil || u.Scheme == "" || u.Host == "" {
 			return invalidSetting(optionSettingProxy, val, "a URL such as http://host:8080")
 		}
+		opts.ProxyURL = val
 	}
 
 	if val, ok := settingValue(norm, optionSettingFollowRedirects); ok {
-		switch b, valid := directive.ParseBool(val); {
-		case valid:
-			opts.FollowRedirects = b
-		case strict:
+		b, valid := directive.ParseBool(val)
+		if !valid {
 			return invalidBool(optionSettingFollowRedirects, val)
 		}
+		opts.FollowRedirects = b
 	}
 
 	if val, ok := settingValue(norm, optionSettingInsecure); ok {
-		switch b, valid := directive.ParseBool(val); {
-		case valid:
-			opts.InsecureSkipVerify = b
-		case strict:
+		b, valid := directive.ParseBool(val)
+		if !valid {
 			return invalidBool(optionSettingInsecure, val)
 		}
+		opts.InsecureSkipVerify = b
 	}
 
 	if val, ok := settingValue(norm, optionSettingForwardCreds); ok {
-		switch allowed, err := ParseForwardCredentials(val); {
-		case err == nil:
-			opts.ForwardCredentials = allowed
-		case strict:
+		allowed, err := ParseForwardCredentials(val)
+		if err != nil {
 			return invalidSetting(
 				optionSettingForwardCreds,
 				val,
 				"origins such as https://cdn.example.com, or true to allow any redirect target",
 			)
 		}
+		opts.ForwardCredentials = allowed
 	}
 
 	if val, ok := settingValue(norm, optionSettingMaxRedirects); ok {
-		switch limit, err := parseRedirectLimit(val); {
-		case err == nil:
-			opts.MaxRedirects = restfile.OptOf(limit)
-		case strict:
+		limit, err := parseRedirectLimit(val)
+		if err != nil {
 			return invalidSetting(
 				optionSettingMaxRedirects,
 				val,
 				"a count such as 20, or none to stop at the first redirect",
 			)
 		}
+		opts.MaxRedirects = restfile.OptOf(limit)
 	}
 
 	if val, ok := settingValue(norm, optionSettingMaxResponse); ok {
-		switch size, err := bytesize.ParseBudget(val); {
-		case err == nil:
-			opts.MaxResponseBytes = size
-		case strict:
+		size, err := bytesize.ParseBudget(val)
+		if err != nil {
 			return invalidSetting(
 				optionSettingMaxResponse,
 				val,
 				"a size such as 100mb, or none to read without a limit",
 			)
 		}
+		opts.MaxResponseBytes = size
 	}
 
 	for _, size := range []struct {
@@ -183,28 +166,27 @@ func applyOptionSettings(opts *Options, settings map[string]string, strict bool)
 		if !ok {
 			continue
 		}
-		switch limit, err := bytesize.Parse(val); {
-		case err == nil:
-			*size.dst = limit
-		case strict:
+		limit, err := bytesize.Parse(val)
+		if err != nil {
 			return invalidSetting(size.key, val, "a size such as 8mb")
 		}
+		*size.dst = limit
 	}
 
 	if val, ok := settingValue(norm, optionSettingWSCompression); ok {
-		switch b, valid := directive.ParseBool(val); {
-		case valid:
-			opts.WSCompression = restfile.OptOf(b)
-		case strict:
+		b, valid := directive.ParseBool(val)
+		if !valid {
 			return invalidBool(optionSettingWSCompression, val)
 		}
+		opts.WSCompression = restfile.OptOf(b)
 	}
 
 	if val, ok := settingValue(norm, optionSettingNoCookies); ok {
-		switch b, valid := directive.ParseBool(val); {
-		case !valid && strict:
+		b, valid := directive.ParseBool(val)
+		if !valid {
 			return invalidBool(optionSettingNoCookies, val)
-		case b:
+		}
+		if b {
 			opts.CookieJar = nil
 		}
 	}

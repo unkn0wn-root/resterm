@@ -5,24 +5,24 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/http/header"
-	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestPrepareHTTPRequestRejectsHTTP2OverHTTP(t *testing.T) {
 	c := NewClient(nil)
-	req := &restfile.Request{
-		Method:   "GET",
-		URL:      "http://example.com",
-		Settings: map[string]string{"http-version": "2"},
-	}
+	req := &restfile.Request{Method: "GET", URL: "http://example.com"}
+	opts := optionsFrom(t, map[string]string{"http-version": "2"})
 
-	_, _, err := c.prepareHTTPRequest(context.Background(), req, nil, Options{})
+	_, _, err := c.prepareHTTPRequest(context.Background(), req, nil, opts)
 	if err == nil {
 		t.Fatalf("expected error for http-version=2 over http")
 	}
@@ -33,26 +33,97 @@ func TestPrepareHTTPRequestRejectsHTTP2OverHTTP(t *testing.T) {
 
 func TestPrepareHTTPRequestAllowsHTTP2OverHTTPS(t *testing.T) {
 	c := NewClient(nil)
-	req := &restfile.Request{
-		Method:   "GET",
-		URL:      "https://example.com",
-		Settings: map[string]string{"http-version": "2"},
-	}
+	req := &restfile.Request{Method: "GET", URL: "https://example.com"}
+	opts := optionsFrom(t, map[string]string{"http-version": "2"})
 
-	_, _, err := c.prepareHTTPRequest(context.Background(), req, nil, Options{})
+	_, _, err := c.prepareHTTPRequest(context.Background(), req, nil, opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestApplyRequestSettingsIgnoresInvalidHTTPVersion(t *testing.T) {
-	opts := Options{HTTPVersion: version.V11}
-
-	effective := applyRequestSettings(opts, map[string]string{"http-version": "unsupported"})
-
-	if effective.HTTPVersion != version.V11 {
-		t.Fatalf("expected HTTP version to remain unchanged, got %v", effective.HTTPVersion)
+// The settings package applies req.Settings to the options before a send. A raw
+// template that still parses must not replace the value it expanded to.
+func TestBuildHTTPRequestReadsSettingsOnlyFromOptions(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		opts     Options
+		settings map[string]string
+	}{
+		{
+			name:     "proxy",
+			opts:     Options{ProxyURL: "http://proxy:8080/edge"},
+			settings: map[string]string{"proxy": "http://proxy:8080/{{x}}"},
+		},
+		{
+			name:     "timeout",
+			opts:     Options{Timeout: 5 * time.Second},
+			settings: map[string]string{"timeout": "1s"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{Method: http.MethodGet, URL: "http://example.com", Settings: tt.settings}
+			_, got, _, err := NewClient(nil).BuildHTTPRequest(t.Context(), req, nil, tt.opts)
+			if err != nil {
+				t.Fatalf("BuildHTTPRequest() error = %v", err)
+			}
+			if got.ProxyURL != tt.opts.ProxyURL || got.Timeout != tt.opts.Timeout {
+				t.Fatalf(
+					"options = %q %v, want %q %v",
+					got.ProxyURL,
+					got.Timeout,
+					tt.opts.ProxyURL,
+					tt.opts.Timeout,
+				)
+			}
+		})
 	}
+
+	t.Run("execute", func(t *testing.T) {
+		var hits atomic.Int32
+		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.IsAbs() {
+				hits.Add(1)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		defer proxy.Close()
+
+		req := &restfile.Request{
+			Method:   http.MethodGet,
+			URL:      "http://example.com/",
+			Settings: map[string]string{"proxy": "http://127.0.0.1:1/{{x}}"},
+		}
+		resp, err := NewClient(nil).Execute(t.Context(), req, nil, Options{ProxyURL: proxy.URL})
+		if err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if resp.StatusCode != http.StatusNoContent || hits.Load() != 1 {
+			t.Fatalf("status %d with %d proxy hits, want 204 with 1", resp.StatusCode, hits.Load())
+		}
+	})
+
+	t.Run("websocket", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if c, err := websocket.Accept(w, r, nil); err == nil {
+				_ = c.Close(websocket.StatusNormalClosure, "")
+			}
+		}))
+		defer srv.Close()
+
+		// HTTP/2 is rejected for websockets, so a re-read of this setting would fail the start.
+		req := &restfile.Request{
+			Method:    http.MethodGet,
+			URL:       "ws" + strings.TrimPrefix(srv.URL, "http"),
+			WebSocket: &restfile.WebSocketRequest{},
+			Settings:  map[string]string{"http-version": "2"},
+		}
+		handle, _, err := NewClient(nil).StartWebSocket(t.Context(), req, nil, Options{})
+		if err != nil {
+			t.Fatalf("StartWebSocket() error = %v", err)
+		}
+		<-handle.Session.Done()
+	})
 }
 
 func TestBuildHTTPRequestFailsOnUnresolvedHeader(t *testing.T) {
@@ -221,18 +292,15 @@ func TestBuildHTTPRequestExpandsHeaderAndAuth(t *testing.T) {
 	}
 }
 
-func TestBuildHTTPRequestResolvesBaseURLFromRequestSettings(t *testing.T) {
+func TestBuildHTTPRequestResolvesBaseURLSetting(t *testing.T) {
 	c := NewClient(nil)
 	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{
 		"api.base": "https://api.example.com/v1/",
 	}))
-	req := &restfile.Request{
-		Method:   http.MethodGet,
-		URL:      "users/42?view=full",
-		Settings: map[string]string{"base-url": "{{api.base}}"},
-	}
+	req := &restfile.Request{Method: http.MethodGet, URL: "users/42?view=full"}
+	opts := optionsFrom(t, map[string]string{"base-url": "{{api.base}}"})
 
-	httpReq, effective, _, err := c.BuildHTTPRequest(t.Context(), req, resolver, Options{})
+	httpReq, effective, _, err := c.BuildHTTPRequest(t.Context(), req, resolver, opts)
 	if err != nil {
 		t.Fatalf("BuildHTTPRequest() error = %v", err)
 	}
@@ -240,7 +308,7 @@ func TestBuildHTTPRequestResolvesBaseURLFromRequestSettings(t *testing.T) {
 		t.Fatalf("request URL = %q, want %q", got, want)
 	}
 	if effective.BaseURL != "{{api.base}}" {
-		t.Fatalf("effective BaseURL = %q, want raw request setting", effective.BaseURL)
+		t.Fatalf("effective BaseURL = %q, want the raw setting", effective.BaseURL)
 	}
 	if req.URL != "users/42?view=full" {
 		t.Fatalf("source request URL was mutated to %q", req.URL)
@@ -250,16 +318,16 @@ func TestBuildHTTPRequestResolvesBaseURLFromRequestSettings(t *testing.T) {
 func TestBuildHTTPRequestResolvesGraphQLGETAgainstBaseURL(t *testing.T) {
 	c := NewClient(nil)
 	req := &restfile.Request{
-		Method:   http.MethodGet,
-		URL:      "graphql?existing=1",
-		Settings: map[string]string{"base-url": "https://api.example.com/v1/"},
+		Method: http.MethodGet,
+		URL:    "graphql?existing=1",
 		Body: restfile.BodySource{GraphQL: &restfile.GraphQLBody{
 			Query:         "query { ping }",
 			OperationName: "Ping",
 		}},
 	}
+	opts := optionsFrom(t, map[string]string{"base-url": "https://api.example.com/v1/"})
 
-	httpReq, _, _, err := c.BuildHTTPRequest(t.Context(), req, vars.NewResolver(), Options{})
+	httpReq, _, _, err := c.BuildHTTPRequest(t.Context(), req, vars.NewResolver(), opts)
 	if err != nil {
 		t.Fatalf("BuildHTTPRequest() error = %v", err)
 	}

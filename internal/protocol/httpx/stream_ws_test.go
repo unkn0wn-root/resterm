@@ -1264,10 +1264,12 @@ func TestWebSocketOffersCompressionByDefault(t *testing.T) {
 					Options: restfile.WebSocketOptions{Compression: tt.opt},
 				},
 			}
+			var settings map[string]string
 			if tt.setting != "" {
-				req.Settings = map[string]string{"ws-compression": tt.setting}
+				settings = map[string]string{"ws-compression": tt.setting}
 			}
-			handle, _, err := NewClient(nil).StartWebSocket(context.Background(), req, nil, Options{})
+			opts := optionsFrom(t, settings)
+			handle, _, err := NewClient(nil).StartWebSocket(context.Background(), req, nil, opts)
 			if err != nil {
 				t.Fatal(err)
 			}
