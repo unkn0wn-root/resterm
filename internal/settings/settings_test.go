@@ -12,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestApplyAllDispatchesHandlers(t *testing.T) {
@@ -356,5 +357,71 @@ func TestApplyHTTPSettingsRejectsEmptyRootMode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing http-root-mode value (use append or replace)") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyHTTPSettingsExpandsTemplatedProxy(t *testing.T) {
+	const prev = "http://prev:3128"
+	for _, tt := range []struct {
+		name string
+		val  string
+		env  map[string]string
+		want string
+		errs []string
+	}{
+		{
+			name: "whole value",
+			val:  "{{p}}",
+			env:  map[string]string{"p": "http://127.0.0.1:8080"},
+			want: "http://127.0.0.1:8080",
+		},
+		{
+			name: "path",
+			val:  "http://proxy:8080/{{x}}",
+			env:  map[string]string{"x": "edge"},
+			want: "http://proxy:8080/edge",
+		},
+		{
+			name: "padded",
+			val:  "{{p}}",
+			env:  map[string]string{"p": " http://127.0.0.1:8080\n"},
+			want: "http://127.0.0.1:8080",
+		},
+		{
+			name: "empty",
+			val:  "{{p}}",
+			env:  map[string]string{"p": ""},
+			want: prev,
+		},
+		{
+			name: "undefined",
+			val:  "{{nope}}",
+			want: prev,
+			errs: []string{"expand proxy", "undefined variable: nope"},
+		},
+		{
+			name: "not a URL",
+			val:  "{{p}}",
+			env:  map[string]string{"p": "localhost"},
+			want: prev,
+			errs: []string{`invalid proxy "localhost" (use a URL such as http://host:8080)`},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := httpx.Options{ProxyURL: prev}
+			res := vars.NewResolver(vars.NewMapProvider("env", tt.env))
+			err := ApplyHTTPSettings(&opts, map[string]string{"proxy": tt.val}, res)
+			if (err != nil) != (len(tt.errs) > 0) {
+				t.Fatalf("ApplyHTTPSettings() error = %v, want errors %q", err, tt.errs)
+			}
+			for _, want := range tt.errs {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %q, want it to contain %q", err, want)
+				}
+			}
+			if opts.ProxyURL != tt.want {
+				t.Fatalf("ProxyURL = %q, want %q", opts.ProxyURL, tt.want)
+			}
+		})
 	}
 }

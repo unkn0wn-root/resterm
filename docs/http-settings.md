@@ -42,7 +42,7 @@ The same setting can be selected globally through an environment:
 }
 ```
 
-Request settings override file settings, which override environment settings: global < file < request. Setting keys are case-insensitive. The base URL and the request URL can contain templates, such as `# @setting base-url {{services.api.base}}`.
+Request settings override file settings, which override environment settings: global < file < request. Setting keys are case-insensitive. The base URL, the request URL and the `proxy` setting can contain templates, such as `# @setting base-url {{services.api.base}}`.
 
 Resterm expands the base only when the final request URL is relative. An absolute URL ignores `base-url`, even if the base contains an invalid or unresolved non-empty value. Skipped requests and gRPC requests do not use it either.
 

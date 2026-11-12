@@ -6,6 +6,11 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
+// Generic HTTP settings that ApplyHTTPSettings expands before httpx reads
+// them. base-url stays raw because the request builder expands it, and only
+// for a relative target.
+var templatedKeys = []string{"proxy"}
+
 var httpSettingKeys = map[string]struct{}{
 	"base-url":                        {},
 	"timeout":                         {},

@@ -68,7 +68,19 @@ func ApplyHTTPSettings(
 	if len(settings) == 0 {
 		return nil
 	}
-	return httpx.ApplyOptionSettings(opts, settings)
+	norm := Merge(settings)
+	for _, key := range templatedKeys {
+		raw, ok := norm[key]
+		if !ok {
+			continue
+		}
+		val, err := expand(raw, key, resolver, diag.ComponentHTTP)
+		if err != nil {
+			return err
+		}
+		norm[key] = val
+	}
+	return httpx.ApplyOptionSettings(opts, norm)
 }
 
 // tlsPrefix is the setting family a TLS block belongs to. Both families spell
@@ -102,25 +114,6 @@ func applyTLSSettings(
 		return nil
 	}
 	component := prefix.component()
-	resolve := func(val string, label string) (string, error) {
-		trimmed := strings.TrimSpace(val)
-		if trimmed == "" {
-			return "", nil
-		}
-		if resolver == nil {
-			return trimmed, nil
-		}
-		expanded, err := resolver.ExpandTemplates(trimmed)
-		if err != nil {
-			return "", diag.WrapAs(
-				diag.ClassProtocol,
-				err,
-				"expand "+label,
-				diag.WithComponent(component),
-			)
-		}
-		return strings.TrimSpace(expanded), nil
-	}
 	// A single scope, so this only canonicalizes the keys.
 	norm := Merge(settings)
 
@@ -146,14 +139,14 @@ func applyTLSSettings(
 		}
 		cfg.Insecure = b
 	}
-	val, err := resolveSetting(norm, prefix.key("client-cert"), prefix.label("client cert"), resolve)
+	val, err := expand(norm[prefix.key("client-cert")], prefix.label("client cert"), resolver, component)
 	if err != nil {
 		return err
 	}
 	if val != "" {
 		cfg.ClientCert = val
 	}
-	val, err = resolveSetting(norm, prefix.key("client-key"), prefix.label("client key"), resolve)
+	val, err = expand(norm[prefix.key("client-key")], prefix.label("client key"), resolver, component)
 	if err != nil {
 		return err
 	}
@@ -168,7 +161,7 @@ func applyTLSSettings(
 			if p == "" {
 				continue
 			}
-			val, err := resolve(p, prefix.label("root ca"))
+			val, err := expand(p, prefix.label("root ca"), resolver, component)
 			if err != nil {
 				return err
 			}
@@ -204,16 +197,16 @@ func firstSetting(m map[string]string, keys ...string) string {
 	return ""
 }
 
-func resolveSetting(
-	norm map[string]string,
-	key, label string,
-	expand func(string, string) (string, error),
-) (string, error) {
-	raw, ok := norm[key]
-	if !ok {
-		return "", nil
+func expand(val, label string, r *vars.Resolver, c diag.Component) (string, error) {
+	val = strings.TrimSpace(val)
+	if val == "" || r == nil {
+		return val, nil
 	}
-	return expand(raw, label)
+	out, err := r.ExpandTemplates(val)
+	if err != nil {
+		return "", diag.WrapAs(diag.ClassProtocol, err, "expand "+label, diag.WithComponent(c))
+	}
+	return strings.TrimSpace(out), nil
 }
 
 func splitList(raw string) []string {
