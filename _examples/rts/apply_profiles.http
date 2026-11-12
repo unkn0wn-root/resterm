@@ -2,12 +2,13 @@
 
 # @patch file jsonApi {headers: {"Accept":"application/json","Content-Type":"application/json"}}
 # @patch file strict {settings: {timeout:"3s", followredirects:false}}
-# @patch global authProd {auth: {type:"oauth2", cache_key:"myapi"}}
+# @patch global authDemo {auth: {type:"bearer", token:"demo-token"}}
 
 ### Reusable apply profiles
 # @name RTS_ApplyProfiles
-# @apply use=jsonApi,use=authProd,use=strict
+# @apply use=jsonApi,use=authDemo,use=strict
 # @assert request.header("Accept") == "application/json"
+# @assert response.json("headers.Authorization") == "Bearer demo-token"
 POST {{base_url}}/anything
 
 {"hello":"world"}

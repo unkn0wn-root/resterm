@@ -9,12 +9,12 @@ The `_examples/` directory has request files you can run right away:
 - `scripts.http` - a RestermScript pre-request block that sets a token, headers, and body, then an `@assert` check.
 - `javascript.http` - JavaScript pre-request and test scripts, and a test that saves a response body to a file.
 - `xml.http` - XML bodies and explicit inline angle-prefixed text.
-- `transport.http` - timeout, proxy, and `@no-log` samples.
+- `transport.http` - timeout, proxy, and `@no-log` samples, with a mock that stands in for the proxy.
 - `auth_scopes.http` - default auth inheritance across global/file/request scopes plus `@auth none`.
 - `auth_command.http` - command-backed auth with file-scoped defaults, named definitions with `use=`, `gh auth token`, patch-based reuse, JSON output parsing, and custom header examples.
 - `oauth2.http` - capturing a token by hand compared with the `@auth oauth2` directive.
 - `graphql.http` - inline and file-based GraphQL requests, with queries and variables in `queries/`.
-- `grpc.http` - gRPC reflection and descriptor usage, with a descriptor set in `descriptors/`.
+- `grpc.http` - gRPC with server reflection and with a `.proto` file from `proto/`.
 - `streaming.http` - an SSE feed and a WebSocket chat in one file.
 - `sse_manual.http` and `sse_scripted.http` - an SSE feed to watch in the Stream tab, and one checked by captures and `@assert`.
 - `websocket_manual.http` and `websocket_scripted.http` - a WebSocket echo to drive from the console, and one driven by `@ws` steps and checked by `@assert` and an `@rts test` block.

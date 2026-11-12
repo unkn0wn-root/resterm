@@ -17,7 +17,6 @@ GET http://api.default.svc.cluster.local/v1/version
 ### Deployment profile over gRPC
 # @k8s use=payments
 # @grpc testservices.inventory.ProjectService/Seed
-# @grpc-descriptor ./descriptors/testservices.protoset
 GRPC passthrough:///payments-api.payments.svc.cluster.local:8082
 
 {}

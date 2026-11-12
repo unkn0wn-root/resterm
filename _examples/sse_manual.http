@@ -1,5 +1,6 @@
 ### Manual SSE Feed
 # @name RecentChangesSSE
-# @sse idle=5s total=20s
+# @sse idle=5s duration=20s
 # Tip: switch to the Stream tab to watch events arrive live.
 GET https://stream.wikimedia.org/v2/stream/recentchange
+User-Agent: resterm-examples (https://github.com/unkn0wn-root/resterm)

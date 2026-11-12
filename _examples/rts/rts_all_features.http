@@ -190,3 +190,4 @@ Accept: application/json
 # @assert stream.summary().eventCount >= 0
 GET https://stream.wikimedia.org/v2/stream/recentchange
 Accept: text/event-stream
+User-Agent: resterm-examples (https://github.com/unkn0wn-root/resterm)
