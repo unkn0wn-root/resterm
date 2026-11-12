@@ -24,13 +24,14 @@ Opening a *workspace*, or a request file that lives outside the current one, mov
 - A file passed with `--env-file` remains active when the workspace changes. Resterm warns if the new workspace has its own environment file. Without `--env-file`, moving to a workspace with no environment file clears the current environment. If the new workspace's environment file cannot load, the move is refused and the current workspace and environment remain active.
 - A move is refused while a request is running, because that request can still write runtime values back and undo the reset. Finish or cancel it first.
 
-Example environment (`_examples/resterm.env.json`):
+Example environment, shortened from the one the [basic example](../_examples/basic.http) uses:
 
 ```json
 {
   "dev": {
-    "settings.http-root-cas": "dev-ca.pem",
-    "settings.grpc-insecure": "false",
+    "base": {
+      "url": "https://httpbin.org"
+    },
     "services": {
       "api": {
         "base": "https://httpbin.org/anything/api"
