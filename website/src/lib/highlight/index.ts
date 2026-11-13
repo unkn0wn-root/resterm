@@ -29,6 +29,13 @@ function load(): Promise<Highlighter> {
   return highlighter;
 }
 
+// resolve maps a fence language or file extension to a loaded grammar,
+// or to plain text.
+function resolve(h: Highlighter, lang: string): string {
+  const requested = aliases[lang] ?? lang;
+  return h.getLoadedLanguages().includes(requested) ? h.getLanguage(requested).name : 'text';
+}
+
 export interface Highlighted {
   label: string;
   pre: Element;
@@ -36,8 +43,7 @@ export interface Highlighted {
 
 export async function highlight(code: string, lang = ''): Promise<Highlighted> {
   const h = await load();
-  const requested = aliases[lang] ?? lang;
-  const resolved = h.getLoadedLanguages().includes(requested) ? h.getLanguage(requested).name : 'text';
+  const resolved = resolve(h, lang);
   const root = h.codeToHast(code, { lang: resolved, theme: restermTheme.name! });
   const pre = root.children[0] as Element;
   return { label: labels[resolved] ?? resolved, pre };
@@ -48,7 +54,7 @@ export async function highlight(code: string, lang = ''): Promise<Highlighted> {
 export async function highlightHtml(code: string, lang: string, cursor?: number): Promise<string> {
   const h = await load();
   return h.codeToHtml(code, {
-    lang,
+    lang: resolve(h, lang),
     theme: restermTheme.name!,
     transformers: [
       {

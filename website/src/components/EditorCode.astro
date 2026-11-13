@@ -1,13 +1,14 @@
 ---
-import { highlightHtml } from '../../lib/highlight';
+import { highlightHtml } from '../lib/highlight';
 
 interface Props {
   code: string;
+  lang?: string;
   cursor?: number;
 }
 
-const { code, cursor } = Astro.props;
-const html = await highlightHtml(code.trimEnd(), 'http', cursor);
+const { code, lang = 'http', cursor } = Astro.props;
+const html = await highlightHtml(code.trimEnd(), lang, cursor);
 ---
 
 <div class="code" set:html={html} />
