@@ -1,0 +1,192 @@
+---
+import type { GetStaticPaths, InferGetStaticPropsType } from 'astro';
+import EditorCode from '../../components/EditorCode.astro';
+import Pager from '../../components/docs/Pager.astro';
+import Docs from '../../layouts/Docs.astro';
+import { getExamples } from '../../lib/examples';
+
+export const getStaticPaths = (async () => {
+  const { pages } = await getExamples();
+  return pages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
+}) satisfies GetStaticPaths;
+
+type Props = InferGetStaticPropsType<typeof getStaticPaths>;
+
+const { page } = Astro.props;
+const { groups } = await getExamples();
+---
+
+<Docs
+  title={page.title}
+  description={page.summary}
+  groups={groups}
+  href={page.href}
+  status={{ file: page.title, focus: page.group }}
+  prev={page.prev?.href}
+  next={page.next?.href}
+>
+  <article class="example">
+    <header class="head">
+      <p class="crumbs">
+        <a href="/examples/">examples</a> <span aria-hidden="true">/</span> {page.group}
+      </p>
+      <h1>
+        <span class="hmark" aria-hidden="true">
+          #
+        </span>
+        {page.title}
+      </h1>
+      <p class="summary">{page.summary}</p>
+      <p class="needs">{page.needs}</p>
+    </header>
+
+    <div class="prose">
+      <Fragment set:html={page.runHtml} />
+      <p class="note">
+        Run this from the root of a <a href="/examples/#get-the-files">clone of the Resterm repository</a>.
+      </p>
+    </div>
+
+    <div class="pane pane-editor editor" data-tabs>
+      <span class="pane-title">Editor</span>
+      <div class="tabs" role="tablist" aria-label="Files">
+        {page.files.map((f, i) => (
+          <button
+            type="button"
+            role="tab"
+            id={`file-tab-${i}`}
+            aria-controls={`file-${i}`}
+            aria-selected={i === 0 ? 'true' : 'false'}
+            tabindex={i === 0 ? 0 : -1}
+          >
+            {f.name}
+          </button>
+        ))}
+      </div>
+      {page.files.map((f, i) => (
+        <div id={`file-${i}`} role="tabpanel" aria-labelledby={`file-tab-${i}`} hidden={i !== 0}>
+          <EditorCode code={f.code} lang={f.lang} />
+          <p class="pane-foot">
+            <a href={f.url}>
+              <span aria-hidden="true">◇</span> {f.path} on GitHub
+            </a>
+          </p>
+        </div>
+      ))}
+    </div>
+
+    <a class="docs" href={page.docs.href}>
+      <span aria-hidden="true">▣</span> {page.docs.title} docs
+    </a>
+
+    <footer class="foot">
+      <Pager prev={page.prev} next={page.next} />
+    </footer>
+  </article>
+</Docs>
+
+<style>
+  .example {
+    max-width: var(--content-w);
+  }
+
+  .crumbs {
+    font-size: 0.8125rem;
+    color: var(--fg-dim);
+  }
+
+  .crumbs a {
+    color: var(--fg-muted);
+    text-decoration: none;
+  }
+
+  .crumbs a:hover {
+    color: var(--fg-strong);
+  }
+
+  h1 {
+    margin-top: 0.5rem;
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    line-height: 1.2;
+    font-weight: 600;
+    color: var(--fg-strong);
+    overflow-wrap: anywhere;
+  }
+
+  .hmark {
+    margin-right: 1ch;
+    color: var(--fg-dim);
+    font-weight: 400;
+  }
+
+  .summary {
+    margin-top: 0.75rem;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    color: var(--fg-muted);
+  }
+
+  .needs {
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--fg-dim);
+  }
+
+  .head {
+    margin-bottom: 0.5rem;
+  }
+
+  .note {
+    font-size: 0.875rem;
+    color: var(--fg-dim);
+  }
+
+  .editor {
+    margin-top: 2rem;
+  }
+
+  .tabs {
+    display: flex;
+    font-size: 0.875rem;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5ch;
+    padding: 1rem 0.5rem 0.5rem;
+    border-bottom: 1px dashed var(--line);
+  }
+
+  [role='tab'] {
+    padding: 0.2rem 0.75ch;
+    border: 0;
+    background: none;
+    color: var(--fg-muted);
+  }
+
+  [role='tab']:hover {
+    background: var(--bg-hover);
+    color: var(--fg-strong);
+  }
+
+  [role='tab'][aria-selected='true'] {
+    background: var(--bg-sel);
+    color: var(--fg-strong);
+    font-weight: 600;
+  }
+
+  .docs {
+    display: block;
+    margin-top: 1.25rem;
+    color: var(--accent-text);
+    font-size: 0.875rem;
+    text-decoration: none;
+  }
+
+  .docs:hover {
+    text-decoration: underline;
+  }
+
+  .foot {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px dashed var(--line-strong);
+  }
+</style>

@@ -18,6 +18,14 @@ const html = await highlightHtml(code.trimEnd(), lang, cursor);
     flex: 1;
     overflow-x: auto;
     padding-block: 1.2rem 1rem;
+    font-size: 0.875rem;
+    line-height: 1.65;
+  }
+
+  /* The light theme comment color is too faint for comments that describe a
+     request. */
+  :root[data-theme='light'] .code {
+    --syn-comment: var(--fg-muted);
   }
 
   .code :global(pre) {

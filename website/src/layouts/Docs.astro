@@ -16,7 +16,16 @@ interface Props {
 }
 
 const { title, description, groups, href, status, prev, next } = Astro.props;
-const current = href.startsWith('/docs/rts/') ? 'rts' : href.startsWith('/docs/cli/') ? 'cli' : 'docs';
+const sections = [
+  { prefix: '/examples/', id: 'examples' },
+  { prefix: '/docs/rts/', id: 'rts' },
+  { prefix: '/docs/cli/', id: 'cli' },
+];
+const current = sections.find((s) => href.startsWith(s.prefix))?.id ?? 'docs';
+const nav =
+  current === 'examples'
+    ? { title: 'Files', index: '/examples/', label: 'Example files' }
+    : { title: 'Docs', index: '/docs/', label: 'Docs pages' };
 
 const hints: [string, string][] = [
   ['/', 'Search'],
@@ -33,7 +42,7 @@ const hints: [string, string][] = [
 <Base {title} {description} {current} {hints} {status} {prev} {next} menu>
   <div class:list={['docs', { wide: !Astro.slots.has('aside') }]}>
     <div class="side">
-      <DocsNav groups={groups} current={href} />
+      <DocsNav groups={groups} current={href} {...nav} />
     </div>
     <div class="main">
       <slot />

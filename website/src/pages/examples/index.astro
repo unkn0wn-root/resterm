@@ -1,0 +1,73 @@
+---
+import GroupList from '../../components/docs/GroupList.astro';
+import Docs from '../../layouts/Docs.astro';
+import { getExamples } from '../../lib/examples';
+
+const { groups, pages, clone } = await getExamples();
+---
+
+<Docs
+  title="Examples"
+  description="Request files that show each Resterm feature, with the command that runs them."
+  groups={groups}
+  href="/examples/"
+  status={{ file: '_examples/', focus: 'Index' }}
+  next={pages[0]?.href}
+>
+  <header class="head">
+    <h1>
+      <span class="hmark" aria-hidden="true">
+        #
+      </span>
+      Examples
+    </h1>
+    <p class="lead">
+      Clone the repository and run the commands from its root. Many examples read <code>resterm.env.json</code> or other
+      files from their own folder, so a single downloaded file may not run on its own.
+    </p>
+  </header>
+
+  <section class="prose get" id="get-the-files">
+    <h2>Get the files</h2>
+    <Fragment set:html={clone} />
+  </section>
+
+  <GroupList groups={groups} />
+</Docs>
+
+<style>
+  .head {
+    max-width: 44rem;
+    margin-bottom: 2rem;
+  }
+
+  h1 {
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    line-height: 1.2;
+    font-weight: 600;
+    color: var(--fg-strong);
+  }
+
+  .hmark {
+    margin-right: 1ch;
+    color: var(--fg-dim);
+    font-weight: 400;
+  }
+
+  .lead {
+    margin-top: 0.75rem;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    color: var(--fg-muted);
+  }
+
+  .lead code {
+    font-size: 0.9em;
+    color: var(--syn-value);
+  }
+
+  .get {
+    max-width: 44rem;
+    margin-bottom: 2.5rem;
+  }
+</style>

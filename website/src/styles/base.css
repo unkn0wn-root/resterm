@@ -130,6 +130,24 @@ dialog.pane {
   --pane-title: var(--accent-text);
 }
 
+.pane-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 3ch;
+  padding: 0.6rem 1rem 0.7rem;
+  border-top: 1px dashed var(--line);
+  font-size: 0.875rem;
+}
+
+.pane-foot a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.pane-foot a:hover {
+  text-decoration: underline;
+}
+
 kbd {
   color: var(--key);
   font-weight: 600;

@@ -1,4 +1,5 @@
 ---
+import GroupList from '../../components/docs/GroupList.astro';
 import Docs from '../../layouts/Docs.astro';
 import { getDocs } from '../../lib/docs';
 import { version } from '../../lib/version';
@@ -43,23 +44,7 @@ const start = [
       </p>
     </header>
 
-    <div class="groups">
-      {groups.map((g) => (
-        <section class="group pane">
-          <h2 class="pane-title">{g.title}</h2>
-          <ul>
-            {g.pages.map((p) => (
-              <li>
-                <a href={p.href}>
-                  <span class="title">{p.title}</span>
-                  <span class="summary">{p.summary}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-    </div>
+    <GroupList groups={groups} />
   </div>
 </Docs>
 
@@ -127,65 +112,5 @@ const start = [
 
   .start a {
     color: var(--accent-text);
-  }
-
-  /* Columns instead of a grid, so each pane keeps the height of its own list.
-     The top padding leaves room for the first titles, which sit on the border. */
-  .groups {
-    columns: 22rem;
-    column-gap: 1.5rem;
-    padding-top: 0.6rem;
-  }
-
-  .group {
-    break-inside: avoid;
-    margin-bottom: 2rem;
-    padding: 1.1rem 0.5rem 0.6rem;
-  }
-
-  .group .pane-title {
-    left: 1.25ch;
-    right: auto;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--fg-muted);
-  }
-
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  li a {
-    display: grid;
-    gap: 0.1rem;
-    padding: 0.45rem 0.75rem;
-    text-decoration: none;
-    border-radius: var(--radius);
-  }
-
-  li a:hover {
-    background: var(--bg-hover);
-  }
-
-  .title {
-    color: var(--fg-strong);
-    font-size: 0.9rem;
-  }
-
-  li a:hover .title {
-    color: var(--focus);
-  }
-
-  :root[data-theme='light'] li a:hover .title {
-    color: var(--accent-text);
-  }
-
-  .summary {
-    font-family: var(--font-sans);
-    font-size: 0.85rem;
-    color: var(--fg-muted);
-    line-height: 1.45;
   }
 </style>
