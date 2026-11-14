@@ -1,0 +1,656 @@
+{
+  "_examples/auth_command.http": {
+    "sha256": "006eae8b09d7cffe7c576c518ca58202696e051e1c3f08bdfe0268f7a893308d",
+    "requests": [
+      {
+        "line": 11,
+        "method": "GET",
+        "name": "GitHubCLITokenFile"
+      },
+      {
+        "line": 19,
+        "method": "GET",
+        "name": "GitHubCLITokenNamed"
+      },
+      {
+        "line": 28,
+        "method": "GET",
+        "name": "GitHubCLITokenNamedHeader"
+      },
+      {
+        "line": 36,
+        "method": "GET",
+        "name": "GitHubCLITokenPatched"
+      },
+      {
+        "line": 45,
+        "method": "GET",
+        "name": "GitHubCLIToken"
+      },
+      {
+        "line": 54,
+        "method": "GET",
+        "name": "GitHubCLITokenReuse"
+      },
+      {
+        "line": 63,
+        "method": "GET",
+        "name": "CommandJSONToken"
+      },
+      {
+        "line": 71,
+        "method": "GET",
+        "name": "CommandCustomHeader"
+      },
+      {
+        "line": 79,
+        "method": "GET",
+        "name": "CommandFixedScheme"
+      }
+    ]
+  },
+  "_examples/auth_scopes.http": {
+    "sha256": "81e480a4af1c6b8a62bc8a852870f90ca5f82677c26659c0c0325e1ad2177239",
+    "requests": [
+      {
+        "line": 8,
+        "method": "GET",
+        "name": "AuthGlobalDefault"
+      },
+      {
+        "line": 15,
+        "method": "GET",
+        "name": "AuthFileDefault"
+      },
+      {
+        "line": 22,
+        "method": "GET",
+        "name": "AuthRequestOverride"
+      },
+      {
+        "line": 30,
+        "method": "GET",
+        "name": "AuthNone"
+      }
+    ]
+  },
+  "_examples/basic.http": {
+    "sha256": "07734461528a20ff1be66487f125887fa6e9c11c80b161c06f7debeadf75ebcf",
+    "requests": [
+      {
+        "line": 7,
+        "method": "GET",
+        "name": "getStatus"
+      },
+      {
+        "line": 13,
+        "method": "GET",
+        "name": "downloadBinary"
+      },
+      {
+        "line": 24,
+        "method": "POST",
+        "name": "createPost"
+      },
+      {
+        "line": 36,
+        "method": "POST",
+        "name": "timestampHelpers"
+      },
+      {
+        "line": 49,
+        "method": "POST",
+        "name": "randomHelpers"
+      },
+      {
+        "line": 67,
+        "method": "GET",
+        "name": "bearerEcho"
+      }
+    ]
+  },
+  "_examples/compare.http": {
+    "sha256": "5e67669ca4516df783e631a0bb69864b29927ece6974c5e7fa2b877c79d3f6f5",
+    "requests": [
+      {
+        "line": 2,
+        "method": "GET",
+        "name": "env-health"
+      },
+      {
+        "line": 8,
+        "method": "GET",
+        "name": "feature-flag"
+      }
+    ]
+  },
+  "_examples/curl-import.http": {
+    "sha256": "7fd48bb8c37b79cda1f6cc748b05eb5b88b911f053ddd4ae35baa15e1e914b04",
+    "requests": [
+      {
+        "line": 6,
+        "method": "GET",
+        "name": "https://api.example.com/search?q=hello"
+      },
+      {
+        "line": 10,
+        "method": "POST",
+        "name": "https://api.example.com/login"
+      }
+    ]
+  },
+  "_examples/graphql.http": {
+    "sha256": "3318fa2a35a421ca7c8e7a61a2ce930a2a2841e934f4023207f5b442d90a30ca",
+    "requests": [
+      {
+        "line": 2,
+        "method": "POST",
+        "name": "GraphQLFetchWorkspace"
+      },
+      {
+        "line": 35,
+        "method": "POST",
+        "name": "GraphQLFromFiles"
+      }
+    ]
+  },
+  "_examples/grouped/grouped-environments.http": {
+    "sha256": "c6dab4e25945bf4853e9142c6d4030cd2023a7e838cef9ff723b49de91cc59d6",
+    "requests": [
+      {
+        "line": 23,
+        "method": "GET",
+        "name": "showSelection"
+      },
+      {
+        "line": 39,
+        "method": "GET",
+        "name": "apiHealth"
+      },
+      {
+        "line": 45,
+        "method": "GET",
+        "name": "whoAmI"
+      },
+      {
+        "line": 54,
+        "method": "GET",
+        "name": "regionRouting"
+      },
+      {
+        "line": 61,
+        "method": "GET",
+        "name": "workloads"
+      }
+    ]
+  },
+  "_examples/grouped/mock.http": {
+    "sha256": "77b49cf40b1fb345f3fd4a0ac817b2e253adecf5c3d1a0bec5fe4ba2043a8eda",
+    "requests": []
+  },
+  "_examples/grpc.http": {
+    "sha256": "4c12e344e0b70d9c33da622bf86673f6a2fcf58f707348b843c5a24e2ff4ce27",
+    "requests": [
+      {
+        "line": 2,
+        "method": "GRPC",
+        "name": "GrpcGenerateReport"
+      },
+      {
+        "line": 19,
+        "method": "GRPC",
+        "name": "GrpcReportStatus"
+      }
+    ]
+  },
+  "_examples/javascript.http": {
+    "sha256": "bb793ea1db282ae1ed6d76afcc543f13a5f48705707b56dd2823b1b4c0652115",
+    "requests": [
+      {
+        "line": 10,
+        "method": "POST",
+        "name": "JavaScriptBootstrap"
+      },
+      {
+        "line": 33,
+        "method": "GET",
+        "name": "JavaScriptSaveImage"
+      }
+    ]
+  },
+  "_examples/k8s.http": {
+    "sha256": "8bd88405a491d4eef7176b56de952daa4a15306b014dcf961bc1378663976af1",
+    "requests": [
+      {
+        "line": 5,
+        "method": "GET",
+        "name": "http://api.default.svc.cluster.local/v1/health"
+      },
+      {
+        "line": 10,
+        "method": "GET",
+        "name": "http://postgres.default.svc.cluster.local:5432/healthz"
+      },
+      {
+        "line": 14,
+        "method": "GET",
+        "name": "http://api.default.svc.cluster.local/v1/version"
+      },
+      {
+        "line": 18,
+        "method": "GRPC",
+        "name": "/testservices.inventory.ProjectService/Seed"
+      }
+    ]
+  },
+  "_examples/mocks.http": {
+    "sha256": "d93a5e861604231cf798483bc2705e80feee01129b0a734f48e6f56d58c1f5e6",
+    "requests": [
+      {
+        "line": 193,
+        "method": "GET",
+        "name": "poll-payment"
+      },
+      {
+        "line": 197,
+        "method": "GET",
+        "name": "fetch-inventory"
+      },
+      {
+        "line": 201,
+        "method": "GET",
+        "name": "spend-quota"
+      },
+      {
+        "line": 206,
+        "method": "GET",
+        "name": "fetch-catalog"
+      },
+      {
+        "line": 213,
+        "method": "POST",
+        "name": "place-order"
+      },
+      {
+        "line": 222,
+        "method": "POST",
+        "name": "place-bulk-order"
+      },
+      {
+        "line": 229,
+        "method": "POST",
+        "name": "submit-account"
+      },
+      {
+        "line": 238,
+        "method": "POST",
+        "name": "submit-account-ok"
+      },
+      {
+        "line": 246,
+        "method": "POST",
+        "name": "deliver-webhook"
+      }
+    ]
+  },
+  "_examples/nested.http": {
+    "sha256": "5012743243befbb51cfef13bbb75cab5df7f623930eadb8dce22a47178ffa2cd",
+    "requests": [
+      {
+        "line": 5,
+        "method": "POST",
+        "name": "Create Workspace"
+      },
+      {
+        "line": 36,
+        "method": "GET",
+        "name": "Get Workspace"
+      },
+      {
+        "line": 43,
+        "method": "GET",
+        "name": "List Members"
+      }
+    ]
+  },
+  "_examples/oauth2.http": {
+    "sha256": "2c4000ed99de033847a32e02581dd9713bb3c2d5358f2cfa48d079fe53c5d7e9",
+    "requests": [
+      {
+        "line": 2,
+        "method": "POST",
+        "name": "OAuthManualExchange"
+      },
+      {
+        "line": 25,
+        "method": "GET",
+        "name": "OAuthManualReuse"
+      },
+      {
+        "line": 36,
+        "method": "GET",
+        "name": "OAuthDirective"
+      },
+      {
+        "line": 45,
+        "method": "GET",
+        "name": "OAuthDirectiveReuse"
+      },
+      {
+        "line": 54,
+        "method": "GET",
+        "name": "OAuthAuthCodePKCE"
+      }
+    ]
+  },
+  "_examples/polling-retries.http": {
+    "sha256": "4c61328e4a7e43626db7b931e4178da0eb79494b476e11c837393d62c40c6d3d",
+    "requests": [
+      {
+        "line": 42,
+        "method": "GET",
+        "name": "poll-job"
+      },
+      {
+        "line": 48,
+        "method": "GET",
+        "name": "retry-transient"
+      },
+      {
+        "line": 57,
+        "method": "GET",
+        "name": "poll-timeout"
+      },
+      {
+        "line": 68,
+        "method": "GET",
+        "name": "retry-exhausted"
+      }
+    ]
+  },
+  "_examples/recording.http": {
+    "sha256": "d43e806041f30f14692f8ae9c2cf1de77cc6fc65adb9ccac0a3e54411cea9d1a",
+    "requests": [
+      {
+        "line": 11,
+        "method": "GET",
+        "name": "recorded-user"
+      }
+    ]
+  },
+  "_examples/rts/apply_profiles.http": {
+    "sha256": "0fc9350176dbd009847be43b5d81a14b562df0dc24d7003c3757a7a4c3b69434",
+    "requests": [
+      {
+        "line": 8,
+        "method": "POST",
+        "name": "RTS_ApplyProfiles"
+      }
+    ]
+  },
+  "_examples/rts/rts_all_features.http": {
+    "sha256": "cd6c1dbcbfa4d0f053f4b0eda0e3a053dc6b7939ccdf7d2d1dcd8991897a92a8",
+    "requests": [
+      {
+        "line": 10,
+        "method": "GET",
+        "name": "RTS_Core"
+      },
+      {
+        "line": 49,
+        "method": "POST",
+        "name": "RTS_TimeHelpers"
+      },
+      {
+        "line": 62,
+        "method": "POST",
+        "name": "RTS_PreRequest"
+      },
+      {
+        "line": 76,
+        "method": "POST",
+        "name": "RTS_Tests"
+      },
+      {
+        "line": 109,
+        "method": "GET",
+        "name": "RTS_Apply"
+      },
+      {
+        "line": 122,
+        "method": "GET",
+        "name": "RTS_When"
+      },
+      {
+        "line": 130,
+        "method": "GET",
+        "name": "RTS_SkipIf"
+      },
+      {
+        "line": 137,
+        "method": "GET",
+        "name": "RTS_Loops"
+      },
+      {
+        "line": 162,
+        "method": "POST",
+        "name": "RTS_ForEach"
+      },
+      {
+        "line": 175,
+        "method": "GET",
+        "name": "RTS_Trace"
+      },
+      {
+        "line": 185,
+        "method": "SSE",
+        "name": "RTS_SSE"
+      }
+    ]
+  },
+  "_examples/scopes.http": {
+    "sha256": "a9a70ba0c2ec6ec982ce7a74b9352fa2303bf54a3056438fb2d4831a1773dd83",
+    "requests": [
+      {
+        "line": 2,
+        "method": "POST",
+        "name": "AnalyticsSeedSession"
+      },
+      {
+        "line": 27,
+        "method": "GET",
+        "name": "AnalyticsFetchJob"
+      }
+    ]
+  },
+  "_examples/scripts.http": {
+    "sha256": "0b78a69a50a7a77f930d5e0db302e760c8510801bc41b7cf33dd326261cb561e",
+    "requests": [
+      {
+        "line": 6,
+        "method": "POST",
+        "name": "ReportsBootstrap"
+      },
+      {
+        "line": 28,
+        "method": "GET",
+        "name": "ReportsList"
+      }
+    ]
+  },
+  "_examples/service-groups.http": {
+    "sha256": "7c42f97c659b10c0ee5e2de6c225b564157e58d3c86900e7cd2335b20a3305b6",
+    "requests": [
+      {
+        "line": 2,
+        "method": "GET",
+        "name": "API Health"
+      },
+      {
+        "line": 9,
+        "method": "POST",
+        "name": "Start Provisioning"
+      },
+      {
+        "line": 33,
+        "method": "POST",
+        "name": "Create Invoice"
+      },
+      {
+        "line": 57,
+        "method": "GET",
+        "name": "Fetch Invoice"
+      }
+    ]
+  },
+  "_examples/sse_manual.http": {
+    "sha256": "01ae53decdd0148490cc318a150941b46cdaeb1b5725a24f54ffaf28ef1907cf",
+    "requests": [
+      {
+        "line": 2,
+        "method": "SSE",
+        "name": "RecentChangesSSE"
+      }
+    ]
+  },
+  "_examples/sse_scripted.http": {
+    "sha256": "1011f93844c84bc3a9d8b8b420488a22224c85fc8ef0404a459697745fe0e10b",
+    "requests": [
+      {
+        "line": 2,
+        "method": "SSE",
+        "name": "SSEScriptedMonitor"
+      }
+    ]
+  },
+  "_examples/ssh.http": {
+    "sha256": "30588db8c3a329028caa5c3f2f8013b909c692583248a62353618d93957a8f5f",
+    "requests": [
+      {
+        "line": 7,
+        "method": "GET",
+        "name": "list over jump"
+      },
+      {
+        "line": 12,
+        "method": "POST",
+        "name": "create via jump"
+      }
+    ]
+  },
+  "_examples/streaming.http": {
+    "sha256": "c86c8786be7c26be6f5fc0877ab8cc09cfe4951f17f1ac89c3afe952f9d9e581",
+    "requests": [
+      {
+        "line": 2,
+        "method": "SSE",
+        "name": "sseDemo"
+      },
+      {
+        "line": 10,
+        "method": "WS",
+        "name": "wsChat"
+      }
+    ]
+  },
+  "_examples/trace.http": {
+    "sha256": "a9188f97a620a51cad9ce5df0bd8eaaacc136f3f3675440b408382bd0bdff807",
+    "requests": [
+      {
+        "line": 2,
+        "method": "GET",
+        "name": "trace-ok"
+      },
+      {
+        "line": 11,
+        "method": "GET",
+        "name": "trace-breach"
+      }
+    ]
+  },
+  "_examples/transport.http": {
+    "sha256": "c1835435c6247c057ec313ac009be1ce40793b678157ff92dcf3489cb94e633c",
+    "requests": [
+      {
+        "line": 5,
+        "method": "GET",
+        "name": "TimeoutDemo"
+      },
+      {
+        "line": 14,
+        "method": "GET",
+        "name": "CustomTransport"
+      },
+      {
+        "line": 25,
+        "method": "POST",
+        "name": "NoLogExample"
+      }
+    ]
+  },
+  "_examples/websocket_manual.http": {
+    "sha256": "762d5caf19683a9207e03446e8ee2284fa2bc33955dc5331240d96b8b26aa121",
+    "requests": [
+      {
+        "line": 2,
+        "method": "WS",
+        "name": "WebSocketManualEcho"
+      }
+    ]
+  },
+  "_examples/websocket_scripted.http": {
+    "sha256": "da488bd79abc752a7a01aa1656e893596641eee378a63539c942d08bcabd4bf6",
+    "requests": [
+      {
+        "line": 2,
+        "method": "WS",
+        "name": "WebSocketScriptedEcho"
+      }
+    ]
+  },
+  "_examples/workflows.http": {
+    "sha256": "3cf98ed5f18a496f40b0860e023c8ebfa5f58d89635a07f9cd8176f5c377ba27",
+    "requests": [
+      {
+        "line": 17,
+        "method": "POST",
+        "name": "AcquireToken"
+      },
+      {
+        "line": 31,
+        "method": "GET",
+        "name": "FetchHeaders"
+      },
+      {
+        "line": 40,
+        "method": "POST",
+        "name": "CreateResource"
+      },
+      {
+        "line": 55,
+        "method": "DELETE",
+        "name": "DeleteResource"
+      },
+      {
+        "line": 5,
+        "method": "WF",
+        "name": "sample-order"
+      }
+    ]
+  },
+  "_examples/xml.http": {
+    "sha256": "3c619fd2c2a897acf70116e5891e8bd1c38fb0c4859e7eb93d9817917331740b",
+    "requests": [
+      {
+        "line": 2,
+        "method": "POST",
+        "name": "xmlEcho"
+      },
+      {
+        "line": 20,
+        "method": "POST",
+        "name": "inlineAngleText"
+      }
+    ]
+  }
+}
