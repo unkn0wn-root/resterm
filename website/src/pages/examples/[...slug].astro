@@ -25,7 +25,7 @@ const { groups } = await getExamples();
   prev={page.prev?.href}
   next={page.next?.href}
 >
-  <article class="example">
+  <article>
     <header class="head">
       <p class="crumbs">
         <a href="/examples/">examples</a> <span aria-hidden="true">/</span> {page.group}
@@ -86,10 +86,6 @@ const { groups } = await getExamples();
 </Docs>
 
 <style>
-  .example {
-    max-width: var(--content-w);
-  }
-
   .crumbs {
     font-size: 0.8125rem;
     color: var(--fg-dim);
@@ -130,6 +126,11 @@ const { groups } = await getExamples();
     margin-top: 0.5rem;
     font-size: 0.8125rem;
     color: var(--fg-dim);
+  }
+
+  .head,
+  .note {
+    max-width: var(--content-w);
   }
 
   .head {
