@@ -198,15 +198,14 @@ func firstSetting(m map[string]string, keys ...string) string {
 }
 
 func expand(val, label string, r *vars.Resolver, c diag.Component) (string, error) {
-	val = strings.TrimSpace(val)
-	if val == "" || r == nil {
-		return val, nil
+	if val != "" && r != nil {
+		out, err := r.ExpandTemplates(val)
+		if err != nil {
+			return "", diag.WrapAs(diag.ClassProtocol, err, "expand "+label, diag.WithComponent(c))
+		}
+		val = out
 	}
-	out, err := r.ExpandTemplates(val)
-	if err != nil {
-		return "", diag.WrapAs(diag.ClassProtocol, err, "expand "+label, diag.WithComponent(c))
-	}
-	return strings.TrimSpace(out), nil
+	return strings.TrimSpace(val), nil
 }
 
 func splitList(raw string) []string {
