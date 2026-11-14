@@ -6,7 +6,7 @@ Use a theme to change Resterm's colors and text styles. Theme files configure it
 
 - Default directory: `<config-dir>/themes/`
 - Override with `RESTERM_THEMES_DIR`
-- Sample: `_examples/themes/aurora.toml`
+- Sample: [`_examples/themes/aurora.toml`](../_examples/themes/aurora.toml)
 - Switch at runtime with `Ctrl+Alt+T` (or press `g` then `m`). The selection persists in `settings.toml`.
 
 ## Theme anatomy

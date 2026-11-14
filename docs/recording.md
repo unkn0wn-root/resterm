@@ -28,4 +28,4 @@ Generated requests use `recordedBaseUrl`. Set it to your mock server's address t
 
 Request names come from the method and path, such as `get-users-42`. Their descriptions include the capture ID, status, and timing. Each request asserts the recorded status code, except for redirects, since `resterm run` follows them. Add more `@assert` and `@expect` rules as needed, then check the requests with `resterm run` and the mock calls with `resterm mock verify`.
 
-For a local walkthrough, serve `_examples/recording.http` with `resterm mock _examples/recording.http --addr 127.0.0.1:9001`, record that origin on port 9000, and run `resterm run _examples/recording.http`. The example includes assertions and a mock call expectation.
+For a local walkthrough, serve [`_examples/recording.http`](../_examples/recording.http) with `resterm mock _examples/recording.http --addr 127.0.0.1:9001`, record that origin on port 9000, and run `resterm run _examples/recording.http`. The example includes assertions and a mock call expectation.

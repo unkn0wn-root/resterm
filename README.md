@@ -158,7 +158,7 @@ Content-Type: application/json
 
 A `@setting` before the first request applies to the whole file. `###` starts a new request. Directives above a request can repeat it, skip it or check the response, either with `@assert` or with an `@rts test` block of [RestermScript](https://resterm.app/docs/rts/) code.
 
-There are more examples in [`_examples/`](_examples/), and every directive is listed in the [request file reference](https://resterm.app/docs/request-files/).
+There are more examples at [resterm.app/examples](https://resterm.app/examples/) and in [`_examples/`](_examples/), and every directive is listed in the [request file reference](https://resterm.app/docs/request-files/).
 
 ## Documentation
 

@@ -33,4 +33,4 @@ The page loads pane data as the tour nears the viewport. It loads the `-editor-h
 
 ## Docs come from docs/
 
-The site reads `../docs/**/*.md` at build time and creates a page for each file. Edit the source files in `docs/` to update the documentation.
+The site reads `../docs/**/*.md` at build time and creates a page for each file. Edit the source files in `docs/` to update the documentation, and add a row, or a link in an existing row, to `docs/examples.md` when you add a file to `_examples/`.
