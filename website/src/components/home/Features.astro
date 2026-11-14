@@ -9,6 +9,7 @@ import restermscript from '../../content/features/restermscript.http?raw';
 import tracing from '../../content/features/tracing.http?raw';
 import tunnels from '../../content/features/tunnels.http?raw';
 import workflows from '../../content/features/workflows.http?raw';
+import { getExamples } from '../../lib/examples';
 import { docHref } from '../../site';
 import EditorCode from '../EditorCode.astro';
 
@@ -20,27 +21,103 @@ interface Feature {
   tone: Tone;
   name: string;
   href: string;
+  code: string;
+  // Slug of the matching page under /examples/.
   example: string;
 }
 
 const features: Feature[] = [
-  { badge: 'HTTP', tone: 'get', name: 'request-files', href: docHref('request-files'), example: requestFiles },
-  { badge: 'GRPC', tone: 'grpc', name: 'protocols', href: docHref('grpc'), example: protocols },
-  { badge: 'WF', tone: 'post', name: 'workflows', href: docHref('workflows'), example: workflows },
-  { badge: 'MOCK', tone: 'put', name: 'mock-servers', href: docHref('mock-servers'), example: mockServers },
-  { badge: 'REC', tone: 'delete', name: 'recording', href: docHref('recording'), example: recording },
-  { badge: 'AUTH', tone: 'patch', name: 'authentication', href: docHref('authentication'), example: authentication },
-  { badge: 'SSH', tone: 'ws', name: 'tunnels', href: docHref('ssh-tunnels'), example: tunnels },
+  {
+    badge: 'HTTP',
+    tone: 'get',
+    name: 'request-files',
+    href: docHref('request-files'),
+    code: requestFiles,
+    example: 'basic',
+  },
+  {
+    badge: 'GRPC',
+    tone: 'grpc',
+    name: 'protocols',
+    href: docHref('grpc'),
+    code: protocols,
+    example: 'grpc',
+  },
+  {
+    badge: 'WF',
+    tone: 'post',
+    name: 'workflows',
+    href: docHref('workflows'),
+    code: workflows,
+    example: 'workflows',
+  },
+  {
+    badge: 'MOCK',
+    tone: 'put',
+    name: 'mock-servers',
+    href: docHref('mock-servers'),
+    code: mockServers,
+    example: 'mocks',
+  },
+  {
+    badge: 'REC',
+    tone: 'delete',
+    name: 'recording',
+    href: docHref('recording'),
+    code: recording,
+    example: 'recording',
+  },
+  {
+    badge: 'AUTH',
+    tone: 'patch',
+    name: 'authentication',
+    href: docHref('authentication'),
+    code: authentication,
+    example: 'auth_command',
+  },
+  {
+    badge: 'SSH',
+    tone: 'ws',
+    name: 'tunnels',
+    href: docHref('ssh-tunnels'),
+    code: tunnels,
+    example: 'ssh',
+  },
   {
     badge: 'TRACE',
     tone: 'options',
     name: 'tracing',
     href: docHref('ui-tour', 'timeline--tracing'),
-    example: tracing,
+    code: tracing,
+    example: 'trace',
   },
-  { badge: 'RTS', tone: 'rts', name: 'restermscript', href: docHref('rts'), example: restermscript },
-  { badge: 'RUN', tone: 'get', name: 'resterm-run', href: docHref('cli/run'), example: restermRun },
+  {
+    badge: 'RTS',
+    tone: 'rts',
+    name: 'restermscript',
+    href: docHref('rts'),
+    code: restermscript,
+    example: 'rts/rts_all_features',
+  },
+  {
+    badge: 'RUN',
+    tone: 'get',
+    name: 'resterm-run',
+    href: docHref('cli/run'),
+    code: restermRun,
+    example: 'service-groups',
+  },
 ];
+
+const { pages } = await getExamples();
+const panels = features.map((f) => {
+  const page = pages.find((p) => p.slug === f.example);
+  if (!page) {
+    throw new Error(`no example "${f.example}" in docs/examples.md`);
+  }
+
+  return { ...f, page };
+});
 ---
 
 <div class="features" data-tabs>
@@ -69,7 +146,7 @@ const features: Feature[] = [
   </div>
 
   <div class="pane pane-editor editor">
-    {features.map((f, i) => (
+    {panels.map((f, i) => (
       <div
         class="panel"
         id={`feature-${f.name}`}
@@ -78,10 +155,15 @@ const features: Feature[] = [
         hidden={i !== 0}
       >
         <span class="pane-title">{f.name}.http</span>
-        <EditorCode code={f.example} />
-        <a class="docs" href={f.href}>
-          <span aria-hidden="true">▣</span> {f.name} docs
-        </a>
+        <EditorCode code={f.code} />
+        <p class="pane-foot">
+          <a href={f.href}>
+            <span aria-hidden="true">▣</span> {f.name} docs
+          </a>
+          <a href={f.page.href}>
+            <span aria-hidden="true">◧</span> {f.page.title} example
+          </a>
+        </p>
       </div>
     ))}
   </div>
@@ -162,13 +244,6 @@ const features: Feature[] = [
 
   .editor {
     display: grid;
-    font-size: 0.875rem;
-    line-height: 1.65;
-  }
-
-  /* The light theme comment color is too faint for the descriptions. */
-  :root[data-theme='light'] .editor {
-    --syn-comment: var(--fg-muted);
   }
 
   .panel {
@@ -183,18 +258,6 @@ const features: Feature[] = [
   .panel[hidden] {
     display: flex;
     visibility: hidden;
-  }
-
-  .docs {
-    padding: 0.6rem 1rem 0.7rem;
-    border-top: 1px dashed var(--line);
-    color: var(--accent-text);
-    font-size: 0.875rem;
-    text-decoration: none;
-  }
-
-  .docs:hover {
-    text-decoration: underline;
   }
 
   @media (max-width: 960px) {
