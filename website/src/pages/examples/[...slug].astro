@@ -2,6 +2,7 @@
 import type { GetStaticPaths, InferGetStaticPropsType } from 'astro';
 import EditorCode from '../../components/EditorCode.astro';
 import Pager from '../../components/docs/Pager.astro';
+import Requests from '../../components/docs/Requests.astro';
 import Docs from '../../layouts/Docs.astro';
 import { getExamples } from '../../lib/examples';
 
@@ -14,6 +15,8 @@ type Props = InferGetStaticPropsType<typeof getStaticPaths>;
 
 const { page } = Astro.props;
 const { groups } = await getExamples();
+const requestFiles = page.files.filter((f) => f.requests.length > 0);
+const split = requestFiles.length > 0;
 ---
 
 <Docs
@@ -25,7 +28,7 @@ const { groups } = await getExamples();
   prev={page.prev?.href}
   next={page.next?.href}
 >
-  <article>
+  <article class:list={{ split }}>
     <header class="head">
       <p class="crumbs">
         <a href="/examples/">examples</a> <span aria-hidden="true">/</span> {page.group}
@@ -65,7 +68,7 @@ const { groups } = await getExamples();
       </div>
       {page.files.map((f, i) => (
         <div id={`file-${i}`} role="tabpanel" aria-labelledby={`file-tab-${i}`} hidden={i !== 0}>
-          <EditorCode code={f.code} lang={f.lang} />
+          <EditorCode code={f.code} lang={f.lang} anchors={f.requests} />
           <p class="pane-foot">
             <a href={f.url}>
               <span aria-hidden="true">◇</span> {f.path} on GitHub
@@ -74,6 +77,12 @@ const { groups } = await getExamples();
         </div>
       ))}
     </div>
+
+    {split && (
+      <div class="requests">
+        <Requests files={requestFiles} />
+      </div>
+    )}
 
     <a class="docs" href={page.docs.href}>
       <span aria-hidden="true">▣</span> {page.docs.title} docs
@@ -133,17 +142,44 @@ const { groups } = await getExamples();
     max-width: var(--content-w);
   }
 
-  .head {
-    margin-bottom: 0.5rem;
-  }
-
   .note {
     font-size: 0.875rem;
     color: var(--fg-dim);
   }
 
-  .editor {
+  .editor,
+  .requests {
     margin-top: 2rem;
+  }
+
+  .requests {
+    display: none;
+  }
+
+  /* On wide screens the Requests pane gets a column beside the editor and stays
+     in view while the editor scrolls, like the Outline beside a docs page. */
+  @media (min-width: 1440px) {
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 14rem;
+      column-gap: 1.5rem;
+      align-items: start;
+    }
+
+    .split > * {
+      grid-column: 1;
+    }
+
+    /* Auto-placement keeps an item with a later column in the row of the item
+       before it, so the pane sits beside the editor. */
+    .split > .requests {
+      grid-column: 2;
+      position: sticky;
+      top: var(--stick);
+      max-height: var(--stick-max);
+      display: flex;
+      flex-direction: column;
+    }
   }
 
   .tabs {

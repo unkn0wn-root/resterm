@@ -73,3 +73,30 @@ describe('languages', () => {
     expect(await highlightHtml('GET /users', 'http')).toContain('color:var(--syn-request)');
   });
 });
+
+describe('anchors', () => {
+  const code = '### A\n# @name a\nGET /a\n\n### B\nGET /b';
+  const lineOf = (html: string, id: string) =>
+    html
+      .split('\n')
+      .find((l) => l.includes(` id="${id}"`))
+      ?.replace(/<[^>]+>/g, '');
+
+  it('puts an id on each anchored line', async () => {
+    const html = await highlightHtml(code, 'http', {
+      anchors: [
+        { line: 2, id: 'file-0-L2' },
+        { line: 6, id: 'file-0-L6' },
+      ],
+    });
+    expect(lineOf(html, 'file-0-L2')).toBe('# @name a');
+    expect(lineOf(html, 'file-0-L6')).toBe('GET /b');
+    expect(html.match(/ id="/g)).toHaveLength(2);
+  });
+
+  it('adds no ids without anchors', async () => {
+    const html = await highlightHtml(code, 'http');
+    expect(html).not.toContain(' id=');
+    expect(await highlightHtml(code, 'http', { anchors: [] })).toBe(html);
+  });
+});

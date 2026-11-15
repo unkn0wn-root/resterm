@@ -1,0 +1,72 @@
+---
+import type { ExampleFile } from '../../lib/examples';
+
+interface Props {
+  files: Pick<ExampleFile, 'name' | 'requests'>[];
+}
+
+const { files } = Astro.props;
+
+// A name may break before a capital that follows a lowercase letter or digit,
+// and after / . _ ? & = or -.
+const breaks = /(?<=[a-z\d])(?=[A-Z])|(?<=[/._?&=-])/;
+---
+
+<aside class="outline pane" aria-label="Requests in this example">
+  <span class="pane-title">Requests</span>
+  <div class="scroll">
+    {files.map((f) => (
+      <>
+        <p class="file">
+          {f.name} ({f.requests.length})
+        </p>
+        <ol>
+          {f.requests.map((r) => (
+            <li>
+              <a href={`#${r.id}`} data-outline={r.id}>
+                <span class={`method method-${r.method.toLowerCase()}`}>{r.method}</span>
+                <span class="name">{r.name.split(breaks).map((part, i) => (i > 0 ? [<wbr />, part] : part))}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </>
+    ))}
+  </div>
+</aside>
+
+<style>
+  .file {
+    margin-bottom: 0.4rem;
+    color: var(--fg-strong);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  /* Each file's badge column fits its widest method. Rows are subgrids, so
+     badges and names line up from row to row. */
+  ol {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  li,
+  li a {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+
+  li a {
+    column-gap: 1ch;
+  }
+
+  ol:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Wrap at the <wbr> points first. A part that is still too wide breaks
+     anywhere. */
+  .name {
+    overflow-wrap: anywhere;
+  }
+</style>

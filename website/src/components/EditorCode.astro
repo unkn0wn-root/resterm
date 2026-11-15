@@ -1,14 +1,13 @@
 ---
-import { highlightHtml } from '../lib/highlight';
+import { highlightHtml, type HighlightOptions } from '../lib/highlight';
 
-interface Props {
+interface Props extends HighlightOptions {
   code: string;
   lang?: string;
-  cursor?: number;
 }
 
-const { code, lang = 'http', cursor } = Astro.props;
-const html = await highlightHtml(code.trimEnd(), lang, cursor);
+const { code, lang = 'http', cursor, anchors } = Astro.props;
+const html = await highlightHtml(code.trimEnd(), lang, { cursor, anchors });
 ---
 
 <div class="code" set:html={html} />
@@ -55,11 +54,19 @@ const html = await highlightHtml(code.trimEnd(), lang, cursor);
     color: var(--fg-dim);
   }
 
-  .code :global(.cursor) {
+  .code :global(.cursor),
+  .code :global(.line:target) {
     background: var(--bg-hover);
   }
 
-  .code :global(.cursor)::before {
+  .code :global(.cursor)::before,
+  .code :global(.line:target)::before {
     color: var(--fg-strong);
+  }
+
+  /* Leave two lines above a linked line in view. That is usually its ###
+     separator. */
+  .code :global(.line[id]) {
+    scroll-margin-top: 2lh;
   }
 </style>
