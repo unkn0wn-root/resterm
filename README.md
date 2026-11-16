@@ -14,24 +14,24 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is a code-first API client built around plain `.http`/`.rest` files. A request is a few lines of text you can read, diff and keep in git, and the same goes for workflows and local mocks. You send them from the terminal UI while you work, and `resterm run` runs the same files in CI. If your API sits behind an SSH bastion or inside a Kubernetes cluster, Resterm opens the tunnel or port-forward for you.
+Resterm treats the file as the interface. A request is plain text in a `.http` or `.rest` file: method, URL, headers, body, auth, checks and settings. Environments, workflows and local mocks work the same way, and so do themes and key bindings. You can use the terminal UI, or run the same files from the CLI with `resterm run`. If your API sits behind an SSH bastion or inside a Kubernetes cluster, Resterm opens the tunnel or port-forward for you.
 
 ## Features
 
 - HTTP, GraphQL, gRPC (with reflection and streaming), WebSocket and SSE
 - environment files, grouped environments, dotenv files and OS variables
-- bearer tokens, OAuth 2.0 (client credentials, password, and authorization code with PKCE), and tokens from CLIs you already use, like `gh auth token`
+- bearer tokens, OAuth 2.0 and tokens from CLIs like `gh auth token`
 - TLS client certificates, custom root CAs, proxies, HTTP/2 and a cookie jar per environment
 - captures and checks with `@capture` and `@assert`, plus `@poll` and `@retry`
 - workflows that chain requests into steps, with `@if` and `@for-each`
 - RestermScript for logic and `@rts test` blocks
-- editor with Vim motions, syntax highlighting, completion for directives, headers, file paths, and inline diagnostics
+- editor with Vim motions, completion and inline diagnostics
 - `@compare` to send one request to several environments and diff the results
 - timeline tracing with per-phase budgets, and export to OpenTelemetry
 - `@profile` with latency stats, a histogram, P95 and P99
-- SSH tunnels and Kubernetes port-forwards that Resterm opens for the request
-- local mock servers from your `.http` files, and a recording proxy that turns real traffic into requests or mocks
-- `resterm run` for CI, with text, JSON or JUnit output and exit codes that tell a failed check from a TLS or tunnel error
+- SSH tunnels and Kubernetes port-forwards
+- local mock servers, and a proxy that records traffic as requests or mocks
+- `resterm run` to run requests and workflows from the command line, with JSON or JUnit output
 - headless Go API to run the same files from your own Go code
 - import from curl and OpenAPI, and share collections as bundles or zip files
 - custom key bindings and themes
