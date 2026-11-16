@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.18.2](https://github.com/unkn0wn-root/resterm/compare/v1.18.1...v1.18.2) (2026-11-16)
+
+
+### Features
+
+* **site:** add a requests pane to example pages ([48ea6f8](https://github.com/unkn0wn-root/resterm/commit/48ea6f838b8bce4a1c2d2bed8de8afe4be1a589e))
+* **site:** add the examples section ([00aeea6](https://github.com/unkn0wn-root/resterm/commit/00aeea6216e7752cd5aed460277992692d836cb6))
+* **site:** generate the example request index ([0661281](https://github.com/unkn0wn-root/resterm/commit/066128156d0f1f67c3237baff1195804956c2897))
+* **site:** link examples from the header ([4ac6737](https://github.com/unkn0wn-root/resterm/commit/4ac67375b690f0b9f7948401370791c9f6f30ebc))
+* **site:** link home features to their examples ([46604ee](https://github.com/unkn0wn-root/resterm/commit/46604ee699099ccdf65e0c24e6121d17116dc8f4))
+
+
+### Bug Fixes
+
+* **examples:** make every example run as described ([1c16551](https://github.com/unkn0wn-root/resterm/commit/1c16551d5168ce96cee3cfab16ac5e40188c386f))
+* **settings:** expand templates in the proxy setting ([0d516ca](https://github.com/unkn0wn-root/resterm/commit/0d516ca2401abf1f254bdaf81818a3410636208b))
+* **settings:** let the higher scope win across setting names ([685ea31](https://github.com/unkn0wn-root/resterm/commit/685ea31ebf617fd7f1209d6d4a5c71d861cfb042))
+* **site:** let example code use the full column width ([1f8e6de](https://github.com/unkn0wn-root/resterm/commit/1f8e6dea463361850887a455487f2852407a7efb))
+
 ### [1.18.1](https://github.com/unkn0wn-root/resterm/compare/v1.18.0...v1.18.1) (2026-11-10)
 
 
