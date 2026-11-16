@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { highlight } from '.';
+import { highlight, highlightHtml } from '.';
 
 async function tokens(code: string, lang: string) {
   const { pre } = await highlight(code, lang);
@@ -65,5 +65,38 @@ describe('languages', () => {
     expect((await highlight('x', 'nope')).label).toBe('text');
     expect((await highlight('x', 'sh')).label).toBe('shell');
     expect((await highlight('x', 'http')).label).toBe('http');
+  });
+
+  it('renders unknown languages as plain text in standalone blocks', async () => {
+    expect(await highlightHtml('let a = 1', 'js')).toBe(await highlightHtml('let a = 1', 'text'));
+    expect(await highlightHtml('ls -la', 'console')).toBe(await highlightHtml('ls -la', 'bash'));
+    expect(await highlightHtml('GET /users', 'http')).toContain('color:var(--syn-request)');
+  });
+});
+
+describe('anchors', () => {
+  const code = '### A\n# @name a\nGET /a\n\n### B\nGET /b';
+  const lineOf = (html: string, id: string) =>
+    html
+      .split('\n')
+      .find((l) => l.includes(` id="${id}"`))
+      ?.replace(/<[^>]+>/g, '');
+
+  it('puts an id on each anchored line', async () => {
+    const html = await highlightHtml(code, 'http', {
+      anchors: [
+        { line: 2, id: 'file-0-L2' },
+        { line: 6, id: 'file-0-L6' },
+      ],
+    });
+    expect(lineOf(html, 'file-0-L2')).toBe('# @name a');
+    expect(lineOf(html, 'file-0-L6')).toBe('GET /b');
+    expect(html.match(/ id="/g)).toHaveLength(2);
+  });
+
+  it('adds no ids without anchors', async () => {
+    const html = await highlightHtml(code, 'http');
+    expect(html).not.toContain(' id=');
+    expect(await highlightHtml(code, 'http', { anchors: [] })).toBe(html);
   });
 });

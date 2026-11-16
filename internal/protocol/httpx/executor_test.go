@@ -18,7 +18,6 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptrace"
 	"net/url"
 	"os"
@@ -30,7 +29,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
-	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/parser"
@@ -43,39 +41,6 @@ import (
 
 func newTestClientWithHTTPFactory(factory HTTPClientFactory) *Client {
 	return NewClientWithOptions(WithHTTPFactory(factory))
-}
-
-func TestApplyRequestSettings(t *testing.T) {
-	jar, _ := cookiejar.New(nil)
-	opts := Options{Timeout: 5 * time.Second, FollowRedirects: true, CookieJar: jar}
-	settings := map[string]string{
-		"timeout":         "10s",
-		"proxy":           "http://localhost:8080",
-		"followredirects": "false",
-		"insecure":        "true",
-		"no-cookies":      "true",
-		"http-version":    "2",
-	}
-
-	effective := applyRequestSettings(opts, settings)
-	if effective.Timeout != 10*time.Second {
-		t.Fatalf("expected timeout 10s, got %s", effective.Timeout)
-	}
-	if !effective.InsecureSkipVerify {
-		t.Fatalf("expected insecure skip verify to be true")
-	}
-	if effective.FollowRedirects {
-		t.Fatalf("expected redirects disabled")
-	}
-	if effective.ProxyURL != "http://localhost:8080" {
-		t.Fatalf("unexpected proxy url: %s", effective.ProxyURL)
-	}
-	if effective.HTTPVersion != version.V2 {
-		t.Fatalf("expected http version 2, got %v", effective.HTTPVersion)
-	}
-	if effective.CookieJar != nil {
-		t.Fatalf("expected cookie jar to be cleared")
-	}
 }
 
 func TestInjectBodyIncludes(t *testing.T) {

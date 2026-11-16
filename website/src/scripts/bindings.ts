@@ -13,7 +13,7 @@ export const bindings: Binding[] = [
   { label: '/', help: 'Search the docs (also Ctrl K)', keys: { '/': 'search' } },
   { label: 'j k', help: 'Scroll down and up', keys: { j: 'down', k: 'up' } },
   { label: 'g g  G', help: 'Jump to the top or the bottom', keys: { 'g g': 'top', G: 'bottom' } },
-  { label: '[  ]', help: 'Previous and next docs page', keys: { '[': 'prev', ']': 'next' } },
+  { label: '[  ]', help: 'Previous and next page', keys: { '[': 'prev', ']': 'next' } },
   { label: 'g d', help: 'Docs index', keys: { 'g d': 'docs' } },
   { label: 'g h', help: 'Home page', keys: { 'g h': 'home' } },
   { label: 't', help: 'Switch between dark and light', keys: { t: 'theme' } },

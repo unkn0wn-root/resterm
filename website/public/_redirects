@@ -1,0 +1,3 @@
+# Cloudflare Pages redirects for pages that moved.
+
+/docs/examples/ /examples/ 301

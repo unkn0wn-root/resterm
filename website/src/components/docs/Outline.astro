@@ -27,48 +27,8 @@ const { toc, source } = Astro.props;
 </aside>
 
 <style>
-  .outline {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    font-size: 0.875rem;
-    line-height: 1.45;
-  }
-
-  .scroll {
-    min-height: 0;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    padding: 1rem 0.75rem;
-  }
-
-  ol {
-    list-style: none;
-    margin: 0 0 1rem;
-    padding: 0;
-    display: grid;
-    gap: 0.3rem;
-  }
-
   .d3 {
     padding-left: 2ch;
-  }
-
-  a {
-    display: block;
-    color: var(--fg-muted);
-    text-decoration: none;
-    border-left: 1px solid transparent;
-    padding-left: 1ch;
-  }
-
-  a:hover {
-    color: var(--fg-strong);
-  }
-
-  a[aria-current='true'] {
-    color: var(--fg-strong);
-    border-left-color: var(--focus);
   }
 
   .source {

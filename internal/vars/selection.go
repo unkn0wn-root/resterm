@@ -41,6 +41,9 @@ type Selection struct {
 // that callers must not modify. Resolve captures env: references for execution.
 type Environment struct {
 	values map[string]string
+	// layers groups the names in values by where they were set, lowest
+	// precedence first: $shared, then the selected environment or profiles.
+	layers [][]string
 	label  string
 	scope  string
 	sel    Selection
@@ -158,33 +161,39 @@ func (c Catalog) Resolve(sel Selection) (Environment, error) {
 		return Environment{}, err
 	}
 
-	if !c.Grouped() {
-		var values map[string]string
-		if env, ok := c.findEnv(next.name); ok {
-			values = collapseNames(env.values)
+	env := Environment{sel: next}
+	// Profiles from different groups cannot set one name, so together they form
+	// one layer above $shared.
+	var own NameMap[string]
+	if c.Grouped() {
+		parts := make([]string, 0, len(c.groups))
+		for _, g := range c.groups {
+			p := next.profiles[g.Name]
+			own.SetMap(g.Profiles[p])
+			parts = append(parts, g.Name+"="+p)
 		}
-		return Environment{
-			values: values,
-			label:  next.name,
-			scope:  flatScope(next.name, c.source),
-			sel:    next,
-		}, nil
+		env.label = strings.Join(parts, ", ")
+		env.scope = groupScope(c.groups, next, c.source)
+	} else {
+		if e, ok := c.findEnv(next.name); ok {
+			own.SetMap(e.values)
+		}
+		env.label = next.name
+		env.scope = flatScope(next.name, c.source)
 	}
-
-	layers := make([]map[string]string, 0, len(c.groups)+1)
-	layers = append(layers, c.shared)
-	parts := make([]string, 0, len(c.groups))
-	for _, g := range c.groups {
-		p := next.profiles[g.Name]
-		layers = append(layers, g.Profiles[p])
-		parts = append(parts, g.Name+"="+p)
+	all := CollectNames(c.shared)
+	all.Merge(own)
+	env.values = all.Map()
+	var shared, selected []string
+	for name := range env.values {
+		if own.Has(name) {
+			selected = append(selected, name)
+		} else {
+			shared = append(shared, name)
+		}
 	}
-	return Environment{
-		values: mergeValues(layers...),
-		label:  strings.Join(parts, ", "),
-		scope:  groupScope(c.groups, next, c.source),
-		sel:    next,
-	}, nil
+	env.layers = [][]string{shared, selected}
+	return env, nil
 }
 
 func (e Environment) Values() map[string]string {

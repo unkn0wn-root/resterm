@@ -7,12 +7,14 @@ on:
     paths:
       - "website/**"
       - "docs/**"
+      - "_examples/**"
       - "_media/**"
       - ".github/workflows/website.yml"
   pull_request:
     paths:
       - "website/**"
       - "docs/**"
+      - "_examples/**"
       - "_media/**"
       - ".github/workflows/website.yml"
   release:

@@ -49,6 +49,22 @@ func (r ResolvedEnv) Values() map[string]string {
 	return r.plain
 }
 
+// Layers returns Values split by where each name was set, lowest precedence
+// first: $shared, then the selected environment or profiles. A name set in
+// both is only in the higher layer.
+func (r ResolvedEnv) Layers() []map[string]string {
+	out := make([]map[string]string, len(r.env.layers))
+	for i, names := range r.env.layers {
+		out[i] = make(map[string]string, len(names))
+		for _, name := range names {
+			if text, ok := r.plain[name]; ok {
+				out[i][name] = text
+			}
+		}
+	}
+	return out
+}
+
 // ProviderValues returns resolver inputs, including references with no value.
 func (r ResolvedEnv) ProviderValues() NameMap[Value] {
 	return r.vals

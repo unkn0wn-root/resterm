@@ -1,7 +1,7 @@
 ---
 import source from '../../content/demo.http?raw';
 import type { Tone } from '../../scripts/terminal/timing';
-import EditorCode from './EditorCode.astro';
+import EditorCode from '../EditorCode.astro';
 
 // The transcript is a real run of src/content/demo.http against its own mocks.
 const cursor = source.split('\n').findIndex((l) => l.startsWith('POST {{base.url}}/hello')) + 1;
@@ -88,6 +88,9 @@ const transcript = run
   .term {
     display: flex;
     flex-direction: column;
+  }
+
+  .term {
     font-size: 0.875rem;
     line-height: 1.65;
   }

@@ -2,14 +2,17 @@ package settings
 
 import (
 	"net/http/cookiejar"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/http/version"
 	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestApplyAllDispatchesHandlers(t *testing.T) {
@@ -112,6 +115,141 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	}
 	if httpOpts.ClientCert != "cert.pem" || httpOpts.ClientKey != "key.pem" {
 		t.Fatalf("unexpected client cert/key: %q / %q", httpOpts.ClientCert, httpOpts.ClientKey)
+	}
+}
+
+func TestApplyAllTLSNamesFollowScope(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		scopes []map[string]string
+		want   []string
+	}{
+		{
+			name:   "root cas over lower root ca",
+			scopes: []map[string]string{{"grpc-root-ca": "low.pem"}, {"grpc-root-cas": "high.pem"}},
+			want:   []string{"high.pem"},
+		},
+		{
+			name:   "root ca over lower root cas",
+			scopes: []map[string]string{{"grpc-root-cas": "low.pem"}, {"grpc-root-ca": "high.pem"}},
+			want:   []string{"high.pem"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var h httpx.Options
+			var g grpcx.Options
+			if _, err := New(HTTPHandler(&h, nil), GRPCHandler(&g, nil)).ApplyAll(Merge(tt.scopes...)); err != nil {
+				t.Fatalf("ApplyAll() error = %v", err)
+			}
+			if !slices.Equal(g.RootCAs, tt.want) {
+				t.Fatalf("RootCAs = %v, want %v", g.RootCAs, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyAllRejectsBothNamesInOneScope(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		grpc bool
+		set  map[string]string
+		want string
+		comp diag.Component
+	}{
+		{
+			name: "insecure",
+			set:  map[string]string{"insecure": "true", "http-insecure": "true"},
+			want: "http-insecure and insecure are the same setting. Use one of them.",
+			comp: diag.ComponentHTTP,
+		},
+		{
+			name: "insecure with an invalid value",
+			set:  map[string]string{"insecure": "true", "http-insecure": "maybe"},
+			want: "http-insecure and insecure are the same setting. Use one of them.",
+			comp: diag.ComponentHTTP,
+		},
+		{
+			name: "http root ca",
+			set:  map[string]string{"http-root-ca": "a.pem", "http-root-cas": "a.pem"},
+			want: "http-root-ca and http-root-cas are the same setting. Use one of them.",
+			comp: diag.ComponentHTTP,
+		},
+		{
+			name: "grpc root ca",
+			grpc: true,
+			set:  map[string]string{"grpc-root-ca": "a.pem", "grpc-root-cas": "b.pem"},
+			want: "grpc-root-ca and grpc-root-cas are the same setting. Use one of them.",
+			comp: diag.ComponentGRPC,
+		},
+		{
+			name: "grpc root ca on an HTTP request",
+			set:  map[string]string{"grpc-root-ca": "a.pem", "grpc-root-cas": "b.pem"},
+		},
+		{
+			name: "insecure on a gRPC request",
+			grpc: true,
+			set:  map[string]string{"insecure": "true", "http-insecure": "true"},
+			want: "http-insecure and insecure are the same setting. Use one of them.",
+			comp: diag.ComponentHTTP,
+		},
+		{
+			name: "both root names empty",
+			set:  map[string]string{"http-root-ca": "", "http-root-cas": ""},
+			want: "http-root-ca and http-root-cas are the same setting. Use one of them.",
+			comp: diag.ComponentHTTP,
+		},
+		{
+			name: "first pair in sorted order",
+			grpc: true,
+			set: map[string]string{
+				"timeout":       "abc",
+				"insecure":      "true",
+				"http-insecure": "true",
+				"grpc-root-ca":  "a.pem",
+				"grpc-root-cas": "b.pem",
+			},
+			want: "grpc-root-ca and grpc-root-cas are the same setting. Use one of them.",
+			comp: diag.ComponentGRPC,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var h httpx.Options
+			var g grpcx.Options
+			hs := []Handler{HTTPHandler(&h, nil)}
+			if tt.grpc {
+				hs = append(hs, GRPCHandler(&g, nil))
+			}
+			_, err := New(hs...).ApplyAll(tt.set)
+			if tt.want == "" {
+				if err != nil {
+					t.Fatalf("ApplyAll() error = %v, want none", err)
+				}
+				return
+			}
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("ApplyAll() error = %v, want %q", err, tt.want)
+			}
+			if rep := diag.ReportOf(err); len(rep.Items) == 0 || rep.Items[0].Component != tt.comp {
+				t.Fatalf("report = %+v, want component %q", rep, tt.comp)
+			}
+		})
+	}
+}
+
+func TestApplyAllReportsInvalidKeysInOrder(t *testing.T) {
+	set := map[string]string{
+		"timeout":         "abc",
+		"no-cookies":      "maybe",
+		"http-version":    "9",
+		"followredirects": "maybe",
+	}
+	// Map order is random, so one pass could report the right key by luck.
+	for range 10 {
+		var opts httpx.Options
+		_, err := New(HTTPHandler(&opts, nil)).ApplyAll(set)
+		if err == nil || !strings.Contains(err.Error(), `invalid followredirects "maybe"`) {
+			t.Fatalf("ApplyAll() error = %v, want the followredirects error", err)
+		}
 	}
 }
 
@@ -219,5 +357,71 @@ func TestApplyHTTPSettingsRejectsEmptyRootMode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing http-root-mode value (use append or replace)") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyHTTPSettingsExpandsTemplatedProxy(t *testing.T) {
+	const prev = "http://prev:3128"
+	for _, tt := range []struct {
+		name string
+		val  string
+		env  map[string]string
+		want string
+		errs []string
+	}{
+		{
+			name: "whole value",
+			val:  "{{p}}",
+			env:  map[string]string{"p": "http://127.0.0.1:8080"},
+			want: "http://127.0.0.1:8080",
+		},
+		{
+			name: "path",
+			val:  "http://proxy:8080/{{x}}",
+			env:  map[string]string{"x": "edge"},
+			want: "http://proxy:8080/edge",
+		},
+		{
+			name: "padded",
+			val:  "{{p}}",
+			env:  map[string]string{"p": " http://127.0.0.1:8080\n"},
+			want: "http://127.0.0.1:8080",
+		},
+		{
+			name: "empty",
+			val:  "{{p}}",
+			env:  map[string]string{"p": ""},
+			want: prev,
+		},
+		{
+			name: "undefined",
+			val:  "{{nope}}",
+			want: prev,
+			errs: []string{"expand proxy", "undefined variable: nope"},
+		},
+		{
+			name: "not a URL",
+			val:  "{{p}}",
+			env:  map[string]string{"p": "localhost"},
+			want: prev,
+			errs: []string{`invalid proxy "localhost" (use a URL such as http://host:8080)`},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := httpx.Options{ProxyURL: prev}
+			res := vars.NewResolver(vars.NewMapProvider("env", tt.env))
+			err := ApplyHTTPSettings(&opts, map[string]string{"proxy": tt.val}, res)
+			if (err != nil) != (len(tt.errs) > 0) {
+				t.Fatalf("ApplyHTTPSettings() error = %v, want errors %q", err, tt.errs)
+			}
+			for _, want := range tt.errs {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %q, want it to contain %q", err, want)
+				}
+			}
+			if opts.ProxyURL != tt.want {
+				t.Fatalf("ProxyURL = %q, want %q", opts.ProxyURL, tt.want)
+			}
+		})
 	}
 }

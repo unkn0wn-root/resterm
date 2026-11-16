@@ -2,7 +2,7 @@
 #
 #   api          dev | stage | prod            which backend
 #   credentials  personal | ci | operator      who you are
-#   region       eu-west | us-east | ap-tokyo  where it runs
+#   region       eu-west | eu-east | ap-tokyo  where it runs
 #
 # 9 declarations in resterm.env.json cover all 27 combinations.
 #

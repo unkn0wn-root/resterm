@@ -15,13 +15,13 @@ GRPC {{grpc.host}}
   "includeHistorical": true
 }
 
-### Fetch Report Status With Descriptor
+### Fetch Report Status With a Proto File
 # @name GrpcReportStatus
 # @tag grpc reports
-# @description Uses a precompiled descriptor set and additional metadata.
+# @description Uses a local proto file and additional metadata.
 # @grpc analytics.ReportingService/GetReportStatus
-# @grpc-descriptor descriptors/analytics.protoset
-# @grpc-metadata authorization: Bearer {{analytics.sessionToken}}
+# @grpc-proto ./proto/analytics.proto
+# @grpc-metadata authorization: Bearer {{auth.token}}
 GRPC {{grpc.host}}
 
 {

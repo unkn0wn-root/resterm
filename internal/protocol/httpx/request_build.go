@@ -36,8 +36,7 @@ func (c *Client) BuildHTTPRequest(
 		)
 	}
 
-	effective := applyRequestSettings(opts, req.Settings)
-	prepared, err := c.prepareRequest(ctx, req, resolver, effective, true)
+	prepared, err := c.prepareRequest(ctx, req, resolver, opts, true)
 	if err != nil {
 		if prepared.optionsSet {
 			return nil, prepared.options, nil, err

@@ -24,13 +24,14 @@ Opening a *workspace*, or a request file that lives outside the current one, mov
 - A file passed with `--env-file` remains active when the workspace changes. Resterm warns if the new workspace has its own environment file. Without `--env-file`, moving to a workspace with no environment file clears the current environment. If the new workspace's environment file cannot load, the move is refused and the current workspace and environment remain active.
 - A move is refused while a request is running, because that request can still write runtime values back and undo the reset. Finish or cancel it first.
 
-Example environment (`_examples/resterm.env.json`):
+Example environment, shortened from the one the [basic example](../_examples/basic.http) uses:
 
 ```json
 {
   "dev": {
-    "settings.http-root-cas": "dev-ca.pem",
-    "settings.grpc-insecure": "false",
+    "base": {
+      "url": "https://httpbin.org"
+    },
     "services": {
       "api": {
         "base": "https://httpbin.org/anything/api"
@@ -84,7 +85,7 @@ A reference name may contain a template, as in `env:{{picked}}`. Only declaratio
 
 ### Shared variables (`$shared`)
 
-Use the reserved `$shared` key to define variables that apply to **all** environments. This avoids repeating common values, such as auth credentials and token URLs, in every environment. Environment-specific values override `$shared` when names collide.
+Use the reserved `$shared` key to define variables that apply to **all** environments. This avoids repeating common values, such as auth credentials and token URLs, in every environment. Environment-specific values override `$shared` when names collide. Settings follow the same order, even when the environment and `$shared` use different names of one setting: `"settings.http-insecure"` in an environment overrides `"settings.insecure"` in `$shared`.
 
 ```json
 {
@@ -108,7 +109,7 @@ In this example `dev` inherits `auth.clientId=demo-client` from `$shared`, while
 
 Use groups when you want to combine independent choices, like API endpoint, app, and credentials, without writing out every combination as its own environment. A file either defines named environments or groups. The two forms cannot be mixed.
 
-A runnable sample is in `_examples/grouped/`. Its `resterm.env.json` declares three groups of 3 profiles, so 9 declarations cover 27 combinations, and `grouped-environments.http` has one request per group plus one that reads from all three.
+A runnable sample is in `_examples/grouped/`. Its `resterm.env.json` declares three groups of 3 profiles, so 9 declarations cover 27 combinations, and [`grouped-environments.http`](../_examples/grouped/grouped-environments.http) has one request per group plus one that reads from all three.
 
 ```json
 {
@@ -151,7 +152,7 @@ A runnable sample is in `_examples/grouped/`. Its `resterm.env.json` declares th
 
 A group with more than one profile needs a `$default`. A group with a single profile uses that profile automatically. The default is matched case-insensitively and keeps the name as written on the profile. The example above defaults to `api=dev, app=dev app 1, credentials=personal`.
 
-When the file loads, Resterm checks that no variable name appears in two different groups, since profiles from different groups can be active at the same time. The check is case-insensitive. Reusing a variable across profiles of the same group is fine because only one of them is ever active. Profile values override `$shared`, even when the key only differs in case. A collision error names the variable and both `group=profile` sources but never prints the values.
+When the file loads, Resterm checks that no variable name appears in two different groups, since profiles from different groups can be active at the same time. The check is case-insensitive. Reusing a variable across profiles of the same group is fine because only one of them is ever active. Profile values override `$shared`, even when the key only differs in case. A collision error names the variable and both `group=profile` sources but never prints the values. Profile settings override `$shared` settings even when the two use different names of one setting, such as `settings.insecure` and `settings.http-insecure`. If the selected profiles of two groups set one setting under its two names, a request that reads that setting fails, unless a file default, the request or an `@apply` patch sets it.
 
 In the TUI, `Ctrl+E` opens a searchable list with one `group = profile` row per choice. Active profiles are marked. Picking a row switches only that group, and the header and status line always show the full selection.
 

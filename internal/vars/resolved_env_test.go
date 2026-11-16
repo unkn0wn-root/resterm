@@ -105,6 +105,91 @@ func TestWithoutRefValuesWithholdsMappedValues(t *testing.T) {
 	}
 }
 
+func TestResolvedEnvLayers(t *testing.T) {
+	const on = "RESTERM_LAYERS_ON"
+	t.Setenv(on, "resolved")
+	missing := fmt.Sprintf("RESTERM_LAYERS_MISSING_%d", time.Now().UnixNano())
+
+	flat, err := NewCatalog(EnvironmentSet{
+		SharedEnvKey: {"shared": "s", "Token": "a", "same": "a", "ref": "env:" + on, "gone": "a", "blank": ""},
+		"dev":        {"token": "b", "same": "b", "own": "b", "gone": "env:" + missing, "Empty": ""},
+		"other":      {"x": "1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grouped, err := NewGroupedCatalog(
+		map[string]string{"shared": "s", "url": "a"},
+		[]Group{
+			{Name: "api", Profiles: EnvironmentSet{"dev": {"URL": "b"}}},
+			{Name: "app", Profiles: EnvironmentSet{"one": {"app": "b", "ref": "env:" + on}}},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve := func(cat Catalog) ResolvedEnv {
+		env, err := cat.Resolve(cat.DefaultSelection())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return env.Resolve()
+	}
+
+	for _, tt := range []struct {
+		name string
+		env  ResolvedEnv
+		want []map[string]string
+	}{
+		{
+			name: "flat",
+			env:  resolve(flat),
+			want: []map[string]string{
+				{"shared": "s", "ref": "resolved", "blank": ""},
+				{"token": "b", "same": "b", "own": "b", "Empty": ""},
+			},
+		},
+		{
+			name: "flat without ref values",
+			env:  resolve(flat).WithoutRefValues(),
+			want: []map[string]string{
+				{"shared": "s", "blank": ""},
+				{"token": "b", "same": "b", "own": "b", "Empty": ""},
+			},
+		},
+		{
+			name: "no shared",
+			env:  testEnvironment(t, "dev", map[string]string{"a": "1"}).Resolve(),
+			want: []map[string]string{{}, {"a": "1"}},
+		},
+		{
+			name: "grouped",
+			env:  resolve(grouped),
+			want: []map[string]string{{"shared": "s"}, {"URL": "b", "app": "b", "ref": "resolved"}},
+		},
+		{name: "zero", env: ResolvedEnv{}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.env.Layers()
+			if !slices.EqualFunc(got, tt.want, maps.Equal) {
+				t.Fatalf("Layers() = %v, want %v", got, tt.want)
+			}
+			all := map[string]string{}
+			for _, layer := range got {
+				for name, v := range layer {
+					if _, ok := all[name]; ok {
+						t.Fatalf("%q is in two layers", name)
+					}
+					all[name] = v
+				}
+			}
+			if !maps.Equal(all, tt.env.Values()) {
+				t.Fatalf("layers hold %v, Values() = %v", all, tt.env.Values())
+			}
+		})
+	}
+}
+
 func TestZeroResolvedEnvHasNoReferences(t *testing.T) {
 	var r ResolvedEnv
 	if got := r.Secrets(); got != nil {

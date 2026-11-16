@@ -43,7 +43,7 @@ A patch can contain these keys:
 - `query` expects a dict where values are strings, numbers, or bools. Null deletes the key.
 - `body` accepts any value. Strings are used as-is, and other values are converted with `str()`.
 - `auth` expects a dict with `type` plus optional params. Use `null` to clear auth for that run.
-- `settings` expects a dict where values are strings, numbers, or bools. Null deletes a setting key.
+- `settings` expects a dict where values are strings, numbers, or bools. A patch overrides the request's own settings and earlier patches, under either name of a setting such as `insecure` and `http-insecure`. Null removes a setting that the request or an earlier patch set, under both names, so the file or environment value applies again. Setting both names of one setting in one patch fails a request that reads that setting, unless a later patch sets or removes it.
 - `vars` expects a dict and sets request-scope variables for this run (values are strings, numbers, or bools).
 
 ## @when and @skip-if

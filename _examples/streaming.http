@@ -2,8 +2,9 @@
 # @name sseDemo
 # @description Demonstrates streaming responses over SSE.
 # @sse duration=30s idle=10s max-events=5
-GET https://example.com/events
+GET https://stream.wikimedia.org/v2/stream/recentchange
 Accept: text/event-stream
+User-Agent: resterm-examples (https://github.com/unkn0wn-root/resterm)
 
 ### WebSocket Chat Demo
 # @name wsChat
@@ -12,4 +13,4 @@ Accept: text/event-stream
 # @ws send Hello from resterm!
 # @ws wait 1s
 # @ws close 1000 normal closure
-GET wss://example.com/chat
+GET wss://echo.websocket.org

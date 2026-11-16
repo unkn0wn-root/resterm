@@ -1,7 +1,11 @@
+# Start the mock in this file first with `resterm mock _examples/transport.http`,
+# or open this file in the TUI and press `g Shift+M`.
+
 ### Fast Timeout
 # @name TimeoutDemo
 # @tag transport timeout
 # @description Demonstrates @timeout to fail fast on slow responses.
+# This request fails on purpose. The 2s timeout ends it before the 5s delay is over.
 # @timeout 2s
 GET {{base.url}}/delay/5
 Accept: application/json
@@ -9,11 +13,12 @@ Accept: application/json
 ### Custom Transport Options
 # @name CustomTransport
 # @tag transport settings
-# @description Shows insecure, proxy, and redirect overrides.
-# @setting insecure true
+# @description Shows proxy and redirect overrides.
+# The local mock answers as the proxy, so example.invalid never has to resolve.
 # @setting followredirects false
 # @setting proxy {{transport.proxy}}
-GET https://example.invalid/ping
+# @assert response.json().via == "resterm mock"
+GET http://example.invalid/ping
 Accept: */*
 
 ### Sensitive Payload With No Logging
@@ -30,3 +35,10 @@ Accept: application/json
   "secret": "{{$uuid}}",
   "source": "transport demo"
 }
+
+### Proxy reply
+# @mock method=GET path=/ping
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"via":"resterm mock"}

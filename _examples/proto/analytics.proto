@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package analytics;
+
+service ReportingService {
+  rpc GenerateReport(GenerateReportRequest) returns (Report);
+  rpc GetReportStatus(GetReportStatusRequest) returns (ReportStatus);
+}
+
+message GenerateReportRequest {
+  string tenant_id = 1;
+  string report_id = 2;
+  bool include_historical = 3;
+}
+
+message Report {
+  string report_id = 1;
+}
+
+message GetReportStatusRequest {
+  string report_id = 1;
+}
+
+message ReportStatus {
+  string report_id = 1;
+  string status = 2;
+}

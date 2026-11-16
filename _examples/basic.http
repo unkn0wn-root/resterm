@@ -68,17 +68,3 @@ Accept: application/json
 # @auth bearer {{auth.token}}
 GET /bearer
 Accept: application/json
-
-### OAuth2 Directive
-# @name oauthDirectiveDemo
-# @description Demonstrates Resterm's built-in @auth oauth2 support with environment-driven parameters.
-# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" audience={{oauth.audience}} cache_key={{oauth.cacheKey}}
-GET /anything/oauth2-demo
-Accept: application/json
-
-### OAuth2 Directive (Reuse Cached Token)
-# @name oauthDirectiveReuseDemo
-# @description After the cache is seeded above, only cache_key is needed to reuse the token.
-# @auth oauth2 cache_key={{oauth.cacheKey}}
-GET /anything/oauth2-demo-reuse
-Accept: application/json

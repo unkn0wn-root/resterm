@@ -32,4 +32,4 @@ if not echoed {
 # @ws send Hello from Resterm
 # @ws wait 1s
 # @ws close 1000 scripted close
-wss://echo.websocket.events
+wss://echo.websocket.org

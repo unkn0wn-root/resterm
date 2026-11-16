@@ -11,6 +11,8 @@ on:
       - "**"
       - "!website/**"
       - "website/capture/**"
+      - "website/requests/**"
+      - "website/src/content/requests.json"
   workflow_dispatch:
 
 jobs:

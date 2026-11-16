@@ -130,6 +130,65 @@ dialog.pane {
   --pane-title: var(--accent-text);
 }
 
+.pane-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 3ch;
+  padding: 0.6rem 1rem 0.7rem;
+  border-top: 1px dashed var(--line);
+  font-size: 0.875rem;
+}
+
+.pane-foot a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.pane-foot a:hover {
+  text-decoration: underline;
+}
+
+/* The docs Outline and the example Requests panes. */
+.outline {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.outline .scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 1rem 0.75rem;
+}
+
+.outline ol {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.outline a {
+  display: block;
+  color: var(--fg-muted);
+  text-decoration: none;
+  border-left: 1px solid transparent;
+  padding-left: 1ch;
+}
+
+.outline a:hover {
+  color: var(--fg-strong);
+}
+
+.outline a[aria-current='true'] {
+  color: var(--fg-strong);
+  border-left-color: var(--focus);
+}
+
 kbd {
   color: var(--key);
   font-weight: 600;
@@ -142,7 +201,8 @@ kbd {
 .method-get {
   color: var(--m-get);
 }
-.method-post {
+.method-post,
+.method-wf {
   color: var(--m-post);
 }
 .method-put {
@@ -157,7 +217,8 @@ kbd {
 .method-grpc {
   color: var(--m-grpc);
 }
-.method-ws {
+.method-ws,
+.method-sse {
   color: var(--m-ws);
 }
 .method-options {

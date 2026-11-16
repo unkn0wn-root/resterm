@@ -4,15 +4,18 @@ import type { NavGroup } from '../../lib/docs';
 interface Props {
   groups: NavGroup[];
   current?: string;
+  title: string;
+  index: string;
+  label: string;
 }
 
-const { groups, current } = Astro.props;
+const { groups, current, title, index, label } = Astro.props;
 ---
 
-<nav class="nav pane" id="docs-nav" aria-label="Docs pages">
-  <span class="pane-title">Docs</span>
+<nav class="nav pane" id="docs-nav" aria-label={label}>
+  <span class="pane-title">{title}</span>
   <div class="scroll">
-    <a class="index" href="/docs/" aria-current={current === '/docs/' ? 'page' : undefined}>
+    <a class="index" href={index} aria-current={current === index ? 'page' : undefined}>
       <span class="icon" aria-hidden="true">
         ▣
       </span>

@@ -1,0 +1,72 @@
+---
+import { highlightHtml, type HighlightOptions } from '../lib/highlight';
+
+interface Props extends HighlightOptions {
+  code: string;
+  lang?: string;
+}
+
+const { code, lang = 'http', cursor, anchors } = Astro.props;
+const html = await highlightHtml(code.trimEnd(), lang, { cursor, anchors });
+---
+
+<div class="code" set:html={html} />
+
+<style>
+  .code {
+    flex: 1;
+    overflow-x: auto;
+    padding-block: 1.2rem 1rem;
+    font-size: 0.875rem;
+    line-height: 1.65;
+  }
+
+  /* The light theme comment color is too faint for comments that describe a
+     request. */
+  :root[data-theme='light'] .code {
+    --syn-comment: var(--fg-muted);
+  }
+
+  .code :global(pre) {
+    background: transparent !important;
+  }
+
+  .code :global(code) {
+    counter-reset: line;
+    display: block;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .code :global(.line) {
+    display: inline-block;
+    width: 100%;
+    padding-right: 1rem;
+  }
+
+  .code :global(.line)::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 3ch;
+    margin: 0 1.5ch 0 1ch;
+    text-align: right;
+    color: var(--fg-dim);
+  }
+
+  .code :global(.cursor),
+  .code :global(.line:target) {
+    background: var(--bg-hover);
+  }
+
+  .code :global(.cursor)::before,
+  .code :global(.line:target)::before {
+    color: var(--fg-strong);
+  }
+
+  /* Leave two lines above a linked line in view. That is usually its ###
+     separator. */
+  .code :global(.line[id]) {
+    scroll-margin-top: 2lh;
+  }
+</style>

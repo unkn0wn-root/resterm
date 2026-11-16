@@ -6,6 +6,11 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/str"
 )
 
+// Generic HTTP settings that ApplyHTTPSettings expands before httpx reads
+// them. base-url stays raw because the request builder expands it, and only
+// for a relative target.
+var templatedKeys = []string{"proxy"}
+
 var httpSettingKeys = map[string]struct{}{
 	"base-url":                        {},
 	"timeout":                         {},
@@ -20,6 +25,17 @@ var httpSettingKeys = map[string]struct{}{
 	"sse-max-event-bytes":             {},
 	"ws-max-message-bytes":            {},
 	"ws-compression":                  {},
+}
+
+// Keys that set the same option. Merge keeps only the ones from the highest
+// scope, and ApplyAll rejects both names when one scope writes both.
+var sameOption = map[string]string{
+	"insecure":      "http-insecure",
+	"http-insecure": "insecure",
+	"http-root-ca":  "http-root-cas",
+	"http-root-cas": "http-root-ca",
+	"grpc-root-ca":  "grpc-root-cas",
+	"grpc-root-cas": "grpc-root-ca",
 }
 
 // IsHTTPKey reports whether key is a supported HTTP setting key.

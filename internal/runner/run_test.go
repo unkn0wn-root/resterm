@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -309,6 +311,100 @@ func TestRunMasksSecretsInEffectiveTargets(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRunMasksSecretProxyPassword(t *testing.T) {
+	const pass = "proxy-pass-0123456789"
+	t.Setenv("RESTERM_TEST_PROXY_PASS", pass)
+	var (
+		hits atomic.Int32
+		auth atomic.Value
+	)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.IsAbs() {
+			hits.Add(1)
+			auth.Store(r.Header.Get("Proxy-Authorization"))
+		}
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer proxy.Close()
+
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	file := filepath.Join(dir, "proxy.http")
+	src := strings.Join([]string{
+		"### Valid",
+		"# @name valid",
+		"# @setting proxy http://ops:{{proxy.pass}}@" + strings.TrimPrefix(proxy.URL, "http://"),
+		"GET http://example.test/items",
+		"",
+		"### Invalid",
+		"# @name invalid",
+		"# @setting proxy ops:{{proxy.pass}}@proxy",
+		"GET http://example.test/items",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{"dev": {"proxy.pass": "env:RESTERM_TEST_PROXY_PASS"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sel, err := cat.Select("dev", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := RunContext(context.Background(), Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		StateDir:      stateDir,
+		History:       true,
+		Catalog:       cat,
+		Selection:     sel,
+		Select:        Select{All: true},
+		Response:      true,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Passed != 1 || rep.Failed != 1 || hits.Load() != 1 {
+		t.Fatalf("passed %d, failed %d, proxy hits %d, want 1 each", rep.Passed, rep.Failed, hits.Load())
+	}
+	if got, want := auth.Load(), "Basic "+base64.StdEncoding.EncodeToString([]byte("ops:"+pass)); got != want {
+		t.Fatalf("Proxy-Authorization = %q, want %q", got, want)
+	}
+
+	var out strings.Builder
+	for _, write := range []func(io.Writer) error{rep.WriteText, rep.WriteJSON, rep.WriteJUnit} {
+		if err := write(&out); err != nil {
+			t.Fatalf("write report: %v", err)
+		}
+	}
+	if strings.Contains(out.String(), pass) || !strings.Contains(out.String(), redact.Mask) {
+		t.Fatalf("reports must mask the proxy password:\n%s", out.String())
+	}
+
+	if es := readHistory(t, stateDir); len(es) != 1 || es[0].RequestName != "valid" {
+		t.Fatalf("history = %+v, want the valid request only", es)
+	}
+	err = filepath.WalkDir(stateDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(b), pass) {
+			t.Errorf("%s holds the proxy password", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

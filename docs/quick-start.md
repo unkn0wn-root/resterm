@@ -1,6 +1,6 @@
 # Quick start
 
-1. Save the example below as a `.http` or `.rest` file in your project directory. You can also use a sample from `_examples/`.
+1. Save the example below as a `.http` or `.rest` file in your project directory. You can also start from one of the [examples](examples.md).
 2. Run `resterm --workspace path/to/project`.
 3. Expand the file in the navigator sidebar with `→` or `Space`. Highlight a request and press `Ctrl+Enter` to send it. With a request highlighted, `Enter` also sends it and `Space` previews it.
 4. Read the response in the tabs on the right: Pretty, Raw, Headers, Diff, Compare, or History.

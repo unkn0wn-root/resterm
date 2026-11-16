@@ -11,6 +11,7 @@ const { current, menu } = Astro.props;
 
 const links = [
   { id: 'docs', icon: '▣', label: 'docs', href: '/docs/' },
+  { id: 'examples', icon: '◧', label: 'examples', href: '/examples/' },
   { id: 'rts', icon: 'λ', label: 'restermscript', href: '/docs/rts/' },
   { id: 'cli', icon: '⇄', label: 'cli', href: '/docs/cli/' },
   { id: 'install', icon: '⬢', label: 'install', href: '/docs/install/' },
@@ -184,7 +185,7 @@ const links = [
     font-weight: 400;
   }
 
-  @media (max-width: 1100px) {
+  @media (max-width: 1200px) {
     .links .cell:nth-child(n + 3),
     .version,
     .right > .sep {
