@@ -2,11 +2,10 @@
 import { site } from '../../site';
 
 // Commands match the README install section.
-const raw = 'https://raw.githubusercontent.com/unkn0wn-root/resterm/main';
 const methods = [
   { id: 'brew', label: 'Homebrew', note: 'macOS and Linux', command: 'brew install resterm' },
-  { id: 'script', label: 'Script', note: 'macOS and Linux', command: `curl -fsSL ${raw}/install.sh | bash` },
-  { id: 'windows', label: 'Windows', note: 'PowerShell', command: `iwr -useb ${raw}/install.ps1 | iex` },
+  { id: 'script', label: 'Script', note: 'macOS and Linux', command: 'curl -fsSL https://resterm.app/install.sh | sh' },
+  { id: 'windows', label: 'Windows', note: 'PowerShell', command: 'irm https://resterm.app/install.ps1 | iex' },
   {
     id: 'go',
     label: 'Go',

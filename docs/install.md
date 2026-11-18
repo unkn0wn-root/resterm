@@ -7,13 +7,13 @@ macOS and Linux:
 ```bash
 brew install resterm
 # or
-curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
+curl -fsSL https://resterm.app/install.sh | sh
 ```
 
 Windows:
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps1 | iex
+irm https://resterm.app/install.ps1 | iex
 ```
 
 ## Prebuilt binaries
