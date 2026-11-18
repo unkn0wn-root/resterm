@@ -15,7 +15,7 @@ export default defineConfig({
   vite: {
     server: {
       fs: {
-        // docs/ and CHANGELOG.md live at the repo root.
+        // docs/, CHANGELOG.md and the install scripts live at the repo root.
         allow: [fileURLToPath(new URL('..', import.meta.url))],
       },
     },

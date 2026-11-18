@@ -9,6 +9,8 @@ on:
       - "docs/**"
       - "_examples/**"
       - "_media/**"
+      - "install.sh"
+      - "install.ps1"
       - ".github/workflows/website.yml"
   pull_request:
     paths:
@@ -16,6 +18,8 @@ on:
       - "docs/**"
       - "_examples/**"
       - "_media/**"
+      - "install.sh"
+      - "install.ps1"
       - ".github/workflows/website.yml"
   release:
     types:

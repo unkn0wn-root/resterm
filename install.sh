@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 REPO="unkn0wn-root/resterm"
@@ -65,8 +65,8 @@ digest_for() {
 }
 
 download_binary() {
-    local url="$1"
-    local output="$2"
+    url="$1"
+    output="$2"
 
     info "Downloading from: $url"
 
@@ -86,7 +86,7 @@ sha256_of() {
 }
 
 verify_checksum() {
-    local file="$1" expected="$2" actual
+    file="$1" expected="$2"
     command_exists sha256sum || command_exists shasum || \
         error "Need sha256sum or shasum to verify the download"
     actual="$(sha256_of "$file")"
