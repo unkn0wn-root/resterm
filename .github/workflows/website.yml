@@ -36,8 +36,10 @@ jobs:
       run:
         working-directory: website
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: website/.node-version
           cache: npm
@@ -48,10 +50,35 @@ jobs:
       - run: npm run build
         env:
           SITE_REF: ${{ github.ref_type == 'tag' && github.ref_name || 'main' }}
-      - if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
-        uses: cloudflare/wrangler-action@v4
+      - name: Upload website
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'release' && startsWith(github.ref, 'refs/tags/v'))
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          name: website
+          path: website/dist
+          if-no-files-found: error
+
+  deploy:
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'release' && startsWith(github.ref, 'refs/tags/v'))
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://resterm.app
+    steps:
+      - name: Download website
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: website
+          path: website/dist
+      - name: Deploy website
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: website
-          command: pages deploy dist --project-name=resterm --branch=main
+          command: pages deploy dist --project-name=resterm --branch=main --commit-hash=${{ github.sha }}
