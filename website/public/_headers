@@ -1,8 +1,15 @@
 # Cloudflare Pages headers. Hashed build assets never change, so they can be
-# cached for good. Everything else revalidates.
+# cached for good. Everything else revalidates. The install scripts are sent as
+# UTF-8 text, the same way raw.githubusercontent.com sends them.
 
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
+
+/install.sh
+  Content-Type: text/plain; charset=utf-8
+
+/install.ps1
+  Content-Type: text/plain; charset=utf-8
 
 /*
   X-Content-Type-Options: nosniff
