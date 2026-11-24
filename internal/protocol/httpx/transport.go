@@ -35,6 +35,9 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 	if err := applyTunnels(transport, opts); err != nil {
 		return nil, err
 	}
+	if opts.UserAgent != "" {
+		transport.ProxyConnectHeader = http.Header{userAgentHeader: {opts.UserAgent}}
+	}
 
 	return newHTTPClient(transport, opts), nil
 }

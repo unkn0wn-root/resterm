@@ -1149,6 +1149,96 @@ func TestRedirectBackToTheOwnerOriginNarrowsTheReferer(t *testing.T) {
 	}
 }
 
+func authUserAgentRequest(rawURL string) *restfile.Request {
+	return &restfile.Request{
+		Method: "GET",
+		URL:    rawURL,
+		Metadata: restfile.RequestMetadata{Auth: &restfile.AuthSpec{
+			Type:   restfile.AuthHeader,
+			Params: map[string]string{authParamHeader: "User-Agent", authParamValue: "auth/1"},
+		}},
+	}
+}
+
+func TestRedirectSendsTheDefaultUserAgentInPlaceOfTheAuthOne(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	tests := []struct {
+		name string
+		opts Options
+		want string
+	}{
+		{name: "default", opts: Options{UserAgent: ua}, want: ua},
+		{name: "zero options"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			other := newRecorder(t)
+			origin := redirectTo(t, otherHost(other.URL)+"/landed")
+
+			execute(t, authUserAgentRequest(origin.URL), tt.opts)
+
+			got := other.received(t).Get("User-Agent")
+			if tt.want != "" && got != tt.want {
+				t.Fatalf("redirect target saw User-Agent %q, want %q", got, tt.want)
+			}
+			if got == "" || got == "auth/1" {
+				t.Fatalf("redirect target saw User-Agent %q, want an agent other than the auth one", got)
+			}
+		})
+	}
+}
+
+func TestRedirectBackToTheOwnerRestoresTheAuthUserAgent(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	owner := &recorder{got: make(chan http.Header, 4)}
+	hop := &recorder{got: make(chan http.Header, 4)}
+	owner.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/back" {
+			owner.got <- r.Header.Clone()
+			return
+		}
+		http.Redirect(w, r, otherHost(hop.URL)+"/hop", http.StatusFound)
+	}))
+	t.Cleanup(owner.Close)
+	hop.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hop.got <- r.Header.Clone()
+		http.Redirect(w, r, owner.URL+"/back", http.StatusFound)
+	}))
+	t.Cleanup(hop.Close)
+
+	execute(t, authUserAgentRequest(owner.URL+"/start"), Options{UserAgent: ua})
+
+	if got := hop.received(t).Get("User-Agent"); got != ua {
+		t.Errorf("middle hop saw User-Agent %q, want %q", got, ua)
+	}
+	if got := owner.received(t).Get("User-Agent"); got != "auth/1" {
+		t.Errorf("last hop saw User-Agent %q, want auth/1", got)
+	}
+}
+
+func TestRedirectKeepsTheUserAgentTheRequestSet(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		ua   string
+	}{
+		{name: "written", ua: "mine/1"},
+		{name: "written empty"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			other := newRecorder(t)
+			origin := redirectTo(t, otherHost(other.URL)+"/landed")
+			req := &restfile.Request{Method: "GET", URL: origin.URL, Headers: http.Header{"User-Agent": {tt.ua}}}
+
+			execute(t, req, Options{UserAgent: "resterm/1.2.3"})
+
+			if got := other.received(t).Get("User-Agent"); got != tt.ua {
+				t.Errorf("redirect target saw User-Agent %q, want %q", got, tt.ua)
+			}
+		})
+	}
+}
+
 // The narrowed Referer goes out on the wire, so an IPv6 hop keeps its brackets.
 func TestNarrowRefererBracketsAnIPv6Hop(t *testing.T) {
 	previous := mustParseURL(t, "https://[2001:db8::1]:8443/tokens?api_key=secret")

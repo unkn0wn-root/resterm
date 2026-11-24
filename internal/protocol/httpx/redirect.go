@@ -21,6 +21,7 @@ type redirectGuard struct {
 	confined  bool
 	creds     header.Set
 	forwardTo origin.Set
+	userAgent string
 }
 
 func newRedirectGuard(opts Options) redirectGuard {
@@ -29,6 +30,7 @@ func newRedirectGuard(opts Options) redirectGuard {
 		confined:  opts.ConfineToOrigin,
 		creds:     header.NewSet(opts.CredentialHeaders...),
 		forwardTo: opts.ForwardCredentials,
+		userAgent: opts.UserAgent,
 	}
 }
 
@@ -78,6 +80,8 @@ func (g redirectGuard) check(req *http.Request, via []*http.Request) error {
 		return nil
 	}
 	g.strip(req.Header)
+	// Restore the default if User-Agent was stripped as a credential.
+	fillUserAgent(req.Header, g.userAgent)
 	return nil
 }
 

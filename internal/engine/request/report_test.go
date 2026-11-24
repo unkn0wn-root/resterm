@@ -29,6 +29,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/grpcx"
 	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
 	"github.com/unkn0wn-root/resterm/internal/redact"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -245,6 +246,36 @@ func TestExecuteReturnsCapturesInOrder(t *testing.T) {
 				t.Fatalf("Captures = %+v, want %+v", res.Captures, tt.want)
 			}
 		})
+	}
+}
+
+func TestExecuteSendsGRPCUserAgent(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	got := make(chan []string, 1)
+	gs := grpc.NewServer(grpc.UnaryInterceptor(
+		func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
+			md, _ := metadata.FromIncomingContext(ctx)
+			got <- md.Get("user-agent")
+			return h(ctx, req)
+		},
+	))
+	testgrpc.RegisterTestServiceServer(gs, emptySvc{})
+	reflection.Register(gs)
+	go func() { _ = gs.Serve(lis) }()
+	t.Cleanup(gs.Stop)
+
+	doc, req := parseDoc(t, "### one\n# @grpc grpc.testing.TestService/EmptyCall\n# @grpc-plaintext true\n"+
+		"GRPC "+lis.Addr().String()+"\n\n{}\n")
+	cfg := engcfg.Config{GRPCOptions: grpcx.Options{UserAgent: "resterm/1.2.3"}}
+	res, err := New(cfg, nil).ExecuteWith(doc, req, testEnv(""), ExecOptions{})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() = %v, %v", res.Err, err)
+	}
+	if ua := <-got; len(ua) != 1 || !strings.HasPrefix(ua[0], "resterm/1.2.3 grpc-go/") {
+		t.Fatalf("user-agent = %q, want one value starting with resterm/1.2.3 grpc-go/", ua)
 	}
 }
 

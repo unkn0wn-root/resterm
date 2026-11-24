@@ -1043,3 +1043,22 @@ func TestPrepareRedirectPreservesQuery(t *testing.T) {
 		t.Fatalf("unexpected host %q", redirect.Host)
 	}
 }
+
+func TestManagerTokenRequestSendsUserAgent(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.UserAgent()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"t","token_type":"Bearer","expires_in":60}`))
+	}))
+	defer srv.Close()
+
+	cfg := Config{TokenURL: srv.URL, ClientID: "c", ClientSecret: "s"}
+	opts := httpx.Options{UserAgent: "resterm/1.2.3"}
+	if _, err := NewManager(nil).Token(t.Context(), "dev", cfg, opts, false); err != nil {
+		t.Fatalf("token: %v", err)
+	}
+	if got != "resterm/1.2.3" {
+		t.Fatalf("token request User-Agent = %q, want resterm/1.2.3", got)
+	}
+}

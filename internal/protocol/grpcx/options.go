@@ -31,4 +31,5 @@ type Options struct {
 	RootMode      tlsconfig.RootMode
 	SSH           *ssh.Plan
 	K8s           *k8s.Plan
+	UserAgent     string
 }

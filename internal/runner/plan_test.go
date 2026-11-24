@@ -55,6 +55,27 @@ func TestBuildAndRunPlanMatchRunContext(t *testing.T) {
 	assertRunnerReportParity(t, want, got)
 }
 
+func TestRunSendsUserAgent(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got = r.UserAgent() }))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "api.http")
+	if err := os.WriteFile(file, []byte("# @name ok\nGET "+srv.URL+"\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	opt := Options{FilePath: file, WorkspaceRoot: dir, HTTPOptions: httpx.Options{UserAgent: ua}}
+	if _, err := RunContext(context.Background(), opt); err != nil {
+		t.Fatalf("RunContext: %v", err)
+	}
+	if got != ua {
+		t.Fatalf("sent User-Agent = %q, want %q", got, ua)
+	}
+}
+
 func TestRunPlanUsesBuiltFileSnapshot(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {

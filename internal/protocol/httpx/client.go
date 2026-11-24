@@ -50,6 +50,8 @@ type Options struct {
 	SSH                *ssh.Plan
 	K8s                *k8s.Plan
 	CookieJar          http.CookieJar
+	// UserAgent is the default for HTTP requests and proxy CONNECT.
+	UserAgent string
 
 	digest *digest.Credentials
 }

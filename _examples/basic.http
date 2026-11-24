@@ -6,7 +6,6 @@
 ### Status Check
 # @name getStatus
 GET /status/204
-User-Agent: resterm/0.1
 Accept: application/json
 
 ### Download binary file

@@ -101,6 +101,7 @@ A template can also provide part of the URL. Both `GET http://{{host}}/users` an
 - HTTP/1.0 is not supported. Resterm rejects `http-version 1.0`, trailing `HTTP/1.0`, and other unsupported version tokens such as `HTTP/3`.
 - Only a trailing `HTTP/<major>` or `HTTP/<major>.<minor>` is read as a version. Any other trailing text stays part of the URL, so `GET https://example.com/a http/foo` requests `/a%20http/foo`.
 - Set a `Host` header to choose a virtual host. The connection and TLS server name still use the URL's host. Cookies use the `Host` value. A redirect to a path keeps the `Host` header. A redirect that names a host uses that host instead. WebSocket handshakes send the `Host` header too.
+- A request without a `User-Agent` header sends `resterm/<version>`, such as `resterm/1.18.2`. A `User-Agent` header in the request is sent as written. An empty `User-Agent:` line sends no `User-Agent` header. Proxy `CONNECT` requests always send `resterm/<version>`.
 - Resterm removes credentials before following a redirect to another origin or to another `Host`, even on the same address. An origin is the scheme, host, and port. Changing any of these creates a different origin. Resterm removes known credential headers and any custom header named by `@auth`, even when that header was already on the request.
 - Use `@setting forward-credentials-on-redirect` to send credentials to specific origins:
 

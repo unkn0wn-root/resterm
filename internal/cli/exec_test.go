@@ -16,7 +16,7 @@ func TestExecFlagsTelemetryConfigPreservesEnvDerivedFields(t *testing.T) {
 	t.Setenv("RESTERM_TRACE_OTEL_TIMEOUT", "15s")
 	t.Setenv("RESTERM_TRACE_OTEL_HEADERS", "x-api-key=secret, x-tenant = demo")
 
-	flags := NewExecFlags()
+	flags := NewExecFlags("v1.2.3")
 	fs := NewFlagSet("test")
 	flags.Bind(fs)
 	if err := fs.Parse([]string{
@@ -27,7 +27,7 @@ func TestExecFlagsTelemetryConfigPreservesEnvDerivedFields(t *testing.T) {
 		t.Fatalf("Parse(...): %v", err)
 	}
 
-	cfg := flags.TelemetryConfig("1.2.3")
+	cfg := flags.TelemetryConfig()
 	if cfg.Endpoint != "override:4317" {
 		t.Fatalf("endpoint = %q, want %q", cfg.Endpoint, "override:4317")
 	}
@@ -37,8 +37,8 @@ func TestExecFlagsTelemetryConfigPreservesEnvDerivedFields(t *testing.T) {
 	if cfg.ServiceName != "cli-service" {
 		t.Fatalf("service = %q, want %q", cfg.ServiceName, "cli-service")
 	}
-	if cfg.Version != "1.2.3" {
-		t.Fatalf("version = %q, want %q", cfg.Version, "1.2.3")
+	if cfg.Version != "v1.2.3" {
+		t.Fatalf("version = %q, want %q", cfg.Version, "v1.2.3")
 	}
 	if cfg.DialTimeout != 15*time.Second {
 		t.Fatalf("dial timeout = %s, want %s", cfg.DialTimeout, 15*time.Second)
@@ -49,14 +49,14 @@ func TestExecFlagsTelemetryConfigPreservesEnvDerivedFields(t *testing.T) {
 	}
 
 	cfg.Headers["x-api-key"] = "changed"
-	next := flags.TelemetryConfig("1.2.3")
+	next := flags.TelemetryConfig()
 	if next.Headers["x-api-key"] != "secret" {
 		t.Fatalf("headers mutated through returned config: %#v", next.Headers)
 	}
 }
 
 func TestExecFlagsBindTelemetryFlags(t *testing.T) {
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	fs := NewFlagSet("test")
 	flags.BindTelemetryFlags(fs)
 	if err := fs.Parse([]string{
@@ -67,7 +67,7 @@ func TestExecFlagsBindTelemetryFlags(t *testing.T) {
 		t.Fatalf("Parse(...): %v", err)
 	}
 
-	cfg := flags.TelemetryConfig("test-version")
+	cfg := flags.TelemetryConfig()
 	if cfg.Endpoint != "collector:4317" {
 		t.Fatalf("endpoint = %q, want %q", cfg.Endpoint, "collector:4317")
 	}
@@ -83,7 +83,7 @@ func TestExecFlagsBindTelemetryFlags(t *testing.T) {
 }
 
 func TestExecFlagsShortAliases(t *testing.T) {
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	fs := NewFlagSet("test")
 	flags.Bind(fs)
 
@@ -136,7 +136,7 @@ func TestExecFlagsShortAliases(t *testing.T) {
 		t.Fatalf("compare base = %q, want prod", flags.CompareBaseline)
 	}
 
-	cfg := flags.TelemetryConfig("test-version")
+	cfg := flags.TelemetryConfig()
 	if cfg.Endpoint != "collector:4317" {
 		t.Fatalf("endpoint = %q, want collector:4317", cfg.Endpoint)
 	}
@@ -149,7 +149,7 @@ func TestExecFlagsShortAliases(t *testing.T) {
 }
 
 func TestExecFlagsParseGroupedSelections(t *testing.T) {
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	fs := NewFlagSet("test")
 	flags.Bind(fs)
 	err := fs.Parse([]string{
@@ -177,7 +177,7 @@ func TestExecFlagsParseGroupedSelections(t *testing.T) {
 }
 
 func TestExecFlagsRejectDuplicateGroupedSelection(t *testing.T) {
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	fs := NewFlagSet("test")
 	flags.Bind(fs)
 	err := fs.Parse([]string{
@@ -210,7 +210,7 @@ func TestExecFlagsResolveGroupedDefaultsAndCompare(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	flags.EnvFile = envFile
 	flags.EnvGroups = GroupFlags{"app": "dev app 2"}
 	flags.CompareTargetsRaw = "dev,prod"

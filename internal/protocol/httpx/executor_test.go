@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -18,14 +19,19 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/http/httptrace"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/filelookup"
@@ -1258,5 +1264,149 @@ func TestPrepareBodyFileTemplateErrorKeepsBodyOut(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "payload.json:1:32") {
 		t.Fatalf("rendered diagnostic lost the position:\n%s", rendered)
+	}
+}
+
+func TestClientSendsDefaultUserAgent(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	var mu sync.Mutex
+	seen := map[string][]string{}
+	record := func(r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen[r.URL.Path] = append(seen[r.URL.Path], r.Header.Get("User-Agent"))
+	}
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { record(r) }))
+	defer other.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		switch r.URL.Path {
+		case "/redirect":
+			http.Redirect(w, r, other.URL+"/landed", http.StatusFound)
+		case "/digest":
+			if verdict(r) != "ok" {
+				challenge(w)
+			}
+		case "/sse":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = fmt.Fprint(w, "data: hi\n\n")
+		case "/ws":
+			if conn, err := websocket.Accept(w, r, nil); err == nil {
+				_ = conn.Close(websocket.StatusNormalClosure, "")
+			}
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient(nil)
+	opts := Options{UserAgent: ua, FollowRedirects: true}
+	for _, path := range []string{"/plain", "/redirect"} {
+		req := &restfile.Request{Method: http.MethodGet, URL: srv.URL + path}
+		if _, err := c.Execute(t.Context(), req, nil, opts); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+	if _, err := c.Execute(t.Context(), digestRequest(http.MethodGet, srv.URL+"/digest"), nil, opts); err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+	sse := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/sse", SSE: &restfile.SSERequest{}}
+	if _, err := c.ExecuteSSE(t.Context(), sse, nil, opts); err != nil {
+		t.Fatalf("sse: %v", err)
+	}
+	ws := &restfile.Request{
+		Method:    http.MethodGet,
+		URL:       "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws",
+		WebSocket: &restfile.WebSocketRequest{Options: restfile.WebSocketOptions{IdleTimeout: time.Second}},
+	}
+	if _, err := c.ExecuteWebSocket(t.Context(), ws, nil, opts); err != nil {
+		t.Fatalf("websocket: %v", err)
+	}
+
+	want := map[string][]string{
+		"/plain":    {ua},
+		"/redirect": {ua},
+		"/landed":   {ua},
+		"/digest":   {ua, ua},
+		"/sse":      {ua},
+		"/ws":       {ua},
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for path, w := range want {
+		if !slices.Equal(seen[path], w) {
+			t.Errorf("%s User-Agent = %q, want %q", path, seen[path], w)
+		}
+	}
+}
+
+func TestBuildHTTPClientProxyConnectUserAgent(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	for _, tt := range []struct {
+		name string
+		opts Options
+		want http.Header
+	}{
+		{name: "environment proxy", opts: Options{UserAgent: ua}, want: http.Header{"User-Agent": {ua}}},
+		{
+			name: "proxy url",
+			opts: Options{UserAgent: ua, ProxyURL: "http://localhost:8080"},
+			want: http.Header{"User-Agent": {ua}},
+		},
+		{name: "zero options"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewClient(nil).buildHTTPClient(tt.opts)
+			if err != nil {
+				t.Fatalf("build http client: %v", err)
+			}
+			transport, ok := client.Transport.(*http.Transport)
+			if !ok {
+				t.Fatalf("unexpected transport type %T", client.Transport)
+			}
+			if !reflect.DeepEqual(transport.ProxyConnectHeader, tt.want) {
+				t.Fatalf("ProxyConnectHeader = %v, want %v", transport.ProxyConnectHeader, tt.want)
+			}
+		})
+	}
+}
+
+func TestProxyConnectSendsDefaultUserAgent(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	got := make(chan *http.Request, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		r, err := http.ReadRequest(bufio.NewReader(conn))
+		if err != nil {
+			return
+		}
+		got <- r
+		_, _ = io.WriteString(conn, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+	}()
+
+	req := &restfile.Request{
+		Method:  http.MethodGet,
+		URL:     "https://example.invalid/",
+		Headers: http.Header{"User-Agent": {"mine/1"}},
+	}
+	opts := Options{UserAgent: ua, ProxyURL: "http://" + ln.Addr().String()}
+	if _, err := NewClient(nil).Execute(t.Context(), req, nil, opts); err == nil {
+		t.Fatal("expected the proxy to refuse the tunnel")
+	}
+	select {
+	case r := <-got:
+		if r.Method != http.MethodConnect || r.UserAgent() != ua {
+			t.Fatalf("proxy saw %s with User-Agent %q, want CONNECT with %q", r.Method, r.UserAgent(), ua)
+		}
+	default:
+		t.Fatal("proxy saw no request")
 	}
 }

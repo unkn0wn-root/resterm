@@ -215,6 +215,19 @@ func TestPreviewShowsTheHostHeader(t *testing.T) {
 	}
 }
 
+func TestPreviewShowsTheDefaultUserAgent(t *testing.T) {
+	eng := New(engcfg.Config{HTTPOptions: httpx.Options{UserAgent: "resterm/1.2.3"}}, nil)
+	req := &restfile.Request{Method: http.MethodGet, URL: "http://example.test/x"}
+	res, err := eng.ExecuteWith(nil, req, envWith(t, "dev", nil), ExecOptions{Mode: ExecModePreview})
+	if err != nil || res.Err != nil {
+		t.Fatalf("ExecuteWith() = %v, %v", err, res.Err)
+	}
+	got := previewHeaders(res.Explain.Final.Headers).Values("User-Agent")
+	if !slices.Equal(got, []string{"resterm/1.2.3"}) {
+		t.Fatalf("preview User-Agent = %q, want resterm/1.2.3 once", got)
+	}
+}
+
 func TestPreviewExplainsGraphQLOnEveryTransport(t *testing.T) {
 	gql := restfile.GraphQLBody{Query: "subscription { n }", OperationName: "N"}
 	for _, tt := range []struct {

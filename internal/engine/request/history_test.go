@@ -138,3 +138,22 @@ func TestRecordLearnsBeforeAppend(t *testing.T) {
 		t.Fatalf("store saw %q, want each entry's secrets before the entry", store.log)
 	}
 }
+
+func TestExecuteKeepsDefaultUserAgentOutOfTheRequest(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	store := &memHistory{}
+	st := &stubTransport{}
+	cfg := engine.Config{Client: st.client(), HTTPOptions: httpx.Options{UserAgent: ua}, History: store}
+	req := &restfile.Request{Method: http.MethodGet, URL: "http://example.test/x"}
+
+	sent := sendWith(t, New(cfg, nil), st, nil, req, envWith(t, "dev", nil), ExecOptions{Record: true})
+	if got := sent.wire.UserAgent(); got != ua {
+		t.Fatalf("sent User-Agent = %q, want %q", got, ua)
+	}
+	if _, ok := sent.executed.Headers["User-Agent"]; ok {
+		t.Fatalf("executed request holds the default: %v", sent.executed.Headers)
+	}
+	if len(store.entries) != 1 || strings.Contains(store.entries[0].RequestText, "User-Agent") {
+		t.Fatalf("history holds the default: %+v", store.entries)
+	}
+}

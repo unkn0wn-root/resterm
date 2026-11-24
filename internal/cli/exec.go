@@ -37,6 +37,7 @@ type ExecFlags struct {
 	EnvGroups         GroupFlags
 
 	telemetry telemetry.Config
+	userAgent string
 }
 
 type ExecConfig struct {
@@ -49,13 +50,17 @@ type ExecConfig struct {
 	Compare   engine.CompareConfig
 }
 
-func NewExecFlags() ExecFlags {
+const product = "resterm"
+
+func NewExecFlags(version string) ExecFlags {
 	tc := telemetry.ConfigFromEnv(os.Getenv)
+	tc.Version = version
 	return ExecFlags{
 		Timeout:      30 * time.Second,
 		Follow:       true,
 		MaxRedirects: httpx.DefaultMaxRedirects,
 		telemetry:    tc,
+		userAgent:    product + "/" + strings.TrimPrefix(version, "v"),
 	}
 }
 
@@ -130,10 +135,8 @@ func (f ExecFlags) ValidateEnvFlag() error {
 	return runcheck.ValidateConcreteEnvironment(f.EnvName, "--env")
 }
 
-func (f ExecFlags) TelemetryConfig(version string) telemetry.Config {
-	cfg := f.telemetry.Clone()
-	cfg.Version = version
-	return cfg
+func (f ExecFlags) TelemetryConfig() telemetry.Config {
+	return f.telemetry.Clone()
 }
 
 // Resolve builds a run configuration and requires a valid environment file.
@@ -203,6 +206,7 @@ func (f ExecFlags) ResolveSession(filePath string) (ExecConfig, error) {
 		FollowRedirects:    f.Follow,
 		InsecureSkipVerify: f.Insecure,
 		ProxyURL:           f.ProxyURL,
+		UserAgent:          f.userAgent,
 	}
 	if f.MaxRedirects < 0 {
 		return ExecConfig{}, fmt.Errorf(
@@ -228,7 +232,7 @@ func (f ExecFlags) ResolveSession(filePath string) (ExecConfig, error) {
 		Recursive: f.Recursive,
 		Env:       env,
 		HTTPOpts:  httpOpts,
-		GRPCOpts:  grpcx.Options{DefaultPlaintext: restfile.OptOf(true)},
+		GRPCOpts:  grpcx.Options{DefaultPlaintext: restfile.OptOf(true), UserAgent: f.userAgent},
 		Compare:   compare,
 	}, nil
 }
@@ -291,8 +295,8 @@ func resolveWorkspace(filePath, workspace string) string {
 	return workspace
 }
 
-func NewExecClient(version string, f ExecFlags) (*httpx.Client, func() error, error) {
-	provider, err := telemetry.New(f.TelemetryConfig(version))
+func NewExecClient(f ExecFlags) (*httpx.Client, func() error, error) {
+	provider, err := telemetry.New(f.TelemetryConfig())
 	if err != nil {
 		return httpx.NewClientWithOptions(), nil, err
 	}

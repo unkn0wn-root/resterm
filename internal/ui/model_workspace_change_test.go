@@ -60,7 +60,7 @@ func workspaceFixture(t *testing.T) string {
 func workspaceModel(t *testing.T, base, envName, explicitEnvFile string) Model {
 	t.Helper()
 	root := filepath.Join(base, "A")
-	flags := cli.NewExecFlags()
+	flags := cli.NewExecFlags("test-version")
 	flags.EnvName = envName
 	flags.EnvFile = explicitEnvFile
 	flags.Workspace = root

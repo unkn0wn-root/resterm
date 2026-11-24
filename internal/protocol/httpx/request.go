@@ -20,6 +20,7 @@ const (
 	authParamHeader    = "header"
 
 	authorizationHeader = "Authorization"
+	userAgentHeader     = "User-Agent"
 	bearerTokenPrefix   = "Bearer "
 	basicPrefix         = "Basic "
 )
@@ -66,6 +67,13 @@ func (c *Client) applyAuthentication(
 		req.URL.User = nil
 	}
 	return plan, nil
+}
+
+func fillUserAgent(h http.Header, ua string) {
+	// An explicit empty header suppresses User-Agent on the wire.
+	if _, ok := h[userAgentHeader]; !ok && ua != "" {
+		h.Set(userAgentHeader, ua)
+	}
 }
 
 type reqMeta struct {
