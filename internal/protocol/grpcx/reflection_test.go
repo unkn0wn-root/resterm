@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	reflectv1 "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	"google.golang.org/protobuf/proto"
@@ -155,6 +158,52 @@ func TestExecuteSendsMetadataToReflection(t *testing.T) {
 			}
 			if len(out) != 2 {
 				t.Fatalf("expected 2 responses, got %d", len(out))
+			}
+		})
+	}
+}
+
+func TestExecuteSendsUserAgent(t *testing.T) {
+	tests := []struct {
+		name   string
+		ua     string
+		prefix string
+	}{
+		{name: "set", ua: "resterm/1.2.3", prefix: "resterm/1.2.3 grpc-go/"},
+		{name: "zero", prefix: "grpc-go/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			seen := map[string][]string{}
+			record := grpc.StreamInterceptor(
+				func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, h grpc.StreamHandler) error {
+					md, _ := metadata.FromIncomingContext(ss.Context())
+					mu.Lock()
+					seen[info.FullMethod] = md.Get("user-agent")
+					mu.Unlock()
+					return h(srv, ss)
+				},
+			)
+			addr := startTestServerWith(t, func(srv *grpc.Server) { reflection.RegisterV1(srv) }, record)
+
+			req := &restfile.Request{GRPC: baseStreamReq(addr, "StreamingOutputCall")}
+			opts := Options{DefaultPlaintext: restfile.OptOf(true), DialTimeout: time.Second, UserAgent: tt.ua}
+			if _, err := NewClient().Execute(context.Background(), req, opts, nil); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for _, method := range []string{
+				reflectv1.ServerReflection_ServerReflectionInfo_FullMethodName,
+				"/grpc.testing.TestService/StreamingOutputCall",
+			} {
+				got := seen[method]
+				if len(got) != 1 || !strings.HasPrefix(got[0], tt.prefix) {
+					t.Errorf("%s user-agent = %q, want one value starting with %q", method, got, tt.prefix)
+				}
 			}
 		})
 	}

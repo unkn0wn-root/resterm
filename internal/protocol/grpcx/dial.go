@@ -52,6 +52,9 @@ func buildDial(gr *restfile.GRPCRequest, opt Options, failure *tlsFailure) (stri
 	if gr.Authority != "" {
 		dialOpts = append(dialOpts, grpc.WithAuthority(gr.Authority))
 	}
+	if opt.UserAgent != "" {
+		dialOpts = append(dialOpts, grpc.WithUserAgent(opt.UserAgent))
+	}
 
 	return dialTarget(gr.Target, sshOn || k8sOn), dialOpts, nil
 }
