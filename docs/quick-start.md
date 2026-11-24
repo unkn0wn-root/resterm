@@ -11,7 +11,6 @@ A minimal `.http` file looks like this:
 ### Fetch Status
 # @name health
 GET https://httpbin.org/status/204
-User-Agent: resterm
 Accept: application/json
 
 ### Create Resource

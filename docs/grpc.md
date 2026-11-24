@@ -22,7 +22,7 @@ Start a gRPC request with a line such as `GRPC host:port`. Use the directives be
 
 Any gRPC TLS setting (roots, client cert/key, insecure) turns on TLS, unless you force plaintext with `@grpc-plaintext true`.
 
-gRPC manages some metadata keys itself, including `grpc-*`, `content-type`, `user-agent`, and `te`. Resterm rejects these reserved keys in `@grpc-metadata` and in gRPC headers.
+gRPC manages some metadata keys itself, including `grpc-*`, `content-type`, `user-agent`, and `te`. Resterm rejects these reserved keys in `@grpc-metadata` and in gRPC headers, and sends `user-agent` as `resterm/<version>` followed by the gRPC client's own name and version.
 
 Metadata keys ending in `-bin` carry binary values. Write the raw bytes in `@grpc-metadata`. gRPC base64-encodes them on the wire, so the request metadata pane shows the encoded form, not the literal you typed.
 
