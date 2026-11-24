@@ -75,7 +75,7 @@
     ]
   },
   "_examples/basic.http": {
-    "sha256": "07734461528a20ff1be66487f125887fa6e9c11c80b161c06f7debeadf75ebcf",
+    "sha256": "c9ff7312e896f9ea6584c7120ba5528820cd497e8b003e57a480cb85f923b082",
     "requests": [
       {
         "line": 7,
@@ -83,27 +83,27 @@
         "name": "getStatus"
       },
       {
-        "line": 13,
+        "line": 12,
         "method": "GET",
         "name": "downloadBinary"
       },
       {
-        "line": 24,
+        "line": 23,
         "method": "POST",
         "name": "createPost"
       },
       {
-        "line": 36,
+        "line": 35,
         "method": "POST",
         "name": "timestampHelpers"
       },
       {
-        "line": 49,
+        "line": 48,
         "method": "POST",
         "name": "randomHelpers"
       },
       {
-        "line": 67,
+        "line": 66,
         "method": "GET",
         "name": "bearerEcho"
       }
