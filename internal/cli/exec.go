@@ -37,6 +37,7 @@ type ExecFlags struct {
 	EnvGroups         GroupFlags
 
 	telemetry telemetry.Config
+	userAgent string
 }
 
 type ExecConfig struct {
@@ -49,6 +50,8 @@ type ExecConfig struct {
 	Compare   engine.CompareConfig
 }
 
+const product = "resterm"
+
 func NewExecFlags(version string) ExecFlags {
 	tc := telemetry.ConfigFromEnv(os.Getenv)
 	tc.Version = version
@@ -57,6 +60,7 @@ func NewExecFlags(version string) ExecFlags {
 		Follow:       true,
 		MaxRedirects: httpx.DefaultMaxRedirects,
 		telemetry:    tc,
+		userAgent:    product + "/" + strings.TrimPrefix(version, "v"),
 	}
 }
 
@@ -202,6 +206,7 @@ func (f ExecFlags) ResolveSession(filePath string) (ExecConfig, error) {
 		FollowRedirects:    f.Follow,
 		InsecureSkipVerify: f.Insecure,
 		ProxyURL:           f.ProxyURL,
+		UserAgent:          f.userAgent,
 	}
 	if f.MaxRedirects < 0 {
 		return ExecConfig{}, fmt.Errorf(
@@ -227,7 +232,7 @@ func (f ExecFlags) ResolveSession(filePath string) (ExecConfig, error) {
 		Recursive: f.Recursive,
 		Env:       env,
 		HTTPOpts:  httpOpts,
-		GRPCOpts:  grpcx.Options{DefaultPlaintext: restfile.OptOf(true)},
+		GRPCOpts:  grpcx.Options{DefaultPlaintext: restfile.OptOf(true), UserAgent: f.userAgent},
 		Compare:   compare,
 	}, nil
 }

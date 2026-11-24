@@ -50,6 +50,37 @@ func TestResolveStopsOnABrokenEnvFile(t *testing.T) {
 	}
 }
 
+func TestResolveSessionIdentifiesTheBuild(t *testing.T) {
+	dir := t.TempDir()
+	for _, tt := range []struct {
+		name  string
+		flags ExecFlags
+		want  string
+	}{
+		{name: "release", flags: NewExecFlags("v1.18.2"), want: "resterm/1.18.2"},
+		{name: "dev", flags: NewExecFlags("dev"), want: "resterm/dev"},
+		{
+			name:  "describe",
+			flags: NewExecFlags("v1.18.2-4-gc4be7e89-dirty"),
+			want:  "resterm/1.18.2-4-gc4be7e89-dirty",
+		},
+		{name: "one v", flags: NewExecFlags("vv1"), want: "resterm/v1"},
+		{name: "zero flags"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			flags := tt.flags
+			flags.Workspace = dir
+			cfg, err := flags.ResolveSession(filepath.Join(dir, "api.http"))
+			if err != nil {
+				t.Fatalf("ResolveSession() error = %v", err)
+			}
+			if cfg.HTTPOpts.UserAgent != tt.want || cfg.GRPCOpts.UserAgent != tt.want {
+				t.Fatalf("user agents = %q, %q, want %q", cfg.HTTPOpts.UserAgent, cfg.GRPCOpts.UserAgent, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveSessionKeepsSelectionFlagsOnABrokenEnvFile(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, "resterm.env.json")

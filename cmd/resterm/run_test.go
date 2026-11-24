@@ -335,6 +335,36 @@ func TestRunCmdSingleRequestSetsDefaultLine(t *testing.T) {
 	}
 }
 
+func TestRunCmdPassesUserAgent(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "one.http")
+	if err := os.WriteFile(file, []byte("# @name one\nGET https://example.com/one\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	prev := version
+	version = "v1.2.3"
+	t.Cleanup(func() { version = prev })
+
+	cmd := newRunCmd()
+	cmd.stdinTTY = false
+	cmd.stdoutTTY = false
+	cmd.newClient = stubRunClient
+	var got runner.Options
+	cmd.runFn = func(_ context.Context, opts runner.Options) (*runner.Report, error) {
+		got = opts
+		return stubRunReport(true), nil
+	}
+
+	if err := cmd.parse([]string{file}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if err := cmd.run(); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got.HTTPOptions.UserAgent != "resterm/1.2.3" || got.GRPCOptions.UserAgent != "resterm/1.2.3" {
+		t.Fatalf("user agents = %q, %q, want resterm/1.2.3", got.HTTPOptions.UserAgent, got.GRPCOptions.UserAgent)
+	}
+}
+
 func TestRunCmdNonInteractiveListsRequestsAndReturnsUsageExit(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "many.http")

@@ -2179,6 +2179,30 @@ func TestSendActiveRequestRecordsAllButInteractiveWebSockets(t *testing.T) {
 	}
 }
 
+func TestSendActiveRequestSendsTheUserAgent(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got = r.UserAgent() }))
+	defer srv.Close()
+
+	model := New(Config{
+		FilePath:       "ua.http",
+		InitialContent: "GET " + srv.URL + "\n",
+		HTTPOptions:    httpx.Options{UserAgent: ua},
+		GRPCOptions:    grpcx.Options{UserAgent: ua},
+	})
+	model.editor.SetCursor(0)
+	if msg := findRunMsg(model.sendActiveRequest()); msg == nil {
+		t.Fatal("the request did not run")
+	}
+	if got != ua {
+		t.Fatalf("sent User-Agent = %q, want %q", got, ua)
+	}
+	if got := model.runCfg(model.runOptions()).GRPCOptions.UserAgent; got != ua {
+		t.Fatalf("gRPC user agent = %q, want %q", got, ua)
+	}
+}
+
 // Pressing send during a run cancels it and starts the next one at once, so the
 // canceled run's result arrives while the new run is in flight.
 func TestStaleRunMsgKeepsNewRun(t *testing.T) {
