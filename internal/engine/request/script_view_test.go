@@ -1,10 +1,14 @@
 package request
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 
+	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/protocol/httpx"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 // Scripts read authored values with references expanded and write data, so a
@@ -145,6 +149,32 @@ GET http://example.test/{{missing}}
 	sent := sendRequest(t, doc, req, envWith(t, "dev", nil), ExecOptions{})
 	if got := sent.wire.Header.Get("X-Caught"); got != "yes" {
 		t.Fatalf("X-Caught = %q, want yes", got)
+	}
+}
+
+func TestPreRequestScriptsDoNotSeeTheDefaultUserAgent(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	for _, tc := range []struct {
+		name   string
+		script restfile.ScriptBlock
+	}{
+		{name: "js", script: jsPre(`request.setHeader("X-Seen", "seen:" + (request.getHeader("User-Agent") || ""));`)},
+		{name: "rts", script: rtsPre(`request.setHeader("X-Seen", "seen:" + request.header("User-Agent"))`)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := &stubTransport{}
+			eng := New(engcfg.Config{Client: st.client(), HTTPOptions: httpx.Options{UserAgent: ua}}, nil)
+			req := &restfile.Request{Method: http.MethodGet, URL: "http://example.test"}
+			req.Metadata.Scripts = []restfile.ScriptBlock{tc.script}
+
+			sent := sendWith(t, eng, st, nil, req, envWith(t, "dev", nil), ExecOptions{})
+			if got := sent.wire.Header.Get("X-Seen"); got != "seen:" {
+				t.Fatalf("script saw %q, want no User-Agent", got)
+			}
+			if got := sent.wire.UserAgent(); got != ua {
+				t.Fatalf("sent User-Agent = %q, want %q", got, ua)
+			}
+		})
 	}
 }
 

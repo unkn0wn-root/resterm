@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -660,5 +662,75 @@ func TestBuildHTTPRequestLocatesBodyVariableAfterComment(t *testing.T) {
 		"expand body template"
 	if got != want {
 		t.Fatalf("Render() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildHTTPRequestUserAgent(t *testing.T) {
+	const ua = "resterm/1.2.3"
+	tests := []struct {
+		name    string
+		headers http.Header
+		auth    *restfile.AuthSpec
+		opts    Options
+		want    []string
+	}{
+		{name: "default", opts: Options{UserAgent: ua}, want: []string{ua}},
+		{name: "zero options"},
+		{
+			name:    "written",
+			headers: http.Header{"User-Agent": {"mine/1"}},
+			opts:    Options{UserAgent: ua},
+			want:    []string{"mine/1"},
+		},
+		{
+			name:    "written empty",
+			headers: http.Header{"User-Agent": {""}},
+			opts:    Options{UserAgent: ua},
+			want:    []string{""},
+		},
+		{
+			name:    "template empty",
+			headers: http.Header{"User-Agent": {"{{ua}}"}},
+			opts:    Options{UserAgent: ua},
+			want:    []string{""},
+		},
+		{
+			name: "auth header",
+			auth: &restfile.AuthSpec{
+				Type:   restfile.AuthHeader,
+				Params: map[string]string{"header": "User-Agent", "value": "auth/1"},
+			},
+			opts: Options{UserAgent: ua},
+			want: []string{"auth/1"},
+		},
+		{
+			name: "apikey header",
+			auth: &restfile.AuthSpec{
+				Type:   restfile.AuthAPIKey,
+				Params: map[string]string{"placement": "header", "name": "User-Agent", "value": "key/1"},
+			},
+			opts: Options{UserAgent: ua},
+			want: []string{"key/1"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &restfile.Request{Method: http.MethodGet, URL: "https://example.com", Headers: tt.headers}
+			req.Metadata.Auth = tt.auth
+			src := req.Headers.Clone()
+			resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"ua": ""}))
+
+			httpReq, _, _, err := NewClient(nil).BuildHTTPRequest(context.Background(), req, resolver, tt.opts)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got, ok := httpReq.Header["User-Agent"]
+			if ok != (tt.want != nil) || !slices.Equal(got, tt.want) {
+				t.Fatalf("User-Agent = %q (set %v), want %q", got, ok, tt.want)
+			}
+			if !reflect.DeepEqual(req.Headers, src) {
+				t.Fatalf("source headers = %v, want %v", req.Headers, src)
+			}
+		})
 	}
 }

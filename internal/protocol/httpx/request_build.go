@@ -197,6 +197,7 @@ func (c *Client) buildHTTPRequest(
 	if err != nil {
 		return nil, opts, err
 	}
+	fillUserAgent(httpReq.Header, opts.UserAgent)
 	opts.CredentialHeaders = slices.Concat(opts.CredentialHeaders, plan.Targets)
 	opts.digest = plan.Digest
 	return httpReq, opts, nil
