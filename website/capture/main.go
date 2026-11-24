@@ -234,7 +234,7 @@ func capture(t tour, dir, version string, cat theme.Catalog, v variant) (frames,
 	}
 
 	path := filepath.Join(ws, t.File)
-	flags := cli.NewExecFlags()
+	flags := cli.NewExecFlags(version)
 	flags.EnvName = t.Env
 	sess, err := flags.Resolve(path)
 	if err != nil {

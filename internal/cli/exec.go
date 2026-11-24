@@ -49,8 +49,9 @@ type ExecConfig struct {
 	Compare   engine.CompareConfig
 }
 
-func NewExecFlags() ExecFlags {
+func NewExecFlags(version string) ExecFlags {
 	tc := telemetry.ConfigFromEnv(os.Getenv)
+	tc.Version = version
 	return ExecFlags{
 		Timeout:      30 * time.Second,
 		Follow:       true,
@@ -130,10 +131,8 @@ func (f ExecFlags) ValidateEnvFlag() error {
 	return runcheck.ValidateConcreteEnvironment(f.EnvName, "--env")
 }
 
-func (f ExecFlags) TelemetryConfig(version string) telemetry.Config {
-	cfg := f.telemetry.Clone()
-	cfg.Version = version
-	return cfg
+func (f ExecFlags) TelemetryConfig() telemetry.Config {
+	return f.telemetry.Clone()
 }
 
 // Resolve builds a run configuration and requires a valid environment file.
@@ -291,8 +290,8 @@ func resolveWorkspace(filePath, workspace string) string {
 	return workspace
 }
 
-func NewExecClient(version string, f ExecFlags) (*httpx.Client, func() error, error) {
-	provider, err := telemetry.New(f.TelemetryConfig(version))
+func NewExecClient(f ExecFlags) (*httpx.Client, func() error, error) {
+	provider, err := telemetry.New(f.TelemetryConfig())
 	if err != nil {
 		return httpx.NewClientWithOptions(), nil, err
 	}

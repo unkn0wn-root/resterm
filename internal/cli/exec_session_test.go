@@ -16,7 +16,7 @@ func TestResolveSessionOpensOnABrokenEnvFile(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	flags.Workspace = dir
 	cfg, err := flags.ResolveSession(filepath.Join(dir, "api.http"))
 	if err != nil {
@@ -43,7 +43,7 @@ func TestResolveStopsOnABrokenEnvFile(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	flags.Workspace = dir
 	if _, err := flags.Resolve(filepath.Join(dir, "api.http")); err == nil {
 		t.Fatal("Resolve() ran on an environment file that did not load")
@@ -57,7 +57,7 @@ func TestResolveSessionKeepsSelectionFlagsOnABrokenEnvFile(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	flags.EnvFile = envFile
 	flags.EnvGroups = GroupFlags{"api": "dev"}
 	flags.CompareTargetsRaw = "dev,prod"
@@ -92,7 +92,7 @@ func TestResolveSessionStopsOnAnUnreadableEnvFile(t *testing.T) {
 		{name: "missing", envFile: filepath.Join(dir, "typo.env.json")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			flags := NewExecFlags()
+			flags := NewExecFlags("test-version")
 			flags.Workspace = dir
 			flags.EnvFile = tc.envFile
 			if _, err := flags.ResolveSession(filepath.Join(dir, "api.http")); err == nil {
@@ -109,7 +109,7 @@ func TestResolveSessionStopsOnFlagErrors(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	flags := NewExecFlags()
+	flags := NewExecFlags("test-version")
 	flags.Workspace = dir
 	flags.CompareGroup = "api"
 	if _, err := flags.ResolveSession(filepath.Join(dir, "api.http")); err == nil {

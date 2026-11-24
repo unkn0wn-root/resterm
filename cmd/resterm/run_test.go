@@ -167,7 +167,7 @@ func TestRunCmdShortAliases(t *testing.T) {
 		t.Fatalf("unexpected exec flags: %+v", cmd.exec)
 	}
 
-	tel := cmd.exec.TelemetryConfig("test-version")
+	tel := cmd.exec.TelemetryConfig()
 	if tel.Endpoint != "collector:4317" || !tel.Insecure || tel.ServiceName != "resterm-test" {
 		t.Fatalf("unexpected telemetry config: %+v", tel)
 	}
@@ -1458,7 +1458,7 @@ func TestPromptRunRequestChoiceEOF(t *testing.T) {
 	}
 }
 
-func stubRunClient(string, cli.ExecFlags) (*httpx.Client, func() error, error) {
+func stubRunClient(cli.ExecFlags) (*httpx.Client, func() error, error) {
 	return httpx.NewClient(nil), nil, nil
 }
 

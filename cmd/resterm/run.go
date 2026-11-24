@@ -55,7 +55,7 @@ func runRun(args []string) error {
 }
 
 type runExecFn func(context.Context, runner.Options) (*runner.Report, error)
-type runClientFn func(string, cli.ExecFlags) (*httpx.Client, func() error, error)
+type runClientFn func(cli.ExecFlags) (*httpx.Client, func() error, error)
 type runThemeFn func() (theme.Definition, error)
 
 type runFormat string
@@ -129,7 +129,7 @@ type runCmd struct {
 
 func newRunCmd() *runCmd {
 	cmd := &runCmd{
-		exec:         cli.NewExecFlags(),
+		exec:         cli.NewExecFlags(version),
 		runFn:        runner.RunContext,
 		newClient:    cli.NewExecClient,
 		in:           os.Stdin,
@@ -215,7 +215,7 @@ func (c *runCmd) run() error {
 	}
 
 	client, shutdown, err := c.client()
-	if err != nil && c.exec.TelemetryConfig(version).Enabled() {
+	if err != nil && c.exec.TelemetryConfig().Enabled() {
 		log.Printf("telemetry init error: %v", err)
 	}
 	if shutdown != nil {
@@ -362,9 +362,9 @@ func (c *runCmd) themeDefinition() *theme.Definition {
 
 func (c *runCmd) client() (*httpx.Client, func() error, error) {
 	if c != nil && c.newClient != nil {
-		return c.newClient(version, c.exec)
+		return c.newClient(c.exec)
 	}
-	return cli.NewExecClient(version, c.exec)
+	return cli.NewExecClient(c.exec)
 }
 
 func (c *runCmd) execRun(

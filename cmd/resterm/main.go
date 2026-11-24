@@ -88,7 +88,7 @@ func run(a []string) error {
 		openapiMode              string
 	)
 
-	exec := cli.NewExecFlags()
+	exec := cli.NewExecFlags(version)
 	fs := cli.NewFlagSet("resterm")
 	fs.StringVarAliases(&filePath, "", "Path to .http/.rest file to open", "file", "f")
 	exec.Bind(fs)
@@ -319,9 +319,9 @@ func run(a []string) error {
 		return err
 	}
 
-	client, shutdown, err := cli.NewExecClient(version, exec)
+	client, shutdown, err := cli.NewExecClient(exec)
 	if err != nil {
-		if exec.TelemetryConfig(version).Enabled() {
+		if exec.TelemetryConfig().Enabled() {
 			log.Printf("telemetry init error: %v", err)
 		}
 	} else if shutdown != nil {
